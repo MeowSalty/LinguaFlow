@@ -216,7 +216,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			Mode:      string(ar.Mode),
 			BackendID: ar.BackendId,
 		}
-		if ar.Mode == Translate && ar.Translate != nil {
+		if ar.Mode == ExecutionRoundConfigModeTranslate && ar.Translate != nil {
 			t := ar.Translate
 			translateCfg := &schema.TranslateRoundConfig{
 				Concurrency: ar.Concurrency,
@@ -249,7 +249,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			}
 			rc.Translate = translateCfg
 		}
-		if ar.Mode == Extract && ar.Extract != nil {
+		if ar.Mode == ExecutionRoundConfigModeExtract && ar.Extract != nil {
 			e := ar.Extract
 			extractCfg := &schema.ExtractRoundConfig{
 				Concurrency: ar.Concurrency,
@@ -282,7 +282,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			}
 			rc.Extract = extractCfg
 		}
-		if ar.Mode == Adjudicate && ar.Adjudicate != nil {
+		if ar.Mode == ExecutionRoundConfigModeAdjudicate && ar.Adjudicate != nil {
 			a := ar.Adjudicate
 			adjudicateCfg := &schema.AdjudicateRoundConfig{
 				Concurrency: ar.Concurrency,
@@ -313,7 +313,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			}
 			rc.Adjudicate = adjudicateCfg
 		}
-		if ar.Mode == SemanticQa && ar.SemanticQa != nil {
+		if ar.Mode == ExecutionRoundConfigModeSemanticQa && ar.SemanticQa != nil {
 			s := ar.SemanticQa
 			semanticQACfg := &schema.SemanticQARoundConfig{
 				Concurrency: ar.Concurrency,

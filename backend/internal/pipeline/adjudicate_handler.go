@@ -30,6 +30,7 @@ type AdjudicateHandler struct {
 	AdjudicateCodes   []string
 	Reporter          progress.Reporter
 	Logger            *slog.Logger
+	RoundIndex        int // execution plan round index, set by caller
 }
 
 func (h *AdjudicateHandler) ModeName() string { return RoundModeAdjudicate }
@@ -184,7 +185,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		logger.Error("adjudicate render failed", "err", renderErr)
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:         RoundModeAdjudicate,
-			SegmentIDs:    segmentIDStrings(idxs),
+			SegmentIDs:    segmentIDStringsFromDoc(doc, idxs),
 			SegmentCount:  len(idxs),
 			BackendName:   h.Backend.Name(),
 			Status:        "failed",
@@ -192,6 +193,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			TriedBackends: tried,
 			ErrorType:     "render_error",
 			ErrorMessage:  renderErr.Error(),
+			RoundIndex:    h.RoundIndex,
 		})
 		return h.preserveResult(doc, idxs, rep)
 	}
@@ -215,17 +217,23 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			logger.Error("adjudicate backend fatal error",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(progress.BatchEvent{
-				Stage:         RoundModeAdjudicate,
-				SegmentIDs:    segmentIDStrings(idxs),
-				SegmentCount:  len(idxs),
-				BackendName:   h.Backend.Name(),
-				Status:        "failed",
-				DurationMs:    time.Since(callStart).Milliseconds(),
-				SentContent:   usr,
-				TriedBackends: tried,
-				ErrorType:     "backend_error",
-				ErrorMessage:  callErr.Error(),
-				HTTPStatus:    httpStatusFromErr(callErr),
+				Stage:          RoundModeAdjudicate,
+				SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
+				SegmentCount:   len(idxs),
+				BackendName:    h.Backend.Name(),
+				Status:         "failed",
+				DurationMs:     time.Since(callStart).Milliseconds(),
+				SentContent:    usr,
+				TriedBackends:  tried,
+				ErrorType:      "backend_error",
+				ErrorMessage:   callErr.Error(),
+				HTTPStatus:     httpStatusFromErr(callErr),
+				RoundIndex:     h.RoundIndex,
+				Attempt:        attempt,
+				SystemPrompt:   sys,
+				UserMessage:    usr,
+				ResponseFormat: req.ResponseFormat,
+				JSONSchema:     req.JSONSchema,
 			})
 			return h.preserveResult(doc, idxs, rep)
 		}
@@ -233,17 +241,23 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			logger.Warn("adjudicate rate limit, will backoff and retry",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(progress.BatchEvent{
-				Stage:         RoundModeAdjudicate,
-				SegmentIDs:    segmentIDStrings(idxs),
-				SegmentCount:  len(idxs),
-				BackendName:   h.Backend.Name(),
-				Status:        "failed",
-				DurationMs:    time.Since(callStart).Milliseconds(),
-				SentContent:   usr,
-				TriedBackends: tried,
-				ErrorType:     "backend_error",
-				ErrorMessage:  callErr.Error(),
-				HTTPStatus:    httpStatusFromErr(callErr),
+				Stage:          RoundModeAdjudicate,
+				SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
+				SegmentCount:   len(idxs),
+				BackendName:    h.Backend.Name(),
+				Status:         "failed",
+				DurationMs:     time.Since(callStart).Milliseconds(),
+				SentContent:    usr,
+				TriedBackends:  tried,
+				ErrorType:      "backend_error",
+				ErrorMessage:   callErr.Error(),
+				HTTPStatus:     httpStatusFromErr(callErr),
+				RoundIndex:     h.RoundIndex,
+				Attempt:        attempt,
+				SystemPrompt:   sys,
+				UserMessage:    usr,
+				ResponseFormat: req.ResponseFormat,
+				JSONSchema:     req.JSONSchema,
 			})
 			wait := backoffDuration(attempt, h.Retry, callErr)
 			timer := time.NewTimer(wait)
@@ -258,17 +272,23 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		logger.Warn("adjudicate backend failed, preserving issues",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 		h.emitBatchOutcome(progress.BatchEvent{
-			Stage:         RoundModeAdjudicate,
-			SegmentIDs:    segmentIDStrings(idxs),
-			SegmentCount:  len(idxs),
-			BackendName:   h.Backend.Name(),
-			Status:        "failed",
-			DurationMs:    time.Since(callStart).Milliseconds(),
-			SentContent:   usr,
-			TriedBackends: tried,
-			ErrorType:     "backend_error",
-			ErrorMessage:  callErr.Error(),
-			HTTPStatus:    httpStatusFromErr(callErr),
+			Stage:          RoundModeAdjudicate,
+			SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
+			SegmentCount:   len(idxs),
+			BackendName:    h.Backend.Name(),
+			Status:         "failed",
+			DurationMs:     time.Since(callStart).Milliseconds(),
+			SentContent:    usr,
+			TriedBackends:  tried,
+			ErrorType:      "backend_error",
+			ErrorMessage:   callErr.Error(),
+			HTTPStatus:     httpStatusFromErr(callErr),
+			RoundIndex:     h.RoundIndex,
+			Attempt:        attempt,
+			SystemPrompt:   sys,
+			UserMessage:    usr,
+			ResponseFormat: req.ResponseFormat,
+			JSONSchema:     req.JSONSchema,
 		})
 		return h.preserveResult(doc, idxs, rep)
 	}
@@ -283,7 +303,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:           RoundModeAdjudicate,
-			SegmentIDs:      segmentIDStrings(idxs),
+			SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
 			SegmentCount:    len(idxs),
 			BackendName:     h.Backend.Name(),
 			Status:          "failed",
@@ -295,6 +315,13 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			TriedBackends:   tried,
 			ErrorType:       "parse_error",
 			ErrorMessage:    parseErr.Error(),
+			RoundIndex:      h.RoundIndex,
+			Attempt:         attempt,
+			SystemPrompt:    sys,
+			UserMessage:     usr,
+			ResponseFormat:  req.ResponseFormat,
+			JSONSchema:      req.JSONSchema,
+			ResponseContent: resp.Text,
 		})
 		return h.preserveResult(doc, idxs, rep)
 	}
@@ -332,7 +359,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 
 	h.emitBatchOutcome(progress.BatchEvent{
 		Stage:           RoundModeAdjudicate,
-		SegmentIDs:      segmentIDStrings(idxs),
+		SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
 		SegmentCount:    len(idxs),
 		BackendName:     h.Backend.Name(),
 		Status:          "success",
@@ -342,6 +369,13 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		SentContent:     usr,
 		ReceivedContent: resp.Text,
 		TriedBackends:   tried,
+		RoundIndex:      h.RoundIndex,
+		Attempt:         attempt,
+		SystemPrompt:    sys,
+		UserMessage:     usr,
+		ResponseFormat:  req.ResponseFormat,
+		JSONSchema:      req.JSONSchema,
+		ResponseContent: resp.Text,
 	})
 
 	return batchResult{

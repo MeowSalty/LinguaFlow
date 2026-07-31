@@ -27,6 +27,7 @@ type Options struct {
 
 // Round 描述一轮翻译的执行配置（Engine 级别）。
 type Round struct {
+	RoundIndex       int
 	Backend          backend.Backend
 	BatchSize        int
 	MaxWordsPerBatch int
@@ -93,6 +94,7 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 		}
 
 		rc := RoundConfig{
+			RoundIndex:       r.RoundIndex,
 			Backend:          r.Backend,
 			BatchSize:        r.BatchSize,
 			MaxWordsPerBatch: r.MaxWordsPerBatch,
@@ -280,6 +282,7 @@ func buildTranslatePipelineRound(
 
 	handler := &pipeline.TranslateHandler{
 		Backend:                rc.Backend,
+		RoundIndex:             rc.RoundIndex,
 		BatchSize:              rc.BatchSize,
 		MaxWordsPerBatch:       rc.MaxWordsPerBatch,
 		FallbackShrink:         rc.FallbackShrink,
@@ -326,6 +329,7 @@ func buildExtractPipelineRound(
 
 	handler := &pipeline.ExtractHandler{
 		Backends:             []backend.Backend{rc.Backend},
+		RoundIndex:           rc.RoundIndex,
 		Renderer:             e.Renderer,
 		Glossary:             glossaryRes,
 		Retry:                rc.Retry,
@@ -359,6 +363,7 @@ func buildAdjudicatePipelineRound(
 
 	handler := &pipeline.AdjudicateHandler{
 		Backend:           rc.Backend,
+		RoundIndex:        rc.RoundIndex,
 		Renderer:          a.Renderer,
 		BatchSize:         rc.BatchSize,
 		MaxWordsPerBatch:  rc.MaxWordsPerBatch,
@@ -390,6 +395,7 @@ func buildSemanticQAPipelineRound(
 
 	handler := &pipeline.SemanticQAHandler{
 		Backend:           rc.Backend,
+		RoundIndex:        rc.RoundIndex,
 		Renderer:          s.Renderer,
 		BatchSize:         rc.BatchSize,
 		MaxWordsPerBatch:  rc.MaxWordsPerBatch,

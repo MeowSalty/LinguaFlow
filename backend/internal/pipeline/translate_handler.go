@@ -52,6 +52,8 @@ type TranslateHandler struct {
 
 	Reporter progress.Reporter
 	Logger   *slog.Logger
+
+	RoundIndex int // execution plan round index, set by caller
 }
 
 func (h *TranslateHandler) ModeName() string { return "translate" }
@@ -207,7 +209,7 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 	contextSet := BuildContextSet(expandedIdxs, batchSet)
 
 	// 构建请求
-	_, usr, req, wantIDs, _, glos, buildErr := h.buildRequest(ctx, doc, expandedIdxs, contextSet, logger)
+	sys, usr, req, wantIDs, _, glos, buildErr := h.buildRequest(ctx, doc, expandedIdxs, contextSet, logger)
 	if buildErr != nil {
 		logger.Error("build request failed", "err", buildErr)
 		return batchResult{unresolved: FilterPendingIdxs(idxs, contextSet)}
@@ -225,17 +227,23 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 			logger.Error("backend returned fatal error",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(progress.BatchEvent{
-				Stage:         "translate",
-				SegmentIDs:    pendingSegmentIDStrings(pendingIdxs),
-				SegmentCount:  len(pendingIdxs),
-				BackendName:   h.Backend.Name(),
-				Status:        "failed",
-				DurationMs:    time.Since(callStart).Milliseconds(),
-				SentContent:   usr,
-				TriedBackends: tried,
-				ErrorType:     "backend_error",
-				ErrorMessage:  callErr.Error(),
-				HTTPStatus:    httpStatusFromErr(callErr),
+				Stage:          "translate",
+				SegmentIDs:     segmentIDStringsFromDoc(doc, pendingIdxs),
+				SegmentCount:   len(pendingIdxs),
+				BackendName:    h.Backend.Name(),
+				Status:         "failed",
+				DurationMs:     time.Since(callStart).Milliseconds(),
+				SentContent:    usr,
+				TriedBackends:  tried,
+				ErrorType:      "backend_error",
+				ErrorMessage:   callErr.Error(),
+				HTTPStatus:     httpStatusFromErr(callErr),
+				RoundIndex:     h.RoundIndex,
+				Attempt:        attempt,
+				SystemPrompt:   sys,
+				UserMessage:    usr,
+				ResponseFormat: req.ResponseFormat,
+				JSONSchema:     req.JSONSchema,
 			})
 			return batchResult{unresolved: pendingIdxs}
 		}
@@ -244,17 +252,23 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 			logger.Warn("backend returned rate limit error, will backoff and retry",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(progress.BatchEvent{
-				Stage:         "translate",
-				SegmentIDs:    pendingSegmentIDStrings(pendingIdxs),
-				SegmentCount:  len(pendingIdxs),
-				BackendName:   h.Backend.Name(),
-				Status:        "failed",
-				DurationMs:    time.Since(callStart).Milliseconds(),
-				SentContent:   usr,
-				TriedBackends: tried,
-				ErrorType:     "backend_error",
-				ErrorMessage:  callErr.Error(),
-				HTTPStatus:    httpStatusFromErr(callErr),
+				Stage:          "translate",
+				SegmentIDs:     segmentIDStringsFromDoc(doc, pendingIdxs),
+				SegmentCount:   len(pendingIdxs),
+				BackendName:    h.Backend.Name(),
+				Status:         "failed",
+				DurationMs:     time.Since(callStart).Milliseconds(),
+				SentContent:    usr,
+				TriedBackends:  tried,
+				ErrorType:      "backend_error",
+				ErrorMessage:   callErr.Error(),
+				HTTPStatus:     httpStatusFromErr(callErr),
+				RoundIndex:     h.RoundIndex,
+				Attempt:        attempt,
+				SystemPrompt:   sys,
+				UserMessage:    usr,
+				ResponseFormat: req.ResponseFormat,
+				JSONSchema:     req.JSONSchema,
 			})
 			wait := backoffDuration(attempt, h.Retry, callErr)
 			timer := time.NewTimer(wait)
@@ -271,7 +285,7 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:           "translate",
-			SegmentIDs:      pendingSegmentIDStrings(pendingIdxs),
+			SegmentIDs:      segmentIDStringsFromDoc(doc, pendingIdxs),
 			SegmentCount:    len(pendingIdxs),
 			BackendName:     h.Backend.Name(),
 			Status:          "failed",
@@ -282,6 +296,12 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 			ErrorMessage:    callErr.Error(),
 			HTTPStatus:      httpStatusFromErr(callErr),
 			ShrinkAttempted: len(pendingIdxs) > 1,
+			RoundIndex:      h.RoundIndex,
+			Attempt:         attempt,
+			SystemPrompt:    sys,
+			UserMessage:     usr,
+			ResponseFormat:  req.ResponseFormat,
+			JSONSchema:      req.JSONSchema,
 		})
 		nextSize := shrinkTo(idxs, h.FallbackShrink)
 		var dropped []int
@@ -318,7 +338,7 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 				"repaired", res.Repaired)
 			h.emitBatchOutcome(progress.BatchEvent{
 				Stage:           "translate",
-				SegmentIDs:      pendingSegmentIDStrings(pendingIdxs),
+				SegmentIDs:      segmentIDStringsFromDoc(doc, pendingIdxs),
 				SegmentCount:    len(pendingIdxs),
 				BackendName:     h.Backend.Name(),
 				Status:          "failed",
@@ -331,6 +351,13 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 				ErrorType:       "parse_error",
 				ErrorMessage:    res.ParseErr.Error(),
 				ShrinkAttempted: len(pendingIdxs) > 1,
+				RoundIndex:      h.RoundIndex,
+				Attempt:         attempt,
+				SystemPrompt:    sys,
+				UserMessage:     usr,
+				ResponseFormat:  req.ResponseFormat,
+				JSONSchema:      req.JSONSchema,
+				ResponseContent: resp.Text,
 			})
 			nextSize := shrinkTo(idxs, h.FallbackShrink)
 			var dropped []int
@@ -364,8 +391,8 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 
 	trans, glosEntries, rubyOutputMap := res.Trans, res.Glos, res.RubyOutput
 
-	h.emitBatchEvent(pendingIdxs, wantIDs, h.Backend.Name(), res, rawRespText, usr,
-		glos, resp.Usage, durationMs, tried, logger)
+	h.emitBatchEvent(doc, pendingIdxs, wantIDs, h.Backend.Name(), res, rawRespText, sys, usr,
+		req.ResponseFormat, req.JSONSchema, attempt, glos, resp.Usage, durationMs, tried, logger)
 
 	logger.Debug("batch translated",
 		"backend", h.Backend.Name(), "batch_size", len(idxs),
@@ -576,7 +603,7 @@ func (h *TranslateHandler) processTranslatedSegments(
 			keepSet := kindSet(h.RubyPreserveKinds)
 			isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
 			restoreSegmentRuby(ctx, seg, h.RubyRestorer, keepSet,
-				h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode)
+				h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex)
 		}
 
 		// TM（直接调用，使用 OriginalSource）
@@ -779,19 +806,24 @@ func (h *TranslateHandler) emitBatchOutcome(evt progress.BatchEvent) {
 
 // emitBatchEvent 发送成功的批次事件。
 func (h *TranslateHandler) emitBatchEvent(
+	doc *Document,
 	pendingIdxs []int,
 	wantIDs []string,
 	backendName string,
 	res repair.Result,
 	rawRespText string,
-	sentContent string,
+	sys string,
+	usr string,
+	responseFormat string,
+	jsonSchema map[string]any,
+	attempt int,
 	usedGlossary []prompt.GlossaryEntry,
 	usage backend.Usage,
 	durationMs int64,
 	triedBackends []string,
 	logger *slog.Logger,
 ) {
-	segIDs := pendingSegmentIDStrings(pendingIdxs)
+	segIDs := segmentIDStringsFromDoc(doc, pendingIdxs)
 
 	status := "success"
 	errorType := ""
@@ -813,13 +845,20 @@ func (h *TranslateHandler) emitBatchEvent(
 		DurationMs:      durationMs,
 		InputTokens:     usage.PromptTokens,
 		OutputTokens:    usage.CompletionTokens,
-		SentContent:     sentContent,
+		SentContent:     usr,
 		ReceivedContent: rawRespText,
 		UsedGlossary:    usedGlossary,
 		AddedGlossary:   res.Glos,
 		ErrorType:       errorType,
 		ErrorMessage:    errorMsg,
 		TriedBackends:   triedBackends,
+		RoundIndex:      h.RoundIndex,
+		Attempt:         attempt,
+		SystemPrompt:    sys,
+		UserMessage:     usr,
+		ResponseFormat:  responseFormat,
+		JSONSchema:      jsonSchema,
+		ResponseContent: rawRespText,
 	})
 }
 

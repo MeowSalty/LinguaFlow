@@ -26,6 +26,7 @@ func restoreSegmentRuby(
 	logger *slog.Logger,
 	reporter progress.Reporter,
 	isTextMode bool,
+	roundIndex int,
 ) {
 	rubyOutput := extractRubyOutput(seg)
 	logger.Info("restoreSegmentRuby: extractRubyOutput",
@@ -65,7 +66,7 @@ func restoreSegmentRuby(
 	}
 
 	if len(backends) > 0 && ctx.Err() == nil {
-		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter, isTextMode)
+		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter, isTextMode, roundIndex)
 	}
 }
 
@@ -92,6 +93,7 @@ func retryAlignSegment(
 	logger *slog.Logger,
 	reporter progress.Reporter,
 	isTextMode bool,
+	roundIndex int,
 ) {
 	if len(originals) == 0 {
 		return
@@ -124,7 +126,7 @@ func retryAlignSegment(
 		if callErr != nil {
 			emitRubyAlignmentBatchEvent(reporter, seg, b.Name(), append([]string(nil), triedBackends...),
 				"failed", "backend_error", callErr.Error(), attemptMs, 0, 0, user, "",
-				rubyHTTPStatusFromErr(callErr))
+				rubyHTTPStatusFromErr(callErr), roundIndex, 0, sys, user, req.ResponseFormat, req.JSONSchema)
 			logger.Warn("ruby alignment call failed, trying next backend",
 				"seg", seg.ID, "backend", b.Name(), "err", callErr)
 			resp = nil
@@ -187,7 +189,8 @@ func retryAlignSegment(
 		}
 
 		emitRubyAlignmentBatchEvent(reporter, seg, b.Name(), append([]string(nil), triedBackends...),
-			status, errorType, errorMsg, attemptMs, inputTokens, outputTokens, user, receivedContent, 0)
+			status, errorType, errorMsg, attemptMs, inputTokens, outputTokens, user, receivedContent, 0,
+			roundIndex, 0, sys, user, req.ResponseFormat, req.JSONSchema)
 		break
 	}
 	if callErr != nil && len(triedBackends) > 0 {
@@ -225,6 +228,12 @@ func emitRubyAlignmentBatchEvent(
 	inputTokens, outputTokens int64,
 	sentContent, receivedContent string,
 	httpStatus int,
+	roundIndex int,
+	attempt int,
+	sys string,
+	usr string,
+	responseFormat string,
+	jsonSchema map[string]any,
 ) {
 	if reporter == nil {
 		return
@@ -248,6 +257,13 @@ func emitRubyAlignmentBatchEvent(
 		ErrorMessage:    errorMsg,
 		HTTPStatus:      httpStatus,
 		TriedBackends:   triedBackends,
+		RoundIndex:      roundIndex,
+		Attempt:         attempt,
+		SystemPrompt:    sys,
+		UserMessage:     usr,
+		ResponseFormat:  responseFormat,
+		JSONSchema:      jsonSchema,
+		ResponseContent: receivedContent,
 	}
 	obs.OnBatchEvent(evt)
 }

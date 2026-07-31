@@ -10,6 +10,7 @@ import (
 // RoundConfig 描述一轮的执行配置。
 // Translate / Extract / Adjudicate / SemanticQA 互斥，恰好一个必须非 nil。
 type RoundConfig struct {
+	RoundIndex       int
 	Backend          backend.Backend
 	BatchSize        int
 	MaxWordsPerBatch int
