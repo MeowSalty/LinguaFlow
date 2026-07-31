@@ -44,6 +44,7 @@ type Server struct {
 	glossaryPruneSvc             *service.GlossaryPruneService
 	executionProfileSvc          *service.ExecutionProfileService
 	jobSvc                       *service.JobService
+	previewSvc                   *service.PreviewService
 	executionPlanSvc             *service.ExecutionPlanService
 	reviewSvc                    *service.ReviewService
 	segmentSvc                   *service.SegmentService
@@ -139,6 +140,19 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	s.glossarySyncSvc = service.NewGlossarySyncService(client, s.glossarySvc, s.projectSvc, s.auditSvc, logger)
 	s.glossaryPruneSvc = service.NewGlossaryPruneService(client, s.projectSvc, s.backendSvc, s.glossarySvc, s.prunePromptTemplateSvc, limiterPool, logger)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
+	previewRunner := worker.NewPreviewRunner(logger, client, limiterPool)
+	s.previewSvc = service.NewPreviewService(
+		logger,
+		client,
+		s.projectSvc,
+		s.jobSvc,
+		s.auditSvc,
+		previewRunner,
+		cfg.JWTSecret,
+		cfg.Preview.ApplyTokenTTL,
+		cfg.Preview.MaxConcurrency,
+		cfg.Preview.Timeout,
+	)
 
 	// 创建 ResourceMutex
 	s.resMutex = worker.NewResourceMutex()
