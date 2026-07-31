@@ -164,6 +164,22 @@ func DefaultWorkerConfig() WorkerConfig {
 	}
 }
 
+// PreviewConfig 控制单段翻译预览（同步接口）的并发与生命周期。
+type PreviewConfig struct {
+	MaxConcurrency int           `yaml:"max_concurrency"` // 全局同时进行的预览数；<=0 时使用默认值 2
+	Timeout        time.Duration `yaml:"timeout"`         // 单次预览执行超时
+	ApplyTokenTTL  time.Duration `yaml:"apply_token_ttl"` // apply_token 有效期
+}
+
+// DefaultPreviewConfig 返回默认的 Preview 配置。
+func DefaultPreviewConfig() PreviewConfig {
+	return PreviewConfig{
+		MaxConcurrency: 2,
+		Timeout:        5 * time.Minute,
+		ApplyTokenTTL:  15 * time.Minute,
+	}
+}
+
 type ServerConfig struct {
 	Host            string             `yaml:"host"`
 	Port            int                `yaml:"port"`
@@ -178,6 +194,7 @@ type ServerConfig struct {
 	ShutdownTimeout time.Duration      `yaml:"shutdown_timeout"`
 	Database        DatabaseConfig     `yaml:"database"`
 	Workers         WorkerConfig       `yaml:"workers"`
+	Preview         PreviewConfig      `yaml:"preview"`
 	CORS            CORSConfig         `yaml:"cors"`
 	Registration    RegistrationConfig `yaml:"registration"`
 	ServeUI         bool               `yaml:"serve_ui"`
@@ -282,6 +299,7 @@ func DefaultServerConfig() *ServerConfig {
 		ShutdownTimeout: 10 * time.Second,
 		Database:        defaultDatabaseConfig(DatabaseDriverSQLite),
 		Workers:         DefaultWorkerConfig(),
+		Preview:         DefaultPreviewConfig(),
 		CORS: CORSConfig{
 			AllowedOrigins: []string{"*"},
 		},
@@ -363,6 +381,15 @@ func ValidateServerConfig(c *ServerConfig) error {
 	}
 	if c.Workers.Sync.QueueCapacity < 1 {
 		c.Workers.Sync.QueueCapacity = 1
+	}
+	if c.Preview.MaxConcurrency <= 0 {
+		c.Preview.MaxConcurrency = DefaultPreviewConfig().MaxConcurrency
+	}
+	if c.Preview.Timeout <= 0 {
+		c.Preview.Timeout = DefaultPreviewConfig().Timeout
+	}
+	if c.Preview.ApplyTokenTTL <= 0 {
+		c.Preview.ApplyTokenTTL = DefaultPreviewConfig().ApplyTokenTTL
 	}
 	return nil
 }
