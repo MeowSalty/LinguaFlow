@@ -252,22 +252,11 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 		return nil, err
 	}
 
-	// 2. 加载执行计划模板（必填）
-	plan, err := s.executionPlans.GetByID(ctx, actorUserID, input.ExecutionPlanID)
-	if err != nil {
-		return nil, fmt.Errorf("execution plan: %w", err)
-	}
-
-	// 3. 校验并生成快照
-	snapshot, err := s.validateAndSnapshot(ctx, actorUserID, projectRow, plan, input.SegmentFilter)
+	// 2. 加载、校验执行计划并生成不可变快照。
+	snapshot, err := s.prepareExecutionSnapshot(ctx, actorUserID, projectRow, input.ExecutionPlanID, input.SegmentFilter)
 	if err != nil {
 		return nil, err
 	}
-
-	// 4. 填充通用配置
-	snapshot.SourceLang = projectRow.SourceLang
-	snapshot.TargetLang = projectRow.TargetLang
-	snapshot.GlossaryEnabled = jobGlossaryEnabled(projectRow.GlossaryEnabled, snapshot.Rounds)
 	snapshot.AutoApprove = input.AutoApprove
 	snapshot.ExplicitSegmentSelection = len(input.SegmentGroupKeys) == 0 && len(input.SegmentIDs) > 0
 
@@ -315,7 +304,7 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 		SetCreatedByID(actorUserID).
 		SetStatus(JobStatusPending).
 		SetTriggerType(JobTriggerManual).
-		SetExecutionPlanID(plan.ID).
+		SetExecutionPlanID(snapshot.ExecutionPlanID).
 		SetExecutionConfig(snapshotMap).
 		SetResourceCount(len(selection)).
 		SetTotalSegments(totalSegments).
@@ -347,6 +336,29 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 }
 
 // --- 快照方法 ---
+
+// prepareExecutionSnapshot loads an execution plan and freezes every runtime
+// dependency used by jobs and synchronous previews at request creation time.
+func (s *JobService) prepareExecutionSnapshot(
+	ctx context.Context,
+	actorUserID int,
+	projectRow *ent.Project,
+	executionPlanID int,
+	overrideSegmentFilter string,
+) (*JobExecutionSnapshot, error) {
+	plan, err := s.executionPlans.GetByID(ctx, actorUserID, executionPlanID)
+	if err != nil {
+		return nil, fmt.Errorf("execution plan: %w", err)
+	}
+	snapshot, err := s.validateAndSnapshot(ctx, actorUserID, projectRow, plan, overrideSegmentFilter)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.SourceLang = projectRow.SourceLang
+	snapshot.TargetLang = projectRow.TargetLang
+	snapshot.GlossaryEnabled = jobGlossaryEnabled(projectRow.GlossaryEnabled, snapshot.Rounds)
+	return snapshot, nil
+}
 
 // validateAndSnapshot 校验执行计划中的每轮配置，并生成完整快照。
 func (s *JobService) validateAndSnapshot(
