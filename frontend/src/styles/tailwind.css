@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 
+/* Follow the app's explicit theme choice instead of the OS preference. */
+@custom-variant dark (&:where(html[data-theme='dark'], html[data-theme='dark'] *));
+
 @theme {
   --color-brand-50: #ecfdf5;
   --color-brand-100: #d1fae5;
