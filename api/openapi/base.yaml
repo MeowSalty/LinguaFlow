@@ -63,6 +63,10 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceSegmentById'
   /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review:
     $ref: './paths/resources.yaml#/projectResourceSegmentReview'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview:
+    $ref: './paths/resources.yaml#/projectResourceSegmentTranslationPreview'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview/apply:
+    $ref: './paths/resources.yaml#/projectResourceSegmentTranslationPreviewApply'
   /projects/{projectId}/resources/{resourceId}/segments/batch-review:
     $ref: './paths/resources.yaml#/projectResourceSegmentsBatchReview'
   /projects/{projectId}/resources/{resourceId}/segments/approve-all:
@@ -252,6 +256,14 @@ components:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentGroup'
     ResourceSegmentGroupListResponse:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentGroupListResponse'
+    SegmentTranslationPreviewRequest:
+      $ref: './components/schemas/resource.yaml#/SegmentTranslationPreviewRequest'
+    SegmentTranslationPreviewResponse:
+      $ref: './components/schemas/resource.yaml#/SegmentTranslationPreviewResponse'
+    TranslationBatchDiagnostic:
+      $ref: './components/schemas/resource.yaml#/TranslationBatchDiagnostic'
+    ApplySegmentTranslationPreviewRequest:
+      $ref: './components/schemas/resource.yaml#/ApplySegmentTranslationPreviewRequest'
     CreateJobRequest:
       $ref: './components/schemas/job.yaml#/CreateJobRequest'
     JobResource:
