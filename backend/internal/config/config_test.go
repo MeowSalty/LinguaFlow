@@ -78,6 +78,34 @@ func TestValidateServerConfig_Defaults(t *testing.T) {
 	}
 }
 
+func TestPreviewConfigDefaults(t *testing.T) {
+	cfg := DefaultServerConfig()
+	if cfg.Preview.MaxConcurrency != 2 {
+		t.Fatalf("max_concurrency=%d want 2", cfg.Preview.MaxConcurrency)
+	}
+	if cfg.Preview.Timeout != 5*time.Minute {
+		t.Fatalf("timeout=%v want 5m", cfg.Preview.Timeout)
+	}
+	if cfg.Preview.ApplyTokenTTL != 15*time.Minute {
+		t.Fatalf("apply_token_ttl=%v want 15m", cfg.Preview.ApplyTokenTTL)
+	}
+
+	zero := DefaultServerConfig()
+	zero.Preview = PreviewConfig{}
+	if err := ValidateServerConfig(zero); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if zero.Preview.MaxConcurrency != 2 {
+		t.Fatalf("max_concurrency=%d want 2 after validation", zero.Preview.MaxConcurrency)
+	}
+	if zero.Preview.Timeout != 5*time.Minute {
+		t.Fatalf("timeout=%v want 5m after validation", zero.Preview.Timeout)
+	}
+	if zero.Preview.ApplyTokenTTL != 15*time.Minute {
+		t.Fatalf("apply_token_ttl=%v want 15m after validation", zero.Preview.ApplyTokenTTL)
+	}
+}
+
 func TestDefaultServerConfig_ServeUI(t *testing.T) {
 	cfg := DefaultServerConfig()
 	if !cfg.ServeUI {
