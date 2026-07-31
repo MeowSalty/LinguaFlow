@@ -41,7 +41,7 @@ const emit = defineEmits<{
   closeComment: []
   updateEditField: [field: 'source_text' | 'target_text' | 'comment', value: string]
   updateCommentText: [value: string]
-  translate: [segment: Segment]
+  previewTranslation: [segment: Segment]
 }>()
 </script>
 
@@ -194,8 +194,8 @@ const emit = defineEmits<{
         </NButton>
 
         <!-- 翻译按钮 -->
-        <NButton size="tiny" type="primary" @click="emit('translate', segment)">
-          {{ t('workspace.segment.actions.translate') }}
+        <NButton size="tiny" type="primary" @click="emit('previewTranslation', segment)">
+          {{ t('workspace.segment.actions.previewTranslation') }}
         </NButton>
       </template>
     </div>

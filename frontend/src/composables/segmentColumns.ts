@@ -65,7 +65,7 @@ export interface SegmentColumnDeps {
 
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>
-  onTranslate: (segment: Segment) => void
+  onPreviewTranslation: (segment: Segment) => void
 
   // ── 质量问题高亮联动（HTML 模式） ──
   /** 当前悬停的问题，格式 `${segmentId}:${issueIndex}` */
@@ -488,11 +488,11 @@ export function useSegmentColumns(
                   {
                     size: 'small',
                     quaternary: true,
-                    onClick: () => deps.onTranslate(row),
+                    onClick: () => deps.onPreviewTranslation(row),
                   },
                   { icon: () => h(NIcon, null, { default: () => h(IconCarbonLanguage) }) },
                 ),
-              default: () => t('workspace.segment.actions.translate'),
+              default: () => t('workspace.segment.actions.previewTranslation'),
             },
           ),
         ])
