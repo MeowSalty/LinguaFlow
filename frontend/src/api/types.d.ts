@@ -598,6 +598,62 @@ export interface paths {
         patch: operations["ReviewResourceSegment"];
         trace?: never;
     };
+    "/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 单段翻译预览
+         * @description 同步执行执行计划（extract、translate、adjudicate、semantic_qa）对单段进行预览，
+         *     不创建 Job、不写回 Segment / 术语表 / TM。模型执行已启动后的成功、部分成功、失败
+         *     统一返回 HTTP 200 并通过 status 区分；认证、权限、参数、资源、并发限制等仍使用
+         *     标准错误码。唯一持久化副作用是记录真实预览用量（UsageRecord.source = "preview"）。
+         *     存在可应用译文时返回短期签名 apply_token，可用独立 apply 接口冲突安全地写回。
+         */
+        post: operations["PreviewResourceSegmentTranslation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 应用单段翻译预览结果
+         * @description 使用预览返回的 apply_token 冲突安全地写回译文。apply_token 无状态，签名自包含
+         *     预览时的 source/target 基线、最终 issues 与确定性 QA 配置。target 与预览一致时
+         *     应用签名 issues；target 被修改时仅基于固定 QA 配置重新运行确定性 QA，
+         *     不再调用 LLM。基线（source/target/status）已变化返回 409，token 过期返回 410。
+         *     写入后状态固定为 edited，不自动 approve/reject。
+         */
+        post: operations["ApplyResourceSegmentTranslationPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/resources/{resourceId}/segments/batch-review": {
         parameters: {
             query?: never;
@@ -1584,6 +1640,112 @@ export interface components {
         };
         ResourceSegmentGroupListResponse: {
             items: components["schemas"]["ResourceSegmentGroup"][];
+        };
+        SegmentTranslationPreviewRequest: {
+            /** @description 执行计划模板 ID；计划中必须至少包含一个 translate 轮次 */
+            execution_plan_id: number;
+            /**
+             * @description 可选：编辑器中尚未保存的原文。省略时使用数据库原文；传入时必须为非空白文本，
+             *     将作为本次预览的原文（模拟一次原文变更后执行计划）。
+             */
+            source_text?: string;
+        };
+        SegmentTranslationPreviewResponse: {
+            /**
+             * @description - failed: 未得到非空最终译文或翻译轮终态失败
+             *     - partial: 有最终译文，但 extract / adjudicate / semantic QA 有终态失败或软警告
+             *     - success: 有最终译文且所有执行轮完成
+             * @enum {string}
+             */
+            status: "success" | "partial" | "failed";
+            segment_id: number;
+            /** @description 实际进入预览的原文（数据库原文或请求覆盖值） */
+            source_text: string;
+            /** @description 最终译文；failed 时可能为空 */
+            target_text?: string;
+            /** @description 最终汇总的质量问题（翻译确定性 QA + adjudicate + semantic QA） */
+            quality_issues?: components["schemas"]["QualityIssue"][];
+            execution: {
+                execution_plan_id: number;
+                execution_plan_name: string;
+                /** @description 各轮执行摘要（不暴露 backend options） */
+                rounds: {
+                    index: number;
+                    /** @enum {string} */
+                    mode: "extract" | "translate" | "adjudicate" | "semantic_qa";
+                    backend_name?: string;
+                    /** @description translate 轮的提示词模板名称 */
+                    prompt_template_name?: string;
+                    /** @description translate 轮的策略模板名称 */
+                    profile_name?: string;
+                }[];
+            };
+            usage: {
+                /** @description 实际 provider 调用次数（覆盖 retry、prompt upgrade、ruby retry 及所有轮次） */
+                api_calls: number;
+                input_tokens: number;
+                output_tokens: number;
+            };
+            batches: components["schemas"]["TranslationBatchDiagnostic"][];
+            warnings?: string[];
+            /** @description 仅当存在可应用译文时返回；用于 apply 接口 */
+            apply_token?: string;
+            /**
+             * Format: date-time
+             * @description apply_token 的过期时间
+             */
+            apply_expires_at?: string;
+        };
+        TranslationBatchDiagnostic: {
+            round_index?: number;
+            /** @description extract | translate | adjudicate | semantic_qa | ruby_retry */
+            stage: string;
+            /** @description 批次重试序号（0 起始） */
+            attempt?: number;
+            /** @description 文档段 ID（doc.Segments[idx].ID，对 Web 文档为 segment_index 字符串） */
+            segment_ids?: string[];
+            segment_count?: number;
+            backend_name?: string;
+            /** @enum {string} */
+            status: "success" | "partial" | "failed";
+            duration_ms?: number;
+            input_tokens?: number;
+            output_tokens?: number;
+            /** @description 发送给后端的请求诊断（不含 provider headers、API key 或 backend options） */
+            request?: {
+                system_prompt?: string;
+                system_prompt_length?: number;
+                system_prompt_truncated?: boolean;
+                user_message?: string;
+                user_message_length?: number;
+                user_message_truncated?: boolean;
+                /** @description none | json_schema | json_object | ""（后端默认） */
+                response_format?: string;
+                /** @description 请求所附 JSON schema（按需） */
+                json_schema?: {
+                    [key: string]: unknown;
+                };
+            };
+            response?: {
+                /** @description 后端原始文本响应 */
+                content?: string;
+                content_length?: number;
+                content_truncated?: boolean;
+            };
+            used_glossary?: components["schemas"]["GlossaryEntry"][];
+            /** @description 本批次抽取/自举新增的术语（仅写入内存 overlay） */
+            added_glossary?: components["schemas"]["GlossaryEntry"][];
+            /** @description backend_error | parse_error | placeholder_error | render_error */
+            error_type?: string;
+            error_message?: string;
+            http_status?: number;
+            tried_backends?: string[];
+            shrink_attempted?: boolean;
+        };
+        ApplySegmentTranslationPreviewRequest: {
+            apply_token: string;
+            /** @description 预览后（可能被用户修改）的译文；为空将返回 400 */
+            target_text: string;
         };
         CreateJobRequest: {
             /** @description 执行计划模板 ID */
@@ -3815,6 +3977,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Segment"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    PreviewResourceSegmentTranslation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SegmentTranslationPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description 预览结果（可能为 success / partial / failed） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SegmentTranslationPreviewResponse"];
+                };
+            };
+            /** @description 预览并发已满 */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApplyResourceSegmentTranslationPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplySegmentTranslationPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description 应用成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Segment"];
+                };
+            };
+            /** @description 段落基线已变化，需重新预览 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description apply_token 已过期或无效 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             default: components["responses"]["Problem"];

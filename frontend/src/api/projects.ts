@@ -23,6 +23,13 @@ export interface ResourceConflictError extends Error {
   readonly conflictData: ApiSchemas['Problem']
 }
 
+export interface SegmentTranslationPreviewError extends Error {
+  readonly isSegmentTranslationPreviewError: true
+  readonly status: number
+  readonly retryAfterSeconds?: number
+  readonly problem?: ApiSchemas['Problem']
+}
+
 export type FetchResourceSegmentsParams = NonNullable<
   ApiPaths['/projects/{projectId}/resources/{resourceId}/segments']['get']['parameters']['query']
 >
@@ -33,6 +40,13 @@ export const isResourceConflictError = (error: unknown): error is ResourceConfli
   error instanceof Error &&
   'isResourceConflict' in error &&
   (error as ResourceConflictError).isResourceConflict === true
+
+export const isSegmentTranslationPreviewError = (
+  error: unknown,
+): error is SegmentTranslationPreviewError =>
+  error instanceof Error &&
+  'isSegmentTranslationPreviewError' in error &&
+  (error as SegmentTranslationPreviewError).isSegmentTranslationPreviewError === true
 
 export const fetchCurrentUser = async (
   client: ApiClient = apiClient,
@@ -464,6 +478,88 @@ export const updateResourceSegment = async (
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.updateSegmentFailed'), error, response)
+  }
+
+  return data
+}
+
+const buildSegmentTranslationPreviewError = (
+  fallbackMessage: string,
+  error: unknown,
+  response?: Response,
+): SegmentTranslationPreviewError => {
+  const failure = buildRequestFailureError(fallbackMessage, error, response)
+  const previewError = failure as SegmentTranslationPreviewError
+  const problem =
+    error && typeof error === 'object' && 'title' in error
+      ? (error as ApiSchemas['Problem'])
+      : undefined
+  const retryAfterHeader = response?.headers.get('Retry-After')
+  const parsedRetryAfter = retryAfterHeader === null ? Number.NaN : Number(retryAfterHeader)
+
+  Object.defineProperties(previewError, {
+    isSegmentTranslationPreviewError: { value: true, enumerable: false },
+    status: { value: response?.status ?? problem?.status ?? 0, enumerable: false },
+    retryAfterSeconds: {
+      value: Number.isFinite(parsedRetryAfter) ? parsedRetryAfter : undefined,
+      enumerable: false,
+    },
+    problem: { value: problem, enumerable: false },
+  })
+
+  return previewError
+}
+
+export const previewResourceSegmentTranslation = async (
+  projectId: number,
+  resourceId: number,
+  segmentId: number,
+  executionPlanId: number,
+  signal?: AbortSignal,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['SegmentTranslationPreviewResponse']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview',
+    {
+      params: { path: { projectId, resourceId, segmentId } },
+      body: { execution_plan_id: executionPlanId },
+      signal,
+    },
+  )
+
+  if (!data) {
+    throw buildSegmentTranslationPreviewError(
+      t('api.errors.previewSegmentTranslationFailed'),
+      error,
+      response,
+    )
+  }
+
+  return data
+}
+
+export const applyResourceSegmentTranslationPreview = async (
+  projectId: number,
+  resourceId: number,
+  segmentId: number,
+  applyToken: string,
+  targetText: string,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['Segment']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview/apply',
+    {
+      params: { path: { projectId, resourceId, segmentId } },
+      body: { apply_token: applyToken, target_text: targetText },
+    },
+  )
+
+  if (!data) {
+    throw buildSegmentTranslationPreviewError(
+      t('api.errors.applySegmentTranslationPreviewFailed'),
+      error,
+      response,
+    )
   }
 
   return data
