@@ -24,7 +24,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  translate: [segment?: Segment]
+  previewTranslation: [segment: Segment]
   refresh: []
   translateByGroupKey: [groupKey: string]
   selectionChange: [segmentIds: number[]]
@@ -218,8 +218,8 @@ const handleSelectionChange = (ids: number[]): void => {
   emit('selectionChange', ids)
 }
 
-const handleTranslate = (segment: Segment): void => {
-  emit('translate', segment)
+const handlePreviewTranslation = (segment: Segment): void => {
+  emit('previewTranslation', segment)
 }
 
 const handleSaveAndEditNext = (segment: Segment): void => {
@@ -391,7 +391,7 @@ const handleCloseInlineComment = (): void => {
         :inline-comment-visible="inlineCommentVisible"
         :inline-comment-text="inlineCommentText"
         @selection-change="handleSelectionChange"
-        @translate="handleTranslate"
+        @preview-translation="handlePreviewTranslation"
         @load-more="handleLoadMore"
         @start-inline-edit="startInlineEdit"
         @cancel-inline-edit="cancelInlineEdit"

@@ -32,7 +32,7 @@ const props = defineProps<{
 // ── Emits ──
 const emit = defineEmits<{
   selectionChange: [segmentIds: number[]]
-  translate: [segment: Segment]
+  previewTranslation: [segment: Segment]
   loadMore: []
   startInlineEdit: [segment: Segment]
   cancelInlineEdit: []
@@ -114,7 +114,7 @@ const deps: SegmentColumnDeps = {
   closeInlineComment: () => emit('closeInlineComment'),
   updateCommentText: (value) => emit('update:inlineCommentText', value),
   updateEditFormField: (field, value) => emit('update:inlineEditForm', field, value),
-  onTranslate: (segment) => emit('translate', segment),
+  onPreviewTranslation: (segment) => emit('previewTranslation', segment),
 }
 
 const columns = useSegmentColumns(configRef, deps)
@@ -282,7 +282,7 @@ defineExpose({
           @close-comment="emit('closeInlineComment')"
           @update-edit-field="(field, val) => emit('update:inlineEditForm', field, val)"
           @update-comment-text="(val) => emit('update:inlineCommentText', val)"
-          @translate="emit('translate', segment)"
+          @preview-translation="emit('previewTranslation', segment)"
         />
       </template>
     </div>

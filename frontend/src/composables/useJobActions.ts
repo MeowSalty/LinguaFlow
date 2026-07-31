@@ -8,7 +8,6 @@ import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
 
-type Segment = ApiSchemas['Segment']
 type Job = ApiSchemas['Job']
 type CreateJobRequest = ApiSchemas['CreateJobRequest']
 type SegmentFilter = NonNullable<CreateJobRequest['segment_filter']>
@@ -69,8 +68,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   }))
 
   const canCreateResourceJob = computed(() => workspace.selectedResourceIds.length > 0)
-  const canCreateSegmentJob = computed(() => workspace.segments.length > 0)
-
   // ── 方法 ──
   const clearResourceSelection = (): void => {
     workspace.clearSelectedResources()
@@ -105,20 +102,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       groupKeys: groupKeys ? [...groupKeys] : [],
       jobTargetGroupKeys: [...jobTargetGroupKeys.value],
     })
-    jobForm.execution_plan_id = null
-    jobForm.segment_filter = undefined
-    jobDrawerVisible.value = true
-  }
-
-  const openSegmentJobDrawer = (segment?: Segment): void => {
-    if (!workspace.activeResourceId) {
-      message.warning(t('workspace.messages.selectResourceFirst'))
-      return
-    }
-
-    jobTargetMode.value = 'segments'
-    jobTargetResourceIds.value = [workspace.activeResourceId]
-    jobTargetSegmentIds.value = segment ? [segment.id] : workspace.segments.map((item) => item.id)
     jobForm.execution_plan_id = null
     jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
@@ -243,11 +226,9 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobFormRules,
     selectedResourceIds: computed(() => workspace.selectedResourceIds),
     canCreateResourceJob,
-    canCreateSegmentJob,
     // 方法
     openResourceJobDrawer,
     openResourceJobDrawerWithIds,
-    openSegmentJobDrawer,
     openSegmentJobDrawerWithIds,
     closeJobDrawer,
     submitJob,

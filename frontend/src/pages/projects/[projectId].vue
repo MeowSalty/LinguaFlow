@@ -30,6 +30,7 @@ import GlossaryDrawer from '@/components/workspace/GlossaryDrawer.vue'
 import GlossaryImportModal from '@/components/workspace/GlossaryImportModal.vue'
 import GlossarySyncDialog from '@/components/workspace/GlossarySyncDialog.vue'
 import SegmentPanel from '@/components/workspace/SegmentPanel.vue'
+import SegmentTranslationPreviewDrawer from '@/components/workspace/SegmentTranslationPreviewDrawer.vue'
 import JobPanel from '@/components/workspace/JobPanel.vue'
 import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
 import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
@@ -59,6 +60,10 @@ const projectsStore = useProjectsStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
 const segmentPanelRef = ref<InstanceType<typeof SegmentPanel> | null>(null)
+const segmentTranslationPreviewDrawerRef = ref<InstanceType<
+  typeof SegmentTranslationPreviewDrawer
+> | null>(null)
+const segmentTranslationPreviewVisible = ref(false)
 
 // ── 标签页懒加载 ──
 const loadedTabs = new Set<string>()
@@ -311,6 +316,41 @@ const handleBatchReview = async (action: 'approve' | 'reject'): Promise<void> =>
   segmentPanelRef.value?.clearSelectedSegments()
 }
 
+const handlePreviewTranslation = (segment: ApiSchemas['Segment']): void => {
+  if (!workspace.activeResourceId) return
+  segmentTranslationPreviewDrawerRef.value?.open(segment, workspace.activeResourceId)
+}
+
+const handlePreviewApplied = async (payload: {
+  segment: ApiSchemas['Segment']
+  resourceId: number
+}): Promise<void> => {
+  if (!projectId.value) return
+
+  const refreshes: Promise<void>[] = [
+    workspace.loadSegments(
+      projectId.value,
+      payload.resourceId,
+      false,
+      workspace.epubActiveGroupKey ?? undefined,
+    ),
+    workspace.loadResourceTree(projectId.value),
+  ]
+
+  if (workspace.isEpubResource) {
+    refreshes.push(workspace.refreshChapterGroups(projectId.value, payload.resourceId))
+    if (workspace.isInEpubDirectory) {
+      refreshes.push(
+        workspace.refreshEpubChapters(projectId.value).catch((error) => {
+          console.error(error)
+        }),
+      )
+    }
+  }
+
+  await Promise.all(refreshes)
+}
+
 // ── Watchers ──
 watch(
   () => route.query.tab,
@@ -535,7 +575,7 @@ onMounted(() => {
             <SegmentPanel
               ref="segmentPanelRef"
               :project-id="projectId"
-              @translate="(segment) => jobMgmt.openSegmentJobDrawer(segment)"
+              @preview-translation="handlePreviewTranslation"
               @refresh="reloadSegments"
             />
           </div>
@@ -581,6 +621,20 @@ onMounted(() => {
       @update:segment-filter="(val) => (jobMgmt.jobForm.segment_filter = val)"
       @submit="jobMgmt.submitJob()"
       @close="jobMgmt.closeJobDrawer()"
+    />
+
+    <SegmentTranslationPreviewDrawer
+      ref="segmentTranslationPreviewDrawerRef"
+      v-model:show="segmentTranslationPreviewVisible"
+      :project-id="projectId"
+      :text-render-mode="
+        workspace.activeResource?.format === 'epub' ||
+        workspace.activeResource?.format === 'docx' ||
+        workspace.activeResource?.format === 'html'
+          ? 'html'
+          : 'plaintext'
+      "
+      @applied="handlePreviewApplied"
     />
 
     <!-- 冲突对话框 -->

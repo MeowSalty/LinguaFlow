@@ -65,7 +65,7 @@ export interface SegmentColumnDeps {
 
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>
-  onTranslate: (segment: Segment) => void
+  onPreviewTranslation: (segment: Segment) => void
 
   // ── 质量问题高亮联动（HTML 模式） ──
   /** 当前悬停的问题，格式 `${segmentId}:${issueIndex}` */
@@ -118,7 +118,6 @@ export function useSegmentColumns(
           h(SegmentTextDisplay, {
             text: row.source_text,
             mode: config.value.textRenderMode,
-            maxLines: isEditing ? 6 : 4,
           }),
         )
 
@@ -202,7 +201,6 @@ export function useSegmentColumns(
                 issues: row.quality_issues,
                 mode: config.value.textRenderMode,
                 activeIssueIndex,
-                maxLines: 4,
               }),
             )
           }
@@ -490,11 +488,11 @@ export function useSegmentColumns(
                   {
                     size: 'small',
                     quaternary: true,
-                    onClick: () => deps.onTranslate(row),
+                    onClick: () => deps.onPreviewTranslation(row),
                   },
                   { icon: () => h(NIcon, null, { default: () => h(IconCarbonLanguage) }) },
                 ),
-              default: () => t('workspace.segment.actions.translate'),
+              default: () => t('workspace.segment.actions.previewTranslation'),
             },
           ),
         ])

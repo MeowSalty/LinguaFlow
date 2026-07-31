@@ -41,7 +41,7 @@ const emit = defineEmits<{
   closeComment: []
   updateEditField: [field: 'source_text' | 'target_text' | 'comment', value: string]
   updateCommentText: [value: string]
-  translate: [segment: Segment]
+  previewTranslation: [segment: Segment]
 }>()
 </script>
 
@@ -81,7 +81,7 @@ const emit = defineEmits<{
     <!-- 源文本 -->
     <div>
       <p class="mb-1 text-xs text-lf-text-muted">{{ t('workspace.segment.columns.source') }}</p>
-      <SegmentTextDisplay :text="segment.source_text" :mode="textRenderMode" :max-lines="4" />
+      <SegmentTextDisplay :text="segment.source_text" :mode="textRenderMode" />
     </div>
 
     <!-- 译文 -->
@@ -103,7 +103,6 @@ const emit = defineEmits<{
           :issues="segment.quality_issues"
           :mode="textRenderMode"
           :active-issue-index="activeIssueIndex"
-          :max-lines="4"
         />
         <div v-else class="target-empty">
           <NText depth="3">{{ t('workspace.segment.emptyTarget') }}</NText>
@@ -195,8 +194,8 @@ const emit = defineEmits<{
         </NButton>
 
         <!-- 翻译按钮 -->
-        <NButton size="tiny" type="primary" @click="emit('translate', segment)">
-          {{ t('workspace.segment.actions.translate') }}
+        <NButton size="tiny" type="primary" @click="emit('previewTranslation', segment)">
+          {{ t('workspace.segment.actions.previewTranslation') }}
         </NButton>
       </template>
     </div>
