@@ -53,11 +53,46 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 提取镜像元数据
+      - name: 准备镜像描述（取 Release 版本简介首段）
+        env:
+          RELEASE_BODY: ${{ github.event.release.body }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -e
+          # 从 release body 中提取「## 🎉 版本简介」章节的正文：
+          #   1) 定位到「## 🎉 版本简介」标题行；
+          #   2) 跳过标题，收集其后的非空正文行；
+          #   3) 遇到空行或引用框（> ）即止，只取第一自然段；
+          #   4) 压成单行，限制 256 字符，作为镜像描述。
+          DESC=$(printf '%s\n' "$RELEASE_BODY" | awk '
+            /^## .*版本简介/ { inSection = 1; next }
+            inSection && /^$/ { exit }
+            inSection && /^>/ { exit }
+            inSection && /^## / { exit }
+            inSection { print }
+          ' | tr -s ' \n\t' ' ' | sed 's/^ *//; s/ *$//' | cut -c1-256)
+          DESC="${DESC:-LinguaFlow ${TAG} 镜像}"
+          printf 'IMAGE_DESCRIPTION=%s\n' "$DESC" >> "$GITHUB_ENV"
+          echo "镜像描述: $DESC"
+
+      - name: 提取并丰富镜像元数据
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          # 同时输出 labels 和 manifest list annotations，
+          # 多架构镜像的 org.opencontainers.image.description 必须通过 annotations 才能在仓库页面显示；
+          # description 取自 Release 说明首段（见上个 step），即"前面确认发布的更新信息"
+          labels: |
+            org.opencontainers.image.title=LinguaFlow
+            org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+          annotations: |
+            org.opencontainers.image.title=LinguaFlow
+            org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -71,6 +106,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
           build-args: |
             VERSION=${{ github.event.release.tag_name }}
             COMMIT=${{ github.sha }}
