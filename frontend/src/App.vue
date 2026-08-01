@@ -127,15 +127,17 @@ const naiveDateLocale = computed(() => {
     :theme-overrides="themeOverrides"
   >
     <NMessageProvider>
-      <BootstrapNoticeHost />
-      <NDialogProvider>
-        <RouterView v-slot="{ Component }">
-          <component :is="Component" v-if="isBlank" />
-          <AppLayout v-else>
-            <component :is="Component" />
-          </AppLayout>
-        </RouterView>
-      </NDialogProvider>
+      <NNotificationProvider>
+        <BootstrapNoticeHost />
+        <NDialogProvider>
+          <RouterView v-slot="{ Component }">
+            <component :is="Component" v-if="isBlank" />
+            <AppLayout v-else>
+              <component :is="Component" />
+            </AppLayout>
+          </RouterView>
+        </NDialogProvider>
+      </NNotificationProvider>
     </NMessageProvider>
   </NConfigProvider>
 </template>
