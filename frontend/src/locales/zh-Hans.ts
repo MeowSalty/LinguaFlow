@@ -1082,6 +1082,7 @@ const messages = {
       jobRetryFailed: '任务重试失败',
       selectReadyResource: '请选择至少一个资源',
       selectResourceFirst: '请先选择资源文件',
+      copyFailed: '复制失败，剪贴板不可用',
     },
   },
   backends: {
