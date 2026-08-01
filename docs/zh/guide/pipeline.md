@@ -19,11 +19,13 @@ flowchart TD
   Res --> Next{下一轮次}
   Next -->|extract| Ex[抽术语 → 写术语表]
   Next -->|translate| Tr[翻译段落]
-  Next -->|adjudicate| Ad[复核质检问题]
+  Next -->|adjudicate| Ad[复核规则质检问题]
+  Next -->|semantic_qa| Sq[LLM 语义扫描]
   Next -->|完成| Done([结束])
   Ex --> Next
   Tr --> Next
   Ad --> Next
+  Sq --> Next
 ```
 
 **翻译轮次内部（简要）：**
@@ -31,11 +33,11 @@ flowchart TD
 1. 内容保护（占位符替换）
 2. 组装上下文 → 调用 AI
 3. 还原占位符 / 后处理 / 可选 Ruby 还原
-4. 规则质检写回段落
+4. 规则质检写回段落（含 16 项确定性 checker）
 
-可选：执行配置中的 **内联术语自举** 会在翻译响应中一并抽术语。
+可选：执行配置中的 **内联术语自举** 会在翻译响应中一并抽术语。语义质检产生的 `warning` 级问题通过 `span` 精确定位到译文片段。
 
-推荐轮次顺序：`extract`（可选）→ `translate`（可多轮）→ `adjudicate`（可选）。
+推荐轮次顺序：`extract`（可选）→ `translate`（可多轮）→ `adjudicate`（可选）→ `semantic_qa`（可选）。
 
 ---
 
@@ -132,28 +134,53 @@ Round 2：只处理 Round 1 失败的段落
 
 ### 规则质检
 
-翻译后自动标问题，例如：
+翻译轮次内由 QA 引擎同步跑规则检查并写回段落。共 16 项确定性 checker（其中 1 项 `duplicate_source_divergence` 为文档级、跨段比对，不可在 `qa.checks` 中关闭）；其余 15 项 per-batch checker 均可在执行配置 `qa.checks` 中按名选择性启用：
 
-| code              | 含义           | 可否 AI 裁决 |
-| ----------------- | -------------- | ------------ |
-| `length_ratio`    | 过短/过长      | ✅ 软规则    |
-| `duplicate`       | 相邻译文重复   | ❌ 硬规则    |
-| `untranslated`    | 译文=原文      | ❌ 硬规则    |
-| `source_residual` | 译文夹源语脚本 | ✅ 软规则    |
+| code                          | 含义                                           | 可否 AI 裁决 |
+| ----------------------------- | ---------------------------------------------- | ------------ |
+| `length_ratio`                | 过短/过长                                       | ✅ 软规则    |
+| `duplicate`                   | 相邻译文完全相同                               | ❌ 硬规则    |
+| `duplicate_source_divergence` | 文档级同源异译                                 | ❌ 文档级    |
+| `untranslated`                | 译文=原文                                       | ❌ 硬规则    |
+| `source_residual`             | 译文夹源语脚本                                 | ✅ 软规则    |
+| `punctuation_pairing`         | 标点配对不平衡                                 | ❌ 硬规则    |
+| `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     | ❌ 硬规则    |
+| `repeated_space`              | 连续空格 / CJK 间空格                          | ❌ 硬规则    |
+| `width_mix`                   | 全/半角混用                                    | ❌ 硬规则    |
+| `number_mismatch`             | 阿拉伯数字集合不一致                           | ❌ 硬规则    |
+| `url_email_mismatch`          | URL/邮箱集合不一致                             | ❌ 硬规则    |
+| `subtitle_line_count`        | 字幕行数不一致                                 | ❌ 硬规则    |
+| `forbidden_term`              | 命中禁译词条却仍出现在译文                     | ❌ 硬规则    |
+| `term_inconsistency`          | 命中强制词条但译文未用 target                  | ❌ 硬规则    |
+| `leftover_placeholder`        | 译文残留 `__LF_*` 占位符                       | ❌ 硬规则    |
+| `xml_tag_mismatch`           | XML 标签集合不一致                             | ❌ 硬规则    |
 
-源语残留按 Unicode 脚本与语言对分档（独立脚本偏严；共汉字语言对有不同策略）。源语言为 `auto` 时残留检测不生效。
-
-审校筛选见 [翻译审校](/zh/guide/review#质量检测)。
+源语残留按 Unicode 脚本与语言对分档（独立脚本偏严；共汉字语言对有不同策略）。源语言为 `auto` 时残留检测不生效。规则与可裁决性等细节见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)。
 
 ### 质量裁决（`adjudicate`）
 
 对软规则问题逐条问 AI：`real` 保留 / `false_positive` 剔除。
 
-1. 只处理已译/已改且带可裁决 code 的段落
+1. 只处理已译/已改且带可裁决 code（`source_residual` / `length_ratio`）的段落
 2. 分批调用 **内置** 裁决提示词
 3. 解析失败时 **保留原问题**，不清空
 
 **建议：** 放在翻译轮次之后；专有名词多的文档优先开 `source_residual`。配置见 [翻译配置 · 使用](/zh/guide/translation-config#进阶组合)；协议细节见 [翻译配置 · 参考 · adjudicate](/zh/guide/translation-config-reference#adjudicate)。
+
+### 语义质检（`semantic_qa`）
+
+用 LLM 扫描已译段落，捕获规则无法覆盖的语义问题（如 `mistranslation` / `calque` / `omission` / `addition` / `grammar` / `register` / `term_fidelity` / `naturalness`）：
+
+1. 系统提示词 **内置**（不可改），内部已显式排除规则负责的 code，不重复报
+2. 输出为 `warning` 级问题，带 `span` 精确定位，**直接进人审，不经裁决**
+3. 扫描范围可按 `segment_scope` 限定（`all` / `with_issues` / `with_issue_codes`），成本敏感时可只扫高价值子集
+4. 扫描失败采用**软警告**：写入资源 `warning_message`，作业继续而非终态失败
+
+::: tip 与裁决的差异
+裁决只对已有规则问题做「保留/剔除」，不新增；语义质检则是**新增**语义类问题。二者互补，不冲突。
+:::
+
+协议细节见 [翻译配置 · 参考 · semantic_qa](/zh/guide/translation-config-reference#semantic-qa)。审校侧呈现见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)。
 
 ---
 
@@ -175,17 +202,34 @@ Round 2：只处理 Round 1 失败的段落
 
 后端 `rate_limit_per_minute`：令牌桶，超限等待而非丢弃。`0` 表示不限。
 
+### 超时
+
+后端 `timeout`（默认 60 秒）可关闭：关闭后实际请求不设时限，适合本地大模型或慢响应网关。本地超时与父上下文截止区分处理——本地超时按可重试错误退避重试，父上下文截止则跳过重试。
+
 ### 错误策略（摘要）
 
 | 场景       | 行为                                         |
 | ---------- | -------------------------------------------- |
 | 429 / 503  | 退避后重试；尊重 `Retry-After`，常有最小等待 |
-| 网络/超时  | 缩小批次再试                                 |
+| 网络/超时  | 缩小批次再试（本地超时按可重试退避）         |
 | 解析失败   | 先提示升级修复，再缩小批次                   |
 | 401 / 403  | 不重试，留给后续轮次                         |
 | 部分段缺失 | 同轮再组批一次                               |
 
 重试参数：`max_attempts` / `backoff_ms` / `jitter`（指数退避 + 抖动）。见 [翻译配置 · 参考 · 重试](/zh/guide/translation-config-reference#重试-retry)。
+
+---
+
+## 单段试译预览
+
+正式作业之外，可对单个段直接发起 **试译预览（preview）**：选一个执行计划，对一段原文在内存中完整跑一遍 `extract → translate → adjudicate → semantic_qa`，不创建作业、不持久化中间结果、不污染术语表/翻译记忆。
+
+- **诊断输出**：批次事件携带 `round_index` / `attempt` / `system_prompt` / `user_message` / `response_format` / `json_schema` / `response_content`，用于排查提示词、响应格式与批次问题
+- **用量计量**：调用次数与 token 消耗按预览口径统计，与正式作业区分
+- **应用译文**：预览结果返回一个带签名的 `apply_token`（有过期时间）；应用时用令牌做基线（source / target / status）条件更新，检测到段落已变化会拒绝，避免覆盖他人改动
+- **内存隔离**：术语表用内存 overlay、翻译记忆用 Noop，确保试译的副作用留在沙箱内
+
+产品操作见 [翻译配置 · 使用 · 单段试译](/zh/guide/translation-config#单段试译)；接口契约见 [翻译配置 · 参考 · 单段试译](/zh/guide/translation-config-reference#单段试译-preview)。
 
 ---
 
@@ -206,5 +250,5 @@ plugins:
 ## 下一步
 
 - [翻译配置 · 使用](/zh/guide/translation-config) · [翻译配置 · 参考](/zh/guide/translation-config-reference)
-- [翻译审校](/zh/guide/review) · [术语表管理](/zh/guide/glossary)
+- [翻译审校](/zh/guide/review)（含语义质检呈现）· [术语表管理](/zh/guide/glossary)
 - [常见问题](/zh/guide/faq)

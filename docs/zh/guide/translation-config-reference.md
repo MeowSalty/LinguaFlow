@@ -28,7 +28,7 @@ Web 可用「探测模型」拉取列表后选择。
 | `base_url`              | string     | SDK 默认                              | 自定义端点                                            |
 | `model`                 | string     | **必填**                              | 模型 ID                                               |
 | `max_tokens`            | int        | OpenAI: `0`；Anthropic/Gemini: `8192` | 最大生成 token；`0` 常表示不额外限制                  |
-| `timeout`               | int/string | `60`（秒）                            | 秒数或 Go duration                                    |
+| `timeout`               | int/string | `60`（秒）                            | 秒数或 Go duration；Web 上可关闭超时（关闭后实际请求不设时限） |
 | `response_format`       | string     | `json_schema`                         | `json_schema` \| `json_object` \| `text` \| `none`    |
 | `temperature`           | float      | API 默认                              | 采样温度                                              |
 | `top_p`                 | float      | API 默认                              | 核采样                                                |
@@ -244,17 +244,40 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 ### 质量检测（qa）
 
-| 字段                   | 类型   | 默认值 | 说明             |
-| ---------------------- | ------ | ------ | ---------------- |
-| `enabled`              | bool   | `true` | 总开关           |
-| `length.enabled`       | bool   | `true` | 长度比检测       |
-| `length.min_ratio`     | float  | `0.5`  | 最小比           |
-| `length.max_ratio`     | float  | `2.5`  | 最大比           |
-| `length.unit`          | string | `char` | `char` \| `word` |
-| `repetition.enabled`   | bool   | `true` | 相邻重复         |
-| `untranslated.enabled` | bool   | `true` | 译文=原文        |
+| 字段                   | 类型     | 默认值 | 说明                                                                                       |
+| ---------------------- | -------- | ------ | ------------------------------------------------------------------------------------------ |
+| `enabled`              | bool     | `true` | 总开关                                                                                     |
+| `checks`               | []string | `nil`  | 启用的确定性 checker 名称；`nil`/缺省 = 启用全部；空数组会被视为「等价于全部」并改回 `nil` |
+| `length.enabled`       | bool     | `true` | 长度比检测（与 `checks` 中的 `length_ratio` 名等价）                                       |
+| `length.min_ratio`     | float    | `0.5`  | 最小比                                                                                     |
+| `length.max_ratio`     | float    | `2.5`  | 最大比                                                                                     |
+| `length.unit`          | string   | `char` | `char` \| `word`                                                                           |
+| `repetition.enabled`   | bool     | `true` | 相邻重复（与 `checks` 中的 `duplicate` 名等价）                                            |
+| `untranslated.enabled` | bool     | `true` | 译文=原文（与 `checks` 中的 `untranslated` 名等价）                                        |
 
-源语残留（`source_residual`）按语言对自动启用，无单独开关；源语言为 `auto` 时不生效。审校侧说明见 [翻译审校](/zh/guide/review#质量检测)。
+#### 可配置 checker 名称（`qa.checks`）
+
+`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 15 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
+
+| 名称                          | 说明                                           |
+| ----------------------------- | ---------------------------------------------- |
+| `untranslated`                | 译文=原文                                       |
+| `length_ratio`                | 长度过短/过长                                   |
+| `duplicate`                   | 相邻译文相同                                    |
+| `source_residual`             | 源语脚本残留（按语言对分档）                    |
+| `punctuation_pairing`         | 标点配对不平衡                                  |
+| `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     |
+| `repeated_space`              | 连续空格 / CJK 间空格                          |
+| `width_mix`                   | 全/半角混用                                    |
+| `number_mismatch`             | 阿拉伯数字集合不一致                           |
+| `url_email_mismatch`          | URL/邮箱集合不一致                             |
+| `subtitle_line_count`        | 字幕行数不一致                                 |
+| `forbidden_term`              | 命中禁译词条仍出现                             |
+| `term_inconsistency`          | 命中强制词条未用 target                        |
+| `leftover_placeholder`        | 译文残留占位符                                 |
+| `xml_tag_mismatch`           | XML 标签集合不一致                             |
+
+源语残留（`source_residual`）随质量检测引擎自动启用，无单独开关；源语言为 `auto` 时不生效。审校侧说明见 [翻译审校](/zh/guide/review#质量检测)。
 
 ### 上下文（context）
 
@@ -302,6 +325,7 @@ bootstrap:
 
 qa:
   enabled: true
+  # checks:               # 留空（缺省）表示启用全部确定性 checker
   length:
     enabled: true
     min_ratio: 0.5
@@ -325,14 +349,15 @@ context:
 
 ### 轮次公共字段
 
-| 字段          | 类型   | 说明                                   |
-| ------------- | ------ | -------------------------------------- |
-| `mode`        | string | `translate` / `extract` / `adjudicate` |
-| `backend_id`  | int    | 后端 ID                                |
-| `concurrency` | int    | 并发（≥ 1）                            |
-| `translate`   | object | `mode=translate` 时必填                |
-| `extract`     | object | `mode=extract` 时必填                  |
-| `adjudicate`  | object | `mode=adjudicate` 时必填               |
+| 字段           | 类型   | 说明                                            |
+| -------------- | ------ | ----------------------------------------------- |
+| `mode`         | string | `translate` / `extract` / `adjudicate` / `semantic_qa` |
+| `backend_id`   | int    | 后端 ID                                         |
+| `concurrency`  | int    | 并发（≥ 1）                                     |
+| `translate`    | object | `mode=translate` 时必填                         |
+| `extract`      | object | `mode=extract` 时必填                           |
+| `adjudicate`   | object | `mode=adjudicate` 时必填                        |
+| `semantic_qa`  | object | `mode=semantic_qa` 时必填                       |
 
 ### extract
 
@@ -379,6 +404,38 @@ context:
 
 text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需重试。
 
+### semantic_qa
+
+语义质检轮次配置。系统提示词内置不可见，无 `prompt_template_id`；产出的语义类问题以 `warning` 直接进人审。
+
+| 字段                  | 类型     | 默认值 | 说明                                                                                                                  |
+| --------------------- | -------- | ------ | --------------------------------------------------------------------------------------------------------------------- |
+| `batch_size`          | int      | —      | 段落数上限；`0` 不限制，与 `max_words_per_batch` 至少填一项                                                           |
+| `max_words_per_batch` | int      | —      | 字词数上限；`0` 不限制，与 `batch_size` 至少填一项                                                                    |
+| `segment_scope`       | string   | `all`  | 段落扫描范围：`all` / `with_issues` / `with_issue_codes`                                                              |
+| `issue_codes`         | []string | —      | 仅 `segment_scope=with_issue_codes` 时生效，须 ≥ 1 项；取值见下方                                                       |
+| `retry`               | object   | —      | 重试                                                                                                                  |
+
+#### `segment_scope` 取值
+
+| 值                  | 扫描范围                                                                                |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| `all`（默认）       | 全部 `translated` / `edited` 且译文非空的段，完整语义覆盖                                |
+| `with_issues`       | 仅扫描带任意 issue 的段                                                                 |
+| `with_issue_codes`  | 仅扫描含 `issue_codes` 声明 code 的段（用于成本敏感的高价值子集，如 ja↔zh 假同源检测） |
+
+范围与任务级 `segment_ids` 取交集。`scope ≠ all` 时未扫到的段会保留其原有的语义 issue。`scope=with_issue_codes` 时必须选至少一个 code。
+
+#### `issue_codes` 取值
+
+支持 7 个 code，规则码与语义码都可作筛选键：
+
+`source_residual`、`length_ratio`、`untranslated`、`duplicate`、`calque`、`term_fidelity`、`naturalness`
+
+#### 软警告
+
+扫描轮失败不视为终态失败：失败原因写入资源 `warning_message`，作业继续。作业进度卡片与资源详情页会提示该资源质检不完整，需人工补查。
+
 ### 重试（retry）
 
 | 字段           | 类型 | 默认值 | 说明         |
@@ -398,7 +455,8 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 
 - `rounds` 非空；每轮有合法 `mode` 与 `backend_id`
 - 对应 mode 必须带齐子配置对象
-- `batch_size` 与 `max_words_per_batch` 在翻译/裁决中不能同时为 0（提取两者皆 0 表示一次全量）
+- `batch_size` 与 `max_words_per_batch` 在翻译/裁决/语义质检中不能同时为 0（提取两者皆 0 表示一次全量）
+- `semantic_qa.segment_scope=with_issue_codes` 时必须提供 ≥ 1 个 `issue_codes`
 - `concurrency` ≥ 1；`fallback_shrink` ∈ [0, 1)
 
 ---
@@ -410,6 +468,61 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 | `system` | 内置，全局只读                |
 | `user`   | 创建者私有                    |
 | `org`    | 组织共享（服务器模式 · 预览） |
+
+---
+
+## 词条属性（forbidden / mandatory）
+
+词条（GlossaryEntry）除原有的 `source` / `target` / `case_sensitive` / `notes` 外，新增两个布尔属性：
+
+| 字段          | 类型   | 默认值  | 说明                                                                                              |
+| ------------- | ------ | ------- | ------------------------------------------------------------------------------------------------- |
+| `forbidden`   | bool   | `false` | 是否为禁译条目；命中源词且译文包含 `target` 时产生 `forbidden_term` error                          |
+| `mandatory`   | bool   | `true`  | 是否为强制条目；命中源词时强制译文使用 `target`，否则产生 `term_inconsistency` warning             |
+
+唯一索引按 `forbidden` 取值分两种：
+
+- `forbidden=false` → `(project_id, source_key)` 唯一，同源词只能一条
+- `forbidden=true` → `(project_id, source_key, target)` 唯一，允许同源词多条不同禁译目标
+
+创建 / 更新请求（`CreateGlossaryEntryRequest` / `UpdateGlossaryEntryRequest`）默认 `forbidden=false`、`mandatory=true`。产品侧说明见 [术语表管理 · 禁译与强制](/zh/guide/glossary#禁译-forbidden-与强制-mandatory)。
+
+---
+
+## 单段试译（preview）
+
+在不创建作业的前提下，对单段原文用某执行计划在内存中跑一遍流水线，预览译文与诊断信息后决定是否应用。
+
+### `POST /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview`
+
+| 字段                | 类型 | 必填 | 说明                                                                                       |
+| ------------------- | ---- | ---- | ------------------------------------------------------------------------------------------ |
+| `execution_plan_id` | int  | 是   | 执行计划 ID；计划必须至少包含一个 `translate` 轮次                                          |
+| `source_text`       | string | 否  | 可选：临时覆盖原文（模拟原文变更后翻译）；省略时使用数据库原文，传入时必须为非空白文本     |
+
+响应（`SegmentTranslationPreviewResponse`）关键字段：
+
+| 字段                | 说明                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| `status`            | `success` / `partial` / `failed`（终态译文状态）                                            |
+| `target_text`       | 最终译文；`failed` 时可能为空                                                              |
+| `quality_issues`    | 汇总质量问题（规则 QA + adjudicate + semantic QA）                                          |
+| `execution.rounds`  | 各轮执行摘要（index / mode），不暴露 backend options                                        |
+| `usage`             | 用量统计（与正式作业区分）                                                                  |
+| `batches`           | 批次诊断（`TranslationBatchDiagnostic`）：含 `round_index` / `attempt` / `system_prompt` / `user_message` / `response_format` / `json_schema` / `response` 等 |
+
+预览在内存沙箱执行：术语表用 overlay、翻译记忆用 Noop，不持久化。
+
+### `POST .../segments/{segmentId}/translation-preview/apply`
+
+| 字段          | 类型   | 必填 | 说明                                          |
+| ------------- | ------ | ---- | --------------------------------------------- |
+| `apply_token` | string | 是   | 预览返回的签名令牌（带过期时间）              |
+| `target_text` | string | 是   | 预览后（可能被人工修改）的译文；为空返回 400  |
+
+应用时做基线条件更新（source / target / status 必须与预览时一致）；段落已变更则令牌失效，需重新试译。
+
+---
 
 ## 相关文档
 
