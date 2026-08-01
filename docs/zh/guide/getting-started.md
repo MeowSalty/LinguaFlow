@@ -204,8 +204,8 @@ OpenAI 类型可对接 OpenAI 兼容接口，例如 Ollama：`http://localhost:1
 | ---------------------------------- | ------------------------------------------------------------------------------------ |
 | 弄清项目 / 资源 / 作业 / 计划      | [核心概念](/zh/guide/concepts)                                                       |
 | 终端批量翻译、CI 集成              | [快速开始 · CLI](/zh/guide/cli-quickstart)                                           |
-| 术语表、自动提取                   | [术语表管理](/zh/guide/glossary)                                                     |
-| 审校、质检、筛选                   | [翻译审校](/zh/guide/review)                                                         |
-| 多轮计划、质量裁决、保护规则       | [翻译配置 · 使用](/zh/guide/translation-config) · [流水线与原理](/zh/guide/pipeline) |
+| 术语表、禁译/强制、自动提取        | [术语表管理](/zh/guide/glossary)                                                     |
+| 审校、质检、筛选、问题高亮         | [翻译审校](/zh/guide/review)                                                         |
+| 多轮计划、质量裁决、语义质检、试译 | [翻译配置 · 使用](/zh/guide/translation-config) · [流水线与原理](/zh/guide/pipeline) |
 | 安装细节、Docker Compose、数据目录 | [安装部署](/zh/guide/installation)                                                   |
 | 本地模式 vs 服务器模式             | [使用模式](/zh/guide/modes)                                                          |
