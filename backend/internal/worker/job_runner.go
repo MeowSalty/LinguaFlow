@@ -872,34 +872,35 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// translateStatusAllowed 判断某 status 是否被 SegmentFilter 允许进入翻译轮。
+// filter==nil 视为 pending_only（与 applyTranslateSegmentFilter 默认一致）。
+func translateStatusAllowed(filter *service.SegmentFilterSnapshot, status string) bool {
+	sf := "pending_only"
+	if filter != nil && filter.StatusFilter != "" {
+		sf = filter.StatusFilter
+	}
+	switch sf {
+	case "all":
+		return true
+	case "skip_approved":
+		switch status {
+		case string(service.SegmentStatusPending), string(service.SegmentStatusRejected),
+			string(service.SegmentStatusTranslated), string(service.SegmentStatusEdited):
+			return true
+		}
+		return false
+	default: // "pending_only"
+		return status == string(service.SegmentStatusPending) ||
+			status == string(service.SegmentStatusRejected)
+	}
+}
+
 // applyTranslateSegmentFilter 按翻译状态过滤段落。
 // 仅翻译轮次使用；抽取轮次不过滤。
 func applyTranslateSegmentFilter(segments []*ent.Segment, filter *service.SegmentFilterSnapshot) []*ent.Segment {
-	if filter == nil {
-		filter = &service.SegmentFilterSnapshot{StatusFilter: "pending_only"}
-	}
-
-	var allowed map[segment.Status]bool
-	switch filter.StatusFilter {
-	case "all":
-		return segments
-	case "skip_approved":
-		allowed = map[segment.Status]bool{
-			service.SegmentStatusPending:    true,
-			service.SegmentStatusRejected:   true,
-			service.SegmentStatusTranslated: true,
-			service.SegmentStatusEdited:     true,
-		}
-	default: // "pending_only"
-		allowed = map[segment.Status]bool{
-			service.SegmentStatusPending:  true,
-			service.SegmentStatusRejected: true,
-		}
-	}
-
 	result := make([]*ent.Segment, 0, len(segments))
 	for _, seg := range segments {
-		if allowed[seg.Status] {
+		if translateStatusAllowed(filter, string(seg.Status)) {
 			result = append(result, seg)
 		}
 	}
