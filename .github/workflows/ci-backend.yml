@@ -98,6 +98,16 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
+      - name: 缓存 Go 编译产物
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-build-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('backend/go.sum') }}
+          restore-keys: |
+            go-build-${{ matrix.goos }}-${{ matrix.goarch }}-
+
       - name: 构建二进制文件
         env:
           GOOS: ${{ matrix.goos }}
@@ -125,7 +135,15 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
+      - name: 缓存 Go 工具二进制
+        id: go-bin-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin
+          key: go-bin-${{ runner.os }}-${{ runner.arch }}-govulncheck
+
       - name: 安装 govulncheck
+        if: steps.go-bin-cache.outputs.cache-hit != 'true'
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: 运行漏洞扫描
