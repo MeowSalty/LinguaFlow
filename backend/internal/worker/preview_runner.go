@@ -138,8 +138,12 @@ func (r *PreviewRunner) RunPreview(
 
 	// Determine the last translate round index.
 	lastTranslateRoundIdx := -1
+	firstTranslateRoundIdx := -1
 	for i := range snapshot.Rounds {
 		if snapshot.Rounds[i].Mode == "translate" {
+			if firstTranslateRoundIdx < 0 {
+				firstTranslateRoundIdx = i
+			}
 			lastTranslateRoundIdx = i
 		}
 	}
@@ -163,15 +167,44 @@ func (r *PreviewRunner) RunPreview(
 		if roundIdx > 0 {
 			inputs := r.buildSegmentInputsFromDoc(doc)
 			doc = pipeline.BuildDocumentFromSegments(inputs, snapshot.SourceLang, snapshot.TargetLang, resourceRow.Format)
-			doc.Segments[targetDocIdx].Translate = true
-			for i := range doc.Segments {
-				if i != targetDocIdx {
-					doc.Segments[i].Translate = false
-				}
+		}
+
+		// 非目标段恒为上下文（Translate=false）。
+		for i := range doc.Segments {
+			if i != targetDocIdx {
+				doc.Segments[i].Translate = false
 			}
 		}
 
-		segmentIndexes := []int{targetDocIdx}
+		// 决定目标段是否本轮翻译。
+		var segmentIndexes []int
+		switch round.Mode {
+		case "translate":
+			if roundIdx == firstTranslateRoundIdx {
+				// 首个 translate 轮强制纳入 target，无视其初始 status
+				// （保留"预览=强制重译目标段"的产品语义）。
+				doc.Segments[targetDocIdx].Translate = true
+				segmentIndexes = []int{targetDocIdx}
+			} else {
+				var filter *service.SegmentFilterSnapshot
+				if round.Translate != nil {
+					filter = round.Translate.SegmentFilter
+				}
+				if translateStatusAllowed(filter, doc.Segments[targetDocIdx].Status) {
+					doc.Segments[targetDocIdx].Translate = true
+					segmentIndexes = []int{targetDocIdx}
+				} else {
+					// 跳过本轮 translate；target 保持上一轮译文作为上下文。
+					doc.Segments[targetDocIdx].Translate = false
+					segmentIndexes = nil
+				}
+			}
+		default:
+			// extract/adjudicate/semantic_qa：始终处理 target；其筛选逻辑由
+			// 各自 handler 按 status 自行完成，不受本次改动影响。
+			doc.Segments[targetDocIdx].Translate = true
+			segmentIndexes = []int{targetDocIdx}
+		}
 
 		// Build the batch handler for this round.
 		var batchHandler func(ctx context.Context, batchResult pipeline.BatchResult) error
