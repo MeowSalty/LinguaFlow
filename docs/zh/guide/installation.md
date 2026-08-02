@@ -39,6 +39,10 @@ docker run -d \
 
 浏览器访问 `http://localhost:8080`，按提示注册/登录后使用。
 
+::: tip 注意「非安全上下文」限制
+浏览器只在 HTTPS 或 `localhost` 下放开部分 API。若你把容器映射到局域网 IP / 域名用**明文 HTTP** 访问，**文件上传**和**复制到剪贴板**会被浏览器禁用。生产建议经反向代理上 HTTPS，详见 [使用模式 · 通过 HTTP 访问的限制](/zh/guide/modes#通过-http-访问的限制-非安全上下文)。
+:::
+
 ### Docker Compose
 
 使用 SQLite（默认）的部署示例：
