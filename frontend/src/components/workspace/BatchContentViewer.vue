@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { NButton, NIcon, NTag } from 'naive-ui'
+import { NButton, NIcon, NTag, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
+import { isCapabilityBlocked } from '@/utils/secureContext'
+
 const { t } = useI18n()
+const message = useMessage()
 
 const props = defineProps<{
   content: string
@@ -26,6 +29,10 @@ const displayContent = computed(() => {
 })
 
 const handleCopy = async (): Promise<void> => {
+  if (isCapabilityBlocked('clipboard')) {
+    message.warning(t('secureContext.clipboardBlockedHint'))
+    return
+  }
   try {
     await navigator.clipboard.writeText(props.content)
     copySuccess.value = true
@@ -33,7 +40,7 @@ const handleCopy = async (): Promise<void> => {
       copySuccess.value = false
     }, 1500)
   } catch {
-    // clipboard API may be unavailable
+    message.error(t('workspace.messages.copyFailed'))
   }
 }
 

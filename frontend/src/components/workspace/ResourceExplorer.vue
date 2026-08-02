@@ -21,6 +21,7 @@ import {
   type PendingUploadItem,
   type ReplaceUploadResult,
 } from '@/stores/projectWorkspace'
+import { isCapabilityBlocked } from '@/utils/secureContext'
 
 type Resource = ApiSchemas['Resource']
 type IncrementalUpdateResponse = ApiSchemas['IncrementalUpdateResponse']
@@ -40,6 +41,21 @@ const message = useMessage()
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
 const { currentStrategyName, toolbarMeta, activeViewComponent } = useResourceViewStrategy()
+
+// ── 安全上下文：非 HTTPS 环境下拦截文件上传 ──
+
+/**
+ * 若当前处于非安全上下文，弹出简短提示并返回 true（调用方应中止上传）。
+ * 完整指引已在启动期 Notification 中给出。
+ */
+const blockUploadIfInsecure = (): boolean => {
+  if (!isCapabilityBlocked('fileUpload')) {
+    return false
+  }
+
+  message.warning(t('secureContext.uploadBlockedHint'))
+  return true
+}
 
 const dragOver = ref(false)
 const uploadPrecheckVisible = ref(false)
@@ -91,6 +107,7 @@ const handleRefreshDirectory = async (): Promise<void> => {
 // ── 资源操作 ──
 
 const chooseReplacementFile = (resourceId: number): void => {
+  if (blockUploadIfInsecure()) return
   const input = document.createElement('input')
   input.type = 'file'
   input.onchange = () => {
@@ -114,6 +131,7 @@ const doReplace = async (resourceId: number, file: File): Promise<void> => {
 }
 
 const chooseIncrementalUpdateFile = (resourceId: number): void => {
+  if (blockUploadIfInsecure()) return
   const input = document.createElement('input')
   input.type = 'file'
   input.onchange = () => {
@@ -297,6 +315,11 @@ const beginUpload = async (
   displayName: string,
   callbacks?: Pick<UploadCustomRequestOptions, 'onFinish' | 'onError'>,
 ): Promise<void> => {
+  if (blockUploadIfInsecure()) {
+    callbacks?.onError?.()
+    return
+  }
+
   if (files.length === 0) {
     callbacks?.onFinish?.()
     return

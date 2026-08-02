@@ -83,6 +83,29 @@ const messages = {
       modeUnreachable: '无法获取服务器运行模式',
     },
   },
+  secureContext: {
+    /** 各能力的用户可读名称（受影响功能清单会拼出这些） */
+    capabilities: {
+      fileUpload: '文件上传',
+      clipboard: '复制到剪贴板',
+    },
+    /** 启动期一次性提醒标题 */
+    bootTitle: '当前为非安全连接，部分功能不可用',
+    /** 启动期正文，{features} 为受影响功能清单 */
+    bootBody:
+      '当前页面通过 HTTP 访问，浏览器限制了以下功能：{features}。请通过 HTTPS 访问，或按下方指引将当前地址标记为可信来源后刷新页面。',
+    /** 操作被拦截时的简短提示（完整指引已在启动期给出） */
+    uploadBlockedHint: '当前为非安全连接，文件上传不可用',
+    clipboardBlockedHint: '当前为非安全连接，复制到剪贴板不可用',
+    /** Chrome 指引 */
+    chromeGuide:
+      'Chrome：地址栏进入 chrome://flags/#unsafely-treat-insecure-origin-as-secure，填入 {origin} 并启用，然后重启浏览器。',
+    /** Edge 指引 */
+    edgeGuide:
+      'Edge：地址栏进入 edge://flags/#unsafely-treat-insecure-origin-as-secure，填入 {origin} 并启用，然后重启浏览器。',
+    /** 通用 HTTPS 建议 */
+    httpsHint: '生产环境建议通过 HTTPS 提供服务。',
+  },
   locale: {
     zhHans: '简体中文',
   },
@@ -1059,6 +1082,7 @@ const messages = {
       jobRetryFailed: '任务重试失败',
       selectReadyResource: '请选择至少一个资源',
       selectResourceFirst: '请先选择资源文件',
+      copyFailed: '复制失败，剪贴板不可用',
     },
   },
   backends: {

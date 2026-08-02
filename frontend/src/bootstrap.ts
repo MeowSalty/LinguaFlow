@@ -1,7 +1,8 @@
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore, type ServiceMode } from '@/stores/service'
+import { hasAnyBlockedCapability } from '@/utils/secureContext'
 
-export type BootstrapUserNotice = 'localUserFailed' | 'modeUnreachable'
+export type BootstrapUserNotice = 'localUserFailed' | 'modeUnreachable' | 'insecureContext'
 
 const bootstrapNotices: BootstrapUserNotice[] = []
 
@@ -15,6 +16,10 @@ export const bootstrapApp = async (): Promise<void> => {
   const service = useServiceStore()
   const auth = useAuthStore()
   bootstrapNotices.length = 0
+
+  if (hasAnyBlockedCapability()) {
+    bootstrapNotices.push('insecureContext')
+  }
 
   const resolved = await service.resolveBaseUrlForBootstrap()
 
