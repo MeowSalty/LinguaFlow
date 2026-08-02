@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -36,6 +37,9 @@ type JobRunner struct {
 	eventBroker *event.Broker
 	limiterPool *backend.LimiterPool
 	resMutex    *ResourceMutex
+	// dbDriver 标识数据库驱动（config.DatabaseDriverPostgres /
+	// DatabaseDriverSQLite），用于 batchHandler 中的写入错误分级。
+	dbDriver string
 
 	// per-job 取消注册表：jobID → cancel 函数
 	mu         sync.Mutex
@@ -52,6 +56,7 @@ func NewJobRunner(
 	eventBroker *event.Broker,
 	limiterPool *backend.LimiterPool,
 	resMutex *ResourceMutex,
+	dbDriver string,
 ) *JobRunner {
 	if logger == nil {
 		logger = slog.Default()
@@ -65,6 +70,7 @@ func NewJobRunner(
 		eventBroker: eventBroker,
 		limiterPool: limiterPool,
 		resMutex:    resMutex,
+		dbDriver:    dbDriver,
 		activeJobs:  make(map[int]context.CancelFunc),
 	}
 }
@@ -249,12 +255,20 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	var lastResult pipeline.TranslateResult
 	var semanticQAWarning string
 
+	// 瞬时写入失败追踪：段 docIndex → 待下一轮 pending 过滤拾取。
+	// 每轮 translate 开始时重置（瞬态段已在下一轮被 pending 过滤拾取并重试，
+	// 清空避免跨轮累积误判）。最后一轮后非空则 fail-fast（避免 limbo 段）。
+	var persistFailedMu sync.Mutex
+	persistFailedIndices := make(map[int]struct{})
+
 	// 段落来源标记：仅 segment_ids 手动选择时跳过默认过滤
 	isExplicitSelection := snapshot.ExplicitSegmentSelection
 	lastTranslateRoundIdx := -1
+	translateRoundCount := 0
 	for i := range snapshot.Rounds {
 		if snapshot.Rounds[i].Mode == "translate" {
 			lastTranslateRoundIdx = i
+			translateRoundCount++
 		}
 	}
 
@@ -325,6 +339,12 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		var batchHandler func(_ context.Context, batchResult pipeline.BatchResult) error
 		switch round.Mode {
 		case "translate":
+			// 每轮 translate 开始时重置瞬态失败追踪（瞬态段已在下一轮被
+			// pending 过滤拾取并重试，清空避免跨轮累积误判）。
+			persistFailedMu.Lock()
+			persistFailedIndices = make(map[int]struct{})
+			persistFailedMu.Unlock()
+
 			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
 				defaultStatus := service.SegmentStatusTranslated
 				if autoApprove {
@@ -339,7 +359,6 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 				}
 
 				localCompleted := 0
-				failed := 0
 				for _, ts := range batchResult.Segments {
 					if ts.TargetText == "" {
 						continue
@@ -363,49 +382,82 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					if autoApprove {
 						update.ClearReviewComment()
 					}
-					// --- 写入 QA 结果 ---
-					update.ClearQualityIssues()
+					// --- 写入 QA 结果（if/else 二选一，避免 ent mutation
+					// 对同一列既 Clear 又 Set 导致 PostgreSQL 42601 重复赋值）---
 					if len(segIssues) > 0 {
 						update.SetQualityIssues(segIssues)
+					} else {
+						update.ClearQualityIssues()
 					}
 					if err := update.Exec(ctx); err != nil {
-						r.logger.Warn("persist segment failed", "segment_id", dbID, "err", err)
-						failed++
-						continue
+						// 取消/超时交由 round_executor 的 ctx 检查接管，不归类重试。
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							continue
+						}
+						classified := database.Classify(r.dbDriver, err)
+						r.logger.Warn("persist segment failed",
+							"segment_id", dbID, "err", err,
+							"category", classified.Category, "sqlstate", classified.SQLState)
+						switch classified.Category {
+						case database.CategoryTransient:
+							// 瞬时：DB 状态因原子 UPDATE 失败仍为 pending，
+							// 记录 docIndex 供终端态兜底，不计入 completed，不返回 error。
+							// 下一轮 pending_only 过滤自动拾取重试。
+							persistFailedMu.Lock()
+							persistFailedIndices[ts.Index] = struct{}{}
+							persistFailedMu.Unlock()
+							continue
+						default: // Structural 或 Unknown：fail-fast（命中首段即终止当前轮）
+							// 对外消息仅含分级摘要，避免把原始驱动错误（可能内嵌
+							// 连接元数据）经 error_message → SSE → API 暴露给客户端。
+							return fmt.Errorf("persist segment %d failed (structural DB write error, sqlstate %s)",
+								dbID, classified.SQLState)
+						}
 					}
 					localCompleted++
 				}
 				mu.Lock()
 				completedCount += localCompleted
 				mu.Unlock()
-				if failed > 0 && localCompleted == 0 {
-					return fmt.Errorf("batch persist failed: all %d segments failed to write to database", failed)
-				}
 				return nil
 			}
 		case "adjudicate":
 			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
 				completed := 0
-				failed := 0
 				for _, ts := range batchResult.Segments {
 					dbID, ok := docIndexToDBID[ts.Index]
 					if !ok {
 						continue
 					}
-					// 仅重写 quality_issues，不改 status / target
-					update := r.client.Segment.UpdateOneID(dbID).ClearQualityIssues()
+					// 仅重写 quality_issues，不改 status / target。
+					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
+					update := r.client.Segment.UpdateOneID(dbID)
 					if len(ts.Issues) > 0 {
 						update.SetQualityIssues(ts.Issues)
+					} else {
+						update.ClearQualityIssues()
 					}
 					if err := update.Exec(ctx); err != nil {
-						r.logger.Warn("persist adjudicated issues failed", "segment_id", dbID, "err", err)
-						failed++
-						continue
+						// 取消/超时交由 round_executor 的 ctx 检查接管，不归类重试。
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							continue
+						}
+						classified := database.Classify(r.dbDriver, err)
+						r.logger.Warn("persist adjudicated issues failed",
+							"segment_id", dbID, "err", err,
+							"category", classified.Category, "sqlstate", classified.SQLState)
+						switch classified.Category {
+						case database.CategoryTransient:
+							// adjudicate 无跨轮重试机制（裁决结果一次性写入，失败即丢失），
+							// 即使瞬时错误也 fail-fast 当前轮，避免末轮静默丢失导致
+							// COMPLETED 时陈旧 quality_issues 被保留且零信号。
+							fallthrough
+						default: // Structural 或 Unknown：fail-fast
+							return fmt.Errorf("persist adjudicated issues for segment %d failed (DB write error, category %s, sqlstate %s)",
+								dbID, classified.Category, classified.SQLState)
+						}
 					}
 					completed++
-				}
-				if failed > 0 && completed == 0 {
-					return fmt.Errorf("adjudicate batch persist failed: all %d writable segments failed to write quality_issues", failed)
 				}
 				return nil
 			}
@@ -434,7 +486,6 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 				}
 
 				completed := 0
-				failed := 0
 				for _, row := range rows {
 					ts, ok := resultsByDBID[row.ID]
 					if !ok {
@@ -442,18 +493,26 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					}
 					updated, err := persistSemanticQASegmentIssues(batchCtx, r.client, row, ts.TargetText, ts.Issues)
 					if err != nil {
-						r.logger.Warn("persist semantic_qa issues failed", "segment_id", row.ID, "err", err)
-						failed++
-						continue
+						// 取消/超时交由 round_executor 的 ctx 检查接管，不计入统计。
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							continue
+						}
+						classified := database.Classify(r.dbDriver, err)
+						r.logger.Warn("persist semantic_qa issues failed",
+							"segment_id", row.ID, "err", err,
+							"category", classified.Category, "sqlstate", classified.SQLState)
+						// semantic_qa 没有跨轮重试机制（裁决/质检结果一次性写入，
+						// 失败即丢失），无论瞬时还是结构性都 fail-fast 当前轮，
+						// 由上层 soft warning 路径接管，避免静默吞没导致 COMPLETED
+						// 时 QA 结果丢失且零信号。
+						return fmt.Errorf("persist semantic_qa issues for segment %d failed (DB write error, category %s, sqlstate %s)",
+							row.ID, classified.Category, classified.SQLState)
 					}
 					if updated == 0 {
 						r.logger.Info("skip stale semantic_qa result", "segment_id", row.ID)
 						continue
 					}
 					completed++
-				}
-				if failed > 0 && completed == 0 {
-					return fmt.Errorf("semantic_qa batch persist failed: all %d writable segments failed to write quality_issues", failed)
 				}
 				return nil
 			}
@@ -521,6 +580,35 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		completedCount = actualCompleted
 	}
 	skippedCount := lastResult.SkippedCount
+
+	// 最后一轮 translate 后，检查仍有瞬时写入失败的段（历经所有翻译轮仍写不进去）。
+	// 这些段既不在 lastResult.UnresolvedCount（那是 LLM 失败）也不在 completed 中，
+	// 不处理会被误判 COMPLETED 而静默丢失。无论单轮还是多轮，凡存在持久化失败的段
+	// 都必须 fail-fast，避免静默丢失；错误消息按轮数区分"首次失败"与"重试耗尽"，
+	// 防止单轮任务被误报为已重试。
+	if lastTranslateRoundIdx >= 0 {
+		persistFailedMu.Lock()
+		persistFailedCount := len(persistFailedIndices)
+		persistFailedMu.Unlock()
+		if persistFailedCount > 0 {
+			r.logger.Warn("segments failed to persist after all translate rounds",
+				"resource_id", item.ID, "count", persistFailedCount,
+				"translate_rounds", translateRoundCount)
+			_ = r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens)
+			_ = r.client.JobResource.UpdateOneID(item.ID).
+				SetCompletedSegments(completedCount).SetSkippedSegments(skippedCount).Exec(ctx)
+			var err error
+			if translateRoundCount > 1 {
+				err = fmt.Errorf("%d segments failed to persist to database after %d translate rounds (transient DB errors exhausted retries): consider retrying the job",
+					persistFailedCount, translateRoundCount)
+			} else {
+				err = fmt.Errorf("%d segments failed to persist to database (transient DB write error, no subsequent retry round): consider retrying the job",
+					persistFailedCount)
+			}
+			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+			return nil
+		}
+	}
 
 	eng.SaveGlossary(ctx)
 

@@ -163,7 +163,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	// 创建 Runner
 	translationRunner := worker.NewJobRunner(
 		logger, client, s.jobSvc, jobStore,
-		translationQueue, s.eventBroker, limiterPool, s.resMutex,
+		translationQueue, s.eventBroker, limiterPool, s.resMutex, cfg.Database.Driver,
 	)
 	syncTaskRunner := worker.NewSyncTaskRunner(
 		logger, client, s.glossarySyncSvc, syncQueue, s.resMutex,
