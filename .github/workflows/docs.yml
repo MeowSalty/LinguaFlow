@@ -27,22 +27,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-
-      - name: 安装 pnpm
-        run: npm install -g pnpm
-
-      - name: 安装 Redocly CLI
-        run: npm install -g @redocly/cli
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
 
       - name: 安装文档依赖
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
         working-directory: docs
 
       - name: 合并 OpenAPI 规范
-        run: redocly bundle api/openapi/base.yaml -o docs/public/openapi/openapi-3.0.yaml
+        run: pnpm dlx @redocly/cli bundle api/openapi/base.yaml -o docs/public/openapi/openapi-3.0.yaml
 
       - name: 获取版本信息
         id: version
