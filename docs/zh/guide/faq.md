@@ -69,6 +69,18 @@ docker logs linguaflow  # 查看日志
 4. 运行 `task backend:install` 和 `task frontend:install` 安装依赖
 5. 按 [安装部署 · 从源码构建](/zh/guide/installation#从源码构建) 完整步骤构建
 
+### 通过 HTTP 访问时，文件上传 / 复制不可用？
+
+浏览器只在**安全上下文**（HTTPS 或 `localhost`）下放开 `crypto.randomUUID`、`navigator.clipboard` 等 API。当你用**明文 HTTP** 访问局域网 IP 或域名（如服务器模式 / Docker 裸 HTTP 部署）时，**文件上传**和**复制到剪贴板**会被拦截，界面会给出提示。
+
+解除方式：
+
+- 生产环境经反向代理上 HTTPS（推荐）
+- 本机改用 `http://localhost:端口` 或 `http://127.0.0.1:端口`
+- Chrome / Edge 临时放行：按启动通知里的 `flags` 指引把当前地址标记为可信来源，重启浏览器后刷新
+
+详见 [使用模式 · 通过 HTTP 访问的限制](/zh/guide/modes#通过-http-访问的限制-非安全上下文)。本地模式（`127.0.0.1`）不受此影响。
+
 ## AI 后端配置
 
 ### API Key 无效？
