@@ -5,6 +5,11 @@ RetryConfig:
       type: integer
       minimum: 1
       default: 3
+      description: |
+        双重角色：
+        - 每池在途重试预算：单池对 429/5xx 最多 MaxAttempts+1 次调用（1 次首调 + MaxAttempts 次重试）。
+        - 池深度（启用 fallback_shrink 时）：池数量 maxPools = MaxAttempts+1，池 N 的批次约束 = floor(orig × shrink^N)。
+        - 最坏情况每段调用次数 ≈ (MaxAttempts+1)²（每池重试 × 池数）。
     backoff_ms:
       type: integer
       minimum: 0
@@ -49,6 +54,11 @@ TranslateRoundConfig:
       exclusiveMinimum: true
       maximum: 1
       exclusiveMaximum: true
+      description: |
+        池缩放系数：池 N 的批次约束 = floor(orig × shrink^N)。
+        各池串行执行；当前池失败（如 429/5xx）的批次会重新批次到下一个更小的池。
+        0 或省略表示禁用缩放池（退化为单池）。
+        取值范围 (0,1)。池数量由 MaxAttempts+1 决定（见 RetryConfig.max_attempts）。
     segment_filter:
       $ref: '#/TranslateSegmentFilterConfig'
       description: 段落过滤配置；省略时默认 pending_only
