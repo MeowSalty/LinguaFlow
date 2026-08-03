@@ -891,11 +891,14 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		return err
 	}
 	var pendingCount, runningCount, completed, failed, cancelled, completedSegments, skippedSegments int
+	var weightedTotal, weightedCompleted int
 	var firstFailure *string
 	// [DEBUG] 诊断：记录每个资源的状态
 	for _, item := range current.Edges.JobResources {
 		completedSegments += item.CompletedSegments
 		skippedSegments += item.SkippedSegments
+		weightedTotal += item.WeightedTotal
+		weightedCompleted += item.WeightedCompleted
 		slog.Debug("reconcile job resource status",
 			"job_id", jobID,
 			"resource_id", item.ID,
@@ -940,15 +943,6 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		"completed_resources", completed,
 		"total_resources", len(current.Edges.JobResources),
 	)
-	// 动态计算 stage_total：已完成资源取 stage_total（精确值），未完成资源取 segment_count（近似值）
-	stageTotal := 0
-	for _, item := range current.Edges.JobResources {
-		if item.StageTotal > 0 {
-			stageTotal += item.StageTotal
-		} else {
-			stageTotal += item.SegmentCount
-		}
-	}
 
 	update := s.client.Job.UpdateOneID(jobID).
 		SetStatus(status).
@@ -957,7 +951,8 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		SetFailedResources(failed).
 		SetCompletedSegments(completedSegments).
 		SetSkippedSegments(skippedSegments).
-		SetStageTotal(stageTotal)
+		SetWeightedTotal(weightedTotal).
+		SetWeightedCompleted(weightedCompleted)
 	if firstFailure != nil && status == JobStatusFailed {
 		update.SetErrorMessage(*firstFailure)
 	} else {

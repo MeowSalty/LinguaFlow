@@ -36,6 +36,8 @@ type jobResourceResponse struct {
 	CurrentStage      string            `json:"current_stage,omitempty"`
 	StageTotal        int               `json:"stage_total,omitempty"`
 	StageCompleted    int               `json:"stage_completed,omitempty"`
+	WeightedTotal     int               `json:"weighted_total,omitempty"`
+	WeightedCompleted int               `json:"weighted_completed,omitempty"`
 	StartedAt         *string           `json:"started_at,omitempty"`
 	CreatedAt         string            `json:"created_at"`
 	UpdatedAt         string            `json:"updated_at"`
@@ -53,6 +55,8 @@ type jobProgressResponse struct {
 	TotalSegments      int  `json:"total_segments"`
 	CompletedSegments  int  `json:"completed_segments"`
 	SkippedSegments    int  `json:"skipped_segments"`
+	WeightedTotal      int  `json:"weighted_total,omitempty"`
+	WeightedCompleted  int  `json:"weighted_completed,omitempty"`
 	QueuePosition      *int `json:"queue_position,omitempty"`
 	QueueSize          *int `json:"queue_size,omitempty"`
 }
@@ -298,6 +302,8 @@ func buildProgressResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobProgres
 		TotalSegments:      row.TotalSegments,
 		CompletedSegments:  row.CompletedSegments,
 		SkippedSegments:    row.SkippedSegments,
+		WeightedTotal:      row.WeightedTotal,
+		WeightedCompleted:  row.WeightedCompleted,
 	}
 	if queueInfo != nil {
 		progress.QueuePosition = &queueInfo.Position
@@ -319,6 +325,8 @@ func toJobResourceResponse(row *ent.JobResource) jobResourceResponse {
 		CurrentStage:      row.CurrentStage,
 		StageTotal:        row.StageTotal,
 		StageCompleted:    row.StageCompleted,
+		WeightedTotal:     row.WeightedTotal,
+		WeightedCompleted: row.WeightedCompleted,
 		StartedAt:         timePtrToString(row.StartedAt),
 		CreatedAt:         row.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:         row.UpdatedAt.Format(timeRFC3339),
