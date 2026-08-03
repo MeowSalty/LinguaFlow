@@ -47,8 +47,6 @@ const CONFIG_DEFAULTS: ExecutionProfileConfig = {
     enabled: true,
     json_structural: true,
     schema_aliases: true,
-    partial: true,
-    partial_threshold: 0.5,
     placeholder_normalize: true,
     prompt_upgrade: true,
   },

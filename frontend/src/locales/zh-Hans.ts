@@ -1490,8 +1490,6 @@ const messages = {
       enabled: '启用响应修复',
       jsonStructural: 'JSON 结构修复',
       schemaAliases: 'Schema 别名映射',
-      partial: '部分缺失重试',
-      partialThreshold: '缺失率阈值',
       placeholderNormalize: '占位符归一化',
       promptUpgrade: 'Prompt 升级重试',
     },
