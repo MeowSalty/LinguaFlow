@@ -36,6 +36,18 @@ export interface BatchEventMetadata {
   shrink_attempted: boolean
 }
 
+/** 池级事件元数据，对应后端 progress.PoolEvent。 */
+export interface PoolEventMetadata {
+  mode: string
+  pool_index: number
+  max_pools: number
+  batches: number
+  pending: number
+  shrink_rate: number
+  /** "pool_start" | "pool_advance" */
+  phase: 'pool_start' | 'pool_advance'
+}
+
 /** Normalize backend `warn` and legacy levels for UI components. */
 export const normalizeSSELevel = (level: string): 'info' | 'warning' | 'error' => {
   switch (level) {
@@ -53,6 +65,7 @@ export const KNOWN_EVENT_TYPES = [
   'stage_start',
   'stage_done',
   'batch',
+  'pool',
   'resource_started',
   'resource_completed',
   'resource_failed',

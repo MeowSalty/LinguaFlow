@@ -1,5 +1,5 @@
 import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
-import type { BatchEventMetadata, SSEEvent } from '@/composables/sseShared'
+import type { BatchEventMetadata, PoolEventMetadata, SSEEvent } from '@/composables/sseShared'
 import { normalizeSSELevel } from '@/composables/sseShared'
 import { t } from '@/i18n'
 
@@ -248,6 +248,39 @@ export const batchStatusTimelineType = (
   if (normalized === 'error') return 'error'
   if (normalized === 'warning') return 'warning'
   return 'success'
+}
+
+// ── 池级事件工具 ──
+
+/** 判断是否为池级事件（多池缩批引擎发出） */
+export const isPoolEvent = (type: string): boolean => type === 'pool'
+
+/** 生成池级事件的时间线条目摘要，如 "翻译 · 缩批 池 1/3" */
+export const getPoolSummary = (event: SSEEvent): string => {
+  const meta = event.metadata as unknown as PoolEventMetadata | undefined
+  const phaseKey = meta?.phase === 'pool_advance' ? 'poolAdvance' : 'poolStart'
+  const stage = event.stage ? getStageLabel(event.stage) : ''
+  const prefix = t(`workspace.job.events.pool.${phaseKey}`)
+  if (!meta) {
+    return [stage, prefix].filter(Boolean).join(' · ')
+  }
+  const progress = t('workspace.job.events.pool.progress', {
+    index: meta.pool_index + 1,
+    total: meta.max_pools,
+  })
+  return [stage, prefix, progress].filter(Boolean).join(' · ')
+}
+
+/** 池级事件对应的 naive-ui 时间线类型：推进为 warning，开始为 info；error 级别优先 */
+export const poolTimelineType = (
+  phase: PoolEventMetadata['phase'] | undefined,
+  level: SSEEvent['level'],
+): 'info' | 'warning' | 'error' => {
+  const normalized = normalizeSSELevel(level)
+  if (normalized === 'error') return 'error'
+  if (phase === 'pool_advance') return 'warning'
+  if (normalized === 'warning') return 'warning'
+  return 'info'
 }
 
 // ── 事件工具 ──
