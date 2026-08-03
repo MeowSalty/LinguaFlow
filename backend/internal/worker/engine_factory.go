@@ -207,8 +207,6 @@ func BuildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 			Enabled:              s.Repair.Enabled,
 			JSONStructural:       s.Repair.JSONStructural,
 			SchemaAliases:        s.Repair.SchemaAliases,
-			Partial:              s.Repair.Partial,
-			PartialThreshold:     s.Repair.PartialThreshold,
 			PlaceholderNormalize: s.Repair.PlaceholderNormalize,
 			PromptUpgrade:        s.Repair.PromptUpgrade,
 		}

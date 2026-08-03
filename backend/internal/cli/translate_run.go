@@ -137,8 +137,6 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			Enabled:              firstProfile.Repair.Enabled,
 			JSONStructural:       firstProfile.Repair.JSONStructural,
 			SchemaAliases:        firstProfile.Repair.SchemaAliases,
-			Partial:              firstProfile.Repair.Partial,
-			PartialThreshold:     firstProfile.Repair.PartialThreshold,
 			PlaceholderNormalize: firstProfile.Repair.PlaceholderNormalize,
 			PromptUpgrade:        firstProfile.Repair.PromptUpgrade,
 		}.ToOptions(),
@@ -212,8 +210,6 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 					Enabled:              profileCfg.Repair.Enabled,
 					JSONStructural:       profileCfg.Repair.JSONStructural,
 					SchemaAliases:        profileCfg.Repair.SchemaAliases,
-					Partial:              profileCfg.Repair.Partial,
-					PartialThreshold:     profileCfg.Repair.PartialThreshold,
 					PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
 					PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
 				}

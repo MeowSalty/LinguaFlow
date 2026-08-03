@@ -108,8 +108,6 @@ func profileConfigToResponse(c *schema.ExecutionProfileConfigData) ExecutionProf
 			Enabled:              c.Repair.Enabled,
 			JsonStructural:       c.Repair.JSONStructural,
 			SchemaAliases:        c.Repair.SchemaAliases,
-			Partial:              c.Repair.Partial,
-			PartialThreshold:     c.Repair.PartialThreshold,
 			PlaceholderNormalize: c.Repair.PlaceholderNormalize,
 			PromptUpgrade:        c.Repair.PromptUpgrade,
 		},
@@ -187,8 +185,6 @@ func parseProfileConfig(c *ExecutionProfileConfig) *schema.ExecutionProfileConfi
 			Enabled:              c.Repair.Enabled,
 			JSONStructural:       c.Repair.JsonStructural,
 			SchemaAliases:        c.Repair.SchemaAliases,
-			Partial:              c.Repair.Partial,
-			PartialThreshold:     c.Repair.PartialThreshold,
 			PlaceholderNormalize: c.Repair.PlaceholderNormalize,
 			PromptUpgrade:        c.Repair.PromptUpgrade,
 		},
@@ -235,8 +231,6 @@ func mergeProfileConfig(existing *schema.ExecutionProfileConfigData, incoming *E
 	merged.Repair.Enabled = incoming.Repair.Enabled
 	merged.Repair.JSONStructural = incoming.Repair.JsonStructural
 	merged.Repair.SchemaAliases = incoming.Repair.SchemaAliases
-	merged.Repair.Partial = incoming.Repair.Partial
-	merged.Repair.PartialThreshold = incoming.Repair.PartialThreshold
 	merged.Repair.PlaceholderNormalize = incoming.Repair.PlaceholderNormalize
 	merged.Repair.PromptUpgrade = incoming.Repair.PromptUpgrade
 

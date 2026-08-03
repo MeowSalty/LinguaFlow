@@ -40,22 +40,21 @@ func TryRepairText(text string, wantIDs []string, opt Options) Result {
 
 	trans, glos, rubyOutput, parseErr := parseTextResponse(text, wantIDs)
 	if parseErr != nil {
-		// T3 部分成功：即使有解析错误，也检查是否有部分结果
-		if len(trans) > 0 && opt.Partial {
+		// Pool model always accepts best partial: if any translations were parsed,
+		// return them without Fatal so the caller can recover missing IDs.
+		if len(trans) > 0 {
 			var missing []string
 			for _, id := range wantIDs {
 				if _, ok := trans[id]; !ok {
 					missing = append(missing, id)
 				}
 			}
-			if float64(len(missing))/float64(len(wantIDs)) < opt.PartialThreshold {
-				return Result{
-					Trans:      trans,
-					Glos:       glos,
-					RubyOutput: rubyOutput,
-					Missing:    missing,
-					Repaired:   repaired,
-				}
+			return Result{
+				Trans:      trans,
+				Glos:       glos,
+				RubyOutput: rubyOutput,
+				Missing:    missing,
+				Repaired:   repaired,
 			}
 		}
 		return Result{Fatal: true, Repaired: repaired, ParseErr: parseErr}

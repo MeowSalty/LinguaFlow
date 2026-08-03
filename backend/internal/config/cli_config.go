@@ -490,8 +490,6 @@ func defaultCLIConfig() *CLIConfig {
 					Enabled:              true,
 					JSONStructural:       true,
 					SchemaAliases:        true,
-					Partial:              true,
-					PartialThreshold:     0.5,
 					PlaceholderNormalize: true,
 					PromptUpgrade:        true,
 				},

@@ -13,12 +13,10 @@ import (
 // Options 控制各层修复算子的启用。零值（所有 bool=false）等于"不修复"——
 // 调用方未传 Options 时 TryRepair 仅做基础 JSON 抽取，行为与原 jsonObjectSlice 路径一致。
 type Options struct {
-	JSONStructural       bool    // L1：BOM 剥离、尾随逗号、控制字符、括号补齐、多对象合并
-	SchemaAliases        bool    // L2：字段名同义化（translation→translations 等）
-	Partial              bool    // L2：部分 ID 缺失时返回 partial 而非 Fatal（调用方据此决定 single 重跑还是 shrink）
-	PartialThreshold     float64 // (0,1]；缺失率 ≥ 阈值时调用方应放弃 partial 走 shrink
-	PlaceholderNormalize bool    // L3：占位符大小写/下划线变体归一（与 NormalizePlaceholders 配合）
-	PromptUpgrade        bool    // L4：解析失败或占位符仍缺失时附加反例 reminder 重试一次
+	JSONStructural       bool // L1：BOM 剥离、尾随逗号、控制字符、括号补齐、多对象合并
+	SchemaAliases        bool // L2：字段名同义化（translation→translations 等）
+	PlaceholderNormalize bool // L3：占位符大小写/下划线变体归一（与 NormalizePlaceholders 配合）
+	PromptUpgrade        bool // L4：解析失败或占位符仍缺失时附加反例 reminder 重试一次
 }
 
 // Result 是 TryRepair 的统一返回。
@@ -26,8 +24,7 @@ type Options struct {
 // 状态判定：
 //   - Fatal=true：解析完全无救；调用方应走 shrinkOrFallback。ParseErr 非 nil。
 //   - Fatal=false 且 Missing 空：全成功。
-//   - Fatal=false 且 Missing 非空：partial。调用方据 Options.PartialThreshold 决定
-//     仅对缺失 ID 单独重试，还是因缺失率过高放弃。
+//   - Fatal=false 且 Missing 非空：partial（调用方自行处理缺失 ID）。
 type Result struct {
 	Trans      map[string]string
 	Glos       []prompt.BootstrapEntry
