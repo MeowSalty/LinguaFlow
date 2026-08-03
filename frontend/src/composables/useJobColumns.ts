@@ -8,6 +8,7 @@ import { t } from '@/i18n'
 import {
   formatDate,
   getJobProgress,
+  getJobProgressNumbers,
   getJobStatusLabel,
   getJobTriggerLabel,
   statusTagType,
@@ -112,14 +113,15 @@ export function useJobColumns(actions: JobColumnActions) {
       width: 130,
       render: (row) => {
         const skipped = row.progress.skipped_segments
+        const { completed } = getJobProgressNumbers(row)
         if (skipped > 0) {
           return h('span', { class: 'text-xs' }, [
-            h('span', {}, `${row.progress.completed_segments}`),
+            h('span', {}, `${completed}`),
             h('span', { class: 'text-lf-text-muted' }, ` +${skipped} `),
             h('span', { class: 'text-lf-text-muted' }, `/ ${row.progress.total_segments}`),
           ])
         }
-        return `${row.progress.completed_segments}/${row.progress.total_segments}`
+        return `${completed}/${row.progress.total_segments}`
       },
     },
     {

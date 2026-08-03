@@ -4,7 +4,7 @@ import { NButton, NIcon, NBadge, NProgress, NEmpty } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
-import { getJobProgressText } from '@/composables/useWorkspaceUtils'
+import { getJobProgress, getJobProgressText } from '@/composables/useWorkspaceUtils'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 
 type Job = ApiSchemas['Job']
@@ -45,13 +45,7 @@ const handleClearCompleted = (): void => {
 const isTerminal = (status: Job['status']): boolean =>
   ['completed', 'failed', 'cancelled'].includes(status)
 
-const progressPercent = (job: Job): number => {
-  if (job.status === 'completed') return 100
-  if (job.status === 'failed' || job.status === 'cancelled') return 0
-  if (job.progress.total_segments > 0)
-    return Math.round((job.progress.completed_segments / job.progress.total_segments) * 100)
-  return 0
-}
+const progressPercent = (job: Job): number => getJobProgress(job)
 
 const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
   if (job.status === 'completed') return 'success'
