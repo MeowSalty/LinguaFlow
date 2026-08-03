@@ -60,7 +60,7 @@ func TestAdjudicateHandler_BuildBatches_SelectsTranslatedWithIssues(t *testing.T
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("BuildBatches: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestAdjudicateHandler_BuildBatches_SkipsNonAdjudicableCodes(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("BuildBatches: %v", err)
 	}
@@ -312,7 +312,7 @@ func TestAdjudicateHandler_BuildBatches_PackedDiscontinuous(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("BuildBatches: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestAdjudicateHandler_BuildBatches_MaxBatchIndexSpan(t *testing.T) {
 		MaxBatchIndexSpan: 2,
 		Logger:            quietLogger(),
 	}
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("BuildBatches: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestAdjudicateHandler_AdjudicateCodes_OnlyLengthRatio(t *testing.T) {
 		Logger:          quietLogger(),
 	}
 	// BuildBatches should still select (has length_ratio)
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil || len(batches) != 1 {
 		t.Fatalf("batches=%v err=%v", batches, err)
 	}

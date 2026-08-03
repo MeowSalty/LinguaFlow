@@ -10,9 +10,9 @@ import (
 // 编排器（RunRound）只负责并发 + 重试，不知道具体操作语义。
 type RoundHandler interface {
 	// BuildBatches 返回待处理的批次列表。
-	// handler 负责：收集待处理项、模式特定过滤、分批策略、上下文扩展。
+	// pending==nil 时 handler 自行扫描 doc（池 0）；pending!=nil 时仅对给定索引按 poolIndex 缩放后重切。
 	// 返回的 [][]int 是抽象索引——翻译模式是段落索引，抽取模式也可以是段落索引。
-	BuildBatches(ctx context.Context, doc *Document) ([][]int, error)
+	BuildBatches(ctx context.Context, doc *Document, pending []int, poolIndex int) ([][]int, error)
 
 	// ProcessBatch 处理单个批次。
 	// idxs 是批次内的索引列表，attempt 是当前重试次数（从 0 开始）。

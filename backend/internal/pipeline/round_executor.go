@@ -30,14 +30,13 @@ type PostprocessConfig struct {
 // batchJob 描述一个待处理的批次任务。
 type batchJob struct {
 	idxs    []int
-	attempt int // 已消耗的重试次数
+	attempt int // 池内已消耗的重试次数
 }
 
 // batchResult 描述一个批次的处理结果。
 type batchResult struct {
-	unresolved     []int        // 需要下一轮处理
-	missing        []int        // 需要 round 级重新分批
-	retry          *batchJob    // 需要重新入队（缩批或退避后重试）
+	unresolved     []int        // 需要下一池处理
+	retry          *batchJob    // 池内 in-flight 退避重试
 	callbackResult *BatchResult // 可选，供 BatchHandler 回调使用
 	failedSegments []int        // 终态扫描失败的段索引（如 semantic_qa）；不计入 Unresolved
 }
@@ -52,8 +51,15 @@ type RunRoundResult struct {
 	FailedBatches int
 }
 
-// RunRound 是通用的并发批次执行引擎。完全不知道段落、翻译等概念。
-// handler 负责分批策略和批次处理，RunRound 只负责并发调度和重试。
+// poolResult 是单个池的执行结果。
+type poolResult struct {
+	unresolved     []int
+	failedSegments []int
+	failedBatches  int
+}
+
+// RunRound 是通用的并发批次执行引擎。
+// 启用 Shrink 时在内部跑多池：池内全并发，池间严格串行；失败段显式传入下一池重切。
 func RunRound(
 	ctx context.Context,
 	round Round,
@@ -70,25 +76,111 @@ func RunRound(
 	}
 
 	handler := round.Handler
-
-	batches, err := handler.BuildBatches(ctx, doc)
-	if err != nil {
-		return RunRoundResult{}, err
+	shrinkEnabled := round.Shrink > 0 && round.Shrink < 1 && !math.IsNaN(round.Shrink) && !math.IsInf(round.Shrink, 0)
+	maxPools := 1
+	if shrinkEnabled {
+		maxPools = round.Retry.MaxAttempts + 1
+		if maxPools < 1 {
+			maxPools = 1
+		}
 	}
-	if len(batches) == 0 {
+	totalAttempts := round.Retry.MaxAttempts + 1
+	if totalAttempts < 1 {
+		totalAttempts = 1
+	}
+
+	var pending []int // nil = 池 0 由 handler 扫描 doc
+	var allFailedSegments []int
+	var failedBatches int
+	var finalUnresolved []int
+	stageStarted := false
+
+	for poolIndex := 0; poolIndex < maxPools; poolIndex++ {
+		if ctx.Err() != nil {
+			break
+		}
+
+		batches, err := handler.BuildBatches(ctx, doc, pending, poolIndex)
+		if err != nil {
+			return RunRoundResult{}, err
+		}
+		if len(batches) == 0 {
+			// 仅池 0 空 batches 视为"无任务"；后续池空 batches 保留上一池的 unresolved
+			if poolIndex == 0 {
+				finalUnresolved = nil
+			}
+			break
+		}
+
+		if !stageStarted {
+			totalSegments := 0
+			for _, batch := range batches {
+				totalSegments += len(batch)
+			}
+			reporter.StageStart(handler.ModeName(), totalSegments)
+			stageStarted = true
+			defer reporter.StageDone()
+		}
+
+		logger.Info("running shrink pool",
+			"mode", handler.ModeName(),
+			"pool", poolIndex,
+			"batches", len(batches),
+			"shrink", round.Shrink)
+
+		pr, err := runPool(ctx, round, handler, doc, batches, totalAttempts, batchHandler, logger)
+		if err != nil {
+			return RunRoundResult{}, err
+		}
+
+		allFailedSegments = append(allFailedSegments, pr.failedSegments...)
+		failedBatches += pr.failedBatches
+		finalUnresolved = pr.unresolved
+
+		if len(pr.unresolved) == 0 {
+			break
+		}
+		if poolIndex+1 >= maxPools {
+			break
+		}
+		pending = uniqueSortedInts(pr.unresolved)
+		logger.Info("advancing to next shrink pool",
+			"pool", poolIndex+1, "pending", len(pending), "shrink", round.Shrink)
+	}
+
+	if !stageStarted {
 		return RunRoundResult{}, nil
 	}
 
-	totalSegments := 0
-	for _, batch := range batches {
-		totalSegments += len(batch)
+	if err := handler.Finalize(ctx, doc, finalUnresolved); err != nil {
+		return RunRoundResult{}, err
 	}
-	reporter.StageStart(handler.ModeName(), totalSegments)
-	defer reporter.StageDone()
 
-	totalAttempts := round.Retry.MaxAttempts + 1
-	jobs := make(chan batchJob, round.Concurrency*2)
-	results := make(chan batchResult, round.Concurrency*2)
+	return RunRoundResult{
+		Unresolved:     finalUnresolved,
+		FailedSegments: allFailedSegments,
+		FailedBatches:  failedBatches,
+	}, nil
+}
+
+// runPool 在单个池内并发执行所有批次；in-flight retry 复用席位，unresolved 释放席位。
+func runPool(
+	ctx context.Context,
+	round Round,
+	handler RoundHandler,
+	doc *Document,
+	batches [][]int,
+	totalAttempts int,
+	batchHandler func(ctx context.Context, result BatchResult) error,
+	logger *slog.Logger,
+) (poolResult, error) {
+	concurrency := round.Concurrency
+	if concurrency < 1 {
+		concurrency = 1
+	}
+
+	jobs := make(chan batchJob, concurrency*2)
+	results := make(chan batchResult, concurrency*2)
 
 	runCtx, runCancel := context.WithCancel(ctx)
 	defer runCancel()
@@ -96,13 +188,11 @@ func RunRound(
 	var pendingMu sync.Mutex
 
 	var nextPending []int
-	var missingSegs []int
 	var failedSegments []int
 	var failedBatches int
 
-	// 启动 worker pool
 	var wg sync.WaitGroup
-	for w := 0; w < round.Concurrency; w++ {
+	for w := 0; w < concurrency; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -116,10 +206,9 @@ func RunRound(
 
 				result := handler.ProcessBatch(runCtx, doc, job.idxs, job.attempt, logger)
 
-				// 调用 BatchHandler 回调
 				if batchHandler != nil && result.callbackResult != nil {
 					if herr := batchHandler(runCtx, *result.callbackResult); herr != nil {
-						logger.Error("batch handler error, terminating round", "err", herr)
+						logger.Error("batch handler error, terminating pool", "err", herr)
 						handlerErr.Store(herr)
 						runCancel()
 						pendingMu.Lock()
@@ -135,7 +224,6 @@ func RunRound(
 		}()
 	}
 
-	// 提交批次任务
 	done := make(chan struct{})
 	var submitWg sync.WaitGroup
 	submitWg.Add(1)
@@ -150,7 +238,6 @@ func RunRound(
 		}
 	}()
 
-	// 收集结果
 	active := len(batches)
 	for active > 0 {
 		select {
@@ -171,10 +258,9 @@ func RunRound(
 					pendingMu.Lock()
 					nextPending = append(nextPending, result.retry.idxs...)
 					pendingMu.Unlock()
-					missingSegs = append(missingSegs, result.missing...)
 					active--
 				case jobs <- *result.retry:
-					missingSegs = append(missingSegs, result.missing...)
+					// in-flight 重试不递减 active（复用席位）
 				}
 			} else {
 				if result.retry != nil {
@@ -182,7 +268,6 @@ func RunRound(
 					nextPending = append(nextPending, result.retry.idxs...)
 					pendingMu.Unlock()
 				}
-				missingSegs = append(missingSegs, result.missing...)
 				active--
 			}
 		}
@@ -194,116 +279,31 @@ cleanup:
 	close(jobs)
 	wg.Wait()
 	if v := handlerErr.Load(); v != nil {
-		return RunRoundResult{}, v.(error)
+		return poolResult{}, v.(error)
 	}
 
-	// 缺失段重新分批（round 级重试）
-	if len(missingSegs) > 0 && ctx.Err() == nil {
-		sort.Ints(missingSegs)
-		// 去重
-		missingSegs = uniqueInts(missingSegs)
-		logger.Info("retrying missing segments", "missing", len(missingSegs))
-
-		retryBatches := [][]int{missingSegs}
-		retryResult, retryErr := runMissingRetry(runCtx, handler, doc, retryBatches, totalAttempts, logger, batchHandler)
-		if retryErr != nil {
-			return RunRoundResult{}, retryErr
-		}
-		nextPending = append(nextPending, retryResult...)
-	}
-
-	// 调用 handler.Finalize
-	if err := handler.Finalize(ctx, doc, nextPending); err != nil {
-		return RunRoundResult{}, err
-	}
-
-	return RunRoundResult{
-		Unresolved:     nextPending,
-		FailedSegments: failedSegments,
-		FailedBatches:  failedBatches,
+	return poolResult{
+		unresolved:     nextPending,
+		failedSegments: failedSegments,
+		failedBatches:  failedBatches,
 	}, nil
 }
 
-// runMissingRetry 对缺失段进行 round 级重试。
-func runMissingRetry(
-	ctx context.Context,
-	handler RoundHandler,
-	doc *Document,
-	batches [][]int,
-	totalAttempts int,
-	logger *slog.Logger,
-	batchHandler func(ctx context.Context, result BatchResult) error,
-) ([]int, error) {
-	jobs := make(chan batchJob, len(batches)*2)
-	results := make(chan batchResult, len(batches)*2)
-
-	var wg sync.WaitGroup
-	for w := 0; w < min(4, len(batches)); w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobs {
-				if ctx.Err() != nil {
-					results <- batchResult{unresolved: job.idxs}
-					continue
-				}
-				result := handler.ProcessBatch(ctx, doc, job.idxs, job.attempt, logger)
-				if batchHandler != nil && result.callbackResult != nil {
-					if herr := batchHandler(ctx, *result.callbackResult); herr != nil {
-						logger.Error("batch handler error in missing retry", "err", herr)
-						results <- batchResult{unresolved: job.idxs}
-						continue
-					}
-				}
-				results <- result
-			}
-		}()
+// uniqueSortedInts 去重并排序。
+func uniqueSortedInts(in []int) []int {
+	if len(in) == 0 {
+		return nil
 	}
-
-	go func() {
-		for _, batch := range batches {
-			jobs <- batchJob{idxs: batch, attempt: 0}
-		}
-	}()
-
-	var nextPending []int
-	active := len(batches)
-	for active > 0 {
-		select {
-		case <-ctx.Done():
-			close(jobs)
-			wg.Wait()
-			return nextPending, ctx.Err()
-		case result := <-results:
-			nextPending = append(nextPending, result.unresolved...)
-			if result.retry != nil && result.retry.attempt < totalAttempts {
-				jobs <- *result.retry
-			} else {
-				if result.retry != nil {
-					nextPending = append(nextPending, result.retry.idxs...)
-				}
-				active--
-			}
-		}
-	}
-	close(jobs)
-	wg.Wait()
-	return nextPending, nil
-}
-
-// uniqueInts 对已排序的 int 切片去重。
-func uniqueInts(sorted []int) []int {
-	if len(sorted) <= 1 {
-		return sorted
-	}
+	out := append([]int(nil), in...)
+	sort.Ints(out)
 	j := 0
-	for i := 1; i < len(sorted); i++ {
-		if sorted[i] != sorted[j] {
+	for i := 1; i < len(out); i++ {
+		if out[i] != out[j] {
 			j++
-			sorted[j] = sorted[i]
+			out[j] = out[i]
 		}
 	}
-	return sorted[:j+1]
+	return out[:j+1]
 }
 
 // segmentIDStringsFromDoc 使用 doc 中稳定的 Segment.ID 标识段落。
@@ -335,6 +335,7 @@ func isFatalBackendError(err error) bool {
 }
 
 // isRetryableByBackoff 判断错误是否为 429/503 限流错误。
+// 供 adjudicate 等非 translate handler 使用；translate 改用 backend.IsRetryable。
 func isRetryableByBackoff(err error) bool {
 	var hsErr backend.HTTPStatusError
 	if errors.As(err, &hsErr) {
@@ -366,18 +367,3 @@ func backoffDuration(attempt int, retry backend.RetryPolicy, lastErr error) time
 
 // minRateLimitBackoff 是 429 错误的最小退避时间。
 const minRateLimitBackoff = 5 * time.Second
-
-// shrinkTo 计算缩批后的大小。
-func shrinkTo(idxs []int, shrink float64) int {
-	if shrink <= 0 || shrink >= 1 || math.IsNaN(shrink) || math.IsInf(shrink, 0) {
-		return 1
-	}
-	next := int(math.Floor(float64(len(idxs)) * shrink))
-	if next >= len(idxs) {
-		next = len(idxs) - 1
-	}
-	if next < 1 {
-		return 1
-	}
-	return next
-}

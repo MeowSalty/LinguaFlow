@@ -59,7 +59,7 @@ func TestSemanticQAHandler_BuildBatches_SelectsTranslatedEdited(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("BuildBatches: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestSemanticQAHandler_BuildBatches_SkipsEmptyTarget(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("BuildBatches: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
 	}
 
 	t.Run("scope all includes segments without issues", func(t *testing.T) {
-		batches, err := base("all", nil).BuildBatches(context.Background(), doc)
+		batches, err := base("all", nil).BuildBatches(context.Background(), doc, nil, 0)
 		if err != nil {
 			t.Fatalf("BuildBatches: %v", err)
 		}
@@ -119,7 +119,7 @@ func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
 	})
 
 	t.Run("scope with_issues skips clean segments", func(t *testing.T) {
-		batches, err := base("with_issues", nil).BuildBatches(context.Background(), doc)
+		batches, err := base("with_issues", nil).BuildBatches(context.Background(), doc, nil, 0)
 		if err != nil {
 			t.Fatalf("BuildBatches: %v", err)
 		}
@@ -129,7 +129,7 @@ func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
 	})
 
 	t.Run("scope with_issue_codes filters by code", func(t *testing.T) {
-		batches, err := base("with_issue_codes", []string{"source_residual"}).BuildBatches(context.Background(), doc)
+		batches, err := base("with_issue_codes", []string{"source_residual"}).BuildBatches(context.Background(), doc, nil, 0)
 		if err != nil {
 			t.Fatalf("BuildBatches: %v", err)
 		}
@@ -139,7 +139,7 @@ func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
 	})
 
 	t.Run("scope with_issue_codes empty codes selects none", func(t *testing.T) {
-		batches, err := base("with_issue_codes", nil).BuildBatches(context.Background(), doc)
+		batches, err := base("with_issue_codes", nil).BuildBatches(context.Background(), doc, nil, 0)
 		if err != nil {
 			t.Fatalf("BuildBatches: %v", err)
 		}
@@ -149,7 +149,7 @@ func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
 	})
 
 	t.Run("unknown scope falls back to all", func(t *testing.T) {
-		batches, err := base("weird", nil).BuildBatches(context.Background(), doc)
+		batches, err := base("weird", nil).BuildBatches(context.Background(), doc, nil, 0)
 		if err != nil {
 			t.Fatalf("BuildBatches: %v", err)
 		}
@@ -159,7 +159,7 @@ func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
 	})
 
 	t.Run("empty scope defaults to all", func(t *testing.T) {
-		batches, err := base("", nil).BuildBatches(context.Background(), doc)
+		batches, err := base("", nil).BuildBatches(context.Background(), doc, nil, 0)
 		if err != nil {
 			t.Fatalf("BuildBatches: %v", err)
 		}
@@ -175,7 +175,7 @@ func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
 		)
 		selectedDoc.Segments[1].Translate = false
 
-		batches, err := base("all", nil).BuildBatches(context.Background(), selectedDoc)
+		batches, err := base("all", nil).BuildBatches(context.Background(), selectedDoc, nil, 0)
 		if err != nil {
 			t.Fatalf("BuildBatches: %v", err)
 		}
@@ -606,7 +606,7 @@ func TestSemanticQAHandler_BuildBatches_PackedDiscontinuous(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("BuildBatches: %v", err)
 	}
@@ -627,7 +627,7 @@ func TestSemanticQAHandler_BuildBatches_MaxBatchIndexSpan(t *testing.T) {
 		MaxBatchIndexSpan: 2,
 		Logger:            quietLogger(),
 	}
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("BuildBatches: %v", err)
 	}
@@ -646,7 +646,7 @@ func TestSemanticQAHandler_BuildBatches_CountsSourceAndTargetWords(t *testing.T)
 		MaxWordsPerBatch: 6,
 		Logger:           quietLogger(),
 	}
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("BuildBatches: %v", err)
 	}

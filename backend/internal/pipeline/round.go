@@ -8,5 +8,8 @@ type Round struct {
 	Concurrency int
 	Retry       backend.RetryPolicy
 	Context     *ContextConfig
-	Handler     RoundHandler
+	// Shrink 是池化缩批系数 (0,1)。>0 且 <1 时启用多池；0 表示单池。
+	// 池 N 的批次约束 = floor(原始 * Shrink^N)。
+	Shrink  float64
+	Handler RoundHandler
 }

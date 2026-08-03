@@ -93,70 +93,72 @@ func (h *TranslateHandler) reporter() progress.Reporter {
 }
 
 // BuildBatches 收集待翻译段落、执行 Protect、分批、上下文扩展。
-func (h *TranslateHandler) BuildBatches(ctx context.Context, doc *Document) ([][]int, error) {
+// pending==nil：池 0，扫描 doc + Protect；pending!=nil：池间重切，不重扫不 Protect。
+func (h *TranslateHandler) BuildBatches(ctx context.Context, doc *Document, pending []int, poolIndex int) ([][]int, error) {
 	logger := h.logger()
 
-	// 1. 收集 pending（Translate=true 的段落）
-	var pending []int
-	skippedCount := 0
-	for i := range doc.Segments {
-		seg := &doc.Segments[i]
-		if seg.Skip {
-			seg.Target = seg.Source
-			skippedCount++
-			continue
-		}
-		if !seg.Translate {
-			continue
-		}
-		if strings.TrimSpace(seg.Source) == "" || IsDecorativeSeparator(seg) {
-			seg.Target = seg.Source
-			skippedCount++
-			continue
-		}
-		pending = append(pending, i)
-	}
-
-	if len(pending) == 0 {
-		h.writeSkippedCount(doc, skippedCount)
-		return nil, nil
-	}
-
-	// 2. Protect
-	if h.Protector != nil {
-		filtered := pending[:0]
-		for _, idx := range pending {
-			seg := &doc.Segments[idx]
-			if seg.OriginalSource == "" {
-				seg.OriginalSource = seg.Source
-			}
-			if err := h.Protector.Protect(seg); err != nil {
-				return nil, fmt.Errorf("protect segment %d: %w", idx, err)
-			}
-			if IsPlaceholderOnly(seg) {
-				seg.Target = seg.OriginalSource
+	if pending == nil {
+		var scan []int
+		skippedCount := 0
+		for i := range doc.Segments {
+			seg := &doc.Segments[i]
+			if seg.Skip {
+				seg.Target = seg.Source
 				skippedCount++
 				continue
 			}
-			filtered = append(filtered, idx)
+			if !seg.Translate {
+				continue
+			}
+			if strings.TrimSpace(seg.Source) == "" || IsDecorativeSeparator(seg) {
+				seg.Target = seg.Source
+				skippedCount++
+				continue
+			}
+			scan = append(scan, i)
 		}
-		pending = filtered
-	}
 
-	// 存储跳过计数
-	h.writeSkippedCount(doc, skippedCount)
+		if len(scan) == 0 {
+			h.writeSkippedCount(doc, skippedCount)
+			return nil, nil
+		}
+
+		if h.Protector != nil {
+			filtered := scan[:0]
+			for _, idx := range scan {
+				seg := &doc.Segments[idx]
+				if seg.OriginalSource == "" {
+					seg.OriginalSource = seg.Source
+				}
+				if err := h.Protector.Protect(seg); err != nil {
+					return nil, fmt.Errorf("protect segment %d: %w", idx, err)
+				}
+				if IsPlaceholderOnly(seg) {
+					seg.Target = seg.OriginalSource
+					skippedCount++
+					continue
+				}
+				filtered = append(filtered, idx)
+			}
+			scan = filtered
+		}
+
+		h.writeSkippedCount(doc, skippedCount)
+		if len(scan) == 0 {
+			return nil, nil
+		}
+		pending = scan
+	}
 
 	if len(pending) == 0 {
 		return nil, nil
 	}
 
-	// 3. 上下文窗口
 	ctxWindow := max(h.Context.Before, h.Context.After)
 	if !h.Context.Enabled {
 		ctxWindow = 0
 	}
 
-	// 4. 分批
 	constraint := BatchConstraint{
 		MaxSegments: h.BatchSize,
 		MaxWords:    h.MaxWordsPerBatch,
@@ -164,14 +166,40 @@ func (h *TranslateHandler) BuildBatches(ctx context.Context, doc *Document) ([][
 	if constraint.MaxSegments <= 0 && constraint.MaxWords <= 0 {
 		constraint.MaxSegments = 1
 	}
+	constraint = shrinkConstraint(constraint, h.FallbackShrink, poolIndex)
 	batches := BuildContextAwareBatches(doc, pending, constraint, ctxWindow, h.Context.Enabled)
 
 	logger.Info("translate handler: batches built",
 		"pending", len(pending), "batches", len(batches),
-		"batch_size", h.BatchSize, "max_words_per_batch", h.MaxWordsPerBatch,
+		"pool", poolIndex,
+		"max_segments", constraint.MaxSegments, "max_words", constraint.MaxWords,
 		"context_enabled", h.Context.Enabled, "context_window", ctxWindow)
 
 	return batches, nil
+}
+
+// shrinkConstraint 按池索引缩放批次约束：floor(orig * shrink^poolIndex)，下限 clamp 到 1。
+func shrinkConstraint(orig BatchConstraint, shrink float64, poolIndex int) BatchConstraint {
+	if poolIndex <= 0 || shrink <= 0 || shrink >= 1 || math.IsNaN(shrink) || math.IsInf(shrink, 0) {
+		return orig
+	}
+	factor := math.Pow(shrink, float64(poolIndex))
+	out := orig
+	if orig.MaxSegments > 0 {
+		next := int(math.Floor(float64(orig.MaxSegments) * factor))
+		if next < 1 {
+			next = 1
+		}
+		out.MaxSegments = next
+	}
+	if orig.MaxWords > 0 {
+		next := int(math.Floor(float64(orig.MaxWords) * factor))
+		if next < 1 {
+			next = 1
+		}
+		out.MaxWords = next
+	}
+	return out
 }
 
 // writeSkippedCount 将跳过计数写入 doc.Vars，保持单调递增语义。
@@ -248,8 +276,8 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 			return batchResult{unresolved: pendingIdxs}
 		}
 
-		if isRetryableByBackoff(callErr) {
-			logger.Warn("backend returned rate limit error, will backoff and retry",
+		if backend.IsRetryable(callErr) {
+			logger.Warn("backend returned retryable error, will backoff and retry",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(progress.BatchEvent{
 				Stage:          "translate",
@@ -281,37 +309,28 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
 		}
 
-		logger.Warn("backend failed for batch, shrinking",
+		logger.Warn("backend failed for batch, deferring to next pool",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 		h.emitBatchOutcome(progress.BatchEvent{
-			Stage:           "translate",
-			SegmentIDs:      segmentIDStringsFromDoc(doc, pendingIdxs),
-			SegmentCount:    len(pendingIdxs),
-			BackendName:     h.Backend.Name(),
-			Status:          "failed",
-			DurationMs:      time.Since(callStart).Milliseconds(),
-			SentContent:     usr,
-			TriedBackends:   tried,
-			ErrorType:       "backend_error",
-			ErrorMessage:    callErr.Error(),
-			HTTPStatus:      httpStatusFromErr(callErr),
-			ShrinkAttempted: len(pendingIdxs) > 1,
-			RoundIndex:      h.RoundIndex,
-			Attempt:         attempt,
-			SystemPrompt:    sys,
-			UserMessage:     usr,
-			ResponseFormat:  req.ResponseFormat,
-			JSONSchema:      req.JSONSchema,
+			Stage:          "translate",
+			SegmentIDs:     segmentIDStringsFromDoc(doc, pendingIdxs),
+			SegmentCount:   len(pendingIdxs),
+			BackendName:    h.Backend.Name(),
+			Status:         "failed",
+			DurationMs:     time.Since(callStart).Milliseconds(),
+			SentContent:    usr,
+			TriedBackends:  tried,
+			ErrorType:      "backend_error",
+			ErrorMessage:   callErr.Error(),
+			HTTPStatus:     httpStatusFromErr(callErr),
+			RoundIndex:     h.RoundIndex,
+			Attempt:        attempt,
+			SystemPrompt:   sys,
+			UserMessage:    usr,
+			ResponseFormat: req.ResponseFormat,
+			JSONSchema:     req.JSONSchema,
 		})
-		nextSize := shrinkTo(idxs, h.FallbackShrink)
-		var dropped []int
-		if nextSize < len(idxs) {
-			dropped = FilterPendingIdxs(idxs[nextSize:], contextSet)
-		}
-		return batchResult{
-			unresolved: dropped,
-			retry:      &batchJob{idxs: idxs[:nextSize], attempt: attempt + 1},
-		}
+		return batchResult{unresolved: pendingIdxs}
 	}
 
 	// 累加 token
@@ -332,7 +351,7 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 			resp = upgradedResp
 			res = upgradedRes
 		} else {
-			logger.Warn("batch response parse failed, shrinking",
+			logger.Warn("batch response parse failed, deferring to next pool",
 				"backend", h.Backend.Name(), "batch_size", len(pendingIdxs), "err", res.ParseErr,
 				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
 				"repaired", res.Repaired)
@@ -359,26 +378,13 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 				JSONSchema:      req.JSONSchema,
 				ResponseContent: resp.Text,
 			})
-			nextSize := shrinkTo(idxs, h.FallbackShrink)
-			var dropped []int
-			if nextSize < len(idxs) {
-				dropped = FilterPendingIdxs(idxs[nextSize:], contextSet)
-			}
-			return batchResult{
-				unresolved: dropped,
-				retry:      &batchJob{idxs: idxs[:nextSize], attempt: attempt + 1},
-			}
+			return batchResult{unresolved: pendingIdxs}
 		}
 	}
 
-	missingRatio := 0.0
-	if len(wantIDs) > 0 {
-		missingRatio = float64(len(res.Missing)) / float64(len(wantIDs))
-	}
-	if len(res.Missing) > 0 && (!h.Repair.Partial || missingRatio >= h.Repair.PartialThreshold) {
-		logger.Warn("partial recovery exceeded threshold, using best partial result",
-			"backend", h.Backend.Name(), "missing", len(res.Missing), "total", len(wantIDs),
-			"threshold", h.Repair.PartialThreshold, "partial_enabled", h.Repair.Partial)
+	if len(res.Missing) > 0 {
+		logger.Warn("partial recovery, using best partial result",
+			"backend", h.Backend.Name(), "missing", len(res.Missing), "total", len(wantIDs))
 	}
 
 	if len(res.Repaired) > 0 {
@@ -403,10 +409,10 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 
 	h.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
 
-	unresolved, missing := h.processTranslatedSegments(ctx, doc, expandedIdxs, wantIDs, trans, rubyOutputMap, contextSet, logger)
+	unresolved := h.processTranslatedSegments(ctx, doc, expandedIdxs, wantIDs, trans, rubyOutputMap, contextSet, logger)
 
 	callbackResult := BuildBatchResult(doc, expandedIdxs, contextSet)
-	return batchResult{unresolved: unresolved, missing: missing, callbackResult: &callbackResult}
+	return batchResult{unresolved: unresolved, callbackResult: &callbackResult}
 }
 
 // callOnce 调用后端翻译接口。
@@ -544,7 +550,7 @@ func (h *TranslateHandler) processTranslatedSegments(
 	rubyOutputMap map[string][]ruby.OutputEntry,
 	contextSet map[int]struct{},
 	logger *slog.Logger,
-) (unresolved []int, missing []int) {
+) (unresolved []int) {
 	rep := h.reporter()
 	wantIDIdx := 0
 	for _, idx := range idxs {
@@ -556,7 +562,7 @@ func (h *TranslateHandler) processTranslatedSegments(
 		wantIDIdx++
 		text, ok := trans[id]
 		if !ok || strings.TrimSpace(text) == "" {
-			missing = append(missing, idx)
+			unresolved = append(unresolved, idx)
 			continue
 		}
 		if rubyOutputMap != nil {
@@ -619,7 +625,7 @@ func (h *TranslateHandler) processTranslatedSegments(
 
 		rep.SegmentDone()
 	}
-	return unresolved, missing
+	return unresolved
 }
 
 // lookupHints 为 idxs 中每段查 glossary / TM 并合并去重。

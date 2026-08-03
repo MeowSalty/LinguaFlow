@@ -38,7 +38,7 @@ func TestTranslateHandler_ProcessBatch_BackendErrorEmitsBatch(t *testing.T) {
 	}
 
 	// BuildBatches to get the batch structure
-	batches, err := h.BuildBatches(context.Background(), doc)
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatalf("build batches: %v", err)
 	}

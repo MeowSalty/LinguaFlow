@@ -90,7 +90,7 @@ func segmentHasAdjudicableIssue(issues []qa.QualityIssue, codes map[string]struc
 }
 
 // BuildBatches 选 status∈{translated,edited} 且 Issues 含可裁决 code 的段，按约束分批。
-func (h *AdjudicateHandler) BuildBatches(_ context.Context, doc *Document) ([][]int, error) {
+func (h *AdjudicateHandler) BuildBatches(_ context.Context, doc *Document, _ []int, _ int) ([][]int, error) {
 	logger := h.logger()
 	if h.Renderer == nil {
 		logger.Warn("adjudicate handler: renderer is nil, skipping")

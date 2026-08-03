@@ -80,7 +80,7 @@ func (h *ExtractHandler) emitBatchOutcome(evt progress.BatchEvent) {
 // BuildBatches 收集待抽取的段落索引，按 BatchConstraint 分批。
 // 跳过 Skip 和空白段落。不扩展上下文。
 // batch_size 和 max_words_per_batch 都为 0 时，不分批，全部一次发送。
-func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document) ([][]int, error) {
+func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document, _ []int, _ int) ([][]int, error) {
 	logger := h.logger()
 
 	if h.Renderer == nil {
