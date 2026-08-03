@@ -1800,6 +1800,10 @@ export interface components {
             stage_total?: number;
             /** @description 当前阶段已完成的段落数 */
             stage_completed?: number;
+            /** @description 跨轮工作量总数（资源级，各轮 stage_total 累加） */
+            weighted_total?: number;
+            /** @description 跨轮已完成工作量（资源级，各轮 stage_completed 累加） */
+            weighted_completed?: number;
             /**
              * Format: date-time
              * @description 资源开始执行的时间
@@ -1841,9 +1845,14 @@ export interface components {
             failed_resources: number;
             /** @description 总段落数（创建时选中的 segment 数） */
             total_segments: number;
+            /** @description 翻译终态去重段数（仅 ReconcileJob 写入；运行中主进度请用 weighted_*） */
             completed_segments: number;
             /** @description 被系统跳过的段落数（已翻译、空文本、纯占位符等） */
             skipped_segments: number;
+            /** @description 跨轮工作量总数（各轮 stage_total 累加，实时、单调）；主进度分母。completed_segments 为翻译终态去重值 */
+            weighted_total?: number;
+            /** @description 跨轮已完成工作量（各轮 stage_completed 累加，实时、单调、≤weighted_total）；主进度分子 */
+            weighted_completed?: number;
             /** @description 在队列中的位置（1-based），null 表示不在队列中 */
             queue_position?: number | null;
             /** @description 当前队列中的任务总数 */
