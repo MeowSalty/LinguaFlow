@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"reflect"
@@ -507,8 +508,6 @@ func defaultRepairOpts() repair.Options {
 	return repair.Options{
 		JSONStructural:       true,
 		SchemaAliases:        true,
-		Partial:              true,
-		PartialThreshold:     0.5,
 		PlaceholderNormalize: true,
 		PromptUpgrade:        true,
 	}
@@ -541,15 +540,17 @@ func runTestTranslateRound(t *testing.T, h *TranslateHandler, doc *Document, con
 	}
 	round := Round{
 		Concurrency: conc,
+		Retry:       h.Retry,
+		Shrink:      h.FallbackShrink,
 		Handler:     h,
 	}
 	_, err := RunRound(context.Background(), round, doc, nil, h.Logger, h.Reporter)
 	return err
 }
 
-// TestProcessBatch_PartialRecovery_BelowThreshold 验证 partial 模式下，缺失少量 ID
-// 时已成功段直接写回，缺失段仅触发额外 LLM 调用，不走 shrink。
-func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
+// TestProcessBatch_MissingIDsAdvanceToNextPool 缺失 ID 写回成功段后，
+// 缺失段进下一池按缩放大小重切补救（不再走 round 级 missing 重试）。
+func TestProcessBatch_MissingIDsAdvanceToNextPool(t *testing.T) {
 	doc := newTestDoc(4)
 	rep := &countingReporter{}
 
@@ -562,6 +563,8 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 	}
 	h := newTestTranslateHandler(fb, 4, 1, func(h *TranslateHandler) {
 		h.Reporter = rep
+		h.FallbackShrink = 0.5
+		h.Retry = backend.RetryPolicy{MaxAttempts: 1}
 	})
 	if err := runTestTranslateRound(t, h, doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -572,16 +575,22 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 		}
 	}
 	if got := int(fb.idx.Load()); got != 2 {
-		t.Errorf("backend calls: %d want 2 (1 batch + 1 single)", got)
+		t.Errorf("backend calls: %d want 2 (pool0 batch + pool1 missing)", got)
 	}
 	if got := atomic.LoadInt32(&rep.segmentDones); got != 4 {
-		t.Errorf("SegmentDone calls=%d want 4 (no double-count, no missing)", got)
+		t.Errorf("SegmentDone calls=%d want 4 (no double-count)", got)
+	}
+	if got := atomic.LoadInt32(&rep.stageStartCalls); got != 1 {
+		t.Errorf("StageStart calls=%d want 1", got)
+	}
+	if got := atomic.LoadInt32(&rep.stageDoneCalls); got != 1 {
+		t.Errorf("StageDone calls=%d want 1", got)
 	}
 }
 
-// TestProcessBatch_PartialRecovery_AboveThresholdShrinks 缺失率超阈值时，
-// 使用最佳部分结果（不丢弃已翻译段），缺失段通过 round 级 missing 重试补救。
-func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
+// TestProcessBatch_HighMissingRateStillUsesBestPartial 高缺失率时仍保留已成功段，
+// 缺失段进下一池补救。
+func TestProcessBatch_HighMissingRateStillUsesBestPartial(t *testing.T) {
 	doc := newTestDoc(4)
 	rep := &countingReporter{}
 
@@ -589,18 +598,21 @@ func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			`{"translations":{"1":"a"}}`,
-			`{"translations":{"1":"x1","2":"x2","3":"x3"}}`,
+			// pool1 MaxSegments=floor(4*0.5)=2 → batches [1,2] and [3]
+			`{"translations":{"1":"x1","2":"x2"}}`,
+			`{"translations":{"1":"x3"}}`,
 		},
 	}
 	h := newTestTranslateHandler(fb, 4, 1, func(h *TranslateHandler) {
 		h.Reporter = rep
-		h.FallbackShrink = 0
+		h.FallbackShrink = 0.5
+		h.Retry = backend.RetryPolicy{MaxAttempts: 1}
 	})
 	if err := runTestTranslateRound(t, h, doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if got := int(fb.idx.Load()); got != 2 {
-		t.Errorf("backend calls: %d want 2 (1 batch + 1 missing retry batch)", got)
+	if got := int(fb.idx.Load()); got != 3 {
+		t.Errorf("backend calls: %d want 3 (pool0 + 2 pool1 batches)", got)
 	}
 	for i, want := range []string{"a", "x1", "x2", "x3"} {
 		if got := doc.Segments[i].Target; got != want {
@@ -666,8 +678,8 @@ func TestProcessBatch_PromptUpgradeRecovers(t *testing.T) {
 	}
 }
 
-// TestProcessBatch_PromptUpgradeDisabledFallsBack 升级重试关闭时，fatal JSON 直接进 shrink。
-func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
+// TestProcessBatch_PromptUpgradeDisabledAdvancesPool 升级重试关闭时，fatal JSON 整批进下一池。
+func TestProcessBatch_PromptUpgradeDisabledAdvancesPool(t *testing.T) {
 	doc := newTestDoc(2)
 	rep := &countingReporter{}
 
@@ -675,7 +687,8 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			"not json",
-			`{"translations":{"1":"x0"}}`,
+			`{"translations":{"1":"x0"}}`, // pool1 batch size floor(2*0.5)=1
+			`{"translations":{"1":"x1"}}`,
 		},
 	}
 	opts := defaultRepairOpts()
@@ -689,13 +702,18 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	if err := runTestTranslateRound(t, h, doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// At least 1 backend call should have been made (initial parse failure)
-	if got := int(fb.idx.Load()); got < 1 {
-		t.Errorf("backend calls: %d want >= 1", got)
+	if got := int(fb.idx.Load()); got < 2 {
+		t.Errorf("backend calls: %d want >= 2 (parse fail + next pool)", got)
+	}
+	if doc.Segments[0].Target != "x0" {
+		t.Errorf("seg0=%q want x0", doc.Segments[0].Target)
+	}
+	if doc.Segments[1].Target != "x1" {
+		t.Errorf("seg1=%q want x1", doc.Segments[1].Target)
 	}
 }
 
-func TestTranslatePlan_UsesLongestContinuousRunsAndMissingRetry(t *testing.T) {
+func TestTranslatePlan_UsesLongestContinuousRunsAndPoolRetry(t *testing.T) {
 	doc := newTestDoc(7)
 	doc.Segments[3].Skip = true
 	doc.Segments[3].Source = "skipped"
@@ -704,11 +722,14 @@ func TestTranslatePlan_UsesLongestContinuousRunsAndMissingRetry(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			`{"translations":{"1":"a0","2":"a1","3":"a2"}}`,
-			`{"translations":{"1":"b4","2":"b5"}}`,
-			`{"translations":{"1":"c6"}}`,
+			`{"translations":{"1":"b4","2":"b5"}}`, // missing id 3 → seg 6 unresolved
+			`{"translations":{"1":"c6"}}`,          // pool1 rebatch of missing
 		},
 	}
-	h := newTestTranslateHandler(fb, 3, 1)
+	h := newTestTranslateHandler(fb, 3, 1, func(h *TranslateHandler) {
+		h.FallbackShrink = 0.5
+		h.Retry = backend.RetryPolicy{MaxAttempts: 1}
+	})
 	if err := runTestTranslateRound(t, h, doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -730,7 +751,7 @@ func TestTranslatePlan_UsesLongestContinuousRunsAndMissingRetry(t *testing.T) {
 		t.Fatalf("first request should not mix separated runs, got %q", fb.requests[0].User)
 	}
 	if !strings.Contains(fb.requests[2].User, "source-6") {
-		t.Fatalf("third request should be second-round single fallback, got %q", fb.requests[2].User)
+		t.Fatalf("third request should be pool1 missing rebatch, got %q", fb.requests[2].User)
 	}
 }
 
@@ -914,5 +935,192 @@ func TestIsDecorativeSeparator(t *testing.T) {
 				t.Errorf("IsDecorativeSeparator() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestShrinkConstraint_Curve(t *testing.T) {
+	orig := BatchConstraint{MaxSegments: 100, MaxWords: 1000}
+	// pool 0
+	c0 := shrinkConstraint(orig, 0.9, 0)
+	if c0.MaxSegments != 100 || c0.MaxWords != 1000 {
+		t.Fatalf("pool0: %+v", c0)
+	}
+	// pool 1: floor(100*0.9)=90, floor(1000*0.9)=900
+	c1 := shrinkConstraint(orig, 0.9, 1)
+	if c1.MaxSegments != 90 || c1.MaxWords != 900 {
+		t.Fatalf("pool1: %+v want 90/900", c1)
+	}
+	// pool 2: floor(100*0.81)=81
+	c2 := shrinkConstraint(orig, 0.9, 2)
+	if c2.MaxSegments != 81 {
+		t.Fatalf("pool2 MaxSegments=%d want 81", c2.MaxSegments)
+	}
+	// pool 3: floor(100*0.729)=72
+	c3 := shrinkConstraint(orig, 0.9, 3)
+	if c3.MaxSegments != 72 {
+		t.Fatalf("pool3 MaxSegments=%d want 72", c3.MaxSegments)
+	}
+	// clamp to 1
+	tiny := shrinkConstraint(BatchConstraint{MaxSegments: 2}, 0.5, 5)
+	if tiny.MaxSegments != 1 {
+		t.Fatalf("clamp: %d want 1", tiny.MaxSegments)
+	}
+	// shrink disabled
+	off := shrinkConstraint(orig, 0, 2)
+	if off.MaxSegments != 100 {
+		t.Fatalf("shrink=0 should keep orig: %+v", off)
+	}
+}
+
+// TestPoolModel_ParseFailureAdvancesAndReleasesSeat 解析失败整批进下一池，不在原席位滚退化链。
+func TestPoolModel_ParseFailureAdvancesAndReleasesSeat(t *testing.T) {
+	doc := newTestDoc(4)
+	rep := &countingReporter{}
+
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			"not-json-at-all", // pool0: parse fail → unresolved whole batch
+			// pool1 MaxSegments=2；concurrency=1 保证响应顺序确定
+			`{"translations":{"1":"a","2":"b"}}`,
+			`{"translations":{"1":"c","2":"d"}}`,
+		},
+	}
+	opts := defaultRepairOpts()
+	opts.PromptUpgrade = false
+	h := newTestTranslateHandler(fb, 4, 1, func(h *TranslateHandler) {
+		h.Reporter = rep
+		h.Repair = opts
+		h.FallbackShrink = 0.5
+		h.Retry = backend.RetryPolicy{MaxAttempts: 2}
+	})
+	if err := runTestTranslateRound(t, h, doc, 1); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	for i, want := range []string{"a", "b", "c", "d"} {
+		if got := doc.Segments[i].Target; got != want {
+			t.Errorf("seg %d: target=%q want %q", i, got, want)
+		}
+	}
+	if got := int(fb.idx.Load()); got != 3 {
+		t.Errorf("backend calls=%d want 3 (1 fail + 2 pool1 batches)", got)
+	}
+	if got := atomic.LoadInt32(&rep.segmentDones); got != 4 {
+		t.Errorf("SegmentDone=%d want 4", got)
+	}
+	if got := atomic.LoadInt32(&rep.stageStartCalls); got != 1 {
+		t.Errorf("StageStart=%d want 1", got)
+	}
+}
+
+// TestPoolModel_5xxInFlightRetry 5xx 走池内 in-flight backoff，不进下一池缩批。
+func TestPoolModel_5xxInFlightRetry(t *testing.T) {
+	doc := newTestDoc(2)
+	rep := &countingReporter{}
+
+	fb := &fakeBackend{
+		name: "fake",
+		errs: []error{
+			&backend.StatusError{StatusCode: 500, Err: errors.New("internal")},
+			nil,
+		},
+		responses: []string{
+			"", // first call fails via errs
+			`{"translations":{"1":"a","2":"b"}}`,
+		},
+	}
+	h := newTestTranslateHandler(fb, 2, 1, func(h *TranslateHandler) {
+		h.Reporter = rep
+		h.FallbackShrink = 0.5
+		h.Retry = backend.RetryPolicy{MaxAttempts: 2, Backoff: 0} // backoff floored to minRateLimitBackoff
+	})
+
+	// Override min backoff path: use short context... actually backoffDuration enforces 5s min.
+	// Speed up by setting MaxAttempts and accepting wait — too slow for unit test.
+	// Instead call ProcessBatch directly and assert retry path without full RunRound wait.
+	h.Renderer = newTestRenderer(t)
+	result := h.ProcessBatch(context.Background(), doc, []int{0, 1}, 0, quietLogger())
+	if result.retry == nil {
+		t.Fatal("expected in-flight retry for 500, got no retry")
+	}
+	if len(result.unresolved) != 0 {
+		t.Fatalf("5xx must not unresolved/shrink, got unresolved=%v", result.unresolved)
+	}
+	if result.retry.attempt != 1 {
+		t.Fatalf("retry.attempt=%d want 1", result.retry.attempt)
+	}
+	if len(result.retry.idxs) != 2 {
+		t.Fatalf("retry must keep same batch size, got %d", len(result.retry.idxs))
+	}
+}
+
+// TestPoolModel_429InFlightRetry 429 行为不变：in-flight backoff。
+func TestPoolModel_429InFlightRetry(t *testing.T) {
+	doc := newTestDoc(2)
+	h := newTestTranslateHandler(&fakeBackend{
+		name: "fake",
+		errs: []error{&backend.StatusError{StatusCode: 429, Err: errors.New("rate limited")}},
+	}, 2, 1, func(h *TranslateHandler) {
+		h.Retry = backend.RetryPolicy{MaxAttempts: 2, Backoff: 0}
+	})
+	h.Renderer = newTestRenderer(t)
+	result := h.ProcessBatch(context.Background(), doc, []int{0, 1}, 0, quietLogger())
+	if result.retry == nil {
+		t.Fatal("expected in-flight retry for 429")
+	}
+	if len(result.unresolved) != 0 {
+		t.Fatalf("429 must not unresolved, got %v", result.unresolved)
+	}
+}
+
+// TestPoolModel_NetworkErrorInFlightRetry 无 HTTPStatus 的网络错误走 IsRetryable in-flight。
+func TestPoolModel_NetworkErrorInFlightRetry(t *testing.T) {
+	doc := newTestDoc(1)
+	h := newTestTranslateHandler(&fakeBackend{
+		name: "fake",
+		errs: []error{errors.New("dial tcp: i/o timeout")},
+	}, 1, 1, func(h *TranslateHandler) {
+		h.Retry = backend.RetryPolicy{MaxAttempts: 2, Backoff: 0}
+	})
+	h.Renderer = newTestRenderer(t)
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.retry == nil {
+		t.Fatal("expected in-flight retry for network error")
+	}
+}
+
+// TestPoolModel_FinalUnresolvedAfterPoolsExhausted 池耗尽后 Finalize 写 failed indices。
+func TestPoolModel_FinalUnresolvedAfterPoolsExhausted(t *testing.T) {
+	doc := newTestDoc(2)
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			"bad", // pool0 parse fail
+			"bad", // pool1
+		},
+	}
+	opts := defaultRepairOpts()
+	opts.PromptUpgrade = false
+	h := newTestTranslateHandler(fb, 2, 1, func(h *TranslateHandler) {
+		h.Repair = opts
+		h.FallbackShrink = 0.5
+		h.Retry = backend.RetryPolicy{MaxAttempts: 1} // maxPools=2
+	})
+	if err := runTestTranslateRound(t, h, doc); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if doc.Segments[0].Target != "" || doc.Segments[1].Target != "" {
+		t.Fatalf("targets should stay empty, got %q %q", doc.Segments[0].Target, doc.Segments[1].Target)
+	}
+	v, ok := doc.Vars["_translate_failed_indices"]
+	if !ok {
+		t.Fatal("expected _translate_failed_indices")
+	}
+	s, _ := v.(string)
+	if s != "0,1" && s != "0, 1" {
+		// Finalize joins with comma no space
+		if s != "0,1" {
+			t.Fatalf("_translate_failed_indices=%q want 0,1", s)
+		}
 	}
 }

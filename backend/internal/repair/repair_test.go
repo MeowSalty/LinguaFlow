@@ -10,8 +10,6 @@ import (
 var allOpts = Options{
 	JSONStructural:       true,
 	SchemaAliases:        true,
-	Partial:              true,
-	PartialThreshold:     0.5,
 	PlaceholderNormalize: true,
 	PromptUpgrade:        true,
 }

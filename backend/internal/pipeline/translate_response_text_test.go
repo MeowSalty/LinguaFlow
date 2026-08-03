@@ -7,10 +7,8 @@ import (
 )
 
 var textRepairOpts = repair.Options{
-	JSONStructural:   true,
-	Partial:          true,
-	PartialThreshold: 0.5,
-	PromptUpgrade:    true,
+	JSONStructural: true,
+	PromptUpgrade:  true,
 }
 
 func TestParseBatchResponseLenientText_HappyPath(t *testing.T) {
@@ -76,9 +74,7 @@ func TestParseBatchResponseLenientText_WithGlossary(t *testing.T) {
 func TestParseBatchResponseLenientText_MissingID(t *testing.T) {
 	text := "[1] 早上好\n"
 	opt := repair.Options{
-		JSONStructural:   true,
-		Partial:          true,
-		PartialThreshold: 0.6,
+		JSONStructural: true,
 	}
 	r := parseBatchResponseLenientText(text, []string{"1", "2"}, opt)
 	if r.Fatal {
