@@ -39,6 +39,10 @@ func (JobResource) Fields() []ent.Field {
 			Comment("当前阶段的总段落数（StageStart 时写入）"),
 		field.Int("stage_completed").Default(0).NonNegative().
 			Comment("当前阶段已完成的段落数（SegmentDone 时递增）"),
+		field.Int("weighted_total").Default(0).NonNegative().
+			Comment("跨轮工作量总数（各轮 stage_total 累加，实时累加）"),
+		field.Int("weighted_completed").Default(0).NonNegative().
+			Comment("跨轮已完成工作量（各轮 stage_completed 累加，实时累加）"),
 		field.Time("started_at").Optional().Nillable().
 			Comment("资源开始执行的时间"),
 	}

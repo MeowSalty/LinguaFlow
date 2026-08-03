@@ -40,6 +40,10 @@ const (
 	FieldStageTotal = "stage_total"
 	// FieldStageCompleted holds the string denoting the stage_completed field in the database.
 	FieldStageCompleted = "stage_completed"
+	// FieldWeightedTotal holds the string denoting the weighted_total field in the database.
+	FieldWeightedTotal = "weighted_total"
+	// FieldWeightedCompleted holds the string denoting the weighted_completed field in the database.
+	FieldWeightedCompleted = "weighted_completed"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
 	FieldStartedAt = "started_at"
 	// EdgeJob holds the string denoting the job edge name in mutations.
@@ -80,6 +84,8 @@ var Columns = []string{
 	FieldCurrentStage,
 	FieldStageTotal,
 	FieldStageCompleted,
+	FieldWeightedTotal,
+	FieldWeightedCompleted,
 	FieldStartedAt,
 }
 
@@ -138,6 +144,14 @@ var (
 	DefaultStageCompleted int
 	// StageCompletedValidator is a validator for the "stage_completed" field. It is called by the builders before save.
 	StageCompletedValidator func(int) error
+	// DefaultWeightedTotal holds the default value on creation for the "weighted_total" field.
+	DefaultWeightedTotal int
+	// WeightedTotalValidator is a validator for the "weighted_total" field. It is called by the builders before save.
+	WeightedTotalValidator func(int) error
+	// DefaultWeightedCompleted holds the default value on creation for the "weighted_completed" field.
+	DefaultWeightedCompleted int
+	// WeightedCompletedValidator is a validator for the "weighted_completed" field. It is called by the builders before save.
+	WeightedCompletedValidator func(int) error
 )
 
 // OrderOption defines the ordering options for the JobResource queries.
@@ -206,6 +220,16 @@ func ByStageTotal(opts ...sql.OrderTermOption) OrderOption {
 // ByStageCompleted orders the results by the stage_completed field.
 func ByStageCompleted(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStageCompleted, opts...).ToFunc()
+}
+
+// ByWeightedTotal orders the results by the weighted_total field.
+func ByWeightedTotal(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWeightedTotal, opts...).ToFunc()
+}
+
+// ByWeightedCompleted orders the results by the weighted_completed field.
+func ByWeightedCompleted(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWeightedCompleted, opts...).ToFunc()
 }
 
 // ByStartedAt orders the results by the started_at field.

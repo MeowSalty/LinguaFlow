@@ -44,10 +44,12 @@ type Job struct {
 	TotalSegments int `json:"total_segments,omitempty"`
 	// 被系统跳过的段落数（聚合自 JobResource）
 	SkippedSegments int `json:"skipped_segments,omitempty"`
-	// 实际需要处理的段落数（ReconcileJob 从各资源的 stage_total 聚合）
-	StageTotal int `json:"stage_total,omitempty"`
-	// 已完成段落数
+	// 已完成段落数（终态去重值，仅 ReconcileJob 写入）
 	CompletedSegments int `json:"completed_segments,omitempty"`
+	// 跨轮工作量总数（各轮 stage_total 累加，实时累加）
+	WeightedTotal int `json:"weighted_total,omitempty"`
+	// 跨轮已完成工作量（各轮 stage_completed 累加，实时累加）
+	WeightedCompleted int `json:"weighted_completed,omitempty"`
 	// 任务级错误信息
 	ErrorMessage *string `json:"error_message,omitempty"`
 	// 任务开始执行的时间，MarkJobRunning 时写入
@@ -121,7 +123,7 @@ func (*Job) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case job.FieldExecutionConfig:
 			values[i] = new([]byte)
-		case job.FieldID, job.FieldProjectID, job.FieldExecutionPlanID, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldTotalSegments, job.FieldSkippedSegments, job.FieldStageTotal, job.FieldCompletedSegments:
+		case job.FieldID, job.FieldProjectID, job.FieldExecutionPlanID, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldTotalSegments, job.FieldSkippedSegments, job.FieldCompletedSegments, job.FieldWeightedTotal, job.FieldWeightedCompleted:
 			values[i] = new(sql.NullInt64)
 		case job.FieldStatus, job.FieldTriggerType, job.FieldErrorMessage:
 			values[i] = new(sql.NullString)
@@ -224,17 +226,23 @@ func (_m *Job) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.SkippedSegments = int(value.Int64)
 			}
-		case job.FieldStageTotal:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field stage_total", values[i])
-			} else if value.Valid {
-				_m.StageTotal = int(value.Int64)
-			}
 		case job.FieldCompletedSegments:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field completed_segments", values[i])
 			} else if value.Valid {
 				_m.CompletedSegments = int(value.Int64)
+			}
+		case job.FieldWeightedTotal:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field weighted_total", values[i])
+			} else if value.Valid {
+				_m.WeightedTotal = int(value.Int64)
+			}
+		case job.FieldWeightedCompleted:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field weighted_completed", values[i])
+			} else if value.Valid {
+				_m.WeightedCompleted = int(value.Int64)
 			}
 		case job.FieldErrorMessage:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -349,11 +357,14 @@ func (_m *Job) String() string {
 	builder.WriteString("skipped_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SkippedSegments))
 	builder.WriteString(", ")
-	builder.WriteString("stage_total=")
-	builder.WriteString(fmt.Sprintf("%v", _m.StageTotal))
-	builder.WriteString(", ")
 	builder.WriteString("completed_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CompletedSegments))
+	builder.WriteString(", ")
+	builder.WriteString("weighted_total=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WeightedTotal))
+	builder.WriteString(", ")
+	builder.WriteString("weighted_completed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WeightedCompleted))
 	builder.WriteString(", ")
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")

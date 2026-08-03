@@ -212,27 +212,6 @@ func (_u *JobUpdate) AddSkippedSegments(v int) *JobUpdate {
 	return _u
 }
 
-// SetStageTotal sets the "stage_total" field.
-func (_u *JobUpdate) SetStageTotal(v int) *JobUpdate {
-	_u.mutation.ResetStageTotal()
-	_u.mutation.SetStageTotal(v)
-	return _u
-}
-
-// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
-func (_u *JobUpdate) SetNillableStageTotal(v *int) *JobUpdate {
-	if v != nil {
-		_u.SetStageTotal(*v)
-	}
-	return _u
-}
-
-// AddStageTotal adds value to the "stage_total" field.
-func (_u *JobUpdate) AddStageTotal(v int) *JobUpdate {
-	_u.mutation.AddStageTotal(v)
-	return _u
-}
-
 // SetCompletedSegments sets the "completed_segments" field.
 func (_u *JobUpdate) SetCompletedSegments(v int) *JobUpdate {
 	_u.mutation.ResetCompletedSegments()
@@ -251,6 +230,48 @@ func (_u *JobUpdate) SetNillableCompletedSegments(v *int) *JobUpdate {
 // AddCompletedSegments adds value to the "completed_segments" field.
 func (_u *JobUpdate) AddCompletedSegments(v int) *JobUpdate {
 	_u.mutation.AddCompletedSegments(v)
+	return _u
+}
+
+// SetWeightedTotal sets the "weighted_total" field.
+func (_u *JobUpdate) SetWeightedTotal(v int) *JobUpdate {
+	_u.mutation.ResetWeightedTotal()
+	_u.mutation.SetWeightedTotal(v)
+	return _u
+}
+
+// SetNillableWeightedTotal sets the "weighted_total" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableWeightedTotal(v *int) *JobUpdate {
+	if v != nil {
+		_u.SetWeightedTotal(*v)
+	}
+	return _u
+}
+
+// AddWeightedTotal adds value to the "weighted_total" field.
+func (_u *JobUpdate) AddWeightedTotal(v int) *JobUpdate {
+	_u.mutation.AddWeightedTotal(v)
+	return _u
+}
+
+// SetWeightedCompleted sets the "weighted_completed" field.
+func (_u *JobUpdate) SetWeightedCompleted(v int) *JobUpdate {
+	_u.mutation.ResetWeightedCompleted()
+	_u.mutation.SetWeightedCompleted(v)
+	return _u
+}
+
+// SetNillableWeightedCompleted sets the "weighted_completed" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableWeightedCompleted(v *int) *JobUpdate {
+	if v != nil {
+		_u.SetWeightedCompleted(*v)
+	}
+	return _u
+}
+
+// AddWeightedCompleted adds value to the "weighted_completed" field.
+func (_u *JobUpdate) AddWeightedCompleted(v int) *JobUpdate {
+	_u.mutation.AddWeightedCompleted(v)
 	return _u
 }
 
@@ -480,14 +501,19 @@ func (_u *JobUpdate) check() error {
 			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "Job.skipped_segments": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.StageTotal(); ok {
-		if err := job.StageTotalValidator(v); err != nil {
-			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "Job.stage_total": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.CompletedSegments(); ok {
 		if err := job.CompletedSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "Job.completed_segments": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.WeightedTotal(); ok {
+		if err := job.WeightedTotalValidator(v); err != nil {
+			return &ValidationError{Name: "weighted_total", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_total": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.WeightedCompleted(); ok {
+		if err := job.WeightedCompletedValidator(v); err != nil {
+			return &ValidationError{Name: "weighted_completed", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_completed": %w`, err)}
 		}
 	}
 	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
@@ -556,17 +582,23 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
 		_spec.AddField(job.FieldSkippedSegments, field.TypeInt, value)
 	}
-	if value, ok := _u.mutation.StageTotal(); ok {
-		_spec.SetField(job.FieldStageTotal, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedStageTotal(); ok {
-		_spec.AddField(job.FieldStageTotal, field.TypeInt, value)
-	}
 	if value, ok := _u.mutation.CompletedSegments(); ok {
 		_spec.SetField(job.FieldCompletedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedCompletedSegments(); ok {
 		_spec.AddField(job.FieldCompletedSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.WeightedTotal(); ok {
+		_spec.SetField(job.FieldWeightedTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeightedTotal(); ok {
+		_spec.AddField(job.FieldWeightedTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.WeightedCompleted(); ok {
+		_spec.SetField(job.FieldWeightedCompleted, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeightedCompleted(); ok {
+		_spec.AddField(job.FieldWeightedCompleted, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(job.FieldErrorMessage, field.TypeString, value)
@@ -928,27 +960,6 @@ func (_u *JobUpdateOne) AddSkippedSegments(v int) *JobUpdateOne {
 	return _u
 }
 
-// SetStageTotal sets the "stage_total" field.
-func (_u *JobUpdateOne) SetStageTotal(v int) *JobUpdateOne {
-	_u.mutation.ResetStageTotal()
-	_u.mutation.SetStageTotal(v)
-	return _u
-}
-
-// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
-func (_u *JobUpdateOne) SetNillableStageTotal(v *int) *JobUpdateOne {
-	if v != nil {
-		_u.SetStageTotal(*v)
-	}
-	return _u
-}
-
-// AddStageTotal adds value to the "stage_total" field.
-func (_u *JobUpdateOne) AddStageTotal(v int) *JobUpdateOne {
-	_u.mutation.AddStageTotal(v)
-	return _u
-}
-
 // SetCompletedSegments sets the "completed_segments" field.
 func (_u *JobUpdateOne) SetCompletedSegments(v int) *JobUpdateOne {
 	_u.mutation.ResetCompletedSegments()
@@ -967,6 +978,48 @@ func (_u *JobUpdateOne) SetNillableCompletedSegments(v *int) *JobUpdateOne {
 // AddCompletedSegments adds value to the "completed_segments" field.
 func (_u *JobUpdateOne) AddCompletedSegments(v int) *JobUpdateOne {
 	_u.mutation.AddCompletedSegments(v)
+	return _u
+}
+
+// SetWeightedTotal sets the "weighted_total" field.
+func (_u *JobUpdateOne) SetWeightedTotal(v int) *JobUpdateOne {
+	_u.mutation.ResetWeightedTotal()
+	_u.mutation.SetWeightedTotal(v)
+	return _u
+}
+
+// SetNillableWeightedTotal sets the "weighted_total" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableWeightedTotal(v *int) *JobUpdateOne {
+	if v != nil {
+		_u.SetWeightedTotal(*v)
+	}
+	return _u
+}
+
+// AddWeightedTotal adds value to the "weighted_total" field.
+func (_u *JobUpdateOne) AddWeightedTotal(v int) *JobUpdateOne {
+	_u.mutation.AddWeightedTotal(v)
+	return _u
+}
+
+// SetWeightedCompleted sets the "weighted_completed" field.
+func (_u *JobUpdateOne) SetWeightedCompleted(v int) *JobUpdateOne {
+	_u.mutation.ResetWeightedCompleted()
+	_u.mutation.SetWeightedCompleted(v)
+	return _u
+}
+
+// SetNillableWeightedCompleted sets the "weighted_completed" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableWeightedCompleted(v *int) *JobUpdateOne {
+	if v != nil {
+		_u.SetWeightedCompleted(*v)
+	}
+	return _u
+}
+
+// AddWeightedCompleted adds value to the "weighted_completed" field.
+func (_u *JobUpdateOne) AddWeightedCompleted(v int) *JobUpdateOne {
+	_u.mutation.AddWeightedCompleted(v)
 	return _u
 }
 
@@ -1209,14 +1262,19 @@ func (_u *JobUpdateOne) check() error {
 			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "Job.skipped_segments": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.StageTotal(); ok {
-		if err := job.StageTotalValidator(v); err != nil {
-			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "Job.stage_total": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.CompletedSegments(); ok {
 		if err := job.CompletedSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "Job.completed_segments": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.WeightedTotal(); ok {
+		if err := job.WeightedTotalValidator(v); err != nil {
+			return &ValidationError{Name: "weighted_total", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_total": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.WeightedCompleted(); ok {
+		if err := job.WeightedCompletedValidator(v); err != nil {
+			return &ValidationError{Name: "weighted_completed", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_completed": %w`, err)}
 		}
 	}
 	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
@@ -1302,17 +1360,23 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
 		_spec.AddField(job.FieldSkippedSegments, field.TypeInt, value)
 	}
-	if value, ok := _u.mutation.StageTotal(); ok {
-		_spec.SetField(job.FieldStageTotal, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedStageTotal(); ok {
-		_spec.AddField(job.FieldStageTotal, field.TypeInt, value)
-	}
 	if value, ok := _u.mutation.CompletedSegments(); ok {
 		_spec.SetField(job.FieldCompletedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedCompletedSegments(); ok {
 		_spec.AddField(job.FieldCompletedSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.WeightedTotal(); ok {
+		_spec.SetField(job.FieldWeightedTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeightedTotal(); ok {
+		_spec.AddField(job.FieldWeightedTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.WeightedCompleted(); ok {
+		_spec.SetField(job.FieldWeightedCompleted, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeightedCompleted(); ok {
+		_spec.AddField(job.FieldWeightedCompleted, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(job.FieldErrorMessage, field.TypeString, value)

@@ -46,6 +46,10 @@ type JobResource struct {
 	StageTotal int `json:"stage_total,omitempty"`
 	// 当前阶段已完成的段落数（SegmentDone 时递增）
 	StageCompleted int `json:"stage_completed,omitempty"`
+	// 跨轮工作量总数（各轮 stage_total 累加，实时累加）
+	WeightedTotal int `json:"weighted_total,omitempty"`
+	// 跨轮已完成工作量（各轮 stage_completed 累加，实时累加）
+	WeightedCompleted int `json:"weighted_completed,omitempty"`
 	// 资源开始执行的时间
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -96,7 +100,7 @@ func (*JobResource) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case jobresource.FieldSegmentIds:
 			values[i] = new([]byte)
-		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldSkippedSegments, jobresource.FieldStageTotal, jobresource.FieldStageCompleted:
+		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldSkippedSegments, jobresource.FieldStageTotal, jobresource.FieldStageCompleted, jobresource.FieldWeightedTotal, jobresource.FieldWeightedCompleted:
 			values[i] = new(sql.NullInt64)
 		case jobresource.FieldStatus, jobresource.FieldOutputPath, jobresource.FieldErrorMessage, jobresource.FieldWarningMessage, jobresource.FieldCurrentStage:
 			values[i] = new(sql.NullString)
@@ -209,6 +213,18 @@ func (_m *JobResource) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.StageCompleted = int(value.Int64)
 			}
+		case jobresource.FieldWeightedTotal:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field weighted_total", values[i])
+			} else if value.Valid {
+				_m.WeightedTotal = int(value.Int64)
+			}
+		case jobresource.FieldWeightedCompleted:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field weighted_completed", values[i])
+			} else if value.Valid {
+				_m.WeightedCompleted = int(value.Int64)
+			}
 		case jobresource.FieldStartedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field started_at", values[i])
@@ -318,6 +334,12 @@ func (_m *JobResource) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("stage_completed=")
 	builder.WriteString(fmt.Sprintf("%v", _m.StageCompleted))
+	builder.WriteString(", ")
+	builder.WriteString("weighted_total=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WeightedTotal))
+	builder.WriteString(", ")
+	builder.WriteString("weighted_completed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WeightedCompleted))
 	builder.WriteString(", ")
 	if v := _m.StartedAt; v != nil {
 		builder.WriteString("started_at=")
