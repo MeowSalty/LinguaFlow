@@ -1,0 +1,119 @@
+name: Release Docker
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    name: 构建并推送 Docker 镜像
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: 安装前端依赖
+        run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      - name: 构建前端
+        run: pnpm build
+        working-directory: frontend
+
+      - name: 嵌入前端到后端
+        run: |
+          rm -rf backend/internal/web/dist
+          cp -r frontend/dist backend/internal/web/dist
+
+      - name: 设置 QEMU（多平台构建支持）
+        uses: docker/setup-qemu-action@v3
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GitHub 容器仓库
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 准备镜像描述（取 Release 版本简介首段）
+        env:
+          RELEASE_BODY: ${{ github.event.release.body }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -e
+          # 从 release body 中提取「## 🎉 版本简介」章节的正文：
+          #   1) 定位到「## 🎉 版本简介」标题行；
+          #   2) 跳过标题，收集其后的非空正文行；
+          #   3) 遇到空行或引用框（> ）即止，只取第一自然段；
+          #   4) 压成单行，限制 256 字符，作为镜像描述。
+          DESC=$(printf '%s\n' "$RELEASE_BODY" | awk '
+            /^## .*版本简介/ { inSection = 1; next }
+            inSection && /^$/ { exit }
+            inSection && /^>/ { exit }
+            inSection && /^## / { exit }
+            inSection { print }
+          ' | tr -s ' \n\t' ' ' | sed 's/^ *//; s/ *$//' | cut -c1-256)
+          DESC="${DESC:-LinguaFlow ${TAG} 镜像}"
+          printf 'IMAGE_DESCRIPTION=%s\n' "$DESC" >> "$GITHUB_ENV"
+          echo "镜像描述: $DESC"
+
+      - name: 提取并丰富镜像元数据
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # 同时输出 labels 和 manifest list annotations，
+          # 多架构镜像的 org.opencontainers.image.description 必须通过 annotations 才能在仓库页面显示；
+          # description 取自 Release 说明首段（见上个 step），即"前面确认发布的更新信息"
+          labels: |
+            org.opencontainers.image.title=LinguaFlow
+            org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+          annotations: |
+            org.opencontainers.image.title=LinguaFlow
+            org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: 构建并推送镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: |
+            VERSION=${{ github.event.release.tag_name }}
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
