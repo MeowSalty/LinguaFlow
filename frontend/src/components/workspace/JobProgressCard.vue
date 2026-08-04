@@ -8,6 +8,8 @@ import {
   calculateJobSpeed,
   formatETA,
   formatJobSpeed,
+  getJobProgress,
+  getJobProgressNumbers,
   getJobProgressText,
   getJobStatusLabel,
   statusTagType,
@@ -18,18 +20,15 @@ const props = defineProps<{
   job: ApiSchemas['Job']
 }>()
 
-const completedPct = computed(() => {
+const completedPct = computed(() => getJobProgress(props.job))
+
+// 主进度条宽度：优先 weighted_*（跨轮工作量，实时单调），回退去重段数
+const completedBarPct = computed(() => {
   if (props.job.status === 'completed') return 100
   if (props.job.status === 'failed' || props.job.status === 'cancelled') return 0
-  const { total_segments, completed_segments } = props.job.progress
-  if (total_segments <= 0) return 0
-  return Math.round((completed_segments / total_segments) * 100)
-})
-
-const completedBarPct = computed(() => {
-  const { total_segments, completed_segments } = props.job.progress
-  if (total_segments <= 0) return 0
-  return Math.round((completed_segments / total_segments) * 100)
+  const { completed, total } = getJobProgressNumbers(props.job)
+  if (total <= 0) return 0
+  return Math.round((completed / total) * 100)
 })
 
 const skippedPct = computed(() => {
@@ -59,6 +58,12 @@ const isTerminal = computed(() => ['completed', 'failed', 'cancelled'].includes(
 const showSkipped = computed(() => props.job.progress.skipped_segments > 0)
 
 const showStatsRow = computed(() => showSkipped.value || hasFailures.value || hasWarnings.value)
+
+// 已完成统计：运行期显示 weighted_completed（跨轮实时），终态显示去重 completed_segments
+const completedCount = computed(() => {
+  const { completed } = getJobProgressNumbers(props.job)
+  return completed
+})
 
 const barColor = computed(() => {
   if (props.job.status === 'completed' && !hasFailures.value && !hasWarnings.value)
@@ -162,7 +167,7 @@ const speedText = computed(() => {
         <span class="inline-block h-2 w-2 rounded-full bg-brand-500" />
         {{ t('workspace.job.stats.completed') }}
         <span class="font-mono tabular-nums font-medium text-lf-text-strong">
-          {{ job.progress.completed_segments }}
+          {{ completedCount }}
         </span>
       </span>
       <span v-if="hasFailures" class="flex items-center gap-1 text-lf-text-muted">

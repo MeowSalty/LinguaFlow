@@ -1,5 +1,9 @@
-# 将 frontend 分支安全合并进 main，并强制保留 main 的 backend/。
+# 将 frontend 分支合并进本地 main，用于合并预演与完整性检查。
 # 必须在 main 分支的 worktree 中运行。
+# 全树分支模型：frontend 与 main 共享完整树，合并不再清空 backend/ 或 docs/。
+#
+# 注意：main 受分支保护（禁止直接推送），本脚本只做本地合并与验证，
+# 不执行 push。合入 main 请通过 Pull Request（网页 Merge 现已安全）。
 # 用法: pwsh -File scripts/merge-frontend-into-main.ps1 [-FrontendRef frontend]
 
 param(
@@ -35,26 +39,13 @@ Write-Host ">> git merge --no-commit $ref"
 git merge --no-commit --no-ff $ref
 $mergeExit = $LASTEXITCODE
 
-# 无论合并是否在 backend 上冲突，一律恢复 main 合并前的 backend/
-if (git rev-parse --verify HEAD:backend 2>$null) {
-    Write-Host '>> 保留 main 的 backend/（checkout HEAD -- backend）'
-    git checkout HEAD -- backend
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
-
-# 清理可能残留的 backend 删除暂存状态后重新保证 backend 完整
-git add -A backend 2>$null
-
 if ($mergeExit -ne 0) {
     $conflicts = git diff --name-only --diff-filter=U
-    $nonBackend = $conflicts | Where-Object { $_ -notlike 'backend/*' -and $_ -ne 'backend' }
-    if ($nonBackend) {
-        Write-Host 'backend/ 已恢复，但仍有其他冲突，请手动解决后提交：'
-        $nonBackend | ForEach-Object { Write-Host "  $_" }
+    if ($conflicts) {
+        Write-Host '合并存在冲突，请手动解决后提交：'
+        $conflicts | ForEach-Object { Write-Host "  $_" }
         exit 1
     }
-    # 仅 backend 冲突时已用 HEAD 版本解决
-    git add -A backend 2>$null
 }
 
 $status = git status --porcelain
@@ -63,7 +54,16 @@ if (-not $status) {
     exit 0
 }
 
-git commit -m "Merge branch '$FrontendRef' into main (keep backend/)"
+# 完整性检查：确认合并后关键目录仍在
+foreach ($dir in @('backend', 'docs', 'frontend', 'api')) {
+    $count = (git ls-files $dir | Measure-Object).Count
+    if ($count -eq 0) {
+        Write-Error "完整性检查失败：合并后 $dir/ 为空，请中止合并并排查。"
+    }
+    Write-Host "OK: $dir/ ($count 个文件)"
+}
+
+git commit -m "Merge branch '$FrontendRef' into main"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host '合并完成：frontend 已合入 main，backend/ 保持 main 版本。'
+Write-Host '本地合并完成。请通过 Pull Request 合入 main（main 受分支保护，禁止直接推送）。'

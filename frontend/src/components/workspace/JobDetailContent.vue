@@ -39,6 +39,14 @@ const warnedResources = computed(() =>
   (props.job.job_resources ?? []).filter((r) => !!r.warning_message?.trim()),
 )
 
+// 资源级进度数值：运行期优先 weighted_*（跨轮累加），回退去重 completed_segments/segment_count
+const getResourceCompleted = (row: JobResource): number => {
+  if (row.weighted_total != null && row.weighted_total > 0) {
+    return row.weighted_completed ?? 0
+  }
+  return row.completed_segments
+}
+
 const resourceColumns = computed(() => [
   {
     title: t('workspace.resource.columns.name'),
@@ -95,9 +103,10 @@ const resourceColumns = computed(() => [
     width: 120,
     render: (row: JobResource) => {
       const skipped = row.skipped_segments ?? 0
+      const completed = getResourceCompleted(row)
       if (skipped > 0) {
         return h('span', { class: 'font-mono tabular-nums whitespace-nowrap text-xs' }, [
-          h('span', { class: 'text-lf-text-strong' }, `${row.completed_segments}`),
+          h('span', { class: 'text-lf-text-strong' }, `${completed}`),
           h('span', { class: 'text-lf-text-muted' }, ` +${skipped} `),
           h('span', { class: 'text-lf-text-muted' }, `/ ${row.segment_count}`),
         ])
@@ -105,7 +114,7 @@ const resourceColumns = computed(() => [
       return h(
         'span',
         { class: 'font-mono tabular-nums whitespace-nowrap text-xs' },
-        { default: () => `${row.completed_segments}/${row.segment_count}` },
+        { default: () => `${completed}/${row.segment_count}` },
       )
     },
   },

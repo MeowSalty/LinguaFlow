@@ -1,4 +1,6 @@
-# 将 origin/main 合并进当前 frontend 分支，并确保不保留 backend/。
+# 将 origin/main 合并进当前 frontend 分支。
+# 全树分支模型：frontend 与 main 共享完整树（含 backend/、docs/，均为只读），
+# 同步即普通合并，无需清理或恢复任何目录。
 # 用法: pwsh -File scripts/sync-main-into-frontend.ps1
 
 $ErrorActionPreference = 'Stop'
@@ -25,20 +27,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host '>> git merge origin/main'
 git merge origin/main --no-edit
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "合并存在冲突。解决后若仍有 backend/，执行: git rm -r backend"
+    Write-Host '合并存在冲突，请解决后提交。'
     exit $LASTEXITCODE
-}
-
-$tracked = git ls-files backend
-if ((Test-Path -LiteralPath 'backend') -or $tracked) {
-    Write-Host '>> 移除合并带回的 backend/'
-    git rm -r backend
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    git commit -m 'chore: 同步 main 后保持前端分支无 backend'
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    Write-Host '已提交 backend/ 清理。'
-} else {
-    Write-Host 'OK: 树中无 backend/，无需清理。'
 }
 
 Write-Host '同步完成。'
