@@ -98,7 +98,7 @@ func segmentInScope(seg Segment, scope string, codes map[string]struct{}) bool {
 }
 
 // BuildBatches 选 status∈{translated,edited} 且 Target 非空、并落入 segment_scope 的段，按约束分批。
-func (h *SemanticQAHandler) BuildBatches(_ context.Context, doc *Document) ([][]int, error) {
+func (h *SemanticQAHandler) BuildBatches(_ context.Context, doc *Document, _ []int, _ int) ([][]int, error) {
 	logger := h.logger()
 	if h.Renderer == nil {
 		logger.Warn("semantic_qa handler: renderer is nil, skipping")

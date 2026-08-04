@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -20,6 +21,7 @@ type fakeBackend struct {
 	responses []string
 	errs      []error
 	idx       atomic.Int32
+	mu        sync.Mutex
 	requests  []backend.Request
 }
 
@@ -27,7 +29,9 @@ func (f *fakeBackend) Name() string { return f.name }
 
 func (f *fakeBackend) Translate(_ context.Context, req backend.Request) (*backend.Response, error) {
 	i := int(f.idx.Add(1)) - 1
+	f.mu.Lock()
 	f.requests = append(f.requests, req)
+	f.mu.Unlock()
 	var (
 		resp string
 		err  error

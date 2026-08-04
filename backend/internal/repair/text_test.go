@@ -5,10 +5,8 @@ import (
 )
 
 var textOpts = Options{
-	JSONStructural:   true,
-	Partial:          true,
-	PartialThreshold: 0.5,
-	PromptUpgrade:    true,
+	JSONStructural: true,
+	PromptUpgrade:  true,
 }
 
 func TestTryRepairText_HappyPath(t *testing.T) {
@@ -56,9 +54,7 @@ func TestTryRepairText_WithGlossary(t *testing.T) {
 func TestTryRepairText_MissingID(t *testing.T) {
 	in := "[1] 早上好\n"
 	opts := Options{
-		JSONStructural:   true,
-		Partial:          true,
-		PartialThreshold: 0.6, // 缺失率 0.5 < 0.6，应为 partial
+		JSONStructural: true,
 	}
 	r := TryRepairText(in, []string{"1", "2"}, opts)
 	if r.Fatal {
@@ -69,17 +65,20 @@ func TestTryRepairText_MissingID(t *testing.T) {
 	}
 }
 
-func TestTryRepairText_MissingID_Fatal(t *testing.T) {
-	// 当缺失率 >= threshold 时应为 fatal
+func TestTryRepairText_MissingID_AlwaysPartial(t *testing.T) {
 	in := "[1] a\n"
 	opts := Options{
-		JSONStructural:   true,
-		Partial:          true,
-		PartialThreshold: 0.3, // 缺失率 0.75 >= 0.3
+		JSONStructural: true,
 	}
 	r := TryRepairText(in, []string{"1", "2", "3", "4"}, opts)
-	if !r.Fatal {
-		t.Errorf("expected fatal for high missing ratio, got missing=%v", r.Missing)
+	if r.Fatal {
+		t.Fatalf("expected non-fatal (partial), got fatal: %v", r.ParseErr)
+	}
+	if len(r.Trans) != 1 || r.Trans["1"] != "a" {
+		t.Errorf("expected trans[1]=a, got %v", r.Trans)
+	}
+	if len(r.Missing) != 3 {
+		t.Errorf("expected 3 missing, got %v", r.Missing)
 	}
 }
 

@@ -34,13 +34,11 @@ type ProfilePostprocessConfig struct {
 
 // ProfileRepairConfig 修复策略配置。
 type ProfileRepairConfig struct {
-	Enabled              bool    `json:"enabled"               yaml:"enabled"`
-	JSONStructural       bool    `json:"json_structural"       yaml:"json_structural"`
-	SchemaAliases        bool    `json:"schema_aliases"        yaml:"schema_aliases"`
-	Partial              bool    `json:"partial"               yaml:"partial"`
-	PartialThreshold     float64 `json:"partial_threshold"     yaml:"partial_threshold"`
-	PlaceholderNormalize bool    `json:"placeholder_normalize" yaml:"placeholder_normalize"`
-	PromptUpgrade        bool    `json:"prompt_upgrade"        yaml:"prompt_upgrade"`
+	Enabled              bool `json:"enabled"               yaml:"enabled"`
+	JSONStructural       bool `json:"json_structural"       yaml:"json_structural"`
+	SchemaAliases        bool `json:"schema_aliases"        yaml:"schema_aliases"`
+	PlaceholderNormalize bool `json:"placeholder_normalize" yaml:"placeholder_normalize"`
+	PromptUpgrade        bool `json:"prompt_upgrade"        yaml:"prompt_upgrade"`
 }
 
 // ProfileGlossaryConfig 术语表配置。
@@ -90,8 +88,6 @@ func DefaultProfileConfig() ExecutionProfileConfigData {
 			Enabled:              true,
 			JSONStructural:       true,
 			SchemaAliases:        true,
-			Partial:              true,
-			PartialThreshold:     0.5,
 			PlaceholderNormalize: true,
 			PromptUpgrade:        true,
 		},

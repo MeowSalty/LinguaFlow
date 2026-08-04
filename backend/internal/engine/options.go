@@ -312,6 +312,7 @@ func buildTranslatePipelineRound(
 		Concurrency: rc.Concurrency,
 		Retry:       rc.Retry,
 		Context:     rc.Context,
+		Shrink:      rc.FallbackShrink,
 		Handler:     handler,
 	}, nil
 }
