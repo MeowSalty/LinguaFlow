@@ -10,6 +10,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
 // 默认可裁决 code；untranslated / duplicate 为硬规则，永不交给 AI。
@@ -27,6 +28,7 @@ type AdjudicateHandler struct {
 	MaxBatchIndexSpan int
 	Retry             backend.RetryPolicy
 	ResponseMode      string
+	Repair            repair.Options
 	AdjudicateCodes   []string
 	Reporter          progress.Reporter
 	Logger            *slog.Logger
@@ -296,7 +298,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
-	verdicts, parseErr := prompt.ParseAdjudicationByMode(resp.Text, isTextMode)
+	verdicts, parseRepaired, parseErr := repair.ParseAdjudicationByMode(resp.Text, isTextMode, h.Repair)
 	if parseErr != nil {
 		logger.Warn("adjudicate parse failed, preserving issues",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", parseErr,
@@ -331,6 +333,11 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	for _, v := range verdicts {
 		key := adjudicationKey(v.ID, v.IssueCode, v.MatchedText)
 		verdictMap[key] = v.Verdict
+	}
+
+	if len(parseRepaired) > 0 {
+		logger.Info("adjudicate response repaired",
+			"backend", h.Backend.Name(), "ops", parseRepaired)
 	}
 
 	callbackSegs := make([]TranslatedSegment, 0, len(idxs))

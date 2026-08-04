@@ -3,7 +3,6 @@ package prompt
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"text/template"
@@ -164,21 +163,12 @@ func SemanticQAIssueSchema() map[string]any {
 	}
 }
 
-// ParseSemanticQAResponse 从 LLM 回复中提取首个 JSON 对象并解析 {issues:[...]}。
-// 容错：允许 ```json 围栏与前后说明文字。
-func ParseSemanticQAResponse(text string) ([]SemanticQAIssue, error) {
-	body := jsonObjectSlice(text)
-	if body == "" {
-		return nil, errors.New("no JSON object found in semantic_qa response")
-	}
-	var env struct {
-		Issues []SemanticQAIssue `json:"issues"`
-	}
-	if err := json.Unmarshal([]byte(body), &env); err != nil {
-		return nil, fmt.Errorf("unmarshal issues: %w", err)
-	}
-	out := env.Issues[:0]
-	for _, iss := range env.Issues {
+// NormalizeSemanticQAIssues 对解析出的 issues 做 trim 与合法性过滤：丢弃缺
+// id/code 的条目，丢弃 code 不属于语义质检白名单的条目。供 repair.TryRepairSemanticQA
+// 复用，避免过滤逻辑漂移。
+func NormalizeSemanticQAIssues(issues []SemanticQAIssue) []SemanticQAIssue {
+	out := issues[:0]
+	for _, iss := range issues {
 		iss.ID = strings.TrimSpace(iss.ID)
 		iss.Code = strings.TrimSpace(iss.Code)
 		iss.Message = strings.TrimSpace(iss.Message)
@@ -191,30 +181,19 @@ func ParseSemanticQAResponse(text string) ([]SemanticQAIssue, error) {
 		}
 		out = append(out, iss)
 	}
-	return out, nil
+	return out
 }
 
-// ParseSemanticQAByMode 按 response mode 解析语义质检响应。
-// text 模式优先纯文本 [issues] 协议，空列表时 fallback JSON（模型常仍吐 JSON）。
-func ParseSemanticQAByMode(text string, isTextMode bool) ([]SemanticQAIssue, error) {
-	if !isTextMode {
-		return ParseSemanticQAResponse(text)
-	}
-	issues, recognized := parseSemanticQATextIssues(text)
-	if recognized {
-		return issues, nil
-	}
-	return ParseSemanticQAResponse(text)
-}
-
-// parseSemanticQATextIssues 解析 text 协议语义质检输出：
+// ParseSemanticQATextIssues 解析 text 协议语义质检输出：
 //
 //	[issues]
 //	id | code | snippet | message
 //
 // 兼容旧三字段 id | code | message（snippet 为空）。
 // message/snippet 含 | 时：四段及以上取前三段为 id/code/snippet，剩余并入 message。
-func parseSemanticQATextIssues(text string) ([]SemanticQAIssue, bool) {
+// 返回 (issues, recognized)：recognized=true 表示命中 [issues] 协议（含空列表），
+// 调用方据此决定是否 fallback JSON。
+func ParseSemanticQATextIssues(text string) ([]SemanticQAIssue, bool) {
 	text = stripAdjudicationCodeFence(text)
 	lines := strings.Split(text, "\n")
 	inIssues := false

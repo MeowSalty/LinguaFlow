@@ -50,6 +50,24 @@ type OutputEntry struct {
 // ValidKinds 是所有合法的注音 kind 值。
 var ValidKinds = []string{"phonetic", "semantic", "creative"}
 
+// NormalizeOutputEntries 对解析出的 OutputEntry 切片做 trim 与合法性过滤：
+// trim Base/Text/Kind，丢弃 Base 为空的条目。供 repair（JSON 路径）与
+// pipeline.parseAlignmentResponseText（text 协议路径）共用，避免过滤逻辑漂移。
+// 以 `entries[:0]` 就地复用底层数组（与 prompt.Normalize* 语义一致）。
+func NormalizeOutputEntries(entries []OutputEntry) []OutputEntry {
+	out := entries[:0]
+	for _, e := range entries {
+		e.Base = strings.TrimSpace(e.Base)
+		e.Text = strings.TrimSpace(e.Text)
+		e.Kind = strings.TrimSpace(e.Kind)
+		if e.Base == "" {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 // insertInfo 记录一次注音插入的位置和内容。
 type insertInfo struct {
 	pos  int

@@ -12,6 +12,7 @@ package repair
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -193,10 +194,12 @@ func escapeControlChars(s string) string {
 	return b.String()
 }
 
-// closeUnbalancedBraces 当 s 末尾大括号未平衡（depth > 0），追加缺失数量的 '}'。
+// closeUnbalancedBraces 当 s 末尾括号未平衡，追加缺失的闭合符号（'}' 或 ']'）。
+// 同时追踪 '{'/'}'（对象）与 '['/']'（数组）：数组型 envelope（{"issues":[...]）被
+// 截断时只补 '}' 会导致 ']' 缺失，json.Unmarshal 失败；用栈记录开启类型可正确补全。
 // 若字符串未闭合则不补——补 '"' 容易把后续噪声纳入字符串值，反而引入错误内容。
 func closeUnbalancedBraces(s string) string {
-	depth := 0
+	var stack []byte
 	inStr := false
 	esc := false
 	for i := 0; i < len(s); i++ {
@@ -217,16 +220,173 @@ func closeUnbalancedBraces(s string) string {
 		switch c {
 		case '"':
 			inStr = true
-		case '{':
-			depth++
-		case '}':
-			depth--
+		case '{', '[':
+			stack = append(stack, c)
+		case '}', ']':
+			if len(stack) > 0 {
+				// 栈顶与 c 配对才弹：'}' 配 '{'、']' 配 '['。
+				top := stack[len(stack)-1]
+				if (c == '}' && top == '{') || (c == ']' && top == '[') {
+					stack = stack[:len(stack)-1]
+				}
+			}
 		}
 	}
-	if inStr || depth <= 0 {
+	if inStr || len(stack) == 0 {
 		return s
 	}
-	return s + strings.Repeat("}", depth)
+	var b strings.Builder
+	b.Grow(len(s) + len(stack))
+	b.WriteString(s)
+	// 栈底→顶记录最早的开启在前；闭合需按开启逆序（后开的先闭），故从栈顶倒序追加。
+	for i := len(stack) - 1; i >= 0; i-- {
+		switch stack[i] {
+		case '{':
+			b.WriteByte('}')
+		case '[':
+			b.WriteByte(']')
+		}
+	}
+	return b.String()
+}
+
+// extractValidEnvelope 是 brace-matching 抽取失败后的鲁棒兜底。
+//
+// 目标破损形态：LLM 产生"结巴/重复前缀"（如 {"{"ruby_output":...}}）或任意
+// 引号/括号相位错乱噪声，使 matchBracePair 字符串追踪失步，导致
+// extractJSONObjectContaining / jsonObjectSlice 找不到 balanced 对象。
+//
+// 本函数从每个 '{' 偏移用 json.Decoder 真实解析：Decoder 读取首个完整 JSON 值
+// 并容忍其后多余数据，因此即便对象被嵌在垃圾里也能定位。
+//
+// 安全性（关键）：
+//   - 只接受含 canonical "translations" 字段且其值为 map 的对象作为 envelope；
+//     alias（output/result 等）不在兜底里接受——alias 抽取由主链路
+//     pickEnvelopeBody / normalizeEnvelopeKeys 负责，兜底只在主链路失败后介入，
+//     此时按"命中任一 alias key 即返"会把诱饵对象（如 {"output":{"1":"x"}}）
+//     误判为 envelope 并静默产出错误译文。
+//   - 多个 translations 候选时 MERGE 各自的 translations map（首键优先，与
+//     主链路 mergeTranslationObjects 语义一致），以恢复散落在多个对象里的 ID。
+//   - 若同一 ID 在不同候选中出现且值不同（冲突），无法判定正确译文，按
+//     "宁可重试也不要凑出可能错的译文"原则直接放弃（返回 false → 上层 Fatal/重试）。
+//
+// 未闭合字符串因 Decoder 失败而被正确判为不可救（保留"未闭合引号=Fatal"语义）。
+func extractValidEnvelope(text string) (map[string]any, bool) {
+	var first map[string]any
+	merged := map[string]any{}
+	aborted := false
+	scanKeyedObjects(text, "translations", func(raw map[string]any) bool {
+		t, ok := raw["translations"].(map[string]any)
+		if !ok {
+			// translations 值非 map（如 alias 诱饵或结巴产生的错误外层）：跳过。
+			return true
+		}
+		if first == nil {
+			first = raw
+		}
+		for k, v := range t {
+			if existing, exists := merged[k]; exists {
+				if !reflect.DeepEqual(existing, v) {
+					// 同一 ID 出现冲突的不同值：无法确定正确译文，放弃（上层 Fatal/重试）。
+					aborted = true
+					return false
+				}
+				continue
+			}
+			merged[k] = v
+		}
+		return true
+	})
+	if aborted || first == nil {
+		return nil, false
+	}
+	// 以首个候选为基底（保留 ruby_output/glossary 等字段），translations 用合并结果。
+	out := make(map[string]any, len(first))
+	for k, v := range first {
+		out[k] = v
+	}
+	out["translations"] = merged
+	return out, true
+}
+
+// decodeKeyedEnvelope 从 s 起用 Decoder 解析首个 JSON 对象，仅当其含
+// requiredKey 字段时才视为候选。Decoder 读取首个完整 JSON 值并容忍其后多余数据，
+// 因此即便对象被嵌在垃圾里也能定位。不校验字段值类型--由调用方通过 accept 判定。
+func decodeKeyedEnvelope(s, requiredKey string) (map[string]any, bool) {
+	dec := json.NewDecoder(strings.NewReader(s))
+	var raw map[string]any
+	if err := dec.Decode(&raw); err != nil {
+		return nil, false
+	}
+	if _, ok := raw[requiredKey]; !ok {
+		return nil, false
+	}
+	return raw, true
+}
+
+// extractValidObject 是 brace-matching 抽取失败后的通用鲁棒兜底，面向非 translations
+// 的单键数组 envelope（{"issues":[...]}/{"verdicts":[...]}/{"ruby_output":[...]}）。
+//
+// 与 extractValidEnvelope 同源：从每个 '{' 偏移用 json.Decoder 真实解析（容忍尾部
+// 噪声与结巴/重复前缀），accept 判定字段值形状（调用方传 arrayValueAccept 等）。
+// 不同之处：这些 envelope 的值是数组而非 ID-keyed map，故不做合并--首个满足 accept
+// 的候选即返回。
+//
+// 安全性：accept 必须校验字段值类型，避免把同名但形状错误的外层包装（如结巴产生的
+// {"issues":{"issues":[]}}）误判为目标 envelope。
+func extractValidObject(text, requiredKey string, accept func(map[string]any) bool) (map[string]any, bool) {
+	var found map[string]any
+	scanKeyedObjects(text, requiredKey, func(raw map[string]any) bool {
+		if accept != nil && !accept(raw) {
+			return true // 不满足形状谓词，继续扫下一个候选
+		}
+		found = raw
+		return false // 命中首个满足条件的候选，停止扫描
+	})
+	return found, found != nil
+}
+
+// scanKeyedObjects 是 extractValidEnvelope / extractValidObject 共享的鲁棒扫描骨架。
+//
+// 从 text 中每个 '{' 偏移用 json.Decoder 真实解析首个 JSON 对象（容忍尾部多余数据，
+// 因此即便对象被嵌在垃圾里或结巴/重复前缀也能定位），仅当对象含 requiredKey 字段时
+// 调用 handle(raw)。handle 返回 false 表示停止扫描，true 表示继续找下一个候选。
+//
+// 修复策略：每个 '{' 偏移只取一个候选——先试原文，原文失败且属截断场景（tail 较短）
+// 再试 close-braces。close-braces 候选仅用于"整段被截断"场景：只当 '{' 靠近文本末尾
+// 时才尝试，避免对每个早期偏移都对整段后缀做 O(n) 扫描（否则失败路径呈近似二次开销）。
+// 整段截断的兜底已由主链路 close-braces（repair.go）处理过，此处仅作补充。
+//
+// 安全约束：本函数不做字段值类型校验（那是 handle/accept 的职责），也不对未闭合
+// 字符串做补闭合（Decoder 失败即跳过，保留"未闭合引号=Fatal"语义）。
+func scanKeyedObjects(text, requiredKey string, handle func(map[string]any) bool) {
+	const (
+		maxAttempts      = 256
+		truncationWindow = 4096
+	)
+	attempts := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] != '{' {
+			continue
+		}
+		attempts++
+		if attempts > maxAttempts {
+			break
+		}
+		tail := text[i:]
+		raw, ok := decodeKeyedEnvelope(tail, requiredKey)
+		if !ok && len(tail) <= truncationWindow {
+			if fixed := closeUnbalancedBraces(tail); fixed != tail {
+				raw, ok = decodeKeyedEnvelope(fixed, requiredKey)
+			}
+		}
+		if !ok {
+			continue
+		}
+		if !handle(raw) {
+			return
+		}
+	}
 }
 
 // mergeTranslationObjects 找出 text 中所有含 "translations" 字段的 JSON 对象，

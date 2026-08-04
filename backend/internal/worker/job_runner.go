@@ -263,10 +263,14 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 
 	// 段落来源标记：仅 segment_ids 手动选择时跳过默认过滤
 	isExplicitSelection := snapshot.ExplicitSegmentSelection
+	firstTranslateRoundIdx := -1
 	lastTranslateRoundIdx := -1
 	translateRoundCount := 0
 	for i := range snapshot.Rounds {
 		if snapshot.Rounds[i].Mode == "translate" {
+			if firstTranslateRoundIdx == -1 {
+				firstTranslateRoundIdx = i
+			}
 			lastTranslateRoundIdx = i
 			translateRoundCount++
 		}
@@ -289,11 +293,13 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		}
 
 		// 翻译轮次按 SegmentFilter 过滤
-		// 显式选择段落且未被任务级覆盖时跳过过滤，尊重用户选择
+		// 显式选择段落且未被任务级覆盖时，仅首个翻译轮次跳过默认过滤以尊重用户选择；
+		// 后续翻译轮次（兜底轮）正常应用 SegmentFilter，避免重译首轮已成功的段。
 		if round.Mode == "translate" && round.Translate != nil {
 			filter := round.Translate.SegmentFilter
-			if isExplicitSelection && (filter == nil || !filter.Overridden) {
-				r.logger.Debug("explicit segment selection, skipping default filter",
+			skipFilter := isExplicitSelection && roundIdx == firstTranslateRoundIdx && (filter == nil || !filter.Overridden)
+			if skipFilter {
+				r.logger.Debug("explicit segment selection, skipping default filter on first translate round",
 					"job_id", job.ID, "resource_id", res.ID)
 			} else {
 				selectedRows = applyTranslateSegmentFilter(selectedRows, filter)

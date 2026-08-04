@@ -609,7 +609,7 @@ func (h *TranslateHandler) processTranslatedSegments(
 			keepSet := kindSet(h.RubyPreserveKinds)
 			isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
 			restoreSegmentRuby(ctx, seg, h.RubyRestorer, keepSet,
-				h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex)
+				h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex, h.Repair)
 		}
 
 		// TM（直接调用，使用 OriginalSource）

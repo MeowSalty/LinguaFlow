@@ -218,10 +218,10 @@ func buildSinglePipelineRound(
 		return buildExtractPipelineRound(rc, glossaryRes, logger, reporter)
 	}
 	if rc.Adjudicate != nil {
-		return buildAdjudicatePipelineRound(rc, logger, reporter)
+		return buildAdjudicatePipelineRound(rc, defaultRepair, logger, reporter)
 	}
 	if rc.SemanticQA != nil {
-		return buildSemanticQAPipelineRound(rc, logger, reporter)
+		return buildSemanticQAPipelineRound(rc, defaultRepair, logger, reporter)
 	}
 	return buildTranslatePipelineRound(
 		rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
@@ -354,6 +354,7 @@ func buildExtractPipelineRound(
 
 func buildAdjudicatePipelineRound(
 	rc RoundConfig,
+	defaultRepair repair.Options,
 	logger *slog.Logger,
 	reporter progress.Reporter,
 ) (pipeline.Round, error) {
@@ -371,6 +372,7 @@ func buildAdjudicatePipelineRound(
 		MaxBatchIndexSpan: a.MaxBatchIndexSpan,
 		Retry:             rc.Retry,
 		ResponseMode:      a.ResponseMode,
+		Repair:            defaultRepair,
 		AdjudicateCodes:   a.AdjudicateCodes,
 		Reporter:          reporter,
 		Logger:            logger,
@@ -386,6 +388,7 @@ func buildAdjudicatePipelineRound(
 
 func buildSemanticQAPipelineRound(
 	rc RoundConfig,
+	defaultRepair repair.Options,
 	logger *slog.Logger,
 	reporter progress.Reporter,
 ) (pipeline.Round, error) {
@@ -403,6 +406,7 @@ func buildSemanticQAPipelineRound(
 		MaxBatchIndexSpan: s.MaxBatchIndexSpan,
 		Retry:             rc.Retry,
 		ResponseMode:      s.ResponseMode,
+		Repair:            defaultRepair,
 		SegmentScope:      s.SegmentScope,
 		IssueCodes:        s.IssueCodes,
 		Reporter:          reporter,

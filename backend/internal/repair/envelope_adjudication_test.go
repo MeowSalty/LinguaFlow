@@ -1,0 +1,147 @@
+package repair
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestTryRepairAdjudication_HappyPath(t *testing.T) {
+	in := `{"verdicts":[{"id":"3","issue_code":"source_residual","matched_text":"test","verdict":"real","reason":"残留"}]}`
+	verdicts, repaired, err := TryRepairAdjudication(in, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v (repaired=%v)", err, repaired)
+	}
+	if len(verdicts) != 1 || verdicts[0].ID != "3" || verdicts[0].Verdict != "real" {
+		t.Errorf("wrong: %#v", verdicts)
+	}
+	if len(repaired) != 0 {
+		t.Errorf("unexpected repair: %v", repaired)
+	}
+}
+
+// TestTryRepairAdjudication_EmptyTruncated 截断型：括号未闭合。
+func TestTryRepairAdjudication_EmptyTruncated(t *testing.T) {
+	in := `{"verdicts":{ "verdicts": []}`
+	verdicts, repaired, err := TryRepairAdjudication(in, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v (repaired=%v)", err, repaired)
+	}
+	if len(verdicts) != 0 {
+		t.Errorf("expected empty, got %#v", verdicts)
+	}
+	if !contains(repaired, "json.robust-extract") && !contains(repaired, "json.close-braces") {
+		t.Errorf("expected a structural repair op, got %v", repaired)
+	}
+}
+
+// TestTryRepairAdjudication_StutteredPrefix 结巴/重复前缀。
+func TestTryRepairAdjudication_StutteredPrefix(t *testing.T) {
+	in := `{"verdicts{"verdicts":[{"id":"3","issue_code":"source_residual","matched_text":"t","verdict":"false_positive","reason":"误报"}]}`
+	verdicts, repaired, err := TryRepairAdjudication(in, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v (repaired=%v)", err, repaired)
+	}
+	if len(verdicts) != 1 || verdicts[0].ID != "3" || verdicts[0].Verdict != "false_positive" {
+		t.Errorf("wrong: %#v", verdicts)
+	}
+	if !contains(repaired, "json.robust-extract") {
+		t.Errorf("expected json.robust-extract, got %v", repaired)
+	}
+}
+
+// TestTryRepairAdjudication_TruncatedWithContent 截断含内容。
+func TestTryRepairAdjudication_TruncatedWithContent(t *testing.T) {
+	in := `{"verdicts":[{"id":"3","issue_code":"source_residual","matched_text":"test","verdict":"real","reason":"残留"`
+	verdicts, repaired, err := TryRepairAdjudication(in, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v (repaired=%v)", err, repaired)
+	}
+	if len(verdicts) != 1 || verdicts[0].ID != "3" {
+		t.Errorf("wrong: %#v", verdicts)
+	}
+	if !contains(repaired, "json.robust-extract") && !contains(repaired, "json.close-braces") {
+		t.Errorf("expected a structural repair op, got %v", repaired)
+	}
+}
+
+func TestTryRepairAdjudication_TrailingComma(t *testing.T) {
+	in := `{"verdicts":[{"id":"1","issue_code":"source_residual","matched_text":"t","verdict":"real","reason":"x",}]}`
+	verdicts, repaired, err := TryRepairAdjudication(in, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(verdicts) != 1 || verdicts[0].ID != "1" {
+		t.Errorf("wrong: %#v", verdicts)
+	}
+	if !contains(repaired, "json.trailing-comma") {
+		t.Errorf("expected json.trailing-comma, got %v", repaired)
+	}
+}
+
+func TestTryRepairAdjudication_CodeFence(t *testing.T) {
+	in := "```json\n{\"verdicts\":[{\"id\":\"1\",\"issue_code\":\"source_residual\",\"matched_text\":\"t\",\"verdict\":\"real\",\"reason\":\"x\"}]}\n```"
+	verdicts, _, err := TryRepairAdjudication(in, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(verdicts) != 1 || verdicts[0].ID != "1" {
+		t.Errorf("wrong: %#v", verdicts)
+	}
+}
+
+func TestTryRepairAdjudication_FiltersMissingID(t *testing.T) {
+	in := `{"verdicts":[{"id":"","issue_code":"source_residual","matched_text":"t","verdict":"real","reason":"x"},{"id":"2","issue_code":"source_residual","matched_text":"t","verdict":"real","reason":"y"}]}`
+	verdicts, _, err := TryRepairAdjudication(in, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(verdicts) != 1 || verdicts[0].ID != "2" {
+		t.Errorf("wrong: %#v", verdicts)
+	}
+}
+
+func TestTryRepairAdjudication_FatalNotJSON(t *testing.T) {
+	_, _, err := TryRepairAdjudication("totally not json", allOpts)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "no JSON object") {
+		t.Errorf("wrong err: %v", err)
+	}
+}
+
+func TestParseAdjudicationByMode_NonTextUsesJSONRepair(t *testing.T) {
+	in := `{"verdicts":{ "verdicts": []}`
+	verdicts, repaired, err := ParseAdjudicationByMode(in, false, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(verdicts) != 0 {
+		t.Errorf("expected empty, got %#v", verdicts)
+	}
+	if len(repaired) == 0 {
+		t.Errorf("expected repair ops for truncated input")
+	}
+}
+
+func TestParseAdjudicationByMode_TextVerdicts(t *testing.T) {
+	in := "[verdicts]\n3 | source_residual | test | real | 残留\n"
+	verdicts, _, err := ParseAdjudicationByMode(in, true, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(verdicts) != 1 || verdicts[0].ID != "3" {
+		t.Errorf("wrong: %#v", verdicts)
+	}
+}
+
+func TestParseAdjudicationByMode_TextEmptyFallsBackJSON(t *testing.T) {
+	in := `{"verdicts":{ "verdicts": []}`
+	verdicts, _, err := ParseAdjudicationByMode(in, true, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(verdicts) != 0 {
+		t.Errorf("expected empty, got %#v", verdicts)
+	}
+}

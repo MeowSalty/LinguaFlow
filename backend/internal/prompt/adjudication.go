@@ -3,7 +3,6 @@ package prompt
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"text/template"
@@ -170,21 +169,12 @@ func AdjudicationVerdictSchema() map[string]any {
 	}
 }
 
-// ParseAdjudicationResponse 从 LLM 回复中提取首个 JSON 对象并解析 {verdicts:[...]}。
-// 容错：允许 ```json 围栏与前后说明文字。
-func ParseAdjudicationResponse(text string) ([]AdjudicationVerdict, error) {
-	body := jsonObjectSlice(text)
-	if body == "" {
-		return nil, errors.New("no JSON object found in adjudication response")
-	}
-	var env struct {
-		Verdicts []AdjudicationVerdict `json:"verdicts"`
-	}
-	if err := json.Unmarshal([]byte(body), &env); err != nil {
-		return nil, fmt.Errorf("unmarshal verdicts: %w", err)
-	}
-	out := env.Verdicts[:0]
-	for _, v := range env.Verdicts {
+// NormalizeAdjudicationVerdicts 对解析出的 verdicts 做 trim 与合法性过滤：丢弃缺
+// id/issue_code 的条目。与 JSON 路径语义一致（不校验 verdict 取值，那由 text 协议
+// 解析器负责）。供 repair.TryRepairAdjudication 复用。
+func NormalizeAdjudicationVerdicts(verdicts []AdjudicationVerdict) []AdjudicationVerdict {
+	out := verdicts[:0]
+	for _, v := range verdicts {
 		v.ID = strings.TrimSpace(v.ID)
 		v.IssueCode = strings.TrimSpace(v.IssueCode)
 		v.MatchedText = strings.TrimSpace(v.MatchedText)
@@ -195,34 +185,24 @@ func ParseAdjudicationResponse(text string) ([]AdjudicationVerdict, error) {
 		}
 		out = append(out, v)
 	}
-	return out, nil
+	return out
 }
 
-// ParseAdjudicationByMode 按 response mode 解析裁决响应。
-// text 模式优先纯文本 [verdicts] 协议，空列表时 fallback JSON（模型常仍吐 JSON）。
-func ParseAdjudicationByMode(text string, isTextMode bool) ([]AdjudicationVerdict, error) {
-	if !isTextMode {
-		return ParseAdjudicationResponse(text)
-	}
-	verdicts := parseAdjudicationTextVerdicts(text)
-	if len(verdicts) > 0 {
-		return verdicts, nil
-	}
-	return ParseAdjudicationResponse(text)
-}
-
-// parseAdjudicationTextVerdicts 解析 text 协议裁决输出：
+// ParseAdjudicationTextVerdicts 解析 text 协议裁决输出：
 //
 //	[verdicts]
 //	id | issue_code | matched_text | verdict | reason
 //
 // 兼容旧四字段 id | issue_code | verdict | reason（matched_text 为空）。
 // reason 含 | 时：五段及以上取前四段为 id/issue_code/matched_text/verdict，剩余并入 reason。
-func parseAdjudicationTextVerdicts(text string) []AdjudicationVerdict {
+// 返回 (verdicts, recognized)：recognized=true 表示命中 [verdicts] 协议（含空列表），
+// 调用方据此决定是否 fallback JSON。语义与 ParseSemanticQATextIssues 对齐。
+func ParseAdjudicationTextVerdicts(text string) ([]AdjudicationVerdict, bool) {
 	text = stripAdjudicationCodeFence(text)
 	lines := strings.Split(text, "\n")
 	inVerdicts := false
 	hasHeader := false
+	hasVerdictContent := false
 	var out []AdjudicationVerdict
 
 	for _, line := range lines {
@@ -244,13 +224,16 @@ func parseAdjudicationTextVerdicts(text string) []AdjudicationVerdict {
 		if hasHeader && !inVerdicts {
 			continue
 		}
+		if hasHeader {
+			hasVerdictContent = true
+		}
 		v := parseAdjudicationVerdictLine(line)
 		if v == nil {
 			continue
 		}
 		out = append(out, *v)
 	}
-	return out
+	return out, len(out) > 0 || (hasHeader && !hasVerdictContent)
 }
 
 func parseAdjudicationVerdictLine(line string) *AdjudicationVerdict {

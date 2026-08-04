@@ -108,51 +108,35 @@ func TestSemanticQAIssueSchema_Strict(t *testing.T) {
 	}
 }
 
-func TestParseSemanticQAResponse_OK(t *testing.T) {
-	resp := `{"issues":[{"id":"1","code":"calque","message":"和制汉语安堵感","snippet":"安堵感"}]}`
-	got, err := ParseSemanticQAResponse(resp)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+func TestNormalizeSemanticQAIssues_OK(t *testing.T) {
+	in := []SemanticQAIssue{{ID: "1", Code: "calque", Message: "和制汉语安堵感", Snippet: "安堵感"}}
+	got := NormalizeSemanticQAIssues(in)
 	if len(got) != 1 || got[0].Code != "calque" || got[0].Snippet != "安堵感" {
 		t.Fatalf("got=%#v", got)
 	}
 }
 
-func TestParseSemanticQAResponse_Fenced(t *testing.T) {
-	resp := "Here:\n```json\n{\"issues\":[{\"id\":\"2\",\"code\":\"naturalness\",\"message\":\"生硬\"}]}\n```"
-	got, err := ParseSemanticQAResponse(resp)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(got) != 1 || got[0].Code != "naturalness" {
-		t.Fatalf("got=%#v", got)
-	}
-}
-
-func TestParseSemanticQAResponse_NoJSON(t *testing.T) {
-	_, err := ParseSemanticQAResponse("sorry I cannot")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestParseSemanticQAResponse_FiltersIllegalCode(t *testing.T) {
-	resp := `{"issues":[{"id":"1","code":"source_residual","message":"x"},{"id":"1","code":"calque","message":"ok"}]}`
-	got, err := ParseSemanticQAResponse(resp)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+func TestNormalizeSemanticQAIssues_FiltersIllegalCode(t *testing.T) {
+	in := []SemanticQAIssue{{ID: "1", Code: "source_residual"}, {ID: "1", Code: "calque", Message: "ok"}}
+	got := NormalizeSemanticQAIssues(in)
 	if len(got) != 1 || got[0].Code != "calque" {
 		t.Fatalf("want only calque, got=%#v", got)
 	}
 }
 
-func TestParseSemanticQAByMode_TextIssues(t *testing.T) {
+func TestNormalizeSemanticQAIssues_DropsMissingID(t *testing.T) {
+	in := []SemanticQAIssue{{Code: "calque"}, {ID: "1", Code: "calque"}}
+	got := NormalizeSemanticQAIssues(in)
+	if len(got) != 1 || got[0].ID != "1" {
+		t.Fatalf("got=%#v", got)
+	}
+}
+
+func TestParseSemanticQATextIssues_TextIssues(t *testing.T) {
 	resp := "[issues]\n1 | calque | 安堵感 | 安堵感借译\n1 | term_fidelity | 术语A | 术语不一致\n2 | naturalness | 整句 | 不自然"
-	got, err := ParseSemanticQAByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
+	got, recognized := ParseSemanticQATextIssues(resp)
+	if !recognized {
+		t.Fatalf("not recognized")
 	}
 	if len(got) != 3 {
 		t.Fatalf("got len=%d want 3: %#v", len(got), got)
@@ -165,83 +149,68 @@ func TestParseSemanticQAByMode_TextIssues(t *testing.T) {
 	}
 }
 
-func TestParseSemanticQAByMode_TextFenced(t *testing.T) {
+func TestParseSemanticQATextIssues_Fenced(t *testing.T) {
 	resp := "```\n[issues]\n1 | calque | 借译\n```"
-	got, err := ParseSemanticQAByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
+	got, recognized := ParseSemanticQATextIssues(resp)
+	if !recognized {
+		t.Fatalf("not recognized")
 	}
 	if len(got) != 1 || got[0].Code != "calque" {
 		t.Fatalf("got=%#v", got)
 	}
 }
 
-func TestParseSemanticQAByMode_TextEmptyFallsBackJSON(t *testing.T) {
-	resp := `{"issues":[{"id":"1","code":"calque","message":"ok"}]}`
-	got, err := ParseSemanticQAByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(got) != 1 || got[0].Code != "calque" {
-		t.Fatalf("JSON fallback got=%#v", got)
-	}
-}
-
-func TestParseSemanticQAByMode_TextEmptyIssues(t *testing.T) {
-	got, err := ParseSemanticQAByMode("[issues]", true)
-	if err != nil {
-		t.Fatalf("parse empty issues: %v", err)
+func TestParseSemanticQATextIssues_Empty(t *testing.T) {
+	got, recognized := ParseSemanticQATextIssues("[issues]")
+	if !recognized {
+		t.Fatalf("empty [issues] header should be recognized")
 	}
 	if len(got) != 0 {
 		t.Fatalf("got=%#v want empty issues", got)
 	}
 }
 
-func TestParseSemanticQAByMode_TextMalformedIssues(t *testing.T) {
-	_, err := ParseSemanticQAByMode("[issues]\nmalformed", true)
-	if err == nil {
-		t.Fatal("malformed issues should not be accepted as an empty result")
+func TestParseSemanticQATextIssues_Malformed(t *testing.T) {
+	got, recognized := ParseSemanticQATextIssues("[issues]\nmalformed")
+	// "malformed" 含非空内容行（无 | 故 parse 失败），hasIssueContent=true → recognized=false，
+	// 由上层 fallback JSON 路径处理。
+	if recognized {
+		t.Fatalf("malformed content line should NOT be recognized as empty-list")
+	}
+	if len(got) != 0 {
+		t.Fatalf("malformed line should yield no issues, got=%#v", got)
 	}
 }
 
-func TestParseSemanticQAByMode_TextFiltersIllegalCode(t *testing.T) {
+func TestParseSemanticQATextIssues_FiltersIllegalCode(t *testing.T) {
 	resp := "[issues]\n1 | source_residual | residual\n2 | calque | ok"
-	got, err := ParseSemanticQAByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	got, _ := ParseSemanticQATextIssues(resp)
 	if len(got) != 1 || got[0].ID != "2" {
 		t.Fatalf("want only legal code, got=%#v", got)
 	}
 }
 
-func TestParseSemanticQAByMode_TextMessageWithPipe(t *testing.T) {
+func TestParseSemanticQATextIssues_MessageWithPipe(t *testing.T) {
 	resp := "[issues]\n1 | calque | snip | a | b | c"
-	got, err := ParseSemanticQAByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	got, _ := ParseSemanticQATextIssues(resp)
 	if len(got) != 1 || got[0].Snippet != "snip" || got[0].Message != "a | b | c" {
 		t.Fatalf("message with pipes got=%#v", got)
 	}
 }
 
-func TestParseSemanticQAByMode_TextLegacyThreeFields(t *testing.T) {
+func TestParseSemanticQATextIssues_LegacyThreeFields(t *testing.T) {
 	resp := "[issues]\n1 | calque | only message"
-	got, err := ParseSemanticQAByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	got, _ := ParseSemanticQATextIssues(resp)
 	if len(got) != 1 || got[0].Snippet != "" || got[0].Message != "only message" {
 		t.Fatalf("legacy three-field got=%#v", got)
 	}
 }
 
-func TestParseSemanticQAByMode_NonTextUsesJSON(t *testing.T) {
-	resp := "[issues]\n1 | calque | x"
-	_, err := ParseSemanticQAByMode(resp, false)
-	if err == nil {
-		t.Fatal("non-text mode should require JSON")
+func TestParseSemanticQATextIssues_NotRecognizedWhenNoHeader(t *testing.T) {
+	resp := "just some prose without issues header"
+	_, recognized := ParseSemanticQATextIssues(resp)
+	if recognized {
+		t.Fatal("should not be recognized without [issues] header")
 	}
 }
 
@@ -270,18 +239,15 @@ func TestSemanticQAIssueSchema_IncludesNewCodes(t *testing.T) {
 	}
 }
 
-func TestParseSemanticQAResponse_NewCodes(t *testing.T) {
-	resp := `{"issues":[
-		{"id":"1","code":"mistranslation","message":"误译","snippet":"x"},
-		{"id":"2","code":"omission","message":"漏译","snippet":"y"},
-		{"id":"3","code":"addition","message":"添译","snippet":"z"},
-		{"id":"4","code":"grammar","message":"语法","snippet":"w"},
-		{"id":"5","code":"register","message":"语体","snippet":"v"}
-	]}`
-	got, err := ParseSemanticQAResponse(resp)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
+func TestNormalizeSemanticQAIssues_NewCodes(t *testing.T) {
+	in := []SemanticQAIssue{
+		{ID: "1", Code: "mistranslation", Message: "误译", Snippet: "x"},
+		{ID: "2", Code: "omission", Message: "漏译", Snippet: "y"},
+		{ID: "3", Code: "addition", Message: "添译", Snippet: "z"},
+		{ID: "4", Code: "grammar", Message: "语法", Snippet: "w"},
+		{ID: "5", Code: "register", Message: "语体", Snippet: "v"},
 	}
+	got := NormalizeSemanticQAIssues(in)
 	if len(got) != 5 {
 		t.Fatalf("got len=%d want 5: %#v", len(got), got)
 	}
@@ -293,32 +259,26 @@ func TestParseSemanticQAResponse_NewCodes(t *testing.T) {
 	}
 }
 
-func TestParseSemanticQAResponse_NewCodesMixedWithRuleCodes(t *testing.T) {
-	resp := `{"issues":[
-		{"id":"1","code":"source_residual","message":"规则不报"},
-		{"id":"1","code":"length_ratio","message":"规则不报"},
-		{"id":"1","code":"mistranslation","message":"语义误译","snippet":"x"},
-		{"id":"2","code":"untranslated","message":"规则不报"}
-	]}`
-	got, err := ParseSemanticQAResponse(resp)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
+func TestNormalizeSemanticQAIssues_MixedWithRuleCodes(t *testing.T) {
+	in := []SemanticQAIssue{
+		{ID: "1", Code: "source_residual", Message: "规则不报"},
+		{ID: "1", Code: "length_ratio", Message: "规则不报"},
+		{ID: "1", Code: "mistranslation", Message: "语义误译", Snippet: "x"},
+		{ID: "2", Code: "untranslated", Message: "规则不报"},
 	}
+	got := NormalizeSemanticQAIssues(in)
 	if len(got) != 1 || got[0].Code != "mistranslation" || got[0].Snippet != "x" {
 		t.Fatalf("want only mistranslation, got=%#v", got)
 	}
 }
 
-func TestParseSemanticQAByMode_TextNewCodes(t *testing.T) {
+func TestParseSemanticQATextIssues_NewCodes(t *testing.T) {
 	resp := "[issues]\n" +
 		"1 | mistranslation | 误译段 | 一般语义误译\n" +
 		"1 | omission | 漏译段 | 丢失分句\n" +
 		"2 | grammar | 语法段 | 主谓不一致\n" +
 		"3 | source_residual | 残留 | 规则不报"
-	got, err := ParseSemanticQAByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	got, _ := ParseSemanticQATextIssues(resp)
 	if len(got) != 3 {
 		t.Fatalf("got len=%d want 3: %#v", len(got), got)
 	}
@@ -333,15 +293,12 @@ func TestParseSemanticQAByMode_TextNewCodes(t *testing.T) {
 	}
 }
 
-func TestParseSemanticQAByMode_TextSameSegmentMultipleDefects(t *testing.T) {
+func TestParseSemanticQATextIssues_SameSegmentMultipleDefects(t *testing.T) {
 	resp := "[issues]\n" +
 		"1 | calque | 结构借译 | 逐结构借译\n" +
 		"1 | mistranslation | 主动误译 | 语义取错\n" +
 		"1 | grammar | 主谓不一致 | 语法错"
-	got, err := ParseSemanticQAByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	got, _ := ParseSemanticQATextIssues(resp)
 	if len(got) != 3 {
 		t.Fatalf("same segment distinct defects should each report: got=%#v", got)
 	}
