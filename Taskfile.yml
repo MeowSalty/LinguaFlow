@@ -218,3 +218,36 @@ tasks:
     dir: '{{.DOCS_DIR}}'
     cmds:
       - pnpm preview
+
+  sync:check:
+    desc: 检查当前分支与远端的分叉（落后 origin/main 与 origin/<当前分支>，只读）
+    cmds:
+      - git fetch origin --quiet
+      - |
+        cur=$(git rev-parse --abbrev-ref HEAD)
+        bm=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
+        bc=$(git rev-list --count HEAD..origin/$cur 2>/dev/null || echo 0)
+        echo "当前分支: $cur"
+        if [ "$bc" -gt 0 ]; then
+          echo "WARNING: 本地落后 origin/$cur $bc 个提交，建议 git pull --ff-only origin $cur"
+        else
+          echo "OK: 与 origin/$cur 同步"
+        fi
+        if [ "$bm" -gt 0 ]; then
+          echo "WARNING: 落后 origin/main $bm 个提交，建议 task sync:main"
+        else
+          echo "OK: 与 origin/main 同步"
+        fi
+
+  sync:main:
+    desc: 将 origin/main 合并进当前分支（全树模型，无需清理）
+    cmds:
+      - git fetch origin
+      - git merge origin/main --no-edit
+
+  sync:pull:
+    desc: 拉取当前分支的远端更新（fast-forward，远端有新提交时用）
+    cmds:
+      - |
+        cur=$(git rev-parse --abbrev-ref HEAD)
+        git pull --ff-only origin "$cur"
