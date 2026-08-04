@@ -33,8 +33,6 @@ const CONFIG_DEFAULTS: ExecutionProfileConfig = {
     enabled: true,
     json_structural: true,
     schema_aliases: true,
-    partial: true,
-    partial_threshold: 0.5,
     placeholder_normalize: true,
     prompt_upgrade: true,
   },
@@ -381,33 +379,6 @@ defineExpose({ lengthRatioError })
               v-model:value="configModel.repair.schema_aliases"
               size="small"
               :disabled="disabled || !configModel.repair.enabled"
-            />
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.repair.partial')
-            }}</span>
-            <NSwitch
-              v-model:value="configModel.repair.partial"
-              size="small"
-              :disabled="disabled || !configModel.repair.enabled"
-            />
-          </div>
-          <div
-            class="ml-4 flex items-center gap-2"
-            :class="{ 'opacity-50 pointer-events-none': !configModel.repair.partial }"
-          >
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.repair.partialThreshold')
-            }}</span>
-            <NInputNumber
-              v-model:value="configModel.repair.partial_threshold"
-              :min="0"
-              :max="1"
-              :step="0.1"
-              size="tiny"
-              :disabled="disabled || !configModel.repair.enabled || !configModel.repair.partial"
-              class="w-24"
             />
           </div>
           <div class="flex items-center justify-between">

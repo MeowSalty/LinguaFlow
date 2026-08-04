@@ -2573,7 +2573,13 @@ export interface components {
             status_filter: "pending_only" | "skip_approved" | "all";
         };
         RetryConfig: {
-            /** @default 3 */
+            /**
+             * @description 双重角色：
+             *     - 每池在途重试预算：单池对 429/5xx 最多 MaxAttempts+1 次调用（1 次首调 + MaxAttempts 次重试）。
+             *     - 池深度（启用 fallback_shrink 时）：池数量 maxPools = MaxAttempts+1，池 N 的批次约束 = floor(orig × shrink^N)。
+             *     - 最坏情况每段调用次数 ≈ (MaxAttempts+1)²（每池重试 × 池数）。
+             * @default 3
+             */
             max_attempts: number;
             /** @default 2000 */
             backoff_ms: number;
@@ -2589,6 +2595,12 @@ export interface components {
             batch_size?: number;
             /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
             max_words_per_batch?: number;
+            /**
+             * @description 池缩放系数：池 N 的批次约束 = floor(orig × shrink^N)。
+             *     各池串行执行；当前池失败（如 429/5xx）的批次会重新批次到下一个更小的池。
+             *     0 或省略表示禁用缩放池（退化为单池）。
+             *     取值范围 (0,1)。池数量由 MaxAttempts+1 决定（见 RetryConfig.max_attempts）。
+             */
             fallback_shrink?: number;
             /** @description 段落过滤配置；省略时默认 pending_only */
             segment_filter?: components["schemas"]["TranslateSegmentFilterConfig"];
@@ -2702,9 +2714,6 @@ export interface components {
             enabled: boolean;
             json_structural: boolean;
             schema_aliases: boolean;
-            partial: boolean;
-            /** Format: double */
-            partial_threshold: number;
             placeholder_normalize: boolean;
             prompt_upgrade: boolean;
         };
