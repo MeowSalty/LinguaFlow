@@ -11,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
 // SemanticQAHandler 实现 RoundHandler，对已翻译段落做 LLM 语义质检，产出 warning 级 issue。
@@ -24,6 +25,7 @@ type SemanticQAHandler struct {
 	MaxBatchIndexSpan int
 	Retry             backend.RetryPolicy
 	ResponseMode      string
+	Repair            repair.Options
 	SegmentScope      string   // "all"(默认) | "with_issues" | "with_issue_codes"
 	IssueCodes        []string // 仅 with_issue_codes 生效
 	Reporter          progress.Reporter
@@ -308,7 +310,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
-	issues, parseErr := prompt.ParseSemanticQAByMode(resp.Text, isTextMode)
+	issues, parseRepaired, parseErr := repair.ParseSemanticQAByMode(resp.Text, isTextMode, h.Repair)
 	if parseErr != nil {
 		logger.Warn("semantic_qa parse failed",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", parseErr,
@@ -343,6 +345,11 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	}
 
 	// id → []issue（snippet → Span；定位失败仍保留 MatchedText）
+	if len(parseRepaired) > 0 {
+		logger.Info("semantic_qa response repaired",
+			"backend", h.Backend.Name(), "ops", parseRepaired)
+	}
+
 	byID := make(map[string][]qa.QualityIssue, len(idxs))
 	segByID := make(map[string]*Segment, len(idxs))
 	for _, idx := range idxs {

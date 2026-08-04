@@ -12,6 +12,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
@@ -27,6 +28,7 @@ func restoreSegmentRuby(
 	reporter progress.Reporter,
 	isTextMode bool,
 	roundIndex int,
+	repairOpt repair.Options,
 ) {
 	rubyOutput := extractRubyOutput(seg)
 	logger.Info("restoreSegmentRuby: extractRubyOutput",
@@ -66,7 +68,7 @@ func restoreSegmentRuby(
 	}
 
 	if len(backends) > 0 && ctx.Err() == nil {
-		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter, isTextMode, roundIndex)
+		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter, isTextMode, roundIndex, repairOpt)
 	}
 }
 
@@ -94,6 +96,7 @@ func retryAlignSegment(
 	reporter progress.Reporter,
 	isTextMode bool,
 	roundIndex int,
+	repairOpt repair.Options,
 ) {
 	if len(originals) == 0 {
 		return
@@ -140,9 +143,15 @@ func retryAlignSegment(
 		inputTokens := resp.Usage.PromptTokens
 		outputTokens := resp.Usage.CompletionTokens
 
-		newOutput := parseAlignmentResponse(resp.Text)
+		newOutput, repaired := parseAlignmentResponse(resp.Text, repairOpt)
+		usedJSONPath := true
 		if isTextMode && len(newOutput) == 0 {
 			newOutput = parseAlignmentResponseText(resp.Text, len(originals))
+			usedJSONPath = false
+		}
+		if usedJSONPath && len(repaired) > 0 {
+			logger.Info("ruby alignment response repaired",
+				"seg", seg.ID, "ops", repaired)
 		}
 		if len(newOutput) == 0 {
 			status = "partial"
@@ -431,31 +440,25 @@ func parseAlignmentResponseText(text string, expectedCount int) []ruby.OutputEnt
 		if m == nil {
 			continue
 		}
-		entry := ruby.OutputEntry{
+		entries = append(entries, ruby.OutputEntry{
 			Base: strings.TrimSpace(m[1]),
 			Text: strings.TrimSpace(m[2]),
 			Kind: strings.TrimSpace(m[3]),
-		}
-		if entry.Base != "" {
-			entries = append(entries, entry)
-		}
+		})
 	}
-	return entries
+	// trim/合法性过滤统一走 ruby.NormalizeOutputEntries（与 JSON 路径一致）。
+	return ruby.NormalizeOutputEntries(entries)
 }
 
 // parseAlignmentResponse 从 LLM 响应中解析 ruby_output。
-func parseAlignmentResponse(text string) []ruby.OutputEntry {
-	body := jsonObjectSlice(text)
-	if body == "" {
-		return nil
+// 委托 repair.TryRepairRubyAlignment 做多层结构修复（结巴/截断/尾随逗号/BOM/控制字符），
+// 失败或空返回 nil。第二个返回值为修复算子链，便于日志诊断。
+func parseAlignmentResponse(text string, opt repair.Options) ([]ruby.OutputEntry, []string) {
+	entries, repaired, err := repair.TryRepairRubyAlignment(text, opt)
+	if err != nil {
+		return nil, nil
 	}
-	var resp struct {
-		RubyOutput []ruby.OutputEntry `json:"ruby_output"`
-	}
-	if err := json.Unmarshal([]byte(body), &resp); err != nil {
-		return nil
-	}
-	return resp.RubyOutput
+	return entries, repaired
 }
 
 // kindSet 将 kind 列表转为 set，用于快速查找。
