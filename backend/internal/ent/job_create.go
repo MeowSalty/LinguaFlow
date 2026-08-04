@@ -168,20 +168,6 @@ func (_c *JobCreate) SetNillableSkippedSegments(v *int) *JobCreate {
 	return _c
 }
 
-// SetStageTotal sets the "stage_total" field.
-func (_c *JobCreate) SetStageTotal(v int) *JobCreate {
-	_c.mutation.SetStageTotal(v)
-	return _c
-}
-
-// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
-func (_c *JobCreate) SetNillableStageTotal(v *int) *JobCreate {
-	if v != nil {
-		_c.SetStageTotal(*v)
-	}
-	return _c
-}
-
 // SetCompletedSegments sets the "completed_segments" field.
 func (_c *JobCreate) SetCompletedSegments(v int) *JobCreate {
 	_c.mutation.SetCompletedSegments(v)
@@ -192,6 +178,34 @@ func (_c *JobCreate) SetCompletedSegments(v int) *JobCreate {
 func (_c *JobCreate) SetNillableCompletedSegments(v *int) *JobCreate {
 	if v != nil {
 		_c.SetCompletedSegments(*v)
+	}
+	return _c
+}
+
+// SetWeightedTotal sets the "weighted_total" field.
+func (_c *JobCreate) SetWeightedTotal(v int) *JobCreate {
+	_c.mutation.SetWeightedTotal(v)
+	return _c
+}
+
+// SetNillableWeightedTotal sets the "weighted_total" field if the given value is not nil.
+func (_c *JobCreate) SetNillableWeightedTotal(v *int) *JobCreate {
+	if v != nil {
+		_c.SetWeightedTotal(*v)
+	}
+	return _c
+}
+
+// SetWeightedCompleted sets the "weighted_completed" field.
+func (_c *JobCreate) SetWeightedCompleted(v int) *JobCreate {
+	_c.mutation.SetWeightedCompleted(v)
+	return _c
+}
+
+// SetNillableWeightedCompleted sets the "weighted_completed" field if the given value is not nil.
+func (_c *JobCreate) SetNillableWeightedCompleted(v *int) *JobCreate {
+	if v != nil {
+		_c.SetWeightedCompleted(*v)
 	}
 	return _c
 }
@@ -353,13 +367,17 @@ func (_c *JobCreate) defaults() {
 		v := job.DefaultSkippedSegments
 		_c.mutation.SetSkippedSegments(v)
 	}
-	if _, ok := _c.mutation.StageTotal(); !ok {
-		v := job.DefaultStageTotal
-		_c.mutation.SetStageTotal(v)
-	}
 	if _, ok := _c.mutation.CompletedSegments(); !ok {
 		v := job.DefaultCompletedSegments
 		_c.mutation.SetCompletedSegments(v)
+	}
+	if _, ok := _c.mutation.WeightedTotal(); !ok {
+		v := job.DefaultWeightedTotal
+		_c.mutation.SetWeightedTotal(v)
+	}
+	if _, ok := _c.mutation.WeightedCompleted(); !ok {
+		v := job.DefaultWeightedCompleted
+		_c.mutation.SetWeightedCompleted(v)
 	}
 }
 
@@ -436,20 +454,28 @@ func (_c *JobCreate) check() error {
 			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "Job.skipped_segments": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.StageTotal(); !ok {
-		return &ValidationError{Name: "stage_total", err: errors.New(`ent: missing required field "Job.stage_total"`)}
-	}
-	if v, ok := _c.mutation.StageTotal(); ok {
-		if err := job.StageTotalValidator(v); err != nil {
-			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "Job.stage_total": %w`, err)}
-		}
-	}
 	if _, ok := _c.mutation.CompletedSegments(); !ok {
 		return &ValidationError{Name: "completed_segments", err: errors.New(`ent: missing required field "Job.completed_segments"`)}
 	}
 	if v, ok := _c.mutation.CompletedSegments(); ok {
 		if err := job.CompletedSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "Job.completed_segments": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.WeightedTotal(); !ok {
+		return &ValidationError{Name: "weighted_total", err: errors.New(`ent: missing required field "Job.weighted_total"`)}
+	}
+	if v, ok := _c.mutation.WeightedTotal(); ok {
+		if err := job.WeightedTotalValidator(v); err != nil {
+			return &ValidationError{Name: "weighted_total", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_total": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.WeightedCompleted(); !ok {
+		return &ValidationError{Name: "weighted_completed", err: errors.New(`ent: missing required field "Job.weighted_completed"`)}
+	}
+	if v, ok := _c.mutation.WeightedCompleted(); ok {
+		if err := job.WeightedCompletedValidator(v); err != nil {
+			return &ValidationError{Name: "weighted_completed", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_completed": %w`, err)}
 		}
 	}
 	if len(_c.mutation.ProjectIDs()) == 0 {
@@ -525,13 +551,17 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 		_spec.SetField(job.FieldSkippedSegments, field.TypeInt, value)
 		_node.SkippedSegments = value
 	}
-	if value, ok := _c.mutation.StageTotal(); ok {
-		_spec.SetField(job.FieldStageTotal, field.TypeInt, value)
-		_node.StageTotal = value
-	}
 	if value, ok := _c.mutation.CompletedSegments(); ok {
 		_spec.SetField(job.FieldCompletedSegments, field.TypeInt, value)
 		_node.CompletedSegments = value
+	}
+	if value, ok := _c.mutation.WeightedTotal(); ok {
+		_spec.SetField(job.FieldWeightedTotal, field.TypeInt, value)
+		_node.WeightedTotal = value
+	}
+	if value, ok := _c.mutation.WeightedCompleted(); ok {
+		_spec.SetField(job.FieldWeightedCompleted, field.TypeInt, value)
+		_node.WeightedCompleted = value
 	}
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(job.FieldErrorMessage, field.TypeString, value)

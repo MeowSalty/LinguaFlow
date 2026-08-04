@@ -257,8 +257,9 @@ var (
 		{Name: "failed_resources", Type: field.TypeInt, Default: 0},
 		{Name: "total_segments", Type: field.TypeInt, Default: 0},
 		{Name: "skipped_segments", Type: field.TypeInt, Default: 0},
-		{Name: "stage_total", Type: field.TypeInt, Default: 0},
 		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
+		{Name: "weighted_total", Type: field.TypeInt, Default: 0},
+		{Name: "weighted_completed", Type: field.TypeInt, Default: 0},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "project_id", Type: field.TypeInt},
@@ -272,13 +273,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "jobs_projects_jobs",
-				Columns:    []*schema.Column{JobsColumns[16]},
+				Columns:    []*schema.Column{JobsColumns[17]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "jobs_users_created_jobs",
-				Columns:    []*schema.Column{JobsColumns[17]},
+				Columns:    []*schema.Column{JobsColumns[18]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -287,7 +288,7 @@ var (
 			{
 				Name:    "job_project_id_id",
 				Unique:  false,
-				Columns: []*schema.Column{JobsColumns[16], JobsColumns[0]},
+				Columns: []*schema.Column{JobsColumns[17], JobsColumns[0]},
 			},
 		},
 	}
@@ -307,6 +308,8 @@ var (
 		{Name: "current_stage", Type: field.TypeString, Nullable: true, Default: ""},
 		{Name: "stage_total", Type: field.TypeInt, Default: 0},
 		{Name: "stage_completed", Type: field.TypeInt, Default: 0},
+		{Name: "weighted_total", Type: field.TypeInt, Default: 0},
+		{Name: "weighted_completed", Type: field.TypeInt, Default: 0},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "job_job_resources", Type: field.TypeInt},
 		{Name: "resource_job_resources", Type: field.TypeInt},
@@ -319,13 +322,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "job_resources_jobs_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[15]},
+				Columns:    []*schema.Column{JobResourcesColumns[17]},
 				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "job_resources_resources_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[16]},
+				Columns:    []*schema.Column{JobResourcesColumns[18]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},

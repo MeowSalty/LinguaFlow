@@ -38,10 +38,12 @@ const (
 	FieldTotalSegments = "total_segments"
 	// FieldSkippedSegments holds the string denoting the skipped_segments field in the database.
 	FieldSkippedSegments = "skipped_segments"
-	// FieldStageTotal holds the string denoting the stage_total field in the database.
-	FieldStageTotal = "stage_total"
 	// FieldCompletedSegments holds the string denoting the completed_segments field in the database.
 	FieldCompletedSegments = "completed_segments"
+	// FieldWeightedTotal holds the string denoting the weighted_total field in the database.
+	FieldWeightedTotal = "weighted_total"
+	// FieldWeightedCompleted holds the string denoting the weighted_completed field in the database.
+	FieldWeightedCompleted = "weighted_completed"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
@@ -101,8 +103,9 @@ var Columns = []string{
 	FieldFailedResources,
 	FieldTotalSegments,
 	FieldSkippedSegments,
-	FieldStageTotal,
 	FieldCompletedSegments,
+	FieldWeightedTotal,
+	FieldWeightedCompleted,
 	FieldErrorMessage,
 	FieldStartedAt,
 }
@@ -165,14 +168,18 @@ var (
 	DefaultSkippedSegments int
 	// SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
 	SkippedSegmentsValidator func(int) error
-	// DefaultStageTotal holds the default value on creation for the "stage_total" field.
-	DefaultStageTotal int
-	// StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
-	StageTotalValidator func(int) error
 	// DefaultCompletedSegments holds the default value on creation for the "completed_segments" field.
 	DefaultCompletedSegments int
 	// CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	CompletedSegmentsValidator func(int) error
+	// DefaultWeightedTotal holds the default value on creation for the "weighted_total" field.
+	DefaultWeightedTotal int
+	// WeightedTotalValidator is a validator for the "weighted_total" field. It is called by the builders before save.
+	WeightedTotalValidator func(int) error
+	// DefaultWeightedCompleted holds the default value on creation for the "weighted_completed" field.
+	DefaultWeightedCompleted int
+	// WeightedCompletedValidator is a validator for the "weighted_completed" field. It is called by the builders before save.
+	WeightedCompletedValidator func(int) error
 )
 
 // OrderOption defines the ordering options for the Job queries.
@@ -238,14 +245,19 @@ func BySkippedSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSkippedSegments, opts...).ToFunc()
 }
 
-// ByStageTotal orders the results by the stage_total field.
-func ByStageTotal(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldStageTotal, opts...).ToFunc()
-}
-
 // ByCompletedSegments orders the results by the completed_segments field.
 func ByCompletedSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCompletedSegments, opts...).ToFunc()
+}
+
+// ByWeightedTotal orders the results by the weighted_total field.
+func ByWeightedTotal(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWeightedTotal, opts...).ToFunc()
+}
+
+// ByWeightedCompleted orders the results by the weighted_completed field.
+func ByWeightedCompleted(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWeightedCompleted, opts...).ToFunc()
 }
 
 // ByErrorMessage orders the results by the error_message field.

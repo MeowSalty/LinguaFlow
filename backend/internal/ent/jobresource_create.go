@@ -196,6 +196,34 @@ func (_c *JobResourceCreate) SetNillableStageCompleted(v *int) *JobResourceCreat
 	return _c
 }
 
+// SetWeightedTotal sets the "weighted_total" field.
+func (_c *JobResourceCreate) SetWeightedTotal(v int) *JobResourceCreate {
+	_c.mutation.SetWeightedTotal(v)
+	return _c
+}
+
+// SetNillableWeightedTotal sets the "weighted_total" field if the given value is not nil.
+func (_c *JobResourceCreate) SetNillableWeightedTotal(v *int) *JobResourceCreate {
+	if v != nil {
+		_c.SetWeightedTotal(*v)
+	}
+	return _c
+}
+
+// SetWeightedCompleted sets the "weighted_completed" field.
+func (_c *JobResourceCreate) SetWeightedCompleted(v int) *JobResourceCreate {
+	_c.mutation.SetWeightedCompleted(v)
+	return _c
+}
+
+// SetNillableWeightedCompleted sets the "weighted_completed" field if the given value is not nil.
+func (_c *JobResourceCreate) SetNillableWeightedCompleted(v *int) *JobResourceCreate {
+	if v != nil {
+		_c.SetWeightedCompleted(*v)
+	}
+	return _c
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_c *JobResourceCreate) SetStartedAt(v time.Time) *JobResourceCreate {
 	_c.mutation.SetStartedAt(v)
@@ -307,6 +335,14 @@ func (_c *JobResourceCreate) defaults() {
 		v := jobresource.DefaultStageCompleted
 		_c.mutation.SetStageCompleted(v)
 	}
+	if _, ok := _c.mutation.WeightedTotal(); !ok {
+		v := jobresource.DefaultWeightedTotal
+		_c.mutation.SetWeightedTotal(v)
+	}
+	if _, ok := _c.mutation.WeightedCompleted(); !ok {
+		v := jobresource.DefaultWeightedCompleted
+		_c.mutation.SetWeightedCompleted(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -361,6 +397,22 @@ func (_c *JobResourceCreate) check() error {
 	if v, ok := _c.mutation.StageCompleted(); ok {
 		if err := jobresource.StageCompletedValidator(v); err != nil {
 			return &ValidationError{Name: "stage_completed", err: fmt.Errorf(`ent: validator failed for field "JobResource.stage_completed": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.WeightedTotal(); !ok {
+		return &ValidationError{Name: "weighted_total", err: errors.New(`ent: missing required field "JobResource.weighted_total"`)}
+	}
+	if v, ok := _c.mutation.WeightedTotal(); ok {
+		if err := jobresource.WeightedTotalValidator(v); err != nil {
+			return &ValidationError{Name: "weighted_total", err: fmt.Errorf(`ent: validator failed for field "JobResource.weighted_total": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.WeightedCompleted(); !ok {
+		return &ValidationError{Name: "weighted_completed", err: errors.New(`ent: missing required field "JobResource.weighted_completed"`)}
+	}
+	if v, ok := _c.mutation.WeightedCompleted(); ok {
+		if err := jobresource.WeightedCompletedValidator(v); err != nil {
+			return &ValidationError{Name: "weighted_completed", err: fmt.Errorf(`ent: validator failed for field "JobResource.weighted_completed": %w`, err)}
 		}
 	}
 	if len(_c.mutation.JobIDs()) == 0 {
@@ -446,6 +498,14 @@ func (_c *JobResourceCreate) createSpec() (*JobResource, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.StageCompleted(); ok {
 		_spec.SetField(jobresource.FieldStageCompleted, field.TypeInt, value)
 		_node.StageCompleted = value
+	}
+	if value, ok := _c.mutation.WeightedTotal(); ok {
+		_spec.SetField(jobresource.FieldWeightedTotal, field.TypeInt, value)
+		_node.WeightedTotal = value
+	}
+	if value, ok := _c.mutation.WeightedCompleted(); ok {
+		_spec.SetField(jobresource.FieldWeightedCompleted, field.TypeInt, value)
+		_node.WeightedCompleted = value
 	}
 	if value, ok := _c.mutation.StartedAt(); ok {
 		_spec.SetField(jobresource.FieldStartedAt, field.TypeTime, value)

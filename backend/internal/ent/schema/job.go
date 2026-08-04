@@ -38,10 +38,12 @@ func (Job) Fields() []ent.Field {
 			Comment("总段落数（创建时选中的 segment 数）"),
 		field.Int("skipped_segments").Default(0).NonNegative().
 			Comment("被系统跳过的段落数（聚合自 JobResource）"),
-		field.Int("stage_total").Default(0).NonNegative().
-			Comment("实际需要处理的段落数（ReconcileJob 从各资源的 stage_total 聚合）"),
 		field.Int("completed_segments").Default(0).NonNegative().
-			Comment("已完成段落数"),
+			Comment("已完成段落数（终态去重值，仅 ReconcileJob 写入）"),
+		field.Int("weighted_total").Default(0).NonNegative().
+			Comment("跨轮工作量总数（各轮 stage_total 累加，实时累加）"),
+		field.Int("weighted_completed").Default(0).NonNegative().
+			Comment("跨轮已完成工作量（各轮 stage_completed 累加，实时累加）"),
 		field.String("error_message").Optional().Nillable().
 			Comment("任务级错误信息"),
 		field.Time("started_at").Optional().Nillable().

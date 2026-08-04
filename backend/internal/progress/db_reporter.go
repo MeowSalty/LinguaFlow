@@ -102,18 +102,66 @@ func (r *DBReporter) StageStart(name string, total int) {
 	defer cancel()
 
 	now := time.Now()
-	err := r.client.JobResource.UpdateOneID(r.jobResourceID).
-		SetCurrentStage(name).
-		SetStageTotal(total).
-		SetStageCompleted(0).
-		SetNillableStartedAt(&now).
-		Exec(ctx)
+	// 事务包裹 JobResource 与 Job 的 weighted_total 累加，避免单条失败导致两者计数偏离。
+	tx, err := r.client.Tx(ctx)
 	if err != nil {
-		r.logger.Warn("DBReporter: failed to update stage info",
+		r.logger.Warn("DBReporter: failed to begin stage tx, falling back to non-transactional write",
 			"job_id", r.jobID,
 			"job_resource_id", r.jobResourceID,
 			"stage", name,
 			"error", err)
+		// 降级为非事务写入：至少保证 weighted_total 累加到 JobResource，
+		// 否则后续 flush 的 AddWeightedCompleted 会让 weighted_completed 超过 weighted_total。
+		if err := r.client.JobResource.UpdateOneID(r.jobResourceID).
+			SetCurrentStage(name).
+			SetStageTotal(total).
+			SetStageCompleted(0).
+			SetNillableStartedAt(&now).
+			AddWeightedTotal(total).
+			Exec(ctx); err != nil {
+			r.logger.Warn("DBReporter: fallback failed to update stage info",
+				"job_id", r.jobID,
+				"job_resource_id", r.jobResourceID,
+				"stage", name,
+				"error", err)
+		}
+		if err := r.client.Job.UpdateOneID(r.jobID).
+			AddWeightedTotal(total).
+			Exec(ctx); err != nil {
+			r.logger.Warn("DBReporter: fallback failed to add job weighted_total",
+				"job_id", r.jobID,
+				"total", total,
+				"error", err)
+		}
+	} else {
+		defer func() {
+			_ = tx.Rollback()
+		}()
+		if err := tx.JobResource.UpdateOneID(r.jobResourceID).
+			SetCurrentStage(name).
+			SetStageTotal(total).
+			SetStageCompleted(0).
+			SetNillableStartedAt(&now).
+			AddWeightedTotal(total).
+			Exec(ctx); err != nil {
+			r.logger.Warn("DBReporter: failed to update stage info",
+				"job_id", r.jobID,
+				"job_resource_id", r.jobResourceID,
+				"stage", name,
+				"error", err)
+		} else if err := tx.Job.UpdateOneID(r.jobID).
+			AddWeightedTotal(total).
+			Exec(ctx); err != nil {
+			r.logger.Warn("DBReporter: failed to add job weighted_total",
+				"job_id", r.jobID,
+				"total", total,
+				"error", err)
+		} else if err := tx.Commit(); err != nil {
+			r.logger.Warn("DBReporter: failed to commit stage tx",
+				"job_id", r.jobID,
+				"stage", name,
+				"error", err)
+		}
 	}
 
 	// Publish stage_start event
@@ -192,7 +240,7 @@ func (r *DBReporter) flush() error {
 	return r.flushFn(updates)
 }
 
-// defaultFlush 默认 flush 实现：更新 JobResource 的 stage_completed 和 Job 的 completed_segments。
+// defaultFlush 默认 flush 实现：更新 JobResource 的 stage_completed，并累加 weighted_completed。
 func (r *DBReporter) defaultFlush(updates []segmentUpdate) error {
 	if len(updates) == 0 {
 		return nil
@@ -205,11 +253,24 @@ func (r *DBReporter) defaultFlush(updates []segmentUpdate) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// 更新 JobResource 的 stage_completed
-	err := r.client.JobResource.UpdateOneID(r.jobResourceID).
-		SetStageCompleted(int(lastDone)).
-		Exec(ctx)
+	// 事务包裹 JobResource 与 Job 的 weighted_completed 累加，避免单条失败导致两者计数偏离。
+	tx, err := r.client.Tx(ctx)
 	if err != nil {
+		r.logger.Warn("DBReporter: failed to begin flush tx",
+			"job_id", r.jobID,
+			"job_resource_id", r.jobResourceID,
+			"error", err)
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	// 更新 JobResource 的 stage_completed，并累加资源级 weighted_completed
+	if err := tx.JobResource.UpdateOneID(r.jobResourceID).
+		SetStageCompleted(int(lastDone)).
+		AddWeightedCompleted(delta).
+		Exec(ctx); err != nil {
 		r.logger.Warn("DBReporter: failed to update job resource progress",
 			"job_id", r.jobID,
 			"job_resource_id", r.jobResourceID,
@@ -217,22 +278,24 @@ func (r *DBReporter) defaultFlush(updates []segmentUpdate) error {
 		return err
 	}
 
-	// 按缓冲区长度增量更新 Job 的 completed_segments
-	return r.updateJobProgress(ctx, delta)
-}
-
-// updateJobProgress 使用 AddCompletedSegments 原子增量更新 Job 的完成段落数。
-func (r *DBReporter) updateJobProgress(ctx context.Context, delta int) error {
-	err := r.client.Job.UpdateOneID(r.jobID).
-		AddCompletedSegments(delta).
-		Exec(ctx)
-	if err != nil {
-		r.logger.Warn("DBReporter: failed to update job progress",
+	// 累加 Job 级跨轮工作量完成数
+	if err := tx.Job.UpdateOneID(r.jobID).
+		AddWeightedCompleted(delta).
+		Exec(ctx); err != nil {
+		r.logger.Warn("DBReporter: failed to add job weighted_completed",
 			"job_id", r.jobID,
 			"delta", delta,
 			"error", err)
+		return err
 	}
-	return err
+
+	if err := tx.Commit(); err != nil {
+		r.logger.Warn("DBReporter: failed to commit flush tx",
+			"job_id", r.jobID,
+			"error", err)
+		return err
+	}
+	return nil
 }
 
 // publishEvent publishes a lifecycle event to the Broker. No-op if broker is nil.

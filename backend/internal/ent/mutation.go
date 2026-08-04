@@ -5551,10 +5551,12 @@ type JobMutation struct {
 	addtotal_segments      *int
 	skipped_segments       *int
 	addskipped_segments    *int
-	stage_total            *int
-	addstage_total         *int
 	completed_segments     *int
 	addcompleted_segments  *int
+	weighted_total         *int
+	addweighted_total      *int
+	weighted_completed     *int
+	addweighted_completed  *int
 	error_message          *string
 	started_at             *time.Time
 	clearedFields          map[string]struct{}
@@ -6223,62 +6225,6 @@ func (m *JobMutation) ResetSkippedSegments() {
 	m.addskipped_segments = nil
 }
 
-// SetStageTotal sets the "stage_total" field.
-func (m *JobMutation) SetStageTotal(i int) {
-	m.stage_total = &i
-	m.addstage_total = nil
-}
-
-// StageTotal returns the value of the "stage_total" field in the mutation.
-func (m *JobMutation) StageTotal() (r int, exists bool) {
-	v := m.stage_total
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldStageTotal returns the old "stage_total" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldStageTotal(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldStageTotal is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldStageTotal requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldStageTotal: %w", err)
-	}
-	return oldValue.StageTotal, nil
-}
-
-// AddStageTotal adds i to the "stage_total" field.
-func (m *JobMutation) AddStageTotal(i int) {
-	if m.addstage_total != nil {
-		*m.addstage_total += i
-	} else {
-		m.addstage_total = &i
-	}
-}
-
-// AddedStageTotal returns the value that was added to the "stage_total" field in this mutation.
-func (m *JobMutation) AddedStageTotal() (r int, exists bool) {
-	v := m.addstage_total
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetStageTotal resets all changes to the "stage_total" field.
-func (m *JobMutation) ResetStageTotal() {
-	m.stage_total = nil
-	m.addstage_total = nil
-}
-
 // SetCompletedSegments sets the "completed_segments" field.
 func (m *JobMutation) SetCompletedSegments(i int) {
 	m.completed_segments = &i
@@ -6333,6 +6279,118 @@ func (m *JobMutation) AddedCompletedSegments() (r int, exists bool) {
 func (m *JobMutation) ResetCompletedSegments() {
 	m.completed_segments = nil
 	m.addcompleted_segments = nil
+}
+
+// SetWeightedTotal sets the "weighted_total" field.
+func (m *JobMutation) SetWeightedTotal(i int) {
+	m.weighted_total = &i
+	m.addweighted_total = nil
+}
+
+// WeightedTotal returns the value of the "weighted_total" field in the mutation.
+func (m *JobMutation) WeightedTotal() (r int, exists bool) {
+	v := m.weighted_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeightedTotal returns the old "weighted_total" field's value of the Job entity.
+// If the Job object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobMutation) OldWeightedTotal(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeightedTotal is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeightedTotal requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeightedTotal: %w", err)
+	}
+	return oldValue.WeightedTotal, nil
+}
+
+// AddWeightedTotal adds i to the "weighted_total" field.
+func (m *JobMutation) AddWeightedTotal(i int) {
+	if m.addweighted_total != nil {
+		*m.addweighted_total += i
+	} else {
+		m.addweighted_total = &i
+	}
+}
+
+// AddedWeightedTotal returns the value that was added to the "weighted_total" field in this mutation.
+func (m *JobMutation) AddedWeightedTotal() (r int, exists bool) {
+	v := m.addweighted_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeightedTotal resets all changes to the "weighted_total" field.
+func (m *JobMutation) ResetWeightedTotal() {
+	m.weighted_total = nil
+	m.addweighted_total = nil
+}
+
+// SetWeightedCompleted sets the "weighted_completed" field.
+func (m *JobMutation) SetWeightedCompleted(i int) {
+	m.weighted_completed = &i
+	m.addweighted_completed = nil
+}
+
+// WeightedCompleted returns the value of the "weighted_completed" field in the mutation.
+func (m *JobMutation) WeightedCompleted() (r int, exists bool) {
+	v := m.weighted_completed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeightedCompleted returns the old "weighted_completed" field's value of the Job entity.
+// If the Job object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobMutation) OldWeightedCompleted(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeightedCompleted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeightedCompleted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeightedCompleted: %w", err)
+	}
+	return oldValue.WeightedCompleted, nil
+}
+
+// AddWeightedCompleted adds i to the "weighted_completed" field.
+func (m *JobMutation) AddWeightedCompleted(i int) {
+	if m.addweighted_completed != nil {
+		*m.addweighted_completed += i
+	} else {
+		m.addweighted_completed = &i
+	}
+}
+
+// AddedWeightedCompleted returns the value that was added to the "weighted_completed" field in this mutation.
+func (m *JobMutation) AddedWeightedCompleted() (r int, exists bool) {
+	v := m.addweighted_completed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeightedCompleted resets all changes to the "weighted_completed" field.
+func (m *JobMutation) ResetWeightedCompleted() {
+	m.weighted_completed = nil
+	m.addweighted_completed = nil
 }
 
 // SetErrorMessage sets the "error_message" field.
@@ -6641,7 +6699,7 @@ func (m *JobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *JobMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 17)
 	if m.created_at != nil {
 		fields = append(fields, job.FieldCreatedAt)
 	}
@@ -6678,11 +6736,14 @@ func (m *JobMutation) Fields() []string {
 	if m.skipped_segments != nil {
 		fields = append(fields, job.FieldSkippedSegments)
 	}
-	if m.stage_total != nil {
-		fields = append(fields, job.FieldStageTotal)
-	}
 	if m.completed_segments != nil {
 		fields = append(fields, job.FieldCompletedSegments)
+	}
+	if m.weighted_total != nil {
+		fields = append(fields, job.FieldWeightedTotal)
+	}
+	if m.weighted_completed != nil {
+		fields = append(fields, job.FieldWeightedCompleted)
 	}
 	if m.error_message != nil {
 		fields = append(fields, job.FieldErrorMessage)
@@ -6722,10 +6783,12 @@ func (m *JobMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalSegments()
 	case job.FieldSkippedSegments:
 		return m.SkippedSegments()
-	case job.FieldStageTotal:
-		return m.StageTotal()
 	case job.FieldCompletedSegments:
 		return m.CompletedSegments()
+	case job.FieldWeightedTotal:
+		return m.WeightedTotal()
+	case job.FieldWeightedCompleted:
+		return m.WeightedCompleted()
 	case job.FieldErrorMessage:
 		return m.ErrorMessage()
 	case job.FieldStartedAt:
@@ -6763,10 +6826,12 @@ func (m *JobMutation) OldField(ctx context.Context, name string) (ent.Value, err
 		return m.OldTotalSegments(ctx)
 	case job.FieldSkippedSegments:
 		return m.OldSkippedSegments(ctx)
-	case job.FieldStageTotal:
-		return m.OldStageTotal(ctx)
 	case job.FieldCompletedSegments:
 		return m.OldCompletedSegments(ctx)
+	case job.FieldWeightedTotal:
+		return m.OldWeightedTotal(ctx)
+	case job.FieldWeightedCompleted:
+		return m.OldWeightedCompleted(ctx)
 	case job.FieldErrorMessage:
 		return m.OldErrorMessage(ctx)
 	case job.FieldStartedAt:
@@ -6864,19 +6929,26 @@ func (m *JobMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetSkippedSegments(v)
 		return nil
-	case job.FieldStageTotal:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetStageTotal(v)
-		return nil
 	case job.FieldCompletedSegments:
 		v, ok := value.(int)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCompletedSegments(v)
+		return nil
+	case job.FieldWeightedTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeightedTotal(v)
+		return nil
+	case job.FieldWeightedCompleted:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeightedCompleted(v)
 		return nil
 	case job.FieldErrorMessage:
 		v, ok := value.(string)
@@ -6918,11 +6990,14 @@ func (m *JobMutation) AddedFields() []string {
 	if m.addskipped_segments != nil {
 		fields = append(fields, job.FieldSkippedSegments)
 	}
-	if m.addstage_total != nil {
-		fields = append(fields, job.FieldStageTotal)
-	}
 	if m.addcompleted_segments != nil {
 		fields = append(fields, job.FieldCompletedSegments)
+	}
+	if m.addweighted_total != nil {
+		fields = append(fields, job.FieldWeightedTotal)
+	}
+	if m.addweighted_completed != nil {
+		fields = append(fields, job.FieldWeightedCompleted)
 	}
 	return fields
 }
@@ -6944,10 +7019,12 @@ func (m *JobMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotalSegments()
 	case job.FieldSkippedSegments:
 		return m.AddedSkippedSegments()
-	case job.FieldStageTotal:
-		return m.AddedStageTotal()
 	case job.FieldCompletedSegments:
 		return m.AddedCompletedSegments()
+	case job.FieldWeightedTotal:
+		return m.AddedWeightedTotal()
+	case job.FieldWeightedCompleted:
+		return m.AddedWeightedCompleted()
 	}
 	return nil, false
 }
@@ -6999,19 +7076,26 @@ func (m *JobMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddSkippedSegments(v)
 		return nil
-	case job.FieldStageTotal:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddStageTotal(v)
-		return nil
 	case job.FieldCompletedSegments:
 		v, ok := value.(int)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddCompletedSegments(v)
+		return nil
+	case job.FieldWeightedTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeightedTotal(v)
+		return nil
+	case job.FieldWeightedCompleted:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeightedCompleted(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Job numeric field %s", name)
@@ -7091,11 +7175,14 @@ func (m *JobMutation) ResetField(name string) error {
 	case job.FieldSkippedSegments:
 		m.ResetSkippedSegments()
 		return nil
-	case job.FieldStageTotal:
-		m.ResetStageTotal()
-		return nil
 	case job.FieldCompletedSegments:
 		m.ResetCompletedSegments()
+		return nil
+	case job.FieldWeightedTotal:
+		m.ResetWeightedTotal()
+		return nil
+	case job.FieldWeightedCompleted:
+		m.ResetWeightedCompleted()
 		return nil
 	case job.FieldErrorMessage:
 		m.ResetErrorMessage()
@@ -7278,6 +7365,10 @@ type JobResourceMutation struct {
 	addstage_total        *int
 	stage_completed       *int
 	addstage_completed    *int
+	weighted_total        *int
+	addweighted_total     *int
+	weighted_completed    *int
+	addweighted_completed *int
 	started_at            *time.Time
 	clearedFields         map[string]struct{}
 	job                   *int
@@ -8022,6 +8113,118 @@ func (m *JobResourceMutation) ResetStageCompleted() {
 	m.addstage_completed = nil
 }
 
+// SetWeightedTotal sets the "weighted_total" field.
+func (m *JobResourceMutation) SetWeightedTotal(i int) {
+	m.weighted_total = &i
+	m.addweighted_total = nil
+}
+
+// WeightedTotal returns the value of the "weighted_total" field in the mutation.
+func (m *JobResourceMutation) WeightedTotal() (r int, exists bool) {
+	v := m.weighted_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeightedTotal returns the old "weighted_total" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldWeightedTotal(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeightedTotal is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeightedTotal requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeightedTotal: %w", err)
+	}
+	return oldValue.WeightedTotal, nil
+}
+
+// AddWeightedTotal adds i to the "weighted_total" field.
+func (m *JobResourceMutation) AddWeightedTotal(i int) {
+	if m.addweighted_total != nil {
+		*m.addweighted_total += i
+	} else {
+		m.addweighted_total = &i
+	}
+}
+
+// AddedWeightedTotal returns the value that was added to the "weighted_total" field in this mutation.
+func (m *JobResourceMutation) AddedWeightedTotal() (r int, exists bool) {
+	v := m.addweighted_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeightedTotal resets all changes to the "weighted_total" field.
+func (m *JobResourceMutation) ResetWeightedTotal() {
+	m.weighted_total = nil
+	m.addweighted_total = nil
+}
+
+// SetWeightedCompleted sets the "weighted_completed" field.
+func (m *JobResourceMutation) SetWeightedCompleted(i int) {
+	m.weighted_completed = &i
+	m.addweighted_completed = nil
+}
+
+// WeightedCompleted returns the value of the "weighted_completed" field in the mutation.
+func (m *JobResourceMutation) WeightedCompleted() (r int, exists bool) {
+	v := m.weighted_completed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeightedCompleted returns the old "weighted_completed" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldWeightedCompleted(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeightedCompleted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeightedCompleted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeightedCompleted: %w", err)
+	}
+	return oldValue.WeightedCompleted, nil
+}
+
+// AddWeightedCompleted adds i to the "weighted_completed" field.
+func (m *JobResourceMutation) AddWeightedCompleted(i int) {
+	if m.addweighted_completed != nil {
+		*m.addweighted_completed += i
+	} else {
+		m.addweighted_completed = &i
+	}
+}
+
+// AddedWeightedCompleted returns the value that was added to the "weighted_completed" field in this mutation.
+func (m *JobResourceMutation) AddedWeightedCompleted() (r int, exists bool) {
+	v := m.addweighted_completed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeightedCompleted resets all changes to the "weighted_completed" field.
+func (m *JobResourceMutation) ResetWeightedCompleted() {
+	m.weighted_completed = nil
+	m.addweighted_completed = nil
+}
+
 // SetStartedAt sets the "started_at" field.
 func (m *JobResourceMutation) SetStartedAt(t time.Time) {
 	m.started_at = &t
@@ -8183,7 +8386,7 @@ func (m *JobResourceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *JobResourceMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 16)
 	if m.created_at != nil {
 		fields = append(fields, jobresource.FieldCreatedAt)
 	}
@@ -8223,6 +8426,12 @@ func (m *JobResourceMutation) Fields() []string {
 	if m.stage_completed != nil {
 		fields = append(fields, jobresource.FieldStageCompleted)
 	}
+	if m.weighted_total != nil {
+		fields = append(fields, jobresource.FieldWeightedTotal)
+	}
+	if m.weighted_completed != nil {
+		fields = append(fields, jobresource.FieldWeightedCompleted)
+	}
 	if m.started_at != nil {
 		fields = append(fields, jobresource.FieldStartedAt)
 	}
@@ -8260,6 +8469,10 @@ func (m *JobResourceMutation) Field(name string) (ent.Value, bool) {
 		return m.StageTotal()
 	case jobresource.FieldStageCompleted:
 		return m.StageCompleted()
+	case jobresource.FieldWeightedTotal:
+		return m.WeightedTotal()
+	case jobresource.FieldWeightedCompleted:
+		return m.WeightedCompleted()
 	case jobresource.FieldStartedAt:
 		return m.StartedAt()
 	}
@@ -8297,6 +8510,10 @@ func (m *JobResourceMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldStageTotal(ctx)
 	case jobresource.FieldStageCompleted:
 		return m.OldStageCompleted(ctx)
+	case jobresource.FieldWeightedTotal:
+		return m.OldWeightedTotal(ctx)
+	case jobresource.FieldWeightedCompleted:
+		return m.OldWeightedCompleted(ctx)
 	case jobresource.FieldStartedAt:
 		return m.OldStartedAt(ctx)
 	}
@@ -8399,6 +8616,20 @@ func (m *JobResourceMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetStageCompleted(v)
 		return nil
+	case jobresource.FieldWeightedTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeightedTotal(v)
+		return nil
+	case jobresource.FieldWeightedCompleted:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeightedCompleted(v)
+		return nil
 	case jobresource.FieldStartedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -8429,6 +8660,12 @@ func (m *JobResourceMutation) AddedFields() []string {
 	if m.addstage_completed != nil {
 		fields = append(fields, jobresource.FieldStageCompleted)
 	}
+	if m.addweighted_total != nil {
+		fields = append(fields, jobresource.FieldWeightedTotal)
+	}
+	if m.addweighted_completed != nil {
+		fields = append(fields, jobresource.FieldWeightedCompleted)
+	}
 	return fields
 }
 
@@ -8447,6 +8684,10 @@ func (m *JobResourceMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedStageTotal()
 	case jobresource.FieldStageCompleted:
 		return m.AddedStageCompleted()
+	case jobresource.FieldWeightedTotal:
+		return m.AddedWeightedTotal()
+	case jobresource.FieldWeightedCompleted:
+		return m.AddedWeightedCompleted()
 	}
 	return nil, false
 }
@@ -8490,6 +8731,20 @@ func (m *JobResourceMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddStageCompleted(v)
+		return nil
+	case jobresource.FieldWeightedTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeightedTotal(v)
+		return nil
+	case jobresource.FieldWeightedCompleted:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeightedCompleted(v)
 		return nil
 	}
 	return fmt.Errorf("unknown JobResource numeric field %s", name)
@@ -8589,6 +8844,12 @@ func (m *JobResourceMutation) ResetField(name string) error {
 		return nil
 	case jobresource.FieldStageCompleted:
 		m.ResetStageCompleted()
+		return nil
+	case jobresource.FieldWeightedTotal:
+		m.ResetWeightedTotal()
+		return nil
+	case jobresource.FieldWeightedCompleted:
+		m.ResetWeightedCompleted()
 		return nil
 	case jobresource.FieldStartedAt:
 		m.ResetStartedAt()

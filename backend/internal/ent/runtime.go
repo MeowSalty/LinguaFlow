@@ -325,18 +325,24 @@ func init() {
 	job.DefaultSkippedSegments = jobDescSkippedSegments.Default.(int)
 	// job.SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
 	job.SkippedSegmentsValidator = jobDescSkippedSegments.Validators[0].(func(int) error)
-	// jobDescStageTotal is the schema descriptor for stage_total field.
-	jobDescStageTotal := jobFields[10].Descriptor()
-	// job.DefaultStageTotal holds the default value on creation for the stage_total field.
-	job.DefaultStageTotal = jobDescStageTotal.Default.(int)
-	// job.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
-	job.StageTotalValidator = jobDescStageTotal.Validators[0].(func(int) error)
 	// jobDescCompletedSegments is the schema descriptor for completed_segments field.
-	jobDescCompletedSegments := jobFields[11].Descriptor()
+	jobDescCompletedSegments := jobFields[10].Descriptor()
 	// job.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
 	job.DefaultCompletedSegments = jobDescCompletedSegments.Default.(int)
 	// job.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	job.CompletedSegmentsValidator = jobDescCompletedSegments.Validators[0].(func(int) error)
+	// jobDescWeightedTotal is the schema descriptor for weighted_total field.
+	jobDescWeightedTotal := jobFields[11].Descriptor()
+	// job.DefaultWeightedTotal holds the default value on creation for the weighted_total field.
+	job.DefaultWeightedTotal = jobDescWeightedTotal.Default.(int)
+	// job.WeightedTotalValidator is a validator for the "weighted_total" field. It is called by the builders before save.
+	job.WeightedTotalValidator = jobDescWeightedTotal.Validators[0].(func(int) error)
+	// jobDescWeightedCompleted is the schema descriptor for weighted_completed field.
+	jobDescWeightedCompleted := jobFields[12].Descriptor()
+	// job.DefaultWeightedCompleted holds the default value on creation for the weighted_completed field.
+	job.DefaultWeightedCompleted = jobDescWeightedCompleted.Default.(int)
+	// job.WeightedCompletedValidator is a validator for the "weighted_completed" field. It is called by the builders before save.
+	job.WeightedCompletedValidator = jobDescWeightedCompleted.Validators[0].(func(int) error)
 	jobresourceMixin := schema.JobResource{}.Mixin()
 	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
 	_ = jobresourceMixinFields0
@@ -394,6 +400,18 @@ func init() {
 	jobresource.DefaultStageCompleted = jobresourceDescStageCompleted.Default.(int)
 	// jobresource.StageCompletedValidator is a validator for the "stage_completed" field. It is called by the builders before save.
 	jobresource.StageCompletedValidator = jobresourceDescStageCompleted.Validators[0].(func(int) error)
+	// jobresourceDescWeightedTotal is the schema descriptor for weighted_total field.
+	jobresourceDescWeightedTotal := jobresourceFields[11].Descriptor()
+	// jobresource.DefaultWeightedTotal holds the default value on creation for the weighted_total field.
+	jobresource.DefaultWeightedTotal = jobresourceDescWeightedTotal.Default.(int)
+	// jobresource.WeightedTotalValidator is a validator for the "weighted_total" field. It is called by the builders before save.
+	jobresource.WeightedTotalValidator = jobresourceDescWeightedTotal.Validators[0].(func(int) error)
+	// jobresourceDescWeightedCompleted is the schema descriptor for weighted_completed field.
+	jobresourceDescWeightedCompleted := jobresourceFields[12].Descriptor()
+	// jobresource.DefaultWeightedCompleted holds the default value on creation for the weighted_completed field.
+	jobresource.DefaultWeightedCompleted = jobresourceDescWeightedCompleted.Default.(int)
+	// jobresource.WeightedCompletedValidator is a validator for the "weighted_completed" field. It is called by the builders before save.
+	jobresource.WeightedCompletedValidator = jobresourceDescWeightedCompleted.Validators[0].(func(int) error)
 	orgmembershipMixin := schema.OrgMembership{}.Mixin()
 	orgmembershipMixinFields0 := orgmembershipMixin[0].Fields()
 	_ = orgmembershipMixinFields0
