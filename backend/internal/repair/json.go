@@ -12,6 +12,7 @@ package repair
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -227,6 +228,102 @@ func closeUnbalancedBraces(s string) string {
 		return s
 	}
 	return s + strings.Repeat("}", depth)
+}
+
+// extractValidEnvelope 是 brace-matching 抽取失败后的鲁棒兜底。
+//
+// 目标破损形态：LLM 产生"结巴/重复前缀"（如 {"{"ruby_output":...}}）或任意
+// 引号/括号相位错乱噪声，使 matchBracePair 字符串追踪失步，导致
+// extractJSONObjectContaining / jsonObjectSlice 找不到 balanced 对象。
+//
+// 本函数从每个 '{' 偏移用 json.Decoder 真实解析：Decoder 读取首个完整 JSON 值
+// 并容忍其后多余数据，因此即便对象被嵌在垃圾里也能定位。
+//
+// 安全性（关键）：
+//   - 只接受含 canonical "translations" 字段且其值为 map 的对象作为 envelope；
+//     alias（output/result 等）不在兜底里接受——alias 抽取由主链路
+//     pickEnvelopeBody / normalizeEnvelopeKeys 负责，兜底只在主链路失败后介入，
+//     此时按"命中任一 alias key 即返"会把诱饵对象（如 {"output":{"1":"x"}}）
+//     误判为 envelope 并静默产出错误译文。
+//   - 多个 translations 候选时 MERGE 各自的 translations map（首键优先，与
+//     主链路 mergeTranslationObjects 语义一致），以恢复散落在多个对象里的 ID。
+//   - 若同一 ID 在不同候选中出现且值不同（冲突），无法判定正确译文，按
+//     "宁可重试也不要凑出可能错的译文"原则直接放弃（返回 false → 上层 Fatal/重试）。
+//
+// 未闭合字符串因 Decoder 失败而被正确判为不可救（保留"未闭合引号=Fatal"语义）。
+func extractValidEnvelope(text string) (map[string]any, bool) {
+	const (
+		maxAttempts      = 256
+		truncationWindow = 4096
+	)
+	var first map[string]any
+	merged := map[string]any{}
+	attempts := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] != '{' {
+			continue
+		}
+		attempts++
+		if attempts > maxAttempts {
+			break
+		}
+		tail := text[i:]
+		// 每个 '{' 偏移只取一个候选：先试原文，原文失败且属截断场景再试 close-braces。
+		raw, ok := decodeTranslationsEnvelope(tail)
+		if !ok && len(tail) <= truncationWindow {
+			// close-braces 候选仅用于"整段被截断"场景：只当 '{' 靠近文本末尾时才尝试，
+			// 避免对每个早期偏移都对整段后缀做 O(n) 扫描（否则失败路径呈近似二次开销）。
+			// 整段截断的兜底已由主链路 close-braces（repair.go）处理过，此处仅作补充。
+			if fixed := closeUnbalancedBraces(tail); fixed != tail {
+				raw, ok = decodeTranslationsEnvelope(fixed)
+			}
+		}
+		if !ok {
+			continue
+		}
+		t := raw["translations"].(map[string]any)
+		if first == nil {
+			first = raw
+		}
+		for k, v := range t {
+			if existing, exists := merged[k]; exists {
+				if !reflect.DeepEqual(existing, v) {
+					// 同一 ID 出现冲突的不同值：无法确定正确译文，放弃（上层 Fatal/重试）。
+					return nil, false
+				}
+				continue
+			}
+			merged[k] = v
+		}
+	}
+	if first == nil {
+		return nil, false
+	}
+	// 以首个候选为基底（保留 ruby_output/glossary 等字段），translations 用合并结果。
+	out := make(map[string]any, len(first))
+	for k, v := range first {
+		out[k] = v
+	}
+	out["translations"] = merged
+	return out, true
+}
+
+// decodeTranslationsEnvelope 从 s 起用 Decoder 解析首个 JSON 对象，仅当其含
+// "translations" 字段且该字段值为 map[string]any 时才视为 envelope 候选。
+func decodeTranslationsEnvelope(s string) (map[string]any, bool) {
+	dec := json.NewDecoder(strings.NewReader(s))
+	var raw map[string]any
+	if err := dec.Decode(&raw); err != nil {
+		return nil, false
+	}
+	t, ok := raw["translations"]
+	if !ok {
+		return nil, false
+	}
+	if _, ok := t.(map[string]any); !ok {
+		return nil, false
+	}
+	return raw, true
 }
 
 // mergeTranslationObjects 找出 text 中所有含 "translations" 字段的 JSON 对象，

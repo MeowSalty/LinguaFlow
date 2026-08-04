@@ -76,9 +76,6 @@ func TryRepair(text string, wantIDs []string, opt Options) Result {
 			}
 		}
 	}
-	if body == "" {
-		return Result{Fatal: true, Repaired: repaired, ParseErr: errors.New("no JSON object found")}
-	}
 
 	raw, err := unmarshalGeneric(body)
 
@@ -101,7 +98,21 @@ func TryRepair(text string, wantIDs []string, opt Options) Result {
 		}
 	}
 
+	// 鲁棒兜底：当 LLM 产生"结巴/重复前缀"（如 {"{"ruby_output":...}}）或任意
+	// 引号/括号相位错乱噪声时，matchBracePair 字符串追踪会失步，pickEnvelopeBody
+	// 拿不到可解析 body。此处从每个 '{' 偏移用 json.Decoder 真实解析（容忍尾部数据），
+	// 恢复内嵌的合法对象。只接受含 "translations" 的对象，避免把诱饵当 envelope。
+	if err != nil && opt.JSONStructural {
+		if robust, ok := extractValidEnvelope(text); ok {
+			repaired = append(repaired, "json.robust-extract")
+			return finalizeResult(robust, wantIDs, repaired, opt)
+		}
+	}
+
 	if err != nil {
+		if body == "" {
+			return Result{Fatal: true, Repaired: repaired, ParseErr: errors.New("no JSON object found")}
+		}
 		return Result{Fatal: true, Repaired: repaired, ParseErr: fmt.Errorf("unmarshal: %w", err)}
 	}
 
@@ -259,14 +270,20 @@ func TryRepairBootstrap(text string, opt Options) ([]prompt.BootstrapEntry, []st
 	return out, repaired, nil
 }
 
-// pickEnvelopeBody 从 text 中挑出最可能含 translations 的 JSON 对象。
-// SchemaAliases 启用时按候选字段顺序探测；否则只看 "translations"；都找不到回退到首对象。
-func pickEnvelopeBody(text string, opt Options) string {
+// envelopeKeys 返回判定 envelope 所用的候选字段名：始终含 "translations"，
+// SchemaAliases 启用时追加常见同义字段。
+func envelopeKeys(opt Options) []string {
 	keys := []string{"translations"}
 	if opt.SchemaAliases {
 		keys = append(keys, "translation", "result", "output", "results")
 	}
-	for _, k := range keys {
+	return keys
+}
+
+// pickEnvelopeBody 从 text 中挑出最可能含 translations 的 JSON 对象。
+// SchemaAliases 启用时按候选字段顺序探测；否则只看 "translations"；都找不到回退到首对象。
+func pickEnvelopeBody(text string, opt Options) string {
+	for _, k := range envelopeKeys(opt) {
 		if body := extractJSONObjectContaining(text, k); body != "" {
 			return body
 		}

@@ -435,6 +435,45 @@ func contains(ss []string, s string) bool {
 	return false
 }
 
+func TestTryRepair_StutteredPrefix(t *testing.T) {
+	// LLM 结巴：开头 {" 被重复，真实对象从第二个 { 开始，且带一个多余尾 }。
+	in := `{"{"ruby_output":{"1":[]},"translations":{"1":"目录","2":"世界"}}}`
+	r := TryRepair(in, []string{"1", "2"}, allOpts)
+	if r.Fatal {
+		t.Fatalf("fatal: %v (repaired=%v)", r.ParseErr, r.Repaired)
+	}
+	if r.Trans["1"] != "目录" || r.Trans["2"] != "世界" {
+		t.Errorf("wrong: %#v", r.Trans)
+	}
+	if !contains(r.Repaired, "json.robust-extract") {
+		t.Errorf("expected json.robust-extract in %v", r.Repaired)
+	}
+}
+
+func TestTryRepair_StutteredKeyPrefix(t *testing.T) {
+	// LLM 写到 "rub 时结巴重开：{\n  "rub{\n  "ruby_output": ...
+	in := "{\n  \"rub{\n  \"ruby_output\": {\n    \"1\": []\n  },\n  \"translations\": {\n    \"1\": \"目录\"\n  }\n}"
+	r := TryRepair(in, []string{"1"}, allOpts)
+	if r.Fatal {
+		t.Fatalf("fatal: %v (repaired=%v)", r.ParseErr, r.Repaired)
+	}
+	if r.Trans["1"] != "目录" {
+		t.Errorf("wrong: %#v", r.Trans)
+	}
+	if !contains(r.Repaired, "json.robust-extract") {
+		t.Errorf("expected json.robust-extract in %v", r.Repaired)
+	}
+}
+
+func TestTryRepair_RobustExtractPreservesUnclosedQuoteFatal(t *testing.T) {
+	// 兜底不得"补闭合"未闭合字符串，保持 Fatal 语义（与既有 TestTryRepair_UnclosedQuoteIsFatal 互补）。
+	in := `{"translations":{"1":"hello`
+	r := TryRepair(in, []string{"1"}, allOpts)
+	if !r.Fatal {
+		t.Fatalf("expected fatal for unclosed quote, got %#v", r.Trans)
+	}
+}
+
 func TestTryRepair_NestedRubyOutput(t *testing.T) {
 	in := `{"translations":{"1":{"translation":"『才没有那回事啦』","ruby_output":[]},"2":{"translation":"包裹着她身体的体温也渐渐离去。","ruby_output":[{"base":"身体","text":"からだ","kind":"phonetic"}]}}}`
 	r := TryRepair(in, []string{"1", "2"}, allOpts)
@@ -458,5 +497,68 @@ func TestTryRepair_NestedRubyOutput(t *testing.T) {
 	}
 	if !contains(r.Repaired, "schema.ruby-nested-extract") {
 		t.Errorf("expected schema.ruby-nested-extract in repairs, got %v", r.Repaired)
+	}
+}
+
+// TestTryRepair_RobustRejectsAliasDecoy_Fabricated 验证 robust 兜底不会把诱饵
+// alias 对象（{"output":{...}}）当 envelope：畸形 translations + 诱饵，本应 Fatal。
+// 旧实现（命中任一 alias key 即返）会返回 Trans={"2":"DECOY"} 静默错误译文。
+func TestTryRepair_RobustRejectsAliasDecoy_Fabricated(t *testing.T) {
+	in := `{"translations":{"1":BAD}{"output":{"2":"DECOY"}}`
+	r := TryRepair(in, []string{"2"}, allOpts)
+	if !r.Fatal {
+		t.Fatalf("expected fatal (alias decoy must not be accepted), got Trans=%#v repaired=%v", r.Trans, r.Repaired)
+	}
+	if r.Trans != nil && r.Trans["2"] == "DECOY" {
+		t.Fatalf("decoy value leaked into result: %#v", r.Trans)
+	}
+}
+
+// TestTryRepair_RobustSkipsAliasDecoy_FindsReal 验证诱饵 alias 对象在前、真实
+// translations 对象在后、且 brace-matching 失步触发 robust 时，兜底跳过诱饵命中
+// 真实 envelope。旧实现（贪心首个命中）会返回诱饵 Trans={"2":"DECOY"}。
+func TestTryRepair_RobustSkipsAliasDecoy_FindsReal(t *testing.T) {
+	in := `{"{` + `{"output":{"2":"DECOY"}}{"translations":{"2":"REAL"}}`
+	r := TryRepair(in, []string{"2"}, allOpts)
+	if r.Fatal {
+		t.Fatalf("unexpected fatal: %v (repaired=%v)", r.ParseErr, r.Repaired)
+	}
+	if r.Trans["2"] != "REAL" {
+		t.Errorf("expected Trans[2]=REAL (real envelope), got %#v", r.Trans)
+	}
+	if r.Trans != nil && r.Trans["2"] == "DECOY" {
+		t.Errorf("decoy value leaked: %#v", r.Trans)
+	}
+	if !contains(r.Repaired, "json.robust-extract") {
+		t.Errorf("expected json.robust-extract in %v", r.Repaired)
+	}
+}
+
+// TestTryRepair_RobustMergesSplitTranslationsObjects 验证结巴 + 两个 translations
+// 对象各含不同 ID 时，robust 合并二者恢复全部 ID（旧实现单选会丢掉另一对象的 ID）。
+func TestTryRepair_RobustMergesSplitTranslationsObjects(t *testing.T) {
+	in := `{"{` + `{"translations":{"1":"A"}}{"translations":{"2":"B"}}`
+	r := TryRepair(in, []string{"1", "2"}, allOpts)
+	if r.Fatal {
+		t.Fatalf("unexpected fatal: %v (repaired=%v)", r.ParseErr, r.Repaired)
+	}
+	if r.Trans["1"] != "A" || r.Trans["2"] != "B" {
+		t.Errorf("expected merged {1:A, 2:B}, got %#v", r.Trans)
+	}
+	if len(r.Missing) != 0 {
+		t.Errorf("expected no missing, got %v", r.Missing)
+	}
+	if !contains(r.Repaired, "json.robust-extract") {
+		t.Errorf("expected json.robust-extract in %v", r.Repaired)
+	}
+}
+
+// TestTryRepair_RobustConflictingValueIsFatal 验证同一 ID 在多个 translations 对象
+// 中出现不同值时，robust 放弃（Fatal/重试）而非静默任选其一。
+func TestTryRepair_RobustConflictingValueIsFatal(t *testing.T) {
+	in := `{"{` + `{"translations":{"1":"FIRST"}}{"translations":{"1":"SECOND"}}`
+	r := TryRepair(in, []string{"1"}, allOpts)
+	if !r.Fatal {
+		t.Fatalf("expected fatal for conflicting same-id values, got Trans=%#v repaired=%v", r.Trans, r.Repaired)
 	}
 }
