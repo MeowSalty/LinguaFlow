@@ -8,11 +8,15 @@ import {
   batchStatusTimelineType,
   eventLevelType,
   formatDuration,
+  getPoolSummary,
   getStageLabel,
   isBatchEvent,
+  isPoolEvent,
+  poolTimelineType,
 } from '@/composables/useWorkspaceUtils'
 
 import BatchEventCard from './BatchEventCard.vue'
+import PoolEventCard from './PoolEventCard.vue'
 
 const { t } = useI18n()
 
@@ -54,8 +58,13 @@ const getBatchSummary = (event: SSEEvent): string => {
 }
 
 const getBatchTimelineType = (event: SSEEvent): 'success' | 'warning' | 'error' => {
-  const meta = event.metadata as BatchEventMetadata | undefined
+  const meta = event.metadata as unknown as BatchEventMetadata | undefined
   return batchStatusTimelineType(meta?.status, event.level)
+}
+
+const getPoolTimelineType = (event: SSEEvent): 'info' | 'warning' | 'error' => {
+  const meta = event.metadata as unknown as { phase?: 'pool_start' | 'pool_advance' } | undefined
+  return poolTimelineType(meta?.phase, event.level)
 }
 
 const JOB_EVENT_TYPES = new Set(['job_started', 'job_completed', 'job_failed', 'job_cancelled'])
@@ -211,7 +220,7 @@ onMounted(() => {
           <!-- Real-time events: solid line + normal text -->
           <template v-for="(event, index) in events" :key="makeKey(event, index, 'live')">
             <NTimelineItem
-              v-if="!isBatchEvent(event.type)"
+              v-if="!isBatchEvent(event.type) && !isPoolEvent(event.type)"
               line-type="default"
               :type="eventLevelType(event.level)"
               :title="event.message"
@@ -219,6 +228,16 @@ onMounted(() => {
               :time="formatEventTime(event.created_at)"
               class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs"
             />
+            <NTimelineItem
+              v-else-if="isPoolEvent(event.type)"
+              line-type="default"
+              :type="getPoolTimelineType(event)"
+              :title="getPoolSummary(event)"
+              :time="formatEventTime(event.created_at)"
+              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs"
+            >
+              <PoolEventCard :event="event" />
+            </NTimelineItem>
             <NTimelineItem
               v-else
               line-type="default"

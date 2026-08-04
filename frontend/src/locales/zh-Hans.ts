@@ -822,6 +822,14 @@ const messages = {
           noContent: '无内容',
           malformedJson: '内容格式异常，显示原始文本',
         },
+        pool: {
+          poolStart: '池开始',
+          poolAdvance: '缩批推进',
+          progress: '池 {index}/{total}',
+          batches: '{count} 批',
+          pending: '{count} 段待处理',
+          shrinkRate: '缩放 {rate}',
+        },
       },
       detail: {
         executionPlan: '执行计划',
