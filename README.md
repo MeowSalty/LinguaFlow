@@ -15,20 +15,25 @@
 
 </div>
 
-LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言。上传源文件，配置 AI 后端，即可开始批量翻译。支持术语管理、翻译审核、进度追踪，让翻译工作更高效、更准确。
+LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言。上传源文件，配置 AI 后端，即可开始批量翻译。支持术语管理、质量检测、翻译审核、进度追踪，让翻译工作更高效、更准确。
 
 ---
 
 ## 支持的文件格式
 
-| 格式 | 扩展名 |
-|------|--------|
-| Markdown | `.md` `.markdown` `.mdx` |
-| EPUB 电子书 | `.epub` |
-| SRT 字幕 | `.srt` |
-| VTT 字幕 | `.vtt` |
-| ASS 字幕 | `.ass` |
-| 纯文本 | `.txt` |
+| 格式        | 扩展名                   |
+| ----------- | ------------------------ |
+| Markdown    | `.md` `.markdown` `.mdx` |
+| HTML        | `.html` `.htm`           |
+| DOCX 文档   | `.docx`                  |
+| EPUB 电子书 | `.epub`                  |
+| SRT 字幕    | `.srt`                   |
+| VTT 字幕    | `.vtt`                   |
+| ASS 字幕    | `.ass`                   |
+| JSON        | `.json`                  |
+| YAML        | `.yaml` `.yml`           |
+| TOML        | `.toml`                  |
+| 纯文本      | `.txt`                   |
 
 ---
 
@@ -47,52 +52,67 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 集成主流 AI 翻译服务，支持自定义翻译策略和提示词。
 
 - 支持 OpenAI、Anthropic、Google Gemini
+- 兼容 Azure OpenAI、Ollama、LM Studio 等 OpenAI API 兼容服务
+- 统一思考强度（`thinking_level`）：关闭 / 低 / 中 / 高，由适配层映射为各厂商原生参数
+- 超时可关闭：适配本地大模型或慢响应网关
+- 流式请求模式（`stream`），适配只接受 `stream:true` 的兼容网关，内部累积为完整响应后返回
 - 自动检测源语言
 - 上下文感知，保持段落间连贯性
 - 代码块、链接、占位符等特殊内容自动保护
+- 单段试译预览：对单段原文用某执行计划先跑一遍看效果，带诊断详情，满意后再应用译文
 
 ### 批量处理
 
-一次翻译整个目录的文件，支持并发处理和增量更新。
+一次翻译整个目录的文件，支持增量更新；每个文件内部可按段落分批并发调用模型。
 
 - 拖拽上传文件或文件夹
 - 增量更新：保留已有译文，仅翻译新增内容
-- 并发翻译，充分利用多核性能
+- 文件内段落分批并发（目录/资源之间按顺序处理）
 - 实时进度追踪，预估剩余时间
 
-### EPUB 电子书
+### EPUB / DOCX / HTML
 
-专门针对 EPUB 电子书的翻译支持。
+针对电子书与办公文档的专用支持。
 
-- 按章节浏览和翻译
-- 章节级翻译进度追踪
-- HTML 内容预览
-- 保留原始格式和结构
+- **EPUB**：按章节浏览与翻译、章节级进度、HTML 内容预览
+- **DOCX**：直接解析 Word ZIP + XML，保留样式外壳
+- **HTML**：按块级元素切段，结构字节级回写
 
 ### 术语管理
 
-创建术语表确保专业词汇翻译一致。支持自动术语提取，让 AI 帮你发现关键术语。
+创建术语表确保专业词汇翻译一致。支持自动术语提取，让 AI 帮你发现关键术语。支持术语精简，自动识别冗余和冲突条目。
 
 - CSV 格式导入导出
+- 禁译（`forbidden`）/ 强制（`mandatory`）属性：禁译词不得出现在译文，强制词须使用指定译法，由规则质检自动核验
 - 自动术语提取（Bootstrap）
+- 术语精简（Prune）— 诊断冗余、冲突、低质量条目
 - 术语修改后自动同步已翻译段落
 
 ### 翻译审核
 
-逐段查看翻译结果，支持行内编辑和批量审核。
+逐段查看翻译结果，支持批量审核与质量定位。内置规则质检与 AI 语义质检双层把关，自动发现翻译问题并在译文中高亮定位。
 
 - 按状态筛选（待翻译/已翻译/已编辑/已批准/已驳回）
-- 行内编辑译文
-- 批量通过/拒绝
-- 添加备注
+- 按质量问题筛选（长度异常、重复翻译、未翻译、源语残留，以及逐字直译、漏译、增译等语义类问题）
+- 译文修改 + 键盘导航；批量通过/拒绝；添加备注
+- **质量检测**：
+  - 规则质检（16 项确定性 checker）：长度异常、重复、未翻译、源语残留、标点配对、异常空白、全/半角混用、数字/URL/邮箱/字幕行数不一致、禁译/强制术语命中、占位符残留、XML 标签不一致、跨段同源异译等
+  - 语义质检（LLM）：捕获规则查不出的语义错误（逐字借译、术语误译、漏译、增译、语法错误、语体错位等），结果带文本区间高亮、直接进人审
+  - AI 质量裁决：对软规则误报逐条复核降噪（见下）
 
 ### 灵活配置
 
 自定义翻译流水线的每个环节。
 
-- **提示词模板**：定义 AI 翻译的系统指令
-- **翻译配置**：分段策略、内容保护、响应修复等
-- **执行计划**：组合后端、提示词、配置，定义多轮翻译流程
+- **提示词模板**：翻译、术语提取、术语精简三类独立模板
+- **执行配置**：分段策略、内容保护、响应修复、质量检测等
+- **执行计划**：组合后端、提示词、配置，定义模式化多轮翻译流程（翻译轮次、提取轮次、质量裁决轮次、语义质检轮次）
+
+### AI 质量裁决与语义质检
+
+规则质检偏敏感，难免误报。质量裁决轮次（`adjudicate`）调用 AI 对已标出的问题逐条复核，剔除明确误报、保留需人工复核的真问题，实现质检降噪。可裁决 `source_residual`（源语残留）与 `length_ratio`（长度异常）两类软规则；`untranslated`（未翻译）与 `duplicate`（重复翻译）为硬规则，不可裁决。
+
+裁决只对已有规则问题做"保留/剔除"、不新增问题；若需捕获规则查不出的语义错误（逐字借译、漏译、增译、语法错误、语体错位等），可在执行计划中再加一轮**语义质检**（`semantic_qa`），产出的语义类问题带文本区间高亮、直接进人审，二者可叠加使用。
 
 ---
 
@@ -100,11 +120,11 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 
 ### Web 界面
 
-启动服务后访问 Web 界面，可视化管理翻译工作。
+启动服务后访问 Web 界面，可视化管理翻译工作。本地模式默认嵌入前端静态资源；服务器模式下可选用 `--no-ui` 关闭嵌入式 Web UI，仅暴露 API 供第三方前端调用。
 
-- 项目、资源、任务、术语表的完整管理
+- 项目、资源、作业、术语表的完整管理
 - 拖拽上传文件
-- 实时任务进度追踪
+- 实时作业进度追踪（SSE 事件流，支持断线重连）
 - 暗色/亮色主题切换
 
 ### 命令行工具
@@ -131,6 +151,7 @@ linguaflow translate -i docs.md -o out.md --to zh --glossary-path terms.csv
 从 [GitHub Releases](https://github.com/MeowSalty/LinguaFlow/releases) 下载对应平台的二进制文件。
 
 支持的平台：
+
 - Linux (amd64, arm64)
 - macOS (amd64, arm64)
 - Windows (amd64, arm64)
@@ -174,8 +195,8 @@ task backend:local:build
 1. **配置 AI 后端** — 在「AI 后端」页面添加你的 OpenAI/Anthropic/Google Gemini 账号
 2. **创建项目** — 在「项目」页面创建新项目，设置源语言和目标语言
 3. **上传文件** — 进入项目工作区，拖拽上传源文件
-4. **开始翻译** — 选择文件，创建翻译任务
-5. **审核译文** — 翻译完成后在「段落」标签页查看和编辑结果
+4. **创建作业** — 选择资源，创建翻译作业
+5. **审核译文** — 翻译完成后在「段落」标签页查看结果、修改译文并审批/拒绝
 
 ### 启动服务器模式
 
@@ -185,20 +206,45 @@ task backend:local:build
 
 ```bash
 ./bin/linguaflow serve
+
+# 仅提供 API，关闭嵌入式 Web UI
+./bin/linguaflow serve --no-ui
 ```
 
 ---
 
 ## 技术架构
 
-| 层级 | 技术栈 |
-|------|--------|
-| 前端 | Vue 3 + TypeScript + naive-ui |
-| 后端 | Go + ent + chi |
-| 数据库 | SQLite |
-| API | OpenAPI 3.0 |
+| 层级   | 技术栈                                    |
+| ------ | ----------------------------------------- |
+| 前端   | Vue 3 + TypeScript + naive-ui             |
+| 后端   | Go + ent + chi                            |
+| 数据库 | SQLite（默认） / PostgreSQL（服务器模式） |
+| API    | OpenAPI 3.0                               |
 
-项目采用前后端分离架构，支持单机部署或分离部署。
+项目采用前后端分离架构，支持单机部署或分离部署。本地模式默认使用嵌入式 SQLite 开箱即用；服务器模式除 SQLite 外，还支持通过环境变量切换到 PostgreSQL 以满足高并发场景。
+
+---
+
+## 文档
+
+详细文档请访问 [LinguaFlow 文档](https://meowsalty.github.io/LinguaFlow/)：
+
+- [快速开始 · Web](https://meowsalty.github.io/LinguaFlow/zh/guide/getting-started)
+- [快速开始 · CLI](https://meowsalty.github.io/LinguaFlow/zh/guide/cli-quickstart)
+- [核心概念](https://meowsalty.github.io/LinguaFlow/zh/guide/concepts)
+- [安装部署](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)
+- [使用模式](https://meowsalty.github.io/LinguaFlow/zh/guide/modes)
+- [项目管理](https://meowsalty.github.io/LinguaFlow/zh/guide/projects)
+- [格式支持](https://meowsalty.github.io/LinguaFlow/zh/guide/formats)
+- [翻译配置 · 使用](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config)
+- [翻译配置 · 参考](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config-reference)
+- [术语表](https://meowsalty.github.io/LinguaFlow/zh/guide/glossary)
+- [翻译审校](https://meowsalty.github.io/LinguaFlow/zh/guide/review)
+- [CLI 参考](https://meowsalty.github.io/LinguaFlow/zh/guide/cli)
+- [流水线与原理](https://meowsalty.github.io/LinguaFlow/zh/guide/pipeline)（含质量裁决、语义质检、单段试译）
+- [FAQ](https://meowsalty.github.io/LinguaFlow/zh/guide/faq)
+- [API 参考](https://meowsalty.github.io/LinguaFlow/zh/api/)
 
 ---
 
@@ -206,10 +252,10 @@ task backend:local:build
 
 本项目采用**双许可**模式：
 
-| 许可证 | 适用场景 | 状态 |
-|--------|----------|------|
-| [GNU AGPL v3](LICENSE) | 开源使用、个人项目、非商业用途 | ✅ 可用 |
-| 商业许可 | 商业闭源使用、私有部署 | 🚧 即将推出 |
+| 许可证                 | 适用场景                       | 状态        |
+| ---------------------- | ------------------------------ | ----------- |
+| [GNU AGPL v3](LICENSE) | 开源使用、个人项目、非商业用途 | ✅ 可用     |
+| 商业许可               | 商业闭源使用、私有部署         | 🚧 即将推出 |
 
 - **开源用户**：遵循 AGPL v3 协议，修改后的代码需开源
 - **商业用户**：如需闭源使用或私有部署，请等待商业许可上线
