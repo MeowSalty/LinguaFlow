@@ -128,40 +128,27 @@ func TestAdjudicationVerdictSchema_Strict(t *testing.T) {
 	}
 }
 
-func TestParseAdjudicationResponse_OK(t *testing.T) {
-	resp := `{"verdicts":[{"id":"1","issue_code":"source_residual","verdict":"false_positive","reason":"proper noun"}]}`
-	got, err := ParseAdjudicationResponse(resp)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+func TestNormalizeAdjudicationVerdicts_OK(t *testing.T) {
+	in := []AdjudicationVerdict{{ID: "1", IssueCode: "source_residual", Verdict: "false_positive", Reason: "proper noun"}}
+	got := NormalizeAdjudicationVerdicts(in)
 	if len(got) != 1 || got[0].Verdict != "false_positive" {
 		t.Fatalf("got=%#v", got)
 	}
 }
 
-func TestParseAdjudicationResponse_Fenced(t *testing.T) {
-	resp := "Here you go:\n```json\n{\"verdicts\":[{\"id\":\"2\",\"issue_code\":\"length_ratio\",\"verdict\":\"real\",\"reason\":\"too short\"}]}\n```"
-	got, err := ParseAdjudicationResponse(resp)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(got) != 1 || got[0].IssueCode != "length_ratio" {
+func TestNormalizeAdjudicationVerdicts_DropsMissingID(t *testing.T) {
+	in := []AdjudicationVerdict{{IssueCode: "source_residual"}, {ID: "1", IssueCode: "source_residual"}}
+	got := NormalizeAdjudicationVerdicts(in)
+	if len(got) != 1 || got[0].ID != "1" {
 		t.Fatalf("got=%#v", got)
 	}
 }
 
-func TestParseAdjudicationResponse_NoJSON(t *testing.T) {
-	_, err := ParseAdjudicationResponse("sorry I cannot")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestParseAdjudicationByMode_TextVerdicts(t *testing.T) {
+func TestParseAdjudicationTextVerdicts_TextVerdicts(t *testing.T) {
 	resp := "[verdicts]\n1 | source_residual | テスト | false_positive | proper noun\n2 | length_ratio |  | real | too short"
-	got, err := ParseAdjudicationByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
+	got, recognized := ParseAdjudicationTextVerdicts(resp)
+	if !recognized {
+		t.Fatalf("expected recognized")
 	}
 	if len(got) != 2 {
 		t.Fatalf("got len=%d want 2: %#v", len(got), got)
@@ -174,65 +161,44 @@ func TestParseAdjudicationByMode_TextVerdicts(t *testing.T) {
 	}
 }
 
-func TestParseAdjudicationByMode_TextLegacyFourFields(t *testing.T) {
+func TestParseAdjudicationTextVerdicts_LegacyFourFields(t *testing.T) {
 	resp := "[verdicts]\n1 | source_residual | false_positive | proper noun"
-	got, err := ParseAdjudicationByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	got, _ := ParseAdjudicationTextVerdicts(resp)
 	if len(got) != 1 || got[0].MatchedText != "" || got[0].Verdict != "false_positive" {
 		t.Fatalf("legacy four-field got=%#v", got)
 	}
 }
 
-func TestParseAdjudicationByMode_TextFenced(t *testing.T) {
+func TestParseAdjudicationTextVerdicts_Fenced(t *testing.T) {
 	resp := "```\n[verdicts]\n1 | source_residual | real | missed\n```"
-	got, err := ParseAdjudicationByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	got, _ := ParseAdjudicationTextVerdicts(resp)
 	if len(got) != 1 || got[0].Verdict != "real" {
 		t.Fatalf("got=%#v", got)
 	}
 }
 
-func TestParseAdjudicationByMode_TextEmptyFallsBackJSON(t *testing.T) {
-	resp := `{"verdicts":[{"id":"1","issue_code":"source_residual","verdict":"false_positive","reason":"ok"}]}`
-	got, err := ParseAdjudicationByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(got) != 1 || got[0].Verdict != "false_positive" {
-		t.Fatalf("JSON fallback got=%#v", got)
-	}
-}
-
-func TestParseAdjudicationByMode_TextFiltersIllegalVerdict(t *testing.T) {
+func TestParseAdjudicationTextVerdicts_FiltersIllegalVerdict(t *testing.T) {
 	resp := "[verdicts]\n1 | source_residual | maybe | unclear\n2 | length_ratio | real | ok"
-	got, err := ParseAdjudicationByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	got, _ := ParseAdjudicationTextVerdicts(resp)
 	if len(got) != 1 || got[0].ID != "2" {
 		t.Fatalf("want only legal verdict, got=%#v", got)
 	}
 }
 
-func TestParseAdjudicationByMode_TextReasonWithPipe(t *testing.T) {
+func TestParseAdjudicationTextVerdicts_ReasonWithPipe(t *testing.T) {
 	resp := "[verdicts]\n1 | source_residual | false_positive | a | b | c"
-	got, err := ParseAdjudicationByMode(resp, true)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	got, _ := ParseAdjudicationTextVerdicts(resp)
 	if len(got) != 1 || got[0].Reason != "a | b | c" {
 		t.Fatalf("reason with pipes got=%#v", got)
 	}
 }
 
-func TestParseAdjudicationByMode_NonTextUsesJSON(t *testing.T) {
-	resp := "[verdicts]\n1 | source_residual | real | x"
-	_, err := ParseAdjudicationByMode(resp, false)
-	if err == nil {
-		t.Fatal("non-text mode should require JSON")
+func TestParseAdjudicationTextVerdicts_Empty(t *testing.T) {
+	got, recognized := ParseAdjudicationTextVerdicts("[verdicts]")
+	if !recognized {
+		t.Fatalf("empty [verdicts] header should be recognized")
+	}
+	if len(got) != 0 {
+		t.Fatalf("got=%#v want empty verdicts", got)
 	}
 }
