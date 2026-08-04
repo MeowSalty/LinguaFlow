@@ -40,10 +40,10 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: 合并 OpenAPI 规范
-        run: pnpm dlx @redocly/cli bundle api/openapi/base.yaml -o api/openapi/openapi-3.0.yaml
+        run: pnpm --package=@redocly/cli dlx redocly bundle api/openapi/base.yaml -o api/openapi/openapi-3.0.yaml
 
       - name: 验证 OpenAPI 规范
-        run: pnpm dlx @redocly/cli lint api/openapi/openapi-3.0.yaml
+        run: pnpm --package=@redocly/cli dlx redocly lint api/openapi/openapi-3.0.yaml
 
       - name: 安装前端依赖
         if: github.ref_name != 'backend'
