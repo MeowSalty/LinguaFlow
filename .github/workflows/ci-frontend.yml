@@ -26,15 +26,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: frontend/package.json
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: 安装 pnpm
-        run: npm install -g pnpm
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: 安装依赖
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
         working-directory: frontend
 
       - name: 运行 lint
@@ -47,15 +52,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: frontend/package.json
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: 安装 pnpm
-        run: npm install -g pnpm
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: 安装依赖
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
         working-directory: frontend
 
       - name: 运行类型检查
@@ -69,15 +79,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: frontend/package.json
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: 安装 pnpm
-        run: npm install -g pnpm
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: 安装依赖
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
         working-directory: frontend
 
       - name: 构建前端
@@ -97,15 +112,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: frontend/package.json
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: 安装 pnpm
-        run: npm install -g pnpm
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: 安装依赖
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
         working-directory: frontend
 
       - name: 运行漏洞扫描
