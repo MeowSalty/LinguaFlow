@@ -55,3 +55,14 @@ func TestPunctuationPairing_ExtraClose(t *testing.T) {
 		t.Fatalf("want 1, got %d", len(issues))
 	}
 }
+
+func TestPunctuationPairing_ProtectedTag(t *testing.T) {
+	c := NewPunctuationPairingChecker("zh")
+	tag := `<a href="p-006.xhtml">期中考试结果与安妮玛丽的考察</a>`
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "中間試験結果とアンネマリーの考察", TargetText: tag, Protected: map[string]string{"__LF_000001__": tag}},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("want 0, got %d: %+v", len(issues), issues)
+	}
+}

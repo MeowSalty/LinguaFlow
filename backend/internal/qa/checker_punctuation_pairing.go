@@ -71,8 +71,14 @@ func (c *PunctuationPairingChecker) Check(_ context.Context, segments []CheckInp
 		if strings.TrimSpace(tgt) == "" {
 			continue
 		}
-		if hit, detail := findPairingProblem(tgt, c.pairs); hit != "" {
-			span := LocateSpan(tgt, hit)
+		cleanTgt := tgt
+		var regions [][2]int
+		if len(seg.Protected) > 0 {
+			regions = ProtectedRegions(tgt, seg.Protected)
+			cleanTgt = StripRegions(tgt, regions)
+		}
+		if hit, detail := findPairingProblem(cleanTgt, c.pairs); hit != "" {
+			span := LocateSpanExcludingRegions(tgt, hit, regions)
 			if span == nil {
 				span = &Span{MatchedText: hit}
 			}

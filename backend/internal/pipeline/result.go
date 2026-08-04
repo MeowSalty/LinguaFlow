@@ -24,6 +24,7 @@ type TranslatedSegment struct {
 	Failed     bool
 	Meta       map[string]any
 	Issues     []qa.QualityIssue // 裁决轮：过滤后的 quality_issues；translate 轮为零值
+	Protected  map[string]string // 占位符→原文；Unprotect 后仍保留，供 QA 屏蔽保护区
 }
 
 // BatchResult 描述一批翻译的结果。

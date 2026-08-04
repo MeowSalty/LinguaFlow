@@ -706,6 +706,7 @@ func buildQACheckInputs(batchResult pipeline.BatchResult) []qa.CheckInput {
 			Index:      ts.Index,
 			SourceText: ts.SourceText,
 			TargetText: ts.TargetText,
+			Protected:  ts.Protected,
 		})
 	}
 	return inputs

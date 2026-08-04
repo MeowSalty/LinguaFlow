@@ -68,6 +68,7 @@ func BuildBatchResult(doc *Document, idxs []int, contextSet map[int]struct{}) Ba
 			TargetText: seg.Target,
 			Failed:     seg.Target == "",
 			Meta:       seg.Meta,
+			Protected:  seg.Protected,
 		})
 	}
 	return BatchResult{Segments: translated}
