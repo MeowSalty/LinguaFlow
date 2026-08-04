@@ -74,6 +74,27 @@ type BatchObserver interface {
 	OnBatchEvent(event BatchEvent)
 }
 
+// PoolEvent describes a pool-level lifecycle event in the multi-pool shrink engine.
+// Only emitted when shrink is enabled (Round.Shrink in (0,1)); single-pool runs emit none.
+type PoolEvent struct {
+	Mode       string  // handler.ModeName()
+	PoolIndex  int     // 当前池索引（从 0 开始）
+	MaxPools   int     // 池总数 = MaxAttempts+1
+	Batches    int     // 本池切出的批次数
+	Pending    int     // 进入本池的待处理段数（池 0 为全部任务段；nil 时表示全量扫描）
+	ShrinkRate float64 // round.Shrink 缩放系数
+	// Phase 取值：
+	//   "pool_start"  — 池开始执行（含池 0）
+	//   "pool_advance" — 当前池未能全部解决，进入下一池前
+	Phase string
+}
+
+// PoolObserver is an optional interface that a Reporter may implement
+// to receive pool-level events from the multi-pool shrink engine.
+type PoolObserver interface {
+	OnPoolEvent(event PoolEvent)
+}
+
 // defaultRefreshEvery 是 refreshLoop 周期重绘的默认间隔。
 // 选 250ms：> progressbar 内部 80ms throttle，且足够让 elapsed time 看起来连续。
 const defaultRefreshEvery = 250 * time.Millisecond

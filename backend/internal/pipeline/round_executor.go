@@ -122,11 +122,31 @@ func RunRound(
 			defer reporter.StageDone()
 		}
 
+		// 进入本池的实际段数：池 0 由 batches 求和（pending 为 nil），后续池用 pending 长度。
+		poolPending := len(pending)
+		if poolPending == 0 {
+			for _, batch := range batches {
+				poolPending += len(batch)
+			}
+		}
+
 		logger.Info("running shrink pool",
 			"mode", handler.ModeName(),
 			"pool", poolIndex,
 			"batches", len(batches),
 			"shrink", round.Shrink)
+
+		if shrinkEnabled {
+			emitPoolEvent(reporter, progress.PoolEvent{
+				Mode:       handler.ModeName(),
+				PoolIndex:  poolIndex,
+				MaxPools:   maxPools,
+				Batches:    len(batches),
+				Pending:    poolPending,
+				ShrinkRate: round.Shrink,
+				Phase:      "pool_start",
+			})
+		}
 
 		pr, err := runPool(ctx, round, handler, doc, batches, totalAttempts, batchHandler, logger)
 		if err != nil {
@@ -146,6 +166,16 @@ func RunRound(
 		pending = uniqueSortedInts(pr.unresolved)
 		logger.Info("advancing to next shrink pool",
 			"pool", poolIndex+1, "pending", len(pending), "shrink", round.Shrink)
+
+		emitPoolEvent(reporter, progress.PoolEvent{
+			Mode:       handler.ModeName(),
+			PoolIndex:  poolIndex,
+			MaxPools:   maxPools,
+			Batches:    len(batches),
+			Pending:    len(pending),
+			ShrinkRate: round.Shrink,
+			Phase:      "pool_advance",
+		})
 	}
 
 	if !stageStarted {
@@ -367,3 +397,12 @@ func backoffDuration(attempt int, retry backend.RetryPolicy, lastErr error) time
 
 // minRateLimitBackoff 是 429 错误的最小退避时间。
 const minRateLimitBackoff = 5 * time.Second
+
+// emitPoolEvent 将池级事件分发给实现了 PoolObserver 的 Reporter（可选接口）。
+func emitPoolEvent(reporter progress.Reporter, evt progress.PoolEvent) {
+	obs, ok := reporter.(progress.PoolObserver)
+	if !ok {
+		return
+	}
+	obs.OnPoolEvent(evt)
+}
