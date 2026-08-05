@@ -3,13 +3,35 @@ package pipeline
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
-// ExpandBatchWithContext 为批次扩展上下文段落。
-// 返回扩展后的索引列表，包含原始批次段落和上下文段落。
-func ExpandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow int) []int {
+// expandedContext 是上下文扩展结果：Idxs 为扩展后索引；TruncatedSrc 记录被 max_chars 截断的上下文段文本（key=idx）。
+type expandedContext struct {
+	Idxs         []int
+	TruncatedSrc map[int]string // idx -> 截断后文本；key 存在表示该段被截断
+}
+
+// isContextEligible 判断段落是否可作为上下文段（与 ExpandBatchWithContext 选段规则同源）。
+func isContextEligible(seg *Segment) bool {
+	if seg.Skip {
+		return false
+	}
+	if IsPlaceholderOnly(seg) || IsDecorativeSeparator(seg) {
+		return false
+	}
+	if strings.TrimSpace(seg.Source) == "" {
+		return false
+	}
+	return true
+}
+
+// ExpandBatchWithContext 为批次扩展上下文段落，并按 maxChars 对上下文段做 rune 截断。
+// maxChars <= 0 表示不截断。批次内段（pending）永不截断。
+func ExpandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow, maxChars int) expandedContext {
+	truncated := map[int]string{}
 	if ctxWindow <= 0 || len(idxs) == 0 {
-		return idxs
+		return expandedContext{Idxs: idxs, TruncatedSrc: truncated}
 	}
 	batchSet := make(map[int]struct{}, len(idxs))
 	for _, idx := range idxs {
@@ -25,15 +47,91 @@ func ExpandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow 
 			continue
 		}
 		seg := &doc.Segments[i]
-		if seg.Skip {
+		if !isContextEligible(seg) {
 			continue
 		}
-		if IsPlaceholderOnly(seg) || IsDecorativeSeparator(seg) || strings.TrimSpace(seg.Source) == "" {
-			continue
+		if maxChars > 0 {
+			src := seg.OriginalSource
+			if src == "" {
+				src = seg.Source
+			}
+			if utf8.RuneCountInString(src) > maxChars {
+				truncated[i] = string([]rune(src)[:maxChars]) + "…"
+			}
 		}
 		expanded = append(expanded, i)
 	}
-	return expanded
+	return expandedContext{Idxs: expanded, TruncatedSrc: truncated}
+}
+
+// estimateContextWords 预估给定候选批次（pending 索引）在 ctxWindow 下会拉入的上下文字词数。
+// 直接复用 ExpandBatchWithContext 的选段结果（maxChars=0，仅统计非批次段），
+// 保证选段区间与过滤规则单一来源，预估与实际发送不可偏离。
+func estimateContextWords(doc *Document, batchIdxs []int, ctxWindow int) int {
+	if ctxWindow <= 0 || len(batchIdxs) == 0 {
+		return 0
+	}
+	expanded := ExpandBatchWithContext(doc, batchIdxs, len(doc.Segments), ctxWindow, 0)
+	batchSet := make(map[int]struct{}, len(batchIdxs))
+	for _, idx := range batchIdxs {
+		batchSet[idx] = struct{}{}
+	}
+	words := 0
+	for _, idx := range expanded.Idxs {
+		if _, inBatch := batchSet[idx]; inBatch {
+			continue
+		}
+		seg := &doc.Segments[idx]
+		src := seg.OriginalSource
+		if src == "" {
+			src = seg.Source
+		}
+		words += CountWords(src)
+	}
+	return words
+}
+
+// buildEligibleWordPrefix 预计算 eligible 上下文段的字数前缀和。
+// prefix[i] = sum of CountWords(OriginalSource ?? Source) for eligible segs in [0, i)。
+// 供 estimateContextWordsWithPrefix 做 O(1) 区间求和，避免巨大 ctxWindow 下的 O(n²) 退化。
+func buildEligibleWordPrefix(doc *Document) []int {
+	prefix := make([]int, len(doc.Segments)+1)
+	for i := range doc.Segments {
+		prefix[i+1] = prefix[i]
+		if isContextEligible(&doc.Segments[i]) {
+			src := doc.Segments[i].OriginalSource
+			if src == "" {
+				src = doc.Segments[i].Source
+			}
+			prefix[i+1] += CountWords(src)
+		}
+	}
+	return prefix
+}
+
+// estimateContextWordsWithPrefix 用前缀和数组快速预估候选批次的上下文字词数。
+// 与 estimateContextWords 同源（同区间、同过滤 isContextEligible、同源文本回退），
+// 但每次调用 O(batchSize) 而非 O(ctxWindow + batchSize)，与 ctxWindow 大小无关。
+// 批内段一定落在 [lo, hi] 内（lo≤batchIdxs[0]、hi≥batchIdxs[-1]），扣除其字数即可。
+func estimateContextWordsWithPrefix(doc *Document, batchIdxs []int, ctxWindow int, eligiblePrefix []int) int {
+	if ctxWindow <= 0 || len(batchIdxs) == 0 {
+		return 0
+	}
+	docLen := len(doc.Segments)
+	lo := max(batchIdxs[0]-ctxWindow, 0)
+	hi := min(batchIdxs[len(batchIdxs)-1]+ctxWindow, docLen-1)
+	total := eligiblePrefix[hi+1] - eligiblePrefix[lo]
+	for _, idx := range batchIdxs {
+		seg := &doc.Segments[idx]
+		if isContextEligible(seg) {
+			src := seg.OriginalSource
+			if src == "" {
+				src = seg.Source
+			}
+			total -= CountWords(src)
+		}
+	}
+	return total
 }
 
 // BuildContextSet 从扩展后的索引列表中构建上下文集合。

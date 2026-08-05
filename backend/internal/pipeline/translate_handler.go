@@ -167,7 +167,14 @@ func (h *TranslateHandler) BuildBatches(ctx context.Context, doc *Document, pend
 		constraint.MaxSegments = 1
 	}
 	constraint = shrinkConstraint(constraint, h.FallbackShrink, poolIndex)
-	batches := BuildContextAwareBatches(doc, pending, constraint, ctxWindow, h.Context.Enabled)
+	var estimator contextWordEstimator
+	if h.Context.Enabled && ctxWindow > 0 && constraint.MaxWords > 0 {
+		eligiblePrefix := buildEligibleWordPrefix(doc)
+		estimator = func(candidate []int) int {
+			return estimateContextWordsWithPrefix(doc, candidate, ctxWindow, eligiblePrefix)
+		}
+	}
+	batches := BuildContextAwareBatches(doc, pending, constraint, ctxWindow, h.Context.Enabled, estimator)
 
 	logger.Info("translate handler: batches built",
 		"pending", len(pending), "batches", len(batches),
@@ -233,11 +240,12 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 	}
 
 	// 扩展上下文
-	expandedIdxs := ExpandBatchWithContext(doc, idxs, len(doc.Segments), ctxWindow)
+	expanded := ExpandBatchWithContext(doc, idxs, len(doc.Segments), ctxWindow, h.Context.MaxChars)
+	expandedIdxs := expanded.Idxs
 	contextSet := BuildContextSet(expandedIdxs, batchSet)
 
 	// 构建请求
-	sys, usr, req, wantIDs, _, glos, buildErr := h.buildRequest(ctx, doc, expandedIdxs, contextSet, logger)
+	sys, usr, req, wantIDs, _, glos, buildErr := h.buildRequest(ctx, doc, expandedIdxs, contextSet, expanded.TruncatedSrc, logger)
 	if buildErr != nil {
 		logger.Error("build request failed", "err", buildErr)
 		return batchResult{unresolved: FilterPendingIdxs(idxs, contextSet)}
@@ -426,6 +434,7 @@ func (h *TranslateHandler) buildRequest(
 	doc *Document,
 	idxs []int,
 	contextSet map[int]struct{},
+	truncatedSrc map[int]string,
 	logger *slog.Logger,
 ) (string, string, backend.Request, []string, map[int]string, []prompt.GlossaryEntry, error) {
 	renderer := h.Renderer
@@ -443,8 +452,13 @@ func (h *TranslateHandler) buildRequest(
 		seg := doc.Segments[idx]
 		source := seg.Source
 		isCtx := IsContext(contextSet, idx)
-		if isCtx && seg.OriginalSource != "" {
-			source = seg.OriginalSource
+		if isCtx {
+			if seg.OriginalSource != "" {
+				source = seg.OriginalSource
+			}
+			if trunc, ok := truncatedSrc[idx]; ok {
+				source = trunc
+			}
 		}
 
 		var id string
