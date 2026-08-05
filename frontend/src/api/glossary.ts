@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 
-import type { ApiClient, ApiSchemas } from './client'
+import type { ApiClient, ApiPaths, ApiSchemas } from './client'
 import { apiClient } from './client'
 import { buildRequestFailureError } from './utils'
 
@@ -90,7 +90,9 @@ export const importGlossaryCSV = async (
 ): Promise<ApiSchemas['GlossaryImportResult']> => {
   const { data, error, response } = await client.POST('/projects/{projectId}/glossary/import', {
     params: { path: { projectId } },
-    body: { file },
+    body: { file } as unknown as NonNullable<
+      ApiPaths['/projects/{projectId}/glossary/import']['post']['requestBody']
+    >['content']['multipart/form-data'],
     bodySerializer: () => {
       const formData = new FormData()
       formData.append('file', file)

@@ -210,10 +210,9 @@ export const uploadProjectResources = async (
 
   const { data, error, response } = await client.POST('/projects/{projectId}/resources', {
     params: { path: { projectId } },
-    body: formData as unknown as {
-      files: File[]
-      paths?: string[]
-    },
+    body: formData as unknown as NonNullable<
+      ApiPaths['/projects/{projectId}/resources']['post']['requestBody']
+    >['content']['multipart/form-data'],
   })
 
   if (!data) {
@@ -327,9 +326,9 @@ export const replaceProjectResource = async (
     '/projects/{projectId}/resources/{resourceId}',
     {
       params: { path: { projectId, resourceId } },
-      body: buildFilesFormData([file], 'file') as unknown as {
-        file: File
-      },
+      body: buildFilesFormData([file], 'file') as unknown as NonNullable<
+        ApiPaths['/projects/{projectId}/resources/{resourceId}']['put']['requestBody']
+      >['content']['multipart/form-data'],
     },
   )
 
@@ -350,9 +349,9 @@ export const incrementalUpdateResource = async (
     '/projects/{projectId}/resources/{resourceId}',
     {
       params: { path: { projectId, resourceId } },
-      body: buildFilesFormData([file], 'file') as unknown as {
-        file: File
-      },
+      body: buildFilesFormData([file], 'file') as unknown as NonNullable<
+        ApiPaths['/projects/{projectId}/resources/{resourceId}']['post']['requestBody']
+      >['content']['multipart/form-data'],
     },
   )
 

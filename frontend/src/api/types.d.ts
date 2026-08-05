@@ -2600,9 +2600,9 @@ export interface components {
             prompt_template_id?: number;
             /** @description 策略模板 ID（ExecutionProfile 单表全局唯一） */
             profile_id?: number;
-            /** @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项 */
+            /** @description 待译段落数上限（不计上下文段）；0=不限制，与 max_words_per_batch 至少填一项 */
             batch_size?: number;
-            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
+            /** @description 字词数上限（计入上下文段）；0=不限制，与 batch_size 至少填一项。纯行数模式（此项与 context.max_chars 均为 0）下上下文体积不受约束 */
             max_words_per_batch?: number;
             /**
              * @description 池缩放系数：池 N 的批次约束 = floor(orig × shrink^N)。
@@ -2765,7 +2765,7 @@ export interface components {
              */
             after: number;
             /**
-             * @description 每个上下文段落的字符数上限，0 表示不限制
+             * @description 每个上下文段落的字符数上限（按 rune 计，超限截断并补省略号）；0 表示不限制
              * @default 0
              */
             max_chars: number;
@@ -3677,7 +3677,7 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    files: File[];
+                    files: string[];
                     /** @description 与 files 一一对应的项目内资源相对路径；省略时使用文件名作为根目录路径 */
                     paths?: string[];
                 };
@@ -3787,7 +3787,7 @@ export interface operations {
             content: {
                 "multipart/form-data": {
                     /** Format: binary */
-                    file: File;
+                    file: string;
                 };
             };
         };
@@ -3818,7 +3818,7 @@ export interface operations {
             content: {
                 "multipart/form-data": {
                     /** Format: binary */
-                    file: File;
+                    file: string;
                 };
             };
         };
@@ -3875,7 +3875,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": File;
+                    "application/octet-stream": string;
                 };
             };
             default: components["responses"]["Problem"];
@@ -3899,7 +3899,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": File;
+                    "application/octet-stream": string;
                 };
             };
             default: components["responses"]["Problem"];
@@ -4299,7 +4299,7 @@ export interface operations {
             content: {
                 "multipart/form-data": {
                     /** Format: binary */
-                    file: File;
+                    file: string;
                 };
             };
         };
@@ -4333,7 +4333,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/csv": File;
+                    "text/csv": string;
                 };
             };
             default: components["responses"]["Problem"];
