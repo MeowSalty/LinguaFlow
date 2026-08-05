@@ -91,6 +91,49 @@ func estimateContextWords(doc *Document, batchIdxs []int, ctxWindow int) int {
 	return words
 }
 
+// buildEligibleWordPrefix 预计算 eligible 上下文段的字数前缀和。
+// prefix[i] = sum of CountWords(OriginalSource ?? Source) for eligible segs in [0, i)。
+// 供 estimateContextWordsWithPrefix 做 O(1) 区间求和，避免巨大 ctxWindow 下的 O(n²) 退化。
+func buildEligibleWordPrefix(doc *Document) []int {
+	prefix := make([]int, len(doc.Segments)+1)
+	for i := range doc.Segments {
+		prefix[i+1] = prefix[i]
+		if isContextEligible(&doc.Segments[i]) {
+			src := doc.Segments[i].OriginalSource
+			if src == "" {
+				src = doc.Segments[i].Source
+			}
+			prefix[i+1] += CountWords(src)
+		}
+	}
+	return prefix
+}
+
+// estimateContextWordsWithPrefix 用前缀和数组快速预估候选批次的上下文字词数。
+// 与 estimateContextWords 同源（同区间、同过滤 isContextEligible、同源文本回退），
+// 但每次调用 O(batchSize) 而非 O(ctxWindow + batchSize)，与 ctxWindow 大小无关。
+// 批内段一定落在 [lo, hi] 内（lo≤batchIdxs[0]、hi≥batchIdxs[-1]），扣除其字数即可。
+func estimateContextWordsWithPrefix(doc *Document, batchIdxs []int, ctxWindow int, eligiblePrefix []int) int {
+	if ctxWindow <= 0 || len(batchIdxs) == 0 {
+		return 0
+	}
+	docLen := len(doc.Segments)
+	lo := max(batchIdxs[0]-ctxWindow, 0)
+	hi := min(batchIdxs[len(batchIdxs)-1]+ctxWindow, docLen-1)
+	total := eligiblePrefix[hi+1] - eligiblePrefix[lo]
+	for _, idx := range batchIdxs {
+		seg := &doc.Segments[idx]
+		if isContextEligible(seg) {
+			src := seg.OriginalSource
+			if src == "" {
+				src = seg.Source
+			}
+			total -= CountWords(src)
+		}
+	}
+	return total
+}
+
 // BuildContextSet 从扩展后的索引列表中构建上下文集合。
 // 返回的集合只包含非批次内的上下文索引。
 func BuildContextSet(expandedIdxs []int, batchSet map[int]struct{}) map[int]struct{} {

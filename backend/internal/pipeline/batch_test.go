@@ -300,6 +300,40 @@ func TestEstimateContextWords_AlignedWithExpand(t *testing.T) {
 	}
 }
 
+// TestEstimateContextWordsWithPrefix_MatchesReference 断言前缀和版预估与参照版（estimateContextWords）
+// 在多种场景下结果一致，保证前缀和优化不改变语义。参照版直接复用 ExpandBatchWithContext，
+// 故本测试通过传递性间接验证前缀和版与 ExpandBatchWithContext 同源。
+func TestEstimateContextWordsWithPrefix_MatchesReference(t *testing.T) {
+	sources := []string{"ctx0", "◇ ◇", "ctx2", "batch", "ctx4", "[PH]", "ctx6", "seven words here now"}
+	doc := testDocWithSources(sources)
+	doc.Segments[1].Skip = true
+	doc.Segments[2].OriginalSource = "context two words here"
+	doc.Segments[5].Protected = map[string]string{"[PH]": "x"}
+
+	prefix := buildEligibleWordPrefix(doc)
+
+	cases := []struct {
+		name   string
+		batch  []int
+		window int
+	}{
+		{"single_mid_w1", []int{3}, 1},
+		{"single_mid_w3", []int{3}, 3},
+		{"single_edge_w5", []int{0}, 5},
+		{"pair_w1", []int{1, 3}, 1},
+		{"pair_w2", []int{3, 6}, 2},
+		{"triple_w0", []int{0, 3, 7}, 0},
+		{"empty_w1", []int{}, 1},
+	}
+	for _, tc := range cases {
+		ref := estimateContextWords(doc, tc.batch, tc.window)
+		got := estimateContextWordsWithPrefix(doc, tc.batch, tc.window, prefix)
+		if ref != got {
+			t.Errorf("%s: prefix %d != reference %d", tc.name, got, ref)
+		}
+	}
+}
+
 // TestSplitByConstraint_ContextWordsBudget pending 段短、上下文段长，断言计入上下文后切批更细。
 func TestSplitByConstraint_ContextWordsBudget(t *testing.T) {
 	sources := []string{

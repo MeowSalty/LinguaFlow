@@ -168,9 +168,10 @@ func (h *TranslateHandler) BuildBatches(ctx context.Context, doc *Document, pend
 	}
 	constraint = shrinkConstraint(constraint, h.FallbackShrink, poolIndex)
 	var estimator contextWordEstimator
-	if h.Context.Enabled && ctxWindow > 0 {
+	if h.Context.Enabled && ctxWindow > 0 && constraint.MaxWords > 0 {
+		eligiblePrefix := buildEligibleWordPrefix(doc)
 		estimator = func(candidate []int) int {
-			return estimateContextWords(doc, candidate, ctxWindow)
+			return estimateContextWordsWithPrefix(doc, candidate, ctxWindow, eligiblePrefix)
 		}
 	}
 	batches := BuildContextAwareBatches(doc, pending, constraint, ctxWindow, h.Context.Enabled, estimator)
