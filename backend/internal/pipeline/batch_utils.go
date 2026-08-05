@@ -3,13 +3,35 @@ package pipeline
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
-// ExpandBatchWithContext 为批次扩展上下文段落。
-// 返回扩展后的索引列表，包含原始批次段落和上下文段落。
-func ExpandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow int) []int {
+// expandedContext 是上下文扩展结果：Idxs 为扩展后索引；TruncatedSrc 记录被 max_chars 截断的上下文段文本（key=idx）。
+type expandedContext struct {
+	Idxs         []int
+	TruncatedSrc map[int]string // idx -> 截断后文本；key 存在表示该段被截断
+}
+
+// isContextEligible 判断段落是否可作为上下文段（与 ExpandBatchWithContext 选段规则同源）。
+func isContextEligible(seg *Segment) bool {
+	if seg.Skip {
+		return false
+	}
+	if IsPlaceholderOnly(seg) || IsDecorativeSeparator(seg) {
+		return false
+	}
+	if strings.TrimSpace(seg.Source) == "" {
+		return false
+	}
+	return true
+}
+
+// ExpandBatchWithContext 为批次扩展上下文段落，并按 maxChars 对上下文段做 rune 截断。
+// maxChars <= 0 表示不截断。批次内段（pending）永不截断。
+func ExpandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow, maxChars int) expandedContext {
+	truncated := map[int]string{}
 	if ctxWindow <= 0 || len(idxs) == 0 {
-		return idxs
+		return expandedContext{Idxs: idxs, TruncatedSrc: truncated}
 	}
 	batchSet := make(map[int]struct{}, len(idxs))
 	for _, idx := range idxs {
@@ -25,15 +47,48 @@ func ExpandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow 
 			continue
 		}
 		seg := &doc.Segments[i]
-		if seg.Skip {
+		if !isContextEligible(seg) {
 			continue
 		}
-		if IsPlaceholderOnly(seg) || IsDecorativeSeparator(seg) || strings.TrimSpace(seg.Source) == "" {
-			continue
+		if maxChars > 0 {
+			src := seg.OriginalSource
+			if src == "" {
+				src = seg.Source
+			}
+			if utf8.RuneCountInString(src) > maxChars {
+				truncated[i] = string([]rune(src)[:maxChars]) + "…"
+			}
 		}
 		expanded = append(expanded, i)
 	}
-	return expanded
+	return expandedContext{Idxs: expanded, TruncatedSrc: truncated}
+}
+
+// estimateContextWords 预估给定候选批次（pending 索引）在 ctxWindow 下会拉入的上下文字词数。
+// 直接复用 ExpandBatchWithContext 的选段结果（maxChars=0，仅统计非批次段），
+// 保证选段区间与过滤规则单一来源，预估与实际发送不可偏离。
+func estimateContextWords(doc *Document, batchIdxs []int, ctxWindow int) int {
+	if ctxWindow <= 0 || len(batchIdxs) == 0 {
+		return 0
+	}
+	expanded := ExpandBatchWithContext(doc, batchIdxs, len(doc.Segments), ctxWindow, 0)
+	batchSet := make(map[int]struct{}, len(batchIdxs))
+	for _, idx := range batchIdxs {
+		batchSet[idx] = struct{}{}
+	}
+	words := 0
+	for _, idx := range expanded.Idxs {
+		if _, inBatch := batchSet[idx]; inBatch {
+			continue
+		}
+		seg := &doc.Segments[idx]
+		src := seg.OriginalSource
+		if src == "" {
+			src = seg.Source
+		}
+		words += CountWords(src)
+	}
+	return words
 }
 
 // BuildContextSet 从扩展后的索引列表中构建上下文集合。

@@ -12,9 +12,13 @@ type BatchConstraint struct {
 	WordCount   func(Segment) int
 }
 
+// contextWordEstimator 预估候选批次（pending 索引）会拉入的上下文字词数。
+// nil 表示不计入上下文预算（退化为旧行为）。仅在 MaxWords>0 时被调用。
+type contextWordEstimator func(batchIdxs []int) int
+
 // BuildContextAwareBatches 根据上下文窗口合并重叠段落的 batch。
 // enabled=false 或 ctxWindow<=0 时退化为连续分组。
-func BuildContextAwareBatches(doc *Document, pending []int, constraint BatchConstraint, ctxWindow int, enabled bool) [][]int {
+func BuildContextAwareBatches(doc *Document, pending []int, constraint BatchConstraint, ctxWindow int, enabled bool, estimator contextWordEstimator) [][]int {
 	if !enabled || ctxWindow <= 0 {
 		return BuildContinuousPendingBatches(doc, pending, constraint)
 	}
@@ -42,7 +46,7 @@ func BuildContextAwareBatches(doc *Document, pending []int, constraint BatchCons
 	// 2. 每组内按约束切分
 	var batches [][]int
 	for _, group := range groups {
-		batches = append(batches, splitByConstraint(doc, group, constraint)...)
+		batches = append(batches, splitByConstraintAndSpan(doc, group, constraint, 0, estimator)...)
 	}
 	return batches
 }
@@ -98,19 +102,19 @@ func BuildPackedPendingBatches(doc *Document, pending []int, constraint BatchCon
 	if maxIndexSpan <= 0 {
 		return splitByConstraint(doc, pending, constraint)
 	}
-	return splitByConstraintAndSpan(doc, pending, constraint, maxIndexSpan)
+	return splitByConstraintAndSpan(doc, pending, constraint, maxIndexSpan, nil)
 }
 
 // splitByConstraint 按段落数和字词数双重约束切分一组段落索引（不必连续）。
 // 超限时，触发超限的段落不加入当前批次，成为下一批次的第一段。
 // 单段超限时独占一个批次（不截断），后续由 shrink 机制处理。
 func splitByConstraint(doc *Document, group []int, constraint BatchConstraint) [][]int {
-	return splitByConstraintAndSpan(doc, group, constraint, 0)
+	return splitByConstraintAndSpan(doc, group, constraint, 0, nil)
 }
 
-// splitByConstraintAndSpan 在 splitByConstraint 基础上可选索引跨度上限。
-// maxIndexSpan <= 0 表示不限制跨度。
-func splitByConstraintAndSpan(doc *Document, group []int, constraint BatchConstraint, maxIndexSpan int) [][]int {
+// splitByConstraintAndSpan 在 splitByConstraint 基础上可选索引跨度上限，以及上下文词数预估器。
+// maxIndexSpan <= 0 表示不限制跨度。estimator 为 nil 时不计入上下文预算。
+func splitByConstraintAndSpan(doc *Document, group []int, constraint BatchConstraint, maxIndexSpan int, estimator contextWordEstimator) [][]int {
 	if len(group) == 0 {
 		return nil
 	}
@@ -123,7 +127,7 @@ func splitByConstraintAndSpan(doc *Document, group []int, constraint BatchConstr
 
 	var batches [][]int
 	start := 0
-	wordCount := 0
+	pendingWords := 0
 	for i, idx := range group {
 		segWords := CountWords(doc.Segments[idx].Source)
 		if constraint.WordCount != nil {
@@ -132,15 +136,21 @@ func splitByConstraintAndSpan(doc *Document, group []int, constraint BatchConstr
 		if i > start {
 			segCount := i - start
 			exceedSegments := !noSegLimit && segCount >= constraint.MaxSegments
-			exceedWords := !noWordLimit && wordCount+segWords > constraint.MaxWords
+			estCtx := 0
+			if !noWordLimit && estimator != nil {
+				candidate := append([]int(nil), group[start:i]...)
+				candidate = append(candidate, idx)
+				estCtx = estimator(candidate)
+			}
+			exceedWords := !noWordLimit && pendingWords+segWords+estCtx > constraint.MaxWords
 			exceedSpan := !noSpanLimit && idx-group[start] > maxIndexSpan
 			if exceedSegments || exceedWords || exceedSpan {
 				batches = append(batches, append([]int(nil), group[start:i]...))
 				start = i
-				wordCount = 0
+				pendingWords = 0
 			}
 		}
-		wordCount += segWords
+		pendingWords += segWords
 	}
 	if start < len(group) {
 		batches = append(batches, append([]int(nil), group[start:]...))
