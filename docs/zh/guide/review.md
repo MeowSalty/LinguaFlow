@@ -117,6 +117,10 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 
 `source_residual` 按语言对自动启用；源语言为 `auto` 时不生效。其中 15 项 per-batch checker 可在 `qa.checks` 中按名启用/排除；`duplicate_source_divergence` 为文档级检查（跨段对比），始终随 QA 引擎运行，不必也不能在 `qa.checks` 中排除。
 
+::: tip 原文结构不会被误报为质量问题
+HTML 标签、链接等原文结构在译文中会被还原回来，但 QA 引擎会把这些区段标为**保护区**，标点配对、空白、全/半角混用等 checker 在保护区上**自动跳过**——只检查译文真正写出来的文字。所以一份满是 HTML 标签的译文不会再因为标签里的英文符号被报一堆 `punctuation_pairing` / `width_mix`。`xml_tag_mismatch` 比对标签时还会**排除 `<ruby>` 注音标签族**，避免与 Ruby 还原策略冲突。详见 [流水线与原理 · 保护区](/zh/guide/pipeline#保护区-不被原文结构干扰)。
+:::
+
 ::: tip 词表上的禁译 / 强制
 `forbidden_term` 与 `term_inconsistency` 由 [术语表](/zh/guide/glossary#禁译-forbidden-与强制-mandatory) 的 `forbidden` / `mandatory` 属性驱动，先配好条目才会触发这两类问题。
 :::

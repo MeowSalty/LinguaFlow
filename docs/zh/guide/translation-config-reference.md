@@ -223,15 +223,17 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 ### 响应修复（repair）
 
-| 字段                    | 类型  | 默认值 | 说明                      |
-| ----------------------- | ----- | ------ | ------------------------- |
-| `enabled`               | bool  | `true` | 总开关                    |
-| `json_structural`       | bool  | `true` | JSON 结构修复             |
-| `schema_aliases`        | bool  | `true` | 别名映射到 `translations` |
-| `partial`               | bool  | `true` | 部分缺失时只重试缺失段    |
-| `partial_threshold`     | float | `0.5`  | 缺失率阈值                |
-| `placeholder_normalize` | bool  | `true` | 占位符变体归一            |
-| `prompt_upgrade`        | bool  | `true` | 失败时附加 reminder 重试  |
+| 字段                    | 类型 | 默认值 | 说明                      |
+| ----------------------- | ---- | ------ | ------------------------- |
+| `enabled`               | bool | `true` | 总开关                    |
+| `json_structural`       | bool | `true` | JSON 结构修复             |
+| `schema_aliases`        | bool | `true` | 别名映射到 `translations` |
+| `placeholder_normalize` | bool | `true` | 占位符变体归一            |
+| `prompt_upgrade`        | bool | `true` | 失败时附加 reminder 重试  |
+
+::: tip 部分段缺失由池化重试兜底
+修复层只负责把模型返回解析成「可解析的翻译 ID 列表」；个别段没回怎么办，由 [流水线的池化缩批重试](/zh/guide/pipeline#批量与并发) 统一处理（按 `fallback_shrink` 缩小批次只重译缺失段），不再在修复配置里单独开关。
+:::
 
 ### 术语自举（bootstrap）
 
@@ -281,12 +283,12 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 ### 上下文（context）
 
-| 字段        | 类型 | 默认值 | 说明                       |
-| ----------- | ---- | ------ | -------------------------- |
-| `enabled`   | bool | `true` | 总开关                     |
-| `before`    | int  | `1`    | 前文章节数                 |
-| `after`     | int  | `1`    | 后文章节数                 |
-| `max_chars` | int  | `0`    | 每段上下文上限，`0` 不限制 |
+| 字段        | 类型 | 默认值 | 说明                                                      |
+| ----------- | ---- | ------ | --------------------------------------------------------- |
+| `enabled`   | bool | `true` | 总开关                                                    |
+| `before`    | int  | `1`    | 前文章节数                                                |
+| `after`     | int  | `1`    | 后文章节数                                                |
+| `max_chars` | int  | `0`    | 每段上下文上限（按 rune 计，超限截断并补省略号）；`0` 不限制 |
 
 ### 默认配置示例
 
@@ -312,8 +314,6 @@ repair:
   enabled: true
   json_structural: true
   schema_aliases: true
-  partial: true
-  partial_threshold: 0.5
   placeholder_normalize: true
   prompt_upgrade: true
 
@@ -374,15 +374,21 @@ context:
 
 ### translate
 
-| 字段                  | 类型   | 说明                                        |
-| --------------------- | ------ | ------------------------------------------- |
-| `prompt_template_id`  | int    | 翻译提示词模板                              |
-| `profile_id`          | int    | 执行配置                                    |
-| `batch_size`          | int    | 每批段落上限，`0` 不限制                    |
-| `max_words_per_batch` | int    | 每批字词上限，`0` 不限制                    |
-| `fallback_shrink`     | float  | 整批失败缩放 (0, 1)                         |
-| `segment_filter`      | object | `pending_only` / `skip_approved` / `all` 等 |
-| `retry`               | object | 重试                                        |
+| 字段                  | 类型   | 说明                                                                                                                       |
+| --------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `prompt_template_id`  | int    | 翻译提示词模板                                                                                                             |
+| `profile_id`          | int    | 执行配置                                                                                                                   |
+| `batch_size`          | int    | 待译段落数上限（**不计上下文段**）；`0` 不限制，与 `max_words_per_batch` 至少填一项                                        |
+| `max_words_per_batch` | int    | 字词数上限（**计入上下文段**）；`0` 不限制，与 `batch_size` 至少填一项。纯行数模式（此项与 `context.max_chars` 均为 0）下上下文体积不受约束 |
+| `fallback_shrink`     | float  | 池缩放系数 (0, 1)；`0`/省略 = 单池不缩批。池 N 批次约束 = `floor(原始 × shrink^N)`，各池串行，失败批次进下一更小的池 |
+| `segment_filter`      | object | `pending_only` / `skip_approved` / `all` 等                                                                                |
+| `retry`               | object | 重试                                                                                                                       |
+
+::: tip 上下文与批次约束的关系
+- `batch_size` 只数「待译段」：开 2 段上下文、`batch_size=10` 时，实际送模型的段落最多是 10 段待译 + 前后各 1 段上下文。
+- `max_words_per_batch` 则把上下文段的字数也**算进预算**，避免「上下文把整批塞满」导致超限。为防止预估偏差，流水线还会在组批时对上下文段做词数预估并扣减预算。
+- `context.max_chars` 与 `max_words_per_batch` **都为 0**（纯行数模式）时，上下文体积完全不受约束，仅在确信上下文很短时使用。
+:::
 
 ### adjudicate
 
@@ -438,11 +444,15 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 
 ### 重试（retry）
 
-| 字段           | 类型 | 默认值 | 说明         |
-| -------------- | ---- | ------ | ------------ |
-| `max_attempts` | int  | `3`    | 最大重试次数 |
-| `backoff_ms`   | int  | `2000` | 基础退避毫秒 |
-| `jitter`       | bool | `true` | 随机抖动     |
+| 字段           | 类型 | 默认值 | 说明                                                                                                       |
+| -------------- | ---- | ------ | ---------------------------------------------------------------------------------------------------------- |
+| `max_attempts` | int  | `3`    | 双重角色：每池在途重试预算（1 次首调 + N 次重试）；启用 `fallback_shrink` 时还决定池数量（池数 = `max_attempts + 1`） |
+| `backoff_ms`   | int  | `2000` | 基础退避毫秒                                                                                               |
+| `jitter`       | bool | `true` | 随机抖动                                                                                                   |
+
+::: tip `max_attempts` 与池化缩批的关系
+启用 `fallback_shrink` 后，`max_attempts` 同时控制「池深度」：池数量 = `max_attempts + 1`，池 N 的批次约束 = `floor(原始 × shrink^N)`。最坏情况下单段调用次数 ≈ `(max_attempts + 1)²`（每池重试 × 池数）。机制细节见 [流水线与原理 · 批量与并发](/zh/guide/pipeline#批量与并发)。
+:::
 
 ### Ruby 重试（计划级）
 
@@ -457,7 +467,7 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 - 对应 mode 必须带齐子配置对象
 - `batch_size` 与 `max_words_per_batch` 在翻译/裁决/语义质检中不能同时为 0（提取两者皆 0 表示一次全量）
 - `semantic_qa.segment_scope=with_issue_codes` 时必须提供 ≥ 1 个 `issue_codes`
-- `concurrency` ≥ 1；`fallback_shrink` ∈ [0, 1)
+- `concurrency` ≥ 1；`fallback_shrink` ∈ (0, 1) 或为 0（禁用池化缩批）
 
 ---
 
