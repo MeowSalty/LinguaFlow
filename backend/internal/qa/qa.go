@@ -264,6 +264,7 @@ type CheckInput struct {
 	SourceText string
 	TargetText string
 	Meta       map[string]any
+	Protected  map[string]string // 占位符→保护区原文；供标点/空白类 checker 屏蔽
 }
 
 // Checker 定义单项质量检测规则的接口。

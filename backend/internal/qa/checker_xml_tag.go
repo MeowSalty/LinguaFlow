@@ -20,6 +20,19 @@ func (c *XMLTagMismatchChecker) Name() string { return CheckXMLTagMismatch }
 // 与 protect.XMLProtector 一致：匹配 <tag> / </tag> / <tag attr> / <tag/>。
 var xmlTagTokenRe = regexp.MustCompile(`</?[A-Za-z][A-Za-z0-9:-]*(?:\s+[^<>]*)?/?>`)
 
+// rubyTagFamily 是 HTML ruby 注音标签族。其守恒由 ruby 还原子系统独立负责，
+// 与通用 XML 标签守恒正交：preserve_kinds 过滤会合法地从译文移除这些标签，
+// 因此在多重集比对中一律排除，避免配置耦合误报。
+var rubyTagFamily = map[string]struct{}{
+	"ruby": {},
+	"rt":   {},
+	"rp":   {},
+	"rb":   {},
+}
+
+// xmlTagNameRe 从标签 token 中提取标签名。
+var xmlTagNameRe = regexp.MustCompile(`^</?([A-Za-z][A-Za-z0-9:-]*)`)
+
 func (c *XMLTagMismatchChecker) Check(_ context.Context, segments []CheckInput) []QualityIssue {
 	var issues []QualityIssue
 	for _, seg := range segments {
@@ -49,6 +62,12 @@ func (c *XMLTagMismatchChecker) Check(_ context.Context, segments []CheckInput) 
 func extractXMLTagMultiset(text string) map[string]int {
 	counts := make(map[string]int)
 	for _, m := range xmlTagTokenRe.FindAllString(text, -1) {
+		nameMatch := xmlTagNameRe.FindStringSubmatch(m)
+		if len(nameMatch) >= 2 {
+			if _, skip := rubyTagFamily[strings.ToLower(nameMatch[1])]; skip {
+				continue
+			}
+		}
 		counts[m]++
 	}
 	return counts

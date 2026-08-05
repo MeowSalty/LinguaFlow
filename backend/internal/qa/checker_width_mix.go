@@ -26,8 +26,14 @@ func (c *WidthMixChecker) Check(_ context.Context, segments []CheckInput) []Qual
 		if strings.TrimSpace(tgt) == "" {
 			continue
 		}
-		if hit, msg := findWidthMix(tgt, c.cjkTarget); hit != "" {
-			span := LocateSpan(tgt, hit)
+		cleanTgt := tgt
+		var regions [][2]int
+		if len(seg.Protected) > 0 {
+			regions = ProtectedRegions(tgt, seg.Protected)
+			cleanTgt = StripRegions(tgt, regions)
+		}
+		if hit, msg := findWidthMix(cleanTgt, c.cjkTarget); hit != "" {
+			span := LocateSpanExcludingRegions(tgt, hit, regions)
 			if span == nil {
 				span = &Span{MatchedText: hit}
 			}

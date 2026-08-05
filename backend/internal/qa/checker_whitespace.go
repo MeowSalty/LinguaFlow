@@ -26,8 +26,14 @@ func (c *WhitespaceIrregularChecker) Check(_ context.Context, segments []CheckIn
 		if tgt == "" {
 			continue
 		}
-		if hit := findIrregularWhitespace(tgt); hit != "" {
-			span := LocateSpan(tgt, hit)
+		cleanTgt := tgt
+		var regions [][2]int
+		if len(seg.Protected) > 0 {
+			regions = ProtectedRegions(tgt, seg.Protected)
+			cleanTgt = StripRegions(tgt, regions)
+		}
+		if hit := findIrregularWhitespace(cleanTgt); hit != "" {
+			span := LocateSpanExcludingRegions(tgt, hit, regions)
 			if span == nil {
 				span = &Span{MatchedText: hit}
 			}
@@ -123,11 +129,17 @@ func (c *RepeatedSpaceChecker) Check(_ context.Context, segments []CheckInput) [
 		if tgt == "" {
 			continue
 		}
-		if hit := findRepeatedSpace(tgt, c.cjkTarget); hit != "" {
-			span := LocateSpan(tgt, hit)
-			if span == nil {
-				span = &Span{MatchedText: hit}
+		var regions [][2]int
+		if len(seg.Protected) > 0 {
+			regions = ProtectedRegions(tgt, seg.Protected)
+		}
+		// RepeatedSpaceChecker 在原串上检测，再过滤掉落在保护区内的命中。
+		// 不使用 StripRegions：拼接非保护区片段会在边界处制造原文不存在的连续空格 / CJK 间空格。
+		for _, m := range findRepeatedSpaceAll(tgt, c.cjkTarget) {
+			if regionCovers(regions, m.start, m.end) {
+				continue
 			}
+			span := &Span{MatchedText: m.text, TargetStart: &m.start, TargetEnd: &m.end}
 			issues = append(issues, QualityIssue{
 				SegmentIndex: seg.Index,
 				Severity:     SeverityWarning,
@@ -140,23 +152,37 @@ func (c *RepeatedSpaceChecker) Check(_ context.Context, segments []CheckInput) [
 	return issues
 }
 
-func findRepeatedSpace(s string, cjkTarget bool) string {
-	if strings.Contains(s, "  ") {
-		idx := strings.Index(s, "  ")
-		end := idx
-		for end < len(s) && s[end] == ' ' {
-			end++
+type repeatedSpaceMatch struct {
+	text       string
+	start, end int // rune 偏移
+}
+
+// findRepeatedSpaceAll 返回原串中所有连续空格 / CJK 字符间空格的命中（rune 偏移）。
+// 供 RepeatedSpaceChecker 在原串上过滤保护区使用，避免 StripRegions 拼接产生虚假命中。
+func findRepeatedSpaceAll(s string, cjkTarget bool) []repeatedSpaceMatch {
+	var out []repeatedSpaceMatch
+	runes := []rune(s)
+	i := 0
+	for i < len(runes) {
+		if runes[i] != ' ' {
+			i++
+			continue
 		}
-		return s[idx:end]
+		start := i
+		for i < len(runes) && runes[i] == ' ' {
+			i++
+		}
+		if i-start >= 2 {
+			out = append(out, repeatedSpaceMatch{text: string(runes[start:i]), start: start, end: i})
+		}
 	}
 	if !cjkTarget {
-		return ""
+		return out
 	}
-	runes := []rune(s)
-	for i := 0; i+2 < len(runes); i++ {
-		if isCJK(runes[i]) && runes[i+1] == ' ' && isCJK(runes[i+2]) {
-			return string(runes[i : i+3])
+	for j := 0; j+2 < len(runes); j++ {
+		if isCJK(runes[j]) && runes[j+1] == ' ' && isCJK(runes[j+2]) {
+			out = append(out, repeatedSpaceMatch{text: string(runes[j : j+3]), start: j, end: j + 3})
 		}
 	}
-	return ""
+	return out
 }
