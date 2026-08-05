@@ -103,7 +103,7 @@ ProfileContextConfig:
       type: integer
       minimum: 0
       default: 0
-      description: 每个上下文段落的字符数上限，0 表示不限制
+      description: 每个上下文段落的字符数上限（按 rune 计，超限截断并补省略号）；0 表示不限制
 
 ProfileQAConfig:
   type: object

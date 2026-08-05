@@ -43,11 +43,11 @@ TranslateRoundConfig:
     batch_size:
       type: integer
       minimum: 0
-      description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项
+      description: 待译段落数上限（不计上下文段）；0=不限制，与 max_words_per_batch 至少填一项
     max_words_per_batch:
       type: integer
       minimum: 0
-      description: 字词数上限；0=不限制，与 batch_size 至少填一项
+      description: 字词数上限（计入上下文段）；0=不限制，与 batch_size 至少填一项。纯行数模式（此项与 context.max_chars 均为 0）下上下文体积不受约束
     fallback_shrink:
       type: number
       minimum: 0
