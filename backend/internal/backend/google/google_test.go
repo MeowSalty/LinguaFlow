@@ -1,6 +1,7 @@
 package google
 
 import (
+	"errors"
 	"testing"
 
 	genai "google.golang.org/genai"
@@ -80,5 +81,29 @@ func TestToGoogleThinkingLevel(t *testing.T) {
 	}
 	if got := toGoogleThinkingLevel(backend.ThinkingOff); got != "" {
 		t.Fatalf("off: %q", got)
+	}
+}
+
+// TestEmptyResponseError_Google 验证 google 后端的空响应错误携带 finish_reason
+// 与 prompt_tokens 诊断信息，且被 backend.IsRetryable 归为不可重试。
+func TestEmptyResponseError_Google(t *testing.T) {
+	b := &Backend{name: "gemini-pro", model: "gemini-2.5-pro"}
+	err := emptyResponseError(b, string(genai.FinishReasonSafety), 2048)
+
+	var ere *backend.EmptyResponseError
+	if !errors.As(err, &ere) {
+		t.Fatalf("want *backend.EmptyResponseError, got %T: %v", err, err)
+	}
+	if ere.FinishReason != "SAFETY" {
+		t.Fatalf("FinishReason = %q, want SAFETY", ere.FinishReason)
+	}
+	if ere.PromptTokens != 2048 {
+		t.Fatalf("PromptTokens = %d, want 2048", ere.PromptTokens)
+	}
+	if ere.Model != "gemini-2.5-pro" {
+		t.Fatalf("Model = %q, want gemini-2.5-pro", ere.Model)
+	}
+	if backend.IsRetryable(err) {
+		t.Fatal("empty response error must not be retryable")
 	}
 }

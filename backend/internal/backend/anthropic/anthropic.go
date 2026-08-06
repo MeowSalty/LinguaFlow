@@ -95,7 +95,7 @@ func (b *Backend) responseFromMessage(msg *sdk.Message, useToolPath bool) (*back
 		return nil, fmt.Errorf("anthropic: response truncated (stop_reason=max_tokens), raise max_tokens")
 	}
 
-	text, err := extractResponseText(msg, useToolPath)
+	text, err := extractResponseText(msg, useToolPath, b, msg.StopReason, msg.Usage.InputTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -243,12 +243,19 @@ func wrapAnthropicError(err error) error {
 // useToolPath=true 时优先在 content 中找 emit_translations 的 tool_use 块，
 // 取其 Input(json.RawMessage) 字面值。退化：无 tool_use 时拼所有 text block,
 // 让上层 jsonObjectSlice 抢救解析。
-func extractResponseText(msg *sdk.Message, useToolPath bool) (string, error) {
+// 空内容时返回 EmptyResponseError（携带 stop_reason/input_tokens 诊断信息），
+// 使上层将其归为不可重试，转入 shrink/fallback 而非退避重试刷屏。
+func extractResponseText(msg *sdk.Message, useToolPath bool, b *Backend, stopReason sdk.StopReason, inputTokens int64) (string, error) {
 	if useToolPath {
 		for _, blk := range msg.Content {
 			if blk.Type == "tool_use" && blk.Name == toolName {
 				if len(blk.Input) == 0 {
-					return "", errors.New("anthropic: empty tool_use input")
+					return "", &backend.EmptyResponseError{
+						BackendName:  b.Name(),
+						Model:        b.model,
+						FinishReason: string(stopReason),
+						PromptTokens: inputTokens,
+					}
 				}
 				return string(blk.Input), nil
 			}
@@ -261,7 +268,12 @@ func extractResponseText(msg *sdk.Message, useToolPath bool) (string, error) {
 		}
 	}
 	if len(buf) == 0 {
-		return "", errors.New("anthropic: no usable content in response")
+		return "", &backend.EmptyResponseError{
+			BackendName:  b.Name(),
+			Model:        b.model,
+			FinishReason: string(stopReason),
+			PromptTokens: inputTokens,
+		}
 	}
 	return string(buf), nil
 }

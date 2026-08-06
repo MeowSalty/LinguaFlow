@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -159,4 +160,54 @@ func TestResponseFromMessage_TruncationHintWithThinking(t *testing.T) {
 	if strings.Contains(err.Error(), "shares max_tokens") {
 		t.Fatalf("thinking-off truncation should not hint shared pool, got: %v", err)
 	}
+}
+
+// TestExtractResponseText_EmptyContent 验证 anthropic 后端的空内容路径返回
+// EmptyResponseError（携带 stop_reason/input_tokens 诊断信息），且被
+// backend.IsRetryable 归为不可重试。refusal stop_reason 是内容过滤的典型信号。
+func TestExtractResponseText_EmptyContent(t *testing.T) {
+	b := &Backend{name: "claude", model: "claude-sonnet-4"}
+	msg := &sdk.Message{
+		Content:    []sdk.ContentBlockUnion{}, // 无 text/tool_use 块
+		StopReason: sdk.StopReasonRefusal,
+	}
+
+	t.Run("no_text_content", func(t *testing.T) {
+		_, err := extractResponseText(msg, false, b, msg.StopReason, 512)
+		var ere *backend.EmptyResponseError
+		if !errors.As(err, &ere) {
+			t.Fatalf("want *backend.EmptyResponseError, got %T: %v", err, err)
+		}
+		if ere.FinishReason != string(sdk.StopReasonRefusal) {
+			t.Fatalf("FinishReason = %q, want %q", ere.FinishReason, sdk.StopReasonRefusal)
+		}
+		if ere.PromptTokens != 512 {
+			t.Fatalf("PromptTokens = %d, want 512", ere.PromptTokens)
+		}
+		if backend.IsRetryable(err) {
+			t.Fatal("empty response error must not be retryable")
+		}
+	})
+
+	t.Run("empty_tool_use_input", func(t *testing.T) {
+		msgWithTool := &sdk.Message{
+			Content: []sdk.ContentBlockUnion{{
+				Type:  "tool_use",
+				Name:  toolName,
+				Input: nil, // 空 input
+			}},
+			StopReason: sdk.StopReasonToolUse,
+		}
+		_, err := extractResponseText(msgWithTool, true, b, msgWithTool.StopReason, 256)
+		var ere *backend.EmptyResponseError
+		if !errors.As(err, &ere) {
+			t.Fatalf("want *backend.EmptyResponseError, got %T: %v", err, err)
+		}
+		if ere.FinishReason != string(sdk.StopReasonToolUse) {
+			t.Fatalf("FinishReason = %q, want %q", ere.FinishReason, sdk.StopReasonToolUse)
+		}
+		if backend.IsRetryable(err) {
+			t.Fatal("empty tool_use input must not be retryable")
+		}
+	})
 }

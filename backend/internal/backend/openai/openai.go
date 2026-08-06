@@ -60,7 +60,13 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		return nil, wrapOpenAIError(err)
 	}
 	if len(resp.Choices) == 0 {
-		return nil, errors.New("openai: empty choices")
+		return nil, emptyChoicesError(b.Name(), b.model, "", resp.Usage.PromptTokens)
+	}
+	// content_filter / 空补全常返回一个 choice 但 Message.Content 为空。对齐
+	// anthropic/google：归为 EmptyResponseError（不可重试），转入 shrink/fallback，
+	// 而非把空文本当作成功响应。
+	if resp.Choices[0].Message.Content == "" {
+		return nil, emptyChoicesError(b.Name(), b.model, resp.Choices[0].FinishReason, resp.Usage.PromptTokens)
 	}
 	return &backend.Response{
 		Text: resp.Choices[0].Message.Content,
@@ -88,7 +94,12 @@ func (b *Backend) translateStream(ctx context.Context, params openaigo.ChatCompl
 		return nil, wrapOpenAIError(err)
 	}
 	if len(acc.Choices) == 0 {
-		return nil, errors.New("openai: empty choices")
+		return nil, emptyChoicesError(b.Name(), b.model, "", acc.Usage.PromptTokens)
+	}
+	// 流式同理：choice 非空但累计内容为空（content_filter 常见形态）需归为
+	// EmptyResponseError，与非流式路径保持一致。
+	if acc.Choices[0].Message.Content == "" {
+		return nil, emptyChoicesError(b.Name(), b.model, acc.Choices[0].FinishReason, acc.Usage.PromptTokens)
 	}
 	return &backend.Response{
 		Text: acc.Choices[0].Message.Content,
@@ -99,6 +110,18 @@ func (b *Backend) translateStream(ctx context.Context, params openaigo.ChatCompl
 		},
 		Raw: acc.ChatCompletion,
 	}, nil
+}
+
+// emptyChoicesError 构造带诊断信息的 EmptyResponseError：无 choices 时 finishReason
+// 留空；choices 非空但内容为空（content_filter 等）时携带第一个 choice 的 finish_reason，
+// 这是内容过滤/截断的关键线索。
+func emptyChoicesError(name, model, finishReason string, promptTokens int64) error {
+	return &backend.EmptyResponseError{
+		BackendName:  name,
+		Model:        model,
+		FinishReason: finishReason,
+		PromptTokens: promptTokens,
+	}
 }
 
 func (b *Backend) buildParams(req backend.Request) (openaigo.ChatCompletionNewParams, error) {
