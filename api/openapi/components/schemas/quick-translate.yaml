@@ -1,0 +1,123 @@
+QuickTranslateRequest:
+  type: object
+  required: [source_text, execution_plan_id]
+  additionalProperties: false
+  properties:
+    source_text:
+      type: string
+      description: 待翻译文本(单段,可含多句)
+    source_lang:
+      type: string
+      default: "auto"
+      description: 源语言;省略或 "auto" 表示自动检测
+    target_lang:
+      type: string
+      default: "zh"
+      description: 目标语言
+    execution_plan_id:
+      type: integer
+      description: |
+        执行计划模板 ID。执行计划模板统一为用户/org 级(ExecutionPlanTemplate
+        无 project 关联),无论是否提供 project_id,用的都是同一套模板;
+        后端用 ExecutionPlanService.checkAccess 对 actor 做用户/org 级授权。
+    project_id:
+      type: integer
+      nullable: true
+      description: |
+        可选项目 ID。提供时仅复用项目的术语表与语言配置(若请求未显式覆盖),
+        并校验 actor 对该项目的访问权;执行计划本身仍与项目无关,不因 project_id
+        改变授权路径。省略时为纯即时翻译,使用请求体内联术语表。
+    glossary:
+      type: array
+      description: 内联临时术语表(纯内存,翻译完即丢)。项目场景下叠加在项目术语表之上。
+      items:
+        $ref: '#/QuickGlossaryEntry'
+
+QuickGlossaryEntry:
+  type: object
+  required: [source, target]
+  additionalProperties: false
+  properties:
+    source:
+      type: string
+    target:
+      type: string
+    case_sensitive:
+      type: boolean
+      default: false
+    forbidden:
+      type: boolean
+      default: false
+    mandatory:
+      type: boolean
+      default: true
+    notes:
+      type: string
+
+QuickTranslateResponse:
+  type: object
+  required: [status, source_text, target_text]
+  properties:
+    status:
+      type: string
+      enum: [success, partial, failed]
+    source_text:
+      type: string
+    target_text:
+      type: string
+      description: 译文;failed 时可能为空
+    source_lang:
+      type: string
+      description: 实际使用的源语言
+    target_lang:
+      type: string
+    quality_issues:
+      type: array
+      items:
+        $ref: '../schemas/job.yaml#/QualityIssue'
+    round_summary:
+      type: array
+      items:
+        $ref: '#/QuickRoundSummary'
+    batches:
+      type: array
+      description: |
+        分步调试诊断(每批一条)。复用 preview 的 TranslationBatchDiagnostic schema,
+        含 system_prompt/user_message/response_content/used_glossary/added_glossary/
+        error_type/http_status/tokens/duration 等(均做隐私裁剪,不含 API key)。
+        单段文本通常产出 1~N 条(多轮+重试时递增)。零新 schema、零新转换代码。
+      items:
+        $ref: '../schemas/resource.yaml#/TranslationBatchDiagnostic'
+    usage:
+      $ref: '#/QuickUsage'
+    warnings:
+      type: array
+      items:
+        type: string
+
+QuickRoundSummary:
+  type: object
+  required: [index, mode, status, duration_ms]
+  properties:
+    index:
+      type: integer
+    mode:
+      type: string
+    backend:
+      type: string
+    status:
+      type: string
+      enum: [success, partial, failed]
+    duration_ms:
+      type: integer
+
+QuickUsage:
+  type: object
+  required: [api_calls, input_tokens, output_tokens]
+  properties:
+    api_calls:
+      type: integer
+    input_tokens:
+      type: integer
+    output_tokens:
+      type: integer

@@ -139,6 +139,8 @@ paths:
     $ref: './paths/stats.yaml#/statsSummary'
   /activity:
     $ref: './paths/stats.yaml#/activity'
+  /quick-translate:
+    $ref: './paths/quick-translate.yaml#/quickTranslate'
 components:
   securitySchemes:
     bearerAuth:
@@ -392,3 +394,13 @@ components:
       $ref: './components/schemas/execution-plan-template.yaml#/CreateExecutionPlanTemplateRequest'
     UpdateExecutionPlanTemplateRequest:
       $ref: './components/schemas/execution-plan-template.yaml#/UpdateExecutionPlanTemplateRequest'
+    QuickTranslateRequest:
+      $ref: './components/schemas/quick-translate.yaml#/QuickTranslateRequest'
+    QuickTranslateResponse:
+      $ref: './components/schemas/quick-translate.yaml#/QuickTranslateResponse'
+    QuickGlossaryEntry:
+      $ref: './components/schemas/quick-translate.yaml#/QuickGlossaryEntry'
+    QuickRoundSummary:
+      $ref: './components/schemas/quick-translate.yaml#/QuickRoundSummary'
+    QuickUsage:
+      $ref: './components/schemas/quick-translate.yaml#/QuickUsage'
