@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -55,6 +57,69 @@ func TestBuildQualityPredicateNonNilForValidFilters(t *testing.T) {
 	for _, opts := range cases {
 		if p := buildQualityPredicate(opts, dialect.SQLite); p == nil {
 			t.Fatalf("buildQualityPredicate(%+v) = nil, want predicate", opts)
+		}
+	}
+}
+
+// renderPredicate 把一个 predicate.Segment 应用到指定 dialect 的 Selector 上，
+// 返回最终渲染出的 WHERE 子句 SQL，供断言占位符与函数名是否正确。
+func renderPredicate(t *testing.T, opts ResourceSegmentListOptions, d string) string {
+	t.Helper()
+	p := buildQualityPredicate(opts, d)
+	if p == nil {
+		return ""
+	}
+	sel := sql.Dialect(d).Select().From(sql.Table(segment.Table))
+	p(sel) // predicate.Segment 通过 s.Where 副作用注入谓词
+	query, _ := sel.Query()
+	return query
+}
+
+// TestBuildQualityPredicatePostgresSQL 防回归：PostgreSQL 下带 severity/code 过滤
+// 的谓词不能残留 "?"（在 PG 中是 jsonb 键存在运算符，会触发 SQLSTATE 42601），
+// 且必须使用 jsonb_* 函数。这是 linguaflow.log:94/98 生产 500 的根因。
+func TestBuildQualityPredicatePostgresSQL(t *testing.T) {
+	cases := []struct {
+		name string
+		opts ResourceSegmentListOptions
+		// mustContain 为必须出现的子串；列名用不含表前缀的字段名匹配，
+		// 避免 s.C() 渲染成 "table"."col" 导致断言脆裂。
+		mustContain []string
+	}{
+		{"severity_warning", ResourceSegmentListOptions{QualitySeverity: "warning"},
+			[]string{"jsonb_array_elements", "v ->> 'severity' = 'warning'"}},
+		{"severity_error", ResourceSegmentListOptions{QualitySeverity: "error"},
+			[]string{"jsonb_array_elements", "v ->> 'severity' = 'error'"}},
+		{"code_untranslated", ResourceSegmentListOptions{QualityCode: "untranslated"},
+			[]string{"jsonb_array_elements", "v ->> 'code' = 'untranslated'"}},
+		{"issues_has", ResourceSegmentListOptions{QualityIssues: "has"},
+			[]string{"jsonb_typeof", "jsonb_array_length", "> 0"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			query := renderPredicate(t, c.opts, dialect.Postgres)
+			if strings.Contains(query, "?") {
+				t.Fatalf("postgres predicate must not contain raw '?', got: %s", query)
+			}
+			for _, want := range c.mustContain {
+				if !strings.Contains(query, want) {
+					t.Fatalf("postgres predicate missing expected fragment %q\nquery: %s", want, query)
+				}
+			}
+		})
+	}
+}
+
+// TestBuildQualityPredicateSQLiteSQL 确认 SQLite 路径仍以单引号字面量内联
+// （修复后两 dialect 统一为字面量，SQLite 不受影响）。
+func TestBuildQualityPredicateSQLiteSQL(t *testing.T) {
+	query := renderPredicate(t, ResourceSegmentListOptions{QualityCode: "untranslated"}, dialect.SQLite)
+	if strings.Contains(query, "?") {
+		t.Fatalf("sqlite predicate must not contain raw '?', got: %s", query)
+	}
+	for _, want := range []string{"json_each", "json_extract(value, '$.code') = 'untranslated'"} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("sqlite predicate missing expected fragment %q\nquery: %s", want, query)
 		}
 	}
 }

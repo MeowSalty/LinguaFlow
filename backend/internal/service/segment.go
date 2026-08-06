@@ -133,6 +133,12 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 // SQLite 与 PostgreSQL 的 JSON 函数不同，按 dialectName 分支：SQLite 使用 JSON1
 // （json_array_length / json_each / json_extract），PostgreSQL 使用 jsonb_*
 // （jsonb_typeof / jsonb_array_length / jsonb_array_elements / ->>）。
+//
+// 注意：不能使用 sql.ExprP("... = ?", val)。ent 的原始表达式（sql.Expr）直接把
+// 模板字符串原样输出，不会把 "?" 重新编号为 Postgres 的 "$N"；而 "?" 在 Postgres
+// 里是 jsonb 的"键存在"运算符，会导致 "syntax error at or near ")""（SQLSTATE 42601）。
+// severity（warning|error）与 code（qa.IsFilterableIssueCode 白名单）均已强校验，
+// 直接以单引号字面量内联即可，避免占位符冲突。
 func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) predicate.Segment {
 	usePostgres := dialectName == dialect.Postgres
 	var preds []predicate.Segment
@@ -165,14 +171,12 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
 				s.Where(sql.ExprP(
-					fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'severity' = ?)", col),
-					sev,
+					fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'severity' = '%s')", col, sev),
 				))
 				return
 			}
 			s.Where(sql.ExprP(
-				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.severity') = ?)", col),
-				sev,
+				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.severity') = '%s')", col, sev),
 			))
 		}))
 	}
@@ -183,14 +187,12 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
 				s.Where(sql.ExprP(
-					fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'code' = ?)", col),
-					code,
+					fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'code' = '%s')", col, code),
 				))
 				return
 			}
 			s.Where(sql.ExprP(
-				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.code') = ?)", col),
-				code,
+				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.code') = '%s')", col, code),
 			))
 		}))
 	}
