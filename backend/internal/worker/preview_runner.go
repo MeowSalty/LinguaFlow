@@ -311,68 +311,21 @@ func (r *PreviewRunner) buildTranslateBatchHandler(
 	engineCfg *engine.Config,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		var allIssues []qa.QualityIssue
-		if qaEngine != nil {
-			inputs := buildQACheckInputs(batchResult)
-			allIssues = qaEngine.Run(context.Background(), inputs)
-		}
-
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
-			}
-			if ts.TargetText == "" {
-				continue
-			}
-			segIssues := qa.IssuesFor(ts.Index, allIssues)
-			doc.Segments[ts.Index].Target = ts.TargetText
-			doc.Segments[ts.Index].Issues = segIssues
-			segStatus := string(service.SegmentStatusTranslated)
-			if qa.HasErrors(segIssues) && engineCfg.QA.AutoReject {
-				segStatus = string(service.SegmentStatusRejected)
-			}
-			doc.Segments[ts.Index].Status = segStatus
-		}
-		return nil
-	}
+	return buildTranslateBatchHandlerCommon(doc, qaEngine, engineCfg, targetDocIdx)
 }
 
 func (r *PreviewRunner) buildAdjudicateBatchHandler(
 	doc *pipeline.Document,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
-			}
-			if len(ts.Issues) > 0 {
-				doc.Segments[ts.Index].Issues = ts.Issues
-			}
-		}
-		return nil
-	}
+	return buildAdjudicateBatchHandlerCommon(doc, targetDocIdx)
 }
 
 func (r *PreviewRunner) buildSemanticQABatchHandler(
 	doc *pipeline.Document,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
-			}
-			if len(ts.Issues) == 0 {
-				continue
-			}
-			existing := doc.Segments[ts.Index].Issues
-			merged := mergeSemanticQAIssues(existing, ts.Issues)
-			doc.Segments[ts.Index].Issues = merged
-		}
-		return nil
-	}
+	return buildSemanticQABatchHandlerCommon(doc, targetDocIdx)
 }
 
 func (r *PreviewRunner) runDuplicateSourceDivergence(doc *pipeline.Document, targetDocIdx int) []qa.QualityIssue {
