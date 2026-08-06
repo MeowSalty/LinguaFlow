@@ -36,7 +36,9 @@ function onVersionChange(event: Event) {
   const target = event.target as HTMLSelectElement
   const version = target.value
   const base = import.meta.env.BASE_URL || '/'
-  if (version === versions.value[0]) {
+  if (version === 'next') {
+    window.location.href = `${base}next/`
+  } else if (version === versions.value[0]) {
     // 最新版本跳转到根路径
     window.location.href = base
   } else {

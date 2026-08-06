@@ -22,9 +22,8 @@ export default {
       () => initMermaid(),
     )
 
-    return h(DefaultTheme.Layout)
-  },
-  enhanceApp({ app }) {
-    app.component('VersionSwitcher', VersionSwitcher)
+    return h(DefaultTheme.Layout, null, {
+      'nav-bar-content-before': () => h(VersionSwitcher),
+    })
   },
 } satisfies Theme
