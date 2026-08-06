@@ -106,6 +106,74 @@ func TestPreviewConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestQuickTranslateConfigDefaults(t *testing.T) {
+	cfg := DefaultServerConfig()
+	if cfg.QuickTranslate.MaxConcurrency != 2 {
+		t.Fatalf("max_concurrency=%d want 2", cfg.QuickTranslate.MaxConcurrency)
+	}
+	if cfg.QuickTranslate.Timeout != 5*time.Minute {
+		t.Fatalf("timeout=%v want 5m", cfg.QuickTranslate.Timeout)
+	}
+	if cfg.QuickTranslate.MaxTimeout != quickTranslateMaxTimeoutUpper {
+		t.Fatalf("max_timeout=%v want %v", cfg.QuickTranslate.MaxTimeout, quickTranslateMaxTimeoutUpper)
+	}
+
+	// 零值回填默认。
+	zero := DefaultServerConfig()
+	zero.QuickTranslate = QuickTranslateConfig{}
+	if err := ValidateServerConfig(zero); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if zero.QuickTranslate.MaxConcurrency != 2 {
+		t.Fatalf("max_concurrency=%d want 2 after validation", zero.QuickTranslate.MaxConcurrency)
+	}
+	if zero.QuickTranslate.Timeout != 5*time.Minute {
+		t.Fatalf("timeout=%v want 5m after validation", zero.QuickTranslate.Timeout)
+	}
+	if zero.QuickTranslate.MaxTimeout != quickTranslateMaxTimeoutUpper {
+		t.Fatalf("max_timeout=%v want %v after validation", zero.QuickTranslate.MaxTimeout, quickTranslateMaxTimeoutUpper)
+	}
+}
+
+func TestQuickTranslateConfig_ClampsAndManagerOverride(t *testing.T) {
+	// MaxConcurrency 超上限 → 钳到 32。
+	c := DefaultServerConfig()
+	c.QuickTranslate.MaxConcurrency = 100
+	c.QuickTranslate.Timeout = 5 * time.Minute
+	c.QuickTranslate.MaxTimeout = quickTranslateMaxTimeoutUpper
+	if err := ValidateServerConfig(c); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if c.QuickTranslate.MaxConcurrency != quickTranslateMaxConcurrencyUpper {
+		t.Fatalf("max_concurrency=%d want clamp to %d", c.QuickTranslate.MaxConcurrency, quickTranslateMaxConcurrencyUpper)
+	}
+
+	// 管理者 MaxTimeout 钳 Timeout：Timeout=2h, MaxTimeout=10m → Timeout=10m。
+	c = DefaultServerConfig()
+	c.QuickTranslate.Timeout = 2 * time.Hour
+	c.QuickTranslate.MaxTimeout = 10 * time.Minute
+	if err := ValidateServerConfig(c); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if c.QuickTranslate.Timeout != 10*time.Minute {
+		t.Fatalf("timeout=%v want clamp to 10m by max_timeout", c.QuickTranslate.Timeout)
+	}
+	if c.QuickTranslate.MaxTimeout != 10*time.Minute {
+		t.Fatalf("max_timeout=%v want 10m", c.QuickTranslate.MaxTimeout)
+	}
+
+	// MaxTimeout 超绝对上限 → 钳到 30m。
+	c = DefaultServerConfig()
+	c.QuickTranslate.MaxTimeout = 2 * time.Hour
+	c.QuickTranslate.Timeout = 2 * time.Hour // 同步，避免被单独钳
+	if err := ValidateServerConfig(c); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if c.QuickTranslate.MaxTimeout != quickTranslateMaxTimeoutUpper {
+		t.Fatalf("max_timeout=%v want clamp to %v", c.QuickTranslate.MaxTimeout, quickTranslateMaxTimeoutUpper)
+	}
+}
+
 func TestDefaultServerConfig_ServeUI(t *testing.T) {
 	cfg := DefaultServerConfig()
 	if !cfg.ServeUI {
