@@ -84,10 +84,12 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 }
 
 // CancelTask 查找匹配的 runner 并取消指定任务。
+// 同时将其从内存队列中移除，避免已取消的任务仍被计入后续任务的排队位置。
 func (d *Dispatcher) CancelTask(taskType string, taskID int) {
 	for _, runner := range d.runners {
 		if runner.Type() == taskType {
 			runner.Cancel(taskID)
+			runner.Queue().Done(taskID)
 			return
 		}
 	}
