@@ -150,8 +150,6 @@ translation_profiles:
       enabled: true
       json_structural: true
       schema_aliases: true
-      partial: true
-      partial_threshold: 0.5
       placeholder_normalize: true
       prompt_upgrade: true
     bootstrap:
@@ -352,15 +350,17 @@ Web 端还可使用「探测模型」接口按凭据拉取列表；字段细节�
 
 ##### repair — 响应修复
 
-| 字段                    | 类型  | 默认值 | 说明            |
-| ----------------------- | ----- | ------ | --------------- |
-| `enabled`               | bool  | `true` | 是否启用修复    |
-| `json_structural`       | bool  | `true` | JSON 结构修复   |
-| `schema_aliases`        | bool  | `true` | Schema 别名修复 |
-| `partial`               | bool  | `true` | 部分响应修复    |
-| `partial_threshold`     | float | `0.5`  | 部分修复阈值    |
-| `placeholder_normalize` | bool  | `true` | 占位符规范化    |
-| `prompt_upgrade`        | bool  | `true` | 提示词升级      |
+| 字段                    | 类型 | 默认值 | 说明                 |
+| ----------------------- | ---- | ------ | -------------------- |
+| `enabled`               | bool | `true` | 是否启用修复         |
+| `json_structural`       | bool | `true` | JSON 结构修复        |
+| `schema_aliases`        | bool | `true` | Schema 别名修复      |
+| `placeholder_normalize` | bool | `true` | 占位符规范化         |
+| `prompt_upgrade`        | bool | `true` | 提示词升级           |
+
+::: tip 部分段缺失的重试
+部分段缺失不再在修复配置里单独开关，改由翻译流水线的池化缩批重试统一处理（按 `fallback_shrink` 缩小批次只重译缺失段），见 [流水线与原理 · 批量与并发](/zh/guide/pipeline#批量与并发)。
+:::
 
 ##### bootstrap — 术语提取
 
@@ -373,12 +373,12 @@ Web 端还可使用「探测模型」接口按凭据拉取列表；字段细节�
 
 ##### context — 上下文窗口
 
-| 字段        | 类型 | 默认值 | 说明                         |
-| ----------- | ---- | ------ | ---------------------------- |
-| `enabled`   | bool | `true` | 是否启用上下文               |
-| `before`    | int  | `1`    | 前文段落数                   |
-| `after`     | int  | `1`    | 后文段落数                   |
-| `max_chars` | int  | `0`    | 上下文最大字符数，`0` 不限制 |
+| 字段        | 类型 | 默认值 | 说明                                                          |
+| ----------- | ---- | ------ | ------------------------------------------------------------- |
+| `enabled`   | bool | `true` | 是否启用上下文                                                |
+| `before`    | int  | `1`    | 前文段落数                                                    |
+| `after`     | int  | `1`    | 后文段落数                                                    |
+| `max_chars` | int  | `0`    | 上下文最大字符数（按 rune 计，超限截断并补省略号）；`0` 不限制 |
 
 #### execution — 执行计划
 
@@ -397,15 +397,15 @@ CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行�
 
 **translate 子配置：**
 
-| 字段                  | 类型   | 说明                                     |
-| --------------------- | ------ | ---------------------------------------- |
-| `prompt`              | string | 翻译提示词模板 key                       |
-| `profile`             | string | 执行配置 / 策略 key                      |
-| `batch_size`          | int    | 批处理大小                               |
-| `max_words_per_batch` | int    | 每批最大词数                             |
-| `concurrency`         | int    | 并发数                                   |
-| `fallback_shrink`     | float  | 回退收缩比例                             |
-| `retry.*`             | —      | `max_attempts` / `backoff_ms` / `jitter` |
+| 字段                  | 类型   | 说明                                                                          |
+| --------------------- | ------ | ----------------------------------------------------------------------------- |
+| `prompt`              | string | 翻译提示词模板 key                                                            |
+| `profile`             | string | 执行配置 / 策略 key                                                           |
+| `batch_size`          | int    | 待译段落数上限（不计上下文段）                                                |
+| `max_words_per_batch` | int    | 每批字词数上限（计入上下文段）                                                |
+| `concurrency`         | int    | 并发数                                                                        |
+| `fallback_shrink`     | float  | 池缩放系数 (0,1)；`0`=单池不缩批。池 N 批次约束 = `floor(原始 × shrink^N)`，见 [流水线与原理](/zh/guide/pipeline#批量与并发) |
+| `retry.*`             | —      | `max_attempts`（启用缩批时同时决定池数）/ `backoff_ms` / `jitter`             |
 
 **extract 子配置：**
 
