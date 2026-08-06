@@ -63,6 +63,35 @@ var ErrUnknownBackendType = errors.New("backend: unknown type")
 // ErrNoBackend 选择器找不到可用后端。
 var ErrNoBackend = errors.New("backend: no enabled backend")
 
+// EmptyResponseError 表示上游返回 HTTP 200 但响应中无可用于翻译的内容。
+// 典型成因：内容过滤（finish_reason=content_filter）、空补全、网关抽风。
+// 这类错误不应按网络/限流错误退避重试——重试基本无效且会刷屏；
+// 上层 IsRetryable 对其返回 false，使其转入 shrink/fallback 路径。
+type EmptyResponseError struct {
+	BackendName  string
+	Model        string
+	FinishReason string // 第一个 choice 的 finish_reason；无 choices 时为空
+	PromptTokens int64  // 若上游返回了 usage 则填充
+}
+
+func (e *EmptyResponseError) Error() string {
+	if e == nil {
+		return "backend: empty response"
+	}
+	detail := "no usable content in response"
+	if e.FinishReason != "" {
+		detail = fmt.Sprintf("empty choices (finish_reason=%s)", e.FinishReason)
+	}
+	prefix := e.BackendName
+	if prefix == "" {
+		prefix = "backend"
+	}
+	if e.PromptTokens > 0 {
+		return fmt.Sprintf("%s: %s; model=%s prompt_tokens=%d", prefix, detail, e.Model, e.PromptTokens)
+	}
+	return fmt.Sprintf("%s: %s; model=%s", prefix, detail, e.Model)
+}
+
 // factories 在 init 阶段由各后端包写入，main 后只读。
 // Go 内存模型保证所有 init 先于 main 执行（happens-before），因此无需加锁。
 var factories = map[string]Factory{}

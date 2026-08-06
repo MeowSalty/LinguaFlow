@@ -63,16 +63,17 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		return nil, wrapGoogleError(err)
 	}
 	if len(resp.Candidates) == 0 {
-		return nil, errors.New("google: empty candidates")
+		return nil, emptyResponseError(b, "", int64(resp.UsageMetadata.PromptTokenCount))
 	}
+	finishReason := resp.Candidates[0].FinishReason
 	// 截断会让 JSON 残缺，显式失败以触发上层 shrinkOrFallback
-	if resp.Candidates[0].FinishReason == genai.FinishReasonMaxTokens {
+	if finishReason == genai.FinishReasonMaxTokens {
 		return nil, fmt.Errorf("google: response truncated (finish_reason=MAX_TOKENS), raise max_tokens")
 	}
 
 	text := resp.Text()
 	if text == "" {
-		return nil, errors.New("google: no usable content in response")
+		return nil, emptyResponseError(b, string(finishReason), int64(resp.UsageMetadata.PromptTokenCount))
 	}
 
 	usage := backend.Usage{}
@@ -125,7 +126,11 @@ func (b *Backend) translateStream(ctx context.Context, model string, contents []
 
 	text := buf.String()
 	if text == "" {
-		return nil, errors.New("google: no usable content in response")
+		promptTokens := int64(0)
+		if usage != nil {
+			promptTokens = int64(usage.PromptTokenCount)
+		}
+		return nil, emptyResponseError(b, string(finish), promptTokens)
 	}
 
 	outUsage := backend.Usage{}
@@ -233,6 +238,17 @@ func wrapGoogleError(err error) error {
 			&backend.StatusError{StatusCode: apiErr.Code, Err: err})
 	}
 	return fmt.Errorf("google: generate content: %w", err)
+}
+
+// emptyResponseError 构造带诊断信息的 EmptyResponseError，携带第一个 candidate
+// 的 finish_reason（SAFETY/RECITATION 等内容过滤类问题的关键线索）。
+func emptyResponseError(b *Backend, finishReason string, promptTokens int64) error {
+	return &backend.EmptyResponseError{
+		BackendName:  b.Name(),
+		Model:        b.model,
+		FinishReason: finishReason,
+		PromptTokens: promptTokens,
+	}
 }
 
 // factory 从 backend.Config 构造实例。Options 期望的键：

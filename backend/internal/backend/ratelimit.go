@@ -35,6 +35,12 @@ func IsRetryable(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
+	// 空响应类错误：上游返回 HTTP 200 但无可用内容（典型是内容过滤/安全拦截/空补全）。
+	// 重试基本无效，交给上层转入 shrink/fallback 路径，而非退避重试刷屏。
+	var emptyErr *EmptyResponseError
+	if errors.As(err, &emptyErr) {
+		return false
+	}
 	var hsErr HTTPStatusError
 	if errors.As(err, &hsErr) {
 		code := hsErr.HTTPStatus()
