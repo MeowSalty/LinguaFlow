@@ -44,7 +44,7 @@ jobs:
         working-directory: docs
 
       - name: 合并 OpenAPI 规范
-        run: pnpm dlx @redocly/cli bundle api/openapi/base.yaml -o docs/public/openapi/openapi-3.0.yaml
+        run: pnpm --package=@redocly/cli dlx redocly bundle api/openapi/base.yaml -o docs/public/openapi/openapi-3.0.yaml
 
       - name: 获取版本信息
         id: version
