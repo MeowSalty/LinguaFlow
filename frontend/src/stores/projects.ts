@@ -72,19 +72,30 @@ export const useProjectsStore = defineStore('projects', () => {
     () => items.value.filter((project) => project.glossary_enabled).length,
   )
 
-  const loadProjects = async (): Promise<void> => {
-    loading.value = true
-    error.value = null
+  const loadProjectsPromise = ref<Promise<void> | null>(null)
 
-    try {
-      const response = await fetchProjects()
-      items.value = response.items
-    } catch (loadError) {
-      error.value =
-        loadError instanceof Error ? loadError.message : t('api.errors.loadProjectsFailed')
-    } finally {
-      loading.value = false
+  const loadProjects = async (): Promise<void> => {
+    if (loadProjectsPromise.value) return loadProjectsPromise.value
+
+    const run = async (): Promise<void> => {
+      loading.value = true
+      error.value = null
+
+      try {
+        const response = await fetchProjects()
+        items.value = response.items
+      } catch (loadError) {
+        error.value =
+          loadError instanceof Error ? loadError.message : t('api.errors.loadProjectsFailed')
+      } finally {
+        loading.value = false
+      }
     }
+
+    loadProjectsPromise.value = run().finally(() => {
+      loadProjectsPromise.value = null
+    })
+    return loadProjectsPromise.value
   }
 
   const createProject = async (payload: CreateProjectPayload): Promise<Project> => {
