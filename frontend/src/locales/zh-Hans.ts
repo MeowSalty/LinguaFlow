@@ -19,6 +19,7 @@ const messages = {
     tools: '工具',
     epubRotate: 'EPUB 横竖排转换',
     quickTranslate: '即时翻译',
+    stats: '用量概览',
     changelog: '更新日志',
     about: '关于',
     admin: '管理后台',
@@ -244,8 +245,8 @@ const messages = {
     },
   },
   dashboard: {
-    title: '工作台',
-    subtitle: '总览调用量、令牌消耗与常用快捷入口，快速进入翻译流程。',
+    title: '开始翻译',
+    subtitle: '粘贴文本即可获得即时译文，无需创建项目即可快速翻译。',
     stats: {
       apiCalls: 'API 调用',
       inputTokens: '输入 Token',
@@ -260,10 +261,6 @@ const messages = {
       viewProjects: {
         title: '查看项目',
         description: '进入项目工作区',
-      },
-      manageOrganizations: {
-        title: '管理后端',
-        description: '配置模型与 API 接入',
       },
     },
     activity: {
@@ -292,6 +289,10 @@ const messages = {
       completed: '已完成',
       failed: '失败',
     },
+  },
+  stats: {
+    title: '用量概览',
+    subtitle: '查看调用量、令牌消耗与最近活动。',
   },
   projects: {
     eyebrow: 'Project Workspace',

@@ -239,6 +239,10 @@ const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
             <IconifyIcon icon="carbon:server-proxy" class="text-base" />
             <span class="whitespace-nowrap">{{ t('nav.backends') }}</span>
           </RouterLink>
+          <RouterLink to="/stats" :class="[navLinkClass]" :active-class="navActiveClass">
+            <IconifyIcon icon="carbon:chart-bar" class="text-base" />
+            <span class="whitespace-nowrap">{{ t('nav.stats') }}</span>
+          </RouterLink>
           <NDropdown
             trigger="hover"
             :options="templateNavOptions"
