@@ -172,24 +172,57 @@ func DefaultPreviewConfig() PreviewConfig {
 	}
 }
 
+// QuickTranslateConfig 控制即时翻译（同步单段在线翻译）的并发与生命周期。
+// 译文纯临时不落库，故无 apply_token_ttl。
+type QuickTranslateConfig struct {
+	// MaxConcurrency 为单 actor 同时进行的即时翻译并发上限（per-actor 信号量）；
+	// 全局并发上限 = MaxConcurrency × 4。<=0 时使用默认值 2，>32 时钳制为 32，
+	// 避免误配放大 AI 速率/成本预算。
+	MaxConcurrency int `yaml:"max_concurrency"`
+	// Timeout 为单次即时翻译执行超时（默认 5 分钟，对齐 Preview——二者复用同一套
+	// 多轮 LLM pipeline，含 429 指数退避，单轮 LLM 调用可能较慢）。<=0 用默认值，
+	// >MaxTimeout 钳制为 MaxTimeout，给服务器管理者一个硬安全阀。
+	Timeout time.Duration `yaml:"timeout"`
+	// MaxTimeout 为 Timeout 的硬上限，防止运维或用户误配过长超时占满并发槽位。
+	// <=0 时使用默认值 30 分钟。
+	MaxTimeout time.Duration `yaml:"max_timeout"`
+}
+
+// quickTranslateMaxConcurrencyUpper 钳制 per-actor 并发上限，避免误配放大全局负载。
+const quickTranslateMaxConcurrencyUpper = 32
+
+// quickTranslateMaxTimeoutUpper 钳制 Timeout 与 MaxTimeout 的绝对上限，
+// 防止误配过长超时长时间占用并发槽位与 handler goroutine。
+const quickTranslateMaxTimeoutUpper = 30 * time.Minute
+
+// DefaultQuickTranslateConfig 返回默认的 QuickTranslate 配置。
+func DefaultQuickTranslateConfig() QuickTranslateConfig {
+	return QuickTranslateConfig{
+		MaxConcurrency: 2,
+		Timeout:        5 * time.Minute,
+		MaxTimeout:     quickTranslateMaxTimeoutUpper,
+	}
+}
+
 type ServerConfig struct {
-	Host            string             `yaml:"host"`
-	Port            int                `yaml:"port"`
-	Mode            string             `yaml:"mode"` // "server" (default) | "local"
-	ServiceName     string             `yaml:"service_name"`
-	DataDir         string             `yaml:"data_dir"`
-	AutoMigrate     bool               `yaml:"auto_migrate"`
-	JWTSecret       string             `yaml:"jwt_secret"`
-	JWTIssuer       string             `yaml:"jwt_issuer"`
-	JWTExpiry       time.Duration      `yaml:"jwt_expiry"`
-	RefreshExpiry   time.Duration      `yaml:"refresh_token_expiry"`
-	ShutdownTimeout time.Duration      `yaml:"shutdown_timeout"`
-	Database        DatabaseConfig     `yaml:"database"`
-	Workers         WorkerConfig       `yaml:"workers"`
-	Preview         PreviewConfig      `yaml:"preview"`
-	CORS            CORSConfig         `yaml:"cors"`
-	Registration    RegistrationConfig `yaml:"registration"`
-	ServeUI         bool               `yaml:"serve_ui"`
+	Host            string               `yaml:"host"`
+	Port            int                  `yaml:"port"`
+	Mode            string               `yaml:"mode"` // "server" (default) | "local"
+	ServiceName     string               `yaml:"service_name"`
+	DataDir         string               `yaml:"data_dir"`
+	AutoMigrate     bool                 `yaml:"auto_migrate"`
+	JWTSecret       string               `yaml:"jwt_secret"`
+	JWTIssuer       string               `yaml:"jwt_issuer"`
+	JWTExpiry       time.Duration        `yaml:"jwt_expiry"`
+	RefreshExpiry   time.Duration        `yaml:"refresh_token_expiry"`
+	ShutdownTimeout time.Duration        `yaml:"shutdown_timeout"`
+	Database        DatabaseConfig       `yaml:"database"`
+	Workers         WorkerConfig         `yaml:"workers"`
+	Preview         PreviewConfig        `yaml:"preview"`
+	QuickTranslate  QuickTranslateConfig `yaml:"quick_translate"`
+	CORS            CORSConfig           `yaml:"cors"`
+	Registration    RegistrationConfig   `yaml:"registration"`
+	ServeUI         bool                 `yaml:"serve_ui"`
 }
 
 // RegistrationConfig 定义用户注册的初始默认值。
@@ -292,6 +325,7 @@ func DefaultServerConfig() *ServerConfig {
 		Database:        defaultDatabaseConfig(DatabaseDriverSQLite),
 		Workers:         DefaultWorkerConfig(),
 		Preview:         DefaultPreviewConfig(),
+		QuickTranslate:  DefaultQuickTranslateConfig(),
 		CORS: CORSConfig{
 			AllowedOrigins: []string{"*"},
 		},
@@ -382,6 +416,26 @@ func ValidateServerConfig(c *ServerConfig) error {
 	}
 	if c.Preview.ApplyTokenTTL <= 0 {
 		c.Preview.ApplyTokenTTL = DefaultPreviewConfig().ApplyTokenTTL
+	}
+	if c.QuickTranslate.MaxConcurrency <= 0 {
+		c.QuickTranslate.MaxConcurrency = DefaultQuickTranslateConfig().MaxConcurrency
+	}
+	if c.QuickTranslate.MaxConcurrency > quickTranslateMaxConcurrencyUpper {
+		c.QuickTranslate.MaxConcurrency = quickTranslateMaxConcurrencyUpper
+	}
+	// MaxTimeout 硬上限：先回填默认，再钳制到绝对上限。
+	if c.QuickTranslate.MaxTimeout <= 0 {
+		c.QuickTranslate.MaxTimeout = DefaultQuickTranslateConfig().MaxTimeout
+	}
+	if c.QuickTranslate.MaxTimeout > quickTranslateMaxTimeoutUpper {
+		c.QuickTranslate.MaxTimeout = quickTranslateMaxTimeoutUpper
+	}
+	// Timeout：回填默认，再钳制到 MaxTimeout（管理者的运行时安全阀）。
+	if c.QuickTranslate.Timeout <= 0 {
+		c.QuickTranslate.Timeout = DefaultQuickTranslateConfig().Timeout
+	}
+	if c.QuickTranslate.Timeout > c.QuickTranslate.MaxTimeout {
+		c.QuickTranslate.Timeout = c.QuickTranslate.MaxTimeout
 	}
 	return nil
 }

@@ -262,6 +262,10 @@ func (s *Server) ListActivity(w http.ResponseWriter, r *http.Request, _ ListActi
 	s.requireAuth(http.HandlerFunc(s.handleListActivity)).ServeHTTP(w, r)
 }
 
+func (s *Server) QuickTranslate(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleQuickTranslate)).ServeHTTP(w, r)
+}
+
 func (s *Server) GetStatsSummary(w http.ResponseWriter, r *http.Request) {
 	s.requireAuth(http.HandlerFunc(s.handleStatsSummary)).ServeHTTP(w, r)
 }

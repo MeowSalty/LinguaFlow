@@ -45,6 +45,7 @@ type Server struct {
 	executionProfileSvc          *service.ExecutionProfileService
 	jobSvc                       *service.JobService
 	previewSvc                   *service.PreviewService
+	quickTranslateSvc            *service.QuickTranslateService
 	executionPlanSvc             *service.ExecutionPlanService
 	reviewSvc                    *service.ReviewService
 	segmentSvc                   *service.SegmentService
@@ -152,6 +153,20 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		cfg.Preview.ApplyTokenTTL,
 		cfg.Preview.MaxConcurrency,
 		cfg.Preview.Timeout,
+	)
+
+	quickTranslateRunner := worker.NewQuickTranslateRunner(logger, client, limiterPool)
+	s.quickTranslateSvc = service.NewQuickTranslateService(
+		logger,
+		client,
+		s.projectSvc,
+		s.jobSvc,
+		s.backendSvc,
+		s.executionPlanSvc,
+		s.auditSvc,
+		quickTranslateRunner,
+		cfg.QuickTranslate.MaxConcurrency,
+		cfg.QuickTranslate.Timeout,
 	)
 
 	// 创建 ResourceMutex

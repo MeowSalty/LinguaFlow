@@ -360,13 +360,12 @@ func (s *JobService) prepareExecutionSnapshot(
 	return snapshot, nil
 }
 
-// validateAndSnapshot 校验执行计划中的每轮配置，并生成完整快照。
-func (s *JobService) validateAndSnapshot(
+// validateAndSnapshotWith 校验执行计划中的每轮配置并生成完整快照，backend 可访问性由 check 注入。
+func (s *JobService) validateAndSnapshotWith(
 	ctx context.Context,
-	actorUserID int,
-	projectRow *ent.Project,
 	plan *ent.ExecutionPlanTemplate,
 	overrideSegmentFilter string,
+	check func(backendID int) error,
 ) (*JobExecutionSnapshot, error) {
 	snapshot := &JobExecutionSnapshot{
 		ExecutionPlanID:   plan.ID,
@@ -376,7 +375,7 @@ func (s *JobService) validateAndSnapshot(
 
 	for i, round := range plan.Rounds {
 		// 校验后端可访问性
-		if err := s.validateBackendAccess(ctx, projectRow, round.BackendID); err != nil {
+		if err := check(round.BackendID); err != nil {
 			return nil, fmt.Errorf("rounds[%d] backend: %w", i, err)
 		}
 
@@ -495,7 +494,7 @@ func (s *JobService) validateAndSnapshot(
 	if plan.RubyRetry.Enabled && plan.RubyRetry.BackendID > 0 {
 		rr := &plan.RubyRetry
 
-		if err := s.validateBackendAccess(ctx, projectRow, rr.BackendID); err != nil {
+		if err := check(rr.BackendID); err != nil {
 			return nil, fmt.Errorf("ruby retry backend: %w", err)
 		}
 
@@ -510,6 +509,73 @@ func (s *JobService) validateAndSnapshot(
 		}
 	}
 
+	return snapshot, nil
+}
+
+// validateAndSnapshot 校验执行计划中的每轮配置，并生成完整快照。（保持原有行为不变）
+func (s *JobService) validateAndSnapshot(
+	ctx context.Context,
+	actorUserID int,
+	projectRow *ent.Project,
+	plan *ent.ExecutionPlanTemplate,
+	overrideSegmentFilter string,
+) (*JobExecutionSnapshot, error) {
+	return s.validateAndSnapshotWith(ctx, plan, overrideSegmentFilter, func(backendID int) error {
+		return s.validateBackendAccess(ctx, projectRow, backendID)
+	})
+}
+
+// validateBackendAccessForActor 检查后端对 actor(用户/org 级) 是否可访问，不依赖项目。
+// 复用 BackendService.requireOwnership:user scope 直接比对 owner;org scope 要求 admin。
+// 即时翻译等无项目场景下，统一归一化授权失败为 ErrBackendNotFound，
+// 与 user-scope 的"不泄露后端存在性"语义一致，避免 org 成员通过 403/404 探测后端存在。
+func (s *JobService) validateBackendAccessForActor(ctx context.Context, actorUserID, backendID int) error {
+	if _, err := s.backends.requireOwnership(ctx, actorUserID, backendID); err != nil {
+		if errors.Is(err, ErrForbidden) {
+			return ErrBackendNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+// prepareExecutionSnapshotForActor 构建即时翻译等场景的执行快照。
+// backend 授权检查通过 check 注入：
+//   - 无项目（projectRow == nil）：以 actor 自身身份为准（requireOwnership），
+//     统一归一化授权失败为 ErrBackendNotFound，避免 org 成员通过 403/404 探测后端存在。
+//   - 有项目（projectRow != nil）：复用 job/preview 的项目级 validateBackendAccess，
+//     按 *项目 owner* 的 org 归属判定，使同一 plan+project 在 job/preview/即时翻译
+//     三条路径上的后端鉴权语义保持一致。
+//
+// source/target 语言与 glossaryEnabled 由调用方显式传入。
+func (s *JobService) prepareExecutionSnapshotForActor(
+	ctx context.Context,
+	actorUserID, executionPlanID int,
+	overrideSegmentFilter, sourceLang, targetLang string,
+	glossaryEnabled bool,
+	projectRow *ent.Project,
+) (*JobExecutionSnapshot, error) {
+	plan, err := s.executionPlans.GetByID(ctx, actorUserID, executionPlanID)
+	if err != nil {
+		return nil, fmt.Errorf("execution plan: %w", err)
+	}
+	var check func(backendID int) error
+	if projectRow != nil {
+		check = func(backendID int) error {
+			return s.validateBackendAccess(ctx, projectRow, backendID)
+		}
+	} else {
+		check = func(backendID int) error {
+			return s.validateBackendAccessForActor(ctx, actorUserID, backendID)
+		}
+	}
+	snapshot, err := s.validateAndSnapshotWith(ctx, plan, overrideSegmentFilter, check)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.SourceLang = sourceLang
+	snapshot.TargetLang = targetLang
+	snapshot.GlossaryEnabled = glossaryEnabled
 	return snapshot, nil
 }
 

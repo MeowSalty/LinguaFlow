@@ -178,6 +178,7 @@ func (r *PreviewRunner) RunPreview(
 
 		// 决定目标段是否本轮翻译。
 		var segmentIndexes []int
+		skippedThisRound := false
 		switch round.Mode {
 		case "translate":
 			if roundIdx == firstTranslateRoundIdx {
@@ -197,6 +198,7 @@ func (r *PreviewRunner) RunPreview(
 					// 跳过本轮 translate；target 保持上一轮译文作为上下文。
 					doc.Segments[targetDocIdx].Translate = false
 					segmentIndexes = nil
+					skippedThisRound = true
 				}
 			}
 		default:
@@ -264,6 +266,13 @@ func (r *PreviewRunner) RunPreview(
 
 		if result.FailedBatchCount > 0 {
 			summary.Status = "partial"
+		} else if result.UnresolvedCount > 0 {
+			// translate 轮的终态失败通过 Finalize 计入 _translate_failed_indices，
+			// 体现在 UnresolvedCount；translate handler 不会递增 FailedBatchCount，
+			// 故需显式检查 UnresolvedCount 才能避免漏报失败轮次。
+			summary.Status = "partial"
+		} else if skippedThisRound {
+			summary.Status = "skipped"
 		} else {
 			summary.Status = "success"
 		}
@@ -311,68 +320,21 @@ func (r *PreviewRunner) buildTranslateBatchHandler(
 	engineCfg *engine.Config,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		var allIssues []qa.QualityIssue
-		if qaEngine != nil {
-			inputs := buildQACheckInputs(batchResult)
-			allIssues = qaEngine.Run(context.Background(), inputs)
-		}
-
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
-			}
-			if ts.TargetText == "" {
-				continue
-			}
-			segIssues := qa.IssuesFor(ts.Index, allIssues)
-			doc.Segments[ts.Index].Target = ts.TargetText
-			doc.Segments[ts.Index].Issues = segIssues
-			segStatus := string(service.SegmentStatusTranslated)
-			if qa.HasErrors(segIssues) && engineCfg.QA.AutoReject {
-				segStatus = string(service.SegmentStatusRejected)
-			}
-			doc.Segments[ts.Index].Status = segStatus
-		}
-		return nil
-	}
+	return buildTranslateBatchHandlerCommon(doc, qaEngine, engineCfg, targetDocIdx)
 }
 
 func (r *PreviewRunner) buildAdjudicateBatchHandler(
 	doc *pipeline.Document,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
-			}
-			if len(ts.Issues) > 0 {
-				doc.Segments[ts.Index].Issues = ts.Issues
-			}
-		}
-		return nil
-	}
+	return buildAdjudicateBatchHandlerCommon(doc, targetDocIdx)
 }
 
 func (r *PreviewRunner) buildSemanticQABatchHandler(
 	doc *pipeline.Document,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
-			}
-			if len(ts.Issues) == 0 {
-				continue
-			}
-			existing := doc.Segments[ts.Index].Issues
-			merged := mergeSemanticQAIssues(existing, ts.Issues)
-			doc.Segments[ts.Index].Issues = merged
-		}
-		return nil
-	}
+	return buildSemanticQABatchHandlerCommon(doc, targetDocIdx)
 }
 
 func (r *PreviewRunner) runDuplicateSourceDivergence(doc *pipeline.Document, targetDocIdx int) []qa.QualityIssue {
