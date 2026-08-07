@@ -255,12 +255,13 @@ export const formatTokens = (count: number): string => {
 export const isBatchEvent = (type: string): boolean => type === 'batch'
 
 export const batchStatusTimelineType = (
-  status: BatchEventMetadata['status'] | undefined,
+  status: BatchEventMetadata['status'] | 'skipped' | undefined,
   level: SSEEvent['level'],
-): 'success' | 'warning' | 'error' => {
+): 'success' | 'warning' | 'error' | 'info' => {
   if (status === 'failed') return 'error'
   if (status === 'partial') return 'warning'
   if (status === 'success') return 'success'
+  if (status === 'skipped') return 'info'
   const normalized = normalizeSSELevel(level)
   if (normalized === 'error') return 'error'
   if (normalized === 'warning') return 'warning'
