@@ -1381,6 +1381,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/quick-translate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 即时翻译（类 Google Translate 的单段在线翻译，译文纯临时不落库） */
+        post: operations["QuickTranslate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2348,6 +2365,83 @@ export interface components {
             description?: string;
             ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds?: components["schemas"]["ExecutionRoundConfig"][];
+        };
+        QuickTranslateRequest: {
+            /** @description 待翻译文本(单段,可含多句) */
+            source_text: string;
+            /**
+             * @description 源语言;省略或 "auto" 表示自动检测
+             * @default auto
+             */
+            source_lang: string;
+            /**
+             * @description 目标语言
+             * @default zh
+             */
+            target_lang: string;
+            /**
+             * @description 执行计划模板 ID。执行计划模板统一为用户/org 级(ExecutionPlanTemplate
+             *     无 project 关联),无论是否提供 project_id,用的都是同一套模板;
+             *     后端用 ExecutionPlanService.checkAccess 对 actor 做用户/org 级授权。
+             */
+            execution_plan_id: number;
+            /**
+             * @description 可选项目 ID。提供时仅复用项目的术语表与语言配置(若请求未显式覆盖),
+             *     并校验 actor 对该项目的访问权;执行计划本身仍与项目无关,不因 project_id
+             *     改变授权路径。省略时为纯即时翻译,使用请求体内联术语表。
+             */
+            project_id?: number | null;
+            /** @description 内联临时术语表(纯内存,翻译完即丢)。项目场景下叠加在项目术语表之上。 */
+            glossary?: components["schemas"]["QuickGlossaryEntry"][];
+        };
+        QuickTranslateResponse: {
+            /** @enum {string} */
+            status: "success" | "partial" | "failed";
+            source_text: string;
+            /** @description 译文;failed 时可能为空 */
+            target_text: string;
+            /** @description 实际使用的源语言 */
+            source_lang?: string;
+            target_lang?: string;
+            quality_issues?: components["schemas"]["QualityIssue"][];
+            round_summary?: components["schemas"]["QuickRoundSummary"][];
+            /**
+             * @description 分步调试诊断(每批一条)。复用 preview 的 TranslationBatchDiagnostic schema,
+             *     含 system_prompt/user_message/response_content/used_glossary/added_glossary/
+             *     error_type/http_status/tokens/duration 等(均做隐私裁剪,不含 API key)。
+             *     单段文本通常产出 1~N 条(多轮+重试时递增)。零新 schema、零新转换代码。
+             */
+            batches?: components["schemas"]["TranslationBatchDiagnostic"][];
+            usage?: components["schemas"]["QuickUsage"];
+            warnings?: string[];
+        };
+        QuickGlossaryEntry: {
+            source: string;
+            target: string;
+            /** @default false */
+            case_sensitive: boolean;
+            /** @default false */
+            forbidden: boolean;
+            /** @default true */
+            mandatory: boolean;
+            notes?: string;
+        };
+        QuickRoundSummary: {
+            index: number;
+            mode: string;
+            backend?: string;
+            /**
+             * @description 轮次执行结果。skipped 表示该轮因目标段状态不满足 segment_filter 而被跳过
+             *     （仅多轮计划的后续 translate 轮可能产生），其译文沿用上一轮结果。
+             * @enum {string}
+             */
+            status: "success" | "partial" | "failed" | "skipped";
+            duration_ms: number;
+        };
+        QuickUsage: {
+            api_calls: number;
+            input_tokens: number;
+            output_tokens: number;
         };
         /**
          * @description 响应格式：
@@ -5501,6 +5595,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    QuickTranslate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuickTranslateRequest"];
+            };
+        };
+        responses: {
+            /** @description 即时翻译结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuickTranslateResponse"];
                 };
             };
             default: components["responses"]["Problem"];

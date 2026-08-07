@@ -168,6 +168,11 @@ const isTemplateRoute = computed(() =>
 
 const toolsNavOptions = computed<DropdownOption[]>(() => [
   {
+    label: t('nav.quickTranslate'),
+    key: '/tools/quick-translate',
+    icon: () => h(IconifyIcon, { icon: 'carbon:translate', class: 'text-base' }),
+  },
+  {
     label: t('nav.epubRotate'),
     key: '/tools/epub-rotate',
     icon: () => h(IconifyIcon, { icon: 'carbon:text-vertical-alignment', class: 'text-base' }),
