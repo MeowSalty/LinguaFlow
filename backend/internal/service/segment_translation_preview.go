@@ -54,7 +54,7 @@ type PreviewRoundSummary struct {
 	Index    int
 	Mode     string
 	Backend  string
-	Status   string // "success" | "partial" | "failed"
+	Status   string // "success" | "partial" | "failed" | "skipped"
 	Duration time.Duration
 }
 

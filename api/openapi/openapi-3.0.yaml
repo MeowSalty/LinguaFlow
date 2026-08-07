@@ -4530,6 +4530,10 @@ components:
             - success
             - partial
             - failed
+            - skipped
+          description: |
+            轮次执行结果。skipped 表示该轮因目标段状态不满足 segment_filter 而被跳过
+            （仅多轮计划的后续 translate 轮可能产生），其译文沿用上一轮结果。
         duration_ms:
           type: integer
     QuickUsage:

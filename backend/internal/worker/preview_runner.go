@@ -178,6 +178,7 @@ func (r *PreviewRunner) RunPreview(
 
 		// 决定目标段是否本轮翻译。
 		var segmentIndexes []int
+		skippedThisRound := false
 		switch round.Mode {
 		case "translate":
 			if roundIdx == firstTranslateRoundIdx {
@@ -197,6 +198,7 @@ func (r *PreviewRunner) RunPreview(
 					// 跳过本轮 translate；target 保持上一轮译文作为上下文。
 					doc.Segments[targetDocIdx].Translate = false
 					segmentIndexes = nil
+					skippedThisRound = true
 				}
 			}
 		default:
@@ -264,6 +266,13 @@ func (r *PreviewRunner) RunPreview(
 
 		if result.FailedBatchCount > 0 {
 			summary.Status = "partial"
+		} else if result.UnresolvedCount > 0 {
+			// translate 轮的终态失败通过 Finalize 计入 _translate_failed_indices，
+			// 体现在 UnresolvedCount；translate handler 不会递增 FailedBatchCount，
+			// 故需显式检查 UnresolvedCount 才能避免漏报失败轮次。
+			summary.Status = "partial"
+		} else if skippedThisRound {
+			summary.Status = "skipped"
 		} else {
 			summary.Status = "success"
 		}
