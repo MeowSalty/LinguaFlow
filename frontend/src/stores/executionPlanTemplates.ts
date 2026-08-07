@@ -74,22 +74,33 @@ export const useExecutionPlanTemplatesStore = defineStore('executionPlanTemplate
     )
   })
 
+  const loadTemplatesPromise = ref<Promise<void> | null>(null)
+
   // ── 方法 ──
   const loadTemplates = async (): Promise<void> => {
-    loading.value = true
-    error.value = null
+    if (loadTemplatesPromise.value) return loadTemplatesPromise.value
 
-    try {
-      const response = await fetchExecutionPlanTemplates()
-      items.value = response.items
-    } catch (loadError) {
-      error.value =
-        loadError instanceof Error
-          ? loadError.message
-          : t('api.errors.fetchExecutionPlanTemplatesFailed')
-    } finally {
-      loading.value = false
+    const run = async (): Promise<void> => {
+      loading.value = true
+      error.value = null
+
+      try {
+        const response = await fetchExecutionPlanTemplates()
+        items.value = response.items
+      } catch (loadError) {
+        error.value =
+          loadError instanceof Error
+            ? loadError.message
+            : t('api.errors.fetchExecutionPlanTemplatesFailed')
+      } finally {
+        loading.value = false
+      }
     }
+
+    loadTemplatesPromise.value = run().finally(() => {
+      loadTemplatesPromise.value = null
+    })
+    return loadTemplatesPromise.value
   }
 
   const createTemplate = async (payload: CreateRequest): Promise<ExecutionPlanTemplate> => {
