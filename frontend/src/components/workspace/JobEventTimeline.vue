@@ -57,7 +57,7 @@ const getBatchSummary = (event: SSEEvent): string => {
   return parts.join(' · ')
 }
 
-const getBatchTimelineType = (event: SSEEvent): 'success' | 'warning' | 'error' => {
+const getBatchTimelineType = (event: SSEEvent): 'success' | 'warning' | 'error' | 'info' => {
   const meta = event.metadata as unknown as BatchEventMetadata | undefined
   return batchStatusTimelineType(meta?.status, event.level)
 }
