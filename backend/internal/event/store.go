@@ -1,6 +1,7 @@
 package event
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 )
@@ -11,9 +12,17 @@ type EventStore interface {
 	// Returns an error if the event could not be persisted.
 	Append(jobID int, evt Event) (int64, error)
 
-	// Replay returns events with seq > afterSeq for the given job.
-	// If the requested range is older than the buffer, returns all available events.
-	Replay(jobID int, afterSeq int64) []Event
+	// Replay returns up to limit events with seq > afterSeq for the given job,
+	// ordered ascending by seq. If limit <= 0, all matching events are returned.
+	// If the requested range is older than the buffer, returns nil to signal
+	// the caller (e.g. HybridStore) to fall back to the DB.
+	// The ctx cancels the underlying query on client disconnect.
+	Replay(ctx context.Context, jobID int, afterSeq int64, limit int) []Event
+
+	// LatestSeq returns the highest seq currently stored for the given job,
+	// and false when the job has no events. Used to compute the recent-window
+	// replay start for fresh SSE connections.
+	LatestSeq(ctx context.Context, jobID int) (int64, bool)
 
 	// Purge removes all stored events for the given job.
 	Purge(jobID int)
@@ -100,8 +109,10 @@ func (s *RingBufferStore) AppendWithSeq(jobID int, evt Event) {
 	buf.mu.Unlock()
 }
 
-// Replay returns events with seq > afterSeq for the given job.
-func (s *RingBufferStore) Replay(jobID int, afterSeq int64) []Event {
+// Replay returns up to limit events with seq > afterSeq for the given job,
+// ordered ascending by seq. If limit <= 0, all matching events are returned.
+// ctx is accepted for interface symmetry but unused (in-memory scan).
+func (s *RingBufferStore) Replay(ctx context.Context, jobID int, afterSeq int64, limit int) []Event {
 	s.mu.RLock()
 	buf, ok := s.buffers[jobID]
 	s.mu.RUnlock()
@@ -140,9 +151,29 @@ func (s *RingBufferStore) Replay(jobID int, afterSeq int64) []Event {
 		evt := buf.events[idx]
 		if evt.Seq > afterSeq {
 			result = append(result, evt)
+			if limit > 0 && len(result) >= limit {
+				break
+			}
 		}
 	}
 	return result
+}
+
+// LatestSeq returns the highest seq in the job's ring buffer, and false when
+// the buffer is empty or absent.
+func (s *RingBufferStore) LatestSeq(ctx context.Context, jobID int) (int64, bool) {
+	s.mu.RLock()
+	buf, ok := s.buffers[jobID]
+	s.mu.RUnlock()
+	if !ok {
+		return 0, false
+	}
+	buf.mu.RLock()
+	defer buf.mu.RUnlock()
+	if buf.count == 0 {
+		return 0, false
+	}
+	return buf.events[(buf.head-1)%len(buf.events)].Seq, true
 }
 
 // Purge removes all stored events for the given job.

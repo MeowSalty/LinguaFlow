@@ -204,6 +204,28 @@ func DefaultQuickTranslateConfig() QuickTranslateConfig {
 	}
 }
 
+// SSEConfig 控制实时事件（SSE）回放与历史事件存储的行为。
+type SSEConfig struct {
+	// RingBufferCapacity 为每个 job 内存 ring buffer 的容量（用于 SSE 重连窗口补进）。
+	// <=0 用默认值 256。
+	RingBufferCapacity int `yaml:"ring_buffer_capacity"`
+	// ReplayBatchSize 为 SSE 首次回放（历史补进）从 DB 拉取的每批事件数。
+	// <=0 用默认值 200。
+	ReplayBatchSize int `yaml:"replay_batch_size"`
+	// MaxReplayEvents 为 SSE 单次连接历史回放的总量上限。
+	// 达到上限即停止回放，缺口交给前端通过 Last-Event-ID 续传或 REST 历史端点补全。
+	// <=0 用默认值（RingBufferCapacity 的 2 倍）。
+	MaxReplayEvents int `yaml:"max_replay_events"`
+}
+
+// DefaultSSEConfig 返回默认的 SSE 配置。
+func DefaultSSEConfig() SSEConfig {
+	return SSEConfig{
+		RingBufferCapacity: 256,
+		ReplayBatchSize:    200,
+	}
+}
+
 type ServerConfig struct {
 	Host            string               `yaml:"host"`
 	Port            int                  `yaml:"port"`
@@ -220,6 +242,7 @@ type ServerConfig struct {
 	Workers         WorkerConfig         `yaml:"workers"`
 	Preview         PreviewConfig        `yaml:"preview"`
 	QuickTranslate  QuickTranslateConfig `yaml:"quick_translate"`
+	SSE             SSEConfig            `yaml:"sse"`
 	CORS            CORSConfig           `yaml:"cors"`
 	Registration    RegistrationConfig   `yaml:"registration"`
 	ServeUI         bool                 `yaml:"serve_ui"`
@@ -326,6 +349,7 @@ func DefaultServerConfig() *ServerConfig {
 		Workers:         DefaultWorkerConfig(),
 		Preview:         DefaultPreviewConfig(),
 		QuickTranslate:  DefaultQuickTranslateConfig(),
+		SSE:             DefaultSSEConfig(),
 		CORS: CORSConfig{
 			AllowedOrigins: []string{"*"},
 		},
@@ -436,6 +460,15 @@ func ValidateServerConfig(c *ServerConfig) error {
 	}
 	if c.QuickTranslate.Timeout > c.QuickTranslate.MaxTimeout {
 		c.QuickTranslate.Timeout = c.QuickTranslate.MaxTimeout
+	}
+	if c.SSE.RingBufferCapacity <= 0 {
+		c.SSE.RingBufferCapacity = DefaultSSEConfig().RingBufferCapacity
+	}
+	if c.SSE.ReplayBatchSize <= 0 {
+		c.SSE.ReplayBatchSize = DefaultSSEConfig().ReplayBatchSize
+	}
+	if c.SSE.MaxReplayEvents <= 0 {
+		c.SSE.MaxReplayEvents = c.SSE.RingBufferCapacity * 2
 	}
 	return nil
 }

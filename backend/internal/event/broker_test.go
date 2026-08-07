@@ -143,3 +143,23 @@ func TestBrokerConcurrentPublish(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestBrokerLatestSeq(t *testing.T) {
+	store := NewRingBufferStore(DefaultRingBufferConfig())
+	b := NewBroker(store)
+
+	if _, ok := b.LatestSeq(t.Context(), 1); ok {
+		t.Fatal("expected ok=false when store has no events")
+	}
+	b.Publish(1, Event{Type: "ev", JobID: 1, Message: "msg"})
+	b.Publish(1, Event{Type: "ev", JobID: 1, Message: "msg"})
+	seq, ok := b.LatestSeq(t.Context(), 1)
+	if !ok || seq != 2 {
+		t.Fatalf("expected latest seq=2, got seq=%d ok=%v", seq, ok)
+	}
+
+	empty := NewBroker(nil)
+	if _, ok := empty.LatestSeq(t.Context(), 1); ok {
+		t.Fatal("expected ok=false when no store is configured")
+	}
+}
