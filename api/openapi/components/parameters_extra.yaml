@@ -21,3 +21,20 @@ Limit:
     type: integer
     minimum: 1
     maximum: 100
+
+AfterSeq:
+  name: after_seq
+  in: query
+  required: false
+  schema:
+    type: integer
+    minimum: 0
+    default: 0
+
+BeforeSeq:
+  name: before_seq
+  in: query
+  required: false
+  schema:
+    type: integer
+    minimum: 1

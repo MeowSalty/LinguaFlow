@@ -104,3 +104,25 @@ jobRetry:
               $ref: '../base.yaml#/components/schemas/Job'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
+
+jobEvents:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/JobId'
+  get:
+    operationId: ListJobEvents
+    summary: 列出任务的历史事件
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '../base.yaml#/components/parameters/AfterSeq'
+      - $ref: '../base.yaml#/components/parameters/BeforeSeq'
+      - $ref: '../base.yaml#/components/parameters/Limit'
+    responses:
+      '200':
+        description: 任务历史事件列表
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/JobEventListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

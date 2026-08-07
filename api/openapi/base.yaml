@@ -102,7 +102,9 @@ paths:
   /jobs/{jobId}/cancel:
    $ref: './paths/jobs.yaml#/jobCancel'
   /jobs/{jobId}/retry:
-   $ref: './paths/jobs.yaml#/jobRetry'
+    $ref: './paths/jobs.yaml#/jobRetry'
+  /jobs/{jobId}/events:
+    $ref: './paths/jobs.yaml#/jobEvents'
   /execution-plan-templates:
     $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplates'
   /execution-plan-templates/{executionPlanTemplateId}:
@@ -176,6 +178,10 @@ components:
       $ref: './components/parameters_extra.yaml#/Cursor'
     Limit:
       $ref: './components/parameters_extra.yaml#/Limit'
+    AfterSeq:
+      $ref: './components/parameters_extra.yaml#/AfterSeq'
+    BeforeSeq:
+      $ref: './components/parameters_extra.yaml#/BeforeSeq'
   responses:
     Problem:
       $ref: './components/responses.yaml#/Problem'
@@ -276,6 +282,10 @@ components:
       $ref: './components/schemas/job.yaml#/JobProgress'
     JobListResponse:
       $ref: './components/schemas/job.yaml#/JobListResponse'
+    JobEvent:
+      $ref: './components/schemas/job.yaml#/JobEvent'
+    JobEventListResponse:
+      $ref: './components/schemas/job.yaml#/JobEventListResponse'
     Activity:
       $ref: './components/schemas/job.yaml#/Activity'
     ActivityListResponse:
