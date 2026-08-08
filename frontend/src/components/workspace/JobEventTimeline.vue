@@ -11,7 +11,6 @@ const { t } = useI18n()
 
 const props = defineProps<{
   events: SSEEvent[]
-  syntheticEvents?: SSEEvent[]
   connected?: boolean
   hasOlder?: boolean
   loadingOlder?: boolean
@@ -56,53 +55,10 @@ const openBatchDetail = (event: SSEEvent): void => {
   detailDrawerShow.value = true
 }
 
-const JOB_EVENT_TYPES = new Set(['job_started', 'job_completed', 'job_failed', 'job_cancelled'])
-
-const RESOURCE_EVENT_TYPES = new Set([
-  'resource_started',
-  'resource_completed',
-  'resource_failed',
-  'resource_cancelled',
-])
-
-const STAGE_EVENT_TYPES = new Set(['stage_start', 'stage_done'])
-
-const filteredSyntheticEvents = computed(() => {
-  const synthetic = props.syntheticEvents ?? []
-  const live = props.events
-
-  const liveJobTypes = new Set<string>()
-  const liveResourceTypes = new Set<string>()
-  const liveStageTypes = new Set<string>()
-
-  for (const event of live) {
-    if (JOB_EVENT_TYPES.has(event.type)) {
-      liveJobTypes.add(event.type)
-    } else if (RESOURCE_EVENT_TYPES.has(event.type)) {
-      liveResourceTypes.add(event.type)
-    } else if (STAGE_EVENT_TYPES.has(event.type)) {
-      liveStageTypes.add(event.type)
-    }
-  }
-
-  return synthetic.filter((event) => {
-    if (JOB_EVENT_TYPES.has(event.type)) {
-      return !liveJobTypes.has(event.type)
-    }
-    if (RESOURCE_EVENT_TYPES.has(event.type)) {
-      return !liveResourceTypes.has(event.type)
-    }
-    if (STAGE_EVENT_TYPES.has(event.type)) {
-      return !liveStageTypes.has(event.type)
-    }
-    return true
-  })
-})
-
 const realItemCache = new WeakMap<SSEEvent, SSEEvent & { _key: string }>()
 
-const timelineItems = computed<Array<SSEEvent & { _key: string; _synthetic?: boolean }>>(() => {
-  const real = props.events.map((e) => {
+const timelineItems = computed<Array<SSEEvent & { _key: string }>>(() => {
+  return props.events.map((e) => {
     let cached = realItemCache.get(e)
     if (!cached) {
       cached = { ...e, _key: String(e.seq) }
@@ -110,12 +66,6 @@ const timelineItems = computed<Array<SSEEvent & { _key: string; _synthetic?: boo
     }
     return cached
   })
-  const syn = filteredSyntheticEvents.value.map((e, i) => ({
-    ...e,
-    _key: `syn-${i}-${e.type}`,
-    _synthetic: true,
-  }))
-  return [...syn, ...real]
 })
 
 let scrollTicking = false
@@ -271,28 +221,43 @@ watch(
   },
 )
 
+const attachScrollListeners = (el: HTMLElement): void => {
+  el.addEventListener('wheel', onWheel, { passive: false })
+  el.addEventListener('touchstart', onTouchStart, { passive: true })
+  el.addEventListener('touchmove', onTouchMove, { passive: false })
+  el.addEventListener('touchend', onTouchEnd, { passive: true })
+}
+
+const detachScrollListeners = (el: HTMLElement): void => {
+  el.removeEventListener('wheel', onWheel)
+  el.removeEventListener('touchstart', onTouchStart)
+  el.removeEventListener('touchmove', onTouchMove)
+  el.removeEventListener('touchend', onTouchEnd)
+}
+
+let currentScrollEl: HTMLElement | null = null
+
+// 滚动容器可能在 onMounted 之后才渲染（事件到达后 v-if 才为 true），
+// 用 watch 确保监听器在容器出现时挂载、消失时卸载
+watch(scrollContainerRef, (el, oldEl) => {
+  if (oldEl) detachScrollListeners(oldEl)
+  if (el) {
+    attachScrollListeners(el)
+    currentScrollEl = el
+  } else {
+    currentScrollEl = null
+  }
+})
+
 onMounted(() => {
   prevEventsLength.value = props.events.length
   tailSeq.value = props.events.at(-1)?.seq ?? 0
   headSeq.value = props.events.at(0)?.seq ?? 0
   nextTick(() => scrollToBottom())
-  const el = scrollContainerRef.value
-  if (el) {
-    el.addEventListener('wheel', onWheel, { passive: false })
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd, { passive: true })
-  }
 })
 
 onUnmounted(() => {
-  const el = scrollContainerRef.value
-  if (el) {
-    el.removeEventListener('wheel', onWheel)
-    el.removeEventListener('touchstart', onTouchStart)
-    el.removeEventListener('touchmove', onTouchMove)
-    el.removeEventListener('touchend', onTouchEnd)
-  }
+  if (currentScrollEl) detachScrollListeners(currentScrollEl)
   if (wheelTimer) {
     clearTimeout(wheelTimer)
     wheelTimer = null

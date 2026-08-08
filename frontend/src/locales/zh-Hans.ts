@@ -837,17 +837,6 @@ const messages = {
         releaseToLoad: '松开加载',
         reachedOldest: '已到最早',
         jobEnded: '任务已结束',
-        synthetic: {
-          jobStarted: '任务开始执行',
-          jobCompleted: '任务已完成',
-          jobFailed: '任务执行失败',
-          jobCancelled: '任务已取消',
-          resourceStarted: '开始翻译资源 {name}',
-          resourceCompleted: '资源 {name} 翻译完成',
-          resourceFailed: '资源 {name} 翻译失败',
-          resourceCancelled: '资源 {name} 已取消',
-          stageStart: '进入阶段',
-        },
         batch: {
           status: {
             success: '成功',

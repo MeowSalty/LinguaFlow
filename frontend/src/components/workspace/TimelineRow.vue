@@ -20,7 +20,7 @@ import PoolEventCard from './PoolEventCard.vue'
 const { t } = useI18n()
 
 const props = defineProps<{
-  event: SSEEvent & { _key?: string; _synthetic?: boolean }
+  event: SSEEvent & { _key?: string }
   isLast?: boolean
 }>()
 
@@ -67,7 +67,6 @@ const typeColorMap: Record<RowType, string> = {
 }
 
 const rowType = computed<RowType>(() => {
-  if (props.event._synthetic) return 'default'
   if (isPoolEvent(props.event.type)) return getPoolTimelineType(props.event)
   if (isBatchEvent(props.event.type)) return getBatchTimelineType(props.event)
   return eventLevelType(props.event.level)
@@ -81,21 +80,13 @@ const rowType = computed<RowType>(() => {
         :class="[isLast ? 'opacity-0' : '', 'absolute left-[5px] top-2 bottom-0 w-px border-l border-lf-border']"
       />
       <div
-        v-if="event._synthetic"
-        class="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-lf-text-muted bg-transparent"
-      />
-      <div
-        v-else
         class="mt-1 h-3 w-3 shrink-0 rounded-full"
         :class="typeColorMap[rowType]"
       />
     </div>
     <div class="min-w-0 flex-1">
       <span class="font-mono tabular-nums text-xs text-lf-text-muted">{{ formatEventTime(event.created_at) }}</span>
-      <div
-        class="text-sm"
-        :class="{ 'text-lf-text-muted': event._synthetic }"
-      >
+      <div class="text-sm">
         {{ event.message }}
       </div>
       <div

@@ -27,7 +27,6 @@ const props = defineProps<{
   externalError?: string | null
   projectName?: string
   events?: SSEEvent[]
-  syntheticEvents?: SSEEvent[]
   sseConnected?: boolean
   hasOlder?: boolean
   loadingOlder?: boolean
@@ -235,7 +234,6 @@ const resourceColumns = computed(() => [
     <JobEventTimeline
       v-if="events"
       :events="events"
-      :synthetic-events="syntheticEvents"
       :connected="sseConnected"
       :has-older="hasOlder"
       :loading-older="loadingOlder"
