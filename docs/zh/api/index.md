@@ -118,6 +118,33 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/quick-translate \
 
 响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-即时翻译)。
 
+### 8. 任务事件历史（分页）
+
+作业执行事件（批次翻译、状态变化、质检等）除通过 SSE 实时推送外，也支持按 `seq` 游标的 REST 分页查询，便于外部监控或回放。
+
+```bash
+# 反向分页（取最近的一页，向上翻更早的事件）
+curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50"
+
+# 用返回的 next_before_seq 继续向上翻（取更早的）
+curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&before_seq=1234"
+
+# 正向分页（从某个 seq 之后向后翻）
+curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&after_seq=1000"
+```
+
+| 参数         | 说明                                              |
+| ------------ | ------------------------------------------------- |
+| `after_seq`  | 正向游标：返回 seq **大于**此值的事件，升序排列    |
+| `before_seq` | 反向游标：返回 seq **小于**此值的事件，降序排列    |
+| `limit`      | 每页条数，`1`–`100`                                |
+
+响应中的 `next_after_seq` / `next_before_seq` 为下一次翻页游标；`0` 表示无更多数据。字段全集见 Redoc 中 `JobEvent` / `JobEventListResponse`。
+
+::: tip SSE 与 REST 怎么配合
+SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-实时事件流)。
+:::
+
 ## 错误码
 
 | 状态码 | 说明               |
