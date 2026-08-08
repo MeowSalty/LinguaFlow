@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { NDrawer, NDrawerContent, NEmpty, NSpin } from 'naive-ui'
 
 import type { ApiSchemas } from '@/api/client'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
-import { buildSyntheticEvents, type SyntheticEvent } from '@/composables/useSyntheticEvents'
 
 import JobDetailContent from './JobDetailContent.vue'
 
 type Job = ApiSchemas['Job']
 
-const props = defineProps<{
+defineProps<{
   show: boolean
   job: Job | null
   loading: boolean
@@ -26,50 +25,19 @@ const emit = defineEmits<{
 
 const tracker = useGlobalJobTrackerStore()
 
-const jobId = computed(() => props.job?.id ?? null)
-
 const events = computed(() => tracker.getJobEvents())
 
 const connected = computed(() => tracker.isJobSSEConnected())
 
-const syntheticEvents = ref<SyntheticEvent[]>([])
+const hasOlder = computed(() => tracker.hasOlder)
 
-const refreshSyntheticEvents = (): void => {
-  if (props.job) {
-    syntheticEvents.value = buildSyntheticEvents(props.job)
-  }
-}
+const loadingOlder = computed(() => tracker.loadingOlder)
+
+const jobEnded = computed(() => tracker.jobEnded)
 
 const clearEventsAndCache = (): void => {
   tracker.clearJobEvents()
 }
-
-watch(
-  () => props.show,
-  (visible) => {
-    if (visible && jobId.value != null) {
-      refreshSyntheticEvents()
-    } else {
-      syntheticEvents.value = []
-    }
-  },
-  { immediate: true },
-)
-
-watch(
-  () => props.loading,
-  (loading, wasLoading) => {
-    if (wasLoading && !loading && props.show) {
-      refreshSyntheticEvents()
-    }
-  },
-)
-
-watch(jobId, (newId, oldId) => {
-  if (props.show && newId != null && newId !== oldId) {
-    refreshSyntheticEvents()
-  }
-})
 </script>
 
 <template>
@@ -91,9 +59,12 @@ watch(jobId, (newId, oldId) => {
           :external-error="error"
           :project-name="projectName"
           :events="events"
-          :synthetic-events="syntheticEvents"
           :sse-connected="connected"
+          :has-older="hasOlder"
+          :loading-older="loadingOlder"
+          :job-ended="jobEnded"
           @clear-events="clearEventsAndCache"
+          @load-older="() => tracker.loadOlder()"
         />
         <NEmpty v-else :description="emptyDescription" />
       </NSpin>

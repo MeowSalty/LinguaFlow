@@ -86,3 +86,38 @@ export const retryJob = async (
 
   return data
 }
+
+export interface JobEventsPage {
+  items: ApiSchemas['JobEvent'][]
+  next_after_seq?: number
+  next_before_seq?: number
+}
+
+export const listJobEvents = async (
+  jobId: number,
+  opts?: { beforeSeq?: number; afterSeq?: number; limit?: number },
+  client: ApiClient = apiClient,
+): Promise<JobEventsPage> => {
+  const query: {
+    before_seq?: number
+    after_seq?: number
+    limit?: number
+  } = {}
+  if (opts?.beforeSeq != null) query.before_seq = opts.beforeSeq
+  if (opts?.afterSeq != null) query.after_seq = opts.afterSeq
+  if (opts?.limit != null) query.limit = opts.limit
+
+  const { data, error, response } = await client.GET('/jobs/{jobId}/events', {
+    params: { path: { jobId }, query },
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.listJobEventsFailed'), error, response)
+  }
+
+  return {
+    items: data.items,
+    next_after_seq: data.next_after_seq,
+    next_before_seq: data.next_before_seq,
+  }
+}

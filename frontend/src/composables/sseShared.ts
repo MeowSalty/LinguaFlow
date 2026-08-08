@@ -1,5 +1,7 @@
 import { getAccessToken, readStoredApiBaseUrl } from '@/api/token-storage'
 
+import type { ApiSchemas } from '@/api/client'
+
 export type SSELevel = 'info' | 'warn' | 'warning' | 'error'
 
 export interface SSEEvent {
@@ -12,6 +14,9 @@ export interface SSEEvent {
   created_at: string
   seq: number
 }
+
+/** REST 历史事件类型；结构上与 SSEEvent 同构，可直接作为 SSEEvent 使用。 */
+export type JobEvent = ApiSchemas['JobEvent']
 
 export interface BatchEventMetadata {
   segment_ids?: string[]

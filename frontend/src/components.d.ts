@@ -14,6 +14,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     ActivityFeed: typeof import('./components/dashboard/ActivityFeed.vue')['default']
     BatchContentViewer: typeof import('./components/workspace/BatchContentViewer.vue')['default']
+    BatchDetailDrawer: typeof import('./components/workspace/BatchDetailDrawer.vue')['default']
     BatchEventCard: typeof import('./components/workspace/BatchEventCard.vue')['default']
     BootstrapNoticeHost: typeof import('./components/BootstrapNoticeHost.vue')['default']
     ConflictDialog: typeof import('./components/workspace/ConflictDialog.vue')['default']
@@ -123,6 +124,7 @@ declare module 'vue' {
 declare global {
   const ActivityFeed: typeof import('./components/dashboard/ActivityFeed.vue')['default']
   const BatchContentViewer: typeof import('./components/workspace/BatchContentViewer.vue')['default']
+  const BatchDetailDrawer: typeof import('./components/workspace/BatchDetailDrawer.vue')['default']
   const BatchEventCard: typeof import('./components/workspace/BatchEventCard.vue')['default']
   const BootstrapNoticeHost: typeof import('./components/BootstrapNoticeHost.vue')['default']
   const ConflictDialog: typeof import('./components/workspace/ConflictDialog.vue')['default']

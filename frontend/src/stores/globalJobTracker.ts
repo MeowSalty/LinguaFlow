@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch, onScopeDispose } from 'vue'
 
-import { type ApiSchemas, fetchJob } from '@/api/client'
+import { type ApiSchemas, fetchJob, listJobEvents } from '@/api/client'
 import { type SSEEvent, KNOWN_EVENT_TYPES, resolveStreamUrl } from '@/composables/sseShared'
 
 type Job = ApiSchemas['Job']
@@ -32,6 +32,12 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   const drawerEvents = ref<SSEEvent[]>([])
   const drawerSSEConnected = ref(false)
   let drawerEventSource: EventSource | null = null
+
+  const seenSeqs = new Set<number>()
+  const minSeqLoaded = ref(0)
+  const loadingOlder = ref(false)
+  const hasOlder = ref(true)
+  const jobEnded = ref(false)
 
   // ── Getters ──
   const activeJobs = computed(() =>
@@ -81,6 +87,39 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     }
   }
 
+  // ── 统一状态重置 ──
+  const resetDrawerState = (): void => {
+    drawerEvents.value = []
+    seenSeqs.clear()
+    minSeqLoaded.value = 0
+    hasOlder.value = true
+    jobEnded.value = false
+  }
+
+  // ── 内部事件插入 ──
+  const insertEvent = (evt: SSEEvent): void => {
+    if (evt.seq > 0) {
+      if (seenSeqs.has(evt.seq)) return
+      seenSeqs.add(evt.seq)
+    }
+    const list = drawerEvents.value
+    let lo = 0
+    let hi = list.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (list[mid]!.seq < evt.seq) {
+        lo = mid + 1
+      } else {
+        hi = mid
+      }
+    }
+    list.splice(lo, 0, evt)
+    if (evt.seq > 0) {
+      minSeqLoaded.value =
+        minSeqLoaded.value === 0 ? evt.seq : Math.min(minSeqLoaded.value, evt.seq)
+    }
+  }
+
   // ── SSE 连接（按需：仅抽屉打开时） ──
   const connectDrawerSSE = (jobId: number): void => {
     if (drawerEventSource) {
@@ -88,7 +127,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
       drawerEventSource = null
     }
 
-    drawerEvents.value = []
+    resetDrawerState()
     drawerSSEConnected.value = false
 
     const url = resolveStreamUrl(jobId)
@@ -103,7 +142,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     const handleEvent = (e: MessageEvent): void => {
       try {
         const data = JSON.parse(e.data) as SSEEvent
-        drawerEvents.value = [...drawerEvents.value, data]
+        insertEvent(data)
       } catch {
         // ignore malformed events
       }
@@ -128,8 +167,55 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
       drawerEventSource.close()
       drawerEventSource = null
     }
-    drawerEvents.value = []
+    resetDrawerState()
     drawerSSEConnected.value = false
+  }
+
+  // ── REST 最新页加载（终端状态，含 SSE 回退） ──
+  const loadLatestPage = async (jobId: number): Promise<void> => {
+    resetDrawerState()
+    loadingOlder.value = true
+    try {
+      const data = await listJobEvents(jobId, { limit: 50 })
+      for (const evt of data.items) insertEvent(evt as SSEEvent)
+      hasOlder.value = data.next_before_seq != null
+    } catch (e) {
+      // REST 端点不可用时回退到 SSE（后端会重放全部历史事件）
+      console.error('loadLatestPage failed, falling back to SSE', e)
+      loadingOlder.value = false
+      connectDrawerSSE(jobId)
+      return
+    } finally {
+      loadingOlder.value = false
+    }
+  }
+
+  // ── 加载更早的历史事件（上拉加载） ──
+  const loadOlder = async (): Promise<void> => {
+    if (
+      loadingOlder.value ||
+      !hasOlder.value ||
+      drawerEvents.value.length === 0 ||
+      drawerJobId.value == null
+    )
+      return
+    loadingOlder.value = true
+    try {
+      const data = await listJobEvents(drawerJobId.value, {
+        beforeSeq: minSeqLoaded.value,
+        limit: 50,
+      })
+      for (const evt of data.items) insertEvent(evt as SSEEvent)
+      hasOlder.value = data.next_before_seq != null
+      if (data.items.length === 0 && data.next_before_seq == null) {
+        hasOlder.value = false
+      }
+    } catch (e) {
+      console.error(e)
+      throw e
+    } finally {
+      loadingOlder.value = false
+    }
   }
 
   // ── 单个任务刷新 ──
@@ -206,10 +292,13 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     if (job) {
       detailJob.value = job
     }
-    // Always fetch latest detail
     void loadDetailJob(jobId)
-    // Connect SSE for this job (backend will replay all historical events)
-    connectDrawerSSE(jobId)
+    const initialStatus = job?.status ?? detailJob.value?.status
+    if (initialStatus && TERMINAL_STATUSES.has(initialStatus)) {
+      void loadLatestPage(jobId)
+    } else {
+      connectDrawerSSE(jobId)
+    }
   }
 
   const closeDetail = (): void => {
@@ -335,6 +424,16 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     }
   })
 
+  // ── 监听状态转换（SSE 模式下任务结束） ──
+  watch(
+    () => detailJob.value?.status,
+    (status) => {
+      if (drawerEventSource != null && status && TERMINAL_STATUSES.has(status)) {
+        jobEnded.value = true
+      }
+    },
+  )
+
   // ── 页面可见性 ──
   const handleVisibility = (): void => {
     if (document.hidden) return
@@ -403,6 +502,9 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     detailJob,
     loadingDetail,
     initialized,
+    hasOlder,
+    loadingOlder,
+    jobEnded,
     // Getters
     activeJobs,
     hasActiveJobs,
@@ -418,10 +520,12 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     closeDetail,
     refreshDetail,
     initialize,
+    loadOlder,
+    loadLatestPage,
     getJobEvents: (): SSEEvent[] => drawerEvents.value,
     isJobSSEConnected: (): boolean => drawerSSEConnected.value,
     clearJobEvents: (): void => {
-      drawerEvents.value = []
+      resetDrawerState()
     },
   }
 })
