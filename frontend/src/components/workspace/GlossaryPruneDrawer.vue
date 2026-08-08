@@ -376,7 +376,7 @@ watch(show, (visible) => {
 </script>
 
 <template>
-  <NDrawer v-model:show="show" :width="760" placement="right">
+  <NDrawer v-model:show="show" :width="'min(760px, 100vw)'" placement="right">
     <NDrawerContent :title="t('workspace.glossary.prune.title')" closable :native-scrollbar="false">
       <div v-if="result" class="space-y-5">
         <NAlert :type="result.failed ? 'warning' : 'success'" :bordered="false">

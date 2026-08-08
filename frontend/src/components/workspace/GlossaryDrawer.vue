@@ -42,7 +42,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <NDrawer v-model:show="show" :width="480" placement="right">
+  <NDrawer v-model:show="show" :width="'min(480px, 100vw)'" placement="right">
     <NDrawerContent :title="drawerTitle" closable>
       <NAlert v-if="error" type="error" :bordered="false" class="mb-4">
         {{ error }}

@@ -43,7 +43,7 @@ const clearEventsAndCache = (): void => {
 <template>
   <NDrawer
     :show="show"
-    :width="720"
+    :width="'min(720px, 100vw)'"
     placement="right"
     @update:show="(value: boolean) => emit('update:show', value)"
   >

@@ -734,7 +734,7 @@ onMounted(() => {
     />
 
     <!-- 编辑项目抽屉 -->
-    <NDrawer v-model:show="editDrawerVisible" :width="420" placement="right">
+    <NDrawer v-model:show="editDrawerVisible" :width="'min(420px, 100vw)'" placement="right">
       <NDrawerContent :title="t('projects.edit.title')" closable>
         <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
           {{ t('projects.edit.description') }}

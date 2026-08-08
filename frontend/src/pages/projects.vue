@@ -435,7 +435,7 @@ watch(
       </div>
     </div>
 
-    <NDrawer v-model:show="drawerVisible" :width="420" placement="right">
+    <NDrawer v-model:show="drawerVisible" :width="'min(420px, 100vw)'" placement="right">
       <NDrawerContent :title="drawerTitle" closable>
         <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
           {{ drawerDescription }}
