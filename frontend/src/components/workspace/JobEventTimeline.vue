@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { NButton, NEmpty, NTimeline, NTimelineItem } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
-import type { SSEEvent } from '@/composables/sseShared'
+import type { BatchEventMetadata, SSEEvent } from '@/composables/sseShared'
+import {
+  batchStatusTimelineType,
+  eventLevelType,
+  formatDuration,
+  getPoolSummary,
+  getStageLabel,
+  isBatchEvent,
+  isPoolEvent,
+  poolTimelineType,
+} from '@/composables/useWorkspaceUtils'
 
 import BatchDetailDrawer from './BatchDetailDrawer.vue'
-import TimelineRow from './TimelineRow.vue'
+import BatchEventCard from './BatchEventCard.vue'
+import PoolEventCard from './PoolEventCard.vue'
 
 const { t } = useI18n()
 
@@ -53,6 +65,48 @@ const pullIndicatorLabel = computed(() => {
 const openBatchDetail = (event: SSEEvent): void => {
   detailDrawerEvent.value = event
   detailDrawerShow.value = true
+}
+
+const formatEventTime = (value: string): string => {
+  return new Intl.DateTimeFormat('zh-Hans', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(value))
+}
+
+const getBatchSummary = (event: SSEEvent): string => {
+  const meta = event.metadata as unknown as BatchEventMetadata | undefined
+  if (!meta) return event.message
+  const parts: string[] = []
+  if (event.stage) parts.push(getStageLabel(event.stage))
+  parts.push(t('workspace.job.events.batch.segments', { count: meta.segment_count }))
+  if (meta.duration_ms) parts.push(formatDuration(meta.duration_ms))
+  return parts.join(' · ')
+}
+
+const getBatchTimelineType = (event: SSEEvent): 'success' | 'warning' | 'error' | 'info' => {
+  const meta = event.metadata as unknown as BatchEventMetadata | undefined
+  return batchStatusTimelineType(meta?.status, event.level)
+}
+
+const getPoolTimelineType = (event: SSEEvent): 'info' | 'warning' | 'error' => {
+  const meta = event.metadata as unknown as { phase?: 'pool_start' | 'pool_advance' } | undefined
+  return poolTimelineType(meta?.phase, event.level)
+}
+
+type TimelineType = 'success' | 'warning' | 'error' | 'info' | 'default'
+
+const getEventTimelineType = (event: SSEEvent): TimelineType => {
+  if (isPoolEvent(event.type)) return getPoolTimelineType(event)
+  if (isBatchEvent(event.type)) return getBatchTimelineType(event)
+  return eventLevelType(event.level)
+}
+
+const getEventTitle = (event: SSEEvent): string => {
+  if (isBatchEvent(event.type)) return getBatchSummary(event)
+  if (isPoolEvent(event.type)) return getPoolSummary(event)
+  return event.message
 }
 
 const realItemCache = new WeakMap<SSEEvent, SSEEvent & { _key: string }>()
@@ -325,13 +379,29 @@ onUnmounted(() => {
           >
             <span v-if="pullDistance > 0 || isNearTop">{{ pullIndicatorLabel }}</span>
           </div>
-          <div v-for="(item, index) in timelineItems" :key="item._key">
-            <TimelineRow
-              :event="item"
-              :is-last="index === timelineItems.length - 1"
-              @open-detail="openBatchDetail"
-            />
-          </div>
+          <NTimeline :icon-size="16">
+            <NTimelineItem
+              v-for="(item, index) in timelineItems"
+              :key="item._key"
+              :type="getEventTimelineType(item)"
+              :title="getEventTitle(item)"
+              :content="
+                item.stage && !isBatchEvent(item.type) && !isPoolEvent(item.type)
+                  ? getStageLabel(item.stage)
+                  : undefined
+              "
+              :time="formatEventTime(item.created_at)"
+              :line-type="index === timelineItems.length - 1 ? undefined : 'default'"
+              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs"
+            >
+              <PoolEventCard v-if="isPoolEvent(item.type)" :event="item" />
+              <BatchEventCard
+                v-else-if="isBatchEvent(item.type)"
+                :event="item"
+                @open-detail="openBatchDetail"
+              />
+            </NTimelineItem>
+          </NTimeline>
         </div>
         <div v-else class="py-6 text-center">
           <NEmpty size="small" :description="t('workspace.job.events.empty')" />
