@@ -13,9 +13,7 @@ export interface BatchEventMeta {
   hasErrorInfo: ComputedRef<boolean>
 }
 
-export const useBatchEventMeta = (
-  eventGetter: () => SSEEvent,
-): BatchEventMeta => {
+export const useBatchEventMeta = (eventGetter: () => SSEEvent): BatchEventMeta => {
   const { t } = useI18n()
 
   const meta = computed<BatchEventMetadata | null>(() => {

@@ -77,15 +77,17 @@ const rowType = computed<RowType>(() => {
   <div class="flex gap-3 py-1">
     <div class="relative flex w-[14px] shrink-0 flex-col items-center">
       <div
-        :class="[isLast ? 'opacity-0' : '', 'absolute left-[5px] top-2 bottom-0 w-px border-l border-lf-border']"
+        :class="[
+          isLast ? 'opacity-0' : '',
+          'absolute left-[5px] top-2 bottom-0 w-px border-l border-lf-border',
+        ]"
       />
-      <div
-        class="mt-1 h-3 w-3 shrink-0 rounded-full"
-        :class="typeColorMap[rowType]"
-      />
+      <div class="mt-1 h-3 w-3 shrink-0 rounded-full" :class="typeColorMap[rowType]" />
     </div>
     <div class="min-w-0 flex-1">
-      <span class="font-mono tabular-nums text-xs text-lf-text-muted">{{ formatEventTime(event.created_at) }}</span>
+      <span class="font-mono tabular-nums text-xs text-lf-text-muted">{{
+        formatEventTime(event.created_at)
+      }}</span>
       <div class="text-sm">
         {{ event.message }}
       </div>

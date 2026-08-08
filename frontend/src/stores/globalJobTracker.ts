@@ -115,7 +115,8 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     }
     list.splice(lo, 0, evt)
     if (evt.seq > 0) {
-      minSeqLoaded.value = minSeqLoaded.value === 0 ? evt.seq : Math.min(minSeqLoaded.value, evt.seq)
+      minSeqLoaded.value =
+        minSeqLoaded.value === 0 ? evt.seq : Math.min(minSeqLoaded.value, evt.seq)
     }
   }
 
@@ -191,10 +192,19 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
 
   // ── 加载更早的历史事件（上拉加载） ──
   const loadOlder = async (): Promise<void> => {
-    if (loadingOlder.value || !hasOlder.value || drawerEvents.value.length === 0 || drawerJobId.value == null) return
+    if (
+      loadingOlder.value ||
+      !hasOlder.value ||
+      drawerEvents.value.length === 0 ||
+      drawerJobId.value == null
+    )
+      return
     loadingOlder.value = true
     try {
-      const data = await listJobEvents(drawerJobId.value, { beforeSeq: minSeqLoaded.value, limit: 50 })
+      const data = await listJobEvents(drawerJobId.value, {
+        beforeSeq: minSeqLoaded.value,
+        limit: 50,
+      })
       for (const evt of data.items) insertEvent(evt as SSEEvent)
       hasOlder.value = data.next_before_seq != null
       if (data.items.length === 0 && data.next_before_seq == null) {
