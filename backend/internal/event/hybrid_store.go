@@ -67,14 +67,30 @@ func (s *HybridStore) Append(jobID int, evt Event) (int64, error) {
 	return seq, dbErr
 }
 
-func (s *HybridStore) Replay(jobID int, afterSeq int64) []Event {
-	events := s.ringStore.Replay(jobID, afterSeq)
+func (s *HybridStore) Replay(ctx context.Context, jobID int, afterSeq int64, limit int) []Event {
+	events := s.ringStore.Replay(ctx, jobID, afterSeq, limit)
 	if events != nil && len(events) > 0 {
 		return events
 	}
-	return s.entStore.Replay(jobID, afterSeq)
+	return s.entStore.Replay(ctx, jobID, afterSeq, limit)
 }
 
+// LatestSeq returns the highest seq for the job, preferring the DB (source of
+// truth) and falling back to the ring buffer when the DB has no rows (e.g.
+// after a degraded memory-only append).
+func (s *HybridStore) LatestSeq(ctx context.Context, jobID int) (int64, bool) {
+	if seq, ok := s.entStore.LatestSeq(ctx, jobID); ok {
+		return seq, true
+	}
+	return s.ringStore.LatestSeq(ctx, jobID)
+}
+
+// Purge removes the in-memory ring buffer events for the given job.
+//
+// 仅清内存窗口：终态任务不再有活跃 SSE 订阅，释放 ring 即可。DB 中的
+// 事件保留供 REST 历史端点（handleListJobEvents）读取；其清理由删除
+// 任务/项目的路径显式负责（见 service.ProjectService 删除项目时的
+// SSEEvent 删除步骤），实现「历史与任务同生共死」。
 func (s *HybridStore) Purge(jobID int) {
 	s.ringStore.Purge(jobID)
 }

@@ -1,6 +1,7 @@
 package event
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -22,8 +23,22 @@ type Event struct {
 // Each job ID has its own set of subscriber channels.
 type Broker struct {
 	store       EventStore
+	historian   Historian
 	mu          sync.RWMutex
 	subscribers map[int]map[chan Event]struct{}
+}
+
+// Historian provides paginated reads of the full persisted event history,
+// used by REST endpoints that need durable, DB-backed listings (unlike Replay,
+// which only serves the in-memory reconnection window). Implementations store
+// the events durably (e.g. EntEventStore).
+type Historian interface {
+	// ListPage returns up to limit events with seq > afterSeq, ascending.
+	ListPage(ctx context.Context, jobID int, afterSeq int64, limit int) (events []Event, nextAfterSeq int64, hasMore bool)
+	// ListPageBefore returns up to limit events with seq < beforeSeq,
+	// ascending, for backward (toward older) pagination. beforeSeq <= 0
+	// returns the most recent events (initial latest page).
+	ListPageBefore(ctx context.Context, jobID int, beforeSeq int64, limit int) (events []Event, nextBeforeSeq int64, hasMore bool)
 }
 
 // NewBroker creates a new Broker instance.
@@ -33,6 +48,13 @@ func NewBroker(store EventStore) *Broker {
 		store:       store,
 		subscribers: make(map[int]map[chan Event]struct{}),
 	}
+}
+
+// WithHistorian attaches a Historian so the broker can serve paginated history
+// reads (e.g. for REST endpoints). Returns the broker for chaining.
+func (b *Broker) WithHistorian(h Historian) *Broker {
+	b.historian = h
+	return b
 }
 
 // Subscribe registers a new subscriber for the given job ID.
@@ -87,13 +109,46 @@ func (b *Broker) Publish(jobID int, evt Event) {
 	}
 }
 
-// Replay returns persisted events with seq > afterSeq for the given job.
-// Returns nil if no store is configured or no events are available.
-func (b *Broker) Replay(jobID int, afterSeq int64) []Event {
+// Replay returns up to limit persisted events with seq > afterSeq for the
+// given job, ordered ascending by seq. If limit <= 0, all matching events are
+// returned. Returns nil if no store is configured or no events match.
+// The ctx cancels the underlying query on client disconnect.
+func (b *Broker) Replay(ctx context.Context, jobID int, afterSeq int64, limit int) []Event {
 	if b.store == nil {
 		return nil
 	}
-	return b.store.Replay(jobID, afterSeq)
+	return b.store.Replay(ctx, jobID, afterSeq, limit)
+}
+
+// ListHistory returns a page of the durable event history for a job. It reads
+// the backing DB directly (not the reconnection ring buffer), so it is suitable
+// for REST endpoints that must list complete historical events. Returns
+// hasMore=false when no Historian is configured.
+func (b *Broker) ListHistory(ctx context.Context, jobID int, afterSeq int64, limit int) ([]Event, int64, bool) {
+	if b.historian == nil {
+		return nil, 0, false
+	}
+	return b.historian.ListPage(ctx, jobID, afterSeq, limit)
+}
+
+// ListHistoryBefore returns a backward page (toward older events) from the
+// durable history. beforeSeq <= 0 returns the most recent events. Returns
+// hasMore=false when no Historian is configured.
+func (b *Broker) ListHistoryBefore(ctx context.Context, jobID int, beforeSeq int64, limit int) ([]Event, int64, bool) {
+	if b.historian == nil {
+		return nil, 0, false
+	}
+	return b.historian.ListPageBefore(ctx, jobID, beforeSeq, limit)
+}
+
+// LatestSeq returns the highest seq stored for the given job, and false when
+// no store is configured or the job has no events. Used to compute the
+// recent-window replay start for fresh SSE connections.
+func (b *Broker) LatestSeq(ctx context.Context, jobID int) (int64, bool) {
+	if b.store == nil {
+		return 0, false
+	}
+	return b.store.LatestSeq(ctx, jobID)
 }
 
 // Purge removes all persisted events for the given job from the underlying store.

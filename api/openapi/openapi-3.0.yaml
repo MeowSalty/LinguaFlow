@@ -1538,6 +1538,27 @@ paths:
                 $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
+  /jobs/{jobId}/events:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      operationId: ListJobEvents
+      summary: 列出任务的历史事件
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AfterSeq'
+        - $ref: '#/components/parameters/BeforeSeq'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 任务历史事件列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobEventListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /execution-plan-templates:
     get:
       operationId: ListExecutionPlanTemplates
@@ -2301,6 +2322,21 @@ components:
         type: integer
         minimum: 1
         maximum: 100
+    AfterSeq:
+      name: after_seq
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    BeforeSeq:
+      name: before_seq
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
   responses:
     Problem:
       description: 错误响应
@@ -3338,6 +3374,52 @@ components:
             $ref: '#/components/schemas/Job'
         next_cursor:
           type: string
+    JobEvent:
+      type: object
+      required:
+        - type
+        - job_id
+        - level
+        - message
+        - created_at
+        - seq
+      properties:
+        type:
+          type: string
+        job_id:
+          type: integer
+        level:
+          type: string
+        stage:
+          type: string
+        message:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        seq:
+          type: integer
+          format: int64
+    JobEventListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobEvent'
+        next_after_seq:
+          type: integer
+          format: int64
+          description: 正向翻页游标(上一页最后一条事件的 seq);0 表示无更多数据
+        next_before_seq:
+          type: integer
+          format: int64
+          description: 反向翻页游标(上一页第一条事件的 seq);0 表示无更多数据
     Activity:
       type: object
       required:

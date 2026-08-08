@@ -254,6 +254,10 @@ func (s *Server) RetryJob(w http.ResponseWriter, r *http.Request, _ JobId) {
 	s.requireAuth(http.HandlerFunc(s.handleRetryJob)).ServeHTTP(w, r)
 }
 
+func (s *Server) ListJobEvents(w http.ResponseWriter, r *http.Request, _ JobId, _ ListJobEventsParams) {
+	s.requireAuth(http.HandlerFunc(s.handleListJobEvents)).ServeHTTP(w, r)
+}
+
 func (s *Server) DownloadTranslatedResourceFile(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
 	s.requireAuth(http.HandlerFunc(s.handleDownloadTranslatedResourceFile)).ServeHTTP(w, r)
 }

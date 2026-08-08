@@ -58,6 +58,8 @@ type Server struct {
 	httpServer                   *http.Server
 	executionPlanHandler         *HandlerExecutionPlan
 	eventBroker                  *event.Broker
+	sseReplayBatch               int
+	sseMaxReplay                 int
 	ready                        atomic.Bool
 }
 
@@ -81,22 +83,25 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		logger = slog.Default()
 	}
 
+	entEventStore := event.NewEntEventStore(client)
 	hybridStore, err := event.NewHybridStore(
-		event.NewRingBufferStore(event.DefaultRingBufferConfig()),
-		event.NewEntEventStore(client),
+		event.NewRingBufferStore(event.RingBufferConfig{Capacity: cfg.SSE.RingBufferCapacity}),
+		entEventStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("init event store: %w", err)
 	}
 
 	s := &Server{
-		serverCfg:   cfg,
-		logger:      logger,
-		db:          db,
-		entClient:   client,
-		mode:        mode,
-		localUser:   localUser,
-		eventBroker: event.NewBroker(hybridStore),
+		serverCfg:      cfg,
+		logger:         logger,
+		db:             db,
+		entClient:      client,
+		mode:           mode,
+		localUser:      localUser,
+		eventBroker:    event.NewBroker(hybridStore).WithHistorian(entEventStore),
+		sseReplayBatch: cfg.SSE.ReplayBatchSize,
+		sseMaxReplay:   cfg.SSE.MaxReplayEvents,
 	}
 	limiterPool := backend.NewLimiterPool()
 	s.adminService = service.NewAdminService(client)
