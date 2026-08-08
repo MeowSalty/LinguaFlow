@@ -36,9 +36,9 @@ const prevScrollHeight = ref(0)
 // pull-to-load：下拉拉拽距离（px），超过阈值触发加载
 const PULL_THRESHOLD = 60
 const pullDistance = ref(0)
-const atTop = ref(false)
 let wheelAccum = 0
 let wheelActive = false
+let wheelTimer: ReturnType<typeof setTimeout> | null = null
 // 批次详情抽屉
 const detailDrawerShow = ref(false)
 const detailDrawerEvent = ref<SSEEvent | null>(null)
@@ -127,7 +127,6 @@ const onScroll = (e: Event): void => {
     scrollTicking = false
     const el = e.target as HTMLElement
     if (!el) return
-    atTop.value = el.scrollTop <= 0
     isNearTop.value = el.scrollTop <= 50
     isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 50
   })
@@ -139,17 +138,27 @@ const triggerLoad = (): void => {
   emit('load-older')
 }
 
-// 桌面端：wheel 在顶部继续上滚 → 累积拉拽距离
+// 桌面端：wheel 在顶部继续上滚 → 累积拉拽距离，松手（停止滚动）后判定
 const onWheel = (e: WheelEvent): void => {
   if (e.deltaY > 0) {
     wheelAccum = 0
     wheelActive = false
+    pullDistance.value = 0
+    if (wheelTimer) {
+      clearTimeout(wheelTimer)
+      wheelTimer = null
+    }
     return
   }
   const el = scrollContainerRef.value
   if (!el || el.scrollTop > 0) {
     wheelAccum = 0
     wheelActive = false
+    pullDistance.value = 0
+    if (wheelTimer) {
+      clearTimeout(wheelTimer)
+      wheelTimer = null
+    }
     return
   }
   // 已在顶部 + 向上滚动
@@ -157,12 +166,17 @@ const onWheel = (e: WheelEvent): void => {
   wheelActive = true
   wheelAccum += Math.abs(e.deltaY)
   pullDistance.value = Math.min(wheelAccum * 0.5, PULL_THRESHOLD * 1.4)
-  if (pullDistance.value >= PULL_THRESHOLD) {
-    triggerLoad()
+  // 停止滚动一段时间（视为松手）→ 达到阈值则触发
+  if (wheelTimer) clearTimeout(wheelTimer)
+  wheelTimer = setTimeout(() => {
+    if (pullDistance.value >= PULL_THRESHOLD) {
+      triggerLoad()
+    }
     wheelAccum = 0
     wheelActive = false
     pullDistance.value = 0
-  }
+    wheelTimer = null
+  }, 140)
 }
 
 const endWheel = (): void => {
@@ -171,9 +185,13 @@ const endWheel = (): void => {
     wheelAccum = 0
     pullDistance.value = 0
   }
+  if (wheelTimer) {
+    clearTimeout(wheelTimer)
+    wheelTimer = null
+  }
 }
 
-// 移动端：touch 在顶部继续下拉
+// 移动端：touch 在顶部继续下拉，松手后判定是否触发
 let touchStartY = 0
 const onTouchStart = (e: TouchEvent): void => {
   touchStartY = e.touches[0]?.clientY ?? 0
@@ -193,12 +211,11 @@ const onTouchMove = (e: TouchEvent): void => {
   }
   e.preventDefault()
   pullDistance.value = Math.min(dy * 0.5, PULL_THRESHOLD * 1.4)
-  if (pullDistance.value >= PULL_THRESHOLD) {
-    triggerLoad()
-    pullDistance.value = 0
-  }
 }
 const onTouchEnd = (): void => {
+  if (pullDistance.value >= PULL_THRESHOLD) {
+    triggerLoad()
+  }
   pullDistance.value = 0
 }
 
@@ -276,6 +293,10 @@ onUnmounted(() => {
     el.removeEventListener('touchmove', onTouchMove)
     el.removeEventListener('touchend', onTouchEnd)
   }
+  if (wheelTimer) {
+    clearTimeout(wheelTimer)
+    wheelTimer = null
+  }
 })
 </script>
 
@@ -325,25 +346,26 @@ onUnmounted(() => {
           @scroll="onScroll"
           @mouseleave="endWheel"
         >
-          <!-- Pull-to-load indicator -->
+          <!-- Top: reached oldest or pull-to-load indicator -->
           <div
+            v-if="!hasOlder && !loadingOlder"
+            class="py-2 text-center text-xs text-lf-text-muted"
+          >
+            {{ t('workspace.job.events.reachedOldest') }}
+          </div>
+          <div
+            v-else
             class="flex items-center justify-center overflow-hidden text-xs text-lf-text-muted transition-[height] duration-150"
             :style="{ height: pullDistance + 'px' }"
           >
             <span v-if="pullDistance > 0 || isNearTop">{{ pullIndicatorLabel }}</span>
           </div>
-          <div
-            v-for="(item, index) in timelineItems"
-            :key="item._key"
-          >
+          <div v-for="(item, index) in timelineItems" :key="item._key">
             <TimelineRow
               :event="item"
               :is-last="index === timelineItems.length - 1"
               @open-detail="openBatchDetail"
             />
-          </div>
-          <div v-if="atTop && !hasOlder && !loadingOlder" class="py-2 text-center text-xs text-lf-text-muted">
-            {{ t('workspace.job.events.reachedOldest') }}
           </div>
         </div>
         <div v-else class="py-6 text-center">
