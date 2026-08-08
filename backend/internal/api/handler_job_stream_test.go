@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -92,6 +93,31 @@ func seedJobEventsN(t *testing.T, client *ent.Client, u *ent.User, n int) (*ent.
 	return job, nil
 }
 
+// safeRecorder 包装 httptest.ResponseRecorder，对其底层 *bytes.Buffer
+// 的读取（Body.String）与并发写入加互斥锁，避免竞态检测报错。
+type safeRecorder struct {
+	*httptest.ResponseRecorder
+	mu sync.Mutex
+}
+
+func newSafeRecorder() *safeRecorder {
+	return &safeRecorder{ResponseRecorder: httptest.NewRecorder()}
+}
+
+// Write 在 handler goroutine 写入 SSE 数据时加锁，保护共享 buffer。
+func (s *safeRecorder) Write(b []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ResponseRecorder.Write(b)
+}
+
+// String 安全读取当前已写入的响应体，供测试主 goroutine 轮询。
+func (s *safeRecorder) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ResponseRecorder.Body.String()
+}
+
 // streamSSE 调用 handleJobStream，收集回放段写入的 SSE 事件后取消连接。
 // expected 为期待的回放事件数，用于轮询等待回放完成。
 func streamSSE(t *testing.T, s *Server, jobID int, u *ent.User, lastEventID string, expected int) []int64 {
@@ -111,7 +137,7 @@ func streamSSE(t *testing.T, s *Server, jobID int, u *ent.User, lastEventID stri
 	rctx.URLParams.Add("jobId", strconv.Itoa(jobID))
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
-	w := httptest.NewRecorder()
+	w := newSafeRecorder()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -121,7 +147,7 @@ func streamSSE(t *testing.T, s *Server, jobID int, u *ent.User, lastEventID stri
 	// 等待回放写入足够事件后取消，避免阻塞在实时循环
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if countIDLines(w.Body.String()) >= expected {
+		if countIDLines(w.String()) >= expected {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -129,9 +155,9 @@ func streamSSE(t *testing.T, s *Server, jobID int, u *ent.User, lastEventID stri
 	cancel()
 	<-done
 
-	seqs := parseIDLines(w.Body.String())
+	seqs := parseIDLines(w.String())
 	if expected >= 0 && len(seqs) != expected {
-		t.Fatalf("expected %d replayed events, got %d (%v); body=%q", expected, len(seqs), seqs, w.Body.String())
+		t.Fatalf("expected %d replayed events, got %d (%v); body=%q", expected, len(seqs), seqs, w.String())
 	}
 	return seqs
 }
