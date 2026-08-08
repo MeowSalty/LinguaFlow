@@ -1043,6 +1043,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{jobId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        /** 列出任务的历史事件 */
+        get: operations["ListJobEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/execution-plan-templates": {
         parameters: {
             query?: never;
@@ -1878,6 +1897,33 @@ export interface components {
         JobListResponse: {
             items: components["schemas"]["Job"][];
             next_cursor?: string;
+        };
+        JobEvent: {
+            type: string;
+            job_id: number;
+            level: string;
+            stage?: string;
+            message: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        JobEventListResponse: {
+            items: components["schemas"]["JobEvent"][];
+            /**
+             * Format: int64
+             * @description 正向翻页游标(上一页最后一条事件的 seq);0 表示无更多数据
+             */
+            next_after_seq?: number;
+            /**
+             * Format: int64
+             * @description 反向翻页游标(上一页第一条事件的 seq);0 表示无更多数据
+             */
+            next_before_seq?: number;
         };
         Activity: {
             id: number;
@@ -2933,6 +2979,8 @@ export interface components {
         SegmentId: number;
         Cursor: string;
         Limit: number;
+        AfterSeq: number;
+        BeforeSeq: number;
     };
     requestBodies: never;
     headers: never;
@@ -4726,6 +4774,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListJobEvents: {
+        parameters: {
+            query?: {
+                after_seq?: components["parameters"]["AfterSeq"];
+                before_seq?: components["parameters"]["BeforeSeq"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务历史事件列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobEventListResponse"];
                 };
             };
             default: components["responses"]["Problem"];

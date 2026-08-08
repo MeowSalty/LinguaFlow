@@ -1988,6 +1988,7 @@ const messages = {
       createJobFailed: '创建任务失败',
       cancelJobFailed: '取消任务失败',
       retryJobFailed: '重试任务失败',
+      listJobEventsFailed: '获取任务事件失败',
       downloadJobFailed: '下载结果失败',
       downloadResourceResultFailed: '下载结果失败',
       downloadResourceResultEmpty: '该资源暂无结果',
