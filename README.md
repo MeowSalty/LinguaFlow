@@ -59,6 +59,7 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 - 自动检测源语言
 - 上下文感知，保持段落间连贯性
 - 代码块、链接、占位符等特殊内容自动保护
+- 即时翻译：首页就是一个翻译框，粘贴单段文本即可出译文，可挂术语表，译文临时不落库
 - 单段试译预览：对单段原文用某执行计划先跑一遍看效果，带诊断详情，满意后再应用译文
 
 ### 批量处理
@@ -198,6 +199,9 @@ task backend:local:build
 4. **创建作业** — 选择资源，创建翻译作业
 5. **审核译文** — 翻译完成后在「段落」标签页查看结果、修改译文并审批/拒绝
 
+> [!TIP]
+> 只想译一段、不想建项目？配好 AI 后端与执行计划后，首页本身就是即时翻译框，直接粘贴文本即可出译文，术语表也能临时挂。详见 [即时翻译](https://meowsalty.github.io/LinguaFlow/zh/guide/quick-translate)。
+
 ### 启动服务器模式
 
 服务器模式支持多租户和权限管理。
@@ -232,6 +236,7 @@ task backend:local:build
 
 - [快速开始 · Web](https://meowsalty.github.io/LinguaFlow/zh/guide/getting-started)
 - [快速开始 · CLI](https://meowsalty.github.io/LinguaFlow/zh/guide/cli-quickstart)
+- [即时翻译](https://meowsalty.github.io/LinguaFlow/zh/guide/quick-translate)
 - [核心概念](https://meowsalty.github.io/LinguaFlow/zh/guide/concepts)
 - [安装部署](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)
 - [使用模式](https://meowsalty.github.io/LinguaFlow/zh/guide/modes)

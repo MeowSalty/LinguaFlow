@@ -17,6 +17,9 @@ hero:
       link: https://github.com/MeowSalty/LinguaFlow
 
 features:
+  - icon: ⚡
+    title: 粘贴即译，不用建项目
+    details: 首页就是一个即时翻译框：粘贴文本 → 选执行计划 → 拿译文。单段、临时、不落库，也能挂术语表，适合快速试效果或译零散内容。
   - icon: 🎯
     title: 一次跑通整条链路
     details: 上传源文件 → 配置 AI → 批量翻译 → 在线审校导出。Web 可视化与 CLI 脚本两种用法，同一套翻译能力。
@@ -62,6 +65,10 @@ flowchart LR
 
 详细步骤见 [快速开始 · Web](/zh/guide/getting-started)。若你更习惯终端，见 [快速开始 · CLI](/zh/guide/cli-quickstart)。
 
+::: tip 只想译一段，不想建项目？
+首页就是一个 [即时翻译](/zh/guide/quick-translate) 框：配好 AI 后端与一份执行计划后，直接粘贴文本即可出译文，术语表也能临时挂。
+:::
+
 ## 一行安装
 
 ::: code-group
@@ -100,6 +107,7 @@ linguaflow translate -i README.md -o README_zh.md --to zh
 | 想了解…                      | 去这里                                                                        |
 | ---------------------------- | ----------------------------------------------------------------------------- |
 | 5 分钟跑通第一次翻译         | [快速开始 · Web](/zh/guide/getting-started)                                   |
+| 只译一段、不想建项目         | [即时翻译](/zh/guide/quick-translate)                                         |
 | 终端批量翻译                 | [快速开始 · CLI](/zh/guide/cli-quickstart)                                    |
 | 项目 / 作业 / 执行计划是什么 | [核心概念](/zh/guide/concepts)                                                |
 | 安装方式与部署               | [安装部署](/zh/guide/installation)                                            |

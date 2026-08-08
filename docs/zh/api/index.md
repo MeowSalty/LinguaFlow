@@ -94,6 +94,57 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/backends/models \
 
 上传资源、创建作业等涉及 multipart 或较长请求体，建议直接对照 **Redoc** 中的对应接口与示例。
 
+### 7. 即时翻译（单段，不落库）
+
+把单段文本交给某份执行计划，同步返回译文、质量标记、各轮摘要、批次诊断与用量。译文**不落库**，适合零散翻译或脚本集成。
+
+```bash
+curl -s -X POST http://127.0.0.1:18080/api/v1/quick-translate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_text": "Hello, world.",
+    "source_lang": "auto",
+    "target_lang": "zh",
+    "execution_plan_id": 1
+  }'
+```
+
+常用可选字段：
+
+| 字段                 | 说明                                                                       |
+| -------------------- | -------------------------------------------------------------------------- |
+| `project_id`         | 可选。提供时复用该项目的术语表与语言配置，并校验访问权                      |
+| `glossary`           | 内联临时术语表数组（`source`/`target` 必填，可选 `forbidden`/`mandatory` 等）。项目场景下叠加在项目术语表之上 |
+
+响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-即时翻译)。
+
+### 8. 任务事件历史（分页）
+
+作业执行事件（批次翻译、状态变化、质检等）除通过 SSE 实时推送外，也支持按 `seq` 游标的 REST 分页查询，便于外部监控或回放。
+
+```bash
+# 反向分页（取最近的一页，向上翻更早的事件）
+curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50"
+
+# 用返回的 next_before_seq 继续向上翻（取更早的）
+curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&before_seq=1234"
+
+# 正向分页（从某个 seq 之后向后翻）
+curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&after_seq=1000"
+```
+
+| 参数         | 说明                                              |
+| ------------ | ------------------------------------------------- |
+| `after_seq`  | 正向游标：返回 seq **大于**此值的事件，升序排列    |
+| `before_seq` | 反向游标：返回 seq **小于**此值的事件，降序排列    |
+| `limit`      | 每页条数，`1`–`100`                                |
+
+响应中的 `next_after_seq` / `next_before_seq` 为下一次翻页游标；`0` 表示无更多数据。字段全集见 Redoc 中 `JobEvent` / `JobEventListResponse`。
+
+::: tip SSE 与 REST 怎么配合
+SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-实时事件流)。
+:::
+
 ## 错误码
 
 | 状态码 | 说明               |

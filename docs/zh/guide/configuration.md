@@ -228,6 +228,14 @@ server:
   jwt_expiry: 15m
   refresh_token_expiry: 720h
   shutdown_timeout: 10s
+  quick_translate:
+    max_concurrency: 2     # 单用户并发上限；全局 = 此值 × 4
+    timeout: 5m            # 单次执行超时
+    max_timeout: 30m       # timeout 的硬上限（管理员安全阀）
+  sse:
+    ring_buffer_capacity: 256  # 每个 job 的 SSE 内存重连窗口
+    replay_batch_size: 200     # SSE 历史回放每批拉取数
+    max_replay_events: 0       # SSE 单连接历史回放上限；0 = ring_buffer_capacity × 2
   cors:
     allowed_origins: ["*"]
   registration:
@@ -492,6 +500,34 @@ CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行�
 | ------------ | ---- | ------ | -------------------------- |
 | `enabled`    | bool | `true` | 是否开放用户注册           |
 | `auto_admin` | bool | `true` | 首个注册用户自动成为管理员 |
+
+##### server.quick_translate — 即时翻译
+
+控制首页 / 工具页「即时翻译」（同步单段在线翻译）的并发与超时。译文纯临时、不落库，故无 `apply_token_ttl`。功能说明见 [即时翻译](/zh/guide/quick-translate)。
+
+| 字段              | 类型     | 默认值 | 说明                                                                                                          |
+| ----------------- | -------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `max_concurrency` | int      | `2`    | 单用户同时进行的即时翻译并发上限（per-actor 信号量）；**全局并发 = 此值 × 4**。`<=0` 用默认值，`>32` 钳制为 32 |
+| `timeout`         | duration | `5m`   | 单次即时翻译执行超时（对齐预览，二者复用同一套含 429 退避的多轮 LLM 流水线）。`<=0` 用默认值，`>max_timeout` 钳制 |
+| `max_timeout`     | duration | `30m`  | `timeout` 的硬上限（管理员安全阀，防误配占满并发槽位）。`<=0` 用默认值，`>30m` 钳制为 30m                      |
+
+::: tip 并发如何受约束
+单用户并发受 `max_concurrency` 限制；整个实例的全局即时翻译并发受 `max_concurrency × 4` 限制。提示「并发已满」时稍后重试即可。
+:::
+
+##### server.sse — 实时事件流
+
+控制作业实时事件（SSE）的回放与历史事件存储行为，影响 [进度追踪](/zh/guide/projects#进度追踪) 与事件时间线的首字节延迟与历史补进。
+
+| 字段                  | 类型 | 默认值            | 说明                                                                                              |
+| --------------------- | ---- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `ring_buffer_capacity` | int  | `256`             | 每个 job 的内存 ring buffer 容量，用于 SSE 重连窗口补进。`<=0` 用默认值                            |
+| `replay_batch_size`   | int  | `200`             | SSE 首次历史回放（补进）从 DB 拉取的每批事件数。`<=0` 用默认值。分批写入可显著降低首字节时间      |
+| `max_replay_events`   | int  | `0`（=容量 × 2）  | SSE 单次连接历史回放总量上限。达到上限即停，缺口由前端用 `Last-Event-ID` 续传或 REST 历史端点补全。`<=0` 用 `ring_buffer_capacity × 2` |
+
+::: info 新连接只补最近窗口
+一个全新的 SSE 连接（无 `Last-Event-ID`）只会从「最近 `max_replay_events` 条」开始补进，而非从 `seq 0` 全量回放。更早的历史由前端通过 [REST 历史端点](/zh/api/#任务事件历史) 分页拉取，保证大作业也能秒开。
+:::
 
 ##### server.database — 数据库
 
