@@ -32,6 +32,12 @@ const events = computed(() => tracker.getJobEvents())
 
 const connected = computed(() => tracker.isJobSSEConnected())
 
+const hasOlder = computed(() => tracker.hasOlder)
+
+const loadingOlder = computed(() => tracker.loadingOlder)
+
+const jobEnded = computed(() => tracker.jobEnded)
+
 const syntheticEvents = ref<SyntheticEvent[]>([])
 
 const refreshSyntheticEvents = (): void => {
@@ -93,7 +99,11 @@ watch(jobId, (newId, oldId) => {
           :events="events"
           :synthetic-events="syntheticEvents"
           :sse-connected="connected"
+          :has-older="hasOlder"
+          :loading-older="loadingOlder"
+          :job-ended="jobEnded"
           @clear-events="clearEventsAndCache"
+          @load-older="() => tracker.loadOlder()"
         />
         <NEmpty v-else :description="emptyDescription" />
       </NSpin>

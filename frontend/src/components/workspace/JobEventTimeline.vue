@@ -1,22 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { NButton, NEmpty, NTimeline, NTimelineItem } from 'naive-ui'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { BatchEventMetadata, SSEEvent } from '@/composables/sseShared'
-import {
-  batchStatusTimelineType,
-  eventLevelType,
-  formatDuration,
-  getPoolSummary,
-  getStageLabel,
-  isBatchEvent,
-  isPoolEvent,
-  poolTimelineType,
-} from '@/composables/useWorkspaceUtils'
+import type { SSEEvent } from '@/composables/sseShared'
 
-import BatchEventCard from './BatchEventCard.vue'
-import PoolEventCard from './PoolEventCard.vue'
+import BatchDetailDrawer from './BatchDetailDrawer.vue'
+import TimelineRow from './TimelineRow.vue'
 
 const { t } = useI18n()
 
@@ -24,47 +13,47 @@ const props = defineProps<{
   events: SSEEvent[]
   syntheticEvents?: SSEEvent[]
   connected?: boolean
+  hasOlder?: boolean
+  loadingOlder?: boolean
+  jobEnded?: boolean
 }>()
 
 const emit = defineEmits<{
   clear: []
+  'load-older': []
 }>()
 
-const scrollContainer = ref<HTMLElement | null>(null)
+const scrollContainerRef = ref<HTMLElement | null>(null)
+const isNearTop = ref(false)
 const isNearBottom = ref(true)
 const hasNewEvents = ref(false)
 const prevEventsLength = ref(0)
+const tailSeq = ref(0)
+const headSeq = ref(0)
+// 头部前插更早事件时，记录滚动位置，前插后恢复，防止视觉跳动
+const pendingScrollRestore = ref<number | null>(null)
+const prevScrollHeight = ref(0)
+// pull-to-load：下拉拉拽距离（px），超过阈值触发加载
+const PULL_THRESHOLD = 60
+const pullDistance = ref(0)
+const atTop = ref(false)
+let wheelAccum = 0
+let wheelActive = false
+// 批次详情抽屉
+const detailDrawerShow = ref(false)
+const detailDrawerEvent = ref<SSEEvent | null>(null)
 
-const formatEventTime = (value: string): string => {
-  return new Intl.DateTimeFormat('zh-Hans', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(new Date(value))
-}
+const canLoadOlder = computed(() => props.hasOlder && !props.loadingOlder)
 
-const makeKey = (event: SSEEvent, index: number, prefix: string): string => {
-  return `${prefix}-${event.type}-${event.created_at}-${index}`
-}
+const pullIndicatorLabel = computed(() => {
+  if (props.loadingOlder) return t('workspace.job.events.loadingOlder')
+  if (pullDistance.value >= PULL_THRESHOLD) return t('workspace.job.events.releaseToLoad')
+  return t('workspace.job.events.pullToLoad')
+})
 
-const getBatchSummary = (event: SSEEvent): string => {
-  const meta = event.metadata as unknown as BatchEventMetadata | undefined
-  if (!meta) return event.message
-  const parts: string[] = []
-  if (event.stage) parts.push(getStageLabel(event.stage))
-  parts.push(t('workspace.job.events.batch.segments', { count: meta.segment_count }))
-  if (meta.duration_ms) parts.push(formatDuration(meta.duration_ms))
-  return parts.join(' · ')
-}
-
-const getBatchTimelineType = (event: SSEEvent): 'success' | 'warning' | 'error' | 'info' => {
-  const meta = event.metadata as unknown as BatchEventMetadata | undefined
-  return batchStatusTimelineType(meta?.status, event.level)
-}
-
-const getPoolTimelineType = (event: SSEEvent): 'info' | 'warning' | 'error' => {
-  const meta = event.metadata as unknown as { phase?: 'pool_start' | 'pool_advance' } | undefined
-  return poolTimelineType(meta?.phase, event.level)
+const openBatchDetail = (event: SSEEvent): void => {
+  detailDrawerEvent.value = event
+  detailDrawerShow.value = true
 }
 
 const JOB_EVENT_TYPES = new Set(['job_started', 'job_completed', 'job_failed', 'job_cancelled'])
@@ -110,41 +99,132 @@ const filteredSyntheticEvents = computed(() => {
   })
 })
 
-const allEvents = computed(() => {
-  return [...filteredSyntheticEvents.value, ...props.events]
+const realItemCache = new WeakMap<SSEEvent, SSEEvent & { _key: string }>()
+
+const timelineItems = computed<Array<SSEEvent & { _key: string; _synthetic?: boolean }>>(() => {
+  const real = props.events.map((e) => {
+    let cached = realItemCache.get(e)
+    if (!cached) {
+      cached = { ...e, _key: String(e.seq) }
+      realItemCache.set(e, cached)
+    }
+    return cached
+  })
+  const syn = filteredSyntheticEvents.value.map((e, i) => ({
+    ...e,
+    _key: `syn-${i}-${e.type}`,
+    _synthetic: true,
+  }))
+  return [...syn, ...real]
 })
 
 let scrollTicking = false
-const checkScrollPosition = (): void => {
+
+const onScroll = (e: Event): void => {
   if (scrollTicking) return
   scrollTicking = true
   requestAnimationFrame(() => {
-    const el = scrollContainer.value
-    if (!el) {
-      scrollTicking = false
-      return
-    }
-    isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 50
-    if (isNearBottom.value) {
-      prevEventsLength.value = props.events.length
-      hasNewEvents.value = false
-    }
     scrollTicking = false
+    const el = e.target as HTMLElement
+    if (!el) return
+    atTop.value = el.scrollTop <= 0
+    isNearTop.value = el.scrollTop <= 50
+    isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 50
   })
 }
 
+const triggerLoad = (): void => {
+  if (!canLoadOlder.value) return
+  hasNewEvents.value = false
+  emit('load-older')
+}
+
+// 桌面端：wheel 在顶部继续上滚 → 累积拉拽距离
+const onWheel = (e: WheelEvent): void => {
+  if (e.deltaY > 0) {
+    wheelAccum = 0
+    wheelActive = false
+    return
+  }
+  const el = scrollContainerRef.value
+  if (!el || el.scrollTop > 0) {
+    wheelAccum = 0
+    wheelActive = false
+    return
+  }
+  // 已在顶部 + 向上滚动
+  e.preventDefault()
+  wheelActive = true
+  wheelAccum += Math.abs(e.deltaY)
+  pullDistance.value = Math.min(wheelAccum * 0.5, PULL_THRESHOLD * 1.4)
+  if (pullDistance.value >= PULL_THRESHOLD) {
+    triggerLoad()
+    wheelAccum = 0
+    wheelActive = false
+    pullDistance.value = 0
+  }
+}
+
+const endWheel = (): void => {
+  if (wheelActive) {
+    wheelActive = false
+    wheelAccum = 0
+    pullDistance.value = 0
+  }
+}
+
+// 移动端：touch 在顶部继续下拉
+let touchStartY = 0
+const onTouchStart = (e: TouchEvent): void => {
+  touchStartY = e.touches[0]?.clientY ?? 0
+}
+const onTouchMove = (e: TouchEvent): void => {
+  const el = scrollContainerRef.value
+  if (!el || el.scrollTop > 0) {
+    pullDistance.value = 0
+    return
+  }
+  const currentY = e.touches[0]?.clientY
+  if (currentY == null) return
+  const dy = currentY - touchStartY
+  if (dy <= 0) {
+    pullDistance.value = 0
+    return
+  }
+  e.preventDefault()
+  pullDistance.value = Math.min(dy * 0.5, PULL_THRESHOLD * 1.4)
+  if (pullDistance.value >= PULL_THRESHOLD) {
+    triggerLoad()
+    pullDistance.value = 0
+  }
+}
+const onTouchEnd = (): void => {
+  pullDistance.value = 0
+}
+
 const scrollToBottom = (): void => {
-  const el = scrollContainer.value
-  if (!el) return
   prevEventsLength.value = props.events.length
-  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  const el = scrollContainerRef.value
+  if (el) el.scrollTop = el.scrollHeight
   hasNewEvents.value = false
 }
 
 watch(
   () => props.events.length,
   (newLen) => {
-    if (newLen > prevEventsLength.value) {
+    const newTail = props.events.at(-1)?.seq ?? 0
+    const newHead = props.events.at(0)?.seq ?? 0
+
+    // 头部前插（loadOlder）：头部 seq 变小 → 记录滚动位置和内容高度，前插后恢复
+    if (newHead < headSeq.value) {
+      const el = scrollContainerRef.value
+      if (el) {
+        prevScrollHeight.value = el.scrollHeight
+        pendingScrollRestore.value = el.scrollTop
+      }
+    } else if (newTail > tailSeq.value) {
+      // 尾部推进（新事件）：自动滚底或提示
+      tailSeq.value = newTail
       if (isNearBottom.value) {
         prevEventsLength.value = newLen
         nextTick(() => {
@@ -154,12 +234,48 @@ watch(
         hasNewEvents.value = true
       }
     }
+
+    headSeq.value = newHead
+    if (newTail > tailSeq.value) tailSeq.value = newTail
+  },
+)
+
+// 前插更早事件后，恢复原滚动位置（补偿新增内容高度），消除跳动
+watch(
+  () => props.events.length,
+  () => {
+    const saved = pendingScrollRestore.value
+    if (saved == null) return
+    nextTick(() => {
+      const el = scrollContainerRef.value
+      if (el) el.scrollTop = saved + (el.scrollHeight - prevScrollHeight.value)
+      pendingScrollRestore.value = null
+    })
   },
 )
 
 onMounted(() => {
   prevEventsLength.value = props.events.length
+  tailSeq.value = props.events.at(-1)?.seq ?? 0
+  headSeq.value = props.events.at(0)?.seq ?? 0
   nextTick(() => scrollToBottom())
+  const el = scrollContainerRef.value
+  if (el) {
+    el.addEventListener('wheel', onWheel, { passive: false })
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+  }
+})
+
+onUnmounted(() => {
+  const el = scrollContainerRef.value
+  if (el) {
+    el.removeEventListener('wheel', onWheel)
+    el.removeEventListener('touchstart', onTouchStart)
+    el.removeEventListener('touchmove', onTouchMove)
+    el.removeEventListener('touchend', onTouchEnd)
+  }
 })
 </script>
 
@@ -173,7 +289,14 @@ onMounted(() => {
       </h4>
       <div class="flex items-center gap-2">
         <span
-          v-if="connected"
+          v-if="jobEnded"
+          class="inline-flex items-center gap-1 rounded-full bg-gray-400/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
+        >
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400" />
+          {{ t('workspace.job.events.jobEnded') }}
+        </span>
+        <span
+          v-else-if="connected"
           class="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-500"
         >
           <span class="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
@@ -193,63 +316,39 @@ onMounted(() => {
     </div>
 
     <div class="relative min-h-50">
-      <div
-        ref="scrollContainer"
-        class="max-h-[60vh] overflow-auto rounded-lg border border-lf-border-soft bg-lf-surface/40 p-3"
-        @scroll="checkScrollPosition"
-      >
-        <div v-if="allEvents.length === 0" class="py-6 text-center">
+      <div class="rounded-lg border border-lf-border-soft bg-lf-surface/40 p-3">
+        <div
+          v-if="timelineItems.length > 0"
+          ref="scrollContainerRef"
+          class="max-h-[60vh] overflow-y-auto"
+          style="overflow-anchor: none"
+          @scroll="onScroll"
+          @mouseleave="endWheel"
+        >
+          <!-- Pull-to-load indicator -->
+          <div
+            class="flex items-center justify-center overflow-hidden text-xs text-lf-text-muted transition-[height] duration-150"
+            :style="{ height: pullDistance + 'px' }"
+          >
+            <span v-if="pullDistance > 0 || isNearTop">{{ pullIndicatorLabel }}</span>
+          </div>
+          <div
+            v-for="(item, index) in timelineItems"
+            :key="item._key"
+          >
+            <TimelineRow
+              :event="item"
+              :is-last="index === timelineItems.length - 1"
+              @open-detail="openBatchDetail"
+            />
+          </div>
+          <div v-if="atTop && !hasOlder && !loadingOlder" class="py-2 text-center text-xs text-lf-text-muted">
+            {{ t('workspace.job.events.reachedOldest') }}
+          </div>
+        </div>
+        <div v-else class="py-6 text-center">
           <NEmpty size="small" :description="t('workspace.job.events.empty')" />
         </div>
-
-        <NTimeline v-else :icon-size="16">
-          <!-- Synthetic events: dashed line + muted text -->
-          <template v-if="filteredSyntheticEvents.length > 0">
-            <NTimelineItem
-              v-for="(event, index) in filteredSyntheticEvents"
-              :key="makeKey(event, index, 'syn')"
-              line-type="dashed"
-              type="default"
-              :title="event.message"
-              :content="event.stage ? getStageLabel(event.stage) : undefined"
-              :time="formatEventTime(event.created_at)"
-              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs [&_.n-timeline-item-content]:text-lf-text-muted"
-            />
-          </template>
-
-          <!-- Real-time events: solid line + normal text -->
-          <template v-for="(event, index) in events" :key="makeKey(event, index, 'live')">
-            <NTimelineItem
-              v-if="!isBatchEvent(event.type) && !isPoolEvent(event.type)"
-              line-type="default"
-              :type="eventLevelType(event.level)"
-              :title="event.message"
-              :content="event.stage ? getStageLabel(event.stage) : undefined"
-              :time="formatEventTime(event.created_at)"
-              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs"
-            />
-            <NTimelineItem
-              v-else-if="isPoolEvent(event.type)"
-              line-type="default"
-              :type="getPoolTimelineType(event)"
-              :title="getPoolSummary(event)"
-              :time="formatEventTime(event.created_at)"
-              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs"
-            >
-              <PoolEventCard :event="event" />
-            </NTimelineItem>
-            <NTimelineItem
-              v-else
-              line-type="default"
-              :type="getBatchTimelineType(event)"
-              :title="getBatchSummary(event)"
-              :time="formatEventTime(event.created_at)"
-              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs"
-            >
-              <BatchEventCard :event="event" />
-            </NTimelineItem>
-          </template>
-        </NTimeline>
       </div>
 
       <!-- Floating "new events" button -->
@@ -268,5 +367,7 @@ onMounted(() => {
         </button>
       </Transition>
     </div>
+
+    <BatchDetailDrawer v-model:show="detailDrawerShow" :event="detailDrawerEvent" />
   </div>
 </template>

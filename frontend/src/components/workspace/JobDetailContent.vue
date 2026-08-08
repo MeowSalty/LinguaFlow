@@ -29,10 +29,14 @@ const props = defineProps<{
   events?: SSEEvent[]
   syntheticEvents?: SSEEvent[]
   sseConnected?: boolean
+  hasOlder?: boolean
+  loadingOlder?: boolean
+  jobEnded?: boolean
 }>()
 
 const emit = defineEmits<{
   clearEvents: []
+  loadOlder: []
 }>()
 
 const warnedResources = computed(() =>
@@ -233,7 +237,11 @@ const resourceColumns = computed(() => [
       :events="events"
       :synthetic-events="syntheticEvents"
       :connected="sseConnected"
+      :has-older="hasOlder"
+      :loading-older="loadingOlder"
+      :job-ended="jobEnded"
       @clear="emit('clearEvents')"
+      @load-older="emit('loadOlder')"
     />
   </div>
 </template>
