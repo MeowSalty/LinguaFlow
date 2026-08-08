@@ -6,11 +6,13 @@ import { useI18n } from 'vue-i18n'
 import { type ApiSchemas } from '@/api/client'
 import { getJobProgress, getJobProgressText } from '@/composables/useWorkspaceUtils'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
+import { useUiStore } from '@/stores/ui'
 
 type Job = ApiSchemas['Job']
 
 const { t } = useI18n()
 const tracker = useGlobalJobTrackerStore()
+const ui = useUiStore()
 
 const isPanelOpen = ref(false)
 
@@ -57,7 +59,8 @@ const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
 <template>
   <div
     v-if="tracker.initialized && tracker.trackedJobs.length > 0"
-    class="fixed bottom-6 right-6 z-50"
+    class="fixed right-6 z-50 transition-[bottom] duration-300"
+    :class="ui.selectionBarActive ? 'bottom-24' : 'bottom-6'"
   >
     <!-- 展开面板 -->
     <Transition name="tracker-panel">
