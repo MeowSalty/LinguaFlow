@@ -126,58 +126,54 @@ const onSelectUserAction = async (key: string | number) => {
   }
 }
 
-const templateNavOptions = computed<DropdownOption[]>(() => [
+interface NavItem {
+  path: string
+  icon: string
+  labelKey: string
+}
+
+const toDropdownOption = (item: NavItem): DropdownOption => ({
+  label: t(item.labelKey),
+  key: item.path,
+  icon: () => h(IconifyIcon, { icon: item.icon, class: 'text-base' }),
+})
+
+const templateNavItems = computed<NavItem[]>(() => [
+  { path: '/prompt-templates', icon: 'carbon:prompt-template', labelKey: 'nav.promptTemplates' },
   {
-    label: t('nav.promptTemplates'),
-    key: '/prompt-templates',
-    icon: () => h(IconifyIcon, { icon: 'carbon:prompt-template', class: 'text-base' }),
+    path: '/bootstrap-prompt-templates',
+    icon: 'carbon:text-mining',
+    labelKey: 'nav.bootstrapPromptTemplates',
   },
+  { path: '/prune-prompt-templates', icon: 'carbon:clean', labelKey: 'nav.prunePromptTemplates' },
+  { path: '/execution-profiles', icon: 'carbon:flow', labelKey: 'nav.executionProfiles' },
   {
-    label: t('nav.bootstrapPromptTemplates'),
-    key: '/bootstrap-prompt-templates',
-    icon: () => h(IconifyIcon, { icon: 'carbon:text-mining', class: 'text-base' }),
-  },
-  {
-    label: t('nav.prunePromptTemplates'),
-    key: '/prune-prompt-templates',
-    icon: () => h(IconifyIcon, { icon: 'carbon:clean', class: 'text-base' }),
-  },
-  {
-    label: t('nav.executionProfiles'),
-    key: '/execution-profiles',
-    icon: () => h(IconifyIcon, { icon: 'carbon:flow', class: 'text-base' }),
-  },
-  {
-    label: t('nav.executionPlanTemplates'),
-    key: '/execution-plan-templates',
-    icon: () => h(IconifyIcon, { icon: 'carbon:plan', class: 'text-base' }),
+    path: '/execution-plan-templates',
+    icon: 'carbon:plan',
+    labelKey: 'nav.executionPlanTemplates',
   },
 ])
+
+const templateNavOptions = computed<DropdownOption[]>(() =>
+  templateNavItems.value.map(toDropdownOption),
+)
 
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
 const isTemplateRoute = computed(() =>
-  [
-    '/prompt-templates',
-    '/bootstrap-prompt-templates',
-    '/prune-prompt-templates',
-    '/execution-profiles',
-    '/execution-plan-templates',
-  ].some((r) => route.path.startsWith(r)),
+  templateNavItems.value.some((item) => route.path.startsWith(item.path)),
 )
 
-const toolsNavOptions = computed<DropdownOption[]>(() => [
+const toolsNavItems = computed<NavItem[]>(() => [
+  { path: '/tools/quick-translate', icon: 'carbon:translate', labelKey: 'nav.quickTranslate' },
   {
-    label: t('nav.quickTranslate'),
-    key: '/tools/quick-translate',
-    icon: () => h(IconifyIcon, { icon: 'carbon:translate', class: 'text-base' }),
-  },
-  {
-    label: t('nav.epubRotate'),
-    key: '/tools/epub-rotate',
-    icon: () => h(IconifyIcon, { icon: 'carbon:text-vertical-alignment', class: 'text-base' }),
+    path: '/tools/epub-rotate',
+    icon: 'carbon:text-vertical-alignment',
+    labelKey: 'nav.epubRotate',
   },
 ])
+
+const toolsNavOptions = computed<DropdownOption[]>(() => toolsNavItems.value.map(toDropdownOption))
 
 const isToolsRoute = computed(() => route.path.startsWith('/tools'))
 
@@ -202,6 +198,13 @@ const onSelectLocale = (key: string | number): void => {
 const navLinkClass =
   'relative flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-lf-text-muted no-underline transition-colors hover:bg-lf-surface-muted hover:text-lf-text-strong'
 const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
+
+const mobileNavOpen = ref(false)
+
+const navigateTo = (path: string): void => {
+  mobileNavOpen.value = false
+  void router.push(path)
+}
 </script>
 
 <template>
@@ -223,8 +226,21 @@ const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
           <span class="hidden sm:inline">{{ t('common.appName') }}</span>
         </RouterLink>
 
+        <NButton
+          quaternary
+          circle
+          class="md:hidden"
+          :aria-label="t('nav.menu')"
+          :title="t('nav.menu')"
+          @click="mobileNavOpen = true"
+        >
+          <template #icon>
+            <IconifyIcon icon="carbon:menu" class="text-lg" />
+          </template>
+        </NButton>
+
         <nav
-          class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm"
+          class="hidden min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm md:flex"
           :aria-label="t('nav.main')"
         >
           <RouterLink to="/" :class="[navLinkClass]" :active-class="navActiveClass">
@@ -334,6 +350,100 @@ const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
         <slot />
       </div>
     </main>
+
+    <NDrawer v-model:show="mobileNavOpen" placement="left" :width="280">
+      <NDrawerContent :title="t('common.appName')" closable>
+        <nav class="flex flex-col gap-1 py-2">
+          <button
+            type="button"
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
+            :class="{ '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path === '/' }"
+            @click="navigateTo('/')"
+          >
+            <IconifyIcon icon="carbon:dashboard" class="text-base" />
+            {{ t('nav.dashboard') }}
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
+            :class="{
+              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith('/projects'),
+            }"
+            @click="navigateTo('/projects')"
+          >
+            <IconifyIcon icon="carbon:folder" class="text-base" />
+            {{ t('nav.projects') }}
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
+            :class="{
+              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith('/backends'),
+            }"
+            @click="navigateTo('/backends')"
+          >
+            <IconifyIcon icon="carbon:server-proxy" class="text-base" />
+            {{ t('nav.backends') }}
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
+            :class="{
+              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith('/stats'),
+            }"
+            @click="navigateTo('/stats')"
+          >
+            <IconifyIcon icon="carbon:chart-bar" class="text-base" />
+            {{ t('nav.stats') }}
+          </button>
+
+          <div class="mt-2 px-3 text-xs font-medium text-lf-text-subtle">
+            {{ t('nav.executionConfig') }}
+          </div>
+          <button
+            v-for="item in templateNavItems"
+            :key="item.path"
+            type="button"
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
+            :class="{
+              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith(item.path),
+            }"
+            @click="navigateTo(item.path)"
+          >
+            <IconifyIcon :icon="item.icon" class="text-base" />
+            {{ t(item.labelKey) }}
+          </button>
+
+          <div class="mt-2 px-3 text-xs font-medium text-lf-text-subtle">
+            {{ t('nav.tools') }}
+          </div>
+          <button
+            v-for="item in toolsNavItems"
+            :key="item.path"
+            type="button"
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
+            :class="{
+              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith(item.path),
+            }"
+            @click="navigateTo(item.path)"
+          >
+            <IconifyIcon :icon="item.icon" class="text-base" />
+            {{ t(item.labelKey) }}
+          </button>
+
+          <button
+            v-if="isAdmin"
+            type="button"
+            class="mt-2 flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
+            :class="{ '!bg-lf-brand-soft !text-brand-600 font-semibold': isAdminRoute }"
+            @click="navigateTo('/admin')"
+          >
+            <IconifyIcon icon="carbon:security" class="text-base" />
+            {{ t('nav.admin') }}
+          </button>
+        </nav>
+      </NDrawerContent>
+    </NDrawer>
 
     <GlobalJobTrackerWidget />
     <GlobalJobDetailDrawer />
