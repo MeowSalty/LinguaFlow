@@ -94,6 +94,30 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/backends/models \
 
 上传资源、创建作业等涉及 multipart 或较长请求体，建议直接对照 **Redoc** 中的对应接口与示例。
 
+### 7. 即时翻译（单段，不落库）
+
+把单段文本交给某份执行计划，同步返回译文、质量标记、各轮摘要、批次诊断与用量。译文**不落库**，适合零散翻译或脚本集成。
+
+```bash
+curl -s -X POST http://127.0.0.1:18080/api/v1/quick-translate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_text": "Hello, world.",
+    "source_lang": "auto",
+    "target_lang": "zh",
+    "execution_plan_id": 1
+  }'
+```
+
+常用可选字段：
+
+| 字段                 | 说明                                                                       |
+| -------------------- | -------------------------------------------------------------------------- |
+| `project_id`         | 可选。提供时复用该项目的术语表与语言配置，并校验访问权                      |
+| `glossary`           | 内联临时术语表数组（`source`/`target` 必填，可选 `forbidden`/`mandatory` 等）。项目场景下叠加在项目术语表之上 |
+
+响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-即时翻译)。
+
 ## 错误码
 
 | 状态码 | 说明               |

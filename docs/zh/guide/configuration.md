@@ -228,6 +228,10 @@ server:
   jwt_expiry: 15m
   refresh_token_expiry: 720h
   shutdown_timeout: 10s
+  quick_translate:
+    max_concurrency: 2     # 单用户并发上限；全局 = 此值 × 4
+    timeout: 5m            # 单次执行超时
+    max_timeout: 30m       # timeout 的硬上限（管理员安全阀）
   cors:
     allowed_origins: ["*"]
   registration:
@@ -492,6 +496,21 @@ CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行�
 | ------------ | ---- | ------ | -------------------------- |
 | `enabled`    | bool | `true` | 是否开放用户注册           |
 | `auto_admin` | bool | `true` | 首个注册用户自动成为管理员 |
+
+##### server.quick_translate — 即时翻译
+
+控制首页 / 工具页「即时翻译」（同步单段在线翻译）的并发与超时。译文纯临时、不落库，故无 `apply_token_ttl`。功能说明见 [即时翻译](/zh/guide/quick-translate)。
+
+| 字段              | 类型     | 默认值 | 说明                                                                                                          |
+| ----------------- | -------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `max_concurrency` | int      | `2`    | 单用户同时进行的即时翻译并发上限（per-actor 信号量）；**全局并发 = 此值 × 4**。`<=0` 用默认值，`>32` 钳制为 32 |
+| `timeout`         | duration | `5m`   | 单次即时翻译执行超时（对齐预览，二者复用同一套含 429 退避的多轮 LLM 流水线）。`<=0` 用默认值，`>max_timeout` 钳制 |
+| `max_timeout`     | duration | `30m`  | `timeout` 的硬上限（管理员安全阀，防误配占满并发槽位）。`<=0` 用默认值，`>30m` 钳制为 30m                      |
+
+::: tip 并发如何受约束
+单用户并发受 `max_concurrency` 限制；整个实例的全局即时翻译并发受 `max_concurrency × 4` 限制。提示「并发已满」时稍后重试即可。
+:::
+:::
 
 ##### server.database — 数据库
 

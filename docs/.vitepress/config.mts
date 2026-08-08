@@ -36,6 +36,7 @@ export default defineConfig({
               items: [
                 { text: '快速开始 · Web', link: '/zh/guide/getting-started' },
                 { text: '快速开始 · CLI', link: '/zh/guide/cli-quickstart' },
+                { text: '即时翻译', link: '/zh/guide/quick-translate' },
                 { text: '核心概念', link: '/zh/guide/concepts' },
                 { text: '安装部署', link: '/zh/guide/installation' },
                 { text: '使用模式', link: '/zh/guide/modes' },
