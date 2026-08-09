@@ -474,7 +474,7 @@ defineExpose({ lengthRatioError })
           <NSwitch v-model:value="configModel.context.enabled" size="small" :disabled="disabled" />
         </div>
         <div :class="{ 'opacity-50 pointer-events-none': !configModel.context.enabled }">
-          <NGrid :cols="3" :x-gap="12" :y-gap="10">
+          <NGrid cols="1 s:2 m:3" responsive="screen" :x-gap="12" :y-gap="10">
             <NGi>
               <div class="mb-1 text-xs text-lf-text-subtle">
                 {{ t('profileConfigEditor.context.before') }}
@@ -604,7 +604,7 @@ defineExpose({ lengthRatioError })
               :disabled="disabled || !configModel.qa!.enabled"
             />
           </div>
-          <NGrid :cols="2" :x-gap="12" :y-gap="10" class="mt-2">
+          <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10" class="mt-2">
             <NGi>
               <div class="mb-1 flex items-center gap-2">
                 <NCheckbox

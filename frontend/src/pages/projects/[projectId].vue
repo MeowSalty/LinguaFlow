@@ -462,7 +462,7 @@ onMounted(() => {
 
 <template>
   <div class="space-y-3">
-    <section class="lf-page-header !px-4 !py-3 sm:!px-5">
+    <section class="lf-page-header px-4! py-3! sm:px-5!">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <NButton quaternary size="small" @click="router.push('/projects')">
@@ -558,7 +558,7 @@ onMounted(() => {
         class="workspace-tabs px-3 pt-1 sm:px-4"
       >
         <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
-          <div class="pb-3 pt-2">
+          <div :class="['pb-3 pt-2', workspace.uploadTasks.length > 0 ? 'pb-20 sm:pb-0' : '']">
             <ResourceExplorer
               v-if="projectId"
               :project-id="projectId"
@@ -571,7 +571,7 @@ onMounted(() => {
         </NTabPane>
 
         <NTabPane name="segments" :tab="t('workspace.tabs.segments')">
-          <div class="pb-3 pt-2">
+          <div :class="['pb-3 pt-2', workspace.uploadTasks.length > 0 ? 'pb-20 sm:pb-0' : '']">
             <SegmentPanel
               ref="segmentPanelRef"
               :project-id="projectId"

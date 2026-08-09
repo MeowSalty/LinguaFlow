@@ -32,13 +32,15 @@ const added = computed(() => normalize(props.addedGlossary))
       <div class="mb-1.5 text-xs font-medium text-lf-text-strong">
         {{ t('workspace.job.events.batch.usedGlossary') }}
       </div>
-      <table class="w-full text-xs">
+      <table class="w-full table-fixed text-xs">
         <thead>
           <tr class="border-b border-lf-border-soft text-lf-text-muted">
-            <th class="py-1 pr-2 text-left font-medium">
+            <th class="py-1 pr-2 text-left font-medium break-all align-top">
               {{ t('workspace.glossary.columns.source') }}
             </th>
-            <th class="py-1 text-left font-medium">{{ t('workspace.glossary.columns.target') }}</th>
+            <th class="py-1 text-left font-medium break-all align-top">
+              {{ t('workspace.glossary.columns.target') }}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -47,8 +49,8 @@ const added = computed(() => normalize(props.addedGlossary))
             :key="`used-${idx}`"
             class="border-b border-lf-border-soft/50"
           >
-            <td class="py-1 pr-2 text-lf-text">{{ item.source }}</td>
-            <td class="py-1 text-lf-text">{{ item.target }}</td>
+            <td class="py-1 pr-2 text-lf-text break-all align-top">{{ item.source }}</td>
+            <td class="py-1 text-lf-text break-all align-top">{{ item.target }}</td>
           </tr>
         </tbody>
       </table>
@@ -58,13 +60,15 @@ const added = computed(() => normalize(props.addedGlossary))
       <div class="mb-1.5 text-xs font-medium text-lf-text-strong">
         {{ t('workspace.job.events.batch.addedGlossary') }}
       </div>
-      <table class="w-full text-xs">
+      <table class="w-full table-fixed text-xs">
         <thead>
           <tr class="border-b border-lf-border-soft text-lf-text-muted">
-            <th class="py-1 pr-2 text-left font-medium">
+            <th class="py-1 pr-2 text-left font-medium break-all align-top">
               {{ t('workspace.glossary.columns.source') }}
             </th>
-            <th class="py-1 text-left font-medium">{{ t('workspace.glossary.columns.target') }}</th>
+            <th class="py-1 text-left font-medium break-all align-top">
+              {{ t('workspace.glossary.columns.target') }}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -73,8 +77,8 @@ const added = computed(() => normalize(props.addedGlossary))
             :key="`added-${idx}`"
             class="border-b border-lf-border-soft/50"
           >
-            <td class="py-1 pr-2 text-lf-text">{{ item.source }}</td>
-            <td class="py-1 text-lf-text">{{ item.target }}</td>
+            <td class="py-1 pr-2 text-lf-text break-all align-top">{{ item.source }}</td>
+            <td class="py-1 text-lf-text break-all align-top">{{ item.target }}</td>
           </tr>
         </tbody>
       </table>

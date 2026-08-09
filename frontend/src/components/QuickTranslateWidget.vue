@@ -348,7 +348,7 @@ onMounted(() => {
           <div
             v-for="round in result.round_summary"
             :key="round.index"
-            class="flex items-center gap-2 text-xs"
+            class="flex min-w-0 flex-wrap items-center gap-2 text-xs"
           >
             <span class="w-6 shrink-0 font-mono text-lf-text-subtle">#{{ round.index + 1 }}</span>
             <NTag size="tiny" :bordered="false">{{ round.mode }}</NTag>

@@ -415,11 +415,17 @@ watch(
 
         <div class="min-w-0 pl-12 md:pl-0">
           <div class="truncate text-sm text-lf-text-muted md:text-lf-text">
+            <span class="mr-2 text-[11px] text-lf-text-subtle md:hidden">
+              {{ t('admin.users.columns.email') }}
+            </span>
             {{ user.email }}
           </div>
         </div>
 
         <div class="pl-12 md:pl-0">
+          <span class="mr-2 text-[11px] text-lf-text-subtle md:hidden">
+            {{ t('admin.users.columns.role') }}
+          </span>
           <NTag
             size="small"
             round
@@ -431,6 +437,9 @@ watch(
         </div>
 
         <div class="flex items-center gap-2 pl-12 md:pl-0">
+          <span class="mr-2 text-[11px] text-lf-text-subtle md:hidden">
+            {{ t('admin.users.columns.status') }}
+          </span>
           <span
             class="lf-status-dot"
             :class="user.active ? 'lf-status-dot--active' : 'lf-status-dot--inactive'"

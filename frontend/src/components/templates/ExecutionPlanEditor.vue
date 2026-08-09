@@ -622,7 +622,7 @@ const emitUpdate = (): void => {
         <!-- 高级配置（可折叠） -->
         <NCollapse class="mt-3">
           <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-            <NGrid :cols="2" :x-gap="12" :y-gap="10">
+            <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
               <NGi>
                 <div class="mb-1 text-xs text-lf-text-subtle">
                   {{ t('executionPlanEditor.round.retryMaxAttempts') }}
@@ -771,7 +771,7 @@ const emitUpdate = (): void => {
         <!-- 高级配置（可折叠） -->
         <NCollapse class="mt-3">
           <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-            <NGrid :cols="2" :x-gap="12" :y-gap="10">
+            <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
               <NGi>
                 <div class="mb-1 text-xs text-lf-text-subtle">
                   {{ t('executionPlanEditor.round.retryMaxAttempts') }}
@@ -878,7 +878,7 @@ const emitUpdate = (): void => {
 
         <NCollapse class="mt-3">
           <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-            <NGrid :cols="2" :x-gap="12" :y-gap="10">
+            <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
               <NGi>
                 <div class="mb-1 text-xs text-lf-text-subtle">
                   {{ t('executionPlanEditor.round.retryMaxAttempts') }}
@@ -1004,7 +1004,7 @@ const emitUpdate = (): void => {
 
         <NCollapse class="mt-3">
           <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-            <NGrid :cols="2" :x-gap="12" :y-gap="10">
+            <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
               <NGi>
                 <div class="mb-1 text-xs text-lf-text-subtle">
                   {{ t('executionPlanEditor.round.retryMaxAttempts') }}

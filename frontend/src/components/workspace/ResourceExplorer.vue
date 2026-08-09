@@ -512,7 +512,7 @@ const currentViewEvents = computed(() => {
 <template>
   <div class="space-y-3" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
     <div
-      class="flex items-center gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2"
+      class="flex flex-wrap items-center gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2"
     >
       <NButton
         v-if="toolbarMeta.showBackButton"
