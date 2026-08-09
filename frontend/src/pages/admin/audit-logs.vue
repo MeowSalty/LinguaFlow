@@ -23,25 +23,35 @@ const formatTime = (dateStr: string): string => {
 }
 
 const getActionType = (action: string): 'success' | 'warning' | 'error' | 'info' | 'default' => {
-  if (action.includes('create') || action.includes('register')) return 'success'
-  if (action.includes('update') || action.includes('edit')) return 'info'
-  if (action.includes('delete') || action.includes('disable')) return 'error'
-  if (action.includes('login') || action.includes('logout')) return 'warning'
+  if (action.includes('create') || action.includes('approve') || action.includes('retry')) {
+    return 'success'
+  }
+  if (action.includes('update') || action.includes('sync') || action.includes('preview')) {
+    return 'info'
+  }
+  if (action.includes('delete') || action.includes('reject') || action.includes('cancel')) {
+    return 'error'
+  }
   return 'default'
 }
 
 const getActionLabel = (action: string): string => {
-  const actionMap: Record<string, string> = {
-    create: t('dashboard.activity.actions.create'),
-    update: t('dashboard.activity.actions.update'),
-    delete: t('dashboard.activity.actions.delete'),
-    complete: t('dashboard.activity.actions.complete'),
-    fail: t('dashboard.activity.actions.fail'),
-    approve: t('dashboard.activity.actions.approve'),
-    reject: t('dashboard.activity.actions.reject'),
-  }
+  const map: Array<[string, string]> = [
+    ['job.create', t('admin.auditLogs.actions.jobCreate')],
+    ['job.cancel', t('admin.auditLogs.actions.jobCancel')],
+    ['job.retry', t('admin.auditLogs.actions.jobRetry')],
+    ['segment.translation_preview.apply', t('admin.auditLogs.actions.segmentPreviewApply')],
+    ['segment.approve_all', t('admin.auditLogs.actions.segmentApproveAll')],
+    ['segment.retranslate_rejected', t('admin.auditLogs.actions.segmentRetranslateRejected')],
+    ['segment.batch_review', t('admin.auditLogs.actions.segmentBatchReview')],
+    ['segment.approve', t('admin.auditLogs.actions.segmentApprove')],
+    ['segment.reject', t('admin.auditLogs.actions.segmentReject')],
+    ['glossary.sync_execute', t('admin.auditLogs.actions.glossarySync')],
+    ['quick_translate', t('admin.auditLogs.actions.quickTranslate')],
+    ['segment.update', t('admin.auditLogs.actions.segmentUpdate')],
+  ]
 
-  for (const [key, label] of Object.entries(actionMap)) {
+  for (const [key, label] of map) {
     if (action.includes(key)) return label
   }
   return action
