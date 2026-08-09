@@ -95,6 +95,8 @@ linguaflow serve
 
 如果未设置环境变量，首个注册的用户将自动成为管理员（取决于配置中 `registration.auto_admin` 的设置）。
 
+管理员可在服务器模式下管理用户、查看全局统计与审计日志，详见 [管理员后台](/zh/guide/admin)。
+
 ::: warning 安全提示
 服务器模式下，请确保：
 
