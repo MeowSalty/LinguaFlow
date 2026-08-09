@@ -2,9 +2,12 @@
 import { NBadge, NButton, NIcon } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
+import { useUiStore } from '@/stores/ui'
 
-withDefaults(
+const { t } = useI18n()
+const ui = useUiStore()
+
+const props = withDefaults(
   defineProps<{
     count: number
     canTranslate: boolean
@@ -16,6 +19,20 @@ withDefaults(
     canReview: false,
   },
 )
+
+watch(
+  () => props.count > 0,
+  (active) => {
+    ui.registerSelectionBar(active)
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  if (props.count > 0) {
+    ui.registerSelectionBar(false)
+  }
+})
 
 defineEmits<{
   translate: []
@@ -32,7 +49,7 @@ defineEmits<{
       class="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-4"
     >
       <div
-        class="pointer-events-auto flex items-center gap-3 rounded-2xl border border-lf-border-soft bg-lf-surface/95 px-4 py-2.5 shadow-lg shadow-lf-shadow-strong backdrop-blur-md"
+        class="pointer-events-auto flex max-w-full flex-wrap items-center gap-3 rounded-2xl border border-lf-border-soft bg-lf-surface/95 px-4 py-2.5 shadow-lg shadow-lf-shadow-strong backdrop-blur-md"
       >
         <!-- 选中数量 -->
         <NBadge :value="count" :max="99" type="success" />

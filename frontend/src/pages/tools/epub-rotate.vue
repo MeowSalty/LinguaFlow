@@ -138,7 +138,7 @@ const onSelectNew = (): void => {
         <p class="text-sm font-medium text-lf-text-strong">{{ t('epubRotate.modeLabel') }}</p>
         <p class="text-xs text-lf-text-muted">{{ t('epubRotate.modeHint') }}</p>
         <NRadioGroup v-model:value="mode" name="epub-rotate-mode" :disabled="busy">
-          <NSpace>
+          <NSpace wrap>
             <NRadio
               v-for="opt in modeOptions"
               :key="opt.value"

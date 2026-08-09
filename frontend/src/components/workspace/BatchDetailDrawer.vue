@@ -27,7 +27,12 @@ const { meta, tokenLine, glossaryUsedCount, glossaryAddedCount, statusTagType, h
 </script>
 
 <template>
-  <NDrawer :show="show" :width="560" placement="right" @update:show="emit('update:show', $event)">
+  <NDrawer
+    :show="show"
+    :width="'min(560px, 100vw)'"
+    placement="right"
+    @update:show="emit('update:show', $event)"
+  >
     <NDrawerContent
       :title="t('workspace.job.events.batch.detailTitle')"
       closable
