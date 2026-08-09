@@ -1,19 +1,8 @@
 <script setup lang="ts">
-import {
-  NButton,
-  NEmpty,
-  NSkeleton,
-  NTag,
-  NDataTable,
-  useMessage,
-  type DataTableColumns,
-} from 'naive-ui'
+import { NButton, NEmpty, NSkeleton, NTag, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
-import { type ApiSchemas } from '@/api/client'
 import { useAdminStore } from '@/stores/admin'
-
-type Activity = ApiSchemas['Activity']
 
 const admin = useAdminStore()
 const message = useMessage()
@@ -58,42 +47,22 @@ const getActionLabel = (action: string): string => {
   return action
 }
 
-const columns = computed<DataTableColumns<Activity>>(() => [
+const columns = computed(() => [
   {
     title: t('admin.auditLogs.columns.time'),
     key: 'created_at',
-    width: 160,
-    render: (row) => h('span', { class: 'text-sm text-lf-text-muted' }, formatTime(row.created_at)),
   },
   {
     title: t('admin.auditLogs.columns.actor'),
     key: 'actor',
-    width: 140,
-    render: (row) => h('span', { class: 'text-sm text-lf-text' }, row.actor?.username ?? '-'),
   },
   {
     title: t('admin.auditLogs.columns.action'),
     key: 'action',
-    width: 140,
-    render: (row) =>
-      h(
-        NTag,
-        { size: 'small', type: getActionType(row.action), round: true, bordered: false },
-        { default: () => getActionLabel(row.action) },
-      ),
   },
   {
     title: t('admin.auditLogs.columns.resource'),
     key: 'resource_type',
-    width: 160,
-    render: (row) =>
-      h('span', { class: 'font-mono text-sm text-lf-text' }, row.resource_type ?? '-'),
-  },
-  {
-    title: t('admin.auditLogs.columns.details'),
-    key: 'message',
-    ellipsis: { tooltip: true },
-    render: (row) => h('span', { class: 'text-sm text-lf-text-muted' }, row.message ?? '-'),
   },
 ])
 
@@ -146,14 +115,60 @@ watch(
         :description="t('admin.auditLogs.empty')"
       />
 
-      <div v-else class="p-1 sm:p-2">
-        <NDataTable
-          :columns="columns"
-          :data="admin.auditLogs"
-          :bordered="false"
-          :single-line="true"
-          size="small"
-        />
+      <div v-else class="lf-data-list">
+        <div
+          class="lf-data-list__head grid-cols-1 md:grid-cols-[160px_140px_140px_160px_minmax(0,1fr)]"
+        >
+          <span v-for="col in columns" :key="col.key" class="hidden md:block">
+            {{ col.title }}
+          </span>
+          <span class="hidden md:block">{{ t('admin.auditLogs.columns.details') }}</span>
+        </div>
+
+        <div
+          v-for="log in admin.auditLogs"
+          :key="log.id"
+          class="lf-data-list__row grid-cols-1 md:grid-cols-[160px_140px_140px_160px_minmax(0,1fr)]"
+        >
+          <div class="min-w-0">
+            <div class="text-xs text-lf-text-subtle md:hidden">
+              {{ t('admin.auditLogs.columns.time') }}
+            </div>
+            <span class="text-sm text-lf-text-muted">{{ formatTime(log.created_at) }}</span>
+          </div>
+
+          <div class="min-w-0">
+            <div class="text-xs text-lf-text-subtle md:hidden">
+              {{ t('admin.auditLogs.columns.actor') }}
+            </div>
+            <span class="truncate text-sm text-lf-text">{{ log.actor?.username ?? '-' }}</span>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <div class="text-xs text-lf-text-subtle md:hidden">
+              {{ t('admin.auditLogs.columns.action') }}
+            </div>
+            <NTag size="small" round :bordered="false" :type="getActionType(log.action)">
+              {{ getActionLabel(log.action) }}
+            </NTag>
+          </div>
+
+          <div class="min-w-0">
+            <div class="text-xs text-lf-text-subtle md:hidden">
+              {{ t('admin.auditLogs.columns.resource') }}
+            </div>
+            <span class="truncate font-mono text-sm text-lf-text">
+              {{ log.resource_type ?? '-' }}
+            </span>
+          </div>
+
+          <div class="min-w-0">
+            <div class="text-xs text-lf-text-subtle md:hidden">
+              {{ t('admin.auditLogs.columns.details') }}
+            </div>
+            <span class="text-sm text-lf-text-muted">{{ log.message ?? '-' }}</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
