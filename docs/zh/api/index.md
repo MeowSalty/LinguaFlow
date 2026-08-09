@@ -145,6 +145,30 @@ curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&after_seq=1000"
 SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-实时事件流)。
 :::
 
+### 9. 活动与审计日志（服务器模式）
+
+服务器模式记录两类活动视图，结构一致（`Activity`：`action` / `resource_type` / `message` / `metadata` 等）：
+
+```bash
+# 个人活动：当前用户可见范围内（自己 / 所在组织 / 项目）
+curl -s http://localhost:8080/api/v1/activity \
+  -H "Authorization: Bearer <token>"
+
+# 全局审计日志：需管理员权限
+curl -s "http://localhost:8080/api/v1/admin/audit-logs?limit=50" \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+两者均为基于 `id` 的反向游标分页（`limit` `1`–`100`，默认 `50`）：把当前页最后一条的 `id` 作为下一页 `cursor` 传入。
+
+```bash
+# 翻到更早的一页
+curl -s "http://localhost:8080/api/v1/admin/audit-logs?limit=50&cursor=12345" \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+后端记录的 `action` 值、资源类型与触发场景对照见 [管理员后台 · 动作类型](/zh/guide/admin#动作类型)。管理员还提供用户管理、系统统计与设置接口，完整列表见 [管理员后台 · API 速览](/zh/guide/admin#api-速览)。
+
 ## 错误码
 
 | 状态码 | 说明               |

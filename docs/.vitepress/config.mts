@@ -49,6 +49,7 @@ export default defineConfig({
                 { text: '术语表管理', link: '/zh/guide/glossary' },
                 { text: '翻译审校', link: '/zh/guide/review' },
                 { text: '格式支持', link: '/zh/guide/formats' },
+                { text: '管理员后台', link: '/zh/guide/admin' },
               ],
             },
             {
