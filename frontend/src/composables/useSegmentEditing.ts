@@ -11,7 +11,6 @@ export { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/
 type Segment = ApiSchemas['Segment']
 
 export interface SegmentFormModel {
-  source_text: string
   target_text: string
   comment: string
 }
@@ -26,7 +25,6 @@ export function useSegmentEditing(
   // ── 内联编辑状态 ──
   const inlineEditingSegmentId = ref<number | null>(null)
   const inlineEditForm = reactive<SegmentFormModel>({
-    source_text: '',
     target_text: '',
     comment: '',
   })
@@ -46,14 +44,12 @@ export function useSegmentEditing(
   // ── 方法 ──
   const startInlineEdit = (segment: Segment): void => {
     inlineEditingSegmentId.value = segment.id
-    inlineEditForm.source_text = segment.source_text
     inlineEditForm.target_text = segment.target_text ?? ''
     inlineEditForm.comment = segment.review_comment ?? ''
   }
 
   const cancelInlineEdit = (): void => {
     inlineEditingSegmentId.value = null
-    inlineEditForm.source_text = ''
     inlineEditForm.target_text = ''
     inlineEditForm.comment = ''
   }
@@ -65,7 +61,6 @@ export function useSegmentEditing(
 
     try {
       await workspace.updateSegment(projectId.value, activeResourceId.value, segment.id, {
-        source_text: inlineEditForm.source_text,
         target_text: inlineEditForm.target_text || undefined,
         comment: inlineEditForm.comment || undefined,
       })
@@ -84,7 +79,6 @@ export function useSegmentEditing(
 
     try {
       await workspace.updateSegment(projectId.value, activeResourceId.value, segment.id, {
-        source_text: inlineEditForm.source_text,
         target_text: inlineEditForm.target_text || undefined,
         comment: inlineEditForm.comment || undefined,
       })

@@ -39,7 +39,7 @@ const emit = defineEmits<{
   openComment: [segment: Segment]
   saveComment: [segment: Segment]
   closeComment: []
-  updateEditField: [field: 'source_text' | 'target_text' | 'comment', value: string]
+  updateEditField: [field: 'target_text' | 'comment', value: string]
   updateCommentText: [value: string]
   previewTranslation: [segment: Segment]
 }>()

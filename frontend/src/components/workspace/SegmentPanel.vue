@@ -226,10 +226,7 @@ const handleSaveAndEditNext = (segment: Segment): void => {
   void saveAndEditNext(segment, workspace.segments)
 }
 
-const handleUpdateInlineEditForm = (
-  field: 'source_text' | 'target_text' | 'comment',
-  value: string,
-): void => {
+const handleUpdateInlineEditForm = (field: 'target_text' | 'comment', value: string): void => {
   inlineEditForm[field] = value
 }
 

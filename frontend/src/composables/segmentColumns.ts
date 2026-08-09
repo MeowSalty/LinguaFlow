@@ -61,7 +61,7 @@ export interface SegmentColumnDeps {
   saveInlineComment: (segment: Segment) => Promise<void>
   closeInlineComment: () => void
   updateCommentText: (value: string) => void
-  updateEditFormField: (field: 'source_text' | 'target_text' | 'comment', value: string) => void
+  updateEditFormField: (field: 'target_text' | 'comment', value: string) => void
 
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>

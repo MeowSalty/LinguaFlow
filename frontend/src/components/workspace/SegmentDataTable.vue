@@ -42,7 +42,7 @@ const emit = defineEmits<{
   saveInlineComment: [segment: Segment]
   closeInlineComment: []
   'update:inlineCommentText': [value: string]
-  'update:inlineEditForm': [field: 'source_text' | 'target_text' | 'comment', value: string]
+  'update:inlineEditForm': [field: 'target_text' | 'comment', value: string]
 }>()
 
 // ── 响应式配置 ──
