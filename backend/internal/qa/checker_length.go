@@ -53,14 +53,14 @@ func (c *LengthRatioChecker) Check(_ context.Context, segments []CheckInput) []Q
 			issues = append(issues, QualityIssue{
 				SegmentIndex: seg.Index,
 				Severity:     SeverityWarning,
-				Code:         "length_ratio",
+				Code:         CheckLengthRatio,
 				Message:      fmt.Sprintf("译文过短 (%.1f%%)，长度比 %.2f", ratio*100, ratio),
 			})
 		} else if ratio > c.maxRatio {
 			issues = append(issues, QualityIssue{
 				SegmentIndex: seg.Index,
 				Severity:     SeverityWarning,
-				Code:         "length_ratio",
+				Code:         CheckLengthRatio,
 				Message:      fmt.Sprintf("译文过长 (%.0f%%)，长度比 %.2f", ratio*100, ratio),
 			})
 		}

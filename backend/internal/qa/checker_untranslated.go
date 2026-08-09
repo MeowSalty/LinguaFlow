@@ -33,7 +33,7 @@ func (c *UntranslatedChecker) Check(_ context.Context, segments []CheckInput) []
 		issues = append(issues, QualityIssue{
 			SegmentIndex: seg.Index,
 			Severity:     SeverityError,
-			Code:         "untranslated",
+			Code:         CheckUntranslated,
 			Message:      "译文与原文相同",
 		})
 	}
