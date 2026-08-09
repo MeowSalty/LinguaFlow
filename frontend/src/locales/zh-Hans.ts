@@ -7,6 +7,7 @@ const messages = {
   },
   nav: {
     main: '主导航',
+    menu: '菜单',
     dashboard: '工作台',
     projects: '项目',
     backends: 'AI 后端',
