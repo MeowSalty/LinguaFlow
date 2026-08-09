@@ -229,7 +229,7 @@ const navigateTo = (path: string): void => {
         <NButton
           quaternary
           circle
-          class="md:hidden"
+          class="flex! md:hidden!"
           :aria-label="t('nav.menu')"
           :title="t('nav.menu')"
           @click="mobileNavOpen = true"
