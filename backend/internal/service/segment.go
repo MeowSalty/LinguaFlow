@@ -229,7 +229,7 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		if source == "" {
 			return nil, ErrInvalidInput
 		}
-		update.SetSourceText(source).ClearTargetText().ClearQualityIssues().SetStatus(SegmentStatusPending)
+		update.SetSourceText(source).ClearQualityIssues().SetStatus(SegmentStatusPending)
 		changed = true
 		sourceChanged = true
 	}
@@ -255,7 +255,10 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		return nil, ErrInvalidInput
 	}
 	if sourceChanged && !targetChanged {
-		update.ClearReviewedBy()
+		// 原文变更使旧译文失效：清空译文与审核信息。
+		// 必须在未显式设置 target_text 时执行，否则会与 SetTargetText
+		// 同时存在，触发 PostgreSQL "multiple assignments to same column" 错误。
+		update.ClearTargetText().ClearReviewedBy()
 	}
 
 	updated, err := update.Save(ctx)
