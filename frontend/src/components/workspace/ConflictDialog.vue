@@ -22,7 +22,7 @@ const emit = defineEmits<{
     :show="show"
     preset="card"
     :title="t('workspace.conflict.title')"
-    :style="{ width: '440px' }"
+    :style="{ width: 'min(440px, calc(100vw - 32px))' }"
     :bordered="false"
     :mask-closable="false"
     @update:show="(value: boolean) => emit('update:show', value)"

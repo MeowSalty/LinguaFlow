@@ -376,13 +376,13 @@ watch(show, (visible) => {
 </script>
 
 <template>
-  <NDrawer v-model:show="show" :width="760" placement="right">
+  <NDrawer v-model:show="show" :width="'min(760px, 100vw)'" placement="right">
     <NDrawerContent :title="t('workspace.glossary.prune.title')" closable :native-scrollbar="false">
       <div v-if="result" class="space-y-5">
         <NAlert :type="result.failed ? 'warning' : 'success'" :bordered="false">
           {{ t('workspace.glossary.prune.resultSummary') }}
         </NAlert>
-        <div class="grid grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div
             v-for="stat in resultStats"
             :key="stat.key"
@@ -545,7 +545,7 @@ watch(show, (visible) => {
       </div>
 
       <template #footer>
-        <div class="flex w-full items-center justify-between gap-3">
+        <div class="flex w-full flex-wrap items-center justify-between gap-3">
           <NText v-if="preview && !result" depth="3" class="text-xs">
             {{ t('workspace.glossary.prune.selectedCount', { count: selectedKeys.length }) }}
           </NText>

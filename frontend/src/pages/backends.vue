@@ -754,7 +754,7 @@ watch(
     </div>
 
     <!-- 创建/编辑抽屉 -->
-    <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
+    <NDrawer v-model:show="drawerVisible" :width="'min(480px, 100vw)'" placement="right">
       <NDrawerContent :title="drawerTitle" :native-scrollbar="false">
         <template #header>
           <div>

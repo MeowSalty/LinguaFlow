@@ -356,7 +356,7 @@ watch(
       </div>
     </div>
 
-    <NDrawer v-model:show="drawerVisible" :width="640" placement="right">
+    <NDrawer v-model:show="drawerVisible" :width="'min(640px, 100vw)'" placement="right">
       <NDrawerContent :native-scrollbar="false">
         <template #header>
           <div>

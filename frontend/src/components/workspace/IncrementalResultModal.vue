@@ -24,7 +24,7 @@ const { t } = useI18n()
     :show="show"
     preset="card"
     :title="t('workspace.incremental.resultTitle')"
-    :style="{ width: '480px' }"
+    :style="{ width: 'min(480px, calc(100vw - 32px))' }"
     :bordered="false"
     :mask-closable="false"
     @update:show="(value: boolean) => emit('update:show', value)"

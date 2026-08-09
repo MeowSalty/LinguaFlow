@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h } from 'vue'
+import { computed, h, onBeforeUnmount, ref } from 'vue'
 import { NAlert, NDataTable, NTag, NText } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -21,6 +21,18 @@ type Job = ApiSchemas['Job']
 type JobResource = ApiSchemas['JobResource']
 
 const { t } = useI18n()
+
+// 移动端断点（width < 640px）：使用原生 matchMedia，避免引入额外依赖
+const isMobile = ref(false)
+if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+  const mql = window.matchMedia('(max-width: 639px)')
+  const update = () => {
+    isMobile.value = mql.matches
+  }
+  update()
+  mql.addEventListener('change', update)
+  onBeforeUnmount(() => mql.removeEventListener('change', update))
+}
 
 const props = defineProps<{
   job: Job
@@ -50,97 +62,105 @@ const getResourceCompleted = (row: JobResource): number => {
   return row.completed_segments
 }
 
-const resourceColumns = computed(() => [
-  {
-    title: t('workspace.resource.columns.name'),
-    key: 'name',
-    minWidth: 200,
-    ellipsis: { tooltip: true },
-    render: (row: JobResource) => row.resource?.name || `#${row.resource_id}`,
-  },
-  {
-    title: t('workspace.job.columns.status'),
-    key: 'status',
-    width: 80,
-    render: (row: JobResource) =>
-      h(
-        NTag,
-        {
-          size: 'tiny',
-          round: true,
-          type: statusTagType(row.status as Job['status']),
-          bordered: false,
-        },
-        { default: () => getJobStatusLabel(row.status as Job['status']) },
-      ),
-  },
-  {
-    title: t('workspace.job.columns.stage'),
-    key: 'stage',
-    width: 120,
-    render: (row: JobResource) => {
-      if (!row.current_stage) return h(NText, { depth: 3 }, { default: () => '-' })
-      const label = getStageLabel(row.current_stage)
-      if (row.stage_total) {
-        return h('div', { class: 'flex items-center gap-1.5' }, [
-          h(
-            NTag,
-            { size: 'tiny', round: true, bordered: false, type: 'info' },
-            { default: () => label },
-          ),
-          h(
-            'span',
-            { class: 'text-xs text-lf-text-muted font-mono tabular-nums' },
-            {
-              default: () => `${row.stage_completed ?? 0}/${row.stage_total}`,
-            },
-          ),
-        ])
-      }
-      return label
+const resourceColumns = computed(() => {
+  const base = [
+    {
+      title: t('workspace.resource.columns.name'),
+      key: 'name',
+      minWidth: 200,
+      ellipsis: { tooltip: true },
+      render: (row: JobResource) => row.resource?.name || `#${row.resource_id}`,
     },
-  },
-  {
-    title: t('workspace.job.columns.segments'),
-    key: 'segments',
-    width: 120,
-    render: (row: JobResource) => {
-      const skipped = row.skipped_segments ?? 0
-      const completed = getResourceCompleted(row)
-      if (skipped > 0) {
-        return h('span', { class: 'font-mono tabular-nums whitespace-nowrap text-xs' }, [
-          h('span', { class: 'text-lf-text-strong' }, `${completed}`),
-          h('span', { class: 'text-lf-text-muted' }, ` +${skipped} `),
-          h('span', { class: 'text-lf-text-muted' }, `/ ${row.segment_count}`),
-        ])
-      }
-      return h(
-        'span',
-        { class: 'font-mono tabular-nums whitespace-nowrap text-xs' },
-        { default: () => `${completed}/${row.segment_count}` },
-      )
+    {
+      title: t('workspace.job.columns.status'),
+      key: 'status',
+      width: 80,
+      render: (row: JobResource) =>
+        h(
+          NTag,
+          {
+            size: 'tiny',
+            round: true,
+            type: statusTagType(row.status as Job['status']),
+            bordered: false,
+          },
+          { default: () => getJobStatusLabel(row.status as Job['status']) },
+        ),
     },
-  },
-  {
-    title: t('workspace.job.columns.remark'),
-    key: 'remark',
-    minWidth: 160,
-    ellipsis: { tooltip: true },
-    render: (row: JobResource) => {
-      if (row.error_message) {
-        return h('span', { class: 'text-xs text-red-500' }, { default: () => row.error_message })
-      }
-      if (row.warning_message) {
+  ]
+
+  if (isMobile.value) return base
+
+  return [
+    ...base,
+    {
+      title: t('workspace.job.columns.stage'),
+      key: 'stage',
+      width: 120,
+      render: (row: JobResource) => {
+        if (!row.current_stage) return h(NText, { depth: 3 }, { default: () => '-' })
+        const label = getStageLabel(row.current_stage)
+        if (row.stage_total) {
+          return h('div', { class: 'flex items-center gap-1.5' }, [
+            h(
+              NTag,
+              { size: 'tiny', round: true, bordered: false, type: 'info' },
+              { default: () => label },
+            ),
+            h(
+              'span',
+              { class: 'text-xs text-lf-text-muted font-mono tabular-nums' },
+              {
+                default: () => `${row.stage_completed ?? 0}/${row.stage_total}`,
+              },
+            ),
+          ])
+        }
+        return label
+      },
+    },
+    {
+      title: t('workspace.job.columns.segments'),
+      key: 'segments',
+      width: 120,
+      render: (row: JobResource) => {
+        const skipped = row.skipped_segments ?? 0
+        const completed = getResourceCompleted(row)
+        if (skipped > 0) {
+          return h('span', { class: 'font-mono tabular-nums whitespace-nowrap text-xs' }, [
+            h('span', { class: 'text-lf-text-strong' }, `${completed}`),
+            h('span', { class: 'text-lf-text-muted' }, ` +${skipped} `),
+            h('span', { class: 'text-lf-text-muted' }, `/ ${row.segment_count}`),
+          ])
+        }
         return h(
           'span',
-          { class: 'text-xs text-amber-600 dark:text-amber-400' },
-          { default: () => row.warning_message },
+          { class: 'font-mono tabular-nums whitespace-nowrap text-xs' },
+          { default: () => `${completed}/${row.segment_count}` },
         )
-      }
-      return h(NText, { depth: 3 }, { default: () => '-' })
+      },
     },
-  },
-])
+    {
+      title: t('workspace.job.columns.remark'),
+      key: 'remark',
+      minWidth: 160,
+      ellipsis: { tooltip: true },
+      render: (row: JobResource) => {
+        if (row.error_message) {
+          return h('span', { class: 'text-xs text-red-500' }, { default: () => row.error_message })
+        }
+        if (row.warning_message) {
+          return h(
+            'span',
+            { class: 'text-xs text-amber-600 dark:text-amber-400' },
+            { default: () => row.warning_message },
+          )
+        }
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      },
+    },
+  ]
+})
 </script>
 
 <template>
@@ -227,7 +247,7 @@ const resourceColumns = computed(() => [
         :data="job.job_resources ?? []"
         :columns="resourceColumns"
         :row-key="(row: JobResource) => row.id"
-        :scroll-x="720"
+        :scroll-x="isMobile ? undefined : 720"
       />
     </div>
 

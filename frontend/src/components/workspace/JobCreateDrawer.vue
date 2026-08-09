@@ -114,7 +114,7 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
 </script>
 
 <template>
-  <NDrawer v-model:show="show" :width="480" placement="right">
+  <NDrawer v-model:show="show" :width="'min(480px, 100vw)'" placement="right">
     <NDrawerContent :title="t('workspace.job.createTitle')" closable>
       <!-- 翻译内容摘要 -->
       <NAlert type="info" :bordered="false" class="mb-4">

@@ -25,7 +25,7 @@ const handleChange = (options: { file: UploadFileInfo }): void => {
     v-model:show="show"
     preset="card"
     :title="t('workspace.glossary.import.title')"
-    :style="{ width: '480px' }"
+    :style="{ width: 'min(480px, calc(100vw - 32px))' }"
     :bordered="false"
     :mask-closable="false"
   >

@@ -6,11 +6,13 @@ import { useI18n } from 'vue-i18n'
 import { type ApiSchemas } from '@/api/client'
 import { getJobProgress, getJobProgressText } from '@/composables/useWorkspaceUtils'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
+import { useUiStore } from '@/stores/ui'
 
 type Job = ApiSchemas['Job']
 
 const { t } = useI18n()
 const tracker = useGlobalJobTrackerStore()
+const ui = useUiStore()
 
 const isPanelOpen = ref(false)
 
@@ -57,13 +59,14 @@ const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
 <template>
   <div
     v-if="tracker.initialized && tracker.trackedJobs.length > 0"
-    class="fixed bottom-6 right-6 z-50"
+    class="fixed right-6 z-50 transition-[bottom] duration-300"
+    :class="ui.selectionBarActive ? 'bottom-24' : 'bottom-6'"
   >
     <!-- 展开面板 -->
     <Transition name="tracker-panel">
       <div
         v-if="isPanelOpen"
-        class="absolute bottom-16 right-0 w-80 max-h-[60vh] flex flex-col overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface/95 shadow-[0_4px_24px_rgba(0,0,0,0.12)] backdrop-blur-xl"
+        class="absolute bottom-16 right-0 w-80 max-w-[calc(100vw-3rem)] max-h-[60vh] flex flex-col overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface/95 shadow-[0_4px_24px_rgba(0,0,0,0.12)] backdrop-blur-xl"
       >
         <!-- 头部 -->
         <div class="flex items-center justify-between border-b border-lf-border-soft px-4 py-3">
@@ -125,7 +128,7 @@ const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
                 quaternary
                 circle
                 size="tiny"
-                class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                class="shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
                 @click="(e: MouseEvent) => handleUntrack(job.id, e)"
               >
                 <template #icon>
