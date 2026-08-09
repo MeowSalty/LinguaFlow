@@ -359,6 +359,98 @@ func createTestSegment(t *testing.T, client *ent.Client, resourceID, index int, 
 	return row
 }
 
+// TestUpdateResourceSegmentRegression 覆盖 UpdateResourceSegment 各字段组合，
+// 重点防回归同时传 source_text 与 target_text 的场景：原实现会在同一 mutation
+// 上对 target_text 同时 Clear + Set，PostgreSQL 报 "multiple assignments to
+// same column target_text" (SQLSTATE 42601)，API 返回 500。
+// SQLite 容忍重复赋值，故本测试用于锁定修复后的业务语义不退化。
+func TestUpdateResourceSegmentRegression(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+
+	setup := func(t *testing.T) (*SegmentService, context.Context, *ent.User, *ent.Project, *ent.Resource, *ent.Segment) {
+		client := testClient(t)
+		ctx := context.Background()
+		user := createTestUser(t, client, "seg-update-user")
+		project := createTestProject(t, client, "seg-update-proj", user.ID)
+		res := createTestResource(t, client, project.ID, "chapters/upd.txt")
+		// 初始：已审核通过、有译文、有审核人（模拟用户编辑已审核段落的场景）
+		seg, err := client.Segment.Create().
+			SetResourceID(res.ID).
+			SetSegmentIndex(0).
+			SetSourceText("Hello").
+			SetTargetText("你好").
+			SetStatus(segment.StatusApproved).
+			SetReviewedByID(user.ID).
+			Save(ctx)
+		if err != nil {
+			t.Fatalf("create segment: %v", err)
+		}
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite)
+		return svc, ctx, user, project, res, seg
+	}
+
+	t.Run("source_and_target_together", func(t *testing.T) {
+		svc, ctx, user, project, res, seg := setup(t)
+		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+			SourceText: strPtr("Hi there"),
+			TargetText: strPtr("你好啊"),
+		})
+		if err != nil {
+			t.Fatalf("UpdateResourceSegment with both source+target: %v", err)
+		}
+		if updated.SourceText != "Hi there" {
+			t.Fatalf("source_text=%q want %q", updated.SourceText, "Hi there")
+		}
+		if updated.TargetText == nil || *updated.TargetText != "你好啊" {
+			t.Fatalf("target_text=%v want %q", updated.TargetText, "你好啊")
+		}
+		if updated.Status != SegmentStatusEdited {
+			t.Fatalf("status=%q want %q", updated.Status, SegmentStatusEdited)
+		}
+		if updated.Edges.ReviewedBy == nil || updated.Edges.ReviewedBy.ID != user.ID {
+			t.Fatalf("reviewed_by=%v want %d", updated.Edges.ReviewedBy, user.ID)
+		}
+	})
+
+	t.Run("source_only_clears_target_and_reviewer", func(t *testing.T) {
+		svc, ctx, user, project, res, seg := setup(t)
+		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+			SourceText: strPtr("New source"),
+		})
+		if err != nil {
+			t.Fatalf("UpdateResourceSegment source-only: %v", err)
+		}
+		if updated.TargetText != nil {
+			t.Fatalf("target_text=%v want nil (cleared)", updated.TargetText)
+		}
+		if updated.Edges.ReviewedBy != nil {
+			t.Fatalf("reviewed_by=%v want nil (cleared)", updated.Edges.ReviewedBy)
+		}
+		if updated.Status != SegmentStatusPending {
+			t.Fatalf("status=%q want %q", updated.Status, SegmentStatusPending)
+		}
+	})
+
+	t.Run("target_only_keeps_source", func(t *testing.T) {
+		svc, ctx, user, project, res, seg := setup(t)
+		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+			TargetText: strPtr("新译文"),
+		})
+		if err != nil {
+			t.Fatalf("UpdateResourceSegment target-only: %v", err)
+		}
+		if updated.SourceText != "Hello" {
+			t.Fatalf("source_text=%q want %q (unchanged)", updated.SourceText, "Hello")
+		}
+		if updated.TargetText == nil || *updated.TargetText != "新译文" {
+			t.Fatalf("target_text=%v want %q", updated.TargetText, "新译文")
+		}
+		if updated.Status != SegmentStatusEdited {
+			t.Fatalf("status=%q want %q", updated.Status, SegmentStatusEdited)
+		}
+	})
+}
+
 func createTestSegmentWithMeta(t *testing.T, client *ent.Client, resourceID, index int, source, meta string, issues []qa.QualityIssue) *ent.Segment {
 	t.Helper()
 	c := client.Segment.Create().
