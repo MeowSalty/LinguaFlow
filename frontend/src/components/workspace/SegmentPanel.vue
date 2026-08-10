@@ -104,48 +104,30 @@ const qualitySeverityChips = computed(() => [
   },
 ])
 
-// ── 质量代码分组筛选 ──
-// 默认仅展示高频分组（硬规则 + 语义质量），其余收纳为「更多」，避免 24 项平铺拥挤。
-const collapsedQualityGroups = new Set([
-  'typography',
-  'content',
-  'markup',
-  'term',
-  'subtitle',
-  'divergence',
-])
-const qualityCodeGroupsExpanded = ref(false)
-
-// 当前选中的 code 落在已折叠分组内时，强制展开，避免「选中却看不见」
-const activeQualityCodeInCollapsedGroup = computed(() => {
-  const active = workspace.segmentQualityCodeFilter
-  if (active === 'all') return false
-  return QUALITY_CODE_GROUPS.some(
-    (g) => collapsedQualityGroups.has(g.key) && (g.codes as string[]).includes(active),
-  )
+// ── 质量代码分组下拉 ──
+// 24 项 code 用分组下拉呈现，支持搜索，避免 chip 平铺导致的布局失衡。
+const qualityCodeSelectValue = computed<SegmentQualityCodeFilter | null>({
+  get: () =>
+    workspace.segmentQualityCodeFilter === 'all' ? null : workspace.segmentQualityCodeFilter,
+  set: (val) => {
+    workspace.segmentQualityCodeFilter = val ?? 'all'
+    if (val && workspace.segmentQualityIssuesFilter === 'none') {
+      workspace.segmentQualityIssuesFilter = 'all'
+    }
+  },
 })
 
-const visibleQualityCodeGroups = computed(() => {
-  if (qualityCodeGroupsExpanded.value || activeQualityCodeInCollapsedGroup.value) {
-    return QUALITY_CODE_GROUPS
-  }
-  return QUALITY_CODE_GROUPS.filter((g) => !collapsedQualityGroups.has(g.key))
-})
-
-// 是否存在被折叠的分组；决定「更多/收起」按钮是否显示
-const hasCollapsedQualityGroups = computed(() => collapsedQualityGroups.size > 0)
-
-const qualityCodeGroupChips = computed(() =>
-  visibleQualityCodeGroups.value.map((group) => ({
-    key: group.key,
+const qualityCodeSelectOptions = computed(() =>
+  QUALITY_CODE_GROUPS.map((group) => ({
+    type: 'group' as const,
     label: t(`workspace.segment.qualityCodeGroups.${group.key}`),
-    chips: group.codes.map((value: QualityCode) => ({ value, label: getQualityCodeLabel(value) })),
+    key: group.key,
+    children: group.codes.map((value: QualityCode) => ({
+      label: getQualityCodeLabel(value),
+      value,
+    })),
   })),
 )
-
-const toggleQualityGroupsExpanded = (): void => {
-  qualityCodeGroupsExpanded.value = !qualityCodeGroupsExpanded.value
-}
 
 const hasActiveQualityFilter = computed(
   () =>
@@ -166,14 +148,6 @@ const toggleQualityIssues = (value: Exclude<SegmentQualityIssuesFilter, 'all'>):
 const toggleQualitySeverity = (value: Exclude<SegmentQualitySeverityFilter, 'all'>): void => {
   const next = workspace.segmentQualitySeverityFilter === value ? 'all' : value
   workspace.segmentQualitySeverityFilter = next
-  if (next !== 'all' && workspace.segmentQualityIssuesFilter === 'none') {
-    workspace.segmentQualityIssuesFilter = 'all'
-  }
-}
-
-const toggleQualityCode = (value: Exclude<SegmentQualityCodeFilter, 'all'>): void => {
-  const next = workspace.segmentQualityCodeFilter === value ? 'all' : value
-  workspace.segmentQualityCodeFilter = next
   if (next !== 'all' && workspace.segmentQualityIssuesFilter === 'none') {
     workspace.segmentQualityIssuesFilter = 'all'
   }
@@ -379,36 +353,16 @@ const handleCloseInlineComment = (): void => {
 
         <span class="hidden h-3.5 w-px bg-lf-border-soft sm:inline-block" />
 
-        <div class="flex flex-col gap-1.5">
-          <div
-            v-for="group in qualityCodeGroupChips"
-            :key="group.key"
-            class="flex flex-wrap items-center gap-1.5"
-          >
-            <span class="text-[10px] font-medium tracking-wide text-lf-text-subtle">
-              {{ group.label }}
-            </span>
-            <button
-              v-for="chip in group.chips"
-              :key="chip.value"
-              type="button"
-              :disabled="!workspace.activeResourceId"
-              :class="chipClass(workspace.segmentQualityCodeFilter === chip.value)"
-              @click="toggleQualityCode(chip.value)"
-            >
-              {{ chip.label }}
-            </button>
-          </div>
-
-          <button
-            v-if="hasCollapsedQualityGroups"
-            type="button"
-            class="text-[11px] font-medium text-lf-text-muted transition-colors hover:text-lf-text-strong"
-            @click="toggleQualityGroupsExpanded"
-          >
-            {{ qualityCodeGroupsExpanded ? t('workspace.segment.fewerCodes') : t('workspace.segment.moreCodes') }}
-          </button>
-        </div>
+        <NSelect
+          v-model:value="qualityCodeSelectValue"
+          size="small"
+          filterable
+          clearable
+          class="min-w-36 max-w-xs flex-1"
+          :disabled="!workspace.activeResourceId"
+          :options="qualityCodeSelectOptions"
+          :placeholder="t('workspace.segment.qualityCodePlaceholder')"
+        />
 
         <button
           v-if="hasActiveQualityFilter"

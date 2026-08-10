@@ -637,8 +637,7 @@ const messages = {
         subtitle: '字幕',
         divergence: '同源偏差',
       },
-      moreCodes: '更多',
-      fewerCodes: '收起',
+      qualityCodePlaceholder: '按问题类型筛选',
       editTitle: '编辑段落',
       columns: {
         source: '原文',
