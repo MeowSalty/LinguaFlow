@@ -21,6 +21,18 @@ const QUALITY_CODE_I18N_KEYS: Record<QualityCode, string> = {
   length_ratio: 'lengthRatio',
   duplicate: 'duplicate',
   source_residual: 'sourceResidual',
+  punctuation_pairing: 'punctuationPairing',
+  whitespace_irregular: 'whitespaceIrregular',
+  repeated_space: 'repeatedSpace',
+  width_mix: 'widthMix',
+  number_mismatch: 'numberMismatch',
+  url_email_mismatch: 'urlEmailMismatch',
+  subtitle_line_count: 'subtitleLineCount',
+  forbidden_term: 'forbiddenTerm',
+  term_inconsistency: 'termInconsistency',
+  leftover_placeholder: 'leftoverPlaceholder',
+  xml_tag_mismatch: 'xmlTagMismatch',
+  duplicate_source_divergence: 'duplicateSourceDivergence',
   calque: 'calque',
   term_fidelity: 'termFidelity',
   naturalness: 'naturalness',
@@ -30,6 +42,32 @@ const QUALITY_CODE_I18N_KEYS: Record<QualityCode, string> = {
   grammar: 'grammar',
   register: 'register',
 }
+
+/** 段落筛选 chip 的语义分组；顺序即展示顺序 */
+export const QUALITY_CODE_GROUPS: { key: string; codes: QualityCode[] }[] = [
+  { key: 'hardRule', codes: ['untranslated', 'duplicate', 'source_residual', 'length_ratio'] },
+  {
+    key: 'typography',
+    codes: ['punctuation_pairing', 'whitespace_irregular', 'repeated_space', 'width_mix'],
+  },
+  { key: 'content', codes: ['number_mismatch', 'url_email_mismatch'] },
+  { key: 'markup', codes: ['leftover_placeholder', 'xml_tag_mismatch'] },
+  { key: 'term', codes: ['forbidden_term', 'term_inconsistency', 'term_fidelity'] },
+  {
+    key: 'semantic',
+    codes: [
+      'calque',
+      'naturalness',
+      'mistranslation',
+      'omission',
+      'addition',
+      'grammar',
+      'register',
+    ],
+  },
+  { key: 'subtitle', codes: ['subtitle_line_count'] },
+  { key: 'divergence', codes: ['duplicate_source_divergence'] },
+]
 
 export const QUALITY_CODES = Object.keys(QUALITY_CODE_I18N_KEYS) as QualityCode[]
 

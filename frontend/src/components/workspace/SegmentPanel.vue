@@ -4,7 +4,11 @@ import { computed, ref, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
-import { getQualityCodeLabel, QUALITY_CODES } from '@/composables/useQualityIssues'
+import {
+  getQualityCodeLabel,
+  QUALITY_CODE_GROUPS,
+  type QualityCode,
+} from '@/composables/useQualityIssues'
 import { useSegmentEditing } from '@/composables/useSegmentEditing'
 import {
   type SegmentQualityCodeFilter,
@@ -100,8 +104,29 @@ const qualitySeverityChips = computed(() => [
   },
 ])
 
-const qualityCodeChips = computed(() =>
-  QUALITY_CODES.map((value) => ({ value, label: getQualityCodeLabel(value) })),
+// ── 质量代码分组下拉 ──
+// 24 项 code 用分组下拉呈现，支持搜索，避免 chip 平铺导致的布局失衡。
+const qualityCodeSelectValue = computed<SegmentQualityCodeFilter | null>({
+  get: () =>
+    workspace.segmentQualityCodeFilter === 'all' ? null : workspace.segmentQualityCodeFilter,
+  set: (val) => {
+    workspace.segmentQualityCodeFilter = val ?? 'all'
+    if (val && workspace.segmentQualityIssuesFilter === 'none') {
+      workspace.segmentQualityIssuesFilter = 'all'
+    }
+  },
+})
+
+const qualityCodeSelectOptions = computed(() =>
+  QUALITY_CODE_GROUPS.map((group) => ({
+    type: 'group' as const,
+    label: t(`workspace.segment.qualityCodeGroups.${group.key}`),
+    key: group.key,
+    children: group.codes.map((value: QualityCode) => ({
+      label: getQualityCodeLabel(value),
+      value,
+    })),
+  })),
 )
 
 const hasActiveQualityFilter = computed(
@@ -123,14 +148,6 @@ const toggleQualityIssues = (value: Exclude<SegmentQualityIssuesFilter, 'all'>):
 const toggleQualitySeverity = (value: Exclude<SegmentQualitySeverityFilter, 'all'>): void => {
   const next = workspace.segmentQualitySeverityFilter === value ? 'all' : value
   workspace.segmentQualitySeverityFilter = next
-  if (next !== 'all' && workspace.segmentQualityIssuesFilter === 'none') {
-    workspace.segmentQualityIssuesFilter = 'all'
-  }
-}
-
-const toggleQualityCode = (value: Exclude<SegmentQualityCodeFilter, 'all'>): void => {
-  const next = workspace.segmentQualityCodeFilter === value ? 'all' : value
-  workspace.segmentQualityCodeFilter = next
   if (next !== 'all' && workspace.segmentQualityIssuesFilter === 'none') {
     workspace.segmentQualityIssuesFilter = 'all'
   }
@@ -336,18 +353,16 @@ const handleCloseInlineComment = (): void => {
 
         <span class="hidden h-3.5 w-px bg-lf-border-soft sm:inline-block" />
 
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button
-            v-for="chip in qualityCodeChips"
-            :key="chip.value"
-            type="button"
-            :disabled="!workspace.activeResourceId"
-            :class="chipClass(workspace.segmentQualityCodeFilter === chip.value)"
-            @click="toggleQualityCode(chip.value)"
-          >
-            {{ chip.label }}
-          </button>
-        </div>
+        <NSelect
+          v-model:value="qualityCodeSelectValue"
+          size="small"
+          filterable
+          clearable
+          class="min-w-36 max-w-xs flex-1"
+          :disabled="!workspace.activeResourceId"
+          :options="qualityCodeSelectOptions"
+          :placeholder="t('workspace.segment.qualityCodePlaceholder')"
+        />
 
         <button
           v-if="hasActiveQualityFilter"
