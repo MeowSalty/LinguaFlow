@@ -143,10 +143,10 @@ SemanticQARoundConfig:
       minItems: 1
       items:
         type: string
-        enum: [source_residual, length_ratio, untranslated, duplicate, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register]
+        enum: [untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register]
       description: |
         仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
-        允许全部 12 个 issue code（规则 + 语义皆可作筛选键）。
+        允许全部 issue code（规则 + 语义皆可作筛选键）。
     retry:
       $ref: '#/RetryConfig'
 

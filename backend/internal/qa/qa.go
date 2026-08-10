@@ -92,23 +92,42 @@ func IsSemanticQACode(code string) bool {
 	return ok
 }
 
-// FilterableIssueCodes 返回执行计划 issue_codes 与段落列表 quality_code
-// 接受的全部 issue code（语义 code + 可作筛选键的部分规则 code）。
-func FilterableIssueCodes() []string {
+// DocumentCheckerCodes 返回文档级（非 per-batch）检查产出的 issue code。
+// 这些检查不走 Engine 注册表（AllCheckerNames），由 worker/preview 直接调用，
+// 但同样持久化到 quality_issues，故需纳入筛选键。新增文档级检查时在此追加。
+func DocumentCheckerCodes() []string {
 	return []string{
-		CheckSourceResidual,
-		CheckLengthRatio,
-		CheckUntranslated,
-		CheckDuplicate,
-		IssueCodeCalque,
-		IssueCodeTermFidelity,
-		IssueCodeNaturalness,
-		IssueCodeMistranslation,
-		IssueCodeOmission,
-		IssueCodeAddition,
-		IssueCodeGrammar,
-		IssueCodeRegister,
+		CodeDuplicateSourceDivergence,
 	}
+}
+
+// FilterableIssueCodes 返回执行计划 issue_codes 与段落列表 quality_code
+// 接受的全部 issue code（全部 per-batch checker code + 文档级 checker code + 全部语义 code）。
+// 由 AllCheckerNames()、DocumentCheckerCodes() 与 SemanticQACodes() 合并派生，
+// 三者其一新增 code 时自动同步，避免多点硬编码漂移。
+func FilterableIssueCodes() []string {
+	return mergeUnique(mergeUnique(AllCheckerNames(), DocumentCheckerCodes()), SemanticQACodes())
+}
+
+// mergeUnique 合并两个切片并去重，保留首次出现的顺序。
+func mergeUnique(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, s := range a {
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	for _, s := range b {
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
 }
 
 // filterableIssueCodeSet 是 FilterableIssueCodes 的 set 视图，供高频判定复用。

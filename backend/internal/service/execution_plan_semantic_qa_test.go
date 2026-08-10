@@ -165,6 +165,23 @@ func TestValidateExecutionRounds_SemanticQA(t *testing.T) {
 		}
 	})
 
+	t.Run("with_issue_codes accepts deterministic checker codes", func(t *testing.T) {
+		// 全部确定性 checker code（含新纳入的 11 个）均可作筛选键
+		err := validateExecutionRounds([]schema.ExecutionRoundConfig{{
+			Mode:      "semantic_qa",
+			BackendID: 1,
+			SemanticQA: &schema.SemanticQARoundConfig{
+				BatchSize:    10,
+				Concurrency:  1,
+				SegmentScope: "with_issue_codes",
+				IssueCodes:   []string{"punctuation_pairing", "number_mismatch", "forbidden_term", "xml_tag_mismatch"},
+			},
+		}})
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
 	t.Run("with_issue_codes requires codes", func(t *testing.T) {
 		err := validateExecutionRounds([]schema.ExecutionRoundConfig{{
 			Mode:      "semantic_qa",
