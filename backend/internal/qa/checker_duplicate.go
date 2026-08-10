@@ -33,7 +33,7 @@ func (c *DuplicateTranslationChecker) Check(_ context.Context, segments []CheckI
 				issues = append(issues, QualityIssue{
 					SegmentIndex: seg.Index,
 					Severity:     SeverityWarning,
-					Code:         "duplicate",
+					Code:         CheckDuplicate,
 					Message:      fmt.Sprintf("译文与段落 %d 重复（原文不同）", prev.sourceIndex),
 				})
 			}

@@ -52,6 +52,18 @@ func TestBuildQualityPredicateNonNilForValidFilters(t *testing.T) {
 		{QualityCode: "addition"},
 		{QualityCode: "grammar"},
 		{QualityCode: "register"},
+		{QualityCode: "punctuation_pairing"},
+		{QualityCode: "whitespace_irregular"},
+		{QualityCode: "repeated_space"},
+		{QualityCode: "width_mix"},
+		{QualityCode: "number_mismatch"},
+		{QualityCode: "url_email_mismatch"},
+		{QualityCode: "subtitle_line_count"},
+		{QualityCode: "forbidden_term"},
+		{QualityCode: "term_inconsistency"},
+		{QualityCode: "leftover_placeholder"},
+		{QualityCode: "xml_tag_mismatch"},
+		{QualityCode: "duplicate_source_divergence"},
 		{QualitySeverity: "error", QualityCode: "duplicate"},
 	}
 	for _, opts := range cases {
@@ -287,6 +299,53 @@ func TestListResourceSegmentsQualityFilterNewSemanticCodes(t *testing.T) {
 	t.Run("all_has", func(t *testing.T) {
 		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "has", Limit: 50}, []int{0, 1, 2, 3, 4})
 	})
+}
+
+func TestListResourceSegmentsQualityFilterDeterministicCodes(t *testing.T) {
+	// 覆盖新纳入筛选的确定性 checker code（原仅 12 个筛选键，现为 23 个）
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-det-user")
+	project := createTestProject(t, client, "seg-qa-det-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/det.txt")
+
+	codes := []string{"punctuation_pairing", "whitespace_irregular", "repeated_space",
+		"width_mix", "number_mismatch", "url_email_mismatch", "subtitle_line_count",
+		"forbidden_term", "term_inconsistency", "leftover_placeholder", "xml_tag_mismatch",
+		"duplicate_source_divergence"}
+	for i, code := range codes {
+		createTestSegment(t, client, res.ID, i, "src"+code, []qa.QualityIssue{
+			{SegmentIndex: i, Severity: qa.SeverityWarning, Code: code, Message: code},
+		})
+	}
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite)
+
+	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
+		t.Helper()
+		page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, opts)
+		if err != nil {
+			t.Fatalf("ListResourceSegments: %v", err)
+		}
+		got := make([]int, 0, len(page.Items))
+		for _, row := range page.Items {
+			got = append(got, row.SegmentIndex)
+		}
+		if len(got) != len(want) {
+			t.Fatalf("indexes=%v want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("indexes=%v want %v", got, want)
+			}
+		}
+	}
+
+	for i, code := range codes {
+		t.Run("code_"+code, func(t *testing.T) {
+			assertIndexes(t, ResourceSegmentListOptions{QualityCode: code, Limit: 50}, []int{i})
+		})
+	}
 }
 
 func TestListResourceSegmentsQualityFilterWithGroupKey(t *testing.T) {

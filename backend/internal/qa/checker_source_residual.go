@@ -97,7 +97,7 @@ func (c *SourceResidualChecker) Check(_ context.Context, segments []CheckInput) 
 				issues = append(issues, QualityIssue{
 					SegmentIndex: seg.Index,
 					Severity:     SeverityWarning,
-					Code:         "source_residual",
+					Code:         CheckSourceResidual,
 					Message:      fmt.Sprintf("译文残留源语片段：%s", hit),
 					Span:         span,
 				})
