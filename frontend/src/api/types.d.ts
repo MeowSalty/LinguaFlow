@@ -1537,7 +1537,7 @@ export interface components {
             segment_index: number;
             /** @enum {string} */
             severity: "warning" | "error";
-            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register） */
+            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register） */
             code: string;
             message: string;
             /** @description 问题在目标/源文本中的跨度；片段级问题可省略 */
@@ -2808,9 +2808,9 @@ export interface components {
             segment_scope: "all" | "with_issues" | "with_issue_codes";
             /**
              * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
-             *     允许全部 12 个 issue code（规则 + 语义皆可作筛选键）。
+             *     允许全部 issue code（规则 + 语义皆可作筛选键）。
              */
-            issue_codes?: ("source_residual" | "length_ratio" | "untranslated" | "duplicate" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
+            issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
             retry?: components["schemas"]["RetryConfig"];
         };
         ExecutionRoundConfig: {
@@ -4059,7 +4059,7 @@ export interface operations {
                 /** @description 按 quality_issues 中的 severity 过滤；指定时隐含仅返回含匹配问题的段落 */
                 quality_severity?: "warning" | "error";
                 /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
-                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register";
+                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };

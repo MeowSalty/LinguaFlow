@@ -627,6 +627,18 @@ const messages = {
         xmlTagMismatch: 'XML 标签不一致',
         duplicateSourceDivergence: '同源译文偏差',
       },
+      qualityCodeGroups: {
+        hardRule: '硬规则',
+        typography: '排版标点',
+        content: '数字链接',
+        markup: '占位标签',
+        term: '术语',
+        semantic: '语义质量',
+        subtitle: '字幕',
+        divergence: '同源偏差',
+      },
+      moreCodes: '更多',
+      fewerCodes: '收起',
       editTitle: '编辑段落',
       columns: {
         source: '原文',

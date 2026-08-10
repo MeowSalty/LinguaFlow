@@ -4,7 +4,11 @@ import { computed, ref, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
-import { getQualityCodeLabel, QUALITY_CODES } from '@/composables/useQualityIssues'
+import {
+  getQualityCodeLabel,
+  QUALITY_CODE_GROUPS,
+  type QualityCode,
+} from '@/composables/useQualityIssues'
 import { useSegmentEditing } from '@/composables/useSegmentEditing'
 import {
   type SegmentQualityCodeFilter,
@@ -100,9 +104,48 @@ const qualitySeverityChips = computed(() => [
   },
 ])
 
-const qualityCodeChips = computed(() =>
-  QUALITY_CODES.map((value) => ({ value, label: getQualityCodeLabel(value) })),
+// ── 质量代码分组筛选 ──
+// 默认仅展示高频分组（硬规则 + 语义质量），其余收纳为「更多」，避免 24 项平铺拥挤。
+const collapsedQualityGroups = new Set([
+  'typography',
+  'content',
+  'markup',
+  'term',
+  'subtitle',
+  'divergence',
+])
+const qualityCodeGroupsExpanded = ref(false)
+
+// 当前选中的 code 落在已折叠分组内时，强制展开，避免「选中却看不见」
+const activeQualityCodeInCollapsedGroup = computed(() => {
+  const active = workspace.segmentQualityCodeFilter
+  if (active === 'all') return false
+  return QUALITY_CODE_GROUPS.some(
+    (g) => collapsedQualityGroups.has(g.key) && (g.codes as string[]).includes(active),
+  )
+})
+
+const visibleQualityCodeGroups = computed(() => {
+  if (qualityCodeGroupsExpanded.value || activeQualityCodeInCollapsedGroup.value) {
+    return QUALITY_CODE_GROUPS
+  }
+  return QUALITY_CODE_GROUPS.filter((g) => !collapsedQualityGroups.has(g.key))
+})
+
+// 是否存在被折叠的分组；决定「更多/收起」按钮是否显示
+const hasCollapsedQualityGroups = computed(() => collapsedQualityGroups.size > 0)
+
+const qualityCodeGroupChips = computed(() =>
+  visibleQualityCodeGroups.value.map((group) => ({
+    key: group.key,
+    label: t(`workspace.segment.qualityCodeGroups.${group.key}`),
+    chips: group.codes.map((value: QualityCode) => ({ value, label: getQualityCodeLabel(value) })),
+  })),
 )
+
+const toggleQualityGroupsExpanded = (): void => {
+  qualityCodeGroupsExpanded.value = !qualityCodeGroupsExpanded.value
+}
 
 const hasActiveQualityFilter = computed(
   () =>
@@ -336,16 +379,34 @@ const handleCloseInlineComment = (): void => {
 
         <span class="hidden h-3.5 w-px bg-lf-border-soft sm:inline-block" />
 
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button
-            v-for="chip in qualityCodeChips"
-            :key="chip.value"
-            type="button"
-            :disabled="!workspace.activeResourceId"
-            :class="chipClass(workspace.segmentQualityCodeFilter === chip.value)"
-            @click="toggleQualityCode(chip.value)"
+        <div class="flex flex-col gap-1.5">
+          <div
+            v-for="group in qualityCodeGroupChips"
+            :key="group.key"
+            class="flex flex-wrap items-center gap-1.5"
           >
-            {{ chip.label }}
+            <span class="text-[10px] font-medium tracking-wide text-lf-text-subtle">
+              {{ group.label }}
+            </span>
+            <button
+              v-for="chip in group.chips"
+              :key="chip.value"
+              type="button"
+              :disabled="!workspace.activeResourceId"
+              :class="chipClass(workspace.segmentQualityCodeFilter === chip.value)"
+              @click="toggleQualityCode(chip.value)"
+            >
+              {{ chip.label }}
+            </button>
+          </div>
+
+          <button
+            v-if="hasCollapsedQualityGroups"
+            type="button"
+            class="text-[11px] font-medium text-lf-text-muted transition-colors hover:text-lf-text-strong"
+            @click="toggleQualityGroupsExpanded"
+          >
+            {{ qualityCodeGroupsExpanded ? t('workspace.segment.fewerCodes') : t('workspace.segment.moreCodes') }}
           </button>
         </div>
 
