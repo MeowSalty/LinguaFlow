@@ -296,8 +296,10 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			if t.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].translate.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
 			}
-			if t.FallbackShrink < 0 || t.FallbackShrink >= 1 {
-				return fmt.Errorf("%w: rounds[%d].translate.fallback_shrink must be in [0, 1)", ErrExecutionPlanConfigInvalid, i)
+			// fallback_shrink 合法域 (0,1]：0 非法（与 OpenAPI exclusiveMinimum:0 一致）。
+			// 前端强制填写且禁止 0；省略（schema 零值 0）同样报错，要求显式提供。
+			if t.FallbackShrink <= 0 || t.FallbackShrink > 1 {
+				return fmt.Errorf("%w: rounds[%d].translate.fallback_shrink must be in (0, 1]", ErrExecutionPlanConfigInvalid, i)
 			}
 		case "extract":
 			if round.Extract == nil {
@@ -319,6 +321,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			if e.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].extract.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
 			}
+		// NOTE: fallback_shrink 当前仅 translate 轮支持缩批，extract 不暴露此字段。
+		// 若未来需要，在此加 e.FallbackShrink ∈ [0,1] 校验（参考 translate 分支）。
 		case "adjudicate":
 			if round.Adjudicate == nil {
 				return fmt.Errorf("%w: rounds[%d].adjudicate config required when mode=adjudicate", ErrExecutionPlanConfigInvalid, i)
@@ -336,6 +340,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			if a.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].adjudicate.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
 			}
+			// NOTE: fallback_shrink 当前仅 translate 轮支持缩批，adjudicate 不暴露此字段。
+			// 若未来需要，在此加 a.FallbackShrink ∈ [0,1] 校验（参考 translate 分支）。
 			for _, code := range a.AdjudicateCodes {
 				if code != "source_residual" && code != "length_ratio" {
 					return fmt.Errorf("%w: rounds[%d].adjudicate.adjudicate_codes contains invalid code %q (allowed: source_residual, length_ratio)", ErrExecutionPlanConfigInvalid, i, code)
@@ -358,6 +364,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			if s.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].semantic_qa.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
 			}
+			// NOTE: fallback_shrink 当前仅 translate 轮支持缩批，semantic_qa 不暴露此字段。
+			// 若未来需要，在此加 s.FallbackShrink ∈ [0,1] 校验（参考 translate 分支）。
 			scope := s.SegmentScope
 			if scope == "" {
 				scope = "all"

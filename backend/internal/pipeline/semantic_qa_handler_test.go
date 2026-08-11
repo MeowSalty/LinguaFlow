@@ -247,8 +247,8 @@ func TestSemanticQAHandler_ProcessBatch_ParseFailureProducesNone(t *testing.T) {
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
 		Logger:    quietLogger(),
-		// MaxAttempts=0 → canRetry=false → 终态
 	}
+	// MaxAttempts=0 → transientBudget=1 → parse 失败在 attempt 0 即耗尽预算，落终态 terminalFailure（软警告）
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
 	if len(doc.Segments[0].Issues) != 1 {
 		t.Fatalf("doc issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
@@ -290,13 +290,13 @@ func TestSemanticQAHandler_ProcessBatch_BackendErrorProducesNone(t *testing.T) {
 	doc.Segments[0].Issues = []qa.QualityIssue{
 		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"},
 	}
+	// MaxAttempts=0 → transientBudget=1 → 预算耗尽，落终态 terminalFailure（软警告）
 	fb := &fakeBackend{name: "fake", errs: []error{errors.New("network down")}}
 	h := &SemanticQAHandler{
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
 		Logger:    quietLogger(),
-		// MaxAttempts=0 + 裸网络错误 → 终态
 	}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
 	if len(doc.Segments[0].Issues) != 1 {
@@ -355,13 +355,13 @@ func TestSemanticQAHandler_ProcessBatch_5xxRetriesAndExhausts(t *testing.T) {
 		Logger: quietLogger(),
 	}
 
-	// attempt 0 → retry
+	// attempt 0 → retry（transientBudget=min(1+1,3)=2，预算内重试）
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
 	if result.retry == nil || result.retry.attempt != 1 {
 		t.Fatalf("attempt0 retry=%v want attempt=1", result.retry)
 	}
 
-	// attempt == MaxAttempts → 终态
+	// attempt 1 → 预算耗尽，落终态 terminalFailure（软警告，QA 覆盖缺口可见）
 	fb2 := &fakeBackend{name: "fake", errs: []error{err500}}
 	h.Backend = fb2
 	result = h.ProcessBatch(context.Background(), doc, []int{0}, 1, quietLogger())
@@ -390,8 +390,12 @@ func TestSemanticQAHandler_ProcessBatch_401Terminal(t *testing.T) {
 	if result.retry != nil {
 		t.Fatalf("401 must not retry, got %v", result.retry)
 	}
-	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
-		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	// 401/403 → fatalUnresolved（跳池 + 跨轮传播换 backend），不再计入扫描失败软警告。
+	if !reflect.DeepEqual(result.fatalUnresolved, []int{0}) {
+		t.Fatalf("fatalUnresolved=%v want [0]", result.fatalUnresolved)
+	}
+	if result.failedSegments != nil {
+		t.Fatalf("401 must not set failedSegments (now fatalUnresolved), got %v", result.failedSegments)
 	}
 }
 
@@ -464,7 +468,7 @@ func TestSemanticQAHandler_ProcessBatch_LocalTimeoutExhausts(t *testing.T) {
 		t.Fatalf("attempt0 retry=%v want attempt=1", result.retry)
 	}
 
-	// attempt == MaxAttempts → 终态，计入扫描失败（不触发第二次 5s 等待）
+	// attempt 1 → 预算耗尽（transientBudget=2），落终态 terminalFailure（软警告，不触发第二次 5s 等待）
 	fb2 := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
 	h.Backend = fb2
 	result = h.ProcessBatch(context.Background(), doc, []int{0}, 1, quietLogger())

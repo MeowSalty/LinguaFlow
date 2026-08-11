@@ -281,7 +281,9 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 				ResponseFormat: req.ResponseFormat,
 				JSONSchema:     req.JSONSchema,
 			})
-			return batchResult{unresolved: pendingIdxs}
+			// 401/403 升级为 fatalUnresolved：跳过剩余池（同 backend 重试无意义），
+			// 跨轮传播语义不变（仍可换 backend 接力）。
+			return batchResult{fatalUnresolved: pendingIdxs}
 		}
 
 		if backend.IsRetryable(callErr) {

@@ -104,8 +104,9 @@ func TestRunRound_PoolEventsEmittedOnShrink(t *testing.T) {
 	}
 }
 
-// TestRunRound_PoolEventsNotEmittedWithoutShrink 未启用缩批（单池）时不发池级事件。
-func TestRunRound_PoolEventsNotEmittedWithoutShrink(t *testing.T) {
+// TestRunRound_PoolEventsEmittedWithoutShrink shrink=0 时仍发池级事件（池数恒由 max_attempts+1 决定）。
+// 第一池全部成功即终止，故仅一个 pool_start 事件。
+func TestRunRound_PoolEventsEmittedWithoutShrink(t *testing.T) {
 	doc := newTestDoc(2)
 	rep := &recordingPoolObserver{}
 
@@ -120,7 +121,7 @@ func TestRunRound_PoolEventsNotEmittedWithoutShrink(t *testing.T) {
 		h.Retry = backend.RetryPolicy{MaxAttempts: 1}
 	})
 	h.Renderer = newTestRenderer(t)
-	// Shrink=0 → 单池，不缩批
+	// Shrink=0 → 多池同尺寸重切（池数=max_attempts+1=2），仍发池事件
 	round := Round{
 		Concurrency: 1,
 		Retry:       h.Retry,
@@ -133,8 +134,15 @@ func TestRunRound_PoolEventsNotEmittedWithoutShrink(t *testing.T) {
 
 	rep.mu.Lock()
 	defer rep.mu.Unlock()
-	if len(rep.events) != 0 {
-		t.Fatalf("pool events=%d want 0 (shrink disabled): %+v", len(rep.events), rep.events)
+	// 第一池全部成功，循环终止；仅 pool0_start 事件。
+	if len(rep.events) != 1 {
+		t.Fatalf("pool events=%d want 1 (pool0_start only): %+v", len(rep.events), rep.events)
+	}
+	if rep.events[0].Phase != "pool_start" || rep.events[0].PoolIndex != 0 {
+		t.Fatalf("events[0]=%+v want pool_start/0", rep.events[0])
+	}
+	if rep.events[0].MaxPools != 2 {
+		t.Fatalf("events[0].MaxPools=%d want 2 (max_attempts+1)", rep.events[0].MaxPools)
 	}
 }
 

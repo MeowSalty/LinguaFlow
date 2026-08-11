@@ -344,6 +344,9 @@ func buildExtractPipelineRound(
 		Reporter:             reporter,
 	}
 
+	// NOTE: extract 不接缩批（BuildBatches 不读 poolIndex，批次约束恒为原始值）；
+	// Shrink 留零值，RunRound 入口会兜底为 1.0 供 SSE 文案展示"重切"。
+	// 若未来需要缩批，在此补 Shrink: rc.FallbackShrink（=require schema/OpenAPI/校验全部接通）。
 	return pipeline.Round{
 		Concurrency: rc.Concurrency,
 		Retry:       rc.Retry,
@@ -378,6 +381,8 @@ func buildAdjudicatePipelineRound(
 		Logger:            logger,
 	}
 
+	// NOTE: adjudicate 不接缩批（BuildBatches 不读 poolIndex）；Shrink 留零值，RunRound 兜底 1.0。
+	// 若未来需要缩批，在此补 Shrink: rc.FallbackShrink（=require schema/OpenAPI/校验全部接通）。
 	return pipeline.Round{
 		Concurrency: rc.Concurrency,
 		Retry:       rc.Retry,
@@ -413,6 +418,8 @@ func buildSemanticQAPipelineRound(
 		Logger:            logger,
 	}
 
+	// NOTE: semantic_qa 不接缩批（BuildBatches 不读 poolIndex）；Shrink 留零值，RunRound 兜底 1.0。
+	// 若未来需要缩批，在此补 Shrink: rc.FallbackShrink（=require schema/OpenAPI/校验全部接通）。
 	return pipeline.Round{
 		Concurrency: rc.Concurrency,
 		Retry:       rc.Retry,

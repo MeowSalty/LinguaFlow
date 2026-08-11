@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
-// TestRunRound_SemanticQATerminalFailureCounts 验证终态失败累计到 FailedBatches/FailedSegments，且不进入 Unresolved。
-func TestRunRound_SemanticQATerminalFailureCounts(t *testing.T) {
+// TestRunRound_SemanticQA401FatalUnresolvedCrossRound 验证 401 致命错误路由为 fatalUnresolved：
+// 跳过剩余池（单池后即终止），但仍计入 finalUnresolved 供跨轮传播。
+func TestRunRound_SemanticQA401FatalUnresolvedCrossRound(t *testing.T) {
 	doc := semanticQADoc([]string{"translated", "translated"}, nil)
 	fb := &fakeBackend{
 		name: "fake",
@@ -22,8 +24,8 @@ func TestRunRound_SemanticQATerminalFailureCounts(t *testing.T) {
 	h := &SemanticQAHandler{
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
-		BatchSize: 1, // 两批各 1 段，便于计 FailedBatches
-		Retry:     backend.RetryPolicy{MaxAttempts: 3},
+		BatchSize: 1,                                   // 两批各 1 段
+		Retry:     backend.RetryPolicy{MaxAttempts: 3}, // maxPools=4，但 401 跳池
 		Logger:    quietLogger(),
 	}
 	round := Round{
@@ -35,22 +37,17 @@ func TestRunRound_SemanticQATerminalFailureCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunRound: %v", err)
 	}
-	if len(result.Unresolved) != 0 {
-		t.Fatalf("Unresolved=%v want empty", result.Unresolved)
+	// 401 → fatalUnresolved → 并入 finalUnresolved（供跨轮传播换 backend）
+	if len(result.Unresolved) != 2 {
+		t.Fatalf("Unresolved=%v want 2 entries (cross-round propagation)", result.Unresolved)
 	}
-	if result.FailedBatches != 2 {
-		t.Fatalf("FailedBatches=%d want 2", result.FailedBatches)
-	}
-	// 两段均失败，顺序不保证并发，但本测试 Concurrency=1 且按 pending 顺序
-	if len(result.FailedSegments) != 2 {
-		t.Fatalf("FailedSegments=%v want 2 entries", result.FailedSegments)
-	}
-	got := append([]int{}, result.FailedSegments...)
-	// 排序后比对
-	if got[0] > got[1] {
-		got[0], got[1] = got[1], got[0]
-	}
+	got := append([]int{}, result.Unresolved...)
+	sort.Ints(got)
 	if !reflect.DeepEqual(got, []int{0, 1}) {
-		t.Fatalf("FailedSegments=%v want [0 1]", result.FailedSegments)
+		t.Fatalf("Unresolved=%v want [0 1]", result.Unresolved)
+	}
+	// 401 不再计入 failedSegments 软警告
+	if len(result.FailedSegments) != 0 {
+		t.Fatalf("FailedSegments=%v want empty (401 now fatalUnresolved)", result.FailedSegments)
 	}
 }

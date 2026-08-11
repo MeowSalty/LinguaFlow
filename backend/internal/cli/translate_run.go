@@ -357,20 +357,48 @@ func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, so
 		doc.TargetLang = targetLang
 	}
 
+	// 跨轮增量载体（in-memory）：per-mode 已解决段索引集合。
+	// 与 job_runner/preview/quick_translate 保持一致，使 CLI 行为与正式作业对齐。
+	// translate 不参与（由 doc.Vars _translate_failed_indices 驱动增量）。
+	resolvedByMode := engine.NewResolvedByMode()
+
 	// 轮次循环
 	for roundIdx := range eng.Rounds() {
-		segmentIndexes := collectPendingOrFailed(doc, roundIdx)
-		if len(segmentIndexes) == 0 {
-			break
-		}
-		if roundIdx > 0 {
-			restoreFailedSegments(doc, segmentIndexes)
+		mode := eng.Rounds()[roundIdx].Handler.ModeName()
+
+		if mode == pipeline.RoundModeTranslate {
+			segmentIndexes := collectPendingOrFailed(doc, roundIdx)
+			if len(segmentIndexes) == 0 {
+				continue
+			}
+			if roundIdx > 0 {
+				restoreFailedSegments(doc, segmentIndexes)
+			}
+
+			_, err := eng.ExecuteRound(ctx, roundIdx, doc, engine.WithSegmentFilter(segmentIndexes))
+			if err != nil {
+				return fmt.Errorf("cli: translate round %d: %w", roundIdx, err)
+			}
+			continue
 		}
 
-		_, err := eng.ExecuteRound(ctx, roundIdx, doc, engine.WithSegmentFilter(segmentIndexes))
-		if err != nil {
-			return fmt.Errorf("cli: translate round %d: %w", roundIdx, err)
+		// 非翻译轮（extract 等）：注入跨轮增量载体，排除上一同模式轮已解决的段。
+		resolvedSet := resolvedByMode[mode]
+		// 非翻译轮处理全部 doc 段（handler 的 BuildBatches 自行按 status/scope 过滤）。
+		allIndexes := make([]int, len(doc.Segments))
+		for i := range doc.Segments {
+			allIndexes[i] = i
 		}
+		execOpts := []engine.ExecuteOption{
+			engine.WithSegmentFilter(allIndexes),
+			engine.WithResolvedIndices(resolvedSet),
+		}
+		result, err := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
+		if err != nil {
+			return fmt.Errorf("cli: %s round %d: %w", mode, roundIdx, err)
+		}
+		// 累加本轮成功段到对应模式的 resolved 集合（跨轮增量）。
+		engine.AccumulateResolved(resolvedByMode, mode, result.Resolved)
 	}
 
 	original, err := os.Open(fj.InputPath)

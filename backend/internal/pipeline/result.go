@@ -42,6 +42,14 @@ type TranslateResult struct {
 	OutputTokens       int64 // LLM 调用消耗的 output token 总数
 	FailedBatchCount   int   // 终态失败的批次数（如 semantic_qa 扫描失败）
 	FailedSegmentCount int   // 终态失败涉及的段落数
+	// Resolved 是本轮成功处理的段索引集合（池 0 扫描 − 未解决 − 终态失败）。
+	// 供调用方累加到跨轮 in-memory resolved 集合，驱动非翻译轮的跨轮增量。
+	Resolved []int
+	// Unresolved 是本轮所有池结束后仍未解决的段索引（含 fatalUnresolved 的致命错误段）。
+	// 与 Resolved 对称，供调用方区分"跨轮传播的未解决"与 translate 特化的
+	// UnresolvedCount（后者基于 doc.Vars _translate_failed_indices，仅 translate 轮有意义）。
+	// 非翻译轮（extract/adjudicate/semantic_qa）的终态未解决信息由此字段承载。
+	Unresolved []int
 }
 
 // ParseFailedIndices 从 doc.Vars 解析失败索引集合。

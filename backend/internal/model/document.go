@@ -27,4 +27,8 @@ type Document struct {
 	Vars         map[string]any // 提示词模板可访问的全局变量
 	InputTokens  int64          // 累加：所有 LLM 调用的 input token 总数（atomic 操作）
 	OutputTokens int64          // 累加：所有 LLM 调用的 output token 总数（atomic 操作）
+	// ResolvedIndices 是本轮池 0 应跳过的"已解决"段索引集合（跨轮增量载体，in-memory）。
+	// 由 ExecuteOption WithResolvedIndices 注入；非翻译 handler 的 BuildBatches 在 pending==nil
+	// 时据此排除已解决段。translate 轮不使用（由 DB status 驱动）。
+	ResolvedIndices map[int]struct{}
 }

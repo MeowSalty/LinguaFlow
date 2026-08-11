@@ -10,7 +10,8 @@ import (
 // 编排器（RunRound）只负责并发 + 重试，不知道具体操作语义。
 type RoundHandler interface {
 	// BuildBatches 返回待处理的批次列表。
-	// pending==nil 时 handler 自行扫描 doc（池 0）；pending!=nil 时仅对给定索引按 poolIndex 缩放后重切。
+	// pending==nil 时 handler 自行扫描 doc（池 0），应排除 doc.ResolvedIndices 中的段（跨轮增量）；
+	// pending!=nil 时仅对给定索引按 poolIndex 缩放后重切。
 	// 返回的 [][]int 是抽象索引——翻译模式是段落索引，抽取模式也可以是段落索引。
 	BuildBatches(ctx context.Context, doc *Document, pending []int, poolIndex int) ([][]int, error)
 
