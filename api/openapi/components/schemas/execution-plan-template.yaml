@@ -31,6 +31,7 @@ TranslateSegmentFilterConfig:
 
 TranslateRoundConfig:
   type: object
+  required: [fallback_shrink]
   properties:
     prompt_template_id:
       type: integer
@@ -53,8 +54,8 @@ TranslateRoundConfig:
       maximum: 1
       description: |
         池缩比系数（合法域 (0,1]）：池 N 的批次约束 = floor(orig × shrink^N)。
-        1.0 = 不缩（多池同尺寸重切）；(0,1) = 每池缩小。0 非法（不缩请用 1.0）。
-        省略（零值）时由后端规范化为 1.0。
+        1.0 = 不缩（多池同尺寸重切）；(0,1) = 每池缩小。
+        0 非法（不缩请用 1.0）；必填，省略/零值会被后端拒绝（不规范化）。
         池数量由 retry.max_attempts+1 决定。
     segment_filter:
       $ref: '#/TranslateSegmentFilterConfig'
