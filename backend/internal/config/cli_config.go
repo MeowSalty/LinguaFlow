@@ -221,8 +221,8 @@ func validateCLIConfigRounds(cfg *CLIConfig) error {
 			if t.Concurrency < 1 {
 				return fmt.Errorf("execution.rounds[%d].translate.concurrency must be >= 1", i)
 			}
-			if t.FallbackShrink < 0 || t.FallbackShrink >= 1 {
-				return fmt.Errorf("execution.rounds[%d].translate.fallback_shrink must be in [0, 1)", i)
+			if t.FallbackShrink <= 0 || t.FallbackShrink > 1 {
+				return fmt.Errorf("execution.rounds[%d].translate.fallback_shrink must be in (0, 1]", i)
 			}
 		case "extract":
 			if r.Extract == nil {
