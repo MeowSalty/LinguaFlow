@@ -51,8 +51,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		translateCfg.BatchSize = &t.BatchSize
 		translateCfg.MaxWordsPerBatch = &t.MaxWordsPerBatch
 		if t.FallbackShrink > 0 {
-			fs := float32(t.FallbackShrink)
-			translateCfg.FallbackShrink = &fs
+			translateCfg.FallbackShrink = float32(t.FallbackShrink)
 		}
 		if t.Retry.MaxAttempts > 0 || t.Retry.BackoffMs > 0 || t.Retry.Jitter {
 			retry := toRetryConfigAPI(t.Retry)
@@ -239,9 +238,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			if t.MaxWordsPerBatch != nil {
 				translateCfg.MaxWordsPerBatch = *t.MaxWordsPerBatch
 			}
-			if t.FallbackShrink != nil {
-				translateCfg.FallbackShrink = float64(*t.FallbackShrink)
-			}
+			translateCfg.FallbackShrink = float64(t.FallbackShrink)
 			if t.Retry != nil {
 				if t.Retry.MaxAttempts != nil {
 					translateCfg.Retry.MaxAttempts = *t.Retry.MaxAttempts
