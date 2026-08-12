@@ -2723,10 +2723,8 @@ export interface components {
         };
         RetryConfig: {
             /**
-             * @description 双重角色：
-             *     - 每池在途重试预算：单池对 429/5xx 最多 MaxAttempts+1 次调用（1 次首调 + MaxAttempts 次重试）。
-             *     - 池深度（启用 fallback_shrink 时）：池数量 maxPools = MaxAttempts+1，池 N 的批次约束 = floor(orig × shrink^N)。
-             *     - 最坏情况每段调用次数 ≈ (MaxAttempts+1)²（每池重试 × 池数）。
+             * @description 池深度 = max_attempts+1（所有 handler 生效）。
+             *     在途重试预算内部封顶 min(max_attempts,3)，不单独暴露。
              * @default 3
              */
             max_attempts: number;
@@ -2745,12 +2743,12 @@ export interface components {
             /** @description 字词数上限（计入上下文段）；0=不限制，与 batch_size 至少填一项。纯行数模式（此项与 context.max_chars 均为 0）下上下文体积不受约束 */
             max_words_per_batch?: number;
             /**
-             * @description 池缩放系数：池 N 的批次约束 = floor(orig × shrink^N)。
-             *     各池串行执行；当前池失败（如 429/5xx）的批次会重新批次到下一个更小的池。
-             *     0 或省略表示禁用缩放池（退化为单池）。
-             *     取值范围 (0,1)。池数量由 MaxAttempts+1 决定（见 RetryConfig.max_attempts）。
+             * @description 池缩比系数（合法域 (0,1]）：池 N 的批次约束 = floor(orig × shrink^N)。
+             *     1.0 = 不缩（多池同尺寸重切）；(0,1) = 每池缩小。
+             *     0 非法（不缩请用 1.0）；必填，省略/零值会被后端拒绝（不规范化）。
+             *     池数量由 retry.max_attempts+1 决定。
              */
-            fallback_shrink?: number;
+            fallback_shrink: number;
             /** @description 段落过滤配置；省略时默认 pending_only */
             segment_filter?: components["schemas"]["TranslateSegmentFilterConfig"];
             retry?: components["schemas"]["RetryConfig"];
