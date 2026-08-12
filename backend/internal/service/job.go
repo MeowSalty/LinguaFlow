@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -155,6 +156,8 @@ type JobTranslateRoundSnapshot struct {
 }
 
 // JobExtractRoundSnapshot 术语抽取轮次快照。
+// NOTE: 无 FallbackShrink 字段——extract 不需要缩批（仅 translate 实现）。
+// 若未来需要，在此结构体加 FallbackShrink float64，并在 prepareExecutionSnapshot 赋值。
 type JobExtractRoundSnapshot struct {
 	TemplateContent      string             `json:"template_content"` // 从 BootstrapPromptTemplate.Content 快照
 	BatchSize            int                `json:"batch_size"`
@@ -166,6 +169,8 @@ type JobExtractRoundSnapshot struct {
 }
 
 // JobAdjudicateRoundSnapshot 质量裁决轮次快照（无 prompt 字段，内置不可见）。
+// NOTE: 无 FallbackShrink 字段——adjudicate 不需要缩批（仅 translate 实现）。
+// 若未来需要，在此结构体加 FallbackShrink float64，并在 validateAndSnapshotWith 赋值。
 type JobAdjudicateRoundSnapshot struct {
 	BatchSize        int                `json:"batch_size"`
 	MaxWordsPerBatch int                `json:"max_words_per_batch"`
@@ -175,6 +180,8 @@ type JobAdjudicateRoundSnapshot struct {
 }
 
 // JobSemanticQARoundSnapshot 语义质检轮次快照（无 prompt 字段，内置不可见）。
+// NOTE: 无 FallbackShrink 字段——semantic_qa 不需要缩批（仅 translate 实现）。
+// 若未来需要，在此结构体加 FallbackShrink float64，并在 snapshotSemanticQARound 赋值。
 type JobSemanticQARoundSnapshot struct {
 	BatchSize        int                `json:"batch_size"`
 	MaxWordsPerBatch int                `json:"max_words_per_batch"`
@@ -723,6 +730,17 @@ func snapshotSegmentFilter(cfg *schema.TranslateSegmentFilterConfig, override st
 		sf = "pending_only"
 	}
 	return &SegmentFilterSnapshot{StatusFilter: sf, Overridden: overridden}
+}
+
+// NormalizeShrink 将 shrink 值规范化：NaN、Inf 视为 1.0（不缩）；(0,1] 原样返回。
+// 快照写入（service）与引擎读取（worker）共用同一实现，避免两处重复定义导致漂移。
+// 合法域严格 (0,1]（校验层拒绝 0，与 OpenAPI exclusiveMinimum:0 一致）。
+// NaN/Inf 是 float64 的合法但无意义值，作防御性兜底规范化为 1.0。
+func NormalizeShrink(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 1.0
+	}
+	return v
 }
 
 // --- 其他方法 ---

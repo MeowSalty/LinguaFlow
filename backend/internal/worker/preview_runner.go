@@ -148,6 +148,11 @@ func (r *PreviewRunner) RunPreview(
 		}
 	}
 
+	// 跨轮增量载体（in-memory）：per-mode 已解决段索引集合。
+	// 与 JobRunner 保持一致，使 preview 诊断行为与正式作业对齐。
+	// translate 不参与（由 DB status 驱动增量）。单段场景下集合退化为空或 {targetDocIdx}。
+	resolvedByMode := engine.NewResolvedByMode()
+
 	var warnings []string
 	var roundSummaries []service.PreviewRoundSummary
 
@@ -225,6 +230,10 @@ func (r *PreviewRunner) RunPreview(
 		if batchHandler != nil {
 			execOpts = append(execOpts, engine.WithBatchHandler(batchHandler))
 		}
+		// 非翻译轮注入跨轮增量载体：BuildBatches 据此排除上一同模式轮已解决的段。
+		if round.Mode != pipeline.RoundModeTranslate {
+			execOpts = append(execOpts, engine.WithResolvedIndices(resolvedByMode[round.Mode]))
+		}
 
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
 		duration := time.Since(roundStart)
@@ -277,6 +286,10 @@ func (r *PreviewRunner) RunPreview(
 			summary.Status = "success"
 		}
 		roundSummaries = append(roundSummaries, summary)
+
+		// 累加本轮成功段到对应模式的 resolved 集合（跨轮增量）。
+		// 单段场景下集合退化为空或 {targetDocIdx}；第二个同模式轮据此跳过已 resolved 的目标。
+		engine.AccumulateResolved(resolvedByMode, round.Mode, result.Resolved)
 
 		// Run duplicate-source-divergence check after the last translate round.
 		if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(engineCfg.QA) {

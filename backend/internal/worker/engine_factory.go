@@ -257,7 +257,7 @@ func buildTranslateRound(rs service.JobRoundSnapshot, b backend.Backend) (engine
 		BatchSize:        t.BatchSize,
 		MaxWordsPerBatch: t.MaxWordsPerBatch,
 		Concurrency:      t.Concurrency,
-		FallbackShrink:   t.FallbackShrink,
+		FallbackShrink:   service.NormalizeShrink(t.FallbackShrink),
 		Retry: backend.RetryPolicy{
 			MaxAttempts: t.Retry.MaxAttempts,
 			Backoff:     time.Duration(t.Retry.BackoffMs) * time.Millisecond,
@@ -289,6 +289,8 @@ func buildExtractRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.R
 		Backend:     b,
 		BatchSize:   e.BatchSize,
 		Concurrency: e.Concurrency,
+		// NOTE: extract 不接缩批，不填 FallbackShrink（engine.RoundConfig.FallbackShrink 留零值，
+		// buildExtractPipelineRound 不传 Shrink，RunRound 入口兜底为 1.0 供 SSE 文案）。
 		Retry: backend.RetryPolicy{
 			MaxAttempts: e.Retry.MaxAttempts,
 			Backoff:     time.Duration(e.Retry.BackoffMs) * time.Millisecond,
@@ -314,6 +316,7 @@ func buildAdjudicateRound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 		BatchSize:        a.BatchSize,
 		MaxWordsPerBatch: a.MaxWordsPerBatch,
 		Concurrency:      a.Concurrency,
+		// NOTE: adjudicate 不接缩批，不填 FallbackShrink（详见 extract 分支注释）。
 		Retry: backend.RetryPolicy{
 			MaxAttempts: a.Retry.MaxAttempts,
 			Backoff:     time.Duration(a.Retry.BackoffMs) * time.Millisecond,
@@ -337,6 +340,7 @@ func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 		BatchSize:        s.BatchSize,
 		MaxWordsPerBatch: s.MaxWordsPerBatch,
 		Concurrency:      s.Concurrency,
+		// NOTE: semantic_qa 不接缩批，不填 FallbackShrink（详见 extract 分支注释）。
 		Retry: backend.RetryPolicy{
 			MaxAttempts: s.Retry.MaxAttempts,
 			Backoff:     time.Duration(s.Retry.BackoffMs) * time.Millisecond,

@@ -51,8 +51,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		translateCfg.BatchSize = &t.BatchSize
 		translateCfg.MaxWordsPerBatch = &t.MaxWordsPerBatch
 		if t.FallbackShrink > 0 {
-			fs := float32(t.FallbackShrink)
-			translateCfg.FallbackShrink = &fs
+			translateCfg.FallbackShrink = float32(t.FallbackShrink)
 		}
 		if t.Retry.MaxAttempts > 0 || t.Retry.BackoffMs > 0 || t.Retry.Jitter {
 			retry := toRetryConfigAPI(t.Retry)
@@ -78,6 +77,8 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			msl := e.MinSourceLen
 			extractCfg.MinSourceLen = &msl
 		}
+		// NOTE: extract 不接缩批（仅 translate 暴露 fallback_shrink）。
+		// 若未来需要，在此加 if e.FallbackShrink > 0 { fs := float32(e.FallbackShrink); extractCfg.FallbackShrink = &fs }。
 		if e.Retry.MaxAttempts > 0 || e.Retry.BackoffMs > 0 || e.Retry.Jitter {
 			retry := toRetryConfigAPI(e.Retry)
 			extractCfg.Retry = &retry
@@ -100,6 +101,8 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			}
 			adjudicateCfg.AdjudicateCodes = &codes
 		}
+		// NOTE: adjudicate 不接缩批（仅 translate 暴露 fallback_shrink）。
+		// 若未来需要，在此加 if a.FallbackShrink > 0 { fs := float32(a.FallbackShrink); adjudicateCfg.FallbackShrink = &fs }。
 		if a.Retry.MaxAttempts > 0 || a.Retry.BackoffMs > 0 || a.Retry.Jitter {
 			retry := toRetryConfigAPI(a.Retry)
 			adjudicateCfg.Retry = &retry
@@ -126,6 +129,8 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			}
 			semanticQACfg.IssueCodes = &codes
 		}
+		// NOTE: semantic_qa 不接缩批（仅 translate 暴露 fallback_shrink）。
+		// 若未来需要，在此加 if s.FallbackShrink > 0 { fs := float32(s.FallbackShrink); semanticQACfg.FallbackShrink = &fs }。
 		if s.Retry.MaxAttempts > 0 || s.Retry.BackoffMs > 0 || s.Retry.Jitter {
 			retry := toRetryConfigAPI(s.Retry)
 			semanticQACfg.Retry = &retry
@@ -233,9 +238,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			if t.MaxWordsPerBatch != nil {
 				translateCfg.MaxWordsPerBatch = *t.MaxWordsPerBatch
 			}
-			if t.FallbackShrink != nil {
-				translateCfg.FallbackShrink = float64(*t.FallbackShrink)
-			}
+			translateCfg.FallbackShrink = float64(t.FallbackShrink)
 			if t.Retry != nil {
 				if t.Retry.MaxAttempts != nil {
 					translateCfg.Retry.MaxAttempts = *t.Retry.MaxAttempts
@@ -269,6 +272,8 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			if e.MinSourceLen != nil {
 				extractCfg.MinSourceLen = *e.MinSourceLen
 			}
+			// NOTE: extract 不接缩批（仅 translate 暴露 fallback_shrink）。
+			// 若未来需要，在此加 if e.FallbackShrink != nil { extractCfg.FallbackShrink = float64(*e.FallbackShrink) }。
 			if e.Retry != nil {
 				if e.Retry.MaxAttempts != nil {
 					extractCfg.Retry.MaxAttempts = *e.Retry.MaxAttempts
@@ -300,6 +305,8 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 				}
 				adjudicateCfg.AdjudicateCodes = codes
 			}
+			// NOTE: adjudicate 不接缩批（仅 translate 暴露 fallback_shrink）。
+			// 若未来需要，在此加 if a.FallbackShrink != nil { adjudicateCfg.FallbackShrink = float64(*a.FallbackShrink) }。
 			if a.Retry != nil {
 				if a.Retry.MaxAttempts != nil {
 					adjudicateCfg.Retry.MaxAttempts = *a.Retry.MaxAttempts
@@ -334,6 +341,8 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 				}
 				semanticQACfg.IssueCodes = codes
 			}
+			// NOTE: semantic_qa 不接缩批（仅 translate 暴露 fallback_shrink）。
+			// 若未来需要，在此加 if s.FallbackShrink != nil { semanticQACfg.FallbackShrink = float64(*s.FallbackShrink) }。
 			if s.Retry != nil {
 				if s.Retry.MaxAttempts != nil {
 					semanticQACfg.Retry.MaxAttempts = *s.Retry.MaxAttempts

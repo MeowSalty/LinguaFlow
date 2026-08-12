@@ -6,10 +6,8 @@ RetryConfig:
       minimum: 1
       default: 3
       description: |
-        双重角色：
-        - 每池在途重试预算：单池对 429/5xx 最多 MaxAttempts+1 次调用（1 次首调 + MaxAttempts 次重试）。
-        - 池深度（启用 fallback_shrink 时）：池数量 maxPools = MaxAttempts+1，池 N 的批次约束 = floor(orig × shrink^N)。
-        - 最坏情况每段调用次数 ≈ (MaxAttempts+1)²（每池重试 × 池数）。
+        池深度 = max_attempts+1（所有 handler 生效）。
+        在途重试预算内部封顶 min(max_attempts,3)，不单独暴露。
     backoff_ms:
       type: integer
       minimum: 0
@@ -33,6 +31,7 @@ TranslateSegmentFilterConfig:
 
 TranslateRoundConfig:
   type: object
+  required: [fallback_shrink]
   properties:
     prompt_template_id:
       type: integer
@@ -53,12 +52,11 @@ TranslateRoundConfig:
       minimum: 0
       exclusiveMinimum: true
       maximum: 1
-      exclusiveMaximum: true
       description: |
-        池缩放系数：池 N 的批次约束 = floor(orig × shrink^N)。
-        各池串行执行；当前池失败（如 429/5xx）的批次会重新批次到下一个更小的池。
-        0 或省略表示禁用缩放池（退化为单池）。
-        取值范围 (0,1)。池数量由 MaxAttempts+1 决定（见 RetryConfig.max_attempts）。
+        池缩比系数（合法域 (0,1]）：池 N 的批次约束 = floor(orig × shrink^N)。
+        1.0 = 不缩（多池同尺寸重切）；(0,1) = 每池缩小。
+        0 非法（不缩请用 1.0）；必填，省略/零值会被后端拒绝（不规范化）。
+        池数量由 retry.max_attempts+1 决定。
     segment_filter:
       $ref: '#/TranslateSegmentFilterConfig'
       description: 段落过滤配置；省略时默认 pending_only
@@ -90,6 +88,8 @@ ExtractRoundConfig:
       minimum: 1
       default: 2
       description: 术语源文最短字符数
+    # fallback_shrink: 当前仅 translate 轮实现缩批，extract 失败模式与批次大小无关，
+    # 不需要缩批，故暂不暴露。若未来需要，在此加 type:number / minimum:0 / maximum:1。
     retry:
       $ref: '#/RetryConfig'
 
@@ -113,6 +113,8 @@ AdjudicateRoundConfig:
       description: |
         可裁决的质量问题 code 子集。空或不传时默认 ["source_residual"]。
         untranslated 与 duplicate 为硬规则，不可裁决。
+    # fallback_shrink: 当前仅 translate 轮实现缩批，adjudicate 失败模式与批次大小无关，
+    # 不需要缩批，故暂不暴露。若未来需要，在此加 type:number / minimum:0 / maximum:1。
     retry:
       $ref: '#/RetryConfig'
 
@@ -147,6 +149,8 @@ SemanticQARoundConfig:
       description: |
         仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
         允许全部 issue code（规则 + 语义皆可作筛选键）。
+    # fallback_shrink: 当前仅 translate 轮实现缩批，semantic_qa 失败模式与批次大小无关，
+    # 不需要缩批，故暂不暴露。若未来需要，在此加 type:number / minimum:0 / maximum:1。
     retry:
       $ref: '#/RetryConfig'
 

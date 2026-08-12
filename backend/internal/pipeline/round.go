@@ -8,8 +8,10 @@ type Round struct {
 	Concurrency int
 	Retry       backend.RetryPolicy
 	Context     *ContextConfig
-	// Shrink 是池化缩批系数 (0,1)。>0 且 <1 时启用多池；0 表示单池。
-	// 池 N 的批次约束 = floor(原始 * Shrink^N)。
+	// Shrink 是池缩比系数 (0,1]。
+	// 池数恒由 Retry.MaxAttempts+1 决定（与 Shrink 解耦）。
+	// Shrink 控制每池批次约束的缩比：1.0 = 多池同尺寸重切；(0,1) = 每池缩小。
+	// 池 N 的批次约束 = floor(原始 × Shrink^N)。0 在快照加载时规范化为 1.0。
 	Shrink  float64
 	Handler RoundHandler
 }

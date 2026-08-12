@@ -50,6 +50,24 @@ func (f *fakeBackend) Translate(_ context.Context, req backend.Request) (*backen
 
 func (f *fakeBackend) Close() error { return nil }
 
+// alwaysErrBackend 对每次调用都返回固定错误，模拟持续故障（适配池重切/重试放大）。
+type alwaysErrBackend struct {
+	name string
+	err  error
+}
+
+func newAlwaysErrBackend(name string, err error) *alwaysErrBackend {
+	return &alwaysErrBackend{name: name, err: err}
+}
+
+func (b *alwaysErrBackend) Name() string { return b.name }
+
+func (b *alwaysErrBackend) Translate(_ context.Context, _ backend.Request) (*backend.Response, error) {
+	return nil, b.err
+}
+
+func (b *alwaysErrBackend) Close() error { return nil }
+
 // testBootstrapTmpl 是测试用的最小 bootstrap 模板。
 const testBootstrapTmpl = `You are LinguaFlow, a glossary-bootstrap assistant.
 Task: extract domain-specific terms from {{.SourceLang}} to {{.TargetLang}}.
@@ -197,11 +215,10 @@ func TestExtractHandler_AllBatchesFailed(t *testing.T) {
 			{ID: "1", Source: "second batch text", Translate: true},
 		},
 	}
-	// BatchSize=1 ⇒ 两批；全部返回错误。
-	fb := &fakeBackend{
-		name: "fake",
-		errs: []error{errors.New("failure 1"), errors.New("failure 2")},
-	}
+	// BatchSize=1 ⇒ 两批；全部返回 400（非致命、非可重试）→ 持续失败。
+	// 用 alwaysErrBackend 保证所有调用（含池重切）均失败，模拟持续故障。
+	err400 := &backend.StatusError{StatusCode: 400, Err: errors.New("bad request")}
+	fb := newAlwaysErrBackend("fake", err400)
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{

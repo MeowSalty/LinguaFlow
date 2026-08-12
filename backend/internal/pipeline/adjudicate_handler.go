@@ -92,7 +92,9 @@ func segmentHasAdjudicableIssue(issues []qa.QualityIssue, codes map[string]struc
 }
 
 // BuildBatches 选 status∈{translated,edited} 且 Issues 含可裁决 code 的段，按约束分批。
-func (h *AdjudicateHandler) BuildBatches(_ context.Context, doc *Document, _ []int, _ int) ([][]int, error) {
+// pending==nil（池 0）时自行扫描 doc（排除跨轮已解决段）；pending!=nil（池>0）时
+// 仅对给定 unresolved 重切，避免全量重扫。
+func (h *AdjudicateHandler) BuildBatches(_ context.Context, doc *Document, pending []int, _ int) ([][]int, error) {
 	logger := h.logger()
 	if h.Renderer == nil {
 		logger.Warn("adjudicate handler: renderer is nil, skipping")
@@ -104,19 +106,30 @@ func (h *AdjudicateHandler) BuildBatches(_ context.Context, doc *Document, _ []i
 	}
 
 	codes := adjudicateCodeSet(h.adjudicateCodes())
-	var pending []int
-	for i := range doc.Segments {
-		seg := &doc.Segments[i]
-		if seg.Status != "translated" && seg.Status != "edited" {
-			continue
+	var scan []int
+	if pending != nil {
+		// 池>0：仅处理给定 unresolved（已通过池 0 过滤），避免全量重扫。
+		scan = pending
+	} else {
+		for i := range doc.Segments {
+			seg := &doc.Segments[i]
+			if seg.Status != "translated" && seg.Status != "edited" {
+				continue
+			}
+			if !segmentHasAdjudicableIssue(seg.Issues, codes) {
+				continue
+			}
+			// 跨轮增量：池 0 排除上一同模式轮已解决的段。
+			if doc.ResolvedIndices != nil {
+				if _, ok := doc.ResolvedIndices[i]; ok {
+					continue
+				}
+			}
+			scan = append(scan, i)
 		}
-		if !segmentHasAdjudicableIssue(seg.Issues, codes) {
-			continue
-		}
-		pending = append(pending, i)
 	}
 
-	if len(pending) == 0 {
+	if len(scan) == 0 {
 		logger.Info("adjudicate handler: no adjudicable segments")
 		return nil, nil
 	}
@@ -127,17 +140,17 @@ func (h *AdjudicateHandler) BuildBatches(_ context.Context, doc *Document, _ []i
 	}
 	if constraint.MaxSegments <= 0 && constraint.MaxWords <= 0 && h.MaxBatchIndexSpan <= 0 {
 		logger.Info("adjudicate handler: no batch limit, sending all segments at once",
-			"segments", len(pending))
-		return [][]int{pending}, nil
+			"segments", len(scan))
+		return [][]int{scan}, nil
 	}
 
 	// 顺序贪心打包：允许索引不连续的段落同批，提高字词预算利用率。
 	// 注意：MaxBatchIndexSpan 为预埋特性，当前未接入 schema/OpenAPI/执行计划配置，
 	// 生产环境恒为 0（即仅按段落数/字词数约束打包，不限制索引跨度）；
 	// 后续如需启用，须在 ent schema、OpenAPI 规范及 handler 映射中同步补齐字段。
-	batches := BuildPackedPendingBatches(doc, pending, constraint, h.MaxBatchIndexSpan)
+	batches := BuildPackedPendingBatches(doc, scan, constraint, h.MaxBatchIndexSpan)
 	logger.Info("adjudicate handler: batches built",
-		"segments", len(pending),
+		"segments", len(scan),
 		"batches", len(batches),
 		"batch_size", h.BatchSize,
 		"max_words_per_batch", h.MaxWordsPerBatch,
@@ -216,51 +229,20 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	resp, callErr := h.Backend.Translate(ctx, req)
 	if callErr != nil {
 		if isFatalBackendError(callErr) {
-			logger.Error("adjudicate backend fatal error",
+			logger.Error("adjudicate backend fatal error, deferring to cross-round",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-			h.emitBatchOutcome(progress.BatchEvent{
-				Stage:          RoundModeAdjudicate,
-				SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
-				SegmentCount:   len(idxs),
-				BackendName:    h.Backend.Name(),
-				Status:         "failed",
-				DurationMs:     time.Since(callStart).Milliseconds(),
-				SentContent:    usr,
-				TriedBackends:  tried,
-				ErrorType:      "backend_error",
-				ErrorMessage:   callErr.Error(),
-				HTTPStatus:     httpStatusFromErr(callErr),
-				RoundIndex:     h.RoundIndex,
-				Attempt:        attempt,
-				SystemPrompt:   sys,
-				UserMessage:    usr,
-				ResponseFormat: req.ResponseFormat,
-				JSONSchema:     req.JSONSchema,
-			})
-			return h.preserveResult(doc, idxs, rep)
+			h.emitBatchOutcome(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+			for range idxs {
+				rep.SegmentDone()
+			}
+			// 401/403：跳池（同 backend 重试无意义）+ 跨轮传播换 backend。
+			return batchResult{fatalUnresolved: idxs}
 		}
-		if isRetryableByBackoff(callErr) {
+		// 可重试错误扩大为全 backend.IsRetryable（含 5xx、429/503 等）。
+		if backend.IsRetryable(callErr) {
 			logger.Warn("adjudicate rate limit, will backoff and retry",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-			h.emitBatchOutcome(progress.BatchEvent{
-				Stage:          RoundModeAdjudicate,
-				SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
-				SegmentCount:   len(idxs),
-				BackendName:    h.Backend.Name(),
-				Status:         "failed",
-				DurationMs:     time.Since(callStart).Milliseconds(),
-				SentContent:    usr,
-				TriedBackends:  tried,
-				ErrorType:      "backend_error",
-				ErrorMessage:   callErr.Error(),
-				HTTPStatus:     httpStatusFromErr(callErr),
-				RoundIndex:     h.RoundIndex,
-				Attempt:        attempt,
-				SystemPrompt:   sys,
-				UserMessage:    usr,
-				ResponseFormat: req.ResponseFormat,
-				JSONSchema:     req.JSONSchema,
-			})
+			h.emitBatchOutcome(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
 			wait := backoffDuration(attempt, h.Retry, callErr)
 			timer := time.NewTimer(wait)
 			select {
@@ -273,25 +255,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		}
 		logger.Warn("adjudicate backend failed, preserving issues",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-		h.emitBatchOutcome(progress.BatchEvent{
-			Stage:          RoundModeAdjudicate,
-			SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
-			SegmentCount:   len(idxs),
-			BackendName:    h.Backend.Name(),
-			Status:         "failed",
-			DurationMs:     time.Since(callStart).Milliseconds(),
-			SentContent:    usr,
-			TriedBackends:  tried,
-			ErrorType:      "backend_error",
-			ErrorMessage:   callErr.Error(),
-			HTTPStatus:     httpStatusFromErr(callErr),
-			RoundIndex:     h.RoundIndex,
-			Attempt:        attempt,
-			SystemPrompt:   sys,
-			UserMessage:    usr,
-			ResponseFormat: req.ResponseFormat,
-			JSONSchema:     req.JSONSchema,
-		})
+		h.emitBatchOutcome(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
 		return h.preserveResult(doc, idxs, rep)
 	}
 

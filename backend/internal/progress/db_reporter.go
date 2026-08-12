@@ -381,19 +381,35 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 
 // OnPoolEvent implements PoolObserver. Publishes pool-level events to the Broker.
 // pool_advance 用 warn 级（仍有未解决段），pool_start 用 info 级。
+// shrink=1.0（不缩）时用"重切"措辞；shrink<1.0（缩比）时用"缩批/缩放"措辞。
 func (r *DBReporter) OnPoolEvent(poolEvent PoolEvent) {
 	if r.broker == nil {
 		return
 	}
 	level := "info"
-	message := fmt.Sprintf("%s 池 %d/%d 开始：%d 批，%d 段（缩放 %.2f）",
-		poolEvent.Mode, poolEvent.PoolIndex+1, poolEvent.MaxPools,
-		poolEvent.Batches, poolEvent.Pending, poolEvent.ShrinkRate)
-	if poolEvent.Phase == "pool_advance" {
-		level = "warn"
-		message = fmt.Sprintf("%s 缩批：池 %d 未能全部解决，%d 段进入池 %d/%d（缩放 %.2f）",
-			poolEvent.Mode, poolEvent.PoolIndex+1,
-			poolEvent.Pending, poolEvent.PoolIndex+2, poolEvent.MaxPools, poolEvent.ShrinkRate)
+	var message string
+	if poolEvent.ShrinkRate >= 1.0 {
+		// 不缩：多池同尺寸重切
+		message = fmt.Sprintf("%s 池 %d/%d 开始：%d 批，%d 段",
+			poolEvent.Mode, poolEvent.PoolIndex+1, poolEvent.MaxPools,
+			poolEvent.Batches, poolEvent.Pending)
+		if poolEvent.Phase == "pool_advance" {
+			level = "warn"
+			message = fmt.Sprintf("%s 重切：池 %d 未能全部解决，%d 段进入池 %d/%d",
+				poolEvent.Mode, poolEvent.PoolIndex+1,
+				poolEvent.Pending, poolEvent.PoolIndex+2, poolEvent.MaxPools)
+		}
+	} else {
+		// 现有"缩批/缩放"措辞
+		message = fmt.Sprintf("%s 池 %d/%d 开始：%d 批，%d 段（缩放 %.2f）",
+			poolEvent.Mode, poolEvent.PoolIndex+1, poolEvent.MaxPools,
+			poolEvent.Batches, poolEvent.Pending, poolEvent.ShrinkRate)
+		if poolEvent.Phase == "pool_advance" {
+			level = "warn"
+			message = fmt.Sprintf("%s 缩批：池 %d 未能全部解决，%d 段进入池 %d/%d（缩放 %.2f）",
+				poolEvent.Mode, poolEvent.PoolIndex+1,
+				poolEvent.Pending, poolEvent.PoolIndex+2, poolEvent.MaxPools, poolEvent.ShrinkRate)
+		}
 	}
 
 	metadata := map[string]any{

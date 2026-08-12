@@ -33,19 +33,19 @@ type ExtractHandler struct {
 	Logger   *slog.Logger
 	Reporter progress.Reporter
 
-	totalBatches  atomic.Int64
-	failedBatches atomic.Int64
+	scannedSegments atomic.Int64 // 池 0 扫描的去重段数（best-effort all-failed 检测分母，与重试/池数解耦）
 
 	RoundIndex int // execution plan round index, set by caller
 }
 
 func (h *ExtractHandler) ModeName() string { return "extract" }
 
-func (h *ExtractHandler) Finalize(_ context.Context, _ *Document, _ []int) error {
-	total := h.totalBatches.Load()
-	failed := h.failedBatches.Load()
-	if total > 0 && failed == total {
-		return fmt.Errorf("extract: all %d batch(es) failed", total)
+func (h *ExtractHandler) Finalize(_ context.Context, _ *Document, unresolved []int) error {
+	scanned := h.scannedSegments.Load()
+	// 全部扫描段最终仍未解决（含 fatalUnresolved）即视为全批失败。
+	// 基于扫描集合而非批处理计数，避免被在途重试/多池放大（旧 totalBatches/failedBatches 会随重试膨胀）。
+	if scanned > 0 && len(unresolved) >= int(scanned) {
+		return fmt.Errorf("extract: all %d scanned segment(s) failed", scanned)
 	}
 	return nil
 }
@@ -80,7 +80,9 @@ func (h *ExtractHandler) emitBatchOutcome(evt progress.BatchEvent) {
 // BuildBatches 收集待抽取的段落索引，按 BatchConstraint 分批。
 // 跳过 Skip 和空白段落。不扩展上下文。
 // batch_size 和 max_words_per_batch 都为 0 时，不分批，全部一次发送。
-func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document, _ []int, _ int) ([][]int, error) {
+// pending==nil（池 0）时自行扫描 doc（排除跨轮已解决段）；pending!=nil（池>0）时
+// 仅对给定 unresolved 重切，避免全量重扫。返回的批次交给 executor 执行。
+func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document, pending []int, _ int) ([][]int, error) {
 	logger := h.logger()
 
 	if h.Renderer == nil {
@@ -96,25 +98,42 @@ func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document, _ []int,
 		return nil, nil
 	}
 
-	var pending []int
-	for i := range doc.Segments {
-		seg := &doc.Segments[i]
-		if seg.Skip {
-			continue
+	var scan []int
+	if pending != nil {
+		// 池>0：仅处理给定 unresolved（已通过池 0 过滤），避免全量重扫。
+		scan = pending
+	} else {
+		for i := range doc.Segments {
+			seg := &doc.Segments[i]
+			if seg.Skip {
+				continue
+			}
+			t := seg.OriginalSource
+			if t == "" {
+				t = seg.Source
+			}
+			if strings.TrimSpace(t) == "" {
+				continue
+			}
+			// 跨轮增量：池 0 排除上一同模式轮已解决的段。
+			if doc.ResolvedIndices != nil {
+				if _, ok := doc.ResolvedIndices[i]; ok {
+					continue
+				}
+			}
+			scan = append(scan, i)
 		}
-		t := seg.OriginalSource
-		if t == "" {
-			t = seg.Source
-		}
-		if strings.TrimSpace(t) == "" {
-			continue
-		}
-		pending = append(pending, i)
 	}
 
-	if len(pending) == 0 {
+	if len(scan) == 0 {
 		logger.Info("extract handler: no text to scan")
 		return nil, nil
+	}
+
+	// 记录池 0 扫描的去重段数，供 Finalize 的 all-failed 检测使用。
+	// pending==nil 唯一标识池 0；后续池的重切不再覆盖此值。
+	if pending == nil {
+		h.scannedSegments.Store(int64(len(scan)))
 	}
 
 	constraint := BatchConstraint{
@@ -125,14 +144,14 @@ func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document, _ []int,
 	// 两者都为 0 → 不分批，全部一次发送
 	if constraint.MaxSegments <= 0 && constraint.MaxWords <= 0 {
 		logger.Info("extract handler: no batch limit, sending all segments at once",
-			"segments", len(pending))
-		return [][]int{pending}, nil
+			"segments", len(scan))
+		return [][]int{scan}, nil
 	}
 
-	batches := BuildContinuousPendingBatches(doc, pending, constraint)
+	batches := BuildContinuousPendingBatches(doc, scan, constraint)
 
 	logger.Info("extract handler: batches built",
-		"segments", len(pending),
+		"segments", len(scan),
 		"batches", len(batches),
 		"batch_size", h.BatchSize,
 		"max_words_per_batch", h.MaxWordsPerBatch)
@@ -142,9 +161,14 @@ func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document, _ []int,
 
 // ProcessBatch 处理单个抽取批次。
 // 从索引取文本 → collectExisting → render → call LLM → parse → glossary.Add。
-// 失败时返回空 batchResult（尽力而为，不阻断）。
-func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, _ int, logger *slog.Logger) batchResult {
-	h.totalBatches.Add(1)
+// 错误路由（按两层错误路由表）：
+//   - 渲染失败 → unresolved（进下一池重切）
+//   - 致命 401/403 → fatalUnresolved（跳池+跨轮传播）
+//   - 可重试 429/503/网络 → retry（同批退避重试）
+//   - 解析失败 → unresolved（进下一池重切）
+//   - 全 backend 失败（非致命）→ unresolved（进下一池重试）
+//   - 成功 → 空 batchResult（resolved 由 executor 统计）
+func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
 	rep := h.reporter()
 	start := time.Now()
 
@@ -186,8 +210,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		for range idxs {
 			rep.SegmentDone()
 		}
-		h.failedBatches.Add(1)
-		return batchResult{}
+		return batchResult{unresolved: idxs}
 	}
 
 	// 非 text：只挂 JSONSchema，不强制 ResponseFormat，由 backend 默认决定是否用 schema。
@@ -202,15 +225,44 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		req.JSONSchema = prompt.BootstrapSchema()
 	}
 
+	// 单后端：直接调用 b.Translate（不再用 backend.WithRetry 包裹）。
+	// 在途重试由 executor 的 retry 通道统一处理。
 	var lastErr error
 	for _, b := range h.Backends {
-		var resp *backend.Response
-		callErr := backend.WithRetry(ctx, h.Retry, func() error {
-			var rerr error
-			resp, rerr = b.Translate(ctx, req)
-			return rerr
-		})
+		callStart := time.Now()
+		resp, callErr := b.Translate(ctx, req)
 		if callErr != nil {
+			// 致命 401/403：跳池（同 backend 重试无意义），跨轮传播换 backend。
+			if isFatalBackendError(callErr) {
+				logger.Warn("extract backend fatal error, deferring to cross-round",
+					"backend", b.Name(), "err", callErr)
+				h.emitBatchOutcome(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+				for range idxs {
+					rep.SegmentDone()
+				}
+				return batchResult{fatalUnresolved: idxs}
+			}
+
+			// 可重试 429/503/网络：退避后同批重试。
+			if backend.IsRetryable(callErr) {
+				logger.Warn("extract backend retryable error, will backoff and retry",
+					"backend", b.Name(), "err", callErr)
+				h.emitBatchOutcome(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+				wait := backoffDuration(attempt, h.Retry, callErr)
+				timer := time.NewTimer(wait)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					for range idxs {
+						rep.SegmentDone()
+					}
+					return batchResult{unresolved: idxs}
+				case <-timer.C:
+				}
+				return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
+			}
+
+			// 其余非致命 backend 错误：换下一个 backend（若有）或进下一池重试。
 			logger.Warn("extract LLM call failed", "backend", b.Name(), "err", callErr)
 			lastErr = callErr
 			continue
@@ -308,8 +360,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 	for range idxs {
 		rep.SegmentDone()
 	}
-	h.failedBatches.Add(1)
-	return batchResult{}
+	return batchResult{unresolved: idxs}
 }
 
 // collectExisting 把所有 texts 上的 Lookup 命中合并去重，作为 existing 提示给 LLM。

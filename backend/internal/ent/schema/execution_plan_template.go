@@ -42,6 +42,9 @@ type ExtractRoundConfig struct {
 	MaxTermsPer1000Chars float64     `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
 	MinSourceLen         int         `json:"min_source_len"          yaml:"min_source_len"`
 	Retry                RetryConfig `json:"retry"                   yaml:"retry"`
+	// NOTE: fallback_shrink 当前仅 translate 轮实现缩批（shrinkConstraint）。
+	// extract 失败模式与批次大小无关，不需要缩批，故此模式暂不暴露该字段。
+	// 若未来需要，在此结构体加 FallbackShrink float64，并补 OpenAPI/校验/snapshot/engine_factory/API 映射。
 }
 
 // AdjudicateRoundConfig 质量裁决轮次配置。
@@ -52,6 +55,9 @@ type AdjudicateRoundConfig struct {
 	Concurrency      int         `json:"concurrency"         yaml:"concurrency"`
 	AdjudicateCodes  []string    `json:"adjudicate_codes"    yaml:"adjudicate_codes"` // 可裁决 code；空=默认 ["source_residual"]
 	Retry            RetryConfig `json:"retry"               yaml:"retry"`
+	// NOTE: fallback_shrink 当前仅 translate 轮实现缩批（shrinkConstraint）。
+	// adjudicate 失败模式与批次大小无关，不需要缩批，故此模式暂不暴露该字段。
+	// 若未来需要，在此结构体加 FallbackShrink float64，并补 OpenAPI/校验/snapshot/engine_factory/API 映射。
 }
 
 // SemanticQARoundConfig 语义质检轮次配置。
@@ -63,6 +69,9 @@ type SemanticQARoundConfig struct {
 	SegmentScope     string      `json:"segment_scope,omitempty" yaml:"segment_scope,omitempty"` // "all"(默认) | "with_issues" | "with_issue_codes"
 	IssueCodes       []string    `json:"issue_codes,omitempty"  yaml:"issue_codes,omitempty"`    // 仅 with_issue_codes 生效；配置时至少一个
 	Retry            RetryConfig `json:"retry"               yaml:"retry"`
+	// NOTE: fallback_shrink 当前仅 translate 轮实现缩批（shrinkConstraint）。
+	// semantic_qa 失败模式与批次大小无关，不需要缩批，故此模式暂不暴露该字段。
+	// 若未来需要，在此结构体加 FallbackShrink float64，并补 OpenAPI/校验/snapshot/engine_factory/API 映射。
 }
 
 // ExecutionPlanRubyRetryConfig 注音对齐重试配置。

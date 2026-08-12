@@ -265,16 +265,25 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	isExplicitSelection := snapshot.ExplicitSegmentSelection
 	firstTranslateRoundIdx := -1
 	lastTranslateRoundIdx := -1
+	lastSemanticQARoundIdx := -1
 	translateRoundCount := 0
 	for i := range snapshot.Rounds {
-		if snapshot.Rounds[i].Mode == "translate" {
+		switch snapshot.Rounds[i].Mode {
+		case "translate":
 			if firstTranslateRoundIdx == -1 {
 				firstTranslateRoundIdx = i
 			}
 			lastTranslateRoundIdx = i
 			translateRoundCount++
+		case "semantic_qa":
+			lastSemanticQARoundIdx = i
 		}
 	}
+
+	// 跨轮增量载体（in-memory）：per-mode 已解决段索引集合。
+	// 下一同模式轮的 BuildBatches（池 0）据此排除已解决段，避免跨轮全量重扫。
+	// translate 不参与（由 DB status 驱动增量）。崩溃重启则该集合丢失，资源从 round 0 重跑（与现状一致，无回归）。
+	resolvedByMode := engine.NewResolvedByMode()
 
 	// 轮次循环
 	for roundIdx := range snapshot.Rounds {
@@ -532,9 +541,16 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			engine.WithSegmentFilter(segmentIndexes),
 			engine.WithBatchHandler(batchHandler),
 		}
+		// 非翻译轮注入跨轮增量载体：BuildBatches 据此排除上一同模式轮已解决的段。
+		if round.Mode != pipeline.RoundModeTranslate {
+			execOpts = append(execOpts, engine.WithResolvedIndices(resolvedByMode[round.Mode]))
+		}
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
 		if roundErr == nil {
 			lastResult = result
+			// 累加本轮成功段到对应模式的 resolved 集合（跨轮增量）。
+			// 注意：跨"不同"模式间不共享（extract 成功不阻止 adjudicate 扫描）。
+			engine.AccumulateResolved(resolvedByMode, round.Mode, result.Resolved)
 			if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(engineCfg.QA) {
 				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
 					roundErr = err
@@ -550,6 +566,23 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					"resource_id", item.ID,
 					"failed_batches", result.FailedBatchCount,
 					"failed_segments", result.FailedSegmentCount,
+				)
+			}
+			// 最后一轮 semantic_qa 后仍有未解决段（含 fatalUnresolved 的 401/403 段，
+			// 经历跨轮接力换 backend 仍未成功），恢复软警告通道，避免鉴权/权限故障在
+			// COMPLETED 状态下零感知。中间轮的 Unresolved 是预期的跨轮传播，不发警告。
+			if round.Mode == "semantic_qa" && roundIdx == lastSemanticQARoundIdx && len(result.Unresolved) > 0 {
+				msg := fmt.Sprintf(
+					"语义质检未完全成功：%d 个段落未能完成（含致命错误如 401/403）",
+					len(result.Unresolved),
+				)
+				// 覆盖优先级：终态扫描失败的批次信息更具体，保留之；否则用未解决段警告。
+				if semanticQAWarning == "" {
+					semanticQAWarning = msg
+				}
+				r.logger.Warn("semantic_qa finished with unresolved segments",
+					"resource_id", item.ID,
+					"unresolved", len(result.Unresolved),
 				)
 			}
 		}

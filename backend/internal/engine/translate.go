@@ -37,6 +37,11 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 	if len(cfg.segmentFilter) > 0 {
 		applySegmentSelection(doc, cfg.segmentFilter)
 	}
+	// 注入跨轮增量载体（非翻译轮据此排除已解决段）。
+	// 无条件赋值（含 nil/空）：doc 跨轮共享时，清空上一轮残留，避免跨模式污染
+	// （否则前一同模式轮注入的非空集合会被后续不同模式首轮继承，致其静默跳过段落）。
+	// translate 轮不调用 WithResolvedIndices → cfg.resolvedIndices=nil → 清空；其 BuildBatches 不读此字段。
+	doc.ResolvedIndices = cfg.resolvedIndices
 
 	e.logger.Info("execute round start",
 		"round", roundIdx,
@@ -57,6 +62,8 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 	roundResult.OutputTokens = atomic.LoadInt64(&doc.OutputTokens)
 	roundResult.FailedBatchCount = result.FailedBatches
 	roundResult.FailedSegmentCount = len(result.FailedSegments)
+	roundResult.Resolved = result.Resolved
+	roundResult.Unresolved = result.Unresolved
 
 	e.logger.Info("execute round done",
 		"round", roundIdx,

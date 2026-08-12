@@ -174,6 +174,7 @@ execution:
         profile: subtitle
         batch_size: 5
         concurrency: 2
+        fallback_shrink: 0.5
 `
 	path := writeTempFile(t, "new-format.yaml", yaml)
 
@@ -381,6 +382,7 @@ execution:
         profile: default
         batch_size: 1
         concurrency: 1
+        fallback_shrink: 0.5
 `
 	path := writeTempFile(t, "bootstrap-inline.yaml", yamlContent)
 
@@ -610,6 +612,7 @@ execution:
         profile: default
         batch_size: 1
         concurrency: 1
+        fallback_shrink: 0.5
 `
 	path := writeTempFile(t, "env-expand.yaml", yaml)
 
@@ -675,10 +678,11 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 						Mode:    "",
 						Backend: "default",
 						Translate: &CLIConfigTranslateRound{
-							Prompt:      "default",
-							Profile:     "default",
-							BatchSize:   1,
-							Concurrency: 1,
+							Prompt:         "default",
+							Profile:        "default",
+							BatchSize:      1,
+							Concurrency:    1,
+							FallbackShrink: 0.5,
 						},
 					},
 				},
@@ -760,10 +764,11 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 						Mode:    "translate",
 						Backend: "default",
 						Translate: &CLIConfigTranslateRound{
-							Prompt:      "default",
-							Profile:     "default",
-							BatchSize:   1,
-							Concurrency: 1,
+							Prompt:         "default",
+							Profile:        "default",
+							BatchSize:      1,
+							Concurrency:    1,
+							FallbackShrink: 0.5,
 						},
 					},
 				},

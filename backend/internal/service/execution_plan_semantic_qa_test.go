@@ -41,6 +41,7 @@ func TestValidateExecutionRounds_SemanticQA(t *testing.T) {
 					ProfileID:        -1,
 					BatchSize:        10,
 					Concurrency:      1,
+					FallbackShrink:   1.0,
 				},
 			},
 		})

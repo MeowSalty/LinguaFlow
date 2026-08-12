@@ -94,6 +94,10 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 		}
 	}
 
+	// 跨轮增量载体（in-memory）：per-mode 已解决段索引集合。
+	// 与 JobRunner/PreviewRunner 保持一致；单段场景下集合退化为空或 {targetDocIdx}。
+	resolvedByMode := engine.NewResolvedByMode()
+
 	var warnings []string
 	var roundSummaries []service.PreviewRoundSummary
 
@@ -166,6 +170,10 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 		if batchHandler != nil {
 			execOpts = append(execOpts, engine.WithBatchHandler(batchHandler))
 		}
+		// 非翻译轮注入跨轮增量载体：BuildBatches 据此排除上一同模式轮已解决的段。
+		if round.Mode != pipeline.RoundModeTranslate {
+			execOpts = append(execOpts, engine.WithResolvedIndices(resolvedByMode[round.Mode]))
+		}
 
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
 		duration := time.Since(roundStart)
@@ -215,6 +223,9 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 			summary.Status = "success"
 		}
 		roundSummaries = append(roundSummaries, summary)
+
+		// 累加本轮成功段到对应模式的 resolved 集合（跨轮增量）。
+		engine.AccumulateResolved(resolvedByMode, round.Mode, result.Resolved)
 
 		// 注意：单段即时翻译不执行 duplicate_source_divergence 检查——
 		// 该检查需要多段对比，单段无意义。
