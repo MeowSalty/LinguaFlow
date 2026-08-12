@@ -64,3 +64,39 @@ func TestNormalizeNumberToken(t *testing.T) {
 		}
 	}
 }
+
+func TestNumberMismatch_fullwidthDigit(t *testing.T) {
+	c := NewNumberMismatchChecker()
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "レベル６の魔法", TargetText: "等级6的魔法"},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("fullwidth ６ vs halfwidth 6 should be equal after norm, got %d: %+v", len(issues), issues)
+	}
+}
+
+func TestNumberMismatch_fullwidthDecimal(t *testing.T) {
+	c := NewNumberMismatchChecker()
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "距離は１２．５キロ", TargetText: "距离 12.5 公里"},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("fullwidth １２．５ vs halfwidth 12.5 should be equal after norm, got %d: %+v", len(issues), issues)
+	}
+}
+
+func TestNormalizeNumberWidth(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"レベル６", "レベル6"},
+		{"１２．５", "12.5"},
+		{"１，２３４", "1,234"},
+		{"abc", "abc"},
+	}
+	for _, tt := range tests {
+		if got := normalizeNumberWidth(tt.in); got != tt.want {
+			t.Errorf("normalizeNumberWidth(%q)=%q want %q", tt.in, got, tt.want)
+		}
+	}
+}
