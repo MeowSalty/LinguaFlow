@@ -1676,6 +1676,7 @@ const messages = {
       roundBatchConfigRequired: '轮次 {n}：批次大小和每批字词数至少填一项',
       roundConcurrencyRequired: '轮次 {n}：请设置并发数',
       roundSemanticQAIssueCodesRequired: '轮次 {n}：按问题代码筛选时至少选择一个问题代码',
+      roundFallbackShrinkRequired: '轮次 {n}：缩放因子需在 0 到 1 之间（不含 0）',
     },
     messages: {
       createSuccess: '执行计划模板创建成功',
@@ -1719,7 +1720,8 @@ const messages = {
       maxWordsPerBatch: '每批字词数',
       maxWordsPerBatchHint: '每批处理的字词数上限（计入上下文段），0 表示不限制',
       fallbackShrink: '缩放因子',
-      fallbackShrinkPlaceholder: '取值范围 0 < x < 1',
+      fallbackShrinkPlaceholder: '取值范围 0 < x ≤ 1',
+      fallbackShrinkHint: '1 = 不缩放，小于 1 表示每池逐级缩小',
       advancedConfig: '高级配置',
       retryMaxAttempts: '最大重试次数',
       retryBackoffMs: '退避毫秒数',

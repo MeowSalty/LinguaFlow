@@ -41,7 +41,7 @@ const DEFAULT_TRANSLATE: TranslateRoundConfig = {
   profile_id: 0,
   batch_size: 10,
   max_words_per_batch: 0,
-  fallback_shrink: undefined,
+  fallback_shrink: 1,
   segment_filter: { status_filter: 'pending_only' },
   retry: { ...DEFAULT_RETRY },
 }
@@ -588,17 +588,21 @@ const emitUpdate = (): void => {
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.fallbackShrink') }}
+              <span class="text-red-400">*</span>
             </div>
             <NInputNumber
               v-model:value="round.translate.fallback_shrink"
               :min="0.01"
-              :max="0.99"
+              :max="1"
               :step="0.1"
               :placeholder="t('executionPlanEditor.round.fallbackShrinkPlaceholder')"
               size="small"
               :disabled="disabled"
               class="w-full"
             />
+            <div class="mt-1 text-[11px] text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.fallbackShrinkHint') }}
+            </div>
           </div>
         </div>
 

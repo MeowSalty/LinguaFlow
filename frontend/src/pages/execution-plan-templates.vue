@@ -51,7 +51,7 @@ const DEFAULT_ROUND: ExecutionRoundConfig = {
     profile_id: 0,
     batch_size: 10,
     max_words_per_batch: 0,
-    fallback_shrink: undefined,
+    fallback_shrink: 1,
     retry: { max_attempts: 3, backoff_ms: 2000, jitter: true },
   },
 }
@@ -184,6 +184,16 @@ const validateRounds = (): boolean => {
         message.error(t('executionPlanTemplates.validation.roundBatchConfigRequired', { n: i + 1 }))
         return false
       }
+      if (
+        round.translate.fallback_shrink == null ||
+        round.translate.fallback_shrink <= 0 ||
+        round.translate.fallback_shrink > 1
+      ) {
+        message.error(
+          t('executionPlanTemplates.validation.roundFallbackShrinkRequired', { n: i + 1 }),
+        )
+        return false
+      }
     }
     if (round.mode === 'adjudicate' && round.adjudicate) {
       const hasBatchSize = round.adjudicate.batch_size && round.adjudicate.batch_size > 0
@@ -233,7 +243,7 @@ const buildPayload = (): CreateRequest => {
             profile_id: round.translate.profile_id,
             batch_size: round.translate.batch_size,
             max_words_per_batch: round.translate.max_words_per_batch,
-            fallback_shrink: round.translate.fallback_shrink ?? undefined,
+            fallback_shrink: round.translate.fallback_shrink,
             ...(round.translate.retry ? { retry: round.translate.retry } : {}),
           },
         }
