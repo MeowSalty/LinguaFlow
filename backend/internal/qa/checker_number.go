@@ -46,6 +46,7 @@ func (c *NumberMismatchChecker) Check(_ context.Context, segments []CheckInput) 
 }
 
 func extractNormalizedNumbers(text string) map[string]int {
+	text = normalizeNumberWidth(text)
 	counts := make(map[string]int)
 	for _, raw := range numberTokenRe.FindAllString(text, -1) {
 		norm := normalizeNumberToken(raw)
@@ -148,5 +149,26 @@ func multisetEqual(a, b map[string]int) bool {
 }
 
 func displayNumbers(text string) []string {
-	return numberTokenRe.FindAllString(text, -1)
+	return numberTokenRe.FindAllString(normalizeNumberWidth(text), -1)
+}
+
+// normalizeNumberWidth 将全角数字与全角小数点/千分位逗号转为半角，
+// 以便 numberTokenRe 正则识别并使 src/tgt 在同一基准下比对。
+// 仅用于数字守恒比较，不修改外部文本。
+func normalizeNumberWidth(text string) string {
+	var b strings.Builder
+	b.Grow(len(text))
+	for _, r := range text {
+		switch {
+		case r >= '０' && r <= '９':
+			b.WriteRune(r - '０' + '0')
+		case r == '．':
+			b.WriteByte('.')
+		case r == '，':
+			b.WriteByte(',')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
