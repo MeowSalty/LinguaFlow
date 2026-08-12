@@ -54,7 +54,7 @@ func (p *Extractor) Protect(seg *model.Segment) error {
 	merged := mergeAdjacentRuby(matches)
 
 	// 3. 剥离 ruby 标签，只保留基底文本
-	seg.Source = stripRubyTags(seg.Source)
+	seg.Source = StripRubyTags(seg.Source)
 
 	// 4. 存入 seg.Meta
 	if len(merged) > 0 {
@@ -159,8 +159,11 @@ func isPerKanji(base string) bool {
 	return unicode.Is(unicode.Han, r)
 }
 
-// stripRubyTags 剥离 <ruby>/<rt> 标签，只保留基底文本。
-func stripRubyTags(source string) string {
+// StripRubyTags 剥离 <ruby>/<rt> 标签，只保留基底文本。
+// 清理基底文本和尾部文本中的辅助标签（如 <rp>, <rb>）。
+// 作为注音剥离的单一来源，供 ruby.Extractor 与 qa.LengthRatioChecker 复用，
+// 避免多处正则副本漂移导致源/译剥离语义不一致。
+func StripRubyTags(source string) string {
 	return rubyElementRe.ReplaceAllStringFunc(source, func(match string) string {
 		m := rubyElementRe.FindStringSubmatch(match)
 		base := m[1]
