@@ -173,10 +173,12 @@ func (h *SemanticQAHandler) BuildBatches(_ context.Context, doc *Document, pendi
 }
 
 // ProcessBatch 渲染语义质检 prompt → 调用 LLM → 解析 issues。
-// 失败时 Issues==nil（batchHandler 跳过写库）；终态扫描失败额外设置 failedSegments。
+// 失败时不返回 callbackResult（batchHandler 跳过写库，原 issue 保留）。
 // 在途重试预算由 executor transientBudget 统一管控（min(max_attempts+1,3)）：
-// 瞬时/解析错误预算内重试，耗尽则 terminalFailure（保留软警告，QA 覆盖缺口可见）。
-// 致命 401/403 → fatalUnresolved（跳池+跨轮传播），不再计入扫描失败软警告。
+// 瞬时/解析错误预算内重试，耗尽则 unresolved（交下一池重切 + 末轮跨轮传播换 backend），
+// 可见性由 job_runner 的 warning_message 通道承担。
+// render 失败（确定性配置/模板问题）→ terminalFailure（软警告，不重试）。
+// 致命 401/403 → fatalUnresolved（跳池+跨轮传播）。
 func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
 	batchStart := time.Now()
 	rep := h.reporter()
@@ -262,8 +264,8 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 
 		// 本地超时 / 5xx / 429 / 裸网络错误可退避重试；外部中断不计入。
 		// 401/403 已在上文 fatalUnresolved 分支提前返回。
-		// 预算内重试；耗尽则 terminalFailure（保留软警告，QA 覆盖缺口可见）。
-		// 预算与 executor transientBudget 同源（transientBudgetFor），确保最后一次有效尝试落终态而非静默 unresolved。
+		// 预算内重试；耗尽则 unresolved（交下一池重切，末轮跨轮传播换 backend）。
+		// 预算与 executor transientBudget 同源（transientBudgetFor）。
 		if (isLocalTimeout || backend.IsRetryable(callErr)) && attempt+1 < transientBudgetFor(h.Retry) {
 			if isLocalTimeout {
 				logger.Warn("semantic_qa backend local timeout, will backoff and retry",
@@ -287,15 +289,19 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		}
 
 		if isLocalTimeout {
-			logger.Warn("semantic_qa backend local timeout exhausted, producing no issues",
+			logger.Warn("semantic_qa backend local timeout exhausted, deferring to next pool",
 				"backend", h.Backend.Name(), "batch_size", len(idxs),
 				"attempt", attempt, "err", callErr)
 		} else {
-			logger.Warn("semantic_qa backend failed terminally, producing no issues",
+			logger.Warn("semantic_qa backend failed terminally, deferring to next pool",
 				"backend", h.Backend.Name(), "batch_size", len(idxs),
 				"attempt", attempt, "err", callErr)
 		}
-		return h.terminalFailure(doc, idxs, rep)
+		// 预算耗尽：段交下一池重切（更小批次可能因上下文缩减而成功），
+		// 末轮后仍未解决则跨轮传播（可换 backend 接力）。可见性由 job_runner
+		// 的 warning_message 通道承担（与原 terminalFailure 软警告等价，不降级）。
+		// 不调用 SegmentDone（段尚未解决），不返回 callbackResult（避免写回空 issue）。
+		return batchResult{unresolved: idxs}
 	}
 
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
@@ -328,13 +334,15 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			JSONSchema:      req.JSONSchema,
 			ResponseContent: resp.Text,
 		})
-		// parse 失败：预算内立即再入队（无退避）；耗尽则 terminalFailure（保留软警告）。
+		// parse 失败：预算内立即再入队（无退避）；耗尽则交下一池重切。
 		// LLM 响应畸形可能因随机性恢复，故预算内走重试通道（与路由表"解析失败→retry"一致）。
-		// 预算与 executor transientBudget 同源，避免持久解析失败静默落入 unresolved 而无软警告。
+		// 预算耗尽后落 unresolved：换更小批次重切可能成功，末轮仍未解决则跨轮传播换 backend；
+		// 可见性由 job_runner 的 warning_message 通道承担，不依赖 failedSegments 软警告。
 		if attempt+1 < transientBudgetFor(h.Retry) {
 			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
 		}
-		return h.terminalFailure(doc, idxs, rep)
+		// 不调用 SegmentDone（段尚未解决），不返回 callbackResult（避免写回空 issue）。
+		return batchResult{unresolved: idxs}
 	}
 
 	// id → []issue（snippet → Span；定位失败仍保留 MatchedText）
