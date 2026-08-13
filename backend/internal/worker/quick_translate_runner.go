@@ -212,6 +212,10 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 
 		if result.FailedBatchCount > 0 {
 			summary.Status = "partial"
+		} else if len(result.Unresolved) > 0 {
+			// 非翻译轮（semantic_qa/extract/adjudicate）的未解决段体现在 Unresolved 切片
+			// （跨轮传播 / 解析失败 / 瞬时错误耗尽）；translate 轮不会设置该切片。
+			summary.Status = "partial"
 		} else if result.UnresolvedCount > 0 {
 			// translate 轮的终态失败通过 Finalize 计入 _translate_failed_indices，
 			// 体现在 UnresolvedCount；translate handler 不会递增 FailedBatchCount，
