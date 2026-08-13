@@ -17,6 +17,60 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
+// contentDisposition 生成符合 RFC 6266/RFC 5987 的 attachment 头部：
+//   - filename*=UTF-8”<percent-encoded> 显式声明 UTF-8，杜绝浏览器按
+//     Latin-1 猜码产生乱码（日文/中文文件名必需的编码）；
+//   - filename=<ASCII 回退> 兼容不接受 filename* 的旧客户端。
+//
+// 修复前使用 filename=%q 将原始 UTF-8 字节直接放进头，未声明编码，
+// 浏览器按默认单字节码表解码导致 mojibake。
+func contentDisposition(filename string) string {
+	base := filepath.Base(filename)
+	return fmt.Sprintf(
+		"attachment; filename=%q; filename*=UTF-8''%s",
+		asciiFallback(base),
+		rfc5987Value(base),
+	)
+}
+
+// rfc5987Value 按 RFC 5987 ext-value 规则对字节做百分号编码：
+// 仅保留 unreserved 字符，其余字节转 %XX，并转义用作分隔符的 '。
+func rfc5987Value(s string) string {
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9',
+			c == '.', c == '_', c == '-', c == '~':
+			b.WriteByte(c)
+		default:
+			b.WriteByte('%')
+			b.WriteByte(hex[c>>4])
+			b.WriteByte(hex[c&0x0F])
+		}
+	}
+	return b.String()
+}
+
+// asciiFallback 生成仅含可打印 ASCII 的回退文件名，用于 filename= 参数。
+// 非 ASCII 字节以 _ 占位，保证旧客户端不抛错。
+func asciiFallback(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 0x20 && r < 0x7f:
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "download"
+	}
+	return b.String()
+}
+
 const maxResourceUploadFiles = 50
 
 type resourceResponse struct {
@@ -529,7 +583,7 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(absolutePath)))
+	w.Header().Set("Content-Disposition", contentDisposition(filepath.Base(absolutePath)))
 	http.ServeFile(w, r, absolutePath)
 }
 
@@ -737,7 +791,7 @@ func (s *Server) handleDownloadTranslatedResourceFile(w http.ResponseWriter, r *
 
 	filename := safeZipResourceEntryName(res.Resource)
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Disposition", contentDisposition(filename))
 	// 注意：Content-Type 和 Content-Disposition 在渲染前设置。
 	// 如果 Render 已向 w 写入部分数据，后续 header 修改可能无效（headers 已 flush）。
 	// 这与现有 downloadSingleTranslationOutput 的行为一致。
