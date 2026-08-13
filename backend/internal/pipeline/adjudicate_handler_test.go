@@ -152,7 +152,7 @@ func TestAdjudicateHandler_ProcessBatch_RealPreserved(t *testing.T) {
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_ParseFailurePreserves(t *testing.T) {
+func TestAdjudicateHandler_ProcessBatch_ParseFailureDefers(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -167,11 +167,16 @@ func TestAdjudicateHandler_ProcessBatch_ParseFailurePreserves(t *testing.T) {
 		Logger:    quietLogger(),
 	}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	// 解析失败：段交下一池重切（unresolved），不改 doc（原 issue 保留供下池重判）。
 	if len(doc.Segments[0].Issues) != 1 {
-		t.Fatalf("issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
+		t.Fatalf("issues len=%d want 1 preserved in doc", len(doc.Segments[0].Issues))
 	}
-	if result.callbackResult == nil || len(result.callbackResult.Segments[0].Issues) != 1 {
-		t.Fatal("callback should carry original issues")
+	if !reflect.DeepEqual(result.unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.unresolved)
+	}
+	// 不返回 callbackResult：避免 batchHandler 写回陈旧 issue 干扰下一池重判。
+	if result.callbackResult != nil {
+		t.Fatal("parse failure must not produce callbackResult (would persist stale issues)")
 	}
 }
 

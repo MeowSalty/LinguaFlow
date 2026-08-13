@@ -264,7 +264,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 
 	verdicts, parseRepaired, parseErr := repair.ParseAdjudicationByMode(resp.Text, isTextMode, h.Repair)
 	if parseErr != nil {
-		logger.Warn("adjudicate parse failed, preserving issues",
+		logger.Warn("adjudicate parse failed, deferring to next pool",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", parseErr,
 			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
 		h.emitBatchOutcome(progress.BatchEvent{
@@ -289,7 +289,10 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			JSONSchema:      req.JSONSchema,
 			ResponseContent: resp.Text,
 		})
-		return h.preserveResult(doc, idxs, rep)
+		// 解析失败：段交下一池重切（与 translate/extract 语义对齐，复用 BuildBatches
+		// 的 pending 重切通道）。不调用 SegmentDone（段尚未解决，会在下一池成功时计数），
+		// 不返回 callbackResult（避免 batchHandler 写回陈旧 issue 干扰下一池重判）。
+		return batchResult{unresolved: idxs}
 	}
 
 	// (id, issue_code, matched_text) → verdict

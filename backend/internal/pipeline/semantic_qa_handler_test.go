@@ -248,19 +248,22 @@ func TestSemanticQAHandler_ProcessBatch_ParseFailureProducesNone(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	// MaxAttempts=0 → transientBudget=1 → parse 失败在 attempt 0 即耗尽预算，落终态 terminalFailure（软警告）
+	// MaxAttempts=0 → transientBudget=1 → parse 失败在 attempt 0 即耗尽预算，落 unresolved（交下一池）
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
 	if len(doc.Segments[0].Issues) != 1 {
 		t.Fatalf("doc issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
 	}
-	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
-		t.Fatal("parse failure must return nil issues so persistence is skipped")
+	if result.callbackResult != nil {
+		t.Fatal("parse failure must not produce callbackResult (would write back empty issues)")
 	}
 	if result.retry != nil {
 		t.Fatal("parse failure with MaxAttempts=0 must not retry")
 	}
-	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
-		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	if !reflect.DeepEqual(result.unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.unresolved)
+	}
+	if result.failedSegments != nil {
+		t.Fatalf("unresolved path must not set failedSegments, got %v", result.failedSegments)
 	}
 }
 
@@ -290,7 +293,7 @@ func TestSemanticQAHandler_ProcessBatch_BackendErrorProducesNone(t *testing.T) {
 	doc.Segments[0].Issues = []qa.QualityIssue{
 		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"},
 	}
-	// MaxAttempts=0 → transientBudget=1 → 预算耗尽，落终态 terminalFailure（软警告）
+	// MaxAttempts=0 → transientBudget=1 → 预算耗尽，落 unresolved（交下一池）
 	fb := &fakeBackend{name: "fake", errs: []error{errors.New("network down")}}
 	h := &SemanticQAHandler{
 		Backend:   fb,
@@ -302,14 +305,17 @@ func TestSemanticQAHandler_ProcessBatch_BackendErrorProducesNone(t *testing.T) {
 	if len(doc.Segments[0].Issues) != 1 {
 		t.Fatalf("doc issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
 	}
-	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
-		t.Fatal("callback should carry nil issues on backend error")
+	if result.callbackResult != nil {
+		t.Fatal("backend error must not produce callbackResult (would write back empty issues)")
 	}
 	if result.retry != nil {
 		t.Fatal("MaxAttempts=0 must not retry")
 	}
-	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
-		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	if !reflect.DeepEqual(result.unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.unresolved)
+	}
+	if result.failedSegments != nil {
+		t.Fatalf("unresolved path must not set failedSegments, got %v", result.failedSegments)
 	}
 }
 
@@ -361,18 +367,21 @@ func TestSemanticQAHandler_ProcessBatch_5xxRetriesAndExhausts(t *testing.T) {
 		t.Fatalf("attempt0 retry=%v want attempt=1", result.retry)
 	}
 
-	// attempt 1 → 预算耗尽，落终态 terminalFailure（软警告，QA 覆盖缺口可见）
+	// attempt 1 → 预算耗尽，落 unresolved（交下一池重切）
 	fb2 := &fakeBackend{name: "fake", errs: []error{err500}}
 	h.Backend = fb2
 	result = h.ProcessBatch(context.Background(), doc, []int{0}, 1, quietLogger())
 	if result.retry != nil {
 		t.Fatalf("exhausted must not retry, got %v", result.retry)
 	}
-	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
-		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	if !reflect.DeepEqual(result.unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.unresolved)
 	}
-	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
-		t.Fatal("exhausted must preserve with nil issues")
+	if result.failedSegments != nil {
+		t.Fatalf("unresolved path must not set failedSegments, got %v", result.failedSegments)
+	}
+	if result.callbackResult != nil {
+		t.Fatal("exhausted must not produce callbackResult (would write back empty issues)")
 	}
 }
 
@@ -468,18 +477,21 @@ func TestSemanticQAHandler_ProcessBatch_LocalTimeoutExhausts(t *testing.T) {
 		t.Fatalf("attempt0 retry=%v want attempt=1", result.retry)
 	}
 
-	// attempt 1 → 预算耗尽（transientBudget=2），落终态 terminalFailure（软警告，不触发第二次 5s 等待）
+	// attempt 1 → 预算耗尽（transientBudget=2），落 unresolved（交下一池，不触发第二次 5s 等待）
 	fb2 := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
 	h.Backend = fb2
 	result = h.ProcessBatch(context.Background(), doc, []int{0}, 1, quietLogger())
 	if result.retry != nil {
 		t.Fatalf("exhausted must not retry, got %v", result.retry)
 	}
-	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
-		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	if !reflect.DeepEqual(result.unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.unresolved)
 	}
-	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
-		t.Fatal("exhausted must preserve with nil issues")
+	if result.failedSegments != nil {
+		t.Fatalf("unresolved path must not set failedSegments, got %v", result.failedSegments)
+	}
+	if result.callbackResult != nil {
+		t.Fatal("exhausted must not produce callbackResult (would write back empty issues)")
 	}
 }
 
