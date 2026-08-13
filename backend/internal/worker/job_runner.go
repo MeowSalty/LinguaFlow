@@ -556,30 +556,14 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					roundErr = err
 				}
 			}
-			// semantic_qa 终态扫描失败转软警告，不阻塞资源 completed。
-			if round.Mode == "semantic_qa" && result.FailedBatchCount > 0 {
-				semanticQAWarning = fmt.Sprintf(
-					"语义质检未完全成功：%d 个批次、%d 个段落扫描失败",
-					result.FailedBatchCount, result.FailedSegmentCount,
-				)
-				r.logger.Warn("semantic_qa finished with soft failures",
-					"resource_id", item.ID,
-					"failed_batches", result.FailedBatchCount,
-					"failed_segments", result.FailedSegmentCount,
-				)
-			}
-			// 最后一轮 semantic_qa 后仍有未解决段（含 fatalUnresolved 的 401/403 段，
-			// 经历跨轮接力换 backend 仍未成功），恢复软警告通道，避免鉴权/权限故障在
-			// COMPLETED 状态下零感知。中间轮的 Unresolved 是预期的跨轮传播，不发警告。
+			// semantic_qa 最后一轮后仍有未解决段（解析失败/瞬时错误耗尽/致命 401/403，
+			// 经历跨轮接力换 backend 仍未成功），发软警告，不阻塞资源 completed。
+			// 中间轮的 Unresolved 是预期的跨轮传播，不发警告。
 			if round.Mode == "semantic_qa" && roundIdx == lastSemanticQARoundIdx && len(result.Unresolved) > 0 {
-				msg := fmt.Sprintf(
-					"语义质检未完全成功：%d 个段落未能完成（含致命错误如 401/403）",
+				semanticQAWarning = fmt.Sprintf(
+					"语义质检未完全成功：%d 个段落未能完成（可重试任务或调整参数后重试）",
 					len(result.Unresolved),
 				)
-				// 覆盖优先级：终态扫描失败的批次信息更具体，保留之；否则用未解决段警告。
-				if semanticQAWarning == "" {
-					semanticQAWarning = msg
-				}
 				r.logger.Warn("semantic_qa finished with unresolved segments",
 					"resource_id", item.ID,
 					"unresolved", len(result.Unresolved),
