@@ -35,6 +35,7 @@ const (
 	CheckDuplicate                = "duplicate"
 	CheckSourceResidual           = "source_residual"
 	CheckPunctuationPairing       = "punctuation_pairing"
+	CheckPunctuationMissing       = "punctuation_missing"
 	CheckWhitespaceIrregular      = "whitespace_irregular"
 	CheckRepeatedSpace            = "repeated_space"
 	CheckWidthMix                 = "width_mix"
@@ -155,6 +156,7 @@ func AllCheckerNames() []string {
 		CheckDuplicate,
 		CheckSourceResidual,
 		CheckPunctuationPairing,
+		CheckPunctuationMissing,
 		CheckWhitespaceIrregular,
 		CheckRepeatedSpace,
 		CheckWidthMix,
@@ -362,6 +364,7 @@ func buildAllCheckers(cfg Config) []Checker {
 		NewDuplicateTranslationChecker(),
 		NewSourceResidualChecker(cfg.SourceLang, cfg.TargetLang),
 		NewPunctuationPairingChecker(cfg.TargetLang),
+		NewPunctuationMissingChecker(),
 		NewWhitespaceIrregularChecker(),
 		NewRepeatedSpaceChecker(cfg.TargetLang),
 		NewWidthMixChecker(cfg.TargetLang),
