@@ -89,6 +89,10 @@ func TryRepair(text string, wantIDs []string, opt Options) Result {
 			fixed = v
 			repaired = append(repaired, "json.escape-control")
 		}
+		if v := escapeUnescapedQuotes(fixed); v != fixed {
+			fixed = v
+			repaired = append(repaired, "json.escape-quotes")
+		}
 		if v := closeUnbalancedBraces(fixed); v != fixed {
 			fixed = v
 			repaired = append(repaired, "json.close-braces")
@@ -217,6 +221,10 @@ func TryRepairBootstrap(text string, opt Options) ([]prompt.BootstrapEntry, []st
 		if v := escapeControlChars(fixed); v != fixed {
 			fixed = v
 			repaired = append(repaired, "json.escape-control")
+		}
+		if v := escapeUnescapedQuotes(fixed); v != fixed {
+			fixed = v
+			repaired = append(repaired, "json.escape-quotes")
 		}
 		if v := closeUnbalancedBraces(fixed); v != fixed {
 			fixed = v
