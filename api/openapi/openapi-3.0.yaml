@@ -907,6 +907,7 @@ paths:
               - duplicate
               - source_residual
               - punctuation_pairing
+              - punctuation_missing
               - whitespace_irregular
               - repeated_space
               - width_mix
@@ -5112,6 +5113,7 @@ components:
               - duplicate
               - source_residual
               - punctuation_pairing
+              - punctuation_missing
               - whitespace_irregular
               - repeated_space
               - width_mix
@@ -5336,7 +5338,7 @@ components:
           type: array
           items:
             type: string
-          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
+          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
         length_method:
           type: string
           enum:

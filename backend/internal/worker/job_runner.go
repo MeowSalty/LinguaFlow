@@ -556,17 +556,26 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					roundErr = err
 				}
 			}
-			// semantic_qa 最后一轮后仍有未解决段（解析失败/瞬时错误耗尽/致命 401/403，
-			// 经历跨轮接力换 backend 仍未成功），发软警告，不阻塞资源 completed。
-			// 中间轮的 Unresolved 是预期的跨轮传播，不发警告。
-			if round.Mode == "semantic_qa" && roundIdx == lastSemanticQARoundIdx && len(result.Unresolved) > 0 {
+			// semantic_qa 最后一轮后仍有失败段，发软警告，不阻塞资源 completed：
+			//  - result.Unresolved：解析失败/瞬时错误耗尽/致命 401/403，经历跨轮接力
+			//    换 backend 仍未成功（中间轮的 Unresolved 是预期跨轮传播，不发警告）；
+			//  - result.FailedSegmentCount：render 失败（确定性配置/模板问题），不进池也不
+			//    跨轮传播，经 terminalFailure → failedSegments 累计，不计入 Unresolved，
+			//    故需单独检查，否则会静默 completed 且无 resource_warning SSE。
+			if round.Mode == "semantic_qa" && roundIdx == lastSemanticQARoundIdx &&
+				(len(result.Unresolved) > 0 || result.FailedSegmentCount > 0) {
+				failed := len(result.Unresolved)
+				if n := result.FailedSegmentCount; n > failed {
+					failed = n
+				}
 				semanticQAWarning = fmt.Sprintf(
 					"语义质检未完全成功：%d 个段落未能完成（可重试任务或调整参数后重试）",
-					len(result.Unresolved),
+					failed,
 				)
-				r.logger.Warn("semantic_qa finished with unresolved segments",
+				r.logger.Warn("semantic_qa finished with unresolved or failed segments",
 					"resource_id", item.ID,
 					"unresolved", len(result.Unresolved),
+					"failed_segments", result.FailedSegmentCount,
 				)
 			}
 		}

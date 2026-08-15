@@ -194,6 +194,72 @@ func escapeControlChars(s string) string {
 	return b.String()
 }
 
+// escapeUnescapedQuotes 修复字符串值内未转义的双引号。
+//
+// LLM 常在 string 值里写出未转义的引号（如 "reason":""英国"是中文用词"），
+// 使 JSON 解析在第二个 " 处提前闭合字符串，随后报 "invalid character after
+// object key:value pair" 之类错误。本函数扫描整段：当处于字符串内、遇到一个
+// 非转义的 " 时，若其后首个非空白字符不是合法的字符串终止上下文（',' '}' ']' ':'
+// 之一：':' 对应 key 结束，其余对应 value 结束），则判定该 " 是值内引号，转义为 \"。
+//
+// 安全性：仅在主解析失败后作为兜底介入（调用方在 unmarshal 失败分支调用）；
+// \" 解码后仍是 "，不改语义内容，与 escapeControlChars 同属安全转义。多字节 UTF-8
+// 序列中不会出现 0x22 / 0x5C，故逐字节扫描 ASCII 终止符是安全的。
+func escapeUnescapedQuotes(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inStr := false
+	esc := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr {
+			if esc {
+				b.WriteByte(c)
+				esc = false
+				continue
+			}
+			if c == '\\' {
+				b.WriteByte(c)
+				esc = true
+				continue
+			}
+			if c == '"' {
+				if isLegalStringTerminator(s, i+1) {
+					b.WriteByte(c)
+					inStr = false
+					continue
+				}
+				b.WriteString(`\"`)
+				continue
+			}
+			b.WriteByte(c)
+			continue
+		}
+		if c == '"' {
+			inStr = true
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
+// isLegalStringTerminator 判断 s[at:] 起首个非空白字符是否为合法的字符串终止
+// 上下文：',' '}' ']' ':' 之一（':' 对应 key 结束，',}]' 对应 value 结束）。
+// s[at:] 全为空白或为空时视为合法终止（末尾由 closeUnbalancedBraces 补齐）。
+func isLegalStringTerminator(s string, at int) bool {
+	for j := at; j < len(s); j++ {
+		switch s[j] {
+		case ' ', '\t', '\n', '\r':
+			continue
+		case ',', '}', ']', ':':
+			return true
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // closeUnbalancedBraces 当 s 末尾括号未平衡，追加缺失的闭合符号（'}' 或 ']'）。
 // 同时追踪 '{'/'}'（对象）与 '['/']'（数组）：数组型 envelope（{"issues":[...]）被
 // 截断时只补 '}' 会导致 ']' 缺失，json.Unmarshal 失败；用栈记录开启类型可正确补全。

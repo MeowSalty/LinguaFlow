@@ -57,6 +57,10 @@ func TryRepairEnvelope(text, key string, opt Options) (map[string]any, []string,
 			fixed = v
 			repaired = append(repaired, "json.escape-control")
 		}
+		if v := escapeUnescapedQuotes(fixed); v != fixed {
+			fixed = v
+			repaired = append(repaired, "json.escape-quotes")
+		}
 		if v := closeUnbalancedBraces(fixed); v != fixed {
 			fixed = v
 			repaired = append(repaired, "json.close-braces")
