@@ -46,18 +46,20 @@ func (c *PunctuationMissingChecker) Name() string { return CheckPunctuationMissi
 func (c *PunctuationMissingChecker) Check(_ context.Context, segments []CheckInput) []QualityIssue {
 	var issues []QualityIssue
 	for _, seg := range segments {
-		src := strings.TrimSpace(stripPlaceholders(seg.SourceText))
 		tgt := seg.TargetText
+		src := strings.TrimSpace(seg.SourceText)
 		if src == "" || strings.TrimSpace(tgt) == "" {
 			continue
 		}
-		regions := ProtectedRegions(tgt, seg.Protected)
+		srcRegions := InlineMarkupRegions(src, seg.Protected)
+		cleanSrc := stripPlaceholders(StripRegions(src, srcRegions))
+		regions := InlineMarkupRegions(tgt, seg.Protected)
 		cleanTgt := stripPlaceholders(StripRegions(tgt, regions))
 		for _, cat := range punctMissingCategories {
-			if countCategory(src, cat.set) < 2 || countCategory(cleanTgt, cat.set) != 0 {
+			if countCategory(cleanSrc, cat.set) < 2 || countCategory(cleanTgt, cat.set) != 0 {
 				continue
 			}
-			matched := firstCategoryRune(src, cat.set, 0) + firstCategoryRune(src, cat.set, 1)
+			matched := firstCategoryRune(cleanSrc, cat.set, 0) + firstCategoryRune(cleanSrc, cat.set, 1)
 			span := LocateSpanExcludingRegions(tgt, matched, regions)
 			if span == nil {
 				span = &Span{MatchedText: matched}
