@@ -22,6 +22,7 @@ const QUALITY_CODE_I18N_KEYS: Record<QualityCode, string> = {
   duplicate: 'duplicate',
   source_residual: 'sourceResidual',
   punctuation_pairing: 'punctuationPairing',
+  punctuation_missing: 'punctuationMissing',
   whitespace_irregular: 'whitespaceIrregular',
   repeated_space: 'repeatedSpace',
   width_mix: 'widthMix',
@@ -48,7 +49,13 @@ export const QUALITY_CODE_GROUPS: { key: string; codes: QualityCode[] }[] = [
   { key: 'hardRule', codes: ['untranslated', 'duplicate', 'source_residual', 'length_ratio'] },
   {
     key: 'typography',
-    codes: ['punctuation_pairing', 'whitespace_irregular', 'repeated_space', 'width_mix'],
+    codes: [
+      'punctuation_pairing',
+      'punctuation_missing',
+      'whitespace_irregular',
+      'repeated_space',
+      'width_mix',
+    ],
   },
   { key: 'content', codes: ['number_mismatch', 'url_email_mismatch'] },
   { key: 'markup', codes: ['leftover_placeholder', 'xml_tag_mismatch'] },

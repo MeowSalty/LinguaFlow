@@ -2808,7 +2808,7 @@ export interface components {
              * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
              *     允许全部 issue code（规则 + 语义皆可作筛选键）。
              */
-            issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
+            issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
             retry?: components["schemas"]["RetryConfig"];
         };
         ExecutionRoundConfig: {
@@ -2919,7 +2919,7 @@ export interface components {
              * @default false
              */
             auto_reject: boolean;
-            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
+            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
             checks?: string[];
             /**
              * @description 长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词
@@ -4057,7 +4057,7 @@ export interface operations {
                 /** @description 按 quality_issues 中的 severity 过滤；指定时隐含仅返回含匹配问题的段落 */
                 quality_severity?: "warning" | "error";
                 /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
-                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register";
+                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
