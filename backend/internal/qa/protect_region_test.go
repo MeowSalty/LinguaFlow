@@ -272,3 +272,69 @@ func TestLocateSpanExcludingRegions_NoRegions(t *testing.T) {
 		t.Fatalf("want start=5 end=6, got start=%d end=%d", *span.TargetStart, *span.TargetEnd)
 	}
 }
+
+// InlineMarkupRegions 在无 ruby 时等价于 ProtectedRegions。
+func TestInlineMarkupRegions_EqualsProtectedWhenNoRuby(t *testing.T) {
+	target := `hello <a href="x">world</a> end`
+	protected := map[string]string{"tag": `<a href="x">world</a>`}
+	got := InlineMarkupRegions(target, protected)
+	want := [][2]int{{6, 27}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+}
+
+// 纯 ruby：整个 <ruby> 元素（含基底）应被整体屏蔽。
+func TestInlineMarkupRegions_PureRuby(t *testing.T) {
+	ruby := "<ruby>呪<rt>じゅ</rt></ruby>"
+	got := InlineMarkupRegions(ruby, nil)
+	if stripped := StripRegions(ruby, got); stripped != "" {
+		t.Fatalf("strip ruby want empty, got %q (regions=%v)", stripped, got)
+	}
+}
+
+// ruby 与 protected 相邻：两段都被屏蔽。
+func TestInlineMarkupRegions_RubyAndProtected(t *testing.T) {
+	span := `a<b>x</b>`
+	ruby := "<ruby>呪<rt>じゅ</rt></ruby>"
+	target := span + ruby
+	got := InlineMarkupRegions(target, map[string]string{"p": span})
+	if len(got) != 2 {
+		t.Fatalf("want 2 regions (span + ruby), got %d: %v", len(got), got)
+	}
+	if stripped := StripRegions(target, got); stripped != "" {
+		t.Fatalf("strip want empty, got %q", stripped)
+	}
+}
+
+// 空输入返回 nil（与 ProtectedRegions 一致；StripRegions(text,nil)==text）。
+func TestInlineMarkupRegions_Empty(t *testing.T) {
+	if got := InlineMarkupRegions("", nil); got != nil {
+		t.Fatalf("want nil, got %v", got)
+	}
+	if got := InlineMarkupRegions("abc", nil); got != nil {
+		t.Fatalf("want nil, got %v", got)
+	}
+	if got := InlineMarkupRegions("abc", map[string]string{}); got != nil {
+		t.Fatalf("want nil, got %v", got)
+	}
+}
+
+// CJK ruby 元素整体被删，保留 ruby 外的 CJK 文本。
+func TestInlineMarkupRegions_CJKRuby(t *testing.T) {
+	target := "見<ruby>呪<rt>じゅ</rt></ruby>術"
+	got := InlineMarkupRegions(target, nil)
+	if stripped := StripRegions(target, got); stripped != "見術" {
+		t.Fatalf("strip want 見術, got %q (regions=%v)", stripped, got)
+	}
+}
+
+// protected 与 ruby 区域有重叠/混合时仍正确并集屏蔽。
+func TestInlineMarkupRegions_ProtectedInsideAroundRuby(t *testing.T) {
+	span := `<a>1</a>`
+	target := span + "<ruby>呪<rt>じゅ</rt></ruby>" + span
+	got := InlineMarkupRegions(target, map[string]string{"p": span})
+	if stripped := StripRegions(target, got); stripped != "" {
+		t.Fatalf("strip want empty, got %q (regions=%v)", stripped, got)
+	}
+}

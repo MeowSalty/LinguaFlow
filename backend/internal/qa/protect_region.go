@@ -10,13 +10,18 @@ func ProtectedRegions(target string, protected map[string]string) [][2]int {
 	if len(protected) == 0 || target == "" {
 		return nil
 	}
+	return mergeRegions(protectedOccurrences(target, protected))
+}
+
+// protectedOccurrences 在 target 中找出每个 protected 值的全部出现位置（字节→rune 偏移），
+// 返回尚未排序合并的原始区域。同一保护值可能在译文中重复出现（如多个 <br/> 或相同 URL），
+// 必须全部记录，否则未屏蔽的副本仍会被 checker 误报。
+func protectedOccurrences(target string, protected map[string]string) [][2]int {
 	raw := make([][2]int, 0, len(protected))
 	for _, value := range protected {
 		if value == "" {
 			continue
 		}
-		// 同一保护值可能在译文中重复出现（如多个 <br/> 或相同 URL），
-		// 需找出全部出现位置，否则未屏蔽的副本仍会被 checker 误报。
 		searchStart := 0
 		for searchStart <= len(target) {
 			rel := strings.Index(target[searchStart:], value)
@@ -30,19 +35,65 @@ func ProtectedRegions(target string, protected map[string]string) [][2]int {
 			searchStart = idx + len(value)
 		}
 	}
+	return raw
+}
+
+// rubyRegions 在 target 中找出所有 <ruby>BASE<rt>READ</rt>TRAILING</ruby> 元素的位置（字节→rune 偏移），
+// 返回尚未排序合并的原始区域。每个 ruby 元素整体作为一个区域（含基底文本），以便后续
+// StripRegions 整段删去，避免 ruby 标签的 <> 被当半角标点误报。
+//
+// 复用包级 rubyElementRe（与 StripRubyTags 同一正则，由 TestStripRubyTagsMatchesRubyPackage 守护）。
+// 因 model → qa 依赖成环，qa 不能反向 import ruby，故直接复用同包正则，不做跨包复制。
+func rubyRegions(target string) [][2]int {
+	matches := rubyElementRe.FindAllStringSubmatchIndex(target, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	raw := make([][2]int, 0, len(matches))
+	for _, loc := range matches {
+		startByte, endByte := loc[0], loc[1]
+		start := utf8RuneOffset(target, startByte)
+		end := start + utf8.RuneCountInString(target[startByte:endByte])
+		raw = append(raw, [2]int{start, end})
+	}
+	return raw
+}
+
+// InlineMarkupRegions 返回 target 中「Protected 区 ∪ ruby 元素区」的 rune 偏移并集
+// （升序、已合并），作为 QA 层统一的内联标记屏蔽出口。
+//
+// 覆盖两条保护通道：
+//   - protect 通道（XMLProtector）把 span 等保护片段写入 seg.Protected 映射；
+//   - ruby 通道（ruby.Restorer 在 Unprotect 之后把 <ruby> 插回 seg.Target），不进 seg.Protected。
+//
+// 消费者一律 regions := InlineMarkupRegions(text, seg.Protected); clean := StripRegions(text, regions)，
+// span 定位继续用 LocateSpanExcludingRegions(原文, hit, regions)（regions 基于原文，偏移正确）。
+// 空输入返回 nil（与 ProtectedRegions 一致），StripRegions(text, nil) == text。
+func InlineMarkupRegions(target string, protected map[string]string) [][2]int {
+	raw := protectedOccurrences(target, protected)
+	raw = append(raw, rubyRegions(target)...)
 	if len(raw) == 0 {
 		return nil
 	}
-	sort.Slice(raw, func(i, j int) bool {
-		// 同起点时长区域在前：保证前缀关系（如 <br> 与 <br/>）中较长区域被保留，
-		// 避免 unstable 排序叠加 map 随机迭代顺序导致非确定性漏屏蔽。
-		if raw[i][0] != raw[j][0] {
-			return raw[i][0] < raw[j][0]
+	return mergeRegions(raw)
+}
+
+// mergeRegions 对 rune 偏移区域排序并合并重叠区域，返回升序、已合并的并集。
+// 同起点时长区域在前：保证前缀关系（如 <br> 与 <br/>）中较长区域被保留，
+// 避免 unstable 排序叠加调用方输入顺序导致非确定性漏屏蔽。
+// 注意：本函数会就地排序入参切片，调用方应传入自有切片。
+func mergeRegions(in [][2]int) [][2]int {
+	if len(in) == 0 {
+		return nil
+	}
+	sort.Slice(in, func(i, j int) bool {
+		if in[i][0] != in[j][0] {
+			return in[i][0] < in[j][0]
 		}
-		return raw[i][1] > raw[j][1]
+		return in[i][1] > in[j][1]
 	})
-	out := make([][2]int, 0, len(raw))
-	for _, r := range raw {
+	out := make([][2]int, 0, len(in))
+	for _, r := range in {
 		if len(out) == 0 {
 			out = append(out, r)
 			continue

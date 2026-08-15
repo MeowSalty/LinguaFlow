@@ -150,3 +150,28 @@ func TestPunctuationMissing_LatinParenAbsent(t *testing.T) {
 		t.Errorf("matched=%q", matched)
 	}
 }
+
+// 源文含 <span class="tcy">…</span>，其属性中的两个 ASCII " 不应被当源文引号整类缺失来误报。
+// 这是误报1 的回归复现：旧逻辑只在译文侧屏蔽区域、源文未屏蔽，class 属性的两个 " 被计入源文，
+// 而译文同形 span 被 StripRegions 删去 → src 计数≥2、tgt==0 → 触发。修复后源文同步屏蔽 → 不触发。
+func TestPunctuationMissing_SourceSpanAttributeQuotesNotReported(t *testing.T) {
+	c := NewPunctuationMissingChecker()
+	span := `<span class="tcy">10</span>`
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: span + "件の表示", TargetText: span + "件的显示", Protected: map[string]string{"__LF_000001__": span}},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("span attribute quotes in source should not trigger punctuation_missing: %+v", issues)
+	}
+}
+
+// 源文/译文含 ruby 元素时，ruby 不含引号/括号，不应误报。
+func TestPunctuationMissing_RubyInSourceNotReported(t *testing.T) {
+	c := NewPunctuationMissingChecker()
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "見て<ruby>呪<rt>じゅ</rt></ruby>術", TargetText: "看<ruby>咒<rt>zhou</rt></ruby>术", Protected: nil},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("ruby in source should not trigger punctuation_missing: %+v", issues)
+	}
+}

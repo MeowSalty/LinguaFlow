@@ -26,12 +26,8 @@ func (c *WhitespaceIrregularChecker) Check(_ context.Context, segments []CheckIn
 		if tgt == "" {
 			continue
 		}
-		cleanTgt := tgt
-		var regions [][2]int
-		if len(seg.Protected) > 0 {
-			regions = ProtectedRegions(tgt, seg.Protected)
-			cleanTgt = StripRegions(tgt, regions)
-		}
+		regions := InlineMarkupRegions(tgt, seg.Protected)
+		cleanTgt := StripRegions(tgt, regions)
 		if hit := findIrregularWhitespace(cleanTgt); hit != "" {
 			span := LocateSpanExcludingRegions(tgt, hit, regions)
 			if span == nil {
@@ -129,10 +125,7 @@ func (c *RepeatedSpaceChecker) Check(_ context.Context, segments []CheckInput) [
 		if tgt == "" {
 			continue
 		}
-		var regions [][2]int
-		if len(seg.Protected) > 0 {
-			regions = ProtectedRegions(tgt, seg.Protected)
-		}
+		regions := InlineMarkupRegions(tgt, seg.Protected)
 		// RepeatedSpaceChecker 在原串上检测，再过滤掉落在保护区内的命中。
 		// 不使用 StripRegions：拼接非保护区片段会在边界处制造原文不存在的连续空格 / CJK 间空格。
 		for _, m := range findRepeatedSpaceAll(tgt, c.cjkTarget) {

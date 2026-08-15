@@ -100,3 +100,37 @@ func TestWidthMix_SpanOutsideProtected(t *testing.T) {
 		t.Fatalf("want start=7 end=8 (outside protected), got start=%d end=%d", *span.TargetStart, *span.TargetEnd)
 	}
 }
+
+// ruby 标签的 <> 不在 Protected 时，width_mix 仍应屏蔽整个 <ruby> 元素，不得把 < 当半角标点误报。
+func TestWidthMix_RubyTagNotReported(t *testing.T) {
+	c := NewWidthMixChecker("zh")
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "雷神皇", TargetText: "<ruby>雷神皇<rt>艾福达尔</rt></ruby>", Protected: nil},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("ruby tags should not trigger width_mix: %+v", issues)
+	}
+}
+
+// ruby 与 Protected span 同时存在时，两者区域并集屏蔽。
+func TestWidthMix_RubyWithProtectedSpan(t *testing.T) {
+	c := NewWidthMixChecker("zh")
+	span := `<a href="x">連</a>`
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "x", TargetText: span + "<ruby>雷<rt>lei</rt></ruby>神", Protected: map[string]string{"__LF_000001__": span}},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("ruby + protected span should not trigger width_mix: %+v", issues)
+	}
+}
+
+// 真阳性能被检测；不因屏蔽 ruby 而漏掉保护区外的真实半角标点。
+func TestWidthMix_RealHalfwidthOutsideRubyReported(t *testing.T) {
+	c := NewWidthMixChecker("zh")
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "x", TargetText: "你好,世界<ruby>雷<rt>lei</rt></ruby>神", Protected: nil},
+	})
+	if len(issues) != 1 {
+		t.Fatalf("want 1 for real halfwidth comma outside ruby, got %d: %+v", len(issues), issues)
+	}
+}
