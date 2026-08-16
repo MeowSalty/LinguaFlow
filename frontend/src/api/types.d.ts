@@ -2709,6 +2709,11 @@ export interface components {
             enabled: boolean;
             /** @description 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端 */
             backend_id?: number;
+            /**
+             * @description 注音对齐重试轮数（仅 enabled=true 时生效）
+             * @default 1
+             */
+            max_attempts: number;
         };
         /** @description 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。 */
         TranslateSegmentFilterConfig: {

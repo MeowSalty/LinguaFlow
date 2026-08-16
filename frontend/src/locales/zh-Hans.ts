@@ -1703,6 +1703,8 @@ const messages = {
       enabled: '启用注音对齐重试',
       backend: '注音对齐后端',
       backendPlaceholder: '留空则使用翻译主后端',
+      maxAttempts: '重试轮数',
+      maxAttemptsHint: '仅启用时生效，最少 1 轮',
     },
     round: {
       mode: '轮次模式',

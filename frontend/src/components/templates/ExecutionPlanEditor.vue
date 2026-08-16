@@ -80,6 +80,7 @@ const DEFAULT_ROUND: RoundModel = {
 const DEFAULT_RUBY_RETRY: ExecutionPlanRubyRetryConfig = {
   enabled: false,
   backend_id: 0,
+  max_attempts: 1,
 }
 
 // ─── 工具函数 ────────────────────────────────────────────────
@@ -197,6 +198,7 @@ function mergeRubyRetry(
   return {
     enabled: source.enabled ?? DEFAULT_RUBY_RETRY.enabled,
     backend_id: source.backend_id ?? DEFAULT_RUBY_RETRY.backend_id,
+    max_attempts: source.max_attempts ?? DEFAULT_RUBY_RETRY.max_attempts,
   }
 }
 
@@ -401,19 +403,37 @@ const emitUpdate = (): void => {
         <NSwitch v-model:value="rubyRetryModel.enabled" size="small" :disabled="disabled" />
       </div>
       <div :class="{ 'opacity-50 pointer-events-none': !rubyRetryModel.enabled }">
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.rubyRetry.backend') }}
-          </div>
-          <NSelect
-            v-model:value="rubyRetryModel.backend_id"
-            :options="backends"
-            size="small"
-            :disabled="disabled || !rubyRetryModel.enabled"
-            clearable
-            :placeholder="t('executionPlanEditor.rubyRetry.backendPlaceholder')"
-          />
-        </div>
+        <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
+          <NGi>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.rubyRetry.backend') }}
+            </div>
+            <NSelect
+              v-model:value="rubyRetryModel.backend_id"
+              :options="backends"
+              size="small"
+              :disabled="disabled || !rubyRetryModel.enabled"
+              clearable
+              :placeholder="t('executionPlanEditor.rubyRetry.backendPlaceholder')"
+            />
+          </NGi>
+          <NGi>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.rubyRetry.maxAttempts') }}
+            </div>
+            <NInputNumber
+              v-model:value="rubyRetryModel.max_attempts"
+              :min="1"
+              :max="10"
+              size="small"
+              :disabled="disabled || !rubyRetryModel.enabled"
+              class="w-full"
+            />
+            <div class="mt-1 text-[11px] text-lf-text-subtle">
+              {{ t('executionPlanEditor.rubyRetry.maxAttemptsHint') }}
+            </div>
+          </NGi>
+        </NGrid>
       </div>
     </NCard>
 

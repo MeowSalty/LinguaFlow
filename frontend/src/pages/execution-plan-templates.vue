@@ -59,6 +59,7 @@ const DEFAULT_ROUND: ExecutionRoundConfig = {
 const DEFAULT_RUBY_RETRY: ExecutionPlanRubyRetryConfig = {
   enabled: false,
   backend_id: 0,
+  max_attempts: 1,
 }
 
 function deepClone<T>(obj: T): T {
@@ -298,9 +299,7 @@ const buildPayload = (): CreateRequest => {
   if (formModel.description.trim()) {
     payload.description = formModel.description.trim()
   }
-  if (formModel.ruby_retry.enabled) {
-    payload.ruby_retry = deepClone(formModel.ruby_retry)
-  }
+  payload.ruby_retry = deepClone(formModel.ruby_retry)
   return payload
 }
 
