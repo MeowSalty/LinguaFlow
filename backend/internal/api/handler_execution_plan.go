@@ -196,6 +196,10 @@ func toRubyRetryConfigAPI(rr schema.ExecutionPlanRubyRetryConfig) ExecutionPlanR
 	if rr.BackendID > 0 {
 		result.BackendId = &rr.BackendID
 	}
+	if rr.MaxAttempts > 0 {
+		v := rr.MaxAttempts
+		result.MaxAttempts = &v
+	}
 	return result
 }
 
@@ -209,6 +213,9 @@ func parseRubyRetryConfig(api *ExecutionPlanRubyRetryConfig) schema.ExecutionPla
 	}
 	if api.BackendId != nil {
 		result.BackendID = *api.BackendId
+	}
+	if api.MaxAttempts != nil {
+		result.MaxAttempts = *api.MaxAttempts
 	}
 	return result
 }

@@ -16,7 +16,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
-// restoreSegmentRuby 对单个段落执行注音还原：提取 → 过滤 → 还原 → 失败则 LLM 对齐重试。
+// restoreSegmentRuby 对单个段落执行注音还原：提取统一 items → 过滤 → 还原，
+// 未对齐条目存在且配置了重试后端时执行定向对齐重试（仅发未对齐条目）。
 func restoreSegmentRuby(
 	ctx context.Context,
 	seg *Segment,
@@ -29,65 +30,97 @@ func restoreSegmentRuby(
 	isTextMode bool,
 	roundIndex int,
 	repairOpt repair.Options,
+	rubyRetryAttempts int,
 ) {
-	rubyOutput := extractRubyOutput(seg)
-	logger.Info("restoreSegmentRuby: extractRubyOutput",
-		"seg", seg.ID,
-		"output_len", len(rubyOutput),
-		"target_head", headSnippet(seg.Target, 100),
-	)
-	if len(rubyOutput) == 0 {
+	items := extractRubyItemsFromSeg(seg)
+	if len(items) == 0 {
 		return
 	}
 
-	filtered := filterByKinds(rubyOutput, keepSet)
-	logger.Info("restoreSegmentRuby: filterByKinds",
-		"seg", seg.ID,
-		"filtered_len", len(filtered),
-	)
-
-	// 全部被过滤，清理内联标记后直接返回
-	if len(filtered) == 0 {
-		restorer.Restore(seg, nil, nil)
+	// inline：marker 位置天然自洽，按标记就地组装，不参与 id 关联与定向重试
+	if strings.Contains(seg.Target, "⟦ruby:") {
+		markers := ruby.ParseInlineMarkers(seg.Target)
+		filtered := filterByKinds(markers, keepSet)
+		restorer.RestoreInlineMarkers(seg, filtered)
 		return
 	}
 
-	originals := extractRubyAnnotationsFromSeg(seg)
-	before := seg.Target
-	result, err := restorer.Restore(seg, filtered, originals)
-	if err != nil {
-		logger.Warn("ruby restore failed, will retry alignment", "seg", seg.ID, "err", err)
-	} else if result.IsFull() {
-		return
-	} else if result.Matched == 0 {
-		logger.Warn("ruby restore: no base matched", "seg", seg.ID)
-	} else {
-		logger.Warn("ruby restore: partial match, will retry alignment",
-			"seg", seg.ID, "matched", result.Matched, "total", result.Total)
-		seg.Target = before
+	translation := seg.Target // 干净译文快照（未插标签）
+	filtered := filterItemsByKind(items, keepSet)
+	if len(filtered) > 0 {
+		result, err := restorer.RestoreItems(seg, filtered)
+		if err != nil {
+			logger.Warn("ruby restore failed, will retry alignment", "seg", seg.ID, "err", err)
+		} else if result.IsFull() && len(ruby.Unaligned(items)) == 0 {
+			return
+		}
+		// 回退到干净译文：定向重试的 prompt 必须看到未插标签的译文
+		seg.Target = translation
 	}
 
-	if len(backends) > 0 && ctx.Err() == nil {
-		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter, isTextMode, roundIndex, repairOpt)
+	attempts := rubyRetryAttempts
+	if attempts <= 0 {
+		attempts = 1
+	}
+	if len(backends) > 0 && ctx.Err() == nil && attempts > 0 && len(ruby.Unaligned(items)) > 0 {
+		retryAlignSegmentDirected(ctx, seg, items, translation, restorer, keepSet, backends,
+			retryPolicy, logger, reporter, isTextMode, roundIndex, repairOpt, attempts)
+	}
+
+	// 最终还原：以最后一次合并后的 items 为准
+	filtered = filterItemsByKind(items, keepSet)
+	if len(filtered) > 0 {
+		restorer.RestoreItems(seg, filtered)
 	}
 }
 
-// extractRubyOutput 从段落中提取注音条目（统一入口）。
-// 优先从 seg.Meta["ruby_output"] 提取（JSON 模式）；
-// 否则从译文中的内联标记提取（text 模式 inline_markers）。
-func extractRubyOutput(seg *Segment) []ruby.OutputEntry {
-	if entries := extractRubyOutputFromSeg(seg); len(entries) > 0 {
-		return entries
+// extractRubyItemsFromSeg 从 Segment.Meta 提取统一注音条目。
+// 优先 seg.Meta["ruby_items"]（[]ruby.Item，主路径）；
+// 回退旧 key seg.Meta["ruby_output"]（[]ruby.OutputEntry，测试/兼容，条目视为已对齐）。
+func extractRubyItemsFromSeg(seg *Segment) []ruby.Item {
+	if raw, ok := seg.Meta["ruby_items"]; ok {
+		if items, ok := raw.([]ruby.Item); ok {
+			return items
+		}
 	}
-	parsed := ruby.ParseInlineMarkers(seg.Target)
-	return parsed
+	if raw, ok := seg.Meta["ruby_output"]; ok {
+		if entries, ok := raw.([]ruby.OutputEntry); ok {
+			items := make([]ruby.Item, len(entries))
+			for i, e := range entries {
+				items[i] = ruby.Item{
+					ID:         e.ID,
+					TargetBase: e.Base,
+					TargetText: e.Text,
+					Kind:       e.Kind,
+					Aligned:    true,
+				}
+			}
+			return items
+		}
+	}
+	return nil
 }
 
-// retryAlignSegment 对单个段落执行 LLM 注音对齐重试：LLM 分类 → 过滤 → 还原。
-func retryAlignSegment(
+// filterItemsByKind 按 preserve_kinds 过滤统一 items（filterByKinds 的 Item 版本）。
+// Kind 为空字符串的条目视为未分类，保留不过滤（向后兼容旧数据）。
+func filterItemsByKind(items []ruby.Item, keep map[string]bool) []ruby.Item {
+	var result []ruby.Item
+	for _, it := range items {
+		if it.Kind == "" || keep[it.Kind] {
+			result = append(result, it)
+		}
+	}
+	return result
+}
+
+// retryAlignSegmentDirected 对单个段落执行定向对齐重试：每轮只下发仍未对齐的条目
+// （{id, source_base, source_text}），用 LLM 返回的 OutputEntry 按 id 合并回 items。
+// 一轮无新增对齐（含空输出/后端全失败）即提前停，避免空转。
+func retryAlignSegmentDirected(
 	ctx context.Context,
 	seg *Segment,
-	originals []ruby.Annotation,
+	items []ruby.Item,
+	translation string,
 	restorer *ruby.Restorer,
 	keepSet map[string]bool,
 	backends []backend.Backend,
@@ -97,114 +130,100 @@ func retryAlignSegment(
 	isTextMode bool,
 	roundIndex int,
 	repairOpt repair.Options,
+	attempts int,
 ) {
-	if len(originals) == 0 {
-		return
-	}
-
-	var sys, user string
-	var schema map[string]any
-	if isTextMode {
-		sys, user = buildAlignmentPromptText(seg, originals)
-	} else {
-		sys, user, schema = buildAlignmentPrompt(seg, originals)
-	}
-	req := backend.Request{
-		System:     sys,
-		User:       user,
-		JSONSchema: schema,
-	}
-	if isTextMode {
-		req.ResponseFormat = "none"
-	}
-
-	var resp *backend.Response
-	var callErr error
-	var triedBackends []string
-	for _, b := range backends {
-		triedBackends = append(triedBackends, b.Name())
-		attemptStart := time.Now()
-		resp, callErr = callRubyBackend(ctx, b, req, retryPolicy)
-		attemptMs := time.Since(attemptStart).Milliseconds()
-		if callErr != nil {
-			emitRubyAlignmentBatchEvent(reporter, seg, b.Name(), append([]string(nil), triedBackends...),
-				"failed", "backend_error", callErr.Error(), attemptMs, 0, 0, user, "",
-				rubyHTTPStatusFromErr(callErr), roundIndex, 0, sys, user, req.ResponseFormat, req.JSONSchema)
-			logger.Warn("ruby alignment call failed, trying next backend",
-				"seg", seg.ID, "backend", b.Name(), "err", callErr)
-			resp = nil
-			continue
+	for attempt := 0; attempt < attempts; attempt++ {
+		missing := ruby.Unaligned(items)
+		if len(missing) == 0 {
+			return
 		}
+
+		var sys, user string
+		var schema map[string]any
+		if isTextMode {
+			sys, user = buildDirectedAlignmentPromptText(seg, missing, translation)
+		} else {
+			sys, user, schema = buildDirectedAlignmentPrompt(seg, missing, translation)
+		}
+		req := backend.Request{
+			System:     sys,
+			User:       user,
+			JSONSchema: schema,
+		}
+		if isTextMode {
+			req.ResponseFormat = "none"
+		}
+
+		var resp *backend.Response
+		var callErr error
+		var triedBackends []string
+		attemptMs := int64(0)
+		for _, b := range backends {
+			triedBackends = append(triedBackends, b.Name())
+			callStart := time.Now()
+			resp, callErr = callRubyBackend(ctx, b, req, retryPolicy)
+			attemptMs = time.Since(callStart).Milliseconds()
+			if callErr != nil {
+				emitRubyAlignmentBatchEvent(reporter, seg, b.Name(), append([]string(nil), triedBackends...),
+					"failed", "backend_error", callErr.Error(), attemptMs, 0, 0, user, "",
+					rubyHTTPStatusFromErr(callErr), roundIndex, attempt, sys, user, req.ResponseFormat, req.JSONSchema)
+				logger.Warn("ruby alignment call failed, trying next backend",
+					"seg", seg.ID, "backend", b.Name(), "err", callErr)
+				resp = nil
+				continue
+			}
+			break
+		}
+		if callErr != nil && len(triedBackends) > 0 {
+			logger.Warn("ruby alignment directed retry exhausted all backends",
+				"seg", seg.ID, "err", callErr)
+			return
+		}
+
+		var newOutput []ruby.OutputEntry
+		if isTextMode {
+			newOutput = parseAlignmentResponseText(resp.Text, len(missing))
+		} else {
+			newOutput, _ = parseAlignmentResponse(resp.Text, repairOpt)
+		}
+
+		before := len(ruby.Unaligned(items))
+		if len(newOutput) > 0 {
+			ruby.MergeByOutput(items, newOutput)
+		}
+		after := len(ruby.Unaligned(items))
 
 		status := "success"
 		errorType := ""
 		errorMsg := ""
-		receivedContent := resp.Text
-		inputTokens := resp.Usage.PromptTokens
-		outputTokens := resp.Usage.CompletionTokens
-
-		newOutput, repaired := parseAlignmentResponse(resp.Text, repairOpt)
-		usedJSONPath := true
-		if isTextMode && len(newOutput) == 0 {
-			newOutput = parseAlignmentResponseText(resp.Text, len(originals))
-			usedJSONPath = false
-		}
-		if usedJSONPath && len(repaired) > 0 {
-			logger.Info("ruby alignment response repaired",
-				"seg", seg.ID, "ops", repaired)
-		}
 		if len(newOutput) == 0 {
 			status = "partial"
 			errorType = "empty_output"
-			logger.Warn("ruby alignment: empty output", "seg", seg.ID, "resp_head", headSnippet(resp.Text, 200))
+			logger.Warn("ruby alignment directed retry: empty output",
+				"seg", seg.ID, "resp_head", headSnippet(resp.Text, 200))
+		} else if after >= before {
+			status = "partial"
+			errorType = "no_match"
+			logger.Warn("ruby alignment directed retry: no new alignment",
+				"seg", seg.ID, "before", before, "after", after)
+		} else if after == 0 {
+			logger.Info("ruby alignment directed retry succeeded", "seg", seg.ID)
 		} else {
-			if seg.Meta == nil {
-				seg.Meta = make(map[string]any)
-			}
-			seg.Meta["ruby_output"] = newOutput
-
-			filtered := filterByKinds(newOutput, keepSet)
-			if len(filtered) == 0 {
-				status = "partial"
-				errorType = "filtered_out"
-				logger.Info("alignment output filtered out by preserve_kinds", "seg", seg.ID)
-			} else {
-				before := seg.Target
-				result, err := restorer.Restore(seg, filtered, originals)
-				if err != nil {
-					status = "partial"
-					errorType = "restore_error"
-					errorMsg = err.Error()
-					logger.Warn("ruby restore after alignment retry failed",
-						"seg", seg.ID, "err", err)
-				} else if result.Matched == 0 {
-					status = "partial"
-					errorType = "no_match"
-					logger.Warn("ruby restore after alignment retry: still no match",
-						"seg", seg.ID)
-				} else if !result.IsFull() {
-					status = "partial"
-					errorType = "partial_match"
-					seg.Target = before
-					logger.Warn("ruby restore after alignment retry: partial match",
-						"seg", seg.ID, "matched", result.Matched, "total", result.Total)
-				} else {
-					status = "success"
-					errorType = ""
-					logger.Info("ruby restore succeeded after alignment retry",
-						"seg", seg.ID)
-				}
-			}
+			status = "partial"
+			errorType = "partial_match"
+			logger.Warn("ruby alignment directed retry: partial match",
+				"seg", seg.ID, "before", before, "after", after)
 		}
 
-		emitRubyAlignmentBatchEvent(reporter, seg, b.Name(), append([]string(nil), triedBackends...),
-			status, errorType, errorMsg, attemptMs, inputTokens, outputTokens, user, receivedContent, 0,
-			roundIndex, 0, sys, user, req.ResponseFormat, req.JSONSchema)
-		break
-	}
-	if callErr != nil && len(triedBackends) > 0 {
-		logger.Warn("ruby alignment retry exhausted all backends",
-			"seg", seg.ID, "err", callErr)
+		emitRubyAlignmentBatchEvent(reporter, seg, triedBackends[len(triedBackends)-1],
+			append([]string(nil), triedBackends...),
+			status, errorType, errorMsg, attemptMs,
+			resp.Usage.PromptTokens, resp.Usage.CompletionTokens,
+			user, resp.Text, 0, roundIndex, attempt, sys, user, req.ResponseFormat, req.JSONSchema)
+
+		if after >= before || after == 0 {
+			return
+		}
 	}
 }
 
@@ -277,47 +296,22 @@ func emitRubyAlignmentBatchEvent(
 	obs.OnBatchEvent(evt)
 }
 
-// extractRubyOutputFromSeg 从 Segment.Meta 中提取 ruby_output。
-func extractRubyOutputFromSeg(seg *Segment) []ruby.OutputEntry {
-	raw, ok := seg.Meta["ruby_output"]
-	if !ok {
-		return nil
-	}
-	entries, ok := raw.([]ruby.OutputEntry)
-	if !ok {
-		return nil
-	}
-	return entries
-}
-
-// extractRubyAnnotationsFromSeg 从 Segment.Meta 中提取 ruby_annotations。
-func extractRubyAnnotationsFromSeg(seg *Segment) []ruby.Annotation {
-	raw, ok := seg.Meta["ruby_annotations"]
-	if !ok {
-		return nil
-	}
-	annots, ok := raw.([]ruby.Annotation)
-	if !ok {
-		return nil
-	}
-	return annots
-}
-
 // rubyTagRe 用于从 OriginalSource 中剥离 ruby 标签。
 var rubyTagRe = regexp.MustCompile(`<ruby>(.*?)<rt>(.*?)</rt>(.*?)</ruby>`)
 
-// buildAlignmentPrompt 构建注音对齐的 system/user 消息和 JSON Schema。
-func buildAlignmentPrompt(seg *Segment, originals []ruby.Annotation) (string, string, map[string]any) {
-	sys := `你是注音对齐工具。给定原文、译文和注音元数据，确定每个注音条目在译文中对应的文本。
+// buildDirectedAlignmentPrompt 构建定向注音对齐的 system/user 消息和 JSON Schema。
+// 只下发仍未对齐的条目（missing，带 id/source_base/source_text），要求 LLM 回显 id。
+func buildDirectedAlignmentPrompt(seg *Segment, missing []ruby.Item, translation string) (string, string, map[string]any) {
+	sys := `你是注音对齐工具。给定原文、译文和尚未对齐的注音条目，确定每个条目在译文中对应的文本。
 
 规则：
+- "id" 必须回显输入条目的 id；无法在译文中找到对应文本的条目可省略 id。
 - "base" 必须是译文中实际出现的文本（不是原文基底），专有名词等未翻译的词除外。
 - "text" 是标注文本：phonetic/semantic 保留原文（不翻译），creative 需要翻译。
 - "kind" 是注音分类：
   · phonetic（音注）：纯读音标注。
   · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
   · creative（创意注音）：基底与标注存在语义落差。
-- 条目顺序与输入 annotations 顺序一致。
 - 仅输出 JSON，无额外文字。`
 
 	// 取原文（优先 OriginalSource，去掉 ruby 标签）
@@ -327,24 +321,24 @@ func buildAlignmentPrompt(seg *Segment, originals []ruby.Annotation) (string, st
 	}
 	source = stripRubyTagsForAlignment(source)
 
-	type annIn struct {
-		Base string `json:"base"`
-		Text string `json:"text"`
-		Kind string `json:"kind"`
+	type missIn struct {
+		ID         string `json:"id"`
+		SourceBase string `json:"source_base"`
+		SourceText string `json:"source_text"`
 	}
-	anns := make([]annIn, len(originals))
-	for i, a := range originals {
-		anns[i] = annIn{Base: a.Base, Text: a.Text}
+	miss := make([]missIn, len(missing))
+	for i, it := range missing {
+		miss[i] = missIn{ID: it.ID, SourceBase: it.SourceBase, SourceText: it.SourceText}
 	}
 
 	userMsg := struct {
-		Source      string  `json:"source"`
-		Translation string  `json:"translation"`
-		Annotations []annIn `json:"annotations"`
+		Source      string   `json:"source"`
+		Translation string   `json:"translation"`
+		Missing     []missIn `json:"missing"`
 	}{
 		Source:      source,
-		Translation: seg.Target,
-		Annotations: anns,
+		Translation: translation,
+		Missing:     miss,
 	}
 	userBytes, _ := json.Marshal(userMsg)
 
@@ -356,6 +350,7 @@ func buildAlignmentPrompt(seg *Segment, originals []ruby.Annotation) (string, st
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
+						"id":   map[string]any{"type": "string"},
 						"base": map[string]any{"type": "string"},
 						"text": map[string]any{"type": "string"},
 						"kind": map[string]any{
@@ -383,10 +378,11 @@ func stripRubyTagsForAlignment(s string) string {
 	})
 }
 
-// buildAlignmentPromptText 构建 text 模式的注音对齐提示词。
-// 用户消息为纯文本格式，LLM 输出每行一条 "base | text | kind"。
-func buildAlignmentPromptText(seg *Segment, originals []ruby.Annotation) (string, string) {
-	sys := `你是注音对齐工具。给定原文、译文和注音元数据，确定每个注音条目在译文中对应的文本。
+// buildDirectedAlignmentPromptText 构建 text 模式的定向注音对齐提示词。
+// 用户消息列出仍未对齐的条目（id / source_base / source_text），
+// LLM 输出每行一条 "base | text | kind[ | id]"（id 可选）。
+func buildDirectedAlignmentPromptText(seg *Segment, missing []ruby.Item, translation string) (string, string) {
+	sys := `你是注音对齐工具。给定原文、译文和尚未对齐的注音条目，确定每个条目在译文中对应的文本。
 
 规则：
 - "base" 必须是译文中实际出现的文本（不是原文基底），专有名词等未翻译的词除外。
@@ -395,8 +391,8 @@ func buildAlignmentPromptText(seg *Segment, originals []ruby.Annotation) (string
   · phonetic（音注）：纯读音标注。
   · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
   · creative（创意注音）：基底与标注存在语义落差。
-- 条目顺序与输入 annotations 顺序一致。
-- 每行输出一条，格式为：base | text | kind
+- 每行输出一条，格式为：base | text | kind | id
+  （id 可省略：无法在译文中找到对应文本的条目不输出 id）
 - 仅输出对齐结果，无额外文字。`
 
 	source := seg.OriginalSource
@@ -409,25 +405,26 @@ func buildAlignmentPromptText(seg *Segment, originals []ruby.Annotation) (string
 	sb.WriteString("原文：")
 	sb.WriteString(source)
 	sb.WriteString("\n译文：")
-	sb.WriteString(seg.Target)
-	sb.WriteString("\n注音元数据：\n")
-	for i, a := range originals {
+	sb.WriteString(translation)
+	sb.WriteString("\n未对齐条目：\n")
+	for i, it := range missing {
 		sb.WriteString(strconv.Itoa(i + 1))
 		sb.WriteString(". ")
-		sb.WriteString(a.Base)
+		sb.WriteString(it.ID)
 		sb.WriteString(" / ")
-		sb.WriteString(a.Text)
+		sb.WriteString(it.SourceBase)
+		sb.WriteString(" / ")
+		sb.WriteString(it.SourceText)
 		sb.WriteString("\n")
 	}
 
 	return sys, sb.String()
 }
 
-// alignmentTextLineRe 匹配 text 模式对齐响应行：base | text | kind
-var alignmentTextLineRe = regexp.MustCompile(`^(.+?)\s*\|\s*(.+?)\s*\|\s*(\w+)$`)
-
 // parseAlignmentResponseText 解析 text 模式的对齐响应。
-// 每行格式：base | text | kind
+// 每行格式：base | text | kind（3 字段）或 base | text | kind | id（4 字段）。
+// 委托 ruby.ParseSectionLine 做右侧分割解析（与 section 路径同源），
+// 避免两套解析器在容错与 id 提取规则上漂移。trim/空 base 过滤统一走 ruby.NormalizeOutputEntries。
 func parseAlignmentResponseText(text string, expectedCount int) []ruby.OutputEntry {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
 	entries := make([]ruby.OutputEntry, 0, expectedCount)
@@ -436,17 +433,17 @@ func parseAlignmentResponseText(text string, expectedCount int) []ruby.OutputEnt
 		if line == "" {
 			continue
 		}
-		m := alignmentTextLineRe.FindStringSubmatch(line)
-		if m == nil {
+		base, entryText, kind, id, ok := ruby.ParseSectionLine(line)
+		if !ok {
 			continue
 		}
 		entries = append(entries, ruby.OutputEntry{
-			Base: strings.TrimSpace(m[1]),
-			Text: strings.TrimSpace(m[2]),
-			Kind: strings.TrimSpace(m[3]),
+			Base: base,
+			Text: entryText,
+			Kind: kind,
+			ID:   id,
 		})
 	}
-	// trim/合法性过滤统一走 ruby.NormalizeOutputEntries（与 JSON 路径一致）。
 	return ruby.NormalizeOutputEntries(entries)
 }
 

@@ -235,3 +235,43 @@ func TestTryRepairText_SectionRubyEmpty(t *testing.T) {
 		t.Errorf("expected empty ruby output, got %#v", r.RubyOutput)
 	}
 }
+
+// TestTryRepairText_SectionRubyFourField section 模式 4 字段行：
+// "base | text | kind | item_id" 优先，item id 透传到 OutputEntry.ID。
+func TestTryRepairText_SectionRubyFourField(t *testing.T) {
+	in := "[1] I want water\n\n[ruby]\n1: I | aɪ | phonetic | 1\n"
+	r := TryRepairText(in, []string{"1"}, textOpts)
+	if r.Fatal {
+		t.Fatalf("unexpected fatal: %v (repaired=%v)", r.ParseErr, r.Repaired)
+	}
+	if len(r.RubyOutput["1"]) != 1 {
+		t.Fatalf("expected 1 ruby entry, got %#v", r.RubyOutput)
+	}
+	entry := r.RubyOutput["1"][0]
+	if entry.ID != "1" {
+		t.Errorf("expected id \"1\", got %q", entry.ID)
+	}
+	if entry.Base != "I" || entry.Text != "aɪ" || entry.Kind != "phonetic" {
+		t.Errorf("wrong entry: %#v", entry)
+	}
+}
+
+// TestTryRepairText_SectionRubyThreeFieldNoID section 模式 3 字段行：
+// "base | text | kind" 回退位置关联，item id 为空。
+func TestTryRepairText_SectionRubyThreeFieldNoID(t *testing.T) {
+	in := "[1] I want water\n\n[ruby]\n1: I | aɪ | phonetic\n"
+	r := TryRepairText(in, []string{"1"}, textOpts)
+	if r.Fatal {
+		t.Fatalf("unexpected fatal: %v (repaired=%v)", r.ParseErr, r.Repaired)
+	}
+	if len(r.RubyOutput["1"]) != 1 {
+		t.Fatalf("expected 1 ruby entry, got %#v", r.RubyOutput)
+	}
+	entry := r.RubyOutput["1"][0]
+	if entry.ID != "" {
+		t.Errorf("expected empty id for 3-field line, got %q", entry.ID)
+	}
+	if entry.Base != "I" || entry.Kind != "phonetic" {
+		t.Errorf("wrong entry: %#v", entry)
+	}
+}

@@ -88,6 +88,7 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		inlineConflictStr,
 		opts.Logger,
 		opts.Reporter,
+		opts.RubyRetryAttempts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("engine: build rounds: %w", err)
