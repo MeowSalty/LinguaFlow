@@ -19,6 +19,7 @@ type Options struct {
 	Rounds            []Round
 	BootstrapBackends []backend.Backend
 	RubyRetryBackends []backend.Backend
+	RubyRetryAttempts int // 注音对齐定向重试轮数；<=0 由 handler 兜底为 1（仅 backends 非空时生效）
 	Config            *Config
 	Logger            *slog.Logger
 	Reporter          progress.Reporter
@@ -184,13 +185,14 @@ func buildPipelineRounds(
 	inlineConflictStr string,
 	logger *slog.Logger,
 	reporter progress.Reporter,
+	rubyRetryAttempts int,
 ) ([]pipeline.Round, error) {
 	out := make([]pipeline.Round, 0, len(configs))
 	for _, rc := range configs {
 		round, err := buildSinglePipelineRound(
 			rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
 			defaultRepair, inlineBootstrap, maxTermsPer1000, minSourceLen,
-			inlineConflictStr, logger, reporter,
+			inlineConflictStr, logger, reporter, rubyRetryAttempts,
 		)
 		if err != nil {
 			return nil, err
@@ -213,6 +215,7 @@ func buildSinglePipelineRound(
 	inlineConflictStr string,
 	logger *slog.Logger,
 	reporter progress.Reporter,
+	rubyRetryAttempts int,
 ) (pipeline.Round, error) {
 	if rc.Extract != nil {
 		return buildExtractPipelineRound(rc, glossaryRes, logger, reporter)
@@ -226,7 +229,7 @@ func buildSinglePipelineRound(
 	return buildTranslatePipelineRound(
 		rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
 		defaultRepair, inlineBootstrap, maxTermsPer1000, minSourceLen,
-		inlineConflictStr, logger, reporter,
+		inlineConflictStr, logger, reporter, rubyRetryAttempts,
 	)
 }
 
@@ -243,6 +246,7 @@ func buildTranslatePipelineRound(
 	inlineConflictStr string,
 	logger *slog.Logger,
 	reporter progress.Reporter,
+	rubyRetryAttempts int,
 ) (pipeline.Round, error) {
 	t := rc.Translate
 	if t == nil {
@@ -300,6 +304,7 @@ func buildTranslatePipelineRound(
 		Postprocess:            t.Postprocess,
 		RubyRestorer:           rubyRestorer,
 		RubyRetryBackends:      rubyRetryBackends,
+		RubyRetryAttempts:      rubyRetryAttempts,
 		InlineBootstrap:        inlineBootstrap,
 		MaxTermsPer1000Chars:   maxTermsPer1000,
 		MinBootstrapSourceLen:  minSourceLen,

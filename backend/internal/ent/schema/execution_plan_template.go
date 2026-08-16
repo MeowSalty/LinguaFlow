@@ -76,8 +76,9 @@ type SemanticQARoundConfig struct {
 
 // ExecutionPlanRubyRetryConfig 注音对齐重试配置。
 type ExecutionPlanRubyRetryConfig struct {
-	Enabled   bool `json:"enabled"    yaml:"enabled"`    // 是否启用注音对齐重试
-	BackendID int  `json:"backend_id" yaml:"backend_id"` // 引用的后端 ID；0 时使用翻译主后端
+	Enabled     bool `json:"enabled"              yaml:"enabled"`        // 是否启用注音对齐重试
+	BackendID   int  `json:"backend_id"           yaml:"backend_id"`     // 引用的后端 ID；0 时使用翻译主后端
+	MaxAttempts int  `json:"max_attempts,omitempty" yaml:"max_attempts"` // 注音对齐重试轮数；省略/<=0 规范化为 1
 }
 
 // RetryConfig 重试策略。

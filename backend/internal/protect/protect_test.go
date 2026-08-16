@@ -301,14 +301,14 @@ func TestExtractor_ProtectAndRestore(t *testing.T) {
 		// 模拟 LLM 返回：target = 保护后的 source
 		seg.Target = seg.Source
 
-		// 通过 Restorer 还原注音：从 Meta 中提取 ruby_annotations 并转换
+		// 通过 Restorer 还原注音：从 Meta 中提取 ruby_annotations 并转换为 Item
 		if seg.Meta != nil {
 			if annotations, ok := seg.Meta["ruby_annotations"].([]ruby.Annotation); ok {
-				rubyOutput := make([]ruby.OutputEntry, len(annotations))
+				items := make([]ruby.Item, len(annotations))
 				for i, a := range annotations {
-					rubyOutput[i] = ruby.OutputEntry{Base: a.Base, Text: a.Text}
+					items[i] = ruby.Item{TargetBase: a.Base, TargetText: a.Text}
 				}
-				if _, err := restorer.Restore(seg, rubyOutput, annotations); err != nil {
+				if _, err := restorer.RestoreItems(seg, items); err != nil {
 					t.Fatalf("restore(%q): %v", tc.input, err)
 				}
 			}
@@ -457,12 +457,12 @@ func TestMergeAdjacentPlaceholders_RoundTrip(t *testing.T) {
 		// RubyRestorer 还原注音
 		if seg.Meta != nil {
 			if annotations, ok := seg.Meta["ruby_annotations"].([]ruby.Annotation); ok {
-				rubyOutput := make([]ruby.OutputEntry, len(annotations))
+				items := make([]ruby.Item, len(annotations))
 				for i, a := range annotations {
-					rubyOutput[i] = ruby.OutputEntry{Base: a.Base, Text: a.Text}
+					items[i] = ruby.Item{TargetBase: a.Base, TargetText: a.Text}
 				}
-				if len(rubyOutput) > 0 {
-					if _, err := restorer.Restore(seg, rubyOutput, annotations); err != nil {
+				if len(items) > 0 {
+					if _, err := restorer.RestoreItems(seg, items); err != nil {
 						t.Fatalf("restore(%q): %v", tc.input, err)
 					}
 				}

@@ -129,8 +129,17 @@ type JobExecutionSnapshot struct {
 
 // ExecutionPlanRubyRetrySnapshot 注音对齐重试快照。
 type ExecutionPlanRubyRetrySnapshot struct {
-	Enabled bool            `json:"enabled"`
-	Backend BackendSnapshot `json:"backend"`
+	Enabled     bool            `json:"enabled"`
+	Backend     BackendSnapshot `json:"backend"`
+	MaxAttempts int             `json:"max_attempts,omitempty"`
+}
+
+// NormalizeRubyRetryAttempts 规范化 ruby_retry.max_attempts：<=0 返回 1。
+func NormalizeRubyRetryAttempts(n int) int {
+	if n <= 0 {
+		return 1
+	}
+	return n
 }
 
 // JobRoundSnapshot 单轮的完整执行快照。
@@ -511,8 +520,9 @@ func (s *JobService) validateAndSnapshotWith(
 		}
 
 		snapshot.RubyRetry = &ExecutionPlanRubyRetrySnapshot{
-			Enabled: true,
-			Backend: *rrBackendSnap,
+			Enabled:     true,
+			Backend:     *rrBackendSnap,
+			MaxAttempts: NormalizeRubyRetryAttempts(rr.MaxAttempts),
 		}
 	}
 

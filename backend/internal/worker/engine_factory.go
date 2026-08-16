@@ -99,6 +99,7 @@ func (f *EngineFactory) BuildEngine(
 	cfg := BuildEngineConfig(snapshot)
 
 	var rubyRetryBackends []backend.Backend
+	rubyRetryAttempts := 0
 	if snapshot.RubyRetry != nil && snapshot.RubyRetry.Enabled {
 		rrCfg := backend.Config{
 			Name:    snapshot.RubyRetry.Backend.Name,
@@ -116,11 +117,13 @@ func (f *EngineFactory) BuildEngine(
 			rrBackend = backend.NewRateLimitedBackend(rrBackend, limiter)
 		}
 		rubyRetryBackends = []backend.Backend{rrBackend}
+		rubyRetryAttempts = service.NormalizeRubyRetryAttempts(snapshot.RubyRetry.MaxAttempts)
 	}
 
 	return engine.NewWithOptions(engine.Options{
 		Rounds:            rounds,
 		RubyRetryBackends: rubyRetryBackends,
+		RubyRetryAttempts: rubyRetryAttempts,
 		Config:            cfg,
 		Logger:            f.logger,
 		Resources:         resources,

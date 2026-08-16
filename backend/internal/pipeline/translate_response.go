@@ -99,7 +99,7 @@ func jsonObjectSlice(text string) string {
 // 当 includeGlossary=true 时，在外层属性里再加一个 "glossary" 数组，要求 items 严格匹配
 // {source,target,notes}；外层 required 同步加入 "glossary"。
 // 当 includeRuby=true 时，在外层属性里加一个 "ruby_output" 对象，按 wantIDs 键控，
-// 每个值为 {base,text} 数组；ruby_output 不加入 required（LLM 可以不输出）。
+// 每个值为含 {base,text,kind}（id 可选）的对象数组；ruby_output 不加入 required（LLM 可以不输出）。
 func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool) map[string]any {
 	props := make(map[string]any, len(wantIDs))
 	for _, id := range wantIDs {
@@ -141,6 +141,7 @@ func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
+						"id":   map[string]any{"type": "string"},
 						"base": map[string]any{"type": "string"},
 						"text": map[string]any{"type": "string"},
 						"kind": map[string]any{

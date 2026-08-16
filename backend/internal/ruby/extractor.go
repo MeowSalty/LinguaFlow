@@ -61,7 +61,14 @@ func (p *Extractor) Protect(seg *model.Segment) error {
 		if seg.Meta == nil {
 			seg.Meta = make(map[string]any)
 		}
+		// ruby_annotations 保持 []Annotation 类型（管线仍按此类型断言）
 		seg.Meta["ruby_annotations"] = merged
+		// 统一 Item 结构：为每条合并后的注音分配段内稳定 ID
+		items := make([]Item, len(merged))
+		for i, a := range merged {
+			items[i] = Item{SourceBase: a.Base, SourceText: a.Text}
+		}
+		seg.Meta["ruby_items"] = AssignIDs(items)
 	}
 
 	return nil

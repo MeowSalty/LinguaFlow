@@ -29,22 +29,66 @@ func (r RestoreResult) IsFull() bool {
 	return r.Total > 0 && r.Matched == r.Total
 }
 
-// Restore 根据输出模式还原注音标签。
-// rubyOutput 为过滤后的注音条目（由调用方负责提取和过滤）。
-// originalAnnotations 为 Protect 阶段提取的原始注音，用于双源匹配回退。可传 nil。
-// 自动检测译文中的 inline markers：有则走正则替换，无则走文本匹配。
-func (r *Restorer) Restore(seg *model.Segment, rubyOutput []OutputEntry, originalAnnotations []Annotation) (RestoreResult, error) {
-	if strings.Contains(seg.Target, "⟦ruby:") {
-		return r.restoreInlineMarkers(seg, rubyOutput)
+// RestoreItems 从统一 Item 结构还原 <ruby> 标签。
+// 仅对 TargetBase 非空的条目尝试还原；第一优先用条目自身的 TargetBase
+// 在译文中定位，未命中且 SourceBase 非空且不同于 TargetBase 时，
+// 第二优先回退到该条目自身的 SourceBase——这是对旧路径（按位置取
+// originals[i]）的核心修复。还原成功的条目置 Aligned = true（按索引
+// 就地修改，调用方可观察）。
+// total = 需要还原的条目数（TargetBase 或 SourceBase 非空）。
+func (r *Restorer) RestoreItems(seg *model.Segment, items []Item) (RestoreResult, error) {
+	if seg == nil || seg.Target == "" || len(items) == 0 {
+		return RestoreResult{}, nil
 	}
-	return r.restoreRubyOutput(seg, rubyOutput, originalAnnotations)
+
+	assigned := make(map[int]bool)
+	var inserts []insertInfo
+	total := 0
+
+	for i := range items {
+		it := &items[i]
+		if it.TargetBase == "" && it.SourceBase == "" {
+			continue
+		}
+		total++
+		if it.TargetBase == "" {
+			continue
+		}
+		found := r.findAndInsert(seg.Target, it.TargetBase, it.TargetText, assigned, &inserts)
+		if !found && it.SourceBase != "" && it.SourceBase != it.TargetBase {
+			found = r.findAndInsert(seg.Target, it.SourceBase, it.TargetText, assigned, &inserts)
+		}
+		if found {
+			it.Aligned = true
+		}
+	}
+
+	if len(inserts) == 0 {
+		return RestoreResult{Matched: 0, Total: total}, nil
+	}
+
+	// 按位置从右到左排序，避免替换时索引偏移
+	sort.Slice(inserts, func(i, j int) bool {
+		return inserts[i].pos > inserts[j].pos
+	})
+
+	// 从右到左应用替换
+	target := seg.Target
+	for _, ins := range inserts {
+		rubyTag := fmt.Sprintf("<ruby>%s<rt>%s</rt></ruby>", ins.base, ins.text)
+		target = target[:ins.pos] + rubyTag + target[ins.end:]
+	}
+
+	seg.Target = target
+	return RestoreResult{Matched: len(inserts), Total: total}, nil
 }
 
 // OutputEntry 是 LLM 返回的单条标注输出。
 type OutputEntry struct {
 	Base string `json:"base"`
 	Text string `json:"text"`
-	Kind string `json:"kind"` // "phonetic" | "semantic" | "creative"
+	Kind string `json:"kind"`         // "phonetic" | "semantic" | "creative"
+	ID   string `json:"id,omitempty"` // 段内条目 id（可选：旧后端/LLM 漏返为空 → 回退位置）
 }
 
 // ValidKinds 是所有合法的注音 kind 值。
@@ -76,62 +120,6 @@ type insertInfo struct {
 	text string
 }
 
-// restoreRubyOutput 通过文本匹配将注音还原为 <ruby> 标签。
-// 核心逻辑：在译文中找到基底文本的对应位置，插入注音。
-//
-// 匹配策略（双源匹配）：
-//  1. 按 rubyOutput 的顺序，为每个条目在译文中查找第一个未被分配的基底文本出现位置
-//  2. 若 LLM 返回的 base 未匹配，回退到原始 annotations 中对应位置的 base 再试一次
-//  3. 从右到左应用替换，避免索引偏移
-func (r *Restorer) restoreRubyOutput(seg *model.Segment, rubyOutput []OutputEntry, originalAnnotations []Annotation) (RestoreResult, error) {
-	if len(rubyOutput) == 0 {
-		return RestoreResult{}, nil
-	}
-
-	target := seg.Target
-
-	// 记录已分配的字节位置
-	assigned := make(map[int]bool)
-
-	var inserts []insertInfo
-	total := 0
-
-	for i, entry := range rubyOutput {
-		if entry.Base == "" {
-			continue
-		}
-		total++
-		// 第一优先：用 LLM 返回的 base（译文中的对应文本）匹配
-		found := r.findAndInsert(target, entry.Base, entry.Text, assigned, &inserts)
-
-		// 第二优先：回退到原始 annotation 的 base（原文基底）匹配
-		if !found && i < len(originalAnnotations) {
-			origBase := originalAnnotations[i].Base
-			if origBase != "" && origBase != entry.Base {
-				r.findAndInsert(target, origBase, entry.Text, assigned, &inserts)
-			}
-		}
-	}
-
-	if len(inserts) == 0 {
-		return RestoreResult{Matched: 0, Total: total}, nil
-	}
-
-	// 按位置从右到左排序，避免替换时索引偏移
-	sort.Slice(inserts, func(i, j int) bool {
-		return inserts[i].pos > inserts[j].pos
-	})
-
-	// 从右到左应用替换
-	for _, ins := range inserts {
-		rubyTag := fmt.Sprintf("<ruby>%s<rt>%s</rt></ruby>", ins.base, ins.text)
-		target = target[:ins.pos] + rubyTag + target[ins.end:]
-	}
-
-	seg.Target = target
-	return RestoreResult{Matched: len(inserts), Total: total}, nil
-}
-
 // findAndInsert 在 target 中查找 base 的第一个未分配出现位置，
 // 找到后记录到 inserts 并标记 assigned，返回 true；未找到返回 false。
 func (r *Restorer) findAndInsert(target, base, text string, assigned map[int]bool, inserts *[]insertInfo) bool {
@@ -161,7 +149,7 @@ func (r *Restorer) findAndInsert(target, base, text string, assigned map[int]boo
 var inlineMarkerRe = regexp.MustCompile(`⟦ruby:([^/⟧]+)/([^/⟧]+)(?:/([^⟧]+))?⟧`)
 
 // sectionRubyLineRe 匹配 section 模式的 ruby 输出行：编号: content
-// content 部分再通过 parseSectionContent 从右解析 "base | text | kind"。
+// content 部分再通过 ParseSectionLine 从右解析 "base | text | kind [| id]"。
 var sectionRubyLineRe = regexp.MustCompile(`^(\d+):\s*(.+)`)
 
 // ParseInlineMarkers 从译文中提取所有内联标记，转换为 []OutputEntry。
@@ -184,9 +172,37 @@ func ParseInlineMarkers(text string) []OutputEntry {
 	return entries
 }
 
-// parseSectionContent 从右解析 "base | text | kind" 格式。
-// 使用 LastIndex 从右分割，确保 base 或 text 中包含 | 时仍能正确解析。
-func parseSectionContent(content string) (base, text, kind string, ok bool) {
+// ParseSectionLine 从右解析单行 ruby 标注 "base | text | kind [| id]"。
+// 3 字段（最右侧为合法 kind）或 4 字段（最右侧为 id，其左为 kind）。
+// 返回 base/text/kind/id；text 为空、字段不足或无法判定时 ok=false。
+// 供 ParseSectionRubyOutput（剥 "N:" 前缀后）与 pipeline.parseAlignmentResponseText
+// （每行直接）共用，避免两套解析器的容错与 id 提取规则漂移。
+func ParseSectionLine(content string) (base, text, kind, itemID string, ok bool) {
+	itemIdx := strings.LastIndex(content, "|")
+	if itemIdx < 0 {
+		return "", "", "", "", false
+	}
+	rightmost := strings.TrimSpace(content[itemIdx+1:])
+	if rightmost == "" {
+		return "", "", "", "", false
+	}
+	// 最右侧是合法 kind → 3 字段行（无 item_id）
+	if isValidKind(rightmost) {
+		base, text, kind, ok = parseBaseTextKind(content)
+		return base, text, kind, "", ok
+	}
+	// 否则优先按 4 字段解析：最右侧为 item_id，其余按 3 字段解析
+	base, text, kind, ok = parseBaseTextKind(content[:itemIdx])
+	if ok {
+		return base, text, kind, rightmost, true
+	}
+	// 4 字段解析失败 → 回退 3 字段整体解析（兼容自定义 kind）
+	base, text, kind, ok = parseBaseTextKind(content)
+	return base, text, kind, "", ok
+}
+
+// parseBaseTextKind 从右解析恰好 3 个字段 "base | text | kind"。
+func parseBaseTextKind(content string) (base, text, kind string, ok bool) {
 	kindIdx := strings.LastIndex(content, "|")
 	if kindIdx < 0 {
 		return "", "", "", false
@@ -199,15 +215,27 @@ func parseSectionContent(content string) (base, text, kind string, ok bool) {
 	}
 	base = strings.TrimSpace(rest[:textIdx])
 	text = strings.TrimSpace(rest[textIdx+1:])
-	if base == "" {
+	if base == "" || text == "" {
 		return "", "", "", false
 	}
 	return base, text, kind, true
 }
 
+// isValidKind 判断 kind 是否为合法值（phonetic/semantic/creative）。
+func isValidKind(kind string) bool {
+	for _, k := range ValidKinds {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
 // ParseSectionRubyOutput 解析 section 模式的 [ruby] 段落。
 // 输入为 [ruby] 之后的所有行（不含 [ruby] 标题行本身）。
-// 格式：每行一条 "编号: base | text | kind"。
+// 格式：每行一条 "编号: base | text | kind[ | item_id]"。
+// 行首的编号是段号（映射 key），不是条目 id；条目 id 仅来自可选的
+// 第 4 个字段（4 字段优先，3 字段时为空 → 还原走位置回退）。
 // 返回 segment ID → []OutputEntry 的映射。
 func ParseSectionRubyOutput(lines []string) map[string][]OutputEntry {
 	result := make(map[string][]OutputEntry)
@@ -220,8 +248,8 @@ func ParseSectionRubyOutput(lines []string) map[string][]OutputEntry {
 		if m == nil {
 			continue
 		}
-		id := m[1]
-		base, text, kind, ok := parseSectionContent(m[2])
+		id := m[1] // 段号（map key），非条目 id
+		base, text, kind, itemID, ok := ParseSectionLine(m[2])
 		if !ok {
 			continue
 		}
@@ -229,15 +257,17 @@ func ParseSectionRubyOutput(lines []string) map[string][]OutputEntry {
 			Base: base,
 			Text: text,
 			Kind: kind,
+			ID:   itemID,
 		}
 		result[id] = append(result[id], entry)
 	}
 	return result
 }
 
-// restoreInlineMarkers 通过正则替换将内联标记还原为 <ruby> 标签。
+// RestoreInlineMarkers 通过正则替换将内联标记还原为 <ruby> 标签。
+// 字节兼容：标记形态与还原结果保持不变。
 // rubyOutput 为过滤后的条目；还原匹配的标记，移除不匹配的标记。
-func (r *Restorer) restoreInlineMarkers(seg *model.Segment, rubyOutput []OutputEntry) (RestoreResult, error) {
+func (r *Restorer) RestoreInlineMarkers(seg *model.Segment, rubyOutput []OutputEntry) (RestoreResult, error) {
 	// 先统计所有标记数
 	allMatches := inlineMarkerRe.FindAllString(seg.Target, -1)
 	if len(allMatches) == 0 {

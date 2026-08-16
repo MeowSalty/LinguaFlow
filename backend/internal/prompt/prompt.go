@@ -31,8 +31,9 @@ const SingleID = "0"
 
 // RubyAnnotation 用于在提示词中展示 Ruby 标注信息。
 type RubyAnnotation struct {
-	Base string `json:"base"` // 基底文本
-	Text string `json:"text"` // 标注文本
+	ID   string `json:"id,omitempty"` // 段内条目 id，供 LLM 回显关联
+	Base string `json:"base"`         // 基底文本
+	Text string `json:"text"`         // 标注文本
 }
 
 // GlossaryEntry 用于在提示词中展示术语命中。
@@ -230,7 +231,7 @@ func buildJSONUser(d Data, segs []SegmentInput) string {
 //   - 需要翻译的段落：[编号] 原文
 //   - 上下文参考段落：[*] 原文
 //   - rubyInputMode="inline"：注音以 ⟦ruby:base/text⟧ 内联到原文
-//   - rubyInputMode="section"：注音以 [ruby] 独立段落追加
+//   - rubyInputMode="section"：注音以 [ruby] 独立段落追加；条目带 id 时以 基底/标注#id 展示，供模型回显关联
 func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotation, rubyInputMode string) string {
 	var sb strings.Builder
 	for i, s := range segs {
@@ -272,6 +273,10 @@ func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotat
 				sb.WriteString(a.Base)
 				sb.WriteString("/")
 				sb.WriteString(a.Text)
+				if a.ID != "" {
+					sb.WriteString("#")
+					sb.WriteString(a.ID)
+				}
 			}
 		}
 	}

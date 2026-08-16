@@ -44,6 +44,7 @@ type TranslateHandler struct {
 
 	RubyRestorer      *ruby.Restorer
 	RubyRetryBackends []backend.Backend
+	RubyRetryAttempts int // 注音对齐定向重试轮数；<=0 兜底为 1（仅 backends 非空时生效）
 
 	InlineBootstrap        bool
 	MaxTermsPer1000Chars   float64
@@ -583,8 +584,12 @@ func (h *TranslateHandler) processTranslatedSegments(
 		}
 		if rubyOutputMap != nil {
 			if ro, rok := rubyOutputMap[id]; rok && len(ro) > 0 {
-				if _, hasAnns := seg.Meta["ruby_annotations"]; hasAnns {
-					seg.Meta["ruby_output"] = ro
+				// inline 模式：LLM 已把标记内嵌进译文，标记即真相，不合并进 items
+				if !strings.Contains(text, "⟦ruby:") {
+					if items, ok := seg.Meta["ruby_items"].([]ruby.Item); ok && len(items) > 0 {
+						ruby.MergeByOutput(items, ro)
+						seg.Meta["ruby_items"] = items
+					}
 				}
 			}
 		}
@@ -625,7 +630,8 @@ func (h *TranslateHandler) processTranslatedSegments(
 			keepSet := kindSet(h.RubyPreserveKinds)
 			isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
 			restoreSegmentRuby(ctx, seg, h.RubyRestorer, keepSet,
-				h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex, h.Repair)
+				h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex, h.Repair,
+				h.RubyRetryAttempts)
 		}
 
 		// TM（直接调用，使用 OriginalSource）
@@ -892,22 +898,28 @@ func headSnippet(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// extractRubyAnnotationsFromDoc 从文档段落中提取注音注释。
+// extractRubyAnnotationsFromDoc 从文档段落中提取注音注释（带段内条目 id）。
+// 优先读取统一结构 seg.Meta["ruby_items"]（[]ruby.Item，带 ID）；
+// 仅当 ruby_items 缺失时回退旧 key seg.Meta["ruby_annotations"]（[]ruby.Annotation，ID 为空）。
 func extractRubyAnnotationsFromDoc(doc *Document, idxs []int, idMap map[int]string) map[string][]prompt.RubyAnnotation {
 	result := make(map[string][]prompt.RubyAnnotation)
 	for _, idx := range idxs {
 		seg := doc.Segments[idx]
-		raw, ok := seg.Meta["ruby_annotations"]
-		if !ok {
-			continue
-		}
-		annots, ok := raw.([]ruby.Annotation)
-		if !ok {
-			continue
-		}
-		converted := make([]prompt.RubyAnnotation, len(annots))
-		for i, a := range annots {
-			converted[i] = prompt.RubyAnnotation{Base: a.Base, Text: a.Text}
+		var converted []prompt.RubyAnnotation
+		if raw, ok := seg.Meta["ruby_items"]; ok {
+			if items, ok := raw.([]ruby.Item); ok {
+				converted = make([]prompt.RubyAnnotation, len(items))
+				for i, it := range items {
+					converted[i] = prompt.RubyAnnotation{ID: it.ID, Base: it.SourceBase, Text: it.SourceText}
+				}
+			}
+		} else if raw, ok := seg.Meta["ruby_annotations"]; ok {
+			if annots, ok := raw.([]ruby.Annotation); ok {
+				converted = make([]prompt.RubyAnnotation, len(annots))
+				for i, a := range annots {
+					converted[i] = prompt.RubyAnnotation{Base: a.Base, Text: a.Text}
+				}
+			}
 		}
 		if len(converted) > 0 {
 			key := seg.ID

@@ -98,3 +98,21 @@ func TestTryRepairRubyAlignment_FatalNotJSON(t *testing.T) {
 		t.Errorf("wrong err: %v", err)
 	}
 }
+
+// TestTryRepairRubyAlignment_PreservesID 修复链保持 OutputEntry.ID 透传。
+func TestTryRepairRubyAlignment_PreservesID(t *testing.T) {
+	in := `{"ruby_output":[{"id":"1","base":"I","text":"aɪ","kind":"phonetic"}]}`
+	entries, repaired, err := TryRepairRubyAlignment(in, allOpts)
+	if err != nil {
+		t.Fatalf("err: %v (repaired=%v)", err, repaired)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %#v", entries)
+	}
+	if entries[0].ID != "1" {
+		t.Errorf("expected id \"1\", got %q", entries[0].ID)
+	}
+	if entries[0].Base != "I" || entries[0].Text != "aɪ" || entries[0].Kind != "phonetic" {
+		t.Errorf("wrong entry: %#v", entries[0])
+	}
+}
