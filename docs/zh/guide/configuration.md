@@ -163,7 +163,7 @@ translation_profiles:
       after: 1
       max_chars: 0
 
-# 执行计划（CLI：translate / extract；Web 端另支持 adjudicate）
+# 执行计划（CLI：translate / extract；Web 端另支持 adjudicate / correct / semantic_qa）
 execution:
   rounds:
     - mode: translate
@@ -319,7 +319,7 @@ Web 端还可使用「探测模型」接口按凭据拉取列表；字段细节�
 :::
 
 ::: info Web 端额外资源
-术语精简提示词（Prune）与质量裁决（`adjudicate`）等能力主要在 **Web 服务端** 的资源模型中配置；CLI 配置文件以 `translate` / `extract` 轮次为主。
+术语精简提示词（Prune）、质量裁决（`adjudicate`）、本地改写（`correct`）、语义质检（`semantic_qa`）等能力主要在 **Web 服务端** 的资源模型中配置；CLI 配置文件以 `translate` / `extract` 轮次为主。
 :::
 
 #### translation_profiles — 执行配置（翻译策略）
@@ -394,7 +394,7 @@ Web 端还可使用「探测模型」接口按凭据拉取列表；字段细节�
 
 ##### rounds — 执行轮次
 
-CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行计划模板另支持 `adjudicate`（质量裁决），详见 [流水线与原理 · 质量裁决](/zh/guide/pipeline#规则质检与-ai-质量裁决)。
+CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行计划模板另支持 `adjudicate`（质量裁决）、`correct`（本地改写）、`semantic_qa`（语义质检），详见 [流水线与原理](/zh/guide/pipeline#规则质检与-ai-质量裁决)。
 
 | 字段        | 类型   | 说明                                     |
 | ----------- | ------ | ---------------------------------------- |
@@ -412,8 +412,8 @@ CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行�
 | `batch_size`          | int    | 待译段落数上限（不计上下文段）                                                |
 | `max_words_per_batch` | int    | 每批字词数上限（计入上下文段）                                                |
 | `concurrency`         | int    | 并发数                                                                        |
-| `fallback_shrink`     | float  | 池缩放系数 (0,1)；`0`=单池不缩批。池 N 批次约束 = `floor(原始 × shrink^N)`，见 [流水线与原理](/zh/guide/pipeline#批量与并发) |
-| `retry.*`             | —      | `max_attempts`（启用缩批时同时决定池数）/ `backoff_ms` / `jitter`             |
+| `fallback_shrink`     | float  | 池缩比系数（**必填**，合法域 (0, 1]）。`1.0` = 多池同尺寸重切；`(0,1)` = 每池缩小，池 N 批次约束 = `floor(原始 × shrink^N)`。`0` 非法（会被拒绝）；池数量 = `retry.max_attempts + 1`，见 [流水线与原理](/zh/guide/pipeline#批量与并发) |
+| `retry.*`             | —      | `max_attempts`（决定池深 = `max_attempts + 1`，每池在途重试预算内部封顶 `min(max_attempts, 3)`）/ `backoff_ms` / `jitter`             |
 
 **extract 子配置：**
 
@@ -427,8 +427,8 @@ CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行�
 | `min_source_len`           | int    | 术语最短源文长度       |
 | `retry.*`                  | —      | 重试配置               |
 
-::: tip Web 端质量裁决
-在 Web 服务端创建执行计划时，可增加 `adjudicate` 轮次：调用 AI 对 `source_residual`、`length_ratio` 等软规则误报降噪。提示词内置，无需选择模板。
+::: tip Web 端质量裁决与本地改写
+在 Web 服务端创建执行计划时，可增加 `adjudicate` 轮次：调用 AI 对 `source_residual`、`length_ratio` 等软规则误报降噪；也可增加 `correct` 轮次：纯本地机械改写译文，消除 `punctuation_missing` 等可确定修复的安全问题。两者提示词均内置，无需选择模板（`correct` 不调 LLM）。
 :::
 
 #### glossary — 术语表
