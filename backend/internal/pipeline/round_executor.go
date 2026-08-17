@@ -19,6 +19,7 @@ const (
 	RoundModeExtract    = "extract"
 	RoundModeAdjudicate = "adjudicate"
 	RoundModeSemanticQA = "semantic_qa"
+	RoundModeCorrect    = "correct"
 )
 
 // PostprocessConfig 是 pipeline 级别的后处理配置。
