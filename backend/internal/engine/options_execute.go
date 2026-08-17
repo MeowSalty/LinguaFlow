@@ -56,10 +56,13 @@ func WithResolvedIndices(set map[int]struct{}) ExecuteOption {
 
 // crossRoundResolvedModes 是参与跨轮 in-memory 增量的非翻译模式集合。
 // translate 由 DB status 驱动增量，不在此列。
+// correct 纳入：它扫描 translated/edited 段，必须跨轮跳过已解决段（与 adjudicate 同理），
+// 否则新增非翻译模式时跨轮增量会静默丢失。
 var crossRoundResolvedModes = []string{
 	pipeline.RoundModeExtract,
 	pipeline.RoundModeAdjudicate,
 	pipeline.RoundModeSemanticQA,
+	pipeline.RoundModeCorrect,
 }
 
 // NewResolvedByMode 返回 per-mode 已解决段索引集合，用于非翻译轮的跨轮增量。

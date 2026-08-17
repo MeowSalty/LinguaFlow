@@ -39,9 +39,13 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	if len(opts.Rounds) == 0 {
 		return nil, fmt.Errorf("engine: no rounds provided")
 	}
-	// 校验每轮都有后端
+	// 校验每轮都有后端（correct 轮纯本地，无需后端）
 	for i, r := range opts.Rounds {
-		if r.Backend == nil {
+		mode := r.Mode
+		if mode == "" {
+			mode = pipeline.RoundModeTranslate
+		}
+		if r.Backend == nil && mode != pipeline.RoundModeCorrect {
 			return nil, fmt.Errorf("engine: round %d has no backend", i)
 		}
 	}
@@ -61,7 +65,11 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	roundConfigs := buildRoundConfigs(opts.Rounds, opts.Config)
 	bootstrapBackends := opts.BootstrapBackends
 	if len(bootstrapBackends) == 0 {
-		bootstrapBackends = []backend.Backend{opts.Rounds[0].Backend}
+		// 回退到首轮 backend；correct 是纯本地轮无 backend，跳过它避免 nil。
+		// 典型 correct 轮位于 translate 之后，此处仅在无显式 BootstrapBackends 时兜底。
+		if b := opts.Rounds[0].Backend; b != nil {
+			bootstrapBackends = []backend.Backend{b}
+		}
 	}
 	rubyRetryBackends := opts.RubyRetryBackends
 
@@ -126,6 +134,8 @@ func (e *Engine) Close() error {
 			b = ah.Backend
 		} else if sh, ok := r.Handler.(*pipeline.SemanticQAHandler); ok {
 			b = sh.Backend
+		} else if _, ok := r.Handler.(*pipeline.CorrectHandler); ok {
+			// correct 是纯本地轮，无 backend。
 		}
 		if b == nil {
 			continue
