@@ -4,11 +4,13 @@ import (
 	"log/slog"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
@@ -17,7 +19,6 @@ import (
 // Options 是 Engine 的构造参数。
 type Options struct {
 	Rounds            []Round
-	BootstrapBackends []backend.Backend
 	RubyRetryBackends []backend.Backend
 	RubyRetryAttempts int // 注音对齐定向重试轮数；<=0 由 handler 兜底为 1（仅 backends 非空时生效）
 	Config            *Config
@@ -63,6 +64,9 @@ type Round struct {
 	SemanticQARenderer *prompt.SemanticQARenderer
 	SegmentScope       string   // "all"(默认) | "with_issues" | "with_issue_codes"
 	IssueCodes         []string // 仅 with_issue_codes 生效
+
+	// 本地改写轮次专用字段
+	CorrectRules []correct.RuleConfig
 }
 
 // RuntimeResources 封装可选的运行时资源。
@@ -158,6 +162,11 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 				IssueCodes:        r.IssueCodes,
 			}
 
+		case pipeline.RoundModeCorrect:
+			rc.Correct = &CorrectRoundConfig{
+				Rules: r.CorrectRules,
+			}
+
 		default:
 			// 未知模式默认为翻译
 			rc.Translate = &TranslateRoundConfig{
@@ -225,6 +234,9 @@ func buildSinglePipelineRound(
 	}
 	if rc.SemanticQA != nil {
 		return buildSemanticQAPipelineRound(rc, defaultRepair, logger, reporter)
+	}
+	if rc.Correct != nil {
+		return buildCorrectPipelineRound(rc, logger, reporter)
 	}
 	return buildTranslatePipelineRound(
 		rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
@@ -425,6 +437,49 @@ func buildSemanticQAPipelineRound(
 
 	// NOTE: semantic_qa 不接缩批（BuildBatches 不读 poolIndex）；Shrink 留零值，RunRound 兜底 1.0。
 	// 若未来需要缩批，在此补 Shrink: rc.FallbackShrink（=require schema/OpenAPI/校验全部接通）。
+	return pipeline.Round{
+		Concurrency: rc.Concurrency,
+		Retry:       rc.Retry,
+		Context:     rc.Context,
+		Handler:     handler,
+	}, nil
+}
+
+func buildCorrectPipelineRound(
+	rc RoundConfig,
+	logger *slog.Logger,
+	reporter progress.Reporter,
+) (pipeline.Round, error) {
+	c := rc.Correct
+	if c == nil {
+		c = &CorrectRoundConfig{}
+	}
+
+	// 构建 correct.Engine：按白名单 + rule-level enabled 过滤规则。
+	// round 级 enabled 已由"轮次是否出现在 rounds 数组"决定（与其他轮次一致）。
+	// Concurrency 由顶层 RoundConfig 承载（与 service 快照一致）。
+	rulesEngine := correct.New(correct.Config{
+		Rules:       c.Rules,
+		Concurrency: rc.Concurrency,
+	})
+
+	// 幂等引擎：仅含本规则消费的 issue code（如 punctuation_missing），
+	// 用与原 checker 同一的 PunctuationMissingChecker 验幂等，防成环不级联其他 checker。
+	var idem *qa.Engine
+	consumed := rulesEngine.ConsumedIssueCodes()
+	if len(consumed) > 0 {
+		idem = qa.NewEngine(qa.Config{Enabled: true, Checks: consumed}, logger)
+	}
+
+	handler := &pipeline.CorrectHandler{
+		Rules:       rulesEngine,
+		Idempotency: idem,
+		Reporter:    reporter,
+		Logger:      logger,
+	}
+
+	// NOTE: correct 不接缩批（BuildBatches 不读 poolIndex）；Shrink 留零值，RunRound 兜底 1.0。
+	// 无 Backend（纯本地）、无 Context、无 Retry 的实际语义（Retry 零值 = 单池，无重试）。
 	return pipeline.Round{
 		Concurrency: rc.Concurrency,
 		Retry:       rc.Retry,

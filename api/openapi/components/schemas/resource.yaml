@@ -313,7 +313,7 @@ SegmentTranslationPreviewResponse:
                 type: integer
               mode:
                 type: string
-                enum: [extract, translate, adjudicate, semantic_qa]
+                enum: [extract, translate, adjudicate, semantic_qa, correct]
               backend_name:
                 type: string
               prompt_template_name:

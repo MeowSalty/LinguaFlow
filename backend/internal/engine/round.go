@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -23,6 +24,9 @@ type RoundConfig struct {
 	Extract    *ExtractRoundConfig
 	Adjudicate *AdjudicateRoundConfig
 	SemanticQA *SemanticQARoundConfig
+
+	// Correct 是本地改写轮次（纯本地、不调 LLM）的特有配置。
+	Correct *CorrectRoundConfig
 }
 
 // TranslateRoundConfig 翻译轮次的特有配置。
@@ -64,4 +68,10 @@ type SemanticQARoundConfig struct {
 	MaxBatchIndexSpan int
 	SegmentScope      string
 	IssueCodes        []string
+}
+
+// CorrectRoundConfig 本地改写轮次的特有配置（engine 层）。
+// 纯本地、不调 LLM：无 Backend、无 BatchSize/MaxWordsPerBatch、无 Retry。
+type CorrectRoundConfig struct {
+	Rules []correct.RuleConfig
 }

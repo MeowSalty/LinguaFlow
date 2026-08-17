@@ -51,10 +51,9 @@ func (c *PunctuationMissingChecker) Check(_ context.Context, segments []CheckInp
 		if src == "" || strings.TrimSpace(tgt) == "" {
 			continue
 		}
-		srcRegions := InlineMarkupRegions(src, seg.Protected)
-		cleanSrc := stripPlaceholders(StripRegions(src, srcRegions))
+		cleanSrc := StripProtectedRegions(src, seg.Protected)
 		regions := InlineMarkupRegions(tgt, seg.Protected)
-		cleanTgt := stripPlaceholders(StripRegions(tgt, regions))
+		cleanTgt := StripProtectedRegionsWithRegions(tgt, regions)
 		for _, cat := range punctMissingCategories {
 			if countCategory(cleanSrc, cat.set) < 2 || countCategory(cleanTgt, cat.set) != 0 {
 				continue
