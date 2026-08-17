@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -21,6 +22,7 @@ type SegmentService struct {
 	client   *ent.Client
 	projects *ProjectService
 	dialect  string
+	logger   *slog.Logger
 }
 
 type ResourceSegmentPage struct {
@@ -45,8 +47,11 @@ type ResourceSegmentUpdateInput struct {
 	Comment    *string
 }
 
-func NewSegmentService(client *ent.Client, projects *ProjectService, dialectName string) *SegmentService {
-	return &SegmentService{client: client, projects: projects, dialect: dialectName}
+func NewSegmentService(client *ent.Client, projects *ProjectService, dialectName string, logger *slog.Logger) *SegmentService {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &SegmentService{client: client, projects: projects, dialect: dialectName, logger: logger}
 }
 
 func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, projectID, resourceID int, opts ResourceSegmentListOptions) (*ResourceSegmentPage, error) {
@@ -208,7 +213,8 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 }
 
 func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input ResourceSegmentUpdateInput) (*ent.Segment, error) {
-	if _, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, true); err != nil {
+	res, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, true)
+	if err != nil {
 		return nil, err
 	}
 	current, err := s.client.Segment.Query().Where(segment.IDEQ(segmentID), segment.ResourceIDEQ(resourceID)).Only(ctx)
@@ -223,24 +229,29 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 	changed := false
 	sourceChanged := false
 	targetChanged := false
+	// QA 输入：source/target 取变更后的值（若未变更则用现状），供 targetChanged 时重算。
+	newSource := current.SourceText
+	var newTarget string
 
 	if input.SourceText != nil {
 		source := strings.TrimSpace(*input.SourceText)
 		if source == "" {
 			return nil, ErrInvalidInput
 		}
-		update.SetSourceText(source).ClearQualityIssues().SetStatus(SegmentStatusPending)
+		update.SetSourceText(source).SetStatus(SegmentStatusPending)
 		changed = true
 		sourceChanged = true
+		newSource = source
 	}
 	if input.TargetText != nil {
 		target := strings.TrimSpace(*input.TargetText)
 		if target == "" {
 			return nil, ErrInvalidInput
 		}
-		update.SetTargetText(target).SetStatus(SegmentStatusEdited).SetReviewedByID(actorUserID).ClearQualityIssues()
+		update.SetTargetText(target).SetStatus(SegmentStatusEdited).SetReviewedByID(actorUserID)
 		changed = true
 		targetChanged = true
+		newTarget = target
 	}
 	if input.Comment != nil {
 		comment := strings.TrimSpace(*input.Comment)
@@ -261,6 +272,22 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		update.ClearTargetText().ClearReviewedBy()
 	}
 
+	// quality_issues 统一处理（避免与 SetTargetText 同列多次赋值）：
+	//   - targetChanged：重跑零配置确定性 QA，用新结果覆盖；
+	//   - sourceChanged && !targetChanged：旧译文失效，无译文不跑 QA，清空旧 issues；
+	//   - 仅 comment 变更：不触碰 quality_issues，保持现状。
+	switch {
+	case targetChanged:
+		issues := s.runManualEditQA(ctx, projectID, res, current.SegmentIndex, newSource, newTarget, current.Meta)
+		if len(issues) > 0 {
+			update.SetQualityIssues(issues)
+		} else {
+			update.ClearQualityIssues()
+		}
+	case sourceChanged:
+		update.ClearQualityIssues()
+	}
+
 	updated, err := update.Save(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -269,6 +296,46 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		return nil, err
 	}
 	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)
+}
+
+// runManualEditQA 对手动编辑的单段译文运行零配置确定性 QA 检查。
+//
+// 适用于 UpdateResourceSegment 等"无执行计划 QA 配置可用"的即时场景：
+//   - 仅跑 ZeroConfigDeterministicChecks 白名单，避免 length_ratio 用默认阈值
+//     与正式翻译流程判定矛盾；
+//   - 不加载术语表（forbidden_term/term_inconsistency 在白名单外）；
+//   - 不跑文档级检查（duplicate_source_divergence 需多段输入）；
+//   - Protected 区不持久化无法重建，依赖它的 checker 退化为基础扫描。
+//
+// 任何错误记录日志并返回 nil，绝不阻塞编辑操作——手动编辑是用户主动行为，
+// QA 失败不应阻止用户保存译文。
+func (s *SegmentService) runManualEditQA(ctx context.Context, projectID int, res *ent.Resource, segmentIndex int, source, target string, meta *string) []qa.QualityIssue {
+	project, err := s.client.Project.Get(ctx, projectID)
+	if err != nil {
+		s.logger.Warn("manual edit QA: load project failed", "projectID", projectID, "error", err)
+		return nil
+	}
+	cfg := qa.DefaultConfig()
+	cfg.Enabled = true
+	cfg.SourceLang = project.SourceLang
+	cfg.TargetLang = project.TargetLang
+	cfg.Format = res.Format
+	cfg.Checks = qa.ZeroConfigDeterministicChecks()
+	engine := qa.NewEngine(cfg, s.logger)
+
+	var metaMap map[string]any
+	if meta != nil {
+		if err := json.Unmarshal([]byte(*meta), &metaMap); err != nil {
+			s.logger.Warn("manual edit QA: parse meta failed", "segmentIndex", segmentIndex, "error", err)
+		}
+	}
+	inputs := []qa.CheckInput{{
+		Index:      segmentIndex,
+		SourceText: source,
+		TargetText: target,
+		Meta:       metaMap,
+	}}
+	return qa.DedupIssues(engine.Run(ctx, inputs))
 }
 
 func (s *SegmentService) requireResourceAccess(ctx context.Context, actorUserID, projectID, resourceID int, write bool) (*ent.Resource, error) {

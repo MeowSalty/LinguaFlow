@@ -471,3 +471,59 @@ func TestLocateSpan_EqualFoldPreservesOriginalByteOffsets(t *testing.T) {
 		t.Fatalf("case-folded span=%#v", span)
 	}
 }
+
+// TestZeroConfigDeterministicChecks 锁定白名单内容与顺序，并断言不含需用户阈值/术语表/多段上下文的 checker。
+func TestZeroConfigDeterministicChecks(t *testing.T) {
+	got := ZeroConfigDeterministicChecks()
+	want := []string{
+		CheckUntranslated,
+		CheckSourceResidual,
+		CheckPunctuationPairing,
+		CheckPunctuationMissing,
+		CheckWhitespaceIrregular,
+		CheckRepeatedSpace,
+		CheckWidthMix,
+		CheckNumberMismatch,
+		CheckURLEmailMismatch,
+		CheckSubtitleLineCount,
+		CheckLeftoverPlaceholder,
+		CheckXMLTagMismatch,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len=%d want %d, got=%v", len(got), len(want), got)
+	}
+	for i, code := range want {
+		if got[i] != code {
+			t.Fatalf("index %d: got %q want %q (full=%v)", i, got[i], code, got)
+		}
+	}
+
+	// 排除需要用户阈值、术语表或多段上下文的 checker。
+	excluded := []string{
+		CheckLengthRatio,              // 需用户阈值，默认值会与执行计划矛盾
+		CheckForbiddenTerm,            // 需术语表
+		CheckTermInconsistency,        // 需术语表
+		CheckDuplicate,                // 需多段输入
+		CodeDuplicateSourceDivergence, // 文档级，不走 Engine
+	}
+	gotSet := make(map[string]struct{}, len(got))
+	for _, c := range got {
+		gotSet[c] = struct{}{}
+	}
+	for _, code := range excluded {
+		if _, ok := gotSet[code]; ok {
+			t.Fatalf("ZeroConfigDeterministicChecks must not include %q, got=%v", code, got)
+		}
+	}
+
+	// 白名单中的每一项必须是 AllCheckerNames 注册的合法 checker。
+	allSet := make(map[string]struct{})
+	for _, c := range AllCheckerNames() {
+		allSet[c] = struct{}{}
+	}
+	for _, c := range got {
+		if _, ok := allSet[c]; !ok {
+			t.Fatalf("ZeroConfigDeterministicChecks contains unknown checker %q", c)
+		}
+	}
+}
