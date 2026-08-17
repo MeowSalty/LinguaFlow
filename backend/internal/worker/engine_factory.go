@@ -8,6 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -46,22 +47,27 @@ func (f *EngineFactory) BuildEngine(
 ) (*engine.Engine, error) {
 	var rounds []engine.Round
 	for i, rs := range snapshot.Rounds {
-		bCfg := backend.Config{
-			Name:    rs.Backend.Name,
-			Type:    rs.Backend.Type,
-			Enabled: true,
-			Options: rs.Backend.Options,
-		}
-		b, err := backend.Build(bCfg)
-		if err != nil {
-			return nil, fmt.Errorf("round[%d] build backend: %w", i, err)
-		}
+		// correct 是纯本地轮，无 backend：跳过 backend 构建（Backend 留 nil）。
+		var b backend.Backend
+		var err error
+		if rs.Mode != "correct" {
+			bCfg := backend.Config{
+				Name:    rs.Backend.Name,
+				Type:    rs.Backend.Type,
+				Enabled: true,
+				Options: rs.Backend.Options,
+			}
+			b, err = backend.Build(bCfg)
+			if err != nil {
+				return nil, fmt.Errorf("round[%d] build backend: %w", i, err)
+			}
 
-		b = backend.NewMeteredBackend(b)
+			b = backend.NewMeteredBackend(b)
 
-		if f.limiterPool != nil && rs.Backend.RateLimitPerMinute > 0 {
-			limiter := f.limiterPool.Get(rs.Backend.ID, rs.Backend.RateLimitPerMinute)
-			b = backend.NewRateLimitedBackend(b, limiter)
+			if f.limiterPool != nil && rs.Backend.RateLimitPerMinute > 0 {
+				limiter := f.limiterPool.Get(rs.Backend.ID, rs.Backend.RateLimitPerMinute)
+				b = backend.NewRateLimitedBackend(b, limiter)
+			}
 		}
 
 		var round engine.Round
@@ -86,6 +92,11 @@ func (f *EngineFactory) BuildEngine(
 				return nil, fmt.Errorf("round[%d]: mode=semantic_qa but semantic_qa config is nil", i)
 			}
 			round, err = buildSemanticQARound(rs, b)
+		case "correct":
+			if rs.Correct == nil {
+				return nil, fmt.Errorf("round[%d]: mode=correct but correct config is nil", i)
+			}
+			round, err = buildCorrectRound(rs)
 		default:
 			return nil, fmt.Errorf("round[%d]: unsupported mode %q", i, rs.Mode)
 		}
@@ -354,6 +365,26 @@ func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 		SemanticQARenderer: renderer,
 		SegmentScope:       s.SegmentScope,
 		IssueCodes:         s.IssueCodes,
+	}, nil
+}
+
+func buildCorrectRound(rs service.JobRoundSnapshot) (engine.Round, error) {
+	c := rs.Correct
+	rules := make([]correct.RuleConfig, 0, len(c.Rules))
+	for _, r := range c.Rules {
+		// 仅构建启用的规则；correct.New 仍按白名单再过滤一次（兜底）。
+		if !r.Enabled {
+			continue
+		}
+		rules = append(rules, correct.RuleConfig{Name: r.Name, Enabled: r.Enabled})
+	}
+	return engine.Round{
+		// NOTE: correct 是纯本地轮，无 Backend（留 nil）。Backend==nil 由 engine.NewWithOptions
+		// 对 mode==correct 放行，Close()/meterMetrics 对 nil 兜底。
+		Concurrency: c.Concurrency,
+		// correct 无重试语义（纯函数，仅 ctx cancel 可中断）；Retry 留零值 = 单池、无重试。
+		Mode:         pipeline.RoundModeCorrect,
+		CorrectRules: rules,
 	}, nil
 }
 

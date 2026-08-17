@@ -436,6 +436,39 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 				mu.Unlock()
 				return nil
 			}
+		case "correct":
+			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
+				for _, ts := range batchResult.Segments {
+					dbID, ok := docIndexToDBID[ts.Index]
+					if !ok {
+						continue
+					}
+					// correct 改写译文并重写 quality_issues（ResolvedCodes 已剔除）。
+					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
+					update := r.client.Segment.UpdateOneID(dbID).
+						SetTargetText(ts.TargetText)
+					if len(ts.Issues) > 0 {
+						update.SetQualityIssues(ts.Issues)
+					} else {
+						update.ClearQualityIssues()
+					}
+					if err := update.Exec(ctx); err != nil {
+						// 取消/超时交由 round_executor 的 ctx 检查接管，不归类重试。
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							continue
+						}
+						classified := database.Classify(r.dbDriver, err)
+						r.logger.Warn("persist correct rewrite failed",
+							"segment_id", dbID, "err", err,
+							"category", classified.Category, "sqlstate", classified.SQLState)
+						// correct 无重试机制（改写结果一次性写入，失败即丢失），
+						// fail-fast 当前轮，避免末轮静默丢失。
+						return fmt.Errorf("persist correct rewrite for segment %d failed (DB write error, category %s, sqlstate %s)",
+							dbID, classified.Category, classified.SQLState)
+					}
+				}
+				return nil
+			}
 		case "adjudicate":
 			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
 				completed := 0
