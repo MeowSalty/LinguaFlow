@@ -19,7 +19,6 @@ type Engine struct {
 	logger            *slog.Logger
 	reporter          progress.Reporter
 	rounds            []pipeline.Round
-	bootstrapBackends []backend.Backend
 	rubyRetryBackends []backend.Backend
 	glossary          glossary.Glossary
 	tm                tm.TranslationMemory
@@ -39,9 +38,13 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	if len(opts.Rounds) == 0 {
 		return nil, fmt.Errorf("engine: no rounds provided")
 	}
-	// 校验每轮都有后端
+	// 校验每轮都有后端（correct 轮纯本地，无需后端）
 	for i, r := range opts.Rounds {
-		if r.Backend == nil {
+		mode := r.Mode
+		if mode == "" {
+			mode = pipeline.RoundModeTranslate
+		}
+		if r.Backend == nil && mode != pipeline.RoundModeCorrect {
 			return nil, fmt.Errorf("engine: round %d has no backend", i)
 		}
 	}
@@ -59,10 +62,6 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	}
 
 	roundConfigs := buildRoundConfigs(opts.Rounds, opts.Config)
-	bootstrapBackends := opts.BootstrapBackends
-	if len(bootstrapBackends) == 0 {
-		bootstrapBackends = []backend.Backend{opts.Rounds[0].Backend}
-	}
 	rubyRetryBackends := opts.RubyRetryBackends
 
 	inlineBootstrap := opts.Config.Glossary.Enabled && opts.Config.Glossary.Bootstrap.Enabled
@@ -99,7 +98,6 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		logger:            opts.Logger,
 		reporter:          opts.Reporter,
 		rounds:            rounds,
-		bootstrapBackends: bootstrapBackends,
 		rubyRetryBackends: rubyRetryBackends,
 		glossary:          glos,
 		tm:                translationMemory,
@@ -126,19 +124,12 @@ func (e *Engine) Close() error {
 			b = ah.Backend
 		} else if sh, ok := r.Handler.(*pipeline.SemanticQAHandler); ok {
 			b = sh.Backend
+		} else if _, ok := r.Handler.(*pipeline.CorrectHandler); ok {
+			// correct 是纯本地轮，无 backend。
 		}
 		if b == nil {
 			continue
 		}
-		if _, ok := seen[b]; ok {
-			continue
-		}
-		seen[b] = struct{}{}
-		if err := b.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	for _, b := range e.bootstrapBackends {
 		if _, ok := seen[b]; ok {
 			continue
 		}

@@ -222,6 +222,8 @@ func (r *PreviewRunner) RunPreview(
 			batchHandler = r.buildAdjudicateBatchHandler(doc, targetDocIdx)
 		case "semantic_qa":
 			batchHandler = r.buildSemanticQABatchHandler(doc, targetDocIdx)
+		case "correct":
+			batchHandler = r.buildCorrectBatchHandler(doc, targetDocIdx)
 		}
 
 		execOpts := []engine.ExecuteOption{
@@ -352,6 +354,13 @@ func (r *PreviewRunner) buildSemanticQABatchHandler(
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
 	return buildSemanticQABatchHandlerCommon(doc, targetDocIdx)
+}
+
+func (r *PreviewRunner) buildCorrectBatchHandler(
+	doc *pipeline.Document,
+	targetDocIdx int,
+) func(ctx context.Context, batchResult pipeline.BatchResult) error {
+	return buildCorrectBatchHandlerCommon(doc, targetDocIdx)
 }
 
 func (r *PreviewRunner) runDuplicateSourceDivergence(doc *pipeline.Document, targetDocIdx int) []qa.QualityIssue {

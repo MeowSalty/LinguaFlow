@@ -162,6 +162,8 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 			batchHandler = buildAdjudicateBatchHandlerCommon(doc, targetDocIdx)
 		case "semantic_qa":
 			batchHandler = buildSemanticQABatchHandlerCommon(doc, targetDocIdx)
+		case "correct":
+			batchHandler = buildCorrectBatchHandlerCommon(doc, targetDocIdx)
 		}
 
 		execOpts := []engine.ExecuteOption{
@@ -329,6 +331,30 @@ func buildSemanticQABatchHandlerCommon(
 			existing := doc.Segments[ts.Index].Issues
 			merged := mergeSemanticQAIssues(existing, ts.Issues)
 			doc.Segments[ts.Index].Issues = merged
+		}
+		return nil
+	}
+}
+
+// buildCorrectBatchHandlerCommon 构建本地改写轮的 batch handler，
+// 将改写后的译文与 issues 写回内存 Document 的目标段。两个 runner 共享以避免漂移。
+func buildCorrectBatchHandlerCommon(
+	doc *pipeline.Document,
+	targetDocIdx int,
+) func(ctx context.Context, batchResult pipeline.BatchResult) error {
+	return func(_ context.Context, batchResult pipeline.BatchResult) error {
+		for _, ts := range batchResult.Segments {
+			if ts.Index != targetDocIdx {
+				continue
+			}
+			if ts.TargetText != "" {
+				doc.Segments[ts.Index].Target = ts.TargetText
+			}
+			// correct handler 总是携带最终 issues（改写过滤后的集合；no-op 段为原 issues 拷贝）。
+			// nil = 该段原无 issues 且未改动，跳过；非 nil（含空切片）= 写回以反映已解决。
+			if ts.Issues != nil {
+				doc.Segments[ts.Index].Issues = ts.Issues
+			}
 		}
 		return nil
 	}

@@ -78,6 +78,24 @@ func InlineMarkupRegions(target string, protected map[string]string) [][2]int {
 	return mergeRegions(raw)
 }
 
+// StripProtectedRegions returns text with inline markup regions (protected spans
+// ∪ ruby elements) and __LF_* placeholders removed, then lower-cased — i.e. the
+// "clean" text the QA checkers operate on. It is the single shared helper that
+// both the punctuation_missing checker and the correct rules use, so the rule's
+// notion of "source/target without protected regions" can never drift from the
+// checker's. Mirrors stripPlaceholders(StripRegions(t, InlineMarkupRegions(t, p))).
+func StripProtectedRegions(text string, protected map[string]string) string {
+	return stripPlaceholders(StripRegions(text, InlineMarkupRegions(text, protected)))
+}
+
+// StripProtectedRegionsWithRegions is the same as StripProtectedRegions but
+// accepts pre-computed regions (from InlineMarkupRegions), avoiding a redundant
+// re-scan on hot paths where the caller already computed regions for span
+// locating (e.g. PunctuationMissingChecker).
+func StripProtectedRegionsWithRegions(text string, regions [][2]int) string {
+	return stripPlaceholders(StripRegions(text, regions))
+}
+
 // mergeRegions 对 rune 偏移区域排序并合并重叠区域，返回升序、已合并的并集。
 // 同起点时长区域在前：保证前缀关系（如 <br> 与 <br/>）中较长区域被保留，
 // 避免 unstable 排序叠加调用方输入顺序导致非确定性漏屏蔽。
