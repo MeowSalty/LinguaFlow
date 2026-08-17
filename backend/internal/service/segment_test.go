@@ -177,7 +177,7 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 		{SegmentIndex: 8, Severity: qa.SeverityWarning, Code: "naturalness", Message: "awkward"},
 	})
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
 
 	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
 		t.Helper()
@@ -269,7 +269,7 @@ func TestListResourceSegmentsQualityFilterNewSemanticCodes(t *testing.T) {
 		})
 	}
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
 
 	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
 		t.Helper()
@@ -319,7 +319,7 @@ func TestListResourceSegmentsQualityFilterDeterministicCodes(t *testing.T) {
 		})
 	}
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
 
 	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
 		t.Helper()
@@ -369,7 +369,7 @@ func TestListResourceSegmentsQualityFilterWithGroupKey(t *testing.T) {
 		{SegmentIndex: 2, Severity: qa.SeverityWarning, Code: "duplicate", Message: "y"},
 	})
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
 	page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, ResourceSegmentListOptions{
 		GroupKey:      "ch1.xhtml",
 		QualityIssues: "has",
@@ -444,7 +444,7 @@ func TestUpdateResourceSegmentRegression(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create segment: %v", err)
 		}
-		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite)
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
 		return svc, ctx, user, project, res, seg
 	}
 
@@ -526,4 +526,190 @@ func createTestSegmentWithMeta(t *testing.T, client *ent.Client, resourceID, ind
 		t.Fatalf("create segment with meta: %v", err)
 	}
 	return row
+}
+
+// createTestSegmentWithTarget 构造带译文与可选 issues 的段落，供 UpdateResourceSegment 的
+// 手动编辑 QA 重跑测试使用。status 默认 translated，模拟"已有翻译结果供用户编辑"场景。
+func createTestSegmentWithTarget(t *testing.T, client *ent.Client, resourceID, index int, source, target string, issues []qa.QualityIssue) *ent.Segment {
+	t.Helper()
+	c := client.Segment.Create().
+		SetResourceID(resourceID).
+		SetSegmentIndex(index).
+		SetSourceText(source).
+		SetTargetText(target).
+		SetStatus(segment.StatusTranslated)
+	if issues != nil {
+		c = c.SetQualityIssues(issues)
+	}
+	row, err := c.Save(context.Background())
+	if err != nil {
+		t.Fatalf("create segment with target: %v", err)
+	}
+	return row
+}
+
+func hasIssueCode(issues []qa.QualityIssue, code string) bool {
+	for _, iss := range issues {
+		if iss.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+// TestUpdateResourceSegmentRerunsQA 验证编辑译文触发零配置确定性 QA。
+// 场景：源文含数字"3"，手动编辑译文为"三只猫"（无阿拉伯数字）→ 触发 number_mismatch。
+func TestUpdateResourceSegmentRerunsQA(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-rerun-user")
+	project := createTestProject(t, client, "seg-qa-rerun-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/qa.txt")
+	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "3 cats", "3只猫", nil)
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+		TargetText: strPtr("三只猫"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateResourceSegment: %v", err)
+	}
+	if !hasIssueCode(updated.QualityIssues, qa.CheckNumberMismatch) {
+		t.Fatalf("expected number_mismatch issue after manual edit, got %v", updated.QualityIssues)
+	}
+}
+
+// TestUpdateResourceSegmentQAReplacesOldIssues 验证手动编辑重跑 QA 后旧 issues 被新结果覆盖。
+// 场景：段落遗留一个假 number_mismatch issue，手动编辑后译文数字已匹配 → 旧 issue 被清空。
+func TestUpdateResourceSegmentQAReplacesOldIssues(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-replace-user")
+	project := createTestProject(t, client, "seg-qa-replace-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/replace.txt")
+	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "3 cats", "3只猫", []qa.QualityIssue{{
+		SegmentIndex: 0,
+		Severity:     qa.SeverityWarning,
+		Code:         qa.CheckNumberMismatch,
+		Message:      "旧 issue（应被新 QA 结果覆盖）",
+	}})
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+		TargetText: strPtr("3只猫"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateResourceSegment: %v", err)
+	}
+	if len(updated.QualityIssues) > 0 {
+		t.Fatalf("expected stale quality_issues replaced (cleared), got %v", updated.QualityIssues)
+	}
+}
+
+// TestUpdateResourceSegmentSourceOnlyClearsIssues 验证仅改 source 时旧译文与旧 issues 一起清空。
+// 场景：sourceChanged && !targetChanged → 无译文不跑 QA，旧 issues 直接清空。
+func TestUpdateResourceSegmentSourceOnlyClearsIssues(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-src-user")
+	project := createTestProject(t, client, "seg-qa-src-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/src.txt")
+	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "3 cats", "3只猫", []qa.QualityIssue{{
+		SegmentIndex: 0,
+		Severity:     qa.SeverityWarning,
+		Code:         qa.CheckNumberMismatch,
+		Message:      "旧 issue",
+	}})
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+		SourceText: strPtr("4 dogs"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateResourceSegment: %v", err)
+	}
+	if updated.TargetText != nil {
+		t.Fatalf("expected target cleared on source-only change, got %v", updated.TargetText)
+	}
+	if len(updated.QualityIssues) > 0 {
+		t.Fatalf("expected quality_issues cleared on source-only change, got %v", updated.QualityIssues)
+	}
+}
+
+// TestUpdateResourceSegmentCommentOnlyKeepsIssues 验证仅改 comment 不触碰 quality_issues。
+func TestUpdateResourceSegmentCommentOnlyKeepsIssues(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-cmt-user")
+	project := createTestProject(t, client, "seg-qa-cmt-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/cmt.txt")
+	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "3 cats", "三只猫", []qa.QualityIssue{{
+		SegmentIndex: 0,
+		Severity:     qa.SeverityWarning,
+		Code:         qa.CheckNumberMismatch,
+		Message:      "应保留",
+	}})
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+		Comment: strPtr("备注"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateResourceSegment: %v", err)
+	}
+	if len(updated.QualityIssues) != 1 || updated.QualityIssues[0].Code != qa.CheckNumberMismatch {
+		t.Fatalf("expected quality_issues unchanged on comment-only change, got %v", updated.QualityIssues)
+	}
+}
+
+// TestUpdateResourceSegmentSourceAndTargetUsesNewSource 验证同时变更时 QA 用新 source + 新 target。
+// 场景：源由"3 cats"改为"4 dogs"（含数字 4），译文"三只狗"无阿拉伯数字 → 用新源跑出 number_mismatch。
+func TestUpdateResourceSegmentSourceAndTargetUsesNewSource(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-st-user")
+	project := createTestProject(t, client, "seg-qa-st-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/st.txt")
+	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "3 cats", "3只猫", nil)
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+		SourceText: strPtr("4 dogs"),
+		TargetText: strPtr("三只狗"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateResourceSegment: %v", err)
+	}
+	if !hasIssueCode(updated.QualityIssues, qa.CheckNumberMismatch) {
+		t.Fatalf("expected number_mismatch using new source, got %v", updated.QualityIssues)
+	}
+}
+
+// TestUpdateResourceSegmentExcludesLengthRatio 验证手动编辑不跑 length_ratio。
+// 场景：源"a"与译文长串纯中文比率远超默认上限 3.0，若启用必触发 length_ratio error；
+// 断言结果中不含 length_ratio 即证明该 checker 被排除（避免与执行计划配置矛盾）。
+func TestUpdateResourceSegmentExcludesLengthRatio(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-lr-user")
+	project := createTestProject(t, client, "seg-qa-lr-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/lr.txt")
+	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "a", "啊", nil)
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+		TargetText: strPtr("啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateResourceSegment: %v", err)
+	}
+	if hasIssueCode(updated.QualityIssues, qa.CheckLengthRatio) {
+		t.Fatalf("length_ratio must not run on manual edit (no execution-plan config), got %v", updated.QualityIssues)
+	}
 }

@@ -170,6 +170,33 @@ func AllCheckerNames() []string {
 	}
 }
 
+// ZeroConfigDeterministicChecks 返回无需用户额外配置阈值、单段即可判定的
+// 确定性 checker 名称白名单。适用于手动编辑译文等无法读取执行计划 QA 配置的
+// 即时场景。
+//
+// 排除规则：
+//   - length_ratio：依赖用户配置的长度比阈值，用默认值跑会与正式翻译流程判定矛盾；
+//   - forbidden_term / term_inconsistency：依赖术语表，gls==nil 时虽自动跳过，
+//     但显式排除可避免语义歧义；
+//   - duplicate：需同批次多段输入，单段场景恒为空；
+//   - duplicate_source_divergence：文档级检查，不走 Engine 注册表。
+func ZeroConfigDeterministicChecks() []string {
+	return []string{
+		CheckUntranslated,
+		CheckSourceResidual,
+		CheckPunctuationPairing,
+		CheckPunctuationMissing,
+		CheckWhitespaceIrregular,
+		CheckRepeatedSpace,
+		CheckWidthMix,
+		CheckNumberMismatch,
+		CheckURLEmailMismatch,
+		CheckSubtitleLineCount,
+		CheckLeftoverPlaceholder,
+		CheckXMLTagMismatch,
+	}
+}
+
 // Span 描述质量问题在目标文本中的跨度。
 // MatchedText 为触发问题的精确文本；TargetStart/TargetEnd 为可选的字符偏移（按 rune 计）。
 type Span struct {
