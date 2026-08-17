@@ -259,7 +259,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 #### 可配置 checker 名称（`qa.checks`）
 
-`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 15 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
+`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 16 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
 
 | 名称                          | 说明                                           |
 | ----------------------------- | ---------------------------------------------- |
@@ -268,10 +268,11 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 | `duplicate`                   | 相邻译文相同                                    |
 | `source_residual`             | 源语脚本残留（按语言对分档）                    |
 | `punctuation_pairing`         | 标点配对不平衡                                  |
+| `punctuation_missing`         | 源文整类包裹标点在译文中完全缺失                |
 | `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     |
 | `repeated_space`              | 连续空格 / CJK 间空格                          |
 | `width_mix`                   | 全/半角混用                                    |
-| `number_mismatch`             | 阿拉伯数字集合不一致                           |
+| `number_mismatch`             | 阿拉伯数字集合不一致（全角数字归一化后比对）   |
 | `url_email_mismatch`          | URL/邮箱集合不一致                             |
 | `subtitle_line_count`        | 字幕行数不一致                                 |
 | `forbidden_term`              | 命中禁译词条仍出现                             |
@@ -351,12 +352,13 @@ context:
 
 | 字段           | 类型   | 说明                                            |
 | -------------- | ------ | ----------------------------------------------- |
-| `mode`         | string | `translate` / `extract` / `adjudicate` / `semantic_qa` |
-| `backend_id`   | int    | 后端 ID                                         |
-| `concurrency`  | int    | 并发（≥ 1）                                     |
+| `mode`         | string | `translate` / `extract` / `adjudicate` / `correct` / `semantic_qa` |
+| `backend_id`   | int    | 后端 ID；`correct` 轮为纯本地无需后端，可省略，其余 mode 必填 |
+| `concurrency`  | int    | 并发（≥ 1）；`correct` 轮固定为 1，不可配置     |
 | `translate`    | object | `mode=translate` 时必填                         |
 | `extract`      | object | `mode=extract` 时必填                           |
 | `adjudicate`   | object | `mode=adjudicate` 时必填                        |
+| `correct`      | object | `mode=correct` 时必填（且 `rules` 至少 1 条）   |
 | `semantic_qa`  | object | `mode=semantic_qa` 时必填                       |
 
 ### extract
@@ -380,7 +382,7 @@ context:
 | `profile_id`          | int    | 执行配置                                                                                                                   |
 | `batch_size`          | int    | 待译段落数上限（**不计上下文段**）；`0` 不限制，与 `max_words_per_batch` 至少填一项                                        |
 | `max_words_per_batch` | int    | 字词数上限（**计入上下文段**）；`0` 不限制，与 `batch_size` 至少填一项。纯行数模式（此项与 `context.max_chars` 均为 0）下上下文体积不受约束 |
-| `fallback_shrink`     | float  | 池缩放系数 (0, 1)；`0`/省略 = 单池不缩批。池 N 批次约束 = `floor(原始 × shrink^N)`，各池串行，失败批次进下一更小的池 |
+| `fallback_shrink`     | float  | 池缩比系数（**必填**，合法域 (0, 1]）。`1.0` = 不缩（多池同尺寸重切）；`(0,1)` = 每池缩小，池 N 批次约束 = `floor(原始 × shrink^N)`。`0` 非法（不缩请用 `1.0`）；省略/零值会被后端拒绝（不规范化）。池数量由 `retry.max_attempts+1` 决定 |
 | `segment_filter`      | object | `pending_only` / `skip_approved` / `all` 等                                                                                |
 | `retry`               | object | 重试                                                                                                                       |
 
@@ -410,6 +412,29 @@ context:
 
 text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需重试。
 
+### correct
+
+本地改写轮次配置（纯本地、不调 LLM）。机械修复 QA 报出的高频安全问题子集：无 `backend_id` / `batch_size` / `max_words_per_batch` / `retry`，不分批、无外部 I/O、无重试。规则按 `rules` 顺序执行，**首个生效即停**（不叠加）；幂等性由 handler 用同一 checker 重跑验证——改写后若仍能报出该 issue code 则回滚、保留原问题。
+
+| 字段     | 类型    | 默认值 | 说明                                       |
+| -------- | ------- | ------ | ------------------------------------------ |
+| `rules`  | []object | —      | 启用的改写规则，按顺序执行；至少 1 条且 `name` 必须在白名单 |
+
+`rules[]` 每项字段：
+
+| 字段       | 类型   | 默认值 | 说明                          |
+| ---------- | ------ | ------ | ----------------------------- |
+| `name`     | string | —      | 规则名（白名单），见下表     |
+| `enabled`  | bool   | `true` | 是否启用此规则               |
+
+当前可用规则（白名单）：
+
+| `name`                       | 修复的 issue code       | 行为                                                                 |
+| ---------------------------- | ----------------------- | -------------------------------------------------------------------- |
+| `punctuation_missing_wrap`  | `punctuation_missing`   | 当源文是单段配对引号包裹（如 `「…」` / `“…”`）且译文丢失该引号时，自动在译文首尾补回对应开闭引号；多段、译文已有该引号、或非配对引号等不安全场景不处理 |
+
+是否执行改写由该轮次是否出现在 `rounds` 数组决定（与其他轮次一致，无轮次级 `enabled` 开关）。可修复的 issue code 与 [翻译审校 · 质量检测](/zh/guide/review#质量检测) 的对应规则项一一对应。
+
 ### semantic_qa
 
 语义质检轮次配置。系统提示词内置不可见，无 `prompt_template_id`；产出的语义类问题以 `warning` 直接进人审。
@@ -434,9 +459,11 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 
 #### `issue_codes` 取值
 
-支持 7 个 code，规则码与语义码都可作筛选键：
+支持全部 25 个 issue code（16 项 per-batch checker + 1 项文档级 `duplicate_source_divergence` + 8 项语义 code），规则码与语义码都可作筛选键：
 
-`source_residual`、`length_ratio`、`untranslated`、`duplicate`、`calque`、`term_fidelity`、`naturalness`
+`untranslated`、`length_ratio`、`duplicate`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`whitespace_irregular`、`repeated_space`、`width_mix`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`forbidden_term`、`term_inconsistency`、`leftover_placeholder`、`xml_tag_mismatch`、`duplicate_source_divergence`、`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
+
+完整清单（含每项含义）见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)；前端筛选 UI 的分组见 [翻译审校 · 按质量问题筛选](/zh/guide/review#按质量问题筛选)。
 
 #### 软警告
 
@@ -446,28 +473,31 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 
 | 字段           | 类型 | 默认值 | 说明                                                                                                       |
 | -------------- | ---- | ------ | ---------------------------------------------------------------------------------------------------------- |
-| `max_attempts` | int  | `3`    | 双重角色：每池在途重试预算（1 次首调 + N 次重试）；启用 `fallback_shrink` 时还决定池数量（池数 = `max_attempts + 1`） |
+| `max_attempts` | int  | `3`    | 池深度 = `max_attempts + 1`（所有 handler 生效）；每池在途重试预算内部封顶 `min(max_attempts, 3)`，不单独暴露 |
 | `backoff_ms`   | int  | `2000` | 基础退避毫秒                                                                                               |
 | `jitter`       | bool | `true` | 随机抖动                                                                                                   |
 
 ::: tip `max_attempts` 与池化缩批的关系
-启用 `fallback_shrink` 后，`max_attempts` 同时控制「池深度」：池数量 = `max_attempts + 1`，池 N 的批次约束 = `floor(原始 × shrink^N)`。最坏情况下单段调用次数 ≈ `(max_attempts + 1)²`（每池重试 × 池数）。机制细节见 [流水线与原理 · 批量与并发](/zh/guide/pipeline#批量与并发)。
+池数量 = `max_attempts + 1`，池 N 的批次约束 = `floor(原始 × shrink^N)`。各池串行，只有前一池失败的段才会进下一池。最坏情况下单段调用次数 ≈ `(max_attempts + 1)²`（每池重试 × 池数）。`correct` 轮为纯本地、无重试，不读 `retry`。机制细节见 [流水线与原理 · 批量与并发](/zh/guide/pipeline#批量与并发)。
 :::
 
 ### Ruby 重试（计划级）
 
-| 字段         | 类型 | 默认值  | 说明                    |
-| ------------ | ---- | ------- | ----------------------- |
-| `enabled`    | bool | `false` | 本地还原失败时 LLM 对齐 |
-| `backend_id` | int  | `0`     | `0` 表示用翻译主后端    |
+| 字段            | 类型 | 默认值  | 说明                                            |
+| --------------- | ---- | ------- | ----------------------------------------------- |
+| `enabled`       | bool | `false` | 本地还原失败时 LLM 对齐                         |
+| `backend_id`    | int  | `0`     | `0` 表示用翻译主后端                           |
+| `max_attempts`  | int  | `1`     | 注音对齐重试轮数（仅 `enabled=true` 时生效，最小 1） |
 
 ### 校验摘要
 
-- `rounds` 非空；每轮有合法 `mode` 与 `backend_id`
-- 对应 mode 必须带齐子配置对象
-- `batch_size` 与 `max_words_per_batch` 在翻译/裁决/语义质检中不能同时为 0（提取两者皆 0 表示一次全量）
+- `rounds` 非空；每轮有合法 `mode`
+- 对应 mode 必须带齐子配置对象（`correct` 的 `rules` 至少 1 条且 `name` 在白名单）
+- `backend_id` 仅 `correct` 轮可省略；其余 mode 必填
+- `concurrency` ≥ 1（`correct` 轮固定为 1）
+- `batch_size` 与 `max_words_per_batch` 在翻译/裁决/语义质检中不能同时为 0（提取两者皆 0 表示一次全量）；`correct` 轮无批次字段
 - `semantic_qa.segment_scope=with_issue_codes` 时必须提供 ≥ 1 个 `issue_codes`
-- `concurrency` ≥ 1；`fallback_shrink` ∈ (0, 1) 或为 0（禁用池化缩批）
+- `fallback_shrink` ∈ (0, 1] 且必填（翻译轮）；省略或 `0` 会被后端拒绝
 
 ---
 

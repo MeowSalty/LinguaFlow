@@ -19,11 +19,13 @@ flowchart TD
   Res --> Next{下一轮次}
   Next -->|extract| Ex[抽术语 → 写术语表]
   Next -->|translate| Tr[翻译段落]
+  Next -->|correct| Co[本地改写译文，消除安全问题]
   Next -->|adjudicate| Ad[复核规则质检问题]
   Next -->|semantic_qa| Sq[LLM 语义扫描]
   Next -->|完成| Done([结束])
   Ex --> Next
   Tr --> Next
+  Co --> Next
   Ad --> Next
   Sq --> Next
 ```
@@ -33,11 +35,11 @@ flowchart TD
 1. 内容保护（占位符替换）
 2. 组装上下文 → 调用 AI
 3. 还原占位符 / 后处理 / 可选 Ruby 还原
-4. 规则质检写回段落（含 16 项确定性 checker）
+4. 规则质检写回段落（含 17 项确定性 checker）
 
 可选：执行配置中的 **内联术语自举** 会在翻译响应中一并抽术语。语义质检产生的 `warning` 级问题通过 `span` 精确定位到译文片段。
 
-推荐轮次顺序：`extract`（可选）→ `translate`（可多轮）→ `adjudicate`（可选）→ `semantic_qa`（可选）。
+推荐轮次顺序：`extract`（可选）→ `translate`（可多轮）→ `correct`（可选）→ `adjudicate`（可选）→ `semantic_qa`（可选）。
 
 ---
 
@@ -66,33 +68,33 @@ Round 2：只处理 Round 1 失败的段落
 - CJK 常按字符计词；非 CJK 常按空白分词
 - **`batch_size` 只数待译段**，不把上下文段算进去；`max_words_per_batch` 则把上下文段的字数也计入预算（避免上下文把整批塞满）。纯行数模式（二者与 `context.max_chars` 均为 0）时上下文体积不受约束
 - 批次会带上上下文窗口，保证连贯；组批时还会**预估上下文段的词数并扣减预算**，避免因上下文膨胀导致批次超限
-- **失败降级（池化缩批）**：`fallback_shrink` > 0 时启用多池缩批——失败段按更小的批次约束重试，直到最小 1 段
+- **失败降级（池化缩批）**：`fallback_shrink` 是翻译轮的必填系数（合法域 (0, 1]）——`1.0` 启用多池同尺寸重切，`(0,1)` 启用多池缩批，失败段按更小的批次约束重试，直到最小 1 段
 - 仍失败的段落可进入下一翻译轮次
 
 ### 池化缩批怎么走
 
-`fallback_shrink` 是池缩放系数（取值 (0, 1)，默认 0.5）。各池串行执行，前一个池里失败的批次会重新切批、进入下一个更小的池：
+`fallback_shrink` 是池缩比系数（必填，合法域 (0, 1]）。各池串行执行，前一个池里失败的批次会重新切批、进入下一个更小的池；`1.0` 时各池同尺寸（只重切不缩小），`(0,1)` 时每池按系数缩小：
 
 ```text
 池 0：批次约束 = 原始 batch_size（或 max_words_per_batch）
   ├─ 成功 → 写入，该段结束
   └─ 失败 → 交给池 1
-池 1：批次约束 = floor(原始 × shrink)        （默认约一半）
+池 1：批次约束 = floor(原始 × shrink)        （shrink=1.0 时与池 0 相同）
   └─ 失败 → 交给池 2
-池 2：批次约束 = floor(原始 × shrink²)       （默认约四分之一）
+池 2：批次约束 = floor(原始 × shrink²)       （shrink=1.0 时仍相同）
   └─ … 直到最小 1 段
 ```
 
 **关键参数**：
 
-- **池数量 = `retry.max_attempts + 1`**——所以开 `fallback_shrink` 时，`max_attempts` 同时控制「每池在途重试预算」和「池深度」
+- **池数量 = `retry.max_attempts + 1`**——`max_attempts` 决定池深度，每池在途重试预算内部封顶 `min(max_attempts, 3)`、不单独暴露
 - 最坏情况下单段调用次数 ≈ `(max_attempts + 1)²`（每池重试 × 池数）
 - 各池之间是**串行**的，只有前一池失败的段才会进下一池；成功段不会被重复处理
 
 工作区作业时间线会以「池级事件」卡片展示当前所处池、批次数与待处理数，方便观察缩批进度。
 
-::: tip 不开缩批时
-`fallback_shrink = 0`（或省略）退化为单池：失败的整批直接按 `max_attempts` 在途重试，不切更小批次。适合响应稳定、失败罕见的后端。
+::: tip 不缩只重切用 1.0
+`fallback_shrink = 1.0` 时多池批次约束相同，相当于「失败段重新按原批次大小再试一遍」而非缩小批次；适合响应稳定、但偶发解析失败需要重切的后端。`0` 非法（会被后端拒绝）；确需单池不重切，请减少 `retry.max_attempts`。
 :::
 
 字段表见 [翻译配置 · 参考 · translate](/zh/guide/translation-config-reference#translate)；重试参数见 [翻译配置 · 参考 · 重试](/zh/guide/translation-config-reference#重试-retry)。
@@ -168,7 +170,7 @@ Round 2：只处理 Round 1 失败的段落
 
 ### 规则质检
 
-翻译轮次内由 QA 引擎同步跑规则检查并写回段落。共 16 项确定性 checker（其中 1 项 `duplicate_source_divergence` 为文档级、跨段比对，不可在 `qa.checks` 中关闭）；其余 15 项 per-batch checker 均可在执行配置 `qa.checks` 中按名选择性启用：
+翻译轮次内由 QA 引擎同步跑规则检查并写回段落。共 17 项确定性 checker（其中 1 项 `duplicate_source_divergence` 为文档级、跨段比对，不可在 `qa.checks` 中关闭）；其余 16 项 per-batch checker 均可在执行配置 `qa.checks` 中按名选择性启用：
 
 | code                          | 含义                                           | 可否 AI 裁决 |
 | ----------------------------- | ---------------------------------------------- | ------------ |
@@ -178,10 +180,11 @@ Round 2：只处理 Round 1 失败的段落
 | `untranslated`                | 译文=原文                                       | ❌ 硬规则    |
 | `source_residual`             | 译文夹源语脚本                                 | ✅ 软规则    |
 | `punctuation_pairing`         | 标点配对不平衡                                 | ❌ 硬规则    |
+| `punctuation_missing`         | 源文整类包裹标点在译文中完全缺失               | ❌ 硬规则    |
 | `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     | ❌ 硬规则    |
 | `repeated_space`              | 连续空格 / CJK 间空格                          | ❌ 硬规则    |
 | `width_mix`                   | 全/半角混用                                    | ❌ 硬规则    |
-| `number_mismatch`             | 阿拉伯数字集合不一致                           | ❌ 硬规则    |
+| `number_mismatch`             | 阿拉伯数字集合不一致（全角数字归一化后比对）   | ❌ 硬规则    |
 | `url_email_mismatch`          | URL/邮箱集合不一致                             | ❌ 硬规则    |
 | `subtitle_line_count`        | 字幕行数不一致                                 | ❌ 硬规则    |
 | `forbidden_term`              | 命中禁译词条却仍出现在译文                     | ❌ 硬规则    |
@@ -210,6 +213,26 @@ LinguaFlow 用**保护区**解决：QA 引擎拿到内容保护阶段记录的�
 3. 解析失败时 **保留原问题**，不清空
 
 **建议：** 放在翻译轮次之后；专有名词多的文档优先开 `source_residual`。配置见 [翻译配置 · 使用](/zh/guide/translation-config#进阶组合)；协议细节见 [翻译配置 · 参考 · adjudicate](/zh/guide/translation-config-reference#adjudicate)。
+
+### 本地改写（`correct`）
+
+纯本地的机械修正轮次，**不调 LLM、无后端、无重试**。消费规则质检已报出的安全问题，按 `rules` 顺序对译文做确定性改写：
+
+1. 扫描 `translated` / `edited` 且译文非空的段（跨轮增量会排除已被前一同模式轮解决的段）
+2. 规则按配置顺序执行，**首个生效改写即停**（不叠加）
+3. **幂等校验**：改写后用同一 checker（规则声明 `ResolvedCodes` 的并集）重跑——若该 issue code 仍报出，则**回滚译文、保留原问题**，避免把「没修好」伪装成「已修好」
+
+首发规则 `punctuation_missing_wrap`：当源文是单段配对引号包裹（`「…」` / `“…”` / `『…』` 等）且译文丢失该引号时，自动在译文首尾补回对应开闭引号；多段包裹、译文已有该引号、非配对引号等不安全场景一律不处理。
+
+::: tip 修复、裁决、语义质检各管一段
+- `correct` 改写译文以**消除**已报出的安全问题（幂等可验证）
+- `adjudicate` 只判断已有软规则问题**保留 / 剔除**、不改译文
+- `semantic_qa` **新增**语义类问题
+
+三者互补，可叠加放在翻译轮次之后。
+:::
+
+配置字段见 [翻译配置 · 参考 · correct](/zh/guide/translation-config-reference#correct)；可修复的 issue code 与 [翻译审校 · 质量检测](/zh/guide/review#质量检测) 对应。
 
 ### 语义质检（`semantic_qa`）
 
