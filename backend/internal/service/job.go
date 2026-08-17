@@ -144,12 +144,13 @@ func NormalizeRubyRetryAttempts(n int) int {
 
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
-	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa"
+	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa" | "correct"
 	Backend    BackendSnapshot             `json:"backend"`
 	Translate  *JobTranslateRoundSnapshot  `json:"translate,omitempty"`
 	Extract    *JobExtractRoundSnapshot    `json:"extract,omitempty"`
 	Adjudicate *JobAdjudicateRoundSnapshot `json:"adjudicate,omitempty"`
 	SemanticQA *JobSemanticQARoundSnapshot `json:"semantic_qa,omitempty"`
+	Correct    *JobCorrectRoundSnapshot    `json:"correct,omitempty"`
 }
 
 // JobTranslateRoundSnapshot 翻译轮次快照。
@@ -198,6 +199,32 @@ type JobSemanticQARoundSnapshot struct {
 	SegmentScope     string             `json:"segment_scope,omitempty"` // 物化后的 scope（空 → "all"）
 	IssueCodes       []string           `json:"issue_codes,omitempty"`   // 仅 with_issue_codes 有效
 	Retry            schema.RetryConfig `json:"retry"`
+}
+
+// JobCorrectRoundSnapshot 本地改写轮次快照（纯本地、不调 LLM，无 prompt/backend 字段）。
+// NOTE: 无 FallbackShrink — correct 不接缩批（与 extract/adjudicate/semantic_qa 一致）。
+// NOTE: 无 Retry — schema 层 CorrectRoundConfig 无 Retry（纯本地、无外部 I/O、无重试语义）。
+// NOTE: 无 Enabled — 是否执行由轮次是否出现在 rounds 数组决定（与其他轮次一致）。
+type JobCorrectRoundSnapshot struct {
+	Rules       []JobCorrectRuleSnapshot `json:"rules,omitempty"`
+	Concurrency int                      `json:"concurrency"`
+}
+
+// JobCorrectRuleSnapshot 单条本地改写规则快照。
+type JobCorrectRuleSnapshot struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+}
+
+func snapshotCorrectRound(c *schema.CorrectRoundConfig) *JobCorrectRoundSnapshot {
+	rules := make([]JobCorrectRuleSnapshot, 0, len(c.Rules))
+	for _, r := range c.Rules {
+		rules = append(rules, JobCorrectRuleSnapshot{Name: r.Name, Enabled: r.Enabled})
+	}
+	return &JobCorrectRoundSnapshot{
+		Rules:       rules,
+		Concurrency: c.Concurrency,
+	}
 }
 
 func snapshotSemanticQARound(s *schema.SemanticQARoundConfig) *JobSemanticQARoundSnapshot {
@@ -390,6 +417,19 @@ func (s *JobService) validateAndSnapshotWith(
 	}
 
 	for i, round := range plan.Rounds {
+		// correct 是纯本地轮，无 backend：跳过 RBAC check 与 backend snapshot，短路出零 BackendSnapshot。
+		if round.Mode == "correct" {
+			if round.Correct == nil {
+				return nil, fmt.Errorf("rounds[%d] correct config is nil", i)
+			}
+			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
+				Mode:    "correct",
+				Backend: BackendSnapshot{}, // 零值（无 backend）
+				Correct: snapshotCorrectRound(round.Correct),
+			})
+			continue
+		}
+
 		// 校验后端可访问性
 		if err := check(round.BackendID); err != nil {
 			return nil, fmt.Errorf("rounds[%d] backend: %w", i, err)

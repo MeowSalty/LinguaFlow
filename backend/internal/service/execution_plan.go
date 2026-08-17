@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
@@ -263,7 +264,9 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 		return fmt.Errorf("%w: rounds must not be empty", ErrExecutionPlanConfigInvalid)
 	}
 	for i, round := range rounds {
-		if round.BackendID <= 0 {
+		// correct 是纯本地轮，无 backend（backend_id 可省略，不校验为正）。
+		// 其余 mode 仍要求 backend_id > 0。
+		if round.Mode != "correct" && round.BackendID <= 0 {
 			return fmt.Errorf("%w: rounds[%d].backend_id must be positive", ErrExecutionPlanConfigInvalid, i)
 		}
 		switch round.Mode {
@@ -384,8 +387,31 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 					return fmt.Errorf("%w: rounds[%d].semantic_qa.issue_codes contains invalid code %q", ErrExecutionPlanConfigInvalid, i, code)
 				}
 			}
+		case "correct":
+			if round.Correct == nil {
+				return fmt.Errorf("%w: rounds[%d].correct config required when mode=correct", ErrExecutionPlanConfigInvalid, i)
+			}
+			c := round.Correct
+			if c.Concurrency < 1 {
+				return fmt.Errorf("%w: rounds[%d].correct.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
+			}
+			// backend_id 不校验（correct 可省略）。
+			if len(c.Rules) == 0 {
+				return fmt.Errorf("%w: rounds[%d].correct.rules must contain at least one rule", ErrExecutionPlanConfigInvalid, i)
+			}
+			allowed := make(map[string]struct{})
+			for _, name := range correct.AllRuleNames() {
+				allowed[name] = struct{}{}
+			}
+			for _, r := range c.Rules {
+				if _, ok := allowed[r.Name]; !ok {
+					return fmt.Errorf("%w: rounds[%d].correct.rules contains invalid rule name %q (allowed: %v)", ErrExecutionPlanConfigInvalid, i, r.Name, correct.AllRuleNames())
+				}
+			}
+			// NOTE: correct 不校验 batch_size/max_words_per_batch/retry（无批量、无外部 I/O、无重试语义）；
+			// 后端 backend_id optional 化后，其余 mode 的 BackendID!=0 已由顶部 if 保证。
 		default:
-			return fmt.Errorf("%w: rounds[%d].mode must be 'translate', 'extract', 'adjudicate' or 'semantic_qa'", ErrExecutionPlanConfigInvalid, i)
+			return fmt.Errorf("%w: rounds[%d].mode must be 'translate', 'extract', 'adjudicate', 'semantic_qa' or 'correct'", ErrExecutionPlanConfigInvalid, i)
 		}
 	}
 	return nil

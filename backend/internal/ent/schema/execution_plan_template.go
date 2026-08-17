@@ -8,12 +8,13 @@ import (
 
 // ExecutionRoundConfig 单轮执行配置。
 type ExecutionRoundConfig struct {
-	Mode       string                 `json:"mode"                  yaml:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa"
+	Mode       string                 `json:"mode"                  yaml:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa" | "correct"
 	BackendID  int                    `json:"backend_id"            yaml:"backend_id"`
 	Translate  *TranslateRoundConfig  `json:"translate,omitempty"   yaml:"translate,omitempty"`
 	Extract    *ExtractRoundConfig    `json:"extract,omitempty"     yaml:"extract,omitempty"`
 	Adjudicate *AdjudicateRoundConfig `json:"adjudicate,omitempty"  yaml:"adjudicate,omitempty"`
 	SemanticQA *SemanticQARoundConfig `json:"semantic_qa,omitempty" yaml:"semantic_qa,omitempty"`
+	Correct    *CorrectRoundConfig    `json:"correct,omitempty"     yaml:"correct,omitempty"`
 }
 
 // TranslateSegmentFilterConfig 翻译轮次段落过滤配置。
@@ -72,6 +73,21 @@ type SemanticQARoundConfig struct {
 	// NOTE: fallback_shrink 当前仅 translate 轮实现缩批（shrinkConstraint）。
 	// semantic_qa 失败模式与批次大小无关，不需要缩批，故此模式暂不暴露该字段。
 	// 若未来需要，在此结构体加 FallbackShrink float64，并补 OpenAPI/校验/snapshot/engine_factory/API 映射。
+}
+
+// CorrectRoundConfig 本地改写轮次配置（纯本地、不调 LLM）。
+// 无 BatchSize/MaxWordsPerBatch/Retry：不分批、无外部 I/O、无重试。
+// 无 Enabled：是否执行由轮次是否出现在 rounds 数组决定（与其他轮次一致）。
+type CorrectRoundConfig struct {
+	Rules       []CorrectRuleConfig `json:"rules,omitempty"     yaml:"rules,omitempty"`
+	Concurrency int                 `json:"concurrency"          yaml:"concurrency"`
+	// NOTE: 无 FallbackShrink — correct 不接缩批（与 extract/adjudicate/semantic_qa 一致）。
+}
+
+// CorrectRuleConfig 单条本地改写规则。
+type CorrectRuleConfig struct {
+	Name    string `json:"name"    yaml:"name"` // 白名单：punctuation_missing_wrap
+	Enabled bool   `json:"enabled" yaml:"enabled"`
 }
 
 // ExecutionPlanRubyRetryConfig 注音对齐重试配置。

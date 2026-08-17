@@ -39,8 +39,11 @@ func (s *Server) parseExecutionPlanTemplateID(w http.ResponseWriter, r *http.Req
 // toExecutionRoundConfigAPI 将 schema 层的轮次配置转换为 API 响应类型。
 func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundConfig {
 	apiRC := ExecutionRoundConfig{
-		Mode:      ExecutionRoundConfigMode(rc.Mode),
-		BackendId: rc.BackendID,
+		Mode: ExecutionRoundConfigMode(rc.Mode),
+	}
+	if rc.BackendID > 0 {
+		bid := rc.BackendID
+		apiRC.BackendId = &bid
 	}
 	if rc.Mode == "translate" && rc.Translate != nil {
 		t := rc.Translate
@@ -137,6 +140,20 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		}
 		apiRC.SemanticQa = &semanticQACfg
 	}
+	if rc.Mode == "correct" && rc.Correct != nil {
+		c := rc.Correct
+		apiRC.Concurrency = c.Concurrency
+		rules := make([]CorrectRuleConfig, 0, len(c.Rules))
+		for _, r := range c.Rules {
+			rr := CorrectRuleConfig{Name: CorrectRuleConfigName(r.Name)}
+			if !r.Enabled {
+				f := false
+				rr.Enabled = &f
+			}
+			rules = append(rules, rr)
+		}
+		apiRC.Correct = &CorrectRoundConfig{Rules: rules}
+	}
 	return apiRC
 }
 
@@ -225,8 +242,10 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 	rounds := make([]schema.ExecutionRoundConfig, 0, len(apiRounds))
 	for _, ar := range apiRounds {
 		rc := schema.ExecutionRoundConfig{
-			Mode:      string(ar.Mode),
-			BackendID: ar.BackendId,
+			Mode: string(ar.Mode),
+		}
+		if ar.BackendId != nil {
+			rc.BackendID = *ar.BackendId
 		}
 		if ar.Mode == ExecutionRoundConfigModeTranslate && ar.Translate != nil {
 			t := ar.Translate
@@ -362,6 +381,25 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 				}
 			}
 			rc.SemanticQA = semanticQACfg
+		}
+		if ar.Mode == ExecutionRoundConfigModeCorrect && ar.Correct != nil {
+			c := ar.Correct
+			correctCfg := &schema.CorrectRoundConfig{
+				Concurrency: ar.Concurrency,
+			}
+			if len(c.Rules) > 0 {
+				rules := make([]schema.CorrectRuleConfig, 0, len(c.Rules))
+				for _, r := range c.Rules {
+					rr := schema.CorrectRuleConfig{Name: string(r.Name)}
+					rr.Enabled = true
+					if r.Enabled != nil {
+						rr.Enabled = *r.Enabled
+					}
+					rules = append(rules, rr)
+				}
+				correctCfg.Rules = rules
+			}
+			rc.Correct = correctCfg
 		}
 		rounds = append(rounds, rc)
 	}
