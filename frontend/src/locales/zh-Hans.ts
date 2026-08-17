@@ -761,6 +761,7 @@ const messages = {
       planPreviewModeExtract: '术语抽取',
       planPreviewModeAdjudicate: '质量裁决',
       planPreviewModeSemanticQA: '语义质检',
+      planPreviewModeCorrect: '本地改写',
       confirmSummary:
         '将使用「{planName}」为 {resourceCount} 个资源（{segmentCount} 个段落）创建任务。',
       segmentFilter: {
@@ -815,6 +816,7 @@ const messages = {
         translate: '翻译',
         adjudicate: '质量裁决',
         semantic_qa: '语义质检',
+        correct: '本地改写',
         review: '审校',
         finalize: '收尾',
         ruby_alignment: '注音对齐',
@@ -1679,6 +1681,7 @@ const messages = {
       roundConcurrencyRequired: '轮次 {n}：请设置并发数',
       roundSemanticQAIssueCodesRequired: '轮次 {n}：按问题代码筛选时至少选择一个问题代码',
       roundFallbackShrinkRequired: '轮次 {n}：缩放因子需在 0 到 1 之间（不含 0）',
+      roundCorrectRulesRequired: '轮次 {n}：本地改写至少启用一条规则',
     },
     messages: {
       createSuccess: '执行计划模板创建成功',
@@ -1712,6 +1715,7 @@ const messages = {
       modeExtract: '术语抽取',
       modeAdjudicate: '质量裁决',
       modeSemanticQA: '语义质检',
+      modeCorrect: '本地改写',
       backend: 'AI 后端',
       backendPlaceholder: '选择后端',
       concurrency: '并发数',
@@ -1770,6 +1774,13 @@ const messages = {
       semanticQABatchSizeHint: '0=不限制，与字词数上限至少填一项',
       semanticQAMaxWordsPerBatch: '字词数上限',
       semanticQAMaxWordsPerBatchHint: '0=不限制，与段落数上限至少填一项',
+      correctPromptHint:
+        '本地改写纯本地机械修复，不调用 LLM、不分批、无重试；规则按顺序执行，首个生效即停。',
+      correctRules: '改写规则',
+      correctRulesHint: '按顺序执行，至少启用一条规则',
+      correctRulePunctuationMissingWrap: '补全缺失引号包裹',
+      correctRulePunctuationMissingWrapHint:
+        '机械修复 punctuation_missing 报出的译文丢失源文引号包裹（单 span 安全子集）',
     },
     actions: {
       addRound: '添加轮次',

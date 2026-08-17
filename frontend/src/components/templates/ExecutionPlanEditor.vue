@@ -23,6 +23,9 @@ type TranslateRoundConfig = NonNullable<ExecutionRoundConfig['translate']>
 type ExtractRoundConfig = NonNullable<ExecutionRoundConfig['extract']>
 type AdjudicateRoundConfig = NonNullable<ExecutionRoundConfig['adjudicate']>
 type SemanticQARoundConfig = NonNullable<ExecutionRoundConfig['semantic_qa']>
+type CorrectRoundConfig = NonNullable<ExecutionRoundConfig['correct']>
+type CorrectRuleConfig = NonNullable<CorrectRoundConfig['rules']>[number]
+type CorrectRuleName = CorrectRuleConfig['name']
 type RetryConfig = NonNullable<TranslateRoundConfig['retry']>
 type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 type RoundMode = ExecutionRoundConfig['mode']
@@ -68,6 +71,10 @@ const DEFAULT_SEMANTIC_QA: SemanticQARoundConfig = {
   segment_scope: 'all',
   issue_codes: undefined,
   retry: { ...DEFAULT_RETRY },
+}
+
+const DEFAULT_CORRECT: CorrectRoundConfig = {
+  rules: [{ name: 'punctuation_missing_wrap', enabled: true }],
 }
 
 const DEFAULT_ROUND: RoundModel = {
@@ -161,6 +168,17 @@ function mergeSemanticQA(source?: Partial<SemanticQARoundConfig>): SemanticQARou
   }
 }
 
+function mergeCorrect(source?: Partial<CorrectRoundConfig>): CorrectRoundConfig {
+  if (!source) return deepClone(DEFAULT_CORRECT)
+  const rules = source.rules && source.rules.length > 0 ? source.rules : DEFAULT_CORRECT.rules
+  return {
+    rules: rules.map((r) => ({
+      name: r.name,
+      enabled: r.enabled ?? true,
+    })),
+  }
+}
+
 function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
   if (!source) return deepClone(DEFAULT_ROUND)
   const mode = source.mode ?? 'translate'
@@ -172,6 +190,7 @@ function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
     extract: mode === 'extract' ? mergeExtract(source.extract) : undefined,
     adjudicate: mode === 'adjudicate' ? mergeAdjudicate(source.adjudicate) : undefined,
     semantic_qa: mode === 'semantic_qa' ? mergeSemanticQA(source.semantic_qa) : undefined,
+    correct: mode === 'correct' ? mergeCorrect(source.correct) : undefined,
   }
 }
 
@@ -281,6 +300,7 @@ const modeOptions = computed(() => [
   { label: t('executionPlanEditor.round.modeExtract'), value: 'extract' as RoundMode },
   { label: t('executionPlanEditor.round.modeAdjudicate'), value: 'adjudicate' as RoundMode },
   { label: t('executionPlanEditor.round.modeSemanticQA'), value: 'semantic_qa' as RoundMode },
+  { label: t('executionPlanEditor.round.modeCorrect'), value: 'correct' as RoundMode },
 ])
 
 const segmentFilterOptions = computed(() => [
@@ -324,6 +344,14 @@ const semanticQAIssueCodeOptions = computed(() =>
   })),
 )
 
+const correctRuleLabelMap: Record<CorrectRuleName, string> = {
+  punctuation_missing_wrap: t('executionPlanEditor.round.correctRulePunctuationMissingWrap'),
+}
+
+const correctRuleHintMap: Record<CorrectRuleName, string> = {
+  punctuation_missing_wrap: t('executionPlanEditor.round.correctRulePunctuationMissingWrapHint'),
+}
+
 const onSemanticQASegmentScopeChange = (round: RoundModel, scope: SemanticQASegmentScope): void => {
   if (!round.semantic_qa) return
   round.semantic_qa.segment_scope = scope
@@ -338,14 +366,16 @@ const modeBadgeClass = (mode: RoundMode): string => {
   if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
   if (mode === 'extract') return 'bg-amber-50 text-amber-600'
   if (mode === 'adjudicate') return 'bg-violet-50 text-violet-600'
-  return 'bg-emerald-50 text-emerald-600'
+  if (mode === 'semantic_qa') return 'bg-emerald-50 text-emerald-600'
+  return 'bg-sky-50 text-sky-600'
 }
 
 const modeLabel = (mode: RoundMode): string => {
   if (mode === 'translate') return t('executionPlanEditor.round.modeTranslate')
   if (mode === 'extract') return t('executionPlanEditor.round.modeExtract')
   if (mode === 'adjudicate') return t('executionPlanEditor.round.modeAdjudicate')
-  return t('executionPlanEditor.round.modeSemanticQA')
+  if (mode === 'semantic_qa') return t('executionPlanEditor.round.modeSemanticQA')
+  return t('executionPlanEditor.round.modeCorrect')
 }
 
 const switchRoundMode = (round: RoundModel, mode: RoundMode): void => {
@@ -355,14 +385,17 @@ const switchRoundMode = (round: RoundModel, mode: RoundMode): void => {
   round.extract = undefined
   round.adjudicate = undefined
   round.semantic_qa = undefined
+  round.correct = undefined
   if (mode === 'translate') {
     round.translate = deepClone(DEFAULT_TRANSLATE)
   } else if (mode === 'extract') {
     round.extract = deepClone(DEFAULT_EXTRACT)
   } else if (mode === 'adjudicate') {
     round.adjudicate = deepClone(DEFAULT_ADJUDICATE)
-  } else {
+  } else if (mode === 'semantic_qa') {
     round.semantic_qa = deepClone(DEFAULT_SEMANTIC_QA)
+  } else if (mode === 'correct') {
+    round.correct = deepClone(DEFAULT_CORRECT)
   }
 }
 
@@ -512,7 +545,7 @@ const emitUpdate = (): void => {
 
       <!-- 公共字段：后端 + 并发 -->
       <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div>
+        <div v-if="round.mode !== 'correct'">
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.backend') }}
             <span class="text-red-400">*</span>
@@ -525,7 +558,7 @@ const emitUpdate = (): void => {
             :placeholder="t('executionPlanEditor.round.backendPlaceholder')"
           />
         </div>
-        <div>
+        <div v-if="round.mode !== 'correct'">
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.concurrency') }}
             <span class="text-red-400">*</span>
@@ -1071,6 +1104,43 @@ const emitUpdate = (): void => {
             </div>
           </NCollapseItem>
         </NCollapse>
+      </template>
+
+      <!-- 本地改写模式配置 -->
+      <template v-if="round.mode === 'correct' && round.correct">
+        <div class="mt-3 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
+          <p class="text-xs leading-5 text-lf-text-muted">
+            {{ t('executionPlanEditor.round.correctPromptHint') }}
+          </p>
+        </div>
+
+        <!-- 改写规则列表 -->
+        <div class="mt-3">
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.correctRules') }}
+            <span class="text-red-400">*</span>
+          </div>
+          <div class="space-y-2">
+            <div
+              v-for="(rule, rIdx) in round.correct.rules"
+              :key="rIdx"
+              class="flex items-start gap-3 rounded-lg border border-lf-border-soft bg-lf-surface px-3 py-2"
+            >
+              <div class="flex flex-1 flex-col gap-1">
+                <span class="text-sm font-medium text-lf-text-strong">
+                  {{ correctRuleLabelMap[rule.name] }}
+                </span>
+                <span class="text-[11px] leading-4 text-lf-text-subtle">
+                  {{ correctRuleHintMap[rule.name] }}
+                </span>
+              </div>
+              <NSwitch v-model:value="rule.enabled" size="small" :disabled="disabled" />
+            </div>
+          </div>
+          <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.correctRulesHint') }}
+          </div>
+        </div>
       </template>
     </NCard>
 

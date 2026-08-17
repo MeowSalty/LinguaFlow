@@ -1708,7 +1708,7 @@ export interface components {
                 rounds: {
                     index: number;
                     /** @enum {string} */
-                    mode: "extract" | "translate" | "adjudicate" | "semantic_qa";
+                    mode: "extract" | "translate" | "adjudicate" | "semantic_qa" | "correct";
                     backend_name?: string;
                     /** @description translate 轮的提示词模板名称 */
                     prompt_template_name?: string;
@@ -2816,14 +2816,34 @@ export interface components {
             issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
             retry?: components["schemas"]["RetryConfig"];
         };
-        ExecutionRoundConfig: {
+        CorrectRuleConfig: {
             /**
-             * @description 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检
+             * @description 规则名（白名单）。首发仅 punctuation_missing_wrap：机械修复 punctuation_missing 报出
+             *     的"译文丢失源文引号包裹"的安全子集（单 span、源首尾为配对引号、译文无该引号）。
              * @enum {string}
              */
-            mode: "translate" | "extract" | "adjudicate" | "semantic_qa";
-            /** @description 后端 ID（Backend 单表全局唯一） */
-            backend_id: number;
+            name: "punctuation_missing_wrap";
+            /** @default true */
+            enabled: boolean;
+        };
+        /**
+         * @description 本地改写轮次配置（纯本地、不调 LLM）。机械修复 QA 报出的高频安全问题子集。
+         *     无 backend_id / batch_size / max_words_per_batch / retry；不分批、无外部 I/O、无重试。
+         *     规则按 rules 顺序执行，首个生效即停（不叠加）。
+         *     是否执行由轮次是否出现在 rounds 数组决定（与其他轮次一致，无 round 级 enabled 开关）。
+         */
+        CorrectRoundConfig: {
+            /** @description 启用的改写规则，按顺序执行。至少 1 条且 Name 必须在白名单。 */
+            rules: components["schemas"]["CorrectRuleConfig"][];
+        };
+        ExecutionRoundConfig: {
+            /**
+             * @description 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检，correct=本地改写
+             * @enum {string}
+             */
+            mode: "translate" | "extract" | "adjudicate" | "semantic_qa" | "correct";
+            /** @description 后端 ID；correct 轮为纯本地无需后端，可省略（其余 mode 必填且由后端运行时校验为正） */
+            backend_id?: number;
             concurrency: number;
             /** @description 翻译模式配置（mode=translate 时必填） */
             translate?: components["schemas"]["TranslateRoundConfig"];
@@ -2833,6 +2853,8 @@ export interface components {
             adjudicate?: components["schemas"]["AdjudicateRoundConfig"];
             /** @description 语义质检模式配置（mode=semantic_qa 时必填） */
             semantic_qa?: components["schemas"]["SemanticQARoundConfig"];
+            /** @description 本地改写模式配置（mode=correct 时必填且 rules 至少 1 条） */
+            correct?: components["schemas"]["CorrectRoundConfig"];
         };
         /** @enum {string} */
         TranslationPromptTemplateScope: "user" | "org" | "system";

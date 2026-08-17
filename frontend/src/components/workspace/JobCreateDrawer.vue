@@ -75,9 +75,12 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
         ? round.adjudicate
         : round.mode === 'semantic_qa'
           ? round.semantic_qa
-          : round.translate
-  const batchSize = modeConfig?.batch_size ?? 0
-  const maxWordsPerBatch = modeConfig?.max_words_per_batch ?? 0
+          : round.mode === 'correct'
+            ? round.correct
+            : round.translate
+  const batchSize = modeConfig && 'batch_size' in modeConfig ? (modeConfig.batch_size ?? 0) : 0
+  const maxWordsPerBatch =
+    modeConfig && 'max_words_per_batch' in modeConfig ? (modeConfig.max_words_per_batch ?? 0) : 0
   const parts: string[] = []
   if (batchSize > 0) {
     parts.push(t('workspace.job.planPreviewBatchSegments', { batchSize }))
@@ -103,7 +106,9 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
         ? 'workspace.job.planPreviewModeAdjudicate'
         : round.mode === 'semantic_qa'
           ? 'workspace.job.planPreviewModeSemanticQA'
-          : 'workspace.job.planPreviewModeTranslate'
+          : round.mode === 'correct'
+            ? 'workspace.job.planPreviewModeCorrect'
+            : 'workspace.job.planPreviewModeTranslate'
   return t('workspace.job.planPreviewRoundItem', {
     index: index + 1,
     mode: t(modeKey),

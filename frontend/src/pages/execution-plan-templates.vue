@@ -169,11 +169,11 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
 const validateRounds = (): boolean => {
   for (let i = 0; i < formModel.rounds.length; i++) {
     const round = formModel.rounds[i]!
-    if (!round.backend_id) {
+    if (round.mode !== 'correct' && !round.backend_id) {
       message.error(t('executionPlanTemplates.validation.roundBackendRequired', { n: i + 1 }))
       return false
     }
-    if (!round.concurrency || round.concurrency < 1) {
+    if (round.mode !== 'correct' && (!round.concurrency || round.concurrency < 1)) {
       message.error(t('executionPlanTemplates.validation.roundConcurrencyRequired', { n: i + 1 }))
       return false
     }
@@ -223,6 +223,15 @@ const validateRounds = (): boolean => {
         return false
       }
     }
+    if (round.mode === 'correct' && round.correct) {
+      const hasEnabledRule = round.correct.rules.some((r) => r.enabled)
+      if (!hasEnabledRule) {
+        message.error(
+          t('executionPlanTemplates.validation.roundCorrectRulesRequired', { n: i + 1 }),
+        )
+        return false
+      }
+    }
   }
   return true
 }
@@ -231,10 +240,16 @@ const buildPayload = (): CreateRequest => {
   const payload: CreateRequest = {
     name: formModel.name.trim(),
     rounds: formModel.rounds.map((round) => {
-      const base = {
+      const base: {
+        mode: typeof round.mode
+        concurrency: typeof round.concurrency
+        backend_id?: typeof round.backend_id
+      } = {
         mode: round.mode,
-        backend_id: round.backend_id,
-        concurrency: round.concurrency,
+        concurrency: round.mode === 'correct' ? 1 : round.concurrency,
+      }
+      if (round.mode !== 'correct') {
+        base.backend_id = round.backend_id
       }
       if (round.mode === 'translate' && round.translate) {
         return {
@@ -290,6 +305,14 @@ const buildPayload = (): CreateRequest => {
               ? { issue_codes: round.semantic_qa.issue_codes }
               : {}),
             ...(round.semantic_qa.retry ? { retry: round.semantic_qa.retry } : {}),
+          },
+        }
+      }
+      if (round.mode === 'correct' && round.correct) {
+        return {
+          ...base,
+          correct: {
+            rules: round.correct.rules,
           },
         }
       }
@@ -373,14 +396,16 @@ const modeBadgeClass = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
   if (mode === 'extract') return 'bg-amber-50 text-amber-600'
   if (mode === 'adjudicate') return 'bg-violet-50 text-violet-600'
-  return 'bg-emerald-50 text-emerald-600'
+  if (mode === 'semantic_qa') return 'bg-emerald-50 text-emerald-600'
+  return 'bg-sky-50 text-sky-600'
 }
 
 const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'translate') return t('executionPlanEditor.round.modeTranslate')
   if (mode === 'extract') return t('executionPlanEditor.round.modeExtract')
   if (mode === 'adjudicate') return t('executionPlanEditor.round.modeAdjudicate')
-  return t('executionPlanEditor.round.modeSemanticQA')
+  if (mode === 'semantic_qa') return t('executionPlanEditor.round.modeSemanticQA')
+  return t('executionPlanEditor.round.modeCorrect')
 }
 
 // ── 生命周期 ──────────────────────────────────────────────────
