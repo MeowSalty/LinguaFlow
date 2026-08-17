@@ -19,7 +19,6 @@ import (
 // Options 是 Engine 的构造参数。
 type Options struct {
 	Rounds            []Round
-	BootstrapBackends []backend.Backend
 	RubyRetryBackends []backend.Backend
 	RubyRetryAttempts int // 注音对齐定向重试轮数；<=0 由 handler 兜底为 1（仅 backends 非空时生效）
 	Config            *Config

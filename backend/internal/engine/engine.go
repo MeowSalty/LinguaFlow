@@ -19,7 +19,6 @@ type Engine struct {
 	logger            *slog.Logger
 	reporter          progress.Reporter
 	rounds            []pipeline.Round
-	bootstrapBackends []backend.Backend
 	rubyRetryBackends []backend.Backend
 	glossary          glossary.Glossary
 	tm                tm.TranslationMemory
@@ -63,14 +62,6 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	}
 
 	roundConfigs := buildRoundConfigs(opts.Rounds, opts.Config)
-	bootstrapBackends := opts.BootstrapBackends
-	if len(bootstrapBackends) == 0 {
-		// 回退到首轮 backend；correct 是纯本地轮无 backend，跳过它避免 nil。
-		// 典型 correct 轮位于 translate 之后，此处仅在无显式 BootstrapBackends 时兜底。
-		if b := opts.Rounds[0].Backend; b != nil {
-			bootstrapBackends = []backend.Backend{b}
-		}
-	}
 	rubyRetryBackends := opts.RubyRetryBackends
 
 	inlineBootstrap := opts.Config.Glossary.Enabled && opts.Config.Glossary.Bootstrap.Enabled
@@ -107,7 +98,6 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		logger:            opts.Logger,
 		reporter:          opts.Reporter,
 		rounds:            rounds,
-		bootstrapBackends: bootstrapBackends,
 		rubyRetryBackends: rubyRetryBackends,
 		glossary:          glos,
 		tm:                translationMemory,
@@ -140,15 +130,6 @@ func (e *Engine) Close() error {
 		if b == nil {
 			continue
 		}
-		if _, ok := seen[b]; ok {
-			continue
-		}
-		seen[b] = struct{}{}
-		if err := b.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	for _, b := range e.bootstrapBackends {
 		if _, ok := seen[b]; ok {
 			continue
 		}
