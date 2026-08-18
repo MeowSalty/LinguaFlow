@@ -154,11 +154,11 @@ func TestCorrectHandler_BuildBatchesScan(t *testing.T) {
 	h := newCorrectHandler()
 	doc := &Document{
 		Segments: []model.Segment{
-			{ID: "0", Source: "「a」", Target: "a", Status: "translated", Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
-			{ID: "1", Source: "「b」", Target: "b", Status: "edited", Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
-			{ID: "2", Source: "「c」", Target: "c", Status: "pending", Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
-			{ID: "3", Source: "「d」", Target: "", Status: "translated", Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
-			{ID: "4", Source: "「e」", Target: "e", Status: "translated", Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
+			{ID: "0", Source: "「a」", Target: "a", Status: "translated", Translate: true, Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
+			{ID: "1", Source: "「b」", Target: "b", Status: "edited", Translate: true, Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
+			{ID: "2", Source: "「c」", Target: "c", Status: "pending", Translate: true, Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
+			{ID: "3", Source: "「d」", Target: "", Status: "translated", Translate: true, Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
+			{ID: "4", Source: "「e」", Target: "e", Status: "translated", Translate: true, Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
 		},
 		ResolvedIndices: map[int]struct{}{4: {}},
 	}
@@ -171,6 +171,26 @@ func TestCorrectHandler_BuildBatchesScan(t *testing.T) {
 	}
 	if !sliceEq(batches[0], []int{0, 1}) {
 		t.Fatalf("batches=%v want [0 1]", batches)
+	}
+}
+
+// 段落选择：未选段（Translate=false）即便 status=translated/edited 且含 issue，
+// 也不进入 correct 扫描，避免用户仅选中部分段落时误改未选译文。
+func TestCorrectHandler_BuildBatchesRespectsSegmentSelection(t *testing.T) {
+	h := newCorrectHandler()
+	doc := &Document{
+		Segments: []model.Segment{
+			{ID: "0", Source: "「a」", Target: "a", Status: "translated", Translate: true, Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
+			{ID: "1", Source: "「b」", Target: "b", Status: "edited", Translate: false, Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
+			{ID: "2", Source: "「c」", Target: "c", Status: "translated", Translate: false, Issues: []qa.QualityIssue{{Code: qa.CheckPunctuationMissing}}},
+		},
+	}
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
+	if err != nil {
+		t.Fatalf("BuildBatches: %v", err)
+	}
+	if len(batches) != 1 || !sliceEq(batches[0], []int{0}) {
+		t.Fatalf("batches=%v want [[0]] (Translate=false excluded)", batches)
 	}
 }
 
