@@ -273,12 +273,18 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 	}
 
 	// quality_issues 统一处理（避免与 SetTargetText 同列多次赋值）：
-	//   - targetChanged：重跑零配置确定性 QA，用新结果覆盖；
+	//   - targetChanged：重跑零配置确定性 QA，与旧 issues 对账后用新结果覆盖；
 	//   - sourceChanged && !targetChanged：旧译文失效，无译文不跑 QA，清空旧 issues；
 	//   - 仅 comment 变更：不触碰 quality_issues，保持现状。
 	switch {
 	case targetChanged:
 		issues := s.runManualEditQA(ctx, projectID, res, current.SegmentIndex, newSource, newTarget, current.Meta)
+		// 对账：手动编辑改了译文，重跑零配置确定性 QA。同指纹 issue 的裁决
+		// （dismissed 等）应继承，避免用户标了"不是问题"的模式在下次编辑后被冲掉。
+		// 注意：runManualEditQA 只跑 ZeroConfigDeterministicChecks 白名单，不跑
+		// length_ratio/术语表/文档级检查，所以旧的非白名单 issues 会被自然清除
+		// （这些 checker 未运行，指纹消失）。这是预期行为。
+		issues = qa.ReconcileIssues(issues, current.QualityIssues)
 		if len(issues) > 0 {
 			update.SetQualityIssues(issues)
 		} else {
