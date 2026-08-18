@@ -25,6 +25,8 @@ func testClient(t *testing.T) *ent.Client {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	// :memory: 数据库是连接私有的；限制单连接确保事务与普通查询共享同一实例。
+	db.SetMaxOpenConns(1)
 	driver := entsql.OpenDB(dialect.SQLite, db)
 	client := ent.NewClient(ent.Driver(driver))
 	if err := client.Schema.Create(context.Background()); err != nil {
