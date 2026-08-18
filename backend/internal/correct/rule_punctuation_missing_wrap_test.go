@@ -71,6 +71,52 @@ func TestPunctuationMissingWrap_NoIssueNoop(t *testing.T) {
 	}
 }
 
+// dismissed issue 对规则不可见：即使 code 命中，已被用户裁决为 dismiss 的
+// issue 不得触发机械修复，避免推翻裁决。
+func TestPunctuationMissingWrap_DismissedIssueInvisible(t *testing.T) {
+	seg := &model.Segment{
+		Source: "「对话」",
+		Target: "对话",
+		Issues: []qa.QualityIssue{{
+			Code:        qa.CheckPunctuationMissing,
+			Severity:    qa.SeverityWarning,
+			Disposition: qa.DispositionDismissed,
+		}},
+	}
+	res := (&PunctuationMissingWrapRule{}).Apply(seg)
+	if res.Changed {
+		t.Fatalf("dismissed issue must not trigger the rule, got %+v", res)
+	}
+	if res.Reason != "no punctuation_missing issue" {
+		t.Errorf("Reason=%q", res.Reason)
+	}
+	if seg.Target != "对话" {
+		t.Errorf("Target mutated: %q", seg.Target)
+	}
+}
+
+// 混合状态：同 code 一条 dismissed（括号类）+ 一条 pending（引号类）。
+// pending 存在时规则应正常触发，且不因 dismissed 条目存在而误判。
+func TestPunctuationMissingWrap_MixedDispositionsTriggers(t *testing.T) {
+	seg := &model.Segment{
+		Source: "「（对话）」",
+		Target: "对话",
+		Issues: []qa.QualityIssue{
+			{Code: qa.CheckPunctuationMissing, Severity: qa.SeverityWarning},
+			{Code: qa.CheckPunctuationMissing, Severity: qa.SeverityWarning,
+				Disposition: qa.DispositionDismissed,
+				Span:        &qa.Span{MatchedText: "（）"}},
+		},
+	}
+	res := (&PunctuationMissingWrapRule{}).Apply(seg)
+	if !res.Changed {
+		t.Fatalf("want changed, got %+v", res)
+	}
+	if res.NewTarget != "「对话」" {
+		t.Errorf("NewTarget=%q", res.NewTarget)
+	}
+}
+
 func TestPunctuationMissingWrap_NotPairedOpenNoop(t *testing.T) {
 	seg := &model.Segment{
 		Source: "对话！",

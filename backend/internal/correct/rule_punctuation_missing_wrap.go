@@ -21,8 +21,8 @@ func (*PunctuationMissingWrapRule) ResolvedCodes() []string {
 }
 
 func (r *PunctuationMissingWrapRule) Apply(seg *model.Segment) CorrectionResult {
-	// 1) Trigger: must have a punctuation_missing issue.
-	if !hasIssueCode(seg.Issues, qa.CheckPunctuationMissing) {
+	// 1) Trigger: must have a pending (non-dismissed) punctuation_missing issue.
+	if !hasPendingIssueCode(seg.Issues, qa.CheckPunctuationMissing) {
 		return CorrectionResult{Reason: "no punctuation_missing issue"}
 	}
 	// 2) Source: clean (strip protected regions + placeholders), trimmed, must be
@@ -63,9 +63,11 @@ func (r *PunctuationMissingWrapRule) Apply(seg *model.Segment) CorrectionResult 
 	}
 }
 
-func hasIssueCode(issues []qa.QualityIssue, code string) bool {
+// hasPendingIssueCode 报告 issues 中是否存在指定 code 且未被裁决为 dismissed 的 issue。
+// correct 规则只能由 pending issue 触发；dismissed 对规则不可见，避免机械修复推翻裁决。
+func hasPendingIssueCode(issues []qa.QualityIssue, code string) bool {
 	for _, iss := range issues {
-		if iss.Code == code {
+		if iss.Code == code && !iss.Dismissed() {
 			return true
 		}
 	}
