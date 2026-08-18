@@ -369,6 +369,32 @@ projectResourceSegmentReview:
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
+projectResourceSegmentIssueDisposition:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+    - $ref: '../base.yaml#/components/parameters/SegmentId'
+  post:
+    operationId: SetResourceSegmentIssueDisposition
+    summary: 对单条质量问题下裁决（可逆）
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/IssueDispositionRequest'
+    responses:
+      '200':
+        description: 裁决成功
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Segment'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
 projectResourceSegmentTranslationPreview:
   parameters:
     - $ref: '../base.yaml#/components/parameters/ProjectId'

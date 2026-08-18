@@ -253,6 +253,13 @@ func toOpenAPIQualityIssue(issue qa.QualityIssue) QualityIssue {
 	if issue.Span != nil {
 		result.Span = &QualityIssueSpan{MatchedText: issue.Span.MatchedText, TargetStart: issue.Span.TargetStart, TargetEnd: issue.Span.TargetEnd}
 	}
+	if !issue.IsPending() {
+		d := QualityIssueDisposition(issue.Disposition)
+		result.Disposition = &d
+	}
+	result.DecidedBy = issue.DecidedBy
+	result.DecidedAt = issue.DecidedAt
+	result.Note = stringPtr(issue.Note)
 	return result
 }
 

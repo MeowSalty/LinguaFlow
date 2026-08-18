@@ -3,11 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 const (
@@ -22,6 +25,7 @@ var (
 	ErrSegmentNotFound     = errors.New("segment not found")
 	ErrInvalidReviewState  = errors.New("invalid review state")
 	ErrRetranslateNoReject = errors.New("no rejected segments to retranslate")
+	ErrIssueNotFound       = errors.New("quality issue not found")
 )
 
 // ReviewService 审核服务，通过 Resource 路径做权限校验。
@@ -225,6 +229,8 @@ func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, pr
 		return 0, ErrRetranslateNoReject
 	}
 	if err := s.client.Segment.Update().
+		// 重译后译文将整体改变，旧 issues 指纹基本全变，清空合理；
+		// re-translate 的语义即"从头来过"，旧裁决不跨文本存活。
 		Where(segment.ResourceIDEQ(resourceID), segment.StatusEQ(SegmentStatusRejected)).
 		SetStatus(SegmentStatusPending).
 		ClearReviewedBy().
@@ -234,6 +240,86 @@ func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, pr
 		return 0, err
 	}
 	return count, nil
+}
+
+// SetIssueDisposition 对单条质量问题下裁决（可逆）。
+//
+// 裁决等价：LLM 与用户都是"给一条 issue 下结论"，本接口是用户侧入口。
+// disposition=dismissed → 标记为非问题；disposition=pending → 撤销裁决改回未决。
+// 通过 (code, matched_text) 定位单条 issue（与 qa.Fingerprint 一致）。
+func (s *ReviewService) SetIssueDisposition(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, code, matchedText, disposition, note string) (updated *ent.Segment, err error) {
+	if _, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true); err != nil {
+		return nil, err
+	}
+	// 按 fingerprint 定位目标 issue（与 qa.Fingerprint 同一构造，避免漂移）
+	targetFP := qa.Fingerprint(qa.QualityIssue{Code: code, Span: &qa.Span{MatchedText: matchedText}})
+
+	// 事务内读改写：quality_issues 是整列 JSON，读后改写回会覆盖整列。
+	// 事务串行化同行的并发写者（SQLite 单写事务；PostgreSQL 行锁），避免
+	// 与 persistSemanticQASegmentIssues/persistDuplicateSourceDivergence 等
+	// 并发写者之间 last-writer-wins 静默丢失裁决。TargetTextEQ 作为额外
+	// 语义保护：若译文已被改写，旧指纹定位的 issue 不再适用，拒绝写入。
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("set issue disposition: begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	row, err := tx.Segment.Query().Where(segment.IDEQ(segmentID)).Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrSegmentNotFound
+		}
+		return nil, err
+	}
+	issues := row.QualityIssues
+	found := -1
+	for i, iss := range issues {
+		if qa.Fingerprint(iss) == targetFP {
+			found = i
+			break
+		}
+	}
+	if found < 0 {
+		return nil, ErrIssueNotFound
+	}
+	now := time.Now().UTC()
+	switch disposition {
+	case string(qa.DispositionDismissed):
+		issues[found].Disposition = qa.DispositionDismissed
+		issues[found].DecidedBy = &actorUserID
+		issues[found].DecidedAt = &now
+		issues[found].Note = note
+	case string(qa.DispositionPending):
+		// 撤销裁决：重置为零值
+		issues[found].Disposition = qa.DispositionPending
+		issues[found].DecidedBy = nil
+		issues[found].DecidedAt = nil
+		issues[found].Note = ""
+	default:
+		return nil, ErrInvalidInput
+	}
+	update := tx.Segment.UpdateOneID(segmentID)
+	if row.TargetText != nil && *row.TargetText != "" {
+		update = update.Where(segment.TargetTextEQ(*row.TargetText))
+	}
+	if err = update.SetQualityIssues(issues).Exec(ctx); err != nil {
+		// CAS 未命中（译文在事务内读取后被并发改写）或写入失败。
+		// 裁决基于旧译文，让调用方重试（重新定位 issue）而非静默丢弃。
+		if ent.IsNotFound(err) {
+			return nil, ErrIssueNotFound
+		}
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("set issue disposition: commit transaction: %w", err)
+	}
+	// 返回带 ReviewedBy/Resource eager load 的完整 segment
+	return s.client.Segment.Query().Where(segment.IDEQ(segmentID)).WithReviewedBy().WithResource().Only(ctx)
 }
 
 // authorizeSegment 通过 Segment → Resource → Project 路径校验访问权限。

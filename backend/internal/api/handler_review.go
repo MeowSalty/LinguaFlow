@@ -160,6 +160,68 @@ func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleSetIssueDisposition 对单条质量问题下裁决（可逆）。
+func (s *Server) handleSetIssueDisposition(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
+	if !ok {
+		return
+	}
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
+	if !ok {
+		return
+	}
+	segmentID, ok := s.parseIntParam(w, r, chi.URLParam(r, "segmentId"), "segmentId")
+	if !ok {
+		return
+	}
+
+	var req IssueDispositionRequest
+	if !s.decodeJSON(w, r, &req) {
+		return
+	}
+
+	note := ""
+	if req.Note != nil {
+		note = *req.Note
+	}
+	disposition := string(req.Disposition)
+	updated, err := s.reviewSvc.SetIssueDisposition(r.Context(), authUser.User.ID, projectID, resourceID, segmentID, req.Code, req.MatchedText, disposition, note)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrSegmentNotFound), errors.Is(err, service.ErrResourceNotFound):
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
+		case errors.Is(err, service.ErrIssueNotFound):
+			s.writeProblem(w, r, http.StatusNotFound, "issue_not_found", "未找到匹配的质量问题")
+		case errors.Is(err, service.ErrForbidden):
+			s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		case errors.Is(err, service.ErrInvalidInput):
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", err.Error())
+		default:
+			s.writeProjectServiceError(w, r, err)
+		}
+		return
+	}
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{
+		ActorUserID:  authUser.User.ID,
+		Action:       "segment.issue_disposition",
+		ResourceType: "segment",
+		ResourceID:   segmentID,
+		Message:      "裁决质量问题",
+		Metadata: map[string]any{
+			"code":         req.Code,
+			"matched_text": req.MatchedText,
+			"disposition":  disposition,
+			"note":         note,
+		},
+	})
+	writeJSON(w, http.StatusOK, toSegmentResponse(updated))
+}
+
 // handleBatchReviewSegments 批量审核段落。
 func (s *Server) handleBatchReviewSegments(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())

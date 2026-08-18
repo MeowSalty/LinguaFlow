@@ -235,6 +235,22 @@ QualityIssue:
     span:
       $ref: '#/QualityIssueSpan'
       description: 问题在目标/源文本中的跨度；片段级问题可省略
+    disposition:
+      type: string
+      enum: [dismissed]
+      description: 裁决状态；省略表示未决（pending）。dismissed 表示已判定不是问题
+    decided_by:
+      type: integer
+      nullable: true
+      description: 裁决者 user_id；null 表示由 LLM 裁决（adjudicate 轮）
+    decided_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: 裁决时间
+    note:
+      type: string
+      description: 裁决说明（可选），如"专有名词，有意保留"
 
 QualityIssueSpan:
   type: object

@@ -989,6 +989,31 @@ paths:
                 $ref: '#/components/schemas/Segment'
         default:
           $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/issues/disposition:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/SegmentId'
+    post:
+      operationId: SetResourceSegmentIssueDisposition
+      summary: 对单条质量问题下裁决（可逆）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueDispositionRequest'
+      responses:
+        '200':
+          description: 裁决成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Segment'
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -2657,6 +2682,23 @@ components:
         span:
           $ref: '#/components/schemas/QualityIssueSpan'
           description: 问题在目标/源文本中的跨度；片段级问题可省略
+        disposition:
+          type: string
+          enum:
+            - dismissed
+          description: 裁决状态；省略表示未决（pending）。dismissed 表示已判定不是问题
+        decided_by:
+          type: integer
+          nullable: true
+          description: 裁决者 user_id；null 表示由 LLM 裁决（adjudicate 轮）
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 裁决时间
+        note:
+          type: string
+          description: 裁决说明（可选），如"专有名词，有意保留"
     UsageStats:
       type: object
       required:
@@ -3165,6 +3207,28 @@ components:
           type: string
           description: 预览后（可能被用户修改）的译文；为空将返回 400
       additionalProperties: false
+    IssueDispositionRequest:
+      type: object
+      required:
+        - code
+        - matched_text
+        - disposition
+      properties:
+        code:
+          type: string
+          description: 问题代码
+        matched_text:
+          type: string
+          description: 问题指纹的 matched_text（无 span 的 issue 传空串）
+        disposition:
+          type: string
+          enum:
+            - pending
+            - dismissed
+          description: pending=撤销裁决（改回未决）；dismissed=判定不是问题
+        note:
+          type: string
+          description: 裁决说明（可选）
     CreateJobRequest:
       type: object
       required:
