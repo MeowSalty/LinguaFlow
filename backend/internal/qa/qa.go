@@ -54,6 +54,7 @@ const (
 	CheckSourceResidual           = "source_residual"
 	CheckPunctuationPairing       = "punctuation_pairing"
 	CheckPunctuationMissing       = "punctuation_missing"
+	CheckPunctuationSurplus       = "punctuation_surplus"
 	CheckWhitespaceIrregular      = "whitespace_irregular"
 	CheckRepeatedSpace            = "repeated_space"
 	CheckWidthMix                 = "width_mix"
@@ -175,6 +176,7 @@ func AllCheckerNames() []string {
 		CheckSourceResidual,
 		CheckPunctuationPairing,
 		CheckPunctuationMissing,
+		CheckPunctuationSurplus,
 		CheckWhitespaceIrregular,
 		CheckRepeatedSpace,
 		CheckWidthMix,
@@ -204,6 +206,7 @@ func ZeroConfigDeterministicChecks() []string {
 		CheckSourceResidual,
 		CheckPunctuationPairing,
 		CheckPunctuationMissing,
+		CheckPunctuationSurplus,
 		CheckWhitespaceIrregular,
 		CheckRepeatedSpace,
 		CheckWidthMix,
@@ -457,6 +460,7 @@ func buildAllCheckers(cfg Config) []Checker {
 		NewSourceResidualChecker(cfg.SourceLang, cfg.TargetLang),
 		NewPunctuationPairingChecker(cfg.TargetLang),
 		NewPunctuationMissingChecker(),
+		NewPunctuationSurplusChecker(),
 		NewWhitespaceIrregularChecker(),
 		NewRepeatedSpaceChecker(cfg.TargetLang),
 		NewWidthMixChecker(cfg.TargetLang),

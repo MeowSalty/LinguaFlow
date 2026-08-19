@@ -303,7 +303,7 @@ projectResourceSegments:
         required: false
         schema:
           type: string
-          enum: [untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register]
+          enum: [untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register]
         description: 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落
       - $ref: '../base.yaml#/components/parameters/Cursor'
       - $ref: '../base.yaml#/components/parameters/Limit'

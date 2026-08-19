@@ -229,7 +229,7 @@ QualityIssue:
       enum: [warning, error]
     code:
       type: string
-      description: 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register）
+      description: 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register）
     message:
       type: string
     span:
