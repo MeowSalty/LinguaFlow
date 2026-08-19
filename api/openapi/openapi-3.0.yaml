@@ -2667,6 +2667,7 @@ components:
         - severity
         - code
         - message
+        - disposition
       properties:
         segment_index:
           type: integer
@@ -2686,8 +2687,9 @@ components:
         disposition:
           type: string
           enum:
+            - pending
             - dismissed
-          description: 裁决状态；省略表示未决（pending）。dismissed 表示已判定不是问题
+          description: 裁决状态；pending=未决，dismissed=已判定不是问题
         decided_by:
           type: integer
           nullable: true
