@@ -60,6 +60,11 @@ func (h *CorrectHandler) BuildBatches(_ context.Context, doc *Document, pending 
 	} else {
 		for i := range doc.Segments {
 			seg := &doc.Segments[i]
+			// 尊重段落选择（Translate 标记）：与 TranslateHandler 一致，
+			// 用户仅选中部分段落时，未选段不进入 correct 扫描，避免误改未选译文。
+			if !seg.Translate {
+				continue
+			}
 			if seg.Status != "translated" && seg.Status != "edited" {
 				continue
 			}
