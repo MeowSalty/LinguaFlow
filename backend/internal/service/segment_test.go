@@ -105,7 +105,9 @@ func TestBuildQualityPredicatePostgresSQL(t *testing.T) {
 		{"code_untranslated", ResourceSegmentListOptions{QualityCode: "untranslated"},
 			[]string{"jsonb_array_elements", "v ->> 'code' = 'untranslated'"}},
 		{"issues_has", ResourceSegmentListOptions{QualityIssues: "has"},
-			[]string{"jsonb_typeof", "jsonb_array_length", "> 0"}},
+			[]string{"jsonb_typeof", "jsonb_array_elements", "v ->> 'disposition' != 'dismissed'"}},
+		{"issues_none", ResourceSegmentListOptions{QualityIssues: "none"},
+			[]string{"jsonb_typeof", "NOT EXISTS", "v ->> 'disposition' != 'dismissed'"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -712,4 +714,101 @@ func TestUpdateResourceSegmentExcludesLengthRatio(t *testing.T) {
 	if hasIssueCode(updated.QualityIssues, qa.CheckLengthRatio) {
 		t.Fatalf("length_ratio must not run on manual edit (no execution-plan config), got %v", updated.QualityIssues)
 	}
+}
+
+// TestListResourceSegmentsQualityFilterDismissed 验证段落筛选的三个维度
+// （quality_issues/severity/code）均只统计待处理的 issue：disposition=dismissed
+// 的已驳回 issue 不再使段落命中"有问题"，severity/code 匹配也忽略已驳回条目。
+// disposition 缺失（旧数据）视为 pending，行为不变。
+func TestListResourceSegmentsQualityFilterDismissed(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-dismiss-user")
+	project := createTestProject(t, client, "seg-qa-dismiss-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/dismiss.txt")
+
+	// 0: NULL quality_issues
+	createTestSegment(t, client, res.ID, 0, "src0", nil)
+	// 1: 单条 pending issue（disposition 显式为 pending）
+	createTestSegment(t, client, res.ID, 1, "src1", []qa.QualityIssue{
+		{SegmentIndex: 1, Severity: qa.SeverityWarning, Code: "untranslated", Message: "not translated", Disposition: qa.DispositionPending},
+	})
+	// 2: 单条 dismissed issue（唯一问题被驳回 → 应算"没问题"）
+	createTestSegment(t, client, res.ID, 2, "src2", []qa.QualityIssue{
+		{SegmentIndex: 2, Severity: qa.SeverityWarning, Code: "untranslated", Message: "not translated", Disposition: qa.DispositionDismissed},
+	})
+	// 3: dismissed(error/untranslated) + pending(warning/duplicate) 混合
+	createTestSegment(t, client, res.ID, 3, "src3", []qa.QualityIssue{
+		{SegmentIndex: 3, Severity: qa.SeverityError, Code: "untranslated", Message: "empty", Disposition: qa.DispositionDismissed},
+		{SegmentIndex: 3, Severity: qa.SeverityWarning, Code: "duplicate", Message: "dup", Disposition: qa.DispositionPending},
+	})
+	// 4: 全部 dismissed（warning + error 各一条）
+	createTestSegment(t, client, res.ID, 4, "src4", []qa.QualityIssue{
+		{SegmentIndex: 4, Severity: qa.SeverityWarning, Code: "duplicate", Message: "dup", Disposition: qa.DispositionDismissed},
+		{SegmentIndex: 4, Severity: qa.SeverityError, Code: "untranslated", Message: "empty", Disposition: qa.DispositionDismissed},
+	})
+	// 5: disposition 缺失（零值，旧数据形态；MarshalJSON 会输出 pending，此处等价）
+	createTestSegment(t, client, res.ID, 5, "src5", []qa.QualityIssue{
+		{SegmentIndex: 5, Severity: qa.SeverityWarning, Code: "calque", Message: "calque"},
+	})
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+
+	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
+		t.Helper()
+		page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, opts)
+		if err != nil {
+			t.Fatalf("ListResourceSegments: %v", err)
+		}
+		got := make([]int, 0, len(page.Items))
+		for _, row := range page.Items {
+			got = append(got, row.SegmentIndex)
+		}
+		if len(got) != len(want) {
+			t.Fatalf("indexes=%v want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("indexes=%v want %v", got, want)
+			}
+		}
+	}
+
+	// "有问题"：pending(1)、混合(3)、缺失视为 pending(5)；纯 dismissed 的 2/4 排除
+	t.Run("has_excludes_dismissed_only", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "has", Limit: 50}, []int{1, 3, 5})
+	})
+	// "没问题"：NULL(0)、纯 dismissed(2、4)
+	t.Run("none_includes_all_dismissed", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "none", Limit: 50}, []int{0, 2, 4})
+	})
+	// severity=warning：1、3（pending duplicate）、5；2/4 的 warning 已驳回
+	t.Run("severity_warning_ignores_dismissed", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualitySeverity: "warning", Limit: 50}, []int{1, 3, 5})
+	})
+	// severity=error：3 的 error 已驳回、4 全驳回 → 无命中
+	t.Run("severity_error_all_dismissed_matches_none", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualitySeverity: "error", Limit: 50}, []int{})
+	})
+	// code=untranslated：1 pending 命中；2/3/4 的 untranslated 已驳回
+	t.Run("code_untranslated_ignores_dismissed", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualityCode: "untranslated", Limit: 50}, []int{1})
+	})
+	// severity=error AND code=duplicate：3 的 error 已驳回，severity=error 不再命中；
+	// 4 全驳回 → 无命中。独立 EXISTS 语义不变，各自忽略 dismissed 条目。
+	t.Run("severity_and_code_independent_exists_ignores_dismissed", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{
+			QualitySeverity: "error",
+			QualityCode:     "duplicate",
+			Limit:           50,
+		}, []int{})
+	})
+	// severity=warning AND code=duplicate → 3（两条均 pending，命中同一段落）
+	t.Run("severity_and_code_both_pending", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{
+			QualitySeverity: "warning",
+			QualityCode:     "duplicate",
+			Limit:           50,
+		}, []int{3})
+	})
 }

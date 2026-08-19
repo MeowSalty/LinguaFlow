@@ -135,6 +135,8 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 
 // buildQualityPredicate 按 quality_issues / quality_severity / quality_code 构造 SQL 谓词。
 // 非法枚举值安全降级为不过滤（返回 nil）。severity 与 code 使用独立 EXISTS（AND）。
+// 三个维度均只统计"待处理"的 issue：disposition 为 dismissed 的已被用户驳回，
+// 不算问题（与 qa.NeedsAction 语义一致）；disposition 缺失（旧数据）视为 pending。
 // SQLite 与 PostgreSQL 的 JSON 函数不同，按 dialectName 分支：SQLite 使用 JSON1
 // （json_array_length / json_each / json_extract），PostgreSQL 使用 jsonb_*
 // （jsonb_typeof / jsonb_array_length / jsonb_array_elements / ->>）。
@@ -153,19 +155,20 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
-				s.Where(sql.ExprP(fmt.Sprintf("jsonb_typeof(%s) = 'array' AND jsonb_array_length(%s) > 0", col, col)))
+				// 存在至少一个未驳回（disposition 缺失或 != 'dismissed'）的 issue
+				s.Where(sql.ExprP(fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col)))
 				return
 			}
-			s.Where(sql.ExprP(fmt.Sprintf("json_array_length(%s) > 0", col)))
+			s.Where(sql.ExprP(fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col)))
 		}))
 	case "none":
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
-				s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR (jsonb_typeof(%s) = 'array' AND jsonb_array_length(%s) = 0)", col, col, col)))
+				s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR jsonb_typeof(%s) != 'array' OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col, col)))
 				return
 			}
-			s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR json_array_length(%s) = 0", col, col)))
+			s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR NOT EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col, col)))
 		}))
 	}
 
@@ -176,12 +179,12 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
 				s.Where(sql.ExprP(
-					fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'severity' = '%s')", col, sev),
+					fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE (v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed') AND v ->> 'severity' = '%s')", col, col, sev),
 				))
 				return
 			}
 			s.Where(sql.ExprP(
-				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.severity') = '%s')", col, sev),
+				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE (json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed') AND json_extract(value, '$.severity') = '%s')", col, sev),
 			))
 		}))
 	}
@@ -192,12 +195,12 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
 				s.Where(sql.ExprP(
-					fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'code' = '%s')", col, code),
+					fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE (v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed') AND v ->> 'code' = '%s')", col, col, code),
 				))
 				return
 			}
 			s.Where(sql.ExprP(
-				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.code') = '%s')", col, code),
+				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE (json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed') AND json_extract(value, '$.code') = '%s')", col, code),
 			))
 		}))
 	}
