@@ -417,6 +417,11 @@ func applyVerdicts(
 			out = append(out, iss)
 			continue
 		}
+		// pending issue 的 Disposition 可能为 Go 零值 ""（checker 构造时省略），
+		// 归一化为显式 pending，保证内存与落库值一致。
+		if iss.Disposition == "" {
+			iss.Disposition = qa.DispositionPending
+		}
 		if _, adjudicable := codes[iss.Code]; !adjudicable {
 			out = append(out, iss)
 			continue

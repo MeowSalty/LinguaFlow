@@ -1,7 +1,9 @@
 package qa
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -24,17 +26,51 @@ const (
 // 语义：裁决行为本身是等价的 —— LLM 和用户都是"给一条 issue 下结论"，
 // 区别只在 actor（仅用于审计，由 DecidedBy 的 nil/非 nil 表达）。因此不设
 // source 字段。disposition 只回答"这条算不算问题"：
-//   - pending（零值）：未决，仍是待解决的问题；
+//   - pending：未决，仍是待解决的问题；
 //   - dismissed：已判定不是问题，无需再解决。
 //
-// 零值即 pending 使旧数据无需迁移；omitempty 让 pending 在 JSON 中省略，
-// 撤销裁决等同于把字段重置为零值。
+// 存储与 API 共用同一组显式字面值（"pending"/"dismissed"），跨层比较无需
+// 归一化。MarshalJSON/UnmarshalJSON 兼容旧数据：DB 中缺失字段或空串在读取
+// 时归一化为 pending，下次写入即渐进迁移为显式 "pending"。
 type IssueDisposition string
 
 const (
-	DispositionPending   IssueDisposition = "" // 零值，省略序列化
+	DispositionPending   IssueDisposition = "pending"
 	DispositionDismissed IssueDisposition = "dismissed"
 )
+
+// MarshalJSON 输出显式字面值。Go 零值 ""（checker 构造 issue 时省略 Disposition）
+// 归一化为 "pending"，保证 DB 中永远是显式枚举值，不依赖零值省略。
+func (d IssueDisposition) MarshalJSON() ([]byte, error) {
+	if d == "" {
+		return json.Marshal(string(DispositionPending))
+	}
+	return json.Marshal(string(d))
+}
+
+// UnmarshalJSON 接受 "pending"/"dismissed"，并兼容旧数据的空串与 null（归一化
+// 为 pending）；非法值返回错误，避免静默落入未定义状态。
+//
+// 注意：JSON 中 disposition 字段缺失时 json 包不会调用本方法，字段保持 Go 零值 ""。
+// 该场景由 QualityIssue.UnmarshalJSON 兜底归一化。
+func (d *IssueDisposition) UnmarshalJSON(data []byte) error {
+	// 旧数据中 disposition 为 null 或空串时归一化为 pending。
+	if bytes.Equal(data, []byte("null")) || bytes.Equal(data, []byte(`""`)) {
+		*d = DispositionPending
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	switch IssueDisposition(s) {
+	case DispositionPending, DispositionDismissed:
+		*d = IssueDisposition(s)
+		return nil
+	default:
+		return fmt.Errorf("invalid disposition %q: want pending|dismissed", s)
+	}
+}
 
 // LengthMethod 定义长度计算方式。
 type LengthMethod string
@@ -233,19 +269,39 @@ type QualityIssue struct {
 	Code         string        `json:"code"`
 	Message      string        `json:"message"`
 	Span         *Span         `json:"span,omitempty"`
-	// 裁决信息。零值 = pending（未决），向后兼容旧数据。DecidedBy 为 nil 表示
+	// 裁决信息。pending=未决，dismissed=已判定不是问题。DecidedBy 为 nil 表示
 	// 由 LLM 裁决（adjudicate 轮），非 nil 表示用户裁决（user_id）。
-	Disposition IssueDisposition `json:"disposition,omitempty"`
+	Disposition IssueDisposition `json:"disposition"`
 	DecidedBy   *int             `json:"decided_by,omitempty"`
 	DecidedAt   *time.Time       `json:"decided_at,omitempty"`
 	Note        string           `json:"note,omitempty"`
 }
 
-// IsPending 报告该问题是否仍未裁决（零值）。
+// UnmarshalJSON 在默认反序列化后归一化 Disposition：旧数据中 disposition 字段
+// 缺失时 Go 零值 "" 不会触发 IssueDisposition.UnmarshalJSON，这里兜底为 pending。
+// 用别名类型 rawQualityIssue 走默认解码，避免递归调用本方法。
+func (i *QualityIssue) UnmarshalJSON(data []byte) error {
+	type rawQualityIssue QualityIssue
+	var raw rawQualityIssue
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*i = QualityIssue(raw)
+	if i.Disposition == "" {
+		i.Disposition = DispositionPending
+	}
+	return nil
+}
+
+// IsPending 报告该问题是否仍未裁决。
 // 所有"是否仍需处理"的判定点必须调用本方法，而非直接比较 Disposition：
-// 零值即 pending 使旧数据无需迁移；未来若引入新的非 dismissed 裁决值，
-// 只需在此处更新语义，避免各判定点行为漂移。
-func (i QualityIssue) IsPending() bool { return i.Disposition == DispositionPending }
+// 未来若引入新的非 dismissed 裁决值，只需在此处更新语义，避免各判定点行为漂移。
+//
+// 兼容 Go 零值 ""：checker 构造 issue 时省略 Disposition 得到零值，语义等同
+// pending。落库时 MarshalJSON 会把 "" 归一化为 "pending"，读回后即不再为零值。
+func (i QualityIssue) IsPending() bool {
+	return i.Disposition == DispositionPending || i.Disposition == ""
+}
 
 // Dismissed 报告该问题是否已被裁决为"不是问题"。
 func (i QualityIssue) Dismissed() bool { return i.Disposition == DispositionDismissed }
@@ -280,6 +336,11 @@ func MatchedText(issue QualityIssue) string {
 // 裁决等价意味着不区分 actor：同指纹即继承，不论裁决来自 LLM 还是用户。
 func ReconcileIssues(fresh, existing []QualityIssue) []QualityIssue {
 	if len(existing) == 0 {
+		for i := range fresh {
+			if fresh[i].Disposition == "" {
+				fresh[i].Disposition = DispositionPending
+			}
+		}
 		return fresh
 	}
 	prev := make(map[string]QualityIssue, len(existing))
@@ -293,6 +354,10 @@ func ReconcileIssues(fresh, existing []QualityIssue) []QualityIssue {
 			iss.DecidedBy = old.DecidedBy
 			iss.DecidedAt = old.DecidedAt
 			iss.Note = old.Note
+		} else if iss.Disposition == "" {
+			// checker 构造 issue 时省略 Disposition 得到 Go 零值 ""，归一化为
+			// 显式 pending，保证落库与内存语义一致。
+			iss.Disposition = DispositionPending
 		}
 		out = append(out, iss)
 	}
