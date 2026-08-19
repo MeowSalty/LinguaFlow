@@ -50,6 +50,8 @@ const {
   saveAndEditNext,
   openInlineComment,
   saveInlineComment,
+  dismissIssue,
+  reinstateIssue,
 } = useSegmentEditing(projectIdRef, activeResourceIdRef)
 
 // ── 文本渲染模式 ──
@@ -414,6 +416,8 @@ const handleCloseInlineComment = (): void => {
         @close-inline-comment="handleCloseInlineComment"
         @update:inline-comment-text="handleUpdateInlineCommentText"
         @update:inline-edit-form="handleUpdateInlineEditForm"
+        @dismiss-issue="dismissIssue"
+        @reinstate-issue="reinstateIssue"
       />
     </div>
   </div>

@@ -41,6 +41,8 @@ const emit = defineEmits<{
   openInlineComment: [segment: Segment]
   saveInlineComment: [segment: Segment]
   closeInlineComment: []
+  dismissIssue: [segment: Segment, issue: import('@/composables/useQualityIssues').QualityIssue]
+  reinstateIssue: [segment: Segment, issue: import('@/composables/useQualityIssues').QualityIssue]
   'update:inlineCommentText': [value: string]
   'update:inlineEditForm': [field: 'target_text' | 'comment', value: string]
 }>()
@@ -115,6 +117,8 @@ const deps: SegmentColumnDeps = {
   updateCommentText: (value) => emit('update:inlineCommentText', value),
   updateEditFormField: (field, value) => emit('update:inlineEditForm', field, value),
   onPreviewTranslation: (segment) => emit('previewTranslation', segment),
+  onDismissIssue: (segment, issue) => emit('dismissIssue', segment, issue),
+  onReinstateIssue: (segment, issue) => emit('reinstateIssue', segment, issue),
 }
 
 const columns = useSegmentColumns(configRef, deps)
@@ -283,6 +287,8 @@ defineExpose({
           @update-edit-field="(field, val) => emit('update:inlineEditForm', field, val)"
           @update-comment-text="(val) => emit('update:inlineCommentText', val)"
           @preview-translation="emit('previewTranslation', segment)"
+          @dismiss-issue="(seg, issue) => emit('dismissIssue', seg, issue)"
+          @reinstate-issue="(seg, issue) => emit('reinstateIssue', seg, issue)"
         />
       </template>
     </div>

@@ -606,6 +606,28 @@ export const approveAllSegments = async (
   return data
 }
 
+export const setResourceSegmentIssueDisposition = async (
+  projectId: number,
+  resourceId: number,
+  segmentId: number,
+  payload: ApiSchemas['IssueDispositionRequest'],
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['Segment']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/issues/disposition',
+    {
+      params: { path: { projectId, resourceId, segmentId } },
+      body: payload,
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.setIssueDispositionFailed'), error, response)
+  }
+
+  return data
+}
+
 export const createOrgProject = async (
   orgId: number,
   payload: ApiSchemas['CreateProjectRequest'],

@@ -171,7 +171,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   } = resourceStore
 
   // ── 直接委托的段落方法 ──
-  const { loadSegments, updateSegment } = segmentStore
+  const { loadSegments, updateSegment, setIssueDisposition } = segmentStore
 
   // ── 直接委托的 EPUB 方法 ──
   const {
@@ -344,6 +344,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     incrementalUpdateResource,
     deleteResource,
     updateSegment,
+    setIssueDisposition,
     createJob,
     cancelJob,
     retryJob,
