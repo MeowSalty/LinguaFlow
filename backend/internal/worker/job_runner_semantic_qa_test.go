@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"reflect"
 	"testing"
+	"time"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -247,4 +248,150 @@ func newSemanticQATestClient(t *testing.T) *ent.Client {
 		_ = db.Close()
 	})
 	return client
+}
+
+// TestPersistSemanticQASegmentIssues_ReconcilePreservesDismissed 验证语义 QA 重扫
+// 同译文时对账逻辑保留既有裁决（persistSemanticQASegmentIssues 内部先
+// qa.ReconcileIssues 再 mergeSemanticQAIssues）：
+//   - existing 中非语义 issue（source_residual，dismissed）不能被
+//     mergeSemanticQAIssues 丢弃，也不能被 ReconcileIssues 改动；
+//   - existing 中同指纹的语义 issue（calque，dismissed）的裁决被 fresh 同指纹
+//     issue 继承：disposition/decided_by/decided_at/note 保留，message 等用新值。
+func TestPersistSemanticQASegmentIssues_ReconcilePreservesDismissed(t *testing.T) {
+	client := newSemanticQATestClient(t)
+	ctx := context.Background()
+
+	decidedAt := time.Now().UTC()
+	var decidedBy = 42
+	existing := []qa.QualityIssue{
+		{SegmentIndex: 0, Severity: qa.SeverityWarning, Code: qa.CheckSourceResidual, Message: "rule",
+			Disposition: qa.DispositionDismissed, DecidedBy: &decidedBy, DecidedAt: &decidedAt, Note: "专有名词"},
+		{SegmentIndex: 0, Severity: qa.SeverityWarning, Code: qa.IssueCodeCalque, Message: "旧 calque",
+			Span: &qa.Span{MatchedText: "hoge"}, Disposition: qa.DispositionDismissed,
+			DecidedBy: &decidedBy, DecidedAt: &decidedAt, Note: "保留"},
+	}
+	created, err := client.Segment.Create().
+		SetSegmentIndex(0).
+		SetSourceText("テスト").
+		SetTargetText("测试").
+		SetStatus(segment.StatusTranslated).
+		SetQualityIssues(existing).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create segment: %v", err)
+	}
+
+	rows, err := client.Segment.Query().Where(segment.IDIn(created.ID)).All(ctx)
+	if err != nil {
+		t.Fatalf("query rows: %v", err)
+	}
+	row := rows[0]
+	target := *row.TargetText
+
+	// fresh 只含与旧 calque 同指纹的语义 issue（pending），模拟重扫该段的新结果。
+	fresh := []qa.QualityIssue{
+		{SegmentIndex: 0, Severity: qa.SeverityWarning, Code: qa.IssueCodeCalque, Message: "新 calque",
+			Span: &qa.Span{MatchedText: "hoge"}},
+	}
+
+	updated, err := persistSemanticQASegmentIssues(ctx, client, row, target, fresh)
+	if err != nil {
+		t.Fatalf("persistSemanticQASegmentIssues: %v", err)
+	}
+	if updated != 1 {
+		t.Fatalf("CAS UPDATE matched %d rows, want 1", updated)
+	}
+
+	after, err := client.Segment.Get(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("reload segment: %v", err)
+	}
+	if len(after.QualityIssues) != 2 {
+		t.Fatalf("quality_issues=%#v want exactly [source_residual, calque]", after.QualityIssues)
+	}
+
+	var sr, cq *qa.QualityIssue
+	for i := range after.QualityIssues {
+		switch after.QualityIssues[i].Code {
+		case qa.CheckSourceResidual:
+			sr = &after.QualityIssues[i]
+		case qa.IssueCodeCalque:
+			cq = &after.QualityIssues[i]
+		}
+	}
+	if sr == nil || !sr.Dismissed() || sr.DecidedBy == nil || *sr.DecidedBy != decidedBy || sr.Note != "专有名词" {
+		t.Fatalf("source_residual dismissed state lost: %#v", sr)
+	}
+	if cq == nil {
+		t.Fatalf("fresh calque got dropped: %#v", after.QualityIssues)
+	}
+	if cq.Message != "新 calque" {
+		t.Fatalf("calque message=%q want fresh value %q", cq.Message, "新 calque")
+	}
+	if !cq.Dismissed() || cq.DecidedBy == nil || *cq.DecidedBy != decidedBy || cq.DecidedAt == nil || cq.Note != "保留" {
+		t.Fatalf("calque disposition not inherited through reconcile: %#v", *cq)
+	}
+}
+
+// TestPersistDuplicateSourceDivergence_ReconcilePreservesDismissed 验证文档级
+// dup-divergence 重算（persistDuplicateSourceDivergence → replaceQualityIssuesByCode
+// + qa.ReconcileIssues）时：
+//   - 非 dup-divergence 的既有裁决（source_residual，dismissed）被保留；
+//   - 被重算结果取代的失效 dup-divergence issue（此处单段落资源计算不出 dup 问题）
+//     被清除。
+func TestPersistDuplicateSourceDivergence_ReconcilePreservesDismissed(t *testing.T) {
+	client := newSemanticQATestClient(t)
+	ctx := context.Background()
+
+	resource, err := client.Resource.Create().
+		SetPath("dup.srt").
+		SetFormat("srt").
+		SetStoragePath("dup.srt").
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create resource: %v", err)
+	}
+
+	decidedAt := time.Now().UTC()
+	var decidedBy = 7
+	seg, err := client.Segment.Create().
+		SetResourceID(resource.ID).
+		SetSegmentIndex(0).
+		SetSourceText("source").
+		SetTargetText("译文").
+		SetStatus(segment.StatusTranslated).
+		SetQualityIssues([]qa.QualityIssue{
+			{Code: qa.CheckSourceResidual, Severity: qa.SeverityWarning,
+				Disposition: qa.DispositionDismissed, DecidedBy: &decidedBy, DecidedAt: &decidedAt, Note: "已裁决"},
+			{Code: qa.CodeDuplicateSourceDivergence, Severity: qa.SeverityWarning, Span: &qa.Span{MatchedText: "译文"}},
+		}).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create segment: %v", err)
+	}
+
+	runner := &JobRunner{client: client}
+	if err := runner.persistDuplicateSourceDivergence(ctx, resource.ID); err != nil {
+		t.Fatalf("persistDuplicateSourceDivergence: %v", err)
+	}
+
+	after, err := client.Segment.Get(ctx, seg.ID)
+	if err != nil {
+		t.Fatalf("reload segment: %v", err)
+	}
+	if len(after.QualityIssues) != 1 {
+		t.Fatalf("quality_issues=%#v want only source_residual", after.QualityIssues)
+	}
+	kept := after.QualityIssues[0]
+	if kept.Code != qa.CheckSourceResidual {
+		t.Fatalf("kept issue code=%q want %q", kept.Code, qa.CheckSourceResidual)
+	}
+	if !kept.Dismissed() || kept.DecidedBy == nil || *kept.DecidedBy != decidedBy || kept.Note != "已裁决" {
+		t.Fatalf("dismissed source_residual lost through reconcile: %#v", kept)
+	}
+	for _, iss := range after.QualityIssues {
+		if iss.Code == qa.CodeDuplicateSourceDivergence {
+			t.Fatalf("stale dup-divergence not cleared: %#v", after.QualityIssues)
+		}
+	}
 }

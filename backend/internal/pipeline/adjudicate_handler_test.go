@@ -117,11 +117,37 @@ func TestAdjudicateHandler_ProcessBatch_FalsePositiveDismissed(t *testing.T) {
 	if result.callbackResult == nil {
 		t.Fatal("expected callbackResult")
 	}
-	if len(doc.Segments[0].Issues) != 1 || doc.Segments[0].Issues[0].Code != "untranslated" {
-		t.Fatalf("issues=%v want only untranslated retained", doc.Segments[0].Issues)
+	// false_positive 不再剔除，而是打 dismissed 标记保留（审计痕迹）
+	if len(doc.Segments[0].Issues) != 2 {
+		t.Fatalf("issues len=%d want 2 (dismissed kept for audit)", len(doc.Segments[0].Issues))
+	}
+	var residual, untranslated *qa.QualityIssue
+	for i := range doc.Segments[0].Issues {
+		iss := &doc.Segments[0].Issues[i]
+		switch iss.Code {
+		case "source_residual":
+			residual = iss
+		case "untranslated":
+			untranslated = iss
+		}
+	}
+	if residual == nil || !residual.Dismissed() || residual.Disposition != qa.DispositionDismissed {
+		t.Fatalf("source_residual not dismissed: %#v", doc.Segments[0].Issues)
+	}
+	if residual.Note != "proper noun" {
+		t.Fatalf("residual note=%q want %q (LLM reason audited)", residual.Note, "proper noun")
+	}
+	if residual.DecidedBy != nil {
+		t.Fatalf("DecidedBy=%v want nil (LLM adjudicated)", residual.DecidedBy)
+	}
+	if residual.DecidedAt == nil {
+		t.Fatal("DecidedAt must be set for dismissed issue")
+	}
+	if untranslated == nil || untranslated.Dismissed() || untranslated.Disposition != qa.DispositionPending {
+		t.Fatalf("untranslated should stay pending: %#v", doc.Segments[0].Issues)
 	}
 	cb := result.callbackResult.Segments
-	if len(cb) != 1 || len(cb[0].Issues) != 1 || cb[0].Issues[0].Code != "untranslated" {
+	if len(cb) != 1 || len(cb[0].Issues) != 2 {
 		t.Fatalf("callback issues=%v", cb)
 	}
 }
@@ -270,8 +296,28 @@ func TestAdjudicateHandler_ProcessBatch_TextMode(t *testing.T) {
 	if !strings.Contains(req.User, "[segment]") {
 		t.Fatalf("text user missing [segment]:\n%s", req.User)
 	}
-	if len(doc.Segments[0].Issues) != 1 || doc.Segments[0].Issues[0].Code != "untranslated" {
-		t.Fatalf("issues=%v want only untranslated retained", doc.Segments[0].Issues)
+	// source_residual 打 dismissed 标记保留，untranslated（硬规则不可裁决）保持 pending
+	if len(doc.Segments[0].Issues) != 2 {
+		t.Fatalf("issues len=%d want 2", len(doc.Segments[0].Issues))
+	}
+	var residual, untranslated *qa.QualityIssue
+	for i := range doc.Segments[0].Issues {
+		iss := &doc.Segments[0].Issues[i]
+		switch iss.Code {
+		case "source_residual":
+			residual = iss
+		case "untranslated":
+			untranslated = iss
+		}
+	}
+	if residual == nil || !residual.Dismissed() || residual.Disposition != qa.DispositionDismissed {
+		t.Fatalf("source_residual not dismissed: %#v", doc.Segments[0].Issues)
+	}
+	if residual.Note != "proper noun" {
+		t.Fatalf("residual note=%q want %q", residual.Note, "proper noun")
+	}
+	if untranslated == nil || untranslated.Dismissed() || untranslated.Disposition != qa.DispositionPending {
+		t.Fatalf("untranslated should stay pending: %#v", doc.Segments[0].Issues)
 	}
 }
 
@@ -294,8 +340,11 @@ func TestAdjudicateHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
 		Logger:       quietLogger(),
 	}
 	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if len(doc.Segments[0].Issues) != 0 {
-		t.Fatalf("issues len=%d want 0 (false_positive dismissed via JSON fallback)", len(doc.Segments[0].Issues))
+	if len(doc.Segments[0].Issues) != 1 || !doc.Segments[0].Issues[0].Dismissed() {
+		t.Fatalf("issues=%#v want 1 dismissed (false_positive via JSON fallback)", doc.Segments[0].Issues)
+	}
+	if doc.Segments[0].Issues[0].Note != "ok" {
+		t.Fatalf("note=%q want %q", doc.Segments[0].Issues[0].Note, "ok")
 	}
 }
 
@@ -379,8 +428,24 @@ func TestAdjudicateHandler_ProcessBatch_MatchedTextSelectiveDismiss(t *testing.T
 		Logger:    quietLogger(),
 	}
 	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if len(doc.Segments[0].Issues) != 1 || qa.MatchedText(doc.Segments[0].Issues[0]) != "bar" {
-		t.Fatalf("issues=%#v want only bar retained", doc.Segments[0].Issues)
+	// foo 打 dismissed 标记保留，bar 保持 pending
+	if len(doc.Segments[0].Issues) != 2 {
+		t.Fatalf("issues=%#v want 2 kept (foo dismissed, bar pending)", doc.Segments[0].Issues)
+	}
+	var foo, bar *qa.QualityIssue
+	for i := range doc.Segments[0].Issues {
+		iss := &doc.Segments[0].Issues[i]
+		if qa.MatchedText(*iss) == "foo" {
+			foo = iss
+		} else if qa.MatchedText(*iss) == "bar" {
+			bar = iss
+		}
+	}
+	if foo == nil || !foo.Dismissed() || foo.Disposition != qa.DispositionDismissed || foo.Note != "ok" {
+		t.Fatalf("foo not dismissed with reason: %#v", foo)
+	}
+	if bar == nil || bar.Dismissed() || bar.Disposition != qa.DispositionPending {
+		t.Fatalf("bar should stay pending: %#v", doc.Segments[0].Issues)
 	}
 }
 
@@ -437,13 +502,54 @@ func TestAdjudicateHandler_AdjudicateCodes_OnlyLengthRatio(t *testing.T) {
 		t.Fatalf("batches=%v err=%v", batches, err)
 	}
 	_ = h.ProcessBatch(context.Background(), doc, batches[0], 0, quietLogger())
-	// source_residual not adjudicated → kept; length_ratio dismissed
-	codes := make([]string, 0, len(doc.Segments[0].Issues))
-	for _, iss := range doc.Segments[0].Issues {
-		codes = append(codes, iss.Code)
+	// source_residual not adjudicated → stays pending; length_ratio dismissed (marked, not removed)
+	if len(doc.Segments[0].Issues) != 2 {
+		t.Fatalf("issues len=%d want 2", len(doc.Segments[0].Issues))
 	}
-	if len(codes) != 1 || codes[0] != "source_residual" {
-		t.Fatalf("issues codes=%v want [source_residual]", codes)
+	var residual, ratio *qa.QualityIssue
+	for i := range doc.Segments[0].Issues {
+		iss := &doc.Segments[0].Issues[i]
+		switch iss.Code {
+		case "source_residual":
+			residual = iss
+		case "length_ratio":
+			ratio = iss
+		}
+	}
+	if residual == nil || residual.Dismissed() || residual.Disposition != qa.DispositionPending {
+		t.Fatalf("source_residual should stay pending: %#v", doc.Segments[0].Issues)
+	}
+	if ratio == nil || !ratio.Dismissed() || ratio.Disposition != qa.DispositionDismissed || ratio.Note != "ok" {
+		t.Fatalf("length_ratio should be dismissed with reason: %#v", doc.Segments[0].Issues)
+	}
+}
+
+func TestApplyVerdicts_AlreadyDismissedPassedThrough(t *testing.T) {
+	issues := []qa.QualityIssue{
+		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "already done", Disposition: qa.DispositionDismissed, Note: "user said not an issue"},
+		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "pending"},
+	}
+	codes := map[string]struct{}{"source_residual": {}}
+	verdictMap := map[string]prompt.AdjudicationVerdict{
+		adjudicationKey("0", "source_residual", ""): {ID: "0", IssueCode: "source_residual", Verdict: "false_positive", Reason: "LLM reason"},
+	}
+	out, newly := applyVerdicts(issues, "0", codes, verdictMap, quietLogger())
+	if newly != 1 {
+		t.Fatalf("newlyDismissed=%d want 1", newly)
+	}
+	if len(out) != 2 {
+		t.Fatalf("len(out)=%d want 2 (dismissed passed through, pending dismissed)", len(out))
+	}
+	// 已 dismissed 的 issue 原样带过，不被重复处理
+	if !out[0].Dismissed() || out[0].Disposition != qa.DispositionDismissed || out[0].Note != "user said not an issue" {
+		t.Fatalf("already-dismissed issue not passed through untouched: %#v", out[0])
+	}
+	// 待决 issue 被 LLM 裁决为 dismissed，reason 沉淀到 Note
+	if !out[1].Dismissed() || out[1].Disposition != qa.DispositionDismissed || out[1].Note != "LLM reason" || out[1].DecidedBy != nil {
+		t.Fatalf("pending issue not dismissed by LLM: %#v", out[1])
+	}
+	if out[1].DecidedAt == nil {
+		t.Fatal("DecidedAt must be set for newly dismissed issue")
 	}
 }
 

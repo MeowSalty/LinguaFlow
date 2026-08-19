@@ -278,6 +278,10 @@ func (s *Server) ReviewResourceSegment(w http.ResponseWriter, r *http.Request, _
 	s.requireAuth(http.HandlerFunc(s.handleReviewSegment)).ServeHTTP(w, r)
 }
 
+func (s *Server) SetResourceSegmentIssueDisposition(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId, _ SegmentId) {
+	s.requireAuth(http.HandlerFunc(s.handleSetIssueDisposition)).ServeHTTP(w, r)
+}
+
 func (s *Server) BatchReviewResourceSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
 	s.requireAuth(http.HandlerFunc(s.handleBatchReviewSegments)).ServeHTTP(w, r)
 }

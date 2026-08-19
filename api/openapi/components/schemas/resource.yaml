@@ -445,3 +445,21 @@ ApplySegmentTranslationPreviewRequest:
       type: string
       description: 预览后（可能被用户修改）的译文；为空将返回 400
   additionalProperties: false
+
+IssueDispositionRequest:
+  type: object
+  required: [code, matched_text, disposition]
+  properties:
+    code:
+      type: string
+      description: 问题代码
+    matched_text:
+      type: string
+      description: 问题指纹的 matched_text（无 span 的 issue 传空串）
+    disposition:
+      type: string
+      enum: [pending, dismissed]
+      description: pending=撤销裁决（改回未决）；dismissed=判定不是问题
+    note:
+      type: string
+      description: 裁决说明（可选）

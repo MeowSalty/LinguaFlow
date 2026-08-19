@@ -399,6 +399,8 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					}
 					// --- 写入 QA 结果（if/else 二选一，避免 ent mutation
 					// 对同一列既 Clear 又 Set 导致 PostgreSQL 42601 重复赋值）---
+					// 不对账：新译文导致指纹基本全变，旧裁决不跨文本存活；
+					// 若未来引入同译文手动重算，须接入 qa.ReconcileIssues。
 					if len(segIssues) > 0 {
 						update.SetQualityIssues(segIssues)
 					} else {
@@ -445,6 +447,8 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					}
 					// correct 改写译文并重写 quality_issues（ResolvedCodes 已剔除）。
 					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
+					// 不对账：新译文导致指纹基本全变，旧裁决不跨文本存活；
+					// 若未来引入同译文手动重算，须接入 qa.ReconcileIssues。
 					update := r.client.Segment.UpdateOneID(dbID).
 						SetTargetText(ts.TargetText)
 					if len(ts.Issues) > 0 {
@@ -479,6 +483,8 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					}
 					// 仅重写 quality_issues，不改 status / target。
 					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
+					// 不对账：adjudicate 不产生新 issue，只是标记已有的
+					// （applyVerdicts 写 dismissed）；新译文场景下指纹全变，无需对账。
 					update := r.client.Segment.UpdateOneID(dbID)
 					if len(ts.Issues) > 0 {
 						update.SetQualityIssues(ts.Issues)
@@ -721,7 +727,10 @@ func mergeSemanticQAIssues(existing, fresh []qa.QualityIssue) []qa.QualityIssue 
 //
 // 返回实际更新行数（0 表示 CAS 未命中，调用方据此跳过并记日志）。
 func persistSemanticQASegmentIssues(ctx context.Context, c *ent.Client, row *ent.Segment, targetText string, fresh []qa.QualityIssue) (int, error) {
-	merged := mergeSemanticQAIssues(row.QualityIssues, fresh)
+	// 对账：retry/崩溃恢复时 semantic_qa 会重扫同一译文，fresh 语义 issues 需继承
+	// 已有同指纹 issue 的裁决（dismissed 等），避免静默冲掉用户/LLM 的裁决。
+	reconciled := qa.ReconcileIssues(fresh, row.QualityIssues)
+	merged := mergeSemanticQAIssues(row.QualityIssues, reconciled)
 	return c.Segment.Update().
 		Where(
 			segment.IDEQ(row.ID),
@@ -819,6 +828,11 @@ func (r *JobRunner) persistDuplicateSourceDivergence(ctx context.Context, resour
 		if !changed {
 			continue
 		}
+		// 对账：每次 job 处理（含 retry）都会对整份资源重算 dup-divergence，
+		// 重算结果需继承同指纹旧裁决（dismissed 等）。replaceQualityIssuesByCode
+		// 已剔除旧的同 code issues，对账会从 row.QualityIssues 找回同指纹裁决；
+		// 保留的非该 code 旧 issues 与自身对账是幂等的，因此安全。
+		merged = qa.ReconcileIssues(merged, row.QualityIssues)
 		if err := r.client.Segment.UpdateOneID(row.ID).SetQualityIssues(merged).Exec(ctx); err != nil {
 			return fmt.Errorf("persist duplicate source QA for segment %d: %w", row.ID, err)
 		}

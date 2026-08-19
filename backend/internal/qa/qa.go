@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
@@ -16,6 +17,23 @@ type IssueSeverity string
 const (
 	SeverityWarning IssueSeverity = "warning"
 	SeverityError   IssueSeverity = "error"
+)
+
+// IssueDisposition 表示一条质量问题的裁决状态。
+//
+// 语义：裁决行为本身是等价的 —— LLM 和用户都是"给一条 issue 下结论"，
+// 区别只在 actor（仅用于审计，由 DecidedBy 的 nil/非 nil 表达）。因此不设
+// source 字段。disposition 只回答"这条算不算问题"：
+//   - pending（零值）：未决，仍是待解决的问题；
+//   - dismissed：已判定不是问题，无需再解决。
+//
+// 零值即 pending 使旧数据无需迁移；omitempty 让 pending 在 JSON 中省略，
+// 撤销裁决等同于把字段重置为零值。
+type IssueDisposition string
+
+const (
+	DispositionPending   IssueDisposition = "" // 零值，省略序列化
+	DispositionDismissed IssueDisposition = "dismissed"
 )
 
 // LengthMethod 定义长度计算方式。
@@ -212,7 +230,22 @@ type QualityIssue struct {
 	Code         string        `json:"code"`
 	Message      string        `json:"message"`
 	Span         *Span         `json:"span,omitempty"`
+	// 裁决信息。零值 = pending（未决），向后兼容旧数据。DecidedBy 为 nil 表示
+	// 由 LLM 裁决（adjudicate 轮），非 nil 表示用户裁决（user_id）。
+	Disposition IssueDisposition `json:"disposition,omitempty"`
+	DecidedBy   *int             `json:"decided_by,omitempty"`
+	DecidedAt   *time.Time       `json:"decided_at,omitempty"`
+	Note        string           `json:"note,omitempty"`
 }
+
+// IsPending 报告该问题是否仍未裁决（零值）。
+// 所有"是否仍需处理"的判定点必须调用本方法，而非直接比较 Disposition：
+// 零值即 pending 使旧数据无需迁移；未来若引入新的非 dismissed 裁决值，
+// 只需在此处更新语义，避免各判定点行为漂移。
+func (i QualityIssue) IsPending() bool { return i.Disposition == DispositionPending }
+
+// Dismissed 报告该问题是否已被裁决为"不是问题"。
+func (i QualityIssue) Dismissed() bool { return i.Disposition == DispositionDismissed }
 
 // Fingerprint 返回问题指纹 (code, matched_text)。无跨度时 matched_text 为空。
 func Fingerprint(issue QualityIssue) string {
@@ -229,6 +262,38 @@ func MatchedText(issue QualityIssue) string {
 		return ""
 	}
 	return issue.Span.MatchedText
+}
+
+// ReconcileIssues 将新算出的 issues 与已有 issues 按 Fingerprint 对账：
+//   - 同指纹 → 继承旧裁决（disposition/decided_by/decided_at/note），其余字段
+//     （severity/message/span 等）用新算值；checker 可能更新了 message 或重新
+//     定位了 span，但问题本身没变，旧裁决仍然成立。
+//   - 指纹消失 → 旧裁决自然清除（问题真没了，或译文变了指纹不再命中）。
+//
+// 用于 job retry/崩溃恢复、文档级检查重算、手动编辑等"同译文/同规则重新计算"
+// 场景，确保已下达的裁决不被静默冲掉。注意：它只在"问题指纹稳定"的前提下生效
+// ——若译文整体改写导致指纹全变，旧裁决理应清除（re-translate 即此语义）。
+//
+// 裁决等价意味着不区分 actor：同指纹即继承，不论裁决来自 LLM 还是用户。
+func ReconcileIssues(fresh, existing []QualityIssue) []QualityIssue {
+	if len(existing) == 0 {
+		return fresh
+	}
+	prev := make(map[string]QualityIssue, len(existing))
+	for _, iss := range existing {
+		prev[Fingerprint(iss)] = iss
+	}
+	out := make([]QualityIssue, 0, len(fresh))
+	for _, iss := range fresh {
+		if old, ok := prev[Fingerprint(iss)]; ok && !old.IsPending() {
+			iss.Disposition = old.Disposition
+			iss.DecidedBy = old.DecidedBy
+			iss.DecidedAt = old.DecidedAt
+			iss.Note = old.Note
+		}
+		out = append(out, iss)
+	}
+	return out
 }
 
 // DedupIssues 按 (code, matched_text) 去重，保留首次出现。

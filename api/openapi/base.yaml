@@ -63,6 +63,8 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceSegmentById'
   /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review:
     $ref: './paths/resources.yaml#/projectResourceSegmentReview'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/issues/disposition:
+    $ref: './paths/resources.yaml#/projectResourceSegmentIssueDisposition'
   /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview:
     $ref: './paths/resources.yaml#/projectResourceSegmentTranslationPreview'
   /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview/apply:
@@ -272,6 +274,8 @@ components:
       $ref: './components/schemas/resource.yaml#/TranslationBatchDiagnostic'
     ApplySegmentTranslationPreviewRequest:
       $ref: './components/schemas/resource.yaml#/ApplySegmentTranslationPreviewRequest'
+    IssueDispositionRequest:
+      $ref: './components/schemas/resource.yaml#/IssueDispositionRequest'
     CreateJobRequest:
       $ref: './components/schemas/job.yaml#/CreateJobRequest'
     JobResource:

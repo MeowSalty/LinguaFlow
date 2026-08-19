@@ -84,9 +84,13 @@ func adjudicateCodeSet(codes []string) map[string]struct{} {
 
 func segmentHasAdjudicableIssue(issues []qa.QualityIssue, codes map[string]struct{}) bool {
 	for _, iss := range issues {
-		if _, ok := codes[iss.Code]; ok {
-			return true
+		if _, ok := codes[iss.Code]; !ok {
+			continue
 		}
+		if iss.Dismissed() {
+			continue // 已裁决为非问题，不再送 LLM
+		}
+		return true
 	}
 	return false
 }
@@ -172,13 +176,17 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		seg := &doc.Segments[idx]
 		var issues []prompt.AdjudicationIssue
 		for _, iss := range seg.Issues {
-			if _, ok := codes[iss.Code]; ok {
-				issues = append(issues, prompt.AdjudicationIssue{
-					Code:        iss.Code,
-					Message:     iss.Message,
-					MatchedText: qa.MatchedText(iss),
-				})
+			if _, ok := codes[iss.Code]; !ok {
+				continue
 			}
+			if iss.Dismissed() {
+				continue // 已裁决为非问题，不再送 LLM
+			}
+			issues = append(issues, prompt.AdjudicationIssue{
+				Code:        iss.Code,
+				Message:     iss.Message,
+				MatchedText: qa.MatchedText(iss),
+			})
 		}
 		segments = append(segments, prompt.AdjudicationSegment{
 			ID:     seg.ID,
@@ -295,11 +303,11 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		return batchResult{unresolved: idxs}
 	}
 
-	// (id, issue_code, matched_text) → verdict
-	verdictMap := make(map[string]string, len(verdicts))
+	// (id, issue_code, matched_text) → verdict（携带 reason 供审计沉淀）
+	verdictMap := make(map[string]prompt.AdjudicationVerdict, len(verdicts))
 	for _, v := range verdicts {
 		key := adjudicationKey(v.ID, v.IssueCode, v.MatchedText)
-		verdictMap[key] = v.Verdict
+		verdictMap[key] = v
 	}
 
 	if len(parseRepaired) > 0 {
@@ -311,8 +319,8 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	dismissedTotal := 0
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
-		filtered := filterIssuesByVerdicts(seg.Issues, seg.ID, codes, verdictMap, logger)
-		dismissedTotal += len(seg.Issues) - len(filtered)
+		filtered, newlyDismissed := applyVerdicts(seg.Issues, seg.ID, codes, verdictMap, logger)
+		dismissedTotal += newlyDismissed
 		seg.Issues = filtered
 		callbackSegs = append(callbackSegs, TranslatedSegment{
 			Index:      idx,
@@ -381,26 +389,34 @@ func adjudicationKey(segID, code, matchedText string) string {
 	return segID + "\x00" + code + "\x00" + matchedText
 }
 
-// filterIssuesByVerdicts 仅剔除可裁决且 verdict==false_positive 的 issue；其余保留。
-// 优先按 (id, code, matched_text) 匹配；若该段该 code 仅有一条 issue，则允许回退到空 matched_text 裁决。
-func filterIssuesByVerdicts(
+// applyVerdicts 应用 LLM 裁决：false_positive 的 issue 打 dismissed 标记并保留在
+// 数组中（沉淀审计痕迹，避免重跑重复付费），real/缺失/其他保持 pending 原样保留。
+// 已 dismissed 的 issue 原样带过，不被重复处理。
+// 优先按 (id, code, matched_text) 匹配；若该段该 code 仅有一条待决 issue，则允许回退到空 matched_text 裁决。
+func applyVerdicts(
 	issues []qa.QualityIssue,
 	segID string,
 	codes map[string]struct{},
-	verdictMap map[string]string,
+	verdictMap map[string]prompt.AdjudicationVerdict,
 	logger *slog.Logger,
-) []qa.QualityIssue {
+) (out []qa.QualityIssue, newlyDismissed int) {
 	if len(issues) == 0 {
-		return nil
+		return nil, 0
 	}
+	now := time.Now().UTC()
 	issueCounts := make(map[string]int, len(codes))
 	for _, iss := range issues {
-		if _, adjudicable := codes[iss.Code]; adjudicable {
+		if _, adjudicable := codes[iss.Code]; adjudicable && !iss.Dismissed() {
 			issueCounts[iss.Code]++
 		}
 	}
-	out := make([]qa.QualityIssue, 0, len(issues))
+	out = make([]qa.QualityIssue, 0, len(issues))
 	for _, iss := range issues {
+		if iss.Dismissed() {
+			// 已裁决的非问题：原样带过，不重复送 LLM/不重复计数。
+			out = append(out, iss)
+			continue
+		}
 		if _, adjudicable := codes[iss.Code]; !adjudicable {
 			out = append(out, iss)
 			continue
@@ -412,13 +428,19 @@ func filterIssuesByVerdicts(
 			// 单实例兼容：LLM 未回传 matched_text 时，用空 matched_text 键。
 			v, ok = verdictMap[adjudicationKey(segID, iss.Code, "")]
 		}
-		if !ok || v != "false_positive" {
-			// 缺失 / real / 其他 → 保留
+		if !ok || v.Verdict != "false_positive" {
+			// 缺失 / real / 其他 → 保持 pending，原样保留
 			out = append(out, iss)
 			continue
 		}
+		iss.Disposition = qa.DispositionDismissed
+		iss.DecidedAt = &now
+		iss.DecidedBy = nil // nil 表示 LLM 裁决
+		iss.Note = v.Reason // LLM 理由沉淀为审计
+		out = append(out, iss)
+		newlyDismissed++
 		logger.Info("adjudicate dismissed false_positive",
-			"segment_id", segID, "code", iss.Code, "matched_text", mt, "message", iss.Message)
+			"segment_id", segID, "code", iss.Code, "matched_text", mt, "message", iss.Message, "reason", v.Reason)
 	}
-	return out
+	return out, newlyDismissed
 }

@@ -438,6 +438,9 @@ func (s *PreviewService) ApplyPreview(
 		SetReviewedByID(actorUserID).
 		ClearReviewComment()
 
+	// quality_issues 写回：ApplyPreview 应用新译文（预览或用户改后），新译文导致
+	// 指纹基本全变，旧裁决不跨文本存活，故不对账。若未来引入"同译文手动重算 QA"
+	// 功能（如用户改了非译文字段后重跑 QA），必须接入 qa.ReconcileIssues。
 	if len(finalIssues) > 0 {
 		update = update.SetQualityIssues(finalIssues)
 	} else {

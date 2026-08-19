@@ -114,6 +114,42 @@ func TestCorrectHandler_IdempotencyFailReverts(t *testing.T) {
 	}
 }
 
+// 混合状态：引号类 pending（触发包裹）+ 括号类 dismissed（用户已裁决非问题）。
+// 包裹后括号类仍缺，但其指纹命中 dismissed 集合 → 幂等检查豁免，不误回滚；
+// filterOutCodes 保留 dismissed 记录（避免未来以 pending 复活）。
+func TestCorrectHandler_DismissedExemptFromIdempotency(t *testing.T) {
+	h := newCorrectHandler()
+	issues := []qa.QualityIssue{
+		{Code: qa.CheckPunctuationMissing, Severity: qa.SeverityWarning},
+		{Code: qa.CheckPunctuationMissing, Severity: qa.SeverityWarning,
+			Disposition: qa.DispositionDismissed,
+			Span:        &qa.Span{MatchedText: "（）"}},
+	}
+	doc := &Document{Segments: []model.Segment{
+		{
+			ID:     "0",
+			Source: "「（对话）」",
+			Target: "对话",
+			Issues: issues,
+			Status: "translated",
+		},
+	}}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if got := doc.Segments[0].Target; got != "「对话」" {
+		t.Fatalf("Target should be applied (dismissed bracket exempt), got %q", got)
+	}
+	if len(doc.Segments[0].Issues) != 1 || !doc.Segments[0].Issues[0].Dismissed() {
+		t.Fatalf("want only the dismissed issue kept, got %+v", doc.Segments[0].Issues)
+	}
+	seg := result.callbackResult.Segments[0]
+	if seg.TargetText != "「对话」" {
+		t.Errorf("callback TargetText=%q", seg.TargetText)
+	}
+	if len(seg.Issues) != 1 || !seg.Issues[0].Dismissed() {
+		t.Errorf("callback issues=%+v, want only dismissed kept", seg.Issues)
+	}
+}
+
 func TestCorrectHandler_BuildBatchesScan(t *testing.T) {
 	h := newCorrectHandler()
 	doc := &Document{
