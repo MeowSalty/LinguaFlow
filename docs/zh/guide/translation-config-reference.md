@@ -259,7 +259,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 #### 可配置 checker 名称（`qa.checks`）
 
-`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 16 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
+`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 17 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
 
 | 名称                          | 说明                                           |
 | ----------------------------- | ---------------------------------------------- |
@@ -269,6 +269,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 | `source_residual`             | 源语脚本残留（按语言对分档）                    |
 | `punctuation_pairing`         | 标点配对不平衡                                  |
 | `punctuation_missing`         | 源文整类包裹标点在译文中完全缺失                |
+| `punctuation_surplus`         | 译文多出源文所无的成对包裹标点                  |
 | `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     |
 | `repeated_space`              | 连续空格 / CJK 间空格                          |
 | `width_mix`                   | 全/半角混用                                    |
@@ -401,7 +402,7 @@ context:
 | `adjudicate_codes`    | []string | `["source_residual"]` | 仅 `source_residual` / `length_ratio` |
 | `retry`               | object   | —                     | 重试                                  |
 
-裁决提示词内置。`untranslated` / `duplicate` 不可裁决。
+裁决提示词内置。`untranslated` / `duplicate` 不可裁决。模型判定 `false_positive` 的问题不会被删除，而是标记为 `dismissed` 保留（记录裁决时间与 LLM 理由），后续轮次跳过；`real` 的问题保持 `pending`。人工也可在审校界面 [驳回问题](/zh/guide/review#质量问题裁决)，效果相同。
 
 输入/输出协议随后端 `response_format` 自动切换：
 
@@ -459,9 +460,9 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 
 #### `issue_codes` 取值
 
-支持全部 25 个 issue code（16 项 per-batch checker + 1 项文档级 `duplicate_source_divergence` + 8 项语义 code），规则码与语义码都可作筛选键：
+支持全部 26 个 issue code（17 项 per-batch checker + 1 项文档级 `duplicate_source_divergence` + 8 项语义 code），规则码与语义码都可作筛选键：
 
-`untranslated`、`length_ratio`、`duplicate`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`whitespace_irregular`、`repeated_space`、`width_mix`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`forbidden_term`、`term_inconsistency`、`leftover_placeholder`、`xml_tag_mismatch`、`duplicate_source_divergence`、`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
+`untranslated`、`length_ratio`、`duplicate`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`whitespace_irregular`、`repeated_space`、`width_mix`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`forbidden_term`、`term_inconsistency`、`leftover_placeholder`、`xml_tag_mismatch`、`duplicate_source_divergence`、`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
 
 完整清单（含每项含义）见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)；前端筛选 UI 的分组见 [翻译审校 · 按质量问题筛选](/zh/guide/review#按质量问题筛选)。
 

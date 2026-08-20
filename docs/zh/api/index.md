@@ -169,6 +169,30 @@ curl -s "http://localhost:8080/api/v1/admin/audit-logs?limit=50&cursor=12345" \
 
 后端记录的 `action` 值、资源类型与触发场景对照见 [管理员后台 · 动作类型](/zh/guide/admin#动作类型)。管理员还提供用户管理、系统统计与设置接口，完整列表见 [管理员后台 · API 速览](/zh/guide/admin#api-速览)。
 
+### 10. 质量问题裁决（驳回 / 撤销）
+
+对某段译文上的单条质量问题下裁决：`dismissed` 判定为不是问题，`pending` 撤销裁决、恢复未决。操作可逆，返回更新后的段落。
+
+```bash
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/42/issues/disposition \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "source_residual",
+    "matched_text": "カタログ",
+    "disposition": "dismissed",
+    "note": "专有名词，有意保留"
+  }'
+```
+
+| 字段            | 说明                                                       |
+| --------------- | ---------------------------------------------------------- |
+| `code`          | 问题代码                                                   |
+| `matched_text`  | 问题指纹的 `matched_text`（无 `span` 的 issue 传空串）    |
+| `disposition`   | `dismissed` = 判定不是问题；`pending` = 撤销裁决、改回未决 |
+| `note`          | 裁决说明（可选），如「专有名词，有意保留」                |
+
+`QualityIssue` 响应含 `disposition`（必填，`pending` / `dismissed`）、`decided_by`（裁决者 user_id，`null` 表示由 LLM 裁决）、`decided_at`（裁决时间）与 `note`（裁决说明）字段。已 `dismissed` 的问题不计入段落列表的质量筛选与统计。产品侧操作见 [翻译审校 · 质量问题裁决](/zh/guide/review#质量问题裁决)。
+
 ## 错误码
 
 | 状态码 | 说明               |
