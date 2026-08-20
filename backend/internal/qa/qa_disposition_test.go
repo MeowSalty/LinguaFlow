@@ -113,4 +113,3 @@ func TestQualityIssueJSONRoundTrip(t *testing.T) {
 		}
 	})
 }
-
