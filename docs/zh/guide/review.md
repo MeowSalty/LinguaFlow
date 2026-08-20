@@ -74,7 +74,7 @@
 
 1. 在段落行的编辑入口中修改译文文本（与可选批注）
 2. 保存后状态自动转为「已修改」(`edited`)
-3. 保存时会自动对译文跑一遍**零配置确定性 QA**（无需执行计划配置）：覆盖 `untranslated`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`whitespace_irregular`、`repeated_space`、`width_mix`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`leftover_placeholder`、`xml_tag_mismatch` 共 12 项即时判定，质量问题会实时更新到该段
+3. 保存时会自动对译文跑一遍**零配置确定性 QA**（无需执行计划配置）：覆盖 `untranslated`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`whitespace_irregular`、`repeated_space`、`width_mix`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`leftover_placeholder`、`xml_tag_mismatch` 共 13 项即时判定，质量问题会实时更新到该段
 4. 之后仍需在「已修改」状态下决定 **审批** 或 **拒绝**
 
 ::: info 只改译文，不改原文
@@ -88,7 +88,7 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 - **规则质检（确定性 QA）**：纯规则、本地执行、可靠可复现；在翻译轮次内随执行配置自动运行并写回段落
 - **本地改写（`correct`）**：可选的执行计划轮次，机械修复规则质检报出的高频安全问题子集（如补回丢失的引号），纯本地、不调 LLM、不新增问题
 - **语义质检（LLM 语义 QA）**：可选的执行计划轮次 `semantic_qa`，捕获规则无法覆盖的语义错误，产 `warning` 级问题直接进人审
-- **质量裁决（`adjudicate`）**：对软规则问题逐条问 AI 做误报剔除，**不新增问题**
+- **质量裁决（`adjudicate`）**：对软规则问题逐条问 AI 做误报判定，`false_positive` 的问题标记为 `dismissed`（保留记录、后续轮次跳过），**不新增问题**
 
 ### 历史与用途
 
@@ -100,7 +100,7 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 | 质量裁决（`adjudicate` 轮次） | 执行计划中安排的轮次            | 否            | —                        | —                    |
 
 ::: tip 修复与裁决各管一段
-`correct` 轮改写译文以**消除**已被规则质检报出的安全问题（幂等：改写后会用同一 checker 重跑验证，改不掉就回滚保留原问题）；`adjudicate` 轮则只判断已有软规则问题**保留 / 剔除**、不改译文。二者都放在翻译轮次之后，不冲突。详见 [流水线与原理 · 规则质检与 AI 质量裁决](/zh/guide/pipeline#规则质检与-ai-质量裁决)。
+`correct` 轮改写译文以**消除**已被规则质检报出的安全问题（幂等：改写后会用同一 checker 重跑验证，改不掉就回滚保留原问题）；`adjudicate` 轮则只判断已有软规则问题**保留 / 标记为 `dismissed`**、不改译文。二者都放在翻译轮次之后，不冲突。详见 [流水线与原理 · 规则质检与 AI 质量裁决](/zh/guide/pipeline#规则质检与-ai-质量裁决)。
 :::
 
 ### 规则质检 code 一览
@@ -116,6 +116,7 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 | `source_residual`          | 译文夹带源语脚本片段（假名、谚文、西里尔文、汉字残留等），按语言对分档 | warning  | ✅ 软规则 |        |
 | `punctuation_pairing`      | 目标语引号/括号/书名号等配对不平衡                                   | warning  | ❌ 硬规则 |        |
 | `punctuation_missing`      | 源文整类包裹标点（引号、括号等）在译文中完全缺失                     | warning  | ❌ 硬规则 |        |
+| `punctuation_surplus`      | 译文多出源文所无的成对包裹标点（引号、括号等）                       | warning  | ❌ 硬规则 |        |
 | `whitespace_irregular`     | 零宽字符、NBSP、制表符、行/段分隔符等异常空白                        | warning  | ❌ 硬规则 |        |
 | `repeated_space`           | 连续空格；CJK 目标语中字符间夹英文空格                              | warning  | ❌ 硬规则 |        |
 | `width_mix`                | CJK 目标语中混入半角标点，或拉丁目标语中混入全角字符               | warning  | ❌ 硬规则 |        |
@@ -127,9 +128,9 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 | `leftover_placeholder`     | 译文中残留 `__LF_*` 占位符（缺失、重复或字形偏移等三类汇总）        | error    | ❌ 硬规则 |        |
 | `xml_tag_mismatch`         | 源/译 XML 标签多重集合不一致（标签爆裂或丢失）                      | error    | ❌ 硬规则 |        |
 
-`source_residual` 按语言对自动启用；源语言为 `auto` 时不生效。其中 16 项 per-batch checker 可在 `qa.checks` 中按名启用/排除；`duplicate_source_divergence` 为文档级检查（跨段对比），始终随 QA 引擎运行，不必也不能在 `qa.checks` 中排除。
+`source_residual` 按语言对自动启用；源语言为 `auto` 时不生效。其中 17 项 per-batch checker 可在 `qa.checks` 中按名启用/排除；`duplicate_source_divergence` 为文档级检查（跨段对比），始终随 QA 引擎运行，不必也不能在 `qa.checks` 中排除。
 
-`punctuation_missing` 与 `punctuation_pairing` 互补不重复：源文某类包裹标点在译文中**完全缺失**时报 `punctuation_missing`；译文仍有该类标点但**配对不平衡**时才报 `punctuation_pairing`。`punctuation_missing` 报出的安全子集可由执行计划的 [本地改写轮次](/zh/guide/translation-config#执行计划) 自动修复，详见 [流水线与原理 · 本地改写](/zh/guide/pipeline#本地改写-correct)。
+`punctuation_missing`、`punctuation_surplus` 与 `punctuation_pairing` 三者互补不重复：源文某类包裹标点在译文中**完全缺失**时报 `punctuation_missing`；译文多出源文所无的**成对**包裹标点（疑似多译出）时报 `punctuation_surplus`；译文仍有该类标点但**配对不平衡**时才报 `punctuation_pairing`。`punctuation_missing` 报出的安全子集可由执行计划的 [本地改写轮次](/zh/guide/translation-config#执行计划) 自动修复，详见 [流水线与原理 · 本地改写](/zh/guide/pipeline#本地改写-correct)。
 
 ::: tip 原文结构不会被误报为质量问题
 HTML 标签、链接等原文结构在译文中会被还原回来，但 QA 引擎会把这些区段标为**保护区**，标点配对、空白、全/半角混用等 checker 在保护区上**自动跳过**——只检查译文真正写出来的文字。所以一份满是 HTML 标签的译文不会再因为标签里的英文符号被报一堆 `punctuation_pairing` / `width_mix`。`xml_tag_mismatch` 比对标签时还会**排除 `<ruby>` 注音标签族**，避免与 Ruby 还原策略冲突。详见 [流水线与原理 · 保护区](/zh/guide/pipeline#保护区-不被原文结构干扰)。
@@ -193,11 +194,53 @@ qa:
     enabled: true          # 未翻译
 ```
 
-- `qa.checks` 为 `undefined`（CLI/界面未填写）→ 启用 **全部** 17 项确定性 checker
+- `qa.checks` 为 `undefined`（CLI/界面未填写）→ 启用 **全部** 18 项确定性 checker
 - `qa.checks` 为具体列表 → 仅启动名单中按 `Checker.Name()` 精确匹配的 checker
 - 列表为空数组时视为「等价于全部」并自动改回 `nil`
 
 规则质检的 select-by-name（界面上的「全部启用 / 自定义选择」）是在配置编辑器里直接勾选具体检查项启用，详见 [翻译配置 · 使用](/zh/guide/translation-config#执行配置)。
+
+## 质量问题裁决
+
+质检报出的问题未必都是真问题——专有名词被误判为源语残留、有意保留的标点被报缺失等。LinguaFlow 支持对单条质量问题下**裁决**，把误报标记为「不是问题」（`dismissed`），让它不再干扰审校与修复。
+
+### 裁决从哪来
+
+裁决有两种来源，效果一致——都写入问题的 `disposition` 字段，`dismissed` 的问题被视为已处置，不再计入筛选/统计，也不再触发本地改写修复：
+
+| 来源               | 谁判定   | 何时发生                                       |
+| ------------------ | -------- | ---------------------------------------------- |
+| AI 裁决（`adjudicate` 轮） | LLM      | 执行计划中安排的裁决轮次，对软规则问题逐条复核 |
+| 人工裁决           | 审校者   | 审校时在段落界面手动驳回                       |
+
+### 人工驳回 / 撤销裁决
+
+在段落列表中对单条质量问题操作：
+
+- **桌面端**：悬停问题图标，在弹出的详情浮层中点击「判定不是问题」
+- **移动端**：点击问题标签打开详情，再点击「判定不是问题」
+
+驳回时会弹出确认框，可填写可选的**裁决说明**（如「专有名词，有意保留」）。确认后该问题变为「已驳回」：
+
+- 桌面端显示为灰色圆线图标，移动端为灰化带删除线的问题标签
+- 对应译文高亮改为灰色删除线（暗色模式下用低对比度样式，避免刺眼）
+- 详情中显示裁决者、裁决时间与说明
+
+::: tip 撤销裁决
+误判了可以撤回：已驳回问题的操作入口会变为「撤销裁决」，确认后恢复为待处理质量问题并提示成功。撤销会清空该问题上的裁决者、时间与说明。
+:::
+
+问题正在处理或保存时，对应的裁决操作会暂时禁用，待写入完成后再恢复。
+
+### 裁决与重算
+
+手动编辑译文后会重跑即时 QA。只要问题的指纹（`code` + `matched_text`）没变，已有的非未决裁决会被**保留**——你标过的「不是问题」不会因为重新质检而被冲掉。指纹消失（问题不再报出）的裁决随之清除，新出现或指纹变化的问题保持 `pending`。
+
+::: info 仅即时 QA 范围内对账
+手动编辑只重跑零配置确定性 QA（13 项），`length_ratio` / 术语表 / 文档级检查不在其列。这些未运行的 checker 产生的问题会在重算时被自然清除，属于预期行为。
+:::
+
+接口细节见 [API 参考](/zh/api/)。
 
 ## 批注
 
@@ -290,12 +333,12 @@ qa:
 
 ### 按质量问题筛选
 
-段落列表支持按质量问题过滤，快速定位需关注的段落。问题类型筛选已从平铺的标签改为**分组下拉**（可搜索、可清空，占位「按问题类型筛选」），按下列 8 个分组组织全部 25 个可筛选 code：
+段落列表支持按质量问题过滤，快速定位需关注的段落。问题类型筛选已从平铺的标签改为**分组下拉**（可搜索、可清空，占位「按问题类型筛选」），按下列 8 个分组组织全部 26 个可筛选 code：
 
 | 分组       | 包含的 code                                                                                              |
 | ---------- | ------------------------------------------------------------------------------------------------------- |
 | 硬规则     | `untranslated`、`duplicate`、`source_residual`、`length_ratio`                                         |
-| 排版标点   | `punctuation_pairing`、`punctuation_missing`、`whitespace_irregular`、`repeated_space`、`width_mix`      |
+| 排版标点   | `punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`whitespace_irregular`、`repeated_space`、`width_mix`      |
 | 数字链接   | `number_mismatch`、`url_email_mismatch`                                                                 |
 | 占位标签   | `leftover_placeholder`、`xml_tag_mismatch`                                                               |
 | 术语       | `forbidden_term`、`term_inconsistency`、`term_fidelity`                                                 |
@@ -303,10 +346,14 @@ qa:
 | 字幕       | `subtitle_line_count`                                                                                   |
 | 同源偏差   | `duplicate_source_divergence`                                                                            |
 
-25 个可筛选 code 由全部 per-batch checker（16 项）、文档级检查（1 项）与语义质检 code（8 项）合并派生；后续新增 checker 会自动出现在筛选列表中。可与状态筛选、关键词搜索叠加。例如：先筛「排版标点」分组里的 `punctuation_missing`，集中处理译文丢失引号的段落；或筛「语义质量」分组里的 `calque` + `warning` 专看语义质检报告出的逐字直译问题。
+26 个可筛选 code 由全部 per-batch checker（17 项）、文档级检查（1 项）与语义质检 code（8 项）合并派生；后续新增 checker 会自动出现在筛选列表中。可与状态筛选、关键词搜索叠加。例如：先筛「排版标点」分组里的 `punctuation_missing`，集中处理译文丢失引号的段落；或筛「语义质量」分组里的 `calque` + `warning` 专看语义质检报告出的逐字直译问题。
+
+::: tip 已驳回问题不计入筛选
+筛选与质量统计只看**待处理**问题——已被裁决为 `dismissed`（驳回）的问题视为已处置，不会让段落因它出现在筛选结果里。详见 [质量问题裁决](#质量问题裁决)。
+:::
 
 ::: tip 配合 AI 质量裁决 / 语义质检 / 本地改写
-- 规则质检偏敏感，可在执行计划中加 **质量裁决**（`adjudicate`）轮次，对 `source_residual`、`length_ratio` 等软规则逐条复核、剔除误报
+- 规则质检偏敏感，可在执行计划中加 **质量裁决**（`adjudicate`）轮次，对 `source_residual`、`length_ratio` 等软规则逐条复核、将误报标记为 `dismissed`
 - 规则查不出来的语义错误，可加 **语义质检**（`semantic_qa`）轮次补足，结果以 `warning` 直接进人审，无需再裁决
 - `punctuation_missing` 等可机械修复的安全问题，可加 **本地改写**（`correct`）轮次自动改写译文消除问题，无需调 LLM
 - 三类轮次都放在翻译轮次之后，详见 [流水线与原理 · 规则质检与 AI 质量裁决](/zh/guide/pipeline#规则质检与-ai-质量裁决)
