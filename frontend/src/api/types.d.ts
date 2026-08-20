@@ -598,6 +598,27 @@ export interface paths {
         patch: operations["ReviewResourceSegment"];
         trace?: never;
     };
+    "/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/issues/disposition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 对单条质量问题下裁决（可逆） */
+        post: operations["SetResourceSegmentIssueDisposition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview": {
         parameters: {
             query?: never;
@@ -1537,11 +1558,25 @@ export interface components {
             segment_index: number;
             /** @enum {string} */
             severity: "warning" | "error";
-            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register） */
+            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register） */
             code: string;
             message: string;
             /** @description 问题在目标/源文本中的跨度；片段级问题可省略 */
             span?: components["schemas"]["QualityIssueSpan"];
+            /**
+             * @description 裁决状态；省略表示未决（pending）。dismissed 表示已判定不是问题
+             * @enum {string}
+             */
+            disposition?: "dismissed";
+            /** @description 裁决者 user_id；null 表示由 LLM 裁决（adjudicate 轮） */
+            decided_by?: number | null;
+            /**
+             * Format: date-time
+             * @description 裁决时间
+             */
+            decided_at?: string | null;
+            /** @description 裁决说明（可选），如"专有名词，有意保留" */
+            note?: string;
         };
         UsageStats: {
             api_calls: number;
@@ -1782,6 +1817,19 @@ export interface components {
             apply_token: string;
             /** @description 预览后（可能被用户修改）的译文；为空将返回 400 */
             target_text: string;
+        };
+        IssueDispositionRequest: {
+            /** @description 问题代码 */
+            code: string;
+            /** @description 问题指纹的 matched_text（无 span 的 issue 传空串） */
+            matched_text: string;
+            /**
+             * @description pending=撤销裁决（改回未决）；dismissed=判定不是问题
+             * @enum {string}
+             */
+            disposition: "pending" | "dismissed";
+            /** @description 裁决说明（可选） */
+            note?: string;
         };
         CreateJobRequest: {
             /** @description 执行计划模板 ID */
@@ -2813,7 +2861,7 @@ export interface components {
              * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
              *     允许全部 issue code（规则 + 语义皆可作筛选键）。
              */
-            issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
+            issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
             retry?: components["schemas"]["RetryConfig"];
         };
         CorrectRuleConfig: {
@@ -2946,7 +2994,7 @@ export interface components {
              * @default false
              */
             auto_reject: boolean;
-            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
+            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
             checks?: string[];
             /**
              * @description 长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词
@@ -4084,7 +4132,7 @@ export interface operations {
                 /** @description 按 quality_issues 中的 severity 过滤；指定时隐含仅返回含匹配问题的段落 */
                 quality_severity?: "warning" | "error";
                 /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
-                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register";
+                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -4156,6 +4204,35 @@ export interface operations {
         };
         responses: {
             /** @description 审核成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Segment"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetResourceSegmentIssueDisposition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueDispositionRequest"];
+            };
+        };
+        responses: {
+            /** @description 裁决成功 */
             200: {
                 headers: {
                     [name: string]: unknown;

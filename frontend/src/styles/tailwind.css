@@ -433,6 +433,31 @@ body {
   box-shadow: inset 0 -2px 0 0 rgb(248 113 113 / 0.9);
 }
 
+/* 已驳回（dismissed）的问题：淡化高亮，表示已判定不是问题 */
+.quality-span--dismissed {
+  color: inherit;
+  background: rgb(115 115 115 / 0.14);
+  box-shadow: inset 0 -1px 0 0 rgb(115 115 115 / 0.35);
+  text-decoration: line-through;
+  text-decoration-color: rgb(115 115 115 / 0.5);
+}
+
+.dark .quality-span--dismissed {
+  background: rgb(161 161 170 / 0.18);
+  box-shadow: inset 0 -1px 0 0 rgb(161 161 170 / 0.4);
+  text-decoration-color: rgb(161 161 170 / 0.55);
+}
+
+.quality-span--dismissed.quality-span--active {
+  background: rgb(115 115 115 / 0.22);
+  box-shadow: inset 0 -2px 0 0 rgb(115 115 115 / 0.6);
+}
+
+.dark .quality-span--dismissed.quality-span--active {
+  background: rgb(161 161 170 / 0.28);
+  box-shadow: inset 0 -2px 0 0 rgb(161 161 170 / 0.65);
+}
+
 /* HTML 模式高亮容器：HTML 内联标签样式的唯一来源（全局，因 VNode 渲染无 scoped 属性） */
 .quality-html-content strong,
 .quality-html-content b {

@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import {
   type ApiSchemas,
   fetchResourceSegments,
+  setResourceSegmentIssueDisposition as setIssueDispositionRequest,
   updateResourceSegment as updateResourceSegmentRequest,
 } from '@/api/client'
 import { fetchSegmentGroups, type ResourceSegmentGroup } from '@/api/epub'
@@ -193,6 +194,31 @@ export const useSegmentStore = defineStore('segment', () => {
   }
 
   /**
+   * 对单条质量问题下裁决（dismissed）或撤销裁决（pending）。
+   * 后端返回更新后的整个 segment，直接替换本地副本。
+   */
+  const setIssueDisposition = async (
+    projectId: number,
+    resourceId: number,
+    segmentId: number,
+    payload: ApiSchemas['IssueDispositionRequest'],
+  ): Promise<Segment> => {
+    editingSegmentIds.value = [...editingSegmentIds.value, segmentId]
+    actionError.value = null
+
+    try {
+      const segment = await setIssueDispositionRequest(projectId, resourceId, segmentId, payload)
+      segments.value = segments.value.map((item) => (item.id === segment.id ? segment : item))
+      return segment
+    } catch (error) {
+      actionError.value = getErrorMessage(error, t('api.errors.setIssueDispositionFailed'))
+      throw error
+    } finally {
+      editingSegmentIds.value = editingSegmentIds.value.filter((id) => id !== segmentId)
+    }
+  }
+
+  /**
    * 加载章节分组列表
    */
   const loadSegmentGroups = async (projectId: number, resourceId: number): Promise<void> => {
@@ -306,6 +332,7 @@ export const useSegmentStore = defineStore('segment', () => {
     updateSegmentProgressCache,
     loadSegments,
     updateSegment,
+    setIssueDisposition,
     resetSegments,
     reset,
     // ── EPUB 新增导出 ──

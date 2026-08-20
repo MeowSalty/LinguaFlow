@@ -1,5 +1,5 @@
 import type { DataTableColumns } from 'naive-ui'
-import { NButton, NIcon, NInput, NSpace, NTag, NText, NTooltip } from 'naive-ui'
+import { NButton, NIcon, NInput, NPopover, NSpace, NTag, NText, NTooltip } from 'naive-ui'
 import type { ComputedRef, Ref, VNode } from 'vue'
 import { computed, h } from 'vue'
 
@@ -12,10 +12,17 @@ import IconCarbonChevronDown from '~icons/carbon/chevron-down'
 import IconCarbonCircleDash from '~icons/carbon/circle-dash'
 import IconCarbonWarning from '~icons/carbon/warning'
 import IconCarbonError from '~icons/carbon/error'
+import IconCarbonUndo from '~icons/carbon/undo'
+import IconCarbonTrashCan from '~icons/carbon/trash-can'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
-import { formatQualityIssueTooltip, resolveActiveIssueIndex } from '@/composables/useQualityIssues'
+import {
+  type QualityIssue,
+  formatQualityIssueTooltip,
+  isIssueDismissed,
+  resolveActiveIssueIndex,
+} from '@/composables/useQualityIssues'
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 import { t } from '@/i18n'
@@ -66,6 +73,12 @@ export interface SegmentColumnDeps {
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>
   onPreviewTranslation: (segment: Segment) => void
+
+  // ── 质量问题裁决 ──
+  /** 对某条质量问题下驳回裁决（dismissed） */
+  onDismissIssue: (segment: Segment, issue: QualityIssue) => void
+  /** 撤销某条质量问题的裁决（改回 pending） */
+  onReinstateIssue: (segment: Segment, issue: QualityIssue) => void
 
   // ── 质量问题高亮联动（HTML 模式） ──
   /** 当前悬停的问题，格式 `${segmentId}:${issueIndex}` */
@@ -214,6 +227,7 @@ export function useSegmentColumns(
           const linkable = config.value.textRenderMode === 'html'
           row.quality_issues.forEach((issue, issueIndex) => {
             const isError = issue.severity === 'error'
+            const dismissed = isIssueDismissed(issue)
             const issueKey = `${row.id}:${issueIndex}`
             const hoverProps = linkable
               ? {
@@ -227,23 +241,70 @@ export function useSegmentColumns(
                   },
                 }
               : {}
+            // 已驳回的问题用灰色淡化图标，区分未决问题
+            const iconColor = dismissed ? '#9ca3af' : isError ? '#d03050' : '#f0a020'
             metaElements.push(
               h(
-                NTooltip,
-                { style: { maxWidth: '320px' }, placement: 'bottom' },
+                NPopover,
+                {
+                  style: { maxWidth: '320px' },
+                  placement: 'bottom',
+                  trigger: 'hover',
+                  delay: 150,
+                },
                 {
                   trigger: () =>
                     h(
                       NIcon,
-                      { size: 14, color: isError ? '#d03050' : '#f0a020', ...hoverProps },
-                      { default: () => h(isError ? IconCarbonError : IconCarbonWarning) },
+                      { size: 14, color: iconColor, ...hoverProps },
+                      {
+                        default: () =>
+                          h(
+                            dismissed
+                              ? IconCarbonCircleDash
+                              : isError
+                                ? IconCarbonError
+                                : IconCarbonWarning,
+                          ),
+                      },
                     ),
                   default: () =>
-                    h(
-                      'div',
-                      { class: 'whitespace-pre-line text-xs leading-relaxed' },
-                      formatQualityIssueTooltip(issue),
-                    ),
+                    h('div', { class: 'space-y-2' }, [
+                      h(
+                        'div',
+                        { class: 'whitespace-pre-line text-xs leading-relaxed' },
+                        formatQualityIssueTooltip(issue),
+                      ),
+                      h(
+                        NButton,
+                        {
+                          size: 'tiny',
+                          quaternary: true,
+                          type: dismissed ? 'default' : 'warning',
+                          disabled: deps.editingSegmentIds.value.includes(row.id),
+                          onClick: (e: MouseEvent) => {
+                            e.stopPropagation()
+                            if (dismissed) {
+                              deps.onReinstateIssue(row, issue)
+                            } else {
+                              deps.onDismissIssue(row, issue)
+                            }
+                          },
+                        },
+                        {
+                          icon: () =>
+                            h(
+                              NIcon,
+                              { size: 12 },
+                              { default: () => h(dismissed ? IconCarbonUndo : IconCarbonTrashCan) },
+                            ),
+                          default: () =>
+                            dismissed
+                              ? t('workspace.segment.disposition.reinstateAction')
+                              : t('workspace.segment.disposition.dismissAction'),
+                        },
+                      ),
+                    ]),
                 },
               ),
             )

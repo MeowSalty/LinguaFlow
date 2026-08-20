@@ -1,8 +1,10 @@
 import { computed, reactive, ref, type Ref } from 'vue'
 import type { SelectOption } from 'naive-ui'
-import { useMessage } from 'naive-ui'
+import { NInput, useDialog, useMessage } from 'naive-ui'
+import { h } from 'vue'
 
 import { type ApiSchemas } from '@/api/client'
+import { formatQualityIssueTooltip, type QualityIssue } from '@/composables/useQualityIssues'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
 
@@ -20,6 +22,7 @@ export function useSegmentEditing(
   activeResourceId: Ref<number | null>,
 ) {
   const message = useMessage()
+  const dialog = useDialog()
   const workspace = useProjectWorkspaceStore()
 
   // ── 内联编辑状态 ──
@@ -119,6 +122,75 @@ export function useSegmentEditing(
     }
   }
 
+  // ── 质量问题裁决 ──
+
+  const submitDisposition = async (
+    segment: Segment,
+    issue: QualityIssue,
+    disposition: 'pending' | 'dismissed',
+    note: string,
+  ): Promise<void> => {
+    if (!projectId.value || !activeResourceId.value) return
+    try {
+      await workspace.setIssueDisposition(projectId.value, activeResourceId.value, segment.id, {
+        code: issue.code,
+        matched_text: issue.span?.matched_text ?? '',
+        disposition,
+        note: note || undefined,
+      })
+      message.success(
+        disposition === 'dismissed'
+          ? t('workspace.segment.disposition.dismissSuccess')
+          : t('workspace.segment.disposition.reinstateSuccess'),
+      )
+    } catch (error) {
+      console.error(error)
+      message.error(workspace.actionError || t('api.errors.setIssueDispositionFailed'))
+    }
+  }
+
+  /** 弹出对话框确认驳回（含可选 note 输入） */
+  const dismissIssue = (segment: Segment, issue: QualityIssue): void => {
+    let note = ''
+    dialog.info({
+      title: t('workspace.segment.disposition.dismissTitle'),
+      content: () =>
+        h('div', { class: 'space-y-3' }, [
+          h(
+            'div',
+            { class: 'whitespace-pre-line text-sm leading-relaxed text-lf-text-muted' },
+            formatQualityIssueTooltip(issue),
+          ),
+          h(NInput, {
+            type: 'textarea',
+            autosize: { minRows: 2, maxRows: 4 },
+            placeholder: t('workspace.segment.disposition.notePlaceholder'),
+            'onUpdate:value': (val: string) => {
+              note = val
+            },
+          }),
+        ]),
+      positiveText: t('workspace.segment.disposition.confirmDismiss'),
+      negativeText: t('workspace.segment.disposition.cancel'),
+      onPositiveClick: () => {
+        void submitDisposition(segment, issue, 'dismissed', note)
+      },
+    })
+  }
+
+  /** 弹出对话框确认撤销裁决 */
+  const reinstateIssue = (segment: Segment, issue: QualityIssue): void => {
+    dialog.warning({
+      title: t('workspace.segment.disposition.reinstateTitle'),
+      content: formatQualityIssueTooltip(issue),
+      positiveText: t('workspace.segment.disposition.confirmReinstate'),
+      negativeText: t('workspace.segment.disposition.cancel'),
+      onPositiveClick: () => {
+        void submitDisposition(segment, issue, 'pending', '')
+      },
+    })
+  }
+
   return {
     // 状态
     inlineEditingSegmentId,
@@ -134,5 +206,7 @@ export function useSegmentEditing(
     saveAndEditNext,
     openInlineComment,
     saveInlineComment,
+    dismissIssue,
+    reinstateIssue,
   }
 }

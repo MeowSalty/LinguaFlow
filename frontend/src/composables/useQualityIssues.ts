@@ -14,6 +14,8 @@ export interface QualityHighlightRange {
   start: number
   end: number
   severity: 'warning' | 'error'
+  /** 已被驳回（dismissed）的 issue：渲染为淡灰色而非 warning/error */
+  dismissed?: boolean
 }
 
 const QUALITY_CODE_I18N_KEYS: Record<QualityCode, string> = {
@@ -23,6 +25,7 @@ const QUALITY_CODE_I18N_KEYS: Record<QualityCode, string> = {
   source_residual: 'sourceResidual',
   punctuation_pairing: 'punctuationPairing',
   punctuation_missing: 'punctuationMissing',
+  punctuation_surplus: 'punctuationSurplus',
   whitespace_irregular: 'whitespaceIrregular',
   repeated_space: 'repeatedSpace',
   width_mix: 'widthMix',
@@ -52,6 +55,7 @@ export const QUALITY_CODE_GROUPS: { key: string; codes: QualityCode[] }[] = [
     codes: [
       'punctuation_pairing',
       'punctuation_missing',
+      'punctuation_surplus',
       'whitespace_irregular',
       'repeated_space',
       'width_mix',
@@ -89,12 +93,38 @@ export const getQualityCodeLabel = (code: string): string => {
   return label === key ? code : label
 }
 
+/** 该问题是否已被驳回（dismissed）；省略 disposition 视为未决（pending） */
+export const isIssueDismissed = (issue: QualityIssue): boolean => issue.disposition === 'dismissed'
+
+/** 格式化裁决信息为可读文本（用于 tooltip 末尾追加） */
+export const formatQualityIssueDisposition = (issue: QualityIssue): string => {
+  if (!isIssueDismissed(issue)) return ''
+  const lines: string[] = [t('workspace.segment.disposition.dismissedHint')]
+  if (issue.note) {
+    lines.push(issue.note)
+  }
+  if (issue.decided_at) {
+    const time = new Date(issue.decided_at).toLocaleString()
+    lines.push(t('workspace.segment.disposition.decidedAt', { time }))
+  }
+  if (issue.decided_by != null) {
+    lines.push(t('workspace.segment.disposition.decidedByUser', { userId: issue.decided_by }))
+  } else if (issue.decided_at) {
+    lines.push(t('workspace.segment.disposition.decidedByLlm'))
+  }
+  return lines.join('\n')
+}
+
 export const formatQualityIssueTooltip = (issue: QualityIssue): string => {
   const codeLabel = getQualityCodeLabel(issue.code)
   const lines = [`[${codeLabel}] ${issue.message}`]
   const matched = issue.span?.matched_text?.trim()
   if (matched) {
     lines.push(t('workspace.segment.qualityMatched', { text: matched }))
+  }
+  const disposition = formatQualityIssueDisposition(issue)
+  if (disposition) {
+    lines.push(disposition)
   }
   return lines.join('\n')
 }
@@ -142,6 +172,7 @@ export const collectQualityHighlightRanges = (
       start: clampedStart,
       end: clampedEnd,
       severity: issue.severity,
+      dismissed: isIssueDismissed(issue),
     })
   }
 
@@ -175,6 +206,10 @@ export const mergeHighlightRanges = (ranges: QualityHighlightRange[]): QualityHi
     if (severityRank(range.severity) > severityRank(last.severity)) {
       last.severity = range.severity
     }
+    // 被驳回的 issue 覆盖正常高亮：任一被合并区间为 dismissed 即整体标记为 dismissed
+    if (range.dismissed) {
+      last.dismissed = true
+    }
     last.end = Math.max(last.end, range.end)
   }
 
@@ -200,8 +235,9 @@ export const renderQualityHighlightedText = (text: string, issues?: QualityIssue
       h(
         'mark',
         {
-          class:
-            range.severity === 'error'
+          class: range.dismissed
+            ? 'quality-span quality-span--dismissed'
+            : range.severity === 'error'
               ? 'quality-span quality-span--error'
               : 'quality-span quality-span--warning',
         },
@@ -385,7 +421,12 @@ const buildHtmlHighlightLayout = (
       perIssue.push(null)
       continue
     }
-    perIssue.push({ start: located.start, end: located.end, severity: issue.severity })
+    perIssue.push({
+      start: located.start,
+      end: located.end,
+      severity: issue.severity,
+      dismissed: isIssueDismissed(issue),
+    })
     endpoints.add(located.start)
     endpoints.add(located.end)
   }
@@ -400,10 +441,12 @@ const buildHtmlHighlightLayout = (
 
     const issueIds: number[] = []
     let severity: 'warning' | 'error' = 'warning'
+    let dismissed = false
     perIssue.forEach((range, idx) => {
       if (range && range.start <= start && range.end >= end) {
         issueIds.push(idx)
         if (range.severity === 'error') severity = 'error'
+        if (range.dismissed) dismissed = true
       }
     })
     if (!issueIds.length) continue
@@ -413,12 +456,13 @@ const buildHtmlHighlightLayout = (
       last &&
       last.end === start &&
       last.severity === severity &&
+      last.dismissed === dismissed &&
       last.issueIds.length === issueIds.length &&
       last.issueIds.every((id, i) => id === issueIds[i])
     ) {
       last.end = end
     } else {
-      merged.push({ start, end, severity, issueIds })
+      merged.push({ start, end, severity, dismissed, issueIds })
     }
   }
 
@@ -473,7 +517,11 @@ const renderTextNodeWithHighlights = (
         {
           class: [
             'quality-span',
-            atom.severity === 'error' ? 'quality-span--error' : 'quality-span--warning',
+            atom.dismissed
+              ? 'quality-span--dismissed'
+              : atom.severity === 'error'
+                ? 'quality-span--error'
+                : 'quality-span--warning',
             isActive ? 'quality-span--active' : '',
           ],
           'data-issue-ids': atom.issueIds.join(','),

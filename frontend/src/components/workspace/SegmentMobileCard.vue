@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { NButton, NIcon, NInput, NTag, NText, NTooltip } from 'naive-ui'
+import { NButton, NIcon, NInput, NPopover, NTag, NText } from 'naive-ui'
 
 import IconCarbonChat from '~icons/carbon/chat'
+import IconCarbonUndo from '~icons/carbon/undo'
+import IconCarbonTrashCan from '~icons/carbon/trash-can'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
-import { formatQualityIssueTooltip, getQualityCodeLabel } from '@/composables/useQualityIssues'
+import {
+  formatQualityIssueTooltip,
+  getQualityCodeLabel,
+  isIssueDismissed,
+  type QualityIssue,
+} from '@/composables/useQualityIssues'
 import { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 import { t } from '@/i18n'
@@ -42,6 +49,8 @@ const emit = defineEmits<{
   updateEditField: [field: 'target_text' | 'comment', value: string]
   updateCommentText: [value: string]
   previewTranslation: [segment: Segment]
+  dismissIssue: [segment: Segment, issue: QualityIssue]
+  reinstateIssue: [segment: Segment, issue: QualityIssue]
 }>()
 </script>
 
@@ -52,25 +61,61 @@ const emit = defineEmits<{
       <span class="text-xs text-lf-text-muted">#{{ segment.segment_index }}</span>
       <div class="flex items-center gap-1">
         <template v-if="segment.quality_issues?.length">
-          <NTooltip
+          <NPopover
             v-for="(issue, issueIndex) in segment.quality_issues"
             :key="`${issue.code}-${issue.span?.matched_text ?? issueIndex}`"
+            trigger="click"
+            placement="bottom"
+            :style="{ maxWidth: '320px' }"
           >
             <template #trigger>
               <NTag
                 size="small"
-                :type="issue.severity === 'error' ? 'error' : 'warning'"
+                :type="
+                  isIssueDismissed(issue)
+                    ? 'default'
+                    : issue.severity === 'error'
+                      ? 'error'
+                      : 'warning'
+                "
                 round
-                :class="{ 'cursor-pointer': textRenderMode === 'html' }"
+                :class="[
+                  isIssueDismissed(issue) ? 'line-through opacity-60' : '',
+                  textRenderMode === 'html' ? 'cursor-pointer' : '',
+                ]"
                 @click="toggleIssueHighlight(issueIndex)"
               >
                 {{ getQualityCodeLabel(issue.code) }}
               </NTag>
             </template>
-            <div class="whitespace-pre-line text-xs leading-relaxed">
-              {{ formatQualityIssueTooltip(issue) }}
+            <div class="space-y-2">
+              <div class="whitespace-pre-line text-xs leading-relaxed">
+                {{ formatQualityIssueTooltip(issue) }}
+              </div>
+              <NButton
+                size="tiny"
+                quaternary
+                :type="isIssueDismissed(issue) ? 'default' : 'warning'"
+                @click="
+                  isIssueDismissed(issue)
+                    ? emit('reinstateIssue', segment, issue)
+                    : emit('dismissIssue', segment, issue)
+                "
+              >
+                <template #icon>
+                  <NIcon
+                    :size="12"
+                    :component="isIssueDismissed(issue) ? IconCarbonUndo : IconCarbonTrashCan"
+                  />
+                </template>
+                {{
+                  isIssueDismissed(issue)
+                    ? t('workspace.segment.disposition.reinstateAction')
+                    : t('workspace.segment.disposition.dismissAction')
+                }}
+              </NButton>
             </div>
-          </NTooltip>
+          </NPopover>
         </template>
         <NTag size="small" :type="statusTagType(segment.status)">
           {{ getSegmentStatusLabel(segment.status) }}
