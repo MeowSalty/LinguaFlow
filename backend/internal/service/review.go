@@ -295,7 +295,7 @@ func (s *ReviewService) SetIssueDisposition(ctx context.Context, actorUserID, pr
 		issues[found].DecidedAt = &now
 		issues[found].Note = note
 	case string(qa.DispositionPending):
-		// 撤销裁决：重置为零值
+		// 撤销裁决：改回未决
 		issues[found].Disposition = qa.DispositionPending
 		issues[found].DecidedBy = nil
 		issues[found].DecidedAt = nil

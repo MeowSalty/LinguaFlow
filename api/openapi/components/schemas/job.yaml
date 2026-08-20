@@ -220,7 +220,7 @@ Segment:
 
 QualityIssue:
   type: object
-  required: [segment_index, severity, code, message]
+  required: [segment_index, severity, code, message, disposition]
   properties:
     segment_index:
       type: integer
@@ -237,8 +237,8 @@ QualityIssue:
       description: 问题在目标/源文本中的跨度；片段级问题可省略
     disposition:
       type: string
-      enum: [dismissed]
-      description: 裁决状态；省略表示未决（pending）。dismissed 表示已判定不是问题
+      enum: [pending, dismissed]
+      description: 裁决状态；pending=未决，dismissed=已判定不是问题
     decided_by:
       type: integer
       nullable: true
