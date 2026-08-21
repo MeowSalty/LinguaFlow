@@ -193,6 +193,19 @@ func TestHandler_ListJobEvents_Unauthorized(t *testing.T) {
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", w.Code)
 	}
+	var problem struct {
+		Type  string `json:"type"`
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if problem.Type != "urn:linguaflow:unauthorized" {
+		t.Errorf("type = %q, want urn:linguaflow:unauthorized", problem.Type)
+	}
+	if problem.Title != "unauthorized" {
+		t.Errorf("title = %q, want unauthorized", problem.Title)
+	}
 }
 
 func TestHandler_ListJobEvents_NotFound(t *testing.T) {
