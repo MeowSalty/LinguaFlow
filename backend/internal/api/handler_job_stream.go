@@ -28,9 +28,9 @@ func (s *Server) parseSSECursor(raw, source string) int64 {
 var sseEventTypeReplacer = strings.NewReplacer("\r", "", "\n", "")
 
 func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := s.resolveAuthUser(r)
-	if !ok {
-		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+	authUser, err := s.resolveAuthUser(r)
+	if err != nil {
+		s.writeAuthProblem(w, r, err)
 		return
 	}
 	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "jobId"), "jobId")
