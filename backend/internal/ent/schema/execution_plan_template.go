@@ -86,7 +86,7 @@ type CorrectRoundConfig struct {
 
 // CorrectRuleConfig 单条本地改写规则。
 type CorrectRuleConfig struct {
-	Name    string `json:"name"    yaml:"name"` // 白名单：punctuation_missing_wrap
+	Name    string `json:"name"    yaml:"name"` // 白名单：punctuation_missing_wrap、punctuation_wrap_loss_wrap
 	Enabled bool   `json:"enabled" yaml:"enabled"`
 }
 

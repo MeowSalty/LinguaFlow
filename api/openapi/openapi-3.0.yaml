@@ -909,6 +909,7 @@ paths:
               - punctuation_pairing
               - punctuation_missing
               - punctuation_surplus
+              - punctuation_wrap_loss
               - whitespace_irregular
               - repeated_space
               - width_mix
@@ -2678,7 +2679,7 @@ components:
             - error
         code:
           type: string
-          description: 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register）
+          description: 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register）
         message:
           type: string
         span:
@@ -5188,6 +5189,7 @@ components:
               - punctuation_pairing
               - punctuation_missing
               - punctuation_surplus
+              - punctuation_wrap_loss
               - whitespace_irregular
               - repeated_space
               - width_mix
@@ -5221,9 +5223,11 @@ components:
           type: string
           enum:
             - punctuation_missing_wrap
+            - punctuation_wrap_loss_wrap
           description: |
             规则名（白名单）。首发仅 punctuation_missing_wrap：机械修复 punctuation_missing 报出
             的"译文丢失源文引号包裹"的安全子集（单 span、源首尾为配对引号、译文无该引号）。
+            另支持 punctuation_wrap_loss_wrap：修复 punctuation_wrap_loss 报出的"译文丢失源文外层引号包裹"（单 span、源首尾配对引号、译文首尾无引号）。
         enabled:
           type: boolean
           default: true
@@ -5445,7 +5449,7 @@ components:
           type: array
           items:
             type: string
-          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
+          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
         length_method:
           type: string
           enum:

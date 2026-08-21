@@ -481,6 +481,7 @@ func TestZeroConfigDeterministicChecks(t *testing.T) {
 		CheckPunctuationPairing,
 		CheckPunctuationMissing,
 		CheckPunctuationSurplus,
+		CheckPunctuationWrapLoss,
 		CheckWhitespaceIrregular,
 		CheckRepeatedSpace,
 		CheckWidthMix,

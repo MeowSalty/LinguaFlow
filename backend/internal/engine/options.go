@@ -463,8 +463,8 @@ func buildCorrectPipelineRound(
 		Concurrency: rc.Concurrency,
 	})
 
-	// 幂等引擎：仅含本规则消费的 issue code（如 punctuation_missing），
-	// 用与原 checker 同一的 PunctuationMissingChecker 验幂等，防成环不级联其他 checker。
+	// 幂等引擎：仅含各规则消费的 issue code，使用原 checker 复验幂等，
+	// 防成环且不级联其他 checker。
 	var idem *qa.Engine
 	consumed := rulesEngine.ConsumedIssueCodes()
 	if len(consumed) > 0 {
