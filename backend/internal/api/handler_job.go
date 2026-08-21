@@ -345,6 +345,12 @@ func (s *Server) writeJobServiceError(w http.ResponseWriter, r *http.Request, er
 		s.writeProblem(w, r, http.StatusNotFound, "not_found", "任务不存在")
 	case errors.Is(err, service.ErrJobEmpty):
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "没有可处理的待处理段落")
+	case errors.Is(err, service.ErrJobNotCancellable):
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "任务当前状态不可取消")
+	case errors.Is(err, service.ErrJobNotRetryable):
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "任务未失败，无法重试")
+	case errors.Is(err, service.ErrJobNoFailedResource):
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "没有可重试的失败资源")
 	case errors.Is(err, service.ErrProjectNotFound):
 		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")
 	case errors.Is(err, service.ErrResourceNotFound), errors.Is(err, service.ErrSegmentNotFound):

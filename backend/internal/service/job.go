@@ -45,6 +45,9 @@ var (
 	ErrJobEmpty            = errors.New("job has no pending segments")
 	ErrJobResourceNotFound = errors.New("job resource not found")
 	ErrJobActorMissing     = errors.New("job actor unavailable")
+	ErrJobNotCancellable   = errors.New("job is not in a cancellable state")
+	ErrJobNotRetryable     = errors.New("job is not in a retryable state")
+	ErrJobNoFailedResource = errors.New("job has no failed resources to retry")
 )
 
 // JobService 任务服务。
@@ -967,6 +970,10 @@ func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*en
 	if err != nil {
 		return nil, err
 	}
+	// 仅 pending/running 可取消；completed/failed/cancelled 为终态，取消会篡改状态。
+	if current.Status != JobStatusPending && current.Status != JobStatusRunning {
+		return nil, ErrJobNotCancellable
+	}
 	if err := s.client.JobResource.Update().
 		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)).
 		SetStatus(JobResourceStatusCancelled).
@@ -989,6 +996,20 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 	current, err := s.GetJob(ctx, actorUserID, jobID)
 	if err != nil {
 		return nil, err
+	}
+	// 仅 failed 任务可重试；对 completed 任务重试会把它重新入队空耗 worker。
+	if current.Status != JobStatusFailed {
+		return nil, ErrJobNotRetryable
+	}
+	// 必须存在 failed 资源才有可重试的对象，从本次读取的资源实时计数。
+	failedResources := 0
+	for _, item := range current.Edges.JobResources {
+		if item.Status == JobResourceStatusFailed {
+			failedResources++
+		}
+	}
+	if failedResources == 0 {
+		return nil, ErrJobNoFailedResource
 	}
 	if err := s.client.JobResource.Update().
 		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusFailed)).
