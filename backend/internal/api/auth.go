@@ -26,13 +26,13 @@ var errNoToken = errors.New("no token provided")
 func (s *Server) writeAuthProblem(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, errNoToken):
-		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "未提供认证凭据")
+		s.writeProblemWithType(w, r, http.StatusUnauthorized, "urn:linguaflow:token-missing", "unauthorized", "未提供认证凭据")
 	case errors.Is(err, service.ErrTokenExpired):
-		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "Token 已过期，请重新登录")
+		s.writeProblemWithType(w, r, http.StatusUnauthorized, "urn:linguaflow:token-expired", "unauthorized", "Token 已过期，请重新登录")
 	case errors.Is(err, service.ErrTokenInvalid):
-		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "Token 无效或已失效")
+		s.writeProblemWithType(w, r, http.StatusUnauthorized, "urn:linguaflow:token-invalid", "unauthorized", "Token 无效或已失效")
 	case errors.Is(err, service.ErrUserInactive):
-		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "用户已被禁用")
+		s.writeProblemWithType(w, r, http.StatusUnauthorized, "urn:linguaflow:user-inactive", "unauthorized", "用户已被禁用")
 	default:
 		s.writeServiceError(w, r, err)
 	}
