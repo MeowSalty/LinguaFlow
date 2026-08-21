@@ -315,3 +315,43 @@ func TestParseSectionRubyOutput_ThreeField(t *testing.T) {
 		t.Errorf(`m["2"] = %+v, want %+v`, got, want2)
 	}
 }
+
+// section 模式以 "基底/标注#id" 展示条目，system prompt 要求 LLM 原样回显 "#id"。
+// item ID 由 AssignIDs 分配为裸数字，解析阶段必须归一化掉 "#" 前缀，
+// 否则 MergeByOutput 用裸数字建索引、用 "#1" 查找会全部漏配 → 注音丢失。
+func TestParseSectionRubyOutput_HashPrefixID(t *testing.T) {
+	lines := []string{
+		"1: 雷神皇 | 雷神大人 | creative | #1",
+		"2: 戳 | たた | phonetic | #2",
+	}
+	m := ParseSectionRubyOutput(lines)
+
+	want := OutputEntry{Base: "雷神皇", Text: "雷神大人", Kind: "creative", ID: "1"}
+	if got := m["1"]; !reflect.DeepEqual(got, []OutputEntry{want}) {
+		t.Errorf(`m["1"] = %+v, want %+v`, got, want)
+	}
+
+	want2 := OutputEntry{Base: "戳", Text: "たた", Kind: "phonetic", ID: "2"}
+	if got := m["2"]; !reflect.DeepEqual(got, []OutputEntry{want2}) {
+		t.Errorf(`m["2"] = %+v, want %+v`, got, want2)
+	}
+}
+
+// 归一化后，带 "#" 前缀的 LLM 输出能正确匹配 AssignIDs 分配的裸数字 item ID。
+func TestMergeByOutput_HashPrefixID(t *testing.T) {
+	items := []Item{
+		{ID: "1", SourceBase: "雷神皇", SourceText: "カミナリサマ"},
+		{ID: "2", SourceBase: "戳", SourceText: "たた"},
+	}
+	out := ParseSectionRubyOutput([]string{
+		"1: 雷神皇 | 雷神大人 | creative | #1",
+		"1: 戳 | たた | phonetic | #2",
+	})
+	MergeByOutput(items, out["1"])
+
+	for _, it := range items {
+		if !it.Aligned {
+			t.Errorf("item ID=%q 未对齐，期望对齐（# 前缀归一化后应命中）", it.ID)
+		}
+	}
+}

@@ -191,14 +191,25 @@ func ParseSectionLine(content string) (base, text, kind, itemID string, ok bool)
 		base, text, kind, ok = parseBaseTextKind(content)
 		return base, text, kind, "", ok
 	}
-	// 否则优先按 4 字段解析：最右侧为 item_id，其余按 3 字段解析
+	// 否则优先按 4 字段解析：最右侧为 item_id，其余按 3 字段解析。
+	// item_id 可能带 prompt 展示用的 "#" 前缀（section 模式以 "基底/标注#id"
+	// 展示，LLM 原样回显 "#1"），归一化回裸数字以匹配 AssignIDs 分配的 item ID。
 	base, text, kind, ok = parseBaseTextKind(content[:itemIdx])
 	if ok {
-		return base, text, kind, rightmost, true
+		return base, text, kind, trimIDPrefix(rightmost), true
 	}
 	// 4 字段解析失败 → 回退 3 字段整体解析（兼容自定义 kind）
 	base, text, kind, ok = parseBaseTextKind(content)
 	return base, text, kind, "", ok
+}
+
+// trimIDPrefix 去除 item id 的 prompt 展示前缀（"#"），并 trim 空白。
+// item ID 由 AssignIDs 分配为裸数字（strconv.Itoa），prompt 以 "基底/标注#id"
+// 形式展示，LLM 常原样回显 "#1"；解析阶段统一回裸数字，保证 MergeByOutput 命中。
+func trimIDPrefix(id string) string {
+	id = strings.TrimSpace(id)
+	id = strings.TrimPrefix(id, "#")
+	return strings.TrimSpace(id)
 }
 
 // parseBaseTextKind 从右解析恰好 3 个字段 "base | text | kind"。
