@@ -29,6 +29,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   previewTranslation: [segment: Segment]
+  previewRevision: [segment: Segment]
   refresh: []
   translateByGroupKey: [groupKey: string]
   selectionChange: [segmentIds: number[]]
@@ -241,6 +242,10 @@ const handlePreviewTranslation = (segment: Segment): void => {
   emit('previewTranslation', segment)
 }
 
+const handlePreviewRevision = (segment: Segment): void => {
+  emit('previewRevision', segment)
+}
+
 const handleSaveAndEditNext = (segment: Segment): void => {
   void saveAndEditNext(segment, workspace.segments)
 }
@@ -406,6 +411,7 @@ const handleCloseInlineComment = (): void => {
         :inline-comment-text="inlineCommentText"
         @selection-change="handleSelectionChange"
         @preview-translation="handlePreviewTranslation"
+        @preview-revision="handlePreviewRevision"
         @load-more="handleLoadMore"
         @start-inline-edit="startInlineEdit"
         @cancel-inline-edit="cancelInlineEdit"

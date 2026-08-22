@@ -31,6 +31,7 @@ import GlossaryImportModal from '@/components/workspace/GlossaryImportModal.vue'
 import GlossarySyncDialog from '@/components/workspace/GlossarySyncDialog.vue'
 import SegmentPanel from '@/components/workspace/SegmentPanel.vue'
 import SegmentTranslationPreviewDrawer from '@/components/workspace/SegmentTranslationPreviewDrawer.vue'
+import SegmentRevisionPreviewDrawer from '@/components/workspace/SegmentRevisionPreviewDrawer.vue'
 import JobPanel from '@/components/workspace/JobPanel.vue'
 import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
 import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
@@ -64,6 +65,10 @@ const segmentTranslationPreviewDrawerRef = ref<InstanceType<
   typeof SegmentTranslationPreviewDrawer
 > | null>(null)
 const segmentTranslationPreviewVisible = ref(false)
+const segmentRevisionPreviewDrawerRef = ref<InstanceType<
+  typeof SegmentRevisionPreviewDrawer
+> | null>(null)
+const segmentRevisionPreviewVisible = ref(false)
 
 // ── 标签页懒加载 ──
 const loadedTabs = new Set<string>()
@@ -321,6 +326,11 @@ const handlePreviewTranslation = (segment: ApiSchemas['Segment']): void => {
   segmentTranslationPreviewDrawerRef.value?.open(segment, workspace.activeResourceId)
 }
 
+const handlePreviewRevision = (segment: ApiSchemas['Segment']): void => {
+  if (!workspace.activeResourceId) return
+  segmentRevisionPreviewDrawerRef.value?.open(segment, workspace.activeResourceId)
+}
+
 const handlePreviewApplied = async (payload: {
   segment: ApiSchemas['Segment']
   resourceId: number
@@ -576,6 +586,7 @@ onMounted(() => {
               ref="segmentPanelRef"
               :project-id="projectId"
               @preview-translation="handlePreviewTranslation"
+              @preview-revision="handlePreviewRevision"
               @refresh="reloadSegments"
             />
           </div>
@@ -626,6 +637,20 @@ onMounted(() => {
     <SegmentTranslationPreviewDrawer
       ref="segmentTranslationPreviewDrawerRef"
       v-model:show="segmentTranslationPreviewVisible"
+      :project-id="projectId"
+      :text-render-mode="
+        workspace.activeResource?.format === 'epub' ||
+        workspace.activeResource?.format === 'docx' ||
+        workspace.activeResource?.format === 'html'
+          ? 'html'
+          : 'plaintext'
+      "
+      @applied="handlePreviewApplied"
+    />
+
+    <SegmentRevisionPreviewDrawer
+      ref="segmentRevisionPreviewDrawerRef"
+      v-model:show="segmentRevisionPreviewVisible"
       :project-id="projectId"
       :text-render-mode="
         workspace.activeResource?.format === 'epub' ||

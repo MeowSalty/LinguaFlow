@@ -14,12 +14,14 @@ import IconCarbonWarning from '~icons/carbon/warning'
 import IconCarbonError from '~icons/carbon/error'
 import IconCarbonUndo from '~icons/carbon/undo'
 import IconCarbonTrashCan from '~icons/carbon/trash-can'
+import IconCarbonMagicWand from '~icons/carbon/magic-wand'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
 import {
   type QualityIssue,
   formatQualityIssueTooltip,
+  hasPendingSemanticIssues,
   isIssueDismissed,
   resolveActiveIssueIndex,
 } from '@/composables/useQualityIssues'
@@ -28,6 +30,12 @@ import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
+
+/** 段落是否可发起单段修订（已翻译/已编辑、译文非空、存在 pending 语义 issue） */
+const canPreviewRevision = (segment: Segment): boolean =>
+  (segment.status === 'translated' || segment.status === 'edited') &&
+  Boolean(segment.target_text) &&
+  hasPendingSemanticIssues(segment)
 
 /**
  * 段落表格配置项
@@ -73,6 +81,7 @@ export interface SegmentColumnDeps {
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>
   onPreviewTranslation: (segment: Segment) => void
+  onPreviewRevision: (segment: Segment) => void
 
   // ── 质量问题裁决 ──
   /** 对某条质量问题下驳回裁决（dismissed） */
@@ -556,6 +565,29 @@ export function useSegmentColumns(
               default: () => t('workspace.segment.actions.previewTranslation'),
             },
           ),
+
+          ...(canPreviewRevision(row)
+            ? [
+                h(
+                  NTooltip,
+                  { placement: 'top' },
+                  {
+                    trigger: () =>
+                      h(
+                        NButton,
+                        {
+                          size: 'small',
+                          quaternary: true,
+                          type: 'primary',
+                          onClick: () => deps.onPreviewRevision(row),
+                        },
+                        { icon: () => h(NIcon, null, { default: () => h(IconCarbonMagicWand) }) },
+                      ),
+                    default: () => t('workspace.segment.actions.previewRevision'),
+                  },
+                ),
+              ]
+            : []),
         ])
       },
     })
