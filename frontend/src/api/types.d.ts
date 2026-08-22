@@ -662,13 +662,45 @@ export interface paths {
         put?: never;
         /**
          * 应用单段翻译预览结果
-         * @description 使用预览返回的 apply_token 冲突安全地写回译文。apply_token 无状态，签名自包含
+         * @description 使用预览返回的 apply_token 冲突安全地写回译文。接受翻译预览与修订预览两种令牌
+         *     （应用语义一致，按令牌内 kind 声明区分审计事件）。apply_token 无状态，签名自包含
          *     预览时的 source/target 基线、最终 issues 与确定性 QA 配置。target 与预览一致时
          *     应用签名 issues；target 被修改时仅基于固定 QA 配置重新运行确定性 QA，
          *     不再调用 LLM。基线（source/target/status）已变化返回 409，token 过期返回 410。
          *     写入后状态固定为 edited，不自动 approve/reject。
          */
         post: operations["ApplyResourceSegmentTranslationPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/revision-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 单段修订预览
+         * @description 同步执行一次 LLM 修订：以段落上 pending 的语义 issue（误译、仿译、漏译等）为修复
+         *     目标，对现有译文做最小改动定点修订，不创建 Job、不写回 Segment。要求段落
+         *     translated/edited 且译文非空、过滤后存在至少一条 pending 语义 issue，否则 409。
+         *     执行计划须包含 revise 轮或至少一个 translate 轮（后者时以翻译轮后端合成默认修订轮）。
+         *     修订完成文本后在内存中重跑确定性 QA 作为最终 issues。模型执行已启动后的成功、
+         *     部分成功、失败统一返回 HTTP 200 并通过 status 区分；并发限制等仍使用标准错误码。
+         *     唯一持久化副作用是记录真实预览用量。存在可应用修订时返回短期签名 apply_token，
+         *     可用 translation-preview/apply 接口冲突安全地写回（令牌内 kind=fix）。
+         */
+        post: operations["PreviewResourceSegmentRevision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1558,16 +1590,16 @@ export interface components {
             segment_index: number;
             /** @enum {string} */
             severity: "warning" | "error";
-            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register） */
+            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register） */
             code: string;
             message: string;
             /** @description 问题在目标/源文本中的跨度；片段级问题可省略 */
             span?: components["schemas"]["QualityIssueSpan"];
             /**
-             * @description 裁决状态；省略表示未决（pending）。dismissed 表示已判定不是问题
+             * @description 裁决状态；pending=未决，dismissed=已判定不是问题
              * @enum {string}
              */
-            disposition?: "dismissed";
+            disposition: "pending" | "dismissed";
             /** @description 裁决者 user_id；null 表示由 LLM 裁决（adjudicate 轮） */
             decided_by?: number | null;
             /**
@@ -1743,7 +1775,7 @@ export interface components {
                 rounds: {
                     index: number;
                     /** @enum {string} */
-                    mode: "extract" | "translate" | "adjudicate" | "semantic_qa" | "correct";
+                    mode: "extract" | "translate" | "adjudicate" | "semantic_qa" | "revise" | "correct";
                     backend_name?: string;
                     /** @description translate 轮的提示词模板名称 */
                     prompt_template_name?: string;
@@ -1769,7 +1801,7 @@ export interface components {
         };
         TranslationBatchDiagnostic: {
             round_index?: number;
-            /** @description extract | translate | adjudicate | semantic_qa | ruby_retry */
+            /** @description extract | translate | adjudicate | semantic_qa | revise | ruby_retry */
             stage: string;
             /** @description 批次重试序号（0 起始） */
             attempt?: number;
@@ -1814,9 +1846,70 @@ export interface components {
             shrink_attempted?: boolean;
         };
         ApplySegmentTranslationPreviewRequest: {
+            /** @description 翻译预览或修订预览返回的 apply_token */
             apply_token: string;
             /** @description 预览后（可能被用户修改）的译文；为空将返回 400 */
             target_text: string;
+        };
+        SegmentRevisionPreviewRequest: {
+            /**
+             * @description 执行计划模板 ID；计划须包含 revise 轮或至少一个 translate 轮
+             *     （后者时以翻译轮后端合成默认修订轮）
+             */
+            execution_plan_id: number;
+            /**
+             * @description 可选：收窄修复目标的语义 issue code 子集；省略时修复段落上全部 pending 语义 issue。
+             *     与段落实际 pending 语义 issue 取交集，交集为空返回 409。
+             */
+            issue_codes?: ("calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
+        };
+        SegmentRevisionPreviewResponse: {
+            /**
+             * @description - failed: 未得到非空修订译文或修订轮终态失败
+             *     - partial: 有修订译文，但修订轮有软警告
+             *     - success: 修订轮完成（修订文本可能与原译文相同，表示 LLM 判定无需改动）
+             * @enum {string}
+             */
+            status: "success" | "partial" | "failed";
+            segment_id: number;
+            /** @description 进入修订的原文（数据库原文） */
+            source_text: string;
+            /** @description 修订前的原译文（apply 基线） */
+            original_target_text: string;
+            /** @description 修订后译文；failed 时可能为空。与 original_target_text 相同表示无改动 */
+            target_text?: string;
+            /** @description 本次作为修复目标喂给修订 LLM 的语义 issue（过滤后子集） */
+            fix_issues?: components["schemas"]["QualityIssue"][];
+            /** @description 修订译文上的最终质量问题（确定性 QA 重跑后与既有裁决对账） */
+            quality_issues?: components["schemas"]["QualityIssue"][];
+            execution: {
+                execution_plan_id: number;
+                execution_plan_name: string;
+                /** @description 实际执行的修订轮摘要（不暴露 backend options） */
+                rounds: {
+                    index: number;
+                    /** @enum {string} */
+                    mode: "revise";
+                    backend_name?: string;
+                    /** @description true 表示计划无 revise 轮、由 translate 轮后端合成的默认修订轮 */
+                    synthesized?: boolean;
+                }[];
+            };
+            usage: {
+                /** @description 实际 provider 调用次数（覆盖 retry、prompt upgrade 及修订轮） */
+                api_calls: number;
+                input_tokens: number;
+                output_tokens: number;
+            };
+            batches: components["schemas"]["TranslationBatchDiagnostic"][];
+            warnings?: string[];
+            /** @description 仅当存在可应用修订译文时返回；用于 translation-preview/apply 接口 */
+            apply_token?: string;
+            /**
+             * Format: date-time
+             * @description apply_token 的过期时间
+             */
+            apply_expires_at?: string;
         };
         IssueDispositionRequest: {
             /** @description 问题代码 */
@@ -2861,16 +2954,44 @@ export interface components {
              * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
              *     允许全部 issue code（规则 + 语义皆可作筛选键）。
              */
-            issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
+            issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "punctuation_wrap_loss" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
+            retry?: components["schemas"]["RetryConfig"];
+        };
+        /**
+         * @description 修订轮次配置。LLM 对已有译文做最小改动定点修订，修复段落上 pending 的语义 issue
+         *     （误译、仿译、漏译等）。system prompt 内置不可见，无 prompt_template_id；
+         *     protect / ruby / 上下文 / QA 配置借用计划内 translate 轮策略，不单独暴露。
+         *     写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。
+         */
+        ReviseRoundConfig: {
+            /** @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项 */
+            batch_size?: number;
+            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
+            max_words_per_batch?: number;
+            /**
+             * @description 段落扫描范围（均要求段落 translated/edited 且译文非空）：
+             *     - with_issues（默认）：修订存在 pending 语义 issue 的段。
+             *     - with_issue_codes：仅修订含 issue_codes 声明 code 的 pending 语义 issue 的段。
+             *     范围与任务级 segment_ids 取交集。
+             * @default with_issues
+             * @enum {string}
+             */
+            segment_scope: "with_issues" | "with_issue_codes";
+            /**
+             * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要修复的语义 issue code
+             *     （子集语义白名单，与 semantic_qa 轮的全量 code 筛选键不同）。
+             */
+            issue_codes?: ("calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
             retry?: components["schemas"]["RetryConfig"];
         };
         CorrectRuleConfig: {
             /**
              * @description 规则名（白名单）。首发仅 punctuation_missing_wrap：机械修复 punctuation_missing 报出
              *     的"译文丢失源文引号包裹"的安全子集（单 span、源首尾为配对引号、译文无该引号）。
+             *     另支持 punctuation_wrap_loss_wrap：修复 punctuation_wrap_loss 报出的"译文丢失源文外层引号包裹"（单 span、源首尾配对引号、译文首尾无引号）。
              * @enum {string}
              */
-            name: "punctuation_missing_wrap";
+            name: "punctuation_missing_wrap" | "punctuation_wrap_loss_wrap";
             /** @default true */
             enabled: boolean;
         };
@@ -2886,10 +3007,10 @@ export interface components {
         };
         ExecutionRoundConfig: {
             /**
-             * @description 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检，correct=本地改写
+             * @description 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检，revise=LLM 修订，correct=本地改写
              * @enum {string}
              */
-            mode: "translate" | "extract" | "adjudicate" | "semantic_qa" | "correct";
+            mode: "translate" | "extract" | "adjudicate" | "semantic_qa" | "revise" | "correct";
             /** @description 后端 ID；correct 轮为纯本地无需后端，可省略（其余 mode 必填且由后端运行时校验为正） */
             backend_id?: number;
             concurrency: number;
@@ -2901,6 +3022,8 @@ export interface components {
             adjudicate?: components["schemas"]["AdjudicateRoundConfig"];
             /** @description 语义质检模式配置（mode=semantic_qa 时必填） */
             semantic_qa?: components["schemas"]["SemanticQARoundConfig"];
+            /** @description 修订模式配置（mode=revise 时必填） */
+            revise?: components["schemas"]["ReviseRoundConfig"];
             /** @description 本地改写模式配置（mode=correct 时必填且 rules 至少 1 条） */
             correct?: components["schemas"]["CorrectRoundConfig"];
         };
@@ -2994,7 +3117,7 @@ export interface components {
              * @default false
              */
             auto_reject: boolean;
-            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
+            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
             checks?: string[];
             /**
              * @description 长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词
@@ -4132,7 +4255,7 @@ export interface operations {
                 /** @description 按 quality_issues 中的 severity 过滤；指定时隐含仅返回含匹配问题的段落 */
                 quality_severity?: "warning" | "error";
                 /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
-                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register";
+                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "punctuation_wrap_loss" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -4321,6 +4444,45 @@ export interface operations {
             /** @description apply_token 已过期或无效 */
             410: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    PreviewResourceSegmentRevision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SegmentRevisionPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description 修订预览结果（可能为 success / partial / failed） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SegmentRevisionPreviewResponse"];
+                };
+            };
+            /** @description 预览并发已满 */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
