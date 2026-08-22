@@ -1066,7 +1066,8 @@ paths:
       operationId: ApplyResourceSegmentTranslationPreview
       summary: 应用单段翻译预览结果
       description: |
-        使用预览返回的 apply_token 冲突安全地写回译文。apply_token 无状态，签名自包含
+        使用预览返回的 apply_token 冲突安全地写回译文。接受翻译预览与修订预览两种令牌
+        （应用语义一致，按令牌内 kind 声明区分审计事件）。apply_token 无状态，签名自包含
         预览时的 source/target 基线、最终 issues 与确定性 QA 配置。target 与预览一致时
         应用签名 issues；target 被修改时仅基于固定 QA 配置重新运行确定性 QA，
         不再调用 LLM。基线（source/target/status）已变化返回 409，token 过期返回 410。
@@ -1094,6 +1095,50 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '410':
           description: apply_token 已过期或无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/revision-preview:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/SegmentId'
+    post:
+      operationId: PreviewResourceSegmentRevision
+      summary: 单段修订预览
+      description: |
+        同步执行一次 LLM 修订：以段落上 pending 的语义 issue（误译、仿译、漏译等）为修复
+        目标，对现有译文做最小改动定点修订，不创建 Job、不写回 Segment。要求段落
+        translated/edited 且译文非空、过滤后存在至少一条 pending 语义 issue，否则 409。
+        执行计划须包含 revise 轮或至少一个 translate 轮（后者时以翻译轮后端合成默认修订轮）。
+        修订完成文本后在内存中重跑确定性 QA 作为最终 issues。模型执行已启动后的成功、
+        部分成功、失败统一返回 HTTP 200 并通过 status 区分；并发限制等仍使用标准错误码。
+        唯一持久化副作用是记录真实预览用量。存在可应用修订时返回短期签名 apply_token，
+        可用 translation-preview/apply 接口冲突安全地写回（令牌内 kind=fix）。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SegmentRevisionPreviewRequest'
+      responses:
+        '200':
+          description: 修订预览结果（可能为 success / partial / failed）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SegmentRevisionPreviewResponse'
+        '429':
+          description: 预览并发已满
+          headers:
+            Retry-After:
+              schema:
+                type: integer
           content:
             application/json:
               schema:
@@ -3071,6 +3116,7 @@ components:
                       - translate
                       - adjudicate
                       - semantic_qa
+                      - revise
                       - correct
                   backend_name:
                     type: string
@@ -3119,7 +3165,7 @@ components:
           type: integer
         stage:
           type: string
-          description: extract | translate | adjudicate | semantic_qa | ruby_retry
+          description: extract | translate | adjudicate | semantic_qa | revise | ruby_retry
         attempt:
           type: integer
           description: 批次重试序号（0 起始）
@@ -3207,10 +3253,142 @@ components:
       properties:
         apply_token:
           type: string
+          description: 翻译预览或修订预览返回的 apply_token
         target_text:
           type: string
           description: 预览后（可能被用户修改）的译文；为空将返回 400
       additionalProperties: false
+    SegmentRevisionPreviewRequest:
+      type: object
+      required:
+        - execution_plan_id
+      properties:
+        execution_plan_id:
+          type: integer
+          minimum: 1
+          description: |
+            执行计划模板 ID；计划须包含 revise 轮或至少一个 translate 轮
+            （后者时以翻译轮后端合成默认修订轮）
+        issue_codes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - calque
+              - term_fidelity
+              - naturalness
+              - mistranslation
+              - omission
+              - addition
+              - grammar
+              - register
+          description: |
+            可选：收窄修复目标的语义 issue code 子集；省略时修复段落上全部 pending 语义 issue。
+            与段落实际 pending 语义 issue 取交集，交集为空返回 409。
+      additionalProperties: false
+    SegmentRevisionPreviewResponse:
+      type: object
+      required:
+        - status
+        - segment_id
+        - source_text
+        - original_target_text
+        - execution
+        - usage
+        - batches
+      properties:
+        status:
+          type: string
+          enum:
+            - success
+            - partial
+            - failed
+          description: |
+            - failed: 未得到非空修订译文或修订轮终态失败
+            - partial: 有修订译文，但修订轮有软警告
+            - success: 修订轮完成（修订文本可能与原译文相同，表示 LLM 判定无需改动）
+        segment_id:
+          type: integer
+        source_text:
+          type: string
+          description: 进入修订的原文（数据库原文）
+        original_target_text:
+          type: string
+          description: 修订前的原译文（apply 基线）
+        target_text:
+          type: string
+          description: 修订后译文；failed 时可能为空。与 original_target_text 相同表示无改动
+        fix_issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/QualityIssue'
+          description: 本次作为修复目标喂给修订 LLM 的语义 issue（过滤后子集）
+        quality_issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/QualityIssue'
+          description: 修订译文上的最终质量问题（确定性 QA 重跑后与既有裁决对账）
+        execution:
+          type: object
+          required:
+            - execution_plan_id
+            - execution_plan_name
+            - rounds
+          properties:
+            execution_plan_id:
+              type: integer
+            execution_plan_name:
+              type: string
+            rounds:
+              type: array
+              description: 实际执行的修订轮摘要（不暴露 backend options）
+              items:
+                type: object
+                required:
+                  - index
+                  - mode
+                properties:
+                  index:
+                    type: integer
+                  mode:
+                    type: string
+                    enum:
+                      - revise
+                  backend_name:
+                    type: string
+                  synthesized:
+                    type: boolean
+                    description: true 表示计划无 revise 轮、由 translate 轮后端合成的默认修订轮
+        usage:
+          type: object
+          required:
+            - api_calls
+            - input_tokens
+            - output_tokens
+          properties:
+            api_calls:
+              type: integer
+              description: 实际 provider 调用次数（覆盖 retry、prompt upgrade 及修订轮）
+            input_tokens:
+              type: integer
+            output_tokens:
+              type: integer
+        batches:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranslationBatchDiagnostic'
+        warnings:
+          type: array
+          items:
+            type: string
+        apply_token:
+          type: string
+          description: 仅当存在可应用修订译文时返回；用于 translation-preview/apply 接口
+        apply_expires_at:
+          type: string
+          format: date-time
+          description: apply_token 的过期时间
     IssueDispositionRequest:
       type: object
       required:
@@ -5214,6 +5392,52 @@ components:
             允许全部 issue code（规则 + 语义皆可作筛选键）。
         retry:
           $ref: '#/components/schemas/RetryConfig'
+    ReviseRoundConfig:
+      type: object
+      description: |
+        修订轮次配置。LLM 对已有译文做最小改动定点修订，修复段落上 pending 的语义 issue
+        （误译、仿译、漏译等）。system prompt 内置不可见，无 prompt_template_id；
+        protect / ruby / 上下文 / QA 配置借用计划内 translate 轮策略，不单独暴露。
+        写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。
+      properties:
+        batch_size:
+          type: integer
+          minimum: 0
+          description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项
+        max_words_per_batch:
+          type: integer
+          minimum: 0
+          description: 字词数上限；0=不限制，与 batch_size 至少填一项
+        segment_scope:
+          type: string
+          enum:
+            - with_issues
+            - with_issue_codes
+          default: with_issues
+          description: |
+            段落扫描范围（均要求段落 translated/edited 且译文非空）：
+            - with_issues（默认）：修订存在 pending 语义 issue 的段。
+            - with_issue_codes：仅修订含 issue_codes 声明 code 的 pending 语义 issue 的段。
+            范围与任务级 segment_ids 取交集。
+        issue_codes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - calque
+              - term_fidelity
+              - naturalness
+              - mistranslation
+              - omission
+              - addition
+              - grammar
+              - register
+          description: |
+            仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要修复的语义 issue code
+            （子集语义白名单，与 semantic_qa 轮的全量 code 筛选键不同）。
+        retry:
+          $ref: '#/components/schemas/RetryConfig'
     CorrectRuleConfig:
       type: object
       required:
@@ -5259,8 +5483,9 @@ components:
             - extract
             - adjudicate
             - semantic_qa
+            - revise
             - correct
-          description: 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检，correct=本地改写
+          description: 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检，revise=LLM 修订，correct=本地改写
         backend_id:
           type: integer
           description: 后端 ID；correct 轮为纯本地无需后端，可省略（其余 mode 必填且由后端运行时校验为正）
@@ -5279,6 +5504,9 @@ components:
         semantic_qa:
           $ref: '#/components/schemas/SemanticQARoundConfig'
           description: 语义质检模式配置（mode=semantic_qa 时必填）
+        revise:
+          $ref: '#/components/schemas/ReviseRoundConfig'
+          description: 修订模式配置（mode=revise 时必填）
         correct:
           $ref: '#/components/schemas/CorrectRoundConfig'
           description: 本地改写模式配置（mode=correct 时必填且 rules 至少 1 条）

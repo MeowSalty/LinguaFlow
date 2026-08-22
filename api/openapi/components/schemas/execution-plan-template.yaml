@@ -154,6 +154,45 @@ SemanticQARoundConfig:
     retry:
       $ref: '#/RetryConfig'
 
+ReviseRoundConfig:
+  type: object
+  description: |
+    修订轮次配置。LLM 对已有译文做最小改动定点修订，修复段落上 pending 的语义 issue
+    （误译、仿译、漏译等）。system prompt 内置不可见，无 prompt_template_id；
+    protect / ruby / 上下文 / QA 配置借用计划内 translate 轮策略，不单独暴露。
+    写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。
+  properties:
+    batch_size:
+      type: integer
+      minimum: 0
+      description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项
+    max_words_per_batch:
+      type: integer
+      minimum: 0
+      description: 字词数上限；0=不限制，与 batch_size 至少填一项
+    segment_scope:
+      type: string
+      enum: [with_issues, with_issue_codes]
+      default: with_issues
+      description: |
+        段落扫描范围（均要求段落 translated/edited 且译文非空）：
+        - with_issues（默认）：修订存在 pending 语义 issue 的段。
+        - with_issue_codes：仅修订含 issue_codes 声明 code 的 pending 语义 issue 的段。
+        范围与任务级 segment_ids 取交集。
+    issue_codes:
+      type: array
+      minItems: 1
+      items:
+        type: string
+        enum: [calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register]
+      description: |
+        仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要修复的语义 issue code
+        （子集语义白名单，与 semantic_qa 轮的全量 code 筛选键不同）。
+    # fallback_shrink: 当前仅 translate 轮实现缩批，revise 失败模式与批次大小无关，
+    # 不需要缩批，故暂不暴露。若未来需要，在此加 type:number / minimum:0 / maximum:1。
+    retry:
+      $ref: '#/RetryConfig'
+
 CorrectRuleConfig:
   type: object
   required: [name]
@@ -190,8 +229,8 @@ ExecutionRoundConfig:
   properties:
     mode:
       type: string
-      enum: [translate, extract, adjudicate, semantic_qa, correct]
-      description: 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检，correct=本地改写
+      enum: [translate, extract, adjudicate, semantic_qa, revise, correct]
+      description: 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检，revise=LLM 修订，correct=本地改写
     backend_id:
       type: integer
       description: 后端 ID；correct 轮为纯本地无需后端，可省略（其余 mode 必填且由后端运行时校验为正）
@@ -210,6 +249,9 @@ ExecutionRoundConfig:
     semantic_qa:
       $ref: '#/SemanticQARoundConfig'
       description: 语义质检模式配置（mode=semantic_qa 时必填）
+    revise:
+      $ref: '#/ReviseRoundConfig'
+      description: 修订模式配置（mode=revise 时必填）
     correct:
       $ref: '#/CorrectRoundConfig'
       description: 本地改写模式配置（mode=correct 时必填且 rules 至少 1 条）

@@ -140,6 +140,34 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		}
 		apiRC.SemanticQa = &semanticQACfg
 	}
+	if rc.Mode == "revise" && rc.Revise != nil {
+		r := rc.Revise
+		apiRC.Concurrency = r.Concurrency
+		reviseCfg := ReviseRoundConfig{}
+		reviseCfg.BatchSize = &r.BatchSize
+		if r.MaxWordsPerBatch > 0 {
+			mwpb := r.MaxWordsPerBatch
+			reviseCfg.MaxWordsPerBatch = &mwpb
+		}
+		if r.SegmentScope != "" {
+			ss := ReviseRoundConfigSegmentScope(r.SegmentScope)
+			reviseCfg.SegmentScope = &ss
+		}
+		if len(r.IssueCodes) > 0 {
+			codes := make([]ReviseRoundConfigIssueCodes, 0, len(r.IssueCodes))
+			for _, c := range r.IssueCodes {
+				codes = append(codes, ReviseRoundConfigIssueCodes(c))
+			}
+			reviseCfg.IssueCodes = &codes
+		}
+		// NOTE: revise 不接缩批（仅 translate 暴露 fallback_shrink）。
+		// 若未来需要，在此加 fallback_shrink 字段并补 OpenAPI/校验/snapshot/engine_factory 映射。
+		if r.Retry.MaxAttempts > 0 || r.Retry.BackoffMs > 0 || r.Retry.Jitter {
+			retry := toRetryConfigAPI(r.Retry)
+			reviseCfg.Retry = &retry
+		}
+		apiRC.Revise = &reviseCfg
+	}
 	if rc.Mode == "correct" && rc.Correct != nil {
 		c := rc.Correct
 		apiRC.Concurrency = c.Concurrency
@@ -381,6 +409,42 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 				}
 			}
 			rc.SemanticQA = semanticQACfg
+		}
+		if ar.Mode == ExecutionRoundConfigModeRevise && ar.Revise != nil {
+			r := ar.Revise
+			reviseCfg := &schema.ReviseRoundConfig{
+				Concurrency: ar.Concurrency,
+			}
+			if r.BatchSize != nil {
+				reviseCfg.BatchSize = *r.BatchSize
+			}
+			if r.MaxWordsPerBatch != nil {
+				reviseCfg.MaxWordsPerBatch = *r.MaxWordsPerBatch
+			}
+			if r.SegmentScope != nil {
+				reviseCfg.SegmentScope = string(*r.SegmentScope)
+			}
+			if r.IssueCodes != nil {
+				codes := make([]string, 0, len(*r.IssueCodes))
+				for _, c := range *r.IssueCodes {
+					codes = append(codes, string(c))
+				}
+				reviseCfg.IssueCodes = codes
+			}
+			// NOTE: revise 不接缩批（仅 translate 暴露 fallback_shrink）。
+			// 若未来需要，在此加 fallback_shrink 字段并补 OpenAPI/校验/snapshot/engine_factory 映射。
+			if r.Retry != nil {
+				if r.Retry.MaxAttempts != nil {
+					reviseCfg.Retry.MaxAttempts = *r.Retry.MaxAttempts
+				}
+				if r.Retry.BackoffMs != nil {
+					reviseCfg.Retry.BackoffMs = *r.Retry.BackoffMs
+				}
+				if r.Retry.Jitter != nil {
+					reviseCfg.Retry.Jitter = *r.Retry.Jitter
+				}
+			}
+			rc.Revise = reviseCfg
 		}
 		if ar.Mode == ExecutionRoundConfigModeCorrect && ar.Correct != nil {
 			c := ar.Correct

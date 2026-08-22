@@ -69,6 +69,8 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceSegmentTranslationPreview'
   /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview/apply:
     $ref: './paths/resources.yaml#/projectResourceSegmentTranslationPreviewApply'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/revision-preview:
+    $ref: './paths/resources.yaml#/projectResourceSegmentRevisionPreview'
   /projects/{projectId}/resources/{resourceId}/segments/batch-review:
     $ref: './paths/resources.yaml#/projectResourceSegmentsBatchReview'
   /projects/{projectId}/resources/{resourceId}/segments/approve-all:
@@ -274,6 +276,10 @@ components:
       $ref: './components/schemas/resource.yaml#/TranslationBatchDiagnostic'
     ApplySegmentTranslationPreviewRequest:
       $ref: './components/schemas/resource.yaml#/ApplySegmentTranslationPreviewRequest'
+    SegmentRevisionPreviewRequest:
+      $ref: './components/schemas/resource.yaml#/SegmentRevisionPreviewRequest'
+    SegmentRevisionPreviewResponse:
+      $ref: './components/schemas/resource.yaml#/SegmentRevisionPreviewResponse'
     IssueDispositionRequest:
       $ref: './components/schemas/resource.yaml#/IssueDispositionRequest'
     CreateJobRequest:

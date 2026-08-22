@@ -313,7 +313,7 @@ SegmentTranslationPreviewResponse:
                 type: integer
               mode:
                 type: string
-                enum: [extract, translate, adjudicate, semantic_qa, correct]
+                enum: [extract, translate, adjudicate, semantic_qa, revise, correct]
               backend_name:
                 type: string
               prompt_template_name:
@@ -357,7 +357,7 @@ TranslationBatchDiagnostic:
       type: integer
     stage:
       type: string
-      description: extract | translate | adjudicate | semantic_qa | ruby_retry
+      description: extract | translate | adjudicate | semantic_qa | revise | ruby_retry
     attempt:
       type: integer
       description: 批次重试序号（0 起始）
@@ -441,10 +441,116 @@ ApplySegmentTranslationPreviewRequest:
   properties:
     apply_token:
       type: string
+      description: 翻译预览或修订预览返回的 apply_token
     target_text:
       type: string
       description: 预览后（可能被用户修改）的译文；为空将返回 400
   additionalProperties: false
+
+SegmentRevisionPreviewRequest:
+  type: object
+  required: [execution_plan_id]
+  properties:
+    execution_plan_id:
+      type: integer
+      minimum: 1
+      description: |
+        执行计划模板 ID；计划须包含 revise 轮或至少一个 translate 轮
+        （后者时以翻译轮后端合成默认修订轮）
+    issue_codes:
+      type: array
+      minItems: 1
+      items:
+        type: string
+        enum: [calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register]
+      description: |
+        可选：收窄修复目标的语义 issue code 子集；省略时修复段落上全部 pending 语义 issue。
+        与段落实际 pending 语义 issue 取交集，交集为空返回 409。
+  additionalProperties: false
+
+SegmentRevisionPreviewResponse:
+  type: object
+  required: [status, segment_id, source_text, original_target_text, execution, usage, batches]
+  properties:
+    status:
+      type: string
+      enum: [success, partial, failed]
+      description: |
+        - failed: 未得到非空修订译文或修订轮终态失败
+        - partial: 有修订译文，但修订轮有软警告
+        - success: 修订轮完成（修订文本可能与原译文相同，表示 LLM 判定无需改动）
+    segment_id:
+      type: integer
+    source_text:
+      type: string
+      description: 进入修订的原文（数据库原文）
+    original_target_text:
+      type: string
+      description: 修订前的原译文（apply 基线）
+    target_text:
+      type: string
+      description: 修订后译文；failed 时可能为空。与 original_target_text 相同表示无改动
+    fix_issues:
+      type: array
+      items:
+        $ref: '../schemas/job.yaml#/QualityIssue'
+      description: 本次作为修复目标喂给修订 LLM 的语义 issue（过滤后子集）
+    quality_issues:
+      type: array
+      items:
+        $ref: '../schemas/job.yaml#/QualityIssue'
+      description: 修订译文上的最终质量问题（确定性 QA 重跑后与既有裁决对账）
+    execution:
+      type: object
+      required: [execution_plan_id, execution_plan_name, rounds]
+      properties:
+        execution_plan_id:
+          type: integer
+        execution_plan_name:
+          type: string
+        rounds:
+          type: array
+          description: 实际执行的修订轮摘要（不暴露 backend options）
+          items:
+            type: object
+            required: [index, mode]
+            properties:
+              index:
+                type: integer
+              mode:
+                type: string
+                enum: [revise]
+              backend_name:
+                type: string
+              synthesized:
+                type: boolean
+                description: true 表示计划无 revise 轮、由 translate 轮后端合成的默认修订轮
+    usage:
+      type: object
+      required: [api_calls, input_tokens, output_tokens]
+      properties:
+        api_calls:
+          type: integer
+          description: 实际 provider 调用次数（覆盖 retry、prompt upgrade 及修订轮）
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+    batches:
+      type: array
+      items:
+        $ref: '#/TranslationBatchDiagnostic'
+    warnings:
+      type: array
+      items:
+        type: string
+    apply_token:
+      type: string
+      description: 仅当存在可应用修订译文时返回；用于 translation-preview/apply 接口
+    apply_expires_at:
+      type: string
+      format: date-time
+      description: apply_token 的过期时间
 
 IssueDispositionRequest:
   type: object

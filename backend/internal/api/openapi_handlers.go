@@ -234,6 +234,10 @@ func (s *Server) ApplyResourceSegmentTranslationPreview(w http.ResponseWriter, r
 	s.requireAuth(http.HandlerFunc(s.handleApplyResourceSegmentTranslationPreview)).ServeHTTP(w, r)
 }
 
+func (s *Server) PreviewResourceSegmentRevision(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId, _ SegmentId) {
+	s.requireAuth(http.HandlerFunc(s.handlePreviewResourceSegmentRevision)).ServeHTTP(w, r)
+}
+
 func (s *Server) ListJobs(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ListJobsParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListJobs)).ServeHTTP(w, r)
 }
