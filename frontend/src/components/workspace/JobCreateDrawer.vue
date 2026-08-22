@@ -75,9 +75,11 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
         ? round.adjudicate
         : round.mode === 'semantic_qa'
           ? round.semantic_qa
-          : round.mode === 'correct'
-            ? round.correct
-            : round.translate
+          : round.mode === 'revise'
+            ? round.revise
+            : round.mode === 'correct'
+              ? round.correct
+              : round.translate
   const batchSize = modeConfig && 'batch_size' in modeConfig ? (modeConfig.batch_size ?? 0) : 0
   const maxWordsPerBatch =
     modeConfig && 'max_words_per_batch' in modeConfig ? (modeConfig.max_words_per_batch ?? 0) : 0
@@ -98,6 +100,14 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
           : t('executionPlanEditor.round.semanticQASegmentScopeAll')
     parts.push(scopeLabel)
   }
+  if (round.mode === 'revise' && round.revise) {
+    const scope = round.revise.segment_scope ?? 'with_issues'
+    parts.push(
+      scope === 'with_issue_codes'
+        ? t('executionPlanEditor.round.reviseSegmentScopeWithIssueCodes')
+        : t('executionPlanEditor.round.reviseSegmentScopeWithIssues'),
+    )
+  }
   const batchInfo = parts.length === 0 ? t('workspace.job.planPreviewNoBatch') : parts.join(' / ')
   const modeKey =
     round.mode === 'extract'
@@ -106,9 +116,11 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
         ? 'workspace.job.planPreviewModeAdjudicate'
         : round.mode === 'semantic_qa'
           ? 'workspace.job.planPreviewModeSemanticQA'
-          : round.mode === 'correct'
-            ? 'workspace.job.planPreviewModeCorrect'
-            : 'workspace.job.planPreviewModeTranslate'
+          : round.mode === 'revise'
+            ? 'workspace.job.planPreviewModeRevise'
+            : round.mode === 'correct'
+              ? 'workspace.job.planPreviewModeCorrect'
+              : 'workspace.job.planPreviewModeTranslate'
   return t('workspace.job.planPreviewRoundItem', {
     index: index + 1,
     mode: t(modeKey),
