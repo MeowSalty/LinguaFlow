@@ -107,7 +107,9 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 
 	result, execErr := eng.ExecuteRound(ctx, 0, doc,
 		engine.WithSegmentFilter([]int{targetSegmentIdx}),
-		engine.WithBatchHandler(buildReviseBatchHandlerCommon(doc, qaEngine, targetSegmentIdx)),
+		// roundSnapshot.Revise 已在入口校验非 nil；写回时移除的 issue 集合与
+		// 送进 prompt 的目标集合严格一致（服务层已收窄为请求 code 交集）。
+		engine.WithBatchHandler(buildReviseBatchHandlerCommon(doc, qaEngine, targetSegmentIdx, roundSnapshot.Revise.IssueCodes)),
 	)
 	summary := service.RevisionRoundSummary{
 		Index:       0,

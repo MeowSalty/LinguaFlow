@@ -576,6 +576,12 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			}
 
 		case "revise":
+			// 写回时移除的 issue 集合与送进 prompt 的目标集合严格一致
+			//（计划校验保证只能是语义 code）。
+			var reviseCodes []string
+			if round.Revise != nil {
+				reviseCodes = round.Revise.IssueCodes
+			}
 			batchHandler = func(batchCtx context.Context, batchResult pipeline.BatchResult) error {
 				resultsByDBID := make(map[int]pipeline.TranslatedSegment, len(batchResult.Segments))
 				dbIDs := make([]int, 0, len(batchResult.Segments))
@@ -623,7 +629,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 						continue
 					}
 					fresh := qa.IssuesFor(ts.Index, allIssues)
-					updated, err := persistReviseSegmentResult(batchCtx, r.client, row, baseline, ts.TargetText, fresh, qaRan)
+					updated, err := persistReviseSegmentResult(batchCtx, r.client, row, baseline, ts.TargetText, fresh, reviseCodes, qaRan)
 					if err != nil {
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							continue
@@ -846,24 +852,28 @@ func persistSemanticQASegmentIssues(ctx context.Context, c *ent.Client, row *ent
 //
 // CAS 保护：仅当段落仍处于 translated/edited 且译文仍等于扫描时的 baseline
 // 时写入，避免覆盖审核态或并发产生的新译文。
-// 对账语义：修订后的确定性 QA 结果按指纹继承旧裁决；旧语义 issue 若因文本变化
-// 指纹不再命中则自然失效。
-// qaRan=false（计划未启用确定性 QA）时不触碰 quality_issues：修订文本未经验证，
-// 不能默认既有 pending issue 已修复而清空。fresh==nil 无法区分"QA 未运行"与
-// "QA 运行后无问题"，故由调用方显式传递 qaRan。
-func persistReviseSegmentResult(ctx context.Context, c *ent.Client, row *ent.Segment, baseline, revised string, fresh []qa.QualityIssue, qaRan bool) (int, error) {
+//
+// 写回契约（与 correct 轮一致："声明修什么，就移除什么，其余判决不动"）：
+//   - targetedCodes 命中且仍 pending 的 issue 视为本轮已修复而移除；
+//   - 范围外 pending 与 dismissed 记录一律保留；
+//   - qaRan=true 时确定性 issue 以 fresh 重算（ReconcileIssues 按指纹继承旧裁决）；
+//     qaRan=false（计划未启用确定性 QA）时确定性 issue 不重算、原样保留。
+//
+// 修订是声明性修复，无法自证 LLM 实际修复了目标问题：若实际未修复，仅当后续
+// semantic_qa 轮会重扫该段（scope=all；with_issues/with_issue_codes 作用域会跳过
+// 已无 issue 的段落，且轮次顺序无约束、revise 可为末轮）时才会重新检出；否则与
+// 手动编辑/重译清除旧语义 issue 的既有语义一致——译文已变更，旧 issue 视为失效。
+func persistReviseSegmentResult(ctx context.Context, c *ent.Client, row *ent.Segment, baseline, revised string, fresh []qa.QualityIssue, targetedCodes []string, qaRan bool) (int, error) {
+	final := qa.ReviseFinalIssues(row.QualityIssues, fresh, targetedCodes, qaRan)
 	update := c.Segment.Update().Where(
 		segment.IDEQ(row.ID),
 		segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
 		segment.TargetTextEQ(baseline),
 	).SetTargetText(revised)
-	if qaRan {
-		reconciled := qa.ReconcileIssues(fresh, row.QualityIssues)
-		if len(reconciled) > 0 {
-			update.SetQualityIssues(reconciled)
-		} else {
-			update.ClearQualityIssues()
-		}
+	if len(final) > 0 {
+		update.SetQualityIssues(final)
+	} else {
+		update.ClearQualityIssues()
 	}
 	return update.Save(ctx)
 }

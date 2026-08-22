@@ -223,7 +223,13 @@ func (r *PreviewRunner) RunPreview(
 		case "semantic_qa":
 			batchHandler = r.buildSemanticQABatchHandler(doc, targetDocIdx)
 		case "revise":
-			batchHandler = buildReviseBatchHandlerCommon(doc, qaEngine, targetDocIdx)
+			// 写回时移除的 issue 集合与送进 prompt 的目标集合严格一致
+			//（计划校验保证只能是语义 code）。
+			var reviseCodes []string
+			if round.Revise != nil {
+				reviseCodes = round.Revise.IssueCodes
+			}
+			batchHandler = buildReviseBatchHandlerCommon(doc, qaEngine, targetDocIdx, reviseCodes)
 		case "correct":
 			batchHandler = r.buildCorrectBatchHandler(doc, targetDocIdx)
 		}

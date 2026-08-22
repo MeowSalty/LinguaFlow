@@ -163,7 +163,13 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 		case "semantic_qa":
 			batchHandler = buildSemanticQABatchHandlerCommon(doc, targetDocIdx)
 		case "revise":
-			batchHandler = buildReviseBatchHandlerCommon(doc, qaEngine, targetDocIdx)
+			// 写回时移除的 issue 集合与送进 prompt 的目标集合严格一致
+			//（计划校验保证只能是语义 code）。
+			var reviseCodes []string
+			if round.Revise != nil {
+				reviseCodes = round.Revise.IssueCodes
+			}
+			batchHandler = buildReviseBatchHandlerCommon(doc, qaEngine, targetDocIdx, reviseCodes)
 		case "correct":
 			batchHandler = buildCorrectBatchHandlerCommon(doc, targetDocIdx)
 		}
@@ -338,34 +344,39 @@ func buildSemanticQABatchHandlerCommon(
 	}
 }
 
-// buildReviseBatchHandlerCommon 构建 LLM 修订轮的 batch handler，重新运行确定性 QA
-// 并将修订后的译文与对账后的 issues 写回内存 Document。该 handler 由
-// RevisionPreviewRunner 使用；不修改段落状态。
+// buildReviseBatchHandlerCommon 构建 LLM 修订轮的 batch handler，按 correct 轮同款
+// 声明式契约（"声明修什么，就移除什么，其余判决不动"）将修订后的译文与最终 issues
+// 写回内存 Document：targetedCodes 命中且仍 pending 的 issue 视为本轮已修复而移除；
+// dismissed 记录与范围外 pending 一律保留；qaRan（qaEngine 非 nil）时确定性 issue 以
+// fresh 重算（ReconcileIssues 按指纹继承旧裁决），范围外语义 issue 不由确定性 QA 维护、
+// 原样保留；qaRan=false 时非目标 issue 原样保留。修订是声明性修复，LLM 实际未修复时
+// 仅当后续 semantic_qa 轮会重扫该段（scope=all；with_issues/with_issue_codes 作用域
+// 会跳过已无 issue 的段落）时才会重新检出；否则与手动编辑/重译清除旧语义 issue 的
+// 既有语义一致——译文已变更，旧 issue 视为失效。
+// 该 handler 由 RevisionPreviewRunner / PreviewRunner / QuickTranslateRunner 共享；
+// 不修改段落状态。
 func buildReviseBatchHandlerCommon(
 	doc *pipeline.Document,
 	qaEngine *qa.Engine,
 	targetDocIdx int,
+	targetedCodes []string,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
 	return func(ctx context.Context, batchResult pipeline.BatchResult) error {
 		for _, ts := range batchResult.Segments {
 			if ts.Index != targetDocIdx {
 				continue
 			}
-			// no-op 修订（LLM 判定无需改动，或返回空译文）与 DB 版 job_runner 的
-			// 行为对齐：跳过写回与 QA 对账，完整保留既有 issue。ReconcileIssues
-			// 的输出仅含 fresh 结果，语义 issue 不在确定性 QA 产出中，对未变文本
-			// 盲目对账会把待修复的语义 issue 从预览结果与 apply_token 中抹掉。
+			// no-op 修订（LLM 判定无需改动，或返回空译文）：跳过写回与任何 issue 变更，完整保留既有 issue。
 			if ts.TargetText == "" || ts.TargetText == doc.Segments[ts.Index].Target {
 				continue
 			}
 			doc.Segments[ts.Index].Target = ts.TargetText
-			// QA 未运行（计划未启用确定性 QA）时同样保留既有 issue：修订文本
-			// 未经验证，不能默认 pending issue 已修复而清空。
-			if qaEngine == nil {
-				continue
+			var fresh []qa.QualityIssue
+			qaRan := qaEngine != nil
+			if qaRan {
+				fresh = qa.IssuesFor(ts.Index, qaEngine.Run(ctx, buildQACheckInputs(batchResult)))
 			}
-			fresh := qa.IssuesFor(ts.Index, qaEngine.Run(ctx, buildQACheckInputs(batchResult)))
-			doc.Segments[ts.Index].Issues = qa.ReconcileIssues(fresh, doc.Segments[ts.Index].Issues)
+			doc.Segments[ts.Index].Issues = qa.ReviseFinalIssues(doc.Segments[ts.Index].Issues, fresh, targetedCodes, qaRan)
 		}
 		return nil
 	}
