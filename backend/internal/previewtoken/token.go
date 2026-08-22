@@ -22,6 +22,11 @@ var (
 const (
 	tokenIssuer = "linguaflow-preview"
 	tokenType   = "preview-apply"
+
+	// KindTranslate keeps the historical empty kind for translation previews.
+	KindTranslate = ""
+	// KindRevision marks a token issued by the revision preview flow.
+	KindRevision = "fix"
 )
 
 // ApplyClaims are the JWT claims embedded in a preview apply token.
@@ -30,6 +35,11 @@ type ApplyClaims struct {
 
 	// Type is always "preview-apply" for domain isolation.
 	Type string `json:"type"`
+
+	// Kind distinguishes the preview purpose for audit routing. Empty means
+	// "translate" translation preview; "fix" means revision preview. It does
+	// not change token verification or application semantics.
+	Kind string `json:"kd,omitempty"`
 
 	// ActorUserID is the user who requested the preview.
 	ActorUserID int `json:"uid"`

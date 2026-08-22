@@ -123,7 +123,16 @@ type PreviewService struct {
 	timeout       time.Duration
 }
 
-// NewPreviewService creates a PreviewService.
+// NewPreviewSemaphore creates the concurrency gate shared by translation and
+// revision previews.
+func NewPreviewSemaphore(maxConcurrency int) chan struct{} {
+	if maxConcurrency <= 0 {
+		maxConcurrency = 2
+	}
+	return make(chan struct{}, maxConcurrency)
+}
+
+// NewPreviewService creates a PreviewService using a private concurrency gate.
 func NewPreviewService(
 	logger *slog.Logger,
 	client *ent.Client,
@@ -136,11 +145,29 @@ func NewPreviewService(
 	maxConcurrency int,
 	timeout time.Duration,
 ) *PreviewService {
+	return NewPreviewServiceWithSemaphore(logger, client, projects, jobs, audit, previewRunner, jwtSecret, tokenTTL, maxConcurrency, timeout, nil)
+}
+
+// NewPreviewServiceWithSemaphore creates a PreviewService with an optionally
+// shared concurrency gate.
+func NewPreviewServiceWithSemaphore(
+	logger *slog.Logger,
+	client *ent.Client,
+	projects *ProjectService,
+	jobs *JobService,
+	audit *AuditService,
+	previewRunner PreviewRunner,
+	jwtSecret string,
+	tokenTTL time.Duration,
+	maxConcurrency int,
+	timeout time.Duration,
+	semaphore chan struct{},
+) *PreviewService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if maxConcurrency <= 0 {
-		maxConcurrency = 2
+	if semaphore == nil {
+		semaphore = NewPreviewSemaphore(maxConcurrency)
 	}
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
@@ -156,7 +183,7 @@ func NewPreviewService(
 		audit:         audit,
 		previewRunner: previewRunner,
 		tokenCodec:    previewtoken.NewCodec(jwtSecret, tokenTTL),
-		semaphore:     make(chan struct{}, maxConcurrency),
+		semaphore:     semaphore,
 		timeout:       timeout,
 	}
 }
@@ -288,6 +315,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 			ResourceID:      input.ResourceID,
 			SegmentID:       input.SegmentID,
 			ExecutionPlanID: input.ExecutionPlanID,
+			Kind:            previewtoken.KindTranslate,
 			SourceHash:      sourceHash,
 			PreviewSource:   result.SourceText,
 			TargetHash:      targetHash,
@@ -455,17 +483,23 @@ func (s *PreviewService) ApplyPreview(
 		return nil, ErrPreviewConflict
 	}
 
-	// 7. Record audit event.
+	action := "resource.segment.translation_preview.apply"
+	message := fmt.Sprintf("Applied preview translation to segment %d", segmentID)
+	if claims.Kind == previewtoken.KindRevision {
+		action = "resource.segment.revision_preview.apply"
+		message = fmt.Sprintf("Applied preview revision to segment %d", segmentID)
+	}
 	auditEvent := AuditEvent{
 		ActorUserID:  actorUserID,
 		ProjectID:    &projectID,
 		ResourceID:   resourceID,
-		Action:       "resource.segment.translation_preview.apply",
+		Action:       action,
 		ResourceType: "segment",
-		Message:      fmt.Sprintf("Applied preview translation to segment %d", segmentID),
+		Message:      message,
 		Metadata: map[string]any{
 			"execution_plan_id": claims.ExecutionPlanID,
 			"target_changed":    targetChanged,
+			"preview_kind":      claims.Kind,
 		},
 	}
 	if projectRow.OwnerOrgID != nil {
