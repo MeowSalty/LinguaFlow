@@ -79,6 +79,16 @@ func EmbeddedSemanticQATemplate() string {
 	return strings.TrimRight(string(data), "\n")
 }
 
+// EmbeddedReviseTemplate 返回嵌入的 LLM 修订提示词模板内容。
+// 修订 prompt 对用户不可见，仅供引擎内置使用。
+func EmbeddedReviseTemplate() string {
+	data, err := fs.ReadFile(builtinFS, "default/prompts/default_revise.tmpl")
+	if err != nil {
+		panic(fmt.Sprintf("embedded prompts/default_revise.tmpl not found: %v", err))
+	}
+	return strings.TrimRight(string(data), "\n")
+}
+
 // EmbeddedProfileConfig 返回嵌入的默认翻译策略配置字节。
 func EmbeddedProfileConfig() []byte {
 	data, err := fs.ReadFile(builtinFS, "default/profiles/default.yaml")
