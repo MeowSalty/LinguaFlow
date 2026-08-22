@@ -313,6 +313,10 @@ func TestRevisionPreviewService_Success_SynthesizedFromTranslate(t *testing.T) {
 	if len(claims.FinalIssues) != 1 || claims.FinalIssues[0].Code != qa.CheckNumberMismatch {
 		t.Fatalf("final issues = %+v", claims.FinalIssues)
 	}
+	// ResolvedCodes 等于请求交集收窄后的修复目标（合成轮同样如此）。
+	if len(claims.ResolvedCodes) != 1 || claims.ResolvedCodes[0] != qa.IssueCodeCalque {
+		t.Fatalf("resolved codes = %+v want [calque]", claims.ResolvedCodes)
+	}
 
 	// 用量记录落库。
 	n, err := client.UsageRecord.Query().Where(usagerecord.SourceEQ("preview")).Count(context.Background())
@@ -356,6 +360,16 @@ func TestRevisionPreviewService_Success_UsesConfiguredReviseRound(t *testing.T) 
 	}
 	if len(out.FixIssues) != 2 {
 		t.Fatalf("FixIssues = %+v want 2", out.FixIssues)
+	}
+
+	// 令牌 ResolvedCodes 等于配置轮收窄后的 code 集合（请求未收窄时为全部
+	// pending 语义目标的 code）。
+	claims, err := previewtoken.NewCodec("test-secret", time.Minute).Decode(out.ApplyToken)
+	if err != nil {
+		t.Fatalf("decode token: %v", err)
+	}
+	if len(claims.ResolvedCodes) != 2 || claims.ResolvedCodes[0] != qa.IssueCodeCalque || claims.ResolvedCodes[1] != qa.IssueCodeOmission {
+		t.Fatalf("resolved codes = %+v want [calque omission]", claims.ResolvedCodes)
 	}
 }
 

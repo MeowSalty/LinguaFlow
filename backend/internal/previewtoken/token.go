@@ -69,6 +69,11 @@ type ApplyClaims struct {
 	// FinalIssues are the quality issues determined by the preview run.
 	FinalIssues []qa.QualityIssue `json:"fi,omitempty"`
 
+	// ResolvedCodes 是修订预览声明已修复的 issue code 集合（仅 KindRevision 令牌
+	// 携带；翻译预览为空，维持整体替换语义）。用户 apply 前改写文本时，仍按此
+	// 集合从段落既有 issue 中剔除 pending 项。旧令牌无此字段时为空，退化为旧行为。
+	ResolvedCodes []string `json:"rc,omitempty"`
+
 	// QAConfig encodes the deterministic QA configuration used during preview
 	// so that apply can re-run deterministic QA if the user modified the target.
 	QAConfig QAConfigClaims `json:"qc"`
