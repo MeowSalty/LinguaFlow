@@ -116,7 +116,7 @@ func TestCorrectHandler_IdempotencyFailReverts(t *testing.T) {
 
 // 混合状态：引号类 pending（触发包裹）+ 括号类 dismissed（用户已裁决非问题）。
 // 包裹后括号类仍缺，但其指纹命中 dismissed 集合 → 幂等检查豁免，不误回滚；
-// filterOutCodes 保留 dismissed 记录（避免未来以 pending 复活）。
+// qa.FilterOutPendingByCodes 保留 dismissed 记录（避免未来以 pending 复活）。
 func TestCorrectHandler_DismissedExemptFromIdempotency(t *testing.T) {
 	h := newCorrectHandler()
 	issues := []qa.QualityIssue{
