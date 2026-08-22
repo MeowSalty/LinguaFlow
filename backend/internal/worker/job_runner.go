@@ -254,6 +254,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	completedCount := 0
 	var lastResult pipeline.TranslateResult
 	var semanticQAWarning string
+	var reviseWarning string
 
 	// 瞬时写入失败追踪：段 docIndex → 待下一轮 pending 过滤拾取。
 	// 每轮 translate 开始时重置（瞬态段已在下一轮被 pending 过滤拾取并重试，
@@ -266,6 +267,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	firstTranslateRoundIdx := -1
 	lastTranslateRoundIdx := -1
 	lastSemanticQARoundIdx := -1
+	lastReviseRoundIdx := -1
 	translateRoundCount := 0
 	for i := range snapshot.Rounds {
 		switch snapshot.Rounds[i].Mode {
@@ -277,6 +279,8 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			translateRoundCount++
 		case "semantic_qa":
 			lastSemanticQARoundIdx = i
+		case "revise":
+			lastReviseRoundIdx = i
 		}
 	}
 
@@ -570,6 +574,76 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 				}
 				return nil
 			}
+
+		case "revise":
+			batchHandler = func(batchCtx context.Context, batchResult pipeline.BatchResult) error {
+				resultsByDBID := make(map[int]pipeline.TranslatedSegment, len(batchResult.Segments))
+				dbIDs := make([]int, 0, len(batchResult.Segments))
+				for _, ts := range batchResult.Segments {
+					dbID, ok := docIndexToDBID[ts.Index]
+					if !ok {
+						continue
+					}
+					resultsByDBID[dbID] = ts
+					dbIDs = append(dbIDs, dbID)
+				}
+				if len(dbIDs) == 0 {
+					return nil
+				}
+				rows, err := r.client.Segment.Query().Where(segment.IDIn(dbIDs...)).All(batchCtx)
+				if err != nil {
+					return fmt.Errorf("load revise batch segments: %w", err)
+				}
+				// 仅对译文确有变化的段构造确定性 QA 输入：no-op 段的 QA 结果
+				// 本就会在写回循环中被跳过，整批跑是纯浪费。
+				changed := make([]pipeline.TranslatedSegment, 0, len(rows))
+				for _, row := range rows {
+					ts, ok := resultsByDBID[row.ID]
+					if !ok {
+						continue
+					}
+					if ts.TargetText != doc.Segments[ts.Index].Target {
+						changed = append(changed, ts)
+					}
+				}
+				var allIssues []qa.QualityIssue
+				qaRan := qaEngine != nil && len(changed) > 0
+				if qaRan {
+					allIssues = qaEngine.Run(batchCtx, buildQACheckInputs(pipeline.BatchResult{Segments: changed}))
+				}
+				completed := 0
+				for _, row := range rows {
+					ts, ok := resultsByDBID[row.ID]
+					if !ok {
+						continue
+					}
+					baseline := doc.Segments[ts.Index].Target
+					if ts.TargetText == baseline {
+						completed++
+						continue
+					}
+					fresh := qa.IssuesFor(ts.Index, allIssues)
+					updated, err := persistReviseSegmentResult(batchCtx, r.client, row, baseline, ts.TargetText, fresh, qaRan)
+					if err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							continue
+						}
+						classified := database.Classify(r.dbDriver, err)
+						r.logger.Warn("persist revise result failed", "segment_id", row.ID, "err", err,
+							"category", classified.Category, "sqlstate", classified.SQLState)
+						return fmt.Errorf("persist revise result for segment %d failed (DB write error, category %s, sqlstate %s)", row.ID, classified.Category, classified.SQLState)
+					}
+					if updated == 0 {
+						r.logger.Info("skip stale revise result", "segment_id", row.ID)
+						continue
+					}
+					completed++
+				}
+				mu.Lock()
+				completedCount += completed
+				mu.Unlock()
+				return nil
+			}
 		}
 
 		roundIdx := roundIdx // capture for closure
@@ -612,6 +686,22 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					failed,
 				)
 				r.logger.Warn("semantic_qa finished with unresolved or failed segments",
+					"resource_id", item.ID,
+					"unresolved", len(result.Unresolved),
+					"failed_segments", result.FailedSegmentCount,
+				)
+			}
+			if round.Mode == "revise" && roundIdx == lastReviseRoundIdx &&
+				(len(result.Unresolved) > 0 || result.FailedSegmentCount > 0) {
+				failed := len(result.Unresolved)
+				if n := result.FailedSegmentCount; n > failed {
+					failed = n
+				}
+				reviseWarning = fmt.Sprintf(
+					"修订未完全成功：%d 个段落未能完成（可重试任务或调整参数后重试）",
+					failed,
+				)
+				r.logger.Warn("revise finished with unresolved or failed segments",
 					"resource_id", item.ID,
 					"unresolved", len(result.Unresolved),
 					"failed_segments", result.FailedSegmentCount,
@@ -703,7 +793,18 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		return nil
 	}
 
-	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount, semanticQAWarning)
+	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount, mergeWarnings(semanticQAWarning, reviseWarning))
+}
+
+func mergeWarnings(first, second string) string {
+	if first == "" {
+		return second
+	}
+	if second == "" {
+		return first
+	}
+	// 多个非空轮次软警告并列保留，避免后一个模式覆盖前一个模式的提示。
+	return first + "; " + second
 }
 
 func mergeSemanticQAIssues(existing, fresh []qa.QualityIssue) []qa.QualityIssue {
@@ -739,6 +840,32 @@ func persistSemanticQASegmentIssues(ctx context.Context, c *ent.Client, row *ent
 		).
 		SetQualityIssues(merged).
 		Save(ctx)
+}
+
+// persistReviseSegmentResult 对单个段落执行 LLM 修订结果的 CAS 写入。
+//
+// CAS 保护：仅当段落仍处于 translated/edited 且译文仍等于扫描时的 baseline
+// 时写入，避免覆盖审核态或并发产生的新译文。
+// 对账语义：修订后的确定性 QA 结果按指纹继承旧裁决；旧语义 issue 若因文本变化
+// 指纹不再命中则自然失效。
+// qaRan=false（计划未启用确定性 QA）时不触碰 quality_issues：修订文本未经验证，
+// 不能默认既有 pending issue 已修复而清空。fresh==nil 无法区分"QA 未运行"与
+// "QA 运行后无问题"，故由调用方显式传递 qaRan。
+func persistReviseSegmentResult(ctx context.Context, c *ent.Client, row *ent.Segment, baseline, revised string, fresh []qa.QualityIssue, qaRan bool) (int, error) {
+	update := c.Segment.Update().Where(
+		segment.IDEQ(row.ID),
+		segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
+		segment.TargetTextEQ(baseline),
+	).SetTargetText(revised)
+	if qaRan {
+		reconciled := qa.ReconcileIssues(fresh, row.QualityIssues)
+		if len(reconciled) > 0 {
+			update.SetQualityIssues(reconciled)
+		} else {
+			update.ClearQualityIssues()
+		}
+	}
+	return update.Save(ctx)
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。

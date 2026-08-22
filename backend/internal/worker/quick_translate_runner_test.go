@@ -10,6 +10,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
@@ -259,5 +261,57 @@ func TestQuickTranslateRun_SemanticQAParseFailureReturnsPartial(t *testing.T) {
 	if result.Status != "partial" {
 		t.Errorf("status=%q want %q (semantic_qa parse failure must surface as partial, "+
 			"rounds=%+v warnings=%v)", result.Status, "partial", result.RoundSummary, result.Warnings)
+	}
+}
+
+func TestBuildReviseBatchHandlerCommon_NoOpAndQANilPreserveIssues(t *testing.T) {
+	makeDoc := func() *pipeline.Document {
+		return &pipeline.Document{
+			SourceLang: "en", TargetLang: "zh", Vars: map[string]any{},
+			Segments: []pipeline.Segment{
+				{ID: "0", Source: "hello", Target: "你好", Status: "translated", Translate: true,
+					Issues: []qa.QualityIssue{{Code: qa.IssueCodeCalque, Message: "借译", Disposition: qa.DispositionPending}}},
+			},
+		}
+	}
+
+	// no-op 修订（LLM 返回原译文）：与 DB 版一致跳过写回与对账，语义 issue 必须保留。
+	doc := makeDoc()
+	handler := buildReviseBatchHandlerCommon(doc, nil, 0)
+	if err := handler(context.Background(), pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{{Index: 0, TargetText: "你好"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Segments[0].Target != "你好" || len(doc.Segments[0].Issues) != 1 {
+		t.Fatalf("no-op revise should preserve target and issues, got target=%q issues=%#v", doc.Segments[0].Target, doc.Segments[0].Issues)
+	}
+
+	// 空译文同样按 no-op 处理，不覆盖、不对账。
+	doc = makeDoc()
+	handler = buildReviseBatchHandlerCommon(doc, nil, 0)
+	if err := handler(context.Background(), pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{{Index: 0, TargetText: ""}}}); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Segments[0].Target != "你好" || len(doc.Segments[0].Issues) != 1 {
+		t.Fatalf("empty revise should preserve target and issues, got target=%q issues=%#v", doc.Segments[0].Target, doc.Segments[0].Issues)
+	}
+
+	// QA 未运行（qaEngine=nil）：译文更新但既有 issue 保留——未经验证不能清空。
+	doc = makeDoc()
+	handler = buildReviseBatchHandlerCommon(doc, nil, 0)
+	if err := handler(context.Background(), pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{{Index: 0, SourceText: "hello", TargetText: "你好（改）"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Segments[0].Target != "你好（改）" || len(doc.Segments[0].Issues) != 1 {
+		t.Fatalf("qa-nil revise should update target and keep issues, got target=%q issues=%#v", doc.Segments[0].Target, doc.Segments[0].Issues)
+	}
+
+	// 对照：QA 运行且无问题（Enabled=false 的 engine Run 返回 nil）→ 按对账语义清空。
+	doc = makeDoc()
+	handler = buildReviseBatchHandlerCommon(doc, qa.NewEngine(qa.Config{}, nil), 0)
+	if err := handler(context.Background(), pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{{Index: 0, SourceText: "hello", TargetText: "你好（改）"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Segments[0].Target != "你好（改）" || len(doc.Segments[0].Issues) != 0 {
+		t.Fatalf("qa-run clean revise should clear issues, got target=%q issues=%#v", doc.Segments[0].Target, doc.Segments[0].Issues)
 	}
 }

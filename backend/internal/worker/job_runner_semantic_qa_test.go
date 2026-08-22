@@ -231,6 +231,73 @@ func TestSemanticQACASSkipsStaleTarget(t *testing.T) {
 	}
 }
 
+func TestPersistReviseSegmentResult_CASAndReconcile(t *testing.T) {
+	client := newSemanticQATestClient(t)
+	ctx := context.Background()
+	decidedBy := 42
+	row, err := client.Segment.Create().SetSegmentIndex(301).SetSourceText("source").SetTargetText("旧译文").SetStatus(segment.StatusTranslated).SetQualityIssues([]qa.QualityIssue{
+		{Code: qa.IssueCodeCalque, Message: "old", Span: &qa.Span{MatchedText: "旧"}, Disposition: qa.DispositionDismissed, DecidedBy: &decidedBy},
+	}).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := []qa.QualityIssue{{Code: qa.IssueCodeCalque, Message: "fresh", Span: &qa.Span{MatchedText: "旧"}, Severity: qa.SeverityWarning}}
+	updated, err := persistReviseSegmentResult(ctx, client, row, "旧译文", "新译文", fresh, true)
+	if err != nil || updated != 1 {
+		t.Fatalf("updated=%d err=%v want one update", updated, err)
+	}
+	after, err := client.Segment.Get(ctx, row.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *after.TargetText != "新译文" || len(after.QualityIssues) != 1 || !after.QualityIssues[0].Dismissed() {
+		t.Fatalf("after=%+v issues=%#v", *after.TargetText, after.QualityIssues)
+	}
+
+	updated, err = persistReviseSegmentResult(ctx, client, after, "旧译文", "再次改写", nil, true)
+	if err != nil || updated != 0 {
+		t.Fatalf("stale CAS updated=%d err=%v want zero", updated, err)
+	}
+}
+
+func TestPersistReviseSegmentResult_QANotRunKeepsIssues(t *testing.T) {
+	client := newSemanticQATestClient(t)
+	ctx := context.Background()
+	row, err := client.Segment.Create().SetSegmentIndex(303).SetSourceText("source").SetTargetText("旧译文").SetStatus(segment.StatusTranslated).SetQualityIssues([]qa.QualityIssue{
+		{Code: qa.IssueCodeCalque, Message: "pending", Disposition: qa.DispositionPending},
+	}).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 计划未启用确定性 QA（qaRan=false）：写入新译文但必须保留既有 pending
+	// issue——修订文本未经验证，不能默认已修复而清空。
+	updated, err := persistReviseSegmentResult(ctx, client, row, "旧译文", "新译文", nil, false)
+	if err != nil || updated != 1 {
+		t.Fatalf("updated=%d err=%v want one update", updated, err)
+	}
+	after, _ := client.Segment.Get(ctx, row.ID)
+	if *after.TargetText != "新译文" || len(after.QualityIssues) != 1 || !after.QualityIssues[0].IsPending() {
+		t.Fatalf("after=%+v issues=%#v want preserved pending issue", *after.TargetText, after.QualityIssues)
+	}
+}
+
+func TestPersistReviseSegmentResultSameTextWritesIssues(t *testing.T) {
+	client := newSemanticQATestClient(t)
+	ctx := context.Background()
+	row, err := client.Segment.Create().SetSegmentIndex(302).SetSourceText("source").SetTargetText("同译文").SetStatus(segment.StatusEdited).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := persistReviseSegmentResult(ctx, client, row, "同译文", "同译文", []qa.QualityIssue{{Code: qa.IssueCodeCalque, Severity: qa.SeverityWarning}}, true)
+	if err != nil || updated != 1 {
+		t.Fatalf("updated=%d err=%v want one update", updated, err)
+	}
+	after, _ := client.Segment.Get(ctx, row.ID)
+	if len(after.QualityIssues) != 1 {
+		t.Fatalf("issues=%#v want persisted", after.QualityIssues)
+	}
+}
+
 // newSemanticQATestClient 创建内存 SQLite ent 客户端并自动迁移。
 func newSemanticQATestClient(t *testing.T) *ent.Client {
 	t.Helper()
