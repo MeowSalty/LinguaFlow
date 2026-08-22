@@ -19,6 +19,7 @@ const (
 	RoundModeExtract    = "extract"
 	RoundModeAdjudicate = "adjudicate"
 	RoundModeSemanticQA = "semantic_qa"
+	RoundModeRevise     = "revise"
 	RoundModeCorrect    = "correct"
 )
 

@@ -62,6 +62,7 @@ var crossRoundResolvedModes = []string{
 	pipeline.RoundModeExtract,
 	pipeline.RoundModeAdjudicate,
 	pipeline.RoundModeSemanticQA,
+	pipeline.RoundModeRevise,
 	pipeline.RoundModeCorrect,
 }
 
