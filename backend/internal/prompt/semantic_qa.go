@@ -194,7 +194,7 @@ func NormalizeSemanticQAIssues(issues []SemanticQAIssue) []SemanticQAIssue {
 // 返回 (issues, recognized)：recognized=true 表示命中 [issues] 协议（含空列表），
 // 调用方据此决定是否 fallback JSON。
 func ParseSemanticQATextIssues(text string) ([]SemanticQAIssue, bool) {
-	text = stripAdjudicationCodeFence(text)
+	text = StripCodeFence(text)
 	lines := strings.Split(text, "\n")
 	inIssues := false
 	hasHeader := false

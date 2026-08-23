@@ -190,7 +190,7 @@ func NormalizeReviseRevisions(revisions []ReviseRevision) []ReviseRevision {
 // 返回 (revisions, recognized)：recognized=true 表示命中 [revisions] 协议（含空列表），
 // 调用方据此决定是否 fallback JSON。
 func ParseReviseTextRevisions(text string) ([]ReviseRevision, bool) {
-	text = stripAdjudicationCodeFence(text)
+	text = StripCodeFence(text)
 	lines := strings.Split(text, "\n")
 	inRevisions := false
 	hasHeader := false

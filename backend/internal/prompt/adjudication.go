@@ -198,7 +198,7 @@ func NormalizeAdjudicationVerdicts(verdicts []AdjudicationVerdict) []Adjudicatio
 // 返回 (verdicts, recognized)：recognized=true 表示命中 [verdicts] 协议（含空列表），
 // 调用方据此决定是否 fallback JSON。语义与 ParseSemanticQATextIssues 对齐。
 func ParseAdjudicationTextVerdicts(text string) ([]AdjudicationVerdict, bool) {
-	text = stripAdjudicationCodeFence(text)
+	text = StripCodeFence(text)
 	lines := strings.Split(text, "\n")
 	inVerdicts := false
 	hasHeader := false
@@ -295,8 +295,10 @@ func parseAdjudicationVerdictLine(line string) *AdjudicationVerdict {
 	}
 }
 
-// stripAdjudicationCodeFence 剥离 ```...``` 围栏（与 repair.stripCodeFence 行为一致，避免跨包依赖）。
-func stripAdjudicationCodeFence(text string) string {
+// StripCodeFence 剥离 ```...``` 围栏，返回内部内容（支持首尾有非围栏文本）。
+// 全仓唯一实现：repair.stripCodeFence 委托本函数——revise 路径上 [revisions]
+// 与 [ruby] 的解析/收集共用同一归一基准，两侧围栏容错必须同步演进。
+func StripCodeFence(text string) string {
 	text = strings.TrimSpace(text)
 	start := strings.Index(text, "```")
 	if start < 0 {

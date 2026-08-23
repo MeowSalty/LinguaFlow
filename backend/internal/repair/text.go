@@ -189,25 +189,39 @@ func parseGlossaryLine(line string) *prompt.BootstrapEntry {
 }
 
 // stripCodeFence 剥离 ```...``` 围栏，返回内部内容。
-// 支持首尾有非围栏文本的情况。
+// 支持首尾有非围栏文本的情况。委托 prompt.StripCodeFence（全仓唯一实现）：
+// revise 路径上 [revisions]（prompt 侧解析）与 [ruby]（本包 collectSectionLines
+// 收集）必须看到同一归一基准，围栏容错不得双副本漂移。
 func stripCodeFence(text string) string {
-	text = strings.TrimSpace(text)
-	// 找到第一个 ```
-	start := strings.Index(text, "```")
-	if start < 0 {
-		return text
+	return prompt.StripCodeFence(text)
+}
+
+// collectSectionLines 收集 text 中 [section] 段落内的非空行（段名大小写不
+// 敏感，遇下一个 [xx] 头即终止）。先经 stripCodeFence 剥围栏，保证段落收集
+// 与 ParseReviseTextRevisions 的围栏预处理看到同一文本形态，避免同一响应内
+// [revisions] 与 [ruby] 的扫描基准分叉。供 revise 轮的 [ruby] 收集使用。
+// 注意：parseTextResponse 的扫描循环另有一份 [N] 翻译行优先于段落行的语义
+// （防止漏收翻译行），不可直接改用本 helper；修改围栏/段边界容错时两处
+// 需同步评估。
+func collectSectionLines(text, section string) []string {
+	var lines []string
+	inSection := false
+	for _, line := range strings.Split(stripCodeFence(text), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.EqualFold(line, "["+section+"]") {
+			inSection = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			inSection = false
+			continue
+		}
+		if inSection {
+			lines = append(lines, line)
+		}
 	}
-	// 跳过 ``` 和可选的语言标识符
-	afterStart := text[start+3:]
-	if idx := strings.IndexByte(afterStart, '\n'); idx >= 0 {
-		afterStart = afterStart[idx+1:]
-	} else {
-		return text
-	}
-	// 找到最后一个 ```
-	end := strings.LastIndex(afterStart, "```")
-	if end < 0 {
-		return strings.TrimSpace(afterStart)
-	}
-	return strings.TrimSpace(afterStart[:end])
+	return lines
 }
