@@ -57,6 +57,11 @@ func (f *EngineFactory) BuildEngineWithConfig(
 	resources engine.RuntimeResources,
 	reporter progress.Reporter,
 ) (*engine.Engine, error) {
+	// revise 轮的 protect/ruby 配置借用计划内第一条 translate 轮的 Strategy
+	// （与 BuildEngineConfig 借用 Repair/Ruby/QA 同语义）；无 translate 轮返回零值，
+	// ReviseHandler 降级为原文直发。
+	borrowProtectRules, borrowRubyEnabled, borrowRubyPreserveKinds := borrowTranslateProtectRuby(snapshot)
+
 	var rounds []engine.Round
 	for i, rs := range snapshot.Rounds {
 		// correct 是纯本地轮，无 backend：跳过 backend 构建（Backend 留 nil）。
@@ -108,7 +113,7 @@ func (f *EngineFactory) BuildEngineWithConfig(
 			if rs.Revise == nil {
 				return nil, fmt.Errorf("round[%d]: mode=revise but revise config is nil", i)
 			}
-			round, err = buildReviseRound(rs, b)
+			round, err = buildReviseRound(rs, b, borrowProtectRules, borrowRubyEnabled, borrowRubyPreserveKinds)
 		case "correct":
 			if rs.Correct == nil {
 				return nil, fmt.Errorf("round[%d]: mode=correct but correct config is nil", i)
@@ -378,11 +383,24 @@ func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 	}, nil
 }
 
-func buildReviseRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+// borrowTranslateProtectRuby 委托 service.BorrowTranslateProtectRuby：真实作业
+// 引擎与修订预览的合成快照共用同一借用语义，实现收敛在 service 层避免重复。
+func borrowTranslateProtectRuby(snapshot *service.JobExecutionSnapshot) (protectRules []string, rubyEnabled bool, rubyPreserveKinds []string) {
+	return service.BorrowTranslateProtectRuby(snapshot)
+}
+
+func buildReviseRound(rs service.JobRoundSnapshot, b backend.Backend, borrowProtectRules []string, borrowRubyEnabled bool, borrowRubyPreserveKinds []string) (engine.Round, error) {
 	r := rs.Revise
 	renderer, err := prompt.NewReviseRenderer(templates.EmbeddedReviseTemplate())
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build revise renderer: %w", err)
+	}
+	// 快照轮显式携带借用结果（修订预览的合成单轮快照，裁剪前已物化）时优先之；
+	// 否则用工厂从完整快照借用的值（真实作业路径）。两者均零值 = 无 translate
+	// 轮，降级原文直发。
+	protectRules, rubyEnabled, rubyPreserveKinds := borrowProtectRules, borrowRubyEnabled, borrowRubyPreserveKinds
+	if r.ProtectRules != nil || r.RubyEnabled || r.RubyPreserveKinds != nil {
+		protectRules, rubyEnabled, rubyPreserveKinds = r.ProtectRules, r.RubyEnabled, r.RubyPreserveKinds
 	}
 	return engine.Round{
 		Backend:          b,
@@ -399,6 +417,11 @@ func buildReviseRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Ro
 		ResponseMode:   responseModeFromBackendOptions(rs.Backend.Options),
 		ReviseRenderer: renderer,
 		IssueCodes:     r.IssueCodes,
+		// protect/ruby 借用计划内第一条 translate 轮的 Strategy（见
+		// borrowTranslateProtectRuby）；零值 = 无 translate 轮，降级原文直发。
+		ProtectRules:      protectRules,
+		RubyEnabled:       rubyEnabled,
+		RubyPreserveKinds: rubyPreserveKinds,
 	}, nil
 }
 

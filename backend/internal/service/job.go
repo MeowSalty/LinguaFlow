@@ -216,6 +216,33 @@ type JobReviseRoundSnapshot struct {
 	SegmentScope     string             `json:"segment_scope,omitempty"` // 物化后的 scope（空 → "with_issues"）
 	IssueCodes       []string           `json:"issue_codes,omitempty"`   // with_issues 为空时物化为完整语义白名单
 	Retry            schema.RetryConfig `json:"retry"`
+	// ProtectRules/RubyEnabled/RubyPreserveKinds 是 protect/ruby 策略借用结果的
+	// 可选载体：真实作业快照不填充（worker 构建引擎时借用第一条 translate 轮，
+	// 见 BorrowTranslateProtectRuby）；仅修订预览的合成单轮快照填充——裁剪后的
+	// 快照没有 translate 轮可借，需在裁剪前物化，使预览与真实 revise 轮行为一致。
+	ProtectRules      []string `json:"protect_rules,omitempty"`
+	RubyEnabled       bool     `json:"ruby_enabled,omitempty"`
+	RubyPreserveKinds []string `json:"ruby_preserve_kinds,omitempty"`
+}
+
+// BorrowTranslateProtectRuby 从快照内第一条 translate 轮的 Strategy 借用
+// protect/ruby 配置（revise 轮自身不携带 strategy，OpenAPI 注释声明的借用语义）。
+// 无 translate 轮时返回零值，调用方按零值降级为原文直发。
+// worker 构建真实作业引擎与修订预览合成单轮快照共用本函数。
+func BorrowTranslateProtectRuby(snapshot *JobExecutionSnapshot) (protectRules []string, rubyEnabled bool, rubyPreserveKinds []string) {
+	for _, rs := range snapshot.Rounds {
+		if rs.Mode != "translate" || rs.Translate == nil {
+			continue
+		}
+		s := rs.Translate.Strategy
+		if s.Protect.Enabled {
+			protectRules = s.Protect.Rules
+		}
+		rubyEnabled = s.Ruby.Enabled
+		rubyPreserveKinds = s.Ruby.PreserveKinds
+		return protectRules, rubyEnabled, rubyPreserveKinds
+	}
+	return nil, false, nil
 }
 
 // JobCorrectRoundSnapshot 本地改写轮次快照（纯本地、不调 LLM，无 prompt/backend 字段）。

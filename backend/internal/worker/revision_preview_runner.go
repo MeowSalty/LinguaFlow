@@ -92,10 +92,14 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 	}
 	collector := preview.NewMemoryCollector()
 	// 执行 snapshot 只含 revise 轮，BuildEngineConfig 找不到 translate 轮会把
-	// Repair 置零（= 不修复）；用服务层从完整 snapshot 派生的 repairOpts 覆盖，
-	// 保持预览与真实作业的解析修复行为一致。
+	// Repair/Ruby 置零（= 不修复、不建 Restorer）；用服务层从完整 snapshot 派生的
+	// repairOpts 与合成轮携带的借用 Ruby 策略覆盖，保持预览与真实作业行为一致。
 	engineCfg := BuildEngineConfig(snapshot)
 	engineCfg.Repair = repairOpts
+	engineCfg.Ruby = engine.RubyConfig{
+		Enabled:       roundSnapshot.Revise.RubyEnabled,
+		PreserveKinds: roundSnapshot.Revise.RubyPreserveKinds,
+	}
 	eng, err := r.factory.BuildEngineWithConfig(ctx, snapshot, engineCfg, engine.RuntimeResources{
 		Glossary: qaConfig.Glossary,
 		TM:       r.buildRevisionTM(snapshot.TMEnabled),

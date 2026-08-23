@@ -356,6 +356,7 @@ func revisionRoundFromSnapshot(snapshot *JobExecutionSnapshot, fixIssues []qa.Qu
 		if round.Mode == "revise" && round.Revise != nil {
 			round.Revise = cloneReviseSnapshot(round.Revise)
 			round.Revise.IssueCodes = codes
+			fillReviseBorrowedStrategy(round.Revise, snapshot)
 			return round, false, nil
 		}
 	}
@@ -363,23 +364,32 @@ func revisionRoundFromSnapshot(snapshot *JobExecutionSnapshot, fixIssues []qa.Qu
 		if snapshot.Rounds[i].Mode != "translate" {
 			continue
 		}
+		revise := &JobReviseRoundSnapshot{
+			// 合成轮采用固定的低并发、适中批量与默认重试参数：
+			// 这些值与交互式修订的成本/响应时间平衡约定一致；IssueCodes
+			// 与已配置 revise 轮同样收窄为请求交集，保持一致的修复目标语义。
+			BatchSize:        20,
+			MaxWordsPerBatch: 0,
+			Concurrency:      1,
+			SegmentScope:     "with_issues",
+			IssueCodes:       append([]string(nil), codes...),
+			Retry:            schema.RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
+		}
+		fillReviseBorrowedStrategy(revise, snapshot)
 		return JobRoundSnapshot{
 			Mode:    "revise",
 			Backend: snapshot.Rounds[i].Backend,
-			Revise: &JobReviseRoundSnapshot{
-				// 合成轮采用固定的低并发、适中批量与默认重试参数：
-				// 这些值与交互式修订的成本/响应时间平衡约定一致；IssueCodes
-				// 与已配置 revise 轮同样收窄为请求交集，保持一致的修复目标语义。
-				BatchSize:        20,
-				MaxWordsPerBatch: 0,
-				Concurrency:      1,
-				SegmentScope:     "with_issues",
-				IssueCodes:       append([]string(nil), codes...),
-				Retry:            schema.RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
-			},
+			Revise:  revise,
 		}, true, nil
 	}
 	return JobRoundSnapshot{}, false, ErrRevisionNoBackend
+}
+
+// fillReviseBorrowedStrategy 把从完整快照借用的 protect/ruby 策略物化进修订轮
+// 快照。快照随后被裁剪为单 revise 轮，worker 的工厂级借用（扫 translate 轮）在
+// 裁剪后必然落空；预物化使单轮预览与真实 revise 轮的输入保护行为一致。
+func fillReviseBorrowedStrategy(revise *JobReviseRoundSnapshot, snapshot *JobExecutionSnapshot) {
+	revise.ProtectRules, revise.RubyEnabled, revise.RubyPreserveKinds = BorrowTranslateProtectRuby(snapshot)
 }
 
 func cloneReviseSnapshot(in *JobReviseRoundSnapshot) *JobReviseRoundSnapshot {
