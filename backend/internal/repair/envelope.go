@@ -114,19 +114,29 @@ func tryRepairKeyed[T any](text, key string, opt Options, normalize func([]T) []
 	if err != nil {
 		return nil, repaired, err
 	}
+	v, err := decodeKeyed(raw, key, normalize)
+	if err != nil {
+		return nil, repaired, err
+	}
+	return v, repaired, nil
+}
+
+// decodeKeyed 从已解析的 envelope map 中取出 key 的数组值并反序列化到具体类型
+// 切片，经 normalize 完成 trim/过滤。
+func decodeKeyed[T any](raw map[string]any, key string, normalize func([]T) []T) ([]T, error) {
 	v, ok := raw[key]
 	if !ok {
-		return nil, repaired, errors.New("response missing " + key + " field")
+		return nil, errors.New("response missing " + key + " field")
 	}
 	b, mErr := json.Marshal(v)
 	if mErr != nil {
-		return nil, repaired, fmt.Errorf("marshal %s: %w", key, mErr)
+		return nil, fmt.Errorf("marshal %s: %w", key, mErr)
 	}
 	var typed []T
 	if err := json.Unmarshal(b, &typed); err != nil {
-		return nil, repaired, fmt.Errorf("unmarshal %s: %w", key, err)
+		return nil, fmt.Errorf("unmarshal %s: %w", key, err)
 	}
-	return normalize(typed), repaired, nil
+	return normalize(typed), nil
 }
 
 // TryRepairSemanticQA 解析 {"issues":[...]} 并应用完整修复链。
@@ -150,25 +160,54 @@ func ParseSemanticQAByMode(text string, isTextMode bool, opt Options) ([]prompt.
 	return TryRepairSemanticQA(text, opt)
 }
 
-// TryRepairRevise 解析 {"revisions":[...]} 并应用完整修复链。
-// 返回 (revisions, 修复算子链，error)；revisions 已经过 trim、空字段过滤与重复
-// id 去重（保留首次出现）。修复层不校验 id 是否属于请求批次，越界 id 由调用方丢弃。
-func TryRepairRevise(text string, opt Options) ([]prompt.ReviseRevision, []string, error) {
-	return tryRepairKeyed(text, "revisions", opt, prompt.NormalizeReviseRevisions)
-}
-
 // ParseReviseByMode 按 response mode 解析修订响应（带修复）。
 // text 模式优先纯文本 [revisions] 协议，未识别时 fallback JSON（模型常仍吐 JSON）。
-// 返回 (revisions, 修复算子链, error)；text 路径修复算子链为空。
-func ParseReviseByMode(text string, isTextMode bool, opt Options) ([]prompt.ReviseRevision, []string, error) {
+// 当响应携带注音对齐输出时一并解析返回（JSON 顶层 ruby_output；text 模式 [ruby]
+// 段落），协议未携带时为 nil（无注音条目或 LLM 漏返，由调用方按空对齐处理）。
+// 返回 (revisions, rubyOutput, 修复算子链, error)；text 路径修复算子链为空。
+func ParseReviseByMode(text string, isTextMode bool, opt Options) ([]prompt.ReviseRevision, map[string][]ruby.OutputEntry, []string, error) {
 	if !isTextMode {
-		return TryRepairRevise(text, opt)
+		return tryRepairReviseWithRuby(text, opt)
 	}
-	revisions, recognized := prompt.ParseReviseTextRevisions(text)
+	revisions, rubyOutput, recognized := parseReviseTextWithRuby(text)
 	if recognized {
-		return revisions, nil, nil
+		return revisions, rubyOutput, nil, nil
 	}
-	return TryRepairRevise(text, opt)
+	return tryRepairReviseWithRuby(text, opt)
+}
+
+// tryRepairReviseWithRuby 解析 {"revisions":[...]} 并提取可选的顶层 ruby_output。
+func tryRepairReviseWithRuby(text string, opt Options) ([]prompt.ReviseRevision, map[string][]ruby.OutputEntry, []string, error) {
+	raw, repaired, err := TryRepairEnvelope(text, "revisions", opt)
+	if err != nil {
+		return nil, nil, repaired, err
+	}
+	revisions, err := decodeKeyed(raw, "revisions", prompt.NormalizeReviseRevisions)
+	if err != nil {
+		return nil, nil, repaired, err
+	}
+	var rubyOutput map[string][]ruby.OutputEntry
+	if rubyRaw, ok := raw["ruby_output"]; ok {
+		if b, mErr := json.Marshal(rubyRaw); mErr == nil {
+			_ = json.Unmarshal(b, &rubyOutput)
+		}
+	}
+	return revisions, rubyOutput, repaired, nil
+}
+
+// parseReviseTextWithRuby 解析 text 协议修订输出：[revisions] 段落必选，其后可选
+// [ruby] 段落（每行 "段id: base | text | kind[ | 条目id]"，复用 section 解析）。
+// recognized=false 表示未命中 [revisions] 协议，调用方据此 fallback JSON。
+func parseReviseTextWithRuby(text string) ([]prompt.ReviseRevision, map[string][]ruby.OutputEntry, bool) {
+	revisions, recognized := prompt.ParseReviseTextRevisions(text)
+	if !recognized {
+		return nil, nil, false
+	}
+	var rubyOutput map[string][]ruby.OutputEntry
+	if rubyLines := collectSectionLines(text, "ruby"); len(rubyLines) > 0 {
+		rubyOutput = ruby.ParseSectionRubyOutput(rubyLines)
+	}
+	return revisions, rubyOutput, true
 }
 
 // 返回 (verdicts, 修复算子链, error)；verdicts 已经过 trim 与字段过滤（丢弃缺

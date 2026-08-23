@@ -7,7 +7,11 @@
 - 只修复问题清单中列出的问题，不做无关润色、改写或重写。
 - 除确实需要修复的片段外，保持未涉及部分逐字不变。
 - 保持占位符、标签、数字、URL 与源文一致，不得因修订破坏其守恒。
+{{- if .RubyMode}}
+- 译文中的注音已剥离为结构化条目随段下发；修订后通过注音协议回填条目，target 内不得出现 <ruby>/<rt> 标签或 ⟦ruby:...⟧ 标记。
+{{- else}}
 - 译文中已有的注音（ruby）标记原样保留，不得增删或改写其条目。
+{{- end}}
 - 保持原有译文的语域、语气与文体，不要把修订变成风格改写。
 - 若判定某个问题不成立、不明确或不该改，原样返回原译文；宁可无改动，也不可引入新问题。
 - 每个输入段落必须返回一个 target；target 与原译文相同表示该段无改动。
@@ -28,23 +32,44 @@
 ## 协议
 
 {{- if eq .Protocol "text"}}
-- 用户消息是纯文本格式，包含 source_lang、target_lang，以及若干 [segment] 块；每块含 id、source、target 和 issues。
+- 用户消息是纯文本格式，包含 source_lang、target_lang，以及若干 [segment] 块；每块含 id、source、target、可选 ruby 行和 issues。
 - 你的回复必须是纯文本：先输出 [revisions]，然后每行一条修订，格式为 `id | target`。
 - 竖线是第一个分隔符；target 中可以包含竖线，解析时只按第一个分隔符切分，其余竖线都属于 target。
 - id 必须与输入 segment 的 id 一致；每个输入 id 必须恰好返回一行，即使 target 不变也必须返回。
+{{- if eq .RubyMode "section"}}
+- 带注音条目的段在 [revisions] 之后另起一行输出 [ruby]，然后每行一条：`段id: 基底 | 标注 | 类型 | 条目id`（条目 id 为该段 ruby 行携带的 #id，必须原样回显）。
+{{- end}}
 {{- else}}
 - 用户消息是一个 JSON 对象，包含 task、source_lang、target_lang、segments 字段；每个 segment 含 id、source、target、issues。
 - 你的回复必须是一个 JSON 对象，顶层含 `revisions` 数组；每项含 `id` 和 `target`。
 - id 必须与输入 segment 的 id 一致；每个输入 id 必须返回一个 target，即使 target 不变也必须返回。
-{{- if eq .Protocol "json_loose"}}
-- 输出 JSON 结构如下：`{"revisions":[{"id":"...","target":"..."}, ...]}`。
+{{- if eq .RubyMode "json"}}
+- 顶层还需含 `ruby_output` 字段（与 `revisions` 同级），按段 id 键控返回注音条目；无注音条目的段使用空数组。
 {{- end}}
+{{- if eq .Protocol "json_loose"}}
+- 输出 JSON 结构如下：`{"revisions":[{"id":"...","target":"..."}, ...]}`。{{if eq .RubyMode "json"}} 含注音时：`{"revisions":[...], "ruby_output":{"<id>":[{"id":"...","base":"...","text":"...","kind":"..."}, ...], ...}}`。{{end}}
+{{- end}}
+{{- end}}
+
+{{- if .HasRuby}}
+
+## 注音（ruby）协议
+
+译文中曾有 <ruby>基底<rt>标注</rt></ruby> 标签，已剥离注音条目随段下发（{{if eq .Protocol "text"}}各段 ruby 行，格式为 基底/标注#id{{else}}ruby_annotations 字段{{end}}）。修订后按下列规则回填：
+- "基底" 必须是修订后 target 中实际写入的对应文本；修订改动了被注音的词时，回填改动后的文本。
+- 每条注音需分类为以下三种之一：
+  · phonetic（音注）：纯读音标注，基底与标注是同一词的读法。
+  · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
+  · creative（创意注音）：基底与标注存在语义落差。
+- 标注文本的翻译规则：phonetic 和 semantic 保留原文不翻译；creative 需要翻译。
+- 每条条目必须原样回显下发条目的 id（{{if eq .Protocol "text"}}[ruby] 行第 4 字段{{else}}条目的 "id" 字段{{end}}）；条目顺序与下发顺序一致。
+- 未被修订涉及的注音词也必须回填，不得遗漏任何条目。
 {{- end}}
 
 ## 输出规则
 
 {{- if eq .Protocol "text"}}
-1. 仅输出纯文本 [revisions] 段，无 markdown 围栏（不要 ```）、无额外文字、无解释说明。
+1. 仅输出纯文本 [revisions] 段{{if eq .RubyMode "section"}}（及带注音段的 [ruby] 段）{{end}}，无 markdown 围栏（不要 ```）、无额外文字、无解释说明。
 2. 不要编造输入中不存在的 id；除明确修复列出的问题外，不得改变 target 的任何字符。
 3. target 为空不合法；target 中的竖线必须原样保留。
 {{- else}}

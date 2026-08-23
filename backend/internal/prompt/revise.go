@@ -31,6 +31,21 @@ type ReviseData struct {
 	Segments   []ReviseSegment
 	// Protocol 控制 system/user 协议与解析通道；由 ProtocolFromResponseMode 推导。
 	Protocol Protocol
+	// RubyAnnotations 与 RubyMode 与 translate 轮同源：Segments 中的 target 已剥离
+	// 注音标签，注音条目按段 id 经 RubyAnnotations 下发，LLM 按 RubyMode 协议
+	// （json/section）回填对齐结果，还原由调用方经 ruby 管线完成。
+	RubyAnnotations map[string][]RubyAnnotation
+	RubyMode        string // "json" | "section" | ""
+}
+
+// HasRuby 判断当前数据中是否存在待回填的注音条目。
+func (d ReviseData) HasRuby() bool {
+	for _, anns := range d.RubyAnnotations {
+		if len(anns) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ReviseRenderer 持有已编译的修订 system 模板。user 由 Render 直接序列化。
@@ -57,6 +72,8 @@ type reviseEnvelope struct {
 	SourceLang string          `json:"source_lang,omitempty"`
 	TargetLang string          `json:"target_lang,omitempty"`
 	Segments   []ReviseSegment `json:"segments"`
+	// RubyAnnotations 的 json tag 与 translate 轮 userEnvelope 对齐。
+	RubyAnnotations map[string][]RubyAnnotation `json:"ruby_annotations,omitempty"`
 }
 
 // Render 返回 (system, user, err)。ProtocolText 时 user 为纯文本格式，否则为 JSON。
@@ -72,10 +89,11 @@ func (r *ReviseRenderer) Render(d ReviseData) (string, string, error) {
 		return sysBuf.String(), buildReviseTextUser(d), nil
 	}
 	env := reviseEnvelope{
-		Task:       "revise_translation",
-		SourceLang: d.SourceLang,
-		TargetLang: d.TargetLang,
-		Segments:   d.Segments,
+		Task:            "revise_translation",
+		SourceLang:      d.SourceLang,
+		TargetLang:      d.TargetLang,
+		Segments:        d.Segments,
+		RubyAnnotations: d.RubyAnnotations,
 	}
 	userBytes, err := json.Marshal(env)
 	if err != nil {
@@ -92,6 +110,7 @@ func (r *ReviseRenderer) Render(d ReviseData) (string, string, error) {
 //	[segment] id=<id>
 //	source: ...
 //	target: ...
+//	ruby: 基底/标注#id, ...（仅含注音条目的段；格式与 translate 轮 section 输入一致）
 //	issues:
 //	- code | snippet: message
 func buildReviseTextUser(d ReviseData) string {
@@ -112,6 +131,22 @@ func buildReviseTextUser(d ReviseData) string {
 		sb.WriteString("target: ")
 		sb.WriteString(seg.Target)
 		sb.WriteByte('\n')
+		if anns := d.RubyAnnotations[seg.ID]; len(anns) > 0 {
+			sb.WriteString("ruby: ")
+			for j, a := range anns {
+				if j > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(a.Base)
+				sb.WriteString("/")
+				sb.WriteString(a.Text)
+				if a.ID != "" {
+					sb.WriteString("#")
+					sb.WriteString(a.ID)
+				}
+			}
+			sb.WriteByte('\n')
+		}
 		sb.WriteString("issues:\n")
 		for _, iss := range seg.Issues {
 			sb.WriteString("- ")
@@ -137,26 +172,66 @@ type ReviseRevision struct {
 // ReviseRevisionSchema 返回 OpenAI 严格 JSON schema：
 //
 //	{revisions:[{id,target}]}
-func ReviseRevisionSchema() map[string]any {
+//
+// includeRuby 时顶层追加必填 ruby_output（按 revisionIDs 键控，与 translate 轮
+// translationsSchema 的 ruby 分支同构）。
+func ReviseRevisionSchema(includeRuby bool, revisionIDs []string) map[string]any {
 	itemProps := map[string]any{
 		"id":     map[string]any{"type": "string"},
 		"target": map[string]any{"type": "string"},
 	}
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"revisions": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type":                 "object",
-					"properties":           itemProps,
-					"required":             []string{"id", "target"},
-					"additionalProperties": false,
-				},
+	outerProps := map[string]any{
+		"revisions": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type":                 "object",
+				"properties":           itemProps,
+				"required":             []string{"id", "target"},
+				"additionalProperties": false,
 			},
 		},
-		"required":             []string{"revisions"},
+	}
+	required := []string{"revisions"}
+	if includeRuby {
+		outerProps["ruby_output"] = RubyOutputSchema(revisionIDs)
+		required = append(required, "ruby_output")
+	}
+	return map[string]any{
+		"type":                 "object",
+		"properties":           outerProps,
+		"required":             required,
 		"additionalProperties": false,
+	}
+}
+
+// RubyOutputSchema 构建 ruby_output 字段的对象 schema：按 ids 键控，每个值为
+// {id,base,text,kind} 条目数组（kind 为三级分类枚举，条目 id 可选）。
+// 由 translate 轮（translationsSchema）与 revise 轮（ReviseRevisionSchema）共用，
+// 保证两轮注音协议同构。
+func RubyOutputSchema(ids []string) map[string]any {
+	props := make(map[string]any, len(ids))
+	for _, id := range ids {
+		props[id] = map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":   map[string]any{"type": "string"},
+					"base": map[string]any{"type": "string"},
+					"text": map[string]any{"type": "string"},
+					"kind": map[string]any{
+						"type": "string",
+						"enum": []string{"phonetic", "semantic", "creative"},
+					},
+				},
+				"required":             []string{"base", "text", "kind"},
+				"additionalProperties": false,
+			},
+		}
+	}
+	return map[string]any{
+		"type":       "object",
+		"properties": props,
 	}
 }
 
