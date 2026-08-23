@@ -18,6 +18,11 @@ import (
 
 // restoreSegmentRuby 对单个段落执行注音还原：提取统一 items → 过滤 → 还原，
 // 未对齐条目存在且配置了重试后端时执行定向对齐重试（仅发未对齐条目）。
+// 返回实际还原（插入译文）的注音条目数，供调用方做守恒校验；还原器无法
+// 定位的条目不计入——计数基于还原器插入/转换结果而非标签子串。注意 inline
+// 分支的计数是译文中 ⟦ruby:⟧ 标记的转换数（translate 轮的容错通道，标记由
+// LLM 书写）；revise 轮不使用该通道（协议禁止标记，见 finalizeRevision 的
+// fail-closed 拒绝）。
 func restoreSegmentRuby(
 	ctx context.Context,
 	seg *Segment,
@@ -31,18 +36,18 @@ func restoreSegmentRuby(
 	roundIndex int,
 	repairOpt repair.Options,
 	rubyRetryAttempts int,
-) {
+) int {
 	items := extractRubyItemsFromSeg(seg)
 	if len(items) == 0 {
-		return
+		return 0
 	}
 
 	// inline：marker 位置天然自洽，按标记就地组装，不参与 id 关联与定向重试
 	if strings.Contains(seg.Target, "⟦ruby:") {
 		markers := ruby.ParseInlineMarkers(seg.Target)
 		filtered := filterByKinds(markers, keepSet)
-		restorer.RestoreInlineMarkers(seg, filtered)
-		return
+		result, _ := restorer.RestoreInlineMarkers(seg, filtered)
+		return result.Matched
 	}
 
 	translation := seg.Target // 干净译文快照（未插标签）
@@ -52,7 +57,7 @@ func restoreSegmentRuby(
 		if err != nil {
 			logger.Warn("ruby restore failed, will retry alignment", "seg", seg.ID, "err", err)
 		} else if result.IsFull() && len(ruby.Unaligned(items)) == 0 {
-			return
+			return result.Matched
 		}
 		// 回退到干净译文：定向重试的 prompt 必须看到未插标签的译文
 		seg.Target = translation
@@ -70,8 +75,10 @@ func restoreSegmentRuby(
 	// 最终还原：以最后一次合并后的 items 为准
 	filtered = filterItemsByKind(items, keepSet)
 	if len(filtered) > 0 {
-		restorer.RestoreItems(seg, filtered)
+		result, _ := restorer.RestoreItems(seg, filtered)
+		return result.Matched
 	}
+	return 0
 }
 
 // extractRubyItemsFromSeg 从 Segment.Meta 提取统一注音条目。
