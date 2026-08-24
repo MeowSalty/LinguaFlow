@@ -43,7 +43,8 @@ type ReviseHandler struct {
 	RoundIndex        int // execution plan round index, set by caller
 
 	// Protector/Ruby* 与 TranslateHandler 同名同语义（protect 规则与 ruby 配置
-	// 借用计划内 translate 轮策略）；零值时降级为原文直发（无 translate 轮的计划）。
+	// 取计划级策略快照，由 worker 引擎工厂从 JobExecutionSnapshot.Strategy 统一
+	// 注入）；零值时降级为原文直发（无策略的计划）。
 	Protector         protect.Protector
 	RubyEnabled       bool
 	RubyPreserveKinds []string

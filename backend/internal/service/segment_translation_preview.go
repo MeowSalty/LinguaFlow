@@ -561,22 +561,18 @@ func aggregateMetrics(metrics []backend.MeterMetrics) backend.MeterMetrics {
 }
 
 func qaConfigFromSnapshot(snapshot *JobExecutionSnapshot, resourceFormat string) previewtoken.QAConfigClaims {
-	for _, rs := range snapshot.Rounds {
-		if rs.Mode == "translate" && rs.Translate != nil {
-			s := rs.Translate.Strategy
-			return previewtoken.QAConfigClaims{
-				Enabled:        s.QA.Enabled,
-				Checks:         s.QA.Checks,
-				LengthMethod:   s.QA.LengthMethod,
-				LengthRatioMin: s.QA.LengthRatioMin,
-				LengthRatioMax: s.QA.LengthRatioMax,
-				SourceLang:     snapshot.SourceLang,
-				TargetLang:     snapshot.TargetLang,
-				Format:         resourceFormat,
-			}
-		}
+	// QA 配置位于计划级策略快照（snapshot.Strategy），不再扫描轮次。
+	s := snapshot.Strategy
+	return previewtoken.QAConfigClaims{
+		Enabled:        s.QA.Enabled,
+		Checks:         s.QA.Checks,
+		LengthMethod:   s.QA.LengthMethod,
+		LengthRatioMin: s.QA.LengthRatioMin,
+		LengthRatioMax: s.QA.LengthRatioMax,
+		SourceLang:     snapshot.SourceLang,
+		TargetLang:     snapshot.TargetLang,
+		Format:         resourceFormat,
 	}
-	return previewtoken.QAConfigClaims{}
 }
 
 func qaConfigFromClaims(claims *previewtoken.ApplyClaims) qa.Config {

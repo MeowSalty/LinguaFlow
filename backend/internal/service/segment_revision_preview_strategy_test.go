@@ -5,76 +5,115 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
-// strategyTestTranslateRound 构造带 protect/ruby 策略的 translate 轮快照。
-func strategyTestTranslateRound() JobRoundSnapshot {
-	return JobRoundSnapshot{
-		Mode: "translate",
-		Translate: &JobTranslateRoundSnapshot{
-			Strategy: StrategySnapshot{
-				Protect: schema.ProfileProtectConfig{Enabled: true, Rules: []string{"code"}},
-				Ruby:    schema.ProfileRubyConfig{Enabled: true, PreserveKinds: []string{"phonetic"}},
-			},
-		},
-	}
-}
-
-// TestRevisionRoundFromSnapshot_MaterializesBorrowedStrategy 修订预览的单轮快照
-// （复刻已配置 revise 轮与从 translate 轮合成两条路径）都必须在裁剪前物化借用的
-// protect/ruby 策略，否则裁剪后工厂级借用必然落空、预览与真实 revise 轮分叉。
-func TestRevisionRoundFromSnapshot_MaterializesBorrowedStrategy(t *testing.T) {
+// TestRevisionRoundFromSnapshot_ClonesAndNarrows 修订预览的单轮快照（复刻已配置
+// revise 轮与从 translate 轮合成两条路径）：策略位于快照顶层（snapshot.Strategy），
+// 轮次裁剪后天然存活，revise 轮不再携带/物化任何策略字段。
+func TestRevisionRoundFromSnapshot_ClonesAndNarrows(t *testing.T) {
 	issues := []qa.QualityIssue{{Code: "calque", Message: "借译"}}
 
 	t.Run("复刻已配置 revise 轮", func(t *testing.T) {
 		snapshot := &JobExecutionSnapshot{
 			Rounds: []JobRoundSnapshot{
-				strategyTestTranslateRound(),
-				{Mode: "revise", Revise: &JobReviseRoundSnapshot{BatchSize: 5}},
+				{Mode: "translate", Translate: &JobTranslateRoundSnapshot{}},
+				{Mode: "revise", Revise: &JobReviseRoundSnapshot{BatchSize: 5, SegmentScope: "with_issue_codes", IssueCodes: []string{"calque"}}},
 			},
 		}
 		round, synthesized, err := revisionRoundFromSnapshot(snapshot, issues)
 		if err != nil || synthesized {
 			t.Fatalf("round=%+v synthesized=%v err=%v", round, synthesized, err)
 		}
-		if len(round.Revise.ProtectRules) != 1 || round.Revise.ProtectRules[0] != "code" {
-			t.Fatalf("ProtectRules=%v want [code]", round.Revise.ProtectRules)
-		}
-		if !round.Revise.RubyEnabled || len(round.Revise.RubyPreserveKinds) != 1 {
-			t.Fatalf("ruby 策略未物化: enabled=%v kinds=%v", round.Revise.RubyEnabled, round.Revise.RubyPreserveKinds)
+		if len(round.Revise.IssueCodes) != 1 || round.Revise.IssueCodes[0] != "calque" {
+			t.Fatalf("IssueCodes=%v want [calque]", round.Revise.IssueCodes)
 		}
 		// 原快照中的 revise 轮本身不得被改动（复刻而非原地修改）。
 		orig := snapshot.Rounds[1].Revise
-		if len(orig.ProtectRules) != 0 || orig.RubyEnabled {
+		if len(orig.IssueCodes) != 1 || orig.IssueCodes[0] != "calque" {
 			t.Fatalf("原快照 revise 轮被修改: %+v", orig)
 		}
 	})
 
 	t.Run("从 translate 轮合成", func(t *testing.T) {
 		snapshot := &JobExecutionSnapshot{
-			Rounds: []JobRoundSnapshot{strategyTestTranslateRound()},
+			Rounds: []JobRoundSnapshot{{Mode: "translate", Translate: &JobTranslateRoundSnapshot{}}},
 		}
 		round, synthesized, err := revisionRoundFromSnapshot(snapshot, issues)
 		if err != nil || !synthesized {
 			t.Fatalf("round=%+v synthesized=%v err=%v", round, synthesized, err)
 		}
-		if len(round.Revise.ProtectRules) != 1 || !round.Revise.RubyEnabled {
-			t.Fatalf("合成轮未物化借用策略: %+v", round.Revise)
+		if round.Mode != "revise" || len(round.Revise.IssueCodes) != 1 {
+			t.Fatalf("合成轮不符合预期: %+v", round)
 		}
 	})
 
-	t.Run("无 translate 轮降级零值", func(t *testing.T) {
+	t.Run("无 revise 且无 translate 轮报错", func(t *testing.T) {
 		snapshot := &JobExecutionSnapshot{
-			Rounds: []JobRoundSnapshot{
-				{Mode: "revise", Revise: &JobReviseRoundSnapshot{BatchSize: 5}},
-			},
+			Rounds: []JobRoundSnapshot{{Mode: "correct", Correct: &JobCorrectRoundSnapshot{}}},
 		}
-		round, _, err := revisionRoundFromSnapshot(snapshot, issues)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(round.Revise.ProtectRules) != 0 || round.Revise.RubyEnabled {
-			t.Fatalf("无 translate 轮应物化零值，实际 %+v", round.Revise)
+		if _, _, err := revisionRoundFromSnapshot(snapshot, issues); err != ErrRevisionNoBackend {
+			t.Fatalf("err=%v want ErrRevisionNoBackend", err)
 		}
 	})
+}
+
+// TestPreviewReadPathsUseTopLevelStrategy 两个预览读取路径必须读顶层计划级策略：
+// 即使轮次被裁剪为单 revise 轮（找不到任何 translate 轮），QA 与修复配置仍应来自
+// snapshot.Strategy 而非落空为零值。
+func TestPreviewReadPathsUseTopLevelStrategy(t *testing.T) {
+	snapshot := &JobExecutionSnapshot{
+		SourceLang: "en",
+		TargetLang: "zh",
+		Strategy: StrategySnapshot{
+			QA: schema.ProfileQAConfig{
+				Enabled:        true,
+				LengthMethod:   "char_weight",
+				LengthRatioMin: 0.5,
+				LengthRatioMax: 2.0,
+			},
+			Repair: schema.ProfileRepairConfig{
+				Enabled:              true,
+				JSONStructural:       true,
+				PlaceholderNormalize: true,
+			},
+		},
+		Rounds: []JobRoundSnapshot{
+			{Mode: "revise", Revise: &JobReviseRoundSnapshot{BatchSize: 5}},
+		},
+	}
+
+	qaClaims := qaConfigFromSnapshot(snapshot, "epub")
+	if !qaClaims.Enabled {
+		t.Fatal("qaConfigFromSnapshot 未读到顶层 Strategy 的 QA 配置")
+	}
+	if qaClaims.LengthMethod != "char_weight" || qaClaims.LengthRatioMin != 0.5 || qaClaims.LengthRatioMax != 2.0 {
+		t.Fatalf("QA 配置读取不完整: %+v", qaClaims)
+	}
+	if qaClaims.SourceLang != "en" || qaClaims.TargetLang != "zh" {
+		t.Fatalf("语言回填错误: source=%s target=%s", qaClaims.SourceLang, qaClaims.TargetLang)
+	}
+	if qaClaims.Format != "epub" {
+		t.Fatalf("Format=%s want epub", qaClaims.Format)
+	}
+
+	repairOpts := repairOptionsFromSnapshot(snapshot)
+	if !repairOpts.JSONStructural || !repairOpts.PlaceholderNormalize {
+		t.Fatalf("Repair 选项映射不完整: %+v", repairOpts)
+	}
+	if repairOpts.SchemaAliases || repairOpts.PromptUpgrade {
+		t.Fatalf("未启用的 Repair 算子不应被打开: %+v", repairOpts)
+	}
+}
+
+// TestPreviewReadPathsZeroValueStrategy 无策略快照（零值）时两个读取路径应安全降级：
+// QA 未启用、无修复算子。
+func TestPreviewReadPathsZeroValueStrategy(t *testing.T) {
+	snapshot := &JobExecutionSnapshot{}
+	if claims := qaConfigFromSnapshot(snapshot, ""); claims.Enabled {
+		t.Fatalf("零值策略不应启用 QA: %+v", claims)
+	}
+	if opts := repairOptionsFromSnapshot(snapshot); opts != (repair.Options{}) {
+		t.Fatalf("零值策略应得零值修复选项: %+v", opts)
+	}
 }

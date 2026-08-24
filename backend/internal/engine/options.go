@@ -266,9 +266,8 @@ func buildSinglePipelineRound(
 }
 
 // deriveRubyMode 推导注音协议模式：ruby 关闭为空串；JSON 为主，text 响应退化为
-// Section。translate 与 revise 轮共用同一推导，保证同一计划内两轮注音协议一致
-// （revise 轮的 ruby 策略借用自 translate 轮，协议分叉会使回填解析落空、守恒
-// 守卫永久误拒）。
+// Section。translate 与 revise 轮共用同一推导（策略均来自计划级引用的同一份
+// 快照顶层 Strategy），协议分叉会使回填解析落空、守恒守卫永久误拒。
 func deriveRubyMode(rubyEnabled bool, responseMode string) string {
 	if !rubyEnabled {
 		return ""

@@ -356,7 +356,6 @@ func revisionRoundFromSnapshot(snapshot *JobExecutionSnapshot, fixIssues []qa.Qu
 		if round.Mode == "revise" && round.Revise != nil {
 			round.Revise = cloneReviseSnapshot(round.Revise)
 			round.Revise.IssueCodes = codes
-			fillReviseBorrowedStrategy(round.Revise, snapshot)
 			return round, false, nil
 		}
 	}
@@ -375,7 +374,6 @@ func revisionRoundFromSnapshot(snapshot *JobExecutionSnapshot, fixIssues []qa.Qu
 			IssueCodes:       append([]string(nil), codes...),
 			Retry:            schema.RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
 		}
-		fillReviseBorrowedStrategy(revise, snapshot)
 		return JobRoundSnapshot{
 			Mode:    "revise",
 			Backend: snapshot.Rounds[i].Backend,
@@ -385,29 +383,16 @@ func revisionRoundFromSnapshot(snapshot *JobExecutionSnapshot, fixIssues []qa.Qu
 	return JobRoundSnapshot{}, false, ErrRevisionNoBackend
 }
 
-// fillReviseBorrowedStrategy 把从完整快照借用的 protect/ruby 策略物化进修订轮
-// 快照。快照随后被裁剪为单 revise 轮，worker 的工厂级借用（扫 translate 轮）在
-// 裁剪后必然落空；预物化使单轮预览与真实 revise 轮的输入保护行为一致。
-func fillReviseBorrowedStrategy(revise *JobReviseRoundSnapshot, snapshot *JobExecutionSnapshot) {
-	revise.ProtectRules, revise.RubyEnabled, revise.RubyPreserveKinds = BorrowTranslateProtectRuby(snapshot)
-}
-
 func cloneReviseSnapshot(in *JobReviseRoundSnapshot) *JobReviseRoundSnapshot {
 	out := *in
 	out.IssueCodes = append([]string(nil), in.IssueCodes...)
 	return &out
 }
 
-// repairOptionsFromSnapshot 从计划内首个 translate 轮的策略派生修复选项，
+// repairOptionsFromSnapshot 从计划级策略快照派生修复选项，
 // 供修订预览在截断轮次前抢救 Repair 配置。
 func repairOptionsFromSnapshot(snapshot *JobExecutionSnapshot) repair.Options {
-	for _, rs := range snapshot.Rounds {
-		if rs.Mode != "translate" || rs.Translate == nil {
-			continue
-		}
-		return RepairOptionsFromStrategy(rs.Translate.Strategy)
-	}
-	return repair.Options{}
+	return RepairOptionsFromStrategy(snapshot.Strategy)
 }
 
 // RepairOptionsFromStrategy 将 translate 策略快照映射为修复选项。worker 的

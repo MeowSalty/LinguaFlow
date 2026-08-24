@@ -43,7 +43,6 @@ func TestValidateExecutionRounds_SemanticQA(t *testing.T) {
 				BackendID: 1,
 				Translate: &schema.TranslateRoundConfig{
 					PromptTemplateID: -1,
-					ProfileID:        -1,
 					BatchSize:        10,
 					Concurrency:      1,
 					FallbackShrink:   1.0,
@@ -319,10 +318,11 @@ func TestValidateAndSnapshotRevise(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create backend: %v", err)
 	}
-	jobs := &JobService{client: client, backends: backends}
+	jobs := &JobService{client: client, backends: backends, profiles: NewExecutionProfileService(client, users)}
 	plan := &ent.ExecutionPlanTemplate{
-		ID:   1,
-		Name: "revise-plan",
+		ID:        1,
+		Name:      "revise-plan",
+		ProfileID: -1, // 内置默认策略：计划级策略物化走 builtin 路径
 		Rounds: []schema.ExecutionRoundConfig{{
 			Mode:      "revise",
 			BackendID: backendRow.ID,
@@ -332,7 +332,7 @@ func TestValidateAndSnapshotRevise(t *testing.T) {
 			},
 		}},
 	}
-	snap, err := jobs.validateAndSnapshotWith(context.Background(), plan, "", func(id int) error {
+	snap, err := jobs.validateAndSnapshotWith(context.Background(), user.ID, plan, "", func(id int) error {
 		if id != backendRow.ID {
 			t.Fatalf("backend id=%d want %d", id, backendRow.ID)
 		}
@@ -351,7 +351,7 @@ func TestValidateAndSnapshotRevise(t *testing.T) {
 	checkSnapshotError := func(name string, cfg *schema.ReviseRoundConfig, want string) {
 		t.Helper()
 		plan.Rounds[0].Revise = cfg
-		_, err := jobs.validateAndSnapshotWith(context.Background(), plan, "", func(int) error { return nil })
+		_, err := jobs.validateAndSnapshotWith(context.Background(), user.ID, plan, "", func(int) error { return nil })
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: err=%v want substring %q", name, err, want)
 		}

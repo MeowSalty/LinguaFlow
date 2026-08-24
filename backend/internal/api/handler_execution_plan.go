@@ -50,7 +50,6 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		apiRC.Concurrency = t.Concurrency
 		translateCfg := TranslateRoundConfig{}
 		translateCfg.PromptTemplateId = &t.PromptTemplateID
-		translateCfg.ProfileId = &t.ProfileID
 		translateCfg.BatchSize = &t.BatchSize
 		translateCfg.MaxWordsPerBatch = &t.MaxWordsPerBatch
 		if t.FallbackShrink > 0 {
@@ -201,9 +200,10 @@ func float32Ptr(v float32) *float32 { return &v }
 // toExecutionPlanTemplateResponse 将 ent 实体转换为 API 响应。
 func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlanTemplate {
 	resp := ExecutionPlanTemplate{
-		Id:    t.ID,
-		Name:  t.Name,
-		Scope: ExecutionPlanTemplateScope(t.Scope),
+		Id:        t.ID,
+		Name:      t.Name,
+		Scope:     ExecutionPlanTemplateScope(t.Scope),
+		ProfileId: t.ProfileID,
 	}
 	if t.Description != "" {
 		resp.Description = &t.Description
@@ -282,9 +282,6 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			}
 			if t.PromptTemplateId != nil {
 				translateCfg.PromptTemplateID = *t.PromptTemplateId
-			}
-			if t.ProfileId != nil {
-				translateCfg.ProfileID = *t.ProfileId
 			}
 			if t.BatchSize != nil {
 				translateCfg.BatchSize = *t.BatchSize
@@ -501,6 +498,7 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 		Name:        req.Name,
 		Scope:       "user",
 		OwnerUserID: &userID,
+		ProfileID:   req.ProfileId,
 		RubyRetry:   parseRubyRetryConfig(req.RubyRetry),
 		Rounds:      toExecutionPlanRoundsAPI(req.Rounds),
 	}
@@ -508,7 +506,7 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 		input.Description = *req.Description
 	}
 
-	pt, err := h.executionPlans.Create(r.Context(), input)
+	pt, err := h.executionPlans.Create(r.Context(), userID, input)
 	if err != nil {
 		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
@@ -536,6 +534,10 @@ func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Reque
 	input := service.UpdateExecutionPlanTemplateInput{
 		Name:        req.Name,
 		Description: req.Description,
+	}
+	if req.ProfileId != nil {
+		pid := *req.ProfileId
+		input.ProfileID = &pid
 	}
 	if req.RubyRetry != nil {
 		rr := parseRubyRetryConfig(req.RubyRetry)

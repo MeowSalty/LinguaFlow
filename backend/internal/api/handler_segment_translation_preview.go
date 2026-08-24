@@ -163,7 +163,8 @@ func toSegmentTranslationPreviewResponse(result *service.PreviewOutput) SegmentT
 			backendName := snapshotRound.Backend.Name
 			var profileName, promptName *string
 			if snapshotRound.Translate != nil {
-				profileName = stringPtr(snapshotRound.Translate.Strategy.ProfileName)
+				// 策略引用位于计划级：展示的即计划策略名（原为首条翻译轮携带的同值快照）。
+				profileName = stringPtr(result.Snapshot.Strategy.ProfileName)
 				promptName = stringPtr(snapshotRound.Translate.Prompt.TemplateName)
 			}
 			response.Execution.Rounds = append(response.Execution.Rounds, struct {

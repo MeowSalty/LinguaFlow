@@ -51,10 +51,10 @@ func newQuickFixture(t *testing.T) (*QuickTranslateService, *ent.Client, int, *f
 	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
 	projects := NewProjectService(client, users)
 	backends := NewBackendService(client, users, nil)
-	executionPlans := NewExecutionPlanService(client, users)
+	profiles := NewExecutionProfileService(client, users)
+	executionPlans := NewExecutionPlanService(client, users, profiles)
 	promptTemplates := NewTranslationPromptTemplateService(client)
 	bootstrapTemplates := NewBootstrapPromptTemplateService(client)
-	profiles := NewExecutionProfileService(client)
 	jobs := NewJobService(client, projects, executionPlans, backends, promptTemplates, bootstrapTemplates, profiles, nil, nil)
 	audit := NewAuditService(client, users, projects)
 	runner := &fakeQuickRunner{}
@@ -87,20 +87,21 @@ func seedUserBackend(t *testing.T, client *ent.Client, userID int) int {
 }
 
 // seedTranslatePlan 直接经 ent 创建一个仅含单 translate 轮的用户级执行计划模板，
-// 引用内置提示词模板 (ID=-1) 与内置策略 (ID=-1)。绕过 validateExecutionRounds。
+// 引用内置提示词模板 (ID=-1)，策略引用走计划级 profile_id（内置策略 ID=-1）。
+// 绕过 validateExecutionRounds。
 func seedTranslatePlan(t *testing.T, client *ent.Client, userID, backendID int) int {
 	t.Helper()
 	plan, err := client.ExecutionPlanTemplate.Create().
 		SetName("p").
 		SetScope("user").
 		SetOwnerUserID(userID).
+		SetProfileID(-1).
 		SetRubyRetry(schema.ExecutionPlanRubyRetryConfig{}).
 		SetRounds([]schema.ExecutionRoundConfig{{
 			Mode:      "translate",
 			BackendID: backendID,
 			Translate: &schema.TranslateRoundConfig{
 				PromptTemplateID: -1,
-				ProfileID:        -1,
 				BatchSize:        10,
 				MaxWordsPerBatch: 500,
 				Concurrency:      1,
