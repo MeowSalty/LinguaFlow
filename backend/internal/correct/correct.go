@@ -7,12 +7,13 @@ import "github.com/MeowSalty/LinguaFlow/backend/internal/model"
 
 // Rule name whitelist (single source for validation + OpenAPI enum).
 const (
-	RulePunctuationMissingWrap = "punctuation_missing_wrap"
+	RulePunctuationMissingWrap  = "punctuation_missing_wrap"
+	RulePunctuationWrapLossWrap = "punctuation_wrap_loss_wrap"
 )
 
 // AllRuleNames returns every built-in correct rule name, in canonical order.
 func AllRuleNames() []string {
-	return []string{RulePunctuationMissingWrap}
+	return []string{RulePunctuationMissingWrap, RulePunctuationWrapLossWrap}
 }
 
 // CorrectionResult is the outcome of applying one Rule to a segment.
@@ -56,7 +57,8 @@ type RuleConfig struct {
 func New(cfg Config) *Engine {
 	e := &Engine{}
 	register := map[string]func() Rule{
-		RulePunctuationMissingWrap: func() Rule { return &PunctuationMissingWrapRule{} },
+		RulePunctuationMissingWrap:  func() Rule { return &PunctuationMissingWrapRule{} },
+		RulePunctuationWrapLossWrap: func() Rule { return &PunctuationWrapLossWrapRule{} },
 	}
 	enabledByName := make(map[string]bool, len(cfg.Rules))
 	for _, rc := range cfg.Rules {
