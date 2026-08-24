@@ -2778,6 +2778,8 @@ type ExecutionPlanTemplateMutation struct {
 	name              *string
 	description       *string
 	scope             *string
+	profile_id        *int
+	addprofile_id     *int
 	ruby_retry        *schema.ExecutionPlanRubyRetryConfig
 	rounds            *[]schema.ExecutionRoundConfig
 	appendrounds      []schema.ExecutionRoundConfig
@@ -3167,6 +3169,62 @@ func (m *ExecutionPlanTemplateMutation) ResetOwnerOrgID() {
 	delete(m.clearedFields, executionplantemplate.FieldOwnerOrgID)
 }
 
+// SetProfileID sets the "profile_id" field.
+func (m *ExecutionPlanTemplateMutation) SetProfileID(i int) {
+	m.profile_id = &i
+	m.addprofile_id = nil
+}
+
+// ProfileID returns the value of the "profile_id" field in the mutation.
+func (m *ExecutionPlanTemplateMutation) ProfileID() (r int, exists bool) {
+	v := m.profile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProfileID returns the old "profile_id" field's value of the ExecutionPlanTemplate entity.
+// If the ExecutionPlanTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExecutionPlanTemplateMutation) OldProfileID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProfileID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProfileID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProfileID: %w", err)
+	}
+	return oldValue.ProfileID, nil
+}
+
+// AddProfileID adds i to the "profile_id" field.
+func (m *ExecutionPlanTemplateMutation) AddProfileID(i int) {
+	if m.addprofile_id != nil {
+		*m.addprofile_id += i
+	} else {
+		m.addprofile_id = &i
+	}
+}
+
+// AddedProfileID returns the value that was added to the "profile_id" field in this mutation.
+func (m *ExecutionPlanTemplateMutation) AddedProfileID() (r int, exists bool) {
+	v := m.addprofile_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProfileID resets all changes to the "profile_id" field.
+func (m *ExecutionPlanTemplateMutation) ResetProfileID() {
+	m.profile_id = nil
+	m.addprofile_id = nil
+}
+
 // SetRubyRetry sets the "ruby_retry" field.
 func (m *ExecutionPlanTemplateMutation) SetRubyRetry(sprrc schema.ExecutionPlanRubyRetryConfig) {
 	m.ruby_retry = &sprrc
@@ -3355,7 +3413,7 @@ func (m *ExecutionPlanTemplateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ExecutionPlanTemplateMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, executionplantemplate.FieldCreatedAt)
 	}
@@ -3376,6 +3434,9 @@ func (m *ExecutionPlanTemplateMutation) Fields() []string {
 	}
 	if m.owner_org != nil {
 		fields = append(fields, executionplantemplate.FieldOwnerOrgID)
+	}
+	if m.profile_id != nil {
+		fields = append(fields, executionplantemplate.FieldProfileID)
 	}
 	if m.ruby_retry != nil {
 		fields = append(fields, executionplantemplate.FieldRubyRetry)
@@ -3405,6 +3466,8 @@ func (m *ExecutionPlanTemplateMutation) Field(name string) (ent.Value, bool) {
 		return m.OwnerUserID()
 	case executionplantemplate.FieldOwnerOrgID:
 		return m.OwnerOrgID()
+	case executionplantemplate.FieldProfileID:
+		return m.ProfileID()
 	case executionplantemplate.FieldRubyRetry:
 		return m.RubyRetry()
 	case executionplantemplate.FieldRounds:
@@ -3432,6 +3495,8 @@ func (m *ExecutionPlanTemplateMutation) OldField(ctx context.Context, name strin
 		return m.OldOwnerUserID(ctx)
 	case executionplantemplate.FieldOwnerOrgID:
 		return m.OldOwnerOrgID(ctx)
+	case executionplantemplate.FieldProfileID:
+		return m.OldProfileID(ctx)
 	case executionplantemplate.FieldRubyRetry:
 		return m.OldRubyRetry(ctx)
 	case executionplantemplate.FieldRounds:
@@ -3494,6 +3559,13 @@ func (m *ExecutionPlanTemplateMutation) SetField(name string, value ent.Value) e
 		}
 		m.SetOwnerOrgID(v)
 		return nil
+	case executionplantemplate.FieldProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProfileID(v)
+		return nil
 	case executionplantemplate.FieldRubyRetry:
 		v, ok := value.(schema.ExecutionPlanRubyRetryConfig)
 		if !ok {
@@ -3516,6 +3588,9 @@ func (m *ExecutionPlanTemplateMutation) SetField(name string, value ent.Value) e
 // this mutation.
 func (m *ExecutionPlanTemplateMutation) AddedFields() []string {
 	var fields []string
+	if m.addprofile_id != nil {
+		fields = append(fields, executionplantemplate.FieldProfileID)
+	}
 	return fields
 }
 
@@ -3524,6 +3599,8 @@ func (m *ExecutionPlanTemplateMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *ExecutionPlanTemplateMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case executionplantemplate.FieldProfileID:
+		return m.AddedProfileID()
 	}
 	return nil, false
 }
@@ -3533,6 +3610,13 @@ func (m *ExecutionPlanTemplateMutation) AddedField(name string) (ent.Value, bool
 // type.
 func (m *ExecutionPlanTemplateMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case executionplantemplate.FieldProfileID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProfileID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown ExecutionPlanTemplate numeric field %s", name)
 }
@@ -3601,6 +3685,9 @@ func (m *ExecutionPlanTemplateMutation) ResetField(name string) error {
 		return nil
 	case executionplantemplate.FieldOwnerOrgID:
 		m.ResetOwnerOrgID()
+		return nil
+	case executionplantemplate.FieldProfileID:
+		m.ResetProfileID()
 		return nil
 	case executionplantemplate.FieldRubyRetry:
 		m.ResetRubyRetry()

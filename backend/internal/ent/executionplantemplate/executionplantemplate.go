@@ -28,6 +28,8 @@ const (
 	FieldOwnerUserID = "owner_user_id"
 	// FieldOwnerOrgID holds the string denoting the owner_org_id field in the database.
 	FieldOwnerOrgID = "owner_org_id"
+	// FieldProfileID holds the string denoting the profile_id field in the database.
+	FieldProfileID = "profile_id"
 	// FieldRubyRetry holds the string denoting the ruby_retry field in the database.
 	FieldRubyRetry = "ruby_retry"
 	// FieldRounds holds the string denoting the rounds field in the database.
@@ -64,6 +66,7 @@ var Columns = []string{
 	FieldScope,
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
+	FieldProfileID,
 	FieldRubyRetry,
 	FieldRounds,
 }
@@ -95,6 +98,8 @@ var (
 	OwnerUserIDValidator func(int) error
 	// OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	OwnerOrgIDValidator func(int) error
+	// DefaultProfileID holds the default value on creation for the "profile_id" field.
+	DefaultProfileID int
 )
 
 // OrderOption defines the ordering options for the ExecutionPlanTemplate queries.
@@ -138,6 +143,11 @@ func ByOwnerUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByOwnerOrgID orders the results by the owner_org_id field.
 func ByOwnerOrgID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOwnerOrgID, opts...).ToFunc()
+}
+
+// ByProfileID orders the results by the profile_id field.
+func ByProfileID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProfileID, opts...).ToFunc()
 }
 
 // ByOwnerUserField orders the results by owner_user field.

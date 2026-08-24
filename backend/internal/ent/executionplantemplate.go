@@ -35,9 +35,11 @@ type ExecutionPlanTemplate struct {
 	OwnerUserID *int `json:"owner_user_id,omitempty"`
 	// OwnerOrgID holds the value of the "owner_org_id" field.
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
+	// 计划级策略引用（ExecutionProfile），为全管道供七项行为预设
+	ProfileID int `json:"profile_id,omitempty"`
 	// 注音对齐重试配置
 	RubyRetry schema.ExecutionPlanRubyRetryConfig `json:"ruby_retry,omitempty"`
-	// 轮次配置列表，每轮引用后端+提示词+策略
+	// 轮次配置列表，每轮引用后端+提示词
 	Rounds []schema.ExecutionRoundConfig `json:"rounds,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the ExecutionPlanTemplateQuery when eager-loading is set.
@@ -85,7 +87,7 @@ func (*ExecutionPlanTemplate) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case executionplantemplate.FieldRubyRetry, executionplantemplate.FieldRounds:
 			values[i] = new([]byte)
-		case executionplantemplate.FieldID, executionplantemplate.FieldOwnerUserID, executionplantemplate.FieldOwnerOrgID:
+		case executionplantemplate.FieldID, executionplantemplate.FieldOwnerUserID, executionplantemplate.FieldOwnerOrgID, executionplantemplate.FieldProfileID:
 			values[i] = new(sql.NullInt64)
 		case executionplantemplate.FieldName, executionplantemplate.FieldDescription, executionplantemplate.FieldScope:
 			values[i] = new(sql.NullString)
@@ -155,6 +157,12 @@ func (_m *ExecutionPlanTemplate) assignValues(columns []string, values []any) er
 			} else if value.Valid {
 				_m.OwnerOrgID = new(int)
 				*_m.OwnerOrgID = int(value.Int64)
+			}
+		case executionplantemplate.FieldProfileID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field profile_id", values[i])
+			} else if value.Valid {
+				_m.ProfileID = int(value.Int64)
 			}
 		case executionplantemplate.FieldRubyRetry:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -242,6 +250,9 @@ func (_m *ExecutionPlanTemplate) String() string {
 		builder.WriteString("owner_org_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("profile_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProfileID))
 	builder.WriteString(", ")
 	builder.WriteString("ruby_retry=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RubyRetry))
