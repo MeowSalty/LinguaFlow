@@ -65,6 +65,9 @@ type Round struct {
 	SegmentScope       string   // "all"(默认) | "with_issues" | "with_issue_codes"
 	IssueCodes         []string // 仅 with_issue_codes 生效
 
+	// LLM 修订轮次专用字段
+	ReviseRenderer *prompt.ReviseRenderer
+
 	// 本地改写轮次专用字段
 	CorrectRules []correct.RuleConfig
 }
@@ -162,6 +165,14 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 				IssueCodes:        r.IssueCodes,
 			}
 
+		case pipeline.RoundModeRevise:
+			rc.Revise = &ReviseRoundConfig{
+				Renderer:          r.ReviseRenderer,
+				ResponseMode:      r.ResponseMode,
+				IssueCodes:        r.IssueCodes,
+				MaxBatchIndexSpan: r.MaxBatchIndexSpan,
+			}
+
 		case pipeline.RoundModeCorrect:
 			rc.Correct = &CorrectRoundConfig{
 				Rules: r.CorrectRules,
@@ -234,6 +245,9 @@ func buildSinglePipelineRound(
 	}
 	if rc.SemanticQA != nil {
 		return buildSemanticQAPipelineRound(rc, defaultRepair, logger, reporter)
+	}
+	if rc.Revise != nil {
+		return buildRevisePipelineRound(rc, defaultRepair, logger, reporter)
 	}
 	if rc.Correct != nil {
 		return buildCorrectPipelineRound(rc, logger, reporter)
@@ -436,6 +450,43 @@ func buildSemanticQAPipelineRound(
 	}
 
 	// NOTE: semantic_qa 不接缩批（BuildBatches 不读 poolIndex）；Shrink 留零值，RunRound 兜底 1.0。
+	// 若未来需要缩批，在此补 Shrink: rc.FallbackShrink（=require schema/OpenAPI/校验全部接通）。
+	return pipeline.Round{
+		Concurrency: rc.Concurrency,
+		Retry:       rc.Retry,
+		Context:     rc.Context,
+		Handler:     handler,
+	}, nil
+}
+
+// buildRevisePipelineRound 构建 LLM 修订轮次。
+func buildRevisePipelineRound(
+	rc RoundConfig,
+	defaultRepair repair.Options,
+	logger *slog.Logger,
+	reporter progress.Reporter,
+) (pipeline.Round, error) {
+	r := rc.Revise
+	if r == nil {
+		r = &ReviseRoundConfig{}
+	}
+
+	handler := &pipeline.ReviseHandler{
+		Backend:           rc.Backend,
+		RoundIndex:        rc.RoundIndex,
+		Renderer:          r.Renderer,
+		BatchSize:         rc.BatchSize,
+		MaxWordsPerBatch:  rc.MaxWordsPerBatch,
+		MaxBatchIndexSpan: r.MaxBatchIndexSpan,
+		Retry:             rc.Retry,
+		ResponseMode:      r.ResponseMode,
+		Repair:            defaultRepair,
+		IssueCodes:        r.IssueCodes,
+		Reporter:          reporter,
+		Logger:            logger,
+	}
+
+	// NOTE: revise 不接缩批（BuildBatches 不读 poolIndex）；Shrink 留零值，RunRound 兜底 1.0。
 	// 若未来需要缩批，在此补 Shrink: rc.FallbackShrink（=require schema/OpenAPI/校验全部接通）。
 	return pipeline.Round{
 		Concurrency: rc.Concurrency,

@@ -22,6 +22,11 @@ var (
 const (
 	tokenIssuer = "linguaflow-preview"
 	tokenType   = "preview-apply"
+
+	// KindTranslate keeps the historical empty kind for translation previews.
+	KindTranslate = ""
+	// KindRevision marks a token issued by the revision preview flow.
+	KindRevision = "fix"
 )
 
 // ApplyClaims are the JWT claims embedded in a preview apply token.
@@ -30,6 +35,11 @@ type ApplyClaims struct {
 
 	// Type is always "preview-apply" for domain isolation.
 	Type string `json:"type"`
+
+	// Kind distinguishes the preview purpose for audit routing. Empty means
+	// "translate" translation preview; "fix" means revision preview. It does
+	// not change token verification or application semantics.
+	Kind string `json:"kd,omitempty"`
 
 	// ActorUserID is the user who requested the preview.
 	ActorUserID int `json:"uid"`
@@ -58,6 +68,11 @@ type ApplyClaims struct {
 
 	// FinalIssues are the quality issues determined by the preview run.
 	FinalIssues []qa.QualityIssue `json:"fi,omitempty"`
+
+	// ResolvedCodes 是修订预览声明已修复的 issue code 集合（仅 KindRevision 令牌
+	// 携带；翻译预览为空，维持整体替换语义）。用户 apply 前改写文本时，仍按此
+	// 集合从段落既有 issue 中剔除 pending 项。旧令牌无此字段时为空，退化为旧行为。
+	ResolvedCodes []string `json:"rc,omitempty"`
 
 	// QAConfig encodes the deterministic QA configuration used during preview
 	// so that apply can re-run deterministic QA if the user modified the target.

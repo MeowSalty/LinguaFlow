@@ -231,6 +231,92 @@ func TestSemanticQACASSkipsStaleTarget(t *testing.T) {
 	}
 }
 
+func TestPersistReviseSegmentResult_CASAndReconcile(t *testing.T) {
+	client := newSemanticQATestClient(t)
+	ctx := context.Background()
+	decidedBy := 42
+	row, err := client.Segment.Create().SetSegmentIndex(301).SetSourceText("source").SetTargetText("旧译文").SetStatus(segment.StatusTranslated).SetQualityIssues([]qa.QualityIssue{
+		// 确定性 dismissed（无 Span，指纹与 fresh 相同）：裁决应被继承。
+		{Code: qa.CheckUntranslated, Message: "old", Disposition: qa.DispositionDismissed, DecidedBy: &decidedBy},
+		// 确定性 pending 且 fresh 未检出：随重算消失。
+		{Code: qa.CheckWidthMix, Message: "width", Disposition: qa.DispositionPending},
+		// 范围外语义 pending：新契约下由 ReviseFinalIssues 显式保留，
+		// 不再被 ReconcileIssues 副作用清掉。
+		{Code: qa.IssueCodeGrammar, Message: "语法", Disposition: qa.DispositionPending},
+	}).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := []qa.QualityIssue{{Code: qa.CheckUntranslated, Message: "fresh", Severity: qa.SeverityError}}
+	targetedCodes := []string{qa.IssueCodeMistranslation}
+	updated, err := persistReviseSegmentResult(ctx, client, row, "旧译文", "新译文", fresh, targetedCodes, true)
+	if err != nil || updated != 1 {
+		t.Fatalf("updated=%d err=%v want one update", updated, err)
+	}
+	after, err := client.Segment.Get(ctx, row.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *after.TargetText != "新译文" || len(after.QualityIssues) != 2 {
+		t.Fatalf("after=%+v issues=%#v", *after.TargetText, after.QualityIssues)
+	}
+	if after.QualityIssues[0].Code != qa.CheckUntranslated || !after.QualityIssues[0].Dismissed() ||
+		after.QualityIssues[0].DecidedBy == nil || *after.QualityIssues[0].DecidedBy != decidedBy ||
+		after.QualityIssues[0].Message != "fresh" {
+		t.Fatalf("reconciled deterministic issue should inherit dismissed verdict: %#v", after.QualityIssues[0])
+	}
+	if after.QualityIssues[1].Code != qa.IssueCodeGrammar || !after.QualityIssues[1].IsPending() {
+		t.Fatalf("out-of-scope semantic pending must survive: %#v", after.QualityIssues[1])
+	}
+
+	updated, err = persistReviseSegmentResult(ctx, client, after, "旧译文", "再次改写", nil, targetedCodes, true)
+	if err != nil || updated != 0 {
+		t.Fatalf("stale CAS updated=%d err=%v want zero", updated, err)
+	}
+}
+
+func TestPersistReviseSegmentResult_QANotRunRemovesTargetedPending(t *testing.T) {
+	client := newSemanticQATestClient(t)
+	ctx := context.Background()
+	row, err := client.Segment.Create().SetSegmentIndex(303).SetSourceText("source").SetTargetText("旧译文").SetStatus(segment.StatusTranslated).SetQualityIssues([]qa.QualityIssue{
+		{Code: qa.IssueCodeCalque, Message: "借译", Disposition: qa.DispositionPending},  // targeted pending → 移除
+		{Code: qa.IssueCodeGrammar, Message: "语法", Disposition: qa.DispositionPending}, // 范围外 pending → 保留
+	}).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 计划未启用确定性 QA（qaRan=false，fresh=nil）：按声明式契约移除 targeted
+	// pending，其余（范围外 pending / dismissed）原样保留；确定性 issue 不重算。
+	updated, err := persistReviseSegmentResult(ctx, client, row, "旧译文", "新译文", nil, []string{qa.IssueCodeCalque}, false)
+	if err != nil || updated != 1 {
+		t.Fatalf("updated=%d err=%v want one update", updated, err)
+	}
+	after, _ := client.Segment.Get(ctx, row.ID)
+	if *after.TargetText != "新译文" || len(after.QualityIssues) != 1 {
+		t.Fatalf("after=%+v issues=%#v want only out-of-scope issue", *after.TargetText, after.QualityIssues)
+	}
+	if after.QualityIssues[0].Code != qa.IssueCodeGrammar || !after.QualityIssues[0].IsPending() {
+		t.Fatalf("issues=%#v want preserved out-of-scope pending", after.QualityIssues)
+	}
+}
+
+func TestPersistReviseSegmentResultSameTextWritesIssues(t *testing.T) {
+	client := newSemanticQATestClient(t)
+	ctx := context.Background()
+	row, err := client.Segment.Create().SetSegmentIndex(302).SetSourceText("source").SetTargetText("同译文").SetStatus(segment.StatusEdited).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := persistReviseSegmentResult(ctx, client, row, "同译文", "同译文", []qa.QualityIssue{{Code: qa.IssueCodeCalque, Severity: qa.SeverityWarning}}, nil, true)
+	if err != nil || updated != 1 {
+		t.Fatalf("updated=%d err=%v want one update", updated, err)
+	}
+	after, _ := client.Segment.Get(ctx, row.ID)
+	if len(after.QualityIssues) != 1 {
+		t.Fatalf("issues=%#v want persisted", after.QualityIssues)
+	}
+}
+
 // newSemanticQATestClient 创建内存 SQLite ent 客户端并自动迁移。
 func newSemanticQATestClient(t *testing.T) *ent.Client {
 	t.Helper()

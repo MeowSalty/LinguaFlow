@@ -16,8 +16,9 @@ import (
 // would not clear the issue, the change is reverted and the original issues kept.
 //
 // 契约：correct 规则只能由 pending issue 触发，dismissed issue 对规则不可见
-// （规则实现必须过滤 dismissed；幂等检查豁免已裁决指纹；filterOutCodes 保留
-// dismissed 记录）。未来新增规则必须遵守此约束，不得以 dismissed 为触发依据。
+// （规则实现必须过滤 dismissed；幂等检查豁免已裁决指纹；
+// qa.FilterOutPendingByCodes 保留 dismissed 记录）。未来新增规则必须遵守此约束，
+// 不得以 dismissed 为触发依据。
 type CorrectHandler struct {
 	Rules       *correct.Engine
 	Idempotency *qa.Engine // rebuilt once for the union of rules' ResolvedCodes
@@ -159,7 +160,7 @@ func (h *CorrectHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			continue
 		}
 		// Apply: drop resolved codes from seg.Issues.
-		seg.Issues = filterOutCodes(seg.Issues, resolvedSet)
+		seg.Issues = qa.FilterOutPendingByCodes(seg.Issues, resolvedSet)
 		logger.Info("correct applied", "op", res.Op, "segment_id", seg.ID)
 		callbackSegs = append(callbackSegs, TranslatedSegment{
 			Index:      idx,
@@ -180,18 +181,4 @@ func codeSet(codes []string) map[string]struct{} {
 		m[c] = struct{}{}
 	}
 	return m
-}
-
-// filterOutCodes 移除 resolved code 中仍为 pending 的 issue，保留 dismissed 记录。
-// dismissed 的模式可能仍存在于新文本且为用户有意为之，删除会让未来 QA 重跑时
-// 以 pending 复活骚扰用户。
-func filterOutCodes(issues []qa.QualityIssue, drop map[string]struct{}) []qa.QualityIssue {
-	out := make([]qa.QualityIssue, 0, len(issues))
-	for _, iss := range issues {
-		if _, ok := drop[iss.Code]; ok && !iss.Dismissed() {
-			continue // 规则已解决且未 dismissed 的，移除
-		}
-		out = append(out, iss)
-	}
-	return out
 }

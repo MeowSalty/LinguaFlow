@@ -45,6 +45,7 @@ type Server struct {
 	executionProfileSvc          *service.ExecutionProfileService
 	jobSvc                       *service.JobService
 	previewSvc                   *service.PreviewService
+	revisionPreviewSvc           *service.RevisionPreviewService
 	quickTranslateSvc            *service.QuickTranslateService
 	executionPlanSvc             *service.ExecutionPlanService
 	reviewSvc                    *service.ReviewService
@@ -147,7 +148,9 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	s.glossaryPruneSvc = service.NewGlossaryPruneService(client, s.projectSvc, s.backendSvc, s.glossarySvc, s.prunePromptTemplateSvc, limiterPool, logger)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
 	previewRunner := worker.NewPreviewRunner(logger, client, limiterPool)
-	s.previewSvc = service.NewPreviewService(
+	revisionRunner := worker.NewRevisionPreviewRunner(logger, client, limiterPool)
+	revisionSemaphore := service.NewPreviewSemaphore(cfg.Preview.MaxConcurrency)
+	s.previewSvc = service.NewPreviewServiceWithSemaphore(
 		logger,
 		client,
 		s.projectSvc,
@@ -158,8 +161,20 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		cfg.Preview.ApplyTokenTTL,
 		cfg.Preview.MaxConcurrency,
 		cfg.Preview.Timeout,
+		revisionSemaphore,
 	)
-
+	s.revisionPreviewSvc = service.NewRevisionPreviewService(
+		logger,
+		client,
+		s.projectSvc,
+		s.jobSvc,
+		revisionRunner,
+		cfg.JWTSecret,
+		cfg.Preview.ApplyTokenTTL,
+		cfg.Preview.MaxConcurrency,
+		cfg.Preview.Timeout,
+		revisionSemaphore,
+	)
 	quickTranslateRunner := worker.NewQuickTranslateRunner(logger, client, limiterPool)
 	s.quickTranslateSvc = service.NewQuickTranslateService(
 		logger,

@@ -124,6 +124,8 @@ func (e *Engine) Close() error {
 			b = ah.Backend
 		} else if sh, ok := r.Handler.(*pipeline.SemanticQAHandler); ok {
 			b = sh.Backend
+		} else if rh, ok := r.Handler.(*pipeline.ReviseHandler); ok {
+			b = rh.Backend
 		} else if _, ok := r.Handler.(*pipeline.CorrectHandler); ok {
 			// correct 是纯本地轮，无 backend。
 		}

@@ -150,7 +150,27 @@ func ParseSemanticQAByMode(text string, isTextMode bool, opt Options) ([]prompt.
 	return TryRepairSemanticQA(text, opt)
 }
 
-// TryRepairAdjudication 解析 {"verdicts":[...]} 并应用完整修复链。
+// TryRepairRevise 解析 {"revisions":[...]} 并应用完整修复链。
+// 返回 (revisions, 修复算子链，error)；revisions 已经过 trim、空字段过滤与重复
+// id 去重（保留首次出现）。修复层不校验 id 是否属于请求批次，越界 id 由调用方丢弃。
+func TryRepairRevise(text string, opt Options) ([]prompt.ReviseRevision, []string, error) {
+	return tryRepairKeyed(text, "revisions", opt, prompt.NormalizeReviseRevisions)
+}
+
+// ParseReviseByMode 按 response mode 解析修订响应（带修复）。
+// text 模式优先纯文本 [revisions] 协议，未识别时 fallback JSON（模型常仍吐 JSON）。
+// 返回 (revisions, 修复算子链, error)；text 路径修复算子链为空。
+func ParseReviseByMode(text string, isTextMode bool, opt Options) ([]prompt.ReviseRevision, []string, error) {
+	if !isTextMode {
+		return TryRepairRevise(text, opt)
+	}
+	revisions, recognized := prompt.ParseReviseTextRevisions(text)
+	if recognized {
+		return revisions, nil, nil
+	}
+	return TryRepairRevise(text, opt)
+}
+
 // 返回 (verdicts, 修复算子链, error)；verdicts 已经过 trim 与字段过滤（丢弃缺
 // id/issue_code 的条目，语义与 prompt.ParseAdjudicationTextVerdicts 一致）。
 func TryRepairAdjudication(text string, opt Options) ([]prompt.AdjudicationVerdict, []string, error) {

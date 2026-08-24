@@ -446,7 +446,8 @@ projectResourceSegmentTranslationPreviewApply:
     operationId: ApplyResourceSegmentTranslationPreview
     summary: 应用单段翻译预览结果
     description: |
-      使用预览返回的 apply_token 冲突安全地写回译文。apply_token 无状态，签名自包含
+      使用预览返回的 apply_token 冲突安全地写回译文。接受翻译预览与修订预览两种令牌
+      （应用语义一致，按令牌内 kind 声明区分审计事件）。apply_token 无状态，签名自包含
       预览时的 source/target 基线、最终 issues 与确定性 QA 配置。target 与预览一致时
       应用签名 issues；target 被修改时仅基于固定 QA 配置重新运行确定性 QA，
       不再调用 LLM。基线（source/target/status）已变化返回 409，token 过期返回 410。
@@ -474,6 +475,51 @@ projectResourceSegmentTranslationPreviewApply:
               $ref: '../base.yaml#/components/schemas/Problem'
       '410':
         description: apply_token 已过期或无效
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegmentRevisionPreview:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+    - $ref: '../base.yaml#/components/parameters/SegmentId'
+  post:
+    operationId: PreviewResourceSegmentRevision
+    summary: 单段修订预览
+    description: |
+      同步执行一次 LLM 修订：以段落上 pending 的语义 issue（误译、仿译、漏译等）为修复
+      目标，对现有译文做最小改动定点修订，不创建 Job、不写回 Segment。要求段落
+      translated/edited 且译文非空、过滤后存在至少一条 pending 语义 issue，否则 409。
+      执行计划须包含 revise 轮或至少一个 translate 轮（后者时以翻译轮后端合成默认修订轮）。
+      修订完成文本后在内存中重跑确定性 QA 作为最终 issues。模型执行已启动后的成功、
+      部分成功、失败统一返回 HTTP 200 并通过 status 区分；并发限制等仍使用标准错误码。
+      唯一持久化副作用是记录真实预览用量。存在可应用修订时返回短期签名 apply_token，
+      可用 translation-preview/apply 接口冲突安全地写回（令牌内 kind=fix）。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/SegmentRevisionPreviewRequest'
+    responses:
+      '200':
+        description: 修订预览结果（可能为 success / partial / failed）
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/SegmentRevisionPreviewResponse'
+      '429':
+        description: 预览并发已满
+        headers:
+          Retry-After:
+            schema:
+              type: integer
         content:
           application/json:
             schema:

@@ -10,7 +10,7 @@ import (
 // 新增 handler 模式时若漏改 crossRoundResolvedModes，本测试会失败。
 func TestNewResolvedByMode_ContainsAllNonTranslateModes(t *testing.T) {
 	m := NewResolvedByMode()
-	wantModes := []string{"extract", "adjudicate", "semantic_qa", "correct"}
+	wantModes := []string{"extract", "adjudicate", "revise", "semantic_qa", "correct"}
 	if len(m) != len(wantModes) {
 		t.Fatalf("mode count=%d want %d (modes=%v)", len(m), len(wantModes), m)
 	}

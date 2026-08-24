@@ -385,6 +385,53 @@ func DedupIssues(issues []QualityIssue) []QualityIssue {
 	return out
 }
 
+// FilterOutPendingByCodes 移除 codes 命中且仍为 pending 的 issue，保留 dismissed
+// 记录与范围外 issue。dismissed 的模式可能仍存在于新文本且为用户有意为之，
+// 删除会让未来 QA 重跑时以 pending 复活骚扰用户。
+// 自 pipeline/correct_handler.go 的 filterOutCodes 迁移而来，供 correct 与
+// revise 两条修复轮共用，单一实现避免漂移。
+func FilterOutPendingByCodes(issues []QualityIssue, drop map[string]struct{}) []QualityIssue {
+	out := make([]QualityIssue, 0, len(issues))
+	for _, iss := range issues {
+		if _, ok := drop[iss.Code]; ok && !iss.Dismissed() {
+			continue // 修复轮已声明解决且未 dismissed 的，移除
+		}
+		out = append(out, iss)
+	}
+	return out
+}
+
+// ReviseFinalIssues 组合修订轮写回的最终 issue 集合。
+//
+// 契约（与 correct 轮一致："声明修什么，就移除什么，其余判决不动"）：
+//   - targetedCodes 范围内且仍 pending 的 issue 视为本轮已修复，移除；
+//   - 范围外 pending 与 dismissed 记录一律保留；
+//   - qaRan 时确定性 issue 以 fresh 重算（ReconcileIssues 按指纹继承旧裁决），
+//     existing 中范围外的语义 issue 不由确定性 QA 维护，保留；
+//   - qaRan=false 时不重算，existing 中非目标 issue 原样保留。
+//
+// 修订是声明性修复（无法像 correct 轮那样用幂等检查自证）：若 LLM 实际未修复，
+// 仅当后续 semantic_qa 轮会重扫该段（scope=all；with_issues/with_issue_codes
+// 作用域会跳过已无 issue 的段落）时才经 mergeSemanticQAIssues 重新检出；否则与
+// 手动编辑/重译清除旧语义 issue 的既有语义一致——译文已变更，旧 issue 视为失效。
+func ReviseFinalIssues(existing, fresh []QualityIssue, targetedCodes []string, qaRan bool) []QualityIssue {
+	drop := make(map[string]struct{}, len(targetedCodes))
+	for _, code := range targetedCodes {
+		drop[code] = struct{}{}
+	}
+	kept := FilterOutPendingByCodes(existing, drop)
+	if !qaRan {
+		return kept
+	}
+	out := ReconcileIssues(fresh, kept)
+	for _, iss := range kept {
+		if IsSemanticQACode(iss.Code) {
+			out = append(out, iss)
+		}
+	}
+	return out
+}
+
 // LocateSpan 在 target 中定位 matchedText 的首次出现，返回带偏移的 Span。
 // 定位失败时仍返回仅含 MatchedText 的 Span（偏移为 nil）。
 func LocateSpan(target, matchedText string) *Span {

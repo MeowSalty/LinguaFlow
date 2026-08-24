@@ -21,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
 
@@ -147,12 +148,13 @@ func NormalizeRubyRetryAttempts(n int) int {
 
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
-	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa" | "correct"
+	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa" | "revise" | "correct"
 	Backend    BackendSnapshot             `json:"backend"`
 	Translate  *JobTranslateRoundSnapshot  `json:"translate,omitempty"`
 	Extract    *JobExtractRoundSnapshot    `json:"extract,omitempty"`
 	Adjudicate *JobAdjudicateRoundSnapshot `json:"adjudicate,omitempty"`
 	SemanticQA *JobSemanticQARoundSnapshot `json:"semantic_qa,omitempty"`
+	Revise     *JobReviseRoundSnapshot     `json:"revise,omitempty"`
 	Correct    *JobCorrectRoundSnapshot    `json:"correct,omitempty"`
 }
 
@@ -204,6 +206,18 @@ type JobSemanticQARoundSnapshot struct {
 	Retry            schema.RetryConfig `json:"retry"`
 }
 
+// JobReviseRoundSnapshot LLM 修订轮次快照（无 prompt 字段，内置不可见）。
+// NOTE: 无 FallbackShrink 字段——revise 不需要缩批（仅 translate 实现）。
+// 若未来需要，在此结构体加 FallbackShrink float64，并在 snapshotReviseRound 赋值。
+type JobReviseRoundSnapshot struct {
+	BatchSize        int                `json:"batch_size"`
+	MaxWordsPerBatch int                `json:"max_words_per_batch"`
+	Concurrency      int                `json:"concurrency"`
+	SegmentScope     string             `json:"segment_scope,omitempty"` // 物化后的 scope（空 → "with_issues"）
+	IssueCodes       []string           `json:"issue_codes,omitempty"`   // with_issues 为空时物化为完整语义白名单
+	Retry            schema.RetryConfig `json:"retry"`
+}
+
 // JobCorrectRoundSnapshot 本地改写轮次快照（纯本地、不调 LLM，无 prompt/backend 字段）。
 // NOTE: 无 FallbackShrink — correct 不接缩批（与 extract/adjudicate/semantic_qa 一致）。
 // NOTE: 无 Retry — schema 层 CorrectRoundConfig 无 Retry（纯本地、无外部 I/O、无重试语义）。
@@ -227,6 +241,28 @@ func snapshotCorrectRound(c *schema.CorrectRoundConfig) *JobCorrectRoundSnapshot
 	return &JobCorrectRoundSnapshot{
 		Rules:       rules,
 		Concurrency: c.Concurrency,
+	}
+}
+
+func snapshotReviseRound(r *schema.ReviseRoundConfig) *JobReviseRoundSnapshot {
+	scope := r.SegmentScope
+	if scope == "" {
+		scope = "with_issues"
+	}
+	issueCodes := append([]string(nil), r.IssueCodes...)
+	if scope == "with_issues" {
+		// 规范约定 issue_codes 仅 with_issue_codes 生效；with_issues 一律物化为
+		// 完整语义白名单。执行链（ReviseHandler）只有 codes 维度、无 scope 维度，
+		// 若保留用户误填的子集会被当作过滤条件，漏掉其余 pending 语义 issue。
+		issueCodes = append([]string(nil), qa.SemanticQACodes()...)
+	}
+	return &JobReviseRoundSnapshot{
+		BatchSize:        r.BatchSize,
+		MaxWordsPerBatch: r.MaxWordsPerBatch,
+		Concurrency:      r.Concurrency,
+		SegmentScope:     scope,
+		IssueCodes:       issueCodes,
+		Retry:            r.Retry,
 	}
 }
 
@@ -542,6 +578,32 @@ func (s *JobService) validateAndSnapshotWith(
 				Mode:       "semantic_qa",
 				Backend:    *backendSnap,
 				SemanticQA: snapshotSemanticQARound(round.SemanticQA),
+			})
+
+		case "revise":
+			if round.Revise == nil {
+				return nil, fmt.Errorf("rounds[%d] revise config is nil", i)
+			}
+			r := round.Revise
+			scope := r.SegmentScope
+			if scope == "" {
+				scope = "with_issues"
+			}
+			if scope != "with_issues" && scope != "with_issue_codes" {
+				return nil, fmt.Errorf("rounds[%d] revise segment_scope invalid: %s", i, r.SegmentScope)
+			}
+			if scope == "with_issue_codes" && len(r.IssueCodes) == 0 {
+				return nil, fmt.Errorf("rounds[%d] revise issue_codes is empty for with_issue_codes", i)
+			}
+			for _, code := range r.IssueCodes {
+				if !qa.IsSemanticQACode(code) {
+					return nil, fmt.Errorf("rounds[%d] revise issue_codes contains invalid code: %s", i, code)
+				}
+			}
+			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
+				Mode:    "revise",
+				Backend: *backendSnap,
+				Revise:  snapshotReviseRound(r),
 			})
 
 		default:

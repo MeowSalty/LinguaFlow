@@ -148,7 +148,7 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 				}
 			}
 		default:
-			// extract/adjudicate/semantic_qa：始终处理目标段。
+			// extract/adjudicate/semantic_qa/revise：始终处理目标段。
 			doc.Segments[targetDocIdx].Translate = true
 			segmentIndexes = []int{targetDocIdx}
 		}
@@ -162,6 +162,14 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 			batchHandler = buildAdjudicateBatchHandlerCommon(doc, targetDocIdx)
 		case "semantic_qa":
 			batchHandler = buildSemanticQABatchHandlerCommon(doc, targetDocIdx)
+		case "revise":
+			// 写回时移除的 issue 集合与送进 prompt 的目标集合严格一致
+			//（计划校验保证只能是语义 code）。
+			var reviseCodes []string
+			if round.Revise != nil {
+				reviseCodes = round.Revise.IssueCodes
+			}
+			batchHandler = buildReviseBatchHandlerCommon(doc, qaEngine, targetDocIdx, reviseCodes)
 		case "correct":
 			batchHandler = buildCorrectBatchHandlerCommon(doc, targetDocIdx)
 		}
@@ -196,7 +204,7 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 			}
 			summary.Status = "failed"
 			roundSummaries = append(roundSummaries, summary)
-			if round.Mode == "semantic_qa" || round.Mode == "extract" {
+			if round.Mode == "semantic_qa" || round.Mode == "revise" || round.Mode == "extract" {
 				warnings = append(warnings, fmt.Sprintf("round %d (%s) failed: %s", roundIdx, round.Mode, roundErr))
 				continue
 			}
@@ -331,6 +339,44 @@ func buildSemanticQABatchHandlerCommon(
 			existing := doc.Segments[ts.Index].Issues
 			merged := mergeSemanticQAIssues(existing, ts.Issues)
 			doc.Segments[ts.Index].Issues = merged
+		}
+		return nil
+	}
+}
+
+// buildReviseBatchHandlerCommon 构建 LLM 修订轮的 batch handler，按 correct 轮同款
+// 声明式契约（"声明修什么，就移除什么，其余判决不动"）将修订后的译文与最终 issues
+// 写回内存 Document：targetedCodes 命中且仍 pending 的 issue 视为本轮已修复而移除；
+// dismissed 记录与范围外 pending 一律保留；qaRan（qaEngine 非 nil）时确定性 issue 以
+// fresh 重算（ReconcileIssues 按指纹继承旧裁决），范围外语义 issue 不由确定性 QA 维护、
+// 原样保留；qaRan=false 时非目标 issue 原样保留。修订是声明性修复，LLM 实际未修复时
+// 仅当后续 semantic_qa 轮会重扫该段（scope=all；with_issues/with_issue_codes 作用域
+// 会跳过已无 issue 的段落）时才会重新检出；否则与手动编辑/重译清除旧语义 issue 的
+// 既有语义一致——译文已变更，旧 issue 视为失效。
+// 该 handler 由 RevisionPreviewRunner / PreviewRunner / QuickTranslateRunner 共享；
+// 不修改段落状态。
+func buildReviseBatchHandlerCommon(
+	doc *pipeline.Document,
+	qaEngine *qa.Engine,
+	targetDocIdx int,
+	targetedCodes []string,
+) func(ctx context.Context, batchResult pipeline.BatchResult) error {
+	return func(ctx context.Context, batchResult pipeline.BatchResult) error {
+		for _, ts := range batchResult.Segments {
+			if ts.Index != targetDocIdx {
+				continue
+			}
+			// no-op 修订（LLM 判定无需改动，或返回空译文）：跳过写回与任何 issue 变更，完整保留既有 issue。
+			if ts.TargetText == "" || ts.TargetText == doc.Segments[ts.Index].Target {
+				continue
+			}
+			doc.Segments[ts.Index].Target = ts.TargetText
+			var fresh []qa.QualityIssue
+			qaRan := qaEngine != nil
+			if qaRan {
+				fresh = qa.IssuesFor(ts.Index, qaEngine.Run(ctx, buildQACheckInputs(batchResult)))
+			}
+			doc.Segments[ts.Index].Issues = qa.ReviseFinalIssues(doc.Segments[ts.Index].Issues, fresh, targetedCodes, qaRan)
 		}
 		return nil
 	}

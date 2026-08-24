@@ -14,7 +14,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
@@ -42,6 +41,19 @@ func NewEngineFactory(logger *slog.Logger, limiterPool *backend.LimiterPool) *En
 func (f *EngineFactory) BuildEngine(
 	ctx context.Context,
 	snapshot *service.JobExecutionSnapshot,
+	resources engine.RuntimeResources,
+	reporter progress.Reporter,
+) (*engine.Engine, error) {
+	return f.BuildEngineWithConfig(ctx, snapshot, BuildEngineConfig(snapshot), resources, reporter)
+}
+
+// BuildEngineWithConfig 同 BuildEngine，但使用调用方预派生的 engine.Config。
+// 供修订预览等场景使用：执行 snapshot 被裁剪为单个 revise 轮后，BuildEngineConfig
+// 无法再从 translate 轮派生 Repair 等策略，调用方需从完整 snapshot 派生后传入。
+func (f *EngineFactory) BuildEngineWithConfig(
+	ctx context.Context,
+	snapshot *service.JobExecutionSnapshot,
+	cfg *engine.Config,
 	resources engine.RuntimeResources,
 	reporter progress.Reporter,
 ) (*engine.Engine, error) {
@@ -92,6 +104,11 @@ func (f *EngineFactory) BuildEngine(
 				return nil, fmt.Errorf("round[%d]: mode=semantic_qa but semantic_qa config is nil", i)
 			}
 			round, err = buildSemanticQARound(rs, b)
+		case "revise":
+			if rs.Revise == nil {
+				return nil, fmt.Errorf("round[%d]: mode=revise but revise config is nil", i)
+			}
+			round, err = buildReviseRound(rs, b)
 		case "correct":
 			if rs.Correct == nil {
 				return nil, fmt.Errorf("round[%d]: mode=correct but correct config is nil", i)
@@ -106,8 +123,6 @@ func (f *EngineFactory) BuildEngine(
 		round.RoundIndex = i
 		rounds = append(rounds, round)
 	}
-
-	cfg := BuildEngineConfig(snapshot)
 
 	var rubyRetryBackends []backend.Backend
 	rubyRetryAttempts := 0
@@ -186,6 +201,8 @@ func extractBackend(handler pipeline.RoundHandler) backend.Backend {
 		return h.Backend
 	case *pipeline.SemanticQAHandler:
 		return h.Backend
+	case *pipeline.ReviseHandler:
+		return h.Backend
 	}
 	return nil
 }
@@ -217,14 +234,7 @@ func BuildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 			continue
 		}
 		s := rs.Translate.Strategy
-		rc := repair.Config{
-			Enabled:              s.Repair.Enabled,
-			JSONStructural:       s.Repair.JSONStructural,
-			SchemaAliases:        s.Repair.SchemaAliases,
-			PlaceholderNormalize: s.Repair.PlaceholderNormalize,
-			PromptUpgrade:        s.Repair.PromptUpgrade,
-		}
-		cfg.Repair = rc.ToOptions()
+		cfg.Repair = service.RepairOptionsFromStrategy(s)
 		cfg.Ruby = engine.RubyConfig{
 			Enabled:       s.Ruby.Enabled,
 			PreserveKinds: s.Ruby.PreserveKinds,
@@ -365,6 +375,30 @@ func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 		SemanticQARenderer: renderer,
 		SegmentScope:       s.SegmentScope,
 		IssueCodes:         s.IssueCodes,
+	}, nil
+}
+
+func buildReviseRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+	r := rs.Revise
+	renderer, err := prompt.NewReviseRenderer(templates.EmbeddedReviseTemplate())
+	if err != nil {
+		return engine.Round{}, fmt.Errorf("build revise renderer: %w", err)
+	}
+	return engine.Round{
+		Backend:          b,
+		BatchSize:        r.BatchSize,
+		MaxWordsPerBatch: r.MaxWordsPerBatch,
+		Concurrency:      r.Concurrency,
+		// NOTE: revise 不接缩批，不填 FallbackShrink（详见 extract 分支注释）。
+		Retry: backend.RetryPolicy{
+			MaxAttempts: r.Retry.MaxAttempts,
+			Backoff:     time.Duration(r.Retry.BackoffMs) * time.Millisecond,
+			Jitter:      r.Retry.Jitter,
+		},
+		Mode:           pipeline.RoundModeRevise,
+		ResponseMode:   responseModeFromBackendOptions(rs.Backend.Options),
+		ReviseRenderer: renderer,
+		IssueCodes:     r.IssueCodes,
 	}, nil
 }
 

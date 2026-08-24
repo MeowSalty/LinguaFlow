@@ -9,7 +9,7 @@ import (
 )
 
 // RoundConfig 描述一轮的执行配置。
-// Translate / Extract / Adjudicate / SemanticQA 互斥，恰好一个必须非 nil。
+// Translate / Extract / Adjudicate / SemanticQA / Revise 互斥，恰好一个必须非 nil。
 type RoundConfig struct {
 	RoundIndex       int
 	Backend          backend.Backend
@@ -24,6 +24,7 @@ type RoundConfig struct {
 	Extract    *ExtractRoundConfig
 	Adjudicate *AdjudicateRoundConfig
 	SemanticQA *SemanticQARoundConfig
+	Revise     *ReviseRoundConfig
 
 	// Correct 是本地改写轮次（纯本地、不调 LLM）的特有配置。
 	Correct *CorrectRoundConfig
@@ -68,6 +69,15 @@ type SemanticQARoundConfig struct {
 	MaxBatchIndexSpan int
 	SegmentScope      string
 	IssueCodes        []string
+}
+
+// ReviseRoundConfig LLM 修订轮次的特有配置。
+type ReviseRoundConfig struct {
+	Renderer     *prompt.ReviseRenderer
+	ResponseMode string
+	IssueCodes   []string
+	// MaxBatchIndexSpan 同批段落索引跨度上限；<=0 不限制（默认关闭）。
+	MaxBatchIndexSpan int
 }
 
 // CorrectRoundConfig 本地改写轮次的特有配置（engine 层）。

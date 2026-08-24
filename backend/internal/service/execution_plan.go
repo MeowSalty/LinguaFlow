@@ -387,6 +387,40 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 					return fmt.Errorf("%w: rounds[%d].semantic_qa.issue_codes contains invalid code %q", ErrExecutionPlanConfigInvalid, i, code)
 				}
 			}
+		case "revise":
+			if round.Revise == nil {
+				return fmt.Errorf("%w: rounds[%d].revise config required when mode=revise", ErrExecutionPlanConfigInvalid, i)
+			}
+			r := round.Revise
+			if r.BatchSize < 0 {
+				return fmt.Errorf("%w: rounds[%d].revise.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if r.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("%w: rounds[%d].revise.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if r.BatchSize <= 0 && r.MaxWordsPerBatch <= 0 {
+				return fmt.Errorf("%w: rounds[%d].revise.batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if r.Concurrency < 1 {
+				return fmt.Errorf("%w: rounds[%d].revise.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
+			}
+			scope := r.SegmentScope
+			if scope == "" {
+				scope = "with_issues"
+			}
+			if scope != "with_issues" && scope != "with_issue_codes" {
+				return fmt.Errorf("%w: rounds[%d].revise.segment_scope must be 'with_issues' or 'with_issue_codes'", ErrExecutionPlanConfigInvalid, i)
+			}
+			if scope == "with_issue_codes" && len(r.IssueCodes) == 0 {
+				return fmt.Errorf("%w: rounds[%d].revise.issue_codes must contain at least one code when segment_scope is 'with_issue_codes'", ErrExecutionPlanConfigInvalid, i)
+			}
+			for _, code := range r.IssueCodes {
+				if !qa.IsSemanticQACode(code) {
+					return fmt.Errorf("%w: rounds[%d].revise.issue_codes contains invalid code %q", ErrExecutionPlanConfigInvalid, i, code)
+				}
+			}
+			// NOTE: fallback_shrink 当前仅 translate 轮支持缩批，revise 不暴露此字段。
+			// 若未来需要，在此加 r.FallbackShrink ∈ [0,1] 校验（参考 translate 分支）。
 		case "correct":
 			if round.Correct == nil {
 				return fmt.Errorf("%w: rounds[%d].correct config required when mode=correct", ErrExecutionPlanConfigInvalid, i)
@@ -411,7 +445,7 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			// NOTE: correct 不校验 batch_size/max_words_per_batch/retry（无批量、无外部 I/O、无重试语义）；
 			// 后端 backend_id optional 化后，其余 mode 的 BackendID!=0 已由顶部 if 保证。
 		default:
-			return fmt.Errorf("%w: rounds[%d].mode must be 'translate', 'extract', 'adjudicate', 'semantic_qa' or 'correct'", ErrExecutionPlanConfigInvalid, i)
+			return fmt.Errorf("%w: rounds[%d].mode must be 'translate', 'extract', 'adjudicate', 'semantic_qa', 'revise' or 'correct'", ErrExecutionPlanConfigInvalid, i)
 		}
 	}
 	return nil

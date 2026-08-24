@@ -123,7 +123,16 @@ type PreviewService struct {
 	timeout       time.Duration
 }
 
-// NewPreviewService creates a PreviewService.
+// NewPreviewSemaphore creates the concurrency gate shared by translation and
+// revision previews.
+func NewPreviewSemaphore(maxConcurrency int) chan struct{} {
+	if maxConcurrency <= 0 {
+		maxConcurrency = 2
+	}
+	return make(chan struct{}, maxConcurrency)
+}
+
+// NewPreviewService creates a PreviewService using a private concurrency gate.
 func NewPreviewService(
 	logger *slog.Logger,
 	client *ent.Client,
@@ -136,11 +145,29 @@ func NewPreviewService(
 	maxConcurrency int,
 	timeout time.Duration,
 ) *PreviewService {
+	return NewPreviewServiceWithSemaphore(logger, client, projects, jobs, audit, previewRunner, jwtSecret, tokenTTL, maxConcurrency, timeout, nil)
+}
+
+// NewPreviewServiceWithSemaphore creates a PreviewService with an optionally
+// shared concurrency gate.
+func NewPreviewServiceWithSemaphore(
+	logger *slog.Logger,
+	client *ent.Client,
+	projects *ProjectService,
+	jobs *JobService,
+	audit *AuditService,
+	previewRunner PreviewRunner,
+	jwtSecret string,
+	tokenTTL time.Duration,
+	maxConcurrency int,
+	timeout time.Duration,
+	semaphore chan struct{},
+) *PreviewService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if maxConcurrency <= 0 {
-		maxConcurrency = 2
+	if semaphore == nil {
+		semaphore = NewPreviewSemaphore(maxConcurrency)
 	}
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
@@ -156,7 +183,7 @@ func NewPreviewService(
 		audit:         audit,
 		previewRunner: previewRunner,
 		tokenCodec:    previewtoken.NewCodec(jwtSecret, tokenTTL),
-		semaphore:     make(chan struct{}, maxConcurrency),
+		semaphore:     semaphore,
 		timeout:       timeout,
 	}
 }
@@ -288,6 +315,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 			ResourceID:      input.ResourceID,
 			SegmentID:       input.SegmentID,
 			ExecutionPlanID: input.ExecutionPlanID,
+			Kind:            previewtoken.KindTranslate,
 			SourceHash:      sourceHash,
 			PreviewSource:   result.SourceText,
 			TargetHash:      targetHash,
@@ -385,10 +413,10 @@ func (s *PreviewService) ApplyPreview(
 	var finalIssues []qa.QualityIssue
 	if !targetChanged {
 		finalIssues = claims.FinalIssues
-	}
-
-	// If target was modified, re-run deterministic QA.
-	if targetChanged {
+	} else {
+		// 用户在 apply 前改写了文本：按令牌冻结配置重跑确定性 QA。
+		var fresh []qa.QualityIssue
+		qaRan := false
 		qaCfg := qaConfigFromClaims(claims)
 		qaCfg.SourceLang = claims.QAConfig.SourceLang
 		qaCfg.TargetLang = claims.QAConfig.TargetLang
@@ -406,14 +434,23 @@ func (s *PreviewService) ApplyPreview(
 				TargetText: targetText,
 			}}
 			allIssues := qaEngine.Run(ctx, inputs)
-			finalIssues = qa.IssuesFor(currentSeg.SegmentIndex, allIssues)
+			fresh = qa.IssuesFor(currentSeg.SegmentIndex, allIssues)
+			qaRan = true
 
 			// Re-run duplicate-source-divergence only when it was enabled by
 			// the frozen deterministic QA configuration.
 			if duplicateSourceDivergenceEnabledForClaims(claims.QAConfig) {
-				s.rerunDuplicateSourceDivergence(ctx, resourceID, segmentID, currentSeg.SegmentIndex, claims.PreviewSource, targetText, &finalIssues)
+				s.rerunDuplicateSourceDivergence(ctx, resourceID, segmentID, currentSeg.SegmentIndex, claims.PreviewSource, targetText, &fresh)
 			}
 		}
+		if claims.Kind == previewtoken.KindRevision && len(claims.ResolvedCodes) > 0 {
+			// 修订令牌：剔除声明已修复的 pending（范围外与 dismissed 保留），
+			// 确定性 issue 以重算结果为准；qaRan=false 时保留既有非目标 issue。
+			finalIssues = qa.ReviseFinalIssues(currentSeg.QualityIssues, fresh, claims.ResolvedCodes, qaRan)
+		} else if qaRan {
+			finalIssues = fresh
+		}
+		// else：翻译预览 + QA 未启用 → finalIssues 为 nil → 清空（既有行为，保持不变）。
 	}
 
 	// 6. CAS update.
@@ -441,6 +478,7 @@ func (s *PreviewService) ApplyPreview(
 	// quality_issues 写回：ApplyPreview 应用新译文（预览或用户改后），新译文导致
 	// 指纹基本全变，旧裁决不跨文本存活，故不对账。若未来引入"同译文手动重算 QA"
 	// 功能（如用户改了非译文字段后重跑 QA），必须接入 qa.ReconcileIssues。
+	// 修订令牌例外：按 ResolvedCodes 剔除声明已修复的 pending，其余判决保留。
 	if len(finalIssues) > 0 {
 		update = update.SetQualityIssues(finalIssues)
 	} else {
@@ -455,18 +493,29 @@ func (s *PreviewService) ApplyPreview(
 		return nil, ErrPreviewConflict
 	}
 
-	// 7. Record audit event.
+	action := "resource.segment.translation_preview.apply"
+	message := fmt.Sprintf("Applied preview translation to segment %d", segmentID)
+	if claims.Kind == previewtoken.KindRevision {
+		action = "resource.segment.revision_preview.apply"
+		message = fmt.Sprintf("Applied preview revision to segment %d", segmentID)
+	}
+	metadata := map[string]any{
+		"execution_plan_id": claims.ExecutionPlanID,
+		"target_changed":    targetChanged,
+		"preview_kind":      claims.Kind,
+	}
+	if claims.Kind == previewtoken.KindRevision {
+		// 翻译令牌无 ResolvedCodes，不加该字段避免审计噪音。
+		metadata["resolved_codes"] = claims.ResolvedCodes
+	}
 	auditEvent := AuditEvent{
 		ActorUserID:  actorUserID,
 		ProjectID:    &projectID,
 		ResourceID:   resourceID,
-		Action:       "resource.segment.translation_preview.apply",
+		Action:       action,
 		ResourceType: "segment",
-		Message:      fmt.Sprintf("Applied preview translation to segment %d", segmentID),
-		Metadata: map[string]any{
-			"execution_plan_id": claims.ExecutionPlanID,
-			"target_changed":    targetChanged,
-		},
+		Message:      message,
+		Metadata:     metadata,
 	}
 	if projectRow.OwnerOrgID != nil {
 		auditEvent.OrgID = projectRow.OwnerOrgID

@@ -207,7 +207,7 @@ func (r *PreviewRunner) RunPreview(
 				}
 			}
 		default:
-			// extract/adjudicate/semantic_qa：始终处理 target；其筛选逻辑由
+			// extract/adjudicate/semantic_qa/revise：始终处理 target；其筛选逻辑由
 			// 各自 handler 按 status 自行完成，不受本次改动影响。
 			doc.Segments[targetDocIdx].Translate = true
 			segmentIndexes = []int{targetDocIdx}
@@ -222,6 +222,14 @@ func (r *PreviewRunner) RunPreview(
 			batchHandler = r.buildAdjudicateBatchHandler(doc, targetDocIdx)
 		case "semantic_qa":
 			batchHandler = r.buildSemanticQABatchHandler(doc, targetDocIdx)
+		case "revise":
+			// 写回时移除的 issue 集合与送进 prompt 的目标集合严格一致
+			//（计划校验保证只能是语义 code）。
+			var reviseCodes []string
+			if round.Revise != nil {
+				reviseCodes = round.Revise.IssueCodes
+			}
+			batchHandler = buildReviseBatchHandlerCommon(doc, qaEngine, targetDocIdx, reviseCodes)
 		case "correct":
 			batchHandler = r.buildCorrectBatchHandler(doc, targetDocIdx)
 		}
@@ -256,7 +264,7 @@ func (r *PreviewRunner) RunPreview(
 			}
 			summary.Status = "failed"
 			roundSummaries = append(roundSummaries, summary)
-			if round.Mode == "semantic_qa" || round.Mode == "extract" {
+			if round.Mode == "semantic_qa" || round.Mode == "revise" || round.Mode == "extract" {
 				warnings = append(warnings, fmt.Sprintf("round %d (%s) failed: %s", roundIdx, round.Mode, roundErr))
 				continue
 			}
