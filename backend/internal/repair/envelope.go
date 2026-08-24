@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
@@ -88,6 +89,19 @@ func TryRepairEnvelope(text, key string, opt Options) (map[string]any, []string,
 		}
 	}
 
+	// 裸数组兜底：LLM 有时丢掉外层信封，直接返回 "[{...},{...}]"（仅缺
+	// {"key": ...} 包装）。主链路只扫 '{'，对这种响应必然落入 "no JSON object
+	// found"。此处把首个通过"通用形状门控（非空全对象）+ opt.BareArrayAccept
+	// 领域判别"的可解码数组重新包装为 {key: [...]}；元素级校验由调用方的
+	// typed unmarshal + normalize 判定，兜底命中但 normalize 后零条目视为误
+	// 采纳、报错重试（bareArrayNoEntriesError），维持"宁可重试也不凑错"原则。
+	if err != nil && opt.JSONStructural {
+		if wrapped, ok := extractBareArrayAsEnvelope(text, key, opt.BareArrayAccept); ok {
+			repaired = append(repaired[:0], "json.bare-array")
+			return wrapped, repaired, nil
+		}
+	}
+
 	if err != nil {
 		if body == "" {
 			return nil, repaired, errors.New("no JSON object found")
@@ -118,7 +132,20 @@ func tryRepairKeyed[T any](text, key string, opt Options, normalize func([]T) []
 	if err != nil {
 		return nil, repaired, err
 	}
+	if err := bareArrayNoEntriesError(v, repaired, key); err != nil {
+		return nil, repaired, err
+	}
 	return v, repaired, nil
+}
+
+// bareArrayNoEntriesError 裸数组兜底命中但 normalize 后零条目：说明数组元素缺
+// 目标类型的必需字段，兜底误采纳了无关数组（噪声中的空数组/异构数组等），返回
+// 错误以走重试路径。正常 envelope（含合法空数组）不经过裸数组兜底，不受影响。
+func bareArrayNoEntriesError[T any](entries []T, repaired []string, key string) error {
+	if len(entries) > 0 || !slices.Contains(repaired, "json.bare-array") {
+		return nil
+	}
+	return fmt.Errorf("bare array adopted as %q but no entries survived normalize", key)
 }
 
 // decodeKeyed 从已解析的 envelope map 中取出 key 的数组值并反序列化到具体类型
@@ -186,6 +213,9 @@ func tryRepairReviseWithRuby(text string, opt Options) ([]prompt.ReviseRevision,
 	if err != nil {
 		return nil, nil, repaired, err
 	}
+	if err := bareArrayNoEntriesError(revisions, repaired, "revisions"); err != nil {
+		return nil, nil, repaired, err
+	}
 	var rubyOutput map[string][]ruby.OutputEntry
 	if rubyRaw, ok := raw["ruby_output"]; ok {
 		if b, mErr := json.Marshal(rubyRaw); mErr == nil {
@@ -213,6 +243,7 @@ func parseReviseTextWithRuby(text string) ([]prompt.ReviseRevision, map[string][
 // 返回 (verdicts, 修复算子链, error)；verdicts 已经过 trim 与字段过滤（丢弃缺
 // id/issue_code 的条目，语义与 prompt.ParseAdjudicationTextVerdicts 一致）。
 func TryRepairAdjudication(text string, opt Options) ([]prompt.AdjudicationVerdict, []string, error) {
+	opt.BareArrayAccept = prompt.ValidBareVerdictEntries
 	return tryRepairKeyed(text, "verdicts", opt, prompt.NormalizeAdjudicationVerdicts)
 }
 
@@ -233,5 +264,6 @@ func ParseAdjudicationByMode(text string, isTextMode bool, opt Options) ([]promp
 // TryRepairRubyAlignment 解析 {"ruby_output":[...]} 并应用完整修复链。
 // 返回 (entries, 修复算子链, error)；失败时 entries 为 nil。
 func TryRepairRubyAlignment(text string, opt Options) ([]ruby.OutputEntry, []string, error) {
+	opt.BareArrayAccept = ruby.ValidBareOutputEntries
 	return tryRepairKeyed(text, "ruby_output", opt, ruby.NormalizeOutputEntries)
 }

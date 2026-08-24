@@ -412,6 +412,15 @@ func extractValidObject(text, requiredKey string, accept func(map[string]any) bo
 	return found, found != nil
 }
 
+// robustScanMaxAttempts / robustScanTruncationWindow 是鲁棒扫描算子
+// （scanKeyedObjects / extractBareArrayAsEnvelope）共享的调参常量：前者限制
+// 尝试的偏移数，后者限定 close-braces 截断修补只对靠近文本末尾的偏移尝试，
+// 避免对每个早期偏移都做 O(n) 后缀扫描。
+const (
+	robustScanMaxAttempts      = 256
+	robustScanTruncationWindow = 4096
+)
+
 // scanKeyedObjects 是 extractValidEnvelope / extractValidObject 共享的鲁棒扫描骨架。
 //
 // 从 text 中每个 '{' 偏移用 json.Decoder 真实解析首个 JSON 对象（容忍尾部多余数据，
@@ -426,22 +435,18 @@ func extractValidObject(text, requiredKey string, accept func(map[string]any) bo
 // 安全约束：本函数不做字段值类型校验（那是 handle/accept 的职责），也不对未闭合
 // 字符串做补闭合（Decoder 失败即跳过，保留"未闭合引号=Fatal"语义）。
 func scanKeyedObjects(text, requiredKey string, handle func(map[string]any) bool) {
-	const (
-		maxAttempts      = 256
-		truncationWindow = 4096
-	)
 	attempts := 0
 	for i := 0; i < len(text); i++ {
 		if text[i] != '{' {
 			continue
 		}
 		attempts++
-		if attempts > maxAttempts {
+		if attempts > robustScanMaxAttempts {
 			break
 		}
 		tail := text[i:]
 		raw, ok := decodeKeyedEnvelope(tail, requiredKey)
-		if !ok && len(tail) <= truncationWindow {
+		if !ok && len(tail) <= robustScanTruncationWindow {
 			if fixed := closeUnbalancedBraces(tail); fixed != tail {
 				raw, ok = decodeKeyedEnvelope(fixed, requiredKey)
 			}
@@ -453,6 +458,64 @@ func scanKeyedObjects(text, requiredKey string, handle func(map[string]any) bool
 			return
 		}
 	}
+}
+
+// extractBareArrayAsEnvelope 是单键数组 envelope 的裸数组兜底。
+//
+// 目标破损形态：LLM 丢掉外层信封，直接输出条目数组本身，如
+// [{"id":"1","base":"白银之风",...}]（应为 {"ruby_output":[...]}）。主链路的
+// brace-matching 与 robust-extract 都只扫 '{' 偏移，永远找不到含 key 的对象。
+//
+// 本函数从每个 '[' 偏移用 json.Decoder 真实解析（容忍尾部多余数据），仅当解码
+// 出"非空且元素全为对象"的 JSON 数组、且通过 accept 领域判别（nil 表示跳过）
+// 时把它重新包装为 {key: [...]} 返回。只做结构搬运、不动元素内容；通用形状门控
+// 挡掉空数组与异构数组，accept 挡掉键名形状不符的回显诱饵（如 prompt 中条目
+// 清单的回显），元素级校验由调用方的 normalize 判定（兜底命中但 normalize 后
+// 零条目视为误采纳、报错重试，见 bareArrayNoEntriesError）。
+func extractBareArrayAsEnvelope(text, key string, accept func([]any) bool) (map[string]any, bool) {
+	attempts := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] != '[' {
+			continue
+		}
+		attempts++
+		if attempts > robustScanMaxAttempts {
+			break
+		}
+		tail := text[i:]
+		dec := json.NewDecoder(strings.NewReader(tail))
+		var arr []any
+		err := dec.Decode(&arr)
+		if err != nil && len(tail) <= robustScanTruncationWindow {
+			if fixed := closeUnbalancedBraces(tail); fixed != tail {
+				dec = json.NewDecoder(strings.NewReader(fixed))
+				err = dec.Decode(&arr)
+			}
+		}
+		if err != nil || !allObjectEntries(arr) {
+			continue
+		}
+		if accept != nil && !accept(arr) {
+			continue
+		}
+		return map[string]any{key: arr}, true
+	}
+	return nil, false
+}
+
+// allObjectEntries 判定裸数组兜底的采纳门控：非空且全部元素为 JSON 对象。
+// 目标条目（issues/verdicts/revisions/ruby_output）都是对象数组，元素为标量
+// 或空数组均属噪声，继续扫描下一候选。
+func allObjectEntries(arr []any) bool {
+	if len(arr) == 0 {
+		return false
+	}
+	for _, e := range arr {
+		if _, ok := e.(map[string]any); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // mergeTranslationObjects 找出 text 中所有含 "translations" 字段的 JSON 对象，

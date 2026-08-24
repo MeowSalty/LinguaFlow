@@ -112,6 +112,25 @@ func NormalizeOutputEntries(entries []OutputEntry) []OutputEntry {
 	return out
 }
 
+// ValidBareOutputEntries 是裸数组兜底（repair 的 json.bare-array 算子）的领域
+// 判别器：判定候选数组是否像 ruby_output 条目而非 prompt 中条目清单的回显。
+// 真实条目必带非空 text 或合法 kind（ValidKinds 之一）；仅有 base 的对象（如
+// 定向重试 prompt 里 {id, source_base, source_text} 的回显变体）判为诱饵。
+func ValidBareOutputEntries(entries []any) bool {
+	for _, e := range entries {
+		m, ok := e.(map[string]any)
+		if !ok {
+			return false
+		}
+		text, _ := m["text"].(string)
+		kind, _ := m["kind"].(string)
+		if strings.TrimSpace(text) != "" || isValidKind(kind) {
+			return true
+		}
+	}
+	return false
+}
+
 // insertInfo 记录一次注音插入的位置和内容。
 type insertInfo struct {
 	pos  int
