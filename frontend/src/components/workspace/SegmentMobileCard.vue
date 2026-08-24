@@ -10,6 +10,7 @@ import type { SegmentFormModel } from '@/composables/useSegmentEditing'
 import {
   formatQualityIssueTooltip,
   getQualityCodeLabel,
+  hasPendingSemanticIssues,
   isIssueDismissed,
   type QualityIssue,
 } from '@/composables/useQualityIssues'
@@ -49,6 +50,7 @@ const emit = defineEmits<{
   updateEditField: [field: 'target_text' | 'comment', value: string]
   updateCommentText: [value: string]
   previewTranslation: [segment: Segment]
+  previewRevision: [segment: Segment]
   dismissIssue: [segment: Segment, issue: QualityIssue]
   reinstateIssue: [segment: Segment, issue: QualityIssue]
 }>()
@@ -241,6 +243,21 @@ const emit = defineEmits<{
         <!-- 翻译按钮 -->
         <NButton size="tiny" type="primary" @click="emit('previewTranslation', segment)">
           {{ t('workspace.segment.actions.previewTranslation') }}
+        </NButton>
+
+        <!-- 修订按钮 -->
+        <NButton
+          v-if="
+            (segment.status === 'translated' || segment.status === 'edited') &&
+            segment.target_text &&
+            hasPendingSemanticIssues(segment)
+          "
+          size="tiny"
+          secondary
+          type="primary"
+          @click="emit('previewRevision', segment)"
+        >
+          {{ t('workspace.segment.actions.previewRevision') }}
         </NButton>
       </template>
     </div>

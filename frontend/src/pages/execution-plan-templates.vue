@@ -223,6 +223,23 @@ const validateRounds = (): boolean => {
         return false
       }
     }
+    if (round.mode === 'revise' && round.revise) {
+      const hasBatchSize = round.revise.batch_size && round.revise.batch_size > 0
+      const hasMaxWords = round.revise.max_words_per_batch && round.revise.max_words_per_batch > 0
+      if (!hasBatchSize && !hasMaxWords) {
+        message.error(t('executionPlanTemplates.validation.roundBatchConfigRequired', { n: i + 1 }))
+        return false
+      }
+      if (
+        round.revise.segment_scope === 'with_issue_codes' &&
+        (!round.revise.issue_codes || round.revise.issue_codes.length === 0)
+      ) {
+        message.error(
+          t('executionPlanTemplates.validation.roundReviseIssueCodesRequired', { n: i + 1 }),
+        )
+        return false
+      }
+    }
     if (round.mode === 'correct' && round.correct) {
       const hasEnabledRule = round.correct.rules.some((r) => r.enabled)
       if (!hasEnabledRule) {
@@ -305,6 +322,23 @@ const buildPayload = (): CreateRequest => {
               ? { issue_codes: round.semantic_qa.issue_codes }
               : {}),
             ...(round.semantic_qa.retry ? { retry: round.semantic_qa.retry } : {}),
+          },
+        }
+      }
+      if (round.mode === 'revise' && round.revise) {
+        const segmentScope = round.revise.segment_scope ?? 'with_issues'
+        return {
+          ...base,
+          revise: {
+            batch_size: round.revise.batch_size,
+            max_words_per_batch: round.revise.max_words_per_batch,
+            segment_scope: segmentScope,
+            ...(segmentScope === 'with_issue_codes' &&
+            round.revise.issue_codes &&
+            round.revise.issue_codes.length > 0
+              ? { issue_codes: round.revise.issue_codes }
+              : {}),
+            ...(round.revise.retry ? { retry: round.revise.retry } : {}),
           },
         }
       }
@@ -397,6 +431,7 @@ const modeBadgeClass = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'extract') return 'bg-amber-50 text-amber-600'
   if (mode === 'adjudicate') return 'bg-violet-50 text-violet-600'
   if (mode === 'semantic_qa') return 'bg-emerald-50 text-emerald-600'
+  if (mode === 'revise') return 'bg-rose-50 text-rose-600'
   return 'bg-sky-50 text-sky-600'
 }
 
@@ -405,6 +440,7 @@ const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'extract') return t('executionPlanEditor.round.modeExtract')
   if (mode === 'adjudicate') return t('executionPlanEditor.round.modeAdjudicate')
   if (mode === 'semantic_qa') return t('executionPlanEditor.round.modeSemanticQA')
+  if (mode === 'revise') return t('executionPlanEditor.round.modeRevise')
   return t('executionPlanEditor.round.modeCorrect')
 }
 

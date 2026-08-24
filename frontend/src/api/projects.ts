@@ -537,6 +537,38 @@ export const previewResourceSegmentTranslation = async (
   return data
 }
 
+export const previewResourceSegmentRevision = async (
+  projectId: number,
+  resourceId: number,
+  segmentId: number,
+  executionPlanId: number,
+  issueCodes?: NonNullable<ApiSchemas['SegmentRevisionPreviewRequest']['issue_codes']>,
+  signal?: AbortSignal,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['SegmentRevisionPreviewResponse']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/revision-preview',
+    {
+      params: { path: { projectId, resourceId, segmentId } },
+      body: {
+        execution_plan_id: executionPlanId,
+        ...(issueCodes && issueCodes.length > 0 ? { issue_codes: issueCodes } : {}),
+      },
+      signal,
+    },
+  )
+
+  if (!data) {
+    throw buildSegmentTranslationPreviewError(
+      t('api.errors.previewSegmentRevisionFailed'),
+      error,
+      response,
+    )
+  }
+
+  return data
+}
+
 export const applyResourceSegmentTranslationPreview = async (
   projectId: number,
   resourceId: number,
