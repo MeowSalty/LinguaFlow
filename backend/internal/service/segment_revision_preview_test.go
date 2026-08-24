@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -284,7 +285,9 @@ func TestRevisionPreviewService_Success_SynthesizedFromTranslate(t *testing.T) {
 		t.Fatalf("synthesized issue codes = %+v want [calque]", rev)
 	}
 	// Repair 从完整 snapshot 的 translate 轮策略抢救：默认 profile 全部算子开启。
-	if want := (repair.Options{JSONStructural: true, SchemaAliases: true, PlaceholderNormalize: true, PromptUpgrade: true}); runner.capturedRepair != want {
+	// Options 含函数字段不可整体 ==，用 DeepEqual 判等（nil 判别器视为相等）。
+	want := repair.Options{JSONStructural: true, SchemaAliases: true, PlaceholderNormalize: true, PromptUpgrade: true}
+	if !reflect.DeepEqual(runner.capturedRepair, want) {
 		t.Fatalf("repair opts = %+v want %+v", runner.capturedRepair, want)
 	}
 

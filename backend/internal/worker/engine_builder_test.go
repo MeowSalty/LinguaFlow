@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"log/slog"
+	"reflect"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
@@ -87,7 +88,8 @@ func TestBuildEngineConfigZeroValueStrategy(t *testing.T) {
 	}
 
 	cfg := BuildEngineConfig(snapshot)
-	if cfg.Repair != (repair.Options{}) {
+	// Options 含函数字段不可整体 ==，用 DeepEqual 判零值（nil 判别器视为相等）。
+	if !reflect.DeepEqual(cfg.Repair, repair.Options{}) {
 		t.Errorf("零值策略时 Repair 应为零值，实际 %+v", cfg.Repair)
 	}
 	if cfg.Ruby.Enabled || len(cfg.Ruby.PreserveKinds) != 0 {

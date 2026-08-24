@@ -1,6 +1,7 @@
 package service
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
@@ -113,7 +114,9 @@ func TestPreviewReadPathsZeroValueStrategy(t *testing.T) {
 	if claims := qaConfigFromSnapshot(snapshot, ""); claims.Enabled {
 		t.Fatalf("零值策略不应启用 QA: %+v", claims)
 	}
-	if opts := repairOptionsFromSnapshot(snapshot); opts != (repair.Options{}) {
+	// Options 含函数字段不可整体 ==，用 DeepEqual 判零值（nil 判别器视为相等）。
+	opts := repairOptionsFromSnapshot(snapshot)
+	if !reflect.DeepEqual(opts, repair.Options{}) {
 		t.Fatalf("零值策略应得零值修复选项: %+v", opts)
 	}
 }
