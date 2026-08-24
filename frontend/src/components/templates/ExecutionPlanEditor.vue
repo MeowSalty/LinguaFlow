@@ -48,7 +48,6 @@ const DEFAULT_RETRY: RetryConfig = { max_attempts: 3, backoff_ms: 2000, jitter: 
 
 const DEFAULT_TRANSLATE: TranslateRoundConfig = {
   prompt_template_id: 0,
-  profile_id: 0,
   batch_size: 10,
   max_words_per_batch: 0,
   fallback_shrink: 1,
@@ -115,7 +114,6 @@ function mergeTranslate(source?: Partial<TranslateRoundConfig>): TranslateRoundC
   if (!source) return deepClone(DEFAULT_TRANSLATE)
   return {
     prompt_template_id: source.prompt_template_id ?? DEFAULT_TRANSLATE.prompt_template_id,
-    profile_id: source.profile_id ?? DEFAULT_TRANSLATE.profile_id,
     batch_size: source.batch_size ?? DEFAULT_TRANSLATE.batch_size,
     max_words_per_batch: source.max_words_per_batch ?? DEFAULT_TRANSLATE.max_words_per_batch,
     fallback_shrink: source.fallback_shrink ?? DEFAULT_TRANSLATE.fallback_shrink,
@@ -265,7 +263,6 @@ const props = withDefaults(
     backends: SelectOption[]
     promptTemplates: SelectOption[]
     bootstrapPromptTemplates: SelectOption[]
-    executionProfiles: SelectOption[]
     disabled?: boolean
   }>(),
   { disabled: false },
@@ -647,33 +644,18 @@ const emitUpdate = (): void => {
 
       <!-- 翻译模式配置 -->
       <template v-if="round.mode === 'translate' && round.translate">
-        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.round.promptTemplate') }}
-            </div>
-            <NSelect
-              v-model:value="round.translate.prompt_template_id"
-              :options="promptTemplates"
-              size="small"
-              :disabled="disabled"
-              :placeholder="t('executionPlanEditor.round.promptTemplatePlaceholder')"
-              clearable
-            />
+        <div class="mt-3">
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.promptTemplate') }}
           </div>
-          <div>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.round.translationProfile') }}
-            </div>
-            <NSelect
-              v-model:value="round.translate.profile_id"
-              :options="executionProfiles"
-              size="small"
-              :disabled="disabled"
-              :placeholder="t('executionPlanEditor.round.profilePlaceholder')"
-              clearable
-            />
-          </div>
+          <NSelect
+            v-model:value="round.translate.prompt_template_id"
+            :options="promptTemplates"
+            size="small"
+            :disabled="disabled"
+            :placeholder="t('executionPlanEditor.round.promptTemplatePlaceholder')"
+            clearable
+          />
         </div>
 
         <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
