@@ -17,7 +17,8 @@ import (
 var defaultAdjudicateCodes = []string{"source_residual"}
 
 // AdjudicateHandler 实现 RoundHandler，对已标出问题的段落做 AI 裁决，剔除误报。
-// 不改译文、不改段落状态；失败时一律保留原 issue。
+// 不改译文、不改段落状态；失败按错误路由推进（与 translate/extract 对齐），
+// 耗尽后原 issue 保持 pending 原样保留（既未确认也未剔除）。
 type AdjudicateHandler struct {
 	Backend          backend.Backend
 	Renderer         *prompt.AdjudicationRenderer
@@ -163,7 +164,17 @@ func (h *AdjudicateHandler) BuildBatches(_ context.Context, doc *Document, pendi
 }
 
 // ProcessBatch 渲染裁决 prompt → 调用 LLM → 解析 verdict → 剔除 false_positive。
-// 失败/解析失败/缺失判定一律保留原 issue。
+// 错误路由（与 translate/extract 语义对齐）：
+//   - 渲染失败 → unresolved（进下一池重切）
+//   - 致命 401/403 → fatalUnresolved（跳池 + 跨轮传播换 backend）
+//   - 可重试 429/5xx/网络 → retry（同批退避重试，预算耗尽落下一池）
+//   - 退避期间外部取消 → unresolved（随轮次取消并入 finalUnresolved）
+//   - 非致命不可重试 backend 错误 → unresolved（进下一池重试）
+//   - 解析失败 → unresolved（进下一池重切）
+//   - 成功 → callbackResult（false_positive 打 dismissed 标记保留）
+//
+// unresolved 段不调 SegmentDone、不回 callback（避免写回陈旧 issue 干扰下一池重判）；
+// 末池耗尽后原 issue 保持 pending 原样保留。
 func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
 	batchStart := time.Now()
 	rep := h.reporter()
@@ -218,7 +229,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			ErrorMessage:  renderErr.Error(),
 			RoundIndex:    h.RoundIndex,
 		})
-		return h.preserveResult(doc, idxs, rep)
+		return batchResult{unresolved: idxs}
 	}
 
 	// 非 text：只挂 JSONSchema，不强制 ResponseFormat，由 backend 默认决定是否用 schema。
@@ -256,15 +267,15 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return h.preserveResult(doc, idxs, rep)
+				return batchResult{unresolved: idxs}
 			case <-timer.C:
 			}
 			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
 		}
-		logger.Warn("adjudicate backend failed, preserving issues",
+		logger.Warn("adjudicate backend failed, deferring to next pool",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 		h.emitBatchOutcome(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-		return h.preserveResult(doc, idxs, rep)
+		return batchResult{unresolved: idxs}
 	}
 
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
@@ -360,25 +371,6 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		ResponseContent: resp.Text,
 	})
 
-	return batchResult{
-		callbackResult: &BatchResult{Segments: callbackSegs},
-	}
-}
-
-// preserveResult 保留原 issues 并返回 callback（供 worker 无害 no-op 或重写同一列表）。
-func (h *AdjudicateHandler) preserveResult(doc *Document, idxs []int, rep progress.Reporter) batchResult {
-	callbackSegs := make([]TranslatedSegment, 0, len(idxs))
-	for _, idx := range idxs {
-		seg := &doc.Segments[idx]
-		callbackSegs = append(callbackSegs, TranslatedSegment{
-			Index:      idx,
-			ID:         seg.ID,
-			SourceText: seg.Source,
-			TargetText: seg.Target,
-			Issues:     append([]qa.QualityIssue(nil), seg.Issues...),
-		})
-		rep.SegmentDone()
-	}
 	return batchResult{
 		callbackResult: &BatchResult{Segments: callbackSegs},
 	}
