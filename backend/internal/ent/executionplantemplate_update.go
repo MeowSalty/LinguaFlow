@@ -120,6 +120,27 @@ func (_u *ExecutionPlanTemplateUpdate) ClearOwnerOrgID() *ExecutionPlanTemplateU
 	return _u
 }
 
+// SetProfileID sets the "profile_id" field.
+func (_u *ExecutionPlanTemplateUpdate) SetProfileID(v int) *ExecutionPlanTemplateUpdate {
+	_u.mutation.ResetProfileID()
+	_u.mutation.SetProfileID(v)
+	return _u
+}
+
+// SetNillableProfileID sets the "profile_id" field if the given value is not nil.
+func (_u *ExecutionPlanTemplateUpdate) SetNillableProfileID(v *int) *ExecutionPlanTemplateUpdate {
+	if v != nil {
+		_u.SetProfileID(*v)
+	}
+	return _u
+}
+
+// AddProfileID adds value to the "profile_id" field.
+func (_u *ExecutionPlanTemplateUpdate) AddProfileID(v int) *ExecutionPlanTemplateUpdate {
+	_u.mutation.AddProfileID(v)
+	return _u
+}
+
 // SetRubyRetry sets the "ruby_retry" field.
 func (_u *ExecutionPlanTemplateUpdate) SetRubyRetry(v schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateUpdate {
 	_u.mutation.SetRubyRetry(v)
@@ -258,6 +279,12 @@ func (_u *ExecutionPlanTemplateUpdate) sqlSave(ctx context.Context) (_node int, 
 	}
 	if value, ok := _u.mutation.Scope(); ok {
 		_spec.SetField(executionplantemplate.FieldScope, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ProfileID(); ok {
+		_spec.SetField(executionplantemplate.FieldProfileID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedProfileID(); ok {
+		_spec.AddField(executionplantemplate.FieldProfileID, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.RubyRetry(); ok {
 		_spec.SetField(executionplantemplate.FieldRubyRetry, field.TypeJSON, value)
@@ -439,6 +466,27 @@ func (_u *ExecutionPlanTemplateUpdateOne) ClearOwnerOrgID() *ExecutionPlanTempla
 	return _u
 }
 
+// SetProfileID sets the "profile_id" field.
+func (_u *ExecutionPlanTemplateUpdateOne) SetProfileID(v int) *ExecutionPlanTemplateUpdateOne {
+	_u.mutation.ResetProfileID()
+	_u.mutation.SetProfileID(v)
+	return _u
+}
+
+// SetNillableProfileID sets the "profile_id" field if the given value is not nil.
+func (_u *ExecutionPlanTemplateUpdateOne) SetNillableProfileID(v *int) *ExecutionPlanTemplateUpdateOne {
+	if v != nil {
+		_u.SetProfileID(*v)
+	}
+	return _u
+}
+
+// AddProfileID adds value to the "profile_id" field.
+func (_u *ExecutionPlanTemplateUpdateOne) AddProfileID(v int) *ExecutionPlanTemplateUpdateOne {
+	_u.mutation.AddProfileID(v)
+	return _u
+}
+
 // SetRubyRetry sets the "ruby_retry" field.
 func (_u *ExecutionPlanTemplateUpdateOne) SetRubyRetry(v schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateUpdateOne {
 	_u.mutation.SetRubyRetry(v)
@@ -607,6 +655,12 @@ func (_u *ExecutionPlanTemplateUpdateOne) sqlSave(ctx context.Context) (_node *E
 	}
 	if value, ok := _u.mutation.Scope(); ok {
 		_spec.SetField(executionplantemplate.FieldScope, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ProfileID(); ok {
+		_spec.SetField(executionplantemplate.FieldProfileID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedProfileID(); ok {
+		_spec.AddField(executionplantemplate.FieldProfileID, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.RubyRetry(); ok {
 		_spec.SetField(executionplantemplate.FieldRubyRetry, field.TypeJSON, value)

@@ -24,9 +24,9 @@ type TranslateSegmentFilterConfig struct {
 }
 
 // TranslateRoundConfig 翻译轮次配置（翻译专用）。
+// 无 ProfileID：策略引用位于计划级（ExecutionPlanTemplate.profile_id），为全管道供行为预设。
 type TranslateRoundConfig struct {
 	PromptTemplateID int                           `json:"prompt_template_id"  yaml:"prompt_template_id"` // 引用 TranslationPromptTemplate
-	ProfileID        int                           `json:"profile_id"          yaml:"profile_id"`
 	BatchSize        int                           `json:"batch_size"          yaml:"batch_size"`
 	MaxWordsPerBatch int                           `json:"max_words_per_batch" yaml:"max_words_per_batch"`
 	Concurrency      int                           `json:"concurrency"         yaml:"concurrency"`
@@ -135,11 +135,16 @@ func (ExecutionPlanTemplate) Fields() []ent.Field {
 			Comment("user / org"),
 		field.Int("owner_user_id").Optional().Nillable().Positive(),
 		field.Int("owner_org_id").Optional().Nillable().Positive(),
+		// -1 = 内置默认策略（templates.BuiltinExecutionProfileID；schema 包不可
+		// import templates，故字面量）。带 Default 使 SQLite 对存量行执行
+		// ALTER TABLE ADD COLUMN NOT NULL 时回填到合法的内置策略而非迁移失败。
+		field.Int("profile_id").Default(-1).
+			Comment("计划级策略引用（ExecutionProfile），为全管道供七项行为预设"),
 		field.JSON("ruby_retry", ExecutionPlanRubyRetryConfig{}).
 			Optional().
 			Comment("注音对齐重试配置"),
 		field.JSON("rounds", []ExecutionRoundConfig{}).
-			Comment("轮次配置列表，每轮引用后端+提示词+策略"),
+			Comment("轮次配置列表，每轮引用后端+提示词"),
 	}
 }
 

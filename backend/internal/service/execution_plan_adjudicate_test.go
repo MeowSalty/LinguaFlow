@@ -38,7 +38,6 @@ func TestValidateExecutionRounds_Adjudicate(t *testing.T) {
 				BackendID: 1,
 				Translate: &schema.TranslateRoundConfig{
 					PromptTemplateID: -1,
-					ProfileID:        -1,
 					BatchSize:        10,
 					Concurrency:      1,
 					FallbackShrink:   1.0,

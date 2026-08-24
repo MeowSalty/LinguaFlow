@@ -28,13 +28,14 @@ var (
 
 // ExecutionPlanService 执行计划模板服务。
 type ExecutionPlanService struct {
-	client *ent.Client
-	users  *UserService
+	client   *ent.Client
+	users    *UserService
+	profiles *ExecutionProfileService
 }
 
 // NewExecutionPlanService 创建执行计划模板服务。
-func NewExecutionPlanService(client *ent.Client, users *UserService) *ExecutionPlanService {
-	return &ExecutionPlanService{client: client, users: users}
+func NewExecutionPlanService(client *ent.Client, users *UserService, profiles *ExecutionProfileService) *ExecutionPlanService {
+	return &ExecutionPlanService{client: client, users: users, profiles: profiles}
 }
 
 // CreateExecutionPlanTemplateInput 创建执行计划模板的输入参数。
@@ -44,6 +45,7 @@ type CreateExecutionPlanTemplateInput struct {
 	Scope       string                              `json:"scope"` // user / org
 	OwnerUserID *int                                `json:"owner_user_id,omitempty"`
 	OwnerOrgID  *int                                `json:"owner_org_id,omitempty"`
+	ProfileID   int                                 `json:"profile_id"` // 计划级策略引用（ExecutionProfile），为全管道供七项行为预设
 	RubyRetry   schema.ExecutionPlanRubyRetryConfig `json:"ruby_retry"`
 	Rounds      []schema.ExecutionRoundConfig       `json:"rounds"`
 }
@@ -52,6 +54,7 @@ type CreateExecutionPlanTemplateInput struct {
 type UpdateExecutionPlanTemplateInput struct {
 	Name        *string                              `json:"name,omitempty"`
 	Description *string                              `json:"description,omitempty"`
+	ProfileID   *int                                 `json:"profile_id,omitempty"` // nil = 保留现值
 	RubyRetry   *schema.ExecutionPlanRubyRetryConfig `json:"ruby_retry,omitempty"`
 	Rounds      []schema.ExecutionRoundConfig        `json:"rounds,omitempty"`
 }
@@ -121,13 +124,18 @@ func (s *ExecutionPlanService) GetByIDRaw(ctx context.Context, planID int) (*ent
 	return plan, nil
 }
 
-// Create 创建执行计划模板。
-func (s *ExecutionPlanService) Create(ctx context.Context, input CreateExecutionPlanTemplateInput) (*ent.ExecutionPlanTemplate, error) {
+// Create 创建执行计划模板。userID 为创建者，用于计划级策略引用的属主校验。
+func (s *ExecutionPlanService) Create(ctx context.Context, userID int, input CreateExecutionPlanTemplateInput) (*ent.ExecutionPlanTemplate, error) {
 	if input.Scope == "" {
 		input.Scope = ScopeUser
 	}
 	if input.Scope != ScopeUser && input.Scope != ScopeOrg {
 		return nil, ErrExecutionPlanScopeInvalid
+	}
+
+	// 计划级 profile_id 引用校验（格式 + 存在性 + 属主；策略引用已从 translate 轮级上提到计划级）。
+	if err := s.validatePlanProfileRef(ctx, userID, input.ProfileID); err != nil {
+		return nil, err
 	}
 
 	if err := validateExecutionRounds(input.Rounds); err != nil {
@@ -143,6 +151,7 @@ func (s *ExecutionPlanService) Create(ctx context.Context, input CreateExecution
 		SetName(name).
 		SetDescription(strings.TrimSpace(input.Description)).
 		SetScope(input.Scope).
+		SetProfileID(input.ProfileID).
 		SetRubyRetry(input.RubyRetry).
 		SetRounds(input.Rounds)
 
@@ -183,6 +192,13 @@ func (s *ExecutionPlanService) Update(ctx context.Context, userID, planID int, i
 		}
 	}
 
+	// 计划级 profile_id 引用校验（格式 + 存在性 + 属主）；nil 表示保留现值（随 RubyRetry 惯例）。
+	if input.ProfileID != nil {
+		if err := s.validatePlanProfileRef(ctx, userID, *input.ProfileID); err != nil {
+			return nil, err
+		}
+	}
+
 	update := s.client.ExecutionPlanTemplate.UpdateOneID(planID)
 
 	if input.Name != nil {
@@ -194,6 +210,9 @@ func (s *ExecutionPlanService) Update(ctx context.Context, userID, planID int, i
 	}
 	if input.Description != nil {
 		update.SetDescription(strings.TrimSpace(*input.Description))
+	}
+	if input.ProfileID != nil {
+		update.SetProfileID(*input.ProfileID)
 	}
 	if input.RubyRetry != nil {
 		update.SetRubyRetry(*input.RubyRetry)
@@ -258,6 +277,47 @@ func (s *ExecutionPlanService) checkAccess(ctx context.Context, userID int, plan
 	return nil
 }
 
+// validatePlanProfileID 校验计划级 profile_id 引用的格式：非零；负数必须可解析为
+// 内置策略（IsBuiltinID 仅判定负号，可解析集合以 BuiltinExecutionProfile 为准，
+// 当前仅 -1）。正数的存在性与属主校验需查库，见 validatePlanProfileRef。
+func validatePlanProfileID(profileID int) error {
+	if profileID == 0 {
+		return fmt.Errorf("%w: profile_id must not be zero", ErrExecutionPlanConfigInvalid)
+	}
+	if profileID < 0 && templates.BuiltinExecutionProfile(profileID) == nil {
+		return fmt.Errorf("%w: profile_id %d is not a valid builtin template", ErrExecutionPlanConfigInvalid, profileID)
+	}
+	return nil
+}
+
+// validatePlanProfileRef 校验计划级 profile_id 引用对调用者可用：负数须可解析为
+// 内置策略；正数经 GetByID 确认存在、CheckAccess 复核属主/成员资格（规则单一来源
+// 见 ExecutionProfileService.CheckAccess）。越权或不存在的引用一律按 not found
+// 报错，不泄露他人资源的存在性（与 checkAccess 同一惯例）。
+func (s *ExecutionPlanService) validatePlanProfileRef(ctx context.Context, userID, profileID int) error {
+	if err := validatePlanProfileID(profileID); err != nil {
+		return err
+	}
+	if profileID < 0 {
+		return nil // 内置策略：validatePlanProfileID 已确认可解析
+	}
+	notFound := fmt.Errorf("%w: profile_id %d not found", ErrExecutionPlanConfigInvalid, profileID)
+	profile, err := s.profiles.GetByID(ctx, profileID)
+	if errors.Is(err, ErrExecutionProfileNotFound) {
+		return notFound
+	}
+	if err != nil {
+		return err
+	}
+	if err := s.profiles.CheckAccess(ctx, userID, profile); err != nil {
+		if errors.Is(err, ErrExecutionProfileNotFound) {
+			return notFound
+		}
+		return err
+	}
+	return nil
+}
+
 // validateExecutionRounds 校验执行轮次配置的有效性。
 func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 	if len(rounds) == 0 {
@@ -281,12 +341,7 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			if t.PromptTemplateID < 0 && t.PromptTemplateID != templates.BuiltinTranslationPromptTemplateID {
 				return fmt.Errorf("%w: rounds[%d].translate.prompt_template_id %d is not a valid builtin translation template", ErrExecutionPlanConfigInvalid, i, t.PromptTemplateID)
 			}
-			if t.ProfileID == 0 {
-				return fmt.Errorf("%w: rounds[%d].translate.profile_id must not be zero", ErrExecutionPlanConfigInvalid, i)
-			}
-			if t.ProfileID < 0 && !templates.IsBuiltinID(t.ProfileID) {
-				return fmt.Errorf("%w: rounds[%d].translate.profile_id %d is not a valid builtin template", ErrExecutionPlanConfigInvalid, i, t.ProfileID)
-			}
+			// NOTE: profile_id 校验已上提到计划级（validatePlanProfileID），轮级不再持有策略引用。
 			if t.BatchSize < 0 {
 				return fmt.Errorf("%w: rounds[%d].translate.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
 			}

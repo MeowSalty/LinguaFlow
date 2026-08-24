@@ -90,6 +90,11 @@ func OwnerOrgID(v int) predicate.ExecutionPlanTemplate {
 	return predicate.ExecutionPlanTemplate(sql.FieldEQ(FieldOwnerOrgID, v))
 }
 
+// ProfileID applies equality check predicate on the "profile_id" field. It's identical to ProfileIDEQ.
+func ProfileID(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldEQ(FieldProfileID, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.ExecutionPlanTemplate {
 	return predicate.ExecutionPlanTemplate(sql.FieldEQ(FieldCreatedAt, v))
@@ -423,6 +428,46 @@ func OwnerOrgIDIsNil() predicate.ExecutionPlanTemplate {
 // OwnerOrgIDNotNil applies the NotNil predicate on the "owner_org_id" field.
 func OwnerOrgIDNotNil() predicate.ExecutionPlanTemplate {
 	return predicate.ExecutionPlanTemplate(sql.FieldNotNull(FieldOwnerOrgID))
+}
+
+// ProfileIDEQ applies the EQ predicate on the "profile_id" field.
+func ProfileIDEQ(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldEQ(FieldProfileID, v))
+}
+
+// ProfileIDNEQ applies the NEQ predicate on the "profile_id" field.
+func ProfileIDNEQ(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldNEQ(FieldProfileID, v))
+}
+
+// ProfileIDIn applies the In predicate on the "profile_id" field.
+func ProfileIDIn(vs ...int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldIn(FieldProfileID, vs...))
+}
+
+// ProfileIDNotIn applies the NotIn predicate on the "profile_id" field.
+func ProfileIDNotIn(vs ...int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldNotIn(FieldProfileID, vs...))
+}
+
+// ProfileIDGT applies the GT predicate on the "profile_id" field.
+func ProfileIDGT(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldGT(FieldProfileID, v))
+}
+
+// ProfileIDGTE applies the GTE predicate on the "profile_id" field.
+func ProfileIDGTE(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldGTE(FieldProfileID, v))
+}
+
+// ProfileIDLT applies the LT predicate on the "profile_id" field.
+func ProfileIDLT(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldLT(FieldProfileID, v))
+}
+
+// ProfileIDLTE applies the LTE predicate on the "profile_id" field.
+func ProfileIDLTE(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldLTE(FieldProfileID, v))
 }
 
 // RubyRetryIsNil applies the IsNil predicate on the "ruby_retry" field.

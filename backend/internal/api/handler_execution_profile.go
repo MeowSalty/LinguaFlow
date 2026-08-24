@@ -398,15 +398,25 @@ func (s *Server) handleUpdateExecutionProfile(w http.ResponseWriter, r *http.Req
 
 // handleDeleteExecutionProfile 删除执行策略配置。
 func (s *Server) handleDeleteExecutionProfile(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
 	id, ok := s.parseExecutionProfileID(w, r)
 	if !ok {
 		return
 	}
 
-	err := s.executionProfileSvc.Delete(r.Context(), id)
+	err := s.executionProfileSvc.Delete(r.Context(), authUser.User.ID, id)
 	if err != nil {
 		if err == service.ErrExecutionProfileNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
+			return
+		}
+		if errors.Is(err, service.ErrExecutionProfileInUse) {
+			// 固定文案：不回传 service 层错误详情，避免泄露引用计划的信息。
+			s.writeProblem(w, r, http.StatusConflict, "conflict", "该执行策略正被执行计划引用，无法删除")
 			return
 		}
 		s.writeServiceError(w, r, err)

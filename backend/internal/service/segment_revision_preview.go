@@ -363,20 +363,21 @@ func revisionRoundFromSnapshot(snapshot *JobExecutionSnapshot, fixIssues []qa.Qu
 		if snapshot.Rounds[i].Mode != "translate" {
 			continue
 		}
+		revise := &JobReviseRoundSnapshot{
+			// 合成轮采用固定的低并发、适中批量与默认重试参数：
+			// 这些值与交互式修订的成本/响应时间平衡约定一致；IssueCodes
+			// 与已配置 revise 轮同样收窄为请求交集，保持一致的修复目标语义。
+			BatchSize:        20,
+			MaxWordsPerBatch: 0,
+			Concurrency:      1,
+			SegmentScope:     "with_issues",
+			IssueCodes:       append([]string(nil), codes...),
+			Retry:            schema.RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
+		}
 		return JobRoundSnapshot{
 			Mode:    "revise",
 			Backend: snapshot.Rounds[i].Backend,
-			Revise: &JobReviseRoundSnapshot{
-				// 合成轮采用固定的低并发、适中批量与默认重试参数：
-				// 这些值与交互式修订的成本/响应时间平衡约定一致；IssueCodes
-				// 与已配置 revise 轮同样收窄为请求交集，保持一致的修复目标语义。
-				BatchSize:        20,
-				MaxWordsPerBatch: 0,
-				Concurrency:      1,
-				SegmentScope:     "with_issues",
-				IssueCodes:       append([]string(nil), codes...),
-				Retry:            schema.RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
-			},
+			Revise:  revise,
 		}, true, nil
 	}
 	return JobRoundSnapshot{}, false, ErrRevisionNoBackend
@@ -388,16 +389,10 @@ func cloneReviseSnapshot(in *JobReviseRoundSnapshot) *JobReviseRoundSnapshot {
 	return &out
 }
 
-// repairOptionsFromSnapshot 从计划内首个 translate 轮的策略派生修复选项，
+// repairOptionsFromSnapshot 从计划级策略快照派生修复选项，
 // 供修订预览在截断轮次前抢救 Repair 配置。
 func repairOptionsFromSnapshot(snapshot *JobExecutionSnapshot) repair.Options {
-	for _, rs := range snapshot.Rounds {
-		if rs.Mode != "translate" || rs.Translate == nil {
-			continue
-		}
-		return RepairOptionsFromStrategy(rs.Translate.Strategy)
-	}
-	return repair.Options{}
+	return RepairOptionsFromStrategy(snapshot.Strategy)
 }
 
 // RepairOptionsFromStrategy 将 translate 策略快照映射为修复选项。worker 的

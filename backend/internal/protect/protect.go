@@ -31,6 +31,9 @@ type Protector interface {
 const placeholderFmt = "__LF_%06d__"
 
 // nextKey 在 seg.Protected 中分配下一个未使用的占位符 key。
+// 同时跳过 Source 文本中已出现的同形字面量：分配 key 与文本既有 __LF_NNNNNN__
+// 字面量碰撞时，按出现次数的守恒校验无法区分真假占位符，还原会落在错误位置；
+// 跳过后字面量由 PlaceholderViolations 的 invented 校验显式拒绝（fail-closed）。
 func nextKey(seg *model.Segment) string {
 	if seg.Protected == nil {
 		seg.Protected = make(map[string]string)
@@ -38,7 +41,7 @@ func nextKey(seg *model.Segment) string {
 	i := len(seg.Protected) + 1
 	for {
 		k := fmt.Sprintf(placeholderFmt, i)
-		if _, exists := seg.Protected[k]; !exists {
+		if _, exists := seg.Protected[k]; !exists && !strings.Contains(seg.Source, k) {
 			return k
 		}
 		i++
@@ -119,6 +122,27 @@ func mergeAdjacentPlaceholders(seg *model.Segment) {
 
 		return newKey
 	})
+}
+
+// ProtectText 对任意文本执行保护，返回占位符形态文本与「占位符 → 原片段」映射。
+// 与 Segment 级 Protect 走同一实现（含相邻占位符合并），供不便持有 Segment 状态的
+// 调用方（如 revise 轮对 target 的保护）使用；调用方负责持有映射以便还原。
+// p 为 nil 时原样返回（无保护配置的降级路径）。
+func ProtectText(p Protector, text string) (string, map[string]string, error) {
+	if p == nil {
+		return text, nil, nil
+	}
+	seg := &model.Segment{Source: text}
+	if err := p.Protect(seg); err != nil {
+		return "", nil, err
+	}
+	return seg.Source, seg.Protected, nil
+}
+
+// RestoreText 把 text 中出现的映射占位符还原为原片段（restoreAll 的文本级导出），
+// 与 Segment 级 Unprotect 的还原语义一致。
+func RestoreText(text string, mapping map[string]string) string {
+	return restoreAll(text, mapping)
 }
 
 // restoreAll 把 text 中出现的所有占位符替换回原内容。

@@ -170,6 +170,9 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 				Renderer:          r.ReviseRenderer,
 				ResponseMode:      r.ResponseMode,
 				IssueCodes:        r.IssueCodes,
+				ProtectRules:      r.ProtectRules,
+				RubyEnabled:       r.RubyEnabled,
+				RubyPreserveKinds: r.RubyPreserveKinds,
 				MaxBatchIndexSpan: r.MaxBatchIndexSpan,
 			}
 
@@ -247,7 +250,10 @@ func buildSinglePipelineRound(
 		return buildSemanticQAPipelineRound(rc, defaultRepair, logger, reporter)
 	}
 	if rc.Revise != nil {
-		return buildRevisePipelineRound(rc, defaultRepair, logger, reporter)
+		return buildRevisePipelineRound(
+			rc, rubyRestorer, rubyRetryBackends,
+			defaultRepair, logger, reporter, rubyRetryAttempts,
+		)
 	}
 	if rc.Correct != nil {
 		return buildCorrectPipelineRound(rc, logger, reporter)
@@ -257,6 +263,19 @@ func buildSinglePipelineRound(
 		defaultRepair, inlineBootstrap, maxTermsPer1000, minSourceLen,
 		inlineConflictStr, logger, reporter, rubyRetryAttempts,
 	)
+}
+
+// deriveRubyMode 推导注音协议模式：ruby 关闭为空串；JSON 为主，text 响应退化为
+// Section。translate 与 revise 轮共用同一推导（策略均来自计划级引用的同一份
+// 快照顶层 Strategy），协议分叉会使回填解析落空、守恒守卫永久误拒。
+func deriveRubyMode(rubyEnabled bool, responseMode string) string {
+	if !rubyEnabled {
+		return ""
+	}
+	if responseMode == "text" {
+		return prompt.RubyModeSection
+	}
+	return prompt.RubyModeJSON
 }
 
 func buildTranslatePipelineRound(
@@ -297,13 +316,7 @@ func buildTranslatePipelineRound(
 		prot = protect.Compose(ps...)
 	}
 
-	rubyMode := ""
-	if t.RubyEnabled {
-		rubyMode = prompt.RubyModeJSON
-		if t.ResponseMode == "text" {
-			rubyMode = prompt.RubyModeSection
-		}
-	}
+	rubyMode := deriveRubyMode(t.RubyEnabled, t.ResponseMode)
 
 	ctxConfig := pipeline.DefaultContextConfig()
 	if rc.Context != nil {
@@ -462,14 +475,27 @@ func buildSemanticQAPipelineRound(
 // buildRevisePipelineRound 构建 LLM 修订轮次。
 func buildRevisePipelineRound(
 	rc RoundConfig,
+	rubyRestorer *ruby.Restorer,
+	rubyRetryBackends []backend.Backend,
 	defaultRepair repair.Options,
 	logger *slog.Logger,
 	reporter progress.Reporter,
+	rubyRetryAttempts int,
 ) (pipeline.Round, error) {
 	r := rc.Revise
 	if r == nil {
 		r = &ReviseRoundConfig{}
 	}
+
+	// 构建 per-round Protector：revise 的 ruby 提取作用于 target，由 handler
+	// 内部自理（不把 ruby.Extractor 放进链）；此处仅承接 protect 规则。
+	var prot protect.Protector
+	if len(r.ProtectRules) > 0 {
+		prot = protect.FromRules(r.ProtectRules)
+	}
+
+	// RubyMode 推导与 translate 轮共用 deriveRubyMode（见其注释）。
+	rubyMode := deriveRubyMode(r.RubyEnabled, r.ResponseMode)
 
 	handler := &pipeline.ReviseHandler{
 		Backend:           rc.Backend,
@@ -482,6 +508,13 @@ func buildRevisePipelineRound(
 		ResponseMode:      r.ResponseMode,
 		Repair:            defaultRepair,
 		IssueCodes:        r.IssueCodes,
+		Protector:         prot,
+		RubyEnabled:       r.RubyEnabled,
+		RubyPreserveKinds: r.RubyPreserveKinds,
+		RubyMode:          rubyMode,
+		RubyRestorer:      rubyRestorer,
+		RubyRetryBackends: rubyRetryBackends,
+		RubyRetryAttempts: rubyRetryAttempts,
 		Reporter:          reporter,
 		Logger:            logger,
 	}

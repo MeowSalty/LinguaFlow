@@ -113,6 +113,20 @@ func (_c *ExecutionPlanTemplateCreate) SetNillableOwnerOrgID(v *int) *ExecutionP
 	return _c
 }
 
+// SetProfileID sets the "profile_id" field.
+func (_c *ExecutionPlanTemplateCreate) SetProfileID(v int) *ExecutionPlanTemplateCreate {
+	_c.mutation.SetProfileID(v)
+	return _c
+}
+
+// SetNillableProfileID sets the "profile_id" field if the given value is not nil.
+func (_c *ExecutionPlanTemplateCreate) SetNillableProfileID(v *int) *ExecutionPlanTemplateCreate {
+	if v != nil {
+		_c.SetProfileID(*v)
+	}
+	return _c
+}
+
 // SetRubyRetry sets the "ruby_retry" field.
 func (_c *ExecutionPlanTemplateCreate) SetRubyRetry(v schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateCreate {
 	_c.mutation.SetRubyRetry(v)
@@ -194,6 +208,10 @@ func (_c *ExecutionPlanTemplateCreate) defaults() {
 		v := executionplantemplate.DefaultScope
 		_c.mutation.SetScope(v)
 	}
+	if _, ok := _c.mutation.ProfileID(); !ok {
+		v := executionplantemplate.DefaultProfileID
+		_c.mutation.SetProfileID(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -227,6 +245,9 @@ func (_c *ExecutionPlanTemplateCreate) check() error {
 		if err := executionplantemplate.OwnerOrgIDValidator(v); err != nil {
 			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "ExecutionPlanTemplate.owner_org_id": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.ProfileID(); !ok {
+		return &ValidationError{Name: "profile_id", err: errors.New(`ent: missing required field "ExecutionPlanTemplate.profile_id"`)}
 	}
 	if _, ok := _c.mutation.Rounds(); !ok {
 		return &ValidationError{Name: "rounds", err: errors.New(`ent: missing required field "ExecutionPlanTemplate.rounds"`)}
@@ -276,6 +297,10 @@ func (_c *ExecutionPlanTemplateCreate) createSpec() (*ExecutionPlanTemplate, *sq
 	if value, ok := _c.mutation.Scope(); ok {
 		_spec.SetField(executionplantemplate.FieldScope, field.TypeString, value)
 		_node.Scope = value
+	}
+	if value, ok := _c.mutation.ProfileID(); ok {
+		_spec.SetField(executionplantemplate.FieldProfileID, field.TypeInt, value)
+		_node.ProfileID = value
 	}
 	if value, ok := _c.mutation.RubyRetry(); ok {
 		_spec.SetField(executionplantemplate.FieldRubyRetry, field.TypeJSON, value)

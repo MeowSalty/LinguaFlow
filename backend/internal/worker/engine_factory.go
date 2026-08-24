@@ -48,8 +48,8 @@ func (f *EngineFactory) BuildEngine(
 }
 
 // BuildEngineWithConfig 同 BuildEngine，但使用调用方预派生的 engine.Config。
-// 供修订预览等场景使用：执行 snapshot 被裁剪为单个 revise 轮后，BuildEngineConfig
-// 无法再从 translate 轮派生 Repair 等策略，调用方需从完整 snapshot 派生后传入。
+// 供修订预览等场景使用：执行 snapshot 被裁剪为单个 revise 轮后仍保留顶层
+// Strategy（计划级物化），调用方可基于完整快照显式覆盖个别配置（如 Repair）。
 func (f *EngineFactory) BuildEngineWithConfig(
 	ctx context.Context,
 	snapshot *service.JobExecutionSnapshot,
@@ -88,7 +88,7 @@ func (f *EngineFactory) BuildEngineWithConfig(
 			if rs.Translate == nil {
 				return nil, fmt.Errorf("round[%d]: mode=translate but translate config is nil", i)
 			}
-			round, err = buildTranslateRound(rs, b)
+			round, err = buildTranslateRound(rs, snapshot.Strategy, b)
 		case "extract":
 			if rs.Extract == nil {
 				return nil, fmt.Errorf("round[%d]: mode=extract but extract config is nil", i)
@@ -108,7 +108,7 @@ func (f *EngineFactory) BuildEngineWithConfig(
 			if rs.Revise == nil {
 				return nil, fmt.Errorf("round[%d]: mode=revise but revise config is nil", i)
 			}
-			round, err = buildReviseRound(rs, b)
+			round, err = buildReviseRound(rs, snapshot.Strategy, b)
 		case "correct":
 			if rs.Correct == nil {
 				return nil, fmt.Errorf("round[%d]: mode=correct but correct config is nil", i)
@@ -217,10 +217,11 @@ func unwrapMetered(b backend.Backend) (*backend.MeteredBackend, bool) {
 	return nil, false
 }
 
-// BuildEngineConfig is the shared engine.Config builder used by both JobRunner
-// and PreviewRunner. It reads QA, repair, ruby, and glossary config from the
-// first translate round's strategy snapshot.
+// BuildEngineConfig 是 JobRunner 与 PreviewRunner 共享的引擎配置构建器。
+// QA、repair、ruby、glossary 自举等计划级行为直接读快照顶层的 Strategy
+// （由 service 层从计划引用的策略物化一次），不再扫描 translate 轮。
 func BuildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
+	s := snapshot.Strategy
 	cfg := &engine.Config{
 		SourceLang: snapshot.SourceLang,
 		TargetLang: snapshot.TargetLang,
@@ -229,51 +230,46 @@ func BuildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 			Enabled: snapshot.GlossaryEnabled,
 		},
 	}
-	for _, rs := range snapshot.Rounds {
-		if rs.Mode != "translate" || rs.Translate == nil {
-			continue
-		}
-		s := rs.Translate.Strategy
-		cfg.Repair = service.RepairOptionsFromStrategy(s)
-		cfg.Ruby = engine.RubyConfig{
-			Enabled:       s.Ruby.Enabled,
-			PreserveKinds: s.Ruby.PreserveKinds,
-		}
-		cfg.Glossary.Bootstrap = config.BootstrapConfig{
-			Enabled:                s.Glossary.Bootstrap.Enabled,
-			MaxTermsPer1000Chars:   s.Glossary.Bootstrap.MaxTermsPer1000Chars,
-			MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
-			InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
-		}
-		cfg.QA = qa.Config{
-			Enabled:        s.QA.Enabled,
-			AutoReject:     s.QA.AutoReject,
-			Checks:         s.QA.Checks,
-			LengthMethod:   qa.LengthMethod(s.QA.LengthMethod),
-			LengthRatioMin: s.QA.LengthRatioMin,
-			LengthRatioMax: s.QA.LengthRatioMax,
-		}
-		cfg.QA.SourceLang = snapshot.SourceLang
-		cfg.QA.TargetLang = snapshot.TargetLang
-		break
+	cfg.Repair = service.RepairOptionsFromStrategy(s)
+	cfg.Ruby = engine.RubyConfig{
+		Enabled:       s.Ruby.Enabled,
+		PreserveKinds: s.Ruby.PreserveKinds,
 	}
+	cfg.Glossary.Bootstrap = config.BootstrapConfig{
+		Enabled:                s.Glossary.Bootstrap.Enabled,
+		MaxTermsPer1000Chars:   s.Glossary.Bootstrap.MaxTermsPer1000Chars,
+		MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
+		InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
+	}
+	cfg.QA = qa.Config{
+		Enabled:        s.QA.Enabled,
+		AutoReject:     s.QA.AutoReject,
+		Checks:         s.QA.Checks,
+		LengthMethod:   qa.LengthMethod(s.QA.LengthMethod),
+		LengthRatioMin: s.QA.LengthRatioMin,
+		LengthRatioMax: s.QA.LengthRatioMax,
+	}
+	cfg.QA.SourceLang = snapshot.SourceLang
+	cfg.QA.TargetLang = snapshot.TargetLang
 	return cfg
 }
 
-func buildTranslateRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+// buildTranslateRound 构建翻译轮：protect/postprocess/context/ruby 全部取自
+// 计划级策略快照（snapshot.Strategy，由调用方传入），轮次自身不再携带策略。
+func buildTranslateRound(rs service.JobRoundSnapshot, strategy service.StrategySnapshot, b backend.Backend) (engine.Round, error) {
 	t := rs.Translate
 	roundRenderer, err := prompt.NewRenderer(t.Prompt.Content)
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build renderer: %w", err)
 	}
 	var protectRules []string
-	if t.Strategy.Protect.Enabled {
-		protectRules = t.Strategy.Protect.Rules
+	if strategy.Protect.Enabled {
+		protectRules = strategy.Protect.Rules
 	}
 	var roundPostprocess *pipeline.PostprocessConfig
-	if t.Strategy.Postprocess.Enabled {
+	if strategy.Postprocess.Enabled {
 		roundPostprocess = &pipeline.PostprocessConfig{
-			TrimSpaces: t.Strategy.Postprocess.TrimSpaces,
+			TrimSpaces: strategy.Postprocess.TrimSpaces,
 		}
 	}
 	return engine.Round{
@@ -291,13 +287,13 @@ func buildTranslateRound(rs service.JobRoundSnapshot, b backend.Backend) (engine
 		ResponseMode:      responseModeFromBackendOptions(rs.Backend.Options),
 		Mode:              pipeline.RoundModeTranslate,
 		ProtectRules:      protectRules,
-		RubyEnabled:       t.Strategy.Ruby.Enabled,
-		RubyPreserveKinds: t.Strategy.Ruby.PreserveKinds,
+		RubyEnabled:       strategy.Ruby.Enabled,
+		RubyPreserveKinds: strategy.Ruby.PreserveKinds,
 		Context: &pipeline.ContextConfig{
-			Enabled:  t.Strategy.Context.Enabled,
-			Before:   t.Strategy.Context.Before,
-			After:    t.Strategy.Context.After,
-			MaxChars: t.Strategy.Context.MaxChars,
+			Enabled:  strategy.Context.Enabled,
+			Before:   strategy.Context.Before,
+			After:    strategy.Context.After,
+			MaxChars: strategy.Context.MaxChars,
 		},
 		Postprocess: roundPostprocess,
 	}, nil
@@ -378,11 +374,18 @@ func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 	}, nil
 }
 
-func buildReviseRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+// buildReviseRound 构建修订轮：protect/ruby 与 translate 轮同源，直接取计划级
+// 策略快照（protect Enabled→Rules，否则 nil）；零值策略 = 无保护规则、不启用注音，
+// ReviseHandler 降级原文直发。
+func buildReviseRound(rs service.JobRoundSnapshot, strategy service.StrategySnapshot, b backend.Backend) (engine.Round, error) {
 	r := rs.Revise
 	renderer, err := prompt.NewReviseRenderer(templates.EmbeddedReviseTemplate())
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build revise renderer: %w", err)
+	}
+	var protectRules []string
+	if strategy.Protect.Enabled {
+		protectRules = strategy.Protect.Rules
 	}
 	return engine.Round{
 		Backend:          b,
@@ -395,10 +398,13 @@ func buildReviseRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Ro
 			Backoff:     time.Duration(r.Retry.BackoffMs) * time.Millisecond,
 			Jitter:      r.Retry.Jitter,
 		},
-		Mode:           pipeline.RoundModeRevise,
-		ResponseMode:   responseModeFromBackendOptions(rs.Backend.Options),
-		ReviseRenderer: renderer,
-		IssueCodes:     r.IssueCodes,
+		Mode:              pipeline.RoundModeRevise,
+		ResponseMode:      responseModeFromBackendOptions(rs.Backend.Options),
+		ReviseRenderer:    renderer,
+		IssueCodes:        r.IssueCodes,
+		ProtectRules:      protectRules,
+		RubyEnabled:       strategy.Ruby.Enabled,
+		RubyPreserveKinds: strategy.Ruby.PreserveKinds,
 	}, nil
 }
 

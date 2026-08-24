@@ -119,8 +119,11 @@ type JobExecution struct {
 
 // JobExecutionSnapshot 任务执行快照，创建时生成，不可变。
 type JobExecutionSnapshot struct {
-	ExecutionPlanID          int                             `json:"execution_plan_id"`
-	ExecutionPlanName        string                          `json:"execution_plan_name"`
+	ExecutionPlanID   int    `json:"execution_plan_id"`
+	ExecutionPlanName string `json:"execution_plan_name"`
+	// Strategy 计划级策略快照：来自计划引用的 ExecutionProfile（profile_id），
+	// 为全管道（所有改写型轮次与引擎级行为）供 protect/ruby 等七项行为预设。
+	Strategy                 StrategySnapshot                `json:"strategy"`
 	Rounds                   []JobRoundSnapshot              `json:"rounds"`
 	SourceLang               string                          `json:"source_lang"`
 	TargetLang               string                          `json:"target_lang"`
@@ -159,9 +162,9 @@ type JobRoundSnapshot struct {
 }
 
 // JobTranslateRoundSnapshot 翻译轮次快照。
+// 无 Strategy 字段：策略快照位于 JobExecutionSnapshot.Strategy（计划级引用物化一次）。
 type JobTranslateRoundSnapshot struct {
 	Prompt           PromptSnapshot         `json:"prompt"`
-	Strategy         StrategySnapshot       `json:"strategy"`
 	BatchSize        int                    `json:"batch_size"`
 	MaxWordsPerBatch int                    `json:"max_words_per_batch"`
 	Concurrency      int                    `json:"concurrency"`
@@ -442,9 +445,11 @@ func (s *JobService) prepareExecutionSnapshot(
 	return snapshot, nil
 }
 
-// validateAndSnapshotWith 校验执行计划中的每轮配置并生成完整快照，backend 可访问性由 check 注入。
+// validateAndSnapshotWith 校验执行计划中的每轮配置并生成完整快照，backend 可访问性由 check 注入，
+// 策略访问权经 snapshotProfile 以 actorUserID 复核。
 func (s *JobService) validateAndSnapshotWith(
 	ctx context.Context,
+	actorUserID int,
 	plan *ent.ExecutionPlanTemplate,
 	overrideSegmentFilter string,
 	check func(backendID int) error,
@@ -454,6 +459,14 @@ func (s *JobService) validateAndSnapshotWith(
 		ExecutionPlanName: plan.Name,
 		Rounds:            make([]JobRoundSnapshot, 0, len(plan.Rounds)),
 	}
+
+	// 计划级策略快照：在轮次循环前物化一次，为全管道（所有改写型轮次与
+	// 引擎级行为）供 protect/ruby 等七项行为预设。
+	strategySnap, err := s.snapshotProfile(ctx, actorUserID, plan.ProfileID)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot strategy profile: %w", err)
+	}
+	snapshot.Strategy = *strategySnap
 
 	for i, round := range plan.Rounds {
 		// correct 是纯本地轮，无 backend：跳过 RBAC check 与 backend snapshot，短路出零 BackendSnapshot。
@@ -493,12 +506,6 @@ func (s *JobService) validateAndSnapshotWith(
 				return nil, fmt.Errorf("rounds[%d] snapshot prompt: %w", i, err)
 			}
 
-			// 快照策略模板
-			strategySnap, err := s.snapshotProfile(ctx, t.ProfileID)
-			if err != nil {
-				return nil, fmt.Errorf("rounds[%d] snapshot profile: %w", i, err)
-			}
-
 			// 校验翻译模板必填
 			if promptSnap.Content == "" {
 				return nil, fmt.Errorf("rounds[%d] prompt_template %q has no system_prompt_content (translation prompt is required)", i, promptSnap.TemplateName)
@@ -509,7 +516,6 @@ func (s *JobService) validateAndSnapshotWith(
 				Backend: *backendSnap,
 				Translate: &JobTranslateRoundSnapshot{
 					Prompt:           *promptSnap,
-					Strategy:         *strategySnap,
 					BatchSize:        t.BatchSize,
 					MaxWordsPerBatch: t.MaxWordsPerBatch,
 					Concurrency:      t.Concurrency,
@@ -611,19 +617,32 @@ func (s *JobService) validateAndSnapshotWith(
 		}
 	}
 
-	// 注音对齐重试快照
-	if plan.RubyRetry.Enabled && plan.RubyRetry.BackendID > 0 {
-		rr := &plan.RubyRetry
-
+	// 注音对齐重试快照。
+	// backend_id=0 表示复用翻译主后端（文档承诺）：从已构建的 snapshot.Rounds 中取
+	// 第一条 translate 轮的 Backend 快照回填，避免 RubyRetry 因缺后端留空导致重试
+	// 静默失效；无 translate 轮可回退时维持留 nil（与既有行为一致）。
+	rr := &plan.RubyRetry
+	var rrBackendSnap *BackendSnapshot
+	if rr.Enabled && rr.BackendID > 0 {
 		if err := check(rr.BackendID); err != nil {
 			return nil, fmt.Errorf("ruby retry backend: %w", err)
 		}
 
-		rrBackendSnap, err := s.snapshotBackend(ctx, rr.BackendID)
+		snap, err := s.snapshotBackend(ctx, rr.BackendID)
 		if err != nil {
 			return nil, fmt.Errorf("ruby retry snapshot backend: %w", err)
 		}
-
+		rrBackendSnap = snap
+	} else if rr.Enabled {
+		for i := range snapshot.Rounds {
+			if snapshot.Rounds[i].Mode == "translate" {
+				backend := snapshot.Rounds[i].Backend
+				rrBackendSnap = &backend
+				break
+			}
+		}
+	}
+	if rrBackendSnap != nil {
 		snapshot.RubyRetry = &ExecutionPlanRubyRetrySnapshot{
 			Enabled:     true,
 			Backend:     *rrBackendSnap,
@@ -642,7 +661,7 @@ func (s *JobService) validateAndSnapshot(
 	plan *ent.ExecutionPlanTemplate,
 	overrideSegmentFilter string,
 ) (*JobExecutionSnapshot, error) {
-	return s.validateAndSnapshotWith(ctx, plan, overrideSegmentFilter, func(backendID int) error {
+	return s.validateAndSnapshotWith(ctx, actorUserID, plan, overrideSegmentFilter, func(backendID int) error {
 		return s.validateBackendAccess(ctx, projectRow, backendID)
 	})
 }
@@ -691,7 +710,7 @@ func (s *JobService) prepareExecutionSnapshotForActor(
 			return s.validateBackendAccessForActor(ctx, actorUserID, backendID)
 		}
 	}
-	snapshot, err := s.validateAndSnapshotWith(ctx, plan, overrideSegmentFilter, check)
+	snapshot, err := s.validateAndSnapshotWith(ctx, actorUserID, plan, overrideSegmentFilter, check)
 	if err != nil {
 		return nil, err
 	}
@@ -802,10 +821,15 @@ func (s *JobService) snapshotBootstrapTemplate(ctx context.Context, templateID i
 	}, nil
 }
 
-// snapshotProfile 快照策略模板。
-func (s *JobService) snapshotProfile(ctx context.Context, profileID int) (*StrategySnapshot, error) {
+// snapshotProfile 快照策略模板。userID 为触发快照的调用者：正数策略在物化前经
+// CheckAccess 复核访问权（与轮次 backend 的 check 注入对齐——计划创建后属主或
+// 组织资格可能已变更），内置策略（scope=system 虚拟实体）对全体放行。
+func (s *JobService) snapshotProfile(ctx context.Context, userID, profileID int) (*StrategySnapshot, error) {
 	tp, err := s.profiles.GetByID(ctx, profileID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.profiles.CheckAccess(ctx, userID, tp); err != nil {
 		return nil, err
 	}
 	tp.Config.NormalizeContext()

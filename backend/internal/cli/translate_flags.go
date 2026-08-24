@@ -11,7 +11,7 @@ import (
 // glossary-path 非空：cliCfg.Glossary.Path 改写、Enabled 强制 true。
 // bootstrap 非空：校验取值，覆盖独立自举开关；
 // 非 "off" 时一并把 Glossary.Enabled 设为 true（与 config.Validate 一致）。
-// profile 非空：将所有翻译轮次的 profile 替换为指定值。
+// profile 非空：将执行计划的计划级策略引用（execution.profile）替换为指定值。
 // prompt 非空：将所有翻译轮次的 prompt 替换为指定值。
 func applyTranslateFlags(cliCfg *config.CLIConfig, opts translateOptions) error {
 	if opts.glossaryPath != "" {
@@ -61,16 +61,12 @@ func applyTranslateFlags(cliCfg *config.CLIConfig, opts translateOptions) error 
 			return fmt.Errorf("--bootstrap must be one of off|pre|inline, got %q", opts.bootstrapMode)
 		}
 	}
-	// profile 覆盖：将所有翻译轮次的 profile 替换为指定值
+	// profile 覆盖：将执行计划的计划级策略引用替换为指定值
 	if opts.profile != "" {
 		if _, ok := cliCfg.TranslationProfiles[opts.profile]; !ok {
 			return fmt.Errorf("translation profile %q not found", opts.profile)
 		}
-		for i := range cliCfg.Execution.Rounds {
-			if cliCfg.Execution.Rounds[i].Mode == "translate" && cliCfg.Execution.Rounds[i].Translate != nil {
-				cliCfg.Execution.Rounds[i].Translate.Profile = opts.profile
-			}
-		}
+		cliCfg.Execution.Profile = opts.profile
 	}
 	// prompt 覆盖：将所有翻译轮次的 prompt 替换为指定值
 	if opts.prompt != "" {

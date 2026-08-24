@@ -178,6 +178,10 @@ func init() {
 	executionplantemplateDescOwnerOrgID := executionplantemplateFields[4].Descriptor()
 	// executionplantemplate.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	executionplantemplate.OwnerOrgIDValidator = executionplantemplateDescOwnerOrgID.Validators[0].(func(int) error)
+	// executionplantemplateDescProfileID is the schema descriptor for profile_id field.
+	executionplantemplateDescProfileID := executionplantemplateFields[5].Descriptor()
+	// executionplantemplate.DefaultProfileID holds the default value on creation for the profile_id field.
+	executionplantemplate.DefaultProfileID = executionplantemplateDescProfileID.Default.(int)
 	executionprofileMixin := schema.ExecutionProfile{}.Mixin()
 	executionprofileMixinFields0 := executionprofileMixin[0].Fields()
 	_ = executionprofileMixinFields0

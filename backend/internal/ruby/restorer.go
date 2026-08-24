@@ -47,7 +47,7 @@ func (r *Restorer) RestoreItems(seg *model.Segment, items []Item) (RestoreResult
 
 	for i := range items {
 		it := &items[i]
-		if it.TargetBase == "" && it.SourceBase == "" {
+		if !it.Restorable() {
 			continue
 		}
 		total++

@@ -70,7 +70,6 @@ func translateSnapshot(t *testing.T) *service.JobExecutionSnapshot {
 			},
 			Translate: &service.JobTranslateRoundSnapshot{
 				Prompt:           service.PromptSnapshot{Content: templates.EmbeddedPromptTemplate()},
-				Strategy:         service.StrategySnapshot{},
 				BatchSize:        10,
 				MaxWordsPerBatch: 500,
 				Concurrency:      1,
@@ -200,7 +199,6 @@ func translateSemanticQASnapshot(t *testing.T) *service.JobExecutionSnapshot {
 				},
 				Translate: &service.JobTranslateRoundSnapshot{
 					Prompt:           service.PromptSnapshot{Content: templates.EmbeddedPromptTemplate()},
-					Strategy:         service.StrategySnapshot{},
 					BatchSize:        10,
 					MaxWordsPerBatch: 500,
 					Concurrency:      1,

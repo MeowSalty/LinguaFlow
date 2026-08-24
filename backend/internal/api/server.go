@@ -127,12 +127,12 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	}
 	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool)
 	s.projectSvc = service.NewProjectService(client, s.userService)
-	s.executionPlanSvc = service.NewExecutionPlanService(client, s.userService)
+	s.executionProfileSvc = service.NewExecutionProfileService(client, s.userService)
+	s.executionPlanSvc = service.NewExecutionPlanService(client, s.userService, s.executionProfileSvc)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.translationPromptTemplateSvc = service.NewTranslationPromptTemplateService(client)
 	s.bootstrapPromptTemplateSvc = service.NewBootstrapPromptTemplateService(client)
 	s.prunePromptTemplateSvc = service.NewPrunePromptTemplateService(client)
-	s.executionProfileSvc = service.NewExecutionProfileService(client)
 	jobStore, err := filestore.NewLocal(filepath.Join(cfg.DataDir, "jobs"))
 	if err != nil {
 		return nil, err

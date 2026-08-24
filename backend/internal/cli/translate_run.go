@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 type translateOptions struct {
@@ -99,6 +100,8 @@ func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 }
 
 // buildEngineFromCLIConfig 从 CLIConfig 构造 engine.Options。
+// 计划级策略来自 execution.profile（按名查 translation_profiles，缺省回退内置默认
+// 策略），translate 与 revise 轮统一从该唯一策略接入 protect/ruby。
 func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error) {
 	if len(cliCfg.Execution.Rounds) == 0 {
 		return nil, fmt.Errorf("execution.rounds 不能为空")
@@ -116,7 +119,7 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		return nil, fmt.Errorf("execution.rounds 中必须至少有一个 translate 轮次")
 	}
 
-	firstProfile := resolveProfile(cliCfg, firstTranslateRound.Profile)
+	profileCfg := config.ResolveExecutionProfile(cliCfg)
 
 	firstPromptContent := resolvePromptContent(cliCfg, firstTranslateRound.Prompt)
 	if firstPromptContent == "" {
@@ -134,33 +137,63 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			Retry:            toBackendRetryPolicy(firstTranslateRound.Retry),
 		},
 		Repair: repair.Config{
-			Enabled:              firstProfile.Repair.Enabled,
-			JSONStructural:       firstProfile.Repair.JSONStructural,
-			SchemaAliases:        firstProfile.Repair.SchemaAliases,
-			PlaceholderNormalize: firstProfile.Repair.PlaceholderNormalize,
-			PromptUpgrade:        firstProfile.Repair.PromptUpgrade,
+			Enabled:              profileCfg.Repair.Enabled,
+			JSONStructural:       profileCfg.Repair.JSONStructural,
+			SchemaAliases:        profileCfg.Repair.SchemaAliases,
+			PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
+			PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
 		}.ToOptions(),
 		Ruby: engine.RubyConfig{
-			Enabled:       firstProfile.Ruby.Enabled,
-			PreserveKinds: firstProfile.Ruby.PreserveKinds,
+			Enabled:       profileCfg.Ruby.Enabled,
+			PreserveKinds: profileCfg.Ruby.PreserveKinds,
 		},
 		Glossary: engine.GlossaryConfig{
 			Enabled:   cliCfg.Glossary.Enabled,
 			Path:      cliCfg.Glossary.Path,
 			Save:      cliCfg.Glossary.Save,
-			Bootstrap: firstProfile.Bootstrap,
+			Bootstrap: profileCfg.Bootstrap,
 		},
 		TMEnabled: cliCfg.TranslationMemory.Enabled,
 		QA: qa.Config{
-			Enabled:        firstProfile.QA.Enabled,
-			AutoReject:     firstProfile.QA.AutoReject,
-			Checks:         firstProfile.QA.Checks,
-			LengthMethod:   qa.LengthMethod(firstProfile.QA.LengthMethod),
-			LengthRatioMin: firstProfile.QA.LengthRatioMin,
-			LengthRatioMax: firstProfile.QA.LengthRatioMax,
+			Enabled:        profileCfg.QA.Enabled,
+			AutoReject:     profileCfg.QA.AutoReject,
+			Checks:         profileCfg.QA.Checks,
+			LengthMethod:   qa.LengthMethod(profileCfg.QA.LengthMethod),
+			LengthRatioMin: profileCfg.QA.LengthRatioMin,
+			LengthRatioMax: profileCfg.QA.LengthRatioMax,
 			SourceLang:     cliCfg.SourceLang,
 			TargetLang:     cliCfg.TargetLang,
 		},
+	}
+
+	// 计划级 protect 规则：Enabled→Rules，否则 nil（与 worker 引擎工厂同语义）。
+	var protectRules []string
+	if profileCfg.Protect.Enabled {
+		protectRules = profileCfg.Protect.Rules
+	}
+	roundRuby := engine.RubyConfig{
+		Enabled:       profileCfg.Ruby.Enabled,
+		PreserveKinds: profileCfg.Ruby.PreserveKinds,
+	}
+	roundRepair := repair.Config{
+		Enabled:              profileCfg.Repair.Enabled,
+		JSONStructural:       profileCfg.Repair.JSONStructural,
+		SchemaAliases:        profileCfg.Repair.SchemaAliases,
+		PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
+		PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
+	}
+	roundContext := pipeline.ContextConfig{
+		Enabled:  profileCfg.Context.Enabled,
+		Before:   profileCfg.Context.Before,
+		After:    profileCfg.Context.After,
+		MaxChars: profileCfg.Context.MaxChars,
+	}
+	var roundPostprocess *pipeline.PostprocessConfig
+	if profileCfg.Postprocess.Enabled {
+		pp := pipeline.PostprocessConfig{
+			TrimSpaces: profileCfg.Postprocess.TrimSpaces,
+		}
+		roundPostprocess = &pp
 	}
 
 	var rounds []engine.Round
@@ -200,42 +233,8 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 				}
 			}
 
-			var roundRepair *repair.Config
-			var roundContext *pipeline.ContextConfig
-			var roundPostprocess *pipeline.PostprocessConfig
-			var roundRuby engine.RubyConfig
-			var roundProtectRules []string
-			if profileCfg, ok := cliCfg.TranslationProfiles[t.Profile]; ok {
-				rc := repair.Config{
-					Enabled:              profileCfg.Repair.Enabled,
-					JSONStructural:       profileCfg.Repair.JSONStructural,
-					SchemaAliases:        profileCfg.Repair.SchemaAliases,
-					PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
-					PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
-				}
-				roundRepair = &rc
-				ctx := pipeline.ContextConfig{
-					Enabled:  profileCfg.Context.Enabled,
-					Before:   profileCfg.Context.Before,
-					After:    profileCfg.Context.After,
-					MaxChars: profileCfg.Context.MaxChars,
-				}
-				roundContext = &ctx
-				if profileCfg.Postprocess.Enabled {
-					pp := pipeline.PostprocessConfig{
-						TrimSpaces: profileCfg.Postprocess.TrimSpaces,
-					}
-					roundPostprocess = &pp
-				}
-				roundRuby = engine.RubyConfig{
-					Enabled:       profileCfg.Ruby.Enabled,
-					PreserveKinds: profileCfg.Ruby.PreserveKinds,
-				}
-				if profileCfg.Protect.Enabled {
-					roundProtectRules = profileCfg.Protect.Rules
-				}
-			}
-
+			rc := roundRepair
+			ctx := roundContext
 			rounds = append(rounds, engine.Round{
 				Backend:           b,
 				BatchSize:         t.BatchSize,
@@ -244,14 +243,45 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 				FallbackShrink:    t.FallbackShrink,
 				Retry:             toBackendRetryPolicy(t.Retry),
 				Renderer:          roundRenderer,
-				Repair:            roundRepair,
+				Repair:            &rc,
 				ResponseMode:      responseModeFromOptions(bCfg.Options),
 				Mode:              pipeline.RoundModeTranslate,
-				ProtectRules:      roundProtectRules,
+				ProtectRules:      protectRules,
 				RubyEnabled:       roundRuby.Enabled,
 				RubyPreserveKinds: roundRuby.PreserveKinds,
-				Context:           roundContext,
+				Context:           &ctx,
 				Postprocess:       roundPostprocess,
+			})
+
+		case "revise":
+			if r.Revise == nil {
+				return nil, fmt.Errorf("execution.rounds[%d]: mode=revise requires revise config", i)
+			}
+			v := r.Revise
+
+			renderer, err := prompt.NewReviseRenderer(templates.EmbeddedReviseTemplate())
+			if err != nil {
+				return nil, fmt.Errorf("build revise renderer: %w", err)
+			}
+			issueCodes, err := resolveReviseIssueCodes(v)
+			if err != nil {
+				return nil, fmt.Errorf("execution.rounds[%d]: %w", i, err)
+			}
+
+			// protect/ruby 与 translate 轮同源：统一取计划级唯一策略。
+			rounds = append(rounds, engine.Round{
+				Backend:           b,
+				BatchSize:         v.BatchSize,
+				MaxWordsPerBatch:  v.MaxWordsPerBatch,
+				Concurrency:       v.Concurrency,
+				Retry:             toBackendRetryPolicy(v.Retry),
+				ResponseMode:      responseModeFromOptions(bCfg.Options),
+				Mode:              pipeline.RoundModeRevise,
+				ReviseRenderer:    renderer,
+				IssueCodes:        issueCodes,
+				ProtectRules:      protectRules,
+				RubyEnabled:       roundRuby.Enabled,
+				RubyPreserveKinds: roundRuby.PreserveKinds,
 			})
 
 		case "extract":
@@ -288,7 +318,7 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 	}
 
 	var rubyRetryBackends []backend.Backend
-	retryName := firstProfile.Ruby.RetryBackend
+	retryName := profileCfg.Ruby.RetryBackend
 	if retryName != "" {
 		bCfg, ok := cliCfg.Backends[retryName]
 		if !ok {
@@ -318,11 +348,26 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 	}, nil
 }
 
-func resolveProfile(cliCfg *config.CLIConfig, name string) config.CLIConfigTranslationProfile {
-	if p, ok := cliCfg.TranslationProfiles[name]; ok {
-		return p
+// resolveReviseIssueCodes 物化修订轮的语义 issue 目标集合（与 service 层快照语义
+// 一致）：with_issues（默认/空）物化为完整语义白名单；with_issue_codes 校验并透传
+// 用户指定 codes。
+func resolveReviseIssueCodes(r *config.CLIConfigReviseRound) ([]string, error) {
+	switch r.SegmentScope {
+	case "", "with_issues":
+		return qa.SemanticQACodes(), nil
+	case "with_issue_codes":
+		if len(r.IssueCodes) == 0 {
+			return nil, fmt.Errorf("revise.issue_codes must contain at least one code when segment_scope is \"with_issue_codes\"")
+		}
+		for _, code := range r.IssueCodes {
+			if !qa.IsSemanticQACode(code) {
+				return nil, fmt.Errorf("revise.issue_codes contains invalid code %q", code)
+			}
+		}
+		return append([]string(nil), r.IssueCodes...), nil
+	default:
+		return nil, fmt.Errorf("revise.segment_scope must be \"with_issues\" or \"with_issue_codes\", got %q", r.SegmentScope)
 	}
-	return config.CLIConfigTranslationProfile{}
 }
 
 func resolvePromptContent(cliCfg *config.CLIConfig, name string) string {

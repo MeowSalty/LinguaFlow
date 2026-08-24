@@ -89,7 +89,7 @@ func TestReviseRenderer_TextUser(t *testing.T) {
 }
 
 func TestReviseRevisionSchema_Strict(t *testing.T) {
-	s := ReviseRevisionSchema()
+	s := ReviseRevisionSchema(false, nil)
 	if s["additionalProperties"] != false {
 		t.Error("outer additionalProperties should be false")
 	}
@@ -149,5 +149,121 @@ func TestParseReviseTextRevisions_MalformedAndUnrecognized(t *testing.T) {
 	_, recognized = ParseReviseTextRevisions("plain response")
 	if recognized {
 		t.Fatal("response without header should not be recognized")
+	}
+}
+
+func TestReviseRenderer_RendersRubyAnnotationsJSON(t *testing.T) {
+	r, err := NewReviseRenderer(defaultTestReviseTmpl)
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	_, usr, err := r.Render(ReviseData{
+		SourceLang: "ja",
+		TargetLang: "zh",
+		Protocol:   ProtocolJSONStrict,
+		Segments: []ReviseSegment{
+			{ID: "s1", Source: "呪い", Target: "诅咒"},
+			{ID: "s2", Source: "第二段", Target: "第二译文"},
+		},
+		RubyAnnotations: map[string][]RubyAnnotation{
+			"s1": {{ID: "7", Base: "呪", Text: "じゅ"}},
+		},
+		RubyMode: RubyModeJSON,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	var env struct {
+		Task            string                      `json:"task"`
+		RubyAnnotations map[string][]RubyAnnotation `json:"ruby_annotations"`
+	}
+	if err := json.Unmarshal([]byte(usr), &env); err != nil {
+		t.Fatalf("user not json: %v\n%s", err, usr)
+	}
+	anns := env.RubyAnnotations["s1"]
+	if len(anns) != 1 {
+		t.Fatalf("ruby_annotations=%#v", env.RubyAnnotations)
+	}
+	if anns[0].ID != "7" || anns[0].Base != "呪" || anns[0].Text != "じゅ" {
+		t.Errorf("annotation mismatch: %#v", anns[0])
+	}
+}
+
+func TestReviseRenderer_TextUser_RubyLine(t *testing.T) {
+	r, err := NewReviseRenderer(defaultTestReviseTmpl)
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	_, usr, err := r.Render(ReviseData{
+		SourceLang: "ja",
+		TargetLang: "zh",
+		Protocol:   ProtocolText,
+		Segments: []ReviseSegment{
+			{ID: "1", Source: "微笑", Target: "微笑"},
+			{ID: "2", Source: "无注音段", Target: "无注音译文"},
+		},
+		RubyAnnotations: map[string][]RubyAnnotation{
+			"1": {{ID: "3", Base: "微", Text: "ほほ"}, {Base: "笑", Text: "え"}},
+		},
+		RubyMode: RubyModeSection,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{
+		"[segment] id=1",
+		"target: 微笑",
+		// 含注音的段在 target 行后渲染 ruby 行；带条目 id 的标注以 #id 结尾
+		"ruby: 微/ほほ#3, 笑/え",
+	} {
+		if !strings.Contains(usr, want) {
+			t.Errorf("missing %q in user:\n%s", want, usr)
+		}
+	}
+	// 无注音条目的段不应出现 ruby 行
+	if strings.Count(usr, "ruby: ") != 1 {
+		t.Errorf("expected exactly one ruby line in user:\n%s", usr)
+	}
+}
+
+func TestReviseRevisionSchema_WithRuby(t *testing.T) {
+	s := ReviseRevisionSchema(true, []string{"1", "2"})
+	req, _ := s["required"].([]string)
+	if len(req) != 2 || req[0] != "revisions" || req[1] != "ruby_output" {
+		t.Errorf("outer required mismatch: %#v", s["required"])
+	}
+	props := s["properties"].(map[string]any)
+	rubyOut := props["ruby_output"].(map[string]any)
+	if rubyOut["type"] != "object" {
+		t.Errorf("ruby_output type=%v", rubyOut["type"])
+	}
+	rprops := rubyOut["properties"].(map[string]any)
+	if len(rprops) != 2 {
+		t.Fatalf("ruby_output properties=%#v", rprops)
+	}
+	for _, id := range []string{"1", "2"} {
+		entry, ok := rprops[id].(map[string]any)
+		if !ok {
+			t.Fatalf("ruby_output.properties[%q]=%#v", id, rprops[id])
+		}
+		items := entry["items"].(map[string]any)
+		itemReq, _ := items["required"].([]string)
+		if len(itemReq) != 3 {
+			t.Errorf("item required mismatch for %q: %#v", id, items["required"])
+		}
+	}
+}
+
+func TestReviseRevisionSchema_NoRuby(t *testing.T) {
+	s := ReviseRevisionSchema(false, nil)
+	props := s["properties"].(map[string]any)
+	if _, ok := props["ruby_output"]; ok {
+		t.Error("ruby_output should be absent when includeRuby=false")
+	}
+	req, _ := s["required"].([]string)
+	for _, r := range req {
+		if r == "ruby_output" {
+			t.Errorf("ruby_output should not be required when includeRuby=false: %#v", req)
+		}
 	}
 }

@@ -18,6 +18,13 @@ type Item struct {
 	Aligned    bool   `json:"-"`                     // 运行态：是否已对齐（不外发/不持久化）
 }
 
+// Restorable 报告条目是否具备还原前提：TargetBase 或 SourceBase 非空。
+// RestoreItems 的 total 计数与 revise 轮守卫的 want 口径共用本谓词，
+// 保证「永不可还原条目」的判定单源，两侧口径不漂移。
+func (it Item) Restorable() bool {
+	return it.TargetBase != "" || it.SourceBase != ""
+}
+
 // ItemsByID 返回 item ID → *Item 的映射。ID 为空的条目以 "" 为键
 // （罕见；键冲突时后写覆盖先写）。
 func ItemsByID(items []Item) map[string]*Item {

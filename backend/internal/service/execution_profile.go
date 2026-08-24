@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
@@ -15,16 +16,18 @@ var (
 	ErrExecutionProfileNotFound      = errors.New("execution profile not found")
 	ErrExecutionProfileScopeInvalid  = errors.New("execution profile scope invalid")
 	ErrExecutionProfileConfigInvalid = errors.New("execution profile config invalid")
+	ErrExecutionProfileInUse         = errors.New("execution profile is referenced by execution plan(s)")
 )
 
 // ExecutionProfileService 提供执行策略配置的 CRUD 操作。
 type ExecutionProfileService struct {
 	client *ent.Client
+	users  *UserService
 }
 
 // NewExecutionProfileService 创建 ExecutionProfileService 实例。
-func NewExecutionProfileService(client *ent.Client) *ExecutionProfileService {
-	return &ExecutionProfileService{client: client}
+func NewExecutionProfileService(client *ent.Client, users *UserService) *ExecutionProfileService {
+	return &ExecutionProfileService{client: client, users: users}
 }
 
 // CreateExecutionProfileInput 创建执行策略配置的输入参数。
@@ -180,8 +183,9 @@ func (s *ExecutionProfileService) Update(ctx context.Context, id int, input Upda
 	return updated, nil
 }
 
-// Delete 删除执行策略配置（内置策略不可删除）。
-func (s *ExecutionProfileService) Delete(ctx context.Context, id int) error {
+// Delete 删除执行策略配置（内置与系统策略不可删除）。userID 为调用者，
+// 须通过 checkDeleteAccess 的属主校验。
+func (s *ExecutionProfileService) Delete(ctx context.Context, userID, id int) error {
 	if templates.IsBuiltinID(id) {
 		return ErrExecutionProfileNotFound
 	}
@@ -192,7 +196,53 @@ func (s *ExecutionProfileService) Delete(ctx context.Context, id int) error {
 	if tp.Scope == "system" {
 		return ErrExecutionProfileNotFound // 系统配置不可删除
 	}
+	if err := s.CheckAccess(ctx, userID, tp); err != nil {
+		return err
+	}
+
+	// 检查是否有执行计划模板引用了该策略（计划级 profile_id）。
+	// 引用检查保持全局：任一计划引用即拒绝删除，避免其任务创建悬空；
+	// 错误不携带计划名，不向调用者泄露其他用户的计划信息。
+	referenced, err := s.client.ExecutionPlanTemplate.Query().
+		Where(executionplantemplate.ProfileID(id)).
+		Exist(ctx)
+	if err != nil {
+		return fmt.Errorf("check execution plan references: %w", err)
+	}
+	if referenced {
+		return ErrExecutionProfileInUse
+	}
+
 	return s.client.ExecutionProfile.DeleteOneID(id).Exec(ctx)
+}
+
+// CheckAccess 校验调用者对策略的访问权（单一来源，供删除门禁、计划级引用校验
+// 与快照物化复核共同复用）：user 范围须为本人，org 范围须为组织 member 及以上
+// 成员（经 requireMembership），system 范围（含内置策略）对全体放行。不满足时
+// 返回 ErrExecutionProfileNotFound，不泄露他人资源的存在性（与
+// ExecutionPlanService.checkAccess 同一惯例）。
+func (s *ExecutionProfileService) CheckAccess(ctx context.Context, userID int, tp *ent.ExecutionProfile) error {
+	switch tp.Scope {
+	case "user":
+		if tp.OwnerUserID == nil || *tp.OwnerUserID != userID {
+			return ErrExecutionProfileNotFound
+		}
+	case "org":
+		if tp.OwnerOrgID == nil {
+			return ErrExecutionProfileNotFound
+		}
+		if _, err := s.users.requireMembership(ctx, userID, *tp.OwnerOrgID, OrgRoleMember); err != nil {
+			if errors.Is(err, ErrForbidden) || errors.Is(err, ErrOrganizationNotFound) {
+				return ErrExecutionProfileNotFound
+			}
+			return err
+		}
+	case "system":
+		// 系统级策略对全体调用者可见。
+	default:
+		return ErrExecutionProfileNotFound
+	}
+	return nil
 }
 
 // validateProfileConfig 校验执行策略配置的有效性。

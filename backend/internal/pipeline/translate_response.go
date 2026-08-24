@@ -134,30 +134,7 @@ func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool
 	}
 
 	if includeRuby {
-		rubyOutputProps := make(map[string]any)
-		for _, id := range wantIDs {
-			rubyOutputProps[id] = map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"id":   map[string]any{"type": "string"},
-						"base": map[string]any{"type": "string"},
-						"text": map[string]any{"type": "string"},
-						"kind": map[string]any{
-							"type": "string",
-							"enum": []string{"phonetic", "semantic", "creative"},
-						},
-					},
-					"required":             []string{"base", "text", "kind"},
-					"additionalProperties": false,
-				},
-			}
-		}
-		outerProps["ruby_output"] = map[string]any{
-			"type":       "object",
-			"properties": rubyOutputProps,
-		}
+		outerProps["ruby_output"] = prompt.RubyOutputSchema(wantIDs)
 		outerRequired = append(outerRequired, "ruby_output")
 	}
 

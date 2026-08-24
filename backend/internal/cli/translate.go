@@ -42,7 +42,7 @@ func newTranslateCmd(rt *appCtx) *cobra.Command {
 	cmd.Flags().StringVar(&to, "to", "", "目标语言（留空则用配置）")
 	cmd.Flags().StringVar(&glossaryPath, "glossary-path", "", "术语表 CSV 路径；指定后强制启用 glossary")
 	cmd.Flags().StringVar(&bootstrapMode, "bootstrap", "", "术语自举模式 off|pre|inline；留空沿用配置（非 off 隐含启用 glossary）")
-	cmd.Flags().StringVar(&profile, "profile", "", "翻译策略名称（引用 translation_profiles 中的 key）")
+	cmd.Flags().StringVar(&profile, "profile", "", "翻译策略名称（覆盖 execution.profile，引用 translation_profiles 中的 key）")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "提示词模板名称（引用 prompt_templates 中的 key）")
 	return cmd
 }
