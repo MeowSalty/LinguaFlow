@@ -169,6 +169,8 @@ const QA_CHECKS = [
   'source_residual',
   'punctuation_pairing',
   'punctuation_missing',
+  'punctuation_surplus',
+  'punctuation_wrap_loss',
   'whitespace_irregular',
   'repeated_space',
   'width_mix',

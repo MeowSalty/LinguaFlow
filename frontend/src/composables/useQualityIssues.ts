@@ -26,6 +26,7 @@ const QUALITY_CODE_I18N_KEYS: Record<QualityCode, string> = {
   punctuation_pairing: 'punctuationPairing',
   punctuation_missing: 'punctuationMissing',
   punctuation_surplus: 'punctuationSurplus',
+  punctuation_wrap_loss: 'punctuationWrapLoss',
   whitespace_irregular: 'whitespaceIrregular',
   repeated_space: 'repeatedSpace',
   width_mix: 'widthMix',
@@ -56,6 +57,7 @@ export const QUALITY_CODE_GROUPS: { key: string; codes: QualityCode[] }[] = [
       'punctuation_pairing',
       'punctuation_missing',
       'punctuation_surplus',
+      'punctuation_wrap_loss',
       'whitespace_irregular',
       'repeated_space',
       'width_mix',
@@ -82,6 +84,22 @@ export const QUALITY_CODE_GROUPS: { key: string; codes: QualityCode[] }[] = [
 
 export const QUALITY_CODES = Object.keys(QUALITY_CODE_I18N_KEYS) as QualityCode[]
 
+/** revise 轮 / 修订预览可作修复目标的语义 issue code 白名单（与 API 规范一致） */
+export const SEMANTIC_REPAIR_ISSUE_CODES: QualityCode[] = [
+  'calque',
+  'term_fidelity',
+  'naturalness',
+  'mistranslation',
+  'omission',
+  'addition',
+  'grammar',
+  'register',
+]
+
+/** 该 issue code 是否属于修订可修复的语义白名单 */
+export const isSemanticRepairIssueCode = (code: string): boolean =>
+  (SEMANTIC_REPAIR_ISSUE_CODES as string[]).includes(code)
+
 /** 将 snake_case 问题代码转为 i18n 键名 */
 export const qualityCodeToI18nKey = (code: string): string =>
   QUALITY_CODE_I18N_KEYS[code as QualityCode] ??
@@ -95,6 +113,12 @@ export const getQualityCodeLabel = (code: string): string => {
 
 /** 该问题是否已被驳回（dismissed）；省略 disposition 视为未决（pending） */
 export const isIssueDismissed = (issue: QualityIssue): boolean => issue.disposition === 'dismissed'
+
+/** 段落上是否存在 pending 的语义 issue（revise 轮 / 修订预览的修复目标） */
+export const hasPendingSemanticIssues = (segment: { quality_issues?: QualityIssue[] }): boolean =>
+  (segment.quality_issues ?? []).some(
+    (issue) => !isIssueDismissed(issue) && isSemanticRepairIssueCode(issue.code),
+  )
 
 /** 格式化裁决信息为可读文本（用于 tooltip 末尾追加） */
 export const formatQualityIssueDisposition = (issue: QualityIssue): string => {
