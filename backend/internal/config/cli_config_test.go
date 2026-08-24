@@ -78,8 +78,8 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	if r.Translate.Prompt != "通用提示词" {
 		t.Errorf("round translate.prompt = %q, want %q", r.Translate.Prompt, "通用提示词")
 	}
-	if r.Translate.Profile != "通用策略" {
-		t.Errorf("round translate.profile = %q, want %q", r.Translate.Profile, "通用策略")
+	if cfg.Execution.Profile != "通用策略" {
+		t.Errorf("execution.profile = %q, want %q", cfg.Execution.Profile, "通用策略")
 	}
 	if r.Translate.Retry.Jitter != true {
 		t.Error("expected translate.retry.jitter = true")
@@ -165,13 +165,13 @@ glossary:
   path: ./terms.csv
   save: true
 execution:
+  profile: subtitle
   rounds:
     - mode: translate
       name: "首轮"
       backend: gpt4
       translate:
         prompt: tech
-        profile: subtitle
         batch_size: 5
         concurrency: 2
         fallback_shrink: 0.5
@@ -237,8 +237,8 @@ execution:
 	if r.Translate.Prompt != "tech" {
 		t.Errorf("translate.prompt = %q, want %q", r.Translate.Prompt, "tech")
 	}
-	if r.Translate.Profile != "subtitle" {
-		t.Errorf("translate.profile = %q, want %q", r.Translate.Profile, "subtitle")
+	if cfg.Execution.Profile != "subtitle" {
+		t.Errorf("execution.profile = %q, want %q", cfg.Execution.Profile, "subtitle")
 	}
 	if r.Translate.BatchSize != 5 {
 		t.Errorf("translate.batch_size = %d, want 5", r.Translate.BatchSize)
@@ -379,7 +379,6 @@ execution:
       backend: gpt4
       translate:
         prompt: tech
-        profile: default
         batch_size: 1
         concurrency: 1
         fallback_shrink: 0.5
@@ -609,7 +608,6 @@ execution:
       backend: test
       translate:
         prompt: default
-        profile: default
         batch_size: 1
         concurrency: 1
         fallback_shrink: 0.5
@@ -666,6 +664,63 @@ func TestReadExternalFileBytes_Security(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Test: ResolveExecutionProfile（execution.profile 计划级策略解析）
+// ---------------------------------------------------------------------------
+
+func TestResolveExecutionProfile(t *testing.T) {
+	named := CLIConfigTranslationProfile{
+		Repair: RepairConfig{Enabled: true},
+		Ruby:   RubyConfig{Enabled: true, PreserveKinds: []string{"phonetic"}},
+	}
+
+	t.Run("named profile resolves", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution:           CLIConfigExecution{Profile: "custom"},
+			TranslationProfiles: map[string]CLIConfigTranslationProfile{"custom": named},
+		}
+		got := ResolveExecutionProfile(cfg)
+		if !got.Repair.Enabled || !got.Ruby.Enabled || len(got.Ruby.PreserveKinds) != 1 {
+			t.Errorf("ResolveExecutionProfile = %+v，want 命中名为 custom 的策略", got)
+		}
+	})
+
+	t.Run("empty profile falls back to builtin", func(t *testing.T) {
+		cfg := &CLIConfig{
+			TranslationProfiles: map[string]CLIConfigTranslationProfile{},
+		}
+		got := ResolveExecutionProfile(cfg)
+		want := BuiltinExecutionProfile()
+		if got.Ruby.Enabled != want.Ruby.Enabled || got.Repair.Enabled != want.Repair.Enabled ||
+			len(got.Protect.Rules) != len(want.Protect.Rules) {
+			t.Errorf("空 profile 应回退内置默认策略，got %+v want %+v", got, want)
+		}
+	})
+
+	t.Run("unknown profile falls back to builtin", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution:           CLIConfigExecution{Profile: "no-such-profile"},
+			TranslationProfiles: map[string]CLIConfigTranslationProfile{"custom": named},
+		}
+		got := ResolveExecutionProfile(cfg)
+		want := BuiltinExecutionProfile()
+		if len(got.Protect.Rules) != len(want.Protect.Rules) {
+			t.Errorf("未命中 profile 应回退内置默认策略，got %+v", got)
+		}
+	})
+}
+
+// TestBuiltinExecutionProfile 验证内置默认策略从嵌入资源正确物化。
+func TestBuiltinExecutionProfile(t *testing.T) {
+	builtin := BuiltinExecutionProfile()
+	if len(builtin.Protect.Rules) == 0 {
+		t.Fatal("builtin profile should carry protect rules")
+	}
+	if !builtin.Postprocess.Enabled {
+		t.Error("builtin profile postprocess should be enabled by default")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Test: validateCLIConfigRounds
 // ---------------------------------------------------------------------------
 
@@ -679,7 +734,6 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 						Backend: "default",
 						Translate: &CLIConfigTranslateRound{
 							Prompt:         "default",
-							Profile:        "default",
 							BatchSize:      1,
 							Concurrency:    1,
 							FallbackShrink: 0.5,
@@ -765,7 +819,6 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 						Backend: "default",
 						Translate: &CLIConfigTranslateRound{
 							Prompt:         "default",
-							Profile:        "default",
 							BatchSize:      1,
 							Concurrency:    1,
 							FallbackShrink: 0.5,
@@ -797,6 +850,91 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 		}
 		if err := validateCLIConfigRounds(cfg); err != nil {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid revise round passes", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{
+					{
+						Mode:    "revise",
+						Backend: "default",
+						Revise: &CLIConfigReviseRound{
+							BatchSize:   10,
+							Concurrency: 2,
+						},
+					},
+				},
+			},
+		}
+		if err := validateCLIConfigRounds(cfg); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("revise round without revise config rejected", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{{Mode: "revise", Backend: "default"}},
+			},
+		}
+		err := validateCLIConfigRounds(cfg)
+		if err == nil {
+			t.Fatal("expected error for missing revise config")
+		}
+		if !strings.Contains(err.Error(), "requires revise config") {
+			t.Errorf("error = %q, want contains %q", err, "requires revise config")
+		}
+	})
+
+	t.Run("revise invalid segment_scope rejected", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{
+					{
+						Mode:    "revise",
+						Backend: "default",
+						Revise: &CLIConfigReviseRound{
+							BatchSize:    10,
+							Concurrency:  1,
+							SegmentScope: "bogus",
+						},
+					},
+				},
+			},
+		}
+		err := validateCLIConfigRounds(cfg)
+		if err == nil {
+			t.Fatal("expected error for invalid segment_scope")
+		}
+		if !strings.Contains(err.Error(), "segment_scope") {
+			t.Errorf("error = %q, want contains %q", err, "segment_scope")
+		}
+	})
+
+	t.Run("revise with_issue_codes requires issue_codes", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{
+					{
+						Mode:    "revise",
+						Backend: "default",
+						Revise: &CLIConfigReviseRound{
+							BatchSize:    10,
+							Concurrency:  1,
+							SegmentScope: "with_issue_codes",
+						},
+					},
+				},
+			},
+		}
+		err := validateCLIConfigRounds(cfg)
+		if err == nil {
+			t.Fatal("expected error for with_issue_codes without issue_codes")
+		}
+		if !strings.Contains(err.Error(), "issue_codes") {
+			t.Errorf("error = %q, want contains %q", err, "issue_codes")
 		}
 	})
 }

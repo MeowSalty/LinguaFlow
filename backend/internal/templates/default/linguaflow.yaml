@@ -63,7 +63,7 @@ bootstrap_prompt_templates:
 # ─────────────────────────────────────────────────────────────
 # 翻译策略配置
 # ─────────────────────────────────────────────────────────────
-# key 为策略名称，可在 execution.rounds[].profile 中按名称引用。
+# key 为策略名称，可在 execution.profile 中按名称引用。
 # 内联配置与 file 二选一：file 为外部文件路径。
 translation_profiles:
   通用策略:
@@ -73,9 +73,14 @@ translation_profiles:
 # ─────────────────────────────────────────────────────────────
 # 执行计划配置
 # ─────────────────────────────────────────────────────────────
+# profile 为计划级策略名称，引用上方 translation_profiles 中的 key；
+# translate 与 revise 轮统一使用该策略的 protect/ruby 等行为预设。
+# 缺省或名称未命中时回退内置默认策略（通用策略）。
 # rounds 定义翻译执行轮次，按顺序执行。
-# 每个轮次必须指定 mode：translate（翻译）或 extract（术语抽取）。
+# 每个轮次必须指定 mode：translate（翻译）、extract（术语抽取）或 revise（LLM 修订）。
 execution:
+  # 引用 translation_profiles 中定义的策略名称
+  profile: 通用策略
   rounds:
     - mode: translate
       # 引用 backends 中定义的后端名称
@@ -84,8 +89,6 @@ execution:
       translate:
         # 引用 translation_prompt_templates 中定义的模板名称
         prompt: 通用提示词
-        # 引用 translation_profiles 中定义的策略名称
-        profile: 通用策略
         # 一次合并发送的段数；1 表示逐段翻译，>1 为批量模式；0 表示不限段落数（需配合 max_words_per_batch）
         batch_size: 1
         # 每批字词数上限；0 表示不限制（仅使用 batch_size 约束）

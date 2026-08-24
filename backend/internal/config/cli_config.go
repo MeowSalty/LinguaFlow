@@ -86,21 +86,25 @@ type CLIConfigTranslationProfile struct {
 
 // CLIConfigExecution 执行计划配置。
 type CLIConfigExecution struct {
-	Rounds []CLIConfigRound `yaml:"rounds"`
+	// Profile 计划级策略名称，引用 translation_profiles key。
+	// 为空或未命中时回退内置默认策略（见 ResolveExecutionProfile）。
+	Profile string           `yaml:"profile"`
+	Rounds  []CLIConfigRound `yaml:"rounds"`
 }
 
 // CLIConfigRound 单轮执行配置。
 type CLIConfigRound struct {
-	Mode      string                   `yaml:"mode"`    // "translate" | "extract"
+	Mode      string                   `yaml:"mode"`    // "translate" | "extract" | "revise"
 	Backend   string                   `yaml:"backend"` // 引用 backends key
 	Translate *CLIConfigTranslateRound `yaml:"translate,omitempty"`
 	Extract   *CLIConfigExtractRound   `yaml:"extract,omitempty"`
+	Revise    *CLIConfigReviseRound    `yaml:"revise,omitempty"`
 }
 
 // CLIConfigTranslateRound 翻译轮次配置。
+// 策略引用位于 execution.profile（计划级），轮内不再携带 profile。
 type CLIConfigTranslateRound struct {
-	Prompt           string      `yaml:"prompt"`  // 引用 translation_prompt_templates key
-	Profile          string      `yaml:"profile"` // 引用 translation_profiles key
+	Prompt           string      `yaml:"prompt"` // 引用 translation_prompt_templates key
 	BatchSize        int         `yaml:"batch_size"`
 	MaxWordsPerBatch int         `yaml:"max_words_per_batch"`
 	Concurrency      int         `yaml:"concurrency"`
@@ -117,6 +121,17 @@ type CLIConfigExtractRound struct {
 	MaxTermsPer1000Chars float64     `yaml:"max_terms_per_1000_chars"`
 	MinSourceLen         int         `yaml:"min_source_len"`
 	Retry                RetryConfig `yaml:"retry"`
+}
+
+// CLIConfigReviseRound LLM 修订轮次配置。
+// 字段语义与 ent/schema.ReviseRoundConfig 对齐；无 FallbackShrink（revise 不接缩批）。
+type CLIConfigReviseRound struct {
+	BatchSize        int         `yaml:"batch_size"`
+	MaxWordsPerBatch int         `yaml:"max_words_per_batch"`
+	Concurrency      int         `yaml:"concurrency"`
+	SegmentScope     string      `yaml:"segment_scope,omitempty"` // "with_issues"（默认）| "with_issue_codes"
+	IssueCodes       []string    `yaml:"issue_codes,omitempty"`   // 仅 with_issue_codes 生效
+	Retry            RetryConfig `yaml:"retry"`
 }
 
 // ---------------------------------------------------------------------------
@@ -191,8 +206,8 @@ func LoadCLIConfig(path string) (*CLIConfig, error) {
 
 // validateCLIConfigRounds 校验 execution.rounds 的合法性。
 //   - 空 Mode 规范化为 "translate"（与 pipeline/engine 层默认行为一致）。
-//   - Mode 必须为 "translate" 或 "extract"，拒绝拼写错误等无效值。
-//   - translate 轮次必须包含 Translate 子配置，extract 轮次必须包含 Extract 子配置。
+//   - Mode 必须为 "translate"、"extract" 或 "revise"，拒绝拼写错误等无效值。
+//   - translate/revise 轮次必须包含对应子配置，extract 轮次必须包含 Extract 子配置。
 //   - BatchSize、Concurrency 等字段必须合法，不合法直接报错而非静默 fallback。
 func validateCLIConfigRounds(cfg *CLIConfig) error {
 	for i := range cfg.Execution.Rounds {
@@ -238,11 +253,98 @@ func validateCLIConfigRounds(cfg *CLIConfig) error {
 			if e.Concurrency < 1 {
 				return fmt.Errorf("execution.rounds[%d].extract.concurrency must be >= 1", i)
 			}
+		case "revise":
+			if r.Revise == nil {
+				return fmt.Errorf("execution.rounds[%d]: mode=revise requires revise config", i)
+			}
+			v := r.Revise
+			if v.BatchSize < 0 {
+				return fmt.Errorf("execution.rounds[%d].revise.batch_size must be >= 0", i)
+			}
+			if v.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("execution.rounds[%d].revise.max_words_per_batch must be >= 0", i)
+			}
+			if v.BatchSize <= 0 && v.MaxWordsPerBatch <= 0 {
+				return fmt.Errorf("execution.rounds[%d].revise.batch_size and max_words_per_batch cannot both be 0", i)
+			}
+			if v.Concurrency < 1 {
+				return fmt.Errorf("execution.rounds[%d].revise.concurrency must be >= 1", i)
+			}
+			switch v.SegmentScope {
+			case "", "with_issues", "with_issue_codes":
+				// 空 = with_issues（默认）
+			default:
+				return fmt.Errorf("execution.rounds[%d].revise.segment_scope must be \"with_issues\" or \"with_issue_codes\"", i)
+			}
+			if v.SegmentScope == "with_issue_codes" && len(v.IssueCodes) == 0 {
+				return fmt.Errorf("execution.rounds[%d].revise.issue_codes must contain at least one code when segment_scope is \"with_issue_codes\"", i)
+			}
 		default:
-			return fmt.Errorf("execution.rounds[%d]: invalid mode %q, must be \"translate\" or \"extract\"", i, r.Mode)
+			return fmt.Errorf("execution.rounds[%d]: invalid mode %q, must be \"translate\", \"extract\" or \"revise\"", i, r.Mode)
 		}
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// execution.profile 解析
+// ---------------------------------------------------------------------------
+
+// ResolveExecutionProfile 解析执行计划的计划级策略配置。
+//   - execution.profile 非空且命中 translation_profiles：返回对应策略；
+//   - 为空或未命中（含拼写错误）：回退内置默认策略，保证 CLI 始终有可用策略。
+func ResolveExecutionProfile(cliCfg *CLIConfig) CLIConfigTranslationProfile {
+	if p, ok := cliCfg.TranslationProfiles[cliCfg.Execution.Profile]; ok {
+		return p
+	}
+	return BuiltinExecutionProfile()
+}
+
+// BuiltinExecutionProfile 返回内置默认策略的 CLI 表示。
+// 数据源为 templates 包嵌入的 profiles/default.yaml（与 Web 端内置策略同源）。
+func BuiltinExecutionProfile() CLIConfigTranslationProfile {
+	c := templates.BuiltinExecutionProfiles()[0].Config
+	return CLIConfigTranslationProfile{
+		Protect: ProtectConfig{
+			Enabled: c.Protect.Enabled,
+			Rules:   append([]string(nil), c.Protect.Rules...),
+		},
+		Postprocess: PostprocessConfig{
+			Enabled:    c.Postprocess.Enabled,
+			TrimSpaces: c.Postprocess.TrimSpaces,
+		},
+		Repair: RepairConfig{
+			Enabled:              c.Repair.Enabled,
+			JSONStructural:       c.Repair.JSONStructural,
+			SchemaAliases:        c.Repair.SchemaAliases,
+			PlaceholderNormalize: c.Repair.PlaceholderNormalize,
+			PromptUpgrade:        c.Repair.PromptUpgrade,
+		},
+		Bootstrap: BootstrapConfig{
+			Enabled:                c.Glossary.Bootstrap.Enabled,
+			MaxTermsPer1000Chars:   c.Glossary.Bootstrap.MaxTermsPer1000Chars,
+			MinSourceLen:           c.Glossary.Bootstrap.MinSourceLen,
+			InlineConflictStrategy: c.Glossary.Bootstrap.InlineConflictStrategy,
+		},
+		Context: ContextConfig{
+			Enabled:  c.Context.Enabled,
+			Before:   c.Context.Before,
+			After:    c.Context.After,
+			MaxChars: c.Context.MaxChars,
+		},
+		Ruby: RubyConfig{
+			Enabled:       c.Ruby.Enabled,
+			PreserveKinds: append([]string(nil), c.Ruby.PreserveKinds...),
+		},
+		QA: QAConfig{
+			Enabled:        c.QA.Enabled,
+			AutoReject:     c.QA.AutoReject,
+			Checks:         append([]string(nil), c.QA.Checks...),
+			LengthMethod:   c.QA.LengthMethod,
+			LengthRatioMin: c.QA.LengthRatioMin,
+			LengthRatioMax: c.QA.LengthRatioMax,
+		},
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -502,12 +604,13 @@ func defaultCLIConfig() *CLIConfig {
 			},
 		},
 		Execution: CLIConfigExecution{
+			// 计划级策略引用：回退配置无内置模板可用，指向下方硬编码的 "default"。
+			Profile: "default",
 			Rounds: []CLIConfigRound{{
 				Mode:    "translate",
 				Backend: "openai-default",
 				Translate: &CLIConfigTranslateRound{
 					Prompt:         "default",
-					Profile:        "default",
 					BatchSize:      1,
 					Concurrency:    4,
 					FallbackShrink: 0.5,
