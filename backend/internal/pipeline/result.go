@@ -23,7 +23,7 @@ type TranslatedSegment struct {
 	TargetText string
 	Failed     bool
 	Meta       map[string]any
-	Issues     []qa.QualityIssue // 裁决轮：过滤后的 quality_issues；translate 轮为零值
+	Issues     []qa.QualityIssue // 裁决轮：过滤后的 quality_issues；translate 轮：注音守恒 warning（可空）
 	Protected  map[string]string // 占位符→原文；Unprotect 后仍保留，供 QA 屏蔽保护区
 }
 

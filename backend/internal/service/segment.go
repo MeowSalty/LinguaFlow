@@ -282,6 +282,11 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 	switch {
 	case targetChanged:
 		issues := s.runManualEditQA(ctx, projectID, res, current.SegmentIndex, newSource, newTarget, current.Meta)
+		// 注音守恒软守卫：编辑前译文带注音而编辑后全丢时补一条 warning，
+		// 经 Reconcile 继承既有裁决（用户 dismiss 过则不再骚扰）。
+		if current.TargetText != nil {
+			issues = append(issues, qa.RubyTagLossIssues(current.SegmentIndex, *current.TargetText, newTarget)...)
+		}
 		// 对账：手动编辑改了译文，重跑零配置确定性 QA。同指纹 issue 的裁决
 		// （dismissed 等）应继承，避免用户标了"不是问题"的模式在下次编辑后被冲掉。
 		// 注意：runManualEditQA 只跑 ZeroConfigDeterministicChecks 白名单，不跑

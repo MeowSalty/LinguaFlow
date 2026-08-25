@@ -166,6 +166,7 @@ func BuildBatchResult(doc *Document, idxs []int, contextSet map[int]struct{}) Ba
 			TargetText: seg.Target,
 			Failed:     seg.Target == "",
 			Meta:       seg.Meta,
+			Issues:     seg.Issues,
 			Protected:  seg.Protected,
 		})
 	}

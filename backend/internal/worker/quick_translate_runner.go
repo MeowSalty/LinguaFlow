@@ -290,7 +290,12 @@ func buildTranslateBatchHandlerCommon(
 			if ts.TargetText == "" {
 				continue
 			}
-			segIssues := qa.IssuesFor(ts.Index, allIssues)
+			// 合并 pipeline 产出的守恒 issue（如注音还原不完整）与 QA 扫描结果，
+			// 与 job_runner 的 translate 轮落库口径一致。新建切片避免对 QA
+			// 内部切片的别名依赖；ts.Issues 为 nil 时 append 跳过。
+			segIssues := make([]qa.QualityIssue, 0, len(ts.Issues)+4)
+			segIssues = append(segIssues, ts.Issues...)
+			segIssues = append(segIssues, qa.IssuesFor(ts.Index, allIssues)...)
 			doc.Segments[ts.Index].Target = ts.TargetText
 			doc.Segments[ts.Index].Issues = segIssues
 			segStatus := string(service.SegmentStatusTranslated)
