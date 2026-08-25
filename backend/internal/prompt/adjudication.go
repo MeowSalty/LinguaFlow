@@ -188,6 +188,23 @@ func NormalizeAdjudicationVerdicts(verdicts []AdjudicationVerdict) []Adjudicatio
 	return out
 }
 
+// ValidBareVerdictEntries 是裸数组兜底（repair 的 json.bare-array 算子）的领域
+// 判别器：判定候选数组是否像 verdicts 条目而非回显噪声。真实裁决必带合法
+// verdict 值（real/false_positive）；缺 verdict 的对象（如 issue 清单的回显）
+// 判为诱饵。供 repair.TryRepairAdjudication 注入。
+func ValidBareVerdictEntries(entries []any) bool {
+	for _, e := range entries {
+		m, ok := e.(map[string]any)
+		if !ok {
+			return false
+		}
+		if v, _ := m["verdict"].(string); v == "real" || v == "false_positive" {
+			return true
+		}
+	}
+	return false
+}
+
 // ParseAdjudicationTextVerdicts 解析 text 协议裁决输出：
 //
 //	[verdicts]

@@ -17,6 +17,13 @@ type Options struct {
 	SchemaAliases        bool // L2：字段名同义化（translation→translations 等）
 	PlaceholderNormalize bool // L3：占位符大小写/下划线变体归一（与 NormalizePlaceholders 配合）
 	PromptUpgrade        bool // L4：解析失败或占位符仍缺失时附加反例 reminder 重试一次
+
+	// BareArrayAccept 是裸数组兜底（json.bare-array）的领域判别器：在通用形状
+	// 门控（非空全对象数组）通过后、采纳候选前调用，返回 false 则继续扫描下一
+	// 候选。nil 表示无领域判别（仅靠通用门控 + normalize 空结果拒绝）。由
+	// TryRepairRubyAlignment/TryRepairAdjudication 等领域入口注入，避免 repair
+	// 包硬编码领域 schema。
+	BareArrayAccept func(entries []any) bool
 }
 
 // Result 是 TryRepair 的统一返回。
