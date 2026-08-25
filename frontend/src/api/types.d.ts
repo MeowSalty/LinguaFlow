@@ -2482,6 +2482,13 @@ export interface components {
             scope: components["schemas"]["ExecutionPlanTemplateScope"];
             owner_user_id?: number;
             owner_org_id?: number;
+            /**
+             * @description 策略模板 ID（ExecutionProfile 单表全局唯一；允许内置负 ID，如 -1 内置默认策略）。
+             *     计划级策略引用：为全管道（所有改写型轮次与引擎级行为）供
+             *     protect/ruby/postprocess/repair/glossary/context/qa 七项行为预设，
+             *     任务创建时整体冻结进执行快照。
+             */
+            profile_id: number;
             ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds: components["schemas"]["ExecutionRoundConfig"][];
             /** Format: date-time */
@@ -2544,12 +2551,16 @@ export interface components {
         CreateExecutionPlanTemplateRequest: {
             name: string;
             description?: string;
+            /** @description 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道供七项行为预设 */
+            profile_id: number;
             ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds: components["schemas"]["ExecutionRoundConfig"][];
         };
         UpdateExecutionPlanTemplateRequest: {
             name?: string;
             description?: string;
+            /** @description 策略模板 ID；省略时保留现值（不允许置空——计划必须始终引用一个策略） */
+            profile_id?: number;
             ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds?: components["schemas"]["ExecutionRoundConfig"][];
         };
@@ -2882,8 +2893,6 @@ export interface components {
         TranslateRoundConfig: {
             /** @description 翻译提示词模板 ID */
             prompt_template_id?: number;
-            /** @description 策略模板 ID（ExecutionProfile 单表全局唯一） */
-            profile_id?: number;
             /** @description 待译段落数上限（不计上下文段）；0=不限制，与 max_words_per_batch 至少填一项 */
             batch_size?: number;
             /** @description 字词数上限（计入上下文段）；0=不限制，与 batch_size 至少填一项。纯行数模式（此项与 context.max_chars 均为 0）下上下文体积不受约束 */
@@ -2960,7 +2969,8 @@ export interface components {
         /**
          * @description 修订轮次配置。LLM 对已有译文做最小改动定点修订，修复段落上 pending 的语义 issue
          *     （误译、仿译、漏译等）。system prompt 内置不可见，无 prompt_template_id；
-         *     protect / ruby / 上下文 / QA 配置借用计划内 translate 轮策略，不单独暴露。
+         *     protect/ruby 及引擎级策略（repair/QA/glossary）经计划级策略引用（profile_id）
+         *     贯穿所有改写型轮次，无需也不依赖计划内 translate 轮的存在。
          *     写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。
          */
         ReviseRoundConfig: {

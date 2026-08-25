@@ -36,6 +36,7 @@ type Scope = ExecutionPlanTemplate['scope']
 interface FormModel {
   name: string
   description: string
+  profile_id: number | null
   ruby_retry: ExecutionPlanRubyRetryConfig
   rounds: ExecutionRoundConfig[]
 }
@@ -48,7 +49,6 @@ const DEFAULT_ROUND: ExecutionRoundConfig = {
   concurrency: 3,
   translate: {
     prompt_template_id: 0,
-    profile_id: 0,
     batch_size: 10,
     max_words_per_batch: 0,
     fallback_shrink: 1,
@@ -87,6 +87,7 @@ const deletingItem = ref<ExecutionPlanTemplate | null>(null)
 const formModel = reactive<FormModel>({
   name: '',
   description: '',
+  profile_id: null,
   ruby_retry: deepClone(DEFAULT_RUBY_RETRY),
   rounds: [],
 })
@@ -107,6 +108,10 @@ const bootstrapPromptTemplateOptions = computed<SelectOption[]>(() =>
 
 const executionProfileOptions = computed<SelectOption[]>(() =>
   executionProfilesStore.items.map((p) => ({ label: p.name, value: p.id })),
+)
+
+const profileNameById = computed(
+  () => new Map(executionProfilesStore.items.map((p) => [p.id, p.name])),
 )
 
 // ── 计算属性 ──────────────────────────────────────────────────
@@ -138,6 +143,14 @@ const rules = computed<FormRules>(() => ({
       trigger: ['input', 'blur'],
     },
   ],
+  profile_id: [
+    {
+      required: true,
+      type: 'number',
+      message: t('executionPlanTemplates.validation.profileRequired'),
+      trigger: ['change', 'blur'],
+    },
+  ],
 }))
 
 // ── 方法 ──────────────────────────────────────────────────────
@@ -145,6 +158,7 @@ const rules = computed<FormRules>(() => ({
 const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
+  formModel.profile_id = null
   formModel.ruby_retry = deepClone(DEFAULT_RUBY_RETRY)
   formModel.rounds = [deepClone(DEFAULT_ROUND)]
   editingItem.value = null
@@ -159,6 +173,7 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
   editingItem.value = item
   formModel.name = item.name
   formModel.description = item.description ?? ''
+  formModel.profile_id = item.profile_id ?? null
   formModel.ruby_retry = item.ruby_retry
     ? deepClone(item.ruby_retry)
     : deepClone(DEFAULT_RUBY_RETRY)
@@ -256,6 +271,7 @@ const validateRounds = (): boolean => {
 const buildPayload = (): CreateRequest => {
   const payload: CreateRequest = {
     name: formModel.name.trim(),
+    profile_id: formModel.profile_id!,
     rounds: formModel.rounds.map((round) => {
       const base: {
         mode: typeof round.mode
@@ -273,7 +289,6 @@ const buildPayload = (): CreateRequest => {
           ...base,
           translate: {
             prompt_template_id: round.translate.prompt_template_id,
-            profile_id: round.translate.profile_id,
             batch_size: round.translate.batch_size,
             max_words_per_batch: round.translate.max_words_per_batch,
             fallback_shrink: round.translate.fallback_shrink,
@@ -601,6 +616,17 @@ watch(
             <NTag size="small" type="info" :bordered="false">
               {{ item.rounds?.length ?? 0 }} {{ t('executionPlanTemplates.card.rounds') }}
             </NTag>
+            <NTag
+              v-if="profileNameById.get(item.profile_id)"
+              size="small"
+              :bordered="false"
+              class="max-w-[160px]"
+            >
+              <span class="truncate">
+                {{ t('executionPlanTemplates.card.profile') }}:
+                {{ profileNameById.get(item.profile_id) }}
+              </span>
+            </NTag>
           </div>
           <div v-if="item.rounds?.length" class="space-y-1">
             <div
@@ -698,6 +724,20 @@ watch(
             />
           </NFormItem>
 
+          <NFormItem :label="t('executionPlanTemplates.form.profile')" path="profile_id">
+            <div class="w-full">
+              <NSelect
+                v-model:value="formModel.profile_id"
+                :options="executionProfileOptions"
+                :placeholder="t('executionPlanTemplates.form.profilePlaceholder')"
+                :disabled="isSystemScope"
+              />
+              <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+                {{ t('executionPlanTemplates.form.profileHint') }}
+              </div>
+            </div>
+          </NFormItem>
+
           <!-- 轮次编辑器 -->
           <div class="mb-4">
             <span class="mb-2 block text-sm font-medium text-lf-text-strong">
@@ -709,7 +749,6 @@ watch(
               :backends="backendOptions"
               :prompt-templates="promptTemplateOptions"
               :bootstrap-prompt-templates="bootstrapPromptTemplateOptions"
-              :execution-profiles="executionProfileOptions"
               :disabled="isSystemScope"
               @update:rounds="formModel.rounds = $event"
               @update:ruby-retry="formModel.ruby_retry = $event"
