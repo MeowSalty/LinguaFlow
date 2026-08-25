@@ -134,3 +134,28 @@ func TestWidthMix_RealHalfwidthOutsideRubyReported(t *testing.T) {
 		t.Fatalf("want 1 for real halfwidth comma outside ruby, got %d: %+v", len(issues), issues)
 	}
 }
+
+// 无 Protected 时通用标签屏蔽应兜住 <a href="x">，不得把 < 当半角标点误报（手动编辑从 DB 重载场景）。
+func TestWidthMix_UnprotectedTagNotReported(t *testing.T) {
+	c := NewWidthMixChecker("zh")
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "雷神皇", TargetText: `<a href="x">連</a>神`, Protected: nil},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("unprotected bare tag should not trigger width_mix: %+v", issues)
+	}
+}
+
+// 防过度屏蔽：标签外的真实半角逗号仍应检出。
+func TestWidthMix_RealHalfwidthOutsideUnprotectedTagReported(t *testing.T) {
+	c := NewWidthMixChecker("zh")
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "x", TargetText: `你好,世界<a href="x">連</a>`, Protected: nil},
+	})
+	if len(issues) != 1 {
+		t.Fatalf("want 1 for real halfwidth comma outside unprotected tag, got %d: %+v", len(issues), issues)
+	}
+	if issues[0].Code != CheckWidthMix {
+		t.Errorf("code=%s", issues[0].Code)
+	}
+}

@@ -716,6 +716,32 @@ func TestUpdateResourceSegmentExcludesLengthRatio(t *testing.T) {
 	}
 }
 
+// TestUpdateResourceSegmentTaggedTargetNoWidthMix 验证手动编辑含 HTML 标签的 CJK 译文
+// 不产生 width_mix 误报。DB 不持久化 Protected 映射，零配置重跑 QA 时 Protected 为空；
+// 此时通用标签屏蔽应兜住标签字符（<、>、" 等），使其不被当作半角标点计入
+// CJK 全半角混用检测。目标语言为 zh（createTestProject 默认），命中 cjkTarget 分支。
+func TestUpdateResourceSegmentTaggedTargetNoWidthMix(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-tag-user")
+	project := createTestProject(t, client, "seg-qa-tag-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/tag.txt")
+	// 初始 source/target 均不含标签
+	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "雷神皇", "雷神皇", nil)
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+		TargetText: strPtr(`<a href="x">連</a>`),
+	})
+	if err != nil {
+		t.Fatalf("UpdateResourceSegment: %v", err)
+	}
+	if hasIssueCode(updated.QualityIssues, qa.CheckWidthMix) {
+		t.Fatalf("tag characters in manually edited target must not trigger width_mix, got %v", updated.QualityIssues)
+	}
+}
+
 // TestListResourceSegmentsQualityFilterDismissed 验证段落筛选的三个维度
 // （quality_issues/severity/code）均只统计待处理的 issue：disposition=dismissed
 // 的已驳回 issue 不再使段落命中"有问题"，severity/code 匹配也忽略已驳回条目。

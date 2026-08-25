@@ -3,6 +3,7 @@ package qa
 import (
 	"reflect"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestProtectedRegions_Single(t *testing.T) {
@@ -336,5 +337,20 @@ func TestInlineMarkupRegions_ProtectedInsideAroundRuby(t *testing.T) {
 	got := InlineMarkupRegions(target, map[string]string{"p": span})
 	if stripped := StripRegions(target, got); stripped != "" {
 		t.Fatalf("strip want empty, got %q (regions=%v)", stripped, got)
+	}
+}
+
+// 通用内联标签通道：无 Protected 时裸标签 <a href="x">、</a> 应各自被兜底屏蔽；
+// 标签之间的正文（連）不属于标记，保留可见以免其他 checker 失明。
+func TestInlineMarkupRegions_GenericTag(t *testing.T) {
+	target := `<a href="x">連</a>`
+	got := InlineMarkupRegions(target, nil)
+	// <a href="x"> 占 rune [0,12)，連 在 rune 12，</a> 占 [13,17)
+	want := [][2]int{{0, 12}, {13, utf8.RuneCountInString(target)}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if stripped := StripRegions(target, got); stripped != "連" {
+		t.Fatalf("StripRegions want 連, got %q", stripped)
 	}
 }
