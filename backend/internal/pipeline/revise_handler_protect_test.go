@@ -9,7 +9,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // protectReviseDoc 构造带 pending 语义问题的单段文档。
@@ -165,7 +164,7 @@ func TestReviseHandler_RubyJSONRoundTrip(t *testing.T) {
 	}}
 	h := &ReviseHandler{
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json", RubyRestorer: ruby.NewRestorer(),
+		RubyEnabled: true, RubyMode: "json",
 	}
 
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
@@ -202,7 +201,7 @@ func TestReviseHandler_RubyTextModeSection(t *testing.T) {
 	}}
 	h := &ReviseHandler{
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		ResponseMode: "text", RubyEnabled: true, RubyMode: "section", RubyRestorer: ruby.NewRestorer(),
+		ResponseMode: "text", RubyEnabled: true, RubyMode: "section",
 	}
 
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
@@ -237,7 +236,7 @@ func TestReviseHandler_RubyInlineMarkersRejected(t *testing.T) {
 	}}
 	h := &ReviseHandler{
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json", RubyRestorer: ruby.NewRestorer(),
+		RubyEnabled: true, RubyMode: "json",
 	}
 
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
@@ -293,7 +292,7 @@ func TestReviseHandler_RubyRealignmentIncompleteRejected(t *testing.T) {
 			fb := &fakeBackend{name: "fake", responses: []string{mustJSON(t, resp)}}
 			h := &ReviseHandler{
 				Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-				RubyEnabled: true, RubyMode: "json", RubyRestorer: ruby.NewRestorer(),
+				RubyEnabled: true, RubyMode: "json",
 			}
 
 			result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
@@ -310,10 +309,12 @@ func TestReviseHandler_RubyRealignmentIncompleteRejected(t *testing.T) {
 	}
 }
 
-// TestReviseHandler_RubyKindRelabelRejected 验证守卫口径不依赖 LLM 事后回填的
-// kind：preserve_kinds 为真子集时，LLM 把存量音注重标到集合外（即使 base 正确）
-// 不得把条目挤出守恒口径——该段仍被拒绝（fail-closed），而非静默丢失注音。
-func TestReviseHandler_RubyKindRelabelRejected(t *testing.T) {
+// TestReviseHandler_RubyKindRelabelAccepted 验证守卫口径不依赖 LLM 事后回填的
+// kind：revise 轮 keepSet 恒为 nil（存量注音无 kind 属性、不参与 preserve_kinds），
+// LLM 把存量音注重标到任意 kind（含幻觉分类）既不剥离存量也不触发拒绝——
+// 只要回填可还原，修订即被采信（消除旧口径「重分类到集合外 → 永久 unresolved」
+// 的尖锐边界）。
+func TestReviseHandler_RubyKindRelabelAccepted(t *testing.T) {
 	const target = "<ruby>漢<rt>かん</rt></ruby>語の本"
 	doc := protectReviseDoc("漢語の本", target, "")
 
@@ -327,19 +328,19 @@ func TestReviseHandler_RubyKindRelabelRejected(t *testing.T) {
 	}}
 	h := &ReviseHandler{
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json", RubyRestorer: ruby.NewRestorer(),
+		RubyEnabled: true, RubyMode: "json",
 		RubyPreserveKinds: []string{"phonetic"},
 	}
 
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if !reflect.DeepEqual(result.unresolved, []int{0}) {
-		t.Fatalf("unresolved=%v want [0]", result.unresolved)
+	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
+		t.Fatalf("callback=%#v want one revision（重分类不得导致拒绝）", result.callbackResult)
 	}
-	if result.callbackResult != nil && len(result.callbackResult.Segments) != 0 {
-		t.Fatalf("callback=%#v want empty", result.callbackResult)
+	if want := "<ruby>漢語<rt>かんご</rt></ruby>之書"; result.callbackResult.Segments[0].TargetText != want {
+		t.Fatalf("target=%q want %q", result.callbackResult.Segments[0].TargetText, want)
 	}
-	if doc.Segments[0].Target != target {
-		t.Fatalf("doc must keep annotated target, got %q", doc.Segments[0].Target)
+	if len(result.unresolved) != 0 {
+		t.Fatalf("unresolved=%v want none", result.unresolved)
 	}
 }
 
@@ -354,7 +355,7 @@ func TestReviseHandler_RubyEmptyBaseItemAccepted(t *testing.T) {
 	}}
 	h := &ReviseHandler{
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json", RubyRestorer: ruby.NewRestorer(),
+		RubyEnabled: true, RubyMode: "json",
 	}
 
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
@@ -369,9 +370,10 @@ func TestReviseHandler_RubyEmptyBaseItemAccepted(t *testing.T) {
 	}
 }
 
-// TestReviseHandler_RubyPreserveKindsEmptyStrips 验证 keep 为空集（用户显式
-// 全剥离）时 want=0：注音被有意剥离的修订正常接受。
-func TestReviseHandler_RubyPreserveKindsEmptyStrips(t *testing.T) {
+// TestReviseHandler_RubyPreserveKindsEmptyIgnored 验证 revise 轮 keepSet 恒为
+// nil：RubyPreserveKinds 配置（含空集）不影响存量注音的守恒口径——回填完整时
+// 注音照常还原，不被 preserve_kinds 剥离（剥离语义仅属 translate 轮）。
+func TestReviseHandler_RubyPreserveKindsEmptyIgnored(t *testing.T) {
 	doc := protectReviseDoc("漢語の本", "<ruby>漢<rt>かん</rt></ruby>語の本", "")
 
 	fb := &fakeBackend{name: "fake", responses: []string{
@@ -384,7 +386,7 @@ func TestReviseHandler_RubyPreserveKindsEmptyStrips(t *testing.T) {
 	}}
 	h := &ReviseHandler{
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json", RubyRestorer: ruby.NewRestorer(),
+		RubyEnabled: true, RubyMode: "json",
 		RubyPreserveKinds: []string{},
 	}
 
@@ -392,8 +394,8 @@ func TestReviseHandler_RubyPreserveKindsEmptyStrips(t *testing.T) {
 	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
 		t.Fatalf("callback=%#v want one revision", result.callbackResult)
 	}
-	if got := result.callbackResult.Segments[0].TargetText; got != "漢語之書" || strings.Contains(got, "<ruby>") {
-		t.Fatalf("target=%q want stripped %q", got, "漢語之書")
+	if got := result.callbackResult.Segments[0].TargetText; got != "<ruby>漢語<rt>かんご</rt></ruby>之書" {
+		t.Fatalf("target=%q want restored %q", got, "<ruby>漢語<rt>かんご</rt></ruby>之書")
 	}
 	if len(result.unresolved) != 0 {
 		t.Fatalf("unresolved=%v want none", result.unresolved)

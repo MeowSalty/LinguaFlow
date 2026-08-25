@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"regexp"
 	"unicode"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // LengthRatioChecker 检测译文长度比异常。
@@ -39,8 +40,12 @@ func (c *LengthRatioChecker) Name() string { return CheckLengthRatio }
 func (c *LengthRatioChecker) Check(_ context.Context, segments []CheckInput) []QualityIssue {
 	var issues []QualityIssue
 	for _, seg := range segments {
-		src := StripRubyTags(seg.SourceText)
-		tgt := StripRubyTags(seg.TargetText)
+		// 长度检测在源文（提取时已剥离）与译文（还原后含标签）之间必须基于
+		// 相同形态比较：统一委托 ruby.StripRubyTags 剥为"基底文本"，与
+		// preserve_kinds 过滤后译文实际保留的字符对齐，避免注音文本导致
+		// 长度比误报。
+		src := ruby.StripRubyTags(seg.SourceText)
+		tgt := ruby.StripRubyTags(seg.TargetText)
 		if src == "" || tgt == "" {
 			continue
 		}
@@ -116,33 +121,4 @@ func isCJK(r rune) bool {
 		unicode.Is(unicode.Hiragana, r) ||
 		unicode.Is(unicode.Katakana, r) ||
 		unicode.Is(unicode.Hangul, r)
-}
-
-// rubyElementRe 匹配 <ruby>BASE<rt>READING</rt>TRAILING</ruby>，
-// 必须与 ruby.StripRubyTags 的正则保持一致：BASE 可能含 <rp> 等辅助标签，
-// TRAILING 可能含闭合辅助标签。
-// 一致性由 TestStripRubyTagsMatchesRubyPackage 守护，漂移即测试失败。
-var rubyElementRe = regexp.MustCompile(`<ruby>(.*?)<rt>(.*?)</rt>(.*?)</ruby>`)
-
-// htmlTagRe 匹配 HTML/XML 标签，用于清理基底文本中的辅助标签。
-var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
-
-// StripRubyTags 剥离 <ruby>/<rt> 标签，只保留基底文本。
-// 长度检测在源文（extractor 已剥离）与译文（Restorer 还原后含标签）之间
-// 必须基于相同形态比较：两侧统一剥为"基底文本"，与 preserve_kinds
-// 过滤后译文实际保留的字符对齐，避免注音文本导致长度比误报。
-//
-// 因 model → qa 依赖（model.Segment.Issues 用 qa.QualityIssue），
-// qa 反向导入 ruby 会成环，故本地复制实现并导出，以便外部测试包
-// （qa_test）直接对比 StripRubyTags 与 ruby.StripRubyTags 的输出，
-// 锁定跨包行为一致性，防正则漂移。
-func StripRubyTags(text string) string {
-	return rubyElementRe.ReplaceAllStringFunc(text, func(match string) string {
-		m := rubyElementRe.FindStringSubmatch(match)
-		base := m[1]
-		trailing := m[3]
-		base = htmlTagRe.ReplaceAllString(base, "")
-		trailing = htmlTagRe.ReplaceAllString(trailing, "")
-		return base + trailing
-	})
 }

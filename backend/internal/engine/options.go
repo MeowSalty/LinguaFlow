@@ -12,7 +12,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -194,12 +193,11 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 }
 
 // buildPipelineRounds 将 RoundConfig 转换为 pipeline.Round（含 Handler）。
-// 注入引擎级资源：glossary、TM、ruby restorer 等。
+// 注入引擎级资源：glossary、TM、ruby 定向重试后端等。
 func buildPipelineRounds(
 	configs []RoundConfig,
 	glossaryRes glossary.Glossary,
 	tmRes tm.TranslationMemory,
-	rubyRestorer *ruby.Restorer,
 	rubyRetryBackends []backend.Backend,
 	defaultRepair repair.Options,
 	inlineBootstrap bool,
@@ -213,7 +211,7 @@ func buildPipelineRounds(
 	out := make([]pipeline.Round, 0, len(configs))
 	for _, rc := range configs {
 		round, err := buildSinglePipelineRound(
-			rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
+			rc, glossaryRes, tmRes, rubyRetryBackends,
 			defaultRepair, inlineBootstrap, maxTermsPer1000, minSourceLen,
 			inlineConflictStr, logger, reporter, rubyRetryAttempts,
 		)
@@ -229,7 +227,6 @@ func buildSinglePipelineRound(
 	rc RoundConfig,
 	glossaryRes glossary.Glossary,
 	tmRes tm.TranslationMemory,
-	rubyRestorer *ruby.Restorer,
 	rubyRetryBackends []backend.Backend,
 	defaultRepair repair.Options,
 	inlineBootstrap bool,
@@ -251,7 +248,7 @@ func buildSinglePipelineRound(
 	}
 	if rc.Revise != nil {
 		return buildRevisePipelineRound(
-			rc, rubyRestorer, rubyRetryBackends,
+			rc, rubyRetryBackends,
 			defaultRepair, logger, reporter, rubyRetryAttempts,
 		)
 	}
@@ -259,7 +256,7 @@ func buildSinglePipelineRound(
 		return buildCorrectPipelineRound(rc, logger, reporter)
 	}
 	return buildTranslatePipelineRound(
-		rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
+		rc, glossaryRes, tmRes, rubyRetryBackends,
 		defaultRepair, inlineBootstrap, maxTermsPer1000, minSourceLen,
 		inlineConflictStr, logger, reporter, rubyRetryAttempts,
 	)
@@ -282,7 +279,6 @@ func buildTranslatePipelineRound(
 	rc RoundConfig,
 	glossaryRes glossary.Glossary,
 	tmRes tm.TranslationMemory,
-	rubyRestorer *ruby.Restorer,
 	rubyRetryBackends []backend.Backend,
 	defaultRepair repair.Options,
 	inlineBootstrap bool,
@@ -308,7 +304,7 @@ func buildTranslatePipelineRound(
 	if t.RubyEnabled || len(t.ProtectRules) > 0 {
 		ps := []protect.Protector{}
 		if t.RubyEnabled {
-			ps = append(ps, &ruby.Extractor{})
+			ps = append(ps, protect.NewRubyProtector())
 		}
 		if len(t.ProtectRules) > 0 {
 			ps = append(ps, protect.FromRules(t.ProtectRules))
@@ -341,7 +337,6 @@ func buildTranslatePipelineRound(
 		RubyPreserveKinds:      t.RubyPreserveKinds,
 		RubyMode:               rubyMode,
 		Postprocess:            t.Postprocess,
-		RubyRestorer:           rubyRestorer,
 		RubyRetryBackends:      rubyRetryBackends,
 		RubyRetryAttempts:      rubyRetryAttempts,
 		InlineBootstrap:        inlineBootstrap,
@@ -475,7 +470,6 @@ func buildSemanticQAPipelineRound(
 // buildRevisePipelineRound 构建 LLM 修订轮次。
 func buildRevisePipelineRound(
 	rc RoundConfig,
-	rubyRestorer *ruby.Restorer,
 	rubyRetryBackends []backend.Backend,
 	defaultRepair repair.Options,
 	logger *slog.Logger,
@@ -488,7 +482,7 @@ func buildRevisePipelineRound(
 	}
 
 	// 构建 per-round Protector：revise 的 ruby 提取作用于 target，由 handler
-	// 内部自理（不把 ruby.Extractor 放进链）；此处仅承接 protect 规则。
+	// 内部自理（不把注音剥离器放进链）；此处仅承接 protect 规则。
 	var prot protect.Protector
 	if len(r.ProtectRules) > 0 {
 		prot = protect.FromRules(r.ProtectRules)
@@ -512,7 +506,6 @@ func buildRevisePipelineRound(
 		RubyEnabled:       r.RubyEnabled,
 		RubyPreserveKinds: r.RubyPreserveKinds,
 		RubyMode:          rubyMode,
-		RubyRestorer:      rubyRestorer,
 		RubyRetryBackends: rubyRetryBackends,
 		RubyRetryAttempts: rubyRetryAttempts,
 		Reporter:          reporter,

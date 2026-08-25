@@ -9,7 +9,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -22,7 +21,6 @@ type Engine struct {
 	rubyRetryBackends []backend.Backend
 	glossary          glossary.Glossary
 	tm                tm.TranslationMemory
-	rubyRestorer      *ruby.Restorer
 	saveGlossary      bool
 	glossaryPath      string
 }
@@ -69,16 +67,10 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	minSourceLen := opts.Config.Glossary.Bootstrap.MinSourceLen
 	inlineConflictStr := opts.Config.Glossary.Bootstrap.InlineConflictStrategy
 
-	var rubyRestorer *ruby.Restorer
-	if opts.Config.Ruby.Enabled {
-		rubyRestorer = ruby.NewRestorer()
-	}
-
 	rounds, err := buildPipelineRounds(
 		roundConfigs,
 		glos,
 		translationMemory,
-		rubyRestorer,
 		rubyRetryBackends,
 		opts.Config.Repair,
 		inlineBootstrap,
@@ -101,7 +93,6 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		rubyRetryBackends: rubyRetryBackends,
 		glossary:          glos,
 		tm:                translationMemory,
-		rubyRestorer:      rubyRestorer,
 		saveGlossary:      opts.Config.Glossary.Save,
 		glossaryPath:      opts.Config.Glossary.Path,
 	}

@@ -1,29 +1,18 @@
-// Package ruby 提供 HTML ruby 注音标签的提取与还原功能。
+// Package ruby 提供 HTML ruby 注音标签的提取、剥离与还原的纯变换。
 //
 // Ruby 标签用于在汉字上方显示注音（如假名 furigana），例如 <ruby>呪<rt>じゅ</rt></ruby>。
-// 提取阶段将注音元数据从源文本中剥离并存入 seg.Meta；还原阶段将注音重新插入译文。
+// 本包是零状态、零 model 依赖的纯函数域包：单一事实源是文本中的 HTML 标签本身——
+// 提取（Extract）从源文读出注音条目并剥离标签，剥离（StripRubyTags）统一全仓的
+// 注音移除口径，还原（RestoreItems/RestoreInlineMarkers）把条目重新插回译文。
+// 注音元数据的落库（seg.Meta["ruby_items"]）与段落状态由调用方
+// （protect.NewRubyProtector / pipeline）负责，本包不感知 Segment。
 package ruby
 
 import (
 	"regexp"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
-
-// Extractor 提取 HTML ruby 注音标签的元数据，将注音信息存入 seg.Meta。
-//
-// 提取阶段的行为：
-//  1. 提取所有 <ruby> 元素的基底文本和注音
-//  2. 合并相邻的 per-kanji ruby 为词级注音
-//  3. 剥离 ruby 标签，只保留基底文本
-//  4. 将注音元数据存入 seg.Meta["ruby_annotations"]
-//
-// 还原阶段为空操作，注音还原委托给 Restorer。
-type Extractor struct{}
-
-func (Extractor) Name() string { return "ruby" }
 
 // rubyElementRe 匹配 <ruby>BASE<rt>READING</rt>TRAILING</ruby>
 // 其中 BASE 可能包含 <rp> 等辅助标签，READING 是注音文本，
@@ -33,51 +22,46 @@ var rubyElementRe = regexp.MustCompile(`<ruby>(.*?)<rt>(.*?)</rt>(.*?)</ruby>`)
 // htmlTagRe 匹配 HTML/XML 标签，用于从基底文本中清理辅助标签。
 var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
 
-// Annotation 是注音条目。
-type Annotation struct {
+// annotation 是注音条目（基底文本 + 标注文本）。
+type annotation struct {
 	Base string // 基底文本（可能跨多个 ruby 元素合并）
 	Text string // 标注文本（合并后的完整文本）
 }
 
 // rubyMatch 跟踪 ruby 元素在源文本中的位置和内容。
 type rubyMatch struct {
-	Annotation
+	annotation
 	start int // 在源文本中的字节偏移
 	end   int // 在源文本中的字节偏移结束
 }
 
-func (p *Extractor) Protect(seg *model.Segment) error {
+// Extract 从源文本中提取所有 ruby 注音条目并剥离 ruby 标签。
+//
+// 行为：
+//  1. 提取所有 <ruby> 元素的基底文本和注音
+//  2. 合并相邻的 per-kanji ruby 为词级注音
+//  3. 剥离 ruby 标签，只保留基底文本
+//
+// 返回按出现顺序排列的条目（ID 经 AssignIDs 分配为段内稳定序号）与剥离后的文本；
+// 无 ruby 元素时 items 为 nil、文本原样返回（正则不命中即返回，快速路径天然高效）。
+func Extract(source string) (items []Item, stripped string) {
 	// 1. 提取所有 ruby 元素的元数据（含位置信息）
-	matches := extractRubyMatches(seg.Source)
+	matches := extractRubyMatches(source)
 
 	// 2. 合并相邻 per-kanji ruby 为词级注音
 	merged := mergeAdjacentRuby(matches)
 
 	// 3. 剥离 ruby 标签，只保留基底文本
-	seg.Source = StripRubyTags(seg.Source)
+	stripped = StripRubyTags(source)
 
-	// 4. 存入 seg.Meta
-	if len(merged) > 0 {
-		if seg.Meta == nil {
-			seg.Meta = make(map[string]any)
-		}
-		// ruby_annotations 保持 []Annotation 类型（管线仍按此类型断言）
-		seg.Meta["ruby_annotations"] = merged
-		// 统一 Item 结构：为每条合并后的注音分配段内稳定 ID
-		items := make([]Item, len(merged))
-		for i, a := range merged {
-			items[i] = Item{SourceBase: a.Base, SourceText: a.Text}
-		}
-		seg.Meta["ruby_items"] = AssignIDs(items)
+	if len(merged) == 0 {
+		return nil, stripped
 	}
-
-	return nil
-}
-
-func (p *Extractor) Unprotect(seg *model.Segment) error {
-	// 不再需要还原占位符（Protect 阶段未使用占位符）
-	// 注音还原委托给 Restorer，在 unprotect stage 之后执行
-	return nil
+	items = make([]Item, len(merged))
+	for i, a := range merged {
+		items[i] = Item{SourceBase: a.Base, SourceText: a.Text}
+	}
+	return AssignIDs(items), stripped
 }
 
 // extractRubyMatches 从源文本中提取所有 ruby 元素及其位置。
@@ -99,7 +83,7 @@ func extractRubyMatches(source string) []rubyMatch {
 		base = htmlTagRe.ReplaceAllString(base, "")
 
 		matches = append(matches, rubyMatch{
-			Annotation: Annotation{
+			annotation: annotation{
 				Base: base,
 				Text: text,
 			},
@@ -121,17 +105,17 @@ func extractRubyMatches(source string) []rubyMatch {
 //   - 基底包含多个字符（如 <ruby>項垂<rt>うなだ</rt></ruby>）
 //   - 两个 ruby 之间有文本分隔
 //   - 两个 ruby 之间有空白/标点
-func mergeAdjacentRuby(matches []rubyMatch) []Annotation {
+func mergeAdjacentRuby(matches []rubyMatch) []annotation {
 	if len(matches) == 0 {
 		return nil
 	}
 
-	var result []Annotation
+	var result []annotation
 	i := 0
 	for i < len(matches) {
 		if isPerKanji(matches[i].Base) {
 			// 尝试向后合并相邻的 per-kanji ruby
-			merged := matches[i].Annotation
+			merged := matches[i].annotation
 			j := i + 1
 			for j < len(matches) {
 				// 检查是否紧邻（无分隔字符）
@@ -150,7 +134,7 @@ func mergeAdjacentRuby(matches []rubyMatch) []Annotation {
 			result = append(result, merged)
 			i = j
 		} else {
-			result = append(result, matches[i].Annotation)
+			result = append(result, matches[i].annotation)
 			i++
 		}
 	}
@@ -167,8 +151,9 @@ func isPerKanji(base string) bool {
 }
 
 // StripRubyTags 剥离 <ruby>/<rt> 标签，只保留基底文本。
-// 清理基底文本和尾部文本中的辅助标签（如 <rp>, <rb>）。
-// 作为注音剥离的单一来源，供 ruby.Extractor 与 qa.LengthRatioChecker 复用，
+// 清理基底文本和尾部文本中的辅助标签（如 <rp>, <rb>；仅删标签本身，
+// 其回退文本内容保留）。本函数是全仓注音剥离的单一来源：ruby.Extract、
+// pipeline 的定向对齐 prompt 与 qa.LengthRatioChecker 均复用本实现，
 // 避免多处正则副本漂移导致源/译剥离语义不一致。
 func StripRubyTags(source string) string {
 	return rubyElementRe.ReplaceAllStringFunc(source, func(match string) string {

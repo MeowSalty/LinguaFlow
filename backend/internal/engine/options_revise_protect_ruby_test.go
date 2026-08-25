@@ -10,7 +10,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // buildReviseHandlerForTest 走 buildRoundConfigs → buildRevisePipelineRound 完整链路，
@@ -23,10 +22,9 @@ func buildReviseHandlerForTest(t *testing.T, r Round) *pipeline.ReviseHandler {
 	}
 	rc := configs[0]
 
-	restorer := ruby.NewRestorer()
 	retryBackends := []backend.Backend{&closeTrackingBackend{name: "ruby-retry"}}
 	pipelineRound, err := buildRevisePipelineRound(
-		rc, restorer, retryBackends,
+		rc, retryBackends,
 		repair.Options{}, slog.Default(), progress.Nop{}, 2,
 	)
 	if err != nil {
@@ -114,7 +112,7 @@ func TestBuildRevisePipelineRound_ProtectRubyPropagation(t *testing.T) {
 	}
 }
 
-// TestBuildRevisePipelineRound_RubyRetryInjection 验证 RubyRestorer 与定向重试参数
+// TestBuildRevisePipelineRound_RubyRetryInjection 验证定向重试参数
 // 沿 buildPipelineRounds 同一条传递链注入 ReviseHandler。
 func TestBuildRevisePipelineRound_RubyRetryInjection(t *testing.T) {
 	configs := buildRoundConfigs([]Round{{
@@ -124,10 +122,9 @@ func TestBuildRevisePipelineRound_RubyRetryInjection(t *testing.T) {
 		MaxBatchIndexSpan: 3,
 	}}, &Config{})
 
-	restorer := ruby.NewRestorer()
 	retryBackends := []backend.Backend{&closeTrackingBackend{name: "ruby-retry"}}
 	pipelineRound, err := buildRevisePipelineRound(
-		configs[0], restorer, retryBackends,
+		configs[0], retryBackends,
 		repair.Options{}, slog.Default(), progress.Nop{}, 3,
 	)
 	if err != nil {
@@ -135,9 +132,6 @@ func TestBuildRevisePipelineRound_RubyRetryInjection(t *testing.T) {
 	}
 	h := pipelineRound.Handler.(*pipeline.ReviseHandler)
 
-	if h.RubyRestorer != restorer {
-		t.Fatal("RubyRestorer 未按同一实例注入")
-	}
 	if len(h.RubyRetryBackends) != 1 {
 		t.Fatalf("RubyRetryBackends = %v，want 单元素", h.RubyRetryBackends)
 	}

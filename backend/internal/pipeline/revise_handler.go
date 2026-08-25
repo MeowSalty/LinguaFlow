@@ -49,7 +49,6 @@ type ReviseHandler struct {
 	RubyEnabled       bool
 	RubyPreserveKinds []string
 	RubyMode          string
-	RubyRestorer      *ruby.Restorer
 	RubyRetryBackends []backend.Backend
 	RubyRetryAttempts int // 注音对齐定向重试轮数；<=0 兜底为 1（仅 backends 非空时生效）
 }
@@ -210,7 +209,7 @@ func (h *ReviseHandler) finalizeRevision(
 	}
 	text = protect.RestoreText(text, st.mapping)
 
-	if h.RubyEnabled && h.RubyRestorer != nil && len(st.rubyItems) > 0 {
+	if h.RubyEnabled && len(st.rubyItems) > 0 {
 		// 协议禁止在 target 中内联 ⟦ruby:...⟧ 标记：translate 轮将其作为容错通道，
 		// 但标记计数由 LLM 自证、无法与存量条目交叉核验，容忍即开放守卫绕过
 		// （伪造标记凑数丢弃存量注音）——检测到即按占位符违规同语义拒绝。
@@ -230,30 +229,21 @@ func (h *ReviseHandler) finalizeRevision(
 			Target:         text,
 			Meta:           map[string]any{"ruby_items": items},
 		}
-		keep := kindSet(h.RubyPreserveKinds)
-		restored := restoreSegmentRuby(ctx, tmp, h.RubyRestorer, keep,
+		// keepSet 传字面 nil（不过滤）：存量注音无 kind 属性、不参与 preserve_kinds
+		// ——LLM 重分类（含幻觉 kind）既不得剥离存量注音，也不得触发整段拒绝
+		// （消除「重分类到集合外 → 永久 unresolved」的尖锐边界）；Want 与还原器
+		// Total 单一来源，无需在调用方重复计算。
+		outcome := restoreSegmentRuby(ctx, tmp, nil,
 			h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex, h.Repair,
 			h.RubyRetryAttempts)
 		// 注音守恒守卫：修订前的 target 带注音，剥离后必须完整回填后才能采信。
-		// want 口径刻意不依赖 LLM 事后回填的 Kind（提取期 Kind 恒空，LLM 把存量
-		// 条目重分类到 keep 外不得把条目挤出守恒口径——那会退回静默丢失），并经
-		// ruby.Item.Restorable 排除双 base 皆空的退化条目（与 RestoreItems 的
-		// total 单源对齐，永不可还原）；keep 为空集 = 用户显式全剥离，want=0。
 		// 判据用还原器实际插入数而非子串计数，LLM 写字面量 <ruby> 文本或
 		// ⟦ruby:⟧ 标记均无法凑数（后者直接在上方拒绝）。不完整即拒绝该段修订
 		// （计入 unresolved），防止剥离形态译文被静默写回导致存量注音丢失
 		// （translate 轮无此守卫：其注音为新增而非存量）。
-		want := 0
-		if len(keep) > 0 {
-			for _, it := range items {
-				if it.Restorable() {
-					want++
-				}
-			}
-		}
-		if restored < want {
+		if outcome.Restored < outcome.Want {
 			logger.Warn("revise segment ruby realignment incomplete",
-				"seg", seg.ID, "expected", want, "restored", restored)
+				"seg", seg.ID, "expected", outcome.Want, "restored", outcome.Restored)
 			return "", false
 		}
 		text = tmp.Target
@@ -262,18 +252,11 @@ func (h *ReviseHandler) finalizeRevision(
 }
 
 // extractTargetRuby 提取译文中的注音条目并返回剥离标签后的译文。
-// 复用 ruby.Extractor 于临时段副本，与 translate 轮对 source 的提取同源；
-// 文本不含 ruby 标签时原样返回（快速路径，避免整段正则扫描）。
+// 委托纯函数 ruby.Extract，与 translate 轮对 source 的提取同源；
+// 文本不含 ruby 标签时原样返回（快速路径：正则不命中即原样返回，无额外开销）。
 func extractTargetRuby(target string) (string, []ruby.Item) {
-	if !strings.Contains(target, "<ruby>") {
-		return target, nil
-	}
-	tmp := &model.Segment{Source: target, Meta: map[string]any{}}
-	if err := (&ruby.Extractor{}).Protect(tmp); err != nil {
-		return target, nil
-	}
-	items, _ := tmp.Meta["ruby_items"].([]ruby.Item)
-	return tmp.Source, items
+	items, stripped := ruby.Extract(target)
+	return stripped, items
 }
 
 // mapSnippetToProtectedForm 把 issue snippet（原始文本片段）映射到与 prompt 内

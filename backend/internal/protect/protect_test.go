@@ -272,11 +272,9 @@ func TestCompose_Unprotect_AdjacentPlaceholders(t *testing.T) {
 	}
 }
 
-// S9: Extractor Protect 应剥离 ruby 标签并存储注音到 Meta。
-// 注音还原委托给 Restorer（RubyRestore stage），而非 Unprotect。
+// S9: ruby Protector 应剥离 ruby 标签并存储注音到 Meta。
+// 注音还原委托给 ruby.RestoreItems（RubyRestore stage），而非 Unprotect。
 func TestExtractor_ProtectAndRestore(t *testing.T) {
-	restorer := ruby.NewRestorer()
-
 	cases := []struct {
 		input    string
 		base     string // protect 后 Source 应仅保留基底文本
@@ -291,7 +289,7 @@ func TestExtractor_ProtectAndRestore(t *testing.T) {
 	}
 	for _, tc := range cases {
 		seg := &model.Segment{Source: tc.input}
-		if err := (&ruby.Extractor{}).Protect(seg); err != nil {
+		if err := NewRubyProtector().Protect(seg); err != nil {
 			t.Fatalf("protect(%q): %v", tc.input, err)
 		}
 		if seg.Source != tc.base {
@@ -301,16 +299,15 @@ func TestExtractor_ProtectAndRestore(t *testing.T) {
 		// 模拟 LLM 返回：target = 保护后的 source
 		seg.Target = seg.Source
 
-		// 通过 Restorer 还原注音：从 Meta 中提取 ruby_annotations 并转换为 Item
+		// 通过 ruby.RestoreItems 还原注音：从 Meta 中提取 ruby_items 并回填 target 字段
 		if seg.Meta != nil {
-			if annotations, ok := seg.Meta["ruby_annotations"].([]ruby.Annotation); ok {
-				items := make([]ruby.Item, len(annotations))
-				for i, a := range annotations {
-					items[i] = ruby.Item{TargetBase: a.Base, TargetText: a.Text}
+			if items, ok := seg.Meta["ruby_items"].([]ruby.Item); ok {
+				for i := range items {
+					items[i].TargetBase = items[i].SourceBase
+					items[i].TargetText = items[i].SourceText
 				}
-				if _, err := restorer.RestoreItems(seg, items); err != nil {
-					t.Fatalf("restore(%q): %v", tc.input, err)
-				}
+				restored, _ := ruby.RestoreItems(seg.Target, items)
+				seg.Target = restored
 			}
 		}
 
@@ -320,10 +317,10 @@ func TestExtractor_ProtectAndRestore(t *testing.T) {
 	}
 }
 
-// S10: Extractor 保护后 ruby 标签应被剥离，基底文本保留，注音存入 Meta。
+// S10: ruby Protector 保护后 ruby 标签应被剥离，基底文本保留，注音存入 Meta。
 func TestExtractor_ProtectsContent(t *testing.T) {
 	seg := &model.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
-	if err := (&ruby.Extractor{}).Protect(seg); err != nil {
+	if err := NewRubyProtector().Protect(seg); err != nil {
 		t.Fatal(err)
 	}
 	// ruby 标签应被剥离
@@ -345,23 +342,23 @@ func TestExtractor_ProtectsContent(t *testing.T) {
 	if seg.Meta == nil {
 		t.Fatal("Meta is nil after protect")
 	}
-	annotations, ok := seg.Meta["ruby_annotations"].([]ruby.Annotation)
+	items, ok := seg.Meta["ruby_items"].([]ruby.Item)
 	if !ok {
-		t.Fatalf("ruby_annotations not found or wrong type in Meta: %v", seg.Meta)
+		t.Fatalf("ruby_items not found or wrong type in Meta: %v", seg.Meta)
 	}
-	if len(annotations) == 0 {
-		t.Fatal("ruby_annotations is empty")
+	if len(items) == 0 {
+		t.Fatal("ruby_items is empty")
 	}
-	if annotations[0].Base != "呪" || annotations[0].Text != "じゅ" {
-		t.Errorf("annotation mismatch: got base=%q text=%q, want base=呪 text=じゅ",
-			annotations[0].Base, annotations[0].Text)
+	if items[0].SourceBase != "呪" || items[0].SourceText != "じゅ" {
+		t.Errorf("item mismatch: got base=%q text=%q, want base=呪 text=じゅ",
+			items[0].SourceBase, items[0].SourceText)
 	}
 }
 
-// S11: Extractor + XMLProtector 组合保护后，LLM 看不到注音内容。
+// S11: ruby Protector + XMLProtector 组合保护后，LLM 看不到注音内容。
 func TestCompose_RubyAndXML_HidesContent(t *testing.T) {
 	seg := &model.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
-	p := Compose(&ruby.Extractor{}, &XMLProtector{})
+	p := Compose(NewRubyProtector(), &XMLProtector{})
 	if err := p.Protect(seg); err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +372,7 @@ func TestCompose_RubyAndXML_HidesContent(t *testing.T) {
 	}
 }
 
-// S12: FromRules 不再处理 "ruby"，ruby.Extractor 由引擎单独处理。
+// S12: FromRules 不再处理 "ruby"，NewRubyProtector 由引擎单独处理。
 func TestFromRules_NoRuby(t *testing.T) {
 	p := FromRules([]string{"code", "link", "placeholder", "ruby", "xml"})
 	source := `<ruby>呪<rt>じゅ</rt></ruby>`
@@ -383,16 +380,16 @@ func TestFromRules_NoRuby(t *testing.T) {
 	if err := p.Protect(seg); err != nil {
 		t.Fatal(err)
 	}
-	// FromRules 不含 Extractor，所以 ruby 标签应原样保留给 XMLProtector 处理
-	// 但 "じゅ" 不应通过 Extractor 被提取
+	// FromRules 不含 ruby protector，所以 ruby 标签应原样保留给 XMLProtector 处理
+	// 但 "じゅ" 不应被提取进 Meta
 	if seg.Meta != nil {
-		if _, ok := seg.Meta["ruby_annotations"]; ok {
-			t.Error("FromRules should not include Extractor")
+		if _, ok := seg.Meta["ruby_items"]; ok {
+			t.Error("FromRules should not include ruby protector")
 		}
 	}
 }
 
-// S14: 无 <rt> 标签时 Extractor 不影响内容。
+// S14: 无 <rt> 标签时 ruby Protector 不影响内容。
 func TestExtractor_NoRtTags(t *testing.T) {
 	cases := []string{
 		`plain text`,
@@ -400,11 +397,11 @@ func TestExtractor_NoRtTags(t *testing.T) {
 	}
 	for _, c := range cases {
 		seg := &model.Segment{Source: c}
-		if err := (&ruby.Extractor{}).Protect(seg); err != nil {
+		if err := NewRubyProtector().Protect(seg); err != nil {
 			t.Fatal(err)
 		}
 		if seg.Source != c {
-			t.Errorf("Extractor modified non-ruby text: %q → %q", c, seg.Source)
+			t.Errorf("ruby protector modified non-ruby text: %q → %q", c, seg.Source)
 		}
 	}
 }
@@ -430,10 +427,9 @@ func TestMergeAdjacentPlaceholders_MergedValue(t *testing.T) {
 	}
 }
 
-// S16: Extractor + XMLProtector + mergeAdjacentPlaceholders + Restorer 完整 round-trip。
+// S16: ruby Protector + XMLProtector + mergeAdjacentPlaceholders + RestoreItems 完整 round-trip。
 // 模拟实际 pipeline：Protect → LLM → Unprotect → RubyRestore。
 func TestMergeAdjacentPlaceholders_RoundTrip(t *testing.T) {
-	restorer := ruby.NewRestorer()
 	cases := []struct {
 		input    string
 		restored string // 还原后期望的 Target（相邻逐字注音会被合并为词级注音）
@@ -442,7 +438,7 @@ func TestMergeAdjacentPlaceholders_RoundTrip(t *testing.T) {
 		{`────</span><ruby>椎名<rt>しいな</rt></ruby>`, `────</span><ruby>椎名<rt>しいな</rt></ruby>`},
 		{`<ruby>微<rt>ほほ</rt></ruby><ruby>笑<rt>え</rt></ruby>`, `<ruby>微笑<rt>ほほえ</rt></ruby>`},
 	}
-	p := Compose(&ruby.Extractor{}, &XMLProtector{})
+	p := Compose(NewRubyProtector(), &XMLProtector{})
 	for _, tc := range cases {
 		seg := &model.Segment{Source: tc.input}
 		if err := p.Protect(seg); err != nil {
@@ -454,18 +450,15 @@ func TestMergeAdjacentPlaceholders_RoundTrip(t *testing.T) {
 		if err := p.Unprotect(seg); err != nil {
 			t.Fatalf("unprotect(%q): %v", tc.input, err)
 		}
-		// RubyRestorer 还原注音
+		// RubyRestore 还原注音：从 Meta 提取 ruby_items 并回填 target 字段
 		if seg.Meta != nil {
-			if annotations, ok := seg.Meta["ruby_annotations"].([]ruby.Annotation); ok {
-				items := make([]ruby.Item, len(annotations))
-				for i, a := range annotations {
-					items[i] = ruby.Item{TargetBase: a.Base, TargetText: a.Text}
+			if items, ok := seg.Meta["ruby_items"].([]ruby.Item); ok && len(items) > 0 {
+				for i := range items {
+					items[i].TargetBase = items[i].SourceBase
+					items[i].TargetText = items[i].SourceText
 				}
-				if len(items) > 0 {
-					if _, err := restorer.RestoreItems(seg, items); err != nil {
-						t.Fatalf("restore(%q): %v", tc.input, err)
-					}
-				}
+				restored, _ := ruby.RestoreItems(seg.Target, items)
+				seg.Target = restored
 			}
 		}
 		if seg.Target != tc.restored {
