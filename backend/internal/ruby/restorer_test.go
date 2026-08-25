@@ -3,8 +3,6 @@ package ruby
 import (
 	"reflect"
 	"testing"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 func TestAssignIDs(t *testing.T) {
@@ -216,18 +214,14 @@ func TestUnaligned(t *testing.T) {
 // TestRestoreItems_UsesOwnSourceBaseFallback 是核心修复场景：
 // 译文不含 TargetBase 但包含条目自身的 SourceBase → 用自身 SourceBase
 // 回退定位插入（而非旧路径按位置的 originals[i]）。
+// 同时验证纯函数契约：不修改 items 的 Aligned 字段。
 func TestRestoreItems_UsesOwnSourceBaseFallback(t *testing.T) {
-	r := &Restorer{}
-
-	seg := &model.Segment{Target: "我喝水。"}
+	target := "我喝水。"
 	items := []Item{
 		{ID: "1", SourceBase: "我", SourceText: "wǒ", TargetBase: "I", TargetText: "aɪ", Kind: "phonetic"},
 		{ID: "2", SourceBase: "杯", SourceText: "bēi", TargetBase: "cup", TargetText: "kʌp", Kind: "phonetic"},
 	}
-	res, err := r.RestoreItems(seg, items)
-	if err != nil {
-		t.Fatalf("RestoreItems error: %v", err)
-	}
+	got, res := RestoreItems(target, items)
 	if res.Matched != 1 {
 		t.Errorf("Matched = %d, want 1", res.Matched)
 	}
@@ -235,46 +229,39 @@ func TestRestoreItems_UsesOwnSourceBaseFallback(t *testing.T) {
 		t.Errorf("Total = %d, want 2", res.Total)
 	}
 	// 核心断言：插入用的是自身 SourceBase（我）+ TargetText（aɪ）
-	if want := "<ruby>我<rt>aɪ</rt></ruby>喝水。"; seg.Target != want {
-		t.Errorf("seg.Target = %q, want %q", seg.Target, want)
+	if want := "<ruby>我<rt>aɪ</rt></ruby>喝水。"; got != want {
+		t.Errorf("restored = %q, want %q", got, want)
 	}
-	if !items[0].Aligned {
-		t.Error("items[0].Aligned = false, want true（SourceBase 回退成功）")
-	}
-	if items[1].Aligned {
-		t.Error("items[1].Aligned = true, want false（TargetBase 与 SourceBase 都不在译文中）")
+	// 纯函数：不修改 items（含 Aligned 字段）
+	for i, it := range items {
+		if it.Aligned {
+			t.Errorf("items[%d].Aligned = true, want false（RestoreItems 不得修改条目）", i)
+		}
 	}
 
 	// TargetBase 命中时优先用 TargetBase（不触发回退）
-	seg2 := &model.Segment{Target: "I want water"}
+	target2 := "I want water"
 	items2 := []Item{
 		{ID: "1", SourceBase: "我", SourceText: "wǒ", TargetBase: "I", TargetText: "aɪ", Kind: "phonetic"},
 	}
-	res2, err := r.RestoreItems(seg2, items2)
-	if err != nil {
-		t.Fatalf("RestoreItems error: %v", err)
-	}
+	got2, res2 := RestoreItems(target2, items2)
 	if res2.Matched != 1 {
 		t.Errorf("Matched = %d, want 1", res2.Matched)
 	}
-	if want := "<ruby>I<rt>aɪ</rt></ruby> want water"; seg2.Target != want {
-		t.Errorf("seg2.Target = %q, want %q", seg2.Target, want)
-	}
-	if !items2[0].Aligned {
-		t.Error("items2[0].Aligned = false, want true（TargetBase 命中）")
+	if want := "<ruby>I<rt>aɪ</rt></ruby> want water"; got2 != want {
+		t.Errorf("restored = %q, want %q", got2, want)
 	}
 }
 
-// TestRestoreItems_EmptyInput 验证空译文/空 items 返回零值结果。
+// TestRestoreItems_EmptyInput 验证空译文/空 items 返回原文本与零值结果。
 func TestRestoreItems_EmptyInput(t *testing.T) {
-	r := &Restorer{}
-	res, err := r.RestoreItems(&model.Segment{}, nil)
-	if err != nil || res != (RestoreResult{}) {
-		t.Errorf("空输入 = %+v, %v; want RestoreResult{}", res, err)
+	got, res := RestoreItems("", nil)
+	if got != "" || res != (RestoreResult{}) {
+		t.Errorf("空输入 = %q, %+v; want \"\", RestoreResult{}", got, res)
 	}
-	res, err = r.RestoreItems(&model.Segment{Target: ""}, []Item{{ID: "1", TargetBase: "I"}})
-	if err != nil || res != (RestoreResult{}) {
-		t.Errorf("空译文 = %+v, %v; want RestoreResult{}", res, err)
+	got, res = RestoreItems("", []Item{{ID: "1", TargetBase: "I"}})
+	if got != "" || res != (RestoreResult{}) {
+		t.Errorf("空译文 = %q, %+v; want \"\", RestoreResult{}", got, res)
 	}
 }
 

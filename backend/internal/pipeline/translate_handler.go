@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
@@ -42,7 +43,6 @@ type TranslateHandler struct {
 	RubyMode          string
 	Postprocess       *PostprocessConfig
 
-	RubyRestorer      *ruby.Restorer
 	RubyRetryBackends []backend.Backend
 	RubyRetryAttempts int // 注音对齐定向重试轮数；<=0 兜底为 1（仅 backends 非空时生效）
 
@@ -579,6 +579,13 @@ func (h *TranslateHandler) processTranslatedSegments(
 		wantIDIdx++
 		text, ok := trans[id]
 		if !ok || strings.TrimSpace(text) == "" {
+			// LLM 本轮漏译：清空 Target/Issues 使该段以「本轮无产出」形态流入
+			// BuildBatchResult（TargetText="" ⇒ Failed=true）。否则 DB 重载的旧译文
+			// 非空会被下游空串守卫放过，旧裁决连同对未变更文本新扫的同指纹 issue
+			// 一并落库，产生 dismissed + pending 孪生条目（旧裁决本应随文本消亡）。
+			// 与下方占位符违规分支的 seg.Target = "" 同口径。
+			seg.Target = ""
+			seg.Issues = nil
 			unresolved = append(unresolved, idx)
 			continue
 		}
@@ -600,6 +607,9 @@ func (h *TranslateHandler) processTranslatedSegments(
 				text = normText
 			}
 		}
+		// translate 轮旧裁决不跨文本存活：成功段先清空 DB 重载的旧 issues，
+		// 防止重译段复活陈旧裁决（须在下方 RubyRestore 追加守恒 issue 之前）。
+		seg.Issues = nil
 		seg.Target = text
 		missingPH, duplicatedPH, inventedPH := protect.PlaceholderViolations(seg)
 		if len(missingPH) > 0 || len(duplicatedPH) > 0 || len(inventedPH) > 0 {
@@ -626,12 +636,22 @@ func (h *TranslateHandler) processTranslatedSegments(
 		}
 
 		// RubyRestore
-		if h.RubyEnabled && h.RubyRestorer != nil {
+		if h.RubyEnabled {
 			keepSet := kindSet(h.RubyPreserveKinds)
 			isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
-			restoreSegmentRuby(ctx, seg, h.RubyRestorer, keepSet,
+			outcome := restoreSegmentRuby(ctx, seg, keepSet,
 				h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex, h.Repair,
 				h.RubyRetryAttempts)
+			// 守恒信号：应还原条目存在但未全部还原时追加 warning issue，
+			// 经 BuildBatchResult → worker translate batchHandler 落库。
+			if outcome.Want > 0 && outcome.Restored < outcome.Want {
+				seg.Issues = append(seg.Issues, qa.QualityIssue{
+					SegmentIndex: idx,
+					Severity:     qa.SeverityWarning,
+					Code:         qa.CodeRubyRestoreIncomplete,
+					Message:      fmt.Sprintf("注音还原不完整：应还原 %d 条，实际 %d 条", outcome.Want, outcome.Restored),
+				})
+			}
 		}
 
 		// TM（直接调用，使用 OriginalSource）
@@ -899,8 +919,7 @@ func headSnippet(s string, n int) string {
 }
 
 // extractRubyAnnotationsFromDoc 从文档段落中提取注音注释（带段内条目 id）。
-// 优先读取统一结构 seg.Meta["ruby_items"]（[]ruby.Item，带 ID）；
-// 仅当 ruby_items 缺失时回退旧 key seg.Meta["ruby_annotations"]（[]ruby.Annotation，ID 为空）。
+// 只读统一结构 seg.Meta["ruby_items"]（[]ruby.Item，带 ID；提取阶段恒写入）。
 func extractRubyAnnotationsFromDoc(doc *Document, idxs []int, idMap map[int]string) map[string][]prompt.RubyAnnotation {
 	result := make(map[string][]prompt.RubyAnnotation)
 	for _, idx := range idxs {
@@ -911,13 +930,6 @@ func extractRubyAnnotationsFromDoc(doc *Document, idxs []int, idMap map[int]stri
 				converted = make([]prompt.RubyAnnotation, len(items))
 				for i, it := range items {
 					converted[i] = prompt.RubyAnnotation{ID: it.ID, Base: it.SourceBase, Text: it.SourceText}
-				}
-			}
-		} else if raw, ok := seg.Meta["ruby_annotations"]; ok {
-			if annots, ok := raw.([]ruby.Annotation); ok {
-				converted = make([]prompt.RubyAnnotation, len(annots))
-				for i, a := range annots {
-					converted[i] = prompt.RubyAnnotation{Base: a.Base, Text: a.Text}
 				}
 			}
 		}

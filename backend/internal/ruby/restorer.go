@@ -5,18 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
-
-// Restorer 负责将 LLM 输出的注音信息还原为 <ruby> 标签。
-// 它不是 Protector 接口的实现，而是作为 unprotect 之后的额外 stage。
-type Restorer struct{}
-
-// NewRestorer 创建 Restorer 实例。
-func NewRestorer() *Restorer {
-	return &Restorer{}
-}
 
 // RestoreResult 记录注音还原的匹配统计。
 type RestoreResult struct {
@@ -29,16 +18,16 @@ func (r RestoreResult) IsFull() bool {
 	return r.Total > 0 && r.Matched == r.Total
 }
 
-// RestoreItems 从统一 Item 结构还原 <ruby> 标签。
+// RestoreItems 从统一 Item 结构还原 <ruby> 标签，返回还原后的文本与匹配统计。
 // 仅对 TargetBase 非空的条目尝试还原；第一优先用条目自身的 TargetBase
 // 在译文中定位，未命中且 SourceBase 非空且不同于 TargetBase 时，
 // 第二优先回退到该条目自身的 SourceBase——这是对旧路径（按位置取
-// originals[i]）的核心修复。还原成功的条目置 Aligned = true（按索引
-// 就地修改，调用方可观察）。
+// originals[i]）的核心修复。
 // total = 需要还原的条目数（TargetBase 或 SourceBase 非空）。
-func (r *Restorer) RestoreItems(seg *model.Segment, items []Item) (RestoreResult, error) {
-	if seg == nil || seg.Target == "" || len(items) == 0 {
-		return RestoreResult{}, nil
+// 纯函数：不修改 items（含 Aligned 字段），对齐状态由调用方经 MergeByOutput 观察。
+func RestoreItems(target string, items []Item) (string, RestoreResult) {
+	if target == "" || len(items) == 0 {
+		return target, RestoreResult{}
 	}
 
 	assigned := make(map[int]bool)
@@ -54,17 +43,14 @@ func (r *Restorer) RestoreItems(seg *model.Segment, items []Item) (RestoreResult
 		if it.TargetBase == "" {
 			continue
 		}
-		found := r.findAndInsert(seg.Target, it.TargetBase, it.TargetText, assigned, &inserts)
+		found := findAndInsert(target, it.TargetBase, it.TargetText, assigned, &inserts)
 		if !found && it.SourceBase != "" && it.SourceBase != it.TargetBase {
-			found = r.findAndInsert(seg.Target, it.SourceBase, it.TargetText, assigned, &inserts)
-		}
-		if found {
-			it.Aligned = true
+			found = findAndInsert(target, it.SourceBase, it.TargetText, assigned, &inserts)
 		}
 	}
 
 	if len(inserts) == 0 {
-		return RestoreResult{Matched: 0, Total: total}, nil
+		return target, RestoreResult{Matched: 0, Total: total}
 	}
 
 	// 按位置从右到左排序，避免替换时索引偏移
@@ -73,14 +59,12 @@ func (r *Restorer) RestoreItems(seg *model.Segment, items []Item) (RestoreResult
 	})
 
 	// 从右到左应用替换
-	target := seg.Target
 	for _, ins := range inserts {
 		rubyTag := fmt.Sprintf("<ruby>%s<rt>%s</rt></ruby>", ins.base, ins.text)
 		target = target[:ins.pos] + rubyTag + target[ins.end:]
 	}
 
-	seg.Target = target
-	return RestoreResult{Matched: len(inserts), Total: total}, nil
+	return target, RestoreResult{Matched: len(inserts), Total: total}
 }
 
 // OutputEntry 是 LLM 返回的单条标注输出。
@@ -141,7 +125,7 @@ type insertInfo struct {
 
 // findAndInsert 在 target 中查找 base 的第一个未分配出现位置，
 // 找到后记录到 inserts 并标记 assigned，返回 true；未找到返回 false。
-func (r *Restorer) findAndInsert(target, base, text string, assigned map[int]bool, inserts *[]insertInfo) bool {
+func findAndInsert(target, base, text string, assigned map[int]bool, inserts *[]insertInfo) bool {
 	searchFrom := 0
 	for {
 		idx := strings.Index(target[searchFrom:], base)
@@ -294,25 +278,28 @@ func ParseSectionRubyOutput(lines []string) map[string][]OutputEntry {
 	return result
 }
 
-// RestoreInlineMarkers 通过正则替换将内联标记还原为 <ruby> 标签。
+// RestoreInlineMarkers 通过正则替换将译文中 LLM 书写的内联标记还原为
+// <ruby> 标签，返回替换完成后的文本与匹配统计。
 // 字节兼容：标记形态与还原结果保持不变。
-// rubyOutput 为过滤后的条目；还原匹配的标记，移除不匹配的标记。
-func (r *Restorer) RestoreInlineMarkers(seg *model.Segment, rubyOutput []OutputEntry) (RestoreResult, error) {
+// rubyOutput 为过滤后的条目；还原匹配的标记，移除不匹配的标记（保留基底）。
+// 注意 Total 是过滤前译文中全部标记数（标记由 LLM 书写、自证），不可作守恒
+// Want 口径；守恒侧应使用过滤后的标记数（见 pipeline.rubyOutcome）。
+func RestoreInlineMarkers(target string, rubyOutput []OutputEntry) (string, RestoreResult) {
 	// 先统计所有标记数
-	allMatches := inlineMarkerRe.FindAllString(seg.Target, -1)
+	allMatches := inlineMarkerRe.FindAllString(target, -1)
 	if len(allMatches) == 0 {
-		return RestoreResult{}, nil
+		return target, RestoreResult{}
 	}
 	if len(rubyOutput) == 0 {
 		// 全部过滤掉，移除标记但保留基底
-		seg.Target = inlineMarkerRe.ReplaceAllStringFunc(seg.Target, func(match string) string {
+		target = inlineMarkerRe.ReplaceAllStringFunc(target, func(match string) string {
 			m := inlineMarkerRe.FindStringSubmatch(match)
 			if len(m) >= 3 {
 				return m[1] // 保留基底
 			}
 			return match
 		})
-		return RestoreResult{Matched: 0, Total: len(allMatches)}, nil
+		return target, RestoreResult{Matched: 0, Total: len(allMatches)}
 	}
 	// 构建匹配集合：base+text → 存在
 	type pair struct{ base, text string }
@@ -324,7 +311,7 @@ func (r *Restorer) RestoreInlineMarkers(seg *model.Segment, rubyOutput []OutputE
 	}
 	total := len(allMatches)
 	matched := 0
-	seg.Target = inlineMarkerRe.ReplaceAllStringFunc(seg.Target, func(match string) string {
+	target = inlineMarkerRe.ReplaceAllStringFunc(target, func(match string) string {
 		m := inlineMarkerRe.FindStringSubmatch(match)
 		if len(m) < 3 {
 			return match
@@ -336,5 +323,5 @@ func (r *Restorer) RestoreInlineMarkers(seg *model.Segment, rubyOutput []OutputE
 		}
 		return base // 不在保留集合中，移除标记但保留基底
 	})
-	return RestoreResult{Matched: matched, Total: total}, nil
+	return target, RestoreResult{Matched: matched, Total: total}
 }

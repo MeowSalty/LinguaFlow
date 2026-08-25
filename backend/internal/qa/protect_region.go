@@ -1,10 +1,20 @@
 package qa
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf8"
 )
+
+// rubyElementRe 匹配 <ruby>BASE<rt>READING</rt>TRAILING</ruby>
+// （与 ruby 包内部正则同形态：BASE 可能含 <rp> 等辅助标签，TRAILING 可能含闭合辅助标签）。
+// ruby 包不导出正则、本处需要的是元素「位置」而非剥除结果（剥离统一走
+// ruby.StripRubyTags），故保留本地副本仅用于区域屏蔽。
+var rubyElementRe = regexp.MustCompile(`<ruby>(.*?)<rt>(.*?)</rt>(.*?)</ruby>`)
+
+// htmlTagRe 匹配 HTML/XML 标签，用于裸标签的兜底屏蔽。
+var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
 
 func ProtectedRegions(target string, protected map[string]string) [][2]int {
 	if len(protected) == 0 || target == "" {
@@ -42,8 +52,8 @@ func protectedOccurrences(target string, protected map[string]string) [][2]int {
 // 返回尚未排序合并的原始区域。每个 ruby 元素整体作为一个区域（含基底文本），以便后续
 // StripRegions 整段删去，避免 ruby 标签的 <> 被当半角标点误报。
 //
-// 复用包级 rubyElementRe（与 StripRubyTags 同一正则，由 TestStripRubyTagsMatchesRubyPackage 守护）。
-// 因 model → qa 依赖成环，qa 不能反向 import ruby，故直接复用同包正则，不做跨包复制。
+// 复用包级 rubyElementRe（与 ruby 包内部正则同形态）。
+// 剥离语义的单一来源是 ruby.StripRubyTags；本处只定位元素区域，不做剥除。
 func rubyRegions(target string) [][2]int {
 	matches := rubyElementRe.FindAllStringSubmatchIndex(target, -1)
 	if len(matches) == 0 {
@@ -61,7 +71,7 @@ func rubyRegions(target string) [][2]int {
 
 // tagRegions 是通用内联标签屏蔽通道：在无 Protected 映射（如手动编辑从 DB 重载）时
 // 兜底屏蔽 `<a href="x">`、`<b>` 等裸标签，使标记字符（`<`/`>`/`"`/`=`）不被 width_mix
-// 等标点类 checker 当成正文误报。复用同包 htmlTagRe（与 StripRubyTags 同正则，语义一致）。
+// 等标点类 checker 当成正文误报。复用同包 htmlTagRe（与 ruby 包内部正则同形态）。
 // 返回尚未排序合并的原始区域（字节→rune 偏移），无匹配返回 nil。
 func tagRegions(target string) [][2]int {
 	matches := htmlTagRe.FindAllStringIndex(target, -1)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,17 +15,31 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
+// rubyOutcome 汇总一次注音还原的守恒口径：Restored 为实际插入/转换数，
+// Want 为按 keepSet 过滤后应还原数（Restorable 计数，与还原器 Total 单一来源）。
+type rubyOutcome struct {
+	Restored int
+	Want     int
+}
+
 // restoreSegmentRuby 对单个段落执行注音还原：提取统一 items → 过滤 → 还原，
 // 未对齐条目存在且配置了重试后端时执行定向对齐重试（仅发未对齐条目）。
-// 返回实际还原（插入译文）的注音条目数，供调用方做守恒校验；还原器无法
-// 定位的条目不计入——计数基于还原器插入/转换结果而非标签子串。注意 inline
-// 分支的计数是译文中 ⟦ruby:⟧ 标记的转换数（translate 轮的容错通道，标记由
-// LLM 书写）；revise 轮不使用该通道（协议禁止标记，见 finalizeRevision 的
-// fail-closed 拒绝）。
+// 返回 rubyOutcome 供守恒校验：translate 轮以 Restored 作为还原信号，
+// revise 轮以 Restored < Want 判定回填不完整并拒绝该段修订（见 finalizeRevision）。
+//
+// keepSet 约定：nil = 不过滤（全保留）；非 nil = 按 map 过滤（Kind 为空串的条目
+// 视为未分类，恒保留）。translate 轮传 kindSet(配置)（nil 配置展开为全集 map），
+// revise 轮传字面 nil——存量注音无 kind 属性、不参与 preserve_kinds，LLM 的
+// 重分类不得把条目挤出守恒口径。
+//
+// Restored 计数基于还原器插入/转换结果而非标签子串，还原器无法定位的条目不计入。
+// inline 分支是 translate 轮的容错通道（标记由 LLM 书写）：标记自洽使
+// Restored==Want 恒成立、漏写标记不可检测（弱协议限制）；全丢失（无任何标记）
+// 时不含 ⟦ruby:⟧ 会落入主路径触发守恒信号。revise 轮不使用该通道（协议禁止
+// 标记，见 finalizeRevision 的 fail-closed 拒绝）。
 func restoreSegmentRuby(
 	ctx context.Context,
 	seg *Segment,
-	restorer *ruby.Restorer,
 	keepSet map[string]bool,
 	backends []backend.Backend,
 	retryPolicy backend.RetryPolicy,
@@ -36,28 +49,30 @@ func restoreSegmentRuby(
 	roundIndex int,
 	repairOpt repair.Options,
 	rubyRetryAttempts int,
-) int {
+) rubyOutcome {
 	items := extractRubyItemsFromSeg(seg)
 	if len(items) == 0 {
-		return 0
+		return rubyOutcome{}
 	}
 
 	// inline：marker 位置天然自洽，按标记就地组装，不参与 id 关联与定向重试
 	if strings.Contains(seg.Target, "⟦ruby:") {
 		markers := ruby.ParseInlineMarkers(seg.Target)
 		filtered := filterByKinds(markers, keepSet)
-		result, _ := restorer.RestoreInlineMarkers(seg, filtered)
-		return result.Matched
+		restored, result := ruby.RestoreInlineMarkers(seg.Target, filtered)
+		seg.Target = restored
+		// Want 显式用 len(filtered)：result.Total 是过滤前全部标记数（LLM 自证口径），
+		// 不可作守恒 Want。
+		return rubyOutcome{Restored: result.Matched, Want: len(filtered)}
 	}
 
 	translation := seg.Target // 干净译文快照（未插标签）
 	filtered := filterItemsByKind(items, keepSet)
 	if len(filtered) > 0 {
-		result, err := restorer.RestoreItems(seg, filtered)
-		if err != nil {
-			logger.Warn("ruby restore failed, will retry alignment", "seg", seg.ID, "err", err)
-		} else if result.IsFull() && len(ruby.Unaligned(items)) == 0 {
-			return result.Matched
+		restored, result := ruby.RestoreItems(seg.Target, filtered)
+		seg.Target = restored
+		if result.IsFull() && len(ruby.Unaligned(items)) == 0 {
+			return rubyOutcome{Restored: result.Matched, Want: result.Total}
 		}
 		// 回退到干净译文：定向重试的 prompt 必须看到未插标签的译文
 		seg.Target = translation
@@ -67,41 +82,29 @@ func restoreSegmentRuby(
 	if attempts <= 0 {
 		attempts = 1
 	}
-	if len(backends) > 0 && ctx.Err() == nil && attempts > 0 && len(ruby.Unaligned(items)) > 0 {
-		retryAlignSegmentDirected(ctx, seg, items, translation, restorer, keepSet, backends,
+	// 仅当按 keepSet 过滤后仍有未对齐条目才进定向重试：被 kind 滤光的条目
+	// 重试也不会被还原，纯属浪费后端调用。注意此处刻意不按 Restorable 过滤——
+	// 双空 base 条目靠重试回填 TargetBase 后才能变为可还原。
+	if len(backends) > 0 && ctx.Err() == nil &&
+		len(filterItemsByKind(ruby.Unaligned(items), keepSet)) > 0 {
+		retryAlignSegmentDirected(ctx, seg, items, translation, keepSet, backends,
 			retryPolicy, logger, reporter, isTextMode, roundIndex, repairOpt, attempts)
 	}
 
 	// 最终还原：以最后一次合并后的 items 为准
 	filtered = filterItemsByKind(items, keepSet)
-	if len(filtered) > 0 {
-		result, _ := restorer.RestoreItems(seg, filtered)
-		return result.Matched
+	if len(filtered) == 0 {
+		return rubyOutcome{}
 	}
-	return 0
+	restored, result := ruby.RestoreItems(seg.Target, filtered)
+	seg.Target = restored
+	return rubyOutcome{Restored: result.Matched, Want: result.Total}
 }
 
-// extractRubyItemsFromSeg 从 Segment.Meta 提取统一注音条目。
-// 优先 seg.Meta["ruby_items"]（[]ruby.Item，主路径）；
-// 回退旧 key seg.Meta["ruby_output"]（[]ruby.OutputEntry，测试/兼容，条目视为已对齐）。
+// extractRubyItemsFromSeg 从 Segment.Meta 提取统一注音条目（[]ruby.Item）。
 func extractRubyItemsFromSeg(seg *Segment) []ruby.Item {
 	if raw, ok := seg.Meta["ruby_items"]; ok {
 		if items, ok := raw.([]ruby.Item); ok {
-			return items
-		}
-	}
-	if raw, ok := seg.Meta["ruby_output"]; ok {
-		if entries, ok := raw.([]ruby.OutputEntry); ok {
-			items := make([]ruby.Item, len(entries))
-			for i, e := range entries {
-				items[i] = ruby.Item{
-					ID:         e.ID,
-					TargetBase: e.Base,
-					TargetText: e.Text,
-					Kind:       e.Kind,
-					Aligned:    true,
-				}
-			}
 			return items
 		}
 	}
@@ -109,8 +112,13 @@ func extractRubyItemsFromSeg(seg *Segment) []ruby.Item {
 }
 
 // filterItemsByKind 按 preserve_kinds 过滤统一 items（filterByKinds 的 Item 版本）。
-// Kind 为空字符串的条目视为未分类，保留不过滤（向后兼容旧数据）。
+// keep == nil 表示不过滤（全保留；revise 轮语义：存量注音无 kind 属性、不参与
+// preserve_kinds）；非 nil 时 Kind 为空字符串的条目视为未分类，保留不过滤
+// （向后兼容旧数据）。
 func filterItemsByKind(items []ruby.Item, keep map[string]bool) []ruby.Item {
+	if keep == nil {
+		return items
+	}
 	var result []ruby.Item
 	for _, it := range items {
 		if it.Kind == "" || keep[it.Kind] {
@@ -128,7 +136,6 @@ func retryAlignSegmentDirected(
 	seg *Segment,
 	items []ruby.Item,
 	translation string,
-	restorer *ruby.Restorer,
 	keepSet map[string]bool,
 	backends []backend.Backend,
 	retryPolicy backend.RetryPolicy,
@@ -303,9 +310,6 @@ func emitRubyAlignmentBatchEvent(
 	obs.OnBatchEvent(evt)
 }
 
-// rubyTagRe 用于从 OriginalSource 中剥离 ruby 标签。
-var rubyTagRe = regexp.MustCompile(`<ruby>(.*?)<rt>(.*?)</rt>(.*?)</ruby>`)
-
 // buildDirectedAlignmentPrompt 构建定向注音对齐的 system/user 消息和 JSON Schema。
 // 只下发仍未对齐的条目（missing，带 id/source_base/source_text），要求 LLM 回显 id。
 func buildDirectedAlignmentPrompt(seg *Segment, missing []ruby.Item, translation string) (string, string, map[string]any) {
@@ -321,12 +325,13 @@ func buildDirectedAlignmentPrompt(seg *Segment, missing []ruby.Item, translation
   · creative（创意注音）：基底与标注存在语义落差。
 - 仅输出 JSON，无额外文字。`
 
-	// 取原文（优先 OriginalSource，去掉 ruby 标签）
+	// 取原文（优先 OriginalSource，去掉 ruby 标签；统一走 ruby.StripRubyTags，
+	// 连同 <rp> 等辅助标签一并清理，避免原文残留标签形态污染对齐 prompt）
 	source := seg.OriginalSource
 	if source == "" {
 		source = seg.Source
 	}
-	source = stripRubyTagsForAlignment(source)
+	source = ruby.StripRubyTags(source)
 
 	type missIn struct {
 		ID         string `json:"id"`
@@ -377,14 +382,6 @@ func buildDirectedAlignmentPrompt(seg *Segment, missing []ruby.Item, translation
 	return sys, string(userBytes), schema
 }
 
-// stripRubyTagsForAlignment 剥离 ruby 标签，只保留基底文本和尾部文本。
-func stripRubyTagsForAlignment(s string) string {
-	return rubyTagRe.ReplaceAllStringFunc(s, func(match string) string {
-		m := rubyTagRe.FindStringSubmatch(match)
-		return m[1] + m[3]
-	})
-}
-
 // buildDirectedAlignmentPromptText 构建 text 模式的定向注音对齐提示词。
 // 用户消息列出仍未对齐的条目（id / source_base / source_text），
 // LLM 输出每行一条 "base | text | kind[ | id]"（id 可选）。
@@ -406,7 +403,8 @@ func buildDirectedAlignmentPromptText(seg *Segment, missing []ruby.Item, transla
 	if source == "" {
 		source = seg.Source
 	}
-	source = stripRubyTagsForAlignment(source)
+	// 原文剥离统一走 ruby.StripRubyTags（含 <rp> 等辅助标签清理）
+	source = ruby.StripRubyTags(source)
 
 	var sb strings.Builder
 	sb.WriteString("原文：")
@@ -480,8 +478,12 @@ func kindSet(kinds []string) map[string]bool {
 }
 
 // filterByKinds 按 preserve_kinds 过滤注音条目。
-// Kind 为空字符串的条目视为未分类，保留不过滤（向后兼容旧数据）。
+// keep == nil 表示不过滤（全保留；与 filterItemsByKind 的 nil 约定一致）；
+// 非 nil 时 Kind 为空字符串的条目视为未分类，保留不过滤（向后兼容旧数据）。
 func filterByKinds(output []ruby.OutputEntry, keep map[string]bool) []ruby.OutputEntry {
+	if keep == nil {
+		return output
+	}
 	var result []ruby.OutputEntry
 	for _, entry := range output {
 		if entry.Kind == "" || keep[entry.Kind] {

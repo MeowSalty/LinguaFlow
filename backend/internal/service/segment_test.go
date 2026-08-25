@@ -582,6 +582,84 @@ func TestUpdateResourceSegmentRerunsQA(t *testing.T) {
 	}
 }
 
+// TestUpdateResourceSegmentRubyTagLossGuard 验证人工编辑的注音守恒软守卫：
+//   - 编辑前译文含 <ruby> 注音、编辑后全丢 → 产出 ruby_tag_loss warning；
+//   - 编辑后仍保留注音 → 不产出；
+//   - 此前已把该 warning 标记为 dismissed → 再次全丢失时继承裁决，不再以
+//     pending 复活（指纹稳定为 code 本身）。
+func TestUpdateResourceSegmentRubyTagLossGuard(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-ruby-user")
+	project := createTestProject(t, client, "seg-qa-ruby-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/ruby.txt")
+	rubyTarget := `<ruby>漢<rt>かん</rt></ruby>字`
+
+	t.Run("all_ruby_lost_warns", func(t *testing.T) {
+		seg := createTestSegmentWithTarget(t, client, res.ID, 0, "漢字", rubyTarget, nil)
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+			TargetText: strPtr("汉字"),
+		})
+		if err != nil {
+			t.Fatalf("UpdateResourceSegment: %v", err)
+		}
+		var found *qa.QualityIssue
+		for i := range updated.QualityIssues {
+			if updated.QualityIssues[i].Code == qa.CodeRubyTagLoss {
+				found = &updated.QualityIssues[i]
+				break
+			}
+		}
+		if found == nil {
+			t.Fatalf("expected ruby_tag_loss warning after stripping all ruby, got %v", updated.QualityIssues)
+		}
+		if found.Severity != qa.SeverityWarning {
+			t.Fatalf("severity=%q want %q", found.Severity, qa.SeverityWarning)
+		}
+		if found.SegmentIndex != 0 {
+			t.Fatalf("segment_index=%d want 0", found.SegmentIndex)
+		}
+	})
+
+	t.Run("ruby_kept_no_warning", func(t *testing.T) {
+		seg := createTestSegmentWithTarget(t, client, res.ID, 1, "漢字", rubyTarget, nil)
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+			TargetText: strPtr(`<ruby>漢<rt>かん</rt></ruby>文字`),
+		})
+		if err != nil {
+			t.Fatalf("UpdateResourceSegment: %v", err)
+		}
+		if hasIssueCode(updated.QualityIssues, qa.CodeRubyTagLoss) {
+			t.Fatalf("editing while keeping ruby must not raise ruby_tag_loss, got %v", updated.QualityIssues)
+		}
+	})
+
+	t.Run("dismissed_inherited_on_repeat_loss", func(t *testing.T) {
+		seg := createTestSegmentWithTarget(t, client, res.ID, 2, "漢字", rubyTarget, []qa.QualityIssue{{
+			SegmentIndex: 2,
+			Severity:     qa.SeverityWarning,
+			Code:         qa.CodeRubyTagLoss,
+			Message:      "译文注音全部丢失：编辑前 1 条",
+			Disposition:  qa.DispositionDismissed,
+		}})
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+			TargetText: strPtr("汉字"),
+		})
+		if err != nil {
+			t.Fatalf("UpdateResourceSegment: %v", err)
+		}
+		for _, iss := range updated.QualityIssues {
+			if iss.Code == qa.CodeRubyTagLoss && iss.IsPending() {
+				t.Fatalf("dismissed ruby_tag_loss must stay dismissed after repeat loss, got %+v", iss)
+			}
+		}
+	})
+}
+
 // TestUpdateResourceSegmentQAReplacesOldIssues 验证手动编辑重跑 QA 后旧 issues 被新结果覆盖。
 // 场景：段落遗留一个假 number_mismatch issue，手动编辑后译文数字已匹配 → 旧 issue 被清空。
 func TestUpdateResourceSegmentQAReplacesOldIssues(t *testing.T) {

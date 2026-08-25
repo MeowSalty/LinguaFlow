@@ -158,12 +158,28 @@ func DocumentCheckerCodes() []string {
 	}
 }
 
+// 守恒类检查（ConservationCodes）产出的 issue code 权威清单。
+// 这些 code 不走 Engine 注册表，由 pipeline（translate 轮注音还原）与
+// service（人工编辑）在特定写路径上按文本事实直接产出，同样持久化到
+// quality_issues 并参与筛选，故与文档级检查一样纳入 FilterableIssueCodes。
+const (
+	CodeRubyRestoreIncomplete = "ruby_restore_incomplete"
+	CodeRubyTagLoss           = "ruby_tag_loss"
+)
+
+// ConservationCodes 返回注音守恒类检查产出的全部 issue code。
+// 新增守恒 code 时只需在此处追加，FilterableIssueCodes 自动同步。
+func ConservationCodes() []string {
+	return []string{CodeRubyRestoreIncomplete, CodeRubyTagLoss}
+}
+
 // FilterableIssueCodes 返回执行计划 issue_codes 与段落列表 quality_code
-// 接受的全部 issue code（全部 per-batch checker code + 文档级 checker code + 全部语义 code）。
-// 由 AllCheckerNames()、DocumentCheckerCodes() 与 SemanticQACodes() 合并派生，
-// 三者其一新增 code 时自动同步，避免多点硬编码漂移。
+// 接受的全部 issue code（全部 per-batch checker code + 文档级 checker code
+// + 全部语义 code + 守恒类 code）。
+// 由 AllCheckerNames()、DocumentCheckerCodes()、SemanticQACodes() 与
+// ConservationCodes() 合并派生，四者其一新增 code 时自动同步，避免多点硬编码漂移。
 func FilterableIssueCodes() []string {
-	return mergeUnique(mergeUnique(AllCheckerNames(), DocumentCheckerCodes()), SemanticQACodes())
+	return mergeUnique(mergeUnique(mergeUnique(AllCheckerNames(), DocumentCheckerCodes()), SemanticQACodes()), ConservationCodes())
 }
 
 // mergeUnique 合并两个切片并去重，保留首次出现的顺序。
