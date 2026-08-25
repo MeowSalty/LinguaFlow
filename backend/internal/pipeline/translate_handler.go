@@ -579,6 +579,13 @@ func (h *TranslateHandler) processTranslatedSegments(
 		wantIDIdx++
 		text, ok := trans[id]
 		if !ok || strings.TrimSpace(text) == "" {
+			// LLM 本轮漏译：清空 Target/Issues 使该段以「本轮无产出」形态流入
+			// BuildBatchResult（TargetText="" ⇒ Failed=true）。否则 DB 重载的旧译文
+			// 非空会被下游空串守卫放过，旧裁决连同对未变更文本新扫的同指纹 issue
+			// 一并落库，产生 dismissed + pending 孪生条目（旧裁决本应随文本消亡）。
+			// 与下方占位符违规分支的 seg.Target = "" 同口径。
+			seg.Target = ""
+			seg.Issues = nil
 			unresolved = append(unresolved, idx)
 			continue
 		}
