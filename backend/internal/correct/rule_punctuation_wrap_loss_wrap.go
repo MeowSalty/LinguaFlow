@@ -59,13 +59,10 @@ func (r *PunctuationWrapLossWrapRule) Apply(seg *model.Segment) CorrectionResult
 	if targetHasEdgeQuoteRune(cleanTgt) {
 		return CorrectionResult{Reason: "target edge already has quote runes"}
 	}
-	// 7) 源文边界守卫：StripProtectedRegions 对内联标记透明，形如 <b>「你好」</b>
-	//    （标记在引号外侧）的源文也会被判定为单一包裹 span。此时包裹原始译文
-	//    边缘会把引号放到标记之外，与源文结构相反（如 「<b>你好</b>」）。
-	//    源文引号不在原始最外缘时拒绝执行，保留 issue 可见。
-	rawSrc := strings.TrimSpace(seg.Source)
-	if !strings.HasPrefix(rawSrc, string(open)) || !strings.HasSuffix(rawSrc, string(close)) {
-		return CorrectionResult{Reason: "source quotes sit inside protected markup; skip to avoid inverting structure"}
+	// 7) 源文边界守卫：源文引号不在原始最外缘时拒绝执行，保留 issue 可见
+	//    （详见 sourceQuotesAtRawEdges）。
+	if !sourceQuotesAtRawEdges(seg.Source, open, close) {
+		return CorrectionResult{Reason: reasonSourceQuotesInsideMarkup}
 	}
 	// 8) 内部引号平衡：译文已带失衡有向引号（如 他说“这样、他「说）时，
 	//    外层包裹会加剧嵌套混乱（「他说“这样」、「他「说」）。边缘已由上面
