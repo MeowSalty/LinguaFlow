@@ -254,6 +254,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	completedCount := 0
 	var lastResult pipeline.TranslateResult
 	var semanticQAWarning string
+	var adjudicateWarning string
 	var reviseWarning string
 
 	// 瞬时写入失败追踪：段 docIndex → 待下一轮 pending 过滤拾取。
@@ -268,6 +269,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	lastTranslateRoundIdx := -1
 	lastSemanticQARoundIdx := -1
 	lastReviseRoundIdx := -1
+	lastAdjudicateRoundIdx := -1
 	translateRoundCount := 0
 	for i := range snapshot.Rounds {
 		switch snapshot.Rounds[i].Mode {
@@ -281,6 +283,8 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			lastSemanticQARoundIdx = i
 		case "revise":
 			lastReviseRoundIdx = i
+		case "adjudicate":
+			lastAdjudicateRoundIdx = i
 		}
 	}
 
@@ -713,6 +717,21 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					"failed_segments", result.FailedSegmentCount,
 				)
 			}
+			// adjudicate 最后一轮后仍有 Unresolved 段：render/backend 失败也走
+			// unresolved 推进，且 Finalize 为 no-op、不产生 failedSegments（未决
+			// issue 保持 pending），故与 semantic_qa/revise 不同，只需检查
+			// Unresolved，无需比较 FailedSegmentCount。
+			if round.Mode == "adjudicate" && roundIdx == lastAdjudicateRoundIdx &&
+				len(result.Unresolved) > 0 {
+				adjudicateWarning = fmt.Sprintf(
+					"质量裁决未完全成功：%d 个段落未能完成裁决（issue 保持待决，可重试任务或调整参数后重试）",
+					len(result.Unresolved),
+				)
+				r.logger.Warn("adjudicate finished with unresolved segments",
+					"resource_id", item.ID,
+					"unresolved", len(result.Unresolved),
+				)
+			}
 		}
 
 		if roundErr != nil {
@@ -799,18 +818,24 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		return nil
 	}
 
-	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount, mergeWarnings(semanticQAWarning, reviseWarning))
+	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount, mergeWarnings(semanticQAWarning, adjudicateWarning, reviseWarning))
 }
 
-func mergeWarnings(first, second string) string {
-	if first == "" {
-		return second
+func mergeWarnings(warnings ...string) string {
+	var nonEmpty []string
+	for _, w := range warnings {
+		if w != "" {
+			nonEmpty = append(nonEmpty, w)
+		}
 	}
-	if second == "" {
-		return first
+	switch len(nonEmpty) {
+	case 0:
+		return ""
+	case 1:
+		return nonEmpty[0]
 	}
 	// 多个非空轮次软警告并列保留，避免后一个模式覆盖前一个模式的提示。
-	return first + "; " + second
+	return strings.Join(nonEmpty, "; ")
 }
 
 func mergeSemanticQAIssues(existing, fresh []qa.QualityIssue) []qa.QualityIssue {

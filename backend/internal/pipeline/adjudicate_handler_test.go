@@ -206,21 +206,59 @@ func TestAdjudicateHandler_ProcessBatch_ParseFailureDefers(t *testing.T) {
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_BackendErrorPreserves(t *testing.T) {
+func TestAdjudicateHandler_ProcessBatch_BackendErrorDefers(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
 			{{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"}},
 		},
 	)
-	fb := &fakeBackend{name: "fake", errs: []error{errors.New("network down")}}
+	// 400 非 401/403（不致命）、非 ≥500/429（不可重试）→ 命中非致命不可重试分支。
+	fb := &fakeBackend{name: "fake", errs: []error{&backend.StatusError{StatusCode: 400, Err: errors.New("bad request")}}}
 	h := &AdjudicateHandler{
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if !reflect.DeepEqual(result.unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.unresolved)
+	}
+	if result.callbackResult != nil {
+		t.Fatal("non-fatal backend error must not produce callbackResult (would persist stale issues)")
+	}
+	if len(doc.Segments[0].Issues) != 1 {
+		t.Fatalf("issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
+	}
+}
+
+func TestAdjudicateHandler_ProcessBatch_RenderFailureDefers(t *testing.T) {
+	doc := adjudicableDoc(
+		[]string{"translated"},
+		[][]qa.QualityIssue{
+			{{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"}},
+		},
+	)
+	// 模板解析通过，但 Execute 时 AdjudicationData 无 Missing 字段 → render 必失败。
+	renderer, err := prompt.NewAdjudicationRenderer("{{.Missing}}")
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	fb := &fakeBackend{name: "fake", responses: []string{`{}`}}
+	h := &AdjudicateHandler{
+		Backend:   fb,
+		Renderer:  renderer,
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if !reflect.DeepEqual(result.unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.unresolved)
+	}
+	if result.callbackResult != nil {
+		t.Fatal("render failure must not produce callbackResult (would persist stale issues)")
+	}
 	if len(doc.Segments[0].Issues) != 1 {
 		t.Fatalf("issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
 	}
