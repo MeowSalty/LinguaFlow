@@ -54,6 +54,11 @@ func (r *PunctuationMissingWrapRule) Apply(seg *model.Segment) CorrectionResult 
 	if countRune(cleanTgt, open) != 0 || countRune(cleanTgt, close) != 0 {
 		return CorrectionResult{Reason: "target already contains the quote runes"}
 	}
+	// 5) 源文边界守卫：源文引号不在原始最外缘时拒绝执行，保留 issue 可见
+	//    （详见 sourceQuotesAtRawEdges）。
+	if !sourceQuotesAtRawEdges(seg.Source, open, close) {
+		return CorrectionResult{Reason: reasonSourceQuotesInsideMarkup}
+	}
 	newTarget := string(open) + seg.Target + string(close)
 	return CorrectionResult{
 		Changed:       true,

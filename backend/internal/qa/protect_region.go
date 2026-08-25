@@ -59,12 +59,32 @@ func rubyRegions(target string) [][2]int {
 	return raw
 }
 
-// InlineMarkupRegions 返回 target 中「Protected 区 ∪ ruby 元素区」的 rune 偏移并集
+// tagRegions 是通用内联标签屏蔽通道：在无 Protected 映射（如手动编辑从 DB 重载）时
+// 兜底屏蔽 `<a href="x">`、`<b>` 等裸标签，使标记字符（`<`/`>`/`"`/`=`）不被 width_mix
+// 等标点类 checker 当成正文误报。复用同包 htmlTagRe（与 StripRubyTags 同正则，语义一致）。
+// 返回尚未排序合并的原始区域（字节→rune 偏移），无匹配返回 nil。
+func tagRegions(target string) [][2]int {
+	matches := htmlTagRe.FindAllStringIndex(target, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	raw := make([][2]int, 0, len(matches))
+	for _, loc := range matches {
+		startByte, endByte := loc[0], loc[1]
+		start := utf8RuneOffset(target, startByte)
+		end := start + utf8.RuneCountInString(target[startByte:endByte])
+		raw = append(raw, [2]int{start, end})
+	}
+	return raw
+}
+
+// InlineMarkupRegions 返回 target 中「Protected 区 ∪ ruby 元素区 ∪ 内联标签区」的 rune 偏移并集
 // （升序、已合并），作为 QA 层统一的内联标记屏蔽出口。
 //
-// 覆盖两条保护通道：
+// 覆盖三条保护通道：
 //   - protect 通道（XMLProtector）把 span 等保护片段写入 seg.Protected 映射；
-//   - ruby 通道（ruby.Restorer 在 Unprotect 之后把 <ruby> 插回 seg.Target），不进 seg.Protected。
+//   - ruby 通道（ruby.Restorer 在 Unprotect 之后把 <ruby> 插回 seg.Target），不进 seg.Protected；
+//   - 标签通道（htmlTagRe）兜底屏蔽裸 `<tag>` 标签，覆盖 Protected 映射缺失的手动编辑等场景。
 //
 // 消费者一律 regions := InlineMarkupRegions(text, seg.Protected); clean := StripRegions(text, regions)，
 // span 定位继续用 LocateSpanExcludingRegions(原文, hit, regions)（regions 基于原文，偏移正确）。
@@ -72,6 +92,7 @@ func rubyRegions(target string) [][2]int {
 func InlineMarkupRegions(target string, protected map[string]string) [][2]int {
 	raw := protectedOccurrences(target, protected)
 	raw = append(raw, rubyRegions(target)...)
+	raw = append(raw, tagRegions(target)...)
 	if len(raw) == 0 {
 		return nil
 	}

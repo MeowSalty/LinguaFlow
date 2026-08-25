@@ -212,3 +212,24 @@ func TestPunctuationMissingWrap_QuoteNotAtEdgesNoop(t *testing.T) {
 		t.Errorf("Target mutated: %q", seg.Target)
 	}
 }
+
+// 源文引号位于内联标记内侧（<b>「你好」</b>，标记在引号外侧）：剥离保护区后
+// 仍是单一包裹 span，但直接包裹原始译文会把引号放到标记之外、与源文结构颠倒
+// （「<b>こんにちは</b>」）。规则应 no-op，issue 保留给人工。
+func TestPunctuationMissingWrap_SourceQuotesInsideMarkupSkipped(t *testing.T) {
+	seg := &model.Segment{
+		Source: "<b>「你好」</b>",
+		Target: "<b>こんにちは</b>",
+		Issues: pmIssue(qa.CheckPunctuationMissing),
+	}
+	res := (&PunctuationMissingWrapRule{}).Apply(seg)
+	if res.Changed {
+		t.Fatalf("source quotes inside markup must not wrap (would invert structure), got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "inverting structure") {
+		t.Errorf("Reason=%q", res.Reason)
+	}
+	if seg.Target != "<b>こんにちは</b>" {
+		t.Errorf("Target mutated: %q", seg.Target)
+	}
+}
