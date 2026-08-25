@@ -628,6 +628,8 @@ const messages = {
         termInconsistency: '术语不一致',
         leftoverPlaceholder: '占位符残留',
         xmlTagMismatch: 'XML 标签不一致',
+        rubyRestoreIncomplete: '注音还原不完整',
+        rubyTagLoss: '注音标签丢失',
         duplicateSourceDivergence: '同源译文偏差',
       },
       disposition: {

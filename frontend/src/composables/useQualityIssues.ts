@@ -46,6 +46,8 @@ const QUALITY_CODE_I18N_KEYS: Record<QualityCode, string> = {
   addition: 'addition',
   grammar: 'grammar',
   register: 'register',
+  ruby_restore_incomplete: 'rubyRestoreIncomplete',
+  ruby_tag_loss: 'rubyTagLoss',
 }
 
 /** 段落筛选 chip 的语义分组；顺序即展示顺序 */
@@ -64,7 +66,10 @@ export const QUALITY_CODE_GROUPS: { key: string; codes: QualityCode[] }[] = [
     ],
   },
   { key: 'content', codes: ['number_mismatch', 'url_email_mismatch'] },
-  { key: 'markup', codes: ['leftover_placeholder', 'xml_tag_mismatch'] },
+  {
+    key: 'markup',
+    codes: ['leftover_placeholder', 'xml_tag_mismatch', 'ruby_restore_incomplete', 'ruby_tag_loss'],
+  },
   { key: 'term', codes: ['forbidden_term', 'term_inconsistency', 'term_fidelity'] },
   {
     key: 'semantic',
