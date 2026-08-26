@@ -149,6 +149,46 @@ func IsSemanticQACode(code string) bool {
 	return ok
 }
 
+// AdjudicableCodes 返回可交由裁决（adjudicate）轮做 LLM 降噪的质量问题 code 权威清单。
+// 是 OpenAPI adjudicate_codes enum、裁决 JSON schema 的 issue_code enum、执行计划校验
+// 白名单与 prompt 模板说明的单一来源。新增可裁决 code 时只需在此处追加，下游所有枚举点
+// 自动同步，避免多点硬编码漂移。
+//
+// 不可裁决的硬规则（untranslated / duplicate）永不列入：前者为空译文硬规则，后者需同
+// 批多段输入，二者均无 LLM 降噪价值。
+func AdjudicableCodes() []string {
+	return []string{
+		CheckSourceResidual,
+		CheckLengthRatio,
+		CheckPunctuationSurplus,
+	}
+}
+
+// DefaultAdjudicateCodes 返回执行计划未显式配置 adjudicate_codes 时的默认裁决集。
+// 必须是 AdjudicableCodes 的子集；故若调整默认集，先确认其仍在允许集内。
+// length_ratio 依赖用户配置的长度比阈值，仅在用户显式选用时才裁决，不进默认集。
+func DefaultAdjudicateCodes() []string {
+	return []string{
+		CheckSourceResidual,
+		CheckPunctuationSurplus,
+	}
+}
+
+// adjudicableCodeSet 是 AdjudicableCodes 的 set 视图，供高频判定复用。
+var adjudicableCodeSet = func() map[string]struct{} {
+	set := make(map[string]struct{}, 3)
+	for _, c := range AdjudicableCodes() {
+		set[c] = struct{}{}
+	}
+	return set
+}()
+
+// IsAdjudicableCode 报告 code 是否为可裁决 code。
+func IsAdjudicableCode(code string) bool {
+	_, ok := adjudicableCodeSet[code]
+	return ok
+}
+
 // DocumentCheckerCodes 返回文档级（非 per-batch）检查产出的 issue code。
 // 这些检查不走 Engine 注册表（AllCheckerNames），由 worker/preview 直接调用，
 // 但同样持久化到 quality_issues，故需纳入筛选键。新增文档级检查时在此追加。
