@@ -562,7 +562,7 @@ func (s *JobService) validateAndSnapshotWith(
 			a := round.Adjudicate
 			codes := a.AdjudicateCodes
 			if len(codes) == 0 {
-				codes = []string{"source_residual"}
+				codes = qa.DefaultAdjudicateCodes()
 			}
 			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 				Mode:    "adjudicate",

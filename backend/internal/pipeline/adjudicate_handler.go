@@ -13,9 +13,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
-// 默认可裁决 code；untranslated / duplicate 为硬规则，永不交给 AI。
-var defaultAdjudicateCodes = []string{"source_residual"}
-
 // AdjudicateHandler 实现 RoundHandler，对已标出问题的段落做 AI 裁决，剔除误报。
 // 不改译文、不改段落状态；失败按错误路由推进（与 translate/extract 对齐），
 // 耗尽后原 issue 保持 pending 原样保留（既未确认也未剔除）。
@@ -70,7 +67,7 @@ func (h *AdjudicateHandler) emitBatchOutcome(evt progress.BatchEvent) {
 
 func (h *AdjudicateHandler) adjudicateCodes() []string {
 	if len(h.AdjudicateCodes) == 0 {
-		return defaultAdjudicateCodes
+		return qa.DefaultAdjudicateCodes()
 	}
 	return h.AdjudicateCodes
 }

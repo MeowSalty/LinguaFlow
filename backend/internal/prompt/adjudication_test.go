@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 const defaultTestAdjudicationTmpl = `You are LinguaFlow adjudication assistant.
@@ -125,6 +127,53 @@ func TestAdjudicationVerdictSchema_Strict(t *testing.T) {
 	req, _ := item["required"].([]string)
 	if len(req) != 5 {
 		t.Errorf("item required should list 5 props, got %#v", req)
+	}
+	assertIssueCodeEnumMatchesAdjudicableCodes(t, item)
+}
+
+// assertIssueCodeEnumMatchesAdjudicableCodes 断言 schema 的 issue_code enum 与
+// qa.AdjudicableCodes() 权威清单双向一致（不缺项、不多项）。strict 模式按该枚举
+// 硬约束生成：缺项会让对应 code 的 issue 永远无法产出 verdict（静默 no-op）。
+func assertIssueCodeEnumMatchesAdjudicableCodes(t *testing.T, item map[string]any) {
+	t.Helper()
+	itemProps, ok := item["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("item properties missing or not a map: %#v", item["properties"])
+	}
+	issueCodeProp, ok := itemProps["issue_code"].(map[string]any)
+	if !ok {
+		t.Fatalf("issue_code property missing or not a map: %#v", itemProps["issue_code"])
+	}
+	var gotSet map[string]bool
+	switch enum := issueCodeProp["enum"].(type) {
+	case []string:
+		gotSet = make(map[string]bool, len(enum))
+		for _, c := range enum {
+			gotSet[c] = true
+		}
+	case []any:
+		gotSet = make(map[string]bool, len(enum))
+		for _, v := range enum {
+			c, ok := v.(string)
+			if !ok {
+				t.Fatalf("issue_code enum has non-string entry: %#v", v)
+			}
+			gotSet[c] = true
+		}
+	default:
+		t.Fatalf("issue_code enum should be []string or []any, got %T: %#v", issueCodeProp["enum"], issueCodeProp["enum"])
+	}
+	wantSet := make(map[string]bool)
+	for _, c := range qa.AdjudicableCodes() {
+		wantSet[c] = true
+		if !gotSet[c] {
+			t.Errorf("issue_code enum missing adjudicable code %q (full enum: %v)", c, qa.AdjudicableCodes())
+		}
+	}
+	for c := range gotSet {
+		if !wantSet[c] {
+			t.Errorf("issue_code enum has extra code %q not in qa.AdjudicableCodes()", c)
+		}
 	}
 }
 

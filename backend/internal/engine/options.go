@@ -109,6 +109,8 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 			FallbackShrink:   r.FallbackShrink,
 			Retry:            retry,
 			Context:          roundCtx,
+			SourceLang:       cfg.SourceLang,
+			TargetLang:       cfg.TargetLang,
 		}
 
 		switch mode {
@@ -541,11 +543,18 @@ func buildCorrectPipelineRound(
 	})
 
 	// 幂等引擎：仅含各规则消费的 issue code，使用原 checker 复验幂等，
-	// 防成环且不级联其他 checker。
+	// 防成环且不级联其他 checker。必须携带 rc 的语言上下文：
+	// width_mix 等 checker 依赖 TargetLang 选分支（如 CJK 目标不把全角标点
+	// 当问题），漏传会让空 lang checker 走拉丁分支、正常改写被误判回滚。
 	var idem *qa.Engine
 	consumed := rulesEngine.ConsumedIssueCodes()
 	if len(consumed) > 0 {
-		idem = qa.NewEngine(qa.Config{Enabled: true, Checks: consumed}, logger)
+		idem = qa.NewEngine(qa.Config{
+			Enabled:    true,
+			Checks:     consumed,
+			SourceLang: rc.SourceLang,
+			TargetLang: rc.TargetLang,
+		}, logger)
 	}
 
 	handler := &pipeline.CorrectHandler{
