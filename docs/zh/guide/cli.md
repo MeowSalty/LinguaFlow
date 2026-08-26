@@ -56,7 +56,7 @@ linguaflow translate -i input.md -o output.md --to zh
 | `--from`          |      | string   | `"auto"` | 源语言代码（默认自动检测）                                         |
 | `--glossary-path` |      | string   | `""`     | 术语表 CSV 路径                                                    |
 | `--bootstrap`     |      | string   | `""`     | 术语自举模式：`off` \| `pre` \| `inline`                           |
-| `--profile`       |      | string   | `""`     | 执行配置名称（引用配置中 `translation_profiles` 的 key）           |
+| `--profile`       |      | string   | `""`     | 执行配置名称（覆盖计划级 `execution.profile`；引用 `translation_profiles` key，未命中报错）           |
 | `--prompt`        |      | string   | `""`     | 提示词模板名称（引用配置中 `translation_prompt_templates` 的 key） |
 
 ### 示例

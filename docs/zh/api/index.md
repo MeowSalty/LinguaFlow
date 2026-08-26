@@ -118,7 +118,32 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/quick-translate \
 
 响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-即时翻译)。
 
-### 8. 任务事件历史（分页）
+### 8. 单段预览（试译 / 修订，不落库）
+
+对项目内某段落同步执行一次单段预览：**试译**对原文重跑流水线产出全新译文；**修订**以段落上 `pending` 语义 issue 为目标对现有译文做定点最小修订。二者不创建作业，只有显式调 `apply` 才写回段落。
+
+```bash
+# 试译预览：对单段原文用某执行计划跑一遍
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/42/translation-preview \
+  -H "Content-Type: application/json" \
+  -d '{"execution_plan_id": 1}'
+
+# 修订预览：对已有译文按 pending 语义 issue 定点修订
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/42/revision-preview \
+  -H "Content-Type: application/json" \
+  -d '{"execution_plan_id": 1, "issue_codes": ["mistranslation", "omission"]}'
+```
+
+要点：
+
+- 试译要求计划含至少一个 `translate` 轮；修订要求计划含 `revise` 轮或至少一个 `translate` 轮（后者时合成默认修订轮）
+- 修订的 `issue_codes` 仅 8 个语义白名单、可选；与段落实有 `pending` 语义 issue 取交集，交集为空返回 409
+- 修订在译文有实质变化时返回短期签名 `apply_token`，用与试译相同的 `.../translation-preview/apply` 端点写回（409 基线变化、410 过期）
+- 与即时翻译类似，模型已启动后的成功/部分成功/失败统一 HTTP 200 并由 `status` 区分；并发满返回 429 带 `Retry-After`
+
+字段全集见 [翻译配置 · 参考 · 单段预览](/zh/guide/translation-config-reference#单段预览-preview)。
+
+### 9. 任务事件历史（分页）
 
 作业执行事件（批次翻译、状态变化、质检等）除通过 SSE 实时推送外，也支持按 `seq` 游标的 REST 分页查询，便于外部监控或回放。
 
@@ -145,7 +170,7 @@ curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&after_seq=1000"
 SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-实时事件流)。
 :::
 
-### 9. 活动与审计日志（服务器模式）
+### 10. 活动与审计日志（服务器模式）
 
 服务器模式记录两类活动视图，结构一致（`Activity`：`action` / `resource_type` / `message` / `metadata` 等）：
 
@@ -169,7 +194,7 @@ curl -s "http://localhost:8080/api/v1/admin/audit-logs?limit=50&cursor=12345" \
 
 后端记录的 `action` 值、资源类型与触发场景对照见 [管理员后台 · 动作类型](/zh/guide/admin#动作类型)。管理员还提供用户管理、系统统计与设置接口，完整列表见 [管理员后台 · API 速览](/zh/guide/admin#api-速览)。
 
-### 10. 质量问题裁决（驳回 / 撤销）
+### 11. 质量问题裁决（驳回 / 撤销）
 
 对某段译文上的单条质量问题下裁决：`dismissed` 判定为不是问题，`pending` 撤销裁决、恢复未决。操作可逆，返回更新后的段落。
 
@@ -195,17 +220,38 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/42
 
 ## 错误码
 
-| 状态码 | 说明               |
-| ------ | ------------------ |
-| 200    | 成功               |
-| 201    | 创建成功           |
-| 400    | 请求参数错误       |
-| 401    | 未认证             |
-| 403    | 无权限             |
-| 404    | 资源不存在         |
-| 409    | 冲突（如重复资源） |
-| 422    | 语义/校验错误      |
-| 500    | 服务器内部错误     |
+| 状态码 | 说明                                       |
+| ------ | ------------------------------------------ |
+| 200    | 成功                                       |
+| 201    | 创建成功                                   |
+| 400    | 请求参数错误                               |
+| 401    | 未认证                                     |
+| 403    | 无权限                                     |
+| 404    | 资源不存在                                 |
+| 409    | 冲突（如重复资源、状态前置校验不满足）     |
+| 422    | 语义/校验错误                              |
+| 429    | 并发/限流（部分端点带 `Retry-After` 头）   |
+| 500    | 服务器内部错误                             |
+
+### Problem 响应与错误 type
+
+错误响应为 RFC 9457 Problem JSON，`type` 字段是 `urn:linguaflow:<slug>` 形式的 URN，可按 type 编程区分错误类别（如 `urn:linguaflow:not-found`、`urn:linguaflow:invalid-input`、`urn:linguaflow:conflict`）。
+
+常见细分 type：
+
+| 场景             | type                                        |
+| ---------------- | ------------------------------------------- |
+| 未提供认证凭据   | `urn:linguaflow:token-missing`              |
+| Token 过期       | `urn:linguaflow:token-expired`              |
+| Token 无效       | `urn:linguaflow:token-invalid`              |
+| 刷新令牌吊销     | `urn:linguaflow:refresh-token-revoked`      |
+| 账号禁用         | `urn:linguaflow:user-inactive`              |
+| 登录密码错误     | `urn:linguaflow:invalid-credentials`        |
+| 取消/重试状态不符 | `urn:linguaflow:conflict`                  |
+
+::: tip 任务取消 / 重试的前置校验
+`CancelJob` / `RetryJob` 增加了状态前置校验，不满足时返回 409 Conflict（`type: urn:linguaflow:conflict`）：取消非可取消状态的任务（「任务当前状态不可取消」）、重试未失败的任务（「任务未失败，无法重试」）、无可重试失败资源（「没有可重试的失败资源」）。
+:::
 
 ## OpenAPI 规范
 

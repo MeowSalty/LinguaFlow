@@ -259,7 +259,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 #### 可配置 checker 名称（`qa.checks`）
 
-`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 17 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
+`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 18 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
 
 | 名称                          | 说明                                           |
 | ----------------------------- | ---------------------------------------------- |
@@ -270,6 +270,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 | `punctuation_pairing`         | 标点配对不平衡                                  |
 | `punctuation_missing`         | 源文整类包裹标点在译文中完全缺失                |
 | `punctuation_surplus`         | 译文多出源文所无的成对包裹标点                  |
+| `punctuation_wrap_loss`       | 源文整段被成对引号包裹，译文首尾完全丢失外层引号（补 `punctuation_missing` 对「内层新增引号致计数非零」的盲区） |
 | `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     |
 | `repeated_space`              | 连续空格 / CJK 间空格                          |
 | `width_mix`                   | 全/半角混用                                    |
@@ -353,11 +354,12 @@ context:
 
 | 字段           | 类型   | 说明                                            |
 | -------------- | ------ | ----------------------------------------------- |
-| `mode`         | string | `translate` / `extract` / `adjudicate` / `correct` / `semantic_qa` |
+| `mode`         | string | `translate` / `extract` / `revise` / `adjudicate` / `correct` / `semantic_qa` |
 | `backend_id`   | int    | 后端 ID；`correct` 轮为纯本地无需后端，可省略，其余 mode 必填 |
 | `concurrency`  | int    | 并发（≥ 1）；`correct` 轮固定为 1，不可配置     |
 | `translate`    | object | `mode=translate` 时必填                         |
 | `extract`      | object | `mode=extract` 时必填                           |
+| `revise`       | object | `mode=revise` 时必填                            |
 | `adjudicate`   | object | `mode=adjudicate` 时必填                        |
 | `correct`      | object | `mode=correct` 时必填（且 `rules` 至少 1 条）   |
 | `semantic_qa`  | object | `mode=semantic_qa` 时必填                       |
@@ -380,12 +382,15 @@ context:
 | 字段                  | 类型   | 说明                                                                                                                       |
 | --------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
 | `prompt_template_id`  | int    | 翻译提示词模板                                                                                                             |
-| `profile_id`          | int    | 执行配置                                                                                                                   |
 | `batch_size`          | int    | 待译段落数上限（**不计上下文段**）；`0` 不限制，与 `max_words_per_batch` 至少填一项                                        |
 | `max_words_per_batch` | int    | 字词数上限（**计入上下文段**）；`0` 不限制，与 `batch_size` 至少填一项。纯行数模式（此项与 `context.max_chars` 均为 0）下上下文体积不受约束 |
 | `fallback_shrink`     | float  | 池缩比系数（**必填**，合法域 (0, 1]）。`1.0` = 不缩（多池同尺寸重切）；`(0,1)` = 每池缩小，池 N 批次约束 = `floor(原始 × shrink^N)`。`0` 非法（不缩请用 `1.0`）；省略/零值会被后端拒绝（不规范化）。池数量由 `retry.max_attempts+1` 决定 |
 | `segment_filter`      | object | `pending_only` / `skip_approved` / `all` 等                                                                                |
 | `retry`               | object | 重试                                                                                                                       |
+
+::: tip 执行策略已移到计划级
+翻译策略引用现在挂在执行计划模板顶层 `profile_id` 上（不再在每轮 translate 里配），translate 与 revise 轮共用该策略的 protect/ruby/repair/QA 等行为预设；CLI 配置里对应的是 `execution.profile`。见下方 [校验摘要](#校验摘要) 与 [配置文件与环境变量](/zh/guide/configuration#execution-执行计划)。
+:::
 
 ::: tip 上下文与批次约束的关系
 - `batch_size` 只数「待译段」：开 2 段上下文、`batch_size=10` 时，实际送模型的段落最多是 10 段待译 + 前后各 1 段上下文。
@@ -433,8 +438,42 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 | `name`                       | 修复的 issue code       | 行为                                                                 |
 | ---------------------------- | ----------------------- | -------------------------------------------------------------------- |
 | `punctuation_missing_wrap`  | `punctuation_missing`   | 当源文是单段配对引号包裹（如 `「…」` / `“…”`）且译文丢失该引号时，自动在译文首尾补回对应开闭引号；多段、译文已有该引号、或非配对引号等不安全场景不处理 |
+| `punctuation_wrap_loss_wrap` | `punctuation_wrap_loss` | 当源文整段被成对有向引号（`「」`/`『』`/`“”`/`‘’`/`«»`）包裹、译文首尾完全丢失外层引号时，在译文首尾补回对应开闭引号；译文边缘已有引号 rune、多段包裹或非配对引号等不安全场景不处理 |
 
 是否执行改写由该轮次是否出现在 `rounds` 数组决定（与其他轮次一致，无轮次级 `enabled` 开关）。可修复的 issue code 与 [翻译审校 · 质量检测](/zh/guide/review#质量检测) 的对应规则项一一对应。
+
+### revise
+
+LLM 修订轮次配置。系统提示词内置不可见、**不可覆盖**（无 `prompt_template_id`），protect/ruby 及引擎级策略（repair/QA/glossary）经计划级 `profile_id` 贯穿所有改写型轮次，无需也不依赖计划内 translate 轮。写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。仅处理段落上 `pending`（未裁决 `dismissed`）的语义 issue 作修复目标。
+
+| 字段                  | 类型     | 默认值         | 说明                                                                                                  |
+| --------------------- | -------- | -------------- | ----------------------------------------------------------------------------------------------------- |
+| `batch_size`          | int      | —              | 段落数上限；`0` 不限制，与 `max_words_per_batch` 至少填一项                                           |
+| `max_words_per_batch` | int      | —              | 字词数上限；`0` 不限制，与 `batch_size` 至少填一项                                                    |
+| `segment_scope`       | string   | `with_issues`  | 段落扫描范围（均要求 translated/edited 且译文非空）：`with_issues` / `with_issue_codes`              |
+| `issue_codes`         | []string | —              | 仅 `segment_scope=with_issue_codes` 时生效，须 ≥ 1 项，且 ⊆ 语义白名单                                |
+| `retry`               | object   | —              | 重试                                                                                                  |
+
+::: warning revise 无 fallback_shrink
+`fallback_shrink` 仅 translate 轮实现缩批，revise 的失败模式与批次大小无关，不缩批，故**不暴露** `fallback_shrink`（也不必填）。
+:::
+
+#### `segment_scope` 取值
+
+| 值                         | 扫描范围                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| `with_issues`（默认）      | 修订存在 `pending` 语义 issue 的段                                                  |
+| `with_issue_codes`         | 仅修订含 `issue_codes` 声明 code 的 `pending` 语义 issue 的段（收窄修复目标子集）  |
+
+范围与任务级 `segment_ids` 取交集。
+
+#### `issue_codes` 取值（修订修复目标白名单）
+
+revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与 `semantic_qa` 轮的全量 code 筛选键不同），仅 8 个语义 code：
+
+`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
+
+`segment_scope=with_issue_codes` 时必须选至少 1 个，且最终会与段落实有 `pending` 语义 issue 取交集——交集为空的段不进入修订。
 
 ### semantic_qa
 
@@ -460,9 +499,11 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 
 #### `issue_codes` 取值
 
-支持全部 26 个 issue code（17 项 per-batch checker + 1 项文档级 `duplicate_source_divergence` + 8 项语义 code），规则码与语义码都可作筛选键：
+支持全部 27 个 issue code（18 项 per-batch checker + 1 项文档级 `duplicate_source_divergence` + 8 项语义 code），规则码与语义码都可作筛选键：
 
-`untranslated`、`length_ratio`、`duplicate`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`whitespace_irregular`、`repeated_space`、`width_mix`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`forbidden_term`、`term_inconsistency`、`leftover_placeholder`、`xml_tag_mismatch`、`duplicate_source_divergence`、`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
+`untranslated`、`length_ratio`、`duplicate`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss`、`whitespace_irregular`、`repeated_space`、`width_mix`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`forbidden_term`、`term_inconsistency`、`leftover_placeholder`、`xml_tag_mismatch`、`duplicate_source_divergence`、`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
+
+其中 `ruby_restore_incomplete`、`ruby_tag_loss` 由翻译轮的注音守恒逻辑在译后产出，不属 `qa.checks` 可选名、不参与 `qa.checks` 过滤，但会随段落问题一同进入段落列表筛选与统计（见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)）。
 
 完整清单（含每项含义）见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)；前端筛选 UI 的分组见 [翻译审校 · 按质量问题筛选](/zh/guide/review#按质量问题筛选)。
 
@@ -496,9 +537,18 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 - 对应 mode 必须带齐子配置对象（`correct` 的 `rules` 至少 1 条且 `name` 在白名单）
 - `backend_id` 仅 `correct` 轮可省略；其余 mode 必填
 - `concurrency` ≥ 1（`correct` 轮固定为 1）
-- `batch_size` 与 `max_words_per_batch` 在翻译/裁决/语义质检中不能同时为 0（提取两者皆 0 表示一次全量）；`correct` 轮无批次字段
+- `batch_size` 与 `max_words_per_batch` 在翻译/修订/裁决/语义质检中不能同时为 0（提取两者皆 0 表示一次全量）；`correct` 轮无批次字段
 - `semantic_qa.segment_scope=with_issue_codes` 时必须提供 ≥ 1 个 `issue_codes`
-- `fallback_shrink` ∈ (0, 1] 且必填（翻译轮）；省略或 `0` 会被后端拒绝
+- `revise.segment_scope=with_issue_codes` 时必须提供 ≥ 1 个 `issue_codes`，且全部 ⊆ 语义白名单
+- `fallback_shrink` ∈ (0, 1] 且必填（**仅翻译轮**）；修订/裁决/语义质检轮无 `fallback_shrink`（省略或 `0` 会被后端拒绝）→ 以 `1.0` 表达不缩
+
+### 执行计划模板顶层字段
+
+执行计划模板（`ExecutionPlanTemplate`）除原有的 `id` / `name` / `scope` / `rounds` 外，新增计划级策略引用 `profile_id`（创建必填，更新时省略即保留现值、不允许置空）：
+
+| 字段          | 类型 | 必填 | 说明                                                                                                   |
+| ------------- | ---- | ---- | ------------------------------------------------------------------------------------------------------ |
+| `profile_id`  | int  | 是   | 执行配置 ID；translate 与 revise 轮共用该策略的 protect/ruby/repair/QA 行为预设。允许内置负 ID（如 `-1`） |
 
 ---
 
@@ -530,11 +580,16 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 
 ---
 
-## 单段试译（preview）
+## 单段预览（preview）
 
-在不创建作业的前提下，对单段原文用某执行计划在内存中跑一遍流水线，预览译文与诊断信息后决定是否应用。
+在不创建作业的前提下，对单个段在内存中跑一遍流水线，预览译文/修订结果与诊断信息后决定是否应用。两类预览共用并发限制与 `apply` 端点：
 
-### `POST /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview`
+| 预览 | 起点 | 做什么 | 适用计划 |
+| ---- | ---- | ------ | -------- |
+| 试译预览 | 段落原文 | 对单段原文用某执行计划完整跑一遍（extract→translate→adjudicate→semantic_qa），产出全新译文 | 计划须含至少一个 `translate` 轮 |
+| 修订预览 | 段落已有译文 | 以段落上 `pending` 的语义 issue 为修复目标，对**现有译文**做最小改动定点修订（不重译） | 计划须含 `revise` 轮或至少一个 `translate` 轮（后者时由后端合成默认修订轮） |
+
+### 试译：`POST /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/translation-preview`
 
 | 字段                | 类型 | 必填 | 说明                                                                                       |
 | ------------------- | ---- | ---- | ------------------------------------------------------------------------------------------ |
@@ -554,14 +609,47 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 
 预览在内存沙箱执行：术语表用 overlay、翻译记忆用 Noop，不持久化。
 
-### `POST .../segments/{segmentId}/translation-preview/apply`
+### 修订：`POST /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/revision-preview`
+
+对单段已有译文执行一次 LLM 修订，不创建 Job、不写回段落；段落须 translated/edited 且译文非空、过滤后存在至少一条 `pending` 语义 issue，否则 409。
+
+| 字段                | 类型     | 必填 | 说明                                                                                                          |
+| ------------------- | -------- | ---- | ------------------------------------------------------------------------------------------------------------- |
+| `execution_plan_id` | int      | 是   | 执行计划模板 ID；计划须含 `revise` 轮或至少一个 `translate` 轮（后者时以翻译轮后端合成默认修订轮）              |
+| `issue_codes`       | []string | 否   | 收窄修复目标的语义 code 子集；省略时修复段落上全部 `pending` 语义 issue。取值仅 8 个语义白名单、≥ 1 项            |
+
+`issue_codes` 取值（语义白名单，与 `semantic_qa` 轮的全量 code 筛选键不同）：`calque` / `term_fidelity` / `naturalness` / `mistranslation` / `omission` / `addition` / `grammar` / `register`。最终与段落实有 `pending` 语义 issue 取交集，交集为空返回 409。
+
+响应（`SegmentRevisionPreviewResponse`）关键字段：
+
+| 字段                     | 说明                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `status`                 | `success` / `partial` / `failed`（模型已启动后统一 HTTP 200，由 `status` 区分）                     |
+| `original_target_text`   | 修订前的原译文（apply 基线）                                                                         |
+| `target_text`            | 修订后译文；`failed` 时可能为空。与 `original_target_text` 相同表示 LLM 判定无需改动                 |
+| `fix_issues`             | 本次作为修复目标喂给修订 LLM 的语义 issue（过滤后子集）                                              |
+| `quality_issues`         | 修订译文上的最终质量问题（确定性 QA 重跑后与既有裁决对账）                                           |
+| `execution.rounds`       | 实际执行的修订轮摘要（index / mode / `synthesized` 标记合成轮），不暴露 backend options             |
+| `usage`                  | 用量统计                                                                                            |
+| `batches`                | 批次诊断                                                                                            |
+| `apply_token`            | 仅在译文有实质变化时返回（带 `apply_expires_at` 过期）                                              |
+
+::: warning 修订预览的限制
+- 与试译预览**共享全局并发上限**，满时返回 429 并带 `Retry-After`，前端提示稍后重试
+- `apply_token` 为短期签名令牌（默认 15 分钟过期）；段落基线变化即失效
+- 预览执行超时（默认 5 分钟）返回 504
+:::
+
+### 应用：`POST .../segments/{segmentId}/translation-preview/apply`
+
+试译与修订预览**共用**此端点：按 `apply_token` 内的 `kind`（翻译/修订）区分审计事件，应用语义一致。修订预览用同一令牌冲突安全写回，409 基线变化、410 过期时清空令牌、需重新预览。
 
 | 字段          | 类型   | 必填 | 说明                                          |
 | ------------- | ------ | ---- | --------------------------------------------- |
-| `apply_token` | string | 是   | 预览返回的签名令牌（带过期时间）              |
+| `apply_token` | string | 是   | 试译或修订预览返回的签名令牌（带过期时间）    |
 | `target_text` | string | 是   | 预览后（可能被人工修改）的译文；为空返回 400  |
 
-应用时做基线条件更新（source / target / status 必须与预览时一致）；段落已变更则令牌失效，需重新试译。
+应用时做基线条件更新（source / target / status 必须与预览时一致）；段落已变更则令牌失效，需重新预览。
 
 ---
 
