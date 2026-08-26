@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
@@ -72,6 +73,36 @@ func TestValidateExecutionRounds_Adjudicate(t *testing.T) {
 		}
 	})
 
+	t.Run("punctuation_surplus accepted", func(t *testing.T) {
+		err := validateExecutionRounds([]schema.ExecutionRoundConfig{{
+			Mode:      "adjudicate",
+			BackendID: 1,
+			Adjudicate: &schema.AdjudicateRoundConfig{
+				BatchSize:       10,
+				Concurrency:     1,
+				AdjudicateCodes: []string{"punctuation_surplus"},
+			},
+		}})
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
+	t.Run("mixed adjudicable codes accepted", func(t *testing.T) {
+		err := validateExecutionRounds([]schema.ExecutionRoundConfig{{
+			Mode:      "adjudicate",
+			BackendID: 1,
+			Adjudicate: &schema.AdjudicateRoundConfig{
+				BatchSize:       10,
+				Concurrency:     1,
+				AdjudicateCodes: []string{"punctuation_surplus", "source_residual"},
+			},
+		}})
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
 	t.Run("invalid adjudicate code", func(t *testing.T) {
 		err := validateExecutionRounds([]schema.ExecutionRoundConfig{{
 			Mode:      "adjudicate",
@@ -84,6 +115,10 @@ func TestValidateExecutionRounds_Adjudicate(t *testing.T) {
 		}})
 		if !errors.Is(err, ErrExecutionPlanConfigInvalid) {
 			t.Fatalf("err=%v want ErrExecutionPlanConfigInvalid", err)
+		}
+		const want = "allowed: source_residual, length_ratio, punctuation_surplus"
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err=%v want substring %q", err, want)
 		}
 	})
 }

@@ -55,7 +55,7 @@ type AdjudicateRoundConfig struct {
 	BatchSize        int         `json:"batch_size"          yaml:"batch_size"`
 	MaxWordsPerBatch int         `json:"max_words_per_batch" yaml:"max_words_per_batch"`
 	Concurrency      int         `json:"concurrency"         yaml:"concurrency"`
-	AdjudicateCodes  []string    `json:"adjudicate_codes"    yaml:"adjudicate_codes"` // 可裁决 code；空=默认 ["source_residual"]
+	AdjudicateCodes  []string    `json:"adjudicate_codes"    yaml:"adjudicate_codes"` // 可裁决 code；空=默认 ["source_residual", "punctuation_surplus"]
 	Retry            RetryConfig `json:"retry"               yaml:"retry"`
 	// NOTE: fallback_shrink 当前仅 translate 轮实现缩批（shrinkConstraint）。
 	// adjudicate 失败模式与批次大小无关，不需要缩批，故此模式暂不暴露该字段。

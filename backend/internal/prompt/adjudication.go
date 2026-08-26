@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 // AdjudicationIssue 是裁决输入中的单条规则问题。
@@ -137,12 +139,17 @@ type AdjudicationVerdict struct {
 // AdjudicationVerdictSchema 返回 OpenAI 严格 JSON schema：
 //
 //	{verdicts:[{id,issue_code,matched_text,verdict,reason}]}
+//
+// issue_code enum 取自 qa.AdjudicableCodes() 权威清单：strict 模式（OpenAI Strict /
+// Gemini structured output）按该枚举硬约束生成，缺项会导致对应 code 的 issue 永远
+// 无法产出 verdict（静默 no-op）。使用完整允许集而非每轮 AdjudicateCodes：输入已
+// 按轮预过滤，且幻觉 code 在 applyVerdicts 中不匹配即被忽略。
 func AdjudicationVerdictSchema() map[string]any {
 	itemProps := map[string]any{
 		"id": map[string]any{"type": "string"},
 		"issue_code": map[string]any{
 			"type": "string",
-			"enum": []string{"source_residual", "length_ratio"},
+			"enum": qa.AdjudicableCodes(),
 		},
 		"matched_text": map[string]any{"type": "string"},
 		"verdict": map[string]any{

@@ -401,8 +401,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			// NOTE: fallback_shrink 当前仅 translate 轮支持缩批，adjudicate 不暴露此字段。
 			// 若未来需要，在此加 a.FallbackShrink ∈ [0,1] 校验（参考 translate 分支）。
 			for _, code := range a.AdjudicateCodes {
-				if code != "source_residual" && code != "length_ratio" {
-					return fmt.Errorf("%w: rounds[%d].adjudicate.adjudicate_codes contains invalid code %q (allowed: source_residual, length_ratio)", ErrExecutionPlanConfigInvalid, i, code)
+				if !qa.IsAdjudicableCode(code) {
+					return fmt.Errorf("%w: rounds[%d].adjudicate.adjudicate_codes contains invalid code %q (allowed: %s)", ErrExecutionPlanConfigInvalid, i, code, strings.Join(qa.AdjudicableCodes(), ", "))
 				}
 			}
 		case "semantic_qa":

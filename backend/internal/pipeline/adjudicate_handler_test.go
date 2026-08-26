@@ -591,5 +591,157 @@ func TestApplyVerdicts_AlreadyDismissedPassedThrough(t *testing.T) {
 	}
 }
 
+func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusDefaultAdjudicable(t *testing.T) {
+	// 未显式配置 AdjudicateCodes 时回退到 qa.DefaultAdjudicateCodes()，
+	// 其中已包含 punctuation_surplus —— 默认配置下即应可裁决。
+	doc := adjudicableDoc(
+		[]string{"translated"},
+		[][]qa.QualityIssue{
+			{
+				{
+					Code:     qa.CheckPunctuationSurplus,
+					Severity: qa.SeverityWarning,
+					Message:  "译文多出源文没有的引号标点：“”",
+					Span:     &qa.Span{MatchedText: "“”"},
+				},
+			},
+		},
+	)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{`{"verdicts":[{"id":"0","issue_code":"punctuation_surplus","matched_text":"“”","verdict":"false_positive","reason":"内心独白加引号"}]}`},
+	}
+	h := &AdjudicateHandler{
+		Backend:   fb,
+		Renderer:  newAdjudicationRenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult == nil {
+		t.Fatal("expected callbackResult")
+	}
+	if len(doc.Segments[0].Issues) != 1 {
+		t.Fatalf("issues len=%d want 1 (dismissed kept for audit)", len(doc.Segments[0].Issues))
+	}
+	var surplus *qa.QualityIssue
+	for i := range doc.Segments[0].Issues {
+		iss := &doc.Segments[0].Issues[i]
+		if iss.Code == qa.CheckPunctuationSurplus {
+			surplus = iss
+		}
+	}
+	if surplus == nil || !surplus.Dismissed() || surplus.Disposition != qa.DispositionDismissed {
+		t.Fatalf("punctuation_surplus not dismissed under default codes: %#v", doc.Segments[0].Issues)
+	}
+	if surplus.Note != "内心独白加引号" {
+		t.Fatalf("note=%q want %q (LLM reason audited)", surplus.Note, "内心独白加引号")
+	}
+	if surplus.DecidedBy != nil {
+		t.Fatalf("DecidedBy=%v want nil (LLM adjudicated)", surplus.DecidedBy)
+	}
+	if surplus.DecidedAt == nil {
+		t.Fatal("DecidedAt must be set for dismissed issue")
+	}
+}
+
+func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusMatchedTextKeyed(t *testing.T) {
+	// LLM 裁决未回传 matched_text（空串），但该段该 code 仅一条待决 issue，
+	// applyVerdicts 的单实例回退（空 matched_text 键）仍应命中并剔除。
+	doc := adjudicableDoc(
+		[]string{"translated"},
+		[][]qa.QualityIssue{
+			{
+				{
+					Code:     qa.CheckPunctuationSurplus,
+					Severity: qa.SeverityWarning,
+					Message:  "译文多出源文没有的引号标点：“”",
+					Span:     &qa.Span{MatchedText: "“”"},
+				},
+			},
+		},
+	)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{`{"verdicts":[{"id":"0","issue_code":"punctuation_surplus","matched_text":"","verdict":"false_positive","reason":"拟声词加引号"}]}`},
+	}
+	h := &AdjudicateHandler{
+		Backend:   fb,
+		Renderer:  newAdjudicationRenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult == nil {
+		t.Fatal("expected callbackResult")
+	}
+	var surplus *qa.QualityIssue
+	for i := range doc.Segments[0].Issues {
+		iss := &doc.Segments[0].Issues[i]
+		if iss.Code == qa.CheckPunctuationSurplus {
+			surplus = iss
+		}
+	}
+	if surplus == nil || !surplus.Dismissed() || surplus.Disposition != qa.DispositionDismissed {
+		t.Fatalf("single-instance fallback should dismiss punctuation_surplus: %#v", doc.Segments[0].Issues)
+	}
+	if surplus.Note != "拟声词加引号" {
+		t.Fatalf("note=%q want %q (LLM reason audited)", surplus.Note, "拟声词加引号")
+	}
+	if surplus.DecidedAt == nil {
+		t.Fatal("DecidedAt must be set for dismissed issue")
+	}
+}
+
+func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusRealStaysPending(t *testing.T) {
+	doc := adjudicableDoc(
+		[]string{"translated"},
+		[][]qa.QualityIssue{
+			{
+				{
+					Code:     qa.CheckPunctuationSurplus,
+					Severity: qa.SeverityWarning,
+					Message:  "译文多出源文没有的引号标点：“”",
+					Span:     &qa.Span{MatchedText: "“”"},
+				},
+			},
+		},
+	)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{`{"verdicts":[{"id":"0","issue_code":"punctuation_surplus","matched_text":"“”","verdict":"real","reason":"无明显文体动机"}]}`},
+	}
+	h := &AdjudicateHandler{
+		Backend:   fb,
+		Renderer:  newAdjudicationRenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	// real 不是错误：批次成功返回 callbackResult，issue 保持 pending 原样保留。
+	if result.callbackResult == nil {
+		t.Fatal("expected callbackResult (real verdict is not an error)")
+	}
+	if len(doc.Segments[0].Issues) != 1 {
+		t.Fatalf("issues len=%d want 1 (real kept)", len(doc.Segments[0].Issues))
+	}
+	var surplus *qa.QualityIssue
+	for i := range doc.Segments[0].Issues {
+		iss := &doc.Segments[0].Issues[i]
+		if iss.Code == qa.CheckPunctuationSurplus {
+			surplus = iss
+		}
+	}
+	if surplus == nil {
+		t.Fatalf("punctuation_surplus missing: %#v", doc.Segments[0].Issues)
+	}
+	if surplus.Dismissed() || surplus.Disposition != qa.DispositionPending {
+		t.Fatalf("real verdict must keep issue pending: %#v", surplus)
+	}
+	if surplus.Note != "" {
+		t.Fatalf("note=%q want empty (only false_positive sets Note)", surplus.Note)
+	}
+}
+
 // silence unused import if backend package only used via fakeBackend elsewhere
 var _ backend.Backend = (*fakeBackend)(nil)
