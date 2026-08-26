@@ -9,11 +9,12 @@ import "github.com/MeowSalty/LinguaFlow/backend/internal/model"
 const (
 	RulePunctuationMissingWrap  = "punctuation_missing_wrap"
 	RulePunctuationWrapLossWrap = "punctuation_wrap_loss_wrap"
+	RuleWidthMixNormalize       = "width_mix_normalize"
 )
 
 // AllRuleNames returns every built-in correct rule name, in canonical order.
 func AllRuleNames() []string {
-	return []string{RulePunctuationMissingWrap, RulePunctuationWrapLossWrap}
+	return []string{RulePunctuationMissingWrap, RulePunctuationWrapLossWrap, RuleWidthMixNormalize}
 }
 
 // CorrectionResult is the outcome of applying one Rule to a segment.
@@ -59,6 +60,7 @@ func New(cfg Config) *Engine {
 	register := map[string]func() Rule{
 		RulePunctuationMissingWrap:  func() Rule { return &PunctuationMissingWrapRule{} },
 		RulePunctuationWrapLossWrap: func() Rule { return &PunctuationWrapLossWrapRule{} },
+		RuleWidthMixNormalize:       func() Rule { return &WidthMixNormalizeRule{} },
 	}
 	enabledByName := make(map[string]bool, len(cfg.Rules))
 	for _, rc := range cfg.Rules {
