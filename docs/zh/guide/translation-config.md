@@ -219,8 +219,8 @@ Key 存在本地数据库。探测模型时凭据仅用于当次请求、不落�
 | ------------------ | ------------------------------------------------------------------------------ |
 | 术语要先建表       | 提取轮次 → 翻译轮次                                                            |
 | 主模型常失败       | 翻译轮次 1（主模型）+ 翻译轮次 2（备用模型/更小批次）                         |
-| 源语残留误报多     | 翻译后加 **质量裁决**，勾选 `source_residual`（可选 `length_ratio`）          |
-| 译文丢引号等可修复 | 翻译后加 **本地改写**，勾选 `punctuation_missing_wrap` / `punctuation_wrap_loss_wrap` 等规则自动改写译文 |
+| 源语残留误报多     | 翻译后加 **质量裁决**，勾选 `source_residual`（可选 `length_ratio`、`punctuation_surplus`） |
+| 译文丢引号等可修复 | 翻译后加 **本地改写**，勾选 `punctuation_missing_wrap` / `punctuation_wrap_loss_wrap` / `width_mix_normalize` 等规则自动改写译文 |
 | 语义问题定点修订   | 翻译/语义质检后加 **LLM 修订**，按 `with_issues` 或 `with_issue_codes` 限定对现有译文做最小改动；或用 [单段修订预览](#单段修订预览) 先看效果 |
 | 规则查不出语义错误 | 翻译后加 **语义质检**，按需限定扫描范围（`all` / `with_issues` / `按 code`） |
 | 日文 HTML 注音     | 执行配置开 Ruby；计划可开 Ruby 重试                                            |

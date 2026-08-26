@@ -273,7 +273,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 | `punctuation_wrap_loss`       | 源文整段被成对引号包裹，译文首尾完全丢失外层引号（补 `punctuation_missing` 对「内层新增引号致计数非零」的盲区） |
 | `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     |
 | `repeated_space`              | 连续空格 / CJK 间空格                          |
-| `width_mix`                   | 全/半角混用                                    |
+| `width_mix`                   | CJK 译文混入零歧义半角标点（`! ? , ; : ( ) [ ]`，数字两侧的 `,` / `:` 与数字后接连续 `!?` 如 `5!`/`100!?` 豁免），或拉丁译文混入全角字符（FF01-FF5E）                                    |
 | `number_mismatch`             | 阿拉伯数字集合不一致（全角数字归一化后比对）   |
 | `url_email_mismatch`          | URL/邮箱集合不一致                             |
 | `subtitle_line_count`        | 字幕行数不一致                                 |
@@ -404,10 +404,10 @@ context:
 | --------------------- | -------- | --------------------- | ------------------------------------- |
 | `batch_size`          | int      | —                     | 与 `max_words_per_batch` 至少填一项   |
 | `max_words_per_batch` | int      | —                     | 每批字词上限                          |
-| `adjudicate_codes`    | []string | `["source_residual"]` | 仅 `source_residual` / `length_ratio` |
+| `adjudicate_codes`    | []string | `["source_residual", "punctuation_surplus"]` | `source_residual` / `length_ratio` / `punctuation_surplus` |
 | `retry`               | object   | —                     | 重试                                  |
 
-裁决提示词内置。`untranslated` / `duplicate` 不可裁决。模型判定 `false_positive` 的问题不会被删除，而是标记为 `dismissed` 保留（记录裁决时间与 LLM 理由），后续轮次跳过；`real` 的问题保持 `pending`。人工也可在审校界面 [驳回问题](/zh/guide/review#质量问题裁决)，效果相同。
+裁决提示词内置。空或不传 `adjudicate_codes` 时默认裁决 `source_residual` 与 `punctuation_surplus`；`length_ratio` 依赖用户配置的长度比阈值，需显式选用。`untranslated` / `duplicate` 为硬规则，不可裁决。模型判定 `false_positive` 的问题不会被删除，而是标记为 `dismissed` 保留（记录裁决时间与 LLM 理由），后续轮次跳过；`real` 的问题保持 `pending`。人工也可在审校界面 [驳回问题](/zh/guide/review#质量问题裁决)，效果相同。
 
 输入/输出协议随后端 `response_format` 自动切换：
 
@@ -439,6 +439,7 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 | ---------------------------- | ----------------------- | -------------------------------------------------------------------- |
 | `punctuation_missing_wrap`  | `punctuation_missing`   | 当源文是单段配对引号包裹（如 `「…」` / `“…”`）且译文丢失该引号时，自动在译文首尾补回对应开闭引号；多段、译文已有该引号、或非配对引号等不安全场景不处理 |
 | `punctuation_wrap_loss_wrap` | `punctuation_wrap_loss` | 当源文整段被成对有向引号（`「」`/`『』`/`“”`/`‘’`/`«»`）包裹、译文首尾完全丢失外层引号时，在译文首尾补回对应开闭引号；译文边缘已有引号 rune、多段包裹或非配对引号等不安全场景不处理 |
+| `width_mix_normalize`        | `width_mix`             | 修复 `width_mix` 报出的全/半角混用安全子集：CJK 译文把 9 个零歧义半角标点（`! ? , ; : ( ) [ ]`）转全角（数字两侧 `,` / `:` 与数字后接连续 `!?` 豁免，保留 `1,000`/`12:30`/`5!` 原样），拉丁译文把全角字符（FF01-FF5E，含全角字母数字）转回半角；改写方向由 pending issue 的首 rune 反推，无法识别时放弃修复 |
 
 是否执行改写由该轮次是否出现在 `rounds` 数组决定（与其他轮次一致，无轮次级 `enabled` 开关）。可修复的 issue code 与 [翻译审校 · 质量检测](/zh/guide/review#质量检测) 的对应规则项一一对应。
 
