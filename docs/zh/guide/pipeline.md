@@ -183,13 +183,13 @@ Round 2：只处理 Round 1 失败的段落
 | `source_residual`             | 译文夹源语脚本                                 | ✅ 软规则    |
 | `punctuation_pairing`         | 标点配对不平衡                                 | ❌ 硬规则    |
 | `punctuation_missing`         | 源文整类包裹标点在译文中完全缺失               | ❌ 硬规则    |
-| `punctuation_surplus`         | 译文多出源文所无的成对包裹标点                 | ❌ 硬规则    |
+| `punctuation_surplus`         | 译文多出源文所无的成对包裹标点                 | ✅ 软规则    |
 | `punctuation_wrap_loss`       | 源文整段被成对引号包裹，译文首尾丢失外层引号   | ✅ 软规则    |
 | `ruby_restore_incomplete`     | 翻译轮该段应还原的 `<ruby>` 注音只还原了部分   | ❌ 软规则    |
 | `ruby_tag_loss`               | 人工编辑把原本含注音的译文改到一条注音不剩     | ❌ 软规则    |
 | `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     | ❌ 硬规则    |
 | `repeated_space`              | 连续空格 / CJK 间空格                          | ❌ 硬规则    |
-| `width_mix`                   | 全/半角混用                                    | ❌ 硬规则    |
+| `width_mix`                   | 全/半角混用（仅检零歧义安全集：CJK 译文的 `! ? , ; : ( ) [ ]` 半角标点与拉丁译文的全角字符 FF01-FF5E，数字写法如 `1,000`/`12:30`/`5!` 豁免） | ❌ 硬规则    |
 | `number_mismatch`             | 阿拉伯数字集合不一致（全角数字归一化后比对）   | ❌ 硬规则    |
 | `url_email_mismatch`          | URL/邮箱集合不一致                             | ❌ 硬规则    |
 | `subtitle_line_count`        | 字幕行数不一致                                 | ❌ 硬规则    |
@@ -214,11 +214,11 @@ LinguaFlow 用**保护区**解决：QA 引擎拿到内容保护阶段记录的�
 
 对软规则问题逐条问 AI：`real` 保留 / `false_positive` 标记为 `dismissed`（保留记录、后续轮次跳过）。
 
-1. 只处理已译/已改且带可裁决 code（`source_residual` / `length_ratio`）的段落
+1. 只处理已译/已改且带可裁决 code（`source_residual` / `length_ratio` / `punctuation_surplus`）的段落
 2. 分批调用 **内置** 裁决提示词
 3. 解析失败时 **保留原问题**，不清空
 
-**建议：** 放在翻译轮次之后；专有名词多的文档优先开 `source_residual`。配置见 [翻译配置 · 使用](/zh/guide/translation-config#进阶组合)；协议细节见 [翻译配置 · 参考 · adjudicate](/zh/guide/translation-config-reference#adjudicate)。
+**建议：** 放在翻译轮次之后；专有名词多的文档优先开 `source_residual`。不配 `adjudicate_codes` 时默认裁决 `source_residual` 与 `punctuation_surplus`；`length_ratio` 需显式勾选。配置见 [翻译配置 · 使用](/zh/guide/translation-config#进阶组合)；协议细节见 [翻译配置 · 参考 · adjudicate](/zh/guide/translation-config-reference#adjudicate)。
 
 ### 本地改写（`correct`）
 
@@ -229,6 +229,8 @@ LinguaFlow 用**保护区**解决：QA 引擎拿到内容保护阶段记录的�
 3. **幂等校验**：改写后用同一 checker（规则声明 `ResolvedCodes` 的并集）重跑——若该 issue code 仍报出，则**回滚译文、保留原问题**，避免把「没修好」伪装成「已修好」。已被 `dismissed` 的问题指纹不计入校验、其裁决记录保留，避免把用户判定为「不是问题」的项又改回去
 
 首发规则 `punctuation_missing_wrap`：当源文是单段配对引号包裹（`「…」` / `“…”` / `『…』` 等）且译文丢失该引号时，自动在译文首尾补回对应开闭引号；多段包裹、译文已有该引号、非配对引号等不安全场景一律不处理。该规则只对仍处于 `pending` 的问题触发，已 `dismissed` 的不再修复。
+
+另有 `punctuation_wrap_loss_wrap`（补回整段丢失的外层引号）与 `width_mix_normalize`（把 `width_mix` 报出的零歧义全/半角混用按目标语方向归一：CJK 转全角、拉丁转半角，数字写法如 `1,000`/`12:30`/`5!` 豁免）。执行计划编辑器会列出全部已知规则，模板未保存过的规则以关闭状态出现，可自行开启。规则清单与行为见 [翻译配置 · 参考 · correct](/zh/guide/translation-config-reference#correct)。
 
 ::: tip 修复、修订、裁决、语义质检各管一段
 - `correct` / `revise` 都**改写译文**以消除已报出的问题：`correct` 纯本地机械修复高频安全问题、不调 LLM；`revise` 调 LLM 按语义 issue 做定点最小修订。两者都沿用幂等契约——改写后重跑确定性 QA 验证，改不掉就回滚

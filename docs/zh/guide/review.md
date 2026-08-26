@@ -122,13 +122,13 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 | `source_residual`          | 译文夹带源语脚本片段（假名、谚文、西里尔文、汉字残留等），按语言对分档 | warning  | ✅ 软规则 |        |
 | `punctuation_pairing`      | 目标语引号/括号/书名号等配对不平衡                                   | warning  | ❌ 硬规则 |        |
 | `punctuation_missing`      | 源文整类包裹标点（引号、括号等）在译文中完全缺失                     | warning  | ❌ 硬规则 |        |
-| `punctuation_surplus`      | 译文多出源文所无的成对包裹标点（引号、括号等）                       | warning  | ❌ 硬规则 |        |
+| `punctuation_surplus`      | 译文多出源文所无的成对包裹标点（引号、括号等）                       | warning  | ✅ 软规则 |        |
 | `punctuation_wrap_loss`    | 源文整段被成对引号包裹，译文首尾完全丢失外层引号（补 `punctuation_missing` 对「内层新增引号致计数非零」的盲区） | warning  | ✅ 软规则 |        |
 | `ruby_restore_incomplete`  | 翻译轮该段应还原的 `<ruby>` 注音只还原了部分（应还原 N 条，实际 M 条） | warning  | ❌ 软规则 |        |
 | `ruby_tag_loss`            | 人工编辑把原本含 `<ruby>` 注音的译文改到一条注音不剩（按基线对比判定）   | warning  | ❌ 软规则 |        |
 | `whitespace_irregular`     | 零宽字符、NBSP、制表符、行/段分隔符等异常空白                        | warning  | ❌ 硬规则 |        |
 | `repeated_space`           | 连续空格；CJK 目标语中字符间夹英文空格                              | warning  | ❌ 硬规则 |        |
-| `width_mix`                | CJK 目标语中混入半角标点，或拉丁目标语中混入全角字符               | warning  | ❌ 硬规则 |        |
+| `width_mix`                | CJK 目标语中混入零歧义半角标点（`! ? , ; : ( ) [ ]`），或拉丁目标语中混入全角字符；数字写法如 `1,000`/`12:30`/`5!` 豁免 | warning  | ❌ 硬规则 |        |
 | `number_mismatch`          | 阿拉伯数字在源/译间不一致（归一化全角数字与千分位/小数分隔符后比对多重集合） | error    | ❌ 硬规则 |        |
 | `url_email_mismatch`       | 源/译中超链接、邮箱地址集合不一致                                    | error    | ❌ 硬规则 |        |
 | `subtitle_line_count`      | srt/ass/vtt 等字幕格式下，源/译行数不一致                            | error    | ❌ 硬规则 |        |
@@ -139,7 +139,7 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 
 `source_residual` 按语言对自动启用；源语言为 `auto` 时不生效。18 项 per-batch checker 可在 `qa.checks` 中按名启用/排除；`duplicate_source_divergence` 为文档级检查（跨段对比），始终随 QA 引擎运行，不必也不能在 `qa.checks` 中排除。`ruby_restore_incomplete` / `ruby_tag_loss` 由翻译轮的注音守恒逻辑产出，不属 `qa.checks` 可选名，但会随段落问题进入筛选与统计。
 
-`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss` 与 `punctuation_pairing` 四者互补不重复：源文某类包裹标点在译文中**完全缺失**时报 `punctuation_missing`；译文多出源文所无的**成对**包裹标点（疑似多译出）时报 `punctuation_surplus`；译文仍有该类标点但**配对不平衡**时才报 `punctuation_pairing`；源文**整段被成对引号包裹**、译文首尾完全丢失外层引号时报 `punctuation_wrap_loss`（补 `punctuation_missing` 对「内层新增引号致计数非零」的盲区）。`punctuation_missing` 与 `punctuation_wrap_loss` 报出的安全子集可由执行计划的 [本地改写轮次](/zh/guide/translation-config#执行计划) 自动修复，详见 [流水线与原理 · 本地改写](/zh/guide/pipeline#本地改写-correct)。
+`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss` 与 `punctuation_pairing` 四者互补不重复：源文某类包裹标点在译文中**完全缺失**时报 `punctuation_missing`；译文多出源文所无的**成对**包裹标点（疑似多译出）时报 `punctuation_surplus`；译文仍有该类标点但**配对不平衡**时才报 `punctuation_pairing`；源文**整段被成对引号包裹**、译文首尾完全丢失外层引号时报 `punctuation_wrap_loss`（补 `punctuation_missing` 对「内层新增引号致计数非零」的盲区）。`punctuation_missing` 与 `punctuation_wrap_loss` 报出的安全子集可由执行计划的 [本地改写轮次](/zh/guide/translation-config#执行计划) 自动修复（另有 `width_mix_normalize` 规则修复全/半角混用），详见 [流水线与原理 · 本地改写](/zh/guide/pipeline#本地改写-correct)。
 
 ::: tip 原文结构不会被误报为质量问题
 HTML 标签、链接等原文结构在译文中会被还原回来，但 QA 引擎会把这些区段标为**保护区**，标点配对、空白、全/半角混用等 checker 在保护区上**自动跳过**——只检查译文真正写出来的文字。所以一份满是 HTML 标签的译文不会再因为标签里的英文符号被报一堆 `punctuation_pairing` / `width_mix`。`xml_tag_mismatch` 比对标签时还会**排除 `<ruby>` 注音标签族**，避免与 Ruby 还原策略冲突。详见 [流水线与原理 · 保护区](/zh/guide/pipeline#保护区-不被原文结构干扰)。
@@ -362,9 +362,9 @@ qa:
 :::
 
 ::: tip 配合 AI 质量裁决 / 语义质检 / 本地改写 / LLM 修订
-- 规则质检偏敏感，可在执行计划中加 **质量裁决**（`adjudicate`）轮次，对 `source_residual`、`length_ratio` 等软规则逐条复核、将误报标记为 `dismissed`
+- 规则质检偏敏感，可在执行计划中加 **质量裁决**（`adjudicate`）轮次，对 `source_residual`、`punctuation_surplus`、`length_ratio` 等软规则逐条复核、将误报标记为 `dismissed`
 - 规则查不出来的语义错误，可加 **语义质检**（`semantic_qa`）轮次补足，结果以 `warning` 直接进人审，无需再裁决
-- `punctuation_missing` / `punctuation_wrap_loss` 等可机械修复的安全问题，可加 **本地改写**（`correct`）轮次自动改写译文消除问题，无需调 LLM
+- `punctuation_missing` / `punctuation_wrap_loss` / `width_mix` 等可机械修复的安全问题，可加 **本地改写**（`correct`）轮次自动改写译文消除问题，无需调 LLM
 - 语义质检报出的 `pending` 语义问题（误译、仿译、漏译等），可加 **LLM 修订**（`revise`）轮次对现有译文做定点最小修订，调 LLM、系统提示词内置
 - 四类轮次都放在翻译轮次之后，详见 [流水线与原理 · 规则质检与 AI 质量裁决](/zh/guide/pipeline#规则质检与-ai-质量裁决)
   :::
@@ -397,7 +397,7 @@ qa:
 7. **批量操作** — 段落较多时使用批量审批/拒绝提高效率
 8. **裁决降噪** — 启用质量裁决轮次，减少源语残留、长度异常的误报干扰
 9. **语义补盲** — 规则查不出来的语义错误，再用语义质检轮次补足
-10. **机械修复** — 对译文丢引号（`punctuation_missing` / `punctuation_wrap_loss`）等可确定修复的安全问题，启用本地改写轮次自动消除
+10. **机械修复** — 对译文丢引号（`punctuation_missing` / `punctuation_wrap_loss`）、全/半角混用（`width_mix`）等可确定修复的安全问题，启用本地改写轮次自动消除
 11. **LLM 定点修订** — 语义质检报出的 `mistranslation` / `calque` / `omission` 等 `pending` 语义问题，启用 LLM 修订（`revise`）轮次对现有译文做最小改动定点修订，或用单段修订预览先看效果
    :::
 
