@@ -1814,10 +1814,11 @@ const messages = {
       adjudicateMaxWordsPerBatch: '字词数上限',
       adjudicateMaxWordsPerBatchHint: '0=不限制，与段落数上限至少填一项',
       adjudicateCodes: '可裁决问题',
-      adjudicateCodesPlaceholder: '默认：源文残留',
-      adjudicateCodesHint: '未翻译与重复译文为硬规则，不可裁决。空则默认源文残留。',
+      adjudicateCodesPlaceholder: '默认：源文残留 + 标点多余',
+      adjudicateCodesHint: '未翻译与重复译文为硬规则，不可裁决。空则默认源文残留、标点多余。',
       adjudicateCodeSourceResidual: '源文残留',
       adjudicateCodeLengthRatio: '长度异常',
+      adjudicateCodePunctuationSurplus: '标点多余',
       semanticQAPromptHint:
         '语义质检 system prompt 内置不可见，无需选择提示词模板；产出 warning 级语义问题直接进人审。',
       semanticQASegmentScope: '段落扫描范围',
@@ -1859,6 +1860,9 @@ const messages = {
       correctRulePunctuationWrapLossWrap: '补全丢失的外层引号包裹',
       correctRulePunctuationWrapLossWrapHint:
         '机械修复 punctuation_wrap_loss 报出的译文丢失源文外层引号包裹（单 span 安全子集）',
+      correctRuleWidthMixNormalize: '规范全半角混用',
+      correctRuleWidthMixNormalizeHint:
+        '修复 width_mix 报出的全半角混用：CJK 译文把 9 个零歧义半角标点（! ? , ; : ( ) [ ]）转全角（数字双侧的 , : 与数字前缀的 !? 豁免，保留 1,000/12:30/5! 原样）；拉丁译文把全角字符（FF01-FF5E，含全角字母数字）转回半角。',
     },
     actions: {
       addRound: '添加轮次',
