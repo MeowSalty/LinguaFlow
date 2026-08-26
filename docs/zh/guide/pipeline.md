@@ -21,12 +21,14 @@ flowchart TD
   Next -->|translate| Tr[翻译段落]
   Next -->|correct| Co[本地改写译文，消除安全问题]
   Next -->|adjudicate| Ad[复核规则质检问题]
+  Next -->|revise| Re[LLM 定点修订译文]
   Next -->|semantic_qa| Sq[LLM 语义扫描]
   Next -->|完成| Done([结束])
   Ex --> Next
   Tr --> Next
   Co --> Next
   Ad --> Next
+  Re --> Next
   Sq --> Next
 ```
 
@@ -35,11 +37,11 @@ flowchart TD
 1. 内容保护（占位符替换）
 2. 组装上下文 → 调用 AI
 3. 还原占位符 / 后处理 / 可选 Ruby 还原
-4. 规则质检写回段落（含 18 项确定性 checker）
+4. 规则质检写回段落（18 项 per-batch checker + 1 项文档级 + 注音守恒码）
 
-可选：执行配置中的 **内联术语自举** 会在翻译响应中一并抽术语。语义质检产生的 `warning` 级问题通过 `span` 精确定位到译文片段。
+可选：执行配置中的 **内联术语自举** 会在翻译响应中一并抽术语。语义质检产生的 `warning` 级问题通过 `span` 精确定位到译文片段。可选的 `revise` 轮按段落上 `pending` 语义 issue 对现有译文做定点最小修订。
 
-推荐轮次顺序：`extract`（可选）→ `translate`（可多轮）→ `correct`（可选）→ `adjudicate`（可选）→ `semantic_qa`（可选）。
+推荐轮次顺序：`extract`（可选）→ `translate`（可多轮）→ `correct`（可选）→ `adjudicate`（可选）→ `revise`（可选）→ `semantic_qa`（可选）。
 
 ---
 
@@ -170,7 +172,7 @@ Round 2：只处理 Round 1 失败的段落
 
 ### 规则质检
 
-翻译轮次内由 QA 引擎同步跑规则检查并写回段落。共 18 项确定性 checker（其中 1 项 `duplicate_source_divergence` 为文档级、跨段比对，不可在 `qa.checks` 中关闭）；其余 17 项 per-batch checker 均可在执行配置 `qa.checks` 中按名选择性启用：
+翻译轮次内由 QA 引擎同步跑规则检查并写回段落。共 18 项 per-batch checker（可在执行配置 `qa.checks` 中按名选择性启用）+ 1 项文档级 `duplicate_source_divergence`（跨段比对，不可在 `qa.checks` 中关闭）；另由翻译轮的注音守恒逻辑产出 `ruby_restore_incomplete` / `ruby_tag_loss` 两个守恒码：
 
 | code                          | 含义                                           | 可否 AI 裁决 |
 | ----------------------------- | ---------------------------------------------- | ------------ |
@@ -182,6 +184,9 @@ Round 2：只处理 Round 1 失败的段落
 | `punctuation_pairing`         | 标点配对不平衡                                 | ❌ 硬规则    |
 | `punctuation_missing`         | 源文整类包裹标点在译文中完全缺失               | ❌ 硬规则    |
 | `punctuation_surplus`         | 译文多出源文所无的成对包裹标点                 | ❌ 硬规则    |
+| `punctuation_wrap_loss`       | 源文整段被成对引号包裹，译文首尾丢失外层引号   | ✅ 软规则    |
+| `ruby_restore_incomplete`     | 翻译轮该段应还原的 `<ruby>` 注音只还原了部分   | ❌ 软规则    |
+| `ruby_tag_loss`               | 人工编辑把原本含注音的译文改到一条注音不剩     | ❌ 软规则    |
 | `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     | ❌ 硬规则    |
 | `repeated_space`              | 连续空格 / CJK 间空格                          | ❌ 硬规则    |
 | `width_mix`                   | 全/半角混用                                    | ❌ 硬规则    |
@@ -225,15 +230,26 @@ LinguaFlow 用**保护区**解决：QA 引擎拿到内容保护阶段记录的�
 
 首发规则 `punctuation_missing_wrap`：当源文是单段配对引号包裹（`「…」` / `“…”` / `『…』` 等）且译文丢失该引号时，自动在译文首尾补回对应开闭引号；多段包裹、译文已有该引号、非配对引号等不安全场景一律不处理。该规则只对仍处于 `pending` 的问题触发，已 `dismissed` 的不再修复。
 
-::: tip 修复、裁决、语义质检各管一段
-- `correct` 改写译文以**消除**已报出的安全问题（幂等可验证）
+::: tip 修复、修订、裁决、语义质检各管一段
+- `correct` / `revise` 都**改写译文**以消除已报出的问题：`correct` 纯本地机械修复高频安全问题、不调 LLM；`revise` 调 LLM 按语义 issue 做定点最小修订。两者都沿用幂等契约——改写后重跑确定性 QA 验证，改不掉就回滚
 - `adjudicate` 只判断已有软规则问题**保留 / 标记为 `dismissed`**、不改译文
 - `semantic_qa` **新增**语义类问题
 
-三者互补，可叠加放在翻译轮次之后。
+四者互补，可叠加放在翻译轮次之后。
 :::
 
 配置字段见 [翻译配置 · 参考 · correct](/zh/guide/translation-config-reference#correct)；可修复的 issue code 与 [翻译审校 · 质量检测](/zh/guide/review#质量检测) 对应。
+
+### LLM 修订（`revise`）
+
+以段落上 `pending`（未裁决 `dismissed`）的语义 issue 为修复目标，调 LLM 对**现有译文**做最小改动的定点修订（不重译原文），系统提示词内置、不可覆盖。与 `correct` 共享写回契约：
+
+1. 仅处理 `translated` / `edited` 且译文非空的段，按 `segment_scope`（`with_issues` / `with_issue_codes`）扫描——只取段落上 `pending` 的语义 issue 作修复目标
+2. `issue_codes` 仅取 8 个语义白名单（`calque` / `term_fidelity` / `naturalness` / `mistranslation` / `omission` / `addition` / `grammar` / `register`），与段落实有 `pending` 语义 issue 取交集，交集为空的段不进入修订
+3. protect/ruby 及引擎级策略（repair/QA/glossary）经计划级 `profile_id` 贯穿，无需依赖计划内 translate 轮
+4. 写回遵循 correct 先例：改写译文与 issues、不改段落状态、CAS 保护；**无 `fallback_shrink`**（修订失败模式与批次大小无关，不缩批）
+
+`revise` 是把语义质检/裁决产出但尚未解决的 `pending` 语义问题，交给 LLM 做定点最小修订，而不是整段重译。与 `correct` 的差别在于：`correct` 纯本地、修高频安全问题；`revise` 调 LLM、按语义问题定点修订。配置字段见 [翻译配置 · 参考 · revise](/zh/guide/translation-config-reference#revise)。
 
 ### 语义质检（`semantic_qa`）
 
@@ -244,8 +260,12 @@ LinguaFlow 用**保护区**解决：QA 引擎拿到内容保护阶段记录的�
 3. 扫描范围可按 `segment_scope` 限定（`all` / `with_issues` / `with_issue_codes`），成本敏感时可只扫高价值子集
 4. 扫描失败采用**软警告**：写入资源 `warning_message`，作业继续而非终态失败
 
-::: tip 与裁决的差异
-裁决只对已有规则问题做「保留/剔除」，不新增；语义质检则是**新增**语义类问题。二者互补，不冲突。
+::: tip 裁决、语义质检、修订的差异
+- 裁决只对已有规则问题做「保留/剔除」，不新增、不改译文
+- 语义质检**新增**语义类问题
+- 修订对段落上 `pending` 的语义问题**定点改写译文**、不新增问题
+
+三者互补，不冲突：语义质检把语义问题报出，修订再把 `pending` 的语义问题定点修掉。
 :::
 
 协议细节见 [翻译配置 · 参考 · semantic_qa](/zh/guide/translation-config-reference#semantic-qa)。审校侧呈现见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)。
@@ -284,9 +304,23 @@ LLM 请求层：
 | 网络/超时  | 缩小批次再试（本地超时按可重试退避）                       |
 | 解析失败   | 先提示升级修复，再缩小批次                                 |
 | 401 / 403  | 不重试，留给后续轮次                                       |
+| 漏译段     | 清空该段 Target/Issues（防旧裁决跨轮复活），按本轮失败进入重试 |
 | 部分段缺失 | 进入池化缩批，缺失段按更小批次重译（见 [批量与并发](#批量与并发)） |
 
 重试参数：`max_attempts` / `backoff_ms` / `jitter`（指数退避 + 抖动）。见 [翻译配置 · 参考 · 重试](/zh/guide/translation-config-reference#重试-retry)。
+
+#### 漏译段清空
+
+某翻译轮里 LLM 漏译的段落（本轮无产出）不再静默沿用数据库里的旧译文及其旧问题裁决——旧裁决跨轮复用会让上一轮已 `dismissed` 的问题「复活」。引擎会清空该段的 Target 与 Issues，按「本轮无产出 / 失败」处理进入重试。用户看到的是：漏译段被明确标记待重跑，而不是带着陈旧裁决标记的旧译文。
+
+#### 末轮未决软警告
+
+当 `adjudicate` 或 `revise` 作为计划的最后一轮仍有未决段落时，任务不会硬失败，而是在完成提示里追加软警告：
+
+- `adjudicate` 末轮：提示「质量裁决未完全成功：N 个段落未能完成裁决（issue 保持待决，可重试任务或调整参数后重试）」
+- `revise` 末轮：提示「修订未完全成功：N 个段落未能完成」
+
+多类软警告（语义质检、裁决、修订）会在完成信息里用「; 」拼接并列返回，后发生的警告不再覆盖先前的，一次看到全部未完成提示。语义质检扫描阶段的软警告另写入资源 `warning_message`，见 [翻译审校 · 任务级资源警告](/zh/guide/review#任务级资源警告)。
 
 #### 持久化层错误分类
 
@@ -306,14 +340,20 @@ LLM 请求层：
 
 ---
 
-## 单段试译预览
+## 单段预览（试译 / 修订）
 
-正式作业之外，可对单个段直接发起 **试译预览（preview）**：选一个执行计划，对一段原文在内存中完整跑一遍 `extract → translate → adjudicate → semantic_qa`，不创建作业、不持久化中间结果、不污染术语表/翻译记忆。
+正式作业之外，可对单个段直接发起 **预览**：不创建作业、不持久化中间结果、不污染术语表/翻译记忆，在内存沙箱里跑一遍后决定是否应用。分两类：
+
+- **试译预览**：选一个执行计划，对一段**原文**完整跑一遍 `extract → translate → adjudicate → semantic_qa`，产出全新译文
+- **修订预览**：以段落上 `pending` 的语义 issue 为修复目标，对**现有译文**做一次 LLM 修订（`revise`），产出定点最小修订的译文；计划须含 `revise` 轮，只有 `translate` 轮时由后端合成默认修订轮。修订结果会在内存中重跑确定性 QA 作为最终 issues，无实质改动时不返回 `apply_token`
+
+二者共用如下机制：
 
 - **诊断输出**：批次事件携带 `round_index` / `attempt` / `system_prompt` / `user_message` / `response_format` / `json_schema` / `response_content`，用于排查提示词、响应格式与批次问题
-- **用量计量**：调用次数与 token 消耗按预览口径统计，与正式作业区分
-- **应用译文**：预览结果返回一个带签名的 `apply_token`（有过期时间）；应用时用令牌做基线（source / target / status）条件更新，检测到段落已变化会拒绝，避免覆盖他人改动
-- **内存隔离**：术语表用内存 overlay、翻译记忆用 Noop，确保试译的副作用留在沙箱内
+- **用量计量**：调用次数与 token 消耗按预览口径统计，与正式作业区分；修订预览的唯一持久化副作用是记录真实预览用量
+- **应用译文**：存在可应用结果时返回带签名的 `apply_token`（有过期时间，二者共用同一 `apply` 端点、令牌内 `kind` 区分翻译/修订）；应用时用令牌做基线（source / target / status）条件更新，检测到段落已变化会拒绝，避免覆盖他人改动
+- **内存隔离**：术语表用内存 overlay、翻译记忆用 Noop，确保预览的副作用留在沙箱内
+- **并发限制**：试译与修订预览共享全局并发上限，满时返回 429 并带 `Retry-After`；超时（默认 5 分钟）返回 504
 
 ### 多轮试译的过滤语义
 
@@ -328,7 +368,7 @@ LLM 请求层：
 
 换句话说：如果你用一个「翻译 → 裁决 → 再翻译」的计划做试译，第二个翻译轮只会处理那些状态仍满足过滤条件（如 `pending`）的目标段，避免对已经被前一轮改写的段无意义重译。
 
-产品操作见 [翻译配置 · 使用 · 单段试译](/zh/guide/translation-config#单段试译)；接口契约见 [翻译配置 · 参考 · 单段试译](/zh/guide/translation-config-reference#单段试译-preview)。
+产品操作见 [翻译配置 · 使用 · 单段试译](/zh/guide/translation-config#单段试译) / [单段修订预览](/zh/guide/translation-config#单段修订预览)；接口契约见 [翻译配置 · 参考 · 单段预览](/zh/guide/translation-config-reference#单段预览-preview)。
 
 ---
 

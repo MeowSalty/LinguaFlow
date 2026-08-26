@@ -163,14 +163,16 @@ translation_profiles:
       after: 1
       max_chars: 0
 
-# 执行计划（CLI：translate / extract；Web 端另支持 adjudicate / correct / semantic_qa）
+# 执行计划（CLI：translate / extract / revise；Web 端另支持 adjudicate / correct / semantic_qa）
 execution:
+  # 计划级策略引用：translate 与 revise 轮统一使用该策略的 protect/ruby 等行为预设。
+  # 引用上方 translation_profiles 中的 key；缺省或名称未命中时回退内置默认策略。
+  profile: 通用策略
   rounds:
     - mode: translate
       backend: openai-default
       translate:
         prompt: 通用提示词
-        profile: 通用策略
         batch_size: 1
         max_words_per_batch: 0
         concurrency: 4
@@ -185,6 +187,19 @@ execution:
     #     template: 通用术语抽取
     #     batch_size: 20
     #     concurrency: 2
+    # - mode: revise          # LLM 修订轮
+    #   backend: openai-default
+    #   revise:
+    #     batch_size: 1
+    #     concurrency: 4
+    #     segment_scope: with_issues   # with_issues | with_issue_codes
+    #     # issue_codes:                # 仅 with_issue_codes 时填，须 ⊆ 语义白名单
+    #     #   - mistranslation
+    #     #   - omission
+    #     retry:
+    #       max_attempts: 3
+    #       backoff_ms: 2000
+    #       jitter: true
 
 # 术语表配置
 glossary:
@@ -319,7 +334,7 @@ Web 端还可使用「探测模型」接口按凭据拉取列表；字段细节�
 :::
 
 ::: info Web 端额外资源
-术语精简提示词（Prune）、质量裁决（`adjudicate`）、本地改写（`correct`）、语义质检（`semantic_qa`）等能力主要在 **Web 服务端** 的资源模型中配置；CLI 配置文件以 `translate` / `extract` 轮次为主。
+术语精简提示词（Prune）、质量裁决（`adjudicate`）、本地改写（`correct`）、LLM 修订（`revise`）、语义质检（`semantic_qa`）等能力主要在 **Web 服务端** 的资源模型中配置；CLI 配置文件以 `translate` / `extract` / `revise` 轮次为主。
 :::
 
 #### translation_profiles — 执行配置（翻译策略）
@@ -390,30 +405,39 @@ Web 端还可使用「探测模型」接口按凭据拉取列表；字段细节�
 
 #### execution — 执行计划
 
-组合后端、模板和配置为翻译流水线。CLI 配置中仅含 `rounds` 列表。
+组合后端、模板和配置为翻译流水线。CLI 配置中含 `profile`（计划级策略引用）与 `rounds` 列表。
+
+| 字段      | 类型   | 说明                                                                                       |
+| --------- | ------ | ------------------------------------------------------------------------------------------ |
+| `profile` | string | 计划级翻译策略名称（引用 `translation_profiles` 的 key）；translate 与 revise 轮共用其行为预设。缺省或名称未命中时回退内置默认策略 |
+| `rounds`  | array  | 执行轮次列表，按顺序执行                                                                   |
 
 ##### rounds — 执行轮次
 
-CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行计划模板另支持 `adjudicate`（质量裁决）、`correct`（本地改写）、`semantic_qa`（语义质检），详见 [流水线与原理](/zh/guide/pipeline#规则质检与-ai-质量裁决)。
+CLI 支持 `translate`（翻译）、`extract`（术语提取）与 `revise`（LLM 修订）。Web 执行计划模板另支持 `adjudicate`（质量裁决）、`correct`（本地改写）、`semantic_qa`（语义质检），详见 [流水线与原理](/zh/guide/pipeline#规则质检与-ai-质量裁决)。
 
-| 字段        | 类型   | 说明                                     |
-| ----------- | ------ | ---------------------------------------- |
-| `mode`      | string | `translate` 或 `extract`                 |
-| `backend`   | string | 使用的 AI 后端（引用 `backends` 的 key） |
+| 字段      | 类型   | 说明                                     |
+| --------- | ------ | ---------------------------------------- |
+| `mode`    | string | `translate` / `extract` / `revise`       |
+| `backend` | string | 使用的 AI 后端（引用 `backends` 的 key） |
 | `translate` | object | `mode=translate` 时必填，见下表          |
 | `extract`   | object | `mode=extract` 时必填，见下表            |
+| `revise`    | object | `mode=revise` 时必填，见下表             |
 
 **translate 子配置：**
 
 | 字段                  | 类型   | 说明                                                                          |
 | --------------------- | ------ | ----------------------------------------------------------------------------- |
 | `prompt`              | string | 翻译提示词模板 key                                                            |
-| `profile`             | string | 执行配置 / 策略 key                                                           |
 | `batch_size`          | int    | 待译段落数上限（不计上下文段）                                                |
 | `max_words_per_batch` | int    | 每批字词数上限（计入上下文段）                                                |
 | `concurrency`         | int    | 并发数                                                                        |
 | `fallback_shrink`     | float  | 池缩比系数（**必填**，合法域 (0, 1]）。`1.0` = 多池同尺寸重切；`(0,1)` = 每池缩小，池 N 批次约束 = `floor(原始 × shrink^N)`。`0` 非法（会被拒绝）；池数量 = `retry.max_attempts + 1`，见 [流水线与原理](/zh/guide/pipeline#批量与并发) |
 | `retry.*`             | —      | `max_attempts`（决定池深 = `max_attempts + 1`，每池在途重试预算内部封顶 `min(max_attempts, 3)`）/ `backoff_ms` / `jitter`             |
+
+::: tip 策略引用已移到计划级
+翻译策略不在每轮 translate 内引用，改由 `execution.profile`（计划级）统一指定，translate 与 revise 轮共用该策略的 protect/ruby/repair/QA 行为预设。`--profile` flag 也改为覆盖此计划级值（不再改写每轮 translate 的 profile）。
+:::
 
 **extract 子配置：**
 
@@ -427,8 +451,20 @@ CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行�
 | `min_source_len`           | int    | 术语最短源文长度       |
 | `retry.*`                  | —      | 重试配置               |
 
-::: tip Web 端质量裁决与本地改写
-在 Web 服务端创建执行计划时，可增加 `adjudicate` 轮次：调用 AI 对 `source_residual`、`length_ratio` 等软规则误报降噪；也可增加 `correct` 轮次：纯本地机械改写译文，消除 `punctuation_missing` 等可确定修复的安全问题。两者提示词均内置，无需选择模板（`correct` 不调 LLM）。
+**revise 子配置：**
+
+| 字段                  | 类型     | 说明                                                                                       |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `batch_size`          | int      | 待修订段落数上限；0 不限制，与 `max_words_per_batch` 至少填一项                            |
+| `max_words_per_batch` | int      | 每批字词数上限；0 不限制，与 `batch_size` 至少填一项                                       |
+| `segment_scope`       | string   | `with_issues`（默认）: 修订存在 `pending` 语义 issue 的段；`with_issue_codes`: 仅修订含 `issue_codes` 声明 code 的段 |
+| `issue_codes`         | []string | 仅 `with_issue_codes` 时填，≥1 项，且 ⊆ 语义白名单（`calque`/`term_fidelity`/`naturalness`/`mistranslation`/`omission`/`addition`/`grammar`/`register`） |
+| `retry.*`             | —        | 重试配置                                                                                   |
+
+revise 轮的系统提示词内置不可覆盖，protect/ruby 等行为复用计划级 `execution.profile`，无 `fallback_shrink`（不缩批）。
+
+::: tip Web 端质量裁决、本地改写与 LLM 修订
+在 Web 服务端创建执行计划时，可增加 `adjudicate` 轮次：调用 AI 对 `source_residual`、`length_ratio` 等软规则误报降噪；也可增加 `correct` 轮次：纯本地机械改写译文，消除 `punctuation_missing` / `punctuation_wrap_loss` 等可确定修复的安全问题；还可增加 `revise` 轮次：调 LLM 对现有译文按 `pending` 语义问题做定点最小修订。三者提示词均内置，无需选择模板（`correct` 不调 LLM）。
 :::
 
 #### glossary — 术语表
@@ -588,7 +624,7 @@ CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行�
 | `--to`            |      | string   | `""`   | 目标语言（覆盖配置文件）                             |
 | `--glossary-path` |      | string   | `""`   | 术语表路径，设置后强制启用                           |
 | `--bootstrap`     |      | string   | `""`   | 术语提取模式：`off`/`pre`/`inline`                   |
-| `--profile`       |      | string   | `""`   | 执行配置名称（`translation_profiles` key）           |
+| `--profile`       |      | string   | `""`   | 执行配置名称（覆盖计划级 `execution.profile`；引用 `translation_profiles` key，未命中报错）           |
 | `--prompt`        |      | string   | `""`   | 提示词模板名称（`translation_prompt_templates` key） |
 
 ### init 子命令
