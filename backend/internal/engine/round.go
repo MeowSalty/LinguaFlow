@@ -11,6 +11,13 @@ import (
 // RoundConfig 描述一轮的执行配置。
 // Translate / Extract / Adjudicate / SemanticQA / Revise 互斥，恰好一个必须非 nil。
 type RoundConfig struct {
+	// SourceLang / TargetLang 是引擎级语言上下文（由 Config 经 buildRoundConfigs
+	// 逐轮下发）。供 correct 幂等引擎等需要按语言构造敏感 checker 的组件使用：
+	// 如 width_mix checker 依赖 TargetLang 区分 CJK/拉丁分支，缺失时会走错分支
+	// 导致改写被幂等回滚、规则静默失效成环。
+	SourceLang string
+	TargetLang string
+
 	RoundIndex       int
 	Backend          backend.Backend
 	BatchSize        int
