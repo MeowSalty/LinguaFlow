@@ -87,8 +87,18 @@ const DEFAULT_REVISE: ReviseRoundConfig = {
   retry: { ...DEFAULT_RETRY },
 }
 
+// 规则白名单：编辑器固定展示全部已知规则，模板未保存过的按关闭处理
+const CORRECT_RULE_NAMES: CorrectRuleName[] = [
+  'punctuation_missing_wrap',
+  'punctuation_wrap_loss_wrap',
+  'width_mix_normalize',
+]
+
 const DEFAULT_CORRECT: CorrectRoundConfig = {
-  rules: [{ name: 'punctuation_missing_wrap', enabled: true }],
+  rules: CORRECT_RULE_NAMES.map((name) => ({
+    name,
+    enabled: name === 'punctuation_missing_wrap',
+  })),
 }
 
 const DEFAULT_ROUND: RoundModel = {
@@ -202,11 +212,14 @@ function mergeRevise(source?: Partial<ReviseRoundConfig>): ReviseRoundConfig {
 
 function mergeCorrect(source?: Partial<CorrectRoundConfig>): CorrectRoundConfig {
   if (!source) return deepClone(DEFAULT_CORRECT)
-  const rules = source.rules && source.rules.length > 0 ? source.rules : DEFAULT_CORRECT.rules
+  // 白名单全量合入：未保存过的规则（如新版本规范新增）以关闭状态出现，保证可见可切换
+  const saved = new Map(
+    (source.rules ?? []).map((r) => [r.name as CorrectRuleName, r.enabled ?? true]),
+  )
   return {
-    rules: rules.map((r) => ({
-      name: r.name,
-      enabled: r.enabled ?? true,
+    rules: CORRECT_RULE_NAMES.map((name) => ({
+      name,
+      enabled: saved.get(name) ?? name === 'punctuation_missing_wrap',
     })),
   }
 }
@@ -398,11 +411,13 @@ const reviseIssueCodeOptions = computed(() =>
 const correctRuleLabelMap: Record<CorrectRuleName, string> = {
   punctuation_missing_wrap: t('executionPlanEditor.round.correctRulePunctuationMissingWrap'),
   punctuation_wrap_loss_wrap: t('executionPlanEditor.round.correctRulePunctuationWrapLossWrap'),
+  width_mix_normalize: t('executionPlanEditor.round.correctRuleWidthMixNormalize'),
 }
 
 const correctRuleHintMap: Record<CorrectRuleName, string> = {
   punctuation_missing_wrap: t('executionPlanEditor.round.correctRulePunctuationMissingWrapHint'),
   punctuation_wrap_loss_wrap: t('executionPlanEditor.round.correctRulePunctuationWrapLossWrapHint'),
+  width_mix_normalize: t('executionPlanEditor.round.correctRuleWidthMixNormalizeHint'),
 }
 
 const onSemanticQASegmentScopeChange = (round: RoundModel, scope: SemanticQASegmentScope): void => {

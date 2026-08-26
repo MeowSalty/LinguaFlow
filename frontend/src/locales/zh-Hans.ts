@@ -1859,6 +1859,9 @@ const messages = {
       correctRulePunctuationWrapLossWrap: '补全丢失的外层引号包裹',
       correctRulePunctuationWrapLossWrapHint:
         '机械修复 punctuation_wrap_loss 报出的译文丢失源文外层引号包裹（单 span 安全子集）',
+      correctRuleWidthMixNormalize: '规范全半角混用',
+      correctRuleWidthMixNormalizeHint:
+        '修复 width_mix 报出的全半角混用：CJK 译文把 9 个零歧义半角标点（! ? , ; : ( ) [ ]）转全角（数字双侧的 , : 与数字前缀的 !? 豁免，保留 1,000/12:30/5! 原样）；拉丁译文把全角字符（FF01-FF5E，含全角字母数字）转回半角。',
     },
     actions: {
       addRound: '添加轮次',
