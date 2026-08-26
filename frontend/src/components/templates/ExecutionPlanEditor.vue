@@ -67,7 +67,7 @@ const DEFAULT_EXTRACT: ExtractRoundConfig = {
 const DEFAULT_ADJUDICATE: AdjudicateRoundConfig = {
   batch_size: 10,
   max_words_per_batch: 0,
-  adjudicate_codes: ['source_residual'],
+  adjudicate_codes: ['source_residual', 'punctuation_surplus'],
   retry: { ...DEFAULT_RETRY },
 }
 
@@ -363,6 +363,10 @@ const adjudicateCodeOptions = computed(() => [
   {
     label: t('executionPlanEditor.round.adjudicateCodeLengthRatio'),
     value: 'length_ratio' as AdjudicateCode,
+  },
+  {
+    label: t('executionPlanEditor.round.adjudicateCodePunctuationSurplus'),
+    value: 'punctuation_surplus' as AdjudicateCode,
   },
 ])
 

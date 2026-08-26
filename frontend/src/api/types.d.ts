@@ -2937,10 +2937,10 @@ export interface components {
             /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
             max_words_per_batch?: number;
             /**
-             * @description 可裁决的质量问题 code 子集。空或不传时默认 ["source_residual"]。
+             * @description 可裁决的质量问题 code 子集。空或不传时默认 ["source_residual", "punctuation_surplus"]。
              *     untranslated 与 duplicate 为硬规则，不可裁决。
              */
-            adjudicate_codes?: ("source_residual" | "length_ratio")[];
+            adjudicate_codes?: ("source_residual" | "length_ratio" | "punctuation_surplus")[];
             retry?: components["schemas"]["RetryConfig"];
         };
         /** @description 语义质检轮次配置。system prompt 内置不可见，无 prompt_template_id；产出 warning 级语义 issue 直接进人审。 */
