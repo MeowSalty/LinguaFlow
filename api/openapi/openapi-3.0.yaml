@@ -5338,8 +5338,9 @@ components:
             enum:
               - source_residual
               - length_ratio
+              - punctuation_surplus
           description: |
-            可裁决的质量问题 code 子集。空或不传时默认 ["source_residual"]。
+            可裁决的质量问题 code 子集。空或不传时默认 ["source_residual", "punctuation_surplus"]。
             untranslated 与 duplicate 为硬规则，不可裁决。
         retry:
           $ref: '#/components/schemas/RetryConfig'
