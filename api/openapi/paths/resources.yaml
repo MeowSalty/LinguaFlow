@@ -305,6 +305,28 @@ projectResourceSegments:
           type: string
           enum: [untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register, ruby_restore_incomplete, ruby_tag_loss]
         description: 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落
+      - name: search_field
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [source, target, both]
+          default: both
+        description: 搜索字段范围；both 时同时匹配原文与译文（默认语义）
+      - name: case_sensitive
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+        description: 搜索是否区分大小写；默认 true 保持子串精确匹配语义
+      - name: include_total
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+        description: 是否在响应中附带满足过滤条件的段落总数（total）；为 true 时额外执行一次计数查询
       - $ref: '../base.yaml#/components/parameters/Cursor'
       - $ref: '../base.yaml#/components/parameters/Limit'
     responses:

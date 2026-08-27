@@ -30,6 +30,7 @@ type SegmentService struct {
 type ResourceSegmentPage struct {
 	Items      []*ent.Segment
 	NextCursor int
+	Total      *int // 仅 IncludeTotal=true 时填充；nil 表示未请求总数
 }
 
 type ResourceSegmentListOptions struct {
@@ -37,6 +38,9 @@ type ResourceSegmentListOptions struct {
 	Limit           int
 	Status          string
 	Search          string
+	SearchField     string // ""/"both"（默认，行为不变）/"source"/"target"
+	CaseSensitive   *bool  // nil/true（默认）大小写敏感；false 用 ContainsFold
+	IncludeTotal    bool
 	GroupKey        string
 	QualityIssues   string
 	QualitySeverity string
@@ -80,7 +84,24 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		q = q.Where(segment.StatusEQ(segment.Status(opts.Status)))
 	}
 	if opts.Search != "" {
-		q = q.Where(segment.Or(segment.SourceTextContains(opts.Search), segment.TargetTextContains(opts.Search)))
+		caseSensitive := true
+		if opts.CaseSensitive != nil {
+			caseSensitive = *opts.CaseSensitive
+		}
+		sourcePred := segment.SourceTextContains(opts.Search)
+		targetPred := segment.TargetTextContains(opts.Search)
+		if !caseSensitive {
+			sourcePred = segment.SourceTextContainsFold(opts.Search)
+			targetPred = segment.TargetTextContainsFold(opts.Search)
+		}
+		switch opts.SearchField {
+		case "source":
+			q = q.Where(sourcePred)
+		case "target":
+			q = q.Where(targetPred)
+		default: // "" / "both"：保持原有 OR 语义
+			q = q.Where(segment.Or(sourcePred, targetPred))
+		}
 	}
 	if p := buildQualityPredicate(opts, s.dialect); p != nil {
 		q = q.Where(p)
@@ -127,6 +148,10 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		if end < len(filtered) {
 			page.NextCursor = page.Items[len(page.Items)-1].SegmentIndex
 		}
+		if opts.IncludeTotal {
+			total := len(filtered)
+			page.Total = &total
+		}
 		return page, nil
 	}
 
@@ -142,6 +167,42 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 	if len(rows) > opts.Limit {
 		page.NextCursor = rows[opts.Limit-1].SegmentIndex
 		page.Items = rows[:opts.Limit]
+	}
+	if opts.IncludeTotal {
+		// 总数需复用列表的搜索/状态/质量谓词，但不能复用带分页（SegmentIndexGT）的 q，
+		// 因此重新构造一份相同过滤条件的计数查询。group_key 已经在上面分支处理。
+		countQ := s.client.Segment.Query().Where(segment.ResourceIDEQ(resourceID))
+		if opts.Status != "" {
+			countQ = countQ.Where(segment.StatusEQ(segment.Status(opts.Status)))
+		}
+		if opts.Search != "" {
+			caseSensitive := true
+			if opts.CaseSensitive != nil {
+				caseSensitive = *opts.CaseSensitive
+			}
+			sourcePred := segment.SourceTextContains(opts.Search)
+			targetPred := segment.TargetTextContains(opts.Search)
+			if !caseSensitive {
+				sourcePred = segment.SourceTextContainsFold(opts.Search)
+				targetPred = segment.TargetTextContainsFold(opts.Search)
+			}
+			switch opts.SearchField {
+			case "source":
+				countQ = countQ.Where(sourcePred)
+			case "target":
+				countQ = countQ.Where(targetPred)
+			default:
+				countQ = countQ.Where(segment.Or(sourcePred, targetPred))
+			}
+		}
+		if p := buildQualityPredicate(opts, s.dialect); p != nil {
+			countQ = countQ.Where(p)
+		}
+		total, cerr := countQ.Count(ctx)
+		if cerr != nil {
+			return nil, cerr
+		}
+		page.Total = &total
 	}
 	return page, nil
 }
