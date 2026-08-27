@@ -30,6 +30,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segmentrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
@@ -76,6 +77,8 @@ type Client struct {
 	SSEEvent *SSEEventClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
+	// SegmentRevision is the client for interacting with the SegmentRevision builders.
+	SegmentRevision *SegmentRevisionClient
 	// SyncTask is the client for interacting with the SyncTask builders.
 	SyncTask *SyncTaskClient
 	// SystemSetting is the client for interacting with the SystemSetting builders.
@@ -115,6 +118,7 @@ func (c *Client) init() {
 	c.Resource = NewResourceClient(c.config)
 	c.SSEEvent = NewSSEEventClient(c.config)
 	c.Segment = NewSegmentClient(c.config)
+	c.SegmentRevision = NewSegmentRevisionClient(c.config)
 	c.SyncTask = NewSyncTaskClient(c.config)
 	c.SystemSetting = NewSystemSettingClient(c.config)
 	c.TMEntry = NewTMEntryClient(c.config)
@@ -229,6 +233,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Resource:                  NewResourceClient(cfg),
 		SSEEvent:                  NewSSEEventClient(cfg),
 		Segment:                   NewSegmentClient(cfg),
+		SegmentRevision:           NewSegmentRevisionClient(cfg),
 		SyncTask:                  NewSyncTaskClient(cfg),
 		SystemSetting:             NewSystemSettingClient(cfg),
 		TMEntry:                   NewTMEntryClient(cfg),
@@ -270,6 +275,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Resource:                  NewResourceClient(cfg),
 		SSEEvent:                  NewSSEEventClient(cfg),
 		Segment:                   NewSegmentClient(cfg),
+		SegmentRevision:           NewSegmentRevisionClient(cfg),
 		SyncTask:                  NewSyncTaskClient(cfg),
 		SystemSetting:             NewSystemSettingClient(cfg),
 		TMEntry:                   NewTMEntryClient(cfg),
@@ -308,8 +314,8 @@ func (c *Client) Use(hooks ...Hook) {
 		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
 		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.OrgMembership,
 		c.Organization, c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource,
-		c.SSEEvent, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.SSEEvent, c.Segment, c.SegmentRevision, c.SyncTask, c.SystemSetting,
+		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -322,8 +328,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
 		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.OrgMembership,
 		c.Organization, c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource,
-		c.SSEEvent, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.SSEEvent, c.Segment, c.SegmentRevision, c.SyncTask, c.SystemSetting,
+		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -364,6 +370,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.SSEEvent.mutate(ctx, m)
 	case *SegmentMutation:
 		return c.Segment.mutate(ctx, m)
+	case *SegmentRevisionMutation:
+		return c.SegmentRevision.mutate(ctx, m)
 	case *SyncTaskMutation:
 		return c.SyncTask.mutate(ctx, m)
 	case *SystemSettingMutation:
@@ -3293,6 +3301,155 @@ func (c *SegmentClient) mutate(ctx context.Context, m *SegmentMutation) (Value, 
 	}
 }
 
+// SegmentRevisionClient is a client for the SegmentRevision schema.
+type SegmentRevisionClient struct {
+	config
+}
+
+// NewSegmentRevisionClient returns a client for the SegmentRevision from the given config.
+func NewSegmentRevisionClient(c config) *SegmentRevisionClient {
+	return &SegmentRevisionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `segmentrevision.Hooks(f(g(h())))`.
+func (c *SegmentRevisionClient) Use(hooks ...Hook) {
+	c.hooks.SegmentRevision = append(c.hooks.SegmentRevision, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `segmentrevision.Intercept(f(g(h())))`.
+func (c *SegmentRevisionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SegmentRevision = append(c.inters.SegmentRevision, interceptors...)
+}
+
+// Create returns a builder for creating a SegmentRevision entity.
+func (c *SegmentRevisionClient) Create() *SegmentRevisionCreate {
+	mutation := newSegmentRevisionMutation(c.config, OpCreate)
+	return &SegmentRevisionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SegmentRevision entities.
+func (c *SegmentRevisionClient) CreateBulk(builders ...*SegmentRevisionCreate) *SegmentRevisionCreateBulk {
+	return &SegmentRevisionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SegmentRevisionClient) MapCreateBulk(slice any, setFunc func(*SegmentRevisionCreate, int)) *SegmentRevisionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SegmentRevisionCreateBulk{err: fmt.Errorf("calling to SegmentRevisionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SegmentRevisionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SegmentRevisionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SegmentRevision.
+func (c *SegmentRevisionClient) Update() *SegmentRevisionUpdate {
+	mutation := newSegmentRevisionMutation(c.config, OpUpdate)
+	return &SegmentRevisionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SegmentRevisionClient) UpdateOne(_m *SegmentRevision) *SegmentRevisionUpdateOne {
+	mutation := newSegmentRevisionMutation(c.config, OpUpdateOne, withSegmentRevision(_m))
+	return &SegmentRevisionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SegmentRevisionClient) UpdateOneID(id int) *SegmentRevisionUpdateOne {
+	mutation := newSegmentRevisionMutation(c.config, OpUpdateOne, withSegmentRevisionID(id))
+	return &SegmentRevisionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SegmentRevision.
+func (c *SegmentRevisionClient) Delete() *SegmentRevisionDelete {
+	mutation := newSegmentRevisionMutation(c.config, OpDelete)
+	return &SegmentRevisionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SegmentRevisionClient) DeleteOne(_m *SegmentRevision) *SegmentRevisionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SegmentRevisionClient) DeleteOneID(id int) *SegmentRevisionDeleteOne {
+	builder := c.Delete().Where(segmentrevision.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SegmentRevisionDeleteOne{builder}
+}
+
+// Query returns a query builder for SegmentRevision.
+func (c *SegmentRevisionClient) Query() *SegmentRevisionQuery {
+	return &SegmentRevisionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSegmentRevision},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SegmentRevision entity by its id.
+func (c *SegmentRevisionClient) Get(ctx context.Context, id int) (*SegmentRevision, error) {
+	return c.Query().Where(segmentrevision.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SegmentRevisionClient) GetX(ctx context.Context, id int) *SegmentRevision {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QuerySegment queries the segment edge of a SegmentRevision.
+func (c *SegmentRevisionClient) QuerySegment(_m *SegmentRevision) *SegmentQuery {
+	query := (&SegmentClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(segmentrevision.Table, segmentrevision.FieldID, id),
+			sqlgraph.To(segment.Table, segment.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, segmentrevision.SegmentTable, segmentrevision.SegmentColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *SegmentRevisionClient) Hooks() []Hook {
+	return c.hooks.SegmentRevision
+}
+
+// Interceptors returns the client interceptors.
+func (c *SegmentRevisionClient) Interceptors() []Interceptor {
+	return c.inters.SegmentRevision
+}
+
+func (c *SegmentRevisionClient) mutate(ctx context.Context, m *SegmentRevisionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SegmentRevisionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SegmentRevisionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SegmentRevisionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SegmentRevisionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SegmentRevision mutation op: %q", m.Op())
+	}
+}
+
 // SyncTaskClient is a client for the SyncTask schema.
 type SyncTaskClient struct {
 	config
@@ -4465,14 +4622,14 @@ type (
 		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
 		ExecutionProfile, GlossaryEntry, Job, JobResource, OrgMembership, Organization,
 		Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
-		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
-		User []ent.Hook
+		SegmentRevision, SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate,
+		UsageRecord, User []ent.Hook
 	}
 	inters struct {
 		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
 		ExecutionProfile, GlossaryEntry, Job, JobResource, OrgMembership, Organization,
 		Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
-		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
-		User []ent.Interceptor
+		SegmentRevision, SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate,
+		UsageRecord, User []ent.Interceptor
 	}
 )

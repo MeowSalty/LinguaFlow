@@ -576,6 +576,55 @@ var (
 			},
 		},
 	}
+	// SegmentRevisionsColumns holds the columns for the "segment_revisions" table.
+	SegmentRevisionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "resource_id", Type: field.TypeInt},
+		{Name: "operation_id", Type: field.TypeString},
+		{Name: "kind", Type: field.TypeEnum, Enums: []string{"replace", "reverse"}},
+		{Name: "before_target", Type: field.TypeString, Nullable: true},
+		{Name: "after_target", Type: field.TypeString, Nullable: true},
+		{Name: "before_status", Type: field.TypeEnum, Enums: []string{"pending", "translated", "edited", "approved", "rejected"}},
+		{Name: "after_status", Type: field.TypeEnum, Enums: []string{"pending", "translated", "edited", "approved", "rejected"}},
+		{Name: "before_reviewer_id", Type: field.TypeInt, Nullable: true},
+		{Name: "after_reviewer_id", Type: field.TypeInt, Nullable: true},
+		{Name: "before_issues", Type: field.TypeJSON, Nullable: true},
+		{Name: "after_issues", Type: field.TypeJSON, Nullable: true},
+		{Name: "actor_id", Type: field.TypeInt},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "segment_id", Type: field.TypeInt},
+	}
+	// SegmentRevisionsTable holds the schema information for the "segment_revisions" table.
+	SegmentRevisionsTable = &schema.Table{
+		Name:       "segment_revisions",
+		Columns:    SegmentRevisionsColumns,
+		PrimaryKey: []*schema.Column{SegmentRevisionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "segment_revisions_segments_segment",
+				Columns:    []*schema.Column{SegmentRevisionsColumns[14]},
+				RefColumns: []*schema.Column{SegmentsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "segmentrevision_segment_id",
+				Unique:  false,
+				Columns: []*schema.Column{SegmentRevisionsColumns[14]},
+			},
+			{
+				Name:    "segmentrevision_operation_id",
+				Unique:  false,
+				Columns: []*schema.Column{SegmentRevisionsColumns[2]},
+			},
+			{
+				Name:    "segmentrevision_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SegmentRevisionsColumns[13]},
+			},
+		},
+	}
 	// SyncTasksColumns holds the columns for the "sync_tasks" table.
 	SyncTasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -792,6 +841,7 @@ var (
 		ResourcesTable,
 		SseEventsTable,
 		SegmentsTable,
+		SegmentRevisionsTable,
 		SyncTasksTable,
 		SystemSettingsTable,
 		TmEntriesTable,
@@ -829,6 +879,7 @@ func init() {
 	SseEventsTable.ForeignKeys[0].RefTable = JobsTable
 	SegmentsTable.ForeignKeys[0].RefTable = ResourcesTable
 	SegmentsTable.ForeignKeys[1].RefTable = UsersTable
+	SegmentRevisionsTable.ForeignKeys[0].RefTable = SegmentsTable
 	SyncTasksTable.ForeignKeys[0].RefTable = GlossaryEntriesTable
 	SyncTasksTable.ForeignKeys[1].RefTable = ProjectsTable
 	SyncTasksTable.ForeignKeys[2].RefTable = UsersTable

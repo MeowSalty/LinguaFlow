@@ -44,6 +44,8 @@ type Tx struct {
 	SSEEvent *SSEEventClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
+	// SegmentRevision is the client for interacting with the SegmentRevision builders.
+	SegmentRevision *SegmentRevisionClient
 	// SyncTask is the client for interacting with the SyncTask builders.
 	SyncTask *SyncTaskClient
 	// SystemSetting is the client for interacting with the SystemSetting builders.
@@ -203,6 +205,7 @@ func (tx *Tx) init() {
 	tx.Resource = NewResourceClient(tx.config)
 	tx.SSEEvent = NewSSEEventClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
+	tx.SegmentRevision = NewSegmentRevisionClient(tx.config)
 	tx.SyncTask = NewSyncTaskClient(tx.config)
 	tx.SystemSetting = NewSystemSettingClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
