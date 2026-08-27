@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
@@ -19,10 +20,11 @@ import (
 )
 
 type SegmentService struct {
-	client   *ent.Client
-	projects *ProjectService
-	dialect  string
-	logger   *slog.Logger
+	client            *ent.Client
+	projects          *ProjectService
+	dialect           string
+	revisionRetention time.Duration
+	logger            *slog.Logger
 }
 
 type ResourceSegmentPage struct {
@@ -47,11 +49,22 @@ type ResourceSegmentUpdateInput struct {
 	Comment    *string
 }
 
-func NewSegmentService(client *ent.Client, projects *ProjectService, dialectName string, logger *slog.Logger) *SegmentService {
+type qaBatchInput struct {
+	Index      int
+	SourceText string
+	TargetText string
+	OldTarget  string
+	Meta       *string
+}
+
+func NewSegmentService(client *ent.Client, projects *ProjectService, dialectName string, revisionRetention time.Duration, logger *slog.Logger) *SegmentService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &SegmentService{client: client, projects: projects, dialect: dialectName, logger: logger}
+	if revisionRetention <= 0 {
+		revisionRetention = 90 * 24 * time.Hour
+	}
+	return &SegmentService{client: client, projects: projects, dialect: dialectName, revisionRetention: revisionRetention, logger: logger}
 }
 
 func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, projectID, resourceID int, opts ResourceSegmentListOptions) (*ResourceSegmentPage, error) {
@@ -281,15 +294,23 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 	//   - 仅 comment 变更：不触碰 quality_issues，保持现状。
 	switch {
 	case targetChanged:
-		issues := s.runManualEditQA(ctx, projectID, res, current.SegmentIndex, newSource, newTarget, current.Meta)
-		// 注音守恒软守卫：编辑前译文带注音而编辑后全丢时补一条 warning，
-		// 经 Reconcile 继承既有裁决（用户 dismiss 过则不再骚扰）。
-		if current.TargetText != nil {
-			issues = append(issues, qa.RubyTagLossIssues(current.SegmentIndex, *current.TargetText, newTarget)...)
+		project, perr := s.client.Project.Get(ctx, projectID)
+		var freshIssuesByIndex map[int][]qa.QualityIssue
+		if perr != nil {
+			s.logger.Warn("manual edit QA: load project failed", "projectID", projectID, "error", perr)
+		} else {
+			freshIssuesByIndex, _ = s.runManualEditQABatch(ctx, project, res, []qaBatchInput{{
+				Index:      current.SegmentIndex,
+				SourceText: newSource,
+				TargetText: newTarget,
+				OldTarget:  oldTargetText(current),
+				Meta:       current.Meta,
+			}})
 		}
+		issues := freshIssuesByIndex[current.SegmentIndex]
 		// 对账：手动编辑改了译文，重跑零配置确定性 QA。同指纹 issue 的裁决
 		// （dismissed 等）应继承，避免用户标了"不是问题"的模式在下次编辑后被冲掉。
-		// 注意：runManualEditQA 只跑 ZeroConfigDeterministicChecks 白名单，不跑
+		// 注意：runManualEditQABatch 只跑 ZeroConfigDeterministicChecks 白名单，不跑
 		// length_ratio/术语表/文档级检查，所以旧的非白名单 issues 会被自然清除
 		// （这些 checker 未运行，指纹消失）。这是预期行为。
 		issues = qa.ReconcileIssues(issues, current.QualityIssues)
@@ -312,23 +333,20 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)
 }
 
-// runManualEditQA 对手动编辑的单段译文运行零配置确定性 QA 检查。
+// runManualEditQABatch 对手动编辑的译文批量运行零配置确定性 QA 检查。
 //
-// 适用于 UpdateResourceSegment 等"无执行计划 QA 配置可用"的即时场景：
-//   - 仅跑 ZeroConfigDeterministicChecks 白名单，避免 length_ratio 用默认阈值
-//     与正式翻译流程判定矛盾；
-//   - 不加载术语表（forbidden_term/term_inconsistency 在白名单外）；
-//   - 不跑文档级检查（duplicate_source_divergence 需多段输入）；
-//   - Protected 区不持久化无法重建，依赖它的 checker 退化为基础扫描。
+// 仅跑 ZeroConfigDeterministicChecks 白名单，避免 length_ratio 用默认阈值与正式
+// 翻译流程判定矛盾；不加载术语表，也不跑文档级检查。Protected 区不持久化无法
+// 重建，依赖它的 checker 退化为基础扫描。
 //
-// 任何错误记录日志并返回 nil，绝不阻塞编辑操作——手动编辑是用户主动行为，
-// QA 失败不应阻止用户保存译文。
-func (s *SegmentService) runManualEditQA(ctx context.Context, projectID int, res *ent.Resource, segmentIndex int, source, target string, meta *string) []qa.QualityIssue {
-	project, err := s.client.Project.Get(ctx, projectID)
-	if err != nil {
-		s.logger.Warn("manual edit QA: load project failed", "projectID", projectID, "error", err)
-		return nil
-	}
+// ZeroConfigDeterministicChecks 白名单排除了 duplicate_source_divergence（文档级、
+// 需多段输入）等跨段检查，因此 engine.Run 对 N 个 CheckInput 等价于 N 次单段调用，
+// 批量不会改变任何单段的 QA 结果。这是批量复用安全性的依据。
+//
+// 调用方负责在合适的连接上预查 project（单段编辑走 s.client；事务内批量替换走 tx），
+// 避免 MaxOpenConns(1) 下事务占用唯一连接后再用 s.client 查询造成的死锁。
+// QA 规则执行本身不阻塞编辑：按现有手动编辑约定记录日志并返回 nil issues。
+func (s *SegmentService) runManualEditQABatch(ctx context.Context, project *ent.Project, res *ent.Resource, inputs []qaBatchInput) (map[int][]qa.QualityIssue, error) {
 	cfg := qa.DefaultConfig()
 	cfg.Enabled = true
 	cfg.SourceLang = project.SourceLang
@@ -337,19 +355,46 @@ func (s *SegmentService) runManualEditQA(ctx context.Context, projectID int, res
 	cfg.Checks = qa.ZeroConfigDeterministicChecks()
 	engine := qa.NewEngine(cfg, s.logger)
 
-	var metaMap map[string]any
-	if meta != nil {
-		if err := json.Unmarshal([]byte(*meta), &metaMap); err != nil {
-			s.logger.Warn("manual edit QA: parse meta failed", "segmentIndex", segmentIndex, "error", err)
+	checkInputs := make([]qa.CheckInput, 0, len(inputs))
+	for _, input := range inputs {
+		var metaMap map[string]any
+		if input.Meta != nil {
+			if err := json.Unmarshal([]byte(*input.Meta), &metaMap); err != nil {
+				s.logger.Warn("manual edit QA: parse meta failed", "segmentIndex", input.Index, "error", err)
+			}
 		}
+		checkInputs = append(checkInputs, qa.CheckInput{
+			Index:      input.Index,
+			SourceText: input.SourceText,
+			TargetText: input.TargetText,
+			Meta:       metaMap,
+		})
 	}
-	inputs := []qa.CheckInput{{
-		Index:      segmentIndex,
-		SourceText: source,
-		TargetText: target,
-		Meta:       metaMap,
-	}}
-	return qa.DedupIssues(engine.Run(ctx, inputs))
+
+	issuesByIndex := make(map[int][]qa.QualityIssue)
+	for _, issue := range engine.Run(ctx, checkInputs) {
+		issuesByIndex[issue.SegmentIndex] = append(issuesByIndex[issue.SegmentIndex], issue)
+	}
+	// DedupIssues 的指纹是 (code, matched_text)，不含段索引；必须先按段分组再
+	// 各自去重，否则不同段的同指纹 issue（如相同的双空格触发 repeated_space）
+	// 会被整批去重吞掉，违背上方"批量等价于 N 次单段调用"的约定。
+	for idx, issues := range issuesByIndex {
+		issuesByIndex[idx] = qa.DedupIssues(issues)
+	}
+	for _, input := range inputs {
+		if input.OldTarget == "" {
+			continue
+		}
+		issuesByIndex[input.Index] = append(issuesByIndex[input.Index], qa.RubyTagLossIssues(input.Index, input.OldTarget, input.TargetText)...)
+	}
+	return issuesByIndex, nil
+}
+
+func oldTargetText(seg *ent.Segment) string {
+	if seg.TargetText == nil {
+		return ""
+	}
+	return *seg.TargetText
 }
 
 func (s *SegmentService) requireResourceAccess(ctx context.Context, actorUserID, projectID, resourceID int, write bool) (*ent.Resource, error) {

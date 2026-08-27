@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
@@ -179,7 +180,7 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 		{SegmentIndex: 8, Severity: qa.SeverityWarning, Code: "naturalness", Message: "awkward"},
 	})
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 
 	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
 		t.Helper()
@@ -271,7 +272,7 @@ func TestListResourceSegmentsQualityFilterNewSemanticCodes(t *testing.T) {
 		})
 	}
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 
 	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
 		t.Helper()
@@ -321,7 +322,7 @@ func TestListResourceSegmentsQualityFilterDeterministicCodes(t *testing.T) {
 		})
 	}
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 
 	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
 		t.Helper()
@@ -371,7 +372,7 @@ func TestListResourceSegmentsQualityFilterWithGroupKey(t *testing.T) {
 		{SegmentIndex: 2, Severity: qa.SeverityWarning, Code: "duplicate", Message: "y"},
 	})
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 	page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, ResourceSegmentListOptions{
 		GroupKey:      "ch1.xhtml",
 		QualityIssues: "has",
@@ -446,7 +447,7 @@ func TestUpdateResourceSegmentRegression(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create segment: %v", err)
 		}
-		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 		return svc, ctx, user, project, res, seg
 	}
 
@@ -570,7 +571,7 @@ func TestUpdateResourceSegmentRerunsQA(t *testing.T) {
 	res := createTestResource(t, client, project.ID, "chapters/qa.txt")
 	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "3 cats", "3只猫", nil)
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 		TargetText: strPtr("三只猫"),
 	})
@@ -598,7 +599,7 @@ func TestUpdateResourceSegmentRubyTagLossGuard(t *testing.T) {
 
 	t.Run("all_ruby_lost_warns", func(t *testing.T) {
 		seg := createTestSegmentWithTarget(t, client, res.ID, 0, "漢字", rubyTarget, nil)
-		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 			TargetText: strPtr("汉字"),
 		})
@@ -625,7 +626,7 @@ func TestUpdateResourceSegmentRubyTagLossGuard(t *testing.T) {
 
 	t.Run("ruby_kept_no_warning", func(t *testing.T) {
 		seg := createTestSegmentWithTarget(t, client, res.ID, 1, "漢字", rubyTarget, nil)
-		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 			TargetText: strPtr(`<ruby>漢<rt>かん</rt></ruby>文字`),
 		})
@@ -645,7 +646,7 @@ func TestUpdateResourceSegmentRubyTagLossGuard(t *testing.T) {
 			Message:      "译文注音全部丢失：编辑前 1 条",
 			Disposition:  qa.DispositionDismissed,
 		}})
-		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 			TargetText: strPtr("汉字"),
 		})
@@ -676,7 +677,7 @@ func TestUpdateResourceSegmentQAReplacesOldIssues(t *testing.T) {
 		Message:      "旧 issue（应被新 QA 结果覆盖）",
 	}})
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 		TargetText: strPtr("3只猫"),
 	})
@@ -704,7 +705,7 @@ func TestUpdateResourceSegmentSourceOnlyClearsIssues(t *testing.T) {
 		Message:      "旧 issue",
 	}})
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 		SourceText: strPtr("4 dogs"),
 	})
@@ -734,7 +735,7 @@ func TestUpdateResourceSegmentCommentOnlyKeepsIssues(t *testing.T) {
 		Message:      "应保留",
 	}})
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 		Comment: strPtr("备注"),
 	})
@@ -757,7 +758,7 @@ func TestUpdateResourceSegmentSourceAndTargetUsesNewSource(t *testing.T) {
 	res := createTestResource(t, client, project.ID, "chapters/st.txt")
 	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "3 cats", "3只猫", nil)
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 		SourceText: strPtr("4 dogs"),
 		TargetText: strPtr("三只狗"),
@@ -782,7 +783,7 @@ func TestUpdateResourceSegmentExcludesLengthRatio(t *testing.T) {
 	res := createTestResource(t, client, project.ID, "chapters/lr.txt")
 	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "a", "啊", nil)
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 		TargetText: strPtr("啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊"),
 	})
@@ -808,7 +809,7 @@ func TestUpdateResourceSegmentTaggedTargetNoWidthMix(t *testing.T) {
 	// 初始 source/target 均不含标签
 	seg := createTestSegmentWithTarget(t, client, res.ID, 0, "雷神皇", "雷神皇", nil)
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 		TargetText: strPtr(`<a href="x">連</a>`),
 	})
@@ -856,7 +857,7 @@ func TestListResourceSegmentsQualityFilterDismissed(t *testing.T) {
 		{SegmentIndex: 5, Severity: qa.SeverityWarning, Code: "calque", Message: "calque"},
 	})
 
-	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
 
 	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
 		t.Helper()

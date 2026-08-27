@@ -227,25 +227,26 @@ func DefaultSSEConfig() SSEConfig {
 }
 
 type ServerConfig struct {
-	Host            string               `yaml:"host"`
-	Port            int                  `yaml:"port"`
-	Mode            string               `yaml:"mode"` // "server" (default) | "local"
-	ServiceName     string               `yaml:"service_name"`
-	DataDir         string               `yaml:"data_dir"`
-	AutoMigrate     bool                 `yaml:"auto_migrate"`
-	JWTSecret       string               `yaml:"jwt_secret"`
-	JWTIssuer       string               `yaml:"jwt_issuer"`
-	JWTExpiry       time.Duration        `yaml:"jwt_expiry"`
-	RefreshExpiry   time.Duration        `yaml:"refresh_token_expiry"`
-	ShutdownTimeout time.Duration        `yaml:"shutdown_timeout"`
-	Database        DatabaseConfig       `yaml:"database"`
-	Workers         WorkerConfig         `yaml:"workers"`
-	Preview         PreviewConfig        `yaml:"preview"`
-	QuickTranslate  QuickTranslateConfig `yaml:"quick_translate"`
-	SSE             SSEConfig            `yaml:"sse"`
-	CORS            CORSConfig           `yaml:"cors"`
-	Registration    RegistrationConfig   `yaml:"registration"`
-	ServeUI         bool                 `yaml:"serve_ui"`
+	Host              string               `yaml:"host"`
+	Port              int                  `yaml:"port"`
+	Mode              string               `yaml:"mode"` // "server" (default) | "local"
+	ServiceName       string               `yaml:"service_name"`
+	DataDir           string               `yaml:"data_dir"`
+	AutoMigrate       bool                 `yaml:"auto_migrate"`
+	JWTSecret         string               `yaml:"jwt_secret"`
+	JWTIssuer         string               `yaml:"jwt_issuer"`
+	JWTExpiry         time.Duration        `yaml:"jwt_expiry"`
+	RefreshExpiry     time.Duration        `yaml:"refresh_token_expiry"`
+	ShutdownTimeout   time.Duration        `yaml:"shutdown_timeout"`
+	RevisionRetention time.Duration        `yaml:"revision_retention"`
+	Database          DatabaseConfig       `yaml:"database"`
+	Workers           WorkerConfig         `yaml:"workers"`
+	Preview           PreviewConfig        `yaml:"preview"`
+	QuickTranslate    QuickTranslateConfig `yaml:"quick_translate"`
+	SSE               SSEConfig            `yaml:"sse"`
+	CORS              CORSConfig           `yaml:"cors"`
+	Registration      RegistrationConfig   `yaml:"registration"`
+	ServeUI           bool                 `yaml:"serve_ui"`
 }
 
 // RegistrationConfig 定义用户注册的初始默认值。
@@ -335,21 +336,22 @@ func sqliteDSNWithForeignKeys(dsn string) string {
 // DefaultServerConfig 返回内置默认服务器配置。loader 在解析 yaml 前以此为基底合并。
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		Host:            "0.0.0.0",
-		Port:            8080,
-		ServiceName:     "linguaflow",
-		DataDir:         "./data",
-		AutoMigrate:     true,
-		JWTSecret:       "dev-insecure-secret-change-me",
-		JWTIssuer:       "linguaflow",
-		JWTExpiry:       15 * time.Minute,
-		RefreshExpiry:   30 * 24 * time.Hour,
-		ShutdownTimeout: 10 * time.Second,
-		Database:        defaultDatabaseConfig(DatabaseDriverSQLite),
-		Workers:         DefaultWorkerConfig(),
-		Preview:         DefaultPreviewConfig(),
-		QuickTranslate:  DefaultQuickTranslateConfig(),
-		SSE:             DefaultSSEConfig(),
+		Host:              "0.0.0.0",
+		Port:              8080,
+		ServiceName:       "linguaflow",
+		DataDir:           "./data",
+		AutoMigrate:       true,
+		JWTSecret:         "dev-insecure-secret-change-me",
+		JWTIssuer:         "linguaflow",
+		JWTExpiry:         15 * time.Minute,
+		RefreshExpiry:     30 * 24 * time.Hour,
+		ShutdownTimeout:   10 * time.Second,
+		RevisionRetention: 90 * 24 * time.Hour,
+		Database:          defaultDatabaseConfig(DatabaseDriverSQLite),
+		Workers:           DefaultWorkerConfig(),
+		Preview:           DefaultPreviewConfig(),
+		QuickTranslate:    DefaultQuickTranslateConfig(),
+		SSE:               DefaultSSEConfig(),
 		CORS: CORSConfig{
 			AllowedOrigins: []string{"*"},
 		},
@@ -394,6 +396,9 @@ func ValidateServerConfig(c *ServerConfig) error {
 	}
 	if c.ShutdownTimeout <= 0 {
 		c.ShutdownTimeout = 10 * time.Second
+	}
+	if c.RevisionRetention <= 0 {
+		c.RevisionRetention = 90 * 24 * time.Hour
 	}
 	switch c.Database.Driver {
 	case DatabaseDriverSQLite:
@@ -469,6 +474,9 @@ func ValidateServerConfig(c *ServerConfig) error {
 	}
 	if c.SSE.MaxReplayEvents <= 0 {
 		c.SSE.MaxReplayEvents = c.SSE.RingBufferCapacity * 2
+	}
+	if c.RevisionRetention <= 0 {
+		c.RevisionRetention = 90 * 24 * time.Hour
 	}
 	return nil
 }
