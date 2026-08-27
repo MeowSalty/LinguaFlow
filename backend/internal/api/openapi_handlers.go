@@ -302,6 +302,18 @@ func (s *Server) ListResourceSegmentGroups(w http.ResponseWriter, r *http.Reques
 	s.requireAuth(http.HandlerFunc(s.handleListResourceSegmentGroups)).ServeHTTP(w, r)
 }
 
+func (s *Server) PreviewResourceSegmentsSearchReplace(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handlePreviewResourceSegmentsSearchReplace)).ServeHTTP(w, r)
+}
+
+func (s *Server) ApplyResourceSegmentsSearchReplace(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleApplyResourceSegmentsSearchReplace)).ServeHTTP(w, r)
+}
+
+func (s *Server) UndoResourceSegmentsSearchReplace(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId, _ string) {
+	s.requireAuth(http.HandlerFunc(s.handleUndoResourceSegmentsSearchReplace)).ServeHTTP(w, r)
+}
+
 // ---- 提示词模板适配器 ----
 
 func (s *Server) ListPromptTemplates(w http.ResponseWriter, r *http.Request) {
