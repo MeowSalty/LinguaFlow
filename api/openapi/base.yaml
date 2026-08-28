@@ -79,6 +79,12 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceRetranslateRejected'
   /projects/{projectId}/resources/{resourceId}/segments/groups:
     $ref: './paths/resources.yaml#/projectResourceSegmentGroups'
+  /projects/{projectId}/resources/{resourceId}/segments/search-replace/preview:
+    $ref: './paths/resources.yaml#/projectResourceSegmentsSearchReplacePreview'
+  /projects/{projectId}/resources/{resourceId}/segments/search-replace/apply:
+    $ref: './paths/resources.yaml#/projectResourceSegmentsSearchReplaceApply'
+  /projects/{projectId}/resources/{resourceId}/segments/search-replace/{operationId}/undo:
+    $ref: './paths/resources.yaml#/projectResourceSegmentsSearchReplaceUndo'
   /projects/{projectId}/glossary:
     $ref: './paths/glossary.yaml#/projectGlossary'
   /projects/{projectId}/glossary/{entryId}:
@@ -282,6 +288,16 @@ components:
       $ref: './components/schemas/resource.yaml#/SegmentRevisionPreviewResponse'
     IssueDispositionRequest:
       $ref: './components/schemas/resource.yaml#/IssueDispositionRequest'
+    SearchReplacePreviewRequest:
+      $ref: './components/schemas/resource.yaml#/SearchReplacePreviewRequest'
+    SearchReplacePreviewResponse:
+      $ref: './components/schemas/resource.yaml#/SearchReplacePreviewResponse'
+    SearchReplaceApplyRequest:
+      $ref: './components/schemas/resource.yaml#/SearchReplaceApplyRequest'
+    SearchReplaceApplyResponse:
+      $ref: './components/schemas/resource.yaml#/SearchReplaceApplyResponse'
+    SearchReplaceUndoResponse:
+      $ref: './components/schemas/resource.yaml#/SearchReplaceUndoResponse'
     CreateJobRequest:
       $ref: './components/schemas/job.yaml#/CreateJobRequest'
     JobResource:

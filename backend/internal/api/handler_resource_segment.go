@@ -39,6 +39,9 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 		Limit:           pageReq.Limit,
 		Status:          strings.TrimSpace(r.URL.Query().Get("status")),
 		Search:          strings.TrimSpace(r.URL.Query().Get("search")),
+		SearchField:     strings.TrimSpace(r.URL.Query().Get("search_field")),
+		CaseSensitive:   parseBoolQuery(r, "case_sensitive"),
+		IncludeTotal:    r.URL.Query().Get("include_total") == "true",
 		GroupKey:        strings.TrimSpace(r.URL.Query().Get("group_key")),
 		QualityIssues:   strings.TrimSpace(r.URL.Query().Get("quality_issues")),
 		QualitySeverity: strings.TrimSpace(r.URL.Query().Get("quality_severity")),
@@ -53,7 +56,7 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 	for _, row := range page.Items {
 		items = append(items, toSegmentResponse(row))
 	}
-	writeJSON(w, http.StatusOK, segmentListResponse{Items: items, NextCursor: formatCursor(page.NextCursor)})
+	writeJSON(w, http.StatusOK, segmentListResponse{Items: items, NextCursor: formatCursor(page.NextCursor), Total: page.Total})
 }
 
 func (s *Server) handleUpdateResourceSegment(w http.ResponseWriter, r *http.Request) {

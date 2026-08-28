@@ -109,6 +109,9 @@ ResourceSegmentListResponse:
         $ref: '../schemas/job.yaml#/Segment'
     next_cursor:
       type: string
+    total:
+      type: integer
+      description: 满足过滤条件的段落总数；仅当请求 include_total=true 时返回
 
 ResourceSegmentUpdateRequest:
   type: object
@@ -569,3 +572,167 @@ IssueDispositionRequest:
     note:
       type: string
       description: 裁决说明（可选）
+
+SearchReplacePreviewItem:
+  type: object
+  required: [segment_id, segment_index, source_text, before, after, match_count]
+  properties:
+    segment_id:
+      type: integer
+    segment_index:
+      type: integer
+    source_text:
+      type: string
+    before:
+      type: string
+      description: 替换前译文
+    after:
+      type: string
+      description: 替换后译文；replace_with 为空串时为删除结果
+    match_count:
+      type: integer
+      description: 该段落内命中次数
+
+SearchReplaceSkippedItem:
+  type: object
+  required: [segment_id, reason]
+  properties:
+    segment_id:
+      type: integer
+    reason:
+      type: string
+      enum: [no_longer_matches, empty_result, target_diverged]
+      description: 跳过原因；no_longer_matches=apply 时当前译文已不含匹配，empty_result=替换后译文为空，target_diverged=undo 时该段已被后续编辑
+
+SearchReplacePreviewRequest:
+  type: object
+  required: [find, replace_with]
+  properties:
+    find:
+      type: string
+      description: 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法
+    replace_with:
+      type: string
+      description: 替换文本；允许空串表示删除
+    match_mode:
+      type: string
+      enum: [substring, regex]
+      default: substring
+    case_sensitive:
+      type: boolean
+      default: true
+    whole_word:
+      type: boolean
+      default: false
+    max_results:
+      type: integer
+      minimum: 1
+      maximum: 100
+      default: 20
+      description: 返回样本上限
+    status:
+      type: string
+      enum: [pending, translated, edited, approved, rejected]
+    quality_issues:
+      type: string
+      enum: [has, none]
+    quality_severity:
+      type: string
+      enum: [warning, error]
+    quality_code:
+      type: string
+    group_key:
+      type: string
+    segment_ids:
+      type: array
+      items:
+        type: integer
+      minItems: 1
+  additionalProperties: false
+
+SearchReplacePreviewResponse:
+  type: object
+  required: [matched_segment_count, total_replacements, items]
+  properties:
+    matched_segment_count:
+      type: integer
+      description: 含至少一次命中的段落数（受影响段落面）
+    total_replacements:
+      type: integer
+      description: 所有段落命中次数总和
+    items:
+      type: array
+      items:
+        $ref: '#/SearchReplacePreviewItem'
+
+SearchReplaceApplyRequest:
+  type: object
+  required: [find, replace_with]
+  properties:
+    find:
+      type: string
+      description: 查找文本；须与预览一致才能命中相同段落
+    replace_with:
+      type: string
+      description: 替换文本；允许空串表示删除
+    match_mode:
+      type: string
+      enum: [substring, regex]
+      default: substring
+    case_sensitive:
+      type: boolean
+      default: true
+    whole_word:
+      type: boolean
+      default: false
+    segment_ids:
+      type: array
+      items:
+        type: integer
+      minItems: 1
+      description: 可选，仅应用这些段落；省略=对该资源所有当前命中段落应用
+  additionalProperties: false
+
+SearchReplaceApplyResponse:
+  type: object
+  required: [operation_id, applied_count, skipped_count, items]
+  properties:
+    operation_id:
+      type: string
+      description: 本次替换的唯一标识，用于撤销
+    applied_count:
+      type: integer
+    skipped_count:
+      type: integer
+    items:
+      type: array
+      items:
+        $ref: '../schemas/job.yaml#/Segment'
+      description: 应用成功的段落
+    skipped:
+      type: array
+      items:
+        $ref: '#/SearchReplaceSkippedItem'
+      description: 跳过的段落及原因
+
+SearchReplaceUndoResponse:
+  type: object
+  required: [undo_operation_id, undone_count, skipped_count, items]
+  properties:
+    undo_operation_id:
+      type: string
+      description: 本次撤销写入的新历史标识，可再撤销（=重做）
+    undone_count:
+      type: integer
+    skipped_count:
+      type: integer
+    items:
+      type: array
+      items:
+        $ref: '../schemas/job.yaml#/Segment'
+      description: 撤销成功回滚的段落
+    skipped:
+      type: array
+      items:
+        $ref: '#/SearchReplaceSkippedItem'
+      description: 跳过的段落及原因

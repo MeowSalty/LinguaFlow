@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
@@ -19,15 +20,17 @@ import (
 )
 
 type SegmentService struct {
-	client   *ent.Client
-	projects *ProjectService
-	dialect  string
-	logger   *slog.Logger
+	client            *ent.Client
+	projects          *ProjectService
+	dialect           string
+	revisionRetention time.Duration
+	logger            *slog.Logger
 }
 
 type ResourceSegmentPage struct {
 	Items      []*ent.Segment
 	NextCursor int
+	Total      *int // 仅 IncludeTotal=true 时填充；nil 表示未请求总数
 }
 
 type ResourceSegmentListOptions struct {
@@ -35,6 +38,9 @@ type ResourceSegmentListOptions struct {
 	Limit           int
 	Status          string
 	Search          string
+	SearchField     string // ""/"both"（默认，行为不变）/"source"/"target"
+	CaseSensitive   *bool  // nil/true（默认）大小写敏感；false 用 ContainsFold
+	IncludeTotal    bool
 	GroupKey        string
 	QualityIssues   string
 	QualitySeverity string
@@ -47,11 +53,55 @@ type ResourceSegmentUpdateInput struct {
 	Comment    *string
 }
 
-func NewSegmentService(client *ent.Client, projects *ProjectService, dialectName string, logger *slog.Logger) *SegmentService {
+type qaBatchInput struct {
+	Index      int
+	SourceText string
+	TargetText string
+	OldTarget  string
+	Meta       *string
+}
+
+func NewSegmentService(client *ent.Client, projects *ProjectService, dialectName string, revisionRetention time.Duration, logger *slog.Logger) *SegmentService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &SegmentService{client: client, projects: projects, dialect: dialectName, logger: logger}
+	if revisionRetention <= 0 {
+		revisionRetention = 90 * 24 * time.Hour
+	}
+	return &SegmentService{client: client, projects: projects, dialect: dialectName, revisionRetention: revisionRetention, logger: logger}
+}
+
+// applySegmentFilters 把资源范围与 status/search/quality 过滤应用到查询。
+// 列表与 include_total 计数必须共享同一套过滤条件，避免两处拼装漂移。
+func applySegmentFilters(q *ent.SegmentQuery, resourceID int, opts ResourceSegmentListOptions, dialectName string) *ent.SegmentQuery {
+	q = q.Where(segment.ResourceIDEQ(resourceID))
+	if opts.Status != "" {
+		q = q.Where(segment.StatusEQ(segment.Status(opts.Status)))
+	}
+	if opts.Search != "" {
+		caseSensitive := true
+		if opts.CaseSensitive != nil {
+			caseSensitive = *opts.CaseSensitive
+		}
+		sourcePred := segment.SourceTextContains(opts.Search)
+		targetPred := segment.TargetTextContains(opts.Search)
+		if !caseSensitive {
+			sourcePred = segment.SourceTextContainsFold(opts.Search)
+			targetPred = segment.TargetTextContainsFold(opts.Search)
+		}
+		switch opts.SearchField {
+		case "source":
+			q = q.Where(sourcePred)
+		case "target":
+			q = q.Where(targetPred)
+		default: // "" / "both"：保持原有 OR 语义
+			q = q.Where(segment.Or(sourcePred, targetPred))
+		}
+	}
+	if p := buildQualityPredicate(opts, dialectName); p != nil {
+		q = q.Where(p)
+	}
+	return q
 }
 
 func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, projectID, resourceID int, opts ResourceSegmentListOptions) (*ResourceSegmentPage, error) {
@@ -62,16 +112,7 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		opts.Limit = 50
 	}
 
-	q := s.client.Segment.Query().Where(segment.ResourceIDEQ(resourceID))
-	if opts.Status != "" {
-		q = q.Where(segment.StatusEQ(segment.Status(opts.Status)))
-	}
-	if opts.Search != "" {
-		q = q.Where(segment.Or(segment.SourceTextContains(opts.Search), segment.TargetTextContains(opts.Search)))
-	}
-	if p := buildQualityPredicate(opts, s.dialect); p != nil {
-		q = q.Where(p)
-	}
+	q := applySegmentFilters(s.client.Segment.Query(), resourceID, opts, s.dialect)
 
 	if opts.GroupKey != "" {
 		// group_key 过滤需要在应用层解析 JSON meta 字段
@@ -114,6 +155,10 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		if end < len(filtered) {
 			page.NextCursor = page.Items[len(page.Items)-1].SegmentIndex
 		}
+		if opts.IncludeTotal {
+			total := len(filtered)
+			page.Total = &total
+		}
 		return page, nil
 	}
 
@@ -130,7 +175,27 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		page.NextCursor = rows[opts.Limit-1].SegmentIndex
 		page.Items = rows[:opts.Limit]
 	}
+	if opts.IncludeTotal {
+		// 计数需复用列表的 status/search/quality 过滤，但不能复用 q：默认路径的
+		// q 可能已叠加游标分页（SegmentIndexGT）与 Limit，会影响计数结果，
+		// 因此基于 applySegmentFilters 重新构造计数查询。group_key 已在上面分支处理。
+		countQ := applySegmentFilters(s.client.Segment.Query(), resourceID, opts, s.dialect)
+		total, cerr := countQ.Count(ctx)
+		if cerr != nil {
+			return nil, cerr
+		}
+		page.Total = &total
+	}
 	return page, nil
+}
+
+// rawPred 把原始 SQL 表达式包装为整体括号化的谓词。ent 以 And 组合多个
+// Where 谓词时不会为单 fn 的 ExprP 谓词补括号，含顶层 OR 的表达式会因
+// SQL 优先级（AND 高于 OR）劫持同查询的其它过滤条件——quality_issues=none
+// 曾因此架空 resource_id 过滤，泄漏其它资源/项目的段落。所有原始谓词必须
+// 经此入口括号化，禁止直接使用 sql.ExprP。
+func rawPred(expr string) *sql.Predicate {
+	return sql.ExprP("(" + expr + ")")
 }
 
 // buildQualityPredicate 按 quality_issues / quality_severity / quality_code 构造 SQL 谓词。
@@ -146,6 +211,7 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 // 里是 jsonb 的"键存在"运算符，会导致 "syntax error at or near ")""（SQLSTATE 42601）。
 // severity（warning|error）与 code（qa.IsFilterableIssueCode 白名单）均已强校验，
 // 直接以单引号字面量内联即可，避免占位符冲突。
+// 所有原始表达式经 rawPred 整体括号化，保证与其它谓词 AND 组合时的语义安全。
 func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) predicate.Segment {
 	usePostgres := dialectName == dialect.Postgres
 	var preds []predicate.Segment
@@ -156,19 +222,19 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
 				// 存在至少一个未驳回（disposition 缺失或 != 'dismissed'）的 issue
-				s.Where(sql.ExprP(fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col)))
+				s.Where(rawPred(fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col)))
 				return
 			}
-			s.Where(sql.ExprP(fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col)))
+			s.Where(rawPred(fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col)))
 		}))
 	case "none":
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
-				s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR jsonb_typeof(%s) != 'array' OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col, col)))
+				s.Where(rawPred(fmt.Sprintf("%s IS NULL OR jsonb_typeof(%s) != 'array' OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col, col)))
 				return
 			}
-			s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR NOT EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col, col)))
+			s.Where(rawPred(fmt.Sprintf("%s IS NULL OR NOT EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col, col)))
 		}))
 	}
 
@@ -178,12 +244,12 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
-				s.Where(sql.ExprP(
+				s.Where(rawPred(
 					fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE (v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed') AND v ->> 'severity' = '%s')", col, col, sev),
 				))
 				return
 			}
-			s.Where(sql.ExprP(
+			s.Where(rawPred(
 				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE (json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed') AND json_extract(value, '$.severity') = '%s')", col, sev),
 			))
 		}))
@@ -194,12 +260,12 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
-				s.Where(sql.ExprP(
+				s.Where(rawPred(
 					fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE (v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed') AND v ->> 'code' = '%s')", col, col, code),
 				))
 				return
 			}
-			s.Where(sql.ExprP(
+			s.Where(rawPred(
 				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE (json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed') AND json_extract(value, '$.code') = '%s')", col, code),
 			))
 		}))
@@ -281,15 +347,23 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 	//   - 仅 comment 变更：不触碰 quality_issues，保持现状。
 	switch {
 	case targetChanged:
-		issues := s.runManualEditQA(ctx, projectID, res, current.SegmentIndex, newSource, newTarget, current.Meta)
-		// 注音守恒软守卫：编辑前译文带注音而编辑后全丢时补一条 warning，
-		// 经 Reconcile 继承既有裁决（用户 dismiss 过则不再骚扰）。
-		if current.TargetText != nil {
-			issues = append(issues, qa.RubyTagLossIssues(current.SegmentIndex, *current.TargetText, newTarget)...)
+		project, perr := s.client.Project.Get(ctx, projectID)
+		var freshIssuesByIndex map[int][]qa.QualityIssue
+		if perr != nil {
+			s.logger.Warn("manual edit QA: load project failed", "projectID", projectID, "error", perr)
+		} else {
+			freshIssuesByIndex, _ = s.runManualEditQABatch(ctx, project, res, []qaBatchInput{{
+				Index:      current.SegmentIndex,
+				SourceText: newSource,
+				TargetText: newTarget,
+				OldTarget:  oldTargetText(current),
+				Meta:       current.Meta,
+			}})
 		}
+		issues := freshIssuesByIndex[current.SegmentIndex]
 		// 对账：手动编辑改了译文，重跑零配置确定性 QA。同指纹 issue 的裁决
 		// （dismissed 等）应继承，避免用户标了"不是问题"的模式在下次编辑后被冲掉。
-		// 注意：runManualEditQA 只跑 ZeroConfigDeterministicChecks 白名单，不跑
+		// 注意：runManualEditQABatch 只跑 ZeroConfigDeterministicChecks 白名单，不跑
 		// length_ratio/术语表/文档级检查，所以旧的非白名单 issues 会被自然清除
 		// （这些 checker 未运行，指纹消失）。这是预期行为。
 		issues = qa.ReconcileIssues(issues, current.QualityIssues)
@@ -312,23 +386,20 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)
 }
 
-// runManualEditQA 对手动编辑的单段译文运行零配置确定性 QA 检查。
+// runManualEditQABatch 对手动编辑的译文批量运行零配置确定性 QA 检查。
 //
-// 适用于 UpdateResourceSegment 等"无执行计划 QA 配置可用"的即时场景：
-//   - 仅跑 ZeroConfigDeterministicChecks 白名单，避免 length_ratio 用默认阈值
-//     与正式翻译流程判定矛盾；
-//   - 不加载术语表（forbidden_term/term_inconsistency 在白名单外）；
-//   - 不跑文档级检查（duplicate_source_divergence 需多段输入）；
-//   - Protected 区不持久化无法重建，依赖它的 checker 退化为基础扫描。
+// 仅跑 ZeroConfigDeterministicChecks 白名单，避免 length_ratio 用默认阈值与正式
+// 翻译流程判定矛盾；不加载术语表，也不跑文档级检查。Protected 区不持久化无法
+// 重建，依赖它的 checker 退化为基础扫描。
 //
-// 任何错误记录日志并返回 nil，绝不阻塞编辑操作——手动编辑是用户主动行为，
-// QA 失败不应阻止用户保存译文。
-func (s *SegmentService) runManualEditQA(ctx context.Context, projectID int, res *ent.Resource, segmentIndex int, source, target string, meta *string) []qa.QualityIssue {
-	project, err := s.client.Project.Get(ctx, projectID)
-	if err != nil {
-		s.logger.Warn("manual edit QA: load project failed", "projectID", projectID, "error", err)
-		return nil
-	}
+// ZeroConfigDeterministicChecks 白名单排除了 duplicate_source_divergence（文档级、
+// 需多段输入）等跨段检查，因此 engine.Run 对 N 个 CheckInput 等价于 N 次单段调用，
+// 批量不会改变任何单段的 QA 结果。这是批量复用安全性的依据。
+//
+// 调用方负责在合适的连接上预查 project（单段编辑走 s.client；事务内批量替换走 tx），
+// 避免 MaxOpenConns(1) 下事务占用唯一连接后再用 s.client 查询造成的死锁。
+// QA 规则执行本身不阻塞编辑：按现有手动编辑约定记录日志并返回 nil issues。
+func (s *SegmentService) runManualEditQABatch(ctx context.Context, project *ent.Project, res *ent.Resource, inputs []qaBatchInput) (map[int][]qa.QualityIssue, error) {
 	cfg := qa.DefaultConfig()
 	cfg.Enabled = true
 	cfg.SourceLang = project.SourceLang
@@ -337,19 +408,46 @@ func (s *SegmentService) runManualEditQA(ctx context.Context, projectID int, res
 	cfg.Checks = qa.ZeroConfigDeterministicChecks()
 	engine := qa.NewEngine(cfg, s.logger)
 
-	var metaMap map[string]any
-	if meta != nil {
-		if err := json.Unmarshal([]byte(*meta), &metaMap); err != nil {
-			s.logger.Warn("manual edit QA: parse meta failed", "segmentIndex", segmentIndex, "error", err)
+	checkInputs := make([]qa.CheckInput, 0, len(inputs))
+	for _, input := range inputs {
+		var metaMap map[string]any
+		if input.Meta != nil {
+			if err := json.Unmarshal([]byte(*input.Meta), &metaMap); err != nil {
+				s.logger.Warn("manual edit QA: parse meta failed", "segmentIndex", input.Index, "error", err)
+			}
 		}
+		checkInputs = append(checkInputs, qa.CheckInput{
+			Index:      input.Index,
+			SourceText: input.SourceText,
+			TargetText: input.TargetText,
+			Meta:       metaMap,
+		})
 	}
-	inputs := []qa.CheckInput{{
-		Index:      segmentIndex,
-		SourceText: source,
-		TargetText: target,
-		Meta:       metaMap,
-	}}
-	return qa.DedupIssues(engine.Run(ctx, inputs))
+
+	issuesByIndex := make(map[int][]qa.QualityIssue)
+	for _, issue := range engine.Run(ctx, checkInputs) {
+		issuesByIndex[issue.SegmentIndex] = append(issuesByIndex[issue.SegmentIndex], issue)
+	}
+	// DedupIssues 的指纹是 (code, matched_text)，不含段索引；必须先按段分组再
+	// 各自去重，否则不同段的同指纹 issue（如相同的双空格触发 repeated_space）
+	// 会被整批去重吞掉，违背上方"批量等价于 N 次单段调用"的约定。
+	for idx, issues := range issuesByIndex {
+		issuesByIndex[idx] = qa.DedupIssues(issues)
+	}
+	for _, input := range inputs {
+		if input.OldTarget == "" {
+			continue
+		}
+		issuesByIndex[input.Index] = append(issuesByIndex[input.Index], qa.RubyTagLossIssues(input.Index, input.OldTarget, input.TargetText)...)
+	}
+	return issuesByIndex, nil
+}
+
+func oldTargetText(seg *ent.Segment) string {
+	if seg.TargetText == nil {
+		return ""
+	}
+	return *seg.TargetText
 }
 
 func (s *SegmentService) requireResourceAccess(ctx context.Context, actorUserID, projectID, resourceID int, write bool) (*ent.Resource, error) {

@@ -54,6 +54,9 @@ type SSEEvent func(*sql.Selector)
 // Segment is the predicate function for segment builders.
 type Segment func(*sql.Selector)
 
+// SegmentRevision is the predicate function for segmentrevision builders.
+type SegmentRevision func(*sql.Selector)
+
 // SyncTask is the predicate function for synctask builders.
 type SyncTask func(*sql.Selector)
 

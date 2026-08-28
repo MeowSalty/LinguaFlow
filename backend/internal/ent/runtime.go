@@ -21,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segmentrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
@@ -637,6 +638,28 @@ func init() {
 	segmentDescResourceID := segmentFields[5].Descriptor()
 	// segment.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
 	segment.ResourceIDValidator = segmentDescResourceID.Validators[0].(func(int) error)
+	segmentrevisionFields := schema.SegmentRevision{}.Fields()
+	_ = segmentrevisionFields
+	// segmentrevisionDescSegmentID is the schema descriptor for segment_id field.
+	segmentrevisionDescSegmentID := segmentrevisionFields[0].Descriptor()
+	// segmentrevision.SegmentIDValidator is a validator for the "segment_id" field. It is called by the builders before save.
+	segmentrevision.SegmentIDValidator = segmentrevisionDescSegmentID.Validators[0].(func(int) error)
+	// segmentrevisionDescResourceID is the schema descriptor for resource_id field.
+	segmentrevisionDescResourceID := segmentrevisionFields[1].Descriptor()
+	// segmentrevision.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
+	segmentrevision.ResourceIDValidator = segmentrevisionDescResourceID.Validators[0].(func(int) error)
+	// segmentrevisionDescOperationID is the schema descriptor for operation_id field.
+	segmentrevisionDescOperationID := segmentrevisionFields[2].Descriptor()
+	// segmentrevision.OperationIDValidator is a validator for the "operation_id" field. It is called by the builders before save.
+	segmentrevision.OperationIDValidator = segmentrevisionDescOperationID.Validators[0].(func(string) error)
+	// segmentrevisionDescActorID is the schema descriptor for actor_id field.
+	segmentrevisionDescActorID := segmentrevisionFields[12].Descriptor()
+	// segmentrevision.ActorIDValidator is a validator for the "actor_id" field. It is called by the builders before save.
+	segmentrevision.ActorIDValidator = segmentrevisionDescActorID.Validators[0].(func(int) error)
+	// segmentrevisionDescCreatedAt is the schema descriptor for created_at field.
+	segmentrevisionDescCreatedAt := segmentrevisionFields[13].Descriptor()
+	// segmentrevision.DefaultCreatedAt holds the default value on creation for the created_at field.
+	segmentrevision.DefaultCreatedAt = segmentrevisionDescCreatedAt.Default.(func() time.Time)
 	synctaskMixin := schema.SyncTask{}.Mixin()
 	synctaskMixinFields0 := synctaskMixin[0].Fields()
 	_ = synctaskMixinFields0

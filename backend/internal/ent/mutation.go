@@ -28,6 +28,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segmentrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
@@ -63,6 +64,7 @@ const (
 	TypeResource                  = "Resource"
 	TypeSSEEvent                  = "SSEEvent"
 	TypeSegment                   = "Segment"
+	TypeSegmentRevision           = "SegmentRevision"
 	TypeSyncTask                  = "SyncTask"
 	TypeSystemSetting             = "SystemSetting"
 	TypeTMEntry                   = "TMEntry"
@@ -16877,6 +16879,1376 @@ func (m *SegmentMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Segment edge %s", name)
+}
+
+// SegmentRevisionMutation represents an operation that mutates the SegmentRevision nodes in the graph.
+type SegmentRevisionMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int
+	resource_id           *int
+	addresource_id        *int
+	operation_id          *string
+	kind                  *segmentrevision.Kind
+	before_target         *string
+	after_target          *string
+	before_status         *segmentrevision.BeforeStatus
+	after_status          *segmentrevision.AfterStatus
+	before_reviewer_id    *int
+	addbefore_reviewer_id *int
+	after_reviewer_id     *int
+	addafter_reviewer_id  *int
+	before_issues         *[]qa.QualityIssue
+	appendbefore_issues   []qa.QualityIssue
+	after_issues          *[]qa.QualityIssue
+	appendafter_issues    []qa.QualityIssue
+	actor_id              *int
+	addactor_id           *int
+	created_at            *time.Time
+	clearedFields         map[string]struct{}
+	segment               *int
+	clearedsegment        bool
+	done                  bool
+	oldValue              func(context.Context) (*SegmentRevision, error)
+	predicates            []predicate.SegmentRevision
+}
+
+var _ ent.Mutation = (*SegmentRevisionMutation)(nil)
+
+// segmentrevisionOption allows management of the mutation configuration using functional options.
+type segmentrevisionOption func(*SegmentRevisionMutation)
+
+// newSegmentRevisionMutation creates new mutation for the SegmentRevision entity.
+func newSegmentRevisionMutation(c config, op Op, opts ...segmentrevisionOption) *SegmentRevisionMutation {
+	m := &SegmentRevisionMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSegmentRevision,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSegmentRevisionID sets the ID field of the mutation.
+func withSegmentRevisionID(id int) segmentrevisionOption {
+	return func(m *SegmentRevisionMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SegmentRevision
+		)
+		m.oldValue = func(ctx context.Context) (*SegmentRevision, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SegmentRevision.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSegmentRevision sets the old SegmentRevision of the mutation.
+func withSegmentRevision(node *SegmentRevision) segmentrevisionOption {
+	return func(m *SegmentRevisionMutation) {
+		m.oldValue = func(context.Context) (*SegmentRevision, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SegmentRevisionMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SegmentRevisionMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SegmentRevisionMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SegmentRevisionMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SegmentRevision.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetSegmentID sets the "segment_id" field.
+func (m *SegmentRevisionMutation) SetSegmentID(i int) {
+	m.segment = &i
+}
+
+// SegmentID returns the value of the "segment_id" field in the mutation.
+func (m *SegmentRevisionMutation) SegmentID() (r int, exists bool) {
+	v := m.segment
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSegmentID returns the old "segment_id" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldSegmentID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSegmentID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSegmentID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSegmentID: %w", err)
+	}
+	return oldValue.SegmentID, nil
+}
+
+// ResetSegmentID resets all changes to the "segment_id" field.
+func (m *SegmentRevisionMutation) ResetSegmentID() {
+	m.segment = nil
+}
+
+// SetResourceID sets the "resource_id" field.
+func (m *SegmentRevisionMutation) SetResourceID(i int) {
+	m.resource_id = &i
+	m.addresource_id = nil
+}
+
+// ResourceID returns the value of the "resource_id" field in the mutation.
+func (m *SegmentRevisionMutation) ResourceID() (r int, exists bool) {
+	v := m.resource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourceID returns the old "resource_id" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldResourceID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourceID: %w", err)
+	}
+	return oldValue.ResourceID, nil
+}
+
+// AddResourceID adds i to the "resource_id" field.
+func (m *SegmentRevisionMutation) AddResourceID(i int) {
+	if m.addresource_id != nil {
+		*m.addresource_id += i
+	} else {
+		m.addresource_id = &i
+	}
+}
+
+// AddedResourceID returns the value that was added to the "resource_id" field in this mutation.
+func (m *SegmentRevisionMutation) AddedResourceID() (r int, exists bool) {
+	v := m.addresource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetResourceID resets all changes to the "resource_id" field.
+func (m *SegmentRevisionMutation) ResetResourceID() {
+	m.resource_id = nil
+	m.addresource_id = nil
+}
+
+// SetOperationID sets the "operation_id" field.
+func (m *SegmentRevisionMutation) SetOperationID(s string) {
+	m.operation_id = &s
+}
+
+// OperationID returns the value of the "operation_id" field in the mutation.
+func (m *SegmentRevisionMutation) OperationID() (r string, exists bool) {
+	v := m.operation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOperationID returns the old "operation_id" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldOperationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOperationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOperationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOperationID: %w", err)
+	}
+	return oldValue.OperationID, nil
+}
+
+// ResetOperationID resets all changes to the "operation_id" field.
+func (m *SegmentRevisionMutation) ResetOperationID() {
+	m.operation_id = nil
+}
+
+// SetKind sets the "kind" field.
+func (m *SegmentRevisionMutation) SetKind(s segmentrevision.Kind) {
+	m.kind = &s
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *SegmentRevisionMutation) Kind() (r segmentrevision.Kind, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldKind(ctx context.Context) (v segmentrevision.Kind, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *SegmentRevisionMutation) ResetKind() {
+	m.kind = nil
+}
+
+// SetBeforeTarget sets the "before_target" field.
+func (m *SegmentRevisionMutation) SetBeforeTarget(s string) {
+	m.before_target = &s
+}
+
+// BeforeTarget returns the value of the "before_target" field in the mutation.
+func (m *SegmentRevisionMutation) BeforeTarget() (r string, exists bool) {
+	v := m.before_target
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBeforeTarget returns the old "before_target" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldBeforeTarget(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBeforeTarget is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBeforeTarget requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBeforeTarget: %w", err)
+	}
+	return oldValue.BeforeTarget, nil
+}
+
+// ClearBeforeTarget clears the value of the "before_target" field.
+func (m *SegmentRevisionMutation) ClearBeforeTarget() {
+	m.before_target = nil
+	m.clearedFields[segmentrevision.FieldBeforeTarget] = struct{}{}
+}
+
+// BeforeTargetCleared returns if the "before_target" field was cleared in this mutation.
+func (m *SegmentRevisionMutation) BeforeTargetCleared() bool {
+	_, ok := m.clearedFields[segmentrevision.FieldBeforeTarget]
+	return ok
+}
+
+// ResetBeforeTarget resets all changes to the "before_target" field.
+func (m *SegmentRevisionMutation) ResetBeforeTarget() {
+	m.before_target = nil
+	delete(m.clearedFields, segmentrevision.FieldBeforeTarget)
+}
+
+// SetAfterTarget sets the "after_target" field.
+func (m *SegmentRevisionMutation) SetAfterTarget(s string) {
+	m.after_target = &s
+}
+
+// AfterTarget returns the value of the "after_target" field in the mutation.
+func (m *SegmentRevisionMutation) AfterTarget() (r string, exists bool) {
+	v := m.after_target
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAfterTarget returns the old "after_target" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldAfterTarget(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAfterTarget is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAfterTarget requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAfterTarget: %w", err)
+	}
+	return oldValue.AfterTarget, nil
+}
+
+// ClearAfterTarget clears the value of the "after_target" field.
+func (m *SegmentRevisionMutation) ClearAfterTarget() {
+	m.after_target = nil
+	m.clearedFields[segmentrevision.FieldAfterTarget] = struct{}{}
+}
+
+// AfterTargetCleared returns if the "after_target" field was cleared in this mutation.
+func (m *SegmentRevisionMutation) AfterTargetCleared() bool {
+	_, ok := m.clearedFields[segmentrevision.FieldAfterTarget]
+	return ok
+}
+
+// ResetAfterTarget resets all changes to the "after_target" field.
+func (m *SegmentRevisionMutation) ResetAfterTarget() {
+	m.after_target = nil
+	delete(m.clearedFields, segmentrevision.FieldAfterTarget)
+}
+
+// SetBeforeStatus sets the "before_status" field.
+func (m *SegmentRevisionMutation) SetBeforeStatus(ss segmentrevision.BeforeStatus) {
+	m.before_status = &ss
+}
+
+// BeforeStatus returns the value of the "before_status" field in the mutation.
+func (m *SegmentRevisionMutation) BeforeStatus() (r segmentrevision.BeforeStatus, exists bool) {
+	v := m.before_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBeforeStatus returns the old "before_status" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldBeforeStatus(ctx context.Context) (v segmentrevision.BeforeStatus, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBeforeStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBeforeStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBeforeStatus: %w", err)
+	}
+	return oldValue.BeforeStatus, nil
+}
+
+// ResetBeforeStatus resets all changes to the "before_status" field.
+func (m *SegmentRevisionMutation) ResetBeforeStatus() {
+	m.before_status = nil
+}
+
+// SetAfterStatus sets the "after_status" field.
+func (m *SegmentRevisionMutation) SetAfterStatus(ss segmentrevision.AfterStatus) {
+	m.after_status = &ss
+}
+
+// AfterStatus returns the value of the "after_status" field in the mutation.
+func (m *SegmentRevisionMutation) AfterStatus() (r segmentrevision.AfterStatus, exists bool) {
+	v := m.after_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAfterStatus returns the old "after_status" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldAfterStatus(ctx context.Context) (v segmentrevision.AfterStatus, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAfterStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAfterStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAfterStatus: %w", err)
+	}
+	return oldValue.AfterStatus, nil
+}
+
+// ResetAfterStatus resets all changes to the "after_status" field.
+func (m *SegmentRevisionMutation) ResetAfterStatus() {
+	m.after_status = nil
+}
+
+// SetBeforeReviewerID sets the "before_reviewer_id" field.
+func (m *SegmentRevisionMutation) SetBeforeReviewerID(i int) {
+	m.before_reviewer_id = &i
+	m.addbefore_reviewer_id = nil
+}
+
+// BeforeReviewerID returns the value of the "before_reviewer_id" field in the mutation.
+func (m *SegmentRevisionMutation) BeforeReviewerID() (r int, exists bool) {
+	v := m.before_reviewer_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBeforeReviewerID returns the old "before_reviewer_id" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldBeforeReviewerID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBeforeReviewerID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBeforeReviewerID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBeforeReviewerID: %w", err)
+	}
+	return oldValue.BeforeReviewerID, nil
+}
+
+// AddBeforeReviewerID adds i to the "before_reviewer_id" field.
+func (m *SegmentRevisionMutation) AddBeforeReviewerID(i int) {
+	if m.addbefore_reviewer_id != nil {
+		*m.addbefore_reviewer_id += i
+	} else {
+		m.addbefore_reviewer_id = &i
+	}
+}
+
+// AddedBeforeReviewerID returns the value that was added to the "before_reviewer_id" field in this mutation.
+func (m *SegmentRevisionMutation) AddedBeforeReviewerID() (r int, exists bool) {
+	v := m.addbefore_reviewer_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearBeforeReviewerID clears the value of the "before_reviewer_id" field.
+func (m *SegmentRevisionMutation) ClearBeforeReviewerID() {
+	m.before_reviewer_id = nil
+	m.addbefore_reviewer_id = nil
+	m.clearedFields[segmentrevision.FieldBeforeReviewerID] = struct{}{}
+}
+
+// BeforeReviewerIDCleared returns if the "before_reviewer_id" field was cleared in this mutation.
+func (m *SegmentRevisionMutation) BeforeReviewerIDCleared() bool {
+	_, ok := m.clearedFields[segmentrevision.FieldBeforeReviewerID]
+	return ok
+}
+
+// ResetBeforeReviewerID resets all changes to the "before_reviewer_id" field.
+func (m *SegmentRevisionMutation) ResetBeforeReviewerID() {
+	m.before_reviewer_id = nil
+	m.addbefore_reviewer_id = nil
+	delete(m.clearedFields, segmentrevision.FieldBeforeReviewerID)
+}
+
+// SetAfterReviewerID sets the "after_reviewer_id" field.
+func (m *SegmentRevisionMutation) SetAfterReviewerID(i int) {
+	m.after_reviewer_id = &i
+	m.addafter_reviewer_id = nil
+}
+
+// AfterReviewerID returns the value of the "after_reviewer_id" field in the mutation.
+func (m *SegmentRevisionMutation) AfterReviewerID() (r int, exists bool) {
+	v := m.after_reviewer_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAfterReviewerID returns the old "after_reviewer_id" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldAfterReviewerID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAfterReviewerID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAfterReviewerID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAfterReviewerID: %w", err)
+	}
+	return oldValue.AfterReviewerID, nil
+}
+
+// AddAfterReviewerID adds i to the "after_reviewer_id" field.
+func (m *SegmentRevisionMutation) AddAfterReviewerID(i int) {
+	if m.addafter_reviewer_id != nil {
+		*m.addafter_reviewer_id += i
+	} else {
+		m.addafter_reviewer_id = &i
+	}
+}
+
+// AddedAfterReviewerID returns the value that was added to the "after_reviewer_id" field in this mutation.
+func (m *SegmentRevisionMutation) AddedAfterReviewerID() (r int, exists bool) {
+	v := m.addafter_reviewer_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAfterReviewerID clears the value of the "after_reviewer_id" field.
+func (m *SegmentRevisionMutation) ClearAfterReviewerID() {
+	m.after_reviewer_id = nil
+	m.addafter_reviewer_id = nil
+	m.clearedFields[segmentrevision.FieldAfterReviewerID] = struct{}{}
+}
+
+// AfterReviewerIDCleared returns if the "after_reviewer_id" field was cleared in this mutation.
+func (m *SegmentRevisionMutation) AfterReviewerIDCleared() bool {
+	_, ok := m.clearedFields[segmentrevision.FieldAfterReviewerID]
+	return ok
+}
+
+// ResetAfterReviewerID resets all changes to the "after_reviewer_id" field.
+func (m *SegmentRevisionMutation) ResetAfterReviewerID() {
+	m.after_reviewer_id = nil
+	m.addafter_reviewer_id = nil
+	delete(m.clearedFields, segmentrevision.FieldAfterReviewerID)
+}
+
+// SetBeforeIssues sets the "before_issues" field.
+func (m *SegmentRevisionMutation) SetBeforeIssues(qi []qa.QualityIssue) {
+	m.before_issues = &qi
+	m.appendbefore_issues = nil
+}
+
+// BeforeIssues returns the value of the "before_issues" field in the mutation.
+func (m *SegmentRevisionMutation) BeforeIssues() (r []qa.QualityIssue, exists bool) {
+	v := m.before_issues
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBeforeIssues returns the old "before_issues" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldBeforeIssues(ctx context.Context) (v []qa.QualityIssue, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBeforeIssues is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBeforeIssues requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBeforeIssues: %w", err)
+	}
+	return oldValue.BeforeIssues, nil
+}
+
+// AppendBeforeIssues adds qi to the "before_issues" field.
+func (m *SegmentRevisionMutation) AppendBeforeIssues(qi []qa.QualityIssue) {
+	m.appendbefore_issues = append(m.appendbefore_issues, qi...)
+}
+
+// AppendedBeforeIssues returns the list of values that were appended to the "before_issues" field in this mutation.
+func (m *SegmentRevisionMutation) AppendedBeforeIssues() ([]qa.QualityIssue, bool) {
+	if len(m.appendbefore_issues) == 0 {
+		return nil, false
+	}
+	return m.appendbefore_issues, true
+}
+
+// ClearBeforeIssues clears the value of the "before_issues" field.
+func (m *SegmentRevisionMutation) ClearBeforeIssues() {
+	m.before_issues = nil
+	m.appendbefore_issues = nil
+	m.clearedFields[segmentrevision.FieldBeforeIssues] = struct{}{}
+}
+
+// BeforeIssuesCleared returns if the "before_issues" field was cleared in this mutation.
+func (m *SegmentRevisionMutation) BeforeIssuesCleared() bool {
+	_, ok := m.clearedFields[segmentrevision.FieldBeforeIssues]
+	return ok
+}
+
+// ResetBeforeIssues resets all changes to the "before_issues" field.
+func (m *SegmentRevisionMutation) ResetBeforeIssues() {
+	m.before_issues = nil
+	m.appendbefore_issues = nil
+	delete(m.clearedFields, segmentrevision.FieldBeforeIssues)
+}
+
+// SetAfterIssues sets the "after_issues" field.
+func (m *SegmentRevisionMutation) SetAfterIssues(qi []qa.QualityIssue) {
+	m.after_issues = &qi
+	m.appendafter_issues = nil
+}
+
+// AfterIssues returns the value of the "after_issues" field in the mutation.
+func (m *SegmentRevisionMutation) AfterIssues() (r []qa.QualityIssue, exists bool) {
+	v := m.after_issues
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAfterIssues returns the old "after_issues" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldAfterIssues(ctx context.Context) (v []qa.QualityIssue, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAfterIssues is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAfterIssues requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAfterIssues: %w", err)
+	}
+	return oldValue.AfterIssues, nil
+}
+
+// AppendAfterIssues adds qi to the "after_issues" field.
+func (m *SegmentRevisionMutation) AppendAfterIssues(qi []qa.QualityIssue) {
+	m.appendafter_issues = append(m.appendafter_issues, qi...)
+}
+
+// AppendedAfterIssues returns the list of values that were appended to the "after_issues" field in this mutation.
+func (m *SegmentRevisionMutation) AppendedAfterIssues() ([]qa.QualityIssue, bool) {
+	if len(m.appendafter_issues) == 0 {
+		return nil, false
+	}
+	return m.appendafter_issues, true
+}
+
+// ClearAfterIssues clears the value of the "after_issues" field.
+func (m *SegmentRevisionMutation) ClearAfterIssues() {
+	m.after_issues = nil
+	m.appendafter_issues = nil
+	m.clearedFields[segmentrevision.FieldAfterIssues] = struct{}{}
+}
+
+// AfterIssuesCleared returns if the "after_issues" field was cleared in this mutation.
+func (m *SegmentRevisionMutation) AfterIssuesCleared() bool {
+	_, ok := m.clearedFields[segmentrevision.FieldAfterIssues]
+	return ok
+}
+
+// ResetAfterIssues resets all changes to the "after_issues" field.
+func (m *SegmentRevisionMutation) ResetAfterIssues() {
+	m.after_issues = nil
+	m.appendafter_issues = nil
+	delete(m.clearedFields, segmentrevision.FieldAfterIssues)
+}
+
+// SetActorID sets the "actor_id" field.
+func (m *SegmentRevisionMutation) SetActorID(i int) {
+	m.actor_id = &i
+	m.addactor_id = nil
+}
+
+// ActorID returns the value of the "actor_id" field in the mutation.
+func (m *SegmentRevisionMutation) ActorID() (r int, exists bool) {
+	v := m.actor_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActorID returns the old "actor_id" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldActorID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActorID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActorID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActorID: %w", err)
+	}
+	return oldValue.ActorID, nil
+}
+
+// AddActorID adds i to the "actor_id" field.
+func (m *SegmentRevisionMutation) AddActorID(i int) {
+	if m.addactor_id != nil {
+		*m.addactor_id += i
+	} else {
+		m.addactor_id = &i
+	}
+}
+
+// AddedActorID returns the value that was added to the "actor_id" field in this mutation.
+func (m *SegmentRevisionMutation) AddedActorID() (r int, exists bool) {
+	v := m.addactor_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetActorID resets all changes to the "actor_id" field.
+func (m *SegmentRevisionMutation) ResetActorID() {
+	m.actor_id = nil
+	m.addactor_id = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SegmentRevisionMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SegmentRevisionMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SegmentRevision entity.
+// If the SegmentRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentRevisionMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SegmentRevisionMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearSegment clears the "segment" edge to the Segment entity.
+func (m *SegmentRevisionMutation) ClearSegment() {
+	m.clearedsegment = true
+	m.clearedFields[segmentrevision.FieldSegmentID] = struct{}{}
+}
+
+// SegmentCleared reports if the "segment" edge to the Segment entity was cleared.
+func (m *SegmentRevisionMutation) SegmentCleared() bool {
+	return m.clearedsegment
+}
+
+// SegmentIDs returns the "segment" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// SegmentID instead. It exists only for internal usage by the builders.
+func (m *SegmentRevisionMutation) SegmentIDs() (ids []int) {
+	if id := m.segment; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetSegment resets all changes to the "segment" edge.
+func (m *SegmentRevisionMutation) ResetSegment() {
+	m.segment = nil
+	m.clearedsegment = false
+}
+
+// Where appends a list predicates to the SegmentRevisionMutation builder.
+func (m *SegmentRevisionMutation) Where(ps ...predicate.SegmentRevision) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SegmentRevisionMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SegmentRevisionMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SegmentRevision, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SegmentRevisionMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SegmentRevisionMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SegmentRevision).
+func (m *SegmentRevisionMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SegmentRevisionMutation) Fields() []string {
+	fields := make([]string, 0, 14)
+	if m.segment != nil {
+		fields = append(fields, segmentrevision.FieldSegmentID)
+	}
+	if m.resource_id != nil {
+		fields = append(fields, segmentrevision.FieldResourceID)
+	}
+	if m.operation_id != nil {
+		fields = append(fields, segmentrevision.FieldOperationID)
+	}
+	if m.kind != nil {
+		fields = append(fields, segmentrevision.FieldKind)
+	}
+	if m.before_target != nil {
+		fields = append(fields, segmentrevision.FieldBeforeTarget)
+	}
+	if m.after_target != nil {
+		fields = append(fields, segmentrevision.FieldAfterTarget)
+	}
+	if m.before_status != nil {
+		fields = append(fields, segmentrevision.FieldBeforeStatus)
+	}
+	if m.after_status != nil {
+		fields = append(fields, segmentrevision.FieldAfterStatus)
+	}
+	if m.before_reviewer_id != nil {
+		fields = append(fields, segmentrevision.FieldBeforeReviewerID)
+	}
+	if m.after_reviewer_id != nil {
+		fields = append(fields, segmentrevision.FieldAfterReviewerID)
+	}
+	if m.before_issues != nil {
+		fields = append(fields, segmentrevision.FieldBeforeIssues)
+	}
+	if m.after_issues != nil {
+		fields = append(fields, segmentrevision.FieldAfterIssues)
+	}
+	if m.actor_id != nil {
+		fields = append(fields, segmentrevision.FieldActorID)
+	}
+	if m.created_at != nil {
+		fields = append(fields, segmentrevision.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SegmentRevisionMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case segmentrevision.FieldSegmentID:
+		return m.SegmentID()
+	case segmentrevision.FieldResourceID:
+		return m.ResourceID()
+	case segmentrevision.FieldOperationID:
+		return m.OperationID()
+	case segmentrevision.FieldKind:
+		return m.Kind()
+	case segmentrevision.FieldBeforeTarget:
+		return m.BeforeTarget()
+	case segmentrevision.FieldAfterTarget:
+		return m.AfterTarget()
+	case segmentrevision.FieldBeforeStatus:
+		return m.BeforeStatus()
+	case segmentrevision.FieldAfterStatus:
+		return m.AfterStatus()
+	case segmentrevision.FieldBeforeReviewerID:
+		return m.BeforeReviewerID()
+	case segmentrevision.FieldAfterReviewerID:
+		return m.AfterReviewerID()
+	case segmentrevision.FieldBeforeIssues:
+		return m.BeforeIssues()
+	case segmentrevision.FieldAfterIssues:
+		return m.AfterIssues()
+	case segmentrevision.FieldActorID:
+		return m.ActorID()
+	case segmentrevision.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SegmentRevisionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case segmentrevision.FieldSegmentID:
+		return m.OldSegmentID(ctx)
+	case segmentrevision.FieldResourceID:
+		return m.OldResourceID(ctx)
+	case segmentrevision.FieldOperationID:
+		return m.OldOperationID(ctx)
+	case segmentrevision.FieldKind:
+		return m.OldKind(ctx)
+	case segmentrevision.FieldBeforeTarget:
+		return m.OldBeforeTarget(ctx)
+	case segmentrevision.FieldAfterTarget:
+		return m.OldAfterTarget(ctx)
+	case segmentrevision.FieldBeforeStatus:
+		return m.OldBeforeStatus(ctx)
+	case segmentrevision.FieldAfterStatus:
+		return m.OldAfterStatus(ctx)
+	case segmentrevision.FieldBeforeReviewerID:
+		return m.OldBeforeReviewerID(ctx)
+	case segmentrevision.FieldAfterReviewerID:
+		return m.OldAfterReviewerID(ctx)
+	case segmentrevision.FieldBeforeIssues:
+		return m.OldBeforeIssues(ctx)
+	case segmentrevision.FieldAfterIssues:
+		return m.OldAfterIssues(ctx)
+	case segmentrevision.FieldActorID:
+		return m.OldActorID(ctx)
+	case segmentrevision.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SegmentRevision field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SegmentRevisionMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case segmentrevision.FieldSegmentID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSegmentID(v)
+		return nil
+	case segmentrevision.FieldResourceID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourceID(v)
+		return nil
+	case segmentrevision.FieldOperationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOperationID(v)
+		return nil
+	case segmentrevision.FieldKind:
+		v, ok := value.(segmentrevision.Kind)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
+		return nil
+	case segmentrevision.FieldBeforeTarget:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBeforeTarget(v)
+		return nil
+	case segmentrevision.FieldAfterTarget:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAfterTarget(v)
+		return nil
+	case segmentrevision.FieldBeforeStatus:
+		v, ok := value.(segmentrevision.BeforeStatus)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBeforeStatus(v)
+		return nil
+	case segmentrevision.FieldAfterStatus:
+		v, ok := value.(segmentrevision.AfterStatus)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAfterStatus(v)
+		return nil
+	case segmentrevision.FieldBeforeReviewerID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBeforeReviewerID(v)
+		return nil
+	case segmentrevision.FieldAfterReviewerID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAfterReviewerID(v)
+		return nil
+	case segmentrevision.FieldBeforeIssues:
+		v, ok := value.([]qa.QualityIssue)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBeforeIssues(v)
+		return nil
+	case segmentrevision.FieldAfterIssues:
+		v, ok := value.([]qa.QualityIssue)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAfterIssues(v)
+		return nil
+	case segmentrevision.FieldActorID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActorID(v)
+		return nil
+	case segmentrevision.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SegmentRevision field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SegmentRevisionMutation) AddedFields() []string {
+	var fields []string
+	if m.addresource_id != nil {
+		fields = append(fields, segmentrevision.FieldResourceID)
+	}
+	if m.addbefore_reviewer_id != nil {
+		fields = append(fields, segmentrevision.FieldBeforeReviewerID)
+	}
+	if m.addafter_reviewer_id != nil {
+		fields = append(fields, segmentrevision.FieldAfterReviewerID)
+	}
+	if m.addactor_id != nil {
+		fields = append(fields, segmentrevision.FieldActorID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SegmentRevisionMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case segmentrevision.FieldResourceID:
+		return m.AddedResourceID()
+	case segmentrevision.FieldBeforeReviewerID:
+		return m.AddedBeforeReviewerID()
+	case segmentrevision.FieldAfterReviewerID:
+		return m.AddedAfterReviewerID()
+	case segmentrevision.FieldActorID:
+		return m.AddedActorID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SegmentRevisionMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case segmentrevision.FieldResourceID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddResourceID(v)
+		return nil
+	case segmentrevision.FieldBeforeReviewerID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBeforeReviewerID(v)
+		return nil
+	case segmentrevision.FieldAfterReviewerID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAfterReviewerID(v)
+		return nil
+	case segmentrevision.FieldActorID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddActorID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SegmentRevision numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SegmentRevisionMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(segmentrevision.FieldBeforeTarget) {
+		fields = append(fields, segmentrevision.FieldBeforeTarget)
+	}
+	if m.FieldCleared(segmentrevision.FieldAfterTarget) {
+		fields = append(fields, segmentrevision.FieldAfterTarget)
+	}
+	if m.FieldCleared(segmentrevision.FieldBeforeReviewerID) {
+		fields = append(fields, segmentrevision.FieldBeforeReviewerID)
+	}
+	if m.FieldCleared(segmentrevision.FieldAfterReviewerID) {
+		fields = append(fields, segmentrevision.FieldAfterReviewerID)
+	}
+	if m.FieldCleared(segmentrevision.FieldBeforeIssues) {
+		fields = append(fields, segmentrevision.FieldBeforeIssues)
+	}
+	if m.FieldCleared(segmentrevision.FieldAfterIssues) {
+		fields = append(fields, segmentrevision.FieldAfterIssues)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SegmentRevisionMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SegmentRevisionMutation) ClearField(name string) error {
+	switch name {
+	case segmentrevision.FieldBeforeTarget:
+		m.ClearBeforeTarget()
+		return nil
+	case segmentrevision.FieldAfterTarget:
+		m.ClearAfterTarget()
+		return nil
+	case segmentrevision.FieldBeforeReviewerID:
+		m.ClearBeforeReviewerID()
+		return nil
+	case segmentrevision.FieldAfterReviewerID:
+		m.ClearAfterReviewerID()
+		return nil
+	case segmentrevision.FieldBeforeIssues:
+		m.ClearBeforeIssues()
+		return nil
+	case segmentrevision.FieldAfterIssues:
+		m.ClearAfterIssues()
+		return nil
+	}
+	return fmt.Errorf("unknown SegmentRevision nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SegmentRevisionMutation) ResetField(name string) error {
+	switch name {
+	case segmentrevision.FieldSegmentID:
+		m.ResetSegmentID()
+		return nil
+	case segmentrevision.FieldResourceID:
+		m.ResetResourceID()
+		return nil
+	case segmentrevision.FieldOperationID:
+		m.ResetOperationID()
+		return nil
+	case segmentrevision.FieldKind:
+		m.ResetKind()
+		return nil
+	case segmentrevision.FieldBeforeTarget:
+		m.ResetBeforeTarget()
+		return nil
+	case segmentrevision.FieldAfterTarget:
+		m.ResetAfterTarget()
+		return nil
+	case segmentrevision.FieldBeforeStatus:
+		m.ResetBeforeStatus()
+		return nil
+	case segmentrevision.FieldAfterStatus:
+		m.ResetAfterStatus()
+		return nil
+	case segmentrevision.FieldBeforeReviewerID:
+		m.ResetBeforeReviewerID()
+		return nil
+	case segmentrevision.FieldAfterReviewerID:
+		m.ResetAfterReviewerID()
+		return nil
+	case segmentrevision.FieldBeforeIssues:
+		m.ResetBeforeIssues()
+		return nil
+	case segmentrevision.FieldAfterIssues:
+		m.ResetAfterIssues()
+		return nil
+	case segmentrevision.FieldActorID:
+		m.ResetActorID()
+		return nil
+	case segmentrevision.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SegmentRevision field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SegmentRevisionMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.segment != nil {
+		edges = append(edges, segmentrevision.EdgeSegment)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SegmentRevisionMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case segmentrevision.EdgeSegment:
+		if id := m.segment; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SegmentRevisionMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SegmentRevisionMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SegmentRevisionMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedsegment {
+		edges = append(edges, segmentrevision.EdgeSegment)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SegmentRevisionMutation) EdgeCleared(name string) bool {
+	switch name {
+	case segmentrevision.EdgeSegment:
+		return m.clearedsegment
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SegmentRevisionMutation) ClearEdge(name string) error {
+	switch name {
+	case segmentrevision.EdgeSegment:
+		m.ClearSegment()
+		return nil
+	}
+	return fmt.Errorf("unknown SegmentRevision unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SegmentRevisionMutation) ResetEdge(name string) error {
+	switch name {
+	case segmentrevision.EdgeSegment:
+		m.ResetSegment()
+		return nil
+	}
+	return fmt.Errorf("unknown SegmentRevision edge %s", name)
 }
 
 // SyncTaskMutation represents an operation that mutates the SyncTask nodes in the graph.

@@ -305,6 +305,28 @@ projectResourceSegments:
           type: string
           enum: [untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register, ruby_restore_incomplete, ruby_tag_loss]
         description: 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落
+      - name: search_field
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [source, target, both]
+          default: both
+        description: 搜索字段范围；both 时同时匹配原文与译文（默认语义）
+      - name: case_sensitive
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+        description: 搜索是否区分大小写；默认 true 保持子串精确匹配语义
+      - name: include_total
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+        description: 是否在响应中附带满足过滤条件的段落总数（total）；为 true 时额外执行一次计数查询
       - $ref: '../base.yaml#/components/parameters/Cursor'
       - $ref: '../base.yaml#/components/parameters/Limit'
     responses:
@@ -610,5 +632,122 @@ projectResourceSegmentGroups:
           application/json:
             schema:
               $ref: '../base.yaml#/components/schemas/ResourceSegmentGroupListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegmentsSearchReplacePreview:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  post:
+    operationId: PreviewResourceSegmentsSearchReplace
+    summary: 搜索替换预览（dry-run）
+    description: |
+      在资源段落译文上执行搜索替换的只读预览，不持久化任何变更。
+      只对 target_text 执行匹配与替换（source_text 不参与）。
+      - substring 模式按字面子串匹配，find 中的 SQL LIKE 通配符（%、_）按普通字符处理
+      - regex 模式使用 Go RE2 语法（线性时间，无回溯），replace_with 支持 $1 捕获引用
+      - whole_word 仅 substring 模式生效，regex 模式忽略（可用 \b 边界）
+      预览仅返回受影响的统计与最多 max_results 条样本；应用由独立的 apply 接口完成。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/SearchReplacePreviewRequest'
+    responses:
+      '200':
+        description: 预览结果
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/SearchReplacePreviewResponse'
+      '400':
+        description: 请求非法（find 为空或正则无法编译）
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegmentsSearchReplaceApply:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  post:
+    operationId: ApplyResourceSegmentsSearchReplace
+    summary: 应用搜索替换
+    description: |
+      对资源段落译文应用搜索替换，无状态：apply 直接接收匹配参数，在事务内对每段
+      当前 target_text 重新匹配后替换。替换后新译文经 trim 为空的段落跳过（empty_result）。
+      替换成功的段落状态固定为 edited、reviewed_by 为当前用户，并重跑零配置确定性 QA
+      与既有裁决对账（dismissed 的 issue 裁决继承）。每次成功应用写入一笔可撤销的
+      SegmentRevision 历史（operation_id），可用 undo 接口按乐观校验回滚。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/SearchReplaceApplyRequest'
+    responses:
+      '200':
+        description: 应用结果
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/SearchReplaceApplyResponse'
+      '400':
+        description: 请求非法（find 为空或正则无法编译）
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegmentsSearchReplaceUndo:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+    - name: operationId
+      in: path
+      required: true
+      schema:
+        type: string
+  post:
+    operationId: UndoResourceSegmentsSearchReplace
+    summary: 撤销搜索替换
+    description: |
+      撤销一笔搜索替换（或撤销一笔先前的撤销，即重做）。按 operation_id 定位历史快照，
+      在事务内逐段乐观校验：当前段的 target_text/status/reviewed_by/quality_issues 仍与
+      快照 after 一致才回滚到 before；任一字段被后续编辑改变则跳过（target_diverged），
+      不覆盖他人工作。撤销自身会写入新的 reverse 历史与新的 undo_operation_id，故可再撤销。
+      operation 不存在或已被按龄裁剪返回 404；全部段落发散无可撤销返回 409。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 撤销结果
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/SearchReplaceUndoResponse'
+      '404':
+        description: operation 不存在或已被裁剪
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Problem'
+      '409':
+        description: 全部段落已被后续编辑改变，无可撤销
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'

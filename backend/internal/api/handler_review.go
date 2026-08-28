@@ -30,6 +30,7 @@ type segmentResponse struct {
 type segmentListResponse struct {
 	Items      []segmentResponse `json:"items"`
 	NextCursor string            `json:"next_cursor,omitempty"`
+	Total      *int              `json:"total,omitempty"`
 }
 
 type segmentReviewRequest struct {
