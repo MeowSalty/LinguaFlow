@@ -243,6 +243,7 @@ server:
   jwt_expiry: 15m
   refresh_token_expiry: 720h
   shutdown_timeout: 10s
+  revision_retention: 2160h # 搜索替换历史保留时长（撤销窗口，默认 90 天）
   quick_translate:
     max_concurrency: 2     # 单用户并发上限；全局 = 此值 × 4
     timeout: 5m            # 单次执行超时
@@ -522,6 +523,7 @@ revise 轮的系统提示词内置不可覆盖，protect/ruby 等行为复用计
 | `jwt_expiry`           | duration | `15m`                           | JWT 过期时间                               |
 | `refresh_token_expiry` | duration | `720h`（30 天）                 | 刷新令牌过期时间                           |
 | `shutdown_timeout`     | duration | `10s`                           | 优雅关闭超时                               |
+| `revision_retention`   | duration | `2160h`（90 天）                | [搜索替换](/zh/guide/review#搜索替换)历史的保留时长（撤销窗口）。`<=0` 用默认值 |
 | `serve_ui`             | bool     | `true`                          | 是否提供嵌入式 Web UI，可用 `--no-ui` 关闭 |
 
 ##### server.cors — 跨域

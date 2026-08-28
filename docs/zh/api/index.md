@@ -218,6 +218,45 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/42
 
 `QualityIssue` 响应含 `disposition`（必填，`pending` / `dismissed`）、`decided_by`（裁决者 user_id，`null` 表示由 LLM 裁决）、`decided_at`（裁决时间）与 `note`（裁决说明）字段。已 `dismissed` 的问题不计入段落列表的质量筛选与统计。产品侧操作见 [翻译审校 · 质量问题裁决](/zh/guide/review#质量问题裁决)。
 
+### 12. 段落搜索替换（search-replace）
+
+对某个资源下的段落**译文**批量查找替换（原文不变），分三步：先预览影响范围，再应用写回，最后可按 `operation_id` 撤销。产品侧操作见 [翻译审校 · 搜索替换](/zh/guide/review#搜索替换)。
+
+```bash
+# 1. 预览：只读，不落库，返回受影响段落数、命中总数与替换前后对照样本
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/search-replace/preview \
+  -H "Content-Type: application/json" \
+  -d '{"find": "color", "replace_with": "colour"}'
+
+# 2. 应用：写回译文，返回 operation_id（供撤销使用）
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/search-replace/apply \
+  -H "Content-Type: application/json" \
+  -d '{"find": "color", "replace_with": "colour"}'
+
+# 3. 撤销最近一次替换（再次调用相当于重做）
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/search-replace/<operationId>/undo
+```
+
+预览与应用共用同一套请求字段：
+
+| 字段             | 类型   | 默认        | 说明                                                         |
+| ---------------- | ------ | ----------- | ------------------------------------------------------------ |
+| `find`           | string | 必填        | 查找内容                                                     |
+| `replace_with`   | string | 必填        | 替换文本；空串表示删除匹配内容                               |
+| `match_mode`     | string | `substring` | `substring` 或 `regex`（RE2 语法，`replace_with` 支持 `$1` 捕获引用） |
+| `case_sensitive` | bool   | `true`      | 是否区分大小写                                               |
+| `whole_word`     | bool   | `false`     | 全字匹配，仅 `substring` 模式生效                            |
+
+预览额外支持 `status` / `quality_issues` 等段落过滤参数与 `max_results`（`1`–`100`，默认 `20`）样本数上限；响应含 `matched_segment_count`（受影响段落数）、`total_replacements`（命中总次数）与样本数组（每项含 `before` / `after` 替换前后对照）。应用响应含 `operation_id`、`applied_count`、`skipped_count` 与跳过明细（如译文已不含匹配内容、替换后译文为空）。
+
+要点：
+
+- 被替换的段落状态置为 `edited`，并重新执行规则质检
+- 撤销按 `operation_id` 回滚；替换后又被人工编辑过的段落会跳过（`target_diverged`）
+- 替换历史超过保留期返回 404，全部段落均已变更、无可撤销内容返回 409；保留时长由 `server.revision_retention` 控制（默认 90 天）
+
+另：段落列表端点 `GET /projects/{projectId}/resources/{resourceId}/segments` 的搜索还支持 `search_field`（`source` / `target` / `both`，默认 `both`）、`case_sensitive`（默认 `true`）与 `include_total`（默认 `false`，为 `true` 时响应附带满足过滤条件的 `total` 总数）查询参数。
+
 ## 错误码
 
 | 状态码 | 说明                                       |
