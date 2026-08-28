@@ -71,15 +71,10 @@ func NewSegmentService(client *ent.Client, projects *ProjectService, dialectName
 	return &SegmentService{client: client, projects: projects, dialect: dialectName, revisionRetention: revisionRetention, logger: logger}
 }
 
-func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, projectID, resourceID int, opts ResourceSegmentListOptions) (*ResourceSegmentPage, error) {
-	if _, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, false); err != nil {
-		return nil, err
-	}
-	if opts.Limit <= 0 || opts.Limit > 200 {
-		opts.Limit = 50
-	}
-
-	q := s.client.Segment.Query().Where(segment.ResourceIDEQ(resourceID))
+// applySegmentFilters 把资源范围与 status/search/quality 过滤应用到查询。
+// 列表与 include_total 计数必须共享同一套过滤条件，避免两处拼装漂移。
+func applySegmentFilters(q *ent.SegmentQuery, resourceID int, opts ResourceSegmentListOptions, dialectName string) *ent.SegmentQuery {
+	q = q.Where(segment.ResourceIDEQ(resourceID))
 	if opts.Status != "" {
 		q = q.Where(segment.StatusEQ(segment.Status(opts.Status)))
 	}
@@ -103,9 +98,21 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 			q = q.Where(segment.Or(sourcePred, targetPred))
 		}
 	}
-	if p := buildQualityPredicate(opts, s.dialect); p != nil {
+	if p := buildQualityPredicate(opts, dialectName); p != nil {
 		q = q.Where(p)
 	}
+	return q
+}
+
+func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, projectID, resourceID int, opts ResourceSegmentListOptions) (*ResourceSegmentPage, error) {
+	if _, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, false); err != nil {
+		return nil, err
+	}
+	if opts.Limit <= 0 || opts.Limit > 200 {
+		opts.Limit = 50
+	}
+
+	q := applySegmentFilters(s.client.Segment.Query(), resourceID, opts, s.dialect)
 
 	if opts.GroupKey != "" {
 		// group_key 过滤需要在应用层解析 JSON meta 字段
@@ -169,35 +176,10 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		page.Items = rows[:opts.Limit]
 	}
 	if opts.IncludeTotal {
-		// 总数需复用列表的搜索/状态/质量谓词，但不能复用带分页（SegmentIndexGT）的 q，
-		// 因此重新构造一份相同过滤条件的计数查询。group_key 已经在上面分支处理。
-		countQ := s.client.Segment.Query().Where(segment.ResourceIDEQ(resourceID))
-		if opts.Status != "" {
-			countQ = countQ.Where(segment.StatusEQ(segment.Status(opts.Status)))
-		}
-		if opts.Search != "" {
-			caseSensitive := true
-			if opts.CaseSensitive != nil {
-				caseSensitive = *opts.CaseSensitive
-			}
-			sourcePred := segment.SourceTextContains(opts.Search)
-			targetPred := segment.TargetTextContains(opts.Search)
-			if !caseSensitive {
-				sourcePred = segment.SourceTextContainsFold(opts.Search)
-				targetPred = segment.TargetTextContainsFold(opts.Search)
-			}
-			switch opts.SearchField {
-			case "source":
-				countQ = countQ.Where(sourcePred)
-			case "target":
-				countQ = countQ.Where(targetPred)
-			default:
-				countQ = countQ.Where(segment.Or(sourcePred, targetPred))
-			}
-		}
-		if p := buildQualityPredicate(opts, s.dialect); p != nil {
-			countQ = countQ.Where(p)
-		}
+		// 计数需复用列表的 status/search/quality 过滤，但不能复用 q：默认路径的
+		// q 可能已叠加游标分页（SegmentIndexGT）与 Limit，会影响计数结果，
+		// 因此基于 applySegmentFilters 重新构造计数查询。group_key 已在上面分支处理。
+		countQ := applySegmentFilters(s.client.Segment.Query(), resourceID, opts, s.dialect)
 		total, cerr := countQ.Count(ctx)
 		if cerr != nil {
 			return nil, cerr
