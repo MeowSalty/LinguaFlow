@@ -396,3 +396,49 @@ func TestUndoSearchReplacePrunedByAge(t *testing.T) {
 		t.Fatalf("revision count=%d want 0 (pruned)", count)
 	}
 }
+
+// TestPreviewSearchReplaceQualityNoneIsolation 防回归：搜索替换预览带
+// quality_issues=none 时，质量谓词必须与 resource_id 限定以 AND 原子组合。
+// 若谓词未加括号，`resource_id = ? AND quality_issues IS NULL OR NOT EXISTS (...)`
+// 的 OR 分支没有资源限定，会把其他项目资源的"干净"段计入匹配面，
+// 预览统计（影响面）跨资源膨胀，还可能误导后续批量替换。
+func TestPreviewSearchReplaceQualityNoneIsolation(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "sr-iso-user")
+	project1 := createTestProject(t, client, "sr-iso-p1", user.ID)
+	project2 := createTestProject(t, client, "sr-iso-p2", user.ID)
+	resA := createTestResource(t, client, project1.ID, "chapters/sr-iso-a.txt")
+	resC := createTestResource(t, client, project2.ID, "chapters/sr-iso-c.txt")
+	// 两段 quality_issues 均为 NULL（即"没问题"），target 均含 "hello"：
+	// 只有 resA 的段在资源范围内，resC 的段只能靠 resource_id 限定排除。
+	segA := createTestSegmentWithTarget(t, client, resA.ID, 0, "src", "hello world", nil)
+	segC := createTestSegmentWithTarget(t, client, resC.ID, 0, "src2", "hello again", nil)
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+
+	result, err := svc.PreviewSearchReplace(ctx, user.ID, project1.ID, resA.ID, SearchReplaceOptions{
+		Find:          "hello",
+		ReplaceWith:   "hi",
+		QualityIssues: "none",
+	})
+	if err != nil {
+		t.Fatalf("PreviewSearchReplace: %v", err)
+	}
+	if result.MatchedSegmentCount != 1 {
+		t.Fatalf("matched_segment_count=%d want 1 (resC 段不得跨项目泄漏)", result.MatchedSegmentCount)
+	}
+	if len(result.Items) != 1 {
+		ids := make([]int, 0, len(result.Items))
+		for _, item := range result.Items {
+			ids = append(ids, item.SegmentID)
+		}
+		t.Fatalf("items=%d (segment_ids=%v) want 1, want segment_id=%d (resC 段 %d 不得泄漏)", len(result.Items), ids, segA.ID, segC.ID)
+	}
+	if result.TotalReplacements != 1 {
+		t.Fatalf("total_replacements=%d want 1", result.TotalReplacements)
+	}
+	if result.Items[0].SegmentID != segA.ID {
+		t.Fatalf("item segment_id=%d want %d (resA 的段)", result.Items[0].SegmentID, segA.ID)
+	}
+}

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -916,4 +917,158 @@ func TestListResourceSegmentsQualityFilterDismissed(t *testing.T) {
 			Limit:           50,
 		}, []int{3})
 	})
+}
+
+// TestListResourceSegmentsQualityFilterIsolation 防回归：质量谓词注入后必须与
+// resource_id 限定以 AND 原子组合。quality_issues=none 分支含顶层 OR，若整体不加
+// 括号，`resource_id = ? AND quality_issues IS NULL OR NOT EXISTS (...)` 会被解析为
+// `(resource_id = ? AND quality_issues IS NULL) OR NOT EXISTS (...)`——OR 分支没有
+// resource 限定，导致列出其他资源甚至其他项目的"干净"段，include_total 计数同样膨胀。
+func TestListResourceSegmentsQualityFilterIsolation(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-iso-user")
+	project1 := createTestProject(t, client, "seg-iso-p1", user.ID)
+	project2 := createTestProject(t, client, "seg-iso-p2", user.ID)
+	resA := createTestResource(t, client, project1.ID, "chapters/iso-a.txt")
+	resB := createTestResource(t, client, project1.ID, "chapters/iso-b.txt")
+	resC := createTestResource(t, client, project2.ID, "chapters/iso-c.txt")
+
+	// resA：index 0 干净（NULL issues），index 1 有 pending issue
+	createTestSegment(t, client, resA.ID, 0, "a-clean", nil)
+	createTestSegment(t, client, resA.ID, 1, "a-issue", []qa.QualityIssue{
+		{SegmentIndex: 1, Severity: qa.SeverityWarning, Code: "duplicate", Message: "dup"},
+	})
+	// resB（同项目另一资源）：全部干净；index 2 超过 resA 的最大 index，
+	// 供游标子测试验证 index 大于游标的外资源段也不得泄漏。
+	createTestSegment(t, client, resB.ID, 0, "b-clean-0", nil)
+	createTestSegment(t, client, resB.ID, 1, "b-clean-1", nil)
+	createTestSegment(t, client, resB.ID, 2, "b-clean-2", nil)
+	// resC（其他项目）：全部干净
+	createTestSegment(t, client, resC.ID, 0, "c-clean-0", nil)
+	createTestSegment(t, client, resC.ID, 1, "c-clean-1", nil)
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+
+	// resourceIDOf 安全解引用 Segment.ResourceID（*int），nil 记为 -1 便于报告泄漏。
+	resourceIDOf := func(row *ent.Segment) int {
+		if row.ResourceID == nil {
+			return -1
+		}
+		return *row.ResourceID
+	}
+	// dumpRows 把结果行压缩成可读摘要，泄漏时逐条列出归属资源与源文，便于定位。
+	dumpRows := func(rows []*ent.Segment) string {
+		parts := make([]string, 0, len(rows))
+		for _, row := range rows {
+			parts = append(parts, fmt.Sprintf("{id=%d resource_id=%d index=%d source=%q}",
+				row.ID, resourceIDOf(row), row.SegmentIndex, row.SourceText))
+		}
+		return strings.Join(parts, " ")
+	}
+	// assertScoped 断言结果恰好是 resA 的 wantIndex 段：任何 resource_id 不是 resA
+	// 的行都是跨资源/跨项目泄漏。
+	assertScoped := func(t *testing.T, page *ResourceSegmentPage, wantIndex int) {
+		t.Helper()
+		if len(page.Items) != 1 {
+			t.Fatalf("got %d items want 1 (resA index %d), rows=%s", len(page.Items), wantIndex, dumpRows(page.Items))
+		}
+		row := page.Items[0]
+		if got := resourceIDOf(row); got != resA.ID {
+			t.Fatalf("leaked item from other resource/project: id=%d resource_id=%d want %d (source=%q)", row.ID, got, resA.ID, row.SourceText)
+		}
+		if row.SegmentIndex != wantIndex {
+			t.Fatalf("segment_index=%d want %d", row.SegmentIndex, wantIndex)
+		}
+	}
+
+	t.Run("none", func(t *testing.T) {
+		page, err := svc.ListResourceSegments(ctx, user.ID, project1.ID, resA.ID, ResourceSegmentListOptions{
+			QualityIssues: "none",
+			IncludeTotal:  true,
+			Limit:         50,
+		})
+		if err != nil {
+			t.Fatalf("ListResourceSegments: %v", err)
+		}
+		assertScoped(t, page, 0)
+		if page.Total == nil {
+			t.Fatalf("total=nil want non-nil (IncludeTotal=true)")
+		}
+		if *page.Total != 1 {
+			t.Fatalf("total=%d want 1 (计数不得跨资源/项目膨胀)", *page.Total)
+		}
+	})
+
+	t.Run("has", func(t *testing.T) {
+		page, err := svc.ListResourceSegments(ctx, user.ID, project1.ID, resA.ID, ResourceSegmentListOptions{
+			QualityIssues: "has",
+			IncludeTotal:  true,
+			Limit:         50,
+		})
+		if err != nil {
+			t.Fatalf("ListResourceSegments: %v", err)
+		}
+		assertScoped(t, page, 1)
+		if page.Total == nil || *page.Total != 1 {
+			t.Fatalf("total=%v want 1", page.Total)
+		}
+	})
+
+	t.Run("none_with_cursor", func(t *testing.T) {
+		// 游标语义：AfterID 为已消费的最后一个 segment index，返回严格大于它的行。
+		// 取 1（resA 最后一段）后 resA 已无 "none" 匹配行；resB 的 index 2 段是
+		// 唯一 index > 1 的干净段，若 resource_id 限定失效（谓词未括号化）它会
+		// 直接出现在结果里，行断言与 Total 断言（计数不含游标）双绊线。
+		// 注意 AfterID=0 是"无游标"哨兵，无法表达"干净段（index 0）之后"，故取最后 index。
+		page, err := svc.ListResourceSegments(ctx, user.ID, project1.ID, resA.ID, ResourceSegmentListOptions{
+			QualityIssues: "none",
+			AfterID:       1,
+			IncludeTotal:  true,
+			Limit:         50,
+		})
+		if err != nil {
+			t.Fatalf("ListResourceSegments: %v", err)
+		}
+		if len(page.Items) != 0 {
+			t.Fatalf("cursor 之后应无匹配行, got %d items, rows=%s", len(page.Items), dumpRows(page.Items))
+		}
+		if page.Total == nil || *page.Total != 1 {
+			t.Fatalf("total=%v want 1 (游标不影响计数，且计数不得跨资源膨胀)", page.Total)
+		}
+	})
+}
+
+// TestBuildQualityPredicateParenthesized 防回归：质量谓词是经 sql.ExprP 注入的
+// 原始 SQL，ent 不会给单函数原始谓词自动加括号。因此四个分支的谓词必须自带外层
+// 括号、作为原子单元加入 AND 链；否则 quality_issues=none 的顶层 OR 会截断 AND 链
+// （行为影响见 TestListResourceSegmentsQualityFilterIsolation）。对 SQLite/Postgres
+// 两个 dialect 的全部分支断言 " AND ("，锁定所有分支均以括号化形式拼接。
+func TestBuildQualityPredicateParenthesized(t *testing.T) {
+	modes := []struct {
+		name string
+		opts ResourceSegmentListOptions
+	}{
+		{"issues_none", ResourceSegmentListOptions{QualityIssues: "none"}},
+		{"issues_has", ResourceSegmentListOptions{QualityIssues: "has"}},
+		{"severity_error", ResourceSegmentListOptions{QualitySeverity: "error"}},
+		{"code_untranslated", ResourceSegmentListOptions{QualityCode: "untranslated"}},
+	}
+	for _, d := range []string{dialect.SQLite, dialect.Postgres} {
+		for _, m := range modes {
+			t.Run(d+"/"+m.name, func(t *testing.T) {
+				sel := sql.Dialect(d).Select().From(sql.Table(segment.Table))
+				segment.ResourceIDEQ(12)(sel) // AND 链首项：资源限定
+				p := buildQualityPredicate(m.opts, d)
+				if p == nil {
+					t.Fatalf("buildQualityPredicate(%+v) = nil, want predicate", m.opts)
+				}
+				p(sel)
+				query, _ := sel.Query()
+				if !strings.Contains(query, " AND (") {
+					t.Fatalf("quality predicate must join the AND chain as a parenthesized unit\ndialect=%s mode=%s\nquery: %s", d, m.name, query)
+				}
+			})
+		}
+	}
 }

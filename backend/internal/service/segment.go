@@ -189,6 +189,15 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 	return page, nil
 }
 
+// rawPred 把原始 SQL 表达式包装为整体括号化的谓词。ent 以 And 组合多个
+// Where 谓词时不会为单 fn 的 ExprP 谓词补括号，含顶层 OR 的表达式会因
+// SQL 优先级（AND 高于 OR）劫持同查询的其它过滤条件——quality_issues=none
+// 曾因此架空 resource_id 过滤，泄漏其它资源/项目的段落。所有原始谓词必须
+// 经此入口括号化，禁止直接使用 sql.ExprP。
+func rawPred(expr string) *sql.Predicate {
+	return sql.ExprP("(" + expr + ")")
+}
+
 // buildQualityPredicate 按 quality_issues / quality_severity / quality_code 构造 SQL 谓词。
 // 非法枚举值安全降级为不过滤（返回 nil）。severity 与 code 使用独立 EXISTS（AND）。
 // 三个维度均只统计"待处理"的 issue：disposition 为 dismissed 的已被用户驳回，
@@ -202,6 +211,7 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 // 里是 jsonb 的"键存在"运算符，会导致 "syntax error at or near ")""（SQLSTATE 42601）。
 // severity（warning|error）与 code（qa.IsFilterableIssueCode 白名单）均已强校验，
 // 直接以单引号字面量内联即可，避免占位符冲突。
+// 所有原始表达式经 rawPred 整体括号化，保证与其它谓词 AND 组合时的语义安全。
 func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) predicate.Segment {
 	usePostgres := dialectName == dialect.Postgres
 	var preds []predicate.Segment
@@ -212,19 +222,19 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
 				// 存在至少一个未驳回（disposition 缺失或 != 'dismissed'）的 issue
-				s.Where(sql.ExprP(fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col)))
+				s.Where(rawPred(fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col)))
 				return
 			}
-			s.Where(sql.ExprP(fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col)))
+			s.Where(rawPred(fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col)))
 		}))
 	case "none":
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
-				s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR jsonb_typeof(%s) != 'array' OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col, col)))
+				s.Where(rawPred(fmt.Sprintf("%s IS NULL OR jsonb_typeof(%s) != 'array' OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed')", col, col, col)))
 				return
 			}
-			s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR NOT EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col, col)))
+			s.Where(rawPred(fmt.Sprintf("%s IS NULL OR NOT EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed')", col, col)))
 		}))
 	}
 
@@ -234,12 +244,12 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
-				s.Where(sql.ExprP(
+				s.Where(rawPred(
 					fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE (v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed') AND v ->> 'severity' = '%s')", col, col, sev),
 				))
 				return
 			}
-			s.Where(sql.ExprP(
+			s.Where(rawPred(
 				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE (json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed') AND json_extract(value, '$.severity') = '%s')", col, sev),
 			))
 		}))
@@ -250,12 +260,12 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)
 			if usePostgres {
-				s.Where(sql.ExprP(
+				s.Where(rawPred(
 					fmt.Sprintf("jsonb_typeof(%s) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE (v ->> 'disposition' IS NULL OR v ->> 'disposition' != 'dismissed') AND v ->> 'code' = '%s')", col, col, code),
 				))
 				return
 			}
-			s.Where(sql.ExprP(
+			s.Where(rawPred(
 				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE (json_extract(value, '$.disposition') IS NULL OR json_extract(value, '$.disposition') != 'dismissed') AND json_extract(value, '$.code') = '%s')", col, code),
 			))
 		}))
