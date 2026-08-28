@@ -792,6 +792,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/resources/{resourceId}/segments/search-replace/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 搜索替换预览（dry-run）
+         * @description 在资源段落译文上执行搜索替换的只读预览，不持久化任何变更。
+         *     只对 target_text 执行匹配与替换（source_text 不参与）。
+         *     - substring 模式按字面子串匹配，find 中的 SQL LIKE 通配符（%、_）按普通字符处理
+         *     - regex 模式使用 Go RE2 语法（线性时间，无回溯），replace_with 支持 $1 捕获引用
+         *     - whole_word 仅 substring 模式生效，regex 模式忽略（可用 \b 边界）
+         *     预览仅返回受影响的统计与最多 max_results 条样本；应用由独立的 apply 接口完成。
+         */
+        post: operations["PreviewResourceSegmentsSearchReplace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/segments/search-replace/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 应用搜索替换
+         * @description 对资源段落译文应用搜索替换，无状态：apply 直接接收匹配参数，在事务内对每段
+         *     当前 target_text 重新匹配后替换。替换后新译文经 trim 为空的段落跳过（empty_result）。
+         *     替换成功的段落状态固定为 edited、reviewed_by 为当前用户，并重跑零配置确定性 QA
+         *     与既有裁决对账（dismissed 的 issue 裁决继承）。每次成功应用写入一笔可撤销的
+         *     SegmentRevision 历史（operation_id），可用 undo 接口按乐观校验回滚。
+         */
+        post: operations["ApplyResourceSegmentsSearchReplace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/segments/search-replace/{operationId}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 撤销搜索替换
+         * @description 撤销一笔搜索替换（或撤销一笔先前的撤销，即重做）。按 operation_id 定位历史快照，
+         *     在事务内逐段乐观校验：当前段的 target_text/status/reviewed_by/quality_issues 仍与
+         *     快照 after 一致才回滚到 before；任一字段被后续编辑改变则跳过（target_diverged），
+         *     不覆盖他人工作。撤销自身会写入新的 reverse 历史与新的 undo_operation_id，故可再撤销。
+         *     operation 不存在或已被按龄裁剪返回 404；全部段落发散无可撤销返回 409。
+         */
+        post: operations["UndoResourceSegmentsSearchReplace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/glossary": {
         parameters: {
             query?: never;
@@ -1661,6 +1744,8 @@ export interface components {
         ResourceSegmentListResponse: {
             items: components["schemas"]["Segment"][];
             next_cursor?: string;
+            /** @description 满足过滤条件的段落总数；仅当请求 include_total=true 时返回 */
+            total?: number;
         };
         SegmentReviewRequest: {
             /**
@@ -1923,6 +2008,79 @@ export interface components {
             disposition: "pending" | "dismissed";
             /** @description 裁决说明（可选） */
             note?: string;
+        };
+        SearchReplacePreviewRequest: {
+            /** @description 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法 */
+            find: string;
+            /** @description 替换文本；允许空串表示删除 */
+            replace_with: string;
+            /**
+             * @default substring
+             * @enum {string}
+             */
+            match_mode: "substring" | "regex";
+            /** @default true */
+            case_sensitive: boolean;
+            /** @default false */
+            whole_word: boolean;
+            /**
+             * @description 返回样本上限
+             * @default 20
+             */
+            max_results: number;
+            /** @enum {string} */
+            status?: "pending" | "translated" | "edited" | "approved" | "rejected";
+            /** @enum {string} */
+            quality_issues?: "has" | "none";
+            /** @enum {string} */
+            quality_severity?: "warning" | "error";
+            quality_code?: string;
+            group_key?: string;
+            segment_ids?: number[];
+        };
+        SearchReplacePreviewResponse: {
+            /** @description 含至少一次命中的段落数（受影响段落面） */
+            matched_segment_count: number;
+            /** @description 所有段落命中次数总和 */
+            total_replacements: number;
+            items: components["schemas"]["SearchReplacePreviewItem"][];
+        };
+        SearchReplaceApplyRequest: {
+            /** @description 查找文本；须与预览一致才能命中相同段落 */
+            find: string;
+            /** @description 替换文本；允许空串表示删除 */
+            replace_with: string;
+            /**
+             * @default substring
+             * @enum {string}
+             */
+            match_mode: "substring" | "regex";
+            /** @default true */
+            case_sensitive: boolean;
+            /** @default false */
+            whole_word: boolean;
+            /** @description 可选，仅应用这些段落；省略=对该资源所有当前命中段落应用 */
+            segment_ids?: number[];
+        };
+        SearchReplaceApplyResponse: {
+            /** @description 本次替换的唯一标识，用于撤销 */
+            operation_id: string;
+            applied_count: number;
+            skipped_count: number;
+            /** @description 应用成功的段落 */
+            items: components["schemas"]["Segment"][];
+            /** @description 跳过的段落及原因 */
+            skipped?: components["schemas"]["SearchReplaceSkippedItem"][];
+        };
+        SearchReplaceUndoResponse: {
+            /** @description 本次撤销写入的新历史标识，可再撤销（=重做） */
+            undo_operation_id: string;
+            undone_count: number;
+            skipped_count: number;
+            /** @description 撤销成功回滚的段落 */
+            items: components["schemas"]["Segment"][];
+            /** @description 跳过的段落及原因 */
+            skipped?: components["schemas"]["SearchReplaceSkippedItem"][];
         };
         CreateJobRequest: {
             /** @description 执行计划模板 ID */
@@ -2839,6 +2997,25 @@ export interface components {
             target_start?: number;
             /** @description 目标文本中的结束偏移（按字符/rune，半开区间）；定位失败时省略 */
             target_end?: number;
+        };
+        SearchReplacePreviewItem: {
+            segment_id: number;
+            segment_index: number;
+            source_text: string;
+            /** @description 替换前译文 */
+            before: string;
+            /** @description 替换后译文；replace_with 为空串时为删除结果 */
+            after: string;
+            /** @description 该段落内命中次数 */
+            match_count: number;
+        };
+        SearchReplaceSkippedItem: {
+            segment_id: number;
+            /**
+             * @description 跳过原因；no_longer_matches=apply 时当前译文已不含匹配，empty_result=替换后译文为空，target_diverged=undo 时该段已被后续编辑
+             * @enum {string}
+             */
+            reason: "no_longer_matches" | "empty_result" | "target_diverged";
         };
         GlossarySyncImpactResource: {
             resource_id: number;
@@ -4269,6 +4446,12 @@ export interface operations {
                 quality_severity?: "warning" | "error";
                 /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
                 quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "punctuation_wrap_loss" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register" | "ruby_restore_incomplete" | "ruby_tag_loss";
+                /** @description 搜索字段范围；both 时同时匹配原文与译文（默认语义） */
+                search_field?: "source" | "target" | "both";
+                /** @description 搜索是否区分大小写；默认 true 保持子串精确匹配语义 */
+                case_sensitive?: boolean;
+                /** @description 是否在响应中附带满足过滤条件的段落总数（total）；为 true 时额外执行一次计数查询 */
+                include_total?: boolean;
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -4600,6 +4783,123 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResourceSegmentGroupListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    PreviewResourceSegmentsSearchReplace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchReplacePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description 预览结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchReplacePreviewResponse"];
+                };
+            };
+            /** @description 请求非法（find 为空或正则无法编译） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApplyResourceSegmentsSearchReplace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchReplaceApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description 应用结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchReplaceApplyResponse"];
+                };
+            };
+            /** @description 请求非法（find 为空或正则无法编译） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UndoResourceSegmentsSearchReplace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 撤销结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchReplaceUndoResponse"];
+                };
+            };
+            /** @description operation 不存在或已被裁剪 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description 全部段落已被后续编辑改变，无可撤销 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             default: components["responses"]["Problem"];

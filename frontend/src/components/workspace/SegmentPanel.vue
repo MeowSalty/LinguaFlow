@@ -17,6 +17,7 @@ import {
   useProjectWorkspaceStore,
 } from '@/stores/projectWorkspace'
 import SegmentDataTable from '@/components/workspace/SegmentDataTable.vue'
+import SegmentSearchReplaceDrawer from '@/components/workspace/SegmentSearchReplaceDrawer.vue'
 
 type Segment = ApiSchemas['Segment']
 
@@ -91,6 +92,44 @@ const chapterOptions = computed(() => {
   }))
   return [allOption, ...groupOptions]
 })
+
+// ── 搜索字段与大小写 ──
+const searchFieldOptions = computed(() => [
+  { label: t('workspace.segment.searchFieldBoth'), value: 'both' },
+  { label: t('workspace.segment.searchFieldSource'), value: 'source' },
+  { label: t('workspace.segment.searchFieldTarget'), value: 'target' },
+])
+
+const hasSearchText = computed(() => Boolean(workspace.segmentSearch.trim()))
+
+// ── 结果计数（include_total 返回）──
+const segmentsCountLabel = computed(() => {
+  if (workspace.segmentsTotal === null) return null
+  return t('workspace.segment.resultCount', {
+    shown: workspace.segments.length,
+    total: workspace.segmentsTotal,
+  })
+})
+
+// ── 搜索替换抽屉 ──
+const searchReplaceDrawerRef = ref<InstanceType<typeof SegmentSearchReplaceDrawer> | null>(null)
+
+const openSearchReplace = (): void => {
+  searchReplaceDrawerRef.value?.open()
+}
+
+const handleSearchReplaceApplied = (payload: { resourceId: number }): void => {
+  if (!props.projectId) return
+  void workspace.loadSegments(
+    props.projectId,
+    payload.resourceId,
+    false,
+    workspace.epubActiveGroupKey ?? undefined,
+  )
+  if (workspace.isEpubResource) {
+    void workspace.refreshChapterGroups(props.projectId, payload.resourceId)
+  }
+}
 
 // ── 质量筛选 chips ──
 const qualityIssuesChips = computed(() => [
@@ -303,6 +342,26 @@ const handleCloseInlineComment = (): void => {
             :placeholder="t('workspace.segment.searchPlaceholder')"
           />
           <NSelect
+            v-if="hasSearchText"
+            v-model:value="workspace.segmentSearchFieldFilter"
+            size="small"
+            class="md:w-32"
+            :disabled="!workspace.activeResourceId"
+            :options="searchFieldOptions"
+          />
+          <NButton
+            v-if="hasSearchText"
+            size="small"
+            class="px-2.5 font-semibold"
+            :type="workspace.segmentSearchCaseSensitive ? 'primary' : 'default'"
+            :secondary="!workspace.segmentSearchCaseSensitive"
+            :disabled="!workspace.activeResourceId"
+            :title="t('workspace.segment.searchCaseSensitive')"
+            @click="workspace.segmentSearchCaseSensitive = !workspace.segmentSearchCaseSensitive"
+          >
+            Aa
+          </NButton>
+          <NSelect
             v-model:value="workspace.segmentStatusFilter"
             size="small"
             class="md:w-36"
@@ -311,6 +370,20 @@ const handleCloseInlineComment = (): void => {
           />
         </div>
         <div class="flex shrink-0 items-center gap-2">
+          <span
+            v-if="segmentsCountLabel"
+            class="hidden text-xs whitespace-nowrap text-lf-text-muted sm:inline"
+          >
+            {{ segmentsCountLabel }}
+          </span>
+          <NButton
+            secondary
+            size="small"
+            :disabled="!workspace.activeResourceId"
+            @click="openSearchReplace"
+          >
+            {{ t('workspace.segment.searchReplace.title') }}
+          </NButton>
           <NButton
             secondary
             size="small"
@@ -426,5 +499,13 @@ const handleCloseInlineComment = (): void => {
         @reinstate-issue="reinstateIssue"
       />
     </div>
+
+    <SegmentSearchReplaceDrawer
+      ref="searchReplaceDrawerRef"
+      :project-id="projectId"
+      :text-render-mode="textRenderMode"
+      :selected-segment-ids="selectedSegmentIds"
+      @applied="handleSearchReplaceApplied"
+    />
   </div>
 </template>
