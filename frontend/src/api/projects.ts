@@ -30,11 +30,21 @@ export interface SegmentTranslationPreviewError extends Error {
   readonly problem?: ApiSchemas['Problem']
 }
 
+export interface SearchReplaceApplyError extends Error {
+  readonly isSearchReplaceApplyError: true
+  readonly status: number
+  readonly problem?: ApiSchemas['Problem']
+}
+
 export type FetchResourceSegmentsParams = NonNullable<
   ApiPaths['/projects/{projectId}/resources/{resourceId}/segments']['get']['parameters']['query']
 >
 
 export type ResourceSegmentQualityCode = NonNullable<FetchResourceSegmentsParams['quality_code']>
+
+export type SearchReplaceMatchMode = NonNullable<
+  ApiSchemas['SearchReplacePreviewRequest']['match_mode']
+>
 
 export const isResourceConflictError = (error: unknown): error is ResourceConflictError =>
   error instanceof Error &&
@@ -47,6 +57,11 @@ export const isSegmentTranslationPreviewError = (
   error instanceof Error &&
   'isSegmentTranslationPreviewError' in error &&
   (error as SegmentTranslationPreviewError).isSegmentTranslationPreviewError === true
+
+export const isSearchReplaceApplyError = (error: unknown): error is SearchReplaceApplyError =>
+  error instanceof Error &&
+  'isSearchReplaceApplyError' in error &&
+  (error as SearchReplaceApplyError).isSearchReplaceApplyError === true
 
 export const fetchCurrentUser = async (
   client: ApiClient = apiClient,
@@ -655,6 +670,121 @@ export const setResourceSegmentIssueDisposition = async (
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.setIssueDispositionFailed'), error, response)
+  }
+
+  return data
+}
+
+/** 搜索替换预览/应用请求的公共参数 */
+export interface SearchReplaceParams {
+  find: string
+  replace_with: string
+  match_mode: SearchReplaceMatchMode
+  case_sensitive: boolean
+  whole_word: boolean
+}
+
+const buildSearchReplaceProblemError = (
+  fallbackMessage: string,
+  error: unknown,
+  response?: Response,
+): SearchReplaceApplyError => {
+  const failure = buildRequestFailureError(fallbackMessage, error, response)
+  const problemError = failure as SearchReplaceApplyError
+  const problem =
+    error && typeof error === 'object' && 'title' in error
+      ? (error as ApiSchemas['Problem'])
+      : undefined
+
+  Object.defineProperties(problemError, {
+    isSearchReplaceApplyError: { value: true, enumerable: false },
+    status: { value: response?.status ?? problem?.status ?? 0, enumerable: false },
+    problem: { value: problem, enumerable: false },
+  })
+
+  return problemError
+}
+
+export const previewResourceSegmentsSearchReplace = async (
+  projectId: number,
+  resourceId: number,
+  payload: SearchReplaceParams & Partial<ApiSchemas['SearchReplacePreviewRequest']>,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['SearchReplacePreviewResponse']> => {
+  const { find, replace_with, match_mode, case_sensitive, whole_word, ...filters } = payload
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/search-replace/preview',
+    {
+      params: { path: { projectId, resourceId } },
+      body: {
+        find,
+        replace_with,
+        match_mode,
+        case_sensitive,
+        whole_word,
+        ...filters,
+        max_results: filters.max_results ?? 20,
+      },
+    },
+  )
+
+  if (!data) {
+    throw buildSearchReplaceProblemError(
+      t('api.errors.previewSearchReplaceFailed'),
+      error,
+      response,
+    )
+  }
+
+  return data
+}
+
+export const applyResourceSegmentsSearchReplace = async (
+  projectId: number,
+  resourceId: number,
+  payload: SearchReplaceParams & Pick<ApiSchemas['SearchReplaceApplyRequest'], 'segment_ids'>,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['SearchReplaceApplyResponse']> => {
+  const { find, replace_with, match_mode, case_sensitive, whole_word, ...rest } = payload
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/search-replace/apply',
+    {
+      params: { path: { projectId, resourceId } },
+      body: {
+        find,
+        replace_with,
+        match_mode,
+        case_sensitive,
+        whole_word,
+        ...(rest.segment_ids && rest.segment_ids.length > 0
+          ? { segment_ids: rest.segment_ids }
+          : {}),
+      },
+    },
+  )
+
+  if (!data) {
+    throw buildSearchReplaceProblemError(t('api.errors.applySearchReplaceFailed'), error, response)
+  }
+
+  return data
+}
+
+export const undoResourceSegmentsSearchReplace = async (
+  projectId: number,
+  resourceId: number,
+  operationId: string,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['SearchReplaceUndoResponse']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/search-replace/{operationId}/undo',
+    {
+      params: { path: { projectId, resourceId, operationId } },
+    },
+  )
+
+  if (!data) {
+    throw buildSearchReplaceProblemError(t('api.errors.undoSearchReplaceFailed'), error, response)
   }
 
   return data
