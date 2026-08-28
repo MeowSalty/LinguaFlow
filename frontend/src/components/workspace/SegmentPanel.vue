@@ -92,6 +92,24 @@ const chapterOptions = computed(() => {
   return [allOption, ...groupOptions]
 })
 
+// ── 搜索字段与大小写 ──
+const searchFieldOptions = computed(() => [
+  { label: t('workspace.segment.searchFieldBoth'), value: 'both' },
+  { label: t('workspace.segment.searchFieldSource'), value: 'source' },
+  { label: t('workspace.segment.searchFieldTarget'), value: 'target' },
+])
+
+const hasSearchText = computed(() => Boolean(workspace.segmentSearch.trim()))
+
+// ── 结果计数（include_total 返回）──
+const segmentsCountLabel = computed(() => {
+  if (workspace.segmentsTotal === null) return null
+  return t('workspace.segment.resultCount', {
+    shown: workspace.segments.length,
+    total: workspace.segmentsTotal,
+  })
+})
+
 // ── 质量筛选 chips ──
 const qualityIssuesChips = computed(() => [
   { value: 'has' as const, label: t('workspace.filters.qualityIssuesHas') },
@@ -303,6 +321,26 @@ const handleCloseInlineComment = (): void => {
             :placeholder="t('workspace.segment.searchPlaceholder')"
           />
           <NSelect
+            v-if="hasSearchText"
+            v-model:value="workspace.segmentSearchFieldFilter"
+            size="small"
+            class="md:w-32"
+            :disabled="!workspace.activeResourceId"
+            :options="searchFieldOptions"
+          />
+          <NButton
+            v-if="hasSearchText"
+            size="small"
+            class="px-2.5 font-semibold"
+            :type="workspace.segmentSearchCaseSensitive ? 'primary' : 'default'"
+            :secondary="!workspace.segmentSearchCaseSensitive"
+            :disabled="!workspace.activeResourceId"
+            :title="t('workspace.segment.searchCaseSensitive')"
+            @click="workspace.segmentSearchCaseSensitive = !workspace.segmentSearchCaseSensitive"
+          >
+            Aa
+          </NButton>
+          <NSelect
             v-model:value="workspace.segmentStatusFilter"
             size="small"
             class="md:w-36"
@@ -311,6 +349,12 @@ const handleCloseInlineComment = (): void => {
           />
         </div>
         <div class="flex shrink-0 items-center gap-2">
+          <span
+            v-if="segmentsCountLabel"
+            class="hidden text-xs whitespace-nowrap text-lf-text-muted sm:inline"
+          >
+            {{ segmentsCountLabel }}
+          </span>
           <NButton
             secondary
             size="small"

@@ -379,12 +379,14 @@ watch(
     workspace.segmentQualityIssuesFilter,
     workspace.segmentQualitySeverityFilter,
     workspace.segmentQualityCodeFilter,
+    workspace.segmentSearchFieldFilter,
+    workspace.segmentSearchCaseSensitive,
     workspace.activeResourceId,
   ],
   (newVal, oldVal) => {
     if (!projectId.value || !workspace.activeResourceId) return
 
-    const resourceIdChanged = newVal[5] !== oldVal?.[5]
+    const resourceIdChanged = newVal[7] !== oldVal?.[7]
 
     // EPUB 资源切换时加载章节数据
     if (resourceIdChanged && workspace.isEpubResource) {

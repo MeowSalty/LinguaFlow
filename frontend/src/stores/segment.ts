@@ -27,6 +27,7 @@ export type SegmentStatusFilter =
 export type SegmentQualityIssuesFilter = 'has' | 'none' | 'all'
 export type SegmentQualitySeverityFilter = 'warning' | 'error' | 'all'
 export type SegmentQualityCodeFilter = ResourceSegmentQualityCode | 'all'
+export type SegmentSearchFieldFilter = 'source' | 'target' | 'both'
 
 export interface SegmentProgress {
   pending: number
@@ -44,6 +45,7 @@ export const useSegmentStore = defineStore('segment', () => {
   // ── 段落状态 ──
   const segments = ref<Segment[]>([])
   const segmentsCursor = ref<string | null>(null)
+  const segmentsTotal = ref<number | null>(null)
   const loadingSegments = ref(false)
   const segmentsError = ref<string | null>(null)
   const editingSegmentIds = ref<number[]>([])
@@ -55,6 +57,8 @@ export const useSegmentStore = defineStore('segment', () => {
   const segmentQualityIssuesFilter = ref<SegmentQualityIssuesFilter>('all')
   const segmentQualitySeverityFilter = ref<SegmentQualitySeverityFilter>('all')
   const segmentQualityCodeFilter = ref<SegmentQualityCodeFilter>('all')
+  const segmentSearchFieldFilter = ref<SegmentSearchFieldFilter>('both')
+  const segmentSearchCaseSensitive = ref(true)
 
   // ── EPUB 章节导航状态 ──
 
@@ -134,9 +138,14 @@ export const useSegmentStore = defineStore('segment', () => {
         segmentQualitySeverityFilter.value !== 'all' ||
         segmentQualityCodeFilter.value !== 'all'
 
+      const hasSearch = Boolean(segmentSearch.value.trim())
+
       const response = await fetchResourceSegments(projectId, resourceId, {
         status: segmentStatusFilter.value === 'all' ? undefined : segmentStatusFilter.value,
         search: segmentSearch.value.trim() || undefined,
+        search_field: hasSearch ? segmentSearchFieldFilter.value : undefined,
+        case_sensitive: hasSearch ? segmentSearchCaseSensitive.value : undefined,
+        include_total: !append,
         quality_issues:
           segmentQualityIssuesFilter.value === 'all' ? undefined : segmentQualityIssuesFilter.value,
         quality_severity:
@@ -151,6 +160,9 @@ export const useSegmentStore = defineStore('segment', () => {
       })
       segments.value = append ? [...segments.value, ...response.items] : response.items
       segmentsCursor.value = response.next_cursor ?? null
+      if (!append) {
+        segmentsTotal.value = response.total ?? null
+      }
 
       // 仅在无筛选条件的全量加载时更新进度缓存
       if (
@@ -283,6 +295,7 @@ export const useSegmentStore = defineStore('segment', () => {
   const resetSegments = (): void => {
     segments.value = []
     segmentsCursor.value = null
+    segmentsTotal.value = null
   }
 
   /**
@@ -305,12 +318,15 @@ export const useSegmentStore = defineStore('segment', () => {
   const reset = (): void => {
     segments.value = []
     segmentsCursor.value = null
+    segmentsTotal.value = null
     segmentsError.value = null
     segmentSearch.value = ''
     segmentStatusFilter.value = 'all'
     segmentQualityIssuesFilter.value = 'all'
     segmentQualitySeverityFilter.value = 'all'
     segmentQualityCodeFilter.value = 'all'
+    segmentSearchFieldFilter.value = 'both'
+    segmentSearchCaseSensitive.value = true
     segmentProgressCache.value = new Map()
     actionError.value = null
     resetEpubState()
@@ -319,6 +335,7 @@ export const useSegmentStore = defineStore('segment', () => {
   return {
     segments,
     segmentsCursor,
+    segmentsTotal,
     loadingSegments,
     segmentsError,
     editingSegmentIds,
@@ -328,6 +345,8 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentQualityIssuesFilter,
     segmentQualitySeverityFilter,
     segmentQualityCodeFilter,
+    segmentSearchFieldFilter,
+    segmentSearchCaseSensitive,
     segmentProgressCache,
     updateSegmentProgressCache,
     loadSegments,
