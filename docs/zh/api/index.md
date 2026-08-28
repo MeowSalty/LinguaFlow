@@ -23,7 +23,9 @@ LinguaFlow 提供 RESTful API，便于与外部系统集成。个人使用 Web /
 
 完整的交互式 API 文档请访问：
 
-**[LinguaFlow API 文档](/redoc/index.html){target="_blank"}**
+<!-- 链接目标 redoc/index.html 位于 public/ 静态目录，VitePress 不会为它加 base 前缀，
+     因此必须用相对路径，带 base 与不带 base 部署时才能都正确解析 -->
+**[LinguaFlow API 文档](../../redoc/index.html){target="_blank"}**
 
 <!-- PLACEHOLDER_QUICK_REF -->
 
