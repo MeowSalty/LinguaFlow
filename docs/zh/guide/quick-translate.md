@@ -100,11 +100,11 @@
 ## 限制
 
 - **单段**：一次翻译一段文本（可含多句）。整篇文档请走项目翻译。
-- **并发受限**：即时翻译有独立的并发上限（默认每用户 2、全局 8），见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#quick-translate-即时翻译)。提示「并发已满」时稍后重试即可。
+- **并发受限**：即时翻译有独立的并发上限（默认每用户 2、全局 8），见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-—-即时翻译)。提示「并发已满」时稍后重试即可。
 - **超时**：默认单次 5 分钟（与单段试译一致，因含 429 指数退避，单轮 LLM 调用可能较慢）。服务器管理员可在 `server.quick_translate.timeout` / `max_timeout` 调整。
 
 ## 下一步
 
 - [快速开始 · Web](/zh/guide/getting-started) — 项目化批量翻译的完整流程
 - [翻译配置 · 使用](/zh/guide/translation-config) — 执行计划、术语、单段试译
-- [配置文件与环境变量](/zh/guide/configuration#quick-translate-即时翻译) — 后端配置项
+- [配置文件与环境变量](/zh/guide/configuration#server-quick-translate-—-即时翻译) — 后端配置项

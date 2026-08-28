@@ -243,6 +243,7 @@ server:
   jwt_expiry: 15m
   refresh_token_expiry: 720h
   shutdown_timeout: 10s
+  revision_retention: 2160h # 搜索替换历史保留时长（撤销窗口，默认 90 天）
   quick_translate:
     max_concurrency: 2     # 单用户并发上限；全局 = 此值 × 4
     timeout: 5m            # 单次执行超时
@@ -522,6 +523,7 @@ revise 轮的系统提示词内置不可覆盖，protect/ruby 等行为复用计
 | `jwt_expiry`           | duration | `15m`                           | JWT 过期时间                               |
 | `refresh_token_expiry` | duration | `720h`（30 天）                 | 刷新令牌过期时间                           |
 | `shutdown_timeout`     | duration | `10s`                           | 优雅关闭超时                               |
+| `revision_retention`   | duration | `2160h`（90 天）                | [搜索替换](/zh/guide/review#搜索替换)历史的保留时长（撤销窗口）。`<=0` 用默认值 |
 | `serve_ui`             | bool     | `true`                          | 是否提供嵌入式 Web UI，可用 `--no-ui` 关闭 |
 
 ##### server.cors — 跨域
@@ -562,7 +564,7 @@ revise 轮的系统提示词内置不可覆盖，protect/ruby 等行为复用计
 | `max_replay_events`   | int  | `0`（=容量 × 2）  | SSE 单次连接历史回放总量上限。达到上限即停，缺口由前端用 `Last-Event-ID` 续传或 REST 历史端点补全。`<=0` 用 `ring_buffer_capacity × 2` |
 
 ::: info 新连接只补最近窗口
-一个全新的 SSE 连接（无 `Last-Event-ID`）只会从「最近 `max_replay_events` 条」开始补进，而非从 `seq 0` 全量回放。更早的历史由前端通过 [REST 历史端点](/zh/api/#任务事件历史) 分页拉取，保证大作业也能秒开。
+一个全新的 SSE 连接（无 `Last-Event-ID`）只会从「最近 `max_replay_events` 条」开始补进，而非从 `seq 0` 全量回放。更早的历史由前端通过 [REST 历史端点](/zh/api/#_9-任务事件历史-分页) 分页拉取，保证大作业也能秒开。
 :::
 
 ##### server.database — 数据库

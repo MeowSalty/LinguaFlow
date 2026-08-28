@@ -23,7 +23,9 @@ LinguaFlow 提供 RESTful API，便于与外部系统集成。个人使用 Web /
 
 完整的交互式 API 文档请访问：
 
-**[LinguaFlow API 文档](/redoc/index.html){target="_blank"}**
+<!-- 链接目标 redoc/index.html 位于 public/ 静态目录，VitePress 不会为它加 base 前缀，
+     因此必须用相对路径，带 base 与不带 base 部署时才能都正确解析 -->
+**[LinguaFlow API 文档](../../redoc/index.html){target="_blank"}**
 
 <!-- PLACEHOLDER_QUICK_REF -->
 
@@ -116,7 +118,7 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/quick-translate \
 | `project_id`         | 可选。提供时复用该项目的术语表与语言配置，并校验访问权                      |
 | `glossary`           | 内联临时术语表数组（`source`/`target` 必填，可选 `forbidden`/`mandatory` 等）。项目场景下叠加在项目术语表之上 |
 
-响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-即时翻译)。
+响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-—-即时翻译)。
 
 ### 8. 单段预览（试译 / 修订，不落库）
 
@@ -167,7 +169,7 @@ curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&after_seq=1000"
 响应中的 `next_after_seq` / `next_before_seq` 为下一次翻页游标；`0` 表示无更多数据。字段全集见 Redoc 中 `JobEvent` / `JobEventListResponse`。
 
 ::: tip SSE 与 REST 怎么配合
-SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-实时事件流)。
+SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-—-实时事件流)。
 :::
 
 ### 10. 活动与审计日志（服务器模式）
@@ -217,6 +219,45 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/42
 | `note`          | 裁决说明（可选），如「专有名词，有意保留」                |
 
 `QualityIssue` 响应含 `disposition`（必填，`pending` / `dismissed`）、`decided_by`（裁决者 user_id，`null` 表示由 LLM 裁决）、`decided_at`（裁决时间）与 `note`（裁决说明）字段。已 `dismissed` 的问题不计入段落列表的质量筛选与统计。产品侧操作见 [翻译审校 · 质量问题裁决](/zh/guide/review#质量问题裁决)。
+
+### 12. 段落搜索替换（search-replace）
+
+对某个资源下的段落**译文**批量查找替换（原文不变），分三步：先预览影响范围，再应用写回，最后可按 `operation_id` 撤销。产品侧操作见 [翻译审校 · 搜索替换](/zh/guide/review#搜索替换)。
+
+```bash
+# 1. 预览：只读，不落库，返回受影响段落数、命中总数与替换前后对照样本
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/search-replace/preview \
+  -H "Content-Type: application/json" \
+  -d '{"find": "color", "replace_with": "colour"}'
+
+# 2. 应用：写回译文，返回 operation_id（供撤销使用）
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/search-replace/apply \
+  -H "Content-Type: application/json" \
+  -d '{"find": "color", "replace_with": "colour"}'
+
+# 3. 撤销最近一次替换（再次调用相当于重做）
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/search-replace/<operationId>/undo
+```
+
+预览与应用共用同一套请求字段：
+
+| 字段             | 类型   | 默认        | 说明                                                         |
+| ---------------- | ------ | ----------- | ------------------------------------------------------------ |
+| `find`           | string | 必填        | 查找内容                                                     |
+| `replace_with`   | string | 必填        | 替换文本；空串表示删除匹配内容                               |
+| `match_mode`     | string | `substring` | `substring` 或 `regex`（RE2 语法，`replace_with` 支持 `$1` 捕获引用） |
+| `case_sensitive` | bool   | `true`      | 是否区分大小写                                               |
+| `whole_word`     | bool   | `false`     | 全字匹配，仅 `substring` 模式生效                            |
+
+预览额外支持 `status` / `quality_issues` 等段落过滤参数与 `max_results`（`1`–`100`，默认 `20`）样本数上限；响应含 `matched_segment_count`（受影响段落数）、`total_replacements`（命中总次数）与样本数组（每项含 `before` / `after` 替换前后对照）。应用响应含 `operation_id`、`applied_count`、`skipped_count` 与跳过明细（如译文已不含匹配内容、替换后译文为空）。
+
+要点：
+
+- 被替换的段落状态置为 `edited`，并重新执行规则质检
+- 撤销按 `operation_id` 回滚；替换后又被人工编辑过的段落会跳过（`target_diverged`）
+- 替换历史超过保留期返回 404，全部段落均已变更、无可撤销内容返回 409；保留时长由 `server.revision_retention` 控制（默认 90 天）
+
+另：段落列表端点 `GET /projects/{projectId}/resources/{resourceId}/segments` 的搜索还支持 `search_field`（`source` / `target` / `both`，默认 `both`）、`case_sensitive`（默认 `true`）与 `include_total`（默认 `false`，为 `true` 时响应附带满足过滤条件的 `total` 总数）查询参数。
 
 ## 错误码
 
