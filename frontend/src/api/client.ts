@@ -98,50 +98,61 @@ const refreshTokenOnce = (): Promise<string | null> => {
 
 export const createAuthMiddleware = (
   readAccessToken = resolveAccessTokenReader(getDefaultTokenStorage()),
-): Middleware => ({
-  onRequest({ request, schemaPath }) {
-    if (AUTH_TOKEN_SKIP_PATHS.has(schemaPath)) {
-      return undefined
-    }
+): Middleware => {
+  // fetch() 会把 request 标记为已使用（body 流被扰动），之后无法再用它构造重试请求；
+  // 在 onRequest 阶段（request 尚未被消费）保留一份克隆，供 401 续签成功后重建重试请求
+  const retryRequests = new WeakMap<Request, Request>()
 
-    const accessToken = readAccessToken()
-
-    if (request.headers.has('Authorization')) {
-      return undefined
-    }
-
-    if (!accessToken && !_isLocalMode) {
-      return new Response(null, { status: 401 })
-    }
-
-    if (!accessToken) {
-      return undefined
-    }
-
-    const headers = new Headers(request.headers)
-    headers.set('Authorization', `Bearer ${accessToken}`)
-
-    return new Request(request, { headers })
-  },
-  async onResponse({ response, request, schemaPath }) {
-    if (response.status === 401 && !AUTH_TOKEN_SKIP_PATHS.has(schemaPath)) {
-      try {
-        const newToken = await refreshTokenOnce()
-        if (newToken) {
-          const headers = new Headers(request.headers)
-          headers.set('Authorization', `Bearer ${newToken}`)
-          return fetch(new Request(request, { headers }))
-        }
-      } catch {
-        // refresh failed
+  return {
+    onRequest({ request, schemaPath }) {
+      if (AUTH_TOKEN_SKIP_PATHS.has(schemaPath)) {
+        return undefined
       }
 
-      _onUnauthorized?.()
-    }
+      try {
+        retryRequests.set(request, request.clone())
+      } catch {
+        // 克隆失败（异常 body）时退回旧行为：无 body 请求仍可直接重试
+      }
 
-    return undefined
-  },
-})
+      const accessToken = readAccessToken()
+
+      if (request.headers.has('Authorization')) {
+        return undefined
+      }
+
+      if (!accessToken && !_isLocalMode) {
+        return new Response(null, { status: 401 })
+      }
+
+      if (!accessToken) {
+        return undefined
+      }
+
+      request.headers.set('Authorization', `Bearer ${accessToken}`)
+      return undefined
+    },
+    async onResponse({ response, request, schemaPath }) {
+      if (response.status === 401 && !AUTH_TOKEN_SKIP_PATHS.has(schemaPath)) {
+        try {
+          const newToken = await refreshTokenOnce()
+          if (newToken) {
+            const retrySource = retryRequests.get(request) ?? request
+            const headers = new Headers(request.headers)
+            headers.set('Authorization', `Bearer ${newToken}`)
+            return fetch(new Request(retrySource, { headers }))
+          }
+        } catch {
+          // refresh failed
+        }
+
+        _onUnauthorized?.()
+      }
+
+      return undefined
+    },
+  }
+}
 
 export const createApiClient = (options: ApiClientOptions = {}): ApiClient => {
   const {
