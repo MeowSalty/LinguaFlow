@@ -17,6 +17,7 @@ import {
   useProjectWorkspaceStore,
 } from '@/stores/projectWorkspace'
 import SegmentDataTable from '@/components/workspace/SegmentDataTable.vue'
+import SegmentSearchReplaceDrawer from '@/components/workspace/SegmentSearchReplaceDrawer.vue'
 
 type Segment = ApiSchemas['Segment']
 
@@ -109,6 +110,26 @@ const segmentsCountLabel = computed(() => {
     total: workspace.segmentsTotal,
   })
 })
+
+// ── 搜索替换抽屉 ──
+const searchReplaceDrawerRef = ref<InstanceType<typeof SegmentSearchReplaceDrawer> | null>(null)
+
+const openSearchReplace = (): void => {
+  searchReplaceDrawerRef.value?.open()
+}
+
+const handleSearchReplaceApplied = (payload: { resourceId: number }): void => {
+  if (!props.projectId) return
+  void workspace.loadSegments(
+    props.projectId,
+    payload.resourceId,
+    false,
+    workspace.epubActiveGroupKey ?? undefined,
+  )
+  if (workspace.isEpubResource) {
+    void workspace.refreshChapterGroups(props.projectId, payload.resourceId)
+  }
+}
 
 // ── 质量筛选 chips ──
 const qualityIssuesChips = computed(() => [
@@ -359,6 +380,14 @@ const handleCloseInlineComment = (): void => {
             secondary
             size="small"
             :disabled="!workspace.activeResourceId"
+            @click="openSearchReplace"
+          >
+            {{ t('workspace.segment.searchReplace.title') }}
+          </NButton>
+          <NButton
+            secondary
+            size="small"
+            :disabled="!workspace.activeResourceId"
             :loading="workspace.loadingSegments"
             @click="handleRefresh"
           >
@@ -470,5 +499,13 @@ const handleCloseInlineComment = (): void => {
         @reinstate-issue="reinstateIssue"
       />
     </div>
+
+    <SegmentSearchReplaceDrawer
+      ref="searchReplaceDrawerRef"
+      :project-id="projectId"
+      :text-render-mode="textRenderMode"
+      :selected-segment-ids="selectedSegmentIds"
+      @applied="handleSearchReplaceApplied"
+    />
   </div>
 </template>

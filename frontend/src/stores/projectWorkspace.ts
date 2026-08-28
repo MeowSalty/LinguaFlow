@@ -96,6 +96,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentQualityCodeFilter,
     segmentSearchFieldFilter,
     segmentSearchCaseSensitive,
+    lastSearchReplaceOperationId,
     segmentProgressCache,
     // EPUB 章节导航状态
     segmentGroups,
@@ -298,6 +299,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentQualityCodeFilter,
     segmentSearchFieldFilter,
     segmentSearchCaseSensitive,
+    lastSearchReplaceOperationId,
     jobStatusFilter,
     // 段落进度缓存
     segmentProgressCache,

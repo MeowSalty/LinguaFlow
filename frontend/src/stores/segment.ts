@@ -85,6 +85,9 @@ export const useSegmentStore = defineStore('segment', () => {
   /** 资源级段落状态缓存：resourceId → 状态分布 */
   const segmentProgressCache = ref<Map<number, SegmentProgress>>(new Map())
 
+  /** 最近一次搜索替换的 operation_id（按资源隔离，用于撤销/重做） */
+  const lastSearchReplaceOperationId = ref<string | null>(null)
+
   const updateSegmentProgressCache = (resourceId: number, segments: Segment[]): void => {
     const counts: SegmentProgress = {
       pending: 0,
@@ -296,6 +299,7 @@ export const useSegmentStore = defineStore('segment', () => {
     segments.value = []
     segmentsCursor.value = null
     segmentsTotal.value = null
+    lastSearchReplaceOperationId.value = null
   }
 
   /**
@@ -328,6 +332,7 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentSearchFieldFilter.value = 'both'
     segmentSearchCaseSensitive.value = true
     segmentProgressCache.value = new Map()
+    lastSearchReplaceOperationId.value = null
     actionError.value = null
     resetEpubState()
   }
@@ -347,6 +352,7 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentQualityCodeFilter,
     segmentSearchFieldFilter,
     segmentSearchCaseSensitive,
+    lastSearchReplaceOperationId,
     segmentProgressCache,
     updateSegmentProgressCache,
     loadSegments,
