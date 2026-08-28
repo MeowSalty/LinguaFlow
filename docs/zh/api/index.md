@@ -116,7 +116,7 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/quick-translate \
 | `project_id`         | 可选。提供时复用该项目的术语表与语言配置，并校验访问权                      |
 | `glossary`           | 内联临时术语表数组（`source`/`target` 必填，可选 `forbidden`/`mandatory` 等）。项目场景下叠加在项目术语表之上 |
 
-响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-即时翻译)。
+响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-—-即时翻译)。
 
 ### 8. 单段预览（试译 / 修订，不落库）
 
@@ -167,7 +167,7 @@ curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&after_seq=1000"
 响应中的 `next_after_seq` / `next_before_seq` 为下一次翻页游标；`0` 表示无更多数据。字段全集见 Redoc 中 `JobEvent` / `JobEventListResponse`。
 
 ::: tip SSE 与 REST 怎么配合
-SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-实时事件流)。
+SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-—-实时事件流)。
 :::
 
 ### 10. 活动与审计日志（服务器模式）

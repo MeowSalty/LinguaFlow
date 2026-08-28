@@ -106,7 +106,7 @@ docker logs linguaflow  # 查看日志
 - 默认 **关闭（off）**：不传思考参数，沿用模型/网关默认；多数翻译场景够用
 - 需要更强推理时再开 **低 / 中 / 高**（仅对支持思考的模型有意义）
 - **Anthropic**：开启后忽略 Temperature/Top P，且思考与输出共用 Max Tokens；批量翻译建议提高 Max Tokens，截断时可降思考档位或减小批次
-- 详见 [翻译配置 · 参考 · 思考强度](/zh/guide/translation-config-reference#思考强度-thinking_level)
+- 详见 [翻译配置 · 参考 · 思考强度](/zh/guide/translation-config-reference#思考强度-thinking-level)
 
 ### 翻译速度很慢？
 

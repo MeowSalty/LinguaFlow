@@ -389,7 +389,7 @@ context:
 | `retry`               | object | 重试                                                                                                                       |
 
 ::: tip 执行策略已移到计划级
-翻译策略引用现在挂在执行计划模板顶层 `profile_id` 上（不再在每轮 translate 里配），translate 与 revise 轮共用该策略的 protect/ruby/repair/QA 等行为预设；CLI 配置里对应的是 `execution.profile`。见下方 [校验摘要](#校验摘要) 与 [配置文件与环境变量](/zh/guide/configuration#execution-执行计划)。
+翻译策略引用现在挂在执行计划模板顶层 `profile_id` 上（不再在每轮 translate 里配），translate 与 revise 轮共用该策略的 protect/ruby/repair/QA 等行为预设；CLI 配置里对应的是 `execution.profile`。见下方 [校验摘要](#校验摘要) 与 [配置文件与环境变量](/zh/guide/configuration#execution-—-执行计划)。
 :::
 
 ::: tip 上下文与批次约束的关系
