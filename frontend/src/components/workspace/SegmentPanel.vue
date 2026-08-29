@@ -35,6 +35,7 @@ const emit = defineEmits<{
   translateByGroupKey: [groupKey: string]
   selectionChange: [segmentIds: number[]]
   translateBatch: [segmentIds: number[]]
+  qaRecheck: []
 }>()
 
 const projectIdRef = toRef(props, 'projectId')
@@ -383,6 +384,9 @@ const handleCloseInlineComment = (): void => {
             @click="openSearchReplace"
           >
             {{ t('workspace.segment.searchReplace.title') }}
+          </NButton>
+          <NButton secondary size="small" @click="emit('qaRecheck')">
+            {{ t('workspace.qaRecheck.action') }}
           </NButton>
           <NButton
             secondary
