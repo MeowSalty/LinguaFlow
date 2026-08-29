@@ -913,6 +913,7 @@ paths:
               - whitespace_irregular
               - repeated_space
               - width_mix
+              - script_mismatch
               - number_mismatch
               - url_email_mismatch
               - subtitle_line_count
@@ -2865,7 +2866,7 @@ components:
             - error
         code:
           type: string
-          description: 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register, ruby_restore_incomplete, ruby_tag_loss）
+          description: 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, script_mismatch, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register, ruby_restore_incomplete, ruby_tag_loss）
         message:
           type: string
         span:
@@ -5724,6 +5725,7 @@ components:
               - whitespace_irregular
               - repeated_space
               - width_mix
+              - script_mismatch
               - number_mismatch
               - url_email_mismatch
               - subtitle_line_count
@@ -6037,7 +6039,7 @@ components:
           type: array
           items:
             type: string
-          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
+          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、script_mismatch、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
         length_method:
           type: string
           enum:
