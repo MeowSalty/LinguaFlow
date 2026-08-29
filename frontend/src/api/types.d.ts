@@ -875,6 +875,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/qa-recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 按执行策略对既有译文重跑 QA 重检
+         * @description 用指定执行策略（profile）当前的 QA 配置与当前版本的规则实现，
+         *     对选中的资源/段落组/段落重跑确定性 QA 与文档级检查。
+         *     按指纹对账继承既有裁决（dismissed 不会以 pending 复活），
+         *     仅更新 quality_issues，不修改译文与段落状态。
+         *     选中资源上存在未完成任务时跳过该资源并在响应中报告。
+         */
+        post: operations["QaRecheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/glossary": {
         parameters: {
             query?: never;
@@ -2798,6 +2824,59 @@ export interface components {
             api_calls: number;
             input_tokens: number;
             output_tokens: number;
+        };
+        QaRecheckRequest: {
+            /**
+             * @description 执行策略（profile）ID。QA 检查配置（开关/checks/阈值）与
+             *     保护规则均取自该策略的当前状态；策略未启用 QA 时返回 400。
+             */
+            profile_id: number;
+            resource_ids?: number[];
+            segment_ids?: number[];
+            /**
+             * @description 按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+             *     传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+             *     与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
+             *     三者皆空时选择项目内全部资源。
+             */
+            segment_group_keys?: string[];
+        };
+        QaRecheckResult: {
+            /** @description 本次重检使用的执行策略 ID */
+            profile_id: number;
+            /** @description 本次重检使用的执行策略名称 */
+            profile_name: string;
+            /** @description 实际执行重检的资源数（不含跳过的忙碌资源） */
+            resources_checked: number;
+            /** @description 实际重检的段落总数（有译文且未被并发跳过） */
+            segments_checked: number;
+            /** @description 无译文被跳过的段落总数 */
+            segments_skipped_no_target: number;
+            /** @description 重检期间译文被并发修改而跳过写回的段落总数 */
+            segments_skipped_concurrent: number;
+            /** @description 新增问题数（新指纹） */
+            issues_new: number;
+            /** @description 被清除的旧确定性问题数（指纹消失；语义/守恒类保留不计入） */
+            issues_cleared: number;
+            /** @description 继承到既有裁决（含 dismissed）的问题数 */
+            dispositions_inherited: number;
+            resources: components["schemas"]["QaRecheckResourceResult"][];
+            resources_skipped_busy: components["schemas"]["QaRecheckBusyResource"][];
+        };
+        QaRecheckResourceResult: {
+            resource_id: number;
+            resource_name: string;
+            segments_checked: number;
+            segments_skipped_no_target: number;
+            segments_skipped_concurrent: number;
+            issues_new: number;
+            issues_cleared: number;
+            dispositions_inherited: number;
+        };
+        QaRecheckBusyResource: {
+            resource_id: number;
+            /** @description 占用该资源的未完成任务 ID */
+            active_job_id: number;
         };
         /**
          * @description 响应格式：
@@ -4900,6 +4979,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    QaRecheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QaRecheckRequest"];
+            };
+        };
+        responses: {
+            /** @description 重检完成，返回统计摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QaRecheckResult"];
                 };
             };
             default: components["responses"]["Problem"];
