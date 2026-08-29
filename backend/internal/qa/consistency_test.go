@@ -42,6 +42,24 @@ func TestCheckDuplicateSourceDivergence_UniqueSources(t *testing.T) {
 	}
 }
 
+// TestDuplicateSourceDivergenceEnabled 验证 checks 配置对该文档级检查的开关语义：
+// nil 表示未显式配置（全开），显式列表仅按是否包含该 code 判定——注意显式空列表
+// 与 nil 语义不同（前者即全关），这是调用方按"声明了什么就跑什么"解读配置的关键。
+func TestDuplicateSourceDivergenceEnabled(t *testing.T) {
+	if !DuplicateSourceDivergenceEnabled(nil) {
+		t.Error("checks=nil 表示未显式配置，应启用")
+	}
+	if !DuplicateSourceDivergenceEnabled([]string{CheckUntranslated, CodeDuplicateSourceDivergence}) {
+		t.Error("显式列表包含该 code 应启用")
+	}
+	if DuplicateSourceDivergenceEnabled([]string{CheckUntranslated}) {
+		t.Error("显式列表不含该 code 应禁用")
+	}
+	if DuplicateSourceDivergenceEnabled([]string{}) {
+		t.Error("显式空列表即全关，应禁用")
+	}
+}
+
 func TestEngine_ChecksFilterExact(t *testing.T) {
 	cfg := Config{
 		Enabled: true,

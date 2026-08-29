@@ -214,6 +214,22 @@ func ConservationCodes() []string {
 	return []string{CodeRubyRestoreIncomplete, CodeRubyTagLoss}
 }
 
+// conservationCodeSet 是 ConservationCodes 的 set 视图，供高频判定复用。
+var conservationCodeSet = func() map[string]struct{} {
+	set := make(map[string]struct{}, len(ConservationCodes()))
+	for _, c := range ConservationCodes() {
+		set[c] = struct{}{}
+	}
+	return set
+}()
+
+// IsConservationCode 报告 code 是否由守恒类写路径（pipeline 注音还原与人工编辑）维护。
+// 重检等组合逻辑据此区分"可重算的确定性 issue"与"只能由维护者清除的 issue"。
+func IsConservationCode(code string) bool {
+	_, ok := conservationCodeSet[code]
+	return ok
+}
+
 // FilterableIssueCodes 返回执行计划 issue_codes 与段落列表 quality_code
 // 接受的全部 issue code（全部 per-batch checker code + 文档级 checker code
 // + 全部语义 code + 守恒类 code）。
@@ -591,6 +607,22 @@ func DefaultConfig() Config {
 	}
 }
 
+// CheckerEnabled 报告给定 checks 配置下指定 code 的检查是否启用。
+// checks 为 nil 表示未显式配置（全开）；显式列表时按名称精确匹配——与
+// NewEngine 的注册表过滤同一语义，供不走注册表的调用方（如跨段检查的
+// 调用点把关）复用，避免各处自持判定漂移。
+func CheckerEnabled(checks []string, code string) bool {
+	if checks == nil {
+		return true
+	}
+	for _, name := range checks {
+		if name == code {
+			return true
+		}
+	}
+	return false
+}
+
 // Engine 编排多个 Checker 并汇总结果。
 type Engine struct {
 	checkers []Checker
@@ -613,13 +645,9 @@ func NewEngine(cfg Config, logger *slog.Logger) *Engine {
 		e.checkers = all
 		return e
 	}
-	allow := make(map[string]struct{}, len(cfg.Checks))
-	for _, name := range cfg.Checks {
-		allow[name] = struct{}{}
-	}
 	e.checkers = make([]Checker, 0, len(cfg.Checks))
 	for _, c := range all {
-		if _, ok := allow[c.Name()]; ok {
+		if CheckerEnabled(cfg.Checks, c.Name()) {
 			e.checkers = append(e.checkers, c)
 		}
 	}
