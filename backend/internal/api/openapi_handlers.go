@@ -314,6 +314,10 @@ func (s *Server) UndoResourceSegmentsSearchReplace(w http.ResponseWriter, r *htt
 	s.requireAuth(http.HandlerFunc(s.handleUndoResourceSegmentsSearchReplace)).ServeHTTP(w, r)
 }
 
+func (s *Server) QaRecheck(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleQaRecheck)).ServeHTTP(w, r)
+}
+
 // ---- 提示词模板适配器 ----
 
 func (s *Server) ListPromptTemplates(w http.ResponseWriter, r *http.Request) {

@@ -43,6 +43,7 @@ type Server struct {
 	prunePromptTemplateSvc       *service.PrunePromptTemplateService
 	glossaryPruneSvc             *service.GlossaryPruneService
 	executionProfileSvc          *service.ExecutionProfileService
+	qaRecheck                    *service.QARecheckService
 	jobSvc                       *service.JobService
 	previewSvc                   *service.PreviewService
 	revisionPreviewSvc           *service.RevisionPreviewService
@@ -128,6 +129,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool)
 	s.projectSvc = service.NewProjectService(client, s.userService)
 	s.executionProfileSvc = service.NewExecutionProfileService(client, s.userService)
+	s.qaRecheck = service.NewQARecheckService(client, s.projectSvc, s.executionProfileSvc, logger)
 	s.executionPlanSvc = service.NewExecutionPlanService(client, s.userService, s.executionProfileSvc)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.translationPromptTemplateSvc = service.NewTranslationPromptTemplateService(client)
