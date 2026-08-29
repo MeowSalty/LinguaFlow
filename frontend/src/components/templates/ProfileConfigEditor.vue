@@ -174,6 +174,7 @@ const QA_CHECKS = [
   'whitespace_irregular',
   'repeated_space',
   'width_mix',
+  'script_mismatch',
   'number_mismatch',
   'url_email_mismatch',
   'subtitle_line_count',
