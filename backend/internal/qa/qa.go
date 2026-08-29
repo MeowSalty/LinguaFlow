@@ -95,6 +95,7 @@ const (
 	CheckWhitespaceIrregular      = "whitespace_irregular"
 	CheckRepeatedSpace            = "repeated_space"
 	CheckWidthMix                 = "width_mix"
+	CheckScriptMismatch           = "script_mismatch"
 	CheckNumberMismatch           = "number_mismatch"
 	CheckURLEmailMismatch         = "url_email_mismatch"
 	CheckSubtitleLineCount        = "subtitle_line_count"
@@ -274,6 +275,7 @@ func AllCheckerNames() []string {
 		CheckWhitespaceIrregular,
 		CheckRepeatedSpace,
 		CheckWidthMix,
+		CheckScriptMismatch,
 		CheckNumberMismatch,
 		CheckURLEmailMismatch,
 		CheckSubtitleLineCount,
@@ -305,6 +307,7 @@ func ZeroConfigDeterministicChecks() []string {
 		CheckWhitespaceIrregular,
 		CheckRepeatedSpace,
 		CheckWidthMix,
+		CheckScriptMismatch,
 		CheckNumberMismatch,
 		CheckURLEmailMismatch,
 		CheckSubtitleLineCount,
@@ -636,6 +639,7 @@ func buildAllCheckers(cfg Config) []Checker {
 		NewWhitespaceIrregularChecker(),
 		NewRepeatedSpaceChecker(cfg.TargetLang),
 		NewWidthMixChecker(cfg.TargetLang),
+		NewScriptMismatchChecker(cfg.TargetLang),
 		NewNumberMismatchChecker(),
 		NewURLEmailMismatchChecker(),
 		NewSubtitleLineCountChecker(cfg.Format),
