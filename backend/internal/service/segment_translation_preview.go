@@ -588,22 +588,10 @@ func qaConfigFromClaims(claims *previewtoken.ApplyClaims) qa.Config {
 	}
 }
 
-// duplicateSourceDivergenceEnabledForClaims mirrors the worker's
-// duplicateSourceDivergenceEnabled but operates on the frozen QA config
-// captured in the apply token.
+// duplicateSourceDivergenceEnabledForClaims 判定冻结在 apply token 中的 QA 配置
+// 是否启用文档级同文异译检查；判定统一委托 qa 包的共享实现，避免多份漂移。
 func duplicateSourceDivergenceEnabledForClaims(cfg previewtoken.QAConfigClaims) bool {
-	if !cfg.Enabled {
-		return false
-	}
-	if cfg.Checks == nil {
-		return true
-	}
-	for _, name := range cfg.Checks {
-		if name == qa.CodeDuplicateSourceDivergence {
-			return true
-		}
-	}
-	return false
+	return cfg.Enabled && qa.DuplicateSourceDivergenceEnabled(cfg.Checks)
 }
 
 // rerunDuplicateSourceDivergence recomputes duplicate-source-divergence issues

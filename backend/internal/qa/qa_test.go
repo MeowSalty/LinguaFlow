@@ -485,6 +485,7 @@ func TestZeroConfigDeterministicChecks(t *testing.T) {
 		CheckWhitespaceIrregular,
 		CheckRepeatedSpace,
 		CheckWidthMix,
+		CheckScriptMismatch,
 		CheckNumberMismatch,
 		CheckURLEmailMismatch,
 		CheckSubtitleLineCount,

@@ -16,9 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
@@ -351,7 +349,7 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	}
 
 	// 5. 解析任务选择
-	selection, err := s.resolveJobSelection(ctx, projectID, input)
+	selection, err := resolveJobSelection(ctx, s.client, projectID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -1309,133 +1307,6 @@ func (s *JobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.J
 	return row, nil
 }
 
-func (s *JobService) resolveJobSelection(ctx context.Context, projectID int, input CreateJobInput) (map[int][]int, error) {
-	if len(input.SegmentGroupKeys) > 0 {
-		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys, input.ResourceIDs)
-	}
-	if len(input.SegmentIDs) > 0 {
-		return s.resolveSegmentSelection(ctx, projectID, input.SegmentIDs)
-	}
-	return s.resolveResourceSelection(ctx, projectID, input.ResourceIDs)
-}
-
-func (s *JobService) resolveSegmentSelection(ctx context.Context, projectID int, segmentIDs []int) (map[int][]int, error) {
-	rows, err := s.client.Segment.Query().
-		Where(segment.IDIn(uniqueInts(segmentIDs)...), segment.HasResourceWith(resource.ProjectIDEQ(projectID))).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) != len(uniqueInts(segmentIDs)) {
-		return nil, ErrSegmentNotFound
-	}
-	selection := make(map[int][]int)
-	for _, row := range rows {
-		if row.ResourceID == nil {
-			continue
-		}
-		selection[*row.ResourceID] = append(selection[*row.ResourceID], row.ID)
-	}
-	return selection, nil
-}
-
-func (s *JobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string, resourceIDs []int) (map[int][]int, error) {
-	uniqueKeys := make(map[string]struct{}, len(groupKeys))
-	for _, key := range groupKeys {
-		k := strings.TrimSpace(key)
-		if k != "" {
-			uniqueKeys[k] = struct{}{}
-		}
-	}
-	if len(uniqueKeys) == 0 {
-		return nil, fmt.Errorf("segment_group_keys 不能为空")
-	}
-
-	// 查询该项目下指定资源的 segments（带 meta 字段）
-	segQuery := s.client.Segment.Query().
-		Where(segment.HasResourceWith(resource.ProjectIDEQ(projectID)))
-	if len(resourceIDs) > 0 {
-		segQuery = segQuery.Where(segment.HasResourceWith(resource.IDIn(uniqueInts(resourceIDs)...)))
-	}
-	rows, err := segQuery.
-		Select(segment.FieldID, segment.FieldMeta, segment.FieldResourceID).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("查询 segments 失败：%w", err)
-	}
-
-	selection := make(map[int][]int)
-	matchedCount := 0
-	for _, row := range rows {
-		if row.Meta == nil || row.ResourceID == nil {
-			continue
-		}
-		var meta map[string]any
-		if err := json.Unmarshal([]byte(*row.Meta), &meta); err != nil {
-			continue
-		}
-		epubFile, ok := meta["epub_file"].(string)
-		if !ok {
-			continue
-		}
-		if _, matched := uniqueKeys[epubFile]; matched {
-			selection[*row.ResourceID] = append(selection[*row.ResourceID], row.ID)
-			matchedCount++
-			slog.Debug("[resolveGroupKeySelection] resource matched",
-				"resource_id", *row.ResourceID,
-				"segment_count", len(selection[*row.ResourceID]),
-				"segment_ids", selection[*row.ResourceID])
-		}
-	}
-
-	slog.Debug("[resolveGroupKeySelection] diagnostic",
-		"project_id", projectID,
-		"group_keys", groupKeys,
-		"total_segments_in_project", len(rows),
-		"matched_segments", matchedCount,
-		"matched_resources", len(selection))
-
-	if matchedCount == 0 {
-		return nil, fmt.Errorf("未找到匹配指定章节的 segments")
-	}
-
-	return selection, nil
-}
-
-func (s *JobService) resolveResourceSelection(ctx context.Context, projectID int, resourceIDs []int) (map[int][]int, error) {
-	resourceQuery := s.client.Resource.Query().Where(resource.ProjectIDEQ(projectID))
-	if len(resourceIDs) > 0 {
-		ids := uniqueInts(resourceIDs)
-		resourceQuery = resourceQuery.Where(resource.IDIn(ids...))
-		count, err := resourceQuery.Clone().Count(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if count != len(ids) {
-			return nil, ErrResourceNotFound
-		}
-	}
-	resources, err := resourceQuery.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	selection := make(map[int][]int)
-	for _, res := range resources {
-		ids, err := s.client.Segment.Query().
-			Where(segment.ResourceIDEQ(res.ID)).
-			Order(ent.Asc(segment.FieldID)).
-			IDs(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if len(ids) == 0 {
-			continue
-		}
-		selection[res.ID] = ids
-	}
-	return selection, nil
-}
-
 func defaultProjectConfig(projectRow *ent.Project) map[string]any {
 	base := map[string]any{}
 	if projectRow == nil {
@@ -1448,23 +1319,6 @@ func defaultProjectConfig(projectRow *ent.Project) map[string]any {
 		base["target_lang"] = targetLang
 	}
 	return base
-}
-
-func uniqueInts(values []int) []int {
-	seen := make(map[int]struct{}, len(values))
-	out := make([]int, 0, len(values))
-	for _, value := range values {
-		if value <= 0 {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	sort.Ints(out)
-	return out
 }
 
 // GetSnapshot 从 Job 的 ExecutionConfig 字段解析快照。

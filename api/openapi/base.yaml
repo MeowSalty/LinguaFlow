@@ -85,6 +85,8 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceSegmentsSearchReplaceApply'
   /projects/{projectId}/resources/{resourceId}/segments/search-replace/{operationId}/undo:
     $ref: './paths/resources.yaml#/projectResourceSegmentsSearchReplaceUndo'
+  /projects/{projectId}/qa-recheck:
+    $ref: './paths/qa.yaml#/projectQaRecheck'
   /projects/{projectId}/glossary:
     $ref: './paths/glossary.yaml#/projectGlossary'
   /projects/{projectId}/glossary/{entryId}:
@@ -440,3 +442,11 @@ components:
       $ref: './components/schemas/quick-translate.yaml#/QuickRoundSummary'
     QuickUsage:
       $ref: './components/schemas/quick-translate.yaml#/QuickUsage'
+    QaRecheckRequest:
+      $ref: './components/schemas/qa.yaml#/QaRecheckRequest'
+    QaRecheckResult:
+      $ref: './components/schemas/qa.yaml#/QaRecheckResult'
+    QaRecheckResourceResult:
+      $ref: './components/schemas/qa.yaml#/QaRecheckResourceResult'
+    QaRecheckBusyResource:
+      $ref: './components/schemas/qa.yaml#/QaRecheckBusyResource'

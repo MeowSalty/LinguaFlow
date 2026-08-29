@@ -325,7 +325,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 
 		if len(selectedRows) == 0 {
 			// 本轮无段可处理（如 translate pending_only 已全部译完）；继续后续 extract/adjudicate 轮
-			if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(engineCfg.QA) {
+			if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
 				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
 					_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 					return nil
@@ -678,7 +678,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			// 累加本轮成功段到对应模式的 resolved 集合（跨轮增量）。
 			// 注意：跨"不同"模式间不共享（extract 成功不阻止 adjudicate 扫描）。
 			engine.AccumulateResolved(resolvedByMode, round.Mode, result.Resolved)
-			if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(engineCfg.QA) {
+			if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
 				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
 					roundErr = err
 				}
@@ -944,21 +944,6 @@ func buildQACheckInputs(batchResult pipeline.BatchResult) []qa.CheckInput {
 		})
 	}
 	return inputs
-}
-
-func duplicateSourceDivergenceEnabled(cfg qa.Config) bool {
-	if !cfg.Enabled {
-		return false
-	}
-	if cfg.Checks == nil {
-		return true
-	}
-	for _, name := range cfg.Checks {
-		if name == qa.CodeDuplicateSourceDivergence {
-			return true
-		}
-	}
-	return false
 }
 
 // persistDuplicateSourceDivergence 在最后一个翻译轮次后执行全文同文异译检查。

@@ -306,7 +306,7 @@ func (r *PreviewRunner) RunPreview(
 		engine.AccumulateResolved(resolvedByMode, round.Mode, result.Resolved)
 
 		// Run duplicate-source-divergence check after the last translate round.
-		if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(engineCfg.QA) {
+		if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
 			divergenceIssues := r.runDuplicateSourceDivergence(doc, targetDocIdx)
 			if len(divergenceIssues) > 0 {
 				existing := doc.Segments[targetDocIdx].Issues
