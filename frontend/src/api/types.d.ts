@@ -1955,6 +1955,10 @@ export interface components {
             http_status?: number;
             tried_backends?: string[];
             shrink_attempted?: boolean;
+            /** @description 后端响应因输出 token 上限被截断（finish_reason=MAX_TOKENS/length、stop_reason=max_tokens）；部分文本仍有效，已由修复链抢救完整前缀，缺失条目走重跑通道 */
+            truncated?: boolean;
+            /** @description 响应解析修复算子链（如 json.close-braces、json.truncation-salvage），按应用顺序记录 */
+            repaired?: string[];
         };
         ApplySegmentTranslationPreviewRequest: {
             /** @description 翻译预览或修订预览返回的 apply_token */
