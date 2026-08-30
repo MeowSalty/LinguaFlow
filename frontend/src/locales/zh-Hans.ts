@@ -799,6 +799,11 @@ const messages = {
           httpStatus: 'HTTP 状态',
           triedBackends: '尝试后端',
           shrinkAttempted: '已尝试缩减请求',
+          truncated: '输出被截断',
+          truncatedHint:
+            '响应因输出 token 上限被截断，已由修复链抢救有效前缀，缺失条目将走重跑通道',
+          repaired: '解析修复 {ops}',
+          repairedHint: '响应解析修复算子链，按应用顺序记录',
           expand: '查看详情',
           collapse: '收起详情',
           systemPrompt: 'System Prompt',
@@ -994,6 +999,11 @@ const messages = {
           triedBackends: '尝试后端',
           contentTruncated: '已截断（原始 {length} 字节）',
           shrinkAttempted: '已尝试缩放',
+          truncated: '输出被截断',
+          truncatedHint:
+            '响应因输出 token 上限被截断，已由修复链抢救有效前缀，缺失条目将走重跑通道',
+          repaired: '解析修复 {ops}',
+          repairedHint: '响应解析修复算子链，按应用顺序记录',
           noContent: '无内容',
           malformedJson: '内容格式异常，显示原始文本',
         },
