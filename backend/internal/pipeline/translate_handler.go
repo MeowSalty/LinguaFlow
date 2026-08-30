@@ -363,6 +363,9 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 	}
 
 	// 累加 token
+	if resp.Truncated {
+		logTruncatedResponse(logger, h.Backend.Name())
+	}
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
@@ -399,6 +402,8 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 				ErrorType:       "parse_error",
 				ErrorMessage:    res.ParseErr.Error(),
 				ShrinkAttempted: len(pendingIdxs) > 1,
+				Truncated:       resp.Truncated,
+				Repaired:        res.Repaired,
 				RoundIndex:      h.RoundIndex,
 				Attempt:         attempt,
 				SystemPrompt:    sys,
@@ -427,7 +432,7 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 	trans, glosEntries, rubyOutputMap := res.Trans, res.Glos, res.RubyOutput
 
 	h.emitBatchEvent(doc, pendingIdxs, wantIDs, h.Backend.Name(), res, rawRespText, sys, usr,
-		req.ResponseFormat, req.JSONSchema, attempt, glos, resp.Usage, durationMs, tried, logger)
+		req.ResponseFormat, req.JSONSchema, attempt, glos, resp.Usage, resp.Truncated, durationMs, tried, logger)
 
 	logger.Debug("batch translated",
 		"backend", h.Backend.Name(), "batch_size", len(idxs),
@@ -884,6 +889,7 @@ func (h *TranslateHandler) emitBatchEvent(
 	attempt int,
 	usedGlossary []prompt.GlossaryEntry,
 	usage backend.Usage,
+	truncated bool,
 	durationMs int64,
 	triedBackends []string,
 	logger *slog.Logger,
@@ -917,6 +923,8 @@ func (h *TranslateHandler) emitBatchEvent(
 		ErrorType:       errorType,
 		ErrorMessage:    errorMsg,
 		TriedBackends:   triedBackends,
+		Truncated:       truncated,
+		Repaired:        res.Repaired,
 		RoundIndex:      h.RoundIndex,
 		Attempt:         attempt,
 		SystemPrompt:    sys,

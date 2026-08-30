@@ -180,7 +180,7 @@ func retryAlignSegmentDirected(
 			if callErr != nil {
 				emitRubyAlignmentBatchEvent(reporter, seg, b.Name(), append([]string(nil), triedBackends...),
 					"failed", "backend_error", callErr.Error(), attemptMs, 0, 0, user, "",
-					rubyHTTPStatusFromErr(callErr), roundIndex, attempt, sys, user, req.ResponseFormat, req.JSONSchema)
+					rubyHTTPStatusFromErr(callErr), roundIndex, attempt, sys, user, req.ResponseFormat, req.JSONSchema, nil, false)
 				logger.Warn("ruby alignment call failed, trying next backend",
 					"seg", seg.ID, "backend", b.Name(), "err", callErr)
 				resp = nil
@@ -194,11 +194,16 @@ func retryAlignSegmentDirected(
 			return
 		}
 
+		if resp.Truncated {
+			logTruncatedResponse(logger, triedBackends[len(triedBackends)-1])
+		}
+
 		var newOutput []ruby.OutputEntry
+		var repaired []string
 		if isTextMode {
 			newOutput = parseAlignmentResponseText(resp.Text, len(missing))
 		} else {
-			newOutput, _ = parseAlignmentResponse(resp.Text, repairOpt)
+			newOutput, repaired = parseAlignmentResponse(resp.Text, repairOpt)
 		}
 
 		before := len(ruby.Unaligned(items))
@@ -233,7 +238,8 @@ func retryAlignSegmentDirected(
 			append([]string(nil), triedBackends...),
 			status, errorType, errorMsg, attemptMs,
 			resp.Usage.PromptTokens, resp.Usage.CompletionTokens,
-			user, resp.Text, 0, roundIndex, attempt, sys, user, req.ResponseFormat, req.JSONSchema)
+			user, resp.Text, 0, roundIndex, attempt, sys, user, req.ResponseFormat, req.JSONSchema,
+			repaired, resp.Truncated)
 
 		if after >= before || after == 0 {
 			return
@@ -276,6 +282,8 @@ func emitRubyAlignmentBatchEvent(
 	usr string,
 	responseFormat string,
 	jsonSchema map[string]any,
+	repaired []string,
+	truncated bool,
 ) {
 	if reporter == nil {
 		return
@@ -299,6 +307,8 @@ func emitRubyAlignmentBatchEvent(
 		ErrorMessage:    errorMsg,
 		HTTPStatus:      httpStatus,
 		TriedBackends:   triedBackends,
+		Truncated:       truncated,
+		Repaired:        repaired,
 		RoundIndex:      roundIndex,
 		Attempt:         attempt,
 		SystemPrompt:    sys,

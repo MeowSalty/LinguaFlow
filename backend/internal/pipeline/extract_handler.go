@@ -268,6 +268,10 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			continue
 		}
 
+		if resp.Truncated {
+			logTruncatedResponse(logger, b.Name())
+		}
+
 		parsed, parseRepaired, perr := repair.ParseBootstrapByMode(resp.Text, isTextMode, h.Repair, false)
 		if perr != nil {
 			logger.Warn("extract parse failed",
@@ -326,6 +330,8 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			SentContent:     usr,
 			ReceivedContent: resp.Text,
 			AddedGlossary:   toBootstrapEntries(res.Added),
+			Truncated:       resp.Truncated,
+			Repaired:        parseRepaired,
 			RoundIndex:      h.RoundIndex,
 			SystemPrompt:    sys,
 			UserMessage:     usr,

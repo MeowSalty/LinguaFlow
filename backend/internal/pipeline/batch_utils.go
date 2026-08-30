@@ -1,11 +1,21 @@
 package pipeline
 
 import (
+	"log/slog"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
+
+// logTruncatedResponse 记录后端响应被输出 token 上限截断的警告。
+// 部分文本仍有效(由修复链抢救前缀,缺失条目走重跑通道),但持续出现说明
+// 输出预算不足,应从三个方向调优。
+func logTruncatedResponse(logger *slog.Logger, backendName string) {
+	logger.Warn("backend response truncated by output token limit",
+		"backend", backendName,
+		"advice", "raise max_tokens / shrink batch_size / lower thinking_level (anthropic)")
+}
 
 // rawSource 返回段落的原始文本：优先 protect 之前的原文快照，未保护过时回退 Source。
 // Source 在 protect 之后是含占位符的版本，任何需要"人类可读原文"的场合（上下文展示、

@@ -439,6 +439,9 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 		return batchResult{unresolved: idxs}
 	}
 
+	if resp.Truncated {
+		logTruncatedResponse(logger, h.Backend.Name())
+	}
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 	revisions, rubyOutput, parseRepaired, parseErr := repair.ParseReviseByMode(resp.Text, isTextMode, h.Repair)
@@ -449,6 +452,7 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 			DurationMs: time.Since(callStart).Milliseconds(), InputTokens: resp.Usage.PromptTokens, OutputTokens: resp.Usage.CompletionTokens,
 			SentContent: usr, ReceivedContent: resp.Text, TriedBackends: tried, ErrorType: "parse_error", ErrorMessage: parseErr.Error(), RoundIndex: h.RoundIndex,
 			Attempt: attempt, SystemPrompt: sys, UserMessage: usr, ResponseFormat: req.ResponseFormat, JSONSchema: req.JSONSchema, ResponseContent: resp.Text,
+			Truncated: resp.Truncated, Repaired: parseRepaired,
 		})
 		if attempt+1 < transientBudgetFor(h.Retry) {
 			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
@@ -515,6 +519,7 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 		DurationMs: time.Since(batchStart).Milliseconds(), InputTokens: resp.Usage.PromptTokens, OutputTokens: resp.Usage.CompletionTokens,
 		SentContent: usr, ReceivedContent: resp.Text, TriedBackends: tried, RoundIndex: h.RoundIndex, Attempt: attempt,
 		SystemPrompt: sys, UserMessage: usr, ResponseFormat: req.ResponseFormat, JSONSchema: req.JSONSchema, ResponseContent: resp.Text,
+		Truncated: resp.Truncated, Repaired: parseRepaired,
 	})
 	return batchResult{callbackResult: &BatchResult{Segments: callbackSegs}, unresolved: missing}
 }
