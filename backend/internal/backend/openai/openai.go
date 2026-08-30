@@ -17,6 +17,12 @@ import (
 
 const TypeName = "openai"
 
+// finishReasonLength 是 chat completions 的 finish_reason=length（输出 token 上限截断）。
+// openai-go v3 对 chat.completions 的 finish_reason 以裸 string 传输（SDK 未提供
+// chat 侧枚举常量，legacy completion.go 的 CompletionChoiceFinishReasonLength
+// 字面值同为 "length"），此处与其上游 API 字面值对齐。
+const finishReasonLength = "length"
+
 // 合法的 response_format 取值。
 const (
 	respFmtJSONSchema = "json_schema"
@@ -62,20 +68,24 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	if len(resp.Choices) == 0 {
 		return nil, emptyChoicesError(b.Name(), b.model, "", resp.Usage.PromptTokens)
 	}
+	choice := resp.Choices[0]
 	// content_filter / 空补全常返回一个 choice 但 Message.Content 为空。对齐
 	// anthropic/google：归为 EmptyResponseError（不可重试），转入 shrink/fallback，
 	// 而非把空文本当作成功响应。
-	if resp.Choices[0].Message.Content == "" {
-		return nil, emptyChoicesError(b.Name(), b.model, resp.Choices[0].FinishReason, resp.Usage.PromptTokens)
+	if choice.Message.Content == "" {
+		return nil, emptyChoicesError(b.Name(), b.model, choice.FinishReason, resp.Usage.PromptTokens)
 	}
 	return &backend.Response{
-		Text: resp.Choices[0].Message.Content,
+		Text: choice.Message.Content,
 		Usage: backend.Usage{
 			PromptTokens:     resp.Usage.PromptTokens,
 			CompletionTokens: resp.Usage.CompletionTokens,
 			TotalTokens:      resp.Usage.TotalTokens,
 		},
 		Raw: resp,
+		// 截断（finish_reason=length）时部分文本仍有效：带 Truncated 标志返回，
+		// 由上层修复链抢救前缀、缺失部分走重跑通道。
+		Truncated: choice.FinishReason == finishReasonLength,
 	}, nil
 }
 
@@ -96,19 +106,23 @@ func (b *Backend) translateStream(ctx context.Context, params openaigo.ChatCompl
 	if len(acc.Choices) == 0 {
 		return nil, emptyChoicesError(b.Name(), b.model, "", acc.Usage.PromptTokens)
 	}
+	choice := acc.Choices[0]
 	// 流式同理：choice 非空但累计内容为空（content_filter 常见形态）需归为
 	// EmptyResponseError，与非流式路径保持一致。
-	if acc.Choices[0].Message.Content == "" {
-		return nil, emptyChoicesError(b.Name(), b.model, acc.Choices[0].FinishReason, acc.Usage.PromptTokens)
+	if choice.Message.Content == "" {
+		return nil, emptyChoicesError(b.Name(), b.model, choice.FinishReason, acc.Usage.PromptTokens)
 	}
 	return &backend.Response{
-		Text: acc.Choices[0].Message.Content,
+		Text: choice.Message.Content,
 		Usage: backend.Usage{
 			PromptTokens:     acc.Usage.PromptTokens,
 			CompletionTokens: acc.Usage.CompletionTokens,
 			TotalTokens:      acc.Usage.TotalTokens,
 		},
 		Raw: acc.ChatCompletion,
+		// 流式同理：截断（finish_reason=length）时累积文本仍有效，
+		// 带 Truncated 标志交由上层修复链处理，与非流式路径保持一致。
+		Truncated: choice.FinishReason == finishReasonLength,
 	}, nil
 }
 

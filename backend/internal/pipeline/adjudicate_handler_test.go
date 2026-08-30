@@ -386,6 +386,55 @@ func TestAdjudicateHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
 	}
 }
 
+// TestAdjudicateHandler_ProcessBatch_TextModeTruncatedRefused fail-closed stage
+// 对截断响应恒不采纳：adjudicate 的成功路径对所有批次段一律 SegmentDone
+// （无「缺失 verdict → 重跑」通道），text 协议逐行解析无完整性信号——截断的
+// 已完成行被当作完整裁决会令缺失 verdict 的段永久跳过。后端标记 Truncated 时
+// 即使 text 协议命中也必须报 parse_error 走 unresolved → 下一池整批重试。
+func TestAdjudicateHandler_ProcessBatch_TextModeTruncatedRefused(t *testing.T) {
+	doc := adjudicableDoc(
+		[]string{"translated"},
+		[][]qa.QualityIssue{
+			{{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"}},
+		},
+	)
+	rec := &recordingBatchObserver{}
+	fb := &truncatedFakeBackend{
+		fakeBackend: fakeBackend{
+			name:      "fake",
+			responses: []string{"[verdicts]\n0 | source_residual | false_positive | proper noun"},
+		},
+	}
+	h := &AdjudicateHandler{
+		Backend:      fb,
+		Renderer:     newAdjudicationRenderer(t),
+		BatchSize:    10,
+		ResponseMode: "text",
+		Reporter:     rec,
+		Logger:       quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if len(result.unresolved) != 1 {
+		t.Fatalf("unresolved=%v, want the batch (truncated text response must fail closed)",
+			result.unresolved)
+	}
+	if result.callbackResult != nil {
+		t.Fatalf("truncated text response must not be accepted as complete verdicts, got %#v",
+			result.callbackResult)
+	}
+	// fail-closed：issue 保持 pending，段未被裁决
+	if doc.Segments[0].Issues[0].Dismissed() {
+		t.Fatal("issue must stay pending when truncated response is refused")
+	}
+	if len(rec.events) != 1 {
+		t.Fatalf("emitted %d batch events, want 1", len(rec.events))
+	}
+	evt := rec.events[0]
+	if evt.ErrorType != "parse_error" || !evt.Truncated {
+		t.Fatalf("event error_type=%q truncated=%v, want parse_error/true", evt.ErrorType, evt.Truncated)
+	}
+}
+
 func TestAdjudicateHandler_BuildBatches_PackedDiscontinuous(t *testing.T) {
 	// 5 段均 translated+issue，但中间夹着非候选（approved）时仍应与其它 pending 同批
 	doc := adjudicableDoc(

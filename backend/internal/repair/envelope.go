@@ -36,14 +36,17 @@ func TryRepairEnvelope(text, key string, opt Options) (map[string]any, []string,
 	}
 
 	body := extractJSONObjectContaining(text, key)
-	if body == "" && opt.JSONStructural {
-		// 兜底：text 可能整体未闭合，尝试补齐括号再抽。
-		if fixed := closeUnbalancedBraces(text); fixed != text {
-			body = extractJSONObjectContaining(fixed, key)
-			if body != "" {
-				repaired = append(repaired, "json.close-braces")
-			}
-		}
+	if body == "" && opt.JSONStructural && !opt.salvageDeclined {
+		// 兜底：text 可能整体未闭合（截断），尝试补齐括号再抽。守卫与截断抢救
+		// 同口径：显式弃用抢救的入口（semantic_qa/adjudication——部分结果会被下游
+		// 静默解释为完整语义）在 close-braces 可补齐的截断形态下也维持报错重试，
+		// fail-closed 对所有截断形态成立；抢救递归（inSalvage，salvageDeclined=
+		// false）不受影响，补齐截断前缀的括号缺口是采纳前缀的必要步骤。
+		// 抽取闭包刻意只探单 key、不带 jsonObjectSlice 回退（防误收同名异形包装，
+		// 见 closeBracesFallback 说明）。
+		body, repaired = closeBracesFallback(text, repaired, func(fixed string) string {
+			return extractJSONObjectContaining(fixed, key)
+		})
 	}
 
 	raw, err := unmarshalGeneric(body)
@@ -80,9 +83,12 @@ func TryRepairEnvelope(text, key string, opt Options) (map[string]any, []string,
 
 	// 鲁棒兜底：结巴/重复前缀或括号相位错乱时，matchBracePair 字符串追踪失步，
 	// extractJSONObjectContaining 拿不到可解析 body。此处从每个 '{' 偏移用
-	// json.Decoder 真实解析，恢复内嵌的合法数组 envelope。
+	// json.Decoder 真实解析，恢复内嵌的合法数组 envelope。closeBracesPatch 与
+	// 截断抢救同口径：salvageDeclined 时关闭截断残尾的修补采纳——「完整值边界
+	// 截断」的残尾不会被补括号后误采纳（fail-closed 对所有截断形态成立）；
+	// 结巴/重复前缀等非截断噪声靠原文解码命中，不受影响。
 	if err != nil && opt.JSONStructural {
-		if robust, ok := extractValidObject(text, key, accept); ok {
+		if robust, ok := extractValidObject(text, key, accept, !opt.salvageDeclined); ok {
 			repaired = repaired[:0]
 			repaired = append(repaired, "json.robust-extract")
 			return robust, repaired, nil
@@ -95,10 +101,27 @@ func TryRepairEnvelope(text, key string, opt Options) (map[string]any, []string,
 	// 领域判别"的可解码数组重新包装为 {key: [...]}；元素级校验由调用方的
 	// typed unmarshal + normalize 判定，兜底命中但 normalize 后零条目视为误
 	// 采纳、报错重试（bareArrayNoEntriesError），维持"宁可重试也不凑错"原则。
+	// salvageDeclined 时关闭 close-braces 修补采纳（与截断抢救同口径）：
+	// 「完整值边界截断」的残尾会被补括号后误当作裸数组，构成对弃用承诺的旁路；
+	// 真裸数组（原文可完整解码）不受影响。
 	if err != nil && opt.JSONStructural {
-		if wrapped, ok := extractBareArrayAsEnvelope(text, key, opt.BareArrayAccept); ok {
+		if wrapped, ok := extractBareArrayAsEnvelope(text, key, opt.BareArrayAccept, !opt.salvageDeclined); ok {
 			repaired = append(repaired[:0], "json.bare-array")
 			return wrapped, repaired, nil
+		}
+	}
+
+	// 截断抢救（末环）：响应被截断在键/值中途（未闭合引号、悬空键）时，此前的
+	// 算子均无法补齐字符串级缺口，最终报错会丢弃截断点之前的完整条目。回退到
+	// 最后一个完整值闭合点、丢弃残尾，用截断前缀递归重跑整条修复链（enterSalvage
+	// 保证深度=1）；err2==nil 即采纳。天然覆盖 revise(revisions)/ruby(ruby_output)；
+	// adjudicate(verdicts)/semantic_qa(issues) 在各自入口显式弃用（无缺失重跑通道/
+	// 假阴性质检风险）。安全门与残留风险见 truncateToLastCompleteValue 的权威注释（json.go）。
+	if err != nil {
+		if cut, ok := salvageCut(text, opt); ok {
+			if raw2, repaired2, err2 := TryRepairEnvelope(cut, key, opt.enterSalvage()); err2 == nil {
+				return raw2, prependSalvageOp(repaired, repaired2), nil
+			}
 		}
 	}
 
@@ -169,7 +192,15 @@ func decodeKeyed[T any](raw map[string]any, key string, normalize func([]T) []T)
 // TryRepairSemanticQA 解析 {"issues":[...]} 并应用完整修复链。
 // 返回 (issues, 修复算子链, error)；issues 已经过 trim 与 code 过滤（与
 // prompt.ParseSemanticQATextIssues 的 code 白名单语义一致）。
+//
+// 截断抢救对本入口固有危险（fail-closed，任何调用方都不应默认开启）：issues
+// envelope 的部分结果会被下游解释为「缺失段=已扫描无问题」——截断抢救把残尾
+// 丢弃后返回的 partial，恰好像一份「只报了前半段问题」的完整质检报告，形成
+// 假阴性质检。故此处无条件弃用（WithoutSalvage，连同 close-braces 截断恢复），
+// 截断响应（键/值中途与完整值边界两种形态）均维持报错重试；确有需要自行决策
+// 部分恢复的调用方可直接使用 TryRepairEnvelope（其 close-braces 兜底不门控）。
 func TryRepairSemanticQA(text string, opt Options) ([]prompt.SemanticQAIssue, []string, error) {
+	opt = opt.WithoutSalvage()
 	return tryRepairKeyed(text, "issues", opt, prompt.NormalizeSemanticQAIssues)
 }
 
@@ -242,8 +273,16 @@ func parseReviseTextWithRuby(text string) ([]prompt.ReviseRevision, map[string][
 
 // 返回 (verdicts, 修复算子链, error)；verdicts 已经过 trim 与字段过滤（丢弃缺
 // id/issue_code 的条目，语义与 prompt.ParseAdjudicationTextVerdicts 一致）。
+//
+// 截断抢救对本入口固有危险：adjudicate 的成功路径对所有批次段一律 SegmentDone 并
+// 返回终态成功，无「缺失 verdict → 重跑」通道——抢救出的 partial 会被计为已裁决，
+// 缺失 verdict 的段经 ResolvedIndices 永久跳过、不再送 LLM 裁决。故与
+// TryRepairSemanticQA 同口径无条件弃用（WithoutSalvage，连同 close-braces 截断
+// 恢复），截断响应（键/值中途与完整值边界两种形态）均维持报错，由 handler 走
+// unresolved → 下一池整批重试。
 func TryRepairAdjudication(text string, opt Options) ([]prompt.AdjudicationVerdict, []string, error) {
 	opt.BareArrayAccept = prompt.ValidBareVerdictEntries
+	opt = opt.WithoutSalvage()
 	return tryRepairKeyed(text, "verdicts", opt, prompt.NormalizeAdjudicationVerdicts)
 }
 

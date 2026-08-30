@@ -13,6 +13,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
@@ -781,160 +782,312 @@ func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 	}
 }
 
-func TestIsPlaceholderOnly(t *testing.T) {
-	tests := []struct {
-		name string
-		seg  Segment
-		want bool
-	}{
-		{
-			name: "single placeholder only",
-			seg: Segment{
-				Source:    "__LF_000001__",
-				Protected: map[string]string{"__LF_000001__": "<br/>"},
-			},
-			want: true,
+// structuralTestRules 是与 config 默认一致的四条保护规则。
+var structuralTestRules = []string{"code", "link", "placeholder", "xml"}
+
+// TestBuildBatches_StructuralMarkingAndContextExclusion 验证池 0 结构段标记与消费：
+// 全部段落（含 Translate=false 的上下文候选段）被统一标记；结构段（纯占位符/纯标点/
+// 占位符+标点混合）不送翻、原文透传、Source 保持原始且 Protected 为空；
+// 上下文扩展排除所有结构段——包括 Translate=false 且从未被 Protect 的段
+// （回归：旧实现依赖 seg.Protected 判定纯占位符，此类段会以裸文本混入上下文）。
+func TestBuildBatches_StructuralMarkingAndContextExclusion(t *testing.T) {
+	doc := &Document{
+		Segments: []Segment{
+			{ID: "seg-0", Source: "Hello world", Translate: false},
+			{ID: "seg-1", Source: "<br/>", Translate: false},
+			{ID: "seg-2", Source: "……{{name}}", Translate: true},
+			{ID: "seg-3", Source: "Translate me", Translate: true},
+			{ID: "seg-4", Source: "◇◇◇", Translate: false},
 		},
-		{
-			name: "multiple placeholders with whitespace",
-			seg: Segment{
-				Source: "__LF_000001__ \n __LF_000002__",
-				Protected: map[string]string{
-					"__LF_000001__": "<br/>",
-					"__LF_000002__": "<br/>",
-				},
-			},
-			want: true,
-		},
-		{
-			name: "empty source",
-			seg: Segment{
-				Source:    "",
-				Protected: map[string]string{"__LF_000001__": "<br/>"},
-			},
-			want: true,
-		},
-		{
-			name: "whitespace-only source with placeholder in protected",
-			seg: Segment{
-				Source:    "   ",
-				Protected: map[string]string{"__LF_000001__": "<br/>"},
-			},
-			want: true,
-		},
-		{
-			name: "placeholder mixed with text",
-			seg: Segment{
-				Source:    "Hello __LF_000001__",
-				Protected: map[string]string{"__LF_000001__": "<br/>"},
-			},
-			want: false,
-		},
-		{
-			name: "plain text without placeholders",
-			seg: Segment{
-				Source:    "Hello World",
-				Protected: map[string]string{},
-			},
-			want: false,
-		},
-		{
-			name: "nil protected map",
-			seg: Segment{
-				Source: "__LF_000001__",
-			},
-			want: false,
-		},
+		SourceLang: "en",
+		TargetLang: "zh",
+	}
+	h := &TranslateHandler{
+		Logger:    quietLogger(),
+		Protector: protect.FromRules(structuralTestRules),
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := IsPlaceholderOnly(&tt.seg); got != tt.want {
-				t.Errorf("IsPlaceholderOnly() = %v, want %v", got, tt.want)
-			}
-		})
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
+	if err != nil {
+		t.Fatalf("BuildBatches: %v", err)
+	}
+
+	// 标记覆盖全部段落：结构段为 true，普通文本段为 false。
+	wantFlags := []bool{false, true, true, false, true}
+	for i, want := range wantFlags {
+		if got := doc.Segments[i].StructuralOnly; got != want {
+			t.Errorf("seg[%d].StructuralOnly = %v, want %v", i, got, want)
+		}
+	}
+
+	// 混合结构段（翻译目标）：原文透传，不进批次；Source 保持原始、Protected 为空
+	// （旧实现会先 Protect 再回退，留下 key 化 Source 与已填充 Protected 的副作用状态）。
+	seg2 := &doc.Segments[2]
+	if seg2.Target != "……{{name}}" {
+		t.Errorf("structural segment Target = %q, want raw passthrough", seg2.Target)
+	}
+	if seg2.Source != "……{{name}}" {
+		t.Errorf("structural segment Source = %q, want unchanged raw text", seg2.Source)
+	}
+	if len(seg2.Protected) != 0 {
+		t.Errorf("structural segment Protected = %v, want empty", seg2.Protected)
+	}
+
+	// 仅一个真实翻译段进批次；跳过计数只含 seg-2（Translate=false 的段不计数，与旧行为一致）。
+	if len(batches) != 1 || len(batches[0]) != 1 || batches[0][0] != 3 {
+		t.Fatalf("batches = %v, want single batch [3]", batches)
+	}
+	if got := doc.Vars["_skipped_count"]; got != 1 {
+		t.Errorf("_skipped_count = %v, want 1", got)
+	}
+
+	// 上下文扩展（窗口 3 覆盖全文档）：普通邻段入选，全部结构段排除——
+	// 关键是 seg-1（<br/>、Translate=false、从未 Protect）：旧实现会把它裸混入上下文。
+	expanded := ExpandBatchWithContext(doc, batches[0], len(doc.Segments), 3, 0)
+	if !reflect.DeepEqual(expanded.Idxs, []int{0, 3}) {
+		t.Errorf("expanded idxs = %v, want [0 3] (structural neighbors excluded)", expanded.Idxs)
+	}
+
+	// 池 ≥1（pending!=nil）复用池 0 标记：不重扫不重算，标记不漂移。
+	pool1, err := h.BuildBatches(context.Background(), doc, []int{3}, 1)
+	if err != nil {
+		t.Fatalf("BuildBatches pool 1: %v", err)
+	}
+	if len(pool1) != 1 || pool1[0][0] != 3 {
+		t.Fatalf("pool 1 batches = %v, want single batch [3]", pool1)
+	}
+	pool1Expanded := ExpandBatchWithContext(doc, pool1[0], len(doc.Segments), 3, 0)
+	if !reflect.DeepEqual(pool1Expanded.Idxs, expanded.Idxs) {
+		t.Errorf("pool 1 expanded idxs = %v, want same as pool 0: %v", pool1Expanded.Idxs, expanded.Idxs)
 	}
 }
 
-func TestIsDecorativeSeparator(t *testing.T) {
-	tests := []struct {
-		name string
-		seg  Segment
-		want bool
-	}{
-		{
-			name: "decorative diamond separators",
-			seg:  Segment{Source: "◇ ◇ ◇ ◇"},
-			want: true,
+// TestTranslateRound_StructuralSegments_PassthroughAndPromptHygiene 全链路验证：
+// 混合结构段既不出现在任何发往后端的请求中（无论批次段还是上下文段），又以原文透传；
+// 批次段在 prompt 中保持 key 化保护形态、上下文段展示保护前原文
+// （钉死 buildRequest 的 isCtx 分支语义，防止机械替换 rawSource 后裸文本直发 LLM）。
+func TestTranslateRound_StructuralSegments_PassthroughAndPromptHygiene(t *testing.T) {
+	doc := &Document{
+		Segments: []Segment{
+			{ID: "seg-0", Source: "Hello {{name}}", Translate: true},
+			{ID: "seg-1", Source: "plain", Translate: true},
+			{ID: "seg-2", Source: "……{{name}}", Translate: true},
+			{ID: "seg-3", Source: "Thanks a lot", Translate: true},
 		},
-		{
-			name: "decorative asterisk separators",
-			seg:  Segment{Source: "* * *"},
-			want: true,
-		},
-		{
-			name: "decorative em-dash separators",
-			seg:  Segment{Source: "— — —"},
-			want: true,
-		},
-		{
-			name: "decorative star separators",
-			seg:  Segment{Source: "★ ★ ★"},
-			want: true,
-		},
-		{
-			name: "decorative circle separators",
-			seg:  Segment{Source: "● ● ●"},
-			want: true,
-		},
-		{
-			name: "decorative tilde separators",
-			seg:  Segment{Source: "~ ~ ~"},
-			want: true,
-		},
-		{
-			name: "decorative reference mark separators",
-			seg:  Segment{Source: "※ ※ ※"},
-			want: true,
-		},
-		{
-			name: "plain text not separator",
-			seg:  Segment{Source: "Hello"},
-			want: false,
-		},
-		{
-			name: "japanese text not separator",
-			seg:  Segment{Source: "名前の呼び方と。"},
-			want: false,
-		},
-		{
-			name: "chapter with digit not separator",
-			seg:  Segment{Source: "第1章"},
-			want: false,
-		},
-		{
-			name: "empty string not separator",
-			seg:  Segment{Source: ""},
-			want: false,
-		},
-		{
-			name: "whitespace only not separator",
-			seg:  Segment{Source: "   "},
-			want: false,
-		},
-		{
-			name: "mixed text and symbols not separator",
-			seg:  Segment{Source: "Hello ◇ ◇"},
-			want: false,
+		SourceLang: "en",
+		TargetLang: "zh",
+	}
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			`{"translations":{"1":"你好 __LF_000001__"}}`,
+			`{"translations":{"2":"平淡"}}`,
+			`{"translations":{"1":"多谢"}}`,
 		},
 	}
+	h := newTestTranslateHandler(fb, 1, 1, func(h *TranslateHandler) {
+		h.Protector = protect.FromRules(structuralTestRules)
+		h.Context = ContextConfig{Enabled: true, Before: 1, After: 1}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := IsDecorativeSeparator(&tt.seg); got != tt.want {
-				t.Errorf("IsDecorativeSeparator() = %v, want %v", got, tt.want)
-			}
-		})
+	if err := runTestTranslateRound(t, h, doc); err != nil {
+		t.Fatalf("runTestTranslateRound: %v", err)
+	}
+
+	if len(fb.requests) != 3 {
+		t.Fatalf("backend requests = %d, want 3", len(fb.requests))
+	}
+	for i, req := range fb.requests {
+		if strings.Contains(req.User, "……{{name}}") {
+			t.Errorf("request[%d] contains structural segment text", i)
+		}
+	}
+	// 批次 [0]（含上下文 seg-1）：批次段必须是 key 化保护形态，而非裸占位符语法。
+	if !strings.Contains(fb.requests[0].User, "Hello __LF_000001__") {
+		t.Errorf("request[0] should contain protected batch source, got: %s", fb.requests[0].User)
+	}
+	if strings.Contains(fb.requests[0].User, "Hello {{name}}") {
+		t.Errorf("request[0] leaked raw placeholder syntax for batch segment")
+	}
+	// 批次 [1]（含上下文 seg-0）：上下文段必须是保护前原文。
+	if !strings.Contains(fb.requests[1].User, "Hello {{name}}") {
+		t.Errorf("request[1] should contain raw context source, got: %s", fb.requests[1].User)
+	}
+	if strings.Contains(fb.requests[1].User, "Hello __LF_") {
+		t.Errorf("request[1] context segment should not be key-ified")
+	}
+
+	// 混合结构段原文透传；其余段完成翻译并还原占位符。
+	if got := doc.Segments[2].Target; got != "……{{name}}" {
+		t.Errorf("structural segment Target = %q, want raw passthrough", got)
+	}
+	if got := doc.Segments[0].Target; got != "你好 {{name}}" {
+		t.Errorf("seg[0].Target = %q, want %q", got, "你好 {{name}}")
+	}
+	if got := doc.Vars["_skipped_count"]; got != 1 {
+		t.Errorf("_skipped_count = %v, want 1", got)
+	}
+}
+
+// countingProtector 统计 Protect 调用次数，钉死保护链对每段恰好执行一次。
+type countingProtector struct {
+	protect.Protector
+	calls int
+}
+
+func (c *countingProtector) Protect(seg *Segment) error {
+	c.calls++
+	return c.Protector.Protect(seg)
+}
+
+// failingProtector 保护链恒失败，验证分析失败在落盘点以与直接 Protect 失败
+// 相同的语义报错（fail-loud，不静默裸发未保护文本）。
+type failingProtector struct{}
+
+func (failingProtector) Name() string             { return "failing" }
+func (failingProtector) Unprotect(*Segment) error { return nil }
+func (failingProtector) Protect(*Segment) error   { return errors.New("protect failed") }
+
+// TestBuildBatches_ProtectChainSingleExecution 验证保护链单次执行：
+// 池 0 的结构段标记分析与 Protect 落盘是同一次链执行的缓存复用，
+// 保护链对每个非 Skip 段恰好执行一次；Skip 段零执行（其标记从不被消费）。
+func TestBuildBatches_ProtectChainSingleExecution(t *testing.T) {
+	doc := &Document{
+		Segments: []Segment{
+			{ID: "seg-0", Source: "Hello {{name}}", Translate: true},
+			{ID: "seg-1", Source: "plain text", Translate: true},
+			{ID: "seg-2", Source: "……{{name}}", Translate: true},
+			{ID: "seg-3", Source: "ctx candidate", Translate: false},
+			{ID: "seg-4", Source: "<br/>", Translate: false},
+			{ID: "seg-5", Source: "[Events] big skip header", Translate: true, Skip: true},
+		},
+		SourceLang: "en",
+		TargetLang: "zh",
+	}
+	counter := &countingProtector{Protector: protect.FromRules(structuralTestRules)}
+	h := &TranslateHandler{
+		Logger:    quietLogger(),
+		Protector: counter,
+		BatchSize: 10,
+	}
+
+	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
+	if err != nil {
+		t.Fatalf("BuildBatches: %v", err)
+	}
+
+	// 5 个非 Skip 段各恰好一次：翻译目标 seg-0/1/2 + 上下文候选 seg-3/4；Skip 段 seg-5 零次。
+	if counter.calls != 5 {
+		t.Errorf("protect chain executions = %d, want 5 (once per non-skip segment)", counter.calls)
+	}
+
+	// 落盘结果与直接 Protect 等价：seg-0 Source key 化、Protected 填充、OriginalSource 快照。
+	seg0 := &doc.Segments[0]
+	if seg0.Source == "Hello {{name}}" || !strings.Contains(seg0.Source, "__LF_") {
+		t.Errorf("seg[0].Source = %q, want key-ified", seg0.Source)
+	}
+	if len(seg0.Protected) == 0 {
+		t.Errorf("seg[0].Protected empty, want mapping applied")
+	}
+	if seg0.OriginalSource != "Hello {{name}}" {
+		t.Errorf("seg[0].OriginalSource = %q, want raw snapshot", seg0.OriginalSource)
+	}
+
+	// 结构段不落盘：Source 保持原始、Protected 为空。
+	seg2 := &doc.Segments[2]
+	if seg2.Source != "……{{name}}" || len(seg2.Protected) != 0 {
+		t.Errorf("structural seg[2] mutated: Source=%q Protected=%v", seg2.Source, seg2.Protected)
+	}
+
+	// Skip 段不标记（零值 fail-open 契约）；批内仅两个非结构翻译段。
+	if doc.Segments[5].StructuralOnly {
+		t.Errorf("skip segment should stay unmarked")
+	}
+	if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0, 1}) {
+		t.Fatalf("batches = %v, want single batch [0 1]", batches)
+	}
+}
+
+// TestBuildBatches_ProtectErrorPropagates 验证标记分析阶段的保护链失败
+// 在 Protect 落盘点报错（与旧"循环内直接 Protect 失败"同语义），不静默跳过保护。
+func TestBuildBatches_ProtectErrorPropagates(t *testing.T) {
+	doc := &Document{
+		Segments: []Segment{
+			{ID: "seg-0", Source: "Hello {{name}}", Translate: true},
+			{ID: "seg-1", Source: "ctx", Translate: false},
+		},
+		SourceLang: "en",
+		TargetLang: "zh",
+	}
+	h := &TranslateHandler{
+		Logger:    quietLogger(),
+		Protector: failingProtector{},
+		BatchSize: 10,
+	}
+
+	_, err := h.BuildBatches(context.Background(), doc, nil, 0)
+	if err == nil {
+		t.Fatalf("BuildBatches err = nil, want protect error")
+	}
+	if !strings.Contains(err.Error(), "protect segment 0") {
+		t.Errorf("err = %v, want protect segment error", err)
+	}
+}
+
+// TestBuildBatches_RubyChainMetaPreserved 验证保护链单次执行优化不丢链的段级
+// 副作用（回归：启用 ruby 的链经 AnalyzeStructural 临时段执行时 ruby_items 被丢弃，
+// prompt 注音标注与译后注音回填整体静默失效）。
+func TestBuildBatches_RubyChainMetaPreserved(t *testing.T) {
+	doc := &Document{
+		Segments: []Segment{
+			{ID: "seg-0", Source: "<ruby>漢<rt>かん</rt></ruby>です", Translate: true},
+			{ID: "seg-1", Source: "<ruby>字<rt>じ</rt></ruby>と {{name}}", Translate: true},
+			{ID: "seg-2", Source: "plain", Translate: true},
+		},
+		SourceLang: "ja",
+		TargetLang: "zh",
+	}
+	h := &TranslateHandler{
+		Logger:    quietLogger(),
+		Protector: protect.Compose(protect.NewRubyProtector(), protect.FromRules(structuralTestRules)),
+		BatchSize: 10,
+	}
+
+	// 与直接 Protect 的落盘终态逐一对照：Source 剥离/映射、Protected、Meta 副作用。
+	wantDoc := &Document{
+		Segments: []Segment{
+			{ID: "seg-0", Source: "<ruby>漢<rt>かん</rt></ruby>です"},
+			{ID: "seg-1", Source: "<ruby>字<rt>じ</rt></ruby>と {{name}}"},
+			{ID: "seg-2", Source: "plain"},
+		},
+	}
+	for i := range wantDoc.Segments {
+		if err := h.Protector.Protect(&wantDoc.Segments[i]); err != nil {
+			t.Fatalf("Protect want[%d]: %v", i, err)
+		}
+	}
+
+	if _, err := h.BuildBatches(context.Background(), doc, nil, 0); err != nil {
+		t.Fatalf("BuildBatches: %v", err)
+	}
+
+	for i := range doc.Segments {
+		got, want := &doc.Segments[i], &wantDoc.Segments[i]
+		if got.Source != want.Source {
+			t.Errorf("seg[%d].Source = %q, want %q", i, got.Source, want.Source)
+		}
+		if !reflect.DeepEqual(got.Protected, want.Protected) {
+			t.Errorf("seg[%d].Protected = %v, want %v", i, got.Protected, want.Protected)
+		}
+		if !reflect.DeepEqual(got.Meta, want.Meta) {
+			t.Errorf("seg[%d].Meta = %v, want %v", i, got.Meta, want.Meta)
+		}
+	}
+	// 仅含 ruby 标签的段有 ruby_items（无注音段不写 Meta 是 ruby protector 的既有约定）。
+	for _, i := range []int{0, 1} {
+		if _, ok := doc.Segments[i].Meta["ruby_items"]; !ok {
+			t.Errorf("seg[%d].Meta missing ruby_items (ruby annotations would be lost)", i)
+		}
 	}
 }
 

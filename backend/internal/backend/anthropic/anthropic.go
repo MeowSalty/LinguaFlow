@@ -85,16 +85,6 @@ func (b *Backend) translateStream(ctx context.Context, params sdk.MessageNewPara
 }
 
 func (b *Backend) responseFromMessage(msg *sdk.Message, useToolPath bool) (*backend.Response, error) {
-	// 截断会让 tool_use 的 JSON 残缺，显式失败以触发上层 shrinkOrFallback
-	if msg.StopReason == sdk.StopReasonMaxTokens {
-		if b.thinking.Enabled() {
-			// thinking 开启时 budget_tokens 与最终输出共用 max_tokens 池：
-			// 截断可能源于思考预算挤占输出，提示用户从三处可调方向定位。
-			return nil, fmt.Errorf("anthropic: response truncated (stop_reason=max_tokens); thinking_level=%s shares max_tokens between thinking budget and output — raise max_tokens, lower thinking_level, or shrink batch_size", b.thinking)
-		}
-		return nil, fmt.Errorf("anthropic: response truncated (stop_reason=max_tokens), raise max_tokens")
-	}
-
 	text, err := extractResponseText(msg, useToolPath, b, msg.StopReason, msg.Usage.InputTokens)
 	if err != nil {
 		return nil, err
@@ -108,6 +98,10 @@ func (b *Backend) responseFromMessage(msg *sdk.Message, useToolPath bool) (*back
 			TotalTokens:      msg.Usage.InputTokens + msg.Usage.OutputTokens,
 		},
 		Raw: msg,
+		// 截断（stop_reason=max_tokens）时部分文本仍有效：带 Truncated 标志返回，
+		// 由上层修复链抢救前缀、缺失部分走重跑通道，而非整体丢弃报错。
+		// 空文本截断由 extractResponseText 的 EmptyResponseError 覆盖（携带 stop reason）。
+		Truncated: msg.StopReason == sdk.StopReasonMaxTokens,
 	}, nil
 }
 
@@ -196,7 +190,7 @@ func (b *Backend) buildParams(req backend.Request) (sdk.MessageNewParams, bool, 
 //
 //	仍会截断，却让用户放松对 batch_size / max_tokens 的主动调优）。
 //
-// 截断保护由 responseFromMessage 的可定位错误信息承担（见 stop_reason=max_tokens 分支）。
+// 截断信号由 responseFromMessage 的 Response.Truncated 标志传递给上层修复链处理。
 func anthropicThinkingBudget(level backend.ThinkingLevel, maxTokens int64) (int64, error) {
 	minBudget := int64(1024)
 	if maxTokens <= minBudget {

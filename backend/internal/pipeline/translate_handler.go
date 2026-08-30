@@ -94,11 +94,36 @@ func (h *TranslateHandler) reporter() progress.Reporter {
 }
 
 // BuildBatches 收集待翻译段落、执行 Protect、分批、上下文扩展。
-// pending==nil：池 0，扫描 doc + Protect；pending!=nil：池间重切，不重扫不 Protect。
+// pending==nil：池 0，先对全部非 Skip 段做一次保护链分析（结构段标记 + 保护产物，
+// 含 Translate=false 的上下文候选段），再扫描 doc；保护产物由 Protect 循环落盘，
+// 保护链对每段恰好执行一次。pending!=nil：池间重切，不重扫不 Protect，复用池 0 标记。
 func (h *TranslateHandler) BuildBatches(ctx context.Context, doc *Document, pending []int, poolIndex int) ([][]int, error) {
 	logger := h.logger()
 
 	if pending == nil {
+		// 结构段标记 + 保护分析：必须是本分支第一条语句——先于扫描循环与下方 buildEligibleWordPrefix
+		// （前缀和直接消费 isContextEligible），顺序颠倒会导致字数预估与实际发送静默偏离。
+		// 判定与实际保护是同一次链执行：翻译目标段的 AnalyzeStructural 产物缓存进 analyses，
+		// 下方 Protect 循环经 Apply 落盘、不重跑链；判定随本轮保护配置浮动，
+		// rawSource 保证跨轮持久 doc（成功段 Source 已 key 化）与 DB 每轮重建
+		// 两条路径输入均为原始文本。
+		// Skip 段不标记：两个消费方（扫描循环、isContextEligible）都先被 Skip 短路，
+		// 标记从不被读，零值 false 即 fail-open；也免去 ASS 头部等大 Skip 段的整链成本。
+		analyses := make([]protect.Analysis, len(doc.Segments))
+		for i := range doc.Segments {
+			seg := &doc.Segments[i]
+			if seg.Skip {
+				continue
+			}
+			if seg.Translate {
+				// 翻译目标段：保护产物留待 Protect 循环落盘。
+				analyses[i] = protect.AnalyzeStructural(h.Protector, rawSource(seg))
+				seg.StructuralOnly = analyses[i].Structural
+				continue
+			}
+			// 上下文候选段（Translate=false）：上下文恒发原文、保护形态从不落盘，只取判定结论。
+			seg.StructuralOnly = protect.IsStructuralOnly(h.Protector, rawSource(seg))
+		}
 		var scan []int
 		skippedCount := 0
 		for i := range doc.Segments {
@@ -111,8 +136,10 @@ func (h *TranslateHandler) BuildBatches(ctx context.Context, doc *Document, pend
 			if !seg.Translate {
 				continue
 			}
-			if strings.TrimSpace(seg.Source) == "" || IsDecorativeSeparator(seg) {
-				seg.Target = seg.Source
+			// 结构段（纯占位符/纯标点/空段/占位符+标点混合）无可译文本：不送翻，
+			// 原文透传，也不进入任何批次的上下文（isContextEligible 同源排除）。
+			if seg.StructuralOnly {
+				seg.Target = rawSource(seg)
 				skippedCount++
 				continue
 			}
@@ -125,29 +152,20 @@ func (h *TranslateHandler) BuildBatches(ctx context.Context, doc *Document, pend
 		}
 
 		if h.Protector != nil {
-			filtered := scan[:0]
 			for _, idx := range scan {
 				seg := &doc.Segments[idx]
 				if seg.OriginalSource == "" {
 					seg.OriginalSource = seg.Source
 				}
-				if err := h.Protector.Protect(seg); err != nil {
+				// 池 0 的标记分析已对同一段文本跑过同一条保护链（scan 段 Source 恒等于
+				// rawSource），此处落盘缓存产物而非重跑链；分析失败与直接 Protect 失败同语义。
+				if err := analyses[idx].Apply(seg); err != nil {
 					return nil, fmt.Errorf("protect segment %d: %w", idx, err)
 				}
-				if IsPlaceholderOnly(seg) {
-					seg.Target = seg.OriginalSource
-					skippedCount++
-					continue
-				}
-				filtered = append(filtered, idx)
 			}
-			scan = filtered
 		}
 
 		h.writeSkippedCount(doc, skippedCount)
-		if len(scan) == 0 {
-			return nil, nil
-		}
 		pending = scan
 	}
 
@@ -345,6 +363,9 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 	}
 
 	// 累加 token
+	if resp.Truncated {
+		logTruncatedResponse(logger, h.Backend.Name())
+	}
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
@@ -381,6 +402,8 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 				ErrorType:       "parse_error",
 				ErrorMessage:    res.ParseErr.Error(),
 				ShrinkAttempted: len(pendingIdxs) > 1,
+				Truncated:       resp.Truncated,
+				Repaired:        res.Repaired,
 				RoundIndex:      h.RoundIndex,
 				Attempt:         attempt,
 				SystemPrompt:    sys,
@@ -409,7 +432,7 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 	trans, glosEntries, rubyOutputMap := res.Trans, res.Glos, res.RubyOutput
 
 	h.emitBatchEvent(doc, pendingIdxs, wantIDs, h.Backend.Name(), res, rawRespText, sys, usr,
-		req.ResponseFormat, req.JSONSchema, attempt, glos, resp.Usage, durationMs, tried, logger)
+		req.ResponseFormat, req.JSONSchema, attempt, glos, resp.Usage, resp.Truncated, durationMs, tried, logger)
 
 	logger.Debug("batch translated",
 		"backend", h.Backend.Name(), "batch_size", len(idxs),
@@ -453,12 +476,11 @@ func (h *TranslateHandler) buildRequest(
 	transIdx := 0
 	for k, idx := range idxs {
 		seg := doc.Segments[idx]
+		// 批次段发送 seg.Source（key 化保护形态）；仅上下文段回退保护前原文。
 		source := seg.Source
 		isCtx := IsContext(contextSet, idx)
 		if isCtx {
-			if seg.OriginalSource != "" {
-				source = seg.OriginalSource
-			}
+			source = rawSource(&seg)
 			if trunc, ok := truncatedSrc[idx]; ok {
 				source = trunc
 			}
@@ -867,6 +889,7 @@ func (h *TranslateHandler) emitBatchEvent(
 	attempt int,
 	usedGlossary []prompt.GlossaryEntry,
 	usage backend.Usage,
+	truncated bool,
 	durationMs int64,
 	triedBackends []string,
 	logger *slog.Logger,
@@ -900,6 +923,8 @@ func (h *TranslateHandler) emitBatchEvent(
 		ErrorType:       errorType,
 		ErrorMessage:    errorMsg,
 		TriedBackends:   triedBackends,
+		Truncated:       truncated,
+		Repaired:        res.Repaired,
 		RoundIndex:      h.RoundIndex,
 		Attempt:         attempt,
 		SystemPrompt:    sys,

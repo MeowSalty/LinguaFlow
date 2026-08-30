@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync/atomic"
 	"time"
@@ -304,10 +305,21 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		return batchResult{unresolved: idxs}
 	}
 
+	if resp.Truncated {
+		logTruncatedResponse(logger, h.Backend.Name())
+	}
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
 	issues, parseRepaired, parseErr := repair.ParseSemanticQAByMode(resp.Text, isTextMode, h.Repair)
+	// 截断响应对 fail-closed stage 恒不采纳：issues 的 partial 会被下游解释为
+	// 「缺失段=已扫描无问题」（假阴性质检）。JSON 模式下 WithoutSalvage 已拒绝
+	// 可检测的截断形态，此处封住两个残余通道——text 协议逐行解析无完整性信号
+	// （截断的已完成行被当作完整结果）、以及截断点恰在完整边界导致解析成功；
+	// 截断即报错走重试/下一池，代价由池预算约束。
+	if parseErr == nil && resp.Truncated {
+		parseErr = fmt.Errorf("response truncated by output token limit: refusing partial issues as complete")
+	}
 	if parseErr != nil {
 		logger.Warn("semantic_qa parse failed",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", parseErr,
@@ -326,6 +338,8 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			TriedBackends:   tried,
 			ErrorType:       "parse_error",
 			ErrorMessage:    parseErr.Error(),
+			Truncated:       resp.Truncated,
+			Repaired:        parseRepaired,
 			RoundIndex:      h.RoundIndex,
 			Attempt:         attempt,
 			SystemPrompt:    sys,
@@ -425,6 +439,8 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		SentContent:     usr,
 		ReceivedContent: resp.Text,
 		TriedBackends:   tried,
+		Truncated:       resp.Truncated,
+		Repaired:        parseRepaired,
 		RoundIndex:      h.RoundIndex,
 		Attempt:         attempt,
 		SystemPrompt:    sys,

@@ -332,6 +332,7 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 		"received_content": recv,
 		"tried_backends":   batchEvent.TriedBackends,
 		"shrink_attempted": batchEvent.ShrinkAttempted,
+		"truncated":        batchEvent.Truncated,
 		"sent_length":      sentLen,
 		"received_length":  recvLen,
 	}
@@ -346,6 +347,9 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 	}
 	if len(batchEvent.AddedGlossary) > 0 {
 		metadata["added_glossary"] = batchEvent.AddedGlossary
+	}
+	if len(batchEvent.Repaired) > 0 {
+		metadata["repaired"] = batchEvent.Repaired
 	}
 	if batchEvent.ErrorType != "" {
 		metadata["error_type"] = batchEvent.ErrorType

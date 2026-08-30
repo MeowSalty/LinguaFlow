@@ -257,6 +257,48 @@ func TestRestoreSegmentRuby_DirectedRetry_OnlyMissing(t *testing.T) {
 	}
 }
 
+// TestRestoreSegmentRuby_DirectedRetry_EmitsTruncationSignal ruby 定向对齐路径的
+// 截断信号接线：后端响应标记 Truncated 且响应 JSON 缺失收尾括号（经
+// json.close-braces 修复成功）时，发出的 ruby_alignment BatchEvent 携带
+// Truncated==true 与 Repaired 修复算子链——与 translate/adjudicate/revise/
+// semantic_qa/extract 五个 stage 的截断诊断口径一致。
+func TestRestoreSegmentRuby_DirectedRetry_EmitsTruncationSignal(t *testing.T) {
+	items := []ruby.Item{
+		{ID: "1", SourceBase: "我", SourceText: "wǒ", TargetBase: "I", TargetText: "wǒ", Kind: "phonetic", Aligned: true},
+		{ID: "4", SourceBase: "水", SourceText: "shuǐ"},
+	}
+	seg := newRubyTestSeg("我水", "I water", items)
+	rec := &recordingBatchObserver{}
+	fb := &truncatedFakeBackend{
+		fakeBackend: fakeBackend{name: "ruby-fake", responses: []string{
+			`{"ruby_output":[{"id":"4","base":"water","text":"shuǐ","kind":"phonetic"}`,
+		}},
+	}
+
+	restoreSegmentRuby(context.Background(), seg, kindSet(nil), []backend.Backend{fb},
+		backend.RetryPolicy{}, quietLogger(), rec, false, 0, defaultRepairOpts(), 1)
+
+	if len(rec.events) != 1 {
+		t.Fatalf("emitted %d batch events, want 1", len(rec.events))
+	}
+	evt := rec.events[0]
+	if evt.Stage != "ruby_alignment" {
+		t.Fatalf("stage = %q, want ruby_alignment", evt.Stage)
+	}
+	if !evt.Truncated {
+		t.Errorf("Truncated = false, want true (backend response marked truncated)")
+	}
+	found := false
+	for _, op := range evt.Repaired {
+		if op == "json.close-braces" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Repaired = %v, want contains \"json.close-braces\"", evt.Repaired)
+	}
+}
+
 // TestRestoreSegmentRuby_DirectedRetry_EarlyStop 一轮无新增对齐（空输出）即提前停：
 // max_attempts=2 时只发 1 次后端调用，译文保持干净。
 func TestRestoreSegmentRuby_DirectedRetry_EarlyStop(t *testing.T) {

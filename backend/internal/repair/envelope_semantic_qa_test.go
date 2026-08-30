@@ -59,19 +59,19 @@ func TestTryRepairSemanticQA_StutteredPrefix(t *testing.T) {
 	}
 }
 
-// TestTryRepairSemanticQA_TruncatedWithContent 复现日志中的截断型故障（含内容）：
+// TestTryRepairSemanticQA_TruncatedWithContent 复现日志中的截断型故障（含内容，
+// 完整值边界截断：值闭引号后直接截断，缺收尾 }]）：
 //
 //	{"issues":[{"code":"term_fidelity","id":"3","message":"...","snippet":"ル…
 //
-// 被截断未闭合 → 补齐括号后解析。
+// semantic_qa 入口经 WithoutSalvage 弃用截断抢救（partial 会被下游解释为
+// 「缺失段=已扫描无问题」的假阴性质检），fail-closed 对所有截断形态成立——
+// close-braces/robust-extract 的截断残尾修补一并弃用，必须报错走重试。
+// 非截断噪声的恢复见 StutteredPrefix。
 func TestTryRepairSemanticQA_TruncatedWithContent(t *testing.T) {
 	in := `{"issues":[{"code":"term_fidelity","id":"3","message":"音译不准确","snippet":"ルトルバーグ"`
-	issues, repaired, err := TryRepairSemanticQA(in, allOpts)
-	if err != nil {
-		t.Fatalf("err: %v (repaired=%v)", err, repaired)
-	}
-	if len(issues) != 1 || issues[0].ID != "3" || issues[0].Snippet != "ルトルバーグ" {
-		t.Errorf("wrong: %#v", issues)
+	if _, _, err := TryRepairSemanticQA(in, allOpts); err == nil {
+		t.Fatal("expected error: semantic_qa must decline boundary truncation")
 	}
 }
 

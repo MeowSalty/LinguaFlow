@@ -66,10 +66,6 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		return nil, emptyResponseError(b, "", int64(resp.UsageMetadata.PromptTokenCount))
 	}
 	finishReason := resp.Candidates[0].FinishReason
-	// 截断会让 JSON 残缺，显式失败以触发上层 shrinkOrFallback
-	if finishReason == genai.FinishReasonMaxTokens {
-		return nil, fmt.Errorf("google: response truncated (finish_reason=MAX_TOKENS), raise max_tokens")
-	}
 
 	text := resp.Text()
 	if text == "" {
@@ -87,6 +83,9 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		Text:  text,
 		Usage: usage,
 		Raw:   resp,
+		// 截断（finish_reason=MAX_TOKENS）时部分文本仍有效：带 Truncated 标志返回，
+		// 由上层修复链抢救前缀、缺失部分走重跑通道，而非整体丢弃报错。
+		Truncated: finishReason == genai.FinishReasonMaxTokens,
 	}, nil
 }
 
@@ -120,10 +119,6 @@ func (b *Backend) translateStream(ctx context.Context, model string, contents []
 		last = resp
 	}
 
-	if finish == genai.FinishReasonMaxTokens {
-		return nil, fmt.Errorf("google: response truncated (finish_reason=MAX_TOKENS), raise max_tokens")
-	}
-
 	text := buf.String()
 	if text == "" {
 		promptTokens := int64(0)
@@ -144,6 +139,9 @@ func (b *Backend) translateStream(ctx context.Context, model string, contents []
 		Text:  text,
 		Usage: outUsage,
 		Raw:   last,
+		// 流式同理：截断（finish_reason=MAX_TOKENS）时累积文本仍有效，
+		// 带 Truncated 标志交由上层修复链处理，而非整体丢弃报错。
+		Truncated: finish == genai.FinishReasonMaxTokens,
 	}, nil
 }
 

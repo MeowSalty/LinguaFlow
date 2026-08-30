@@ -42,6 +42,11 @@ type Response struct {
 	Text  string
 	Usage Usage
 	Raw   any // 调试用，可为 nil
+
+	// Truncated 表示响应因输出 token 上限被截断（finish_reason=MAX_TOKENS/length，
+	// stop_reason=max_tokens）。部分文本仍然有效：上层修复链会抢救完整前缀，
+	// 缺失条目走重跑通道。仅作信号与诊断，不影响调用方对 Text 的正常解析。
+	Truncated bool
 }
 
 // Backend 是 AI 翻译后端的抽象。

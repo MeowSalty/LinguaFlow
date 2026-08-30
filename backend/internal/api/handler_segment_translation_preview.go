@@ -200,6 +200,7 @@ func toTranslationBatchDiagnostic(event progress.BatchEvent) TranslationBatchDia
 		ErrorMessage:    stringPtr(event.ErrorMessage),
 		HttpStatus:      intPtr(event.HTTPStatus),
 		ShrinkAttempted: boolPtr(event.ShrinkAttempted),
+		Truncated:       boolPtr(event.Truncated),
 	}
 	if len(event.SegmentIDs) > 0 {
 		ids := append([]string(nil), event.SegmentIDs...)
@@ -208,6 +209,10 @@ func toTranslationBatchDiagnostic(event progress.BatchEvent) TranslationBatchDia
 	if len(event.TriedBackends) > 0 {
 		tried := append([]string(nil), event.TriedBackends...)
 		diagnostic.TriedBackends = &tried
+	}
+	if len(event.Repaired) > 0 {
+		repaired := append([]string(nil), event.Repaired...)
+		diagnostic.Repaired = &repaired
 	}
 	if len(event.UsedGlossary) > 0 {
 		entries := make([]GlossaryEntry, 0, len(event.UsedGlossary))

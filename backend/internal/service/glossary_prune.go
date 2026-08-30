@@ -139,11 +139,18 @@ func NewGlossaryPruneService(
 }
 
 // defaultPruneRepairOptions 返回精简场景的默认修复选项。
+//
+// 截断抢救必须弃用（WithoutSalvage，fail-closed）：prune 把 LLM 返回的 refined
+// 列表当作「保留白名单」（computePruneDiff 中不在列表内的既有条目 → 建议删除）。
+// 若响应被截断而抢救出部分前缀，截断缺口（模型未及输出的条目）会被静默解释为
+// 「建议删除」，造成误删风险——因此截断响应维持解析失败走重试，不做部分恢复。
+// WithoutSalvage 同时弃用 TryRepairBootstrap 配套的 close-braces 截断恢复
+// （完整值边界截断形态），fail-closed 对所有截断形态成立。
 func defaultPruneRepairOptions() repair.Options {
 	return repair.Options{
 		JSONStructural: true,
 		SchemaAliases:  true,
-	}
+	}.WithoutSalvage()
 }
 
 // defaultPruneRetryPolicy 返回精简场景的默认重试策略。
@@ -312,6 +319,14 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	repairOpts := defaultPruneRepairOptions()
 	// requireHeaderForEmpty：避免乱输出被当成空 glossary → 建议全删
 	refined, parseRepaired, perr := repair.ParseBootstrapByMode(resp.Text, isTextMode, repairOpts, true)
+	// 截断响应对 fail-closed stage 恒不采纳（与 repairOpts 的 WithoutSalvage 同一
+	// 语义）：refined 列表是「保留白名单」，partial 会被 computePruneDiff 解释为
+	// 「未列出条目建议删除」。JSON 模式下 WithoutSalvage 已拒绝可检测的截断形态，
+	// 此处封住 text 协议逐行解析无完整性信号、以及截断点恰在完整边界导致解析
+	// 成功两个残余通道。
+	if perr == nil && resp.Truncated {
+		perr = fmt.Errorf("response truncated by output token limit: refusing partial refined list as complete")
+	}
 	if perr != nil {
 		s.logger.Warn("prune parse failed",
 			"resp_len", len(resp.Text),
