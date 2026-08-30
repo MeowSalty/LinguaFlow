@@ -437,6 +437,14 @@ TranslationBatchDiagnostic:
         type: string
     shrink_attempted:
       type: boolean
+    truncated:
+      type: boolean
+      description: 后端响应因输出 token 上限被截断（finish_reason=MAX_TOKENS/length、stop_reason=max_tokens）；部分文本仍有效，已由修复链抢救完整前缀，缺失条目走重跑通道
+    repaired:
+      type: array
+      items:
+        type: string
+      description: 响应解析修复算子链（如 json.close-braces、json.truncation-salvage），按应用顺序记录
 
 ApplySegmentTranslationPreviewRequest:
   type: object
