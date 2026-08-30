@@ -87,6 +87,27 @@ const hasErrorInfo = computed(
       <NTag v-if="tokenLine" size="tiny" :bordered="false">
         <span class="font-mono tabular-nums">{{ tokenLine }}</span>
       </NTag>
+      <NTag
+        v-if="batch.truncated"
+        size="tiny"
+        type="warning"
+        :bordered="false"
+        :title="t('workspace.segment.translationPreview.diagnostic.truncatedHint')"
+      >
+        {{ t('workspace.segment.translationPreview.diagnostic.truncated') }}
+      </NTag>
+      <NTag
+        v-if="batch.repaired?.length"
+        size="tiny"
+        :bordered="false"
+        :title="t('workspace.segment.translationPreview.diagnostic.repairedHint')"
+      >
+        {{
+          t('workspace.segment.translationPreview.diagnostic.repaired', {
+            ops: batch.repaired.join(', '),
+          })
+        }}
+      </NTag>
     </div>
 
     <div v-if="hasErrorInfo" class="mt-2 space-y-1 text-xs text-lf-text-muted">

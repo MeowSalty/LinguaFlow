@@ -210,8 +210,7 @@ const submit = async (): Promise<void> => {
     message.success(t('workspace.qaRecheck.successToast'))
     emit('completed')
   } catch (error) {
-    errorMessage.value =
-      error instanceof Error ? error.message : t('api.errors.qaRecheckFailed')
+    errorMessage.value = error instanceof Error ? error.message : t('api.errors.qaRecheckFailed')
   } finally {
     submitting.value = false
   }

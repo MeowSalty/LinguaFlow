@@ -56,6 +56,25 @@ const { meta, tokenLine, glossaryUsedCount, glossaryAddedCount, statusTagType, h
           <NTag v-if="glossaryAddedCount" size="tiny" round :bordered="false" type="success">
             {{ t('workspace.job.events.batch.glossaryAdded', { count: glossaryAddedCount }) }}
           </NTag>
+          <NTag
+            v-if="meta.truncated"
+            size="tiny"
+            round
+            type="warning"
+            :bordered="false"
+            :title="t('workspace.job.events.batch.truncatedHint')"
+          >
+            {{ t('workspace.job.events.batch.truncated') }}
+          </NTag>
+          <NTag
+            v-if="meta.repaired?.length"
+            size="tiny"
+            round
+            :bordered="false"
+            :title="t('workspace.job.events.batch.repairedHint')"
+          >
+            {{ t('workspace.job.events.batch.repaired', { ops: meta.repaired.join(', ') }) }}
+          </NTag>
         </div>
 
         <!-- Error info -->
