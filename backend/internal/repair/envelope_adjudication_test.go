@@ -49,18 +49,16 @@ func TestTryRepairAdjudication_StutteredPrefix(t *testing.T) {
 	}
 }
 
-// TestTryRepairAdjudication_TruncatedWithContent 截断含内容。
+// TestTryRepairAdjudication_TruncatedWithContent 截断含内容（完整值边界截断：
+// 值闭引号后直接截断，缺收尾 }]）。adjudication 入口经 WithoutSalvage 弃用截断
+// 抢救（无「缺失 verdict → 重跑」通道，partial 会被计为终态成功），fail-closed
+// 对所有截断形态成立——close-braces/robust-extract 的截断残尾修补一并弃用，
+// 必须报错走 unresolved → 下一池整批重试。非截断噪声的恢复见 StutteredPrefix。
 func TestTryRepairAdjudication_TruncatedWithContent(t *testing.T) {
 	in := `{"verdicts":[{"id":"3","issue_code":"source_residual","matched_text":"test","verdict":"real","reason":"残留"`
-	verdicts, repaired, err := TryRepairAdjudication(in, allOpts)
-	if err != nil {
-		t.Fatalf("err: %v (repaired=%v)", err, repaired)
-	}
-	if len(verdicts) != 1 || verdicts[0].ID != "3" {
-		t.Errorf("wrong: %#v", verdicts)
-	}
-	if !contains(repaired, "json.robust-extract") && !contains(repaired, "json.close-braces") {
-		t.Errorf("expected a structural repair op, got %v", repaired)
+	verdicts, _, err := TryRepairAdjudication(in, allOpts)
+	if err == nil {
+		t.Fatalf("expected error: adjudication must decline boundary truncation, got %#v", verdicts)
 	}
 }
 
