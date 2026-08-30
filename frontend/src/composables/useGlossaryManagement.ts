@@ -252,6 +252,7 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
           notes: glossaryForm.notes.trim() || undefined,
         })
         message.success(t('workspace.glossary.messages.createSuccess'))
+        closeGlossaryDrawer()
       }
     } catch (error) {
       console.error(error)
