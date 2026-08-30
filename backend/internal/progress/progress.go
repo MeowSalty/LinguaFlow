@@ -57,6 +57,8 @@ type BatchEvent struct {
 	HTTPStatus      int                     `json:"http_status,omitempty"`
 	TriedBackends   []string                `json:"tried_backends,omitempty"`
 	ShrinkAttempted bool                    `json:"shrink_attempted,omitempty"`
+	Truncated       bool                    `json:"truncated,omitempty"` // 后端响应因输出 token 上限被截断(finish_reason=MAX_TOKENS/length 等);部分文本有效,已由修复链抢救前缀
+	Repaired        []string                `json:"repaired,omitempty"`  // 响应解析修复算子链(如 json.close-braces、json.truncation-salvage),按应用顺序
 
 	// Diagnostic fields for preview response.
 	RoundIndex      int            `json:"round_index,omitempty"`
