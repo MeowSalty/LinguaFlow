@@ -1,10 +1,21 @@
 package pipeline
 
 import (
-	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
+
+// rawSource 返回段落的原始文本：优先 protect 之前的原文快照，未保护过时回退 Source。
+// Source 在 protect 之后是含占位符的版本，任何需要"人类可读原文"的场合（上下文展示、
+// 字数统计、结果落库、结构段判定）都必须走本函数。
+func rawSource(seg *model.Segment) string {
+	if seg.OriginalSource != "" {
+		return seg.OriginalSource
+	}
+	return seg.Source
+}
 
 // expandedContext 是上下文扩展结果：Idxs 为扩展后索引；TruncatedSrc 记录被 max_chars 截断的上下文段文本（key=idx）。
 type expandedContext struct {
@@ -13,17 +24,12 @@ type expandedContext struct {
 }
 
 // isContextEligible 判断段落是否可作为上下文段（与 ExpandBatchWithContext 选段规则同源）。
+// 契约：StructuralOnly 标记由 translate 轮 BuildBatches 池 0 对全部非 Skip 段统一计算
+// （含 Translate=false 的段；Skip 段不标记——本函数先被 Skip 短路，零值即 fail-open），
+// 直接调用 ExpandBatchWithContext 的调用方须先完成标记；
+// 未标记（零值 false）按"有内容"处理（fail-open）。
 func isContextEligible(seg *Segment) bool {
-	if seg.Skip {
-		return false
-	}
-	if IsPlaceholderOnly(seg) || IsDecorativeSeparator(seg) {
-		return false
-	}
-	if strings.TrimSpace(seg.Source) == "" {
-		return false
-	}
-	return true
+	return !seg.Skip && !seg.StructuralOnly
 }
 
 // ExpandBatchWithContext 为批次扩展上下文段落，并按 maxChars 对上下文段做 rune 截断。
@@ -51,10 +57,7 @@ func ExpandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow,
 			continue
 		}
 		if maxChars > 0 {
-			src := seg.OriginalSource
-			if src == "" {
-				src = seg.Source
-			}
+			src := rawSource(seg)
 			if utf8.RuneCountInString(src) > maxChars {
 				truncated[i] = string([]rune(src)[:maxChars]) + "…"
 			}
@@ -82,11 +85,7 @@ func estimateContextWords(doc *Document, batchIdxs []int, ctxWindow int) int {
 			continue
 		}
 		seg := &doc.Segments[idx]
-		src := seg.OriginalSource
-		if src == "" {
-			src = seg.Source
-		}
-		words += CountWords(src)
+		words += CountWords(rawSource(seg))
 	}
 	return words
 }
@@ -99,11 +98,7 @@ func buildEligibleWordPrefix(doc *Document) []int {
 	for i := range doc.Segments {
 		prefix[i+1] = prefix[i]
 		if isContextEligible(&doc.Segments[i]) {
-			src := doc.Segments[i].OriginalSource
-			if src == "" {
-				src = doc.Segments[i].Source
-			}
-			prefix[i+1] += CountWords(src)
+			prefix[i+1] += CountWords(rawSource(&doc.Segments[i]))
 		}
 	}
 	return prefix
@@ -124,11 +119,7 @@ func estimateContextWordsWithPrefix(doc *Document, batchIdxs []int, ctxWindow in
 	for _, idx := range batchIdxs {
 		seg := &doc.Segments[idx]
 		if isContextEligible(seg) {
-			src := seg.OriginalSource
-			if src == "" {
-				src = seg.Source
-			}
-			total -= CountWords(src)
+			total -= CountWords(rawSource(seg))
 		}
 	}
 	return total
@@ -155,14 +146,10 @@ func BuildBatchResult(doc *Document, idxs []int, contextSet map[int]struct{}) Ba
 		if IsContext(contextSet, idx) {
 			continue
 		}
-		source := seg.OriginalSource
-		if source == "" {
-			source = seg.Source
-		}
 		translated = append(translated, TranslatedSegment{
 			Index:      idx,
 			ID:         seg.ID,
-			SourceText: source,
+			SourceText: rawSource(&seg),
 			TargetText: seg.Target,
 			Failed:     seg.Target == "",
 			Meta:       seg.Meta,
@@ -222,37 +209,4 @@ func IsCJK(r rune) bool {
 		unicode.Is(unicode.Hiragana, r) ||
 		unicode.Is(unicode.Katakana, r) ||
 		unicode.Is(unicode.Hangul, r)
-}
-
-// IsDecorativeSeparator 判断段落是否为装饰性分隔符（如 ◇ ◇ ◇）。
-func IsDecorativeSeparator(seg *Segment) bool {
-	text := strings.TrimSpace(seg.Source)
-	if text == "" {
-		return false
-	}
-	text = strings.ReplaceAll(text, " ", "")
-	text = strings.ReplaceAll(text, "\t", "")
-	text = strings.ReplaceAll(text, "\n", "")
-	text = strings.ReplaceAll(text, "\r", "")
-	if text == "" {
-		return false
-	}
-	for _, r := range text {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			return false
-		}
-	}
-	return true
-}
-
-// IsPlaceholderOnly 判断段落是否仅包含占位符（无实际文本）。
-func IsPlaceholderOnly(seg *Segment) bool {
-	if len(seg.Protected) == 0 {
-		return false
-	}
-	text := seg.Source
-	for key := range seg.Protected {
-		text = strings.ReplaceAll(text, key, "")
-	}
-	return strings.TrimSpace(text) == ""
 }

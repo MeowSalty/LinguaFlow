@@ -266,13 +266,13 @@ func TestBuildPackedPendingBatches_Empty(t *testing.T) {
 }
 
 // TestEstimateContextWords_AlignedWithExpand 断言预估函数选出的上下文段集合与
-// ExpandBatchWithContext 实际选出的非批内段集合一致（同源保证，含 skip/装饰/占位段）。
+// ExpandBatchWithContext 实际选出的非批内段集合一致（同源保证，含 Skip 段与结构段）。
 func TestEstimateContextWords_AlignedWithExpand(t *testing.T) {
 	sources := []string{"ctx0", "◇ ◇", "ctx2", "batch", "ctx4", "[PH]", "ctx6"}
 	doc := testDocWithSources(sources)
 	doc.Segments[1].Skip = true
 	doc.Segments[2].OriginalSource = "context two words"
-	doc.Segments[5].Protected = map[string]string{"[PH]": "x"}
+	doc.Segments[5].StructuralOnly = true
 
 	batchIdxs := []int{3}
 	ctxWindow := 3
@@ -308,7 +308,7 @@ func TestEstimateContextWordsWithPrefix_MatchesReference(t *testing.T) {
 	doc := testDocWithSources(sources)
 	doc.Segments[1].Skip = true
 	doc.Segments[2].OriginalSource = "context two words here"
-	doc.Segments[5].Protected = map[string]string{"[PH]": "x"}
+	doc.Segments[5].StructuralOnly = true
 
 	prefix := buildEligibleWordPrefix(doc)
 
@@ -501,12 +501,14 @@ func TestEstimateContextWords_IgnoresTranslateFlag(t *testing.T) {
 	}
 }
 
-// TestSplitByConstraint_SparsePending_NoContextEligible pending 两侧全是 Skip/占位/装饰段，
+// TestSplitByConstraint_SparsePending_NoContextEligible pending 两侧全是 Skip/结构段，
 // estimator 返回 0、切批行为与无上下文一致。
 func TestSplitByConstraint_SparsePending_NoContextEligible(t *testing.T) {
 	sources := []string{"◇", "a", "[PH]", "b", "◇"}
 	doc := testDocWithSources(sources)
-	doc.Segments[2].Protected = map[string]string{"[PH]": "x"}
+	doc.Segments[0].StructuralOnly = true
+	doc.Segments[2].StructuralOnly = true
+	doc.Segments[4].StructuralOnly = true
 	ctxWindow := 1
 	est := func(c []int) int { return estimateContextWords(doc, c, ctxWindow) }
 
