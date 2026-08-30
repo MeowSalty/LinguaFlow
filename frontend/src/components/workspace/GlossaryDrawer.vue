@@ -10,6 +10,7 @@ import {
   NFormItem,
   NInput,
   NSwitch,
+  NTag,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -19,7 +20,7 @@ const { t } = useI18n()
 
 const show = defineModel<boolean>('show', { default: false })
 
-defineProps<{
+const props = defineProps<{
   isEditMode: boolean
   drawerTitle: string
   formRef: FormInst | null
@@ -39,6 +40,63 @@ const emit = defineEmits<{
   'update:formCaseSensitive': [value: boolean]
   'update:formNotes': [value: string]
 }>()
+
+const notePresetGroupDefs = [
+  {
+    group: 'type',
+    keys: [
+      'personName',
+      'maleName',
+      'femaleName',
+      'surname',
+      'characterName',
+      'formOfAddress',
+      'placeName',
+      'orgName',
+      'brandName',
+      'productName',
+      'workTitle',
+      'acronym',
+    ],
+  },
+  {
+    group: 'handling',
+    keys: [
+      'keepOriginal',
+      'keepEnglish',
+      'doNotTranslate',
+      'transliterate',
+      'freeTranslate',
+      'fixedTranslation',
+      'allCaps',
+      'capitalize',
+    ],
+  },
+] as const
+
+const notePresetGroups = computed(() =>
+  notePresetGroupDefs.map(({ group, keys }) => ({
+    label: t(`workspace.glossary.form.notesPresetGroups.${group}`),
+    presets: keys.map((key) => t(`workspace.glossary.form.notesPresets.${group}.${key}`)),
+  })),
+)
+
+const noteSegments = computed(() =>
+  props.form.notes
+    .split(/[;；]/)
+    .map((segment) => segment.trim())
+    .filter(Boolean),
+)
+
+const isNotePresetActive = (preset: string): boolean => noteSegments.value.includes(preset)
+
+const toggleNotePreset = (preset: string): void => {
+  const segments = noteSegments.value
+  const next = segments.includes(preset)
+    ? segments.filter((segment) => segment !== preset)
+    : [...segments, preset]
+  emit('update:formNotes', next.join('；'))
+}
 </script>
 
 <template>
@@ -96,13 +154,34 @@ const emit = defineEmits<{
           </div>
         </NFormItem>
         <NFormItem :label="t('workspace.glossary.form.notes')">
-          <NInput
-            :value="form.notes"
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-            :placeholder="t('workspace.glossary.form.notesPlaceholder')"
-            @update:value="(val: string) => emit('update:formNotes', val)"
-          />
+          <div class="w-full space-y-2">
+            <NInput
+              :value="form.notes"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              :placeholder="t('workspace.glossary.form.notesPlaceholder')"
+              @update:value="(val: string) => emit('update:formNotes', val)"
+            />
+            <div class="space-y-1.5">
+              <div
+                v-for="group in notePresetGroups"
+                :key="group.label"
+                class="flex flex-wrap items-center gap-1.5"
+              >
+                <span class="text-xs text-lf-text-subtle">{{ group.label }}</span>
+                <NTag
+                  v-for="preset in group.presets"
+                  :key="preset"
+                  checkable
+                  size="small"
+                  :checked="isNotePresetActive(preset)"
+                  @update:checked="() => toggleNotePreset(preset)"
+                >
+                  {{ preset }}
+                </NTag>
+              </div>
+            </div>
+          </div>
         </NFormItem>
       </NForm>
       <template #footer>
