@@ -26,7 +26,7 @@ type Job struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// 所属项目 ID
 	ProjectID int `json:"project_id,omitempty"`
-	// pending, running, completed, failed, cancelled
+	// pending, running, paused, completed, failed, cancelled
 	Status string `json:"status,omitempty"`
 	// 触发类型：manual, file_update, glossary_change, web_edit
 	TriggerType string `json:"trigger_type,omitempty"`
@@ -40,16 +40,10 @@ type Job struct {
 	CompletedResources int `json:"completed_resources,omitempty"`
 	// 失败的资源数
 	FailedResources int `json:"failed_resources,omitempty"`
-	// 总段落数（创建时选中的 segment 数）
-	TotalSegments int `json:"total_segments,omitempty"`
-	// 被系统跳过的段落数（聚合自 JobResource）
-	SkippedSegments int `json:"skipped_segments,omitempty"`
-	// 已完成段落数（终态去重值，仅 ReconcileJob 写入）
-	CompletedSegments int `json:"completed_segments,omitempty"`
-	// 跨轮工作量总数（各轮 stage_total 累加，实时累加）
-	WeightedTotal int `json:"weighted_total,omitempty"`
-	// 跨轮已完成工作量（各轮 stage_completed 累加，实时累加）
-	WeightedCompleted int `json:"weighted_completed,omitempty"`
+	// 已知工作量总数（单位=段落×轮：JobRound pending→running 时累加 segment_total；矩阵重算时全量刷新）
+	ProgressTotal int64 `json:"progress_total,omitempty"`
+	// 已完成工作量（单位=段落×轮：各轮 segment_completed 之和；矩阵重算时全量刷新）
+	ProgressCompleted int64 `json:"progress_completed,omitempty"`
 	// 任务级错误信息
 	ErrorMessage *string `json:"error_message,omitempty"`
 	// 任务开始执行的时间，MarkJobRunning 时写入
@@ -69,11 +63,13 @@ type JobEdges struct {
 	CreatedBy *User `json:"created_by,omitempty"`
 	// JobResources holds the value of the job_resources edge.
 	JobResources []*JobResource `json:"job_resources,omitempty"`
+	// JobRounds holds the value of the job_rounds edge.
+	JobRounds []*JobRound `json:"job_rounds,omitempty"`
 	// SseEvents holds the value of the sse_events edge.
 	SseEvents []*SSEEvent `json:"sse_events,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [4]bool
+	loadedTypes [5]bool
 }
 
 // ProjectOrErr returns the Project value or an error if the edge
@@ -107,10 +103,19 @@ func (e JobEdges) JobResourcesOrErr() ([]*JobResource, error) {
 	return nil, &NotLoadedError{edge: "job_resources"}
 }
 
+// JobRoundsOrErr returns the JobRounds value or an error if the edge
+// was not loaded in eager-loading.
+func (e JobEdges) JobRoundsOrErr() ([]*JobRound, error) {
+	if e.loadedTypes[3] {
+		return e.JobRounds, nil
+	}
+	return nil, &NotLoadedError{edge: "job_rounds"}
+}
+
 // SseEventsOrErr returns the SseEvents value or an error if the edge
 // was not loaded in eager-loading.
 func (e JobEdges) SseEventsOrErr() ([]*SSEEvent, error) {
-	if e.loadedTypes[3] {
+	if e.loadedTypes[4] {
 		return e.SseEvents, nil
 	}
 	return nil, &NotLoadedError{edge: "sse_events"}
@@ -123,7 +128,7 @@ func (*Job) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case job.FieldExecutionConfig:
 			values[i] = new([]byte)
-		case job.FieldID, job.FieldProjectID, job.FieldExecutionPlanID, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldTotalSegments, job.FieldSkippedSegments, job.FieldCompletedSegments, job.FieldWeightedTotal, job.FieldWeightedCompleted:
+		case job.FieldID, job.FieldProjectID, job.FieldExecutionPlanID, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldProgressTotal, job.FieldProgressCompleted:
 			values[i] = new(sql.NullInt64)
 		case job.FieldStatus, job.FieldTriggerType, job.FieldErrorMessage:
 			values[i] = new(sql.NullString)
@@ -214,35 +219,17 @@ func (_m *Job) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.FailedResources = int(value.Int64)
 			}
-		case job.FieldTotalSegments:
+		case job.FieldProgressTotal:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field total_segments", values[i])
+				return fmt.Errorf("unexpected type %T for field progress_total", values[i])
 			} else if value.Valid {
-				_m.TotalSegments = int(value.Int64)
+				_m.ProgressTotal = value.Int64
 			}
-		case job.FieldSkippedSegments:
+		case job.FieldProgressCompleted:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field skipped_segments", values[i])
+				return fmt.Errorf("unexpected type %T for field progress_completed", values[i])
 			} else if value.Valid {
-				_m.SkippedSegments = int(value.Int64)
-			}
-		case job.FieldCompletedSegments:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field completed_segments", values[i])
-			} else if value.Valid {
-				_m.CompletedSegments = int(value.Int64)
-			}
-		case job.FieldWeightedTotal:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field weighted_total", values[i])
-			} else if value.Valid {
-				_m.WeightedTotal = int(value.Int64)
-			}
-		case job.FieldWeightedCompleted:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field weighted_completed", values[i])
-			} else if value.Valid {
-				_m.WeightedCompleted = int(value.Int64)
+				_m.ProgressCompleted = value.Int64
 			}
 		case job.FieldErrorMessage:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -291,6 +278,11 @@ func (_m *Job) QueryCreatedBy() *UserQuery {
 // QueryJobResources queries the "job_resources" edge of the Job entity.
 func (_m *Job) QueryJobResources() *JobResourceQuery {
 	return NewJobClient(_m.config).QueryJobResources(_m)
+}
+
+// QueryJobRounds queries the "job_rounds" edge of the Job entity.
+func (_m *Job) QueryJobRounds() *JobRoundQuery {
+	return NewJobClient(_m.config).QueryJobRounds(_m)
 }
 
 // QuerySseEvents queries the "sse_events" edge of the Job entity.
@@ -351,20 +343,11 @@ func (_m *Job) String() string {
 	builder.WriteString("failed_resources=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FailedResources))
 	builder.WriteString(", ")
-	builder.WriteString("total_segments=")
-	builder.WriteString(fmt.Sprintf("%v", _m.TotalSegments))
+	builder.WriteString("progress_total=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProgressTotal))
 	builder.WriteString(", ")
-	builder.WriteString("skipped_segments=")
-	builder.WriteString(fmt.Sprintf("%v", _m.SkippedSegments))
-	builder.WriteString(", ")
-	builder.WriteString("completed_segments=")
-	builder.WriteString(fmt.Sprintf("%v", _m.CompletedSegments))
-	builder.WriteString(", ")
-	builder.WriteString("weighted_total=")
-	builder.WriteString(fmt.Sprintf("%v", _m.WeightedTotal))
-	builder.WriteString(", ")
-	builder.WriteString("weighted_completed=")
-	builder.WriteString(fmt.Sprintf("%v", _m.WeightedCompleted))
+	builder.WriteString("progress_completed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProgressCompleted))
 	builder.WriteString(", ")
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")

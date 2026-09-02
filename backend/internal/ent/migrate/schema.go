@@ -256,11 +256,8 @@ var (
 		{Name: "resource_count", Type: field.TypeInt, Default: 0},
 		{Name: "completed_resources", Type: field.TypeInt, Default: 0},
 		{Name: "failed_resources", Type: field.TypeInt, Default: 0},
-		{Name: "total_segments", Type: field.TypeInt, Default: 0},
-		{Name: "skipped_segments", Type: field.TypeInt, Default: 0},
-		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
-		{Name: "weighted_total", Type: field.TypeInt, Default: 0},
-		{Name: "weighted_completed", Type: field.TypeInt, Default: 0},
+		{Name: "progress_total", Type: field.TypeInt64, Default: 0},
+		{Name: "progress_completed", Type: field.TypeInt64, Default: 0},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "project_id", Type: field.TypeInt},
@@ -274,13 +271,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "jobs_projects_jobs",
-				Columns:    []*schema.Column{JobsColumns[17]},
+				Columns:    []*schema.Column{JobsColumns[14]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "jobs_users_created_jobs",
-				Columns:    []*schema.Column{JobsColumns[18]},
+				Columns:    []*schema.Column{JobsColumns[15]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -289,7 +286,7 @@ var (
 			{
 				Name:    "job_project_id_id",
 				Unique:  false,
-				Columns: []*schema.Column{JobsColumns[17], JobsColumns[0]},
+				Columns: []*schema.Column{JobsColumns[14], JobsColumns[0]},
 			},
 		},
 	}
@@ -303,14 +300,10 @@ var (
 		{Name: "segment_count", Type: field.TypeInt, Default: 0},
 		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
 		{Name: "skipped_segments", Type: field.TypeInt, Default: 0},
+		{Name: "work_weight", Type: field.TypeInt64, Default: 0},
 		{Name: "output_path", Type: field.TypeString, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "warning_message", Type: field.TypeString, Nullable: true},
-		{Name: "current_stage", Type: field.TypeString, Nullable: true, Default: ""},
-		{Name: "stage_total", Type: field.TypeInt, Default: 0},
-		{Name: "stage_completed", Type: field.TypeInt, Default: 0},
-		{Name: "weighted_total", Type: field.TypeInt, Default: 0},
-		{Name: "weighted_completed", Type: field.TypeInt, Default: 0},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "job_job_resources", Type: field.TypeInt},
 		{Name: "resource_job_resources", Type: field.TypeInt},
@@ -323,15 +316,64 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "job_resources_jobs_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[17]},
+				Columns:    []*schema.Column{JobResourcesColumns[13]},
 				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "job_resources_resources_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[18]},
+				Columns:    []*schema.Column{JobResourcesColumns[14]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.NoAction,
+			},
+		},
+	}
+	// JobRoundsColumns holds the columns for the "job_rounds" table.
+	JobRoundsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "round_index", Type: field.TypeInt},
+		{Name: "mode", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "segment_total", Type: field.TypeInt, Default: 0},
+		{Name: "segment_completed", Type: field.TypeInt, Default: 0},
+		{Name: "resolved_segment_ids", Type: field.TypeJSON},
+		{Name: "error_message", Type: field.TypeString, Nullable: true},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+		{Name: "job_id", Type: field.TypeInt},
+		{Name: "job_resource_id", Type: field.TypeInt},
+	}
+	// JobRoundsTable holds the schema information for the "job_rounds" table.
+	JobRoundsTable = &schema.Table{
+		Name:       "job_rounds",
+		Columns:    JobRoundsColumns,
+		PrimaryKey: []*schema.Column{JobRoundsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "job_rounds_jobs_job_rounds",
+				Columns:    []*schema.Column{JobRoundsColumns[12]},
+				RefColumns: []*schema.Column{JobsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "job_rounds_job_resources_rounds",
+				Columns:    []*schema.Column{JobRoundsColumns[13]},
+				RefColumns: []*schema.Column{JobResourcesColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "jobround_job_resource_id_round_index",
+				Unique:  true,
+				Columns: []*schema.Column{JobRoundsColumns[13], JobRoundsColumns[3]},
+			},
+			{
+				Name:    "jobround_job_id",
+				Unique:  false,
+				Columns: []*schema.Column{JobRoundsColumns[12]},
 			},
 		},
 	}
@@ -833,6 +875,7 @@ var (
 		GlossaryEntriesTable,
 		JobsTable,
 		JobResourcesTable,
+		JobRoundsTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
 		ProjectsTable,
@@ -868,6 +911,8 @@ func init() {
 	JobsTable.ForeignKeys[1].RefTable = UsersTable
 	JobResourcesTable.ForeignKeys[0].RefTable = JobsTable
 	JobResourcesTable.ForeignKeys[1].RefTable = ResourcesTable
+	JobRoundsTable.ForeignKeys[0].RefTable = JobsTable
+	JobRoundsTable.ForeignKeys[1].RefTable = JobResourcesTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable

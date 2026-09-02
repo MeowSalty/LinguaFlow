@@ -30,6 +30,9 @@ type Job func(*sql.Selector)
 // JobResource is the predicate function for jobresource builders.
 type JobResource func(*sql.Selector)
 
+// JobRound is the predicate function for jobround builders.
+type JobRound func(*sql.Selector)
+
 // OrgMembership is the predicate function for orgmembership builders.
 type OrgMembership func(*sql.Selector)
 

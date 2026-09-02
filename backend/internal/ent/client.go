@@ -23,6 +23,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -61,6 +62,8 @@ type Client struct {
 	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
+	// JobRound is the client for interacting with the JobRound builders.
+	JobRound *JobRoundClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
 	OrgMembership *OrgMembershipClient
 	// Organization is the client for interacting with the Organization builders.
@@ -110,6 +113,7 @@ func (c *Client) init() {
 	c.GlossaryEntry = NewGlossaryEntryClient(c.config)
 	c.Job = NewJobClient(c.config)
 	c.JobResource = NewJobResourceClient(c.config)
+	c.JobRound = NewJobRoundClient(c.config)
 	c.OrgMembership = NewOrgMembershipClient(c.config)
 	c.Organization = NewOrganizationClient(c.config)
 	c.Project = NewProjectClient(c.config)
@@ -225,6 +229,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		GlossaryEntry:             NewGlossaryEntryClient(cfg),
 		Job:                       NewJobClient(cfg),
 		JobResource:               NewJobResourceClient(cfg),
+		JobRound:                  NewJobRoundClient(cfg),
 		OrgMembership:             NewOrgMembershipClient(cfg),
 		Organization:              NewOrganizationClient(cfg),
 		Project:                   NewProjectClient(cfg),
@@ -267,6 +272,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		GlossaryEntry:             NewGlossaryEntryClient(cfg),
 		Job:                       NewJobClient(cfg),
 		JobResource:               NewJobResourceClient(cfg),
+		JobRound:                  NewJobRoundClient(cfg),
 		OrgMembership:             NewOrgMembershipClient(cfg),
 		Organization:              NewOrganizationClient(cfg),
 		Project:                   NewProjectClient(cfg),
@@ -312,10 +318,11 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
-		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.OrgMembership,
-		c.Organization, c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource,
-		c.SSEEvent, c.Segment, c.SegmentRevision, c.SyncTask, c.SystemSetting,
-		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.JobRound,
+		c.OrgMembership, c.Organization, c.Project, c.PrunePromptTemplate,
+		c.RefreshToken, c.Resource, c.SSEEvent, c.Segment, c.SegmentRevision,
+		c.SyncTask, c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate,
+		c.UsageRecord, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -326,10 +333,11 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
-		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.OrgMembership,
-		c.Organization, c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource,
-		c.SSEEvent, c.Segment, c.SegmentRevision, c.SyncTask, c.SystemSetting,
-		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.JobRound,
+		c.OrgMembership, c.Organization, c.Project, c.PrunePromptTemplate,
+		c.RefreshToken, c.Resource, c.SSEEvent, c.Segment, c.SegmentRevision,
+		c.SyncTask, c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate,
+		c.UsageRecord, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -354,6 +362,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Job.mutate(ctx, m)
 	case *JobResourceMutation:
 		return c.JobResource.mutate(ctx, m)
+	case *JobRoundMutation:
+		return c.JobRound.mutate(ctx, m)
 	case *OrgMembershipMutation:
 		return c.OrgMembership.mutate(ctx, m)
 	case *OrganizationMutation:
@@ -1551,6 +1561,22 @@ func (c *JobClient) QueryJobResources(_m *Job) *JobResourceQuery {
 	return query
 }
 
+// QueryJobRounds queries the job_rounds edge of a Job.
+func (c *JobClient) QueryJobRounds(_m *Job) *JobRoundQuery {
+	query := (&JobRoundClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(job.Table, job.FieldID, id),
+			sqlgraph.To(jobround.Table, jobround.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, job.JobRoundsTable, job.JobRoundsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QuerySseEvents queries the sse_events edge of a Job.
 func (c *JobClient) QuerySseEvents(_m *Job) *SSEEventQuery {
 	query := (&SSEEventClient{config: c.config}).Query()
@@ -1732,6 +1758,22 @@ func (c *JobResourceClient) QueryResource(_m *JobResource) *ResourceQuery {
 	return query
 }
 
+// QueryRounds queries the rounds edge of a JobResource.
+func (c *JobResourceClient) QueryRounds(_m *JobResource) *JobRoundQuery {
+	query := (&JobRoundClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(jobresource.Table, jobresource.FieldID, id),
+			sqlgraph.To(jobround.Table, jobround.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, jobresource.RoundsTable, jobresource.RoundsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *JobResourceClient) Hooks() []Hook {
 	return c.hooks.JobResource
@@ -1754,6 +1796,171 @@ func (c *JobResourceClient) mutate(ctx context.Context, m *JobResourceMutation) 
 		return (&JobResourceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown JobResource mutation op: %q", m.Op())
+	}
+}
+
+// JobRoundClient is a client for the JobRound schema.
+type JobRoundClient struct {
+	config
+}
+
+// NewJobRoundClient returns a client for the JobRound from the given config.
+func NewJobRoundClient(c config) *JobRoundClient {
+	return &JobRoundClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `jobround.Hooks(f(g(h())))`.
+func (c *JobRoundClient) Use(hooks ...Hook) {
+	c.hooks.JobRound = append(c.hooks.JobRound, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `jobround.Intercept(f(g(h())))`.
+func (c *JobRoundClient) Intercept(interceptors ...Interceptor) {
+	c.inters.JobRound = append(c.inters.JobRound, interceptors...)
+}
+
+// Create returns a builder for creating a JobRound entity.
+func (c *JobRoundClient) Create() *JobRoundCreate {
+	mutation := newJobRoundMutation(c.config, OpCreate)
+	return &JobRoundCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of JobRound entities.
+func (c *JobRoundClient) CreateBulk(builders ...*JobRoundCreate) *JobRoundCreateBulk {
+	return &JobRoundCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *JobRoundClient) MapCreateBulk(slice any, setFunc func(*JobRoundCreate, int)) *JobRoundCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &JobRoundCreateBulk{err: fmt.Errorf("calling to JobRoundClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*JobRoundCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &JobRoundCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for JobRound.
+func (c *JobRoundClient) Update() *JobRoundUpdate {
+	mutation := newJobRoundMutation(c.config, OpUpdate)
+	return &JobRoundUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *JobRoundClient) UpdateOne(_m *JobRound) *JobRoundUpdateOne {
+	mutation := newJobRoundMutation(c.config, OpUpdateOne, withJobRound(_m))
+	return &JobRoundUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *JobRoundClient) UpdateOneID(id int) *JobRoundUpdateOne {
+	mutation := newJobRoundMutation(c.config, OpUpdateOne, withJobRoundID(id))
+	return &JobRoundUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for JobRound.
+func (c *JobRoundClient) Delete() *JobRoundDelete {
+	mutation := newJobRoundMutation(c.config, OpDelete)
+	return &JobRoundDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *JobRoundClient) DeleteOne(_m *JobRound) *JobRoundDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *JobRoundClient) DeleteOneID(id int) *JobRoundDeleteOne {
+	builder := c.Delete().Where(jobround.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &JobRoundDeleteOne{builder}
+}
+
+// Query returns a query builder for JobRound.
+func (c *JobRoundClient) Query() *JobRoundQuery {
+	return &JobRoundQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeJobRound},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a JobRound entity by its id.
+func (c *JobRoundClient) Get(ctx context.Context, id int) (*JobRound, error) {
+	return c.Query().Where(jobround.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *JobRoundClient) GetX(ctx context.Context, id int) *JobRound {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryJob queries the job edge of a JobRound.
+func (c *JobRoundClient) QueryJob(_m *JobRound) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(jobround.Table, jobround.FieldID, id),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, jobround.JobTable, jobround.JobColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryJobResource queries the job_resource edge of a JobRound.
+func (c *JobRoundClient) QueryJobResource(_m *JobRound) *JobResourceQuery {
+	query := (&JobResourceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(jobround.Table, jobround.FieldID, id),
+			sqlgraph.To(jobresource.Table, jobresource.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, jobround.JobResourceTable, jobround.JobResourceColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *JobRoundClient) Hooks() []Hook {
+	return c.hooks.JobRound
+}
+
+// Interceptors returns the client interceptors.
+func (c *JobRoundClient) Interceptors() []Interceptor {
+	return c.inters.JobRound
+}
+
+func (c *JobRoundClient) mutate(ctx context.Context, m *JobRoundMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&JobRoundCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&JobRoundUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&JobRoundUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&JobRoundDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown JobRound mutation op: %q", m.Op())
 	}
 }
 
@@ -4620,16 +4827,16 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
-		ExecutionProfile, GlossaryEntry, Job, JobResource, OrgMembership, Organization,
-		Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
-		SegmentRevision, SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate,
-		UsageRecord, User []ent.Hook
+		ExecutionProfile, GlossaryEntry, Job, JobResource, JobRound, OrgMembership,
+		Organization, Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent,
+		Segment, SegmentRevision, SyncTask, SystemSetting, TMEntry,
+		TranslationPromptTemplate, UsageRecord, User []ent.Hook
 	}
 	inters struct {
 		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
-		ExecutionProfile, GlossaryEntry, Job, JobResource, OrgMembership, Organization,
-		Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
-		SegmentRevision, SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate,
-		UsageRecord, User []ent.Interceptor
+		ExecutionProfile, GlossaryEntry, Job, JobResource, JobRound, OrgMembership,
+		Organization, Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent,
+		Segment, SegmentRevision, SyncTask, SystemSetting, TMEntry,
+		TranslationPromptTemplate, UsageRecord, User []ent.Interceptor
 	}
 )

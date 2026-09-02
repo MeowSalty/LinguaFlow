@@ -24,7 +24,7 @@ type JobResource struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
-	// pending, running, completed, failed, cancelled
+	// pending, running, completed, failed, cancelled（paused 仅 Job 级；暂停时资源冻结在 running，恢复走 running→pending 重置）
 	Status string `json:"status,omitempty"`
 	// 本任务要处理的 Resource 级 Segment ID 快照；空数组表示按资源 pending 段动态选择
 	SegmentIds []int `json:"segment_ids,omitempty"`
@@ -34,22 +34,14 @@ type JobResource struct {
 	CompletedSegments int `json:"completed_segments,omitempty"`
 	// 被系统跳过的段落数（已翻译、空文本、纯占位符等）
 	SkippedSegments int `json:"skipped_segments,omitempty"`
+	// 准入工作配额权重（所选段落 source_text 字节数；动态选择资源首次入线时回填）
+	WorkWeight int64 `json:"work_weight,omitempty"`
 	// 输出文件路径
 	OutputPath string `json:"output_path,omitempty"`
 	// 翻译错误信息
 	ErrorMessage *string `json:"error_message,omitempty"`
 	// 软警告信息（如 semantic_qa 扫描失败）；资源状态仍为 completed
 	WarningMessage *string `json:"warning_message,omitempty"`
-	// 当前执行阶段名称：translate, bootstrap 等
-	CurrentStage string `json:"current_stage,omitempty"`
-	// 当前阶段的总段落数（StageStart 时写入）
-	StageTotal int `json:"stage_total,omitempty"`
-	// 当前阶段已完成的段落数（SegmentDone 时递增）
-	StageCompleted int `json:"stage_completed,omitempty"`
-	// 跨轮工作量总数（各轮 stage_total 累加，实时累加）
-	WeightedTotal int `json:"weighted_total,omitempty"`
-	// 跨轮已完成工作量（各轮 stage_completed 累加，实时累加）
-	WeightedCompleted int `json:"weighted_completed,omitempty"`
 	// 资源开始执行的时间
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -66,9 +58,11 @@ type JobResourceEdges struct {
 	Job *Job `json:"job,omitempty"`
 	// Resource holds the value of the resource edge.
 	Resource *Resource `json:"resource,omitempty"`
+	// Rounds holds the value of the rounds edge.
+	Rounds []*JobRound `json:"rounds,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // JobOrErr returns the Job value or an error if the edge
@@ -93,6 +87,15 @@ func (e JobResourceEdges) ResourceOrErr() (*Resource, error) {
 	return nil, &NotLoadedError{edge: "resource"}
 }
 
+// RoundsOrErr returns the Rounds value or an error if the edge
+// was not loaded in eager-loading.
+func (e JobResourceEdges) RoundsOrErr() ([]*JobRound, error) {
+	if e.loadedTypes[2] {
+		return e.Rounds, nil
+	}
+	return nil, &NotLoadedError{edge: "rounds"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*JobResource) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -100,9 +103,9 @@ func (*JobResource) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case jobresource.FieldSegmentIds:
 			values[i] = new([]byte)
-		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldSkippedSegments, jobresource.FieldStageTotal, jobresource.FieldStageCompleted, jobresource.FieldWeightedTotal, jobresource.FieldWeightedCompleted:
+		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldSkippedSegments, jobresource.FieldWorkWeight:
 			values[i] = new(sql.NullInt64)
-		case jobresource.FieldStatus, jobresource.FieldOutputPath, jobresource.FieldErrorMessage, jobresource.FieldWarningMessage, jobresource.FieldCurrentStage:
+		case jobresource.FieldStatus, jobresource.FieldOutputPath, jobresource.FieldErrorMessage, jobresource.FieldWarningMessage:
 			values[i] = new(sql.NullString)
 		case jobresource.FieldCreatedAt, jobresource.FieldUpdatedAt, jobresource.FieldStartedAt:
 			values[i] = new(sql.NullTime)
@@ -175,6 +178,12 @@ func (_m *JobResource) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.SkippedSegments = int(value.Int64)
 			}
+		case jobresource.FieldWorkWeight:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field work_weight", values[i])
+			} else if value.Valid {
+				_m.WorkWeight = value.Int64
+			}
 		case jobresource.FieldOutputPath:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field output_path", values[i])
@@ -194,36 +203,6 @@ func (_m *JobResource) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.WarningMessage = new(string)
 				*_m.WarningMessage = value.String
-			}
-		case jobresource.FieldCurrentStage:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field current_stage", values[i])
-			} else if value.Valid {
-				_m.CurrentStage = value.String
-			}
-		case jobresource.FieldStageTotal:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field stage_total", values[i])
-			} else if value.Valid {
-				_m.StageTotal = int(value.Int64)
-			}
-		case jobresource.FieldStageCompleted:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field stage_completed", values[i])
-			} else if value.Valid {
-				_m.StageCompleted = int(value.Int64)
-			}
-		case jobresource.FieldWeightedTotal:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field weighted_total", values[i])
-			} else if value.Valid {
-				_m.WeightedTotal = int(value.Int64)
-			}
-		case jobresource.FieldWeightedCompleted:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field weighted_completed", values[i])
-			} else if value.Valid {
-				_m.WeightedCompleted = int(value.Int64)
 			}
 		case jobresource.FieldStartedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -267,6 +246,11 @@ func (_m *JobResource) QueryJob() *JobQuery {
 // QueryResource queries the "resource" edge of the JobResource entity.
 func (_m *JobResource) QueryResource() *ResourceQuery {
 	return NewJobResourceClient(_m.config).QueryResource(_m)
+}
+
+// QueryRounds queries the "rounds" edge of the JobResource entity.
+func (_m *JobResource) QueryRounds() *JobRoundQuery {
+	return NewJobResourceClient(_m.config).QueryRounds(_m)
 }
 
 // Update returns a builder for updating this JobResource.
@@ -313,6 +297,9 @@ func (_m *JobResource) String() string {
 	builder.WriteString("skipped_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SkippedSegments))
 	builder.WriteString(", ")
+	builder.WriteString("work_weight=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WorkWeight))
+	builder.WriteString(", ")
 	builder.WriteString("output_path=")
 	builder.WriteString(_m.OutputPath)
 	builder.WriteString(", ")
@@ -325,21 +312,6 @@ func (_m *JobResource) String() string {
 		builder.WriteString("warning_message=")
 		builder.WriteString(*v)
 	}
-	builder.WriteString(", ")
-	builder.WriteString("current_stage=")
-	builder.WriteString(_m.CurrentStage)
-	builder.WriteString(", ")
-	builder.WriteString("stage_total=")
-	builder.WriteString(fmt.Sprintf("%v", _m.StageTotal))
-	builder.WriteString(", ")
-	builder.WriteString("stage_completed=")
-	builder.WriteString(fmt.Sprintf("%v", _m.StageCompleted))
-	builder.WriteString(", ")
-	builder.WriteString("weighted_total=")
-	builder.WriteString(fmt.Sprintf("%v", _m.WeightedTotal))
-	builder.WriteString(", ")
-	builder.WriteString("weighted_completed=")
-	builder.WriteString(fmt.Sprintf("%v", _m.WeightedCompleted))
 	builder.WriteString(", ")
 	if v := _m.StartedAt; v != nil {
 		builder.WriteString("started_at=")

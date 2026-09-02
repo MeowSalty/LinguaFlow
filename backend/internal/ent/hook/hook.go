@@ -105,6 +105,18 @@ func (f JobResourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobResourceMutation", m)
 }
 
+// The JobRoundFunc type is an adapter to allow the use of ordinary
+// function as JobRound mutator.
+type JobRoundFunc func(context.Context, *ent.JobRoundMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f JobRoundFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.JobRoundMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobRoundMutation", m)
+}
+
 // The OrgMembershipFunc type is an adapter to allow the use of ordinary
 // function as OrgMembership mutator.
 type OrgMembershipFunc func(context.Context, *ent.OrgMembershipMutation) (ent.Value, error)

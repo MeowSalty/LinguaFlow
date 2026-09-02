@@ -13,6 +13,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -318,36 +319,18 @@ func init() {
 	job.DefaultFailedResources = jobDescFailedResources.Default.(int)
 	// job.FailedResourcesValidator is a validator for the "failed_resources" field. It is called by the builders before save.
 	job.FailedResourcesValidator = jobDescFailedResources.Validators[0].(func(int) error)
-	// jobDescTotalSegments is the schema descriptor for total_segments field.
-	jobDescTotalSegments := jobFields[8].Descriptor()
-	// job.DefaultTotalSegments holds the default value on creation for the total_segments field.
-	job.DefaultTotalSegments = jobDescTotalSegments.Default.(int)
-	// job.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
-	job.TotalSegmentsValidator = jobDescTotalSegments.Validators[0].(func(int) error)
-	// jobDescSkippedSegments is the schema descriptor for skipped_segments field.
-	jobDescSkippedSegments := jobFields[9].Descriptor()
-	// job.DefaultSkippedSegments holds the default value on creation for the skipped_segments field.
-	job.DefaultSkippedSegments = jobDescSkippedSegments.Default.(int)
-	// job.SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
-	job.SkippedSegmentsValidator = jobDescSkippedSegments.Validators[0].(func(int) error)
-	// jobDescCompletedSegments is the schema descriptor for completed_segments field.
-	jobDescCompletedSegments := jobFields[10].Descriptor()
-	// job.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
-	job.DefaultCompletedSegments = jobDescCompletedSegments.Default.(int)
-	// job.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
-	job.CompletedSegmentsValidator = jobDescCompletedSegments.Validators[0].(func(int) error)
-	// jobDescWeightedTotal is the schema descriptor for weighted_total field.
-	jobDescWeightedTotal := jobFields[11].Descriptor()
-	// job.DefaultWeightedTotal holds the default value on creation for the weighted_total field.
-	job.DefaultWeightedTotal = jobDescWeightedTotal.Default.(int)
-	// job.WeightedTotalValidator is a validator for the "weighted_total" field. It is called by the builders before save.
-	job.WeightedTotalValidator = jobDescWeightedTotal.Validators[0].(func(int) error)
-	// jobDescWeightedCompleted is the schema descriptor for weighted_completed field.
-	jobDescWeightedCompleted := jobFields[12].Descriptor()
-	// job.DefaultWeightedCompleted holds the default value on creation for the weighted_completed field.
-	job.DefaultWeightedCompleted = jobDescWeightedCompleted.Default.(int)
-	// job.WeightedCompletedValidator is a validator for the "weighted_completed" field. It is called by the builders before save.
-	job.WeightedCompletedValidator = jobDescWeightedCompleted.Validators[0].(func(int) error)
+	// jobDescProgressTotal is the schema descriptor for progress_total field.
+	jobDescProgressTotal := jobFields[8].Descriptor()
+	// job.DefaultProgressTotal holds the default value on creation for the progress_total field.
+	job.DefaultProgressTotal = jobDescProgressTotal.Default.(int64)
+	// job.ProgressTotalValidator is a validator for the "progress_total" field. It is called by the builders before save.
+	job.ProgressTotalValidator = jobDescProgressTotal.Validators[0].(func(int64) error)
+	// jobDescProgressCompleted is the schema descriptor for progress_completed field.
+	jobDescProgressCompleted := jobFields[9].Descriptor()
+	// job.DefaultProgressCompleted holds the default value on creation for the progress_completed field.
+	job.DefaultProgressCompleted = jobDescProgressCompleted.Default.(int64)
+	// job.ProgressCompletedValidator is a validator for the "progress_completed" field. It is called by the builders before save.
+	job.ProgressCompletedValidator = jobDescProgressCompleted.Validators[0].(func(int64) error)
 	jobresourceMixin := schema.JobResource{}.Mixin()
 	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
 	_ = jobresourceMixinFields0
@@ -389,34 +372,59 @@ func init() {
 	jobresource.DefaultSkippedSegments = jobresourceDescSkippedSegments.Default.(int)
 	// jobresource.SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
 	jobresource.SkippedSegmentsValidator = jobresourceDescSkippedSegments.Validators[0].(func(int) error)
-	// jobresourceDescCurrentStage is the schema descriptor for current_stage field.
-	jobresourceDescCurrentStage := jobresourceFields[8].Descriptor()
-	// jobresource.DefaultCurrentStage holds the default value on creation for the current_stage field.
-	jobresource.DefaultCurrentStage = jobresourceDescCurrentStage.Default.(string)
-	// jobresourceDescStageTotal is the schema descriptor for stage_total field.
-	jobresourceDescStageTotal := jobresourceFields[9].Descriptor()
-	// jobresource.DefaultStageTotal holds the default value on creation for the stage_total field.
-	jobresource.DefaultStageTotal = jobresourceDescStageTotal.Default.(int)
-	// jobresource.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
-	jobresource.StageTotalValidator = jobresourceDescStageTotal.Validators[0].(func(int) error)
-	// jobresourceDescStageCompleted is the schema descriptor for stage_completed field.
-	jobresourceDescStageCompleted := jobresourceFields[10].Descriptor()
-	// jobresource.DefaultStageCompleted holds the default value on creation for the stage_completed field.
-	jobresource.DefaultStageCompleted = jobresourceDescStageCompleted.Default.(int)
-	// jobresource.StageCompletedValidator is a validator for the "stage_completed" field. It is called by the builders before save.
-	jobresource.StageCompletedValidator = jobresourceDescStageCompleted.Validators[0].(func(int) error)
-	// jobresourceDescWeightedTotal is the schema descriptor for weighted_total field.
-	jobresourceDescWeightedTotal := jobresourceFields[11].Descriptor()
-	// jobresource.DefaultWeightedTotal holds the default value on creation for the weighted_total field.
-	jobresource.DefaultWeightedTotal = jobresourceDescWeightedTotal.Default.(int)
-	// jobresource.WeightedTotalValidator is a validator for the "weighted_total" field. It is called by the builders before save.
-	jobresource.WeightedTotalValidator = jobresourceDescWeightedTotal.Validators[0].(func(int) error)
-	// jobresourceDescWeightedCompleted is the schema descriptor for weighted_completed field.
-	jobresourceDescWeightedCompleted := jobresourceFields[12].Descriptor()
-	// jobresource.DefaultWeightedCompleted holds the default value on creation for the weighted_completed field.
-	jobresource.DefaultWeightedCompleted = jobresourceDescWeightedCompleted.Default.(int)
-	// jobresource.WeightedCompletedValidator is a validator for the "weighted_completed" field. It is called by the builders before save.
-	jobresource.WeightedCompletedValidator = jobresourceDescWeightedCompleted.Validators[0].(func(int) error)
+	// jobresourceDescWorkWeight is the schema descriptor for work_weight field.
+	jobresourceDescWorkWeight := jobresourceFields[5].Descriptor()
+	// jobresource.DefaultWorkWeight holds the default value on creation for the work_weight field.
+	jobresource.DefaultWorkWeight = jobresourceDescWorkWeight.Default.(int64)
+	// jobresource.WorkWeightValidator is a validator for the "work_weight" field. It is called by the builders before save.
+	jobresource.WorkWeightValidator = jobresourceDescWorkWeight.Validators[0].(func(int64) error)
+	jobroundMixin := schema.JobRound{}.Mixin()
+	jobroundMixinFields0 := jobroundMixin[0].Fields()
+	_ = jobroundMixinFields0
+	jobroundFields := schema.JobRound{}.Fields()
+	_ = jobroundFields
+	// jobroundDescCreatedAt is the schema descriptor for created_at field.
+	jobroundDescCreatedAt := jobroundMixinFields0[0].Descriptor()
+	// jobround.DefaultCreatedAt holds the default value on creation for the created_at field.
+	jobround.DefaultCreatedAt = jobroundDescCreatedAt.Default.(func() time.Time)
+	// jobroundDescUpdatedAt is the schema descriptor for updated_at field.
+	jobroundDescUpdatedAt := jobroundMixinFields0[1].Descriptor()
+	// jobround.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	jobround.DefaultUpdatedAt = jobroundDescUpdatedAt.Default.(func() time.Time)
+	// jobround.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	jobround.UpdateDefaultUpdatedAt = jobroundDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// jobroundDescJobID is the schema descriptor for job_id field.
+	jobroundDescJobID := jobroundFields[0].Descriptor()
+	// jobround.JobIDValidator is a validator for the "job_id" field. It is called by the builders before save.
+	jobround.JobIDValidator = jobroundDescJobID.Validators[0].(func(int) error)
+	// jobroundDescJobResourceID is the schema descriptor for job_resource_id field.
+	jobroundDescJobResourceID := jobroundFields[1].Descriptor()
+	// jobround.JobResourceIDValidator is a validator for the "job_resource_id" field. It is called by the builders before save.
+	jobround.JobResourceIDValidator = jobroundDescJobResourceID.Validators[0].(func(int) error)
+	// jobroundDescRoundIndex is the schema descriptor for round_index field.
+	jobroundDescRoundIndex := jobroundFields[2].Descriptor()
+	// jobround.RoundIndexValidator is a validator for the "round_index" field. It is called by the builders before save.
+	jobround.RoundIndexValidator = jobroundDescRoundIndex.Validators[0].(func(int) error)
+	// jobroundDescStatus is the schema descriptor for status field.
+	jobroundDescStatus := jobroundFields[4].Descriptor()
+	// jobround.DefaultStatus holds the default value on creation for the status field.
+	jobround.DefaultStatus = jobroundDescStatus.Default.(string)
+	// jobroundDescSegmentTotal is the schema descriptor for segment_total field.
+	jobroundDescSegmentTotal := jobroundFields[5].Descriptor()
+	// jobround.DefaultSegmentTotal holds the default value on creation for the segment_total field.
+	jobround.DefaultSegmentTotal = jobroundDescSegmentTotal.Default.(int)
+	// jobround.SegmentTotalValidator is a validator for the "segment_total" field. It is called by the builders before save.
+	jobround.SegmentTotalValidator = jobroundDescSegmentTotal.Validators[0].(func(int) error)
+	// jobroundDescSegmentCompleted is the schema descriptor for segment_completed field.
+	jobroundDescSegmentCompleted := jobroundFields[6].Descriptor()
+	// jobround.DefaultSegmentCompleted holds the default value on creation for the segment_completed field.
+	jobround.DefaultSegmentCompleted = jobroundDescSegmentCompleted.Default.(int)
+	// jobround.SegmentCompletedValidator is a validator for the "segment_completed" field. It is called by the builders before save.
+	jobround.SegmentCompletedValidator = jobroundDescSegmentCompleted.Validators[0].(func(int) error)
+	// jobroundDescResolvedSegmentIds is the schema descriptor for resolved_segment_ids field.
+	jobroundDescResolvedSegmentIds := jobroundFields[7].Descriptor()
+	// jobround.DefaultResolvedSegmentIds holds the default value on creation for the resolved_segment_ids field.
+	jobround.DefaultResolvedSegmentIds = jobroundDescResolvedSegmentIds.Default.(func() []int)
 	orgmembershipMixin := schema.OrgMembership{}.Mixin()
 	orgmembershipMixinFields0 := orgmembershipMixin[0].Fields()
 	_ = orgmembershipMixinFields0

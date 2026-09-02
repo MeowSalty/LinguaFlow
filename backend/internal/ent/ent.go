@@ -20,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -103,6 +104,7 @@ func checkColumn(t, c string) error {
 			glossaryentry.Table:             glossaryentry.ValidColumn,
 			job.Table:                       job.ValidColumn,
 			jobresource.Table:               jobresource.ValidColumn,
+			jobround.Table:                  jobround.ValidColumn,
 			orgmembership.Table:             orgmembership.ValidColumn,
 			organization.Table:              organization.ValidColumn,
 			project.Table:                   project.ValidColumn,

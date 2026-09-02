@@ -28,28 +28,22 @@ const (
 	FieldCompletedSegments = "completed_segments"
 	// FieldSkippedSegments holds the string denoting the skipped_segments field in the database.
 	FieldSkippedSegments = "skipped_segments"
+	// FieldWorkWeight holds the string denoting the work_weight field in the database.
+	FieldWorkWeight = "work_weight"
 	// FieldOutputPath holds the string denoting the output_path field in the database.
 	FieldOutputPath = "output_path"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
 	// FieldWarningMessage holds the string denoting the warning_message field in the database.
 	FieldWarningMessage = "warning_message"
-	// FieldCurrentStage holds the string denoting the current_stage field in the database.
-	FieldCurrentStage = "current_stage"
-	// FieldStageTotal holds the string denoting the stage_total field in the database.
-	FieldStageTotal = "stage_total"
-	// FieldStageCompleted holds the string denoting the stage_completed field in the database.
-	FieldStageCompleted = "stage_completed"
-	// FieldWeightedTotal holds the string denoting the weighted_total field in the database.
-	FieldWeightedTotal = "weighted_total"
-	// FieldWeightedCompleted holds the string denoting the weighted_completed field in the database.
-	FieldWeightedCompleted = "weighted_completed"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
 	FieldStartedAt = "started_at"
 	// EdgeJob holds the string denoting the job edge name in mutations.
 	EdgeJob = "job"
 	// EdgeResource holds the string denoting the resource edge name in mutations.
 	EdgeResource = "resource"
+	// EdgeRounds holds the string denoting the rounds edge name in mutations.
+	EdgeRounds = "rounds"
 	// Table holds the table name of the jobresource in the database.
 	Table = "job_resources"
 	// JobTable is the table that holds the job relation/edge.
@@ -66,6 +60,13 @@ const (
 	ResourceInverseTable = "resources"
 	// ResourceColumn is the table column denoting the resource relation/edge.
 	ResourceColumn = "resource_job_resources"
+	// RoundsTable is the table that holds the rounds relation/edge.
+	RoundsTable = "job_rounds"
+	// RoundsInverseTable is the table name for the JobRound entity.
+	// It exists in this package in order to avoid circular dependency with the "jobround" package.
+	RoundsInverseTable = "job_rounds"
+	// RoundsColumn is the table column denoting the rounds relation/edge.
+	RoundsColumn = "job_resource_id"
 )
 
 // Columns holds all SQL columns for jobresource fields.
@@ -78,14 +79,10 @@ var Columns = []string{
 	FieldSegmentCount,
 	FieldCompletedSegments,
 	FieldSkippedSegments,
+	FieldWorkWeight,
 	FieldOutputPath,
 	FieldErrorMessage,
 	FieldWarningMessage,
-	FieldCurrentStage,
-	FieldStageTotal,
-	FieldStageCompleted,
-	FieldWeightedTotal,
-	FieldWeightedCompleted,
 	FieldStartedAt,
 }
 
@@ -134,24 +131,10 @@ var (
 	DefaultSkippedSegments int
 	// SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
 	SkippedSegmentsValidator func(int) error
-	// DefaultCurrentStage holds the default value on creation for the "current_stage" field.
-	DefaultCurrentStage string
-	// DefaultStageTotal holds the default value on creation for the "stage_total" field.
-	DefaultStageTotal int
-	// StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
-	StageTotalValidator func(int) error
-	// DefaultStageCompleted holds the default value on creation for the "stage_completed" field.
-	DefaultStageCompleted int
-	// StageCompletedValidator is a validator for the "stage_completed" field. It is called by the builders before save.
-	StageCompletedValidator func(int) error
-	// DefaultWeightedTotal holds the default value on creation for the "weighted_total" field.
-	DefaultWeightedTotal int
-	// WeightedTotalValidator is a validator for the "weighted_total" field. It is called by the builders before save.
-	WeightedTotalValidator func(int) error
-	// DefaultWeightedCompleted holds the default value on creation for the "weighted_completed" field.
-	DefaultWeightedCompleted int
-	// WeightedCompletedValidator is a validator for the "weighted_completed" field. It is called by the builders before save.
-	WeightedCompletedValidator func(int) error
+	// DefaultWorkWeight holds the default value on creation for the "work_weight" field.
+	DefaultWorkWeight int64
+	// WorkWeightValidator is a validator for the "work_weight" field. It is called by the builders before save.
+	WorkWeightValidator func(int64) error
 )
 
 // OrderOption defines the ordering options for the JobResource queries.
@@ -192,6 +175,11 @@ func BySkippedSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSkippedSegments, opts...).ToFunc()
 }
 
+// ByWorkWeight orders the results by the work_weight field.
+func ByWorkWeight(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkWeight, opts...).ToFunc()
+}
+
 // ByOutputPath orders the results by the output_path field.
 func ByOutputPath(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOutputPath, opts...).ToFunc()
@@ -205,31 +193,6 @@ func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 // ByWarningMessage orders the results by the warning_message field.
 func ByWarningMessage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWarningMessage, opts...).ToFunc()
-}
-
-// ByCurrentStage orders the results by the current_stage field.
-func ByCurrentStage(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldCurrentStage, opts...).ToFunc()
-}
-
-// ByStageTotal orders the results by the stage_total field.
-func ByStageTotal(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldStageTotal, opts...).ToFunc()
-}
-
-// ByStageCompleted orders the results by the stage_completed field.
-func ByStageCompleted(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldStageCompleted, opts...).ToFunc()
-}
-
-// ByWeightedTotal orders the results by the weighted_total field.
-func ByWeightedTotal(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldWeightedTotal, opts...).ToFunc()
-}
-
-// ByWeightedCompleted orders the results by the weighted_completed field.
-func ByWeightedCompleted(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldWeightedCompleted, opts...).ToFunc()
 }
 
 // ByStartedAt orders the results by the started_at field.
@@ -250,6 +213,20 @@ func ByResourceField(field string, opts ...sql.OrderTermOption) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newResourceStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByRoundsCount orders the results by rounds count.
+func ByRoundsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newRoundsStep(), opts...)
+	}
+}
+
+// ByRounds orders the results by rounds terms.
+func ByRounds(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newRoundsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newJobStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -262,5 +239,12 @@ func newResourceStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ResourceInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, ResourceTable, ResourceColumn),
+	)
+}
+func newRoundsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(RoundsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, RoundsTable, RoundsColumn),
 	)
 }

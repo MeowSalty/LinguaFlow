@@ -28,6 +28,8 @@ type Tx struct {
 	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
+	// JobRound is the client for interacting with the JobRound builders.
+	JobRound *JobRoundClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
 	OrgMembership *OrgMembershipClient
 	// Organization is the client for interacting with the Organization builders.
@@ -197,6 +199,7 @@ func (tx *Tx) init() {
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
 	tx.Job = NewJobClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
+	tx.JobRound = NewJobRoundClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)

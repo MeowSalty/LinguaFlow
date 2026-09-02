@@ -34,16 +34,10 @@ const (
 	FieldCompletedResources = "completed_resources"
 	// FieldFailedResources holds the string denoting the failed_resources field in the database.
 	FieldFailedResources = "failed_resources"
-	// FieldTotalSegments holds the string denoting the total_segments field in the database.
-	FieldTotalSegments = "total_segments"
-	// FieldSkippedSegments holds the string denoting the skipped_segments field in the database.
-	FieldSkippedSegments = "skipped_segments"
-	// FieldCompletedSegments holds the string denoting the completed_segments field in the database.
-	FieldCompletedSegments = "completed_segments"
-	// FieldWeightedTotal holds the string denoting the weighted_total field in the database.
-	FieldWeightedTotal = "weighted_total"
-	// FieldWeightedCompleted holds the string denoting the weighted_completed field in the database.
-	FieldWeightedCompleted = "weighted_completed"
+	// FieldProgressTotal holds the string denoting the progress_total field in the database.
+	FieldProgressTotal = "progress_total"
+	// FieldProgressCompleted holds the string denoting the progress_completed field in the database.
+	FieldProgressCompleted = "progress_completed"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
@@ -54,6 +48,8 @@ const (
 	EdgeCreatedBy = "created_by"
 	// EdgeJobResources holds the string denoting the job_resources edge name in mutations.
 	EdgeJobResources = "job_resources"
+	// EdgeJobRounds holds the string denoting the job_rounds edge name in mutations.
+	EdgeJobRounds = "job_rounds"
 	// EdgeSseEvents holds the string denoting the sse_events edge name in mutations.
 	EdgeSseEvents = "sse_events"
 	// Table holds the table name of the job in the database.
@@ -79,6 +75,13 @@ const (
 	JobResourcesInverseTable = "job_resources"
 	// JobResourcesColumn is the table column denoting the job_resources relation/edge.
 	JobResourcesColumn = "job_job_resources"
+	// JobRoundsTable is the table that holds the job_rounds relation/edge.
+	JobRoundsTable = "job_rounds"
+	// JobRoundsInverseTable is the table name for the JobRound entity.
+	// It exists in this package in order to avoid circular dependency with the "jobround" package.
+	JobRoundsInverseTable = "job_rounds"
+	// JobRoundsColumn is the table column denoting the job_rounds relation/edge.
+	JobRoundsColumn = "job_id"
 	// SseEventsTable is the table that holds the sse_events relation/edge.
 	SseEventsTable = "sse_events"
 	// SseEventsInverseTable is the table name for the SSEEvent entity.
@@ -101,11 +104,8 @@ var Columns = []string{
 	FieldResourceCount,
 	FieldCompletedResources,
 	FieldFailedResources,
-	FieldTotalSegments,
-	FieldSkippedSegments,
-	FieldCompletedSegments,
-	FieldWeightedTotal,
-	FieldWeightedCompleted,
+	FieldProgressTotal,
+	FieldProgressCompleted,
 	FieldErrorMessage,
 	FieldStartedAt,
 }
@@ -160,26 +160,14 @@ var (
 	DefaultFailedResources int
 	// FailedResourcesValidator is a validator for the "failed_resources" field. It is called by the builders before save.
 	FailedResourcesValidator func(int) error
-	// DefaultTotalSegments holds the default value on creation for the "total_segments" field.
-	DefaultTotalSegments int
-	// TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
-	TotalSegmentsValidator func(int) error
-	// DefaultSkippedSegments holds the default value on creation for the "skipped_segments" field.
-	DefaultSkippedSegments int
-	// SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
-	SkippedSegmentsValidator func(int) error
-	// DefaultCompletedSegments holds the default value on creation for the "completed_segments" field.
-	DefaultCompletedSegments int
-	// CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
-	CompletedSegmentsValidator func(int) error
-	// DefaultWeightedTotal holds the default value on creation for the "weighted_total" field.
-	DefaultWeightedTotal int
-	// WeightedTotalValidator is a validator for the "weighted_total" field. It is called by the builders before save.
-	WeightedTotalValidator func(int) error
-	// DefaultWeightedCompleted holds the default value on creation for the "weighted_completed" field.
-	DefaultWeightedCompleted int
-	// WeightedCompletedValidator is a validator for the "weighted_completed" field. It is called by the builders before save.
-	WeightedCompletedValidator func(int) error
+	// DefaultProgressTotal holds the default value on creation for the "progress_total" field.
+	DefaultProgressTotal int64
+	// ProgressTotalValidator is a validator for the "progress_total" field. It is called by the builders before save.
+	ProgressTotalValidator func(int64) error
+	// DefaultProgressCompleted holds the default value on creation for the "progress_completed" field.
+	DefaultProgressCompleted int64
+	// ProgressCompletedValidator is a validator for the "progress_completed" field. It is called by the builders before save.
+	ProgressCompletedValidator func(int64) error
 )
 
 // OrderOption defines the ordering options for the Job queries.
@@ -235,29 +223,14 @@ func ByFailedResources(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFailedResources, opts...).ToFunc()
 }
 
-// ByTotalSegments orders the results by the total_segments field.
-func ByTotalSegments(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTotalSegments, opts...).ToFunc()
+// ByProgressTotal orders the results by the progress_total field.
+func ByProgressTotal(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProgressTotal, opts...).ToFunc()
 }
 
-// BySkippedSegments orders the results by the skipped_segments field.
-func BySkippedSegments(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldSkippedSegments, opts...).ToFunc()
-}
-
-// ByCompletedSegments orders the results by the completed_segments field.
-func ByCompletedSegments(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldCompletedSegments, opts...).ToFunc()
-}
-
-// ByWeightedTotal orders the results by the weighted_total field.
-func ByWeightedTotal(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldWeightedTotal, opts...).ToFunc()
-}
-
-// ByWeightedCompleted orders the results by the weighted_completed field.
-func ByWeightedCompleted(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldWeightedCompleted, opts...).ToFunc()
+// ByProgressCompleted orders the results by the progress_completed field.
+func ByProgressCompleted(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProgressCompleted, opts...).ToFunc()
 }
 
 // ByErrorMessage orders the results by the error_message field.
@@ -298,6 +271,20 @@ func ByJobResources(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByJobRoundsCount orders the results by job_rounds count.
+func ByJobRoundsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newJobRoundsStep(), opts...)
+	}
+}
+
+// ByJobRounds orders the results by job_rounds terms.
+func ByJobRounds(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newJobRoundsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // BySseEventsCount orders the results by sse_events count.
 func BySseEventsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -330,6 +317,13 @@ func newJobResourcesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(JobResourcesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, JobResourcesTable, JobResourcesColumn),
+	)
+}
+func newJobRoundsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(JobRoundsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, JobRoundsTable, JobRoundsColumn),
 	)
 }
 func newSseEventsStep() *sqlgraph.Step {
