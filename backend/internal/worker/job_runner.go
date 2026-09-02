@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
@@ -24,6 +25,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/sysmem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -41,9 +43,31 @@ type JobRunner struct {
 	// DatabaseDriverSQLite），用于 batchHandler 中的写入错误分级。
 	dbDriver string
 
-	// per-job 取消注册表：jobID → cancel 函数
+	// pipeCfg 流水线准入预算（字节配额与资源数上限）。
+	pipeCfg PipelineConfig
+	// rssFuse 进程级 RSS 双水位保险丝；nil 时禁用。
+	rssFuse *sysmem.Gate
+
+	// per-job 取消注册表：jobID → 取消句柄（包装结构体使 defer 可按值
+	// 身份比较删除——cancel 函数本身只能与 nil 比较）
 	mu         sync.Mutex
-	activeJobs map[int]context.CancelFunc
+	activeJobs map[int]*jobCancelEntry
+	// per-job 暂停闸门注册表：jobID → gate
+	gates map[int]*pipeline.PauseGate
+}
+
+// jobCancelEntry 包装 per-job cancel：指针可比较，供旧执行的 defer
+// 判别「注册表里还是不是本次注册」，避免误删 resume 后新执行的注册项。
+type jobCancelEntry struct {
+	cancel context.CancelFunc
+}
+
+// PipelineConfig 流水线准入配置（由 server 从 WorkerConfig 注入）。
+type PipelineConfig struct {
+	// MaxInflightWeight 在途工作配额上限（源文本字节；0 = 不限制）。
+	MaxInflightWeight int64
+	// MaxInflightResources 在途资源数上限（0 = 不限制）。
+	MaxInflightResources int
 }
 
 // NewJobRunner 创建一个新的任务执行器。
@@ -57,6 +81,8 @@ func NewJobRunner(
 	limiterPool *backend.LimiterPool,
 	resMutex *ResourceMutex,
 	dbDriver string,
+	pipeCfg PipelineConfig,
+	rssFuse *sysmem.Gate,
 ) *JobRunner {
 	if logger == nil {
 		logger = slog.Default()
@@ -71,7 +97,10 @@ func NewJobRunner(
 		limiterPool: limiterPool,
 		resMutex:    resMutex,
 		dbDriver:    dbDriver,
-		activeJobs:  make(map[int]context.CancelFunc),
+		pipeCfg:     pipeCfg,
+		rssFuse:     rssFuse,
+		activeJobs:  make(map[int]*jobCancelEntry),
+		gates:       make(map[int]*pipeline.PauseGate),
 	}
 }
 
@@ -110,11 +139,11 @@ func (r *JobRunner) Run(ctx context.Context) error {
 // Cancel 通知运行中的翻译任务立即停止。
 func (r *JobRunner) Cancel(taskID int) {
 	r.mu.Lock()
-	cancel, ok := r.activeJobs[taskID]
+	entry, ok := r.activeJobs[taskID]
 	r.mu.Unlock()
 	if ok {
 		r.logger.Info("cancelling running job", "job_id", taskID)
-		cancel()
+		entry.cancel()
 	}
 }
 
@@ -127,19 +156,26 @@ func (r *JobRunner) Recover(ctx context.Context) ([]int, error) {
 	return jobIDs, nil
 }
 
-// processJob 处理单个翻译任务：加载执行上下文，筛选待处理的资源并依次执行。
+// processJob 处理单个翻译任务（流水线模式）：所有 pending 资源并发入线，
+// 每资源一个 goroutine 按序执行自己的轮次；同轮所有在途资源共享该轮
+// 站位并发预算（CPU 工位模型）。准入控制（字节配额 + 资源数上限 + RSS
+// 保险丝）约束同时在途的资源；pause gate 在安全点优雅排空。
 func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 	// 创建 per-job context，支持外部取消
 	jobCtx, jobCancel := context.WithCancel(ctx)
 	defer jobCancel()
 
-	// 注册到 activeJobs，使 Cancel 能触发取消
+	// 注册到 activeJobs，使 Cancel 能触发取消。按值身份删除：与
+	// unregisterGate 同理，避免旧执行的 defer 误删 resume 后新执行注册的 cancel。
+	entry := &jobCancelEntry{cancel: jobCancel}
 	r.mu.Lock()
-	r.activeJobs[jobID] = jobCancel
+	r.activeJobs[jobID] = entry
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
-		delete(r.activeJobs, jobID)
+		if r.activeJobs[jobID] == entry {
+			delete(r.activeJobs, jobID)
+		}
 		r.mu.Unlock()
 	}()
 
@@ -147,44 +183,265 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 	if err != nil {
 		return err
 	}
-	// 二次校验：任务可能在入队后、执行前被取消
-	if exec.Job.Status == service.JobStatusCancelled {
-		r.logger.Info("job already cancelled, skipping", "job_id", jobID)
+	// 二次校验：任务可能在入队后、执行前被取消或暂停
+	if exec.Job.Status == service.JobStatusCancelled || exec.Job.Status == service.JobStatusPaused {
+		r.logger.Info("job already cancelled or paused, skipping", "job_id", jobID, "status", exec.Job.Status)
 		return nil
 	}
 	pending := make([]*ent.JobResource, 0, len(exec.JobResources))
 	for _, item := range exec.JobResources {
-		if item.Status == service.JobResourceStatusPending {
+		if item.Status == service.JobResourceStatusPending || item.Status == service.JobResourceStatusRunning {
 			pending = append(pending, item)
 		}
 	}
+
+	snapshot, err := r.jobs.GetExecutionSnapshot(jobCtx, jobID)
+	if err != nil {
+		return err
+	}
+
 	if len(pending) > 0 {
+		// 流水线编排：轮次行注册表、暂停闸门、准入预算、站位信号量。
+		registry, err := loadJobRounds(jobCtx, r.client, jobID)
+		if err != nil {
+			return err
+		}
+		// 暂停闸门先于 MarkJobRunning 注册：消除「DB 已 running 但 gate 尚未
+		// 注册」窗口内暂停请求的静默丢失（PauseTask 查不到 gate 返回 false）。
+		// 翻转前到达的暂停走 pending→paused 直接翻转，随后 MarkJobRunning
+		// 条件更新不命中，runner 干净退出（defer 注销 gate）。
+		gate := pipeline.NewPauseGate()
+		r.registerGate(jobID, gate)
+		defer r.unregisterGate(jobID, gate)
+
 		if err := r.jobs.MarkJobRunning(jobCtx, jobID); err != nil {
+			// 条件更新未命中：任务在入队后、执行前被并发暂停/取消。
+			if errors.Is(err, service.ErrJobNotRunnable) {
+				r.logger.Info("job not runnable anymore, skipping", "job_id", jobID)
+				return nil
+			}
 			return err
 		}
 		// 记录任务开始时间
 		_ = r.jobs.MarkJobStarted(jobCtx, jobID)
+
+		adm := newAdmission(r.pipeCfg.MaxInflightWeight, r.pipeCfg.MaxInflightResources)
+
+		// 站位信号量：round_index → Station（容量 = 该轮快照 concurrency）。
+		stations := make([]*pipeline.Station, len(snapshot.Rounds))
+		for i := range snapshot.Rounds {
+			stations[i] = pipeline.NewStation(roundConcurrency(snapshot, i))
+		}
+
+		var wg sync.WaitGroup
 		for _, item := range pending {
-			// 每次处理资源前检查 context 是否已取消
-			if jobCtx.Err() != nil {
-				r.logger.Info("job context cancelled, stopping", "job_id", jobID)
-				break
-			}
-			if err := r.processJobResource(jobCtx, exec, item); err != nil {
-				r.logger.Warn("job resource failed", "job_id", jobID, "job_resource_id", item.ID, "err", err)
+			wg.Add(1)
+			go func(item *ent.JobResource) {
+				defer wg.Done()
+				r.runPipelineResource(jobCtx, exec, snapshot, item, registry, gate, adm, stations)
+			}(item)
+		}
+		wg.Wait()
+
+		// 排空后暂停：所有资源 goroutine 退出（在途请求已返回并持久化），
+		// 置任务为 paused（未取消时）。
+		if gate.Paused() && jobCtx.Err() == nil {
+			if err := r.jobs.MarkJobPaused(jobCtx, jobID); err != nil {
+				r.logger.Warn("failed to mark job paused", "job_id", jobID, "err", err)
 			}
 		}
 	}
-	reconcileErr := r.jobs.ReconcileJob(jobCtx, jobID)
+	// 收尾 reconcile 用独立 ctx：取消路径下 jobCtx 已失效，但终态聚合
+	//（矩阵重算 + 状态推导 + 终态事件）仍须落库；超时防悬挂 worker。
+	reconcileCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	reconcileErr := r.jobs.ReconcileJob(reconcileCtx, jobID)
 	r.eventBroker.Purge(jobID)
 	return reconcileErr
 }
 
+// roundConcurrency 从快照提取某轮的站位容量（concurrency 字段）。
+func roundConcurrency(snapshot *service.JobExecutionSnapshot, roundIdx int) int {
+	if roundIdx < 0 || roundIdx >= len(snapshot.Rounds) {
+		return 1
+	}
+	rd := snapshot.Rounds[roundIdx]
+	switch rd.Mode {
+	case "translate":
+		if rd.Translate != nil {
+			return rd.Translate.Concurrency
+		}
+	case "extract":
+		if rd.Extract != nil {
+			return rd.Extract.Concurrency
+		}
+	case "adjudicate":
+		if rd.Adjudicate != nil {
+			return rd.Adjudicate.Concurrency
+		}
+	case "semantic_qa":
+		if rd.SemanticQA != nil {
+			return rd.SemanticQA.Concurrency
+		}
+	case "revise":
+		if rd.Revise != nil {
+			return rd.Revise.Concurrency
+		}
+	case "correct":
+		if rd.Correct != nil {
+			return rd.Correct.Concurrency
+		}
+	}
+	return 1
+}
+
+// runPipelineResource 单资源的流水线执行：准入 → 轮次循环（恢复断点 →
+// 站位注入 → 执行 → 持久化 resolved）。返回前保证准入预算已归还。
+func (r *JobRunner) runPipelineResource(
+	jobCtx context.Context,
+	exec *service.JobExecution,
+	snapshot *service.JobExecutionSnapshot,
+	item *ent.JobResource,
+	registry *roundRegistry,
+	gate *pipeline.PauseGate,
+	adm *admission,
+	stations []*pipeline.Station,
+) {
+	// 动态选择资源：首次入线加载选择集时回填 work_weight（准入从首次入线起算）。
+	// 权重计算/回填失败时资源以最小单元（weightAllow(0)=1）准入——绕过字节
+	// 配额但无功能错误；记 Warn 保持该降级路径可观测，避免瞬时 DB 错误
+	// 静默放行大资源且无人知晓。
+	weight := item.WorkWeight
+	if weight == 0 && len(item.SegmentIds) == 0 {
+		w, err := r.computeWorkWeight(jobCtx, item)
+		switch {
+		case err != nil:
+			r.logger.Warn("compute work weight failed, resource admitted with minimal weight",
+				"job_id", exec.Job.ID, "job_resource_id", item.ID, "err", err)
+		case w > 0:
+			weight = w
+			if uerr := r.client.JobResource.UpdateOneID(item.ID).SetWorkWeight(w).Exec(jobCtx); uerr != nil {
+				r.logger.Warn("persist work weight failed, will recompute on next run",
+					"job_id", exec.Job.ID, "job_resource_id", item.ID, "err", uerr)
+			}
+		}
+	}
+
+	// 准入：字节配额 + 资源数上限 + RSS 保险丝（pull 型：每次准入尝试
+	// 调用 Allow() 推进双水位状态机；熔断中资源排队、在途继续——只出不进）。
+	for {
+		if jobCtx.Err() != nil {
+			return
+		}
+		if gate.Paused() {
+			return // 暂停：未入线资源直接退出（resume 重新入队）
+		}
+		if r.rssFuse != nil && !r.rssFuse.Allow() {
+			// 熔断中：不占用配额，等待水位回落（1s 轮询）。
+			select {
+			case <-jobCtx.Done():
+				return
+			case <-gate.Done():
+				return
+			case <-time.After(time.Second):
+			}
+			continue
+		}
+		if err := adm.admit(weight); err == nil {
+			if r.pipeCfg.MaxInflightWeight > 0 && weightAllow(weight) > r.pipeCfg.MaxInflightWeight {
+				// 超预算单资源独跑（admit 空预算放行）：峰值在途字节短暂
+				// 超过配额，内存后盾由进程级 RSS 保险丝兜底。
+				r.logger.Warn("resource work weight exceeds inflight budget, admitting solo",
+					"job_id", exec.Job.ID, "job_resource_id", item.ID,
+					"work_weight_bytes", weight, "budget_bytes", r.pipeCfg.MaxInflightWeight)
+			}
+			break
+		} else if !errAdmissionRetryable(err) {
+			r.logger.Error("admission failed permanently, resource aborted",
+				"job_id", exec.Job.ID, "job_resource_id", item.ID, "err", err)
+			_ = r.jobs.MarkJobResourceFailed(jobCtx, exec.Job.ID, item.ID, err)
+			return
+		}
+		select {
+		case <-jobCtx.Done():
+			return
+		case <-gate.Done():
+			return
+		case <-time.After(time.Second):
+		}
+	}
+	defer adm.release(weight)
+
+	if err := r.processJobResource(jobCtx, exec, snapshot, item, registry, gate, stations); err != nil {
+		r.logger.Warn("job resource failed", "job_id", exec.Job.ID, "job_resource_id", item.ID, "err", err)
+	}
+}
+
+// computeWorkWeight 聚合动态选择资源（segment_ids 为空）全部段落的
+// source_text 字节数，作为准入权重回填。经 service 层 ent 自定义聚合
+// 实现字节口径跨 SQLite/PostgreSQL 一致。
+func (r *JobRunner) computeWorkWeight(ctx context.Context, item *ent.JobResource) (int64, error) {
+	res, err := item.Edges.ResourceOrErr()
+	if err != nil {
+		return 0, err
+	}
+	return service.SumResourceWorkWeight(ctx, r.client, res.ID)
+}
+
+// registerGate / unregisterGate 维护 jobID → pause gate 注册表。
+func (r *JobRunner) registerGate(jobID int, gate *pipeline.PauseGate) {
+	r.mu.Lock()
+	if r.gates == nil {
+		r.gates = make(map[int]*pipeline.PauseGate)
+	}
+	r.gates[jobID] = gate
+	r.mu.Unlock()
+}
+
+// unregisterGate 注销本次执行注册的 gate。按值身份删除：MarkJobPaused 之后、
+// 本 defer 执行之前的窗口内 resume 可启动新执行并注册新 gate——若按 jobID
+// 无条件 delete 会误删新执行的 gate（此后 PauseTask 恒 miss、暂停 API 恒 409）。
+func (r *JobRunner) unregisterGate(jobID int, gate *pipeline.PauseGate) {
+	r.mu.Lock()
+	if r.gates[jobID] == gate {
+		delete(r.gates, jobID)
+	}
+	r.mu.Unlock()
+}
+
+// Pause 通知运行中的任务优雅排空（等待在途 LLM 请求返回后冻结）。
+// 返回 false 表示任务未在运行（由 service 层处理 pending 态暂停）。
+func (r *JobRunner) Pause(taskID int) bool {
+	r.mu.Lock()
+	gate, ok := r.gates[taskID]
+	r.mu.Unlock()
+	if !ok {
+		return false
+	}
+	gate.Pause()
+	r.logger.Info("pausing running job", "job_id", taskID)
+	return true
+}
+
 // processJobResource 处理单个翻译资源：从 DB 加载段落、轮次循环翻译、写回 DB。
-func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExecution, item *ent.JobResource) error {
+// registry/gate/stations 为流水线编排注入物（nil 时退化为单资源直跑，
+// 供测试与 CLI 路径复用）。
+func (r *JobRunner) processJobResource(
+	ctx context.Context,
+	exec *service.JobExecution,
+	snapshot *service.JobExecutionSnapshot,
+	item *ent.JobResource,
+	registry *roundRegistry,
+	gate *pipeline.PauseGate,
+	stations []*pipeline.Station,
+) error {
 	job := exec.Job
 
 	if err := r.jobs.MarkJobResourceRunning(ctx, job.ID, item.ID); err != nil {
+		// 条件更新未命中：资源已被并发取消/置终态，静默跳过。
+		if errors.Is(err, service.ErrJobResourceNotRunnable) {
+			return nil
+		}
 		return err
 	}
 	_ = r.jobs.MarkJobResourceStarted(ctx, item.ID)
@@ -214,10 +471,42 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		defer release()
 	}
 
-	snapshot, err := r.jobs.GetExecutionSnapshot(ctx, job.ID)
-	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("get execution snapshot: %w", err))
-		return nil
+	// 断点恢复：从 JobRound 行装载各非翻译轮已解决段集合（DB Segment ID），
+	// 转 docIndex 后注入 resolvedByMode（跨同模式轮累积的并集语义）。
+	// registry 为 nil（单资源路径）时跳过——无 JobRound 行。
+	var resolvedByMode map[string]map[int]struct{} = engine.NewResolvedByMode()
+	var dbIDToIndexBootstrap map[int]int
+	if registry != nil {
+		persisted, err := loadResolved(ctx, r.client, item.ID)
+		if err != nil {
+			r.logger.Warn("load resolved checkpoints failed, rounds will rescan",
+				"job_id", job.ID, "job_resource_id", item.ID, "err", err)
+		} else if len(persisted) > 0 {
+			// DB ID → docIndex 映射依赖每轮重载（loadSegments 顺序确定），
+			// 此处仅用 ID 与顺序建立映射：全列加载（含 source_text 大文本）
+			// 读出即弃是启动期读放大，改用单列投影；排序须与轮次循环的
+			// loadSegments 一致（Asc(SegmentIndex), Asc(ID)）。
+			idRows, loadErr := r.client.Segment.Query().
+				Where(segment.ResourceIDEQ(res.ID)).
+				Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
+				Select(segment.FieldID).
+				All(ctx)
+			if loadErr == nil {
+				dbIDToIndexBootstrap = make(map[int]int, len(idRows))
+				for i, row := range idRows {
+					dbIDToIndexBootstrap[row.ID] = i
+				}
+				for mode, dbIDs := range persisted {
+					if set, ok := resolvedByMode[mode]; ok {
+						for dbID := range dbIDs {
+							if idx, ok2 := dbIDToIndexBootstrap[dbID]; ok2 {
+								set[idx] = struct{}{}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	engineCfg := BuildEngineConfig(snapshot)
@@ -290,8 +579,33 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 
 	// 跨轮增量载体（in-memory）：per-mode 已解决段索引集合。
 	// 下一同模式轮的 BuildBatches（池 0）据此排除已解决段，避免跨轮全量重扫。
-	// translate 不参与（由 DB status 驱动增量）。崩溃重启则该集合丢失，资源从 round 0 重跑（与现状一致，无回归）。
-	resolvedByMode := engine.NewResolvedByMode()
+	// translate 不参与（由 DB status 驱动增量）。恢复时从 JobRound 行
+	// resolved_segment_ids 并集重建（见上方断点恢复）。
+	// resolvedByMode 已在断点恢复处初始化（registry==nil 时为空集合）。
+
+	// 断点持久化注入：写「当前轮 mode 的 resolvedByMode 集合」对应 DB ID
+	//（跨同模式轮累积），轮次循环内每轮刷新 mode 与映射后由闭包读取。
+	// resolvedIndexToDBID 由轮次循环以当轮 docIndexToDBID 整体赋值（首次
+	// 读取前必被覆盖），无需 bootstrap 预填——断点恢复的正向映射
+	// dbIDToIndexBootstrap 在上方恢复循环中直接消费。
+	var resolvedMu sync.Mutex
+	resolvedMode := ""
+	var resolvedIndexToDBID map[int]int
+	resolvedSourceFn := func() []int {
+		resolvedMu.Lock()
+		defer resolvedMu.Unlock()
+		set := resolvedByMode[resolvedMode]
+		if len(set) == 0 {
+			return nil
+		}
+		out := make([]int, 0, len(set))
+		for idx := range set {
+			if dbID, ok := resolvedIndexToDBID[idx]; ok {
+				out = append(out, dbID)
+			}
+		}
+		return out
+	}
 
 	// 轮次循环
 	for roundIdx := range snapshot.Rounds {
@@ -299,8 +613,39 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			r.logger.Info("context cancelled, stopping round loop", "job_id", job.ID)
 			break
 		}
+		// 轮次启动前暂停检查：退出循环（当前轮保持 running 冻结态，
+		// resume 时按批量重置路径处理）。
+		if gate != nil && gate.Paused() {
+			r.logger.Info("job paused, stopping round loop", "job_id", job.ID)
+			break
+		}
 
 		round := snapshot.Rounds[roundIdx]
+
+		// 轮次行流转：跳过已完成的轮（断点续传核心——completed 轮直接跳过）。
+		roundRowID := 0
+		if registry != nil {
+			roundRowID, err = registry.ensureLoaded(ctx, r.client, item.ID, roundIdx, round.Mode)
+			if err != nil {
+				_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+				return nil
+			}
+			rowStatus, statErr := r.jobs.GetJobRoundStatus(ctx, roundRowID)
+			if statErr != nil {
+				_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, statErr)
+				return nil
+			}
+			if rowStatus == service.JobRoundStatusCompleted || rowStatus == service.JobRoundStatusSkipped {
+				continue // 断点续传：已完成/跳过轮不再执行
+			}
+			// pending→running 条件更新：progress_total 分母只在该转换时累加
+			//（DBReporter.StageStart 的累加条件由 MarkJobRoundRunning 的
+			// 条件更新语义保证——仅 pending/skipped 可转 running）。
+			if err := r.jobs.MarkJobRoundRunning(ctx, job.ID, roundRowID); err != nil {
+				_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+				return nil
+			}
+		}
 
 		// 每轮从 DB 重新加载段落（Worker 通过 DB 重新加载避免保护态问题）
 		selectedRows, allRows, loadErr := r.loadSegments(ctx, res.ID, item.SegmentIds)
@@ -324,7 +669,13 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		}
 
 		if len(selectedRows) == 0 {
-			// 本轮无段可处理（如 translate pending_only 已全部译完）；继续后续 extract/adjudicate 轮
+			// 本轮无段可处理（如 translate pending_only 已全部译完）：显式标记
+			// skipped（进度矩阵可见「跳过」而非静默消失），继续后续轮次。
+			if roundRowID > 0 {
+				if err := r.jobs.MarkJobRoundSkipped(ctx, roundRowID); err != nil {
+					r.logger.Warn("mark round skipped failed", "round_row_id", roundRowID, "err", err)
+				}
+			}
 			if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
 				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
 					_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
@@ -356,6 +707,22 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			if idx, ok := dbIDToIndex[row.ID]; ok {
 				docIndexToDBID[idx] = row.ID
 			}
+		}
+
+		// 每轮刷新 resolved 持久化映射与 reporter 目标行。
+		// 顺序约束：SwitchRound 先 flush 上一轮残留缓冲（写入旧行），
+		// 此后才刷新 resolvedMode/映射——否则残留 flush 的闭包会按新 mode
+		// 取集合，把错误模式的断点写进上一轮行。
+		reporter.SwitchRound(roundRowID)
+		resolvedMu.Lock()
+		resolvedMode = round.Mode
+		resolvedIndexToDBID = docIndexToDBID
+		resolvedMu.Unlock()
+		// translate 轮不持久化断点（由 Segment.status 驱动增量）。
+		if round.Mode == pipeline.RoundModeTranslate {
+			reporter.SetResolvedSource(nil)
+		} else {
+			reporter.SetResolvedSource(resolvedSourceFn)
 		}
 
 		// 构建 BatchHandler（翻译/裁决轮次用于持久化，抽取轮次不需要）
@@ -672,12 +1039,29 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		if round.Mode != pipeline.RoundModeTranslate {
 			execOpts = append(execOpts, engine.WithResolvedIndices(resolvedByMode[round.Mode]))
 		}
+		// 流水线注入：站位信号量（同轮资源共享并发预算）与暂停闸门
+		//（退避重试等待中止信号）。单资源路径（stations/gate 为 nil）跳过。
+		if stations != nil && roundIdx < len(stations) {
+			execOpts = append(execOpts, engine.WithStation(stations[roundIdx]))
+		}
+		if gate != nil {
+			execOpts = append(execOpts, engine.WithPauseGate(gate))
+		}
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
 		if roundErr == nil {
 			lastResult = result
 			// 累加本轮成功段到对应模式的 resolved 集合（跨轮增量）。
 			// 注意：跨"不同"模式间不共享（extract 成功不阻止 adjudicate 扫描）。
+			// resolvedMu 与 flush 侧的 resolvedSourceFn 读并发互斥（ticker flush
+			// 会在轮次间隙读该集合持久化断点）。
+			resolvedMu.Lock()
 			engine.AccumulateResolved(resolvedByMode, round.Mode, result.Resolved)
+			resolvedMu.Unlock()
+			// 轮次收尾强制断点落盘：AccumulateResolved 之后缓冲已空（StageDone
+			// 已 flush 段计数），常规 flush 会因 pending 空早退跳过——不强制
+			// 写入则本轮 resolved 集合不落盘，暂停/崩溃恢复后被全量重扫
+			//（重复 LLM 调用与重复计费）。translate 轮无 resolvedSource，no-op。
+			reporter.PersistResolved()
 			if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
 				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
 					roundErr = err
@@ -739,6 +1123,19 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		}
 
 		if roundErr != nil {
+			// 暂停排空的未解决批次不应落 failed：暂停会把退避中/未派发的
+			// 批次全部转为 unresolved，extract 等轮次的 Finalize「全未解决」
+			// 检查会把它误报为轮次失败——按冻结语义返回（轮次行保持
+			// running，resume 重置后续跑），与成功路径的暂停豁免一致。
+			if gate != nil && gate.Paused() {
+				return nil
+			}
+			// 轮次失败：轮次行落 failed 终态（供断点续传跳过与进度矩阵展示）。
+			if roundRowID > 0 {
+				if err := r.jobs.MarkJobRoundFailed(ctx, roundRowID, roundErr); err != nil {
+					r.logger.Warn("mark round failed failed", "round_row_id", roundRowID, "err", err)
+				}
+			}
 			if errors.Is(roundErr, context.Canceled) && completedCount > 0 {
 				r.logger.Warn("translation cancelled, preserving partial progress",
 					"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
@@ -750,9 +1147,21 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("round %d (%s): %w", roundIdx, round.Mode, roundErr))
 			return nil
 		}
+		// 轮次成功：轮次行落 completed 终态（暂停退出时保持 running 冻结态，
+		// resume 重置后续跑）。存在未解决段或 ctx 已取消（RunRound 把取消
+		// 吞成 unresolved、nil error）时同样保持 running——completed 会被
+		// 断点续传永久跳过且 RetryJob 不重置，未完成段将静默丢失；
+		// running 由 retry/resume/recover 的重置路径续跑。
+		// 翻译轮次的 SkippedCount 是轮内的结构跳过计数（空文本/占位段），
+		// 与轮次行流转的 skipped 状态语义不同。
+		if roundRowID > 0 && (gate == nil || !gate.Paused()) &&
+			len(result.Unresolved) == 0 && ctx.Err() == nil {
+			if err := r.jobs.MarkJobRoundCompleted(ctx, roundRowID); err != nil {
+				r.logger.Warn("mark round completed failed", "round_row_id", roundRowID, "err", err)
+			}
+		}
 		// 不再因 UnresolvedCount==0 提前 break，避免跳过后续 extract/adjudicate 轮
 	}
-
 	completedQuery := r.client.Segment.Query().
 		Where(
 			segment.ResourceIDEQ(res.ID),
@@ -770,6 +1179,14 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		completedCount = actualCompleted
 	}
 	skippedCount := lastResult.SkippedCount
+
+	// 暂停退出：资源保持 running 冻结态（矩阵行同样冻结），跳过一切终态
+	// 判定与 usage 记录——resume 时从断点继续，不会重复计费。
+	if gate != nil && gate.Paused() {
+		r.logger.Info("job paused, freezing resource state",
+			"job_id", job.ID, "job_resource_id", item.ID)
+		return nil
+	}
 
 	// 最后一轮 translate 后，检查仍有瞬时写入失败的段（历经所有翻译轮仍写不进去）。
 	// 这些段既不在 lastResult.UnresolvedCount（那是 LLM 失败）也不在 completed 中，

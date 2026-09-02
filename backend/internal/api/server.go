@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/sysmem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
 
@@ -197,10 +198,27 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	translationQueue := worker.NewQueue(cfg.Workers.Translation.QueueCapacity)
 	syncQueue := worker.NewQueue(cfg.Workers.Sync.QueueCapacity)
 
+	// RSS 保险丝：进程级双水位准入闸门（0 = 关闭）。仅是准入控制，
+	// 不改变任务状态；触发时资源排队、在途请求继续。
+	var rssFuse *sysmem.Gate
+	if cfg.Pipeline.RssLimitMB > 0 {
+		rssFuse = sysmem.NewGate(uint64(cfg.Pipeline.RssLimitMB)*1024*1024, sysmem.ReadRSS, logger)
+		logger.Info("rss fuse enabled",
+			"limit_mb", cfg.Pipeline.RssLimitMB,
+			"high_watermark_mb", float64(cfg.Pipeline.RssLimitMB)*0.85,
+			"low_watermark_mb", float64(cfg.Pipeline.RssLimitMB)*0.70,
+		)
+	}
+
 	// 创建 Runner
 	translationRunner := worker.NewJobRunner(
 		logger, client, s.jobSvc, jobStore,
 		translationQueue, s.eventBroker, limiterPool, s.resMutex, cfg.Database.Driver,
+		worker.PipelineConfig{
+			MaxInflightWeight:    int64(cfg.Pipeline.MaxInflightWeightMB) * 1024 * 1024,
+			MaxInflightResources: cfg.Pipeline.MaxInflightResources,
+		},
+		rssFuse,
 	)
 	syncTaskRunner := worker.NewSyncTaskRunner(
 		logger, client, s.glossarySyncSvc, syncQueue, s.resMutex,

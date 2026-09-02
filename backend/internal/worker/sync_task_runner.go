@@ -90,6 +90,11 @@ func (r *SyncTaskRunner) Cancel(taskID int) {
 	}
 }
 
+// Pause 同步任务无暂停语义（短任务，无 LLM 在途请求），恒返回 false。
+func (r *SyncTaskRunner) Pause(taskID int) bool {
+	return false
+}
+
 // Recover 从数据库恢复挂起的任务并返回 ID 列表。
 func (r *SyncTaskRunner) Recover(ctx context.Context) ([]int, error) {
 	taskIDs, err := r.syncSvc.RecoverPendingJobs(ctx)
