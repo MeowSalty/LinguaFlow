@@ -35,6 +35,9 @@ type ExtractHandler struct {
 
 	scannedSegments atomic.Int64 // 池 0 扫描的去重段数（best-effort all-failed 检测分母，与重试/池数解耦）
 
+	// Gate 是任务级暂停闸门（退避重试等待中止信号）；nil 时无暂停语义。
+	Gate *PauseGate
+
 	RoundIndex int // execution plan round index, set by caller
 }
 
@@ -253,9 +256,12 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 				select {
 				case <-ctx.Done():
 					timer.Stop()
-					for range idxs {
-						rep.SegmentDone()
-					}
+					// 段保持未解决：不调 SegmentDone——未解决段计入
+					// segment_completed 后，恢复/重试重跑会二次计数。
+					return batchResult{unresolved: idxs}
+				case <-h.Gate.Done():
+					// 暂停时中止退避等待：段保持未解决，由断点集合覆盖。
+					timer.Stop()
 					return batchResult{unresolved: idxs}
 				case <-timer.C:
 				}

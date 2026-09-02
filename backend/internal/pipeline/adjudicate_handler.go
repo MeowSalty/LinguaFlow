@@ -31,7 +31,11 @@ type AdjudicateHandler struct {
 	AdjudicateCodes   []string
 	Reporter          progress.Reporter
 	Logger            *slog.Logger
-	RoundIndex        int // execution plan round index, set by caller
+
+	// Gate 是任务级暂停闸门（退避重试等待中止信号）；nil 时无暂停语义。
+	Gate *PauseGate
+
+	RoundIndex int // execution plan round index, set by caller
 }
 
 func (h *AdjudicateHandler) ModeName() string { return RoundModeAdjudicate }
@@ -264,6 +268,10 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
+				return batchResult{unresolved: idxs}
+			case <-h.Gate.Done():
+				// 暂停时中止退避等待：段保持未解决，由断点集合覆盖。
 				timer.Stop()
 				return batchResult{unresolved: idxs}
 			case <-timer.C:

@@ -40,7 +40,11 @@ type ReviseHandler struct {
 	IssueCodes        []string
 	Reporter          progress.Reporter
 	Logger            *slog.Logger
-	RoundIndex        int // execution plan round index, set by caller
+
+	// Gate 是任务级暂停闸门（退避重试等待中止信号）；nil 时无暂停语义。
+	Gate *PauseGate
+
+	RoundIndex int // execution plan round index, set by caller
 
 	// Protector/Ruby* 与 TranslateHandler 同名同语义（protect 规则与 ruby 配置
 	// 取计划级策略快照，由 worker 引擎工厂从 JobExecutionSnapshot.Strategy 统一
@@ -430,7 +434,13 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return h.preserveResult(doc, idxs, rep)
+				// 退避期间取消：段保持未解决（不 preserve——preserve 会把
+				// 未修订段计入 resolved 断点，retry 后被永久跳过）。
+				return batchResult{unresolved: idxs}
+			case <-h.Gate.Done():
+				// 暂停时中止退避等待：段保持未解决，由断点集合覆盖。
+				timer.Stop()
+				return batchResult{unresolved: idxs}
 			case <-timer.C:
 			}
 			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}

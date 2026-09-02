@@ -112,6 +112,11 @@ func RunRound(
 		if ctx.Err() != nil {
 			break
 		}
+		// 池推进前暂停检查：暂停时不进入新池（本池已完成批次的结果保留，
+		// 未解决段落由断点集合覆盖，resume 时从 pending 重新切批）。
+		if round.Gate != nil && round.Gate.Paused() {
+			break
+		}
 
 		batches, err := handler.BuildBatches(ctx, doc, pending, poolIndex)
 		if err != nil {
@@ -320,8 +325,56 @@ func runPool(
 					pendingMu.Unlock()
 					continue
 				}
+				// 暂停闸门：批次派发前检查，暂停中不派发新批次。
+				// 检查通过后先登记在途计数再获取槽位；任一步失败（ctx 取消）
+				// 则本批段落保持未解决，由断点集合/下一轮 pending 过滤覆盖。
+				// 暂停让行必须发空 result 保持 active 计数平衡：pause 不取消
+				// runCtx，主循环无法经 Done 分支提前退出，只能靠 result 归零。
+				if round.Gate != nil {
+					if round.Gate.Paused() {
+						pendingMu.Lock()
+						nextPending = append(nextPending, job.idxs...)
+						pendingMu.Unlock()
+						results <- batchResult{}
+						continue
+					}
+					round.Gate.AcquireInflight()
+				}
+				if round.Slots != nil {
+					if !round.Slots.Acquire(runCtx) {
+						if round.Gate != nil {
+							round.Gate.ReleaseInflight()
+						}
+						pendingMu.Lock()
+						nextPending = append(nextPending, job.idxs...)
+						pendingMu.Unlock()
+						results <- batchResult{}
+						continue
+					}
+				}
+				// 获取槽位可能阻塞较久（Station 容量被所有在途资源共享），
+				// 阻塞期间到达的暂停需在此复查——否则排队 worker 会在槽位
+				// 释放后照常执行一整批 LLM 调用，排空时间被放大为排队深度。
+				if round.Gate != nil && round.Gate.Paused() {
+					if round.Slots != nil {
+						round.Slots.Release()
+					}
+					round.Gate.ReleaseInflight()
+					pendingMu.Lock()
+					nextPending = append(nextPending, job.idxs...)
+					pendingMu.Unlock()
+					results <- batchResult{}
+					continue
+				}
 
 				result := handler.ProcessBatch(runCtx, doc, job.idxs, job.attempt, logger)
+
+				if round.Slots != nil {
+					round.Slots.Release()
+				}
+				if round.Gate != nil {
+					round.Gate.ReleaseInflight()
+				}
 
 				if batchHandler != nil && result.callbackResult != nil {
 					if herr := batchHandler(runCtx, *result.callbackResult); herr != nil {
