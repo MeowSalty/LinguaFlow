@@ -115,6 +115,12 @@ paths:
    $ref: './paths/jobs.yaml#/jobCancel'
   /jobs/{jobId}/retry:
     $ref: './paths/jobs.yaml#/jobRetry'
+  /jobs/{jobId}/pause:
+    $ref: './paths/jobs.yaml#/jobPause'
+  /jobs/{jobId}/resume:
+    $ref: './paths/jobs.yaml#/jobResume'
+  /jobs/{jobId}/stream:
+    $ref: './paths/jobs.yaml#/jobStream'
   /jobs/{jobId}/events:
     $ref: './paths/jobs.yaml#/jobEvents'
   /execution-plan-templates:
@@ -304,6 +310,8 @@ components:
       $ref: './components/schemas/job.yaml#/CreateJobRequest'
     JobResource:
       $ref: './components/schemas/job.yaml#/JobResource'
+    JobResourceRound:
+      $ref: './components/schemas/job.yaml#/JobResourceRound'
     Job:
       $ref: './components/schemas/job.yaml#/Job'
     JobProgress:
