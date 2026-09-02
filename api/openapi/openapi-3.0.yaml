@@ -1699,6 +1699,7 @@ paths:
             enum:
               - pending
               - running
+              - paused
               - completed
               - failed
               - cancelled
@@ -1766,6 +1767,8 @@ paths:
     post:
       operationId: CancelJob
       summary: 取消任务
+      description: |
+        取消任务（运行中或排队中）。取消后任务可再次通过 retry 恢复执行。
       security:
         - bearerAuth: []
       responses:
@@ -1782,7 +1785,12 @@ paths:
       - $ref: '#/components/parameters/JobId'
     post:
       operationId: RetryJob
-      summary: 重试失败的资源
+      summary: 重试失败或已取消的任务
+      description: |
+        对失败或已取消的任务重新发起执行：失败/取消的资源重新入队，
+        已完成的轮次与已翻译段落直接跳过，从当前进度断点继续。
+        例外：显式选段（segment_ids 手动选择）的任务，首个翻译轮
+        会重译所有选中段落。
       security:
         - bearerAuth: []
       responses:
@@ -1792,6 +1800,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/{jobId}/pause:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    post:
+      operationId: PauseJob
+      summary: 暂停任务
+      description: |
+        优雅暂停——停止派发新批次并等待在途 LLM 请求返回后冻结任务。
+        暂停后可通过 resume 从轮次断点恢复。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 暂停后的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/{jobId}/resume:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    post:
+      operationId: ResumeJob
+      summary: 恢复已暂停的任务
+      description: 从轮次断点恢复已暂停的任务。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 恢复后的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/{jobId}/stream:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      operationId: StreamJobEvents
+      summary: 订阅任务实时事件流 (SSE)
+      description: |
+        以 Server-Sent Events 推送任务实时事件。
+
+        - 认证：除 bearerAuth 外，原生 EventSource 无法设置自定义请求头，
+          可改用 `access_token` 查询参数携带访问令牌。
+        - 断线重连：通过标准 `Last-Event-ID` 请求头或 `lastEventId` 查询参数
+          传入上次收到的 seq，从该位置继续；省略时仅回放最近一个有限窗口
+          （更早的历史请走 `GET /jobs/{jobId}/events`）。
+        - 帧格式：每条事件为一个 SSE 帧
+          `id: <seq>`、`event: <事件类型>`、`data: <JobEvent JSON>`；
+          注释行（`: connected`、`: keepalive <unix>`）用于连接确认与保活。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: access_token
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 访问令牌（用于无法设置 Authorization 头的 EventSource）
+        - name: lastEventId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          description: 断线重连游标，等价于 Last-Event-ID 请求头；0 或缺省表示从最近窗口开始
+      responses:
+        '200':
+          description: SSE 事件流（帧格式见操作描述）
+          content:
+            text/event-stream:
+              schema:
+                type: string
         default:
           $ref: '#/components/responses/Problem'
   /jobs/{jobId}/events:
@@ -3804,6 +3893,8 @@ components:
         - segment_count
         - completed_segments
         - skipped_segments
+        - work_weight
+        - rounds
         - created_at
         - updated_at
       properties:
@@ -3826,6 +3917,15 @@ components:
         skipped_segments:
           type: integer
           description: 被系统跳过的段落数
+        work_weight:
+          type: integer
+          format: int64
+          description: 准入工作配额权重（源文本字节）
+        rounds:
+          type: array
+          description: 轮次执行明细（resource × round 流水线）；遗留终态任务可能为空
+          items:
+            $ref: '#/components/schemas/JobResourceRound'
         output_path:
           type: string
         error_message:
@@ -3841,25 +3941,60 @@ components:
         updated_at:
           type: string
           format: date-time
-        current_stage:
-          type: string
-          description: 当前执行阶段名称
-        stage_total:
-          type: integer
-          description: 当前阶段的总段落数
-        stage_completed:
-          type: integer
-          description: 当前阶段已完成的段落数
-        weighted_total:
-          type: integer
-          description: 跨轮工作量总数（资源级，各轮 stage_total 累加）
-        weighted_completed:
-          type: integer
-          description: 跨轮已完成工作量（资源级，各轮 stage_completed 累加）
         started_at:
           type: string
           format: date-time
           description: 资源开始执行的时间
+    JobResourceRound:
+      type: object
+      required:
+        - round_index
+        - mode
+        - status
+        - segment_total
+        - segment_completed
+      properties:
+        round_index:
+          type: integer
+          description: 执行计划快照中的轮次序号（0 起）
+        mode:
+          type: string
+          enum:
+            - translate
+            - extract
+            - adjudicate
+            - semantic_qa
+            - revise
+            - correct
+          description: 轮次模式
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - skipped
+        segment_total:
+          type: integer
+          description: 本轮实际处理的段落数（首次启动时写入；断点恢复不重设）
+        segment_completed:
+          type: integer
+          description: 本轮已完成段落数（断点恢复时保留已完成值继续累加）
+        error_message:
+          type: string
+          nullable: true
+          description: 轮次级错误信息
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 轮次开始执行的时间
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 轮次到达终态的时间
     Job:
       type: object
       required:
@@ -3890,6 +4025,7 @@ components:
           enum:
             - pending
             - running
+            - paused
             - completed
             - failed
             - cancelled
@@ -3928,9 +4064,8 @@ components:
         - total_resources
         - completed_resources
         - failed_resources
-        - total_segments
-        - completed_segments
-        - skipped_segments
+        - progress_total
+        - progress_completed
       properties:
         total_resources:
           type: integer
@@ -3938,21 +4073,14 @@ components:
           type: integer
         failed_resources:
           type: integer
-        total_segments:
+        progress_total:
           type: integer
-          description: 总段落数（创建时选中的 segment 数）
-        completed_segments:
+          format: int64
+          description: 已知工作量总数（单位=段落×轮，随轮次启动动态增长）
+        progress_completed:
           type: integer
-          description: 翻译终态去重段数（仅 ReconcileJob 写入；运行中主进度请用 weighted_*）
-        skipped_segments:
-          type: integer
-          description: 被系统跳过的段落数（已翻译、空文本、纯占位符等）
-        weighted_total:
-          type: integer
-          description: 跨轮工作量总数（各轮 stage_total 累加，实时、单调）；主进度分母。completed_segments 为翻译终态去重值
-        weighted_completed:
-          type: integer
-          description: 跨轮已完成工作量（各轮 stage_completed 累加，实时、单调、≤weighted_total）；主进度分子
+          format: int64
+          description: 已完成工作量（单位=段落×轮，随轮次推进单调递增）
         queue_position:
           type: integer
           nullable: true
