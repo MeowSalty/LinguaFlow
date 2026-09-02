@@ -258,6 +258,14 @@ func (s *Server) RetryJob(w http.ResponseWriter, r *http.Request, _ JobId) {
 	s.requireAuth(http.HandlerFunc(s.handleRetryJob)).ServeHTTP(w, r)
 }
 
+func (s *Server) PauseJob(w http.ResponseWriter, r *http.Request, _ JobId) {
+	s.requireAuth(http.HandlerFunc(s.handlePauseJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) ResumeJob(w http.ResponseWriter, r *http.Request, _ JobId) {
+	s.requireAuth(http.HandlerFunc(s.handleResumeJob)).ServeHTTP(w, r)
+}
+
 func (s *Server) ListJobEvents(w http.ResponseWriter, r *http.Request, _ JobId, _ ListJobEventsParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListJobEvents)).ServeHTTP(w, r)
 }
