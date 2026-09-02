@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
@@ -26,6 +27,7 @@ import (
 const (
 	JobStatusPending   = "pending"
 	JobStatusRunning   = "running"
+	JobStatusPaused    = "paused"
 	JobStatusCompleted = "completed"
 	JobStatusFailed    = "failed"
 	JobStatusCancelled = "cancelled"
@@ -37,16 +39,27 @@ const (
 	JobResourceStatusCompleted = "completed"
 	JobResourceStatusFailed    = "failed"
 	JobResourceStatusCancelled = "cancelled"
+
+	// JobRound 状态机：pending → running → completed/failed；skipped 由
+	// pending 直达（本轮无段可处理）。JobRound 矩阵是进度的唯一事实源。
+	JobRoundStatusPending   = "pending"
+	JobRoundStatusRunning   = "running"
+	JobRoundStatusCompleted = "completed"
+	JobRoundStatusFailed    = "failed"
+	JobRoundStatusSkipped   = "skipped"
 )
 
 var (
-	ErrJobNotFound         = errors.New("job not found")
-	ErrJobEmpty            = errors.New("job has no pending segments")
-	ErrJobResourceNotFound = errors.New("job resource not found")
-	ErrJobActorMissing     = errors.New("job actor unavailable")
-	ErrJobNotCancellable   = errors.New("job is not in a cancellable state")
-	ErrJobNotRetryable     = errors.New("job is not in a retryable state")
-	ErrJobNoFailedResource = errors.New("job has no failed resources to retry")
+	ErrJobNotFound            = errors.New("job not found")
+	ErrJobEmpty               = errors.New("job has no pending segments")
+	ErrJobActorMissing        = errors.New("job actor unavailable")
+	ErrJobNotCancellable      = errors.New("job is not in a cancellable state")
+	ErrJobNotRetryable        = errors.New("job is not in a retryable state")
+	ErrJobNoFailedResource    = errors.New("job has no failed resources to retry")
+	ErrJobNotRunnable         = errors.New("job is not in a runnable state")
+	ErrJobNotPausable         = errors.New("job is not in a pausable state")
+	ErrJobNotResumable        = errors.New("job is not in a resumable state")
+	ErrJobResourceNotRunnable = errors.New("job resource is not in a runnable state")
 )
 
 // JobService 任务服务。
@@ -358,12 +371,22 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	}
 
 	resourceIDs := make([]int, 0, len(selection))
-	totalSegments := 0
-	for resourceID, segmentIDs := range selection {
+	for resourceID := range selection {
 		resourceIDs = append(resourceIDs, resourceID)
-		totalSegments += len(segmentIDs)
 	}
 	sort.Ints(resourceIDs)
+
+	// 聚合每个资源的工作量权重：SUM(LENGTH(CAST(source_text AS BLOB))) 字节口径，
+	// 在事务外以只读查询完成（选择解析同样在事务外）。动态选择（segment_ids 为空）
+	// 留 0，由 worker 侧 back-fill。
+	weights := make(map[int]int64, len(resourceIDs))
+	for _, resourceID := range resourceIDs {
+		weight, err := sumSegmentWorkWeight(ctx, s.client, selection[resourceID])
+		if err != nil {
+			return nil, fmt.Errorf("sum work weight for resource %d: %w", resourceID, err)
+		}
+		weights[resourceID] = weight
+	}
 
 	// 7. 事务创建任务
 	tx, err := s.client.Tx(ctx)
@@ -390,22 +413,40 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 		SetExecutionPlanID(snapshot.ExecutionPlanID).
 		SetExecutionConfig(snapshotMap).
 		SetResourceCount(len(selection)).
-		SetTotalSegments(totalSegments).
 		Save(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	// 预建 resource×round 完整矩阵（含动态选择资源）：每资源每轮一行 pending
+	// JobRound。矩阵是进度的唯一事实源，Job.progress_total/progress_completed
+	// 是其派生缓存（DBReporter 首次揭示工作量时累加分母）。
+	roundBuilders := make([]*ent.JobRoundCreate, 0, len(resourceIDs)*len(snapshot.Rounds))
 	for _, resourceID := range resourceIDs {
 		segmentIDs := append([]int(nil), selection[resourceID]...)
 		sort.Ints(segmentIDs)
-		if _, err := tx.JobResource.Create().
+		jr, err := tx.JobResource.Create().
 			SetJobID(created.ID).
 			SetResourceID(resourceID).
 			SetStatus(JobResourceStatusPending).
 			SetSegmentIds(segmentIDs).
 			SetSegmentCount(len(segmentIDs)).
-			Save(ctx); err != nil {
+			SetWorkWeight(weights[resourceID]).
+			Save(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for i, rd := range snapshot.Rounds {
+			roundBuilders = append(roundBuilders, tx.JobRound.Create().
+				SetJobID(created.ID).
+				SetJobResourceID(jr.ID).
+				SetRoundIndex(i).
+				SetMode(rd.Mode).
+				SetStatus(JobRoundStatusPending))
+		}
+	}
+	if len(roundBuilders) > 0 {
+		if err := bulkCreateJobRounds(ctx, roundBuilders, tx.JobRound.CreateBulk); err != nil {
 			return nil, err
 		}
 	}
@@ -904,11 +945,282 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 			Exec(ctx); err != nil {
 			return nil, err
 		}
+		// 轮次行 failed|running|skipped→pending（条件更新）：保留 segment_total/
+		// segment_completed/resolved_segment_ids 断点，恢复后从断点继续。
+		// skipped 是「当时无段可处理」的时点判断——重启期间用户可经段落
+		// 编辑 API 把段置回 pending 使其失效，重置后空段检查自然重新判定；
+		// failed 来自 MarkJobRoundFailed 与 MarkJobResourceFailed 两写间隙的
+		// 崩溃窗口（轮落 failed 而资源留 running），runner 重跑时本就会重新
+		// 执行 failed 轮（只跳过 completed|skipped），重置集与其对齐避免
+		// 矩阵永久失真（与 RetryJob 的重置集一致）。
+		// 按「将被重跑的资源」收窄：completed/failed/cancelled 资源（恢复时
+		// running→pending 之外的终态）的轮不重置，避免固化永不执行的孤儿行
+		//（completed 资源不会被恢复重跑）。
+		if err := s.client.JobRound.Update().
+			Where(
+				jobround.HasJobWith(job.IDEQ(current.ID)),
+				jobround.HasJobResourceWith(jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)),
+				jobround.StatusIn(JobRoundStatusFailed, JobRoundStatusRunning, JobRoundStatusSkipped),
+			).
+			SetStatus(JobRoundStatusPending).
+			Exec(ctx); err != nil {
+			return nil, err
+		}
+		// 升级回填：迁移前创建的任务可能没有任何轮次行（pre-migration job），
+		// 依据执行快照补建 resource×round pending 矩阵。
+		if err := s.backfillJobRoundsForRecovery(ctx, current.ID); err != nil {
+			slog.Warn("recover: backfill job rounds failed", "job_id", current.ID, "err", err)
+		}
+		// 从矩阵重算进度计数器（无条件求和）：这是防止恢复重跑重复累加的正确性路径。
+		if err := recomputeJobProgress(ctx, clientProgressStore{s.client}, current.ID); err != nil {
+			slog.Warn("recover: recompute job progress failed", "job_id", current.ID, "err", err)
+		}
 	}
 	return ids, nil
 }
 
+// backfillJobRoundsForRecovery 为没有任何 JobRound 行的任务补建 resource×round
+// pending 矩阵（升级回填）。轮次模式取自任务执行快照的 Rounds；快照缺失或无
+// 轮次（更早期存量任务）时，退化为每资源一条 round_index=0 的 pending 轮
+// （mode=translate），保证矩阵非空、进度分母可被 DBReporter 首次揭示。
+// 解析/建行失败时返回错误（由调用方记录日志并继续恢复流程）。
+func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int) error {
+	count, err := s.client.JobRound.Query().
+		Where(jobround.JobIDEQ(jobID)).
+		Count(ctx)
+	if err != nil {
+		return fmt.Errorf("count job rounds: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+	jobRow, err := s.client.Job.Get(ctx, jobID)
+	if err != nil {
+		return fmt.Errorf("load job: %w", err)
+	}
+	resources, err := s.client.JobResource.Query().
+		Where(jobresource.HasJobWith(job.IDEQ(jobID))).
+		All(ctx)
+	if err != nil {
+		return fmt.Errorf("load job resources: %w", err)
+	}
+	if len(resources) == 0 {
+		return nil
+	}
+	// 优先按执行快照的轮次物化；无快照/无轮次时退化为单 translate 轮。
+	type backfillRound struct {
+		index int
+		mode  string
+	}
+	rounds := make([]backfillRound, 0, 1)
+	snapshot, err := GetSnapshot(jobRow)
+	if err != nil {
+		slog.Warn("recover: parse execution snapshot failed, falling back to single round", "job_id", jobID, "err", err)
+	}
+	if snapshot != nil && len(snapshot.Rounds) > 0 {
+		for i, rd := range snapshot.Rounds {
+			rounds = append(rounds, backfillRound{index: i, mode: rd.Mode})
+		}
+	} else {
+		slog.Warn("recover: job has no rounds in execution snapshot, backfilling single translate round", "job_id", jobID)
+		rounds = append(rounds, backfillRound{index: 0, mode: "translate"})
+	}
+	builders := make([]*ent.JobRoundCreate, 0, len(resources)*len(rounds))
+	for _, jr := range resources {
+		for _, rd := range rounds {
+			builders = append(builders, s.client.JobRound.Create().
+				SetJobID(jobID).
+				SetJobResourceID(jr.ID).
+				SetRoundIndex(rd.index).
+				SetMode(rd.mode).
+				SetStatus(JobRoundStatusPending))
+		}
+	}
+	if err := bulkCreateJobRounds(ctx, builders, s.client.JobRound.CreateBulk); err != nil {
+		return fmt.Errorf("create job rounds: %w", err)
+	}
+	return nil
+}
+
+// jobRoundBulkChunk JobRound 批量插入分片大小。
+const jobRoundBulkChunk = 500
+
+// bulkCreateJobRounds 分批执行 JobRound 插入：ent 的 CreateBulk 把全部行
+// 拼进单条多行 INSERT（每行 10 个绑定列），受 SQLite 绑定变量上限 32766
+// 约束（与 selection.go 的 selectionQueryChunkSize 同类）——不分片时约
+// 3300 行即报 "too many SQL variables"，使创建/回填整体失败。
+// createBulk 由调用方绑定各自的 client/tx。
+func bulkCreateJobRounds(ctx context.Context, builders []*ent.JobRoundCreate, createBulk func(...*ent.JobRoundCreate) *ent.JobRoundCreateBulk) error {
+	for start := 0; start < len(builders); start += jobRoundBulkChunk {
+		end := start + jobRoundBulkChunk
+		if end > len(builders) {
+			end = len(builders)
+		}
+		if _, err := createBulk(builders[start:end]...).Save(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// --- JobRound 矩阵重算 ---
+
+// jobProgressStore 抽象矩阵重算所需的最小能力，使重算既能在事务外（*ent.Client，
+// Recover/Retry/Reconcile）也能在事务内（*ent.Tx，ResumeJob）执行。ent 生成的
+// Client/Tx 以字段暴露实体客户端，不直接满足该接口，经下方两个薄适配器接入。
+type jobProgressStore interface {
+	JobRoundQuery() *ent.JobRoundQuery
+	JobUpdateOneID(id int) *ent.JobUpdateOne
+}
+
+// clientProgressStore 适配事务外的 *ent.Client。
+type clientProgressStore struct{ client *ent.Client }
+
+func (a clientProgressStore) JobRoundQuery() *ent.JobRoundQuery {
+	return a.client.JobRound.Query()
+}
+
+func (a clientProgressStore) JobUpdateOneID(id int) *ent.JobUpdateOne {
+	return a.client.Job.UpdateOneID(id)
+}
+
+// txProgressStore 适配事务内的 *ent.Tx。
+type txProgressStore struct{ tx *ent.Tx }
+
+func (a txProgressStore) JobRoundQuery() *ent.JobRoundQuery {
+	return a.tx.JobRound.Query()
+}
+
+func (a txProgressStore) JobUpdateOneID(id int) *ent.JobUpdateOne {
+	return a.tx.Job.UpdateOneID(id)
+}
+
+// jobRoundProgressSums JobRound 矩阵聚合计数的扫描载体（列名经 sql tag 对齐）。
+type jobRoundProgressSums struct {
+	SegmentTotal     int64 `sql:"segment_total"`
+	SegmentCompleted int64 `sql:"segment_completed"`
+}
+
+// sumJobRoundProgress 计算任务矩阵的无条件求和（核心不变式）：
+//
+//	progress_total    = Σ segment_total    （所有 JobRound 行，无状态过滤）
+//	progress_completed = Σ segment_completed
+//
+// 无状态过滤是刻意的：fresh pending 行为 0/0、skipped 行为 0/0、reset-with-history
+// 行（resume/recovery/retry 后回到 pending）有意保留计数，无条件求和天然覆盖。
+func sumJobRoundProgress(ctx context.Context, store jobProgressStore, jobID int) (total, completed int64, err error) {
+	var rows []jobRoundProgressSums
+	if err := store.JobRoundQuery().
+		Where(jobround.JobIDEQ(jobID)).
+		Select(jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted).
+		Scan(ctx, &rows); err != nil {
+		return 0, 0, fmt.Errorf("sum job rounds: %w", err)
+	}
+	for _, row := range rows {
+		total += row.SegmentTotal
+		completed += row.SegmentCompleted
+	}
+	return total, completed, nil
+}
+
+// recomputeJobProgress 用矩阵无条件求和覆盖 Job.progress_total/progress_completed
+// （派生缓存）。任何 reset 路径（Resume/Recover/Retry）之后必须调用。
+func recomputeJobProgress(ctx context.Context, store jobProgressStore, jobID int) error {
+	total, completed, err := sumJobRoundProgress(ctx, store, jobID)
+	if err != nil {
+		return err
+	}
+	return store.JobUpdateOneID(jobID).
+		SetProgressTotal(total).
+		SetProgressCompleted(completed).
+		Exec(ctx)
+}
+
+// --- JobRound 状态机 ---
+//
+// 全部为条件更新：WHERE status IN (...) 不命中（0 行受影响）视为良性 no-op。
+// 并发语义由条件更新保证：DBReporter 仅在 pending/skipped→running 首次揭示时
+// 累加 progress_total 分母。
+
+// MarkJobRoundRunning 将轮次行 pending|skipped→running 并记录开始时间。
+// jobID 目前仅用于签名对称（未来事件发布），更新本身按行 ID 条件执行。
+func (s *JobService) MarkJobRoundRunning(ctx context.Context, jobID, roundRowID int) error {
+	_, err := s.client.JobRound.Update().
+		Where(
+			jobround.IDEQ(roundRowID),
+			jobround.StatusIn(JobRoundStatusPending, JobRoundStatusSkipped),
+		).
+		SetStatus(JobRoundStatusRunning).
+		SetStartedAt(time.Now()).
+		ClearFinishedAt().
+		ClearErrorMessage().
+		Save(ctx)
+	return err
+}
+
+// MarkJobRoundCompleted 将轮次行 running→completed 并记录完成时间。
+func (s *JobService) MarkJobRoundCompleted(ctx context.Context, roundRowID int) error {
+	_, err := s.client.JobRound.Update().
+		Where(
+			jobround.IDEQ(roundRowID),
+			jobround.StatusEQ(JobRoundStatusRunning),
+		).
+		SetStatus(JobRoundStatusCompleted).
+		SetFinishedAt(time.Now()).
+		Save(ctx)
+	return err
+}
+
+// MarkJobRoundFailed 将轮次行 running→failed 并记录错误信息与完成时间。
+func (s *JobService) MarkJobRoundFailed(ctx context.Context, roundRowID int, failure error) error {
+	message := "job round failed"
+	if failure != nil {
+		message = failure.Error()
+	}
+	_, err := s.client.JobRound.Update().
+		Where(
+			jobround.IDEQ(roundRowID),
+			jobround.StatusEQ(JobRoundStatusRunning),
+		).
+		SetStatus(JobRoundStatusFailed).
+		SetErrorMessage(message).
+		SetFinishedAt(time.Now()).
+		Save(ctx)
+	return err
+}
+
+// MarkJobRoundSkipped 将轮次行标记为 skipped 并记录完成时间（本轮无段可处理）。
+// 接受 pending 与 running：runner 先 MarkJobRoundRunning 再做空段检查，
+// 此时行已是 running（仅 pending 会 0 行命中且不报错，行将永久停留 running）。
+func (s *JobService) MarkJobRoundSkipped(ctx context.Context, roundRowID int) error {
+	_, err := s.client.JobRound.Update().
+		Where(
+			jobround.IDEQ(roundRowID),
+			jobround.StatusIn(JobRoundStatusPending, JobRoundStatusRunning),
+		).
+		SetStatus(JobRoundStatusSkipped).
+		SetFinishedAt(time.Now()).
+		Save(ctx)
+	return err
+}
+
+// GetJobRoundStatus 返回轮次行当前状态。
+// 投影只取状态列：轮次行含可达几十 KB 的 resolved_segment_ids 断点
+// blob，每轮每资源一次的调用读出即弃是纯读放大。
+func (s *JobService) GetJobRoundStatus(ctx context.Context, roundRowID int) (string, error) {
+	row, err := s.client.JobRound.Query().
+		Where(jobround.IDEQ(roundRowID)).
+		Select(jobround.FieldStatus).
+		Only(ctx)
+	if err != nil {
+		return "", err
+	}
+	return row.Status, nil
+}
+
 func (s *JobService) LoadJobExecution(ctx context.Context, jobID int) (*JobExecution, error) {
+	// worker 执行路径不预载轮次行：断点恢复走 loadResolved、轮次路由走
+	// loadJobRounds（各自带投影），WithRounds 全列预载会把断点 blob 读出即弃。
 	current, err := s.client.Job.Query().
 		Where(job.IDEQ(jobID)).
 		WithProject().
@@ -940,8 +1252,17 @@ func (s *JobService) LoadJobExecution(ctx context.Context, jobID int) (*JobExecu
 }
 
 func (s *JobService) MarkJobRunning(ctx context.Context, jobID int) error {
-	if err := s.client.Job.UpdateOneID(jobID).SetStatus(JobStatusRunning).Exec(ctx); err != nil {
+	// 条件更新：任务在入队后、执行前被并发暂停/取消时不命中（0 行受影响），
+	// 返回 ErrJobNotRunnable 供 processJob 在派发资源前中止。
+	n, err := s.client.Job.Update().
+		Where(job.IDEQ(jobID), job.StatusIn(JobStatusPending, JobStatusRunning)).
+		SetStatus(JobStatusRunning).
+		Save(ctx)
+	if err != nil {
 		return err
+	}
+	if n == 0 {
+		return ErrJobNotRunnable
 	}
 	s.publishEvent(jobID, "job_started", "info", "", "任务开始执行")
 	return nil
@@ -979,36 +1300,78 @@ func (s *JobService) MarkJobResourceStarted(ctx context.Context, jobResourceID i
 }
 
 func (s *JobService) MarkJobResourceRunning(ctx context.Context, jobID, jobResourceID int) error {
-	if err := s.client.JobResource.UpdateOneID(jobResourceID).
+	// 条件更新：资源在入队后、派发前被并发取消/置终态时不命中（0 行受影响），
+	// 返回 ErrJobResourceNotRunnable 供 worker 静默跳过该资源。
+	n, err := s.client.JobResource.Update().
+		Where(
+			jobresource.IDEQ(jobResourceID),
+			jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning),
+		).
 		SetStatus(JobResourceStatusRunning).
 		ClearErrorMessage().
-		Exec(ctx); err != nil {
-		if ent.IsNotFound(err) {
-			return ErrJobResourceNotFound
-		}
+		Save(ctx)
+	if err != nil {
 		return err
+	}
+	if n == 0 {
+		return ErrJobResourceNotRunnable
 	}
 	s.publishEvent(jobID, "resource_started", "info", "", "开始处理资源")
 	return nil
 }
 
 func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments, skippedSegments int, warning string) error {
-	update := s.client.JobResource.UpdateOneID(jobResourceID).
+	// 条件更新（best-effort）：允许 pending/running→completed 及对已 completed
+	// 资源的幂等重写（如清除 warning）；cancelled/failed 终态不被覆盖，未命中
+	// 时良性返回 nil。
+	// 资源终态与轮次收敛放同一事务：两写间隙崩溃会留下 completed 资源名下
+	// 的非终态轮次行，而重置/恢复路径均不会碰 completed 资源的轮——该行
+	// 将成为永不执行的孤儿（已揭示 segment_total 使进度永久虚高）。
+	warning = strings.TrimSpace(warning)
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+	update := tx.JobResource.Update().
+		Where(
+			jobresource.IDEQ(jobResourceID),
+			jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning, JobResourceStatusCompleted),
+		).
 		SetStatus(JobResourceStatusCompleted).
 		SetOutputPath(strings.TrimSpace(outputPath)).
 		SetCompletedSegments(completedSegments).
 		SetSkippedSegments(skippedSegments).
 		ClearErrorMessage()
-	warning = strings.TrimSpace(warning)
 	if warning != "" {
-		update.SetWarningMessage(warning)
+		update = update.SetWarningMessage(warning)
 	} else {
-		update.ClearWarningMessage()
+		update = update.ClearWarningMessage()
 	}
-	if err := update.Exec(ctx); err != nil {
-		if ent.IsNotFound(err) {
-			return ErrJobResourceNotFound
-		}
+	n, err := update.Save(ctx)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return nil
+	}
+	// 收敛该资源的轮次矩阵：带 unresolved 的轮次行在 runner 成功分支保持
+	// running（交由重置路径续跑），若其工作已被后续同模式轮补齐/跳过而资源
+	// 正常收尾，残留 running 行将与资源终态矛盾（GetJob 矩阵展示、重置路径
+	// 误翻）。与资源终态同事务提交。
+	if _, err := tx.JobRound.Update().
+		Where(
+			jobround.HasJobResourceWith(jobresource.IDEQ(jobResourceID)),
+			jobround.StatusEQ(JobRoundStatusRunning),
+		).
+		SetStatus(JobRoundStatusCompleted).
+		SetFinishedAt(time.Now()).
+		Save(ctx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.publishEvent(jobID, "resource_completed", "info", "", fmt.Sprintf("资源处理完成 (%d 段)", completedSegments))
@@ -1023,13 +1386,17 @@ func (s *JobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResour
 	if failure != nil {
 		message = failure.Error()
 	}
-	if err := s.client.JobResource.UpdateOneID(jobResourceID).
+	// 条件更新（best-effort）：pending/running→failed，允许对已 failed 资源重写
+	// 错误信息；cancelled 终态不被覆盖，未命中时良性返回 nil。
+	_, err := s.client.JobResource.Update().
+		Where(
+			jobresource.IDEQ(jobResourceID),
+			jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning, JobResourceStatusFailed),
+		).
 		SetStatus(JobResourceStatusFailed).
 		SetErrorMessage(message).
-		Exec(ctx); err != nil {
-		if ent.IsNotFound(err) {
-			return ErrJobResourceNotFound
-		}
+		Save(ctx)
+	if err != nil {
 		return err
 	}
 	s.publishEvent(jobID, "resource_failed", "error", "", fmt.Sprintf("资源处理失败: %s", message))
@@ -1037,12 +1404,16 @@ func (s *JobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResour
 }
 
 func (s *JobService) MarkJobResourceCancelled(ctx context.Context, jobID, jobResourceID int) error {
-	if err := s.client.JobResource.UpdateOneID(jobResourceID).
+	// 条件更新（best-effort）：pending/running→cancelled；completed/failed 终态
+	// 不被覆盖，未命中时良性返回 nil。
+	_, err := s.client.JobResource.Update().
+		Where(
+			jobresource.IDEQ(jobResourceID),
+			jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning),
+		).
 		SetStatus(JobResourceStatusCancelled).
-		Exec(ctx); err != nil {
-		if ent.IsNotFound(err) {
-			return ErrJobResourceNotFound
-		}
+		Save(ctx)
+	if err != nil {
 		return err
 	}
 	s.publishEvent(jobID, "resource_cancelled", "info", "", "资源处理取消")
@@ -1054,8 +1425,8 @@ func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*en
 	if err != nil {
 		return nil, err
 	}
-	// 仅 pending/running 可取消；completed/failed/cancelled 为终态，取消会篡改状态。
-	if current.Status != JobStatusPending && current.Status != JobStatusRunning {
+	// 仅 pending/running/paused 可取消；completed/failed/cancelled 为终态，取消会篡改状态。
+	if current.Status != JobStatusPending && current.Status != JobStatusRunning && current.Status != JobStatusPaused {
 		return nil, ErrJobNotCancellable
 	}
 	if err := s.client.JobResource.Update().
@@ -1076,27 +1447,180 @@ func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*en
 	return s.GetJob(ctx, actorUserID, current.ID)
 }
 
+// PauseResult PauseJob 的结果。NeedsDrain=true 表示任务正在运行、状态未变：
+// 由 API 层通知 worker 优雅排空（在途 LLM 请求返回并持久化后，worker 调用
+// MarkJobPaused 落 paused 终态）。
+type PauseResult struct {
+	Job        *ent.Job
+	NeedsDrain bool
+}
+
+// PauseJob 优雅暂停任务。
+//   - pending：直接翻转 paused（未派发、无需排空），发布 job_paused 事件；
+//   - running：不改状态，返回 NeedsDrain=true 交由 worker 排空后落终态；
+//   - 终态（completed/failed/cancelled/paused）：ErrJobNotPausable。
+func (s *JobService) PauseJob(ctx context.Context, actorUserID, jobID int) (PauseResult, error) {
+	current, err := s.GetJob(ctx, actorUserID, jobID)
+	if err != nil {
+		return PauseResult{}, err
+	}
+	switch current.Status {
+	case JobStatusPending:
+		// 条件翻转：pending→paused；并发状态变化未命中时按不可暂停处理。
+		n, err := s.client.Job.Update().
+			Where(job.IDEQ(current.ID), job.StatusEQ(JobStatusPending)).
+			SetStatus(JobStatusPaused).
+			Save(ctx)
+		if err != nil {
+			return PauseResult{}, err
+		}
+		if n == 0 {
+			return PauseResult{}, ErrJobNotPausable
+		}
+		s.publishEvent(jobID, "job_paused", "info", "", "任务已暂停")
+		paused, err := s.GetJob(ctx, actorUserID, jobID)
+		if err != nil {
+			return PauseResult{}, err
+		}
+		return PauseResult{Job: paused}, nil
+	case JobStatusRunning:
+		// running 任务状态不变：worker 排空（在途请求返回并持久化）后调用
+		// MarkJobPaused 落 paused，前端经轮询/SSE job_paused 观察终态。
+		return PauseResult{Job: current, NeedsDrain: true}, nil
+	default:
+		// completed/failed/cancelled/paused 为不可暂停状态。
+		return PauseResult{}, ErrJobNotPausable
+	}
+}
+
+// MarkJobPaused 由 worker 在暂停排空后调用：条件翻转 running→paused 并发布
+// job_paused 事件。已被并发取消/暂停时未命中（0 行受影响），良性 no-op。
+func (s *JobService) MarkJobPaused(ctx context.Context, jobID int) error {
+	n, err := s.client.Job.Update().
+		Where(job.IDEQ(jobID), job.StatusEQ(JobStatusRunning)).
+		SetStatus(JobStatusPaused).
+		Save(ctx)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return nil
+	}
+	s.publishEvent(jobID, "job_paused", "info", "", "任务已暂停（已等待在途请求完成）")
+	return nil
+}
+
+// ResumeJob 从轮次断点恢复已暂停的任务：仅 paused 可恢复（否则
+// ErrJobNotResumable）。事务内批量条件重置——资源 running→pending、轮次
+// running→pending（保留 segment_total/segment_completed/resolved_segment_ids
+// 断点）——任务 paused→pending，随后从矩阵重算进度计数器（无条件求和）。
+// 重置绝不清理断点字段，保证恢复后从断点继续、求和保持正确。
+func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
+	current, err := s.GetJob(ctx, actorUserID, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if current.Status != JobStatusPaused {
+		return nil, ErrJobNotResumable
+	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if err := tx.JobResource.Update().
+		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusRunning)).
+		SetStatus(JobResourceStatusPending).
+		Exec(ctx); err != nil {
+		return nil, err
+	}
+	// 轮次行 failed|running|skipped→pending：仅翻状态，断点字段原样保留。
+	// skipped 是「当时无段可处理」的时点判断——暂停期间用户可经段落编辑
+	// API 把段置回 pending 使其失效，重置后空段检查自然重新判定；failed
+	// 来自 MarkJobRoundFailed 与 MarkJobResourceFailed 两写间隙的崩溃窗口
+	//（轮落 failed 而资源留 running），runner 重跑时本就会重新执行 failed
+	// 轮（只跳过 completed|skipped），重置集与其对齐避免矩阵永久失真。
+	// 按「将被重跑的资源」收窄：completed/failed/cancelled 资源的轮不重置
+	//（resume 只重新入队 pending/running 资源），避免制造永不执行的孤儿行。
+	if err := tx.JobRound.Update().
+		Where(
+			jobround.HasJobWith(job.IDEQ(current.ID)),
+			jobround.HasJobResourceWith(jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)),
+			jobround.StatusIn(JobRoundStatusFailed, JobRoundStatusRunning, JobRoundStatusSkipped),
+		).
+		SetStatus(JobRoundStatusPending).
+		Exec(ctx); err != nil {
+		return nil, err
+	}
+	// 最终翻转查受影响行数（与 PauseJob/MarkJobRunning 等其余状态转换一致）：
+	// GetJob 与事务之间任务被并发取消（paused 可取消）时 0 行命中，回滚并
+	// 拒绝——不发布恢复事件、不重新入队已取消任务。
+	n, err := tx.Job.Update().
+		Where(job.IDEQ(current.ID), job.StatusEQ(JobStatusPaused)).
+		SetStatus(JobStatusPending).
+		Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrJobNotResumable
+	}
+	if err := recomputeJobProgress(ctx, txProgressStore{tx}, current.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	committed = true
+	s.publishEvent(jobID, "job_resumed", "info", "", "任务已恢复")
+	return s.GetJob(ctx, actorUserID, jobID)
+}
+
 func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
 	current, err := s.GetJob(ctx, actorUserID, jobID)
 	if err != nil {
 		return nil, err
 	}
-	// 仅 failed 任务可重试；对 completed 任务重试会把它重新入队空耗 worker。
-	if current.Status != JobStatusFailed {
+	// failed/cancelled 任务可重试；对 completed 任务重试会把它重新入队空耗 worker。
+	if current.Status != JobStatusFailed && current.Status != JobStatusCancelled {
 		return nil, ErrJobNotRetryable
 	}
-	// 必须存在 failed 资源才有可重试的对象，从本次读取的资源实时计数。
-	failedResources := 0
+	// 必须存在 failed/cancelled 资源才有可重试的对象，从本次读取的资源实时计数。
+	retryableResources := 0
 	for _, item := range current.Edges.JobResources {
-		if item.Status == JobResourceStatusFailed {
-			failedResources++
+		if item.Status == JobResourceStatusFailed || item.Status == JobResourceStatusCancelled {
+			retryableResources++
 		}
 	}
-	if failedResources == 0 {
+	if retryableResources == 0 {
 		return nil, ErrJobNoFailedResource
 	}
+	// 轮次行 failed|running|skipped→pending（条件更新）：保留 segment_total/
+	// segment_completed/resolved_segment_ids 断点；completed 轮不动，重跑时
+	// 按断点跳过。running 轮来自有未解决段的轮次与取消打断（成功分支不置
+	// completed 保持 running）；skipped 是「当时无段可处理」的时点判断——
+	// 失败期间用户可经段落编辑 API 把段置回 pending 使其失效，重置后空段
+	// 检查会自然重新判定（无段则再次 skip，代价一次空扫描）。
+	// 按「将被重跑的资源」收窄：failed/cancelled 资源之外的轮次行（如
+	// completed 资源的轮）不重置，避免误翻造成矩阵与资源状态矛盾。
+	// 必须先于下方资源重置执行：过滤依赖重置前的 failed/cancelled 资源状态。
+	if err := s.client.JobRound.Update().
+		Where(
+			jobround.HasJobWith(job.IDEQ(current.ID)),
+			jobround.HasJobResourceWith(jobresource.StatusIn(JobResourceStatusFailed, JobResourceStatusCancelled)),
+			jobround.StatusIn(JobRoundStatusFailed, JobRoundStatusRunning, JobRoundStatusSkipped),
+		).
+		SetStatus(JobRoundStatusPending).
+		Exec(ctx); err != nil {
+		return nil, err
+	}
 	if err := s.client.JobResource.Update().
-		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusFailed)).
+		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusIn(JobResourceStatusFailed, JobResourceStatusCancelled)).
 		SetStatus(JobResourceStatusPending).
 		SetSkippedSegments(0).
 		ClearErrorMessage().
@@ -1107,12 +1631,15 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 	if err := s.client.Job.UpdateOneID(current.ID).
 		SetStatus(JobStatusPending).
 		SetFailedResources(0).
-		SetSkippedSegments(0).
 		ClearErrorMessage().
 		Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
 			return nil, ErrJobNotFound
 		}
+		return nil, err
+	}
+	// 从矩阵重算进度计数器（无条件求和）：reset 保留计数，求和天然一致。
+	if err := recomputeJobProgress(ctx, clientProgressStore{s.client}, current.ID); err != nil {
 		return nil, err
 	}
 	return s.GetJob(ctx, actorUserID, current.ID)
@@ -1129,15 +1656,15 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		}
 		return err
 	}
-	var pendingCount, runningCount, completed, failed, cancelled, completedSegments, skippedSegments int
-	var weightedTotal, weightedCompleted int
+	// paused 任务保持 paused：不覆盖派生状态、不发终态事件，但刷新计数器
+	//（暂停排空后资源/轮次已持久化，矩阵求和仍是最新的）。
+	if current.Status == JobStatusPaused {
+		return recomputeJobProgress(ctx, clientProgressStore{s.client}, jobID)
+	}
+	var pendingCount, runningCount, completed, failed, cancelled int
 	var firstFailure *string
 	// [DEBUG] 诊断：记录每个资源的状态
 	for _, item := range current.Edges.JobResources {
-		completedSegments += item.CompletedSegments
-		skippedSegments += item.SkippedSegments
-		weightedTotal += item.WeightedTotal
-		weightedCompleted += item.WeightedCompleted
 		slog.Debug("reconcile job resource status",
 			"job_id", jobID,
 			"resource_id", item.ID,
@@ -1172,8 +1699,12 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		"completed", completed,
 		"failed", failed,
 		"cancelled", cancelled,
-		"completed_segments", completedSegments,
 	)
+	// 进度计数器：矩阵无条件求和（派生缓存，核心不变式见 sumJobRoundProgress）。
+	progressTotal, progressCompleted, err := sumJobRoundProgress(ctx, clientProgressStore{s.client}, jobID)
+	if err != nil {
+		return err
+	}
 	status := deriveJobStatus(len(current.Edges.JobResources), pendingCount, runningCount, completed, failed, cancelled)
 	// [DEBUG] 诊断：记录最终决定的作业状态
 	slog.Debug("reconcile job derived status",
@@ -1188,10 +1719,8 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		SetResourceCount(len(current.Edges.JobResources)).
 		SetCompletedResources(completed).
 		SetFailedResources(failed).
-		SetCompletedSegments(completedSegments).
-		SetSkippedSegments(skippedSegments).
-		SetWeightedTotal(weightedTotal).
-		SetWeightedCompleted(weightedCompleted)
+		SetProgressTotal(progressTotal).
+		SetProgressCompleted(progressCompleted)
 	if firstFailure != nil && status == JobStatusFailed {
 		update.SetErrorMessage(*firstFailure)
 	} else {
@@ -1288,7 +1817,23 @@ func (s *JobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.J
 		WithProject().
 		WithCreatedBy().
 		WithJobResources(func(q *ent.JobResourceQuery) {
-			q.WithResource().Order(ent.Asc(jobresource.FieldID))
+			q.WithResource().WithRounds(func(rq *ent.JobRoundQuery) {
+				// 详情视图不消费断点 blob（jobRoundResponse 不含该字段），
+				// 投影排除 resolved_segment_ids——它是可增长到几十 KB/行的
+				// JSON 集合，本接口是前端轮询主路径，避免无谓读放大。
+				rq.Select(
+					jobround.FieldID,
+					jobround.FieldRoundIndex,
+					jobround.FieldMode,
+					jobround.FieldStatus,
+					jobround.FieldSegmentTotal,
+					jobround.FieldSegmentCompleted,
+					jobround.FieldErrorMessage,
+					jobround.FieldStartedAt,
+					jobround.FieldFinishedAt,
+				)
+				rq.Order(ent.Asc(jobround.FieldRoundIndex))
+			}).Order(ent.Asc(jobresource.FieldID))
 		}).
 		Only(ctx)
 	if err != nil {
