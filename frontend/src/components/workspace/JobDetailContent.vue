@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, h, onBeforeUnmount, ref } from 'vue'
-import { NAlert, NDataTable, NTag, NText } from 'naive-ui'
+import { NAlert, NDataTable, NTag, NText, NTooltip } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -11,6 +11,11 @@ import {
   getJobStatusLabel,
   getJobTriggerLabel,
   getStageLabel,
+  getResourceRound,
+  getResourceWorkTotals,
+  getRoundColumns,
+  getRoundError,
+  roundCellView,
   statusTagType,
 } from '@/composables/useWorkspaceUtils'
 
@@ -54,13 +59,103 @@ const warnedResources = computed(() =>
   (props.job.job_resources ?? []).filter((r) => !!r.warning_message?.trim()),
 )
 
-// 资源级进度数值：运行期优先 weighted_*（跨轮累加），回退去重 completed_segments/segment_count
-const getResourceCompleted = (row: JobResource): number => {
-  if (row.weighted_total != null && row.weighted_total > 0) {
-    return row.weighted_completed ?? 0
+// ── 轮次矩阵（资源×轮次）──
+
+/** 轮次列定义（跨资源按 round_index 求并集；同一任务共享同一轮次序列） */
+const roundColumnsDef = computed(() => getRoundColumns(props.job))
+
+/** 矩阵单元格：字形极简（✓ / x/y / · / ✗ / –），详情收进悬停 tooltip */
+const renderRoundCell = (row: JobResource, roundIndex: number, mode: string) => {
+  const round = getResourceRound(row, roundIndex)
+  if (!round) {
+    // 遗留终态任务（矩阵重构前创建）无轮次明细
+    return h(
+      NTooltip,
+      { trigger: 'hover', placement: 'top' },
+      {
+        trigger: () => h('span', { class: 'text-lf-text-subtle' }, '–'),
+        default: () => t('workspace.job.round.legacyHint'),
+      },
+    )
   }
-  return row.completed_segments
+
+  const view = roundCellView(round.status, round.segment_completed, round.segment_total)
+  const content = h(
+    'span',
+    { class: ['inline-flex items-center gap-1 whitespace-nowrap text-xs', view.class] },
+    [
+      ...(view.pulse
+        ? [
+            h('span', {
+              class: 'inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500',
+            }),
+          ]
+        : []),
+      view.text,
+    ],
+  )
+
+  const lines: string[] = [
+    t('workspace.job.round.roundLabel', { index: roundIndex + 1 }),
+    `${getStageLabel(mode)} · ${t(`workspace.job.round.status.${round.status}`)}`,
+  ]
+  if (round.status === 'skipped') {
+    lines.push(t('workspace.job.round.skippedHint'))
+  } else if (round.segment_total > 0) {
+    lines.push(
+      t('workspace.job.round.segments', {
+        completed: round.segment_completed,
+        total: round.segment_total,
+      }),
+    )
+  }
+  if (round.started_at) {
+    lines.push(t('workspace.job.round.startedAt', { time: formatDate(round.started_at) }))
+  }
+  if (round.finished_at) {
+    lines.push(t('workspace.job.round.finishedAt', { time: formatDate(round.finished_at) }))
+  }
+  if (round.error_message) {
+    lines.push(round.error_message)
+  }
+
+  return h(
+    NTooltip,
+    { trigger: 'hover', placement: 'top' },
+    {
+      trigger: () => content,
+      default: () =>
+        h(
+          'div',
+          { class: 'space-y-0.5' },
+          lines.map((line, idx) => h('div', { key: idx }, line)),
+        ),
+    },
+  )
 }
+
+const roundColumns = computed(() =>
+  roundColumnsDef.value.map((col) => ({
+    key: `round-${col.roundIndex}`,
+    width: 76,
+    align: 'center' as const,
+    title: () =>
+      h(
+        NTooltip,
+        { trigger: 'hover', placement: 'top' },
+        {
+          trigger: () =>
+            h(
+              'span',
+              { class: 'cursor-help text-xs font-medium text-lf-text-muted' },
+              getStageLabel(col.mode),
+            ),
+          default: () => t('workspace.job.round.roundLabel', { index: col.roundIndex + 1 }),
+        },
+      ),
+    render: (row: JobResource) => renderRoundCell(row, col.roundIndex, col.mode),
+  })),
+)
 
 const resourceColumns = computed(() => {
   const base = [
@@ -93,50 +188,25 @@ const resourceColumns = computed(() => {
 
   return [
     ...base,
+    ...roundColumns.value,
     {
-      title: t('workspace.job.columns.stage'),
-      key: 'stage',
-      width: 120,
-      render: (row: JobResource) => {
-        if (!row.current_stage) return h(NText, { depth: 3 }, { default: () => '-' })
-        const label = getStageLabel(row.current_stage)
-        if (row.stage_total) {
-          return h('div', { class: 'flex items-center gap-1.5' }, [
-            h(
-              NTag,
-              { size: 'tiny', round: true, bordered: false, type: 'info' },
-              { default: () => label },
-            ),
-            h(
-              'span',
-              { class: 'text-xs text-lf-text-muted font-mono tabular-nums' },
-              {
-                default: () => `${row.stage_completed ?? 0}/${row.stage_total}`,
-              },
-            ),
-          ])
-        }
-        return label
-      },
-    },
-    {
-      title: t('workspace.job.columns.segments'),
-      key: 'segments',
-      width: 120,
+      title: t('workspace.job.columns.workload'),
+      key: 'workload',
+      width: 110,
       render: (row: JobResource) => {
         const skipped = row.skipped_segments ?? 0
-        const completed = getResourceCompleted(row)
+        const { completed, total } = getResourceWorkTotals(row)
         if (skipped > 0) {
           return h('span', { class: 'font-mono tabular-nums whitespace-nowrap text-xs' }, [
             h('span', { class: 'text-lf-text-strong' }, `${completed}`),
             h('span', { class: 'text-lf-text-muted' }, ` +${skipped} `),
-            h('span', { class: 'text-lf-text-muted' }, `/ ${row.segment_count}`),
+            h('span', { class: 'text-lf-text-muted' }, `/ ${total}`),
           ])
         }
         return h(
           'span',
           { class: 'font-mono tabular-nums whitespace-nowrap text-xs' },
-          { default: () => `${completed}/${row.segment_count}` },
+          { default: () => `${completed}/${total}` },
         )
       },
     },
@@ -156,11 +226,19 @@ const resourceColumns = computed(() => {
             { default: () => row.warning_message },
           )
         }
+        // 资源自身无错误时回退最近失败轮次的错误信息
+        const roundError = getRoundError(row)
+        if (roundError) {
+          return h('span', { class: 'text-xs text-red-500' }, { default: () => roundError })
+        }
         return h(NText, { depth: 3 }, { default: () => '-' })
       },
     },
   ]
 })
+
+// 桌面端横向滚动宽度：名称 + 状态 + 轮次列 + 工作量 + 备注
+const tableScrollX = computed(() => 200 + 80 + roundColumnsDef.value.length * 76 + 110 + 160)
 </script>
 
 <template>
@@ -247,7 +325,7 @@ const resourceColumns = computed(() => {
         :data="job.job_resources ?? []"
         :columns="resourceColumns"
         :row-key="(row: JobResource) => row.id"
-        :scroll-x="isMobile ? undefined : 720"
+        :scroll-x="isMobile ? undefined : tableScrollX"
       />
     </div>
 

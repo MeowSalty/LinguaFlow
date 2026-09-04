@@ -682,6 +682,8 @@ onMounted(() => {
               @detail="(job) => jobMgmt.openJobDetail(job)"
               @cancel="(job) => jobMgmt.cancelJob(job)"
               @retry="(job) => jobMgmt.retryJob(job)"
+              @pause="(job) => jobMgmt.pauseJob(job)"
+              @resume="(job) => jobMgmt.resumeJob(job)"
             />
           </div>
         </NTabPane>
