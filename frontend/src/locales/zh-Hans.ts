@@ -884,12 +884,10 @@ const messages = {
         progress: '进度',
         executionPlan: '执行计划',
         resources: '资源',
-        segments: '段落',
-        skipped: '跳过',
+        workload: '工作量',
         trigger: '触发方式',
         error: '错误信息',
         remark: '备注',
-        stage: '阶段',
         startedAt: '开始时间',
       },
       warnings: {
@@ -918,25 +916,42 @@ const messages = {
       validation: {
         executionPlanRequired: '请选择执行计划模板',
       },
-      // 阶段名称
+      // 阶段名称（轮次模式标签）
       stage: {
         bootstrap: '术语提取',
         extract: '术语提取',
         translate: '翻译',
         adjudicate: '质量裁决',
         semantic_qa: '语义质检',
+        revise: 'LLM 修订',
         correct: '本地改写',
         review: '审校',
         finalize: '收尾',
         ruby_alignment: '注音对齐',
+      },
+      // 轮次矩阵（资源×轮次）单元格与提示
+      round: {
+        roundLabel: '轮次 {index}',
+        status: {
+          pending: '待执行',
+          running: '执行中',
+          completed: '已完成',
+          failed: '失败',
+          skipped: '已跳过',
+        },
+        segments: '{completed}/{total} 段',
+        startedAt: '开始 {time}',
+        finishedAt: '结束 {time}',
+        legacyHint: '旧版任务无轮次明细',
+        skippedHint: '本轮无段可处理',
       },
       // 进度文案
       progress: {
         waiting: '等待中...',
         startingSoon: '即将开始',
         queued: '排队中，前面有 {ahead} 个任务',
-        running: '{stage}{completed}/{total} 段落',
-        runningWithSkipped: '{stage}{completed}/{total} 段落（跳过 {skipped}）',
+        running: '已完成 {completed}/{total} 工作量',
+        percentTooltip: '百分比为已知工作量占比；新轮次启动时分母增大，进度可能暂时回落',
         completed: '翻译完成',
         failed: '翻译失败',
         cancelled: '已取消',
@@ -960,6 +975,9 @@ const messages = {
         failed: '已失败',
         warned: '有警告',
         total: '总计',
+        unitWorkload: '段×轮',
+        unitSegments: '段落',
+        unitResources: '资源',
       },
       // 事件日志
       events: {

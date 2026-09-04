@@ -108,20 +108,12 @@ export function useJobColumns(actions: JobColumnActions) {
       render: (row) => `${row.progress.completed_resources}/${row.progress.total_resources}`,
     },
     {
-      title: t('workspace.job.columns.segments'),
-      key: 'total_segments',
-      width: 130,
+      title: t('workspace.job.columns.workload'),
+      key: 'workload',
+      width: 110,
       render: (row) => {
-        const skipped = row.progress.skipped_segments
-        const { completed } = getJobProgressNumbers(row)
-        if (skipped > 0) {
-          return h('span', { class: 'text-xs' }, [
-            h('span', {}, `${completed}`),
-            h('span', { class: 'text-lf-text-muted' }, ` +${skipped} `),
-            h('span', { class: 'text-lf-text-muted' }, `/ ${row.progress.total_segments}`),
-          ])
-        }
-        return `${completed}/${row.progress.total_segments}`
+        const { completed, total } = getJobProgressNumbers(row)
+        return `${completed}/${total}`
       },
     },
     {
