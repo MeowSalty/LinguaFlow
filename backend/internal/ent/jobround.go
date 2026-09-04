@@ -3,7 +3,6 @@
 package ent
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -36,10 +35,8 @@ type JobRound struct {
 	Status string `json:"status,omitempty"`
 	// 本轮实际处理的段落数（首次 StageStart 写入；恢复不重设）
 	SegmentTotal int `json:"segment_total,omitempty"`
-	// 本轮已完成段落数（恢复时保留已 flush 值继续累加）
+	// 本轮已完成段落数（≡ 该轮 job_round_segments 关联基数；由 progress.DBReporter 独占写入——绝对值、幂等、单调；终态闭合不改写本列，闭合口径在读侧按状态派生）
 	SegmentCompleted int `json:"segment_completed,omitempty"`
-	// 非翻译轮断点集合（DB Segment ID）；translate 轮恒为空，由 Segment.status 驱动增量
-	ResolvedSegmentIds []int `json:"resolved_segment_ids,omitempty"`
 	// 轮次级错误信息
 	ErrorMessage *string `json:"error_message,omitempty"`
 	// 轮次开始执行的时间
@@ -58,9 +55,13 @@ type JobRoundEdges struct {
 	Job *Job `json:"job,omitempty"`
 	// JobResource holds the value of the job_resource edge.
 	JobResource *JobResource `json:"job_resource,omitempty"`
+	// ResolvedSegments holds the value of the resolved_segments edge.
+	ResolvedSegments []*Segment `json:"resolved_segments,omitempty"`
+	// JobRoundSegments holds the value of the job_round_segments edge.
+	JobRoundSegments []*JobRoundSegment `json:"job_round_segments,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [4]bool
 }
 
 // JobOrErr returns the Job value or an error if the edge
@@ -85,13 +86,29 @@ func (e JobRoundEdges) JobResourceOrErr() (*JobResource, error) {
 	return nil, &NotLoadedError{edge: "job_resource"}
 }
 
+// ResolvedSegmentsOrErr returns the ResolvedSegments value or an error if the edge
+// was not loaded in eager-loading.
+func (e JobRoundEdges) ResolvedSegmentsOrErr() ([]*Segment, error) {
+	if e.loadedTypes[2] {
+		return e.ResolvedSegments, nil
+	}
+	return nil, &NotLoadedError{edge: "resolved_segments"}
+}
+
+// JobRoundSegmentsOrErr returns the JobRoundSegments value or an error if the edge
+// was not loaded in eager-loading.
+func (e JobRoundEdges) JobRoundSegmentsOrErr() ([]*JobRoundSegment, error) {
+	if e.loadedTypes[3] {
+		return e.JobRoundSegments, nil
+	}
+	return nil, &NotLoadedError{edge: "job_round_segments"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*JobRound) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case jobround.FieldResolvedSegmentIds:
-			values[i] = new([]byte)
 		case jobround.FieldID, jobround.FieldJobID, jobround.FieldJobResourceID, jobround.FieldRoundIndex, jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted:
 			values[i] = new(sql.NullInt64)
 		case jobround.FieldMode, jobround.FieldStatus, jobround.FieldErrorMessage:
@@ -173,14 +190,6 @@ func (_m *JobRound) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.SegmentCompleted = int(value.Int64)
 			}
-		case jobround.FieldResolvedSegmentIds:
-			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field resolved_segment_ids", values[i])
-			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.ResolvedSegmentIds); err != nil {
-					return fmt.Errorf("unmarshal field resolved_segment_ids: %w", err)
-				}
-			}
 		case jobround.FieldErrorMessage:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field error_message", values[i])
@@ -223,6 +232,16 @@ func (_m *JobRound) QueryJob() *JobQuery {
 // QueryJobResource queries the "job_resource" edge of the JobRound entity.
 func (_m *JobRound) QueryJobResource() *JobResourceQuery {
 	return NewJobRoundClient(_m.config).QueryJobResource(_m)
+}
+
+// QueryResolvedSegments queries the "resolved_segments" edge of the JobRound entity.
+func (_m *JobRound) QueryResolvedSegments() *SegmentQuery {
+	return NewJobRoundClient(_m.config).QueryResolvedSegments(_m)
+}
+
+// QueryJobRoundSegments queries the "job_round_segments" edge of the JobRound entity.
+func (_m *JobRound) QueryJobRoundSegments() *JobRoundSegmentQuery {
+	return NewJobRoundClient(_m.config).QueryJobRoundSegments(_m)
 }
 
 // Update returns a builder for updating this JobRound.
@@ -274,9 +293,6 @@ func (_m *JobRound) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("segment_completed=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SegmentCompleted))
-	builder.WriteString(", ")
-	builder.WriteString("resolved_segment_ids=")
-	builder.WriteString(fmt.Sprintf("%v", _m.ResolvedSegmentIds))
 	builder.WriteString(", ")
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")

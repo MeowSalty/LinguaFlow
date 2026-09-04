@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -421,10 +422,16 @@ func init() {
 	jobround.DefaultSegmentCompleted = jobroundDescSegmentCompleted.Default.(int)
 	// jobround.SegmentCompletedValidator is a validator for the "segment_completed" field. It is called by the builders before save.
 	jobround.SegmentCompletedValidator = jobroundDescSegmentCompleted.Validators[0].(func(int) error)
-	// jobroundDescResolvedSegmentIds is the schema descriptor for resolved_segment_ids field.
-	jobroundDescResolvedSegmentIds := jobroundFields[7].Descriptor()
-	// jobround.DefaultResolvedSegmentIds holds the default value on creation for the resolved_segment_ids field.
-	jobround.DefaultResolvedSegmentIds = jobroundDescResolvedSegmentIds.Default.(func() []int)
+	jobroundsegmentFields := schema.JobRoundSegment{}.Fields()
+	_ = jobroundsegmentFields
+	// jobroundsegmentDescJobRoundID is the schema descriptor for job_round_id field.
+	jobroundsegmentDescJobRoundID := jobroundsegmentFields[0].Descriptor()
+	// jobroundsegment.JobRoundIDValidator is a validator for the "job_round_id" field. It is called by the builders before save.
+	jobroundsegment.JobRoundIDValidator = jobroundsegmentDescJobRoundID.Validators[0].(func(int) error)
+	// jobroundsegmentDescSegmentID is the schema descriptor for segment_id field.
+	jobroundsegmentDescSegmentID := jobroundsegmentFields[1].Descriptor()
+	// jobroundsegment.SegmentIDValidator is a validator for the "segment_id" field. It is called by the builders before save.
+	jobroundsegment.SegmentIDValidator = jobroundsegmentDescSegmentID.Validators[0].(func(int) error)
 	orgmembershipMixin := schema.OrgMembership{}.Mixin()
 	orgmembershipMixinFields0 := orgmembershipMixin[0].Fields()
 	_ = orgmembershipMixinFields0

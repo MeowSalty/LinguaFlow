@@ -706,6 +706,52 @@ func HasJobResourceWith(preds ...predicate.JobResource) predicate.JobRound {
 	})
 }
 
+// HasResolvedSegments applies the HasEdge predicate on the "resolved_segments" edge.
+func HasResolvedSegments() predicate.JobRound {
+	return predicate.JobRound(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, ResolvedSegmentsTable, ResolvedSegmentsPrimaryKey...),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasResolvedSegmentsWith applies the HasEdge predicate on the "resolved_segments" edge with a given conditions (other predicates).
+func HasResolvedSegmentsWith(preds ...predicate.Segment) predicate.JobRound {
+	return predicate.JobRound(func(s *sql.Selector) {
+		step := newResolvedSegmentsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasJobRoundSegments applies the HasEdge predicate on the "job_round_segments" edge.
+func HasJobRoundSegments() predicate.JobRound {
+	return predicate.JobRound(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, JobRoundSegmentsTable, JobRoundSegmentsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasJobRoundSegmentsWith applies the HasEdge predicate on the "job_round_segments" edge with a given conditions (other predicates).
+func HasJobRoundSegmentsWith(preds ...predicate.JobRoundSegment) predicate.JobRound {
+	return predicate.JobRound(func(s *sql.Selector) {
+		step := newJobRoundSegmentsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.JobRound) predicate.JobRound {
 	return predicate.JobRound(sql.AndPredicates(predicates...))

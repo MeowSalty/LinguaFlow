@@ -611,6 +611,29 @@ func HasReviewedByWith(preds ...predicate.User) predicate.Segment {
 	})
 }
 
+// HasResolvedInRounds applies the HasEdge predicate on the "resolved_in_rounds" edge.
+func HasResolvedInRounds() predicate.Segment {
+	return predicate.Segment(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, ResolvedInRoundsTable, ResolvedInRoundsPrimaryKey...),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasResolvedInRoundsWith applies the HasEdge predicate on the "resolved_in_rounds" edge with a given conditions (other predicates).
+func HasResolvedInRoundsWith(preds ...predicate.JobRound) predicate.Segment {
+	return predicate.Segment(func(s *sql.Selector) {
+		step := newResolvedInRoundsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Segment) predicate.Segment {
 	return predicate.Segment(sql.AndPredicates(predicates...))

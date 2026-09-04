@@ -13,6 +13,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 )
 
 // JobRoundCreate is the builder for creating a JobRound entity.
@@ -116,12 +118,6 @@ func (_c *JobRoundCreate) SetNillableSegmentCompleted(v *int) *JobRoundCreate {
 	return _c
 }
 
-// SetResolvedSegmentIds sets the "resolved_segment_ids" field.
-func (_c *JobRoundCreate) SetResolvedSegmentIds(v []int) *JobRoundCreate {
-	_c.mutation.SetResolvedSegmentIds(v)
-	return _c
-}
-
 // SetErrorMessage sets the "error_message" field.
 func (_c *JobRoundCreate) SetErrorMessage(v string) *JobRoundCreate {
 	_c.mutation.SetErrorMessage(v)
@@ -172,6 +168,36 @@ func (_c *JobRoundCreate) SetJob(v *Job) *JobRoundCreate {
 // SetJobResource sets the "job_resource" edge to the JobResource entity.
 func (_c *JobRoundCreate) SetJobResource(v *JobResource) *JobRoundCreate {
 	return _c.SetJobResourceID(v.ID)
+}
+
+// AddResolvedSegmentIDs adds the "resolved_segments" edge to the Segment entity by IDs.
+func (_c *JobRoundCreate) AddResolvedSegmentIDs(ids ...int) *JobRoundCreate {
+	_c.mutation.AddResolvedSegmentIDs(ids...)
+	return _c
+}
+
+// AddResolvedSegments adds the "resolved_segments" edges to the Segment entity.
+func (_c *JobRoundCreate) AddResolvedSegments(v ...*Segment) *JobRoundCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddResolvedSegmentIDs(ids...)
+}
+
+// AddJobRoundSegmentIDs adds the "job_round_segments" edge to the JobRoundSegment entity by IDs.
+func (_c *JobRoundCreate) AddJobRoundSegmentIDs(ids ...int) *JobRoundCreate {
+	_c.mutation.AddJobRoundSegmentIDs(ids...)
+	return _c
+}
+
+// AddJobRoundSegments adds the "job_round_segments" edges to the JobRoundSegment entity.
+func (_c *JobRoundCreate) AddJobRoundSegments(v ...*JobRoundSegment) *JobRoundCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddJobRoundSegmentIDs(ids...)
 }
 
 // Mutation returns the JobRoundMutation object of the builder.
@@ -229,10 +255,6 @@ func (_c *JobRoundCreate) defaults() {
 		v := jobround.DefaultSegmentCompleted
 		_c.mutation.SetSegmentCompleted(v)
 	}
-	if _, ok := _c.mutation.ResolvedSegmentIds(); !ok {
-		v := jobround.DefaultResolvedSegmentIds()
-		_c.mutation.SetResolvedSegmentIds(v)
-	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -288,9 +310,6 @@ func (_c *JobRoundCreate) check() error {
 		if err := jobround.SegmentCompletedValidator(v); err != nil {
 			return &ValidationError{Name: "segment_completed", err: fmt.Errorf(`ent: validator failed for field "JobRound.segment_completed": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.ResolvedSegmentIds(); !ok {
-		return &ValidationError{Name: "resolved_segment_ids", err: errors.New(`ent: missing required field "JobRound.resolved_segment_ids"`)}
 	}
 	if len(_c.mutation.JobIDs()) == 0 {
 		return &ValidationError{Name: "job", err: errors.New(`ent: missing required edge "JobRound.job"`)}
@@ -352,10 +371,6 @@ func (_c *JobRoundCreate) createSpec() (*JobRound, *sqlgraph.CreateSpec) {
 		_spec.SetField(jobround.FieldSegmentCompleted, field.TypeInt, value)
 		_node.SegmentCompleted = value
 	}
-	if value, ok := _c.mutation.ResolvedSegmentIds(); ok {
-		_spec.SetField(jobround.FieldResolvedSegmentIds, field.TypeJSON, value)
-		_node.ResolvedSegmentIds = value
-	}
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(jobround.FieldErrorMessage, field.TypeString, value)
 		_node.ErrorMessage = &value
@@ -400,6 +415,38 @@ func (_c *JobRoundCreate) createSpec() (*JobRound, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.JobResourceID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ResolvedSegmentsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   jobround.ResolvedSegmentsTable,
+			Columns: jobround.ResolvedSegmentsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(segment.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.JobRoundSegmentsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: true,
+			Table:   jobround.JobRoundSegmentsTable,
+			Columns: []string{jobround.JobRoundSegmentsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobroundsegment.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

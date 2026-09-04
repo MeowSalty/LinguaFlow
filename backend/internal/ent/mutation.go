@@ -20,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
@@ -58,6 +59,7 @@ const (
 	TypeJob                       = "Job"
 	TypeJobResource               = "JobResource"
 	TypeJobRound                  = "JobRound"
+	TypeJobRoundSegment           = "JobRoundSegment"
 	TypeOrgMembership             = "OrgMembership"
 	TypeOrganization              = "Organization"
 	TypeProject                   = "Project"
@@ -8617,32 +8619,36 @@ func (m *JobResourceMutation) ResetEdge(name string) error {
 // JobRoundMutation represents an operation that mutates the JobRound nodes in the graph.
 type JobRoundMutation struct {
 	config
-	op                         Op
-	typ                        string
-	id                         *int
-	created_at                 *time.Time
-	updated_at                 *time.Time
-	round_index                *int
-	addround_index             *int
-	mode                       *string
-	status                     *string
-	segment_total              *int
-	addsegment_total           *int
-	segment_completed          *int
-	addsegment_completed       *int
-	resolved_segment_ids       *[]int
-	appendresolved_segment_ids []int
-	error_message              *string
-	started_at                 *time.Time
-	finished_at                *time.Time
-	clearedFields              map[string]struct{}
-	job                        *int
-	clearedjob                 bool
-	job_resource               *int
-	clearedjob_resource        bool
-	done                       bool
-	oldValue                   func(context.Context) (*JobRound, error)
-	predicates                 []predicate.JobRound
+	op                        Op
+	typ                       string
+	id                        *int
+	created_at                *time.Time
+	updated_at                *time.Time
+	round_index               *int
+	addround_index            *int
+	mode                      *string
+	status                    *string
+	segment_total             *int
+	addsegment_total          *int
+	segment_completed         *int
+	addsegment_completed      *int
+	error_message             *string
+	started_at                *time.Time
+	finished_at               *time.Time
+	clearedFields             map[string]struct{}
+	job                       *int
+	clearedjob                bool
+	job_resource              *int
+	clearedjob_resource       bool
+	resolved_segments         map[int]struct{}
+	removedresolved_segments  map[int]struct{}
+	clearedresolved_segments  bool
+	job_round_segments        map[int]struct{}
+	removedjob_round_segments map[int]struct{}
+	clearedjob_round_segments bool
+	done                      bool
+	oldValue                  func(context.Context) (*JobRound, error)
+	predicates                []predicate.JobRound
 }
 
 var _ ent.Mutation = (*JobRoundMutation)(nil)
@@ -9127,57 +9133,6 @@ func (m *JobRoundMutation) ResetSegmentCompleted() {
 	m.addsegment_completed = nil
 }
 
-// SetResolvedSegmentIds sets the "resolved_segment_ids" field.
-func (m *JobRoundMutation) SetResolvedSegmentIds(i []int) {
-	m.resolved_segment_ids = &i
-	m.appendresolved_segment_ids = nil
-}
-
-// ResolvedSegmentIds returns the value of the "resolved_segment_ids" field in the mutation.
-func (m *JobRoundMutation) ResolvedSegmentIds() (r []int, exists bool) {
-	v := m.resolved_segment_ids
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldResolvedSegmentIds returns the old "resolved_segment_ids" field's value of the JobRound entity.
-// If the JobRound object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobRoundMutation) OldResolvedSegmentIds(ctx context.Context) (v []int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldResolvedSegmentIds is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldResolvedSegmentIds requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldResolvedSegmentIds: %w", err)
-	}
-	return oldValue.ResolvedSegmentIds, nil
-}
-
-// AppendResolvedSegmentIds adds i to the "resolved_segment_ids" field.
-func (m *JobRoundMutation) AppendResolvedSegmentIds(i []int) {
-	m.appendresolved_segment_ids = append(m.appendresolved_segment_ids, i...)
-}
-
-// AppendedResolvedSegmentIds returns the list of values that were appended to the "resolved_segment_ids" field in this mutation.
-func (m *JobRoundMutation) AppendedResolvedSegmentIds() ([]int, bool) {
-	if len(m.appendresolved_segment_ids) == 0 {
-		return nil, false
-	}
-	return m.appendresolved_segment_ids, true
-}
-
-// ResetResolvedSegmentIds resets all changes to the "resolved_segment_ids" field.
-func (m *JobRoundMutation) ResetResolvedSegmentIds() {
-	m.resolved_segment_ids = nil
-	m.appendresolved_segment_ids = nil
-}
-
 // SetErrorMessage sets the "error_message" field.
 func (m *JobRoundMutation) SetErrorMessage(s string) {
 	m.error_message = &s
@@ -9379,6 +9334,114 @@ func (m *JobRoundMutation) ResetJobResource() {
 	m.clearedjob_resource = false
 }
 
+// AddResolvedSegmentIDs adds the "resolved_segments" edge to the Segment entity by ids.
+func (m *JobRoundMutation) AddResolvedSegmentIDs(ids ...int) {
+	if m.resolved_segments == nil {
+		m.resolved_segments = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.resolved_segments[ids[i]] = struct{}{}
+	}
+}
+
+// ClearResolvedSegments clears the "resolved_segments" edge to the Segment entity.
+func (m *JobRoundMutation) ClearResolvedSegments() {
+	m.clearedresolved_segments = true
+}
+
+// ResolvedSegmentsCleared reports if the "resolved_segments" edge to the Segment entity was cleared.
+func (m *JobRoundMutation) ResolvedSegmentsCleared() bool {
+	return m.clearedresolved_segments
+}
+
+// RemoveResolvedSegmentIDs removes the "resolved_segments" edge to the Segment entity by IDs.
+func (m *JobRoundMutation) RemoveResolvedSegmentIDs(ids ...int) {
+	if m.removedresolved_segments == nil {
+		m.removedresolved_segments = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.resolved_segments, ids[i])
+		m.removedresolved_segments[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedResolvedSegments returns the removed IDs of the "resolved_segments" edge to the Segment entity.
+func (m *JobRoundMutation) RemovedResolvedSegmentsIDs() (ids []int) {
+	for id := range m.removedresolved_segments {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResolvedSegmentsIDs returns the "resolved_segments" edge IDs in the mutation.
+func (m *JobRoundMutation) ResolvedSegmentsIDs() (ids []int) {
+	for id := range m.resolved_segments {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetResolvedSegments resets all changes to the "resolved_segments" edge.
+func (m *JobRoundMutation) ResetResolvedSegments() {
+	m.resolved_segments = nil
+	m.clearedresolved_segments = false
+	m.removedresolved_segments = nil
+}
+
+// AddJobRoundSegmentIDs adds the "job_round_segments" edge to the JobRoundSegment entity by ids.
+func (m *JobRoundMutation) AddJobRoundSegmentIDs(ids ...int) {
+	if m.job_round_segments == nil {
+		m.job_round_segments = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.job_round_segments[ids[i]] = struct{}{}
+	}
+}
+
+// ClearJobRoundSegments clears the "job_round_segments" edge to the JobRoundSegment entity.
+func (m *JobRoundMutation) ClearJobRoundSegments() {
+	m.clearedjob_round_segments = true
+}
+
+// JobRoundSegmentsCleared reports if the "job_round_segments" edge to the JobRoundSegment entity was cleared.
+func (m *JobRoundMutation) JobRoundSegmentsCleared() bool {
+	return m.clearedjob_round_segments
+}
+
+// RemoveJobRoundSegmentIDs removes the "job_round_segments" edge to the JobRoundSegment entity by IDs.
+func (m *JobRoundMutation) RemoveJobRoundSegmentIDs(ids ...int) {
+	if m.removedjob_round_segments == nil {
+		m.removedjob_round_segments = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.job_round_segments, ids[i])
+		m.removedjob_round_segments[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedJobRoundSegments returns the removed IDs of the "job_round_segments" edge to the JobRoundSegment entity.
+func (m *JobRoundMutation) RemovedJobRoundSegmentsIDs() (ids []int) {
+	for id := range m.removedjob_round_segments {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// JobRoundSegmentsIDs returns the "job_round_segments" edge IDs in the mutation.
+func (m *JobRoundMutation) JobRoundSegmentsIDs() (ids []int) {
+	for id := range m.job_round_segments {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetJobRoundSegments resets all changes to the "job_round_segments" edge.
+func (m *JobRoundMutation) ResetJobRoundSegments() {
+	m.job_round_segments = nil
+	m.clearedjob_round_segments = false
+	m.removedjob_round_segments = nil
+}
+
 // Where appends a list predicates to the JobRoundMutation builder.
 func (m *JobRoundMutation) Where(ps ...predicate.JobRound) {
 	m.predicates = append(m.predicates, ps...)
@@ -9413,7 +9476,7 @@ func (m *JobRoundMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *JobRoundMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 12)
 	if m.created_at != nil {
 		fields = append(fields, jobround.FieldCreatedAt)
 	}
@@ -9440,9 +9503,6 @@ func (m *JobRoundMutation) Fields() []string {
 	}
 	if m.segment_completed != nil {
 		fields = append(fields, jobround.FieldSegmentCompleted)
-	}
-	if m.resolved_segment_ids != nil {
-		fields = append(fields, jobround.FieldResolvedSegmentIds)
 	}
 	if m.error_message != nil {
 		fields = append(fields, jobround.FieldErrorMessage)
@@ -9479,8 +9539,6 @@ func (m *JobRoundMutation) Field(name string) (ent.Value, bool) {
 		return m.SegmentTotal()
 	case jobround.FieldSegmentCompleted:
 		return m.SegmentCompleted()
-	case jobround.FieldResolvedSegmentIds:
-		return m.ResolvedSegmentIds()
 	case jobround.FieldErrorMessage:
 		return m.ErrorMessage()
 	case jobround.FieldStartedAt:
@@ -9514,8 +9572,6 @@ func (m *JobRoundMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldSegmentTotal(ctx)
 	case jobround.FieldSegmentCompleted:
 		return m.OldSegmentCompleted(ctx)
-	case jobround.FieldResolvedSegmentIds:
-		return m.OldResolvedSegmentIds(ctx)
 	case jobround.FieldErrorMessage:
 		return m.OldErrorMessage(ctx)
 	case jobround.FieldStartedAt:
@@ -9593,13 +9649,6 @@ func (m *JobRoundMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSegmentCompleted(v)
-		return nil
-	case jobround.FieldResolvedSegmentIds:
-		v, ok := value.([]int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetResolvedSegmentIds(v)
 		return nil
 	case jobround.FieldErrorMessage:
 		v, ok := value.(string)
@@ -9758,9 +9807,6 @@ func (m *JobRoundMutation) ResetField(name string) error {
 	case jobround.FieldSegmentCompleted:
 		m.ResetSegmentCompleted()
 		return nil
-	case jobround.FieldResolvedSegmentIds:
-		m.ResetResolvedSegmentIds()
-		return nil
 	case jobround.FieldErrorMessage:
 		m.ResetErrorMessage()
 		return nil
@@ -9776,12 +9822,18 @@ func (m *JobRoundMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *JobRoundMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 4)
 	if m.job != nil {
 		edges = append(edges, jobround.EdgeJob)
 	}
 	if m.job_resource != nil {
 		edges = append(edges, jobround.EdgeJobResource)
+	}
+	if m.resolved_segments != nil {
+		edges = append(edges, jobround.EdgeResolvedSegments)
+	}
+	if m.job_round_segments != nil {
+		edges = append(edges, jobround.EdgeJobRoundSegments)
 	}
 	return edges
 }
@@ -9798,30 +9850,68 @@ func (m *JobRoundMutation) AddedIDs(name string) []ent.Value {
 		if id := m.job_resource; id != nil {
 			return []ent.Value{*id}
 		}
+	case jobround.EdgeResolvedSegments:
+		ids := make([]ent.Value, 0, len(m.resolved_segments))
+		for id := range m.resolved_segments {
+			ids = append(ids, id)
+		}
+		return ids
+	case jobround.EdgeJobRoundSegments:
+		ids := make([]ent.Value, 0, len(m.job_round_segments))
+		for id := range m.job_round_segments {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *JobRoundMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 4)
+	if m.removedresolved_segments != nil {
+		edges = append(edges, jobround.EdgeResolvedSegments)
+	}
+	if m.removedjob_round_segments != nil {
+		edges = append(edges, jobround.EdgeJobRoundSegments)
+	}
 	return edges
 }
 
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
 func (m *JobRoundMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case jobround.EdgeResolvedSegments:
+		ids := make([]ent.Value, 0, len(m.removedresolved_segments))
+		for id := range m.removedresolved_segments {
+			ids = append(ids, id)
+		}
+		return ids
+	case jobround.EdgeJobRoundSegments:
+		ids := make([]ent.Value, 0, len(m.removedjob_round_segments))
+		for id := range m.removedjob_round_segments {
+			ids = append(ids, id)
+		}
+		return ids
+	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *JobRoundMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 4)
 	if m.clearedjob {
 		edges = append(edges, jobround.EdgeJob)
 	}
 	if m.clearedjob_resource {
 		edges = append(edges, jobround.EdgeJobResource)
+	}
+	if m.clearedresolved_segments {
+		edges = append(edges, jobround.EdgeResolvedSegments)
+	}
+	if m.clearedjob_round_segments {
+		edges = append(edges, jobround.EdgeJobRoundSegments)
 	}
 	return edges
 }
@@ -9834,6 +9924,10 @@ func (m *JobRoundMutation) EdgeCleared(name string) bool {
 		return m.clearedjob
 	case jobround.EdgeJobResource:
 		return m.clearedjob_resource
+	case jobround.EdgeResolvedSegments:
+		return m.clearedresolved_segments
+	case jobround.EdgeJobRoundSegments:
+		return m.clearedjob_round_segments
 	}
 	return false
 }
@@ -9862,8 +9956,497 @@ func (m *JobRoundMutation) ResetEdge(name string) error {
 	case jobround.EdgeJobResource:
 		m.ResetJobResource()
 		return nil
+	case jobround.EdgeResolvedSegments:
+		m.ResetResolvedSegments()
+		return nil
+	case jobround.EdgeJobRoundSegments:
+		m.ResetJobRoundSegments()
+		return nil
 	}
 	return fmt.Errorf("unknown JobRound edge %s", name)
+}
+
+// JobRoundSegmentMutation represents an operation that mutates the JobRoundSegment nodes in the graph.
+type JobRoundSegmentMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int
+	clearedFields    map[string]struct{}
+	job_round        *int
+	clearedjob_round bool
+	segment          *int
+	clearedsegment   bool
+	done             bool
+	oldValue         func(context.Context) (*JobRoundSegment, error)
+	predicates       []predicate.JobRoundSegment
+}
+
+var _ ent.Mutation = (*JobRoundSegmentMutation)(nil)
+
+// jobroundsegmentOption allows management of the mutation configuration using functional options.
+type jobroundsegmentOption func(*JobRoundSegmentMutation)
+
+// newJobRoundSegmentMutation creates new mutation for the JobRoundSegment entity.
+func newJobRoundSegmentMutation(c config, op Op, opts ...jobroundsegmentOption) *JobRoundSegmentMutation {
+	m := &JobRoundSegmentMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeJobRoundSegment,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withJobRoundSegmentID sets the ID field of the mutation.
+func withJobRoundSegmentID(id int) jobroundsegmentOption {
+	return func(m *JobRoundSegmentMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *JobRoundSegment
+		)
+		m.oldValue = func(ctx context.Context) (*JobRoundSegment, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().JobRoundSegment.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withJobRoundSegment sets the old JobRoundSegment of the mutation.
+func withJobRoundSegment(node *JobRoundSegment) jobroundsegmentOption {
+	return func(m *JobRoundSegmentMutation) {
+		m.oldValue = func(context.Context) (*JobRoundSegment, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m JobRoundSegmentMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m JobRoundSegmentMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *JobRoundSegmentMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *JobRoundSegmentMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().JobRoundSegment.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetJobRoundID sets the "job_round_id" field.
+func (m *JobRoundSegmentMutation) SetJobRoundID(i int) {
+	m.job_round = &i
+}
+
+// JobRoundID returns the value of the "job_round_id" field in the mutation.
+func (m *JobRoundSegmentMutation) JobRoundID() (r int, exists bool) {
+	v := m.job_round
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldJobRoundID returns the old "job_round_id" field's value of the JobRoundSegment entity.
+// If the JobRoundSegment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobRoundSegmentMutation) OldJobRoundID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldJobRoundID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldJobRoundID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldJobRoundID: %w", err)
+	}
+	return oldValue.JobRoundID, nil
+}
+
+// ResetJobRoundID resets all changes to the "job_round_id" field.
+func (m *JobRoundSegmentMutation) ResetJobRoundID() {
+	m.job_round = nil
+}
+
+// SetSegmentID sets the "segment_id" field.
+func (m *JobRoundSegmentMutation) SetSegmentID(i int) {
+	m.segment = &i
+}
+
+// SegmentID returns the value of the "segment_id" field in the mutation.
+func (m *JobRoundSegmentMutation) SegmentID() (r int, exists bool) {
+	v := m.segment
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSegmentID returns the old "segment_id" field's value of the JobRoundSegment entity.
+// If the JobRoundSegment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobRoundSegmentMutation) OldSegmentID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSegmentID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSegmentID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSegmentID: %w", err)
+	}
+	return oldValue.SegmentID, nil
+}
+
+// ResetSegmentID resets all changes to the "segment_id" field.
+func (m *JobRoundSegmentMutation) ResetSegmentID() {
+	m.segment = nil
+}
+
+// ClearJobRound clears the "job_round" edge to the JobRound entity.
+func (m *JobRoundSegmentMutation) ClearJobRound() {
+	m.clearedjob_round = true
+	m.clearedFields[jobroundsegment.FieldJobRoundID] = struct{}{}
+}
+
+// JobRoundCleared reports if the "job_round" edge to the JobRound entity was cleared.
+func (m *JobRoundSegmentMutation) JobRoundCleared() bool {
+	return m.clearedjob_round
+}
+
+// JobRoundIDs returns the "job_round" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// JobRoundID instead. It exists only for internal usage by the builders.
+func (m *JobRoundSegmentMutation) JobRoundIDs() (ids []int) {
+	if id := m.job_round; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetJobRound resets all changes to the "job_round" edge.
+func (m *JobRoundSegmentMutation) ResetJobRound() {
+	m.job_round = nil
+	m.clearedjob_round = false
+}
+
+// ClearSegment clears the "segment" edge to the Segment entity.
+func (m *JobRoundSegmentMutation) ClearSegment() {
+	m.clearedsegment = true
+	m.clearedFields[jobroundsegment.FieldSegmentID] = struct{}{}
+}
+
+// SegmentCleared reports if the "segment" edge to the Segment entity was cleared.
+func (m *JobRoundSegmentMutation) SegmentCleared() bool {
+	return m.clearedsegment
+}
+
+// SegmentIDs returns the "segment" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// SegmentID instead. It exists only for internal usage by the builders.
+func (m *JobRoundSegmentMutation) SegmentIDs() (ids []int) {
+	if id := m.segment; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetSegment resets all changes to the "segment" edge.
+func (m *JobRoundSegmentMutation) ResetSegment() {
+	m.segment = nil
+	m.clearedsegment = false
+}
+
+// Where appends a list predicates to the JobRoundSegmentMutation builder.
+func (m *JobRoundSegmentMutation) Where(ps ...predicate.JobRoundSegment) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the JobRoundSegmentMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *JobRoundSegmentMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.JobRoundSegment, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *JobRoundSegmentMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *JobRoundSegmentMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (JobRoundSegment).
+func (m *JobRoundSegmentMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *JobRoundSegmentMutation) Fields() []string {
+	fields := make([]string, 0, 2)
+	if m.job_round != nil {
+		fields = append(fields, jobroundsegment.FieldJobRoundID)
+	}
+	if m.segment != nil {
+		fields = append(fields, jobroundsegment.FieldSegmentID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *JobRoundSegmentMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case jobroundsegment.FieldJobRoundID:
+		return m.JobRoundID()
+	case jobroundsegment.FieldSegmentID:
+		return m.SegmentID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *JobRoundSegmentMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case jobroundsegment.FieldJobRoundID:
+		return m.OldJobRoundID(ctx)
+	case jobroundsegment.FieldSegmentID:
+		return m.OldSegmentID(ctx)
+	}
+	return nil, fmt.Errorf("unknown JobRoundSegment field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *JobRoundSegmentMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case jobroundsegment.FieldJobRoundID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetJobRoundID(v)
+		return nil
+	case jobroundsegment.FieldSegmentID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSegmentID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown JobRoundSegment field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *JobRoundSegmentMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *JobRoundSegmentMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *JobRoundSegmentMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown JobRoundSegment numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *JobRoundSegmentMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *JobRoundSegmentMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *JobRoundSegmentMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown JobRoundSegment nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *JobRoundSegmentMutation) ResetField(name string) error {
+	switch name {
+	case jobroundsegment.FieldJobRoundID:
+		m.ResetJobRoundID()
+		return nil
+	case jobroundsegment.FieldSegmentID:
+		m.ResetSegmentID()
+		return nil
+	}
+	return fmt.Errorf("unknown JobRoundSegment field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *JobRoundSegmentMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.job_round != nil {
+		edges = append(edges, jobroundsegment.EdgeJobRound)
+	}
+	if m.segment != nil {
+		edges = append(edges, jobroundsegment.EdgeSegment)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *JobRoundSegmentMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case jobroundsegment.EdgeJobRound:
+		if id := m.job_round; id != nil {
+			return []ent.Value{*id}
+		}
+	case jobroundsegment.EdgeSegment:
+		if id := m.segment; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *JobRoundSegmentMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *JobRoundSegmentMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *JobRoundSegmentMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedjob_round {
+		edges = append(edges, jobroundsegment.EdgeJobRound)
+	}
+	if m.clearedsegment {
+		edges = append(edges, jobroundsegment.EdgeSegment)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *JobRoundSegmentMutation) EdgeCleared(name string) bool {
+	switch name {
+	case jobroundsegment.EdgeJobRound:
+		return m.clearedjob_round
+	case jobroundsegment.EdgeSegment:
+		return m.clearedsegment
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *JobRoundSegmentMutation) ClearEdge(name string) error {
+	switch name {
+	case jobroundsegment.EdgeJobRound:
+		m.ClearJobRound()
+		return nil
+	case jobroundsegment.EdgeSegment:
+		m.ClearSegment()
+		return nil
+	}
+	return fmt.Errorf("unknown JobRoundSegment unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *JobRoundSegmentMutation) ResetEdge(name string) error {
+	switch name {
+	case jobroundsegment.EdgeJobRound:
+		m.ResetJobRound()
+		return nil
+	case jobroundsegment.EdgeSegment:
+		m.ResetSegment()
+		return nil
+	}
+	return fmt.Errorf("unknown JobRoundSegment edge %s", name)
 }
 
 // OrgMembershipMutation represents an operation that mutates the OrgMembership nodes in the graph.
@@ -16635,28 +17218,31 @@ func (m *SSEEventMutation) ResetEdge(name string) error {
 // SegmentMutation represents an operation that mutates the Segment nodes in the graph.
 type SegmentMutation struct {
 	config
-	op                   Op
-	typ                  string
-	id                   *int
-	created_at           *time.Time
-	updated_at           *time.Time
-	segment_index        *int
-	addsegment_index     *int
-	source_text          *string
-	target_text          *string
-	status               *segment.Status
-	review_comment       *string
-	meta                 *string
-	quality_issues       *[]qa.QualityIssue
-	appendquality_issues []qa.QualityIssue
-	clearedFields        map[string]struct{}
-	resource             *int
-	clearedresource      bool
-	reviewed_by          *int
-	clearedreviewed_by   bool
-	done                 bool
-	oldValue             func(context.Context) (*Segment, error)
-	predicates           []predicate.Segment
+	op                        Op
+	typ                       string
+	id                        *int
+	created_at                *time.Time
+	updated_at                *time.Time
+	segment_index             *int
+	addsegment_index          *int
+	source_text               *string
+	target_text               *string
+	status                    *segment.Status
+	review_comment            *string
+	meta                      *string
+	quality_issues            *[]qa.QualityIssue
+	appendquality_issues      []qa.QualityIssue
+	clearedFields             map[string]struct{}
+	resource                  *int
+	clearedresource           bool
+	reviewed_by               *int
+	clearedreviewed_by        bool
+	resolved_in_rounds        map[int]struct{}
+	removedresolved_in_rounds map[int]struct{}
+	clearedresolved_in_rounds bool
+	done                      bool
+	oldValue                  func(context.Context) (*Segment, error)
+	predicates                []predicate.Segment
 }
 
 var _ ent.Mutation = (*SegmentMutation)(nil)
@@ -17284,6 +17870,60 @@ func (m *SegmentMutation) ResetReviewedBy() {
 	m.clearedreviewed_by = false
 }
 
+// AddResolvedInRoundIDs adds the "resolved_in_rounds" edge to the JobRound entity by ids.
+func (m *SegmentMutation) AddResolvedInRoundIDs(ids ...int) {
+	if m.resolved_in_rounds == nil {
+		m.resolved_in_rounds = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.resolved_in_rounds[ids[i]] = struct{}{}
+	}
+}
+
+// ClearResolvedInRounds clears the "resolved_in_rounds" edge to the JobRound entity.
+func (m *SegmentMutation) ClearResolvedInRounds() {
+	m.clearedresolved_in_rounds = true
+}
+
+// ResolvedInRoundsCleared reports if the "resolved_in_rounds" edge to the JobRound entity was cleared.
+func (m *SegmentMutation) ResolvedInRoundsCleared() bool {
+	return m.clearedresolved_in_rounds
+}
+
+// RemoveResolvedInRoundIDs removes the "resolved_in_rounds" edge to the JobRound entity by IDs.
+func (m *SegmentMutation) RemoveResolvedInRoundIDs(ids ...int) {
+	if m.removedresolved_in_rounds == nil {
+		m.removedresolved_in_rounds = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.resolved_in_rounds, ids[i])
+		m.removedresolved_in_rounds[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedResolvedInRounds returns the removed IDs of the "resolved_in_rounds" edge to the JobRound entity.
+func (m *SegmentMutation) RemovedResolvedInRoundsIDs() (ids []int) {
+	for id := range m.removedresolved_in_rounds {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResolvedInRoundsIDs returns the "resolved_in_rounds" edge IDs in the mutation.
+func (m *SegmentMutation) ResolvedInRoundsIDs() (ids []int) {
+	for id := range m.resolved_in_rounds {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetResolvedInRounds resets all changes to the "resolved_in_rounds" edge.
+func (m *SegmentMutation) ResetResolvedInRounds() {
+	m.resolved_in_rounds = nil
+	m.clearedresolved_in_rounds = false
+	m.removedresolved_in_rounds = nil
+}
+
 // Where appends a list predicates to the SegmentMutation builder.
 func (m *SegmentMutation) Where(ps ...predicate.Segment) {
 	m.predicates = append(m.predicates, ps...)
@@ -17618,12 +18258,15 @@ func (m *SegmentMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *SegmentMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	if m.resource != nil {
 		edges = append(edges, segment.EdgeResource)
 	}
 	if m.reviewed_by != nil {
 		edges = append(edges, segment.EdgeReviewedBy)
+	}
+	if m.resolved_in_rounds != nil {
+		edges = append(edges, segment.EdgeResolvedInRounds)
 	}
 	return edges
 }
@@ -17640,30 +18283,50 @@ func (m *SegmentMutation) AddedIDs(name string) []ent.Value {
 		if id := m.reviewed_by; id != nil {
 			return []ent.Value{*id}
 		}
+	case segment.EdgeResolvedInRounds:
+		ids := make([]ent.Value, 0, len(m.resolved_in_rounds))
+		for id := range m.resolved_in_rounds {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *SegmentMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
+	if m.removedresolved_in_rounds != nil {
+		edges = append(edges, segment.EdgeResolvedInRounds)
+	}
 	return edges
 }
 
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
 func (m *SegmentMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case segment.EdgeResolvedInRounds:
+		ids := make([]ent.Value, 0, len(m.removedresolved_in_rounds))
+		for id := range m.removedresolved_in_rounds {
+			ids = append(ids, id)
+		}
+		return ids
+	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *SegmentMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	if m.clearedresource {
 		edges = append(edges, segment.EdgeResource)
 	}
 	if m.clearedreviewed_by {
 		edges = append(edges, segment.EdgeReviewedBy)
+	}
+	if m.clearedresolved_in_rounds {
+		edges = append(edges, segment.EdgeResolvedInRounds)
 	}
 	return edges
 }
@@ -17676,6 +18339,8 @@ func (m *SegmentMutation) EdgeCleared(name string) bool {
 		return m.clearedresource
 	case segment.EdgeReviewedBy:
 		return m.clearedreviewed_by
+	case segment.EdgeResolvedInRounds:
+		return m.clearedresolved_in_rounds
 	}
 	return false
 }
@@ -17703,6 +18368,9 @@ func (m *SegmentMutation) ResetEdge(name string) error {
 		return nil
 	case segment.EdgeReviewedBy:
 		m.ResetReviewedBy()
+		return nil
+	case segment.EdgeResolvedInRounds:
+		m.ResetResolvedInRounds()
 		return nil
 	}
 	return fmt.Errorf("unknown Segment edge %s", name)

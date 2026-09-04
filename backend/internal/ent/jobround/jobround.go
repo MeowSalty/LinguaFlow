@@ -32,8 +32,6 @@ const (
 	FieldSegmentTotal = "segment_total"
 	// FieldSegmentCompleted holds the string denoting the segment_completed field in the database.
 	FieldSegmentCompleted = "segment_completed"
-	// FieldResolvedSegmentIds holds the string denoting the resolved_segment_ids field in the database.
-	FieldResolvedSegmentIds = "resolved_segment_ids"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
@@ -44,6 +42,10 @@ const (
 	EdgeJob = "job"
 	// EdgeJobResource holds the string denoting the job_resource edge name in mutations.
 	EdgeJobResource = "job_resource"
+	// EdgeResolvedSegments holds the string denoting the resolved_segments edge name in mutations.
+	EdgeResolvedSegments = "resolved_segments"
+	// EdgeJobRoundSegments holds the string denoting the job_round_segments edge name in mutations.
+	EdgeJobRoundSegments = "job_round_segments"
 	// Table holds the table name of the jobround in the database.
 	Table = "job_rounds"
 	// JobTable is the table that holds the job relation/edge.
@@ -60,6 +62,18 @@ const (
 	JobResourceInverseTable = "job_resources"
 	// JobResourceColumn is the table column denoting the job_resource relation/edge.
 	JobResourceColumn = "job_resource_id"
+	// ResolvedSegmentsTable is the table that holds the resolved_segments relation/edge. The primary key declared below.
+	ResolvedSegmentsTable = "job_round_segments"
+	// ResolvedSegmentsInverseTable is the table name for the Segment entity.
+	// It exists in this package in order to avoid circular dependency with the "segment" package.
+	ResolvedSegmentsInverseTable = "segments"
+	// JobRoundSegmentsTable is the table that holds the job_round_segments relation/edge.
+	JobRoundSegmentsTable = "job_round_segments"
+	// JobRoundSegmentsInverseTable is the table name for the JobRoundSegment entity.
+	// It exists in this package in order to avoid circular dependency with the "jobroundsegment" package.
+	JobRoundSegmentsInverseTable = "job_round_segments"
+	// JobRoundSegmentsColumn is the table column denoting the job_round_segments relation/edge.
+	JobRoundSegmentsColumn = "job_round_id"
 )
 
 // Columns holds all SQL columns for jobround fields.
@@ -74,11 +88,16 @@ var Columns = []string{
 	FieldStatus,
 	FieldSegmentTotal,
 	FieldSegmentCompleted,
-	FieldResolvedSegmentIds,
 	FieldErrorMessage,
 	FieldStartedAt,
 	FieldFinishedAt,
 }
+
+var (
+	// ResolvedSegmentsPrimaryKey and ResolvedSegmentsColumn2 are the table columns denoting the
+	// primary key for the resolved_segments relation (M2M).
+	ResolvedSegmentsPrimaryKey = []string{"job_round_id", "segment_id"}
+)
 
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
@@ -113,8 +132,6 @@ var (
 	DefaultSegmentCompleted int
 	// SegmentCompletedValidator is a validator for the "segment_completed" field. It is called by the builders before save.
 	SegmentCompletedValidator func(int) error
-	// DefaultResolvedSegmentIds holds the default value on creation for the "resolved_segment_ids" field.
-	DefaultResolvedSegmentIds func() []int
 )
 
 // OrderOption defines the ordering options for the JobRound queries.
@@ -198,6 +215,34 @@ func ByJobResourceField(field string, opts ...sql.OrderTermOption) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newJobResourceStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByResolvedSegmentsCount orders the results by resolved_segments count.
+func ByResolvedSegmentsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newResolvedSegmentsStep(), opts...)
+	}
+}
+
+// ByResolvedSegments orders the results by resolved_segments terms.
+func ByResolvedSegments(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newResolvedSegmentsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByJobRoundSegmentsCount orders the results by job_round_segments count.
+func ByJobRoundSegmentsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newJobRoundSegmentsStep(), opts...)
+	}
+}
+
+// ByJobRoundSegments orders the results by job_round_segments terms.
+func ByJobRoundSegments(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newJobRoundSegmentsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newJobStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -210,5 +255,19 @@ func newJobResourceStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(JobResourceInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, JobResourceTable, JobResourceColumn),
+	)
+}
+func newResolvedSegmentsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ResolvedSegmentsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2M, false, ResolvedSegmentsTable, ResolvedSegmentsPrimaryKey...),
+	)
+}
+func newJobRoundSegmentsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(JobRoundSegmentsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, true, JobRoundSegmentsTable, JobRoundSegmentsColumn),
 	)
 }
