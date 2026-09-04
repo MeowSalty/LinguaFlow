@@ -174,6 +174,44 @@ func TestMarkJobResourceCompleted_ConvergesStrandedRounds(t *testing.T) {
 	}
 }
 
+// TestMarkJobResourceCompleted_GapRoundFailsNotInventsCompletion 有缺口残留轮的
+// 收敛口径回归：残留 running 轮带计数缺口（segment_completed < segment_total）时
+// 资源收尾必须收敛为 failed 而非 completed——缺口就是未完成的段，闭合成
+// completed 会把它们记成完成，且断点续传（runner 只跳过 completed|skipped）
+// 会永久跳过该轮。segment_completed 不被抬高（≡ 断点集合基数，DBReporter 的
+// 独占写入面），Job.progress_completed 也不因收敛增加（failed 不闭合）。
+func TestMarkJobResourceCompleted_GapRoundFailsNotInventsCompletion(t *testing.T) {
+	env := newJobRoundTestEnv(t, nil)
+	ctx := context.Background()
+	// seed：job 缓存 100/64 = 轮口径 60（running）+ 预期缺口 0；join 4 行的
+	// 断点基数为缺口分流提供真实集合。
+	job, _, rounds := seedJobWithRounds(t, env, JobStatusRunning, 100, 64, []jobResourceSpec{{
+		status:       JobResourceStatusRunning,
+		segmentCount: 10,
+		rounds: []jobRoundSpec{{
+			roundIndex: 0, mode: "semantic_qa", status: JobRoundStatusRunning,
+			total: 10, completed: 4, resolvedCount: 4,
+		}},
+	}})
+	roundRowID := rounds[0][0].ID
+
+	if err := env.svc.MarkJobResourceCompleted(ctx, job.ID, rounds[0][0].JobResourceID, "out.txt", 4, 0, ""); err != nil {
+		t.Fatalf("MarkJobResourceCompleted: %v", err)
+	}
+
+	after := env.client.JobRound.GetX(ctx, roundRowID)
+	if after.Status != JobRoundStatusFailed {
+		t.Errorf("有缺口残留轮收尾后 = %q, want %q（缺口段未完成，不得发明完成）", after.Status, JobRoundStatusFailed)
+	}
+	if after.ErrorMessage == nil || *after.ErrorMessage == "" {
+		t.Errorf("有缺口残留轮收敛为 failed 应写明缺口原因，error_message = %v", after.ErrorMessage)
+	}
+	// 计数列不被抬高：保持断点集合基数 4。
+	assertRoundCheckpoint(t, env.client, after, JobRoundStatusFailed, 10, 4, 4)
+	// failed 不闭合：Job 缓存不因收敛增加，仍为 seed 的 100/64。
+	assertJobProgress(t, reloadJob(t, env.client, job.ID), 100, 64)
+}
+
 // TestRetryJob_ResetsRunningRounds 重试重置范围回归：有未解决段的轮次
 // 与取消打断的轮次在成功分支保持 running（不再误置 completed），RetryJob
 // 必须把 running 轮重置为 pending 才能在重跑时被重新执行。
@@ -231,7 +269,8 @@ func TestRetryJob_ResetsRunningRounds(t *testing.T) {
 // 可处理」的时点判断——失败期间用户可经段落编辑 API 把段置回 pending 使其
 // 失效，重试必须重置 skipped 轮（空段检查会自然重新判定），否则新 pending 段
 // 被本任务静默跳过、永不翻译。
-func TestRetryJob_ResetsSkippedRounds(t *testing.T) {	client := testClient(t)
+func TestRetryJob_ResetsSkippedRounds(t *testing.T) {
+	client := testClient(t)
 	ctx := context.Background()
 	user := createTestUser(t, client, "retry-skipped-user")
 	project := createTestProject(t, client, "retry-skipped-proj", user.ID)

@@ -6,8 +6,9 @@ import (
 )
 
 // TestReconcileJob_MatrixAggregationAcrossResources 校验 ReconcileJob 的进度聚合
-// 改为 JobRound 矩阵无条件求和：progress_total = Σ segment_total、
-// progress_completed = Σ segment_completed（跨资源、跨轮次、无状态过滤）。
+// 改为 JobRound 矩阵求和口径：progress_total = Σ segment_total（无状态过滤）、
+// progress_completed = Σ jobRoundProgress(...)（闭合终态 completed/skipped 取
+// segment_total，pending/running/failed 取 segment_completed）。
 func TestReconcileJob_MatrixAggregationAcrossResources(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()
@@ -73,6 +74,8 @@ func TestReconcileJob_MatrixAggregationAcrossResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create jr2: %v", err)
 	}
+	// 口径钉子：有缺口的 pending 轮取实际 segment_completed（0），不做闭合
+	// 补齐——未完成部分交由重置路径续跑。
 	if _, err := client.JobRound.Create().
 		SetJob(job).
 		SetJobResource(jr2).
@@ -84,6 +87,20 @@ func TestReconcileJob_MatrixAggregationAcrossResources(t *testing.T) {
 		Save(ctx); err != nil {
 		t.Fatalf("create jr2 round 0: %v", err)
 	}
+	// 口径钉子：有缺口的 skipped 轮闭合取 segment_total（5 而非 2）——skipped
+	// 是闭合终态，其已揭示工作量按定义全额计入；segment_completed 列本身
+	// 保持断点集合基数（2）不被改写。
+	if _, err := client.JobRound.Create().
+		SetJob(job).
+		SetJobResource(jr2).
+		SetRoundIndex(1).
+		SetMode("revise").
+		SetStatus(JobRoundStatusSkipped).
+		SetSegmentTotal(5).
+		SetSegmentCompleted(2).
+		Save(ctx); err != nil {
+		t.Fatalf("create jr2 round 1: %v", err)
+	}
 
 	svc := &JobService{client: client}
 	if err := svc.ReconcileJob(ctx, job.ID); err != nil {
@@ -94,11 +111,13 @@ func TestReconcileJob_MatrixAggregationAcrossResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get job: %v", err)
 	}
-	if after.ProgressTotal != 20 {
-		t.Errorf("Job.ProgressTotal = %d, want 20", after.ProgressTotal)
+	// total = 10 + 6 + 4 + 5 = 25；completed = 10 + 6(闭合) + 0(缺口 pending 取实际值)
+	// + 5(闭合 skipped 取满量) = 21。
+	if after.ProgressTotal != 25 {
+		t.Errorf("Job.ProgressTotal = %d, want 25", after.ProgressTotal)
 	}
-	if after.ProgressCompleted != 13 {
-		t.Errorf("Job.ProgressCompleted = %d, want 13", after.ProgressCompleted)
+	if after.ProgressCompleted != 21 {
+		t.Errorf("Job.ProgressCompleted = %d, want 21", after.ProgressCompleted)
 	}
 	if after.Status != JobStatusCompleted {
 		t.Errorf("Job.Status = %q, want %q", after.Status, JobStatusCompleted)

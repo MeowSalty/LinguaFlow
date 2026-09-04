@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 )
 
@@ -17,13 +19,18 @@ import (
 //
 // 核心不变量：JobRound 矩阵是唯一事实源；Job.progress_total / progress_completed
 // 只是派生缓存。任何批量重置（RecoverPendingJobs / ResumeJob / RetryJob）都必须以
-// 「无条件求和」重算派生缓存：
+// 矩阵求和口径重算派生缓存（见 jobRoundProgress）：
 //
 //	progress_total     = Σ segment_total（全部行，含 fresh pending 0/0 行）
-//	progress_completed = Σ segment_completed（全部行）
+//	progress_completed = Σ jobRoundProgress(status, segment_total, segment_completed)
+//	                     ——闭合终态（completed/skipped）取 segment_total，
+//	                       其余状态取 segment_completed
 //
-// 且重置不得清除 resolved_segment_ids / segment_total / segment_completed 等断点字段：
-// fresh pending 行为 0/0；带历史的行重置后保留全部总量与断点。
+// 闭合只在读侧发生：终态转换不回写 segment_completed（该列 ≡ 断点集合基数、由
+// DBReporter 独占写入），只按口径差值维护 Job 缓存。
+//
+// 且重置不得清除 job_round_segments 关联断点 / segment_total / segment_completed
+// 等断点字段：fresh pending 行为 0/0；带历史的行重置后保留全部总量与断点。
 
 // ---- 测试环境与种子辅助 ----
 
@@ -57,13 +64,15 @@ func newJobRoundTestEnv(t *testing.T, broker *event.Broker) *jobRoundTestEnv {
 
 // jobRoundSpec 单轮种子配置。
 type jobRoundSpec struct {
-	roundIndex  int
-	mode        string
-	status      string
-	total       int
-	completed   int
-	resolvedIDs []int
-	errMessage  string
+	roundIndex int
+	mode       string
+	status     string
+	total      int
+	completed  int
+	// resolvedCount 预置断点段数：创建 N 条真实 Segment 并写入
+	// job_round_segments join 行（join 表双 FK 强制段行真实存在）。
+	resolvedCount int
+	errMessage    string
 }
 
 // jobResourceSpec 单资源种子配置（含其名下轮次行）。
@@ -113,15 +122,23 @@ func seedJobWithRounds(t *testing.T, env *jobRoundTestEnv, jobStatus string, pro
 				SetStatus(rs.status).
 				SetSegmentTotal(rs.total).
 				SetSegmentCompleted(rs.completed)
-			if rs.resolvedIDs != nil {
-				create = create.SetResolvedSegmentIds(rs.resolvedIDs)
-			}
 			if rs.errMessage != "" {
 				create = create.SetErrorMessage(rs.errMessage)
 			}
 			roundRow, err := create.Save(ctx)
 			if err != nil {
 				t.Fatalf("create round jr=%d idx=%d: %v", jr.ID, rs.roundIndex, err)
+			}
+			// 预置断点：创建真实 Segment 行并写 join 行（双 FK 强制段真实存在，
+			// 模拟 worker flush 落下的 checkpoint 关联行）。
+			for i := 0; i < rs.resolvedCount; i++ {
+				seg := createTestSegment(t, env.client, res.ID, i, fmt.Sprintf("round-seed-%d-r%d-seg-%d", i, jr.ID, rs.roundIndex), nil)
+				if _, err := env.client.JobRoundSegment.Create().
+					SetJobRoundID(roundRow.ID).
+					SetSegmentID(seg.ID).
+					Save(ctx); err != nil {
+					t.Fatalf("create job_round_segment round=%d seg=%d: %v", roundRow.ID, seg.ID, err)
+				}
 			}
 			row = append(row, roundRow)
 		}
@@ -165,7 +182,9 @@ func assertJobProgress(t *testing.T, row *ent.Job, wantTotal, wantCompleted int6
 }
 
 // assertRoundCheckpoint 校验轮次行的状态与断点字段完整保留。
-func assertRoundCheckpoint(t *testing.T, r *ent.JobRound, wantStatus string, wantTotal, wantCompleted int, wantResolved []int) {
+// 断点集合经 job_round_segments join 表断言：wantResolvedRows 为期望的
+// 关联行数（断点基数），0 表示该轮无断点行。
+func assertRoundCheckpoint(t *testing.T, client *ent.Client, r *ent.JobRound, wantStatus string, wantTotal, wantCompleted, wantResolvedRows int) {
 	t.Helper()
 	if r.Status != wantStatus {
 		t.Errorf("round %d status = %q, want %q", r.ID, r.Status, wantStatus)
@@ -176,25 +195,35 @@ func assertRoundCheckpoint(t *testing.T, r *ent.JobRound, wantStatus string, wan
 	if r.SegmentCompleted != wantCompleted {
 		t.Errorf("round %d segment_completed = %d, want %d（重置不得清断点）", r.ID, r.SegmentCompleted, wantCompleted)
 	}
-	if !intSliceEqual(r.ResolvedSegmentIds, wantResolved) {
-		t.Errorf("round %d resolved_segment_ids = %v, want %v（重置不得清断点集合）", r.ID, r.ResolvedSegmentIds, wantResolved)
+	if got := countRoundJoinRows(t, client, r.ID); got != wantResolvedRows {
+		t.Errorf("round %d join 断点行 = %d, want %d（重置不得清断点集合）", r.ID, got, wantResolvedRows)
 	}
 }
 
-// intSliceEqual 比较两个 []int，nil 与空切片视为相等。
-func intSliceEqual(a, b []int) bool {
-	if len(a) == 0 && len(b) == 0 {
-		return true
+// countRoundJoinRows 统计某轮 job_round_segments 关联行数（断点集合基数）。
+func countRoundJoinRows(t *testing.T, client *ent.Client, roundRowID int) int {
+	t.Helper()
+	n, err := client.JobRoundSegment.Query().
+		Where(jobroundsegment.JobRoundIDEQ(roundRowID)).
+		Count(context.Background())
+	if err != nil {
+		t.Fatalf("count job_round_segments: %v", err)
 	}
-	if len(a) != len(b) {
-		return false
+	return n
+}
+
+// roundJoinSegmentIDs 读取某轮 join 表引用的全部段 ID（升序），用于精确集合断言。
+func roundJoinSegmentIDs(t *testing.T, client *ent.Client, roundRowID int) []int {
+	t.Helper()
+	ids, err := client.JobRoundSegment.Query().
+		Where(jobroundsegment.JobRoundIDEQ(roundRowID)).
+		Select(jobroundsegment.FieldSegmentID).
+		Ints(context.Background())
+	if err != nil {
+		t.Fatalf("query join segment ids: %v", err)
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	sort.Ints(ids)
+	return ids
 }
 
 // intSliceContains 报告 want 是否出现在 ids 中。
@@ -340,6 +369,198 @@ func TestMarkJobRound_StateMachine(t *testing.T) {
 	}
 }
 
+// TestMarkJobRoundCompleted_ClosesJobProgressWithoutRewritingCheckpoint 校验
+// completed 终态闭合任务级缺口而不改写断点计数：闭合是状态语义（读侧按
+// jobRoundProgress 口径派生为满量），segment_completed 保持 ≡ 断点集合基数
+// （DBReporter 的独占写入面、恢复重跑的进度基线）；Job 缓存补齐到 100/100。
+func TestMarkJobRoundCompleted_ClosesJobProgressWithoutRewritingCheckpoint(t *testing.T) {
+	env := newJobRoundTestEnv(t, nil)
+	ctx := context.Background()
+	job, _, rounds := seedJobWithRounds(t, env, JobStatusRunning, 100, 91, []jobResourceSpec{{
+		status: JobResourceStatusRunning,
+		rounds: []jobRoundSpec{{
+			roundIndex: 0, mode: "translate", status: JobRoundStatusRunning,
+			total: 100, completed: 91, resolvedCount: 91,
+		}},
+	}})
+	roundRowID := rounds[0][0].ID
+	beforeJoins := countRoundJoinRows(t, env.client, roundRowID)
+
+	if err := env.svc.MarkJobRoundCompleted(ctx, roundRowID); err != nil {
+		t.Fatalf("MarkJobRoundCompleted: %v", err)
+	}
+
+	// 计数列不被终态闭合改写：保持 100/91（≡ 断点集合基数），join 行数不变。
+	assertRoundCheckpoint(t, env.client, env.client.JobRound.GetX(ctx, roundRowID), JobRoundStatusCompleted, 100, 91, beforeJoins)
+	round := env.client.JobRound.GetX(ctx, roundRowID)
+	if round.FinishedAt == nil {
+		t.Fatal("completed round finished_at = nil")
+	}
+	// 任务级缺口仍被闭合：Job 缓存按闭合口径为 100/100。
+	assertJobProgress(t, reloadJob(t, env.client, job.ID), 100, 100)
+}
+
+// TestMarkJobRoundCompleted_ZeroDeltaIsIdempotent 校验轮次已经完整时完成标记
+// 不重复增加 Job.progress_completed，避免终态重试造成缓存超计。
+func TestMarkJobRoundCompleted_ZeroDeltaIsIdempotent(t *testing.T) {
+	env := newJobRoundTestEnv(t, nil)
+	ctx := context.Background()
+	job, _, rounds := seedJobWithRounds(t, env, JobStatusRunning, 100, 100, []jobResourceSpec{{
+		status: JobResourceStatusRunning,
+		rounds: []jobRoundSpec{{
+			roundIndex: 0, mode: "translate", status: JobRoundStatusRunning,
+			total: 100, completed: 100,
+		}},
+	}})
+
+	if err := env.svc.MarkJobRoundCompleted(ctx, rounds[0][0].ID); err != nil {
+		t.Fatalf("MarkJobRoundCompleted: %v", err)
+	}
+	assertRoundCheckpoint(t, env.client, env.client.JobRound.GetX(ctx, rounds[0][0].ID), JobRoundStatusCompleted, 100, 100, 0)
+	assertJobProgress(t, reloadJob(t, env.client, job.ID), 100, 100)
+}
+
+// TestMarkJobRoundTerminal_NoOpPreservesProgress 校验状态不匹配时仍保持原有
+// 条件更新语义：返回 nil、0 行受影响，不改变轮次字段或 Job 计数器。
+func TestMarkJobRoundTerminal_NoOpPreservesProgress(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     string
+		mark       func(context.Context, *JobService, int) error
+		wantStatus string
+	}{
+		{
+			name:       "completed round marked completed",
+			status:     JobRoundStatusCompleted,
+			mark:       func(ctx context.Context, svc *JobService, id int) error { return svc.MarkJobRoundCompleted(ctx, id) },
+			wantStatus: JobRoundStatusCompleted,
+		},
+		{
+			name:       "pending round marked completed",
+			status:     JobRoundStatusPending,
+			mark:       func(ctx context.Context, svc *JobService, id int) error { return svc.MarkJobRoundCompleted(ctx, id) },
+			wantStatus: JobRoundStatusPending,
+		},
+		{
+			name:       "completed round marked skipped",
+			status:     JobRoundStatusCompleted,
+			mark:       func(ctx context.Context, svc *JobService, id int) error { return svc.MarkJobRoundSkipped(ctx, id) },
+			wantStatus: JobRoundStatusCompleted,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newJobRoundTestEnv(t, nil)
+			ctx := context.Background()
+			job, _, rounds := seedJobWithRounds(t, env, JobStatusRunning, 100, 60, []jobResourceSpec{{
+				status: JobResourceStatusRunning,
+				rounds: []jobRoundSpec{{
+					roundIndex: 0, mode: "translate", status: tt.status,
+					total: 100, completed: 60,
+				}},
+			}})
+			before := env.client.JobRound.GetX(ctx, rounds[0][0].ID)
+			if err := tt.mark(ctx, env.svc, before.ID); err != nil {
+				t.Fatalf("mark terminal: %v", err)
+			}
+			after := env.client.JobRound.GetX(ctx, before.ID)
+			if after.Status != tt.wantStatus {
+				t.Errorf("round status = %q, want %q", after.Status, tt.wantStatus)
+			}
+			if after.SegmentTotal != before.SegmentTotal || after.SegmentCompleted != before.SegmentCompleted {
+				t.Errorf("round progress changed from %d/%d to %d/%d", before.SegmentCompleted, before.SegmentTotal, after.SegmentCompleted, after.SegmentTotal)
+			}
+			if after.FinishedAt != nil {
+				t.Errorf("finished_at = %v, want nil for no-op", after.FinishedAt)
+			}
+			assertJobProgress(t, reloadJob(t, env.client, job.ID), 100, 60)
+		})
+	}
+}
+
+// TestMarkJobRoundSkipped_ClosesFreshAndHistoricalProgress 校验 skipped 终态的边界：
+// fresh 轮是 0/0 no-op；带历史进度的轮闭合为满量口径，但闭合只作用于 Job 缓存
+// （wantDelta），轮次行的 segment_completed 保持断点集合基数不被改写。
+func TestMarkJobRoundSkipped_ClosesFreshAndHistoricalProgress(t *testing.T) {
+	tests := []struct {
+		name              string
+		status            string
+		total, completed  int
+		jobTotal, jobDone int64
+		wantDelta         int64
+	}{
+		{name: "fresh pending", status: JobRoundStatusPending, total: 0, completed: 0, jobTotal: 0, jobDone: 0, wantDelta: 0},
+		{name: "historical running", status: JobRoundStatusRunning, total: 100, completed: 60, jobTotal: 100, jobDone: 60, wantDelta: 40},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newJobRoundTestEnv(t, nil)
+			ctx := context.Background()
+			job, _, rounds := seedJobWithRounds(t, env, JobStatusRunning, tt.jobTotal, tt.jobDone, []jobResourceSpec{{
+				status: JobResourceStatusRunning,
+				rounds: []jobRoundSpec{{
+					roundIndex: 0, mode: "translate", status: tt.status,
+					total: tt.total, completed: tt.completed,
+				}},
+			}})
+			if err := env.svc.MarkJobRoundSkipped(ctx, rounds[0][0].ID); err != nil {
+				t.Fatalf("MarkJobRoundSkipped: %v", err)
+			}
+			// 轮次行：segment_completed 不被终态闭合改写（保持 seed 值）。
+			// wantDelta 只作用于 Job 缓存（闭合口径增量），join 断点基数不变（seed 为 0）。
+			assertRoundCheckpoint(t, env.client, env.client.JobRound.GetX(ctx, rounds[0][0].ID), JobRoundStatusSkipped, tt.total, tt.completed, 0)
+			assertJobProgress(t, reloadJob(t, env.client, job.ID), tt.jobTotal, tt.jobDone+tt.wantDelta)
+		})
+	}
+}
+
+// TestMarkJobRoundTerminal_ReconcileRemainsStable 校验终态补齐后矩阵求和与 Job
+// 缓存一致：ReconcileJob 只会把同一 100/100 求和重新写回，不产生跳变。
+func TestMarkJobRoundTerminal_ReconcileRemainsStable(t *testing.T) {
+	env := newJobRoundTestEnv(t, nil)
+	ctx := context.Background()
+	job, _, rounds := seedJobWithRounds(t, env, JobStatusRunning, 100, 91, []jobResourceSpec{{
+		status: JobResourceStatusRunning,
+		rounds: []jobRoundSpec{{
+			roundIndex: 0, mode: "translate", status: JobRoundStatusRunning,
+			total: 100, completed: 91,
+		}},
+	}})
+
+	if err := env.svc.MarkJobRoundCompleted(ctx, rounds[0][0].ID); err != nil {
+		t.Fatalf("MarkJobRoundCompleted: %v", err)
+	}
+	before := reloadJob(t, env.client, job.ID)
+	if err := env.svc.ReconcileJob(ctx, job.ID); err != nil {
+		t.Fatalf("ReconcileJob: %v", err)
+	}
+	after := reloadJob(t, env.client, job.ID)
+	if after.ProgressTotal != before.ProgressTotal || after.ProgressCompleted != before.ProgressCompleted {
+		t.Errorf("progress changed after reconcile from %d/%d to %d/%d", before.ProgressCompleted, before.ProgressTotal, after.ProgressCompleted, after.ProgressTotal)
+	}
+	assertJobProgress(t, after, 100, 100)
+}
+
+// TestMarkJobRoundFailed_PreservesPartialProgress 校验 failed 轮不套用终态闭合
+// 语义：失败仍保留部分进度，交由恢复/重试继续执行。
+func TestMarkJobRoundFailed_PreservesPartialProgress(t *testing.T) {
+	env := newJobRoundTestEnv(t, nil)
+	ctx := context.Background()
+	job, _, rounds := seedJobWithRounds(t, env, JobStatusRunning, 100, 60, []jobResourceSpec{{
+		status: JobResourceStatusRunning,
+		rounds: []jobRoundSpec{{
+			roundIndex: 0, mode: "translate", status: JobRoundStatusRunning,
+			total: 100, completed: 60,
+		}},
+	}})
+
+	if err := env.svc.MarkJobRoundFailed(ctx, rounds[0][0].ID, errors.New("boom")); err != nil {
+		t.Fatalf("MarkJobRoundFailed: %v", err)
+	}
+	assertRoundCheckpoint(t, env.client, env.client.JobRound.GetX(ctx, rounds[0][0].ID), JobRoundStatusFailed, 100, 60, 0)
+	assertJobProgress(t, reloadJob(t, env.client, job.ID), 100, 60)
+}
+
 // TestGetJobRoundStatus_MissingRound 不存在的轮次行必须返回错误。
 func TestGetJobRoundStatus_MissingRound(t *testing.T) {
 	env := newJobRoundTestEnv(t, nil)
@@ -450,7 +671,7 @@ func TestMarkJobPaused_FromRunning(t *testing.T) {
 
 // TestResumeJob_PreservesRoundCheckpoint 覆盖暂停恢复：
 // paused 任务 → pending；running 资源/轮次 → pending；
-// 断点字段（resolved_segment_ids / segment_total / segment_completed）全部保留；
+// 断点字段（job_round_segments 关联行 / segment_total / segment_completed）全部保留；
 // 派生计数器按矩阵无条件求和重算。
 func TestResumeJob_PreservesRoundCheckpoint(t *testing.T) {
 	env := newJobRoundTestEnv(t, nil)
@@ -460,7 +681,7 @@ func TestResumeJob_PreservesRoundCheckpoint(t *testing.T) {
 			status: JobResourceStatusRunning,
 			rounds: []jobRoundSpec{{
 				roundIndex: 0, mode: "extract", status: JobRoundStatusRunning,
-				total: 40, completed: 12, resolvedIDs: []int{5, 7},
+				total: 40, completed: 12, resolvedCount: 2,
 			}},
 		},
 		{
@@ -493,14 +714,14 @@ func TestResumeJob_PreservesRoundCheckpoint(t *testing.T) {
 	if len(roundsAfter) != 1 {
 		t.Fatalf("rounds len = %d, want 1", len(roundsAfter))
 	}
-	assertRoundCheckpoint(t, roundsAfter[0], JobRoundStatusPending, 40, 12, []int{5, 7})
+	assertRoundCheckpoint(t, env.client, roundsAfter[0], JobRoundStatusPending, 40, 12, 2)
 
 	// 新鲜 pending 轮保持 0/0。
 	freshRounds := loadResourceRounds(t, env.client, jrs[1].ID)
 	if len(freshRounds) != 1 {
 		t.Fatalf("fresh rounds len = %d, want 1", len(freshRounds))
 	}
-	assertRoundCheckpoint(t, freshRounds[0], JobRoundStatusPending, 0, 0, nil)
+	assertRoundCheckpoint(t, env.client, freshRounds[0], JobRoundStatusPending, 0, 0, 0)
 
 	// 无条件求和：progress_total = 40 + 0 = 40；progress_completed = 12 + 0 = 12。
 	assertJobProgress(t, reloadJob(t, env.client, job.ID), 40, 12)
@@ -539,7 +760,7 @@ func TestRecoverPendingJobs_NoDoubleAccumulation(t *testing.T) {
 		status: JobResourceStatusRunning,
 		rounds: []jobRoundSpec{
 			{roundIndex: 0, mode: "translate", status: JobRoundStatusCompleted, total: 100, completed: 100},
-			{roundIndex: 1, mode: "extract", status: JobRoundStatusRunning, total: 50, completed: 20, resolvedIDs: []int{11}},
+			{roundIndex: 1, mode: "extract", status: JobRoundStatusRunning, total: 50, completed: 20, resolvedCount: 1},
 			{roundIndex: 2, mode: "semantic_qa", status: JobRoundStatusPending},
 		},
 	}})
@@ -566,9 +787,9 @@ func TestRecoverPendingJobs_NoDoubleAccumulation(t *testing.T) {
 	if len(roundsAfter) != 3 {
 		t.Fatalf("rounds len = %d, want 3", len(roundsAfter))
 	}
-	assertRoundCheckpoint(t, roundsAfter[1], JobRoundStatusPending, 50, 20, []int{11})
+	assertRoundCheckpoint(t, env.client, roundsAfter[1], JobRoundStatusPending, 50, 20, 1)
 	// r0：completed 终态行不得被重置。
-	assertRoundCheckpoint(t, roundsAfter[0], JobRoundStatusCompleted, 100, 100, nil)
+	assertRoundCheckpoint(t, env.client, roundsAfter[0], JobRoundStatusCompleted, 100, 100, 0)
 
 	// 任务状态 running → pending；派生缓存重算后恰为 150/120（求和公式见函数注释）。
 	after := reloadJob(t, env.client, job.ID)
@@ -667,7 +888,7 @@ func TestReconcileJob_PausedPreserved(t *testing.T) {
 
 // TestRetryJob_CancelledJobWithMatrix 覆盖取消任务的矩阵化重试：
 // cancelled 任务与 failed/cancelled 资源均可重试 → pending；
-// failed 轮 → pending 且 resolved_segment_ids 保留；completed 轮终态不动；
+// failed 轮 → pending 且 job_round_segments 断点关联行保留；completed 轮终态不动；
 // 派生计数器按矩阵无条件求和重算（旧缓存值被整体覆盖）：
 //
 //	progress_total     = 25 + 10 = 35
@@ -681,7 +902,7 @@ func TestRetryJob_CancelledJobWithMatrix(t *testing.T) {
 			status: JobResourceStatusFailed,
 			rounds: []jobRoundSpec{{
 				roundIndex: 0, mode: "extract", status: JobRoundStatusFailed,
-				total: 25, completed: 8, resolvedIDs: []int{3, 9}, errMessage: "boom",
+				total: 25, completed: 8, resolvedCount: 2, errMessage: "boom",
 			}},
 		},
 		{
@@ -717,14 +938,14 @@ func TestRetryJob_CancelledJobWithMatrix(t *testing.T) {
 	if len(failedRounds) != 1 {
 		t.Fatalf("failed-resource rounds len = %d, want 1", len(failedRounds))
 	}
-	assertRoundCheckpoint(t, failedRounds[0], JobRoundStatusPending, 25, 8, []int{3, 9})
+	assertRoundCheckpoint(t, env.client, failedRounds[0], JobRoundStatusPending, 25, 8, 2)
 
 	// completed 轮终态不动。
 	doneRounds := loadResourceRounds(t, env.client, jrs[1].ID)
 	if len(doneRounds) != 1 {
 		t.Fatalf("completed-resource rounds len = %d, want 1", len(doneRounds))
 	}
-	assertRoundCheckpoint(t, doneRounds[0], JobRoundStatusCompleted, 10, 10, nil)
+	assertRoundCheckpoint(t, env.client, doneRounds[0], JobRoundStatusCompleted, 10, 10, 0)
 
 	// 派生缓存 = 矩阵无条件求和。
 	assertJobProgress(t, reloadJob(t, env.client, job.ID), 35, 18)

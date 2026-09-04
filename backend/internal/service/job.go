@@ -946,7 +946,9 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 			return nil, err
 		}
 		// 轮次行 failed|running|skipped→pending（条件更新）：保留 segment_total/
-		// segment_completed/resolved_segment_ids 断点，恢复后从断点继续。
+		// segment_completed 与 job_round_segments 断点关联行，恢复后从断点继续。
+		// segment_completed 是断点集合的派生缓存（DBReporter 独占写入），重置后
+		// 重跑以断点集合为基线继续推进（StageStart 锚定集合基数），计数不回退。
 		// skipped 是「当时无段可处理」的时点判断——重启期间用户可经段落
 		// 编辑 API 把段置回 pending 使其失效，重置后空段检查自然重新判定；
 		// failed 来自 MarkJobRoundFailed 与 MarkJobResourceFailed 两写间隙的
@@ -1097,33 +1099,60 @@ func (a txProgressStore) JobUpdateOneID(id int) *ent.JobUpdateOne {
 
 // jobRoundProgressSums JobRound 矩阵聚合计数的扫描载体（列名经 sql tag 对齐）。
 type jobRoundProgressSums struct {
-	SegmentTotal     int64 `sql:"segment_total"`
-	SegmentCompleted int64 `sql:"segment_completed"`
+	SegmentTotal     int64  `sql:"segment_total"`
+	SegmentCompleted int64  `sql:"segment_completed"`
+	Status           string `sql:"status"`
 }
 
-// sumJobRoundProgress 计算任务矩阵的无条件求和（核心不变式）：
+// isJobRoundClosed 报告轮次状态是否为闭合终态：completed/skipped 按定义不再有
+// 待办，其已揭示工作量全额计入进度；pending/running/failed 只计实际完成量，
+// 未完成部分交由重置路径续跑。
+func isJobRoundClosed(status string) bool {
+	return status == JobRoundStatusCompleted || status == JobRoundStatusSkipped
+}
+
+// jobRoundProgress 返回单个轮次计入 Job.progress_completed 的值——矩阵求和与
+// 终态闭合增量共用的唯一口径：
+//   - 闭合终态取 segment_total（定义性闭合，同时吸收「同一段被前后同模式轮
+//     各揭示一次」造成的分母重复：残留段由后续同模式轮重扫）；
+//   - 其余状态取 segment_completed（≡ 该轮断点集合基数）。
 //
-//	progress_total    = Σ segment_total    （所有 JobRound 行，无状态过滤）
-//	progress_completed = Σ segment_completed
+// 补齐只在读侧发生，绝不回写 segment_completed：该列是 DBReporter 的独占写入
+// 面，也是恢复重跑的进度基线（StageStart 锚定断点集合基数），写入非断点派生的
+// 值会让基线在重置后回退、并使 Job 缓存相对矩阵求和超计。
+func jobRoundProgress(status string, segmentTotal, segmentCompleted int64) int64 {
+	if isJobRoundClosed(status) && segmentTotal > segmentCompleted {
+		return segmentTotal
+	}
+	return segmentCompleted
+}
+
+// sumJobRoundProgress 计算任务矩阵的求和口径（核心不变式）：
 //
-// 无状态过滤是刻意的：fresh pending 行为 0/0、skipped 行为 0/0、reset-with-history
-// 行（resume/recovery/retry 后回到 pending）有意保留计数，无条件求和天然覆盖。
+//	progress_total    = Σ segment_total   （所有 JobRound 行，无状态过滤）
+//	progress_completed = Σ jobRoundProgress(status, segment_total, segment_completed)
+//
+// completed 侧不是裸求和 segment_completed：闭合终态（completed/skipped）按定义
+// 显示为满量，读侧取 segment_total——这吸收了「同一段被前后同模式轮各揭示一次」
+// 的分母重复，同时避免把补齐值回写进计数列破坏断点基线。无状态过滤是刻意的：
+// fresh pending 行为 0/0、skipped 行 0/0 或满量、reset-with-history 行（resume/
+// recovery/retry 后回到 pending）有意保留断点计数，该口径天然覆盖。
 func sumJobRoundProgress(ctx context.Context, store jobProgressStore, jobID int) (total, completed int64, err error) {
 	var rows []jobRoundProgressSums
 	if err := store.JobRoundQuery().
 		Where(jobround.JobIDEQ(jobID)).
-		Select(jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted).
+		Select(jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted, jobround.FieldStatus).
 		Scan(ctx, &rows); err != nil {
 		return 0, 0, fmt.Errorf("sum job rounds: %w", err)
 	}
 	for _, row := range rows {
 		total += row.SegmentTotal
-		completed += row.SegmentCompleted
+		completed += jobRoundProgress(row.Status, row.SegmentTotal, row.SegmentCompleted)
 	}
 	return total, completed, nil
 }
 
-// recomputeJobProgress 用矩阵无条件求和覆盖 Job.progress_total/progress_completed
+// recomputeJobProgress 用矩阵求和口径覆盖 Job.progress_total/progress_completed
 // （派生缓存）。任何 reset 路径（Resume/Recover/Retry）之后必须调用。
 func recomputeJobProgress(ctx context.Context, store jobProgressStore, jobID int) error {
 	total, completed, err := sumJobRoundProgress(ctx, store, jobID)
@@ -1159,16 +1188,101 @@ func (s *JobService) MarkJobRoundRunning(ctx context.Context, jobID, roundRowID 
 }
 
 // MarkJobRoundCompleted 将轮次行 running→completed 并记录完成时间。
+// 终态闭合是状态语义：闭合口径（completed 计满量）由读侧按状态派生，不改写
+// segment_completed——该列 ≡ 断点集合基数，是 DBReporter 的独占写入面与恢复
+// 重跑的进度基线。segment_completed ≤ segment_total 是矩阵不变式，因此闭合口径
+// 只会向上、不超计；failed 轮不闭合，保留部分进度交由重试/恢复续跑。
 func (s *JobService) MarkJobRoundCompleted(ctx context.Context, roundRowID int) error {
-	_, err := s.client.JobRound.Update().
+	return s.markJobRoundTerminal(ctx, roundRowID, []string{JobRoundStatusRunning}, JobRoundStatusCompleted)
+}
+
+// markJobRoundTerminal 在一个事务内完成轮次终态转换与任务进度缓存维护。
+// 先读 job_id/status/segment_total/segment_completed 按口径计算增量，再用原状态
+// 条件更新防止并发调用重复计费；状态不满足原前置条件（包括行不存在）时保持原语义，
+// 即 0 行受影响、返回 nil。轮次和 Job 缓存同事务提交，避免业务结果已落库而
+// 进度 flush 未落库时，终态轮永久停在未完成进度。
+func (s *JobService) markJobRoundTerminal(ctx context.Context, roundRowID int, fromStatuses []string, targetStatus string) error {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	row, err := tx.JobRound.Query().
+		Where(jobround.IDEQ(roundRowID)).
+		Select(
+			jobround.FieldJobID,
+			jobround.FieldStatus,
+			jobround.FieldSegmentTotal,
+			jobround.FieldSegmentCompleted,
+		).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			// 原条件更新对不存在的行也是 0 行命中，保持良性 no-op。
+			return nil
+		}
+		return err
+	}
+
+	allowed := false
+	for _, status := range fromStatuses {
+		if row.Status == status {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		// 保持原有 WHERE status IN (...) 的可观察语义：终态或其他状态不改动，
+		// 不因事务内读取到不匹配状态而报错。
+		return nil
+	}
+
+	// 终态闭合的进度增量 = 目标状态口径 − 当前状态口径（见 jobRoundProgress）；
+	// 不回写 segment_completed，保持「该列 ≡ 断点集合基数」以供重跑做基线。
+	// 增量按差值双向生效：闭合目标为正，逆向迁移（闭合态回退为非终态）为负，
+	// 两者都必须落到缓存上，否则矩阵与缓存会永久错位。
+	//
+	// 已知窗口：本读取与 DBReporter 的 flush 是两个事务。仅当某次 flush 失败留下
+	// 残留、其重试恰好落在本闭合之后时，那批断点会既被 flush 计入缓存、又被闭合
+	// 增量按旧计数覆盖一次，缓存短暂高于矩阵求和；一切重算路径（ReconcileJob /
+	// RecoverPendingJobs / ResumeJob / RetryJob）都以矩阵求和覆盖缓存，故不会固化。
+	delta := jobRoundProgress(targetStatus, int64(row.SegmentTotal), int64(row.SegmentCompleted)) -
+		jobRoundProgress(row.Status, int64(row.SegmentTotal), int64(row.SegmentCompleted))
+
+	update := tx.JobRound.Update().
 		Where(
 			jobround.IDEQ(roundRowID),
-			jobround.StatusEQ(JobRoundStatusRunning),
+			jobround.StatusIn(fromStatuses...),
 		).
-		SetStatus(JobRoundStatusCompleted).
-		SetFinishedAt(time.Now()).
-		Save(ctx)
-	return err
+		SetStatus(targetStatus).
+		SetFinishedAt(time.Now())
+	n, err := update.Save(ctx)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		// 并发调用已先完成状态翻转时，条件更新为 0 行；不能再次增加 Job 计数。
+		return nil
+	}
+
+	if delta != 0 {
+		if err := tx.Job.UpdateOneID(row.JobID).
+			AddProgressCompleted(delta).
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
 
 // MarkJobRoundFailed 将轮次行 running→failed 并记录错误信息与完成时间。
@@ -1192,21 +1306,16 @@ func (s *JobService) MarkJobRoundFailed(ctx context.Context, roundRowID int, fai
 // MarkJobRoundSkipped 将轮次行标记为 skipped 并记录完成时间（本轮无段可处理）。
 // 接受 pending 与 running：runner 先 MarkJobRoundRunning 再做空段检查，
 // 此时行已是 running（仅 pending 会 0 行命中且不报错，行将永久停留 running）。
+// skipped 同样是闭合终态：闭合口径由读侧按状态派生（skipped 计满量），不改写
+// segment_completed（该列 ≡ 断点集合基数）；矩阵不变式 segment_completed ≤
+// segment_total 保证闭合口径只会向上，fresh skipped 轮 0/0 的口径为 0。
 func (s *JobService) MarkJobRoundSkipped(ctx context.Context, roundRowID int) error {
-	_, err := s.client.JobRound.Update().
-		Where(
-			jobround.IDEQ(roundRowID),
-			jobround.StatusIn(JobRoundStatusPending, JobRoundStatusRunning),
-		).
-		SetStatus(JobRoundStatusSkipped).
-		SetFinishedAt(time.Now()).
-		Save(ctx)
-	return err
+	return s.markJobRoundTerminal(ctx, roundRowID,
+		[]string{JobRoundStatusPending, JobRoundStatusRunning}, JobRoundStatusSkipped)
 }
 
 // GetJobRoundStatus 返回轮次行当前状态。
-// 投影只取状态列：轮次行含可达几十 KB 的 resolved_segment_ids 断点
-// blob，每轮每资源一次的调用读出即弃是纯读放大。
+// 投影只取状态列，不加载断点关联行等无关数据。
 func (s *JobService) GetJobRoundStatus(ctx context.Context, roundRowID int) (string, error) {
 	row, err := s.client.JobRound.Query().
 		Where(jobround.IDEQ(roundRowID)).
@@ -1357,20 +1466,47 @@ func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobRes
 	if n == 0 {
 		return nil
 	}
-	// 收敛该资源的轮次矩阵：带 unresolved 的轮次行在 runner 成功分支保持
-	// running（交由重置路径续跑），若其工作已被后续同模式轮补齐/跳过而资源
-	// 正常收尾，残留 running 行将与资源终态矛盾（GetJob 矩阵展示、重置路径
-	// 误翻）。与资源终态同事务提交。
-	if _, err := tx.JobRound.Update().
+	// 收敛该资源名下的异常残留 running 轮：runner 正常路径已把每个执行过的轮
+	// 落终态（成功轮 completed、空段轮 skipped、失败轮 failed），能走到这里的是
+	// 状态写入失败等异常残留。本收敛只保证终态化、不发明完成——按计数缺口分流：
+	// 无缺口（segment_completed ≥ segment_total）说明工作确实做完、只是状态没
+	// 落盘，收敛为 completed；有缺口则缺口段未完成，闭合成 completed 会把它们
+	// 记成完成、且断点续传（runner 只跳过 completed|skipped）会永久跳过该轮，
+	// 故收敛为 failed 并写明缺口。两分支读侧口径都不变（无缺口分支的闭合值 ==
+	// segment_completed；failed 不闭合），因此不产生 Job 缓存增量。
+	rounds, err := tx.JobRound.Query().
 		Where(
 			jobround.HasJobResourceWith(jobresource.IDEQ(jobResourceID)),
 			jobround.StatusEQ(JobRoundStatusRunning),
 		).
-		SetStatus(JobRoundStatusCompleted).
-		SetFinishedAt(time.Now()).
-		Save(ctx); err != nil {
+		Select(
+			jobround.FieldID,
+			jobround.FieldSegmentTotal,
+			jobround.FieldSegmentCompleted,
+		).
+		All(ctx)
+	if err != nil {
 		return err
 	}
+	for _, round := range rounds {
+		updateRound := tx.JobRound.Update().
+			Where(
+				jobround.IDEQ(round.ID),
+				jobround.StatusEQ(JobRoundStatusRunning),
+			).
+			SetFinishedAt(time.Now())
+		if round.SegmentCompleted >= round.SegmentTotal {
+			updateRound = updateRound.SetStatus(JobRoundStatusCompleted)
+		} else {
+			updateRound = updateRound.
+				SetStatus(JobRoundStatusFailed).
+				SetErrorMessage(fmt.Sprintf("资源收尾时轮次仍未闭合，缺口段未完成（已完成 %d/%d）", round.SegmentCompleted, round.SegmentTotal))
+		}
+		if _, err := updateRound.Save(ctx); err != nil {
+			return err
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -1512,9 +1648,9 @@ func (s *JobService) MarkJobPaused(ctx context.Context, jobID int) error {
 
 // ResumeJob 从轮次断点恢复已暂停的任务：仅 paused 可恢复（否则
 // ErrJobNotResumable）。事务内批量条件重置——资源 running→pending、轮次
-// running→pending（保留 segment_total/segment_completed/resolved_segment_ids
-// 断点）——任务 paused→pending，随后从矩阵重算进度计数器（无条件求和）。
-// 重置绝不清理断点字段，保证恢复后从断点继续、求和保持正确。
+// running→pending（保留 segment_total/segment_completed 与 job_round_segments
+// 断点关联行）——任务 paused→pending，随后从矩阵重算进度计数器（无条件求和）。
+// 重置绝不清理断点数据，保证恢复后从断点继续、求和保持正确。
 func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
 	current, err := s.GetJob(ctx, actorUserID, jobID)
 	if err != nil {
@@ -1540,6 +1676,8 @@ func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*en
 		return nil, err
 	}
 	// 轮次行 failed|running|skipped→pending：仅翻状态，断点字段原样保留。
+	// segment_completed 是断点集合的派生缓存（DBReporter 独占写入），重置后
+	// 重跑以断点集合为基线继续推进（StageStart 锚定集合基数），计数不回退。
 	// skipped 是「当时无段可处理」的时点判断——暂停期间用户可经段落编辑
 	// API 把段置回 pending 使其失效，重置后空段检查自然重新判定；failed
 	// 来自 MarkJobRoundFailed 与 MarkJobResourceFailed 两写间隙的崩溃窗口
@@ -1601,8 +1739,10 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 		return nil, ErrJobNoFailedResource
 	}
 	// 轮次行 failed|running|skipped→pending（条件更新）：保留 segment_total/
-	// segment_completed/resolved_segment_ids 断点；completed 轮不动，重跑时
-	// 按断点跳过。running 轮来自有未解决段的轮次与取消打断（成功分支不置
+	// segment_completed 与 job_round_segments 断点关联行；completed 轮不动，重跑时
+	// 按断点跳过。segment_completed 是断点集合的派生缓存（DBReporter 独占写入），
+	// 重置后重跑以断点集合为基线继续推进（StageStart 锚定集合基数），计数不回退。
+	// running 轮来自有未解决段的轮次与取消打断（成功分支不置
 	// completed 保持 running）；skipped 是「当时无段可处理」的时点判断——
 	// 失败期间用户可经段落编辑 API 把段置回 pending 使其失效，重置后空段
 	// 检查会自然重新判定（无段则再次 skip，代价一次空扫描）。
@@ -1818,9 +1958,9 @@ func (s *JobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.J
 		WithCreatedBy().
 		WithJobResources(func(q *ent.JobResourceQuery) {
 			q.WithResource().WithRounds(func(rq *ent.JobRoundQuery) {
-				// 详情视图不消费断点 blob（jobRoundResponse 不含该字段），
-				// 投影排除 resolved_segment_ids——它是可增长到几十 KB/行的
-				// JSON 集合，本接口是前端轮询主路径，避免无谓读放大。
+				// 详情视图不消费断点数据（jobRoundResponse 不含该字段），
+				// 投影只取响应所需列——断点存于 job_round_segments
+				// 关联行，本接口是前端轮询主路径，避免逐轮加载关联数据。
 				rq.Select(
 					jobround.FieldID,
 					jobround.FieldRoundIndex,
