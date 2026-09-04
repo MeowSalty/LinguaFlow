@@ -7,6 +7,8 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
@@ -31,8 +33,8 @@ type roundInfo struct {
 }
 
 // loadJobRounds 从 DB 装载任务全部 JobRound 行，构建注册表。
-// 投影只取路由所需三列：resolved_segment_ids 断点 blob 可达几十 KB/行，
-// 读出即弃是纯粹的启动期读放大（断点恢复走 loadResolved 独立查询）。
+// 投影只取路由所需三列（id/job_resource_id/round_index），避免读出即弃的
+// 启动期读放大（断点恢复走 loadResolved 独立查询）。
 // 兼容升级：旧任务无 JobRound 行时返回空注册表（rounds 为空 map），
 // 执行链对此的处理是「动态建行」（见 ensureRoundRow）。
 func loadJobRounds(ctx context.Context, client *ent.Client, jobID int) (*roundRegistry, error) {
@@ -142,27 +144,48 @@ func (reg *roundRegistry) ensureLoaded(
 
 // loadResolved 从 DB 恢复某资源各非翻译轮已解决段集合（按 mode 分组，DB Segment ID）。
 // 恢复语义：内存 resolvedByMode 是跨同模式轮累积集合，持久化后恢复 =
-// 各同模式轮 resolved_segment_ids 的并集。
+// 各同模式轮 job_round_segments 关联行的并集（逐段实时追加，崩溃/失败后
+// 已落盘段不重扫）。两步查询：先取该资源**非翻译**轮的 (id, mode)，
+// 再按行 ID 集合查 join 行；无此类轮次行时跳过第二次查询。
+//
+// 排除 translate 轮是必须的读放大控制：translate 轮同样登记断点行（其
+// segment_completed 由集合基数派生），但跨轮增量由 Segment.status 驱动、
+// resolvedByMode 里根本没有 translate 键，把整个翻译断点集读出来只会被丢弃。
 func loadResolved(ctx context.Context, client *ent.Client, jobResourceID int) (map[string]map[int]struct{}, error) {
-	rows, err := client.JobRound.Query().
-		Where(jobround.JobResourceIDEQ(jobResourceID)).
+	rounds, err := client.JobRound.Query().
+		Where(
+			jobround.JobResourceIDEQ(jobResourceID),
+			jobround.ModeNEQ(pipeline.RoundModeTranslate),
+		).
+		Select(jobround.FieldID, jobround.FieldMode).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load resolved rounds: %w", err)
 	}
 	out := make(map[string]map[int]struct{})
-	for _, row := range rows {
-		if len(row.ResolvedSegmentIds) == 0 {
-			continue
-		}
-		set, ok := out[row.Mode]
+	if len(rounds) == 0 {
+		return out, nil
+	}
+	roundIDs := make([]int, 0, len(rounds))
+	modeByRound := make(map[int]string, len(rounds))
+	for _, row := range rounds {
+		roundIDs = append(roundIDs, row.ID)
+		modeByRound[row.ID] = row.Mode
+	}
+	links, err := client.JobRoundSegment.Query().
+		Where(jobroundsegment.JobRoundIDIn(roundIDs...)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load resolved segments: %w", err)
+	}
+	for _, link := range links {
+		mode := modeByRound[link.JobRoundID]
+		set, ok := out[mode]
 		if !ok {
-			set = make(map[int]struct{}, len(row.ResolvedSegmentIds))
-			out[row.Mode] = set
+			set = make(map[int]struct{})
+			out[mode] = set
 		}
-		for _, id := range row.ResolvedSegmentIds {
-			set[id] = struct{}{}
-		}
+		set[link.SegmentID] = struct{}{}
 	}
 	return out, nil
 }

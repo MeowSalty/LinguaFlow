@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -279,25 +280,53 @@ func TestEnsureRoundRow_ConcurrentCreateRace(t *testing.T) {
 	}
 }
 
+// createRoundSegmentLink 预插一行 job_round_segments 关联（断点逐段追加行）。
+func createRoundSegmentLink(t *testing.T, client *ent.Client, roundRowID, segmentID int) {
+	t.Helper()
+	if err := client.JobRoundSegment.Create().
+		SetJobRoundID(roundRowID).
+		SetSegmentID(segmentID).
+		Exec(context.Background()); err != nil {
+		t.Fatalf("create job_round_segment (round=%d, segment=%d): %v", roundRowID, segmentID, err)
+	}
+}
+
 // TestLoadResolved_UnionPerMode loadResolved 按 mode 分组恢复各同模式轮
-// resolved_segment_ids 的并集；空集合行跳过；不同 mode 互不混入。
+// job_round_segments 关联行的并集；无关联行的轮跳过；不同 mode 互不混入；
+// 无任何轮次行时返回空 map。
 func TestLoadResolved_UnionPerMode(t *testing.T) {
 	client := newRegistryTestClient(t)
 	ctx := context.Background()
-	jobID, jr0, _ := registryFixture(t, client)
+	jobID, jr0, jr1 := registryFixture(t, client)
 
-	// translate 轮恒空（不 Set resolved_segment_ids）→ 跳过。
-	createJobRoundRow(t, client, jobID, jr0, 0, "translate")
+	// 预建真实 Segment 行：join 表双 FK，segment_id 必须存在。
+	segIDs := make([]int, 0, 3)
+	for i := 0; i < 3; i++ {
+		seg, err := client.Segment.Create().
+			SetSegmentIndex(i).
+			SetSourceText(fmt.Sprintf("seg-%d", i)).
+			Save(ctx)
+		if err != nil {
+			t.Fatalf("create segment %d: %v", i, err)
+		}
+		segIDs = append(segIDs, seg.ID)
+	}
+
+	// translate 轮**有**关联行（其 segment_completed 就是断点集合基数），但跨轮
+	// 增量由 Segment.status 驱动、resolvedByMode 无 translate 键——loadResolved
+	// 必须在查询层就把它排除，否则每个资源启动时都要把整个翻译断点集读出来丢掉。
+	rt := createJobRoundRow(t, client, jobID, jr0, 0, "translate")
+	createRoundSegmentLink(t, client, rt, segIDs[0])
+	createRoundSegmentLink(t, client, rt, segIDs[1])
+	createRoundSegmentLink(t, client, rt, segIDs[2])
 
 	r1 := createJobRoundRow(t, client, jobID, jr0, 1, "adjudicate")
-	if err := client.JobRound.UpdateOneID(r1).SetResolvedSegmentIds([]int{5, 7}).Exec(ctx); err != nil {
-		t.Fatalf("set resolved r1: %v", err)
-	}
+	createRoundSegmentLink(t, client, r1, segIDs[0])
+	createRoundSegmentLink(t, client, r1, segIDs[1])
 	r2 := createJobRoundRow(t, client, jobID, jr0, 2, "adjudicate")
-	if err := client.JobRound.UpdateOneID(r2).SetResolvedSegmentIds([]int{7, 9}).Exec(ctx); err != nil {
-		t.Fatalf("set resolved r2: %v", err)
-	}
-	// extract 轮同样为空 → 跳过。
+	createRoundSegmentLink(t, client, r2, segIDs[1])
+	createRoundSegmentLink(t, client, r2, segIDs[2])
+	// extract 轮本例无关联行 → 跳过。
 	createJobRoundRow(t, client, jobID, jr0, 3, "extract")
 
 	got, err := loadResolved(ctx, client, jr0)
@@ -305,24 +334,33 @@ func TestLoadResolved_UnionPerMode(t *testing.T) {
 		t.Fatalf("loadResolved: %v", err)
 	}
 
-	// adjudicate：两轮并集 {5,7,9}。
+	// adjudicate：两轮并集 {seg0, seg1, seg2}。
 	adj := got["adjudicate"]
 	if len(adj) != 3 {
-		t.Fatalf("adjudicate set = %v, want {5,7,9}", adj)
+		t.Fatalf("adjudicate set = %v, want 三段并集", adj)
 	}
-	for _, id := range []int{5, 7, 9} {
+	for _, id := range segIDs {
 		if _, ok := adj[id]; !ok {
 			t.Fatalf("adjudicate set 缺少 DB 段 ID %d: %v", id, adj)
 		}
 	}
-	// 空集合的 mode 不应出现键（或至多为空集）。
+	// translate 轮即使有关联行也不得进入结果（查询层已排除）。
 	if s := got["translate"]; len(s) != 0 {
-		t.Fatalf("translate set = %v, want 空（空行跳过）", s)
+		t.Fatalf("translate set = %v, want 空（翻译轮断点不参与跨轮过滤）", s)
 	}
 	if s := got["extract"]; len(s) != 0 {
-		t.Fatalf("extract set = %v, want 空（空行跳过）", s)
+		t.Fatalf("extract set = %v, want 空（该轮无关联行）", s)
 	}
 	if len(got) != 1 {
 		t.Fatalf("modes = %d (%v), want 仅 adjudicate", len(got), got)
+	}
+
+	// 无任何轮次行的资源：空 map，不报错。
+	empty, err := loadResolved(ctx, client, jr1)
+	if err != nil {
+		t.Fatalf("loadResolved(no rounds): %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("loadResolved(no rounds) = %v, want 空 map", empty)
 	}
 }
