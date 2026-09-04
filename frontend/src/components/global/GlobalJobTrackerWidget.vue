@@ -107,6 +107,10 @@ const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
                 class="h-2 w-2 shrink-0 rounded-full bg-amber-500"
               />
               <span
+                v-else-if="job.status === 'paused'"
+                class="h-2 w-2 shrink-0 rounded-full bg-amber-400"
+              />
+              <span
                 v-else-if="job.status === 'completed'"
                 class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
               />

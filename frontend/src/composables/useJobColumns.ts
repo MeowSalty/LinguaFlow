@@ -1,4 +1,4 @@
-import { computed, h } from 'vue'
+import { computed, h, type VNode } from 'vue'
 import type { DataTableColumns, SelectOption } from 'naive-ui'
 import { NButton, NProgress, NSpace, NTag, NText } from 'naive-ui'
 
@@ -20,6 +20,8 @@ export interface JobColumnActions {
   openJobDetail: (job: Job) => void
   cancelJob: (job: Job) => void
   retryJob: (job: Job) => void
+  pauseJob: (job: Job) => void
+  resumeJob: (job: Job) => void
 }
 
 export function useJobColumns(actions: JobColumnActions) {
@@ -30,6 +32,7 @@ export function useJobColumns(actions: JobColumnActions) {
     { label: t('workspace.filters.allStatuses'), value: 'all' },
     { label: t('workspace.job.status.pending'), value: 'pending' },
     { label: t('workspace.job.status.running'), value: 'running' },
+    { label: t('workspace.job.status.paused'), value: 'paused' },
     { label: t('workspace.job.status.completed'), value: 'completed' },
     { label: t('workspace.job.status.failed'), value: 'failed' },
     { label: t('workspace.job.status.cancelled'), value: 'cancelled' },
@@ -142,8 +145,12 @@ export function useJobColumns(actions: JobColumnActions) {
       key: 'actions',
       width: 220,
       fixed: 'right',
-      render: (row) =>
-        h(NSpace, { size: 4, wrap: false }, () => [
+      render: (row) => {
+        // 按状态条件渲染操作按钮（互斥，最多同时 3 个）
+        const buttons: VNode[] = []
+
+        // 详情：始终可用
+        buttons.push(
           h(
             NButton,
             {
@@ -157,35 +164,82 @@ export function useJobColumns(actions: JobColumnActions) {
             },
             { default: () => t('workspace.job.actions.details') },
           ),
-          h(
-            NButton,
-            {
-              size: 'small',
-              quaternary: true,
-              disabled: row.status !== 'pending' && row.status !== 'running',
-              loading: workspace.cancellingJobIds.includes(row.id),
-              onClick: (event: MouseEvent) => {
-                event.stopPropagation()
-                actions.cancelJob(row)
+        )
+        // 暂停：pending / running
+        if (row.status === 'pending' || row.status === 'running') {
+          buttons.push(
+            h(
+              NButton,
+              {
+                size: 'small',
+                quaternary: true,
+                loading: workspace.pausingJobIds.includes(row.id),
+                onClick: (event: MouseEvent) => {
+                  event.stopPropagation()
+                  actions.pauseJob(row)
+                },
               },
-            },
-            { default: () => t('workspace.job.actions.cancel') },
-          ),
-          h(
-            NButton,
-            {
-              size: 'small',
-              quaternary: true,
-              disabled: row.status !== 'failed',
-              loading: workspace.retryingJobIds.includes(row.id),
-              onClick: (event: MouseEvent) => {
-                event.stopPropagation()
-                actions.retryJob(row)
+              { default: () => t('workspace.job.actions.pause') },
+            ),
+          )
+        }
+        // 恢复：paused
+        if (row.status === 'paused') {
+          buttons.push(
+            h(
+              NButton,
+              {
+                size: 'small',
+                quaternary: true,
+                loading: workspace.resumingJobIds.includes(row.id),
+                onClick: (event: MouseEvent) => {
+                  event.stopPropagation()
+                  actions.resumeJob(row)
+                },
               },
-            },
-            { default: () => t('workspace.job.actions.retry') },
-          ),
-        ]),
+              { default: () => t('workspace.job.actions.resume') },
+            ),
+          )
+        }
+        // 取消：pending / running / paused（paused 任务可取消）
+        if (row.status === 'pending' || row.status === 'running' || row.status === 'paused') {
+          buttons.push(
+            h(
+              NButton,
+              {
+                size: 'small',
+                quaternary: true,
+                loading: workspace.cancellingJobIds.includes(row.id),
+                onClick: (event: MouseEvent) => {
+                  event.stopPropagation()
+                  actions.cancelJob(row)
+                },
+              },
+              { default: () => t('workspace.job.actions.cancel') },
+            ),
+          )
+        }
+        // 重试：failed / cancelled
+        if (row.status === 'failed' || row.status === 'cancelled') {
+          buttons.push(
+            h(
+              NButton,
+              {
+                size: 'small',
+                quaternary: true,
+                loading: workspace.retryingJobIds.includes(row.id),
+                onClick: (event: MouseEvent) => {
+                  event.stopPropagation()
+                  actions.retryJob(row)
+                },
+              },
+              { default: () => t('workspace.job.actions.retry') },
+            ),
+          )
+        }
+
+        return h(NSpace, { size: 4, wrap: false }, () => buttons)
+      },
     },
   ])
 
