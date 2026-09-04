@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -11,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -20,13 +22,14 @@ import (
 // SegmentQuery is the builder for querying Segment entities.
 type SegmentQuery struct {
 	config
-	ctx            *QueryContext
-	order          []segment.OrderOption
-	inters         []Interceptor
-	predicates     []predicate.Segment
-	withResource   *ResourceQuery
-	withReviewedBy *UserQuery
-	withFKs        bool
+	ctx                  *QueryContext
+	order                []segment.OrderOption
+	inters               []Interceptor
+	predicates           []predicate.Segment
+	withResource         *ResourceQuery
+	withReviewedBy       *UserQuery
+	withResolvedInRounds *JobRoundQuery
+	withFKs              bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -100,6 +103,28 @@ func (_q *SegmentQuery) QueryReviewedBy() *UserQuery {
 			sqlgraph.From(segment.Table, segment.FieldID, selector),
 			sqlgraph.To(user.Table, user.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, segment.ReviewedByTable, segment.ReviewedByColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryResolvedInRounds chains the current query on the "resolved_in_rounds" edge.
+func (_q *SegmentQuery) QueryResolvedInRounds() *JobRoundQuery {
+	query := (&JobRoundClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(segment.Table, segment.FieldID, selector),
+			sqlgraph.To(jobround.Table, jobround.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, segment.ResolvedInRoundsTable, segment.ResolvedInRoundsPrimaryKey...),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -294,13 +319,14 @@ func (_q *SegmentQuery) Clone() *SegmentQuery {
 		return nil
 	}
 	return &SegmentQuery{
-		config:         _q.config,
-		ctx:            _q.ctx.Clone(),
-		order:          append([]segment.OrderOption{}, _q.order...),
-		inters:         append([]Interceptor{}, _q.inters...),
-		predicates:     append([]predicate.Segment{}, _q.predicates...),
-		withResource:   _q.withResource.Clone(),
-		withReviewedBy: _q.withReviewedBy.Clone(),
+		config:               _q.config,
+		ctx:                  _q.ctx.Clone(),
+		order:                append([]segment.OrderOption{}, _q.order...),
+		inters:               append([]Interceptor{}, _q.inters...),
+		predicates:           append([]predicate.Segment{}, _q.predicates...),
+		withResource:         _q.withResource.Clone(),
+		withReviewedBy:       _q.withReviewedBy.Clone(),
+		withResolvedInRounds: _q.withResolvedInRounds.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -326,6 +352,17 @@ func (_q *SegmentQuery) WithReviewedBy(opts ...func(*UserQuery)) *SegmentQuery {
 		opt(query)
 	}
 	_q.withReviewedBy = query
+	return _q
+}
+
+// WithResolvedInRounds tells the query-builder to eager-load the nodes that are connected to
+// the "resolved_in_rounds" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *SegmentQuery) WithResolvedInRounds(opts ...func(*JobRoundQuery)) *SegmentQuery {
+	query := (&JobRoundClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withResolvedInRounds = query
 	return _q
 }
 
@@ -408,9 +445,10 @@ func (_q *SegmentQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Segm
 		nodes       = []*Segment{}
 		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [3]bool{
 			_q.withResource != nil,
 			_q.withReviewedBy != nil,
+			_q.withResolvedInRounds != nil,
 		}
 	)
 	if _q.withReviewedBy != nil {
@@ -446,6 +484,13 @@ func (_q *SegmentQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Segm
 	if query := _q.withReviewedBy; query != nil {
 		if err := _q.loadReviewedBy(ctx, query, nodes, nil,
 			func(n *Segment, e *User) { n.Edges.ReviewedBy = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withResolvedInRounds; query != nil {
+		if err := _q.loadResolvedInRounds(ctx, query, nodes,
+			func(n *Segment) { n.Edges.ResolvedInRounds = []*JobRound{} },
+			func(n *Segment, e *JobRound) { n.Edges.ResolvedInRounds = append(n.Edges.ResolvedInRounds, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -512,6 +557,67 @@ func (_q *SegmentQuery) loadReviewedBy(ctx context.Context, query *UserQuery, no
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *SegmentQuery) loadResolvedInRounds(ctx context.Context, query *JobRoundQuery, nodes []*Segment, init func(*Segment), assign func(*Segment, *JobRound)) error {
+	edgeIDs := make([]driver.Value, len(nodes))
+	byID := make(map[int]*Segment)
+	nids := make(map[int]map[*Segment]struct{})
+	for i, node := range nodes {
+		edgeIDs[i] = node.ID
+		byID[node.ID] = node
+		if init != nil {
+			init(node)
+		}
+	}
+	query.Where(func(s *sql.Selector) {
+		joinT := sql.Table(segment.ResolvedInRoundsTable)
+		s.Join(joinT).On(s.C(jobround.FieldID), joinT.C(segment.ResolvedInRoundsPrimaryKey[0]))
+		s.Where(sql.InValues(joinT.C(segment.ResolvedInRoundsPrimaryKey[1]), edgeIDs...))
+		columns := s.SelectedColumns()
+		s.Select(joinT.C(segment.ResolvedInRoundsPrimaryKey[1]))
+		s.AppendSelect(columns...)
+		s.SetDistinct(false)
+	})
+	if err := query.prepareQuery(ctx); err != nil {
+		return err
+	}
+	qr := QuerierFunc(func(ctx context.Context, q Query) (Value, error) {
+		return query.sqlAll(ctx, func(_ context.Context, spec *sqlgraph.QuerySpec) {
+			assign := spec.Assign
+			values := spec.ScanValues
+			spec.ScanValues = func(columns []string) ([]any, error) {
+				values, err := values(columns[1:])
+				if err != nil {
+					return nil, err
+				}
+				return append([]any{new(sql.NullInt64)}, values...), nil
+			}
+			spec.Assign = func(columns []string, values []any) error {
+				outValue := int(values[0].(*sql.NullInt64).Int64)
+				inValue := int(values[1].(*sql.NullInt64).Int64)
+				if nids[inValue] == nil {
+					nids[inValue] = map[*Segment]struct{}{byID[outValue]: {}}
+					return assign(columns[1:], values[1:])
+				}
+				nids[inValue][byID[outValue]] = struct{}{}
+				return nil
+			}
+		})
+	})
+	neighbors, err := withInterceptors[[]*JobRound](ctx, query, qr, query.inters)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected "resolved_in_rounds" node returned %v`, n.ID)
+		}
+		for kn := range nodes {
+			assign(kn, n)
 		}
 	}
 	return nil

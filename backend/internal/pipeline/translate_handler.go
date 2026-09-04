@@ -54,6 +54,10 @@ type TranslateHandler struct {
 	Reporter progress.Reporter
 	Logger   *slog.Logger
 
+	// Gate 是任务级暂停闸门（退避重试等待中止信号）；nil 时无暂停语义。
+	// 由 RunRound 调用方经 engine.Round 注入（见 roundexecutor 的 Slots/Gate 注入）。
+	Gate *PauseGate
+
 	RoundIndex int // execution plan round index, set by caller
 }
 
@@ -84,13 +88,6 @@ func (h *TranslateHandler) logger() *slog.Logger {
 		return slog.Default()
 	}
 	return h.Logger
-}
-
-func (h *TranslateHandler) reporter() progress.Reporter {
-	if h.Reporter == nil {
-		return progress.Nop{}
-	}
-	return h.Reporter
 }
 
 // BuildBatches 收集待翻译段落、执行 Protect、分批、上下文扩展。
@@ -331,6 +328,10 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
+				return batchResult{unresolved: pendingIdxs}
+			case <-h.Gate.Done():
+				// 暂停时中止退避等待：段保持未解决，由断点集合覆盖。
 				timer.Stop()
 				return batchResult{unresolved: pendingIdxs}
 			case <-timer.C:
@@ -590,7 +591,6 @@ func (h *TranslateHandler) processTranslatedSegments(
 	contextSet map[int]struct{},
 	logger *slog.Logger,
 ) (unresolved []int) {
-	rep := h.reporter()
 	wantIDIdx := 0
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
@@ -686,8 +686,6 @@ func (h *TranslateHandler) processTranslatedSegments(
 				logger.Debug("tm add failed", "err", err)
 			}
 		}
-
-		rep.SegmentDone()
 	}
 	return unresolved
 }

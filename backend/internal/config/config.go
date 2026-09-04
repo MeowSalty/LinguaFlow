@@ -136,6 +136,42 @@ type WorkerConfig struct {
 	Sync        RunnerConfig `yaml:"sync"`
 }
 
+// PipelineConfig 流水线准入控制（资源入线的字节配额与资源数上限）。
+// weight 语义为「在途工作配额」：以源文本字节为代理，同时关联内存与
+// LLM 成本，不承诺精确等于进程内存——每资源峰值 ≈ 2~4× 源文本字节
+// + 每轮批提示词固定开销；固定开销由 MaxInflightResources 兜底。
+// 注意：配额是并发节流而非内存上限（内存上限由 RssLimitMB 保险丝
+// 进程级兜底），超预算的单资源在预算空置时独跑放行，不会饥饿。
+// 口径为「每任务」：预算随每个任务的执行实例化，并发任务各自独占
+// 一份——进程级实际在途量 ≈ 配额 × 并发任务数，进程级兜底仅 RssLimitMB。
+type PipelineConfig struct {
+	// MaxInflightWeightMB 在途工作配额上限（源文本字节，单位 MB，每任务口径）；
+	// <=0 用默认值 32。并发节流：控制同时入线的源文本总量，非硬性内存上限。
+	MaxInflightWeightMB int `yaml:"max_inflight_weight_mb"`
+	// MaxInflightResources 在途资源数上限（每任务口径；兜住每资源句柄开销）；
+	// <=0 用默认值 8。
+	MaxInflightResources int `yaml:"max_inflight_resources"`
+	// RssLimitMB 进程级 RSS 保险丝上限（MB）；0 = 关闭。
+	// 双水位：≥85% 暂停所有任务的新资源准入（只出不进），≤70% 恢复。
+	// 触发不改变任务状态（任务保持 running，资源排队），仅记结构化日志。
+	RssLimitMB int `yaml:"rss_limit_mb"`
+}
+
+// 流水线准入默认值。
+const (
+	defaultMaxInflightWeightMB  = 32
+	defaultMaxInflightResources = 8
+)
+
+// DefaultPipelineConfig 返回默认的流水线准入配置（RSS 保险丝默认关闭）。
+func DefaultPipelineConfig() PipelineConfig {
+	return PipelineConfig{
+		MaxInflightWeightMB:  defaultMaxInflightWeightMB,
+		MaxInflightResources: defaultMaxInflightResources,
+		RssLimitMB:           0,
+	}
+}
+
 // RunnerConfig 单个 Runner 的并发数和队列容量。
 type RunnerConfig struct {
 	Count         int `yaml:"count"`          // Worker goroutine 数，默认 NumCPU()（下限 2）
@@ -241,6 +277,7 @@ type ServerConfig struct {
 	RevisionRetention time.Duration        `yaml:"revision_retention"`
 	Database          DatabaseConfig       `yaml:"database"`
 	Workers           WorkerConfig         `yaml:"workers"`
+	Pipeline          PipelineConfig       `yaml:"pipeline"`
 	Preview           PreviewConfig        `yaml:"preview"`
 	QuickTranslate    QuickTranslateConfig `yaml:"quick_translate"`
 	SSE               SSEConfig            `yaml:"sse"`
@@ -349,6 +386,7 @@ func DefaultServerConfig() *ServerConfig {
 		RevisionRetention: 90 * 24 * time.Hour,
 		Database:          defaultDatabaseConfig(DatabaseDriverSQLite),
 		Workers:           DefaultWorkerConfig(),
+		Pipeline:          DefaultPipelineConfig(),
 		Preview:           DefaultPreviewConfig(),
 		QuickTranslate:    DefaultQuickTranslateConfig(),
 		SSE:               DefaultSSEConfig(),
@@ -436,6 +474,17 @@ func ValidateServerConfig(c *ServerConfig) error {
 	}
 	if c.Workers.Sync.QueueCapacity < 1 {
 		c.Workers.Sync.QueueCapacity = 1
+	}
+	// 流水线准入：<=0 或负值回退默认值（0 是显式关闭 RSS 保险丝的合法值，
+	// 仅对 RssLimitMB 例外——RssLimitMB < 0 视为非法并回退 0）。
+	if c.Pipeline.MaxInflightWeightMB <= 0 {
+		c.Pipeline.MaxInflightWeightMB = defaultMaxInflightWeightMB
+	}
+	if c.Pipeline.MaxInflightResources <= 0 {
+		c.Pipeline.MaxInflightResources = defaultMaxInflightResources
+	}
+	if c.Pipeline.RssLimitMB < 0 {
+		c.Pipeline.RssLimitMB = 0
 	}
 	if c.Preview.MaxConcurrency <= 0 {
 		c.Preview.MaxConcurrency = DefaultPreviewConfig().MaxConcurrency

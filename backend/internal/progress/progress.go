@@ -38,6 +38,18 @@ func (Nop) BatchComplete()         {}
 func (Nop) StageDone()             {}
 func (Nop) Close() error           { return nil }
 
+// SegmentResolvedNotifier 由支持轮次断点持久化的 Reporter 实现（当前仅
+// DBReporter）。executor 在判定一个段已解决（批次终态推导的 resolved
+// 子集）时逐段调用；与 SegmentDone 配对——SegmentDone 推进计数、
+// SegmentResolved 登记断点，两者由 executor 的同一判定驱动，保证
+// 「segment_completed ≡ 断点集合基数」的 checkpoint 不变式。
+// 非持久化实现（Nop/Terminal/Log/MemoryCollector）不实现本接口；
+// 调用方通过类型断言探测，未实现则跳过断点登记（同 pipeline SetGate
+// 的注入惯例）。
+type SegmentResolvedNotifier interface {
+	SegmentResolved(docIndex int)
+}
+
 // BatchEvent describes the result of a single batch translation attempt.
 type BatchEvent struct {
 	Stage           string                  `json:"stage"`

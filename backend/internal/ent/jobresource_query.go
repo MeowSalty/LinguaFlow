@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -13,6 +14,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 )
@@ -26,6 +28,7 @@ type JobResourceQuery struct {
 	predicates   []predicate.JobResource
 	withJob      *JobQuery
 	withResource *ResourceQuery
+	withRounds   *JobRoundQuery
 	withFKs      bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -100,6 +103,28 @@ func (_q *JobResourceQuery) QueryResource() *ResourceQuery {
 			sqlgraph.From(jobresource.Table, jobresource.FieldID, selector),
 			sqlgraph.To(resource.Table, resource.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, jobresource.ResourceTable, jobresource.ResourceColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryRounds chains the current query on the "rounds" edge.
+func (_q *JobResourceQuery) QueryRounds() *JobRoundQuery {
+	query := (&JobRoundClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(jobresource.Table, jobresource.FieldID, selector),
+			sqlgraph.To(jobround.Table, jobround.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, jobresource.RoundsTable, jobresource.RoundsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -301,6 +326,7 @@ func (_q *JobResourceQuery) Clone() *JobResourceQuery {
 		predicates:   append([]predicate.JobResource{}, _q.predicates...),
 		withJob:      _q.withJob.Clone(),
 		withResource: _q.withResource.Clone(),
+		withRounds:   _q.withRounds.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -326,6 +352,17 @@ func (_q *JobResourceQuery) WithResource(opts ...func(*ResourceQuery)) *JobResou
 		opt(query)
 	}
 	_q.withResource = query
+	return _q
+}
+
+// WithRounds tells the query-builder to eager-load the nodes that are connected to
+// the "rounds" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *JobResourceQuery) WithRounds(opts ...func(*JobRoundQuery)) *JobResourceQuery {
+	query := (&JobRoundClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withRounds = query
 	return _q
 }
 
@@ -408,9 +445,10 @@ func (_q *JobResourceQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 		nodes       = []*JobResource{}
 		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [3]bool{
 			_q.withJob != nil,
 			_q.withResource != nil,
+			_q.withRounds != nil,
 		}
 	)
 	if _q.withJob != nil || _q.withResource != nil {
@@ -446,6 +484,13 @@ func (_q *JobResourceQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 	if query := _q.withResource; query != nil {
 		if err := _q.loadResource(ctx, query, nodes, nil,
 			func(n *JobResource, e *Resource) { n.Edges.Resource = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withRounds; query != nil {
+		if err := _q.loadRounds(ctx, query, nodes,
+			func(n *JobResource) { n.Edges.Rounds = []*JobRound{} },
+			func(n *JobResource, e *JobRound) { n.Edges.Rounds = append(n.Edges.Rounds, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -513,6 +558,36 @@ func (_q *JobResourceQuery) loadResource(ctx context.Context, query *ResourceQue
 		for i := range nodes {
 			assign(nodes[i], n)
 		}
+	}
+	return nil
+}
+func (_q *JobResourceQuery) loadRounds(ctx context.Context, query *JobRoundQuery, nodes []*JobResource, init func(*JobResource), assign func(*JobResource, *JobRound)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*JobResource)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(jobround.FieldJobResourceID)
+	}
+	query.Where(predicate.JobRound(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(jobresource.RoundsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.JobResourceID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "job_resource_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
 	}
 	return nil
 }

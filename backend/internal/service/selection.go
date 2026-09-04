@@ -8,6 +8,9 @@ import (
 	"sort"
 	"strings"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -16,6 +19,72 @@ import (
 // 任务创建与 QA 重检共享的段落选择解析：
 // 按 segment_group_keys > segment_ids > resource_ids 的优先级把选择条件
 // 解析为 resourceID → segmentIDs 的映射，二者共享同一套权限与匹配语义。
+
+// workWeightScan 聚合计数的扫描载体（列名经 sql tag 对齐 AS 别名）。
+type workWeightScan struct {
+	WorkWeight int64 `sql:"work_weight"`
+}
+
+// workWeightAggregate 自定义聚合表达式：按驱动方言对 source_text 求字节数
+// 后求和——SQLite 用 LENGTH(CAST(x AS BLOB))（UTF-8 字节数），PostgreSQL
+// 用 OCTET_LENGTH(x)（PG 无 blob 类型，CAST(x AS BLOB) 会报
+// "type blob does not exist"）。两口径均为 UTF-8 字节数，跨驱动一致。
+// 经 ent AggregateFunc 注入（Selector 携带驱动方言），避免直接依赖底层 *sql.DB。
+func workWeightAggregate(s *entsql.Selector) string {
+	col := s.C(segment.FieldSourceText)
+	var byteLen string
+	if s.Dialect() == dialect.Postgres {
+		byteLen = fmt.Sprintf("OCTET_LENGTH(%s)", col)
+	} else {
+		byteLen = fmt.Sprintf("LENGTH(CAST(%s AS BLOB))", col)
+	}
+	return fmt.Sprintf("COALESCE(SUM(%s), 0) AS work_weight", byteLen)
+}
+
+// sumSegmentWorkWeight 汇总选定段落的 source_text 字节长度，作为任务资源的
+// 工作量权重（准入预算用）。segment_ids 为空（动态选择）时返回 0，由 worker
+// 侧 back-fill。IN 列表按 selectionQueryChunkSize 分片，避免超过 SQLite
+// 绑定变量上限。
+func sumSegmentWorkWeight(ctx context.Context, client *ent.Client, segmentIDs []int) (int64, error) {
+	if len(segmentIDs) == 0 {
+		return 0, nil
+	}
+	var total int64
+	for start := 0; start < len(segmentIDs); start += selectionQueryChunkSize {
+		end := start + selectionQueryChunkSize
+		if end > len(segmentIDs) {
+			end = len(segmentIDs)
+		}
+		var rows []workWeightScan
+		if err := client.Segment.Query().
+			Where(segment.IDIn(segmentIDs[start:end]...)).
+			Aggregate(workWeightAggregate).
+			Scan(ctx, &rows); err != nil {
+			return 0, err
+		}
+		if len(rows) > 0 {
+			total += rows[0].WorkWeight
+		}
+	}
+	return total, nil
+}
+
+// SumResourceWorkWeight 汇总某资源全部段落的 source_text 字节长度。
+// 供 worker 回填动态选择资源（segment_ids 为空）的工作权重——Document
+// 每轮全量加载该资源段落，全量字节即内存代理；单资源无 IN 列表，不分片。
+func SumResourceWorkWeight(ctx context.Context, client *ent.Client, resourceID int) (int64, error) {
+	var rows []workWeightScan
+	if err := client.Segment.Query().
+		Where(segment.ResourceIDEQ(resourceID)).
+		Aggregate(workWeightAggregate).
+		Scan(ctx, &rows); err != nil {
+		return 0, err
+	}
+	if len(rows) > 0 {
+		return rows[0].WorkWeight, nil
+	}
+	return 0, nil
+}
 
 func resolveJobSelection(ctx context.Context, client *ent.Client, projectID int, input CreateJobInput) (map[int][]int, error) {
 	if len(input.SegmentGroupKeys) > 0 {

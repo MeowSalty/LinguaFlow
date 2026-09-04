@@ -95,6 +95,17 @@ func (d *Dispatcher) CancelTask(taskType string, taskID int) {
 	}
 }
 
+// PauseTask 查找匹配的 runner 并请求优雅排空。返回 false 表示任务
+// 未在运行（调用方负责处理 pending 态任务的暂停翻转）。
+func (d *Dispatcher) PauseTask(taskType string, taskID int) bool {
+	for _, runner := range d.runners {
+		if runner.Type() == taskType {
+			return runner.Pause(taskID)
+		}
+	}
+	return false
+}
+
 // Enqueue 查找匹配的 runner 并将任务入队。
 func (d *Dispatcher) Enqueue(ctx context.Context, taskType string, taskID int) error {
 	for _, runner := range d.runners {

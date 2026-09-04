@@ -5,7 +5,6 @@ import (
 	"errors"
 	"reflect"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -14,14 +13,6 @@ import (
 )
 
 const testReviseTmpl = `Revise {{.SourceLang}} to {{.TargetLang}}.`
-
-type reviseReporter struct{ done atomic.Int32 }
-
-func (r *reviseReporter) StageStart(string, int) {}
-func (r *reviseReporter) SegmentDone()           { r.done.Add(1) }
-func (r *reviseReporter) BatchComplete()         {}
-func (r *reviseReporter) StageDone()             {}
-func (r *reviseReporter) Close() error           { return nil }
 
 func newReviseRenderer(t *testing.T) *prompt.ReviseRenderer {
 	t.Helper()
@@ -73,9 +64,8 @@ func TestReviseHandler_BuildBatchesFiltersPendingCodesAndResolved(t *testing.T) 
 
 func TestReviseHandler_ProcessBatchReturnsKnownRevisionsAndMarksMissingUnresolved(t *testing.T) {
 	doc := reviseDoc()
-	rep := &reviseReporter{}
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"你好啊"},{"id":"unknown","target":"丢弃"}]}`}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Reporter: rep, Logger: discardLogger()}
+	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 	result := h.ProcessBatch(context.Background(), doc, []int{0, 1}, 0, discardLogger())
 	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
 		t.Fatalf("callback=%#v want one known revision", result.callbackResult)
@@ -83,13 +73,11 @@ func TestReviseHandler_ProcessBatchReturnsKnownRevisionsAndMarksMissingUnresolve
 	if got := result.callbackResult.Segments[0]; got.TargetText != "你好啊" || got.Issues != nil {
 		t.Fatalf("segment=%+v want revised text and nil issues", got)
 	}
-	// 段 1 未被 LLM 返回：必须进 unresolved 交由下一池重试，且不消耗进度计数，
-	// 否则会被 computeResolved 计为已解决而静默跳过。
+	// 段 1 未被 LLM 返回：必须进 unresolved 交由下一池重试。executor 对终态批次
+	// 按 idxs−unresolved 计数（handler 不触碰进度计数），resolved 子集={0}、
+	// missing={1}，两序列的配对断言在 executor 层测试覆盖。
 	if !reflect.DeepEqual(result.unresolved, []int{1}) {
 		t.Fatalf("unresolved=%v want [1]", result.unresolved)
-	}
-	if rep.done.Load() != 1 {
-		t.Fatalf("segment done=%d want 1", rep.done.Load())
 	}
 	if doc.Segments[0].Target != "你好" {
 		t.Fatal("handler must not mutate document target")

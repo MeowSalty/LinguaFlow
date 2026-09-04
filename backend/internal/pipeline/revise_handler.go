@@ -40,7 +40,11 @@ type ReviseHandler struct {
 	IssueCodes        []string
 	Reporter          progress.Reporter
 	Logger            *slog.Logger
-	RoundIndex        int // execution plan round index, set by caller
+
+	// Gate 是任务级暂停闸门（退避重试等待中止信号）；nil 时无暂停语义。
+	Gate *PauseGate
+
+	RoundIndex int // execution plan round index, set by caller
 
 	// Protector/Ruby* 与 TranslateHandler 同名同语义（protect 规则与 ruby 配置
 	// 取计划级策略快照，由 worker 引擎工厂从 JobExecutionSnapshot.Strategy 统一
@@ -62,13 +66,6 @@ func (h *ReviseHandler) logger() *slog.Logger {
 		return slog.Default()
 	}
 	return h.Logger
-}
-
-func (h *ReviseHandler) reporter() progress.Reporter {
-	if h.Reporter == nil {
-		return progress.Nop{}
-	}
-	return h.Reporter
 }
 
 func (h *ReviseHandler) emitBatchOutcome(evt progress.BatchEvent) {
@@ -357,7 +354,6 @@ func (h *ReviseHandler) BuildBatches(_ context.Context, doc *Document, pending [
 // 失败时不产出 callbackResult；成功时 callback 仅包含 LLM 返回的合法段。
 func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
 	batchStart := time.Now()
-	rep := h.reporter()
 	tried := []string{h.Backend.Name()}
 	codes := h.issueCodeSet()
 	proto := prompt.ProtocolFromResponseMode(h.ResponseMode)
@@ -371,7 +367,7 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 			BackendName: h.Backend.Name(), Status: "failed", DurationMs: time.Since(batchStart).Milliseconds(),
 			TriedBackends: tried, ErrorType: "protect_error", ErrorMessage: protectErr.Error(), RoundIndex: h.RoundIndex,
 		})
-		return h.terminalFailure(doc, idxs, rep)
+		return h.terminalFailure(doc, idxs)
 	}
 
 	sys, usr, renderErr := h.Renderer.Render(prompt.ReviseData{
@@ -389,7 +385,7 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 			BackendName: h.Backend.Name(), Status: "failed", DurationMs: time.Since(batchStart).Milliseconds(),
 			TriedBackends: tried, ErrorType: "render_error", ErrorMessage: renderErr.Error(), RoundIndex: h.RoundIndex,
 		})
-		return h.terminalFailure(doc, idxs, rep)
+		return h.terminalFailure(doc, idxs)
 	}
 
 	req := backend.Request{System: sys, User: usr}
@@ -411,15 +407,12 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 		if isExternalInterrupt {
 			logger.Info("revise backend interrupted by context", "backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(backendErrorBatchEvent(RoundModeRevise, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-			return h.preserveResult(doc, idxs, rep)
+			return h.preserveResult(doc, idxs)
 		}
 		isLocalTimeout := errors.Is(callErr, context.DeadlineExceeded) && ctx.Err() == nil
 		if isFatalBackendError(callErr) {
 			logger.Warn("revise backend fatal error, deferring to cross-round", "backend", h.Backend.Name(), "batch_size", len(idxs), "attempt", attempt, "err", callErr)
 			h.emitBatchOutcome(backendErrorBatchEvent(RoundModeRevise, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-			for range idxs {
-				rep.SegmentDone()
-			}
 			return batchResult{fatalUnresolved: idxs}
 		}
 		h.emitBatchOutcome(backendErrorBatchEvent(RoundModeRevise, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
@@ -430,7 +423,13 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return h.preserveResult(doc, idxs, rep)
+				// 退避期间取消：段保持未解决（不 preserve——preserve 会把
+				// 未修订段计入 resolved 断点，retry 后被永久跳过）。
+				return batchResult{unresolved: idxs}
+			case <-h.Gate.Done():
+				// 暂停时中止退避等待：段保持未解决，由断点集合覆盖。
+				timer.Stop()
+				return batchResult{unresolved: idxs}
 			case <-timer.C:
 			}
 			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
@@ -502,7 +501,6 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 	missing := make([]int, 0)
 	for _, idx := range idxs {
 		if _, ok := returned[idx]; ok {
-			rep.SegmentDone()
 			continue
 		}
 		missing = append(missing, idx)
@@ -525,19 +523,20 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 }
 
 // preserveResult 保留原译文；修订 handler 不在内存中改写段落。
-func (h *ReviseHandler) preserveResult(doc *Document, idxs []int, rep progress.Reporter) batchResult {
+// 注意：ctx 取消时本 result 经 cleanup 路径被丢弃，不进入计数/断点登记。
+func (h *ReviseHandler) preserveResult(doc *Document, idxs []int) batchResult {
 	callbackSegs := make([]TranslatedSegment, 0, len(idxs))
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
 		callbackSegs = append(callbackSegs, TranslatedSegment{Index: idx, ID: seg.ID, SourceText: seg.Source, TargetText: seg.Target})
-		rep.SegmentDone()
 	}
 	return batchResult{callbackResult: &BatchResult{Segments: callbackSegs}}
 }
 
 // terminalFailure 在 preserveResult 基础上标记 failedSegments，供 RunRound 累计为软警告。
-func (h *ReviseHandler) terminalFailure(doc *Document, idxs []int, rep progress.Reporter) batchResult {
-	result := h.preserveResult(doc, idxs, rep)
+// failedSegments 段不计数（executor 将其从 resolved 子集排除——未解决，软警告承担可见性）。
+func (h *ReviseHandler) terminalFailure(doc *Document, idxs []int) batchResult {
+	result := h.preserveResult(doc, idxs)
 	result.failedSegments = idxs
 	return result
 }

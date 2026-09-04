@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -209,6 +210,21 @@ func (_u *SegmentUpdate) SetReviewedBy(v *User) *SegmentUpdate {
 	return _u.SetReviewedByID(v.ID)
 }
 
+// AddResolvedInRoundIDs adds the "resolved_in_rounds" edge to the JobRound entity by IDs.
+func (_u *SegmentUpdate) AddResolvedInRoundIDs(ids ...int) *SegmentUpdate {
+	_u.mutation.AddResolvedInRoundIDs(ids...)
+	return _u
+}
+
+// AddResolvedInRounds adds the "resolved_in_rounds" edges to the JobRound entity.
+func (_u *SegmentUpdate) AddResolvedInRounds(v ...*JobRound) *SegmentUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddResolvedInRoundIDs(ids...)
+}
+
 // Mutation returns the SegmentMutation object of the builder.
 func (_u *SegmentUpdate) Mutation() *SegmentMutation {
 	return _u.mutation
@@ -224,6 +240,27 @@ func (_u *SegmentUpdate) ClearResource() *SegmentUpdate {
 func (_u *SegmentUpdate) ClearReviewedBy() *SegmentUpdate {
 	_u.mutation.ClearReviewedBy()
 	return _u
+}
+
+// ClearResolvedInRounds clears all "resolved_in_rounds" edges to the JobRound entity.
+func (_u *SegmentUpdate) ClearResolvedInRounds() *SegmentUpdate {
+	_u.mutation.ClearResolvedInRounds()
+	return _u
+}
+
+// RemoveResolvedInRoundIDs removes the "resolved_in_rounds" edge to JobRound entities by IDs.
+func (_u *SegmentUpdate) RemoveResolvedInRoundIDs(ids ...int) *SegmentUpdate {
+	_u.mutation.RemoveResolvedInRoundIDs(ids...)
+	return _u
+}
+
+// RemoveResolvedInRounds removes "resolved_in_rounds" edges to JobRound entities.
+func (_u *SegmentUpdate) RemoveResolvedInRounds(v ...*JobRound) *SegmentUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveResolvedInRoundIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -394,6 +431,51 @@ func (_u *SegmentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ResolvedInRoundsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   segment.ResolvedInRoundsTable,
+			Columns: segment.ResolvedInRoundsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedResolvedInRoundsIDs(); len(nodes) > 0 && !_u.mutation.ResolvedInRoundsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   segment.ResolvedInRoundsTable,
+			Columns: segment.ResolvedInRoundsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ResolvedInRoundsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   segment.ResolvedInRoundsTable,
+			Columns: segment.ResolvedInRoundsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -598,6 +680,21 @@ func (_u *SegmentUpdateOne) SetReviewedBy(v *User) *SegmentUpdateOne {
 	return _u.SetReviewedByID(v.ID)
 }
 
+// AddResolvedInRoundIDs adds the "resolved_in_rounds" edge to the JobRound entity by IDs.
+func (_u *SegmentUpdateOne) AddResolvedInRoundIDs(ids ...int) *SegmentUpdateOne {
+	_u.mutation.AddResolvedInRoundIDs(ids...)
+	return _u
+}
+
+// AddResolvedInRounds adds the "resolved_in_rounds" edges to the JobRound entity.
+func (_u *SegmentUpdateOne) AddResolvedInRounds(v ...*JobRound) *SegmentUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddResolvedInRoundIDs(ids...)
+}
+
 // Mutation returns the SegmentMutation object of the builder.
 func (_u *SegmentUpdateOne) Mutation() *SegmentMutation {
 	return _u.mutation
@@ -613,6 +710,27 @@ func (_u *SegmentUpdateOne) ClearResource() *SegmentUpdateOne {
 func (_u *SegmentUpdateOne) ClearReviewedBy() *SegmentUpdateOne {
 	_u.mutation.ClearReviewedBy()
 	return _u
+}
+
+// ClearResolvedInRounds clears all "resolved_in_rounds" edges to the JobRound entity.
+func (_u *SegmentUpdateOne) ClearResolvedInRounds() *SegmentUpdateOne {
+	_u.mutation.ClearResolvedInRounds()
+	return _u
+}
+
+// RemoveResolvedInRoundIDs removes the "resolved_in_rounds" edge to JobRound entities by IDs.
+func (_u *SegmentUpdateOne) RemoveResolvedInRoundIDs(ids ...int) *SegmentUpdateOne {
+	_u.mutation.RemoveResolvedInRoundIDs(ids...)
+	return _u
+}
+
+// RemoveResolvedInRounds removes "resolved_in_rounds" edges to JobRound entities.
+func (_u *SegmentUpdateOne) RemoveResolvedInRounds(v ...*JobRound) *SegmentUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveResolvedInRoundIDs(ids...)
 }
 
 // Where appends a list predicates to the SegmentUpdate builder.
@@ -813,6 +931,51 @@ func (_u *SegmentUpdateOne) sqlSave(ctx context.Context) (_node *Segment, err er
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ResolvedInRoundsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   segment.ResolvedInRoundsTable,
+			Columns: segment.ResolvedInRoundsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedResolvedInRoundsIDs(); len(nodes) > 0 && !_u.mutation.ResolvedInRoundsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   segment.ResolvedInRoundsTable,
+			Columns: segment.ResolvedInRoundsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ResolvedInRoundsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   segment.ResolvedInRoundsTable,
+			Columns: segment.ResolvedInRoundsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

@@ -43,5 +43,9 @@ func (Segment) Edges() []ent.Edge {
 		edge.From("reviewed_by", User.Type).
 			Ref("reviewed_segments").
 			Unique(),
+		// 反向不 Unique → M2M：JobRound.resolved_segments 的轮次断点关联
+		//（through job_round_segments，见 job_round_segment.go）。
+		edge.From("resolved_in_rounds", JobRound.Type).
+			Ref("resolved_segments"),
 	}
 }
