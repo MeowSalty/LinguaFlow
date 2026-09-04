@@ -41,6 +41,14 @@ type batchResult struct {
 	callbackResult  *BatchResult // 可选，供 BatchHandler 回调使用
 	failedSegments  []int        // 终态扫描失败的段索引（如 semantic_qa）；不计入 Unresolved
 	fatalUnresolved []int        // 致命错误（如 401/403）：直接落入 finalUnresolved，跳过剩余池
+	// deferred 标记 runPool worker 的让行点（暂停/槽位获取失败/获取后复查暂停、
+	// batchHandler 回调失败、提交确认门判定副作用未确认）：idxs 已被塞入
+	// nextPending（未解决），result 不携带任何失败字段。收集点据此跳过一切
+	// 计数——否则空 result 会被误判为「全批成功」。
+	deferred bool
+	// idxs 是本批的段索引（由 runPool worker 在派发结果前回填 job.idxs，handler
+	// 不感知）。收集点据此推导 resolved 子集，而非从 handler 返回值反推。
+	idxs []int
 }
 
 // RunRoundResult 是 RunRound 的返回结果。
@@ -178,7 +186,7 @@ func RunRound(
 			Phase:      "pool_start",
 		})
 
-		pr, err := runPool(ctx, round, handler, doc, batches, transientBudget, batchHandler, logger)
+		pr, err := runPool(ctx, round, handler, doc, batches, transientBudget, batchHandler, logger, reporter)
 		if err != nil {
 			return RunRoundResult{}, err
 		}
@@ -284,7 +292,8 @@ func computeResolved(scannedIdxs, unresolved, failedSegments []int) []int {
 }
 
 // runPool 在单个池内并发执行所有批次；in-flight retry 复用席位，unresolved 释放席位。
-// transientBudget 是在途重试预算（内部封顶后的值）。
+// transientBudget 是在途重试预算（内部封顶后的值）。reporter 承接收集点的
+// 段计数/断点登记（本函数是计数的唯一判定源，见收集点注释）。
 func runPool(
 	ctx context.Context,
 	round Round,
@@ -294,6 +303,7 @@ func runPool(
 	transientBudget int,
 	batchHandler func(ctx context.Context, result BatchResult) error,
 	logger *slog.Logger,
+	reporter progress.Reporter,
 ) (poolResult, error) {
 	concurrency := round.Concurrency
 	if concurrency < 1 {
@@ -335,7 +345,7 @@ func runPool(
 						pendingMu.Lock()
 						nextPending = append(nextPending, job.idxs...)
 						pendingMu.Unlock()
-						results <- batchResult{}
+						results <- batchResult{deferred: true, idxs: job.idxs}
 						continue
 					}
 					round.Gate.AcquireInflight()
@@ -348,7 +358,7 @@ func runPool(
 						pendingMu.Lock()
 						nextPending = append(nextPending, job.idxs...)
 						pendingMu.Unlock()
-						results <- batchResult{}
+						results <- batchResult{deferred: true, idxs: job.idxs}
 						continue
 					}
 				}
@@ -363,7 +373,7 @@ func runPool(
 					pendingMu.Lock()
 					nextPending = append(nextPending, job.idxs...)
 					pendingMu.Unlock()
-					results <- batchResult{}
+					results <- batchResult{deferred: true, idxs: job.idxs}
 					continue
 				}
 
@@ -384,11 +394,38 @@ func runPool(
 						pendingMu.Lock()
 						nextPending = append(nextPending, job.idxs...)
 						pendingMu.Unlock()
-						results <- batchResult{}
+						results <- batchResult{deferred: true, idxs: job.idxs}
 						continue
 					}
 				}
+				// 提交确认门：副作用是否真的落库无法从 result 的成功形态判断，必须
+				// 看两个 ctx——副作用经由哪条 ctx 写库没有统一约定：走 batchHandler
+				// 的模式中 translate/correct/adjudicate 忽略形参、以闭包捕获的资源级
+				// ctx 落库（见 worker/job_runner.go 的 batchHandler 声明），故以 ctx
+				// 判定；semantic_qa/revise 以形参（即 runCtx）落库，extract 无
+				// batchHandler、术语在 ProcessBatch 内以 runCtx 写库，故 runCtx 也
+				// 必须判定——它同时覆盖 handlerErr fail-fast 取消 runCtx（ctx 仍
+				// 存活）的窗口，以及父 ctx 取消向子 ctx 传播的瞬间窗口。ctx 已死时
+				// 各 handler 对 context.Canceled 的处理是「静默跳过该段并返回 nil」，
+				// 而 semantic_qa/revise 的 preserveResult 与成功形态无法区分——
+				// 回调返回 nil 也不可信。任一 ctx 已死即按让行处理：段落回
+				// nextPending，绝不计数、绝不登记断点。
+				//
+				// 方向性取舍：伪造断点会让非翻译轮在恢复时永久跳过该段（裁决/
+				// 质检/修订/术语抽取结果静默丢失），而漏登记只是恢复后重扫一次
+				// （翻译轮由 Segment.status 过滤掉，零成本）。宁可重扫，绝不伪造。
+				// 暂停不取消 ctx（PauseGate 与 ctx 解耦），pause/resume 主流程不走
+				// 这道门。代价：runCtx 因 fail-fast 被取消时会多让行几个在途批次，
+				// 该轮本就会 abort 并重跑，重扫成本可接受。
+				if ctx.Err() != nil || runCtx.Err() != nil {
+					pendingMu.Lock()
+					nextPending = append(nextPending, job.idxs...)
+					pendingMu.Unlock()
+					results <- batchResult{deferred: true, idxs: job.idxs}
+					continue
+				}
 
+				result.idxs = job.idxs
 				results <- result
 			}
 		}()
@@ -409,36 +446,94 @@ func runPool(
 	}()
 
 	active := len(batches)
+	// resolvedNotifier 是支持轮次断点持久化的 Reporter（当前仅 DBReporter）；
+	// 未实现则跳过断点登记（与 emitPoolEvent 的探测惯例一致）。
+	resolvedNotifier, _ := reporter.(progress.SegmentResolvedNotifier)
+
+	// applyBatchResult 是收集点记账的唯一实现：主循环与 cleanup 排空共用同一份
+	// 终态判定，避免两条路径语义漂移（排空路径若自带一份判定，取消场景的计数
+	// 与断点口径会与正常路径悄悄分叉）。重试的席位调度不在此处——它需要 active
+	// 记账与 jobs 通道，排空期两者都已不可用。
+	//
+	// 计数与断点登记的唯一判定源：本批终态时从 job.idxs 推导 resolved 子集，
+	// 逐段 SegmentDone（计数）+ SegmentResolved（断点），随后 BatchComplete
+	// 触发缓冲区 flush。handler 不再触碰进度计数。
+	//
+	// 批次终态判定（按收集到的 result 形态）：
+	//   - deferred=true：让行点（暂停/槽位失败/batchHandler 失败/副作用未确认
+	//     （含 extract）），idxs 已进 nextPending——空 result 不代表全批成功，
+	//     跳过一切计数；
+	//   - retry != nil：同批退避重试（含超预算转 nextPending），非终态——
+	//     重试后的终态批次再计，保证池推进/在途重试不重复计数；
+	//   - 其余为终态：resolved = idxs − unresolved − fatalUnresolved − failedSegments。
+	//
+	// 各 handler 返回组合的核实结论（resolved 公式对全部组合成立）：
+	//   - translate：unresolved 为漏译/占位符违规段（FilterPendingIdxs 过滤
+	//     上下文段后），成功段仅写 doc 不单独报告；fatal=401/403 整批
+	//     fatalUnresolved。unresolved 恒 ⊆ idxs，idxs−unresolved 即成功段；
+	//   - extract：成功=空 batchResult（idxs 全 resolved）；失败=unresolved/
+	//     fatalUnresolved 整批（idxs）；无部分成功形态。成功的空 result 也要过
+	//     提交确认门——术语在 ProcessBatch 内以 runCtx 落库，ctx 已死时成功
+	//     形态同样不代表副作用落库，由门转 deferred；
+	//   - adjudicate：成功=callbackResult（idxs 全 resolved）；失败=unresolved/
+	//     fatalUnresolved 整批；无部分成功形态；
+	//   - semantic_qa：成功=callbackResult（idxs 全 resolved）；失败=unresolved
+	//     整批、fatalUnresolved 整批、terminalFailure=failedSegments 整批（软警告，
+	//     未解决——callbackResult 里的 preserve 段不计 resolved）；外部中断
+	//     preserve：ctx 或 runCtx 任一已死时都被 worker 侧的提交确认门转成
+	//     deferred，不会以终态形态到达本函数——runCtx 被 fail-fast 取消时
+	//     （ctx 仍存活）preserve 形态与成功同形，同样不可信；
+	//   - revise：部分成功=callbackResult（returned 段）+ unresolved=missing 段，
+	//     idxs−missing 恰为 callback 段；terminalFailure=failedSegments（未解决，
+	//     callback 内的 preserve 段不计）；fatal=整批 fatalUnresolved；外部中断
+	//     preserve 同 semantic_qa（ctx 或 runCtx 任一已死时被门转成 deferred）；
+	//   - correct：纯本地恒成功=callbackResult（idxs 全 resolved）。
+	//   综上：failedSegments 恒 = 整批 idxs 且恒伴随 callbackResult、从不伴随
+	//   unresolved/retry；unresolved/fatalUnresolved 恒 ⊆ idxs；无任何形态
+	//   会把同一 idx 同时计入 resolved 与失败/未解决集合。
+	applyBatchResult := func(result batchResult) {
+		pendingMu.Lock()
+		nextPending = append(nextPending, result.unresolved...)
+		fatalUnresolved = append(fatalUnresolved, result.fatalUnresolved...)
+		if len(result.failedSegments) > 0 {
+			failedSegments = append(failedSegments, result.failedSegments...)
+			failedBatches++
+		}
+		pendingMu.Unlock()
+
+		if !result.deferred && result.retry == nil {
+			notifyResolvedSegments(result.idxs, result, reporter, resolvedNotifier)
+			reporter.BatchComplete()
+		}
+	}
+
+	// deferRetry 把无法重投的在途重试转为未解决（排空期 jobs 已关闭）。
+	deferRetry := func(result batchResult) {
+		if result.retry == nil {
+			return
+		}
+		pendingMu.Lock()
+		nextPending = append(nextPending, result.retry.idxs...)
+		pendingMu.Unlock()
+	}
+
 	for active > 0 {
 		select {
 		case <-runCtx.Done():
 			goto cleanup
 		case result := <-results:
-			pendingMu.Lock()
-			nextPending = append(nextPending, result.unresolved...)
-			fatalUnresolved = append(fatalUnresolved, result.fatalUnresolved...)
-			if len(result.failedSegments) > 0 {
-				failedSegments = append(failedSegments, result.failedSegments...)
-				failedBatches++
-			}
-			pendingMu.Unlock()
+			applyBatchResult(result)
 
 			if result.retry != nil && result.retry.attempt < transientBudget {
 				select {
 				case <-runCtx.Done():
-					pendingMu.Lock()
-					nextPending = append(nextPending, result.retry.idxs...)
-					pendingMu.Unlock()
+					deferRetry(result)
 					active--
 				case jobs <- *result.retry:
 					// in-flight 重试不递减 active（复用席位）
 				}
 			} else {
-				if result.retry != nil {
-					pendingMu.Lock()
-					nextPending = append(nextPending, result.retry.idxs...)
-					pendingMu.Unlock()
-				}
+				deferRetry(result)
 				active--
 			}
 		}
@@ -448,7 +543,36 @@ cleanup:
 	close(done)
 	submitWg.Wait()
 	close(jobs)
-	wg.Wait()
+
+	// 排空 in-flight 结果：worker 可能已经跑完批次（副作用落库、batchHandler
+	// 回调成功）却还没把 result 交出来。必须在 wg.Wait() 之前持续接收，否则
+	//   (a) 这些批次的计数与断点永久丢失——业务结果已在库里，恢复时却无从判断
+	//       该段已处理，非翻译轮会重复调用 LLM，轮次进度也永远补不齐；
+	//   (b) results 缓冲（容量 concurrency*2）在取消时已满且仍有 worker 阻塞在
+	//       发送上时，wg.Wait() 永不返回 —— runPool 悬挂 → 资源 goroutine 悬挂
+	//       → 整个任务卡死。
+	// 排空期 jobs 已关闭，重试不能重投，一律转 nextPending。
+	workersDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(workersDone)
+	}()
+	for workersRunning := true; workersRunning; {
+		select {
+		case result := <-results:
+			applyBatchResult(result)
+			deferRetry(result)
+		case <-workersDone:
+			workersRunning = false
+		}
+	}
+	// worker 已全部退出，不再有发送方：关闭后 range 排空缓冲残留。
+	close(results)
+	for result := range results {
+		applyBatchResult(result)
+		deferRetry(result)
+	}
+
 	if v := handlerErr.Load(); v != nil {
 		return poolResult{}, v.(error)
 	}
@@ -459,6 +583,47 @@ cleanup:
 		failedSegments:  failedSegments,
 		failedBatches:   failedBatches,
 	}, nil
+}
+
+// notifyResolvedSegments 对终态批次的 resolved 子集逐段通知：
+// SegmentDone 推进进度计数，SegmentResolved（Reporter 实现
+// SegmentResolvedNotifier 时）登记轮次断点，两者由同一判定驱动，
+// 保证 segment_completed ≡ 断点集合基数的 checkpoint 不变式。
+//
+// resolved = idxs − unresolved − fatalUnresolved − failedSegments（各自去重；
+// 计数口径从「已尝试」收敛为「已解决」：失败尝试、池推进重试与暂停让行
+// 段均不计数，completed 恒 ≤ total）。
+// unresolvable 恒 ⊆ idxs（核实结论见收集点注释），故每个 idx 至多通知一次；
+// 若 handler 返回异常组合（集合溢出 idxs），以 idxs 为界防御性截断。
+func notifyResolvedSegments(
+	idxs []int,
+	result batchResult,
+	rep progress.Reporter,
+	notifier progress.SegmentResolvedNotifier,
+) {
+	if len(idxs) == 0 {
+		return
+	}
+	excluded := make(map[int]struct{}, len(result.unresolved)+len(result.fatalUnresolved)+len(result.failedSegments)+len(idxs))
+	for _, idx := range result.unresolved {
+		excluded[idx] = struct{}{}
+	}
+	for _, idx := range result.fatalUnresolved {
+		excluded[idx] = struct{}{}
+	}
+	for _, idx := range result.failedSegments {
+		excluded[idx] = struct{}{}
+	}
+	for _, idx := range idxs {
+		if _, ok := excluded[idx]; ok {
+			continue
+		}
+		excluded[idx] = struct{}{} // idxs 内重复索引只通知一次
+		rep.SegmentDone()
+		if notifier != nil {
+			notifier.SegmentResolved(idx)
+		}
+	}
 }
 
 // uniqueSortedInts 去重并排序。

@@ -51,13 +51,6 @@ func (h *AdjudicateHandler) logger() *slog.Logger {
 	return h.Logger
 }
 
-func (h *AdjudicateHandler) reporter() progress.Reporter {
-	if h.Reporter == nil {
-		return progress.Nop{}
-	}
-	return h.Reporter
-}
-
 func (h *AdjudicateHandler) emitBatchOutcome(evt progress.BatchEvent) {
 	rep := h.Reporter
 	if rep == nil {
@@ -175,11 +168,11 @@ func (h *AdjudicateHandler) BuildBatches(_ context.Context, doc *Document, pendi
 //   - 解析失败 → unresolved（进下一池重切）
 //   - 成功 → callbackResult（false_positive 打 dismissed 标记保留）
 //
-// unresolved 段不调 SegmentDone、不回 callback（避免写回陈旧 issue 干扰下一池重判）；
+// unresolved 段不回 callback（避免写回陈旧 issue 干扰下一池重判）；
 // 末池耗尽后原 issue 保持 pending 原样保留。
+// 段计数/断点由 executor 在批次终态时统一登记（handler 不触碰进度计数）。
 func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
 	batchStart := time.Now()
-	rep := h.reporter()
 	codes := adjudicateCodeSet(h.adjudicateCodes())
 	tried := []string{h.Backend.Name()}
 
@@ -253,9 +246,6 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			logger.Error("adjudicate backend fatal error, deferring to cross-round",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-			for range idxs {
-				rep.SegmentDone()
-			}
 			// 401/403：跳池（同 backend 重试无意义）+ 跨轮传播换 backend。
 			return batchResult{fatalUnresolved: idxs}
 		}
@@ -291,9 +281,9 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
 	verdicts, parseRepaired, parseErr := repair.ParseAdjudicationByMode(resp.Text, isTextMode, h.Repair)
-	// 截断响应对 fail-closed stage 恒不采纳：adjudicate 的成功路径对所有批次段一律
-	// SegmentDone（无「缺失 verdict → 重跑」通道），partial 会被计为终态已裁决。
-	// JSON 模式下 WithoutSalvage 已拒绝可检测的截断形态，此处封住两个残余通道——
+	// 截断响应对 fail-closed stage 恒不采纳：adjudicate 的成功路径对批次全段生效
+	//（executor 按「idxs−失败段」计数，无「缺失 verdict → 重跑」通道），partial 会被
+	// 计为终态已裁决。JSON 模式下 WithoutSalvage 已拒绝可检测的截断形态，此处封住两个残余通道——
 	// text 协议逐行解析无完整性信号（截断的已完成行被当作完整结果）、以及截断点
 	// 恰在完整边界导致解析成功；截断即报错走 unresolved → 下一池整批重试。
 	if parseErr == nil && resp.Truncated {
@@ -328,7 +318,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			ResponseContent: resp.Text,
 		})
 		// 解析失败：段交下一池重切（与 translate/extract 语义对齐，复用 BuildBatches
-		// 的 pending 重切通道）。不调用 SegmentDone（段尚未解决，会在下一池成功时计数），
+		// 的 pending 重切通道）。不计数（段尚未解决，executor 在终态批次时计数），
 		// 不返回 callbackResult（避免 batchHandler 写回陈旧 issue 干扰下一池重判）。
 		return batchResult{unresolved: idxs}
 	}
@@ -359,7 +349,6 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			TargetText: seg.Target,
 			Issues:     filtered,
 		})
-		rep.SegmentDone()
 	}
 
 	logger.Info("adjudicate batch ok",

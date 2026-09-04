@@ -128,13 +128,10 @@ func equalInts(a, b []int) bool {
 // 暂停闸门，其余批次不再派发（直接落入 Unresolved），不推进到下一池，
 // Finalize 仍执行，且暂停不是错误。
 //
-// 已知生产缺陷（不在测试侧修复）：runPool 的暂停跳过路径
-// （round_executor.go:332-337）消费批次后只记 nextPending、不发空结果，
-// 而池主循环（round_executor.go:393-427）仅在收到结果时递减 active，
-// 也不监听 Gate.Done()——只要有批次在暂停时仍未派发，主循环就会永久
-// 阻塞（runPool 悬挂 → 资源 goroutine 悬挂 → processJob 的 wg.Wait 悬挂）。
-// 因此本测试以有界等待运行：若命中缺陷则 Skip 并注明；缺陷修复后自动
-// 恢复完整断言。
+// 有界等待兼作悬挂回归：runPool 的暂停让行分支必须发出 deferred 空结果（保持
+// active 计数平衡），否则主循环既等不到结果、又不监听 Gate.Done，会永久阻塞
+// （runPool 悬挂 → 资源 goroutine 悬挂 → processJob 的 wg.Wait 悬挂）。
+// 超时即失败，不再 Skip。
 func TestRunRound_PauseMidPoolStopsDispatch(t *testing.T) {
 	gate := NewPauseGate()
 	doc := newTestDoc(6)
@@ -199,8 +196,8 @@ func TestRunRound_PauseMidPoolStopsDispatch(t *testing.T) {
 			t.Fatalf("StageStart calls=%d want 1", n)
 		}
 	case <-time.After(5 * time.Second):
-		t.Skip("命中已知生产缺陷：runPool 暂停路径不发空结果导致池主循环悬挂" +
-			"（round_executor.go runPool 暂停跳过分支 vs active 记账）；修复后本测试自动恢复断言")
+		t.Fatal("RunRound 未在 5s 内返回：暂停让行路径必须发出 deferred 空结果，" +
+			"否则池主循环的 active 计数永不归零（悬挂回归）")
 	}
 }
 
@@ -516,11 +513,21 @@ func TestRunRound_PauseWhileWaitingForStation(t *testing.T) {
 		if out.err != nil {
 			t.Fatalf("RunRound: %v（暂停不是错误）", out.err)
 		}
+		// 两个 worker 抢 jobs channel：哪个批次持槽执行、哪个阻塞在
+		// Acquire 取决于调度——本测试曾假设段 0 必然持槽（Unresolved 恒
+		// [1]），该假设在 goroutine 调度下间歇失效。断言调度无关的
+		// 互补性：恰一批派发，未派发段进入 unresolved。
 		if n := h.dispatchCount(); n != 1 {
 			t.Fatalf("ProcessBatch 派发=%d want 1（阻塞在站位的排队批次不应在暂停后执行）", n)
 		}
-		if got := sortedCopy(out.result.Unresolved); !equalInts(got, []int{1}) {
-			t.Fatalf("Unresolved=%v want [1]", got)
+		dispatched := h.snapshotDispatched()
+		if len(dispatched) != 1 || len(dispatched[0]) != 1 {
+			t.Fatalf("派发批次=%v want 恰一个单段批次", dispatched)
+		}
+		got := sortedCopy(out.result.Unresolved)
+		want := dispatched[0][0] ^ 1 // {0,1} 中与派发段互补的另一个
+		if len(got) != 1 || got[0] != want {
+			t.Fatalf("Unresolved=%v want [%d]（与派发段 %d 互补）", got, want, dispatched[0][0])
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("RunRound 未在 5s 内返回（暂停排空悬挂）")

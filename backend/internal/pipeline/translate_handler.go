@@ -90,13 +90,6 @@ func (h *TranslateHandler) logger() *slog.Logger {
 	return h.Logger
 }
 
-func (h *TranslateHandler) reporter() progress.Reporter {
-	if h.Reporter == nil {
-		return progress.Nop{}
-	}
-	return h.Reporter
-}
-
 // BuildBatches 收集待翻译段落、执行 Protect、分批、上下文扩展。
 // pending==nil：池 0，先对全部非 Skip 段做一次保护链分析（结构段标记 + 保护产物，
 // 含 Translate=false 的上下文候选段），再扫描 doc；保护产物由 Protect 循环落盘，
@@ -598,7 +591,6 @@ func (h *TranslateHandler) processTranslatedSegments(
 	contextSet map[int]struct{},
 	logger *slog.Logger,
 ) (unresolved []int) {
-	rep := h.reporter()
 	wantIDIdx := 0
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
@@ -694,8 +686,6 @@ func (h *TranslateHandler) processTranslatedSegments(
 				logger.Debug("tm add failed", "err", err)
 			}
 		}
-
-		rep.SegmentDone()
 	}
 	return unresolved
 }
