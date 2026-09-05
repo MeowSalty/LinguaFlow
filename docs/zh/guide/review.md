@@ -74,7 +74,7 @@
 
 1. 在段落行的编辑入口中修改译文文本（与可选批注）
 2. 保存后状态自动转为「已修改」(`edited`)
-3. 保存时会自动对译文跑一遍**零配置确定性 QA**（无需执行计划配置）：覆盖 `untranslated`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss`、`whitespace_irregular`、`repeated_space`、`width_mix`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`leftover_placeholder`、`xml_tag_mismatch` 共 14 项即时判定，质量问题会实时更新到该段；若编辑前译文含 `<ruby>` 注音、编辑后全丢，还会产出 `ruby_tag_loss` 软警告（可驳回，不阻塞保存）
+3. 保存时会自动对译文跑一遍**零配置确定性 QA**（无需执行计划配置）：覆盖 `untranslated`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss`、`whitespace_irregular`、`repeated_space`、`width_mix`、`script_mismatch`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`leftover_placeholder`、`xml_tag_mismatch` 共 15 项即时判定，质量问题会实时更新到该段；若编辑前译文含 `<ruby>` 注音、编辑后全丢，还会产出 `ruby_tag_loss` 软警告（可驳回，不阻塞保存）
 4. 之后仍需在「已修改」状态下决定 **审批** 或 **拒绝**
 
 ::: info 只改译文，不改原文
@@ -129,6 +129,7 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 | `whitespace_irregular`     | 零宽字符、NBSP、制表符、行/段分隔符等异常空白                        | warning  | ❌ 硬规则 |        |
 | `repeated_space`           | 连续空格；CJK 目标语中字符间夹英文空格                              | warning  | ❌ 硬规则 |        |
 | `width_mix`                | CJK 目标语中混入零歧义半角标点（`! ? , ; : ( ) [ ]`），或拉丁目标语中混入全角字符；数字写法如 `1,000`/`12:30`/`5!` 豁免 | warning  | ❌ 硬规则 |        |
+| `script_mismatch`          | 多文字系统目标语言（如 `zh-Hans`/`zh-Hant`、`sr-Latn`/`sr-Cyrl`）的译文中出现兄弟文字系统专属字符（如简体译文混入繁体字），出现即报；单文字系统语言与 `auto` 不生效 | warning  | ❌ 硬规则 |        |
 | `number_mismatch`          | 阿拉伯数字在源/译间不一致（归一化全角数字与千分位/小数分隔符后比对多重集合） | error    | ❌ 硬规则 |        |
 | `url_email_mismatch`       | 源/译中超链接、邮箱地址集合不一致                                    | error    | ❌ 硬规则 |        |
 | `subtitle_line_count`      | srt/ass/vtt 等字幕格式下，源/译行数不一致                            | error    | ❌ 硬规则 |        |
@@ -137,7 +138,7 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 | `leftover_placeholder`     | 译文中残留 `__LF_*` 占位符（缺失、重复或字形偏移等三类汇总）        | error    | ❌ 硬规则 |        |
 | `xml_tag_mismatch`         | 源/译 XML 标签多重集合不一致（标签爆裂或丢失）                      | error    | ❌ 硬规则 |        |
 
-`source_residual` 按语言对自动启用；源语言为 `auto` 时不生效。18 项 per-batch checker 可在 `qa.checks` 中按名启用/排除；`duplicate_source_divergence` 为文档级检查（跨段对比），始终随 QA 引擎运行，不必也不能在 `qa.checks` 中排除。`ruby_restore_incomplete` / `ruby_tag_loss` 由翻译轮的注音守恒逻辑产出，不属 `qa.checks` 可选名，但会随段落问题进入筛选与统计。
+`source_residual` 按语言对自动启用；源语言为 `auto` 时不生效。19 项 per-batch checker 可在 `qa.checks` 中按名启用/排除；`duplicate_source_divergence` 为文档级检查（跨段对比），始终随 QA 引擎运行，不必也不能在 `qa.checks` 中排除。`ruby_restore_incomplete` / `ruby_tag_loss` 由翻译轮的注音守恒逻辑产出，不属 `qa.checks` 可选名，但会随段落问题进入筛选与统计。
 
 `punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss` 与 `punctuation_pairing` 四者互补不重复：源文某类包裹标点在译文中**完全缺失**时报 `punctuation_missing`；译文多出源文所无的**成对**包裹标点（疑似多译出）时报 `punctuation_surplus`；译文仍有该类标点但**配对不平衡**时才报 `punctuation_pairing`；源文**整段被成对引号包裹**、译文首尾完全丢失外层引号时报 `punctuation_wrap_loss`（补 `punctuation_missing` 对「内层新增引号致计数非零」的盲区）。`punctuation_missing` 与 `punctuation_wrap_loss` 报出的安全子集可由执行计划的 [本地改写轮次](/zh/guide/translation-config#执行计划) 自动修复（另有 `width_mix_normalize` 规则修复全/半角混用），详见 [流水线与原理 · 本地改写](/zh/guide/pipeline#本地改写-correct)。
 
@@ -203,7 +204,7 @@ qa:
     enabled: true          # 未翻译
 ```
 
-- `qa.checks` 为 `undefined`（CLI/界面未填写）→ 启用 **全部** 18 项 per-batch checker（文档级 `duplicate_source_divergence` 始终随引擎运行，不在此列）
+- `qa.checks` 为 `undefined`（CLI/界面未填写）→ 启用 **全部** 19 项 per-batch checker（文档级 `duplicate_source_divergence` 始终随引擎运行，不在此列）
 - `qa.checks` 为具体列表 → 仅启动名单中按 `Checker.Name()` 精确匹配的 checker；`ruby_restore_incomplete` / `ruby_tag_loss` 由翻译轮注音守恒产出，不属可选名
 - 列表为空数组时视为「等价于全部」并自动改回 `nil`
 
@@ -246,10 +247,47 @@ qa:
 手动编辑译文后会重跑即时 QA。只要问题的指纹（`code` + `matched_text`）没变，已有的非未决裁决会被**保留**——你标过的「不是问题」不会因为重新质检而被冲掉。指纹消失（问题不再报出）的裁决随之清除，新出现或指纹变化的问题保持 `pending`。
 
 ::: info 仅即时 QA 范围内对账
-手动编辑只重跑零配置确定性 QA（14 项确定性 checker + `ruby_tag_loss` 守恒比对），`length_ratio` / 术语表 / 文档级检查不在其列。这些未运行的 checker 产生的问题会在重算时被自然清除，属于预期行为。
+手动编辑只重跑零配置确定性 QA（15 项确定性 checker + `ruby_tag_loss` 守恒比对），`length_ratio` / 术语表 / 文档级检查不在其列。这些未运行的 checker 产生的问题会在重算时被自然清除，属于预期行为。
 :::
 
 接口细节见 [API 参考](/zh/api/)。
+
+## QA 重检
+
+译文没变，但规则升级或执行配置调整之后，旧段落上的质检结果可能已经过时——想按**当前**的 QA 配置重新扫描既有译文，不必重跑翻译作业，用 **QA 重检** 即可。
+
+### 从哪里发起
+
+入口分布在工作区多个层级，按当前浏览范围自动带入重检目标：
+
+- 资源列表 / 资源浏览的工具栏（整个资源或当前章节）
+- 段落面板工具栏（当前资源 / 章节，或先勾选段落限定选中范围）
+- 选中段落后的浮动操作栏（选中段落）
+- EPUB 章节选择胶囊
+
+发起后选择一份**启用了 QA 的执行配置**，确认范围即开始重检。
+
+### 重检做什么
+
+- 按所选执行配置**当前的 QA 配置**与当前版本的规则实现，对范围内译文重跑确定性 QA 与文档级 `duplicate_source_divergence`
+- **只写回 `quality_issues`，不改译文、不改段落状态**——重检是纯质量视角的刷新
+- 裁决对账：指纹相同的问题**继承既有裁决**（含人工 `dismissed`），不会把已判定「不是问题」的项复活；新出现的问题计为「新增」，指纹消失的计为「清除」
+- 语义质检产出的问题与注音守恒码（`ruby_restore_incomplete` / `ruby_tag_loss`）**原样保留**——它们的维护者分别是语义质检轮与翻译/编辑写路径，重检不清除也不重算
+
+### 结果怎么看
+
+重检完成后抽屉展示统计摘要：重检的段落/资源数、新增与清除的问题数、继承的裁决数、因无译文或并发修改而跳过的段落数，以及按资源的明细。选中范围内存在**运行中任务**的资源会被跳过并在结果中警告，避免与正在写入的作业互相覆盖——等任务结束再对这部分补一次重检即可。
+
+接口契约见 [API 概述 · QA 重检](/zh/api/#_14-qa-重检-qa-recheck)。
+
+## 截断与修复诊断
+
+模型响应偶尔会因输出 token 上限被截断，或带出格式瑕疵需要修复链介入。这些过程不再只藏在重试里，批次事件与预览诊断会把它们**标注出来**：
+
+- **「输出被截断」标签**（`truncated`）— 该批次的后端响应因 token 上限被截断（如 `finish_reason=length` / `max_tokens`）。截断的部分文本仍有效：修复链会抢救出最后完整值之前的有效前缀，缺失的条目进入重跑通道
+- **「解析修复」标签**（`repaired`）— 响应解析时应用过的修复算子链（如 `json.close-braces`、`json.truncation-salvage`），按应用顺序列出，悬停可查看说明
+
+在 [批次详情抽屉](/zh/guide/projects#进度追踪) 与 [单段预览诊断](#单段修订预览) 中都能看到这两个标签。看到「输出被截断」不必紧张：残缺条目会自动重跑，无需人工干预；如果频繁出现，说明批次过大或 `max_tokens` 偏小，可调整执行计划里的批次参数或后端的 `max_tokens`。
 
 ## 批注
 
@@ -312,7 +350,7 @@ qa:
 
 ### 撤销替换
 
-抽屉底部的 **撤销上次替换** 可回滚最近一次替换，再次撤销相当于重做。已被后续编辑的段落会被跳过。撤销历史在服务端保留一段时间（默认 90 天，由 `server.revision_retention` 配置，见 [配置文件与环境变量](/zh/guide/configuration#server-—-服务器)），超过保留期或切换资源后无法再撤销。接口契约见 [API 概述 · 段落搜索替换](/zh/api/#_12-段落搜索替换-search-replace)。
+抽屉底部的 **撤销上次替换** 可回滚最近一次替换，再次撤销相当于重做。已被后续编辑的段落会被跳过。撤销历史在服务端保留一段时间（默认 90 天，由 `server.revision_retention` 配置，见 [配置文件与环境变量](/zh/guide/configuration#server-—-服务器)），超过保留期或切换资源后无法再撤销。接口契约见 [API 概述 · 段落搜索替换](/zh/api/#_13-段落搜索替换-search-replace)。
 
 ## 一键审批
 
@@ -373,12 +411,12 @@ qa:
 
 ### 按质量问题筛选
 
-段落列表支持按质量问题过滤，快速定位需关注的段落。问题类型筛选已从平铺的标签改为**分组下拉**（可搜索、可清空，占位「按问题类型筛选」），按下列 8 个分组组织全部 29 个可筛选 code：
+段落列表支持按质量问题过滤，快速定位需关注的段落。问题类型筛选已从平铺的标签改为**分组下拉**（可搜索、可清空，占位「按问题类型筛选」），按下列 8 个分组组织全部 30 个可筛选 code：
 
 | 分组       | 包含的 code                                                                                              |
 | ---------- | ------------------------------------------------------------------------------------------------------- |
 | 硬规则     | `untranslated`、`duplicate`、`source_residual`、`length_ratio`                                         |
-| 排版标点   | `punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss`、`whitespace_irregular`、`repeated_space`、`width_mix`      |
+| 排版标点   | `punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss`、`whitespace_irregular`、`repeated_space`、`width_mix`、`script_mismatch`      |
 | 数字链接   | `number_mismatch`、`url_email_mismatch`                                                                 |
 | 占位标签   | `leftover_placeholder`、`xml_tag_mismatch`、`ruby_restore_incomplete`、`ruby_tag_loss`                  |
 | 术语       | `forbidden_term`、`term_inconsistency`、`term_fidelity`                                                 |
@@ -386,7 +424,7 @@ qa:
 | 字幕       | `subtitle_line_count`                                                                                   |
 | 同源偏差   | `duplicate_source_divergence`                                                                            |
 
-29 个可筛选 code 由全部 per-batch checker（18 项）、注音守恒 code（2 项）、文档级检查（1 项）与语义质检 code（8 项）合并派生；后续新增 checker 会自动出现在筛选列表中。可与状态筛选、关键词搜索叠加。例如：先筛「排版标点」分组里的 `punctuation_missing`，集中处理译文丢失引号的段落；或筛「语义质量」分组里的 `calque` + `warning` 专看语义质检报告出的逐字直译问题。
+30 个可筛选 code 由全部 per-batch checker（19 项）、注音守恒 code（2 项）、文档级检查（1 项）与语义质检 code（8 项）合并派生；后续新增 checker 会自动出现在筛选列表中。可与状态筛选、关键词搜索叠加。例如：先筛「排版标点」分组里的 `punctuation_missing`，集中处理译文丢失引号的段落；或筛「语义质量」分组里的 `calque` + `warning` 专看语义质检报告出的逐字直译问题。
 
 ::: tip 已驳回问题不计入筛选
 筛选与质量统计只看**待处理**问题——已被裁决为 `dismissed`（驳回）的问题视为已处置，不会让段落因它出现在筛选结果里。详见 [质量问题裁决](#质量问题裁决)。
