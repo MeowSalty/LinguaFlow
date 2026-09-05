@@ -13,6 +13,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
@@ -676,12 +677,33 @@ func (h *TranslateHandler) processTranslatedSegments(
 			}
 		}
 
+		// 原文口径：Protect 阶段会改写 seg.Source，OriginalSource 才是真正的原文。
+		// 结构守卫与 TM 共用。
+		source := seg.OriginalSource
+		if source == "" {
+			source = seg.Source
+		}
+
+		// 结构守卫：EPUB 等格式把译文原样粘进 XHTML 再对整章做严格 XML 校验，
+		// 单段译文结构损坏（LLM 违反协议直写裸 ruby 标签、ruby 还原按子串定位
+		// 把合法标签劈开等）会让整章校验失败并静默降级为原文复制。必须卡在
+		// RubyRestore 之后（它是坏结构的制造者之一）、TM 之前（坏译文绝不能
+		// 污染记忆库并传染后续段落）。占位符违规分支同口径：清空 Target 复用
+		// 既有的池间/跨轮重试机制，同时清掉针对已丢弃译文的 issue（如注音
+		// 还原不完整），避免对不存在文本的陈旧裁决落库。
+		if markup.RequiresWellFormedTargets(doc.Format) {
+			if err := markup.TargetRegression(source, seg.Target); err != nil {
+				logger.Warn("batch segment target markup regression",
+					"seg", seg.ID, "err", err)
+				seg.Target = ""
+				seg.Issues = nil
+				unresolved = append(unresolved, idx)
+				continue
+			}
+		}
+
 		// TM（直接调用，使用 OriginalSource）
 		if h.TM != nil {
-			source := seg.OriginalSource
-			if source == "" {
-				source = seg.Source
-			}
 			if err := h.TM.Add(ctx, source, seg.Target, doc.SourceLang, doc.TargetLang); err != nil {
 				logger.Debug("tm add failed", "err", err)
 			}

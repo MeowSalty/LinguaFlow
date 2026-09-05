@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
@@ -113,6 +114,25 @@ func (h *CorrectHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		}
 		oldTarget := seg.Target
 		seg.Target = res.NewTarget
+		// 结构守卫：correct 轮做的是译文改写，判据是「不要把已经合法的译文改
+		// 坏」，基线取改写前的译文而非原文。改写结果一次性落库、没有重试机制，
+		// 因此不应用这次改写就是 fail-closed。
+		if markup.RequiresWellFormedTargets(doc.Format) {
+			if err := markup.TargetRegression(oldTarget, res.NewTarget); err != nil {
+				seg.Target = oldTarget
+				logger.Warn("correct rewrite broke markup structure, reverted",
+					"op", res.Op, "segment_id", seg.ID, "err", err)
+				callbackSegs = append(callbackSegs, TranslatedSegment{
+					Index:      idx,
+					ID:         seg.ID,
+					SourceText: seg.Source,
+					TargetText: seg.Target,
+					Issues:     append([]qa.QualityIssue(nil), seg.Issues...),
+					Protected:  seg.Protected,
+				})
+				continue
+			}
+		}
 		// Idempotency: rerun consumed checker(s) on the rewritten single segment.
 		var stillHas []qa.QualityIssue
 		if h.Idempotency != nil && len(resolvedSet) > 0 {
