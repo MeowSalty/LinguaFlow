@@ -25,6 +25,33 @@ type Parser interface {
 	Render(ctx context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error
 }
 
+// TargetDefect 描述一个无法原样交付的译文段落。
+type TargetDefect struct {
+	SegmentID string // Segment.ID
+	Location  string // 人类可读定位
+	Reason    string // 具体原因
+}
+
+// TargetInspector 由「把译文原样嵌入结构化文档」的 Parser 实现：渲染前逐段预检。
+// 实现者必须保证预检口径与自身 Render 的降级判定同源——预检为空 ⇔ Render 不丢弃
+// 任何译文。否则会出现「预检放过、渲染仍丢译文」的静默数据丢失。
+//
+// 目前仅 epub 需要实现：其 renderer 把译文字节原样写进 XHTML 元素内容，单个损坏
+// 译文会让整章严格校验失败并回退为原文。docx 的 htmlToOOXML 已有单段级降级，其余
+// 格式译文按字节/行直通或经序列化器转义，译文里的裸 & 等本就是合法内容，不受此约束。
+type TargetInspector interface {
+	InspectTargets(doc *pipeline.Document) []TargetDefect
+}
+
+// InspectTargets 对实现了 TargetInspector 的格式执行译文预检；其余格式返回 nil。
+func InspectTargets(p Parser, doc *pipeline.Document) []TargetDefect {
+	inspector, ok := p.(TargetInspector)
+	if !ok {
+		return nil
+	}
+	return inspector.InspectTargets(doc)
+}
+
 // ErrNotImplemented 由占位 parser 返回。
 var ErrNotImplemented = errors.New("parser: not implemented")
 
