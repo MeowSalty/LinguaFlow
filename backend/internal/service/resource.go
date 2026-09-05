@@ -36,6 +36,24 @@ var (
 	ErrNoTranslatedSegments  = errors.New("resource has no translated segments")
 )
 
+// ErrTargetMarkupInvalid 表示资源内存在无法原样交付的译文段落，导出被拒绝。
+var ErrTargetMarkupInvalid = errors.New("target markup invalid")
+
+// TargetMarkupError 携带导出预检发现的全部缺陷段落。
+type TargetMarkupError struct{ Defects []parser.TargetDefect }
+
+// Error 给出可读汇总：缺陷总数与首条定位、原因，便于日志一眼定位问题。
+func (e *TargetMarkupError) Error() string {
+	if len(e.Defects) == 0 {
+		return ErrTargetMarkupInvalid.Error()
+	}
+	first := e.Defects[0]
+	return fmt.Sprintf("%s: %d 个段落无法原样交付，首个: %s (%s)",
+		ErrTargetMarkupInvalid.Error(), len(e.Defects), first.Location, first.Reason)
+}
+
+func (e *TargetMarkupError) Unwrap() error { return ErrTargetMarkupInvalid }
+
 // SegmentChangeType 段落变更类型。
 type SegmentChangeType string
 
@@ -1152,5 +1170,14 @@ func (s *ResourceService) RenderTranslatedResource(
 	if err != nil {
 		return fmt.Errorf("resolve parser for format %q: %w", res.Format, err)
 	}
+
+	// 6. 渲染前译文预检：把译文字节原样嵌入结构化文档的格式（如 epub），单个
+	// 损坏译文会让整章校验失败并静默回退为原文。必须在渲染前整体拒绝——
+	// handler 已提前设置 Content-Disposition，一旦有字节写进 writer 响应头
+	// 就无法再改为错误码。
+	if defects := parser.InspectTargets(p, doc); len(defects) > 0 {
+		return &TargetMarkupError{Defects: defects}
+	}
+
 	return p.Render(ctx, doc, original, writer)
 }

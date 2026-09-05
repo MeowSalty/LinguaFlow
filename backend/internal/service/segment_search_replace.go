@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segmentrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service/segmatch"
 )
@@ -23,7 +24,15 @@ const (
 	skipReasonNoLongerMatches = "no_longer_matches" // apply 时当前译文已不含匹配
 	skipReasonEmptyResult     = "empty_result"      // 替换后译文经 trim 为空
 	skipReasonTargetDiverged  = "target_diverged"   // undo 时该段已被后续编辑改变
+	// skipReasonInvalidMarkup 替换后译文在需要 well-formed 的格式下结构非法。
+	skipReasonInvalidMarkup = "invalid_markup"
 )
+
+// replaceResultMarkupInvalid 报告替换结果在需要 well-formed 译文的格式下是否结构非法。
+// preview 与 apply 必须共用同一判定，否则预览显示会改、实际却被跳过，误导用户。
+func replaceResultMarkupInvalid(format, newTarget string) bool {
+	return markup.RequiresWellFormedTargets(format) && markup.ValidateFragment(newTarget) != nil
+}
 
 var (
 	// ErrRevisionNotFound 表示撤销目标 operation 不存在或已被按龄裁剪。
@@ -93,7 +102,8 @@ type SearchReplaceUndoResult struct {
 // PreviewSearchReplace 在资源段落译文上执行只读搜索替换预览，不持久化。
 // 只对 target_text 匹配；source_text 不参与。空译文段不参与。
 func (s *SegmentService) PreviewSearchReplace(ctx context.Context, actorUserID, projectID, resourceID int, opts SearchReplaceOptions) (*SearchReplacePreviewResult, error) {
-	if _, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, false); err != nil {
+	res, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, false)
+	if err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(opts.Find) == "" {
@@ -168,6 +178,12 @@ func (s *SegmentService) PreviewSearchReplace(ctx context.Context, actorUserID, 
 			continue
 		}
 		after, _ := matcher.ReplaceAll(*seg.TargetText, opts.ReplaceWith)
+		// 与 apply 同一判定：结构非法的替换结果 apply 会跳过，预览就不该展示它，
+		// 否则用户看到的改动数与实际生效数不一致。注意判定作用于替换「结果」，
+		// 所以用搜索替换修补已损坏标签（结果合法）不受影响。
+		if replaceResultMarkupInvalid(res.Format, after) {
+			continue
+		}
 		result.MatchedSegmentCount++
 		result.TotalReplacements += len(matches)
 		if len(result.Items) < maxResults {
@@ -246,6 +262,13 @@ func (s *SegmentService) ApplySearchReplace(ctx context.Context, actorUserID, pr
 		newTarget, _ := matcher.ReplaceAll(*seg.TargetText, opts.ReplaceWith)
 		if strings.TrimSpace(newTarget) == "" {
 			result.Skipped = append(result.Skipped, SearchReplaceSkip{SegmentID: seg.ID, Reason: skipReasonEmptyResult})
+			continue
+		}
+		// 跳过而非阻断：一整批里因 1 段结构非法而整批失败太粗暴，而 Skipped 通道
+		// 本就是为「这段不该改」设计的，预览也走同一判定（见 replaceResultMarkupInvalid），
+		// 用户在预览里看不到该段的改动，apply 结果中会给出原因。
+		if replaceResultMarkupInvalid(res.Format, newTarget) {
+			result.Skipped = append(result.Skipped, SearchReplaceSkip{SegmentID: seg.ID, Reason: skipReasonInvalidMarkup})
 			continue
 		}
 		pendings = append(pendings, pending{seg: seg, newTarget: newTarget})
@@ -341,6 +364,10 @@ func (s *SegmentService) ApplySearchReplace(ctx context.Context, actorUserID, pr
 // （target_diverged），不覆盖他人工作。撤销自身写入新的 reverse 历史与新的
 // undo_operation_id，故可再撤销。operation 不存在或已被裁剪返回 ErrRevisionNotFound；
 // 全部段落发散返回 ErrNoReversibleSegments。
+//
+// 刻意不加译文结构守卫：撤销的目标是回到历史状态，若因「回滚后的译文结构非法」而
+// 拒绝，用户就会被永久锁在当前状态里出不来。历史里的非法译文由导出预检与审校界面
+// 的 xml_tag_mismatch 负责暴露。
 func (s *SegmentService) UndoSearchReplace(ctx context.Context, actorUserID, projectID, resourceID int, operationID string) (*SearchReplaceUndoResult, error) {
 	if _, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, true); err != nil {
 		return nil, err

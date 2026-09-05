@@ -442,3 +442,84 @@ func TestPreviewSearchReplaceQualityNoneIsolation(t *testing.T) {
 		t.Fatalf("item segment_id=%d want %d (resA 的段)", result.Items[0].SegmentID, segA.ID)
 	}
 }
+
+// searchReplaceMarkupSetup 在 epub 资源上构造两段含 </ruby> 的译文：
+//   - brokenSeg：完整 ruby 标签，把 </ruby> 删掉后结构非法；
+//   - repairSeg：历史遗留的 stray 闭合标签，删掉 </ruby> 后反而修复为合法片段。
+//
+// 同一个 find/replace 一段变坏、一段变好，正好覆盖 skip 通道与正常应用两条路径。
+func searchReplaceMarkupSetup(t *testing.T) (*SegmentService, *ent.Client, context.Context, *ent.User, *ent.Project, *ent.Resource, *ent.Segment, *ent.Segment) {
+	t.Helper()
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "sr-markup-user")
+	project := createTestProject(t, client, "sr-markup-proj", user.ID)
+	res := createTestEpubResource(t, client, project.ID, "chapters/sr-markup.epub")
+	broken := createTestSegmentWithTarget(t, client, res.ID, 0, "source 0", "<ruby>漢<rt>かん</rt></ruby>字", nil)
+	repair := createTestSegmentWithTarget(t, client, res.ID, 1, "source 1", "foo </ruby> bar", nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+	return svc, client, ctx, user, project, res, broken, repair
+}
+
+// TestApplySearchReplaceSkipsInvalidMarkupResult 验证结构守卫是"跳过"而非整批失败：
+// 一段替换结果非法时，另一段照常 applied，非法段进 Skipped 并携带 invalid_markup
+// 原因，且数据库中该段译文保持原样。
+func TestApplySearchReplaceSkipsInvalidMarkupResult(t *testing.T) {
+	svc, client, ctx, user, project, res, broken, repair := searchReplaceMarkupSetup(t)
+
+	result, err := svc.ApplySearchReplace(ctx, user.ID, project.ID, res.ID, SearchReplaceOptions{
+		Find:        "</ruby>",
+		ReplaceWith: "",
+	})
+	if err != nil {
+		t.Fatalf("ApplySearchReplace: %v", err)
+	}
+	if result.AppliedCount != 1 || len(result.Items) != 1 || result.Items[0].ID != repair.ID {
+		t.Fatalf("applied=%d items=%v want exactly the repair segment %d", result.AppliedCount, result.Items, repair.ID)
+	}
+	if result.SkippedCount != 1 || len(result.Skipped) != 1 {
+		t.Fatalf("skipped_count=%d skipped=%v want exactly 1", result.SkippedCount, result.Skipped)
+	}
+	if result.Skipped[0].SegmentID != broken.ID {
+		t.Fatalf("skipped segment=%d want %d", result.Skipped[0].SegmentID, broken.ID)
+	}
+	if result.Skipped[0].Reason != skipReasonInvalidMarkup {
+		t.Fatalf("skip reason=%q want %q", result.Skipped[0].Reason, skipReasonInvalidMarkup)
+	}
+	// 被跳过段的 DB 译文不得被改动。
+	dbSeg, err := client.Segment.Get(ctx, broken.ID)
+	if err != nil {
+		t.Fatalf("reload broken segment: %v", err)
+	}
+	if dbSeg.TargetText == nil || *dbSeg.TargetText != "<ruby>漢<rt>かん</rt></ruby>字" {
+		t.Fatalf("target_text in DB=%v want unchanged", dbSeg.TargetText)
+	}
+}
+
+// TestPreviewSearchReplaceConsistentWithApply 验证 preview 与 apply 共用同一判定：
+// 同一参数下 preview 的 MatchedSegmentCount 与 apply 的 AppliedCount 相等，
+// 预览不展示实际会被跳过的段，否则用户看到的改动数与实际生效数不一致。
+func TestPreviewSearchReplaceConsistentWithApply(t *testing.T) {
+	svc, _, ctx, user, project, res, broken, _ := searchReplaceMarkupSetup(t)
+
+	opts := SearchReplaceOptions{
+		Find:        "</ruby>",
+		ReplaceWith: "",
+	}
+	preview, err := svc.PreviewSearchReplace(ctx, user.ID, project.ID, res.ID, opts)
+	if err != nil {
+		t.Fatalf("PreviewSearchReplace: %v", err)
+	}
+	apply, err := svc.ApplySearchReplace(ctx, user.ID, project.ID, res.ID, opts)
+	if err != nil {
+		t.Fatalf("ApplySearchReplace: %v", err)
+	}
+	if preview.MatchedSegmentCount != apply.AppliedCount {
+		t.Fatalf("preview matched=%d, apply applied=%d, want equal", preview.MatchedSegmentCount, apply.AppliedCount)
+	}
+	for _, item := range preview.Items {
+		if item.SegmentID == broken.ID {
+			t.Fatalf("preview should not show segment %d (its replacement result is invalid)", broken.ID)
+		}
+	}
+}
