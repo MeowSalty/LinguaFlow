@@ -259,7 +259,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 #### 可配置 checker 名称（`qa.checks`）
 
-`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 18 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
+`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 19 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
 
 | 名称                          | 说明                                           |
 | ----------------------------- | ---------------------------------------------- |
@@ -274,6 +274,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 | `whitespace_irregular`        | 零宽/NBSP/制表符等异常空白                     |
 | `repeated_space`              | 连续空格 / CJK 间空格                          |
 | `width_mix`                   | CJK 译文混入零歧义半角标点（`! ? , ; : ( ) [ ]`，数字两侧的 `,` / `:` 与数字后接连续 `!?` 如 `5!`/`100!?` 豁免），或拉丁译文混入全角字符（FF01-FF5E）                                    |
+| `script_mismatch`             | 多文字系统目标语言（zh-Hans/zh-Hant、sr-Latn/sr-Cyrl 等）译文出现兄弟文字系统专属字符，出现即报；单文字系统语言与 `auto` 静默不活跃                                    |
 | `number_mismatch`             | 阿拉伯数字集合不一致（全角数字归一化后比对）   |
 | `url_email_mismatch`          | URL/邮箱集合不一致                             |
 | `subtitle_line_count`        | 字幕行数不一致                                 |
@@ -500,9 +501,9 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 
 #### `issue_codes` 取值
 
-支持全部 27 个 issue code（18 项 per-batch checker + 1 项文档级 `duplicate_source_divergence` + 8 项语义 code），规则码与语义码都可作筛选键：
+支持全部 28 个 issue code（19 项 per-batch checker + 1 项文档级 `duplicate_source_divergence` + 8 项语义 code），规则码与语义码都可作筛选键：
 
-`untranslated`、`length_ratio`、`duplicate`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss`、`whitespace_irregular`、`repeated_space`、`width_mix`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`forbidden_term`、`term_inconsistency`、`leftover_placeholder`、`xml_tag_mismatch`、`duplicate_source_divergence`、`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
+`untranslated`、`length_ratio`、`duplicate`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss`、`whitespace_irregular`、`repeated_space`、`width_mix`、`script_mismatch`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`forbidden_term`、`term_inconsistency`、`leftover_placeholder`、`xml_tag_mismatch`、`duplicate_source_divergence`、`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
 
 其中 `ruby_restore_incomplete`、`ruby_tag_loss` 由翻译轮的注音守恒逻辑在译后产出，不属 `qa.checks` 可选名、不参与 `qa.checks` 过滤，但会随段落问题一同进入段落列表筛选与统计（见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)）。
 

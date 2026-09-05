@@ -172,7 +172,26 @@ curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&after_seq=1000"
 SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-—-实时事件流)。
 :::
 
-### 10. 活动与审计日志（服务器模式）
+SSE 也可直接通过 OpenAPI 收录的 `GET /jobs/{jobId}/stream` 端点订阅：原生 `EventSource` 无法设置 `Authorization` 头时，可用 `access_token` 查询参数携带令牌；断线重连用 `Last-Event-ID` 请求头或 `lastEventId` 查询参数传入上次收到的 seq，从该位置续传。生命周期事件含 `job_paused` / `job_resumed`（任务暂停/恢复完成时发布）。
+
+### 10. 任务暂停 / 恢复 / 重试（断点续跑）
+
+任务支持暂停与恢复，失败/取消的任务可重试并从断点继续（已完成轮次与段落直接跳过；显式手选段落的任务首个翻译轮会重译选中段落）：
+
+```bash
+# 暂停：优雅排空——停止派发新批次，等在途请求返回后冻结任务
+curl -s -X POST http://127.0.0.1:18080/api/v1/jobs/42/pause
+
+# 恢复：从轮次断点继续
+curl -s -X POST http://127.0.0.1:18080/api/v1/jobs/42/resume
+
+# 重试：失败或已取消的任务从断点续跑
+curl -s -X POST http://127.0.0.1:18080/api/v1/jobs/42/retry
+```
+
+任务状态枚举为 `pending` / `running` / `paused` / `completed` / `failed` / `cancelled`；主进度字段为 `progress_completed` / `progress_total`（工作量口径，单位「段 × 轮」）。状态前置校验不满足时返回 409（如恢复一个未暂停的任务）。产品侧操作见 [项目管理 · 暂停与恢复](/zh/guide/projects#暂停与恢复)。
+
+### 11. 活动与审计日志（服务器模式）
 
 服务器模式记录两类活动视图，结构一致（`Activity`：`action` / `resource_type` / `message` / `metadata` 等）：
 
@@ -196,7 +215,7 @@ curl -s "http://localhost:8080/api/v1/admin/audit-logs?limit=50&cursor=12345" \
 
 后端记录的 `action` 值、资源类型与触发场景对照见 [管理员后台 · 动作类型](/zh/guide/admin#动作类型)。管理员还提供用户管理、系统统计与设置接口，完整列表见 [管理员后台 · API 速览](/zh/guide/admin#api-速览)。
 
-### 11. 质量问题裁决（驳回 / 撤销）
+### 12. 质量问题裁决（驳回 / 撤销）
 
 对某段译文上的单条质量问题下裁决：`dismissed` 判定为不是问题，`pending` 撤销裁决、恢复未决。操作可逆，返回更新后的段落。
 
@@ -220,7 +239,7 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/42
 
 `QualityIssue` 响应含 `disposition`（必填，`pending` / `dismissed`）、`decided_by`（裁决者 user_id，`null` 表示由 LLM 裁决）、`decided_at`（裁决时间）与 `note`（裁决说明）字段。已 `dismissed` 的问题不计入段落列表的质量筛选与统计。产品侧操作见 [翻译审校 · 质量问题裁决](/zh/guide/review#质量问题裁决)。
 
-### 12. 段落搜索替换（search-replace）
+### 13. 段落搜索替换（search-replace）
 
 对某个资源下的段落**译文**批量查找替换（原文不变），分三步：先预览影响范围，再应用写回，最后可按 `operation_id` 撤销。产品侧操作见 [翻译审校 · 搜索替换](/zh/guide/review#搜索替换)。
 
@@ -258,6 +277,26 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/se
 - 替换历史超过保留期返回 404，全部段落均已变更、无可撤销内容返回 409；保留时长由 `server.revision_retention` 控制（默认 90 天）
 
 另：段落列表端点 `GET /projects/{projectId}/resources/{resourceId}/segments` 的搜索还支持 `search_field`（`source` / `target` / `both`，默认 `both`）、`case_sensitive`（默认 `true`）与 `include_total`（默认 `false`，为 `true` 时响应附带满足过滤条件的 `total` 总数）查询参数。
+
+### 14. QA 重检（qa-recheck）
+
+用指定执行配置**当前**的 QA 配置对既有译文重跑确定性 QA 与文档级检查，同步返回统计结果（不创建任务）：只更新 `quality_issues`，不改译文与段落状态；同指纹问题继承既有人工裁决。产品侧操作见 [翻译审校 · QA 重检](/zh/guide/review#qa-重检)。
+
+```bash
+# 对资源 1、2 重跑 QA（使用执行配置 3 当前的 QA 设置）
+curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/qa-recheck \
+  -H "Content-Type: application/json" \
+  -d '{"profile_id": 3, "resource_ids": [1, 2]}'
+```
+
+| 字段                | 类型     | 说明                                                                                              |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `profile_id`        | int      | 必填。执行配置 ID，取其**当前**的 QA 配置、阈值与保护规则；该配置未启用 QA 时返回 400              |
+| `resource_ids`      | []int    | 资源范围。三者（含下两行）皆空时选项目内全部资源                                                  |
+| `segment_ids`       | []int    | 限定具体段落；与 `segment_group_keys` 互斥                                                        |
+| `segment_group_keys`| []string | 按章节分组键选段（仅 EPUB 等多章节资源，传 `meta.epub_file` 值）；优先级：分组键 > 段落 > 资源      |
+
+选中资源上存在运行中任务时跳过该资源并在响应的 `resources_skipped_busy` 中报告（含占用它的任务 ID），避免与作业写入互相覆盖。响应为统计摘要（`QaRecheckResult`）：重检段落/资源数、新增（`issues_new`）与清除（`issues_cleared`）问题数、继承裁决数（`dispositions_inherited`）、无译文/并发修改跳过数与按资源明细。字段全集见 Redoc 中 `QaRecheckRequest` / `QaRecheckResult`。
 
 ## 错误码
 
