@@ -1,9 +1,10 @@
 ﻿<script setup lang="ts">
-import { NAlert, NButton, NEmpty, NIcon, NModal, useMessage } from 'naive-ui'
+import { NAlert, NButton, NEmpty, NIcon, NModal, useDialog, useMessage } from 'naive-ui'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
+import { isDownloadTranslatedError } from '@/api/projects'
 import ResourceBreadcrumb from '@/components/workspace/ResourceBreadcrumb.vue'
 import UploadPrecheckPanel from '@/components/workspace/UploadPrecheckPanel.vue'
 import { useResourceViewStrategy } from '@/composables/workspace/useResourceViewStrategy'
@@ -29,6 +30,7 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const dialog = useDialog()
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
 const { currentStrategyName, toolbarMeta, activeViewComponent } = useResourceViewStrategy()
@@ -171,6 +173,16 @@ const downloadResourceResult = async (resource: Resource): Promise<void> => {
     URL.revokeObjectURL(url)
   } catch (error) {
     console.error(error)
+    // 409 = 无已翻译段落，或译文标签结构预检失败（detail 含缺陷段落编号与原因），
+    // 信息量超出瞬时 toast 的可读范围，改用对话框完整展示
+    if (isDownloadTranslatedError(error) && error.status === 409) {
+      dialog.error({
+        title: t('api.errors.downloadTranslatedFailed'),
+        content: error.problem?.detail || t('api.errors.downloadResourceResultEmpty'),
+        positiveText: t('workspace.common.close'),
+      })
+      return
+    }
     message.error(workspace.actionError || t('workspace.messages.downloadFailed'))
   }
 }
