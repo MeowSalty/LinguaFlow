@@ -609,8 +609,8 @@ SearchReplaceSkippedItem:
       type: integer
     reason:
       type: string
-      enum: [no_longer_matches, empty_result, target_diverged]
-      description: 跳过原因；no_longer_matches=apply 时当前译文已不含匹配，empty_result=替换后译文为空，target_diverged=undo 时该段已被后续编辑
+      enum: [no_longer_matches, empty_result, target_diverged, invalid_markup]
+      description: 跳过原因；no_longer_matches=apply 时当前译文已不含匹配，empty_result=替换后译文为空，target_diverged=undo 时该段已被后续编辑，invalid_markup=替换后译文标签结构非法（会导致导出时整章降级为原文）
 
 SearchReplacePreviewRequest:
   type: object
