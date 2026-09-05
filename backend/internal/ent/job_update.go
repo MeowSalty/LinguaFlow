@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
@@ -170,108 +171,45 @@ func (_u *JobUpdate) AddFailedResources(v int) *JobUpdate {
 	return _u
 }
 
-// SetTotalSegments sets the "total_segments" field.
-func (_u *JobUpdate) SetTotalSegments(v int) *JobUpdate {
-	_u.mutation.ResetTotalSegments()
-	_u.mutation.SetTotalSegments(v)
+// SetProgressTotal sets the "progress_total" field.
+func (_u *JobUpdate) SetProgressTotal(v int64) *JobUpdate {
+	_u.mutation.ResetProgressTotal()
+	_u.mutation.SetProgressTotal(v)
 	return _u
 }
 
-// SetNillableTotalSegments sets the "total_segments" field if the given value is not nil.
-func (_u *JobUpdate) SetNillableTotalSegments(v *int) *JobUpdate {
+// SetNillableProgressTotal sets the "progress_total" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableProgressTotal(v *int64) *JobUpdate {
 	if v != nil {
-		_u.SetTotalSegments(*v)
+		_u.SetProgressTotal(*v)
 	}
 	return _u
 }
 
-// AddTotalSegments adds value to the "total_segments" field.
-func (_u *JobUpdate) AddTotalSegments(v int) *JobUpdate {
-	_u.mutation.AddTotalSegments(v)
+// AddProgressTotal adds value to the "progress_total" field.
+func (_u *JobUpdate) AddProgressTotal(v int64) *JobUpdate {
+	_u.mutation.AddProgressTotal(v)
 	return _u
 }
 
-// SetSkippedSegments sets the "skipped_segments" field.
-func (_u *JobUpdate) SetSkippedSegments(v int) *JobUpdate {
-	_u.mutation.ResetSkippedSegments()
-	_u.mutation.SetSkippedSegments(v)
+// SetProgressCompleted sets the "progress_completed" field.
+func (_u *JobUpdate) SetProgressCompleted(v int64) *JobUpdate {
+	_u.mutation.ResetProgressCompleted()
+	_u.mutation.SetProgressCompleted(v)
 	return _u
 }
 
-// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
-func (_u *JobUpdate) SetNillableSkippedSegments(v *int) *JobUpdate {
+// SetNillableProgressCompleted sets the "progress_completed" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableProgressCompleted(v *int64) *JobUpdate {
 	if v != nil {
-		_u.SetSkippedSegments(*v)
+		_u.SetProgressCompleted(*v)
 	}
 	return _u
 }
 
-// AddSkippedSegments adds value to the "skipped_segments" field.
-func (_u *JobUpdate) AddSkippedSegments(v int) *JobUpdate {
-	_u.mutation.AddSkippedSegments(v)
-	return _u
-}
-
-// SetCompletedSegments sets the "completed_segments" field.
-func (_u *JobUpdate) SetCompletedSegments(v int) *JobUpdate {
-	_u.mutation.ResetCompletedSegments()
-	_u.mutation.SetCompletedSegments(v)
-	return _u
-}
-
-// SetNillableCompletedSegments sets the "completed_segments" field if the given value is not nil.
-func (_u *JobUpdate) SetNillableCompletedSegments(v *int) *JobUpdate {
-	if v != nil {
-		_u.SetCompletedSegments(*v)
-	}
-	return _u
-}
-
-// AddCompletedSegments adds value to the "completed_segments" field.
-func (_u *JobUpdate) AddCompletedSegments(v int) *JobUpdate {
-	_u.mutation.AddCompletedSegments(v)
-	return _u
-}
-
-// SetWeightedTotal sets the "weighted_total" field.
-func (_u *JobUpdate) SetWeightedTotal(v int) *JobUpdate {
-	_u.mutation.ResetWeightedTotal()
-	_u.mutation.SetWeightedTotal(v)
-	return _u
-}
-
-// SetNillableWeightedTotal sets the "weighted_total" field if the given value is not nil.
-func (_u *JobUpdate) SetNillableWeightedTotal(v *int) *JobUpdate {
-	if v != nil {
-		_u.SetWeightedTotal(*v)
-	}
-	return _u
-}
-
-// AddWeightedTotal adds value to the "weighted_total" field.
-func (_u *JobUpdate) AddWeightedTotal(v int) *JobUpdate {
-	_u.mutation.AddWeightedTotal(v)
-	return _u
-}
-
-// SetWeightedCompleted sets the "weighted_completed" field.
-func (_u *JobUpdate) SetWeightedCompleted(v int) *JobUpdate {
-	_u.mutation.ResetWeightedCompleted()
-	_u.mutation.SetWeightedCompleted(v)
-	return _u
-}
-
-// SetNillableWeightedCompleted sets the "weighted_completed" field if the given value is not nil.
-func (_u *JobUpdate) SetNillableWeightedCompleted(v *int) *JobUpdate {
-	if v != nil {
-		_u.SetWeightedCompleted(*v)
-	}
-	return _u
-}
-
-// AddWeightedCompleted adds value to the "weighted_completed" field.
-func (_u *JobUpdate) AddWeightedCompleted(v int) *JobUpdate {
-	_u.mutation.AddWeightedCompleted(v)
+// AddProgressCompleted adds value to the "progress_completed" field.
+func (_u *JobUpdate) AddProgressCompleted(v int64) *JobUpdate {
+	_u.mutation.AddProgressCompleted(v)
 	return _u
 }
 
@@ -354,6 +292,21 @@ func (_u *JobUpdate) AddJobResources(v ...*JobResource) *JobUpdate {
 	return _u.AddJobResourceIDs(ids...)
 }
 
+// AddJobRoundIDs adds the "job_rounds" edge to the JobRound entity by IDs.
+func (_u *JobUpdate) AddJobRoundIDs(ids ...int) *JobUpdate {
+	_u.mutation.AddJobRoundIDs(ids...)
+	return _u
+}
+
+// AddJobRounds adds the "job_rounds" edges to the JobRound entity.
+func (_u *JobUpdate) AddJobRounds(v ...*JobRound) *JobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddJobRoundIDs(ids...)
+}
+
 // AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by IDs.
 func (_u *JobUpdate) AddSseEventIDs(ids ...int) *JobUpdate {
 	_u.mutation.AddSseEventIDs(ids...)
@@ -405,6 +358,27 @@ func (_u *JobUpdate) RemoveJobResources(v ...*JobResource) *JobUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobResourceIDs(ids...)
+}
+
+// ClearJobRounds clears all "job_rounds" edges to the JobRound entity.
+func (_u *JobUpdate) ClearJobRounds() *JobUpdate {
+	_u.mutation.ClearJobRounds()
+	return _u
+}
+
+// RemoveJobRoundIDs removes the "job_rounds" edge to JobRound entities by IDs.
+func (_u *JobUpdate) RemoveJobRoundIDs(ids ...int) *JobUpdate {
+	_u.mutation.RemoveJobRoundIDs(ids...)
+	return _u
+}
+
+// RemoveJobRounds removes "job_rounds" edges to JobRound entities.
+func (_u *JobUpdate) RemoveJobRounds(v ...*JobRound) *JobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveJobRoundIDs(ids...)
 }
 
 // ClearSseEvents clears all "sse_events" edges to the SSEEvent entity.
@@ -491,29 +465,14 @@ func (_u *JobUpdate) check() error {
 			return &ValidationError{Name: "failed_resources", err: fmt.Errorf(`ent: validator failed for field "Job.failed_resources": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.TotalSegments(); ok {
-		if err := job.TotalSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "Job.total_segments": %w`, err)}
+	if v, ok := _u.mutation.ProgressTotal(); ok {
+		if err := job.ProgressTotalValidator(v); err != nil {
+			return &ValidationError{Name: "progress_total", err: fmt.Errorf(`ent: validator failed for field "Job.progress_total": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.SkippedSegments(); ok {
-		if err := job.SkippedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "Job.skipped_segments": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.CompletedSegments(); ok {
-		if err := job.CompletedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "Job.completed_segments": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.WeightedTotal(); ok {
-		if err := job.WeightedTotalValidator(v); err != nil {
-			return &ValidationError{Name: "weighted_total", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_total": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.WeightedCompleted(); ok {
-		if err := job.WeightedCompletedValidator(v); err != nil {
-			return &ValidationError{Name: "weighted_completed", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_completed": %w`, err)}
+	if v, ok := _u.mutation.ProgressCompleted(); ok {
+		if err := job.ProgressCompletedValidator(v); err != nil {
+			return &ValidationError{Name: "progress_completed", err: fmt.Errorf(`ent: validator failed for field "Job.progress_completed": %w`, err)}
 		}
 	}
 	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
@@ -570,35 +529,17 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedFailedResources(); ok {
 		_spec.AddField(job.FieldFailedResources, field.TypeInt, value)
 	}
-	if value, ok := _u.mutation.TotalSegments(); ok {
-		_spec.SetField(job.FieldTotalSegments, field.TypeInt, value)
+	if value, ok := _u.mutation.ProgressTotal(); ok {
+		_spec.SetField(job.FieldProgressTotal, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTotalSegments(); ok {
-		_spec.AddField(job.FieldTotalSegments, field.TypeInt, value)
+	if value, ok := _u.mutation.AddedProgressTotal(); ok {
+		_spec.AddField(job.FieldProgressTotal, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.SkippedSegments(); ok {
-		_spec.SetField(job.FieldSkippedSegments, field.TypeInt, value)
+	if value, ok := _u.mutation.ProgressCompleted(); ok {
+		_spec.SetField(job.FieldProgressCompleted, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
-		_spec.AddField(job.FieldSkippedSegments, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.CompletedSegments(); ok {
-		_spec.SetField(job.FieldCompletedSegments, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedCompletedSegments(); ok {
-		_spec.AddField(job.FieldCompletedSegments, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.WeightedTotal(); ok {
-		_spec.SetField(job.FieldWeightedTotal, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedWeightedTotal(); ok {
-		_spec.AddField(job.FieldWeightedTotal, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.WeightedCompleted(); ok {
-		_spec.SetField(job.FieldWeightedCompleted, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedWeightedCompleted(); ok {
-		_spec.AddField(job.FieldWeightedCompleted, field.TypeInt, value)
+	if value, ok := _u.mutation.AddedProgressCompleted(); ok {
+		_spec.AddField(job.FieldProgressCompleted, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(job.FieldErrorMessage, field.TypeString, value)
@@ -708,6 +649,51 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.JobRoundsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.JobRoundsTable,
+			Columns: []string{job.JobRoundsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedJobRoundsIDs(); len(nodes) > 0 && !_u.mutation.JobRoundsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.JobRoundsTable,
+			Columns: []string{job.JobRoundsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.JobRoundsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.JobRoundsTable,
+			Columns: []string{job.JobRoundsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -918,108 +904,45 @@ func (_u *JobUpdateOne) AddFailedResources(v int) *JobUpdateOne {
 	return _u
 }
 
-// SetTotalSegments sets the "total_segments" field.
-func (_u *JobUpdateOne) SetTotalSegments(v int) *JobUpdateOne {
-	_u.mutation.ResetTotalSegments()
-	_u.mutation.SetTotalSegments(v)
+// SetProgressTotal sets the "progress_total" field.
+func (_u *JobUpdateOne) SetProgressTotal(v int64) *JobUpdateOne {
+	_u.mutation.ResetProgressTotal()
+	_u.mutation.SetProgressTotal(v)
 	return _u
 }
 
-// SetNillableTotalSegments sets the "total_segments" field if the given value is not nil.
-func (_u *JobUpdateOne) SetNillableTotalSegments(v *int) *JobUpdateOne {
+// SetNillableProgressTotal sets the "progress_total" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableProgressTotal(v *int64) *JobUpdateOne {
 	if v != nil {
-		_u.SetTotalSegments(*v)
+		_u.SetProgressTotal(*v)
 	}
 	return _u
 }
 
-// AddTotalSegments adds value to the "total_segments" field.
-func (_u *JobUpdateOne) AddTotalSegments(v int) *JobUpdateOne {
-	_u.mutation.AddTotalSegments(v)
+// AddProgressTotal adds value to the "progress_total" field.
+func (_u *JobUpdateOne) AddProgressTotal(v int64) *JobUpdateOne {
+	_u.mutation.AddProgressTotal(v)
 	return _u
 }
 
-// SetSkippedSegments sets the "skipped_segments" field.
-func (_u *JobUpdateOne) SetSkippedSegments(v int) *JobUpdateOne {
-	_u.mutation.ResetSkippedSegments()
-	_u.mutation.SetSkippedSegments(v)
+// SetProgressCompleted sets the "progress_completed" field.
+func (_u *JobUpdateOne) SetProgressCompleted(v int64) *JobUpdateOne {
+	_u.mutation.ResetProgressCompleted()
+	_u.mutation.SetProgressCompleted(v)
 	return _u
 }
 
-// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
-func (_u *JobUpdateOne) SetNillableSkippedSegments(v *int) *JobUpdateOne {
+// SetNillableProgressCompleted sets the "progress_completed" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableProgressCompleted(v *int64) *JobUpdateOne {
 	if v != nil {
-		_u.SetSkippedSegments(*v)
+		_u.SetProgressCompleted(*v)
 	}
 	return _u
 }
 
-// AddSkippedSegments adds value to the "skipped_segments" field.
-func (_u *JobUpdateOne) AddSkippedSegments(v int) *JobUpdateOne {
-	_u.mutation.AddSkippedSegments(v)
-	return _u
-}
-
-// SetCompletedSegments sets the "completed_segments" field.
-func (_u *JobUpdateOne) SetCompletedSegments(v int) *JobUpdateOne {
-	_u.mutation.ResetCompletedSegments()
-	_u.mutation.SetCompletedSegments(v)
-	return _u
-}
-
-// SetNillableCompletedSegments sets the "completed_segments" field if the given value is not nil.
-func (_u *JobUpdateOne) SetNillableCompletedSegments(v *int) *JobUpdateOne {
-	if v != nil {
-		_u.SetCompletedSegments(*v)
-	}
-	return _u
-}
-
-// AddCompletedSegments adds value to the "completed_segments" field.
-func (_u *JobUpdateOne) AddCompletedSegments(v int) *JobUpdateOne {
-	_u.mutation.AddCompletedSegments(v)
-	return _u
-}
-
-// SetWeightedTotal sets the "weighted_total" field.
-func (_u *JobUpdateOne) SetWeightedTotal(v int) *JobUpdateOne {
-	_u.mutation.ResetWeightedTotal()
-	_u.mutation.SetWeightedTotal(v)
-	return _u
-}
-
-// SetNillableWeightedTotal sets the "weighted_total" field if the given value is not nil.
-func (_u *JobUpdateOne) SetNillableWeightedTotal(v *int) *JobUpdateOne {
-	if v != nil {
-		_u.SetWeightedTotal(*v)
-	}
-	return _u
-}
-
-// AddWeightedTotal adds value to the "weighted_total" field.
-func (_u *JobUpdateOne) AddWeightedTotal(v int) *JobUpdateOne {
-	_u.mutation.AddWeightedTotal(v)
-	return _u
-}
-
-// SetWeightedCompleted sets the "weighted_completed" field.
-func (_u *JobUpdateOne) SetWeightedCompleted(v int) *JobUpdateOne {
-	_u.mutation.ResetWeightedCompleted()
-	_u.mutation.SetWeightedCompleted(v)
-	return _u
-}
-
-// SetNillableWeightedCompleted sets the "weighted_completed" field if the given value is not nil.
-func (_u *JobUpdateOne) SetNillableWeightedCompleted(v *int) *JobUpdateOne {
-	if v != nil {
-		_u.SetWeightedCompleted(*v)
-	}
-	return _u
-}
-
-// AddWeightedCompleted adds value to the "weighted_completed" field.
-func (_u *JobUpdateOne) AddWeightedCompleted(v int) *JobUpdateOne {
-	_u.mutation.AddWeightedCompleted(v)
+// AddProgressCompleted adds value to the "progress_completed" field.
+func (_u *JobUpdateOne) AddProgressCompleted(v int64) *JobUpdateOne {
+	_u.mutation.AddProgressCompleted(v)
 	return _u
 }
 
@@ -1102,6 +1025,21 @@ func (_u *JobUpdateOne) AddJobResources(v ...*JobResource) *JobUpdateOne {
 	return _u.AddJobResourceIDs(ids...)
 }
 
+// AddJobRoundIDs adds the "job_rounds" edge to the JobRound entity by IDs.
+func (_u *JobUpdateOne) AddJobRoundIDs(ids ...int) *JobUpdateOne {
+	_u.mutation.AddJobRoundIDs(ids...)
+	return _u
+}
+
+// AddJobRounds adds the "job_rounds" edges to the JobRound entity.
+func (_u *JobUpdateOne) AddJobRounds(v ...*JobRound) *JobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddJobRoundIDs(ids...)
+}
+
 // AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by IDs.
 func (_u *JobUpdateOne) AddSseEventIDs(ids ...int) *JobUpdateOne {
 	_u.mutation.AddSseEventIDs(ids...)
@@ -1153,6 +1091,27 @@ func (_u *JobUpdateOne) RemoveJobResources(v ...*JobResource) *JobUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobResourceIDs(ids...)
+}
+
+// ClearJobRounds clears all "job_rounds" edges to the JobRound entity.
+func (_u *JobUpdateOne) ClearJobRounds() *JobUpdateOne {
+	_u.mutation.ClearJobRounds()
+	return _u
+}
+
+// RemoveJobRoundIDs removes the "job_rounds" edge to JobRound entities by IDs.
+func (_u *JobUpdateOne) RemoveJobRoundIDs(ids ...int) *JobUpdateOne {
+	_u.mutation.RemoveJobRoundIDs(ids...)
+	return _u
+}
+
+// RemoveJobRounds removes "job_rounds" edges to JobRound entities.
+func (_u *JobUpdateOne) RemoveJobRounds(v ...*JobRound) *JobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveJobRoundIDs(ids...)
 }
 
 // ClearSseEvents clears all "sse_events" edges to the SSEEvent entity.
@@ -1252,29 +1211,14 @@ func (_u *JobUpdateOne) check() error {
 			return &ValidationError{Name: "failed_resources", err: fmt.Errorf(`ent: validator failed for field "Job.failed_resources": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.TotalSegments(); ok {
-		if err := job.TotalSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "Job.total_segments": %w`, err)}
+	if v, ok := _u.mutation.ProgressTotal(); ok {
+		if err := job.ProgressTotalValidator(v); err != nil {
+			return &ValidationError{Name: "progress_total", err: fmt.Errorf(`ent: validator failed for field "Job.progress_total": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.SkippedSegments(); ok {
-		if err := job.SkippedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "Job.skipped_segments": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.CompletedSegments(); ok {
-		if err := job.CompletedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "Job.completed_segments": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.WeightedTotal(); ok {
-		if err := job.WeightedTotalValidator(v); err != nil {
-			return &ValidationError{Name: "weighted_total", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_total": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.WeightedCompleted(); ok {
-		if err := job.WeightedCompletedValidator(v); err != nil {
-			return &ValidationError{Name: "weighted_completed", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_completed": %w`, err)}
+	if v, ok := _u.mutation.ProgressCompleted(); ok {
+		if err := job.ProgressCompletedValidator(v); err != nil {
+			return &ValidationError{Name: "progress_completed", err: fmt.Errorf(`ent: validator failed for field "Job.progress_completed": %w`, err)}
 		}
 	}
 	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
@@ -1348,35 +1292,17 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	if value, ok := _u.mutation.AddedFailedResources(); ok {
 		_spec.AddField(job.FieldFailedResources, field.TypeInt, value)
 	}
-	if value, ok := _u.mutation.TotalSegments(); ok {
-		_spec.SetField(job.FieldTotalSegments, field.TypeInt, value)
+	if value, ok := _u.mutation.ProgressTotal(); ok {
+		_spec.SetField(job.FieldProgressTotal, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTotalSegments(); ok {
-		_spec.AddField(job.FieldTotalSegments, field.TypeInt, value)
+	if value, ok := _u.mutation.AddedProgressTotal(); ok {
+		_spec.AddField(job.FieldProgressTotal, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.SkippedSegments(); ok {
-		_spec.SetField(job.FieldSkippedSegments, field.TypeInt, value)
+	if value, ok := _u.mutation.ProgressCompleted(); ok {
+		_spec.SetField(job.FieldProgressCompleted, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
-		_spec.AddField(job.FieldSkippedSegments, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.CompletedSegments(); ok {
-		_spec.SetField(job.FieldCompletedSegments, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedCompletedSegments(); ok {
-		_spec.AddField(job.FieldCompletedSegments, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.WeightedTotal(); ok {
-		_spec.SetField(job.FieldWeightedTotal, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedWeightedTotal(); ok {
-		_spec.AddField(job.FieldWeightedTotal, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.WeightedCompleted(); ok {
-		_spec.SetField(job.FieldWeightedCompleted, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedWeightedCompleted(); ok {
-		_spec.AddField(job.FieldWeightedCompleted, field.TypeInt, value)
+	if value, ok := _u.mutation.AddedProgressCompleted(); ok {
+		_spec.AddField(job.FieldProgressCompleted, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(job.FieldErrorMessage, field.TypeString, value)
@@ -1486,6 +1412,51 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.JobRoundsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.JobRoundsTable,
+			Columns: []string{job.JobRoundsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedJobRoundsIDs(); len(nodes) > 0 && !_u.mutation.JobRoundsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.JobRoundsTable,
+			Columns: []string{job.JobRoundsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.JobRoundsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.JobRoundsTable,
+			Columns: []string{job.JobRoundsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

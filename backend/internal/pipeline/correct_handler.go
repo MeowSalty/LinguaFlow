@@ -39,13 +39,6 @@ func (h *CorrectHandler) logger() *slog.Logger {
 	return h.Logger
 }
 
-func (h *CorrectHandler) reporter() progress.Reporter {
-	if h.Reporter == nil {
-		return progress.Nop{}
-	}
-	return h.Reporter
-}
-
 // BuildBatches scans segments with status translated/edited and non-empty Target
 // (pool 0, excluding doc.ResolvedIndices cross-round increments). Returns a single
 // batch (local work, no word/segment budget). pending!=nil re-slices the given indices.
@@ -90,7 +83,6 @@ func (h *CorrectHandler) BuildBatches(_ context.Context, doc *Document, pending 
 // ProcessBatch applies rules per segment; on a change idempotency-reruns the
 // consumed checker(s). Revert + keep issues if the rewrite fails to clear the code.
 func (h *CorrectHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, _ int, logger *slog.Logger) batchResult {
-	rep := h.reporter()
 	if logger == nil {
 		logger = h.logger()
 	}
@@ -117,7 +109,6 @@ func (h *CorrectHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 				Issues:     append([]qa.QualityIssue(nil), seg.Issues...),
 				Protected:  seg.Protected,
 			})
-			rep.SegmentDone()
 			continue
 		}
 		oldTarget := seg.Target
@@ -156,7 +147,6 @@ func (h *CorrectHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 				Issues:     append([]qa.QualityIssue(nil), seg.Issues...),
 				Protected:  seg.Protected,
 			})
-			rep.SegmentDone()
 			continue
 		}
 		// Apply: drop resolved codes from seg.Issues.
@@ -170,7 +160,6 @@ func (h *CorrectHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			Issues:     append([]qa.QualityIssue(nil), seg.Issues...),
 			Protected:  seg.Protected,
 		})
-		rep.SegmentDone()
 	}
 	return batchResult{callbackResult: &BatchResult{Segments: callbackSegs}}
 }

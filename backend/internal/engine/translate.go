@@ -32,6 +32,17 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 	round := e.rounds[roundIdx]
 	handler := round.Handler
 
+	// 流水线注入：站位信号量与暂停闸门（每次执行按选项覆盖；nil 保持单资源
+	// 语义）。Round 为值类型副本，不污染引擎持有的基准配置。
+	round.Slots = cfg.station
+	round.Gate = cfg.gate
+	// 退避重试等待中止信号同步到 handler（各 LLM handler 的 backoff select）。
+	if cfg.gate != nil {
+		if setter, ok := handler.(interface{ SetGate(*pipeline.PauseGate) }); ok {
+			setter.SetGate(cfg.gate)
+		}
+	}
+
 	// Prepare document
 	e.PrepareDocument(doc, nil)
 	if len(cfg.segmentFilter) > 0 {

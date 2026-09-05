@@ -1,0 +1,29 @@
+projectQaRecheck:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  post:
+    operationId: QaRecheck
+    summary: 按执行策略对既有译文重跑 QA 重检
+    description: |
+      用指定执行策略（profile）当前的 QA 配置与当前版本的规则实现，
+      对选中的资源/段落组/段落重跑确定性 QA 与文档级检查。
+      按指纹对账继承既有裁决（dismissed 不会以 pending 复活），
+      仅更新 quality_issues，不修改译文与段落状态。
+      选中资源上存在未完成任务时跳过该资源并在响应中报告。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/QaRecheckRequest'
+    responses:
+      '200':
+        description: 重检完成，返回统计摘要
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/QaRecheckResult'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

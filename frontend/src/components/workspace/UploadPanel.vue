@@ -39,6 +39,24 @@ const errorTasks = computed(() => workspace.uploadTasks.filter((t) => t.stage ==
 
 const partialTasks = computed(() => workspace.uploadTasks.filter((t) => t.stage === 'partial'))
 
+// ── 文件数统计（任务可能是多文件批次，按 fileCount 汇总） ──
+
+const activeFileCount = computed(() =>
+  activeTasks.value.reduce((acc, task) => acc + task.fileCount, 0),
+)
+
+const completedFileCount = computed(() =>
+  completedTasks.value.reduce((acc, task) => acc + task.fileCount, 0),
+)
+
+const partialFileCount = computed(() =>
+  partialTasks.value.reduce((acc, task) => acc + task.fileCount, 0),
+)
+
+const errorFileCount = computed(() =>
+  errorTasks.value.reduce((acc, task) => acc + task.fileCount, 0),
+)
+
 /** 主导阶段：取优先级最高的任务阶段 */
 const stagePriority: Record<UploadTask['stage'], number> = {
   error: 0,
@@ -56,71 +74,45 @@ const dominantStage = computed<UploadTask['stage'] | 'idle'>(() => {
     .stage
 })
 
-/** 平均进度（仅 uploading 阶段的任务） */
+/** 加权平均进度（仅 uploading 阶段的任务，按文件数加权） */
 const averageProgress = computed(() => {
   const uploadingTasks = workspace.uploadTasks.filter((t) => t.stage === 'uploading')
-  if (uploadingTasks.length === 0) return 0
-  const sum = uploadingTasks.reduce((acc, t) => acc + t.progress, 0)
-  return Math.round(sum / uploadingTasks.length)
+  const totalWeight = uploadingTasks.reduce((acc, task) => acc + task.fileCount, 0)
+  if (totalWeight === 0) return 0
+  const weighted = uploadingTasks.reduce((acc, task) => acc + task.progress * task.fileCount, 0)
+  return Math.round(weighted / totalWeight)
 })
 
-/** 摘要文案 */
+/** 状态文案（收缩态与展开态共用） */
 const summaryText = computed(() => {
-  const count = workspace.uploadTasks.length
   const stage = dominantStage.value
   const result = workspace.lastUploadResult
 
   if (stage === 'prechecking') {
-    return t('workspace.uploadPanel.collapsedPrechecking', { count })
+    return t('workspace.uploadPanel.statusPrechecking', { count: activeFileCount.value })
   }
   if (stage === 'uploading') {
-    return t('workspace.uploadPanel.collapsedUploading', {
-      count: activeTasks.value.length,
+    return t('workspace.uploadPanel.statusUploading', {
+      count: activeFileCount.value,
       percent: averageProgress.value,
     })
   }
   if (stage === 'processing') {
-    return t('workspace.uploadPanel.collapsedProcessing')
+    return t('workspace.uploadPanel.statusProcessing', { count: activeFileCount.value })
   }
   if (stage === 'complete') {
-    const total = result?.summary.total ?? completedTasks.value.length
-    return t('workspace.uploadPanel.collapsedComplete', { count: total })
+    const total = result?.summary.total ?? completedFileCount.value
+    return t('workspace.uploadPanel.statusComplete', { count: total })
   }
   if (stage === 'partial') {
-    const total = result?.summary.total ?? partialTasks.value.length
-    return t('workspace.uploadPanel.collapsedPartial', { count: total })
+    const total = result?.summary.total ?? partialFileCount.value
+    return t('workspace.uploadPanel.statusPartial', { count: total })
   }
   if (stage === 'error') {
-    const failed = result?.summary.failed ?? errorTasks.value.length
-    return t('workspace.uploadPanel.collapsedError', { count: failed })
+    const failed = result?.summary.failed ?? errorFileCount.value
+    return t('workspace.uploadPanel.statusError', { count: failed })
   }
   return ''
-})
-
-/** 展开态标题 */
-const expandedTitle = computed(() => {
-  const stage = dominantStage.value
-  const activeCount = activeTasks.value.length
-
-  if (stage === 'prechecking') {
-    return t('workspace.uploadPanel.expandedPrechecking', { count: activeCount })
-  }
-  if (stage === 'uploading') {
-    return t('workspace.uploadPanel.expandedUploading', { count: activeCount })
-  }
-  if (stage === 'processing') {
-    return t('workspace.uploadPanel.expandedProcessing')
-  }
-  if (stage === 'complete') {
-    return t('workspace.uploadPanel.expandedComplete')
-  }
-  if (stage === 'partial') {
-    return t('workspace.uploadPanel.expandedPartial')
-  }
-  if (stage === 'error') {
-    return t('workspace.uploadPanel.expandedError')
-  }
-  return t('workspace.uploadPanel.title')
 })
 
 // ── 展开/收缩自动逻辑 ──
@@ -384,6 +376,35 @@ const getActionDetail = (row: ResultRow): string => {
   return row.action
 }
 
+/** 任务阶段对应的文案标签 */
+const getStageLabel = (stage: UploadTask['stage']): string => {
+  switch (stage) {
+    case 'prechecking':
+      return t('workspace.uploadPanel.stageLabels.prechecking')
+    case 'uploading':
+      return t('workspace.uploadPanel.stageLabels.uploading')
+    case 'processing':
+      return t('workspace.uploadPanel.stageLabels.processing')
+    case 'complete':
+      return t('workspace.uploadPanel.stageLabels.complete')
+    case 'partial':
+      return t('workspace.uploadPanel.stageLabels.partial')
+    case 'error':
+      return t('workspace.uploadPanel.stageLabels.error')
+  }
+}
+
+/** 任务阶段对应的标签色调 */
+const getStageTagType = (
+  stage: UploadTask['stage'],
+): 'default' | 'info' | 'success' | 'warning' | 'error' => {
+  if (stage === 'complete') return 'success'
+  if (stage === 'uploading') return 'info'
+  if (stage === 'processing' || stage === 'partial') return 'warning'
+  if (stage === 'error') return 'error'
+  return 'default'
+}
+
 /** 阶段对应的图标背景色 */
 const stageIconBgClass = (stage: UploadTask['stage']): string => {
   const map: Record<UploadTask['stage'], string> = {
@@ -431,9 +452,9 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
             <IconCarbonCheckmark v-else class="h-4 w-4" />
           </div>
 
-          <!-- 摘要文案 / 展开态标题 -->
+          <!-- 摘要文案（收缩态与展开态共用） -->
           <span class="min-w-0 flex-1 truncate text-sm font-medium text-lf-text-strong">
-            {{ isExpanded ? expandedTitle : summaryText }}
+            {{ summaryText }}
           </span>
 
           <!-- 迷你进度条（收缩态 uploading） -->
@@ -475,6 +496,40 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
         <!-- 展开态内容 -->
         <Transition name="expand">
           <div v-if="isExpanded" class="border-t border-lf-border-soft">
+            <!-- 进行中任务列表（有活跃任务时显示） -->
+            <div v-if="hasActiveTasks" class="max-h-[40vh] space-y-2 overflow-y-auto px-4 py-3">
+              <div
+                v-for="task in workspace.uploadTasks"
+                :key="task.id"
+                class="flex flex-col gap-1.5 rounded-lg border border-lf-border/60 bg-lf-surface px-3 py-2.5"
+              >
+                <div class="flex items-center gap-2">
+                  <span class="min-w-0 flex-1 truncate text-sm font-medium text-lf-text-strong">
+                    {{ task.fileName }}
+                  </span>
+                  <NTag :type="getStageTagType(task.stage)" size="small" :bordered="false">
+                    {{ getStageLabel(task.stage) }}
+                  </NTag>
+                </div>
+                <div v-if="task.stage === 'uploading'" class="flex items-center gap-2">
+                  <NProgress
+                    type="line"
+                    :percentage="task.progress"
+                    :show-indicator="false"
+                    :stroke-width="4"
+                    status="info"
+                    class="upload-progress-bar min-w-0 flex-1"
+                  />
+                  <span class="w-9 shrink-0 text-right text-xs tabular-nums text-lf-text-muted">
+                    {{ task.progress }}%
+                  </span>
+                </div>
+                <p v-else-if="task.errorMessage" class="text-xs text-red-500 dark:text-red-400">
+                  {{ task.errorMessage }}
+                </p>
+              </div>
+            </div>
+
             <!-- 结果详情区（仅 complete/partial/error 时显示） -->
             <template v-if="hasResult && !hasActiveTasks">
               <!-- 摘要指标区 -->

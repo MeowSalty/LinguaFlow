@@ -205,6 +205,26 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
+  const pauseJob = async (job: Job): Promise<void> => {
+    try {
+      await workspace.pauseJob(job.id)
+      message.success(t('workspace.messages.jobPaused'))
+    } catch (error) {
+      console.error(error)
+      message.error(workspace.actionError || t('workspace.messages.jobPauseFailed'))
+    }
+  }
+
+  const resumeJob = async (job: Job): Promise<void> => {
+    try {
+      await workspace.resumeJob(job.id)
+      message.success(t('workspace.messages.jobResumed'))
+    } catch (error) {
+      console.error(error)
+      message.error(workspace.actionError || t('workspace.messages.jobResumeFailed'))
+    }
+  }
+
   const openJobDetail = async (job: Job): Promise<void> => {
     const globalTracker = useGlobalJobTrackerStore()
     globalTracker.trackJob(job, workspace.project?.name)
@@ -234,6 +254,8 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     submitJob,
     cancelJob,
     retryJob,
+    pauseJob,
+    resumeJob,
     openJobDetail,
     clearResourceSelection,
   }

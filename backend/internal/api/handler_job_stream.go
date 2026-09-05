@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
 // parseSSECursor parses a Last-Event-ID value into a non-negative seq.
@@ -27,14 +25,17 @@ func (s *Server) parseSSECursor(raw, source string) int64 {
 
 var sseEventTypeReplacer = strings.NewReplacer("\r", "", "\n", "")
 
-func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request) {
+// StreamJobEvents 实现 OpenAPI 生成的 ServerInterface（GET /jobs/{jobId}/stream）。
+// params 中的 lastEventId 与 handleJobStream 内部 query/header 读取语义一致
+// （EventSource 无法设置自定义 header，前端经 query 兜底），内部读取逻辑保持不变。
+func (s *Server) StreamJobEvents(w http.ResponseWriter, r *http.Request, jobId JobId, _ StreamJobEventsParams) {
+	s.handleJobStream(w, r, int(jobId))
+}
+
+func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request, jobID int) {
 	authUser, err := s.resolveAuthUser(r)
 	if err != nil {
 		s.writeAuthProblem(w, r, err)
-		return
-	}
-	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "jobId"), "jobId")
-	if !ok {
 		return
 	}
 	if err := s.jobSvc.CheckJobAccess(r.Context(), authUser.User.ID, jobID); err != nil {

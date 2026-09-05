@@ -54,9 +54,11 @@ type SegmentEdges struct {
 	Resource *Resource `json:"resource,omitempty"`
 	// ReviewedBy holds the value of the reviewed_by edge.
 	ReviewedBy *User `json:"reviewed_by,omitempty"`
+	// ResolvedInRounds holds the value of the resolved_in_rounds edge.
+	ResolvedInRounds []*JobRound `json:"resolved_in_rounds,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // ResourceOrErr returns the Resource value or an error if the edge
@@ -79,6 +81,15 @@ func (e SegmentEdges) ReviewedByOrErr() (*User, error) {
 		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "reviewed_by"}
+}
+
+// ResolvedInRoundsOrErr returns the ResolvedInRounds value or an error if the edge
+// was not loaded in eager-loading.
+func (e SegmentEdges) ResolvedInRoundsOrErr() ([]*JobRound, error) {
+	if e.loadedTypes[2] {
+		return e.ResolvedInRounds, nil
+	}
+	return nil, &NotLoadedError{edge: "resolved_in_rounds"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -211,6 +222,11 @@ func (_m *Segment) QueryResource() *ResourceQuery {
 // QueryReviewedBy queries the "reviewed_by" edge of the Segment entity.
 func (_m *Segment) QueryReviewedBy() *UserQuery {
 	return NewSegmentClient(_m.config).QueryReviewedBy(_m)
+}
+
+// QueryResolvedInRounds queries the "resolved_in_rounds" edge of the Segment entity.
+func (_m *Segment) QueryResolvedInRounds() *JobRoundQuery {
+	return NewSegmentClient(_m.config).QueryResolvedInRounds(_m)
 }
 
 // Update returns a builder for updating this Segment.

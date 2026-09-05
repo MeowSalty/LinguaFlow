@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -161,6 +162,21 @@ func (_c *SegmentCreate) SetNillableReviewedByID(id *int) *SegmentCreate {
 // SetReviewedBy sets the "reviewed_by" edge to the User entity.
 func (_c *SegmentCreate) SetReviewedBy(v *User) *SegmentCreate {
 	return _c.SetReviewedByID(v.ID)
+}
+
+// AddResolvedInRoundIDs adds the "resolved_in_rounds" edge to the JobRound entity by IDs.
+func (_c *SegmentCreate) AddResolvedInRoundIDs(ids ...int) *SegmentCreate {
+	_c.mutation.AddResolvedInRoundIDs(ids...)
+	return _c
+}
+
+// AddResolvedInRounds adds the "resolved_in_rounds" edges to the JobRound entity.
+func (_c *SegmentCreate) AddResolvedInRounds(v ...*JobRound) *SegmentCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddResolvedInRoundIDs(ids...)
 }
 
 // Mutation returns the SegmentMutation object of the builder.
@@ -343,6 +359,22 @@ func (_c *SegmentCreate) createSpec() (*Segment, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.user_reviewed_segments = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ResolvedInRoundsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   segment.ResolvedInRoundsTable,
+			Columns: segment.ResolvedInRoundsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

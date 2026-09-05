@@ -14,6 +14,7 @@ type Segment struct {
 	Meta           map[string]any    // parser 注入的格式信息（块类型、行号、缩进等）
 	Skip           bool              // 增量翻译标记：true 时 translate stage 跳过
 	Translate      bool              // 上下文标记：true=需要翻译，false=仅作上下文参考
+	StructuralOnly bool              // 结构段标记：在本轮保护配置下剥离可保护跨度后无字母/数字。由 translate 轮 BuildBatches 池 0 对全部非 Skip 段统一判定（含 Translate=false；Skip 段不标记——消费方均先被 Skip 短路），驱动送翻跳过与上下文过滤；不持久化，随每轮保护配置浮动。零值 false=未标记，按"有内容"处理（fail-open）
 	Issues         []qa.QualityIssue // 质量问题（裁决轮从 DB 重载；translate 轮通常为空）
 	Status         string            // 段落状态：pending/translated/edited/approved/rejected
 }

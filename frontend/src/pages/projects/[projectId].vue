@@ -34,6 +34,7 @@ import SegmentTranslationPreviewDrawer from '@/components/workspace/SegmentTrans
 import SegmentRevisionPreviewDrawer from '@/components/workspace/SegmentRevisionPreviewDrawer.vue'
 import JobPanel from '@/components/workspace/JobPanel.vue'
 import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
+import QaRecheckDrawer from '@/components/workspace/QaRecheckDrawer.vue'
 import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
 import IncrementalResultModal from '@/components/workspace/IncrementalResultModal.vue'
 import { useGlossaryManagement, GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
@@ -299,6 +300,85 @@ const handleClearEpubChapterSelection = (): void => {
 
 // ── 段落选择操作 ──
 const selectedSegmentCount = computed(() => segmentPanelRef.value?.selectedSegmentIds.length ?? 0)
+
+// ── QA 重检 ──
+// project 模式由抽屉内范围单选决定；其余模式由触发入口传入固定目标
+interface QaRecheckTarget {
+  mode: 'project' | 'resources' | 'chapters' | 'segments'
+  resourceIds: number[]
+  groupKeys: string[]
+  segmentIds: number[]
+}
+
+const EMPTY_QA_RECHECK_TARGET: QaRecheckTarget = {
+  mode: 'project',
+  resourceIds: [],
+  groupKeys: [],
+  segmentIds: [],
+}
+
+const qaRecheckDrawerVisible = ref(false)
+const qaRecheckTarget = ref<QaRecheckTarget>({ ...EMPTY_QA_RECHECK_TARGET })
+
+const openQaRecheckDrawer = (target: QaRecheckTarget): void => {
+  qaRecheckTarget.value = target
+  qaRecheckDrawerVisible.value = true
+}
+
+/** 段落工具栏入口：项目级重检，范围由抽屉内单选决定（含当前段落选中） */
+const handleQaRecheckProject = (): void => {
+  openQaRecheckDrawer({
+    mode: 'project',
+    resourceIds: [],
+    groupKeys: [],
+    segmentIds: [...(segmentPanelRef.value?.selectedSegmentIds ?? [])],
+  })
+}
+
+/** 资源胶囊入口：重检选中的资源 */
+const handleQaRecheckSelectedResources = (): void => {
+  const resourceIds = [...jobMgmt.selectedResourceIds.value]
+  if (resourceIds.length === 0) return
+  openQaRecheckDrawer({ mode: 'resources', resourceIds, groupKeys: [], segmentIds: [] })
+}
+
+/** EPUB 章节胶囊入口：重检选中的章节（与任务创建一致，同时上送资源 ID 与分组键） */
+const handleQaRecheckSelectedChapters = (): void => {
+  const epubResourceId = workspace.epubDirectoryResourceId
+  if (!epubResourceId) return
+  const groupKeys = [...workspace.epubSelectedGroupKeys]
+  openQaRecheckDrawer({
+    mode: 'chapters',
+    resourceIds: [epubResourceId],
+    groupKeys,
+    segmentIds: [],
+  })
+  workspace.epubSelectedGroupKeys = new Set()
+}
+
+/** 段落胶囊入口：重检选中的段落 */
+const handleQaRecheckSelectedSegments = (): void => {
+  const ids = segmentPanelRef.value?.selectedSegmentIds as number[] | undefined
+  if (!ids || ids.length === 0) return
+  openQaRecheckDrawer({
+    mode: 'segments',
+    resourceIds: [],
+    groupKeys: [],
+    segmentIds: [...ids],
+  })
+  segmentPanelRef.value?.clearSelectedSegments()
+}
+
+/** 重检仅更新 quality_issues，重载当前视图的段落以刷新高亮与筛选 */
+const handleQaRecheckCompleted = (): void => {
+  if (!projectId.value || !workspace.activeResourceId) return
+  void workspace.loadSegments(
+    projectId.value,
+    workspace.activeResourceId,
+    false,
+    workspace.epubActiveGroupKey ?? undefined,
+  )
+}
 
 const handleTranslateSelectedSegments = (): void => {
   const ids = segmentPanelRef.value?.selectedSegmentIds as number[] | undefined
@@ -590,6 +670,7 @@ onMounted(() => {
               @preview-translation="handlePreviewTranslation"
               @preview-revision="handlePreviewRevision"
               @refresh="reloadSegments"
+              @qa-recheck="handleQaRecheckProject"
             />
           </div>
         </NTabPane>
@@ -601,6 +682,8 @@ onMounted(() => {
               @detail="(job) => jobMgmt.openJobDetail(job)"
               @cancel="(job) => jobMgmt.cancelJob(job)"
               @retry="(job) => jobMgmt.retryJob(job)"
+              @pause="(job) => jobMgmt.pauseJob(job)"
+              @resume="(job) => jobMgmt.resumeJob(job)"
             />
           </div>
         </NTabPane>
@@ -634,6 +717,17 @@ onMounted(() => {
       @update:segment-filter="(val) => (jobMgmt.jobForm.segment_filter = val)"
       @submit="jobMgmt.submitJob()"
       @close="jobMgmt.closeJobDrawer()"
+    />
+
+    <!-- QA 重检抽屉 -->
+    <QaRecheckDrawer
+      v-model:show="qaRecheckDrawerVisible"
+      :project-id="projectId"
+      :target-mode="qaRecheckTarget.mode"
+      :target-resource-ids="qaRecheckTarget.resourceIds"
+      :target-group-keys="qaRecheckTarget.groupKeys"
+      :target-segment-ids="qaRecheckTarget.segmentIds"
+      @completed="handleQaRecheckCompleted"
     />
 
     <SegmentTranslationPreviewDrawer
@@ -734,7 +828,9 @@ onMounted(() => {
       v-show="activeTab === 'resources' && !workspace.isInEpubDirectory"
       :count="jobMgmt.selectedResourceIds.value.length"
       :can-translate="jobMgmt.canCreateResourceJob.value"
+      show-qa-recheck
       @translate="jobMgmt.openResourceJobDrawer()"
+      @qa-recheck="handleQaRecheckSelectedResources"
       @clear="jobMgmt.clearResourceSelection()"
     />
 
@@ -743,7 +839,9 @@ onMounted(() => {
       v-show="activeTab === 'resources' && workspace.isInEpubDirectory"
       :count="epubSelectedChapterCount"
       :can-translate="epubSelectedChapterCount > 0"
+      show-qa-recheck
       @translate="handleTranslateEpubChapters"
+      @qa-recheck="handleQaRecheckSelectedChapters"
       @clear="handleClearEpubChapterSelection"
     />
 
@@ -754,7 +852,9 @@ onMounted(() => {
       :can-translate="selectedSegmentCount > 0"
       :show-review="true"
       :can-review="selectedSegmentCount > 0"
+      show-qa-recheck
       @translate="handleTranslateSelectedSegments"
+      @qa-recheck="handleQaRecheckSelectedSegments"
       @clear="handleClearSelectedSegments"
       @approve="handleBatchReview('approve')"
       @reject="handleBatchReview('reject')"

@@ -3,6 +3,7 @@ import { computed, ref, watch, onScopeDispose } from 'vue'
 
 import { type ApiSchemas, fetchJob, listJobEvents } from '@/api/client'
 import { type SSEEvent, KNOWN_EVENT_TYPES, resolveStreamUrl } from '@/composables/sseShared'
+import { createAdaptivePoller, resolveAdaptiveInterval } from '@/utils/adaptivePolling'
 
 type Job = ApiSchemas['Job']
 
@@ -14,8 +15,12 @@ const STORAGE_KEY = 'linguaflow:globalTracker:jobIds'
 const MAX_TRACKED_JOBS = 20
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 
-const RUNNING_POLL_INTERVAL = 3_000
-const PENDING_POLL_INTERVAL = 8_000
+// 全局跟踪轮询比工作区列表轮询更保守（跟踪任务可跨页面长期存在）
+const TRACKER_POLL_INTERVALS = {
+  running: 3_000,
+  pending: 8_000,
+  paused: 15_000,
+} as const
 
 export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   // ── 状态 ──
@@ -332,15 +337,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   }
 
   // ── 轮询 ──
-  let pollTimer: ReturnType<typeof setInterval> | null = null
   let detailPollTimer: ReturnType<typeof setInterval> | null = null
-
-  const clearPollTimer = (): void => {
-    if (pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
-    }
-  }
 
   const clearDetailPollTimer = (): void => {
     if (detailPollTimer) {
@@ -349,40 +346,20 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     }
   }
 
-  const resolvePollInterval = (): number | null => {
-    const jobs = trackedJobs.value
-    if (jobs.length === 0) return null
-
-    const hasRunning = jobs.some((j) => j.status === 'running')
-    if (hasRunning) return RUNNING_POLL_INTERVAL
-
-    const hasPending = jobs.some((j) => j.status === 'pending')
-    if (hasPending) return PENDING_POLL_INTERVAL
-
-    return null
-  }
-
-  const startPolling = (): void => {
-    clearPollTimer()
-    const interval = resolvePollInterval()
-    if (interval == null) return
-
-    pollTimer = setInterval(() => {
+  const poller = createAdaptivePoller(
+    () =>
+      resolveAdaptiveInterval(
+        trackedJobs.value.map((j) => j.status),
+        TRACKER_POLL_INTERVALS,
+      ),
+    () => {
       if (document.hidden) return
-
-      const newInterval = resolvePollInterval()
-      if (newInterval == null) {
-        clearPollTimer()
-        return
-      }
-
-      // Poll active jobs
       const active = trackedJobs.value.filter((j) => !TERMINAL_STATUSES.has(j.status))
       for (const job of active) {
         void refreshJob(job.id)
       }
-    }, interval)
-  }
+    },
+  )
 
   const startDetailPolling = (): void => {
     clearDetailPollTimer()
@@ -409,9 +386,9 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   // ── 监听活跃任务变化，自动启停轮询 ──
   watch(hasActiveJobs, (active) => {
     if (active) {
-      startPolling()
+      poller.start()
     } else {
-      clearPollTimer()
+      poller.stop()
     }
   })
 
@@ -450,8 +427,8 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     }
 
     // Restart polling if needed
-    if (hasActiveJobs.value && !pollTimer) {
-      startPolling()
+    if (hasActiveJobs.value && !poller.isRunning()) {
+      poller.start()
     }
   }
 
@@ -476,7 +453,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     persistIds()
 
     if (hasActiveJobs.value) {
-      startPolling()
+      poller.start()
     }
   }
 
@@ -487,7 +464,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
 
   // ── 清理 ──
   onScopeDispose(() => {
-    clearPollTimer()
+    poller.stop()
     clearDetailPollTimer()
     disconnectDrawerSSE()
     if (typeof document !== 'undefined') {

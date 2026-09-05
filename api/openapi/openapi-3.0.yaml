@@ -913,6 +913,7 @@ paths:
               - whitespace_irregular
               - repeated_space
               - width_mix
+              - script_mismatch
               - number_mismatch
               - url_email_mismatch
               - subtitle_line_count
@@ -1368,6 +1369,35 @@ paths:
                 $ref: '#/components/schemas/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /projects/{projectId}/qa-recheck:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: QaRecheck
+      summary: 按执行策略对既有译文重跑 QA 重检
+      description: |
+        用指定执行策略（profile）当前的 QA 配置与当前版本的规则实现，
+        对选中的资源/段落组/段落重跑确定性 QA 与文档级检查。
+        按指纹对账继承既有裁决（dismissed 不会以 pending 复活），
+        仅更新 quality_issues，不修改译文与段落状态。
+        选中资源上存在未完成任务时跳过该资源并在响应中报告。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QaRecheckRequest'
+      responses:
+        '200':
+          description: 重检完成，返回统计摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QaRecheckResult'
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/glossary:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -1669,6 +1699,7 @@ paths:
             enum:
               - pending
               - running
+              - paused
               - completed
               - failed
               - cancelled
@@ -1736,6 +1767,8 @@ paths:
     post:
       operationId: CancelJob
       summary: 取消任务
+      description: |
+        取消任务（运行中或排队中）。取消后任务可再次通过 retry 恢复执行。
       security:
         - bearerAuth: []
       responses:
@@ -1752,7 +1785,12 @@ paths:
       - $ref: '#/components/parameters/JobId'
     post:
       operationId: RetryJob
-      summary: 重试失败的资源
+      summary: 重试失败或已取消的任务
+      description: |
+        对失败或已取消的任务重新发起执行：失败/取消的资源重新入队，
+        已完成的轮次与已翻译段落直接跳过，从当前进度断点继续。
+        例外：显式选段（segment_ids 手动选择）的任务，首个翻译轮
+        会重译所有选中段落。
       security:
         - bearerAuth: []
       responses:
@@ -1762,6 +1800,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/{jobId}/pause:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    post:
+      operationId: PauseJob
+      summary: 暂停任务
+      description: |
+        优雅暂停——停止派发新批次并等待在途 LLM 请求返回后冻结任务。
+        暂停后可通过 resume 从轮次断点恢复。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 暂停后的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/{jobId}/resume:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    post:
+      operationId: ResumeJob
+      summary: 恢复已暂停的任务
+      description: 从轮次断点恢复已暂停的任务。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 恢复后的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/{jobId}/stream:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      operationId: StreamJobEvents
+      summary: 订阅任务实时事件流 (SSE)
+      description: |
+        以 Server-Sent Events 推送任务实时事件。
+
+        - 认证：除 bearerAuth 外，原生 EventSource 无法设置自定义请求头，
+          可改用 `access_token` 查询参数携带访问令牌。
+        - 断线重连：通过标准 `Last-Event-ID` 请求头或 `lastEventId` 查询参数
+          传入上次收到的 seq，从该位置继续；省略时仅回放最近一个有限窗口
+          （更早的历史请走 `GET /jobs/{jobId}/events`）。
+        - 帧格式：每条事件为一个 SSE 帧
+          `id: <seq>`、`event: <事件类型>`、`data: <JobEvent JSON>`；
+          注释行（`: connected`、`: keepalive <unix>`）用于连接确认与保活。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: access_token
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 访问令牌（用于无法设置 Authorization 头的 EventSource）
+        - name: lastEventId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          description: 断线重连游标，等价于 Last-Event-ID 请求头；0 或缺省表示从最近窗口开始
+      responses:
+        '200':
+          description: SSE 事件流（帧格式见操作描述）
+          content:
+            text/event-stream:
+              schema:
+                type: string
         default:
           $ref: '#/components/responses/Problem'
   /jobs/{jobId}/events:
@@ -2865,7 +2984,7 @@ components:
             - error
         code:
           type: string
-          description: 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register, ruby_restore_incomplete, ruby_tag_loss）
+          description: 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, script_mismatch, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register, ruby_restore_incomplete, ruby_tag_loss）
         message:
           type: string
         span:
@@ -3389,6 +3508,14 @@ components:
             type: string
         shrink_attempted:
           type: boolean
+        truncated:
+          type: boolean
+          description: 后端响应因输出 token 上限被截断（finish_reason=MAX_TOKENS/length、stop_reason=max_tokens）；部分文本仍有效，已由修复链抢救完整前缀，缺失条目走重跑通道
+        repaired:
+          type: array
+          items:
+            type: string
+          description: 响应解析修复算子链（如 json.close-braces、json.truncation-salvage），按应用顺序记录
     ApplySegmentTranslationPreviewRequest:
       type: object
       required:
@@ -3766,6 +3893,8 @@ components:
         - segment_count
         - completed_segments
         - skipped_segments
+        - work_weight
+        - rounds
         - created_at
         - updated_at
       properties:
@@ -3788,6 +3917,15 @@ components:
         skipped_segments:
           type: integer
           description: 被系统跳过的段落数
+        work_weight:
+          type: integer
+          format: int64
+          description: 准入工作配额权重（源文本字节）
+        rounds:
+          type: array
+          description: 轮次执行明细（resource × round 流水线）；遗留终态任务可能为空
+          items:
+            $ref: '#/components/schemas/JobResourceRound'
         output_path:
           type: string
         error_message:
@@ -3803,25 +3941,60 @@ components:
         updated_at:
           type: string
           format: date-time
-        current_stage:
-          type: string
-          description: 当前执行阶段名称
-        stage_total:
-          type: integer
-          description: 当前阶段的总段落数
-        stage_completed:
-          type: integer
-          description: 当前阶段已完成的段落数
-        weighted_total:
-          type: integer
-          description: 跨轮工作量总数（资源级，各轮 stage_total 累加）
-        weighted_completed:
-          type: integer
-          description: 跨轮已完成工作量（资源级，各轮 stage_completed 累加）
         started_at:
           type: string
           format: date-time
           description: 资源开始执行的时间
+    JobResourceRound:
+      type: object
+      required:
+        - round_index
+        - mode
+        - status
+        - segment_total
+        - segment_completed
+      properties:
+        round_index:
+          type: integer
+          description: 执行计划快照中的轮次序号（0 起）
+        mode:
+          type: string
+          enum:
+            - translate
+            - extract
+            - adjudicate
+            - semantic_qa
+            - revise
+            - correct
+          description: 轮次模式
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - skipped
+        segment_total:
+          type: integer
+          description: 本轮实际处理的段落数（首次启动时写入；断点恢复不重设）
+        segment_completed:
+          type: integer
+          description: 本轮已完成段落数（断点恢复时保留已完成值继续累加）
+        error_message:
+          type: string
+          nullable: true
+          description: 轮次级错误信息
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 轮次开始执行的时间
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 轮次到达终态的时间
     Job:
       type: object
       required:
@@ -3852,6 +4025,7 @@ components:
           enum:
             - pending
             - running
+            - paused
             - completed
             - failed
             - cancelled
@@ -3890,9 +4064,8 @@ components:
         - total_resources
         - completed_resources
         - failed_resources
-        - total_segments
-        - completed_segments
-        - skipped_segments
+        - progress_total
+        - progress_completed
       properties:
         total_resources:
           type: integer
@@ -3900,21 +4073,14 @@ components:
           type: integer
         failed_resources:
           type: integer
-        total_segments:
+        progress_total:
           type: integer
-          description: 总段落数（创建时选中的 segment 数）
-        completed_segments:
+          format: int64
+          description: 已知工作量总数（单位=段落×轮，随轮次启动动态增长）
+        progress_completed:
           type: integer
-          description: 翻译终态去重段数（仅 ReconcileJob 写入；运行中主进度请用 weighted_*）
-        skipped_segments:
-          type: integer
-          description: 被系统跳过的段落数（已翻译、空文本、纯占位符等）
-        weighted_total:
-          type: integer
-          description: 跨轮工作量总数（各轮 stage_total 累加，实时、单调）；主进度分母。completed_segments 为翻译终态去重值
-        weighted_completed:
-          type: integer
-          description: 跨轮已完成工作量（各轮 stage_completed 累加，实时、单调、≤weighted_total）；主进度分子
+          format: int64
+          description: 已完成工作量（单位=段落×轮，随轮次推进单调递增）
         queue_position:
           type: integer
           nullable: true
@@ -5206,6 +5372,129 @@ components:
           type: integer
         output_tokens:
           type: integer
+    QaRecheckRequest:
+      type: object
+      required:
+        - profile_id
+      properties:
+        profile_id:
+          type: integer
+          minimum: 1
+          description: |
+            执行策略（profile）ID。QA 检查配置（开关/checks/阈值）与
+            保护规则均取自该策略的当前状态；策略未启用 QA 时返回 400。
+        resource_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        segment_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        segment_group_keys:
+          type: array
+          items:
+            type: string
+          description: |
+            按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+            传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+            与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
+            三者皆空时选择项目内全部资源。
+      additionalProperties: false
+    QaRecheckResult:
+      type: object
+      required:
+        - profile_id
+        - profile_name
+        - resources_checked
+        - segments_checked
+        - segments_skipped_no_target
+        - segments_skipped_concurrent
+        - issues_new
+        - issues_cleared
+        - dispositions_inherited
+        - resources
+        - resources_skipped_busy
+      properties:
+        profile_id:
+          type: integer
+          description: 本次重检使用的执行策略 ID
+        profile_name:
+          type: string
+          description: 本次重检使用的执行策略名称
+        resources_checked:
+          type: integer
+          description: 实际执行重检的资源数（不含跳过的忙碌资源）
+        segments_checked:
+          type: integer
+          description: 实际重检的段落总数（有译文且未被并发跳过）
+        segments_skipped_no_target:
+          type: integer
+          description: 无译文被跳过的段落总数
+        segments_skipped_concurrent:
+          type: integer
+          description: 重检期间译文被并发修改而跳过写回的段落总数
+        issues_new:
+          type: integer
+          description: 新增问题数（新指纹）
+        issues_cleared:
+          type: integer
+          description: 被清除的旧确定性问题数（指纹消失；语义/守恒类保留不计入）
+        dispositions_inherited:
+          type: integer
+          description: 继承到既有裁决（含 dismissed）的问题数
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/QaRecheckResourceResult'
+        resources_skipped_busy:
+          type: array
+          items:
+            $ref: '#/components/schemas/QaRecheckBusyResource'
+      additionalProperties: false
+    QaRecheckResourceResult:
+      type: object
+      required:
+        - resource_id
+        - resource_name
+        - segments_checked
+        - segments_skipped_no_target
+        - segments_skipped_concurrent
+        - issues_new
+        - issues_cleared
+        - dispositions_inherited
+      properties:
+        resource_id:
+          type: integer
+        resource_name:
+          type: string
+        segments_checked:
+          type: integer
+        segments_skipped_no_target:
+          type: integer
+        segments_skipped_concurrent:
+          type: integer
+        issues_new:
+          type: integer
+        issues_cleared:
+          type: integer
+        dispositions_inherited:
+          type: integer
+      additionalProperties: false
+    QaRecheckBusyResource:
+      type: object
+      required:
+        - resource_id
+        - active_job_id
+      properties:
+        resource_id:
+          type: integer
+        active_job_id:
+          type: integer
+          description: 占用该资源的未完成任务 ID
+      additionalProperties: false
     ResponseFormat:
       type: string
       enum:
@@ -5724,6 +6013,7 @@ components:
               - whitespace_irregular
               - repeated_space
               - width_mix
+              - script_mismatch
               - number_mismatch
               - url_email_mismatch
               - subtitle_line_count
@@ -6037,7 +6327,7 @@ components:
           type: array
           items:
             type: string
-          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
+          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、script_mismatch、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
         length_method:
           type: string
           enum:

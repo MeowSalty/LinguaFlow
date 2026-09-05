@@ -48,6 +48,7 @@ func TestCancelJob_StatePrecondition(t *testing.T) {
 	}{
 		{name: "pending ok", jobStatus: JobStatusPending, resStatuses: []string{JobResourceStatusPending}, wantJobAfter: JobStatusCancelled, wantResAfter: JobResourceStatusCancelled},
 		{name: "running ok", jobStatus: JobStatusRunning, resStatuses: []string{JobResourceStatusRunning}, wantJobAfter: JobStatusCancelled, wantResAfter: JobResourceStatusCancelled},
+		{name: "paused ok", jobStatus: JobStatusPaused, resStatuses: []string{JobResourceStatusRunning}, wantJobAfter: JobStatusCancelled, wantResAfter: JobResourceStatusCancelled},
 		{name: "completed rejected", jobStatus: JobStatusCompleted, resStatuses: []string{JobResourceStatusCompleted}, wantErr: ErrJobNotCancellable},
 		{name: "failed rejected", jobStatus: JobStatusFailed, resStatuses: []string{JobResourceStatusFailed}, wantErr: ErrJobNotCancellable},
 		{name: "cancelled rejected", jobStatus: JobStatusCancelled, resStatuses: []string{JobResourceStatusCancelled}, wantErr: ErrJobNotCancellable},
@@ -96,10 +97,12 @@ func TestRetryJob_StatePrecondition(t *testing.T) {
 		wantResAfter string // 期望首个资源的事后状态；仅成功用例校验
 	}{
 		{name: "failed with failed resource ok", jobStatus: JobStatusFailed, resStatuses: []string{JobResourceStatusFailed}, wantJobAfter: JobStatusPending, wantResAfter: JobResourceStatusPending},
+		{name: "failed with cancelled resource ok", jobStatus: JobStatusFailed, resStatuses: []string{JobResourceStatusCancelled}, wantJobAfter: JobStatusPending, wantResAfter: JobResourceStatusPending},
+		{name: "cancelled with cancelled resource ok", jobStatus: JobStatusCancelled, resStatuses: []string{JobResourceStatusCancelled}, wantJobAfter: JobStatusPending, wantResAfter: JobResourceStatusPending},
 		{name: "completed rejected", jobStatus: JobStatusCompleted, resStatuses: []string{JobResourceStatusCompleted}, wantErr: ErrJobNotRetryable},
 		{name: "pending rejected", jobStatus: JobStatusPending, resStatuses: []string{JobResourceStatusPending}, wantErr: ErrJobNotRetryable},
-		{name: "cancelled rejected", jobStatus: JobStatusCancelled, resStatuses: []string{JobResourceStatusCancelled}, wantErr: ErrJobNotRetryable},
-		{name: "failed without failed resource rejected", jobStatus: JobStatusFailed, resStatuses: []string{JobResourceStatusCancelled}, wantErr: ErrJobNoFailedResource},
+		{name: "paused rejected", jobStatus: JobStatusPaused, resStatuses: []string{JobResourceStatusRunning}, wantErr: ErrJobNotRetryable},
+		{name: "failed without retryable resource rejected", jobStatus: JobStatusFailed, resStatuses: []string{JobResourceStatusCompleted}, wantErr: ErrJobNoFailedResource},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -1,17 +1,7 @@
 import { computed, ref, watch, onMounted, onUnmounted, type Ref } from 'vue'
 
 import { useJobStore } from '@/stores/job'
-
-// ── 轮询间隔策略 ──
-
-/** 任务列表轮询间隔（毫秒），按最高活跃状态选择 */
-const LIST_POLLING_INTERVALS: Record<string, number | null> = {
-  pending: 5_000,
-  running: 2_000,
-  completed: null,
-  failed: null,
-  cancelled: null,
-}
+import { createAdaptivePoller, resolveAdaptiveInterval } from '@/utils/adaptivePolling'
 
 // ── 接口定义 ──
 
@@ -20,14 +10,12 @@ interface UseJobPollingOptions {
   projectId: Ref<number | null>
   /** 是否启用列表轮询（如面板是否可见、详情抽屉是否关闭） */
   enabled?: Ref<boolean>
-  /** 任务列表轮询间隔覆盖（毫秒） */
-  listInterval?: number
 }
 
 interface UseJobPollingReturn {
   /** 是否正在轮询 */
   isPolling: Ref<boolean>
-  /** 是否存在活跃（running/pending）任务 */
+  /** 是否存在活跃（running/pending/paused）任务 */
   hasActiveJobs: Ref<boolean>
   /** 手动启动轮询 */
   start: () => void
@@ -40,64 +28,27 @@ interface UseJobPollingReturn {
 export function useJobPolling({
   projectId,
   enabled = ref(true),
-  listInterval,
 }: UseJobPollingOptions): UseJobPollingReturn {
   const jobStore = useJobStore()
 
   const isPolling = ref(false)
-  let listTimer: ReturnType<typeof setInterval> | null = null
 
   // ── 活跃任务检测 ──
   const hasActiveJobs = computed(() =>
-    jobStore.jobs.some((j) => j.status === 'running' || j.status === 'pending'),
+    jobStore.jobs.some(
+      (j) => j.status === 'running' || j.status === 'pending' || j.status === 'paused',
+    ),
   )
-
-  /**
-   * 根据当前任务列表中的最高优先级状态，
-   * 计算列表轮询间隔。若无活跃任务则返回 null（停止轮询）。
-   */
-  const resolveListInterval = (): number | null => {
-    if (listInterval != null) return listInterval
-
-    const jobs = jobStore.jobs
-    if (jobs.length === 0) return null
-
-    const hasRunning = jobs.some((j) => j.status === 'running')
-    if (hasRunning) return LIST_POLLING_INTERVALS.running!
-
-    const hasPending = jobs.some((j) => j.status === 'pending')
-    if (hasPending) return LIST_POLLING_INTERVALS.pending!
-
-    return null
-  }
-
-  // ── 列表轮询 ──
 
   const pollList = (): void => {
     if (!projectId.value || !enabled.value) return
     void jobStore.loadJobs(projectId.value)
   }
 
-  const clearListTimer = (): void => {
-    if (listTimer) {
-      clearInterval(listTimer)
-      listTimer = null
-    }
-  }
-
-  const startListTimer = (): void => {
-    if (listTimer || !enabled.value) return
-    const interval = resolveListInterval()
-    if (interval == null) return
-
-    listTimer = setInterval(() => {
-      pollList()
-      const newInterval = resolveListInterval()
-      if (newInterval == null) {
-        clearListTimer()
-      }
-    }, interval)
-  }
+  const poller = createAdaptivePoller(
+    () => resolveAdaptiveInterval(jobStore.jobs.map((j) => j.status)),
+    pollList,
+  )
 
   // ── 统一控制 ──
 
@@ -106,12 +57,12 @@ export function useJobPolling({
     if (!hasActiveJobs.value) return
 
     isPolling.value = true
-    startListTimer()
+    poller.start()
   }
 
   const stop = (): void => {
     isPolling.value = false
-    clearListTimer()
+    poller.stop()
   }
 
   // ── 页面可见性处理 ──
@@ -128,9 +79,9 @@ export function useJobPolling({
   watch(enabled, (val) => {
     if (val && hasActiveJobs.value) {
       pollList()
-      startListTimer()
+      poller.start()
     } else {
-      clearListTimer()
+      poller.stop()
     }
   })
 

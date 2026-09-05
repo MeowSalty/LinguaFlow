@@ -875,6 +875,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/qa-recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 按执行策略对既有译文重跑 QA 重检
+         * @description 用指定执行策略（profile）当前的 QA 配置与当前版本的规则实现，
+         *     对选中的资源/段落组/段落重跑确定性 QA 与文档级检查。
+         *     按指纹对账继承既有裁决（dismissed 不会以 pending 复活），
+         *     仅更新 quality_issues，不修改译文与段落状态。
+         *     选中资源上存在未完成任务时跳过该资源并在响应中报告。
+         */
+        post: operations["QaRecheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/glossary": {
         parameters: {
             query?: never;
@@ -1152,7 +1178,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 取消任务 */
+        /**
+         * 取消任务
+         * @description 取消任务（运行中或排队中）。取消后任务可再次通过 retry 恢复执行。
+         */
         post: operations["CancelJob"];
         delete?: never;
         options?: never;
@@ -1171,8 +1200,90 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 重试失败的资源 */
+        /**
+         * 重试失败或已取消的任务
+         * @description 对失败或已取消的任务重新发起执行：失败/取消的资源重新入队，
+         *     已完成的轮次与已翻译段落直接跳过，从当前进度断点继续。
+         *     例外：显式选段（segment_ids 手动选择）的任务，首个翻译轮
+         *     会重译所有选中段落。
+         */
         post: operations["RetryJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{jobId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 暂停任务
+         * @description 优雅暂停——停止派发新批次并等待在途 LLM 请求返回后冻结任务。
+         *     暂停后可通过 resume 从轮次断点恢复。
+         */
+        post: operations["PauseJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{jobId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 恢复已暂停的任务
+         * @description 从轮次断点恢复已暂停的任务。
+         */
+        post: operations["ResumeJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{jobId}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 订阅任务实时事件流 (SSE)
+         * @description 以 Server-Sent Events 推送任务实时事件。
+         *
+         *     - 认证：除 bearerAuth 外，原生 EventSource 无法设置自定义请求头，
+         *       可改用 `access_token` 查询参数携带访问令牌。
+         *     - 断线重连：通过标准 `Last-Event-ID` 请求头或 `lastEventId` 查询参数
+         *       传入上次收到的 seq，从该位置继续；省略时仅回放最近一个有限窗口
+         *       （更早的历史请走 `GET /jobs/{jobId}/events`）。
+         *     - 帧格式：每条事件为一个 SSE 帧
+         *       `id: <seq>`、`event: <事件类型>`、`data: <JobEvent JSON>`；
+         *       注释行（`: connected`、`: keepalive <unix>`）用于连接确认与保活。
+         */
+        get: operations["StreamJobEvents"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1673,7 +1784,7 @@ export interface components {
             segment_index: number;
             /** @enum {string} */
             severity: "warning" | "error";
-            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register, ruby_restore_incomplete, ruby_tag_loss） */
+            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, script_mismatch, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register, ruby_restore_incomplete, ruby_tag_loss） */
             code: string;
             message: string;
             /** @description 问题在目标/源文本中的跨度；片段级问题可省略 */
@@ -1929,6 +2040,10 @@ export interface components {
             http_status?: number;
             tried_backends?: string[];
             shrink_attempted?: boolean;
+            /** @description 后端响应因输出 token 上限被截断（finish_reason=MAX_TOKENS/length、stop_reason=max_tokens）；部分文本仍有效，已由修复链抢救完整前缀，缺失条目走重跑通道 */
+            truncated?: boolean;
+            /** @description 响应解析修复算子链（如 json.close-braces、json.truncation-salvage），按应用顺序记录 */
+            repaired?: string[];
         };
         ApplySegmentTranslationPreviewRequest: {
             /** @description 翻译预览或修订预览返回的 apply_token */
@@ -2120,6 +2235,13 @@ export interface components {
             completed_segments: number;
             /** @description 被系统跳过的段落数 */
             skipped_segments: number;
+            /**
+             * Format: int64
+             * @description 准入工作配额权重（源文本字节）
+             */
+            work_weight: number;
+            /** @description 轮次执行明细（resource × round 流水线）；遗留终态任务可能为空 */
+            rounds: components["schemas"]["JobResourceRound"][];
             output_path?: string;
             error_message?: string;
             /** @description 软警告信息（如 semantic_qa 扫描失败）；资源状态仍为 completed */
@@ -2129,21 +2251,38 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
-            /** @description 当前执行阶段名称 */
-            current_stage?: string;
-            /** @description 当前阶段的总段落数 */
-            stage_total?: number;
-            /** @description 当前阶段已完成的段落数 */
-            stage_completed?: number;
-            /** @description 跨轮工作量总数（资源级，各轮 stage_total 累加） */
-            weighted_total?: number;
-            /** @description 跨轮已完成工作量（资源级，各轮 stage_completed 累加） */
-            weighted_completed?: number;
             /**
              * Format: date-time
              * @description 资源开始执行的时间
              */
             started_at?: string;
+        };
+        JobResourceRound: {
+            /** @description 执行计划快照中的轮次序号（0 起） */
+            round_index: number;
+            /**
+             * @description 轮次模式
+             * @enum {string}
+             */
+            mode: "translate" | "extract" | "adjudicate" | "semantic_qa" | "revise" | "correct";
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed" | "skipped";
+            /** @description 本轮实际处理的段落数（首次启动时写入；断点恢复不重设） */
+            segment_total: number;
+            /** @description 本轮已完成段落数（断点恢复时保留已完成值继续累加） */
+            segment_completed: number;
+            /** @description 轮次级错误信息 */
+            error_message?: string | null;
+            /**
+             * Format: date-time
+             * @description 轮次开始执行的时间
+             */
+            started_at?: string | null;
+            /**
+             * Format: date-time
+             * @description 轮次到达终态的时间
+             */
+            finished_at?: string | null;
         };
         Job: {
             id: number;
@@ -2154,7 +2293,7 @@ export interface components {
             };
             execution_plan_id: number;
             /** @enum {string} */
-            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            status: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
             /** @enum {string} */
             trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
             /** @description 执行配置快照（已脱敏，不含 API 密钥） */
@@ -2178,16 +2317,16 @@ export interface components {
             total_resources: number;
             completed_resources: number;
             failed_resources: number;
-            /** @description 总段落数（创建时选中的 segment 数） */
-            total_segments: number;
-            /** @description 翻译终态去重段数（仅 ReconcileJob 写入；运行中主进度请用 weighted_*） */
-            completed_segments: number;
-            /** @description 被系统跳过的段落数（已翻译、空文本、纯占位符等） */
-            skipped_segments: number;
-            /** @description 跨轮工作量总数（各轮 stage_total 累加，实时、单调）；主进度分母。completed_segments 为翻译终态去重值 */
-            weighted_total?: number;
-            /** @description 跨轮已完成工作量（各轮 stage_completed 累加，实时、单调、≤weighted_total）；主进度分子 */
-            weighted_completed?: number;
+            /**
+             * Format: int64
+             * @description 已知工作量总数（单位=段落×轮，随轮次启动动态增长）
+             */
+            progress_total: number;
+            /**
+             * Format: int64
+             * @description 已完成工作量（单位=段落×轮，随轮次推进单调递增）
+             */
+            progress_completed: number;
             /** @description 在队列中的位置（1-based），null 表示不在队列中 */
             queue_position?: number | null;
             /** @description 当前队列中的任务总数 */
@@ -2799,6 +2938,59 @@ export interface components {
             input_tokens: number;
             output_tokens: number;
         };
+        QaRecheckRequest: {
+            /**
+             * @description 执行策略（profile）ID。QA 检查配置（开关/checks/阈值）与
+             *     保护规则均取自该策略的当前状态；策略未启用 QA 时返回 400。
+             */
+            profile_id: number;
+            resource_ids?: number[];
+            segment_ids?: number[];
+            /**
+             * @description 按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+             *     传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+             *     与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
+             *     三者皆空时选择项目内全部资源。
+             */
+            segment_group_keys?: string[];
+        };
+        QaRecheckResult: {
+            /** @description 本次重检使用的执行策略 ID */
+            profile_id: number;
+            /** @description 本次重检使用的执行策略名称 */
+            profile_name: string;
+            /** @description 实际执行重检的资源数（不含跳过的忙碌资源） */
+            resources_checked: number;
+            /** @description 实际重检的段落总数（有译文且未被并发跳过） */
+            segments_checked: number;
+            /** @description 无译文被跳过的段落总数 */
+            segments_skipped_no_target: number;
+            /** @description 重检期间译文被并发修改而跳过写回的段落总数 */
+            segments_skipped_concurrent: number;
+            /** @description 新增问题数（新指纹） */
+            issues_new: number;
+            /** @description 被清除的旧确定性问题数（指纹消失；语义/守恒类保留不计入） */
+            issues_cleared: number;
+            /** @description 继承到既有裁决（含 dismissed）的问题数 */
+            dispositions_inherited: number;
+            resources: components["schemas"]["QaRecheckResourceResult"][];
+            resources_skipped_busy: components["schemas"]["QaRecheckBusyResource"][];
+        };
+        QaRecheckResourceResult: {
+            resource_id: number;
+            resource_name: string;
+            segments_checked: number;
+            segments_skipped_no_target: number;
+            segments_skipped_concurrent: number;
+            issues_new: number;
+            issues_cleared: number;
+            dispositions_inherited: number;
+        };
+        QaRecheckBusyResource: {
+            resource_id: number;
+            /** @description 占用该资源的未完成任务 ID */
+            active_job_id: number;
+        };
         /**
          * @description 响应格式：
          *     - json_schema: 强制结构化 JSON 输出（推荐）
@@ -3140,7 +3332,7 @@ export interface components {
              * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
              *     允许全部 issue code（规则 + 语义皆可作筛选键）。
              */
-            issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "punctuation_wrap_loss" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register" | "ruby_restore_incomplete" | "ruby_tag_loss")[];
+            issue_codes?: ("untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "punctuation_wrap_loss" | "whitespace_irregular" | "repeated_space" | "width_mix" | "script_mismatch" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register" | "ruby_restore_incomplete" | "ruby_tag_loss")[];
             retry?: components["schemas"]["RetryConfig"];
         };
         /**
@@ -3307,7 +3499,7 @@ export interface components {
              * @default false
              */
             auto_reject: boolean;
-            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
+            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、script_mismatch、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
             checks?: string[];
             /**
              * @description 长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词
@@ -4445,7 +4637,7 @@ export interface operations {
                 /** @description 按 quality_issues 中的 severity 过滤；指定时隐含仅返回含匹配问题的段落 */
                 quality_severity?: "warning" | "error";
                 /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
-                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "punctuation_wrap_loss" | "whitespace_irregular" | "repeated_space" | "width_mix" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register" | "ruby_restore_incomplete" | "ruby_tag_loss";
+                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "punctuation_wrap_loss" | "whitespace_irregular" | "repeated_space" | "width_mix" | "script_mismatch" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register" | "ruby_restore_incomplete" | "ruby_tag_loss";
                 /** @description 搜索字段范围；both 时同时匹配原文与译文（默认语义） */
                 search_field?: "source" | "target" | "both";
                 /** @description 搜索是否区分大小写；默认 true 保持子串精确匹配语义 */
@@ -4905,6 +5097,33 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    QaRecheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QaRecheckRequest"];
+            };
+        };
+        responses: {
+            /** @description 重检完成，返回统计摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QaRecheckResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     ListGlossaryEntries: {
         parameters: {
             query?: never;
@@ -5235,7 +5454,7 @@ export interface operations {
     ListJobs: {
         parameters: {
             query?: {
-                status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+                status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
                 trigger_type?: "manual" | "file_update" | "glossary_change" | "web_edit";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
@@ -5351,6 +5570,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    PauseJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 暂停后的任务 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ResumeJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 恢复后的任务 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    StreamJobEvents: {
+        parameters: {
+            query?: {
+                /** @description 访问令牌（用于无法设置 Authorization 头的 EventSource） */
+                access_token?: string;
+                /** @description 断线重连游标，等价于 Last-Event-ID 请求头；0 或缺省表示从最近窗口开始 */
+                lastEventId?: number;
+            };
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSE 事件流（帧格式见操作描述） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
                 };
             };
             default: components["responses"]["Problem"];

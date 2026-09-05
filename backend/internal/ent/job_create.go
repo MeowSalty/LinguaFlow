@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -140,72 +141,30 @@ func (_c *JobCreate) SetNillableFailedResources(v *int) *JobCreate {
 	return _c
 }
 
-// SetTotalSegments sets the "total_segments" field.
-func (_c *JobCreate) SetTotalSegments(v int) *JobCreate {
-	_c.mutation.SetTotalSegments(v)
+// SetProgressTotal sets the "progress_total" field.
+func (_c *JobCreate) SetProgressTotal(v int64) *JobCreate {
+	_c.mutation.SetProgressTotal(v)
 	return _c
 }
 
-// SetNillableTotalSegments sets the "total_segments" field if the given value is not nil.
-func (_c *JobCreate) SetNillableTotalSegments(v *int) *JobCreate {
+// SetNillableProgressTotal sets the "progress_total" field if the given value is not nil.
+func (_c *JobCreate) SetNillableProgressTotal(v *int64) *JobCreate {
 	if v != nil {
-		_c.SetTotalSegments(*v)
+		_c.SetProgressTotal(*v)
 	}
 	return _c
 }
 
-// SetSkippedSegments sets the "skipped_segments" field.
-func (_c *JobCreate) SetSkippedSegments(v int) *JobCreate {
-	_c.mutation.SetSkippedSegments(v)
+// SetProgressCompleted sets the "progress_completed" field.
+func (_c *JobCreate) SetProgressCompleted(v int64) *JobCreate {
+	_c.mutation.SetProgressCompleted(v)
 	return _c
 }
 
-// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
-func (_c *JobCreate) SetNillableSkippedSegments(v *int) *JobCreate {
+// SetNillableProgressCompleted sets the "progress_completed" field if the given value is not nil.
+func (_c *JobCreate) SetNillableProgressCompleted(v *int64) *JobCreate {
 	if v != nil {
-		_c.SetSkippedSegments(*v)
-	}
-	return _c
-}
-
-// SetCompletedSegments sets the "completed_segments" field.
-func (_c *JobCreate) SetCompletedSegments(v int) *JobCreate {
-	_c.mutation.SetCompletedSegments(v)
-	return _c
-}
-
-// SetNillableCompletedSegments sets the "completed_segments" field if the given value is not nil.
-func (_c *JobCreate) SetNillableCompletedSegments(v *int) *JobCreate {
-	if v != nil {
-		_c.SetCompletedSegments(*v)
-	}
-	return _c
-}
-
-// SetWeightedTotal sets the "weighted_total" field.
-func (_c *JobCreate) SetWeightedTotal(v int) *JobCreate {
-	_c.mutation.SetWeightedTotal(v)
-	return _c
-}
-
-// SetNillableWeightedTotal sets the "weighted_total" field if the given value is not nil.
-func (_c *JobCreate) SetNillableWeightedTotal(v *int) *JobCreate {
-	if v != nil {
-		_c.SetWeightedTotal(*v)
-	}
-	return _c
-}
-
-// SetWeightedCompleted sets the "weighted_completed" field.
-func (_c *JobCreate) SetWeightedCompleted(v int) *JobCreate {
-	_c.mutation.SetWeightedCompleted(v)
-	return _c
-}
-
-// SetNillableWeightedCompleted sets the "weighted_completed" field if the given value is not nil.
-func (_c *JobCreate) SetNillableWeightedCompleted(v *int) *JobCreate {
-	if v != nil {
-		_c.SetWeightedCompleted(*v)
+		_c.SetProgressCompleted(*v)
 	}
 	return _c
 }
@@ -275,6 +234,21 @@ func (_c *JobCreate) AddJobResources(v ...*JobResource) *JobCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddJobResourceIDs(ids...)
+}
+
+// AddJobRoundIDs adds the "job_rounds" edge to the JobRound entity by IDs.
+func (_c *JobCreate) AddJobRoundIDs(ids ...int) *JobCreate {
+	_c.mutation.AddJobRoundIDs(ids...)
+	return _c
+}
+
+// AddJobRounds adds the "job_rounds" edges to the JobRound entity.
+func (_c *JobCreate) AddJobRounds(v ...*JobRound) *JobCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddJobRoundIDs(ids...)
 }
 
 // AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by IDs.
@@ -359,25 +333,13 @@ func (_c *JobCreate) defaults() {
 		v := job.DefaultFailedResources
 		_c.mutation.SetFailedResources(v)
 	}
-	if _, ok := _c.mutation.TotalSegments(); !ok {
-		v := job.DefaultTotalSegments
-		_c.mutation.SetTotalSegments(v)
+	if _, ok := _c.mutation.ProgressTotal(); !ok {
+		v := job.DefaultProgressTotal
+		_c.mutation.SetProgressTotal(v)
 	}
-	if _, ok := _c.mutation.SkippedSegments(); !ok {
-		v := job.DefaultSkippedSegments
-		_c.mutation.SetSkippedSegments(v)
-	}
-	if _, ok := _c.mutation.CompletedSegments(); !ok {
-		v := job.DefaultCompletedSegments
-		_c.mutation.SetCompletedSegments(v)
-	}
-	if _, ok := _c.mutation.WeightedTotal(); !ok {
-		v := job.DefaultWeightedTotal
-		_c.mutation.SetWeightedTotal(v)
-	}
-	if _, ok := _c.mutation.WeightedCompleted(); !ok {
-		v := job.DefaultWeightedCompleted
-		_c.mutation.SetWeightedCompleted(v)
+	if _, ok := _c.mutation.ProgressCompleted(); !ok {
+		v := job.DefaultProgressCompleted
+		_c.mutation.SetProgressCompleted(v)
 	}
 }
 
@@ -438,44 +400,20 @@ func (_c *JobCreate) check() error {
 			return &ValidationError{Name: "failed_resources", err: fmt.Errorf(`ent: validator failed for field "Job.failed_resources": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.TotalSegments(); !ok {
-		return &ValidationError{Name: "total_segments", err: errors.New(`ent: missing required field "Job.total_segments"`)}
+	if _, ok := _c.mutation.ProgressTotal(); !ok {
+		return &ValidationError{Name: "progress_total", err: errors.New(`ent: missing required field "Job.progress_total"`)}
 	}
-	if v, ok := _c.mutation.TotalSegments(); ok {
-		if err := job.TotalSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "Job.total_segments": %w`, err)}
+	if v, ok := _c.mutation.ProgressTotal(); ok {
+		if err := job.ProgressTotalValidator(v); err != nil {
+			return &ValidationError{Name: "progress_total", err: fmt.Errorf(`ent: validator failed for field "Job.progress_total": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.SkippedSegments(); !ok {
-		return &ValidationError{Name: "skipped_segments", err: errors.New(`ent: missing required field "Job.skipped_segments"`)}
+	if _, ok := _c.mutation.ProgressCompleted(); !ok {
+		return &ValidationError{Name: "progress_completed", err: errors.New(`ent: missing required field "Job.progress_completed"`)}
 	}
-	if v, ok := _c.mutation.SkippedSegments(); ok {
-		if err := job.SkippedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "Job.skipped_segments": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.CompletedSegments(); !ok {
-		return &ValidationError{Name: "completed_segments", err: errors.New(`ent: missing required field "Job.completed_segments"`)}
-	}
-	if v, ok := _c.mutation.CompletedSegments(); ok {
-		if err := job.CompletedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "Job.completed_segments": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.WeightedTotal(); !ok {
-		return &ValidationError{Name: "weighted_total", err: errors.New(`ent: missing required field "Job.weighted_total"`)}
-	}
-	if v, ok := _c.mutation.WeightedTotal(); ok {
-		if err := job.WeightedTotalValidator(v); err != nil {
-			return &ValidationError{Name: "weighted_total", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_total": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.WeightedCompleted(); !ok {
-		return &ValidationError{Name: "weighted_completed", err: errors.New(`ent: missing required field "Job.weighted_completed"`)}
-	}
-	if v, ok := _c.mutation.WeightedCompleted(); ok {
-		if err := job.WeightedCompletedValidator(v); err != nil {
-			return &ValidationError{Name: "weighted_completed", err: fmt.Errorf(`ent: validator failed for field "Job.weighted_completed": %w`, err)}
+	if v, ok := _c.mutation.ProgressCompleted(); ok {
+		if err := job.ProgressCompletedValidator(v); err != nil {
+			return &ValidationError{Name: "progress_completed", err: fmt.Errorf(`ent: validator failed for field "Job.progress_completed": %w`, err)}
 		}
 	}
 	if len(_c.mutation.ProjectIDs()) == 0 {
@@ -543,25 +481,13 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 		_spec.SetField(job.FieldFailedResources, field.TypeInt, value)
 		_node.FailedResources = value
 	}
-	if value, ok := _c.mutation.TotalSegments(); ok {
-		_spec.SetField(job.FieldTotalSegments, field.TypeInt, value)
-		_node.TotalSegments = value
+	if value, ok := _c.mutation.ProgressTotal(); ok {
+		_spec.SetField(job.FieldProgressTotal, field.TypeInt64, value)
+		_node.ProgressTotal = value
 	}
-	if value, ok := _c.mutation.SkippedSegments(); ok {
-		_spec.SetField(job.FieldSkippedSegments, field.TypeInt, value)
-		_node.SkippedSegments = value
-	}
-	if value, ok := _c.mutation.CompletedSegments(); ok {
-		_spec.SetField(job.FieldCompletedSegments, field.TypeInt, value)
-		_node.CompletedSegments = value
-	}
-	if value, ok := _c.mutation.WeightedTotal(); ok {
-		_spec.SetField(job.FieldWeightedTotal, field.TypeInt, value)
-		_node.WeightedTotal = value
-	}
-	if value, ok := _c.mutation.WeightedCompleted(); ok {
-		_spec.SetField(job.FieldWeightedCompleted, field.TypeInt, value)
-		_node.WeightedCompleted = value
+	if value, ok := _c.mutation.ProgressCompleted(); ok {
+		_spec.SetField(job.FieldProgressCompleted, field.TypeInt64, value)
+		_node.ProgressCompleted = value
 	}
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(job.FieldErrorMessage, field.TypeString, value)
@@ -614,6 +540,22 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.JobRoundsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.JobRoundsTable,
+			Columns: []string{job.JobRoundsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobround.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

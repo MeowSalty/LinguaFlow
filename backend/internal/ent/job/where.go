@@ -100,29 +100,14 @@ func FailedResources(v int) predicate.Job {
 	return predicate.Job(sql.FieldEQ(FieldFailedResources, v))
 }
 
-// TotalSegments applies equality check predicate on the "total_segments" field. It's identical to TotalSegmentsEQ.
-func TotalSegments(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldTotalSegments, v))
+// ProgressTotal applies equality check predicate on the "progress_total" field. It's identical to ProgressTotalEQ.
+func ProgressTotal(v int64) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldProgressTotal, v))
 }
 
-// SkippedSegments applies equality check predicate on the "skipped_segments" field. It's identical to SkippedSegmentsEQ.
-func SkippedSegments(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldSkippedSegments, v))
-}
-
-// CompletedSegments applies equality check predicate on the "completed_segments" field. It's identical to CompletedSegmentsEQ.
-func CompletedSegments(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldCompletedSegments, v))
-}
-
-// WeightedTotal applies equality check predicate on the "weighted_total" field. It's identical to WeightedTotalEQ.
-func WeightedTotal(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldWeightedTotal, v))
-}
-
-// WeightedCompleted applies equality check predicate on the "weighted_completed" field. It's identical to WeightedCompletedEQ.
-func WeightedCompleted(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldWeightedCompleted, v))
+// ProgressCompleted applies equality check predicate on the "progress_completed" field. It's identical to ProgressCompletedEQ.
+func ProgressCompleted(v int64) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldProgressCompleted, v))
 }
 
 // ErrorMessage applies equality check predicate on the "error_message" field. It's identical to ErrorMessageEQ.
@@ -525,204 +510,84 @@ func FailedResourcesLTE(v int) predicate.Job {
 	return predicate.Job(sql.FieldLTE(FieldFailedResources, v))
 }
 
-// TotalSegmentsEQ applies the EQ predicate on the "total_segments" field.
-func TotalSegmentsEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldTotalSegments, v))
+// ProgressTotalEQ applies the EQ predicate on the "progress_total" field.
+func ProgressTotalEQ(v int64) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldProgressTotal, v))
 }
 
-// TotalSegmentsNEQ applies the NEQ predicate on the "total_segments" field.
-func TotalSegmentsNEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldTotalSegments, v))
+// ProgressTotalNEQ applies the NEQ predicate on the "progress_total" field.
+func ProgressTotalNEQ(v int64) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldProgressTotal, v))
 }
 
-// TotalSegmentsIn applies the In predicate on the "total_segments" field.
-func TotalSegmentsIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldTotalSegments, vs...))
+// ProgressTotalIn applies the In predicate on the "progress_total" field.
+func ProgressTotalIn(vs ...int64) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldProgressTotal, vs...))
 }
 
-// TotalSegmentsNotIn applies the NotIn predicate on the "total_segments" field.
-func TotalSegmentsNotIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldTotalSegments, vs...))
+// ProgressTotalNotIn applies the NotIn predicate on the "progress_total" field.
+func ProgressTotalNotIn(vs ...int64) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldProgressTotal, vs...))
 }
 
-// TotalSegmentsGT applies the GT predicate on the "total_segments" field.
-func TotalSegmentsGT(v int) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldTotalSegments, v))
+// ProgressTotalGT applies the GT predicate on the "progress_total" field.
+func ProgressTotalGT(v int64) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldProgressTotal, v))
 }
 
-// TotalSegmentsGTE applies the GTE predicate on the "total_segments" field.
-func TotalSegmentsGTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldTotalSegments, v))
+// ProgressTotalGTE applies the GTE predicate on the "progress_total" field.
+func ProgressTotalGTE(v int64) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldProgressTotal, v))
 }
 
-// TotalSegmentsLT applies the LT predicate on the "total_segments" field.
-func TotalSegmentsLT(v int) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldTotalSegments, v))
+// ProgressTotalLT applies the LT predicate on the "progress_total" field.
+func ProgressTotalLT(v int64) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldProgressTotal, v))
 }
 
-// TotalSegmentsLTE applies the LTE predicate on the "total_segments" field.
-func TotalSegmentsLTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldTotalSegments, v))
+// ProgressTotalLTE applies the LTE predicate on the "progress_total" field.
+func ProgressTotalLTE(v int64) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldProgressTotal, v))
 }
 
-// SkippedSegmentsEQ applies the EQ predicate on the "skipped_segments" field.
-func SkippedSegmentsEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldSkippedSegments, v))
+// ProgressCompletedEQ applies the EQ predicate on the "progress_completed" field.
+func ProgressCompletedEQ(v int64) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldProgressCompleted, v))
 }
 
-// SkippedSegmentsNEQ applies the NEQ predicate on the "skipped_segments" field.
-func SkippedSegmentsNEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldSkippedSegments, v))
+// ProgressCompletedNEQ applies the NEQ predicate on the "progress_completed" field.
+func ProgressCompletedNEQ(v int64) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldProgressCompleted, v))
 }
 
-// SkippedSegmentsIn applies the In predicate on the "skipped_segments" field.
-func SkippedSegmentsIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldSkippedSegments, vs...))
+// ProgressCompletedIn applies the In predicate on the "progress_completed" field.
+func ProgressCompletedIn(vs ...int64) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldProgressCompleted, vs...))
 }
 
-// SkippedSegmentsNotIn applies the NotIn predicate on the "skipped_segments" field.
-func SkippedSegmentsNotIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldSkippedSegments, vs...))
+// ProgressCompletedNotIn applies the NotIn predicate on the "progress_completed" field.
+func ProgressCompletedNotIn(vs ...int64) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldProgressCompleted, vs...))
 }
 
-// SkippedSegmentsGT applies the GT predicate on the "skipped_segments" field.
-func SkippedSegmentsGT(v int) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldSkippedSegments, v))
+// ProgressCompletedGT applies the GT predicate on the "progress_completed" field.
+func ProgressCompletedGT(v int64) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldProgressCompleted, v))
 }
 
-// SkippedSegmentsGTE applies the GTE predicate on the "skipped_segments" field.
-func SkippedSegmentsGTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldSkippedSegments, v))
+// ProgressCompletedGTE applies the GTE predicate on the "progress_completed" field.
+func ProgressCompletedGTE(v int64) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldProgressCompleted, v))
 }
 
-// SkippedSegmentsLT applies the LT predicate on the "skipped_segments" field.
-func SkippedSegmentsLT(v int) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldSkippedSegments, v))
+// ProgressCompletedLT applies the LT predicate on the "progress_completed" field.
+func ProgressCompletedLT(v int64) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldProgressCompleted, v))
 }
 
-// SkippedSegmentsLTE applies the LTE predicate on the "skipped_segments" field.
-func SkippedSegmentsLTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldSkippedSegments, v))
-}
-
-// CompletedSegmentsEQ applies the EQ predicate on the "completed_segments" field.
-func CompletedSegmentsEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldCompletedSegments, v))
-}
-
-// CompletedSegmentsNEQ applies the NEQ predicate on the "completed_segments" field.
-func CompletedSegmentsNEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldCompletedSegments, v))
-}
-
-// CompletedSegmentsIn applies the In predicate on the "completed_segments" field.
-func CompletedSegmentsIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldCompletedSegments, vs...))
-}
-
-// CompletedSegmentsNotIn applies the NotIn predicate on the "completed_segments" field.
-func CompletedSegmentsNotIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldCompletedSegments, vs...))
-}
-
-// CompletedSegmentsGT applies the GT predicate on the "completed_segments" field.
-func CompletedSegmentsGT(v int) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldCompletedSegments, v))
-}
-
-// CompletedSegmentsGTE applies the GTE predicate on the "completed_segments" field.
-func CompletedSegmentsGTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldCompletedSegments, v))
-}
-
-// CompletedSegmentsLT applies the LT predicate on the "completed_segments" field.
-func CompletedSegmentsLT(v int) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldCompletedSegments, v))
-}
-
-// CompletedSegmentsLTE applies the LTE predicate on the "completed_segments" field.
-func CompletedSegmentsLTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldCompletedSegments, v))
-}
-
-// WeightedTotalEQ applies the EQ predicate on the "weighted_total" field.
-func WeightedTotalEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldWeightedTotal, v))
-}
-
-// WeightedTotalNEQ applies the NEQ predicate on the "weighted_total" field.
-func WeightedTotalNEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldWeightedTotal, v))
-}
-
-// WeightedTotalIn applies the In predicate on the "weighted_total" field.
-func WeightedTotalIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldWeightedTotal, vs...))
-}
-
-// WeightedTotalNotIn applies the NotIn predicate on the "weighted_total" field.
-func WeightedTotalNotIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldWeightedTotal, vs...))
-}
-
-// WeightedTotalGT applies the GT predicate on the "weighted_total" field.
-func WeightedTotalGT(v int) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldWeightedTotal, v))
-}
-
-// WeightedTotalGTE applies the GTE predicate on the "weighted_total" field.
-func WeightedTotalGTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldWeightedTotal, v))
-}
-
-// WeightedTotalLT applies the LT predicate on the "weighted_total" field.
-func WeightedTotalLT(v int) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldWeightedTotal, v))
-}
-
-// WeightedTotalLTE applies the LTE predicate on the "weighted_total" field.
-func WeightedTotalLTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldWeightedTotal, v))
-}
-
-// WeightedCompletedEQ applies the EQ predicate on the "weighted_completed" field.
-func WeightedCompletedEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldWeightedCompleted, v))
-}
-
-// WeightedCompletedNEQ applies the NEQ predicate on the "weighted_completed" field.
-func WeightedCompletedNEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldWeightedCompleted, v))
-}
-
-// WeightedCompletedIn applies the In predicate on the "weighted_completed" field.
-func WeightedCompletedIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldWeightedCompleted, vs...))
-}
-
-// WeightedCompletedNotIn applies the NotIn predicate on the "weighted_completed" field.
-func WeightedCompletedNotIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldWeightedCompleted, vs...))
-}
-
-// WeightedCompletedGT applies the GT predicate on the "weighted_completed" field.
-func WeightedCompletedGT(v int) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldWeightedCompleted, v))
-}
-
-// WeightedCompletedGTE applies the GTE predicate on the "weighted_completed" field.
-func WeightedCompletedGTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldWeightedCompleted, v))
-}
-
-// WeightedCompletedLT applies the LT predicate on the "weighted_completed" field.
-func WeightedCompletedLT(v int) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldWeightedCompleted, v))
-}
-
-// WeightedCompletedLTE applies the LTE predicate on the "weighted_completed" field.
-func WeightedCompletedLTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldWeightedCompleted, v))
+// ProgressCompletedLTE applies the LTE predicate on the "progress_completed" field.
+func ProgressCompletedLTE(v int64) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldProgressCompleted, v))
 }
 
 // ErrorMessageEQ applies the EQ predicate on the "error_message" field.
@@ -911,6 +776,29 @@ func HasJobResources() predicate.Job {
 func HasJobResourcesWith(preds ...predicate.JobResource) predicate.Job {
 	return predicate.Job(func(s *sql.Selector) {
 		step := newJobResourcesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasJobRounds applies the HasEdge predicate on the "job_rounds" edge.
+func HasJobRounds() predicate.Job {
+	return predicate.Job(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, JobRoundsTable, JobRoundsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasJobRoundsWith applies the HasEdge predicate on the "job_rounds" edge with a given conditions (other predicates).
+func HasJobRoundsWith(preds ...predicate.JobRound) predicate.Job {
+	return predicate.Job(func(s *sql.Selector) {
+		step := newJobRoundsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

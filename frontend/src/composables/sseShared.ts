@@ -39,6 +39,8 @@ export interface BatchEventMetadata {
   http_status?: number
   tried_backends: string[]
   shrink_attempted: boolean
+  truncated?: boolean
+  repaired?: string[]
 }
 
 /** 池级事件元数据，对应后端 progress.PoolEvent。 */
@@ -79,6 +81,8 @@ export const KNOWN_EVENT_TYPES = [
   'job_completed',
   'job_failed',
   'job_cancelled',
+  'job_paused',
+  'job_resumed',
 ] as const
 
 export const resolveStreamUrl = (jobId: number): string | null => {

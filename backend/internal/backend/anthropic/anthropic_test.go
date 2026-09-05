@@ -1,8 +1,8 @@
 package anthropic
 
 import (
+	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
@@ -134,32 +134,104 @@ func TestFactory_ParseThinkingLevel(t *testing.T) {
 	}
 }
 
-func TestResponseFromMessage_TruncationHintWithThinking(t *testing.T) {
-	// 截断时若 thinking enabled，错误信息应提示 max_tokens 被思考与输出共享，
-	// 让用户可从 raise max_tokens / lower thinking_level / shrink batch 三方向定位。
-	msg := &sdk.Message{StopReason: sdk.StopReasonMaxTokens}
+// TestResponseFromMessage_TruncatedSignal 验证截断（stop_reason=max_tokens）一等化：
+// 非空文本/tool input → 正常返回 Response 且 Truncated=true（不再报错丢弃）；
+// 空内容 → EmptyResponseError（不可重试，携带 stop reason）。
+// thinking 是否开启不再影响截断行为（调参提示由 pipeline 层统一承担）。
+func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
+	b := &Backend{name: "claude", model: "claude-sonnet-4", thinking: backend.ThinkingHigh}
 
-	b := &Backend{thinking: backend.ThinkingHigh}
-	_, err := b.responseFromMessage(msg, false)
-	if err == nil {
-		t.Fatal("want truncation error")
-	}
-	if !strings.Contains(err.Error(), "shares max_tokens") {
-		t.Fatalf("thinking-enabled truncation should hint shared pool, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), string(backend.ThinkingHigh)) {
-		t.Fatalf("error should mention thinking_level, got: %v", err)
-	}
+	t.Run("non_empty_text_returns_truncated", func(t *testing.T) {
+		msg := &sdk.Message{
+			Content:    []sdk.ContentBlockUnion{{Type: "text", Text: `{"items":[{"t":1}`}},
+			StopReason: sdk.StopReasonMaxTokens,
+		}
+		resp, err := b.responseFromMessage(msg, false)
+		if err != nil {
+			t.Fatalf("truncated non-empty text must not error, got: %v", err)
+		}
+		if !resp.Truncated {
+			t.Fatal("want Truncated=true for stop_reason=max_tokens")
+		}
+		if resp.Text != `{"items":[{"t":1}` {
+			t.Fatalf("Text = %q, want partial prefix", resp.Text)
+		}
+	})
 
-	// thinking off 时维持原有简洁文案
-	b = &Backend{thinking: backend.ThinkingOff}
-	_, err = b.responseFromMessage(msg, false)
-	if err == nil {
-		t.Fatal("want truncation error")
-	}
-	if strings.Contains(err.Error(), "shares max_tokens") {
-		t.Fatalf("thinking-off truncation should not hint shared pool, got: %v", err)
-	}
+	t.Run("non_empty_tool_use_input_returns_truncated", func(t *testing.T) {
+		msg := &sdk.Message{
+			Content: []sdk.ContentBlockUnion{{
+				Type:  "tool_use",
+				Name:  toolName,
+				Input: json.RawMessage(`{"items":[]}`),
+			}},
+			StopReason: sdk.StopReasonMaxTokens,
+		}
+		resp, err := b.responseFromMessage(msg, true)
+		if err != nil {
+			t.Fatalf("truncated non-empty tool input must not error, got: %v", err)
+		}
+		if !resp.Truncated {
+			t.Fatal("want Truncated=true for stop_reason=max_tokens")
+		}
+		if resp.Text != `{"items":[]}` {
+			t.Fatalf("Text = %q, want tool_use input JSON", resp.Text)
+		}
+	})
+
+	t.Run("non_max_tokens_stop_keeps_truncated_false", func(t *testing.T) {
+		msg := &sdk.Message{
+			Content:    []sdk.ContentBlockUnion{{Type: "text", Text: "done"}},
+			StopReason: sdk.StopReasonEndTurn,
+		}
+		resp, err := b.responseFromMessage(msg, false)
+		if err != nil {
+			t.Fatalf("normal response must not error, got: %v", err)
+		}
+		if resp.Truncated {
+			t.Fatal("want Truncated=false for stop_reason=end_turn")
+		}
+	})
+
+	t.Run("empty_content_returns_empty_response_error", func(t *testing.T) {
+		msg := &sdk.Message{
+			Content:    []sdk.ContentBlockUnion{}, // 无 text/tool_use 块
+			StopReason: sdk.StopReasonMaxTokens,
+		}
+		resp, err := b.responseFromMessage(msg, false)
+		if err == nil {
+			t.Fatal("want EmptyResponseError for empty truncated content")
+		}
+		if resp != nil {
+			t.Fatalf("want nil response on error, got %+v", resp)
+		}
+		var ere *backend.EmptyResponseError
+		if !errors.As(err, &ere) {
+			t.Fatalf("want *backend.EmptyResponseError, got %T: %v", err, err)
+		}
+		if ere.FinishReason != string(sdk.StopReasonMaxTokens) {
+			t.Fatalf("FinishReason = %q, want %q", ere.FinishReason, sdk.StopReasonMaxTokens)
+		}
+		if backend.IsRetryable(err) {
+			t.Fatal("empty truncated response must not be retryable")
+		}
+	})
+
+	t.Run("thinking_enabled_no_longer_errors_on_truncation", func(t *testing.T) {
+		// 旧契约：thinking 开启时截断报"shares max_tokens"错。新契约下该文案随
+		// 报错分支一并移除，截断一律以 Truncated 标志返回。
+		msg := &sdk.Message{
+			Content:    []sdk.ContentBlockUnion{{Type: "text", Text: "partial"}},
+			StopReason: sdk.StopReasonMaxTokens,
+		}
+		resp, err := b.responseFromMessage(msg, false)
+		if err != nil {
+			t.Fatalf("thinking-enabled truncation must not error, got: %v", err)
+		}
+		if !resp.Truncated || resp.Text != "partial" {
+			t.Fatalf("want Truncated=true with partial text, got Truncated=%v Text=%q", resp.Truncated, resp.Text)
+		}
+	})
 }
 
 // TestExtractResponseText_EmptyContent 验证 anthropic 后端的空内容路径返回

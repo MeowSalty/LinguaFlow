@@ -42,6 +42,8 @@ export interface DirectoryChild {
 export interface UploadTask {
   id: string
   fileName: string
+  /** 任务包含的文件数（拖拽 / 批量选择会合并为一个批次任务） */
+  fileCount: number
   stage: 'prechecking' | 'uploading' | 'processing' | 'complete' | 'partial' | 'error'
   progress: number
   errorMessage?: string
@@ -477,9 +479,12 @@ export const useResourceStore = defineStore('resource', () => {
 
   // ── Actions：上传 ──
 
-  const addUploadTask = (fileName: string): string => {
+  const addUploadTask = (fileName: string, fileCount = 1): string => {
     const id = crypto.randomUUID()
-    uploadTasks.value = [...uploadTasks.value, { id, fileName, stage: 'uploading', progress: 0 }]
+    uploadTasks.value = [
+      ...uploadTasks.value,
+      { id, fileName, fileCount, stage: 'uploading', progress: 0 },
+    ]
     return id
   }
 

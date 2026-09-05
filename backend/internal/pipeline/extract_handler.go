@@ -35,6 +35,9 @@ type ExtractHandler struct {
 
 	scannedSegments atomic.Int64 // 池 0 扫描的去重段数（best-effort all-failed 检测分母，与重试/池数解耦）
 
+	// Gate 是任务级暂停闸门（退避重试等待中止信号）；nil 时无暂停语义。
+	Gate *PauseGate
+
 	RoundIndex int // execution plan round index, set by caller
 }
 
@@ -55,13 +58,6 @@ func (h *ExtractHandler) logger() *slog.Logger {
 		return slog.Default()
 	}
 	return h.Logger
-}
-
-func (h *ExtractHandler) reporter() progress.Reporter {
-	if h.Reporter == nil {
-		return progress.Nop{}
-	}
-	return h.Reporter
 }
 
 // emitBatchOutcome 发送批次事件到 Reporter。
@@ -169,7 +165,6 @@ func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document, pending 
 //   - 全 backend 失败（非致命）→ unresolved（进下一池重试）
 //   - 成功 → 空 batchResult（resolved 由 executor 统计）
 func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
-	rep := h.reporter()
 	start := time.Now()
 
 	// 从索引取文本（优先用 OriginalSource）
@@ -207,9 +202,6 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			ErrorMessage: err.Error(),
 			RoundIndex:   h.RoundIndex,
 		})
-		for range idxs {
-			rep.SegmentDone()
-		}
 		return batchResult{unresolved: idxs}
 	}
 
@@ -237,9 +229,6 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 				logger.Warn("extract backend fatal error, deferring to cross-round",
 					"backend", b.Name(), "err", callErr)
 				h.emitBatchOutcome(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-				for range idxs {
-					rep.SegmentDone()
-				}
 				return batchResult{fatalUnresolved: idxs}
 			}
 
@@ -253,9 +242,12 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 				select {
 				case <-ctx.Done():
 					timer.Stop()
-					for range idxs {
-						rep.SegmentDone()
-					}
+					// 段保持未解决：不计数（executor 对 unresolved 段不推进度）——
+					// 未解决段计入 segment_completed 后，恢复/重试重跑会二次计数。
+					return batchResult{unresolved: idxs}
+				case <-h.Gate.Done():
+					// 暂停时中止退避等待：段保持未解决，由断点集合覆盖。
+					timer.Stop()
 					return batchResult{unresolved: idxs}
 				case <-timer.C:
 				}
@@ -266,6 +258,10 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			logger.Warn("extract LLM call failed", "backend", b.Name(), "err", callErr)
 			lastErr = callErr
 			continue
+		}
+
+		if resp.Truncated {
+			logTruncatedResponse(logger, b.Name())
 		}
 
 		parsed, parseRepaired, perr := repair.ParseBootstrapByMode(resp.Text, isTextMode, h.Repair, false)
@@ -326,6 +322,8 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			SentContent:     usr,
 			ReceivedContent: resp.Text,
 			AddedGlossary:   toBootstrapEntries(res.Added),
+			Truncated:       resp.Truncated,
+			Repaired:        parseRepaired,
 			RoundIndex:      h.RoundIndex,
 			SystemPrompt:    sys,
 			UserMessage:     usr,
@@ -334,9 +332,6 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			ResponseContent: resp.Text,
 		})
 
-		for range idxs {
-			rep.SegmentDone()
-		}
 		return batchResult{}
 	}
 
@@ -357,9 +352,6 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		ResponseFormat: req.ResponseFormat,
 		JSONSchema:     req.JSONSchema,
 	})
-	for range idxs {
-		rep.SegmentDone()
-	}
 	return batchResult{unresolved: idxs}
 }
 

@@ -258,6 +258,14 @@ func (s *Server) RetryJob(w http.ResponseWriter, r *http.Request, _ JobId) {
 	s.requireAuth(http.HandlerFunc(s.handleRetryJob)).ServeHTTP(w, r)
 }
 
+func (s *Server) PauseJob(w http.ResponseWriter, r *http.Request, _ JobId) {
+	s.requireAuth(http.HandlerFunc(s.handlePauseJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) ResumeJob(w http.ResponseWriter, r *http.Request, _ JobId) {
+	s.requireAuth(http.HandlerFunc(s.handleResumeJob)).ServeHTTP(w, r)
+}
+
 func (s *Server) ListJobEvents(w http.ResponseWriter, r *http.Request, _ JobId, _ ListJobEventsParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListJobEvents)).ServeHTTP(w, r)
 }
@@ -312,6 +320,10 @@ func (s *Server) ApplyResourceSegmentsSearchReplace(w http.ResponseWriter, r *ht
 
 func (s *Server) UndoResourceSegmentsSearchReplace(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId, _ string) {
 	s.requireAuth(http.HandlerFunc(s.handleUndoResourceSegmentsSearchReplace)).ServeHTTP(w, r)
+}
+
+func (s *Server) QaRecheck(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleQaRecheck)).ServeHTTP(w, r)
 }
 
 // ---- 提示词模板适配器 ----

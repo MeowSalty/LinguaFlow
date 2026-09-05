@@ -59,18 +59,6 @@ func TestMergeQualityIssuesByFingerprint(t *testing.T) {
 	}
 }
 
-func TestDuplicateSourceDivergenceEnabled(t *testing.T) {
-	if !duplicateSourceDivergenceEnabled(qa.Config{Enabled: true}) {
-		t.Fatal("nil checks should enable document checks")
-	}
-	if duplicateSourceDivergenceEnabled(qa.Config{Enabled: true, Checks: []string{qa.CheckUntranslated}}) {
-		t.Fatal("explicit checker list should filter document check")
-	}
-	if !duplicateSourceDivergenceEnabled(qa.Config{Enabled: true, Checks: []string{qa.CodeDuplicateSourceDivergence}}) {
-		t.Fatal("explicit document checker should be enabled")
-	}
-}
-
 func TestPersistDuplicateSourceDivergenceMergesWithoutChangingStatus(t *testing.T) {
 	client := newSemanticQATestClient(t)
 	ctx := context.Background()

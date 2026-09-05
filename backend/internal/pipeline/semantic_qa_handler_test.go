@@ -611,6 +611,71 @@ func TestSemanticQAHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
 	}
 }
 
+// TestSemanticQAHandler_ProcessBatch_TextModeTruncatedRefused fail-closed stage
+// 对截断响应恒不采纳（text 协议逐行解析无完整性信号，截断的已完成行会被当作
+// 完整质检结果形成假阴性）：后端标记 Truncated 时即使 text 协议命中也必须
+// 报 parse_error 走重试，事件携带截断信号。
+func TestSemanticQAHandler_ProcessBatch_TextModeTruncatedRefused(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	rec := &recordingBatchObserver{}
+	fb := &truncatedFakeBackend{
+		fakeBackend: fakeBackend{
+			name:      "fake",
+			responses: []string{"[issues]\n0 | calque | 借译"},
+		},
+	}
+	h := &SemanticQAHandler{
+		Backend:      fb,
+		Renderer:     newSemanticQARenderer(t),
+		BatchSize:    10,
+		ResponseMode: "text",
+		Reporter:     rec,
+		Logger:       quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult != nil {
+		t.Fatalf("truncated text response must not be accepted as complete issues, got %#v",
+			result.callbackResult)
+	}
+	if len(rec.events) == 0 {
+		t.Fatal("expected parse_error event")
+	}
+	evt := rec.events[0]
+	if evt.ErrorType != "parse_error" || !evt.Truncated {
+		t.Fatalf("event error_type=%q truncated=%v, want parse_error/true", evt.ErrorType, evt.Truncated)
+	}
+}
+
+// TestSemanticQAHandler_ProcessBatch_TruncatedCompleteJSONRefused 同一 fail-closed
+// 规则封住「截断点恰在完整边界、解析成功」的残余通道：JSON 本身完整可解析
+// （对照 TextModeJSONFallback 的成功路径），但后端标记 Truncated 即拒绝——
+// 无法排除模型还想输出更多 issue。
+func TestSemanticQAHandler_ProcessBatch_TruncatedCompleteJSONRefused(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	rec := &recordingBatchObserver{}
+	fb := &truncatedFakeBackend{
+		fakeBackend: fakeBackend{
+			name:      "fake",
+			responses: []string{`{"issues":[{"id":"0","code":"naturalness","message":"生硬"}]}`},
+		},
+	}
+	h := &SemanticQAHandler{
+		Backend:   fb,
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Reporter:  rec,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult != nil {
+		t.Fatalf("truncated response must not be accepted even when JSON parses cleanly, got %#v",
+			result.callbackResult)
+	}
+	if len(rec.events) == 0 || rec.events[0].ErrorType != "parse_error" || !rec.events[0].Truncated {
+		t.Fatalf("want parse_error event with truncated=true, got %+v", rec.events)
+	}
+}
+
 func TestSemanticQAHandler_BuildBatches_PackedDiscontinuous(t *testing.T) {
 	doc := semanticQADoc(
 		[]string{"translated", "approved", "translated", "pending", "edited"},

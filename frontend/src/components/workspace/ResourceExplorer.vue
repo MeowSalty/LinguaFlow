@@ -1,14 +1,5 @@
 ﻿<script setup lang="ts">
-import {
-  NAlert,
-  NButton,
-  NEmpty,
-  NIcon,
-  NModal,
-  NUpload,
-  useMessage,
-  type UploadCustomRequestOptions,
-} from 'naive-ui'
+import { NAlert, NButton, NEmpty, NIcon, NModal, useMessage } from 'naive-ui'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -309,23 +300,35 @@ const executeUploadItems = async (items: PendingUploadItem[], taskId: string): P
   }
 }
 
+/** 打开文件选择器，多选文件作为一个批次上传（与拖拽上传共用同一批处理流程） */
+const chooseUploadFiles = (): void => {
+  if (blockUploadIfInsecure()) return
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.multiple = true
+  input.onchange = () => {
+    const files = Array.from(input.files ?? [])
+    if (files.length === 0) return
+    const paths = computeUploadPaths(files, workspace.currentPath)
+    void beginUpload(files, paths, summarizeUploadName(files))
+  }
+  input.click()
+}
+
 const beginUpload = async (
   files: File[],
   paths: string[] | undefined,
   displayName: string,
-  callbacks?: Pick<UploadCustomRequestOptions, 'onFinish' | 'onError'>,
 ): Promise<void> => {
   if (blockUploadIfInsecure()) {
-    callbacks?.onError?.()
     return
   }
 
   if (files.length === 0) {
-    callbacks?.onFinish?.()
     return
   }
 
-  const taskId = workspace.addUploadTask(displayName)
+  const taskId = workspace.addUploadTask(displayName, files.length)
   workspace.updateUploadTaskStage(taskId, 'prechecking')
 
   try {
@@ -335,12 +338,10 @@ const beginUpload = async (
     if (items.some((item) => item.precheck.action !== 'create')) {
       pendingUploadTaskId.value = taskId
       uploadPrecheckVisible.value = true
-      callbacks?.onFinish?.()
       return
     }
 
     await executeUploadItems(items, taskId)
-    callbacks?.onFinish?.()
   } catch (error) {
     console.error(error)
     message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
@@ -349,7 +350,6 @@ const beginUpload = async (
       'error',
       workspace.actionError || t('workspace.messages.uploadFailed'),
     )
-    callbacks?.onError?.()
   }
 }
 
@@ -380,21 +380,6 @@ const cancelPrecheckedUpload = (): void => {
   pendingUploadTaskId.value = null
   uploadPrecheckVisible.value = false
   workspace.clearPendingUploadItems()
-}
-
-const handleUpload = async ({
-  file,
-  onFinish,
-  onError,
-}: UploadCustomRequestOptions): Promise<void> => {
-  if (!file.file) {
-    onError()
-    return
-  }
-
-  const files = [file.file]
-  const paths = computeUploadPaths(files, workspace.currentPath)
-  await beginUpload(files, paths, file.name, { onFinish, onError })
 }
 
 // ── 拖拽上传 ──
@@ -556,19 +541,19 @@ const currentViewEvents = computed(() => {
             </template>
           </NButton>
         </template>
-        <NUpload
+        <NButton
           v-if="toolbarMeta.showUploadButton"
-          multiple
-          :show-file-list="false"
-          :custom-request="handleUpload"
+          type="primary"
+          size="small"
+          strong
+          :loading="workspace.hasActiveUploads"
+          @click="chooseUploadFiles"
         >
-          <NButton type="primary" size="small" strong :loading="workspace.hasActiveUploads">
-            <template #icon>
-              <NIcon size="16"><IconCarbonUpload /></NIcon>
-            </template>
-            {{ t('workspace.resource.actions.upload') }}
-          </NButton>
-        </NUpload>
+          <template #icon>
+            <NIcon size="16"><IconCarbonUpload /></NIcon>
+          </template>
+          {{ t('workspace.resource.actions.upload') }}
+        </NButton>
       </div>
     </div>
 
@@ -624,14 +609,12 @@ const currentViewEvents = computed(() => {
             <p class="max-w-md text-center text-xs leading-5 text-lf-text-muted">
               {{ t('workspace.explorer.dropHint') }}
             </p>
-            <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
-              <NButton type="primary">
-                <template #icon>
-                  <NIcon><IconCarbonUpload /></NIcon>
-                </template>
-                {{ t('workspace.resource.actions.uploadFirst') }}
-              </NButton>
-            </NUpload>
+            <NButton type="primary" @click="chooseUploadFiles">
+              <template #icon>
+                <NIcon><IconCarbonUpload /></NIcon>
+              </template>
+              {{ t('workspace.resource.actions.uploadFirst') }}
+            </NButton>
           </div>
         </template>
       </NEmpty>

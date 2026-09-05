@@ -2,6 +2,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -20,7 +21,7 @@ func (Job) Fields() []ent.Field {
 		field.Int("project_id").Positive().
 			Comment("所属项目 ID"),
 		field.String("status").Default("pending").
-			Comment("pending, running, completed, failed, cancelled"),
+			Comment("pending, running, paused, completed, failed, cancelled"),
 		field.String("trigger_type").Default("manual").
 			Comment("触发类型：manual, file_update, glossary_change, web_edit"),
 		field.Int("execution_plan_id").Positive().
@@ -34,16 +35,10 @@ func (Job) Fields() []ent.Field {
 			Comment("已完成的资源数"),
 		field.Int("failed_resources").Default(0).NonNegative().
 			Comment("失败的资源数"),
-		field.Int("total_segments").Default(0).NonNegative().
-			Comment("总段落数（创建时选中的 segment 数）"),
-		field.Int("skipped_segments").Default(0).NonNegative().
-			Comment("被系统跳过的段落数（聚合自 JobResource）"),
-		field.Int("completed_segments").Default(0).NonNegative().
-			Comment("已完成段落数（终态去重值，仅 ReconcileJob 写入）"),
-		field.Int("weighted_total").Default(0).NonNegative().
-			Comment("跨轮工作量总数（各轮 stage_total 累加，实时累加）"),
-		field.Int("weighted_completed").Default(0).NonNegative().
-			Comment("跨轮已完成工作量（各轮 stage_completed 累加，实时累加）"),
+		field.Int64("progress_total").Default(0).NonNegative().
+			Comment("已知工作量总数（单位=段落×轮：JobRound pending→running 时累加 segment_total；矩阵重算时全量刷新）"),
+		field.Int64("progress_completed").Default(0).NonNegative().
+			Comment("已完成工作量（单位=段落×轮：各轮 segment_completed 之和；矩阵重算时全量刷新）"),
 		field.String("error_message").Optional().Nillable().
 			Comment("任务级错误信息"),
 		field.Time("started_at").Optional().Nillable().
@@ -62,6 +57,10 @@ func (Job) Edges() []ent.Edge {
 			Ref("created_jobs").
 			Unique(),
 		edge.To("job_resources", JobResource.Type),
+		// FK 级联：任务删除时由 DB 自动清理轮次矩阵行（entsql.OnDelete
+		// 注解须挂在拥有边的 To 声明上，子侧 From 注解不传导）。
+		edge.To("job_rounds", JobRound.Type).
+			Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("sse_events", SSEEvent.Type),
 	}
 }

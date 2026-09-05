@@ -790,6 +790,23 @@ export const undoResourceSegmentsSearchReplace = async (
   return data
 }
 
+export const qaRecheck = async (
+  projectId: number,
+  payload: ApiSchemas['QaRecheckRequest'],
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['QaRecheckResult']> => {
+  const { data, error, response } = await client.POST('/projects/{projectId}/qa-recheck', {
+    params: { path: { projectId } },
+    body: payload,
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.qaRecheckFailed'), error, response)
+  }
+
+  return data
+}
+
 export const createOrgProject = async (
   orgId: number,
   payload: ApiSchemas['CreateProjectRequest'],

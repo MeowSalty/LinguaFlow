@@ -23,12 +23,16 @@ const emit = defineEmits<{
   detail: [job: Job]
   cancel: [job: Job]
   retry: [job: Job]
+  pause: [job: Job]
+  resume: [job: Job]
 }>()
 
 const { jobColumns, jobStatusOptions } = useJobColumns({
   openJobDetail: (job) => emit('detail', job),
   cancelJob: (job) => emit('cancel', job),
   retryJob: (job) => emit('retry', job),
+  pauseJob: (job) => emit('pause', job),
+  resumeJob: (job) => emit('resume', job),
 })
 
 // ── 自适应轮询：面板挂载时自动轮询运行中的任务 ──

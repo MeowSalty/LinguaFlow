@@ -39,6 +39,8 @@ const (
 	EdgeResource = "resource"
 	// EdgeReviewedBy holds the string denoting the reviewed_by edge name in mutations.
 	EdgeReviewedBy = "reviewed_by"
+	// EdgeResolvedInRounds holds the string denoting the resolved_in_rounds edge name in mutations.
+	EdgeResolvedInRounds = "resolved_in_rounds"
 	// Table holds the table name of the segment in the database.
 	Table = "segments"
 	// ResourceTable is the table that holds the resource relation/edge.
@@ -55,6 +57,11 @@ const (
 	ReviewedByInverseTable = "users"
 	// ReviewedByColumn is the table column denoting the reviewed_by relation/edge.
 	ReviewedByColumn = "user_reviewed_segments"
+	// ResolvedInRoundsTable is the table that holds the resolved_in_rounds relation/edge. The primary key declared below.
+	ResolvedInRoundsTable = "job_round_segments"
+	// ResolvedInRoundsInverseTable is the table name for the JobRound entity.
+	// It exists in this package in order to avoid circular dependency with the "jobround" package.
+	ResolvedInRoundsInverseTable = "job_rounds"
 )
 
 // Columns holds all SQL columns for segment fields.
@@ -77,6 +84,12 @@ var Columns = []string{
 var ForeignKeys = []string{
 	"user_reviewed_segments",
 }
+
+var (
+	// ResolvedInRoundsPrimaryKey and ResolvedInRoundsColumn2 are the table columns denoting the
+	// primary key for the resolved_in_rounds relation (M2M).
+	ResolvedInRoundsPrimaryKey = []string{"job_round_id", "segment_id"}
+)
 
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
@@ -203,6 +216,20 @@ func ByReviewedByField(field string, opts ...sql.OrderTermOption) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newReviewedByStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByResolvedInRoundsCount orders the results by resolved_in_rounds count.
+func ByResolvedInRoundsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newResolvedInRoundsStep(), opts...)
+	}
+}
+
+// ByResolvedInRounds orders the results by resolved_in_rounds terms.
+func ByResolvedInRounds(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newResolvedInRoundsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newResourceStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -215,5 +242,12 @@ func newReviewedByStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ReviewedByInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, ReviewedByTable, ReviewedByColumn),
+	)
+}
+func newResolvedInRoundsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ResolvedInRoundsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2M, true, ResolvedInRoundsTable, ResolvedInRoundsPrimaryKey...),
 	)
 }

@@ -18,6 +18,11 @@ type TaskRunner interface {
 	// Cancel 通知运行中的任务停止。
 	Cancel(taskID int)
 
+	// Pause 通知运行中的任务优雅排空（等待在途 LLM 请求返回后冻结）。
+	// 返回 false 表示任务未在运行（由 service 层处理 pending 态暂停）。
+	// 无暂停语义的 Runner（如 sync）实现为 no-op 返回 false。
+	Pause(taskID int) bool
+
 	// Recover 从数据库恢复挂起的任务并重新入队，返回恢复的任务 ID 列表。
 	Recover(ctx context.Context) ([]int, error)
 

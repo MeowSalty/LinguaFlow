@@ -141,7 +141,7 @@ func streamSSE(t *testing.T, s *Server, jobID int, u *ent.User, lastEventID stri
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		s.handleJobStream(w, req)
+		s.handleJobStream(w, req, jobID)
 	}()
 
 	// 等待回放写入足够事件后取消，避免阻塞在实时循环

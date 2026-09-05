@@ -13,10 +13,12 @@ const props = withDefaults(
     canTranslate: boolean
     showReview?: boolean
     canReview?: boolean
+    showQaRecheck?: boolean
   }>(),
   {
     showReview: false,
     canReview: false,
+    showQaRecheck: false,
   },
 )
 
@@ -39,6 +41,7 @@ defineEmits<{
   clear: []
   approve: []
   reject: []
+  qaRecheck: []
 }>()
 </script>
 
@@ -96,6 +99,12 @@ defineEmits<{
               {{ t('workspace.selection.reject') }}
             </NButton>
           </template>
+          <NButton v-if="showQaRecheck" size="small" ghost @click="$emit('qaRecheck')">
+            <template #icon>
+              <NIcon size="14"><IconCarbonRenew /></NIcon>
+            </template>
+            {{ t('workspace.selection.qaRecheck') }}
+          </NButton>
           <NButton quaternary size="small" @click="$emit('clear')">
             {{ t('workspace.selection.clear') }}
           </NButton>
