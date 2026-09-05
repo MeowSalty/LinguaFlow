@@ -36,6 +36,12 @@ export interface SearchReplaceApplyError extends Error {
   readonly problem?: ApiSchemas['Problem']
 }
 
+export interface DownloadTranslatedError extends Error {
+  readonly isDownloadTranslatedError: true
+  readonly status: number
+  readonly problem?: ApiSchemas['Problem']
+}
+
 export type FetchResourceSegmentsParams = NonNullable<
   ApiPaths['/projects/{projectId}/resources/{resourceId}/segments']['get']['parameters']['query']
 >
@@ -62,6 +68,11 @@ export const isSearchReplaceApplyError = (error: unknown): error is SearchReplac
   error instanceof Error &&
   'isSearchReplaceApplyError' in error &&
   (error as SearchReplaceApplyError).isSearchReplaceApplyError === true
+
+export const isDownloadTranslatedError = (error: unknown): error is DownloadTranslatedError =>
+  error instanceof Error &&
+  'isDownloadTranslatedError' in error &&
+  (error as DownloadTranslatedError).isDownloadTranslatedError === true
 
 export const fetchCurrentUser = async (
   client: ApiClient = apiClient,
@@ -414,6 +425,27 @@ export const downloadProjectResource = async (
   }
 }
 
+const buildDownloadTranslatedError = (
+  fallbackMessage: string,
+  error: unknown,
+  response?: Response,
+): DownloadTranslatedError => {
+  const failure = buildRequestFailureError(fallbackMessage, error, response)
+  const translatedError = failure as DownloadTranslatedError
+  const problem =
+    error && typeof error === 'object' && 'title' in error
+      ? (error as ApiSchemas['Problem'])
+      : undefined
+
+  Object.defineProperties(translatedError, {
+    isDownloadTranslatedError: { value: true, enumerable: false },
+    status: { value: response?.status ?? problem?.status ?? 0, enumerable: false },
+    problem: { value: problem, enumerable: false },
+  })
+
+  return translatedError
+}
+
 export const downloadResourceResult = async (
   projectId: number,
   resourceId: number,
@@ -428,7 +460,11 @@ export const downloadResourceResult = async (
   )
 
   if (!data) {
-    throw buildRequestFailureError(t('api.errors.downloadResourceResultFailed'), error, response)
+    throw buildDownloadTranslatedError(
+      t('api.errors.downloadResourceResultFailed'),
+      error,
+      response,
+    )
   }
 
   return {
