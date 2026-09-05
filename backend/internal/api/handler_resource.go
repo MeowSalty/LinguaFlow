@@ -14,6 +14,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
@@ -802,10 +803,48 @@ func (s *Server) handleDownloadTranslatedResourceFile(w http.ResponseWriter, r *
 		switch {
 		case errors.Is(err, service.ErrNoTranslatedSegments):
 			s.writeProblem(w, r, http.StatusConflict, "no_translated_segments", "资源没有已翻译的段落")
+		case errors.Is(err, service.ErrTargetMarkupInvalid):
+			var markupErr *service.TargetMarkupError
+			detail := "译文标记校验失败"
+			if errors.As(err, &markupErr) {
+				detail = targetMarkupProblemDetail(markupErr.Defects)
+				for _, d := range markupErr.Defects {
+					s.logger.Warn("导出预检发现无法原样交付的译文段落",
+						"resource_id", res.Resource.ID, "segment_id", d.SegmentID,
+						"location", d.Location, "reason", d.Reason)
+				}
+			}
+			s.writeProblem(w, r, http.StatusConflict, "invalid_target_markup", detail)
 		case errors.Is(err, service.ErrResourceNotFound):
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
 		default:
 			s.writeResourceServiceError(w, r, err)
 		}
 	}
+}
+
+// maxTargetMarkupIDsInDetail 写进 problem detail 的最大段号数，
+// 避免大量缺陷段落把 toast 文案撑爆。
+const maxTargetMarkupIDsInDetail = 5
+
+// targetMarkupProblemDetail 把预检缺陷拼成一行前端可直接展示的 toast 文案。
+// 必须单行：前端 buildRequestFailureError 优先取 problem.detail 显示。
+func targetMarkupProblemDetail(defects []parser.TargetDefect) string {
+	if len(defects) == 0 {
+		return "译文标签结构损坏，导出已阻止。请修正段落的译文后重试。"
+	}
+	ids := make([]string, 0, min(len(defects), maxTargetMarkupIDsInDetail))
+	for _, d := range defects[:min(len(defects), maxTargetMarkupIDsInDetail)] {
+		ids = append(ids, "#"+d.SegmentID)
+	}
+	more := ""
+	if len(defects) > maxTargetMarkupIDsInDetail {
+		more = " 等"
+	}
+	first := defects[0]
+	return fmt.Sprintf(
+		"译文标签结构损坏，导出已阻止：共 %d 个段落（%s%s）。首个错误：段落 #%s（%s）—— %s。请修正这些段落的译文后重试。",
+		len(defects), strings.Join(ids, "、"), more,
+		first.SegmentID, first.Location, first.Reason,
+	)
 }
