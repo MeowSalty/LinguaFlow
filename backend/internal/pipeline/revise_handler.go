@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -177,7 +178,9 @@ func (h *ReviseHandler) buildProtectedInputs(
 // 变体归一 → PlaceholderViolations（违规即拒绝，由调用方计入 unresolved）→
 // RestoreText 还原保护片段 → 注音对齐还原（复用 restoreSegmentRuby，获得与
 // translate 轮一致的 inline 标记容错与定向对齐重试）。
-// 返回最终译文；ok=false 表示占位符守恒被破坏或注音回填不完整，该段不可采信。
+// format 是文档格式，供最终的结构守卫做格式门禁（见函数尾注）。
+// 返回最终译文；ok=false 表示占位符守恒被破坏、注音回填不完整或译文结构退化，
+// 该段不可采信。
 func (h *ReviseHandler) finalizeRevision(
 	ctx context.Context,
 	seg *Segment,
@@ -185,6 +188,7 @@ func (h *ReviseHandler) finalizeRevision(
 	st *reviseProtectState,
 	rubyOutput map[string][]ruby.OutputEntry,
 	isTextMode bool,
+	format string,
 	logger *slog.Logger,
 ) (string, bool) {
 	text := revision.Target
@@ -244,6 +248,20 @@ func (h *ReviseHandler) finalizeRevision(
 			return "", false
 		}
 		text = tmp.Target
+	}
+
+	// 结构守卫：revise 与 translate 轮同为 LLM 直写译文，可能违反协议直写裸标签、
+	// 或按子串回填把既有标签劈开。与 correct 轮同一口径——判据是「不要把已经
+	// 合法的译文改坏」，基线取改写前的译文（doc 原始 Target，未被本函数污染）。
+	// 守卫位于占位符还原与注音还原之后，因为它们是坏结构的制造者之一。
+	// 违规按占位符守恒分支同语义 fail-closed：拒绝本次改写（ok=false → 该段计入
+	// unresolved），交由下一池重试或跨轮传播。
+	if markup.RequiresWellFormedTargets(format) {
+		if err := markup.TargetRegression(seg.Target, text); err != nil {
+			logger.Warn("revise segment target markup regression",
+				"seg", seg.ID, "err", err)
+			return "", false
+		}
 	}
 	return text, true
 }
@@ -480,7 +498,7 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 			continue
 		}
 		seen[revision.ID] = struct{}{}
-		text, ok := h.finalizeRevision(ctx, seg, revision, stateByID[revision.ID], rubyOutput, isTextMode, logger)
+		text, ok := h.finalizeRevision(ctx, seg, revision, stateByID[revision.ID], rubyOutput, isTextMode, doc.Format, logger)
 		if !ok {
 			// 占位符守恒被破坏：不进入 callback，落入 missing 计入 unresolved，
 			// 与 translate 轮违规即拒的语义一致。
