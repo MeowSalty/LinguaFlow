@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -16,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
@@ -281,6 +283,23 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 	}
 }
 
+// ErrSegmentMarkupInvalid 表示提交的译文不是 well-formed XML 片段，无法嵌入该格式
+// 的导出文档。放行会导致导出时整章降级为原文——因此在写入边界即拒绝。
+var ErrSegmentMarkupInvalid = errors.New("segment target markup invalid")
+
+// SegmentMarkupError 携带 markup.ValidateFragment 返回的具体语法错误，
+// 供 handler 拼装可读的 problem detail。
+type SegmentMarkupError struct{ Err error }
+
+func (e *SegmentMarkupError) Error() string {
+	if e.Err == nil {
+		return ErrSegmentMarkupInvalid.Error()
+	}
+	return ErrSegmentMarkupInvalid.Error() + ": " + e.Err.Error()
+}
+
+func (e *SegmentMarkupError) Unwrap() error { return ErrSegmentMarkupInvalid }
+
 func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input ResourceSegmentUpdateInput) (*ent.Segment, error) {
 	res, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, true)
 	if err != nil {
@@ -316,6 +335,16 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		target := strings.TrimSpace(*input.TargetText)
 		if target == "" {
 			return nil, ErrInvalidInput
+		}
+		// 结构守卫只施加于 renderer 会把译文原样嵌入 XML 文档的格式（目前仅 epub）；
+		// txt 等格式译文里的 <color=red>、裸 & 都是合法内容，无门禁的校验会误伤。
+		// 格式取 res.Format——requireResourceAccess 已经查出了 Resource，不再额外查询。
+		// 这里用硬口径而非「相对原文未退化」的宽松口径：交互场景应当立即报错，且用户
+		// 最终必须产出可导出的内容——遗留原文含裸 & 时，译文写 &amp; 才是导出需要的形态。
+		if markup.RequiresWellFormedTargets(res.Format) {
+			if verr := markup.ValidateFragment(target); verr != nil {
+				return nil, &SegmentMarkupError{Err: verr}
+			}
 		}
 		update.SetTargetText(target).SetStatus(SegmentStatusEdited).SetReviewedByID(actorUserID)
 		changed = true
