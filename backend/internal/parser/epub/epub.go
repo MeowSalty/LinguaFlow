@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"path"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ziputil"
@@ -282,8 +283,12 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 			// XHTML 章节 → 解析 DOM → 替换译文 → 序列化
 			translated, err := renderXHTML(file, segmentsByFile[filePath])
 			if err != nil {
-				// 降级：写入原始内容
-				slog.Debug("[epub:render] renderXHTML failed, fallback to copy", "file", file.Name, "error", err)
+				// 整章降级：写入原始内容。该路径意味着整章严格校验失败，读者将拿到
+				// 未翻译的原文而站点仍显示已翻译，属于静默数据丢失，必须以 Warn 暴露
+				// 给运维（对齐 docx.go 的 Error 级先例）。正常情况下上游预检与单段容错
+				// 已把坏译文拦下，此处仅作最后兜底。
+				slog.Warn("[epub:render] renderXHTML failed, whole chapter falls back to untranslated copy",
+					"file", file.Name, "error", err)
 				if cErr := ziputil.CopyEntryUnbounded(zipWriter, file); cErr != nil {
 					writeErr = fmt.Errorf("epub: copy fallback for %s: %w", file.Name, cErr)
 					break
@@ -313,6 +318,54 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 		}
 	}
 	return writeErr
+}
+
+// InspectTargets 在渲染前逐段预检译文片段的 XML 结构合法性。
+//
+// 判定条件与 renderXHTML 的替换条件同源（groupSegmentsByFile + pathReplacements）：
+// 仅考虑同时具备 epub_file 与 element_path 的段落，且只在译文非空但无法通过
+// markup.ValidateFragment 时报缺陷——译文为空时渲染端保留原节点内容，不丢任何
+// 译文，报了就是误报。与 Render 的降级判定共用 markup.ValidateFragment 这一口径，
+// 保证预检为空 ⇔ Render 不丢弃任何译文。
+//
+// 同一 (epub_file, element_path) 有多段时只看最后一段：renderXHTML 用 map 承载
+// 替换关系，后写覆盖前写，被覆盖的段根本不会进入输出，为它报缺陷就是无理由地
+// 阻断下载。
+func (*Parser) InspectTargets(doc *pipeline.Document) []parser.TargetDefect {
+	type slot struct {
+		id     string
+		target string
+	}
+	effective := make(map[string]slot)
+	order := make([]string, 0, len(doc.Segments))
+	for _, seg := range doc.Segments {
+		epubFile, _ := seg.Meta["epub_file"].(string)
+		elementPath, _ := seg.Meta["element_path"].(string)
+		if epubFile == "" || elementPath == "" {
+			continue
+		}
+		key := epubFile + " " + elementPath
+		if _, seen := effective[key]; !seen {
+			order = append(order, key)
+		}
+		effective[key] = slot{id: seg.ID, target: seg.Target}
+	}
+
+	var defects []parser.TargetDefect
+	for _, key := range order {
+		s := effective[key]
+		if s.target == "" {
+			continue
+		}
+		if err := markup.ValidateFragment(s.target); err != nil {
+			defects = append(defects, parser.TargetDefect{
+				SegmentID: s.id,
+				Location:  key,
+				Reason:    err.Error(),
+			})
+		}
+	}
+	return defects
 }
 
 // checkDRM 检测 EPUB 是否包含 DRM 保护。
@@ -347,9 +400,20 @@ func renderXHTML(file *zip.File, segments []pipeline.Segment) ([]byte, error) {
 		if target == "" {
 			target = seg.Source
 		}
-		if ep, ok := seg.Meta["element_path"].(string); ok {
-			pathReplacements[ep] = target
+		ep, ok := seg.Meta["element_path"].(string)
+		if !ok {
+			continue
 		}
+		if err := markup.ValidateFragment(target); err != nil {
+			// 译文结构损坏时直接放弃替换该元素：不写入映射时 processXMLTokens
+			// 走非替换直通分支，原始节点字节完整保留，整章仍然合法。不回退写入
+			// seg.Source——遗留数据的 source_text 本身也可能非法（提取期 CharData
+			// 未转义），写回去照样毒死整章。
+			slog.Warn("[epub:renderXHTML] skip segment with invalid markup, keep original content",
+				"file", file.Name, "element_path", ep, "segment_id", seg.ID, "error", err)
+			continue
+		}
+		pathReplacements[ep] = target
 	}
 	slog.Debug("[epub:renderXHTML] processing file", "file", file.Name, "segments", len(segments), "pathReplacements", len(pathReplacements))
 	for ep, tgt := range pathReplacements {
@@ -367,18 +431,39 @@ func renderXHTML(file *zip.File, segments []pipeline.Segment) ([]byte, error) {
 	}
 
 	// 安全网: 验证输出是 well-formed XML
-	verifier := xml.NewDecoder(bytes.NewReader(buf.Bytes()))
-	for {
-		_, err := verifier.Token()
-		if err == io.EOF {
-			break
+	if verr := wellFormedXML(buf.Bytes()); verr != nil {
+		// 原文本身就不是严格合法的 XML 时不回退。最常见的是 XHTML DTD 实体
+		// （&nbsp; 等）——浏览器与阅读器靠 DTD 认得它们，Go 的解码器不加载 DTD，
+		// 于是把它们判为非法。这类字节位于可提取块级元素之外，会被原样直通到
+		// 输出，让整章校验必然失败。此时回退成复制原文换不来更合法的输出，只会
+		// 白丢整章译文（正是本函数要防的事故）。保留渲染结果是安全的：每段插入
+		// 的译文都已单独通过 markup.ValidateFragment，其余字节原样直通，输出不
+		// 会比原文更坏。
+		if oerr := wellFormedXML(raw); oerr != nil {
+			slog.Warn("[epub:renderXHTML] original xhtml is not strict XML, keeping rendered output anyway",
+				"file", file.Name, "original_error", oerr, "rendered_error", verr)
+			return buf.Bytes(), nil
 		}
-		if err != nil {
-			return nil, fmt.Errorf("rendered xhtml %s is not well-formed: %w", file.Name, err)
-		}
+		return nil, fmt.Errorf("rendered xhtml %s is not well-formed: %w", file.Name, verr)
 	}
 
 	return buf.Bytes(), nil
+}
+
+// wellFormedXML 报告 data 是否为严格 well-formed 的 XML。
+// 与 markup.ValidateFragment 同口径（默认严格解码器，不开 AutoClose、不注入
+// HTML 实体表），因此「每段片段合法 + 原文合法」即可推出「整章合法」。
+func wellFormedXML(data []byte) error {
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	for {
+		_, err := dec.Token()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // processXMLTokens 使用原始字节直通方式处理 XML Token 流。

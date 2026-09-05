@@ -244,6 +244,9 @@ projectResourceDownloadTranslated:
       基于资源当前所有已翻译/已编辑的 segments，渲染并下载翻译后的文件。
       不依赖翻译任务状态，直接读取资源级别的最新翻译数据。
       如果没有任何已翻译的段落，返回 409 Conflict。
+      渲染前会预检译文标签结构：存在无法原样嵌入导出文档的译文时（如标签未闭合）
+      返回 409 Conflict，detail 给出缺陷段落编号与原因。此时不写出任何文件内容，
+      避免把「该章整章回退为原文」的残缺结果静默交付给用户。
     security:
       - bearerAuth: []
     responses:
