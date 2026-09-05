@@ -266,15 +266,36 @@ func extractSegmentsFromXHTML(data []byte, epubFilePath string) ([]pipeline.Segm
 		case xml.CharData:
 			text := string(t)
 			if collecting {
-				innerHTML.WriteString(text)
+				innerHTML.WriteString(escapeXMLText(text))
 			}
 			if inTocLink {
-				tocLinkText.WriteString(text)
+				tocLinkText.WriteString(escapeXMLText(text))
 			}
 		}
 	}
 
 	return segments, nil
+}
+
+// xmlTextEscaper 转义 XML 文本上下文中的保留字符。
+// 刻意不使用 html.EscapeString：它会把引号也转义成 &#34;/&#39;，而引号在
+// 文本节点中本就合法，转义只会无谓污染提取出的文本。
+var xmlTextEscaper = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+)
+
+// escapeXMLText 把解码器还原出来的 CharData 重新转义为合法 XML 文本。
+//
+// decoder 配置了 HTMLEntity，原文里的 &amp; 会被解码成裸 &，若不转义直接写进
+// source_text，渲染写回时就是非法 XML，整章校验失败并回退为原文。经此转义后：
+//   - source_text 是 well-formed 片段，空译文回退原文时整章仍合法；
+//   - LLM 看到的是 &amp; 并会照抄，译文同样保持合法。
+//
+// writeStartTag 的属性值转义不经过这里：属性上下文确实需要转义引号。
+func escapeXMLText(s string) string {
+	return xmlTextEscaper.Replace(s)
 }
 
 // writeStartTag 将 StartElement 序列化为 HTML 开始标签字符串。
