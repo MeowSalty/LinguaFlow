@@ -9,6 +9,8 @@
  *   $env:AI_BASE_URL="http://axonhub.home.server/v1"
  *   $env:AI_API_KEY="ah-xxx"
  *   $env:AI_MODEL="deepseek-v4-pro"
+ *   # 可选：流式空闲超时毫秒数，默认 90000
+ *   $env:AI_IDLE_TIMEOUT_MS="90000"
  *   # 可选：不设则自动用最近两个 tag
  *   $env:VERSION="0.2.0"
  *   $env:PREV_VERSION="v0.1.0"
@@ -256,6 +258,7 @@ async function callAI(prompt) {
   }
 
   const url = baseUrl + '/chat/completions';
+  const idleTimeoutMs = Number(process.env.AI_IDLE_TIMEOUT_MS) || 90_000;
   const maxRetries = 3;
   let lastError;
 
@@ -263,41 +266,89 @@ async function callAI(prompt) {
     const t0 = Date.now();
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 300000);
-      let response;
+      // 滑动空闲超时而非固定总时长：流式下模型边生成边推送，总耗时可达数分钟，
+      // 但 90 秒内没有任何新数据（含响应头/首块迟迟不到）就视为挂死，中止交给下方重试
+      let idleTimer;
+      const resetIdle = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => controller.abort(), idleTimeoutMs);
+      };
+      resetIdle();
+
+      let content = '';
+      let usage;
       try {
-        response = await fetch(url, {
+        const response = await fetch(url, {
           method: 'POST',
           headers,
           body: JSON.stringify({
             model,
             messages: [{ role: 'user', content: prompt }],
             temperature: 0.6,
+            // 流式让网关立刻开始返回数据，避免源站生成慢时被 Cloudflare 524（125s 无响应）掐断
+            stream: true,
           }),
           signal: controller.signal,
         });
+        resetIdle(); // 响应头到达也算一次进展
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+        }
+
+        if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
+          const decoder = new TextDecoder();
+          const reader = response.body.getReader();
+          // SSE 事件按行分隔，一个网络块可能截断在行中间，残片留待下一个块拼接
+          let buffer = '';
+          const handleLine = (line) => {
+            if (!line.startsWith('data:')) return; // 空行与 ": keepalive" 注释
+            const payload = line.slice(5).trim();
+            if (!payload || payload === '[DONE]') return;
+            try {
+              const data = JSON.parse(payload);
+              content += data.choices?.[0]?.delta?.content ?? '';
+              if (data.usage) usage = data.usage;
+            } catch {
+              console.warn(`忽略无法解析的 SSE 数据: ${payload.slice(0, 100)}`);
+            }
+          };
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            resetIdle();
+            buffer += decoder.decode(value, { stream: true });
+            let nl;
+            while ((nl = buffer.indexOf('\n')) !== -1) {
+              handleLine(buffer.slice(0, nl).replace(/\r$/, ''));
+              buffer = buffer.slice(nl + 1);
+            }
+          }
+          handleLine(buffer + decoder.decode()); // 处理流结束时无换行结尾的残余
+        } else {
+          // 网关忽略 stream 参数时仍整体返回 JSON，按原非流式逻辑解析
+          const data = await response.json();
+          content = data.choices[0].message.content;
+          usage = data.usage;
+        }
       } finally {
-        clearTimeout(timeout);
+        clearTimeout(idleTimer);
       }
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
-      }
-
-      const data = await response.json();
-      let content = data.choices[0].message.content;
       content = content.replace(/^\s*```(?:markdown|md)?\s*\n/i, '').replace(/\n\s*```\s*$/, '');
+      if (!content.trim()) {
+        throw new Error('AI 返回内容为空');
+      }
 
-      const usage = data.usage;
       console.log(
-        `AI 已生成 Release Notes（第 ${attempt} 次，${Date.now() - t0}ms）` +
+        `AI 已生成 Release Notes（第 ${attempt} 次，${Date.now() - t0}ms，${content.length} 字符）` +
           `，prompt_tokens: ${usage?.prompt_tokens ?? 'n/a'}` +
           `，completion_tokens: ${usage?.completion_tokens ?? 'n/a'}` +
           `，total_tokens: ${usage?.total_tokens ?? 'n/a'}`,
       );
       return content;
     } catch (err) {
-      const reason = err.name === 'AbortError' ? '请求超时（>300s）' : err.message;
+      const reason = err.name === 'AbortError' ? `流式空闲超时（>${idleTimeoutMs / 1000}s 无数据）` : err.message;
       console.warn(`第 ${attempt}/${maxRetries} 次尝试失败: ${reason}`);
       lastError = new Error(reason);
       if (attempt < maxRetries) {
