@@ -81,6 +81,10 @@
 段落编辑入口仅支持修改译文与批注，不能改动源文。依赖长度比阈值、术语表或多段/文档级比对的检查（`length_ratio`、`forbidden_term`、`term_inconsistency`、`duplicate`、`duplicate_source_divergence`）不在即时 QA 范围内，仍由翻译轮次或后续审校处理。
 :::
 
+::: warning EPUB 译文保存前的结构守卫
+EPUB 资源的译文会先做**结构合法性校验**：译文必须是能嵌入 XHTML 的合法 XML 片段（标签成对闭合、嵌套正确，`&` 等特殊字符不能裸写）。结构非法的译文会被**拒绝保存**，不会落库。这是为了让每一份导出的 EPUB 都能正常打开——见 [下载与导出 · 结构预检](#结构预检)。
+:::
+
 ## 质量检测
 
 LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及五类机制：
@@ -136,14 +140,14 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 | `forbidden_term`           | 命中词表禁译（forbidden）条目，译文中却出现 target                   | error    | ❌ 硬规则 |        |
 | `term_inconsistency`       | 命中强制（mandatory）条目，但译文未用 target 译法                    | warning  | ❌ 硬规则 |        |
 | `leftover_placeholder`     | 译文中残留 `__LF_*` 占位符（缺失、重复或字形偏移等三类汇总）        | error    | ❌ 硬规则 |        |
-| `xml_tag_mismatch`         | 源/译 XML 标签多重集合不一致（标签爆裂或丢失）                      | error    | ❌ 硬规则 |        |
+| `xml_tag_mismatch`         | 源/译 XML 标签多重集合不一致（标签爆裂或丢失），**或译文 XML 结构损坏**（标签未闭合或嵌套错误，即使标签数量相同也能查出）                      | error    | ❌ 硬规则 |        |
 
 `source_residual` 按语言对自动启用；源语言为 `auto` 时不生效。19 项 per-batch checker 可在 `qa.checks` 中按名启用/排除；`duplicate_source_divergence` 为文档级检查（跨段对比），始终随 QA 引擎运行，不必也不能在 `qa.checks` 中排除。`ruby_restore_incomplete` / `ruby_tag_loss` 由翻译轮的注音守恒逻辑产出，不属 `qa.checks` 可选名，但会随段落问题进入筛选与统计。
 
 `punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss` 与 `punctuation_pairing` 四者互补不重复：源文某类包裹标点在译文中**完全缺失**时报 `punctuation_missing`；译文多出源文所无的**成对**包裹标点（疑似多译出）时报 `punctuation_surplus`；译文仍有该类标点但**配对不平衡**时才报 `punctuation_pairing`；源文**整段被成对引号包裹**、译文首尾完全丢失外层引号时报 `punctuation_wrap_loss`（补 `punctuation_missing` 对「内层新增引号致计数非零」的盲区）。`punctuation_missing` 与 `punctuation_wrap_loss` 报出的安全子集可由执行计划的 [本地改写轮次](/zh/guide/translation-config#执行计划) 自动修复（另有 `width_mix_normalize` 规则修复全/半角混用），详见 [流水线与原理 · 本地改写](/zh/guide/pipeline#本地改写-correct)。
 
 ::: tip 原文结构不会被误报为质量问题
-HTML 标签、链接等原文结构在译文中会被还原回来，但 QA 引擎会把这些区段标为**保护区**，标点配对、空白、全/半角混用等 checker 在保护区上**自动跳过**——只检查译文真正写出来的文字。所以一份满是 HTML 标签的译文不会再因为标签里的英文符号被报一堆 `punctuation_pairing` / `width_mix`。`xml_tag_mismatch` 比对标签时还会**排除 `<ruby>` 注音标签族**，避免与 Ruby 还原策略冲突。详见 [流水线与原理 · 保护区](/zh/guide/pipeline#保护区-不被原文结构干扰)。
+HTML 标签、链接等原文结构在译文中会被还原回来，但 QA 引擎会把这些区段标为**保护区**，标点配对、空白、全/半角混用等 checker 在保护区上**自动跳过**——只检查译文真正写出来的文字。所以一份满是 HTML 标签的译文不会再因为标签里的英文符号被报一堆 `punctuation_pairing` / `width_mix`。`xml_tag_mismatch` 比对标签时还会**排除 `<ruby>` 注音标签族**，避免与 Ruby 还原策略冲突；但排除只针对标签集合比对，这些标签的**未闭合或嵌套错误**仍会被结构检查发现。详见 [流水线与原理 · 保护区](/zh/guide/pipeline#保护区-不被原文结构干扰)。
 :::
 
 ::: tip 词表上的禁译 / 强制
@@ -348,9 +352,30 @@ qa:
 替换只作用于译文。被替换的段落状态会变为「已编辑」，并自动重新执行规则质检；替换后译文为空的段落会被跳过，不会产生空译文。
 :::
 
+::: warning EPUB 译文的替换守卫
+对 EPUB 资源，预览会**排除**替换后将产生非法 XML 结构的段落（如替换文本破坏了标签闭合）；实际应用时这些段落不会被修改，而是计入**跳过**，跳过原因为 `invalid_markup`——跳过它们是为了避免导出时整章译文降级为原文（见 [结构预检](#结构预检)）。其他格式不受影响。
+:::
+
 ### 撤销替换
 
 抽屉底部的 **撤销上次替换** 可回滚最近一次替换，再次撤销相当于重做。已被后续编辑的段落会被跳过。撤销历史在服务端保留一段时间（默认 90 天，由 `server.revision_retention` 配置，见 [配置文件与环境变量](/zh/guide/configuration#server-—-服务器)），超过保留期或切换资源后无法再撤销。接口契约见 [API 概述 · 段落搜索替换](/zh/api/#_13-段落搜索替换-search-replace)。
+
+## 下载与导出
+
+在资源详情页（或工作区的资源浏览入口）可以**下载翻译结果**，把译文写回原格式导出。导出对多数格式是即时完成的；EPUB 则有一道额外的**结构预检**。
+
+### 结构预检
+
+EPUB 的译文最终要嵌回原书的 XHTML，译文必须是合法的 XML 片段。因此下载 EPUB 译文前，服务端会对资源内**全部译文**做一次结构校验：
+
+- **全部合法** → 正常导出文件；
+- **存在任一结构缺陷**（标签未闭合、嵌套交错、裸 `&` 等）→ **不输出任何文件**，弹出「下载译文失败」对话框，给出缺陷段落总数、最多 5 个段落编号，以及首个错误的具体位置和原因。
+
+看到失败对话框时，按给出的段落编号到段落编辑中修正译文（通常是标签没成对闭合），再重新下载即可。上游各写入环节已尽量拦住非法译文（手动编辑与 [单段试译](/zh/guide/translation-config#单段试译) 应用时直接拒绝保存、[搜索替换](#搜索替换) 与[术语同步](/zh/guide/glossary#术语同步更新) 自动跳过、翻译/校对/修订轮次拒绝结构退化的改写），预检是最后一道兜底。
+
+::: tip 只有 EPUB 有预检
+TXT 等纯文本格式没有标签结构，写入与导出均不做此校验，行为不变。
+:::
 
 ## 一键审批
 
