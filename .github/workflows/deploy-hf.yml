@@ -23,8 +23,6 @@ jobs:
           TAG: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
 
           # ghcr 镜像 tag 不带 v 前缀（如 v0.10.0 -> 0.10.0）
           IMAGE_TAG="${TAG#v}"
@@ -69,6 +67,9 @@ jobs:
           EOF
 
           git init -b main
+          # 身份限定在孤儿仓库内：本地重跑脚本验证时不会改写全局 git 配置
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
           git add Dockerfile README.md
           git commit -m "chore: deploy ${TAG}"
 
