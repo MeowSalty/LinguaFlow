@@ -275,6 +275,7 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/se
 - 被替换的段落状态置为 `edited`，并重新执行规则质检
 - 撤销按 `operation_id` 回滚；替换后又被人工编辑过的段落会跳过（`target_diverged`）
 - 替换历史超过保留期返回 404，全部段落均已变更、无可撤销内容返回 409；保留时长由 `server.revision_retention` 控制（默认 90 天）
+- EPUB 资源中，替换后将产生非法 XML 结构的段落在预览中即被排除；应用时不会修改这些段落，而是在跳过明细中以原因 `invalid_markup` 返回
 
 另：段落列表端点 `GET /projects/{projectId}/resources/{resourceId}/segments` 的搜索还支持 `search_field`（`source` / `target` / `both`，默认 `both`）、`case_sensitive`（默认 `true`）与 `include_total`（默认 `false`，为 `true` 时响应附带满足过滤条件的 `total` 总数）查询参数。
 
@@ -328,6 +329,16 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/qa-recheck \
 | 账号禁用         | `urn:linguaflow:user-inactive`              |
 | 登录密码错误     | `urn:linguaflow:invalid-credentials`        |
 | 取消/重试状态不符 | `urn:linguaflow:conflict`                  |
+| 译文结构非法（EPUB） | `urn:linguaflow:invalid-target-markup`   |
+
+::: tip EPUB 译文结构守卫
+EPUB 资源的译文必须是能嵌入 XHTML 的合法 XML 片段。两类接口会返回 409 Conflict（`type: urn:linguaflow:invalid-target-markup`）之外的细分行为：
+
+- **写入类接口**（段落编辑、单段试译/修订预览应用）遇到结构非法译文：返回 **400**，不落库，`detail` 说明具体语法错误
+- **下载翻译结果**（`DownloadTranslatedResourceFile`）：渲染前对全部译文预检，存在缺陷时返回 **409**、不输出文件，`detail` 给出缺陷段落总数、最多 5 个段落编号及首个错误的位置与原因
+
+产品侧行为见 [翻译审校 · 结构预检](/zh/guide/review#结构预检)。
+:::
 
 ::: tip 任务取消 / 重试的前置校验
 `CancelJob` / `RetryJob` 增加了状态前置校验，不满足时返回 409 Conflict（`type: urn:linguaflow:conflict`）：取消非可取消状态的任务（「任务当前状态不可取消」）、重试未失败的任务（「任务未失败，无法重试」）、无可重试失败资源（「没有可重试的失败资源」）。

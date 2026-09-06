@@ -281,7 +281,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 | `forbidden_term`              | 命中禁译词条仍出现                             |
 | `term_inconsistency`          | 命中强制词条未用 target                        |
 | `leftover_placeholder`        | 译文残留占位符                                 |
-| `xml_tag_mismatch`           | XML 标签集合不一致                             |
+| `xml_tag_mismatch`           | XML 标签集合不一致，或译文 XML 结构损坏（标签未闭合/嵌套错误） |
 
 源语残留（`source_residual`）随质量检测引擎自动启用，无单独开关；源语言为 `auto` 时不生效。审校侧说明见 [翻译审校](/zh/guide/review#质量检测)。
 
