@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 )
 
@@ -2045,5 +2046,332 @@ func TestXHTMLTOCIntegration(t *testing.T) {
 	}
 	if ch2Title != "一章 一年次の春に" {
 		t.Errorf("ch2 epub_chapter_title = %q, want %q", ch2Title, "一章　一年次の春に")
+	}
+}
+
+// ==========================================================================
+// 译文片段容错测试（渲染端单段容错 + 预检 + 提取端转义）
+// ==========================================================================
+
+// readRenderedEntry 从渲染后的 ZIP 中读取指定条目的文本内容。
+func readRenderedEntry(t *testing.T, zr *zip.Reader, name string) string {
+	t.Helper()
+	for _, f := range zr.File {
+		if f.Name != name {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open %s: %v", name, err)
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		return string(data)
+	}
+	t.Fatalf("entry %q not found in rendered zip", name)
+	return ""
+}
+
+// assertStrictXMLWellFormed 用默认严格模式解码器校验 data 是 well-formed XML。
+// 口径与 renderXHTML 的整章安全网一致：Strict=true、无 HTML 实体表、不自动闭合。
+func assertStrictXMLWellFormed(t *testing.T, data []byte) {
+	t.Helper()
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	for {
+		_, err := dec.Token()
+		if err == io.EOF {
+			return
+		}
+		if err != nil {
+			t.Fatalf("输出不是 well-formed XML: %v\n%s", err, data)
+		}
+	}
+}
+
+// threeParagraphChapter 是「两个好段夹一个坏段」测试共用的章节内容。
+const threeParagraphChapter = "<p>夜明けの空</p><p><ruby>暁の雷帝<rt>れいさい</rt></ruby>の帰還</p><p>物語は続く</p>"
+
+// brokenRubyTarget 是缺 </ruby> 的坏译文：第 2 段填入它模拟单段结构损坏。
+const brokenRubyTarget = "「等级６：<ruby>劣化雷神皇<rt>雷瑟</rt>！」"
+
+// TestRenderKeepsOutputWhenOriginalIsNotStrictXML 回归：原文自身不是严格 XML 时
+// 不得回退整章。
+//
+// XHTML DTD 实体（&nbsp; 等）位于可提取块级元素之外时会被原样直通到输出，
+// 而 Go 的解码器不加载 DTD、把它判为非法，于是整章安全网必然失败。修复前这会
+// 让整章降级为原文复制、白丢全章译文——与坏译文段同一个用户可见症状，但触发
+// 条件是极常见的原文写法，与译文质量无关。修复后：输出不比原文更坏即保留。
+func TestRenderKeepsOutputWhenOriginalIsNotStrictXML(t *testing.T) {
+	original := createTestEPUB(t, []testChapter{{
+		filename: "OEBPS/ch1.xhtml",
+		// <div> 不是可提取块级元素，其中的 &nbsp; 会原样直通到输出
+		content: "<p>夜明けの空</p><div>A&nbsp;B</div>",
+		id:      "ch1",
+	}})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(original), "epub")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(doc.Segments))
+	}
+	doc.Segments[0].Target = "黎明的天空"
+
+	var rendered bytes.Buffer
+	if err := p.Render(context.Background(), doc, bytes.NewReader(original), &rendered); err != nil {
+		t.Fatalf("Render error: %v", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(rendered.Bytes()), int64(rendered.Len()))
+	if err != nil {
+		t.Fatalf("open rendered zip: %v", err)
+	}
+	chapter := readRenderedEntry(t, zr, "OEBPS/ch1.xhtml")
+
+	if !strings.Contains(chapter, "黎明的天空") {
+		t.Errorf("译文丢失（整章被回退为原文）:\n%s", chapter)
+	}
+	// 原文的实体原样保留：渲染没有额外改坏任何东西
+	if !strings.Contains(chapter, "A&nbsp;B") {
+		t.Errorf("原文实体应原样保留:\n%s", chapter)
+	}
+}
+
+// TestRenderBrokenSegmentKeepsChapterIntact 核心回归：单个坏译文段不再毒死整章。
+//
+// 修复前：第 2 段译文缺 </ruby>，整章严格校验失败，Render 把该章降级为原文复制，
+// 第 1、3 段的完好译文一并丢失（685 段完好译文因 1 段坏数据全部丢失的形态）。
+// 修复后：坏段保留原文，好段译文照常写入，整章仍然合法。
+func TestRenderBrokenSegmentKeepsChapterIntact(t *testing.T) {
+	original := createTestEPUB(t, []testChapter{
+		{filename: "OEBPS/ch1.xhtml", content: threeParagraphChapter, id: "ch1"},
+	})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(original), "epub")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 3 {
+		t.Fatalf("expected 3 segments, got %d", len(doc.Segments))
+	}
+
+	doc.Segments[0].Target = "黎明的天空"
+	doc.Segments[1].Target = brokenRubyTarget
+	doc.Segments[2].Target = "故事仍将继续"
+
+	var rendered bytes.Buffer
+	if err := p.Render(context.Background(), doc, bytes.NewReader(original), &rendered); err != nil {
+		t.Fatalf("Render error: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(rendered.Bytes()), int64(rendered.Len()))
+	if err != nil {
+		t.Fatalf("open rendered zip: %v", err)
+	}
+	chapter := readRenderedEntry(t, zr, "OEBPS/ch1.xhtml")
+
+	// 整章必须仍是 well-formed XML（严格模式）
+	assertStrictXMLWellFormed(t, []byte(chapter))
+
+	// 好段的译文必须出现在输出中（修复前它们会随整章回退而全部丢失）
+	if !strings.Contains(chapter, "黎明的天空") {
+		t.Errorf("第 1 段译文丢失:\n%s", chapter)
+	}
+	if !strings.Contains(chapter, "故事仍将继续") {
+		t.Errorf("第 3 段译文丢失:\n%s", chapter)
+	}
+
+	// 坏段保留原文（原文子串「の帰還」不在坏译文中，二者可区分）
+	if !strings.Contains(chapter, "の帰還") {
+		t.Errorf("坏译文段应保留原文:\n%s", chapter)
+	}
+	// 坏译文不得被写入输出
+	if strings.Contains(chapter, brokenRubyTarget) {
+		t.Errorf("坏译文不应出现在输出中:\n%s", chapter)
+	}
+}
+
+// TestInspectTargetsReportsBrokenRubyTarget 验证 InspectTargets 渲染前预检：
+// 坏译文恰好报 1 条缺陷且定位信息完整；全部合法或译文为空时不误报。
+func TestInspectTargetsReportsBrokenRubyTarget(t *testing.T) {
+	original := createTestEPUB(t, []testChapter{
+		{filename: "OEBPS/ch1.xhtml", content: threeParagraphChapter, id: "ch1"},
+	})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(original), "epub")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 3 {
+		t.Fatalf("expected 3 segments, got %d", len(doc.Segments))
+	}
+
+	badSeg := doc.Segments[1]
+	doc.Segments[1].Target = brokenRubyTarget
+
+	defects := p.InspectTargets(doc)
+	if len(defects) != 1 {
+		t.Fatalf("expected 1 defect, got %d: %+v", len(defects), defects)
+	}
+	d := defects[0]
+	if d.SegmentID != badSeg.ID {
+		t.Errorf("SegmentID = %q, want %q", d.SegmentID, badSeg.ID)
+	}
+	elementPath, _ := badSeg.Meta["element_path"].(string)
+	if !strings.Contains(d.Location, "OEBPS/ch1.xhtml") {
+		t.Errorf("Location %q 应包含 EPUB 内文件名", d.Location)
+	}
+	if elementPath == "" || !strings.Contains(d.Location, elementPath) {
+		t.Errorf("Location %q 应包含 element_path %q", d.Location, elementPath)
+	}
+	if d.Reason == "" {
+		t.Error("Reason 不应为空")
+	}
+
+	// 全部译文合法 → 无缺陷
+	doc.Segments[0].Target = "黎明的天空"
+	doc.Segments[1].Target = "黎明雷帝的归来"
+	doc.Segments[2].Target = "故事仍将继续"
+	if defects := p.InspectTargets(doc); len(defects) != 0 {
+		t.Errorf("全部译文合法时应无缺陷, got %+v", defects)
+	}
+
+	// 译文为空不算缺陷：渲染端会保留原节点内容，报了就是误报
+	doc.Segments[0].Target = "黎明的天空"
+	doc.Segments[1].Target = ""
+	doc.Segments[2].Target = ""
+	if defects := p.InspectTargets(doc); len(defects) != 0 {
+		t.Errorf("空译文不应算缺陷, got %+v", defects)
+	}
+}
+
+// TestInspectTargetsIgnoresOverriddenDuplicatePath 验证同一 element_path 有多段时
+// 只看最后一段：renderXHTML 用 map 承载替换关系、后写覆盖前写，被覆盖的段根本
+// 不会进入输出，为它报缺陷就是无理由地阻断整本书的下载。
+func TestInspectTargetsIgnoresOverriddenDuplicatePath(t *testing.T) {
+	original := createTestEPUB(t, []testChapter{
+		{filename: "OEBPS/ch1.xhtml", content: "<p>夜明けの空</p>", id: "ch1"},
+	})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(original), "epub")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(doc.Segments))
+	}
+
+	// 坏段在前、好段在后（同 epub_file + element_path）：渲染时好段覆盖坏段
+	bad := doc.Segments[0]
+	bad.ID = "stale"
+	bad.Target = brokenRubyTarget
+	good := doc.Segments[0]
+	good.Target = "黎明的天空"
+	doc.Segments = []pipeline.Segment{bad, good}
+
+	if defects := p.InspectTargets(doc); len(defects) != 0 {
+		t.Errorf("被覆盖的坏段不应报缺陷, got %+v", defects)
+	}
+
+	// 反向顺序：坏段在后即真正生效，必须报出来
+	doc.Segments = []pipeline.Segment{good, bad}
+	defects := p.InspectTargets(doc)
+	if len(defects) != 1 {
+		t.Fatalf("生效的坏段应报 1 条缺陷, got %d: %+v", len(defects), defects)
+	}
+	if defects[0].SegmentID != "stale" {
+		t.Errorf("SegmentID = %q, want %q", defects[0].SegmentID, "stale")
+	}
+}
+
+// TestRenderEscapesAmpersandInExtractedSource 验证提取端把解码后的 CharData
+// 重新转义：原文 A &amp; B &lt; C 提取出的 Source 保持转义形态，是合法片段；
+// 空译文往返后整章仍 well-formed 且保留 &amp;。修复前裸 & 会让整章校验失败。
+func TestRenderEscapesAmpersandInExtractedSource(t *testing.T) {
+	original := createTestEPUB(t, []testChapter{
+		{filename: "OEBPS/ch1.xhtml", content: "<p>A &amp; B &lt; C</p>", id: "ch1"},
+	})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(original), "epub")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(doc.Segments))
+	}
+
+	// Source 中 & 与 < 应保持转义形态
+	want := "A &amp; B &lt; C"
+	if doc.Segments[0].Source != want {
+		t.Errorf("Source = %q, want %q", doc.Segments[0].Source, want)
+	}
+	if err := markup.ValidateFragment(doc.Segments[0].Source); err != nil {
+		t.Fatalf("提取出的 Source 应为合法 XML 片段: %v", err)
+	}
+
+	// 空译文往返：不填任何 Target 直接 Render
+	var rendered bytes.Buffer
+	if err := p.Render(context.Background(), doc, bytes.NewReader(original), &rendered); err != nil {
+		t.Fatalf("Render error: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(rendered.Bytes()), int64(rendered.Len()))
+	if err != nil {
+		t.Fatalf("open rendered zip: %v", err)
+	}
+	chapter := readRenderedEntry(t, zr, "OEBPS/ch1.xhtml")
+
+	assertStrictXMLWellFormed(t, []byte(chapter))
+	if !strings.Contains(chapter, "&amp;") {
+		t.Errorf("输出应保留 &amp; 转义形态:\n%s", chapter)
+	}
+	if !strings.Contains(chapter, "<p>A &amp; B &lt; C</p>") {
+		t.Errorf("原文段落应原样保留:\n%s", chapter)
+	}
+}
+
+// TestRenderRejectsInterleavedRubyNesting 验证交错嵌套的 ruby 译文被拦下：
+// 标签多重集与源文相同（ruby/rt 各一对）但嵌套非法，是 LLM/注音还原实证过的坏法。
+// 该段不被替换，整章仍然 well-formed。
+func TestRenderRejectsInterleavedRubyNesting(t *testing.T) {
+	xhtml := `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body><p><ruby>暁の雷帝<rt>れいさい</rt></ruby>の帰還</p></body>
+</html>`
+
+	_, f := createTestZipFile(t, "OEBPS/ch1.xhtml", xhtml)
+	segs := extractSegments(t, xhtml, "OEBPS/ch1.xhtml")
+	if len(segs) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(segs))
+	}
+
+	interleaved := "<ruby>黎明雷帝<rt>れいさい</ruby></rt>"
+	if err := markup.ValidateFragment(interleaved); err == nil {
+		t.Fatal("交错嵌套的 ruby 应被判为非法片段")
+	}
+
+	segs[0].Target = interleaved
+	rendered, err := renderXHTML(f, segs)
+	if err != nil {
+		t.Fatalf("renderXHTML error: %v", err)
+	}
+	output := string(rendered)
+
+	assertStrictXMLWellFormed(t, rendered)
+	// 原文保留（「の帰還」只出现在原文中）
+	if !strings.Contains(output, "の帰還") {
+		t.Errorf("非法译文段应保留原文:\n%s", output)
+	}
+	// 译文未被替换
+	if strings.Contains(output, "黎明雷帝") {
+		t.Errorf("交错嵌套的译文不应被写入:\n%s", output)
 	}
 }

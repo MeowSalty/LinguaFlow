@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -1071,4 +1072,93 @@ func TestBuildQualityPredicateParenthesized(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestUpdateResourceSegmentMarkupGuard 验证手动编辑译文的写入守卫：
+//   - epub 等译文会被原样嵌入 XML 文档的格式，结构非法的译文在写入边界即被拒绝，
+//     且数据库不受影响（放行会让导出时整章降级为原文）；
+//   - txt 等纯文本格式不受门禁影响，译文里的 <color=red>、裸 & 是合法内容；
+//   - epub 上合法（含平衡 ruby 标签）的译文照常保存。
+func TestUpdateResourceSegmentMarkupGuard(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	// 缺 </ruby> 的损坏译文，epub 上必须被拒绝。
+	brokenTarget := "「等级６：<ruby>劣化雷神皇<rt>雷瑟</rt>！」"
+
+	setup := func(t *testing.T, format string) (*ent.Client, *SegmentService, context.Context, *ent.User, *ent.Project, *ent.Resource, *ent.Segment) {
+		client := testClient(t)
+		ctx := context.Background()
+		user := createTestUser(t, client, "seg-markup-user")
+		project := createTestProject(t, client, "seg-markup-proj", user.ID)
+		var res *ent.Resource
+		if format == "epub" {
+			res = createTestEpubResource(t, client, project.ID, "chapters/markup.epub")
+		} else {
+			res = createTestResource(t, client, project.ID, "chapters/markup.txt")
+		}
+		seg := createTestSegmentWithTarget(t, client, res.ID, 0, "Level 6.", "旧译文", nil)
+		svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+		return client, svc, ctx, user, project, res, seg
+	}
+
+	t.Run("epub_rejects_broken_target", func(t *testing.T) {
+		client, svc, ctx, user, project, res, seg := setup(t, "epub")
+		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+			TargetText: strPtr(brokenTarget),
+		})
+		if updated != nil {
+			t.Fatalf("expected error, got updated segment %d", updated.ID)
+		}
+		if !errors.Is(err, ErrSegmentMarkupInvalid) {
+			t.Fatalf("err=%v want ErrSegmentMarkupInvalid", err)
+		}
+		var markupErr *SegmentMarkupError
+		if !errors.As(err, &markupErr) {
+			t.Fatalf("err=%T does not unwrap to *SegmentMarkupError", err)
+		}
+		// handler 用它拼装可读的 problem detail，必须携带具体语法错误。
+		if markupErr.Err == nil {
+			t.Fatal("SegmentMarkupError.Err is nil, handler cannot build a readable detail")
+		}
+		// 写入被拒后数据库里的译文不得被改动。
+		dbSeg, err := client.Segment.Get(ctx, seg.ID)
+		if err != nil {
+			t.Fatalf("reload segment: %v", err)
+		}
+		if dbSeg.TargetText == nil || *dbSeg.TargetText != "旧译文" {
+			t.Fatalf("target_text in DB=%v want %q (unchanged)", dbSeg.TargetText, "旧译文")
+		}
+	})
+
+	t.Run("txt_allows_non_xml_target", func(t *testing.T) {
+		_, svc, ctx, user, project, res, seg := setup(t, "txt")
+		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+			TargetText: strPtr(brokenTarget),
+		})
+		if err != nil {
+			t.Fatalf("UpdateResourceSegment on txt resource: %v", err)
+		}
+		if updated.TargetText == nil || *updated.TargetText != brokenTarget {
+			t.Fatalf("target_text=%v want %q", updated.TargetText, brokenTarget)
+		}
+		if updated.Status != SegmentStatusEdited {
+			t.Fatalf("status=%q want %q", updated.Status, SegmentStatusEdited)
+		}
+	})
+
+	t.Run("epub_allows_balanced_target", func(t *testing.T) {
+		_, svc, ctx, user, project, res, seg := setup(t, "epub")
+		target := "<ruby>劣化雷神皇<rt>れいさ</rt></ruby>"
+		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
+			TargetText: strPtr(target),
+		})
+		if err != nil {
+			t.Fatalf("UpdateResourceSegment with balanced ruby: %v", err)
+		}
+		if updated.TargetText == nil || *updated.TargetText != target {
+			t.Fatalf("target_text=%v want %q", updated.TargetText, target)
+		}
+		if updated.Status != SegmentStatusEdited {
+			t.Fatalf("status=%q want %q", updated.Status, SegmentStatusEdited)
+		}
+	})
 }

@@ -276,6 +276,100 @@ func TestCorrectHandler_RuleNoopPreservesIssues(t *testing.T) {
 	}
 }
 
+// newMarkupCorrectHandler 构造启用真实 width_mix_normalize 规则的 CorrectHandler，
+// 构造方式与 newWidthMixHandler 同构（Checks=ConsumedIssueCodes、TargetLang="zh"）。
+func newMarkupCorrectHandler() *CorrectHandler {
+	rules := correct.New(correct.Config{
+		Rules: []correct.RuleConfig{
+			{Name: correct.RuleWidthMixNormalize, Enabled: true},
+		},
+	})
+	return &CorrectHandler{
+		Rules: rules,
+		Idempotency: qa.NewEngine(qa.Config{
+			Enabled:    true,
+			Checks:     rules.ConsumedIssueCodes(),
+			TargetLang: "zh",
+		}, quietLogger()),
+		Logger: quietLogger(),
+	}
+}
+
+// markupGuardOldTarget 是改写前结构合法的译文：平衡 ruby + 全角字母/全角小于号。
+// 全角 ＜（U+FF1C）在 XML CharData 中是普通字符，片段合法。
+const markupGuardOldTarget = `<ruby>雷神<rt>らいじん</rt></ruby>Ａ ＜ Ｂ`
+
+// markupGuardNewTarget 是 width_mix 规则把 U+FF01–U+FF5E 全部转回半角后的结果：
+// ＜ 变成裸 <，`< ` 在 CharData 中非法，片段损坏。
+const markupGuardNewTarget = `<ruby>雷神<rt>らいじん</rt></ruby>A < B`
+
+// markupGuardWidthMixIssues 构造触发 width_mix 规则的 pending issue；
+// Span.MatchedText 首 rune 为全角 ＜，规则据此反推为拉丁方向（全角→半角）。
+func markupGuardWidthMixIssues() []qa.QualityIssue {
+	return []qa.QualityIssue{{
+		Code:     qa.CheckWidthMix,
+		Severity: qa.SeverityWarning,
+		Span:     &qa.Span{MatchedText: "＜"},
+	}}
+}
+
+// 结构守卫：改写把合法译文改坏（全角 ＜ 被规则转成裸 <，XML 片段损坏）时必须回滚，
+// Target 回到改写前的值，issue 以未改写形态保留。
+func TestCorrectHandler_MarkupRegressionReverts(t *testing.T) {
+	h := newMarkupCorrectHandler()
+	doc := &Document{
+		Format: "epub",
+		Segments: []model.Segment{
+			{
+				ID:     "0",
+				Source: "「雷神Ａ ＜ Ｂ」",
+				Target: markupGuardOldTarget,
+				Issues: markupGuardWidthMixIssues(),
+				Status: "translated",
+			},
+		},
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if got := doc.Segments[0].Target; got != markupGuardOldTarget {
+		t.Fatalf("Target should be reverted to oldTarget, got %q want %q", got, markupGuardOldTarget)
+	}
+	if len(doc.Segments[0].Issues) != 1 || doc.Segments[0].Issues[0].Code != qa.CheckWidthMix {
+		t.Fatalf("issues should be preserved, got %+v", doc.Segments[0].Issues)
+	}
+	seg := result.callbackResult.Segments[0]
+	if seg.TargetText != markupGuardOldTarget {
+		t.Errorf("callback TargetText=%q, want %q", seg.TargetText, markupGuardOldTarget)
+	}
+}
+
+// 结构守卫格式门禁：Format 非 epub 时不做结构校验，同样的改写正常生效
+// （width_mix 转换结果对非 XML 格式是合法内容，不应回滚）。
+func TestCorrectHandler_MarkupGuardFormatGate(t *testing.T) {
+	h := newMarkupCorrectHandler()
+	doc := &Document{
+		Segments: []model.Segment{
+			{
+				ID:     "0",
+				Source: "「雷神Ａ ＜ Ｂ」",
+				Target: markupGuardOldTarget,
+				Issues: markupGuardWidthMixIssues(),
+				Status: "translated",
+			},
+		},
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if got := doc.Segments[0].Target; got != markupGuardNewTarget {
+		t.Fatalf("Target should be rewritten without guard, got %q want %q", got, markupGuardNewTarget)
+	}
+	if len(doc.Segments[0].Issues) != 0 {
+		t.Fatalf("pending width_mix should be cleared, got %+v", doc.Segments[0].Issues)
+	}
+	seg := result.callbackResult.Segments[0]
+	if seg.TargetText != markupGuardNewTarget {
+		t.Errorf("callback TargetText=%q, want %q", seg.TargetText, markupGuardNewTarget)
+	}
+}
+
 func sliceEq(a, b []int) bool {
 	if len(a) != len(b) {
 		return false

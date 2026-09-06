@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 )
 
 // SyncTask 状态常量
@@ -427,6 +428,14 @@ func (s *GlossarySyncService) ExecuteSyncTask(
 			return s.failTask(ctx, taskID, err)
 		}
 
+		// 结构守卫需要按资源取格式：在开事务前按批次一次性预取本批涉及的资源，
+		// 避免事务内逐段查询造成 N+1；事务外查询也绕开了 MaxOpenConns(1) 下
+		// 事务占用唯一连接后经 s.client 再查询的死锁约束（守卫查询须走 tx 连接）。
+		formatsByResource, err := s.loadResourceFormats(ctx, batch)
+		if err != nil {
+			return s.failTask(ctx, taskID, fmt.Errorf("load resource formats: %w", err))
+		}
+
 		// 事务内处理本批次
 		tx, err := s.client.Tx(ctx)
 		if err != nil {
@@ -472,6 +481,20 @@ func (s *GlossarySyncService) ExecuteSyncTask(
 			if !replaced {
 				result.TotalSkipped++
 				continue
+			}
+
+			// 结构守卫：术语文本可能出现在 <ruby> 基底等标签内部，替换会劈开标签。
+			// 与搜索替换同一口径——跳过该段并计数，不让一段坏结果毁掉整个同步任务。
+			if markup.RequiresWellFormedTargets(formatsByResource[*seg.ResourceID]) {
+				if verr := markup.ValidateFragment(newText); verr != nil {
+					result.TotalSkipped++
+					s.logger.Warn("glossary sync skipped segment: replacement broke markup structure",
+						"segment_id", seg.ID,
+						"resource_id", *seg.ResourceID,
+						"reason", verr,
+					)
+					continue
+				}
 			}
 
 			// 更新段落：设置新译文、状态改为 edited、清除审核信息
@@ -546,6 +569,35 @@ func (s *GlossarySyncService) ExecuteSyncTask(
 }
 
 // --- 辅助方法 ---
+
+// loadResourceFormats 一次性查出批次内段落涉及资源的格式，返回 resource_id → format。
+// 供结构守卫做格式门禁，避免事务内逐段查询资源造成 N+1。
+func (s *GlossarySyncService) loadResourceFormats(ctx context.Context, batch []*ent.Segment) (map[int]string, error) {
+	ids := make([]int, 0, len(batch))
+	seen := make(map[int]struct{}, len(batch))
+	for _, seg := range batch {
+		if seg.ResourceID == nil {
+			continue
+		}
+		if _, ok := seen[*seg.ResourceID]; ok {
+			continue
+		}
+		seen[*seg.ResourceID] = struct{}{}
+		ids = append(ids, *seg.ResourceID)
+	}
+	formats := make(map[int]string, len(ids))
+	if len(ids) == 0 {
+		return formats, nil
+	}
+	rows, err := s.client.Resource.Query().Where(resource.IDIn(ids...)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		formats[row.ID] = row.Format
+	}
+	return formats, nil
+}
 
 // verifySourceInSegment 验证段落的 source_text 是否包含术语的 source
 func (s *GlossarySyncService) verifySourceInSegment(seg *ent.Segment, entry *ent.GlossaryEntry) bool {
