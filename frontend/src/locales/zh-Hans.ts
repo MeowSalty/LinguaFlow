@@ -741,6 +741,7 @@ const messages = {
           no_longer_matches: '当前译文已不含匹配内容',
           empty_result: '替换后译文为空，已跳过',
           target_diverged: '该段落已被后续编辑，已跳过',
+          invalid_markup: '替换后译文标签结构非法，已跳过（否则导出时整章降级为原文）',
         },
       },
       translationPreview: {
@@ -2285,6 +2286,7 @@ const messages = {
       downloadJobFailed: '下载结果失败',
       downloadResourceResultFailed: '下载结果失败',
       downloadResourceResultEmpty: '该资源暂无结果',
+      downloadTranslatedFailed: '下载译文失败',
       fetchOrganizationsFailed: '获取组织列表失败',
       loadStatsFailed: '加载统计失败',
       loadActivityFailed: '加载活动失败',
