@@ -11,6 +11,11 @@
  *   $env:AI_MODEL="deepseek-v4-pro"
  *   # 可选：流式空闲超时毫秒数，默认 90000
  *   $env:AI_IDLE_TIMEOUT_MS="90000"
+ *   # 可选：最大输出 token 数，不设则用网关/上游默认（注意：思考 token 也计入该预算）
+ *   $env:AI_MAX_TOKENS="32768"
+ *   # 可选：推理努力档位（OpenAI 标准 reasoning_effort）：
+ *   #       none/minimal/low/medium/high/xhigh/max
+ *   $env:AI_REASONING_EFFORT="low"
  *   # 可选：不设则自动用最近两个 tag
  *   $env:VERSION="0.2.0"
  *   $env:PREV_VERSION="v0.1.0"
@@ -259,6 +264,8 @@ async function callAI(prompt) {
 
   const url = baseUrl + '/chat/completions';
   const idleTimeoutMs = Number(process.env.AI_IDLE_TIMEOUT_MS) || 90_000;
+  const maxTokens = Number(process.env.AI_MAX_TOKENS) || undefined;
+  const reasoningEffort = process.env.AI_REASONING_EFFORT?.trim().toLowerCase();
   const maxRetries = 3;
   let lastError;
 
@@ -277,6 +284,7 @@ async function callAI(prompt) {
 
       let content = '';
       let usage;
+      let finishReason;
       try {
         const response = await fetch(url, {
           method: 'POST',
@@ -285,6 +293,8 @@ async function callAI(prompt) {
             model,
             messages: [{ role: 'user', content: prompt }],
             temperature: 0.6,
+            ...(maxTokens && { max_tokens: maxTokens }),
+            ...(reasoningEffort && { reasoning_effort: reasoningEffort }),
             // 流式让网关立刻开始返回数据，避免源站生成慢时被 Cloudflare 524（125s 无响应）掐断
             stream: true,
           }),
@@ -308,6 +318,7 @@ async function callAI(prompt) {
             try {
               const data = JSON.parse(payload);
               content += data.choices?.[0]?.delta?.content ?? '';
+              if (data.choices?.[0]?.finish_reason) finishReason = data.choices[0].finish_reason;
               if (data.usage) usage = data.usage;
             } catch {
               console.warn(`忽略无法解析的 SSE 数据: ${payload.slice(0, 100)}`);
@@ -330,9 +341,20 @@ async function callAI(prompt) {
           const data = await response.json();
           content = data.choices[0].message.content;
           usage = data.usage;
+          finishReason = data.choices[0].finish_reason;
         }
       } finally {
         clearTimeout(idleTimer);
+      }
+
+      // 输出被上限截断时正文必然残缺，不能当成功发布（finish_reason 由流末块/非流式响应携带）
+      if (finishReason === 'length') {
+        const err = new Error(
+          `AI 输出被 max_tokens 截断（completion_tokens: ${usage?.completion_tokens ?? '未知'}），` +
+            '请调大 AI_MAX_TOKENS 或网关/模型的输出上限，或用 AI_REASONING_EFFORT 减少思考开销',
+        );
+        err.noRetry = true; // 截断是确定性失败，重试只会复现同样结果
+        throw err;
       }
 
       content = content.replace(/^\s*```(?:markdown|md)?\s*\n/i, '').replace(/\n\s*```\s*$/, '');
@@ -344,13 +366,16 @@ async function callAI(prompt) {
         `AI 已生成 Release Notes（第 ${attempt} 次，${Date.now() - t0}ms，${content.length} 字符）` +
           `，prompt_tokens: ${usage?.prompt_tokens ?? 'n/a'}` +
           `，completion_tokens: ${usage?.completion_tokens ?? 'n/a'}` +
-          `，total_tokens: ${usage?.total_tokens ?? 'n/a'}`,
+          `，reasoning_tokens: ${usage?.completion_tokens_details?.reasoning_tokens ?? 'n/a'}` +
+          `，total_tokens: ${usage?.total_tokens ?? 'n/a'}` +
+          `，finish_reason: ${finishReason ?? 'n/a'}`,
       );
       return content;
     } catch (err) {
       const reason = err.name === 'AbortError' ? `流式空闲超时（>${idleTimeoutMs / 1000}s 无数据）` : err.message;
       console.warn(`第 ${attempt}/${maxRetries} 次尝试失败: ${reason}`);
       lastError = new Error(reason);
+      if (err.noRetry) break;
       if (attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, 2000 * attempt));
       }
