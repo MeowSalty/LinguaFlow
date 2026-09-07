@@ -5,14 +5,12 @@ import {
   NDropdown,
   NDrawer,
   NDrawerContent,
-  NEmpty,
   NForm,
   NFormItem,
   NInput,
   NInputNumber,
   NModal,
   NSelect,
-  NSkeleton,
   NSlider,
   NSwitch,
   NTag,
@@ -117,6 +115,13 @@ const thinkingLevelOptions = computed<SelectOption[]>(() =>
 const hasActiveFilters = computed(
   () => backends.searchQuery.trim().length > 0 || backends.typeFilter !== 'all',
 )
+
+const metrics = computed(() => [
+  { label: t('backends.stats.total'), value: backends.backendCount },
+  { label: t('backends.stats.openai'), value: backends.openaiCount },
+  { label: t('backends.stats.anthropic'), value: backends.anthropicCount },
+  { label: t('backends.stats.google'), value: backends.googleCount },
+])
 
 const isEditMode = computed(() => Boolean(editingBackend.value))
 const drawerTitle = computed(() =>
@@ -599,106 +604,66 @@ watch(
 </script>
 
 <template>
-  <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('backends.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('backends.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('backends.subtitle') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="backends.loading" @click="backends.loadBackends">
-            {{ t('projects.actions.refresh') }}
-          </NButton>
-          <NButton type="primary" @click="openCreateDrawer">
-            {{ t('backends.create.title') }}
-          </NButton>
-        </div>
-      </div>
-    </section>
+  <EntityListPage
+    :title="t('backends.title')"
+    :subtitle="t('backends.subtitle')"
+    :metrics="metrics"
+    :loading="backends.loading"
+    :empty="backends.filteredItems.length === 0"
+    :empty-description="
+      hasActiveFilters ? t('backends.empty.filtered') : t('backends.empty.default')
+    "
+  >
+    <template #actions>
+      <NButton secondary :loading="backends.loading" @click="backends.loadBackends">
+        {{ t('projects.actions.refresh') }}
+      </NButton>
+      <NButton type="primary" @click="openCreateDrawer">
+        {{ t('backends.create.title') }}
+      </NButton>
+    </template>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('backends.stats.total') }}</div>
-        <div class="lf-metric-value">{{ backends.backendCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('backends.stats.openai') }}</div>
-        <div class="lf-metric-value">{{ backends.openaiCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('backends.stats.anthropic') }}</div>
-        <div class="lf-metric-value">{{ backends.anthropicCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('backends.stats.google') }}</div>
-        <div class="lf-metric-value">{{ backends.googleCount }}</div>
-      </div>
-    </div>
-
-    <div class="lf-panel px-4 py-3">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <NInput
-          v-model:value="backends.searchQuery"
-          clearable
-          class="lg:max-w-sm"
-          :placeholder="t('backends.filters.searchPlaceholder')"
-        />
-        <div class="flex flex-wrap gap-3">
-          <NSelect v-model:value="backends.typeFilter" class="w-44" :options="filterTypeOptions" />
-          <NButton
-            v-if="hasActiveFilters"
-            quaternary
-            @click="((backends.searchQuery = ''), (backends.typeFilter = 'all'))"
-          >
-            {{ t('backends.filters.reset') }}
-          </NButton>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="backends.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <div v-for="index in 6" :key="index" class="lf-panel p-5">
-        <NSkeleton text :repeat="4" />
-      </div>
-    </div>
-
-    <NEmpty
-      v-else-if="backends.filteredItems.length === 0"
-      class="lf-panel py-16"
-      :description="hasActiveFilters ? t('backends.empty.filtered') : t('backends.empty.default')"
-    >
-      <template #extra>
+    <template #filters>
+      <NInput
+        v-model:value="backends.searchQuery"
+        clearable
+        class="lg:max-w-sm"
+        :placeholder="t('backends.filters.searchPlaceholder')"
+      />
+      <div class="flex flex-wrap gap-3">
+        <NSelect v-model:value="backends.typeFilter" class="w-44" :options="filterTypeOptions" />
         <NButton
           v-if="hasActiveFilters"
-          secondary
+          quaternary
           @click="((backends.searchQuery = ''), (backends.typeFilter = 'all'))"
         >
           {{ t('backends.filters.reset') }}
         </NButton>
-        <NButton v-else type="primary" @click="openCreateDrawer">
-          {{ t('backends.create.title') }}
-        </NButton>
-      </template>
-    </NEmpty>
+      </div>
+    </template>
 
-    <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <template #empty-extra>
+      <NButton
+        v-if="hasActiveFilters"
+        secondary
+        @click="((backends.searchQuery = ''), (backends.typeFilter = 'all'))"
+      >
+        {{ t('backends.filters.reset') }}
+      </NButton>
+      <NButton v-else type="primary" @click="openCreateDrawer">
+        {{ t('backends.create.title') }}
+      </NButton>
+    </template>
+
+    <!-- 卡片网格 -->
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="backend in backends.filteredItems"
         :key="backend.id"
         class="lf-interactive-card group relative overflow-hidden p-5"
       >
         <div
-          class="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-brand-500/0 via-lf-info/70 to-lf-accent/0 opacity-0 transition-opacity group-hover:opacity-100"
+          class="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-brand-500/0 via-brand-500/70 to-brand-500/0 opacity-0 transition-opacity group-hover:opacity-100"
         />
         <div class="flex h-full flex-col gap-5">
           <div class="flex items-start justify-between gap-4">
@@ -714,7 +679,7 @@ watch(
           </div>
 
           <div class="space-y-3">
-            <div class="rounded-xl border border-lf-border-soft bg-lf-code-bg px-3.5 py-3">
+            <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-code-bg px-3.5 py-3">
               <div class="text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase">
                 {{ t('backends.card.model') }}
               </div>
@@ -724,7 +689,7 @@ watch(
             </div>
             <div
               v-if="getThinkingLevelDisplay(backend) !== 'off'"
-              class="flex items-center justify-between rounded-xl border border-lf-border-soft px-3.5 py-2.5"
+              class="flex items-center justify-between rounded-lf-ctl border border-lf-border-soft px-3.5 py-2.5"
             >
               <span class="text-xs text-lf-text-muted">{{ t('backends.card.thinking') }}</span>
               <NTag size="small" round :bordered="false" type="info">
@@ -752,151 +717,123 @@ watch(
         </div>
       </div>
     </div>
+  </EntityListPage>
 
-    <!-- 创建/编辑抽屉 -->
-    <NDrawer v-model:show="drawerVisible" :width="'min(480px, 100vw)'" placement="right">
-      <NDrawerContent :title="drawerTitle" :native-scrollbar="false">
-        <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-            <div class="mt-1 text-xs text-lf-text-muted">{{ drawerDescription }}</div>
-          </div>
-        </template>
+  <!-- 创建/编辑抽屉 -->
+  <NDrawer v-model:show="drawerVisible" :width="'min(480px, 100vw)'" placement="right">
+    <NDrawerContent :title="drawerTitle" :native-scrollbar="false">
+      <template #header>
+        <div>
+          <div class="text-lg font-semibold">{{ drawerTitle }}</div>
+          <div class="mt-1 text-xs text-lf-text-muted">{{ drawerDescription }}</div>
+        </div>
+      </template>
 
-        <NForm
-          ref="formRef"
-          :model="formModel"
-          :rules="rules"
-          label-placement="top"
-          require-mark-placement="right-hanging"
-        >
-          <NFormItem :label="t('backends.form.name')" path="name">
-            <NInput
-              v-model:value="formModel.name"
-              :placeholder="t('backends.form.namePlaceholder')"
-            />
-          </NFormItem>
+      <NForm
+        ref="formRef"
+        :model="formModel"
+        :rules="rules"
+        label-placement="top"
+        require-mark-placement="right-hanging"
+      >
+        <NFormItem :label="t('backends.form.name')" path="name">
+          <NInput
+            v-model:value="formModel.name"
+            :placeholder="t('backends.form.namePlaceholder')"
+          />
+        </NFormItem>
 
-          <NFormItem :label="t('backends.form.type')" path="type">
-            <NSelect
-              v-model:value="formModel.type"
-              :options="typeOptions"
-              :placeholder="t('backends.form.typePlaceholder')"
-              :disabled="isEditMode"
-            />
-          </NFormItem>
+        <NFormItem :label="t('backends.form.type')" path="type">
+          <NSelect
+            v-model:value="formModel.type"
+            :options="typeOptions"
+            :placeholder="t('backends.form.typePlaceholder')"
+            :disabled="isEditMode"
+          />
+        </NFormItem>
 
-          <NDivider />
+        <NDivider />
 
-          <NFormItem v-if="requiresApiKey" :label="t('backends.form.apiKey')" path="api_key">
-            <NInput
-              v-model:value="formModel.api_key"
-              type="password"
-              show-password-on="click"
-              :placeholder="t('backends.form.apiKeyPlaceholder')"
-            />
-          </NFormItem>
+        <NFormItem v-if="requiresApiKey" :label="t('backends.form.apiKey')" path="api_key">
+          <NInput
+            v-model:value="formModel.api_key"
+            type="password"
+            show-password-on="click"
+            :placeholder="t('backends.form.apiKeyPlaceholder')"
+          />
+        </NFormItem>
 
-          <NFormItem :label="t('backends.form.baseUrl')" path="base_url">
-            <NInput
-              v-model:value="formModel.base_url"
-              :placeholder="t('backends.form.baseUrlPlaceholder')"
-            />
-          </NFormItem>
+        <NFormItem :label="t('backends.form.baseUrl')" path="base_url">
+          <NInput
+            v-model:value="formModel.base_url"
+            :placeholder="t('backends.form.baseUrlPlaceholder')"
+          />
+        </NFormItem>
 
-          <NFormItem :label="t('backends.form.model')" path="model">
-            <div class="flex w-full flex-col gap-2">
-              <div class="flex w-full items-center gap-2">
-                <NSelect
-                  class="min-w-0 flex-1"
-                  clearable
-                  filterable
-                  tag
-                  :show-arrow="hasModelOptions"
-                  :value="formModel.model || null"
-                  :options="modelOptions"
-                  :filter="filterModelOption"
-                  :placeholder="t('backends.form.modelPlaceholder')"
-                  @update:value="(value) => (formModel.model = value == null ? '' : String(value))"
-                />
-                <NButton
-                  secondary
-                  :loading="fetchingModels"
-                  :disabled="!canFetchModels || fetchingModels"
-                  @click="handleFetchModels"
-                >
-                  {{ t('backends.form.fetchModels') }}
-                </NButton>
-              </div>
-              <p class="text-xs leading-5 text-lf-text-muted">
-                {{ t('backends.form.fetchModelsHint') }}
-              </p>
-            </div>
-          </NFormItem>
-
-          <NFormItem :label="t('backends.form.thinkingLevel')" path="thinking_level">
-            <div class="flex w-full flex-col gap-2">
+        <NFormItem :label="t('backends.form.model')" path="model">
+          <div class="flex w-full flex-col gap-2">
+            <div class="flex w-full items-center gap-2">
               <NSelect
-                v-model:value="formModel.thinking_level"
-                :options="thinkingLevelOptions"
-                :placeholder="t('backends.form.thinkingLevelPlaceholder')"
+                class="min-w-0 flex-1"
+                clearable
+                filterable
+                tag
+                :show-arrow="hasModelOptions"
+                :value="formModel.model || null"
+                :options="modelOptions"
+                :filter="filterModelOption"
+                :placeholder="t('backends.form.modelPlaceholder')"
+                @update:value="(value) => (formModel.model = value == null ? '' : String(value))"
               />
-              <p class="text-xs leading-5 text-lf-text-muted">
-                {{
-                  isAnthropic && isThinkingEnabled
-                    ? t('backends.form.thinkingLevelAnthropicHint')
-                    : t('backends.form.thinkingLevelHint')
-                }}
-              </p>
+              <NButton
+                secondary
+                :loading="fetchingModels"
+                :disabled="!canFetchModels || fetchingModels"
+                @click="handleFetchModels"
+              >
+                {{ t('backends.form.fetchModels') }}
+              </NButton>
             </div>
-          </NFormItem>
+            <p class="text-xs leading-5 text-lf-text-muted">
+              {{ t('backends.form.fetchModelsHint') }}
+            </p>
+          </div>
+        </NFormItem>
 
-          <NFormItem :label="t('backends.form.temperature')" path="temperature">
-            <div class="flex w-full flex-col gap-2">
-              <div class="flex w-full items-center gap-3">
-                <NSwitch
-                  v-model:value="formModel.temperatureEnabled"
-                  :disabled="samplingControlsDisabled"
-                />
-                <template v-if="!samplingControlsDisabled && formModel.temperatureEnabled">
-                  <NSlider
-                    v-model:value="formModel.temperature"
-                    :min="0"
-                    :max="temperatureMax"
-                    :step="0.1"
-                    class="flex-1"
-                  />
-                  <span class="w-10 text-right font-mono text-sm text-lf-text">
-                    {{ formModel.temperature.toFixed(1) }}
-                  </span>
-                </template>
-                <span v-else class="text-xs text-lf-text-muted">
-                  {{
-                    samplingControlsDisabled
-                      ? t('backends.form.samplingIgnoredByThinking')
-                      : t('backends.form.useApiDefault')
-                  }}
-                </span>
-              </div>
-            </div>
-          </NFormItem>
+        <NFormItem :label="t('backends.form.thinkingLevel')" path="thinking_level">
+          <div class="flex w-full flex-col gap-2">
+            <NSelect
+              v-model:value="formModel.thinking_level"
+              :options="thinkingLevelOptions"
+              :placeholder="t('backends.form.thinkingLevelPlaceholder')"
+            />
+            <p class="text-xs leading-5 text-lf-text-muted">
+              {{
+                isAnthropic && isThinkingEnabled
+                  ? t('backends.form.thinkingLevelAnthropicHint')
+                  : t('backends.form.thinkingLevelHint')
+              }}
+            </p>
+          </div>
+        </NFormItem>
 
-          <NFormItem :label="t('backends.form.topP')" path="top_p">
+        <NFormItem :label="t('backends.form.temperature')" path="temperature">
+          <div class="flex w-full flex-col gap-2">
             <div class="flex w-full items-center gap-3">
               <NSwitch
-                v-model:value="formModel.top_pEnabled"
+                v-model:value="formModel.temperatureEnabled"
                 :disabled="samplingControlsDisabled"
               />
-              <template v-if="!samplingControlsDisabled && formModel.top_pEnabled">
+              <template v-if="!samplingControlsDisabled && formModel.temperatureEnabled">
                 <NSlider
-                  v-model:value="formModel.top_p"
+                  v-model:value="formModel.temperature"
                   :min="0"
-                  :max="1"
-                  :step="0.05"
+                  :max="temperatureMax"
+                  :step="0.1"
                   class="flex-1"
                 />
                 <span class="w-10 text-right font-mono text-sm text-lf-text">
-                  {{ formModel.top_p.toFixed(2) }}
+                  {{ formModel.temperature.toFixed(1) }}
                 </span>
               </template>
               <span v-else class="text-xs text-lf-text-muted">
@@ -907,111 +844,139 @@ watch(
                 }}
               </span>
             </div>
-          </NFormItem>
+          </div>
+        </NFormItem>
 
-          <NFormItem :label="t('backends.form.maxTokens')" path="max_tokens">
-            <div class="flex w-full flex-col gap-2">
-              <div class="flex w-full items-center gap-3">
-                <NSwitch v-model:value="formModel.maxTokensEnabled" />
-                <template v-if="formModel.maxTokensEnabled">
-                  <NInputNumber
-                    v-model:value="formModel.max_tokens"
-                    :min="maxTokensMin"
-                    :max="1000000"
-                    :placeholder="t('backends.form.maxTokensPlaceholder')"
-                    class="flex-1"
-                  />
-                </template>
-                <span v-else class="text-xs text-lf-text-muted">
-                  {{ t('backends.form.useApiDefault') }}
-                </span>
-              </div>
-              <p
-                v-if="isAnthropic && isThinkingEnabled"
-                class="text-xs leading-5 text-lf-text-muted"
-              >
-                {{ t('backends.form.maxTokensThinkingHint') }}
-              </p>
-            </div>
-          </NFormItem>
+        <NFormItem :label="t('backends.form.topP')" path="top_p">
+          <div class="flex w-full items-center gap-3">
+            <NSwitch
+              v-model:value="formModel.top_pEnabled"
+              :disabled="samplingControlsDisabled"
+            />
+            <template v-if="!samplingControlsDisabled && formModel.top_pEnabled">
+              <NSlider
+                v-model:value="formModel.top_p"
+                :min="0"
+                :max="1"
+                :step="0.05"
+                class="flex-1"
+              />
+              <span class="w-10 text-right font-mono text-sm text-lf-text">
+                {{ formModel.top_p.toFixed(2) }}
+              </span>
+            </template>
+            <span v-else class="text-xs text-lf-text-muted">
+              {{
+                samplingControlsDisabled
+                  ? t('backends.form.samplingIgnoredByThinking')
+                  : t('backends.form.useApiDefault')
+              }}
+            </span>
+          </div>
+        </NFormItem>
 
-          <NFormItem :label="t('backends.form.timeout')" path="timeout">
+        <NFormItem :label="t('backends.form.maxTokens')" path="max_tokens">
+          <div class="flex w-full flex-col gap-2">
             <div class="flex w-full items-center gap-3">
-              <NSwitch v-model:value="formModel.timeoutEnabled" />
-              <template v-if="formModel.timeoutEnabled">
+              <NSwitch v-model:value="formModel.maxTokensEnabled" />
+              <template v-if="formModel.maxTokensEnabled">
                 <NInputNumber
-                  v-model:value="formModel.timeout"
-                  :min="1"
-                  :placeholder="t('backends.form.timeoutPlaceholder')"
+                  v-model:value="formModel.max_tokens"
+                  :min="maxTokensMin"
+                  :max="1000000"
+                  :placeholder="t('backends.form.maxTokensPlaceholder')"
                   class="flex-1"
                 />
               </template>
               <span v-else class="text-xs text-lf-text-muted">
-                {{ t('backends.form.timeoutUnlimited') }}
+                {{ t('backends.form.useApiDefault') }}
               </span>
             </div>
-          </NFormItem>
-
-          <NFormItem :label="t('backends.form.responseFormat')" path="response_format">
-            <NSelect v-model:value="formModel.response_format" :options="responseFormatOptions" />
-          </NFormItem>
-
-          <NFormItem
-            v-if="isAnthropic"
-            :label="t('backends.form.enablePromptCache')"
-            path="enable_prompt_cache"
-          >
-            <NSwitch v-model:value="formModel.enable_prompt_cache" />
-          </NFormItem>
-
-          <NFormItem :label="t('backends.form.stream')" path="stream">
-            <NSwitch v-model:value="formModel.stream" />
-            <template #feedback>
-              <span class="text-xs text-lf-text-muted">
-                {{ t('backends.form.streamHint') }}
-              </span>
-            </template>
-          </NFormItem>
-
-          <NFormItem :label="t('backends.form.rateLimitPerMinute')" path="rate_limit_per_minute">
-            <NInputNumber
-              v-model:value="formModel.rate_limit_per_minute"
-              :min="0"
-              :placeholder="t('backends.form.rateLimitPerMinutePlaceholder')"
-              class="w-full"
-            />
-            <template #feedback>
-              <span class="text-xs text-lf-text-muted">
-                {{ t('backends.form.rateLimitPerMinuteHint') }}
-              </span>
-            </template>
-          </NFormItem>
-        </NForm>
-
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <NButton @click="drawerVisible = false">
-              {{ t('workspace.common.cancel') }}
-            </NButton>
-            <NButton type="primary" :loading="submitting" @click="onSubmit">
-              {{ t('workspace.common.save') }}
-            </NButton>
+            <p
+              v-if="isAnthropic && isThinkingEnabled"
+              class="text-xs leading-5 text-lf-text-muted"
+            >
+              {{ t('backends.form.maxTokensThinkingHint') }}
+            </p>
           </div>
-        </template>
-      </NDrawerContent>
-    </NDrawer>
+        </NFormItem>
 
-    <!-- 删除确认弹窗 -->
-    <NModal
-      v-model:show="deleteModalVisible"
-      preset="dialog"
-      type="warning"
-      :title="t('projects.actions.confirmDelete')"
-      :content="deletingBackend ? t('backends.delete.confirm', { name: deletingBackend.name }) : ''"
-      :positive-text="t('workspace.common.confirm')"
-      :negative-text="t('workspace.common.cancel')"
-      :loading="deletingBackend ? backends.deletingBackendIds.includes(deletingBackend.id) : false"
-      @positive-click="executeDelete"
-    />
-  </div>
+        <NFormItem :label="t('backends.form.timeout')" path="timeout">
+          <div class="flex w-full items-center gap-3">
+            <NSwitch v-model:value="formModel.timeoutEnabled" />
+            <template v-if="formModel.timeoutEnabled">
+              <NInputNumber
+                v-model:value="formModel.timeout"
+                :min="1"
+                :placeholder="t('backends.form.timeoutPlaceholder')"
+                class="flex-1"
+              />
+            </template>
+            <span v-else class="text-xs text-lf-text-muted">
+              {{ t('backends.form.timeoutUnlimited') }}
+            </span>
+          </div>
+        </NFormItem>
+
+        <NFormItem :label="t('backends.form.responseFormat')" path="response_format">
+          <NSelect v-model:value="formModel.response_format" :options="responseFormatOptions" />
+        </NFormItem>
+
+        <NFormItem
+          v-if="isAnthropic"
+          :label="t('backends.form.enablePromptCache')"
+          path="enable_prompt_cache"
+        >
+          <NSwitch v-model:value="formModel.enable_prompt_cache" />
+        </NFormItem>
+
+        <NFormItem :label="t('backends.form.stream')" path="stream">
+          <NSwitch v-model:value="formModel.stream" />
+          <template #feedback>
+            <span class="text-xs text-lf-text-muted">
+              {{ t('backends.form.streamHint') }}
+            </span>
+          </template>
+        </NFormItem>
+
+        <NFormItem :label="t('backends.form.rateLimitPerMinute')" path="rate_limit_per_minute">
+          <NInputNumber
+            v-model:value="formModel.rate_limit_per_minute"
+            :min="0"
+            :placeholder="t('backends.form.rateLimitPerMinutePlaceholder')"
+            class="w-full"
+          />
+          <template #feedback>
+            <span class="text-xs text-lf-text-muted">
+              {{ t('backends.form.rateLimitPerMinuteHint') }}
+            </span>
+          </template>
+        </NFormItem>
+      </NForm>
+
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <NButton @click="drawerVisible = false">
+            {{ t('workspace.common.cancel') }}
+          </NButton>
+          <NButton type="primary" :loading="submitting" @click="onSubmit">
+            {{ t('workspace.common.save') }}
+          </NButton>
+        </div>
+      </template>
+    </NDrawerContent>
+  </NDrawer>
+
+  <!-- 删除确认弹窗 -->
+  <NModal
+    v-model:show="deleteModalVisible"
+    preset="dialog"
+    type="warning"
+    :title="t('projects.actions.confirmDelete')"
+    :content="deletingBackend ? t('backends.delete.confirm', { name: deletingBackend.name }) : ''"
+    :positive-text="t('workspace.common.confirm')"
+    :negative-text="t('workspace.common.cancel')"
+    :loading="deletingBackend ? backends.deletingBackendIds.includes(deletingBackend.id) : false"
+    @positive-click="executeDelete"
+  />
 </template>

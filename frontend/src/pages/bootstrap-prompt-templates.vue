@@ -3,13 +3,11 @@ import {
   NButton,
   NDrawer,
   NDrawerContent,
-  NEmpty,
   NForm,
   NFormItem,
   NInput,
   NModal,
   NSelect,
-  NSkeleton,
   NTag,
   useMessage,
   type FormInst,
@@ -65,6 +63,13 @@ const filterScopeOptions = computed<SelectOption[]>(() => [
 const hasActiveFilters = computed(
   () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
 )
+
+const metrics = computed(() => [
+  { label: t('bootstrapPromptTemplates.stats.total'), value: store.totalCount },
+  { label: t('bootstrapPromptTemplates.stats.system'), value: store.systemCount },
+  { label: t('bootstrapPromptTemplates.stats.user'), value: store.userCount },
+  { label: t('bootstrapPromptTemplates.stats.org'), value: store.orgCount },
+])
 
 const isEditMode = computed(() => Boolean(editingItem.value))
 const isSystemScope = computed(() => editingItem.value?.scope === 'system')
@@ -200,110 +205,63 @@ watch(
 </script>
 
 <template>
-  <div class="lf-page">
-    <!-- 页面头部 -->
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('bootstrapPromptTemplates.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('bootstrapPromptTemplates.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('bootstrapPromptTemplates.subtitle') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="store.loading" @click="store.loadTemplates">
-            <template #icon><IconCarbonRenew /></template>
-            {{ t('bootstrapPromptTemplates.actions.refresh') }}
-          </NButton>
-          <NButton type="primary" @click="openCreateDrawer">
-            <template #icon><IconCarbonAdd /></template>
-            {{ t('bootstrapPromptTemplates.actions.create') }}
-          </NButton>
-        </div>
-      </div>
-    </section>
+  <EntityListPage
+    :title="t('bootstrapPromptTemplates.title')"
+    :subtitle="t('bootstrapPromptTemplates.subtitle')"
+    :metrics="metrics"
+    :loading="store.loading"
+    :empty="store.filteredItems.length === 0"
+    :empty-description="
+      hasActiveFilters
+        ? t('bootstrapPromptTemplates.empty.filtered')
+        : t('bootstrapPromptTemplates.empty.default')
+    "
+  >
+    <template #actions>
+      <NButton secondary :loading="store.loading" @click="store.loadTemplates">
+        <template #icon><IconCarbonRenew /></template>
+        {{ t('bootstrapPromptTemplates.actions.refresh') }}
+      </NButton>
+      <NButton type="primary" @click="openCreateDrawer">
+        <template #icon><IconCarbonAdd /></template>
+        {{ t('bootstrapPromptTemplates.actions.create') }}
+      </NButton>
+    </template>
 
-    <!-- 统计卡片 -->
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('bootstrapPromptTemplates.stats.total') }}</div>
-        <div class="lf-metric-value">{{ store.totalCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('bootstrapPromptTemplates.stats.system') }}</div>
-        <div class="lf-metric-value">{{ store.systemCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('bootstrapPromptTemplates.stats.user') }}</div>
-        <div class="lf-metric-value">{{ store.userCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('bootstrapPromptTemplates.stats.org') }}</div>
-        <div class="lf-metric-value">{{ store.orgCount }}</div>
-      </div>
-    </div>
-
-    <div class="lf-panel px-4 py-3">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <NInput
-          v-model:value="store.searchQuery"
-          clearable
-          class="lg:max-w-sm"
-          :placeholder="t('bootstrapPromptTemplates.filters.searchPlaceholder')"
-        />
-        <div class="flex flex-wrap gap-3">
-          <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
-          <NButton
-            v-if="hasActiveFilters"
-            quaternary
-            @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-          >
-            {{ t('bootstrapPromptTemplates.filters.reset') }}
-          </NButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- 加载骨架屏 -->
-    <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <div v-for="index in 6" :key="index" class="lf-panel p-5">
-        <NSkeleton text :repeat="4" />
-      </div>
-    </div>
-
-    <!-- 空状态 -->
-    <NEmpty
-      v-else-if="store.filteredItems.length === 0"
-      class="lf-panel py-16"
-      :description="
-        hasActiveFilters
-          ? t('bootstrapPromptTemplates.empty.filtered')
-          : t('bootstrapPromptTemplates.empty.default')
-      "
-    >
-      <template #extra>
+    <template #filters>
+      <NInput
+        v-model:value="store.searchQuery"
+        clearable
+        class="lg:max-w-sm"
+        :placeholder="t('bootstrapPromptTemplates.filters.searchPlaceholder')"
+      />
+      <div class="flex flex-wrap gap-3">
+        <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
         <NButton
           v-if="hasActiveFilters"
-          secondary
+          quaternary
           @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
         >
           {{ t('bootstrapPromptTemplates.filters.reset') }}
         </NButton>
-        <NButton v-else type="primary" @click="openCreateDrawer">
-          {{ t('bootstrapPromptTemplates.actions.createFirst') }}
-        </NButton>
-      </template>
-    </NEmpty>
+      </div>
+    </template>
+
+    <template #empty-extra>
+      <NButton
+        v-if="hasActiveFilters"
+        secondary
+        @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
+      >
+        {{ t('bootstrapPromptTemplates.filters.reset') }}
+      </NButton>
+      <NButton v-else type="primary" @click="openCreateDrawer">
+        {{ t('bootstrapPromptTemplates.actions.createFirst') }}
+      </NButton>
+    </template>
 
     <!-- 卡片网格 -->
-    <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="item in store.filteredItems"
         :key="item.id"
@@ -377,88 +335,86 @@ watch(
         </div>
       </div>
     </div>
+  </EntityListPage>
 
-    <!-- 创建/编辑抽屉 -->
-    <NDrawer v-model:show="drawerVisible" :width="'min(640px, 100vw)'" placement="right">
-      <NDrawerContent :native-scrollbar="false">
-        <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-          </div>
-        </template>
+  <!-- 创建/编辑抽屉 -->
+  <NDrawer v-model:show="drawerVisible" :width="'min(640px, 100vw)'" placement="right">
+    <NDrawerContent :native-scrollbar="false">
+      <template #header>
+        <div>
+          <div class="text-lg font-semibold">{{ drawerTitle }}</div>
+        </div>
+      </template>
 
-        <NForm
-          ref="formRef"
-          :model="formModel"
-          :rules="rules"
-          label-placement="top"
-          require-mark-placement="right-hanging"
-        >
-          <NFormItem :label="t('bootstrapPromptTemplates.form.name')" path="name">
-            <NInput
-              v-model:value="formModel.name"
-              :placeholder="t('bootstrapPromptTemplates.form.namePlaceholder')"
-              :disabled="isSystemScope"
-            />
-          </NFormItem>
+      <NForm
+        ref="formRef"
+        :model="formModel"
+        :rules="rules"
+        label-placement="top"
+        require-mark-placement="right-hanging"
+      >
+        <NFormItem :label="t('bootstrapPromptTemplates.form.name')" path="name">
+          <NInput
+            v-model:value="formModel.name"
+            :placeholder="t('bootstrapPromptTemplates.form.namePlaceholder')"
+            :disabled="isSystemScope"
+          />
+        </NFormItem>
 
-          <NFormItem :label="t('bootstrapPromptTemplates.form.description')" path="description">
-            <NInput
-              v-model:value="formModel.description"
-              type="textarea"
-              :placeholder="t('bootstrapPromptTemplates.form.descriptionPlaceholder')"
-              :rows="3"
-              :disabled="isSystemScope"
-            />
-          </NFormItem>
+        <NFormItem :label="t('bootstrapPromptTemplates.form.description')" path="description">
+          <NInput
+            v-model:value="formModel.description"
+            type="textarea"
+            :placeholder="t('bootstrapPromptTemplates.form.descriptionPlaceholder')"
+            :rows="3"
+            :disabled="isSystemScope"
+          />
+        </NFormItem>
 
-          <NFormItem :label="t('bootstrapPromptTemplates.form.content')" path="content">
-            <PromptTemplateEditor
-              v-model="formModel.content"
-              :disabled="isSystemScope"
-              :rows="8"
-              variable-set="bootstrap"
-            />
-          </NFormItem>
-        </NForm>
+        <NFormItem :label="t('bootstrapPromptTemplates.form.content')" path="content">
+          <PromptTemplateEditor
+            v-model="formModel.content"
+            :disabled="isSystemScope"
+            :rows="8"
+            variable-set="bootstrap"
+          />
+        </NFormItem>
+      </NForm>
 
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <NButton @click="drawerVisible = false">
-              {{ t('bootstrapPromptTemplates.actions.cancel') }}
-            </NButton>
-            <NButton
-              v-if="!isSystemScope"
-              type="primary"
-              :loading="store.creating || store.updating"
-              @click="onSubmit"
-            >
-              {{
-                isEditMode
-                  ? t('bootstrapPromptTemplates.actions.submitUpdate')
-                  : t('bootstrapPromptTemplates.actions.submitCreate')
-              }}
-            </NButton>
-          </div>
-        </template>
-      </NDrawerContent>
-    </NDrawer>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <NButton @click="drawerVisible = false">
+            {{ t('bootstrapPromptTemplates.actions.cancel') }}
+          </NButton>
+          <NButton
+            v-if="!isSystemScope"
+            type="primary"
+            :loading="store.creating || store.updating"
+            @click="onSubmit"
+          >
+            {{
+              isEditMode
+                ? t('bootstrapPromptTemplates.actions.submitUpdate')
+                : t('bootstrapPromptTemplates.actions.submitCreate')
+            }}
+          </NButton>
+        </div>
+      </template>
+    </NDrawerContent>
+  </NDrawer>
 
-    <!-- 删除确认弹窗 -->
-    <NModal
-      v-model:show="deleteModalVisible"
-      preset="dialog"
-      type="warning"
-      :title="t('bootstrapPromptTemplates.actions.confirmDelete')"
-      :content="
-        deletingItem
-          ? t('bootstrapPromptTemplates.delete.confirm', { name: deletingItem.name })
-          : ''
-      "
-      :positive-text="t('bootstrapPromptTemplates.actions.confirmDelete')"
-      :negative-text="t('bootstrapPromptTemplates.actions.cancel')"
-      :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
-      @positive-click="executeDelete"
-    />
-  </div>
+  <!-- 删除确认弹窗 -->
+  <NModal
+    v-model:show="deleteModalVisible"
+    preset="dialog"
+    type="warning"
+    :title="t('bootstrapPromptTemplates.actions.confirmDelete')"
+    :content="
+      deletingItem ? t('bootstrapPromptTemplates.delete.confirm', { name: deletingItem.name }) : ''
+    "
+    :positive-text="t('bootstrapPromptTemplates.actions.confirmDelete')"
+    :negative-text="t('bootstrapPromptTemplates.actions.cancel')"
+    :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
+    @positive-click="executeDelete"
+  />
 </template>

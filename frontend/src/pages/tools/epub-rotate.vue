@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Icon as IconifyIcon } from '@iconify/vue'
 import { useMessage, type UploadFileInfo } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -99,12 +98,11 @@ const onSelectNew = (): void => {
 <template>
   <div class="lf-page">
     <section class="lf-page-header">
-      <div class="space-y-3">
-        <div class="lf-eyebrow">{{ t('nav.tools') }}</div>
-        <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
+      <div class="space-y-1.5">
+        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
           {{ t('epubRotate.title') }}
         </h1>
-        <p class="max-w-3xl text-sm leading-7 text-lf-text-muted">
+        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
           {{ t('epubRotate.description') }}
         </p>
       </div>
@@ -124,7 +122,7 @@ const onSelectNew = (): void => {
         >
           <NUploadDragger>
             <div class="flex flex-col items-center gap-2 py-4">
-              <IconifyIcon icon="carbon:document" class="text-3xl text-brand-600" />
+              <IconCarbonDocument class="text-3xl text-brand-600" />
               <span class="text-sm text-lf-text">{{ t('epubRotate.selectFile') }}</span>
             </div>
           </NUploadDragger>
@@ -150,7 +148,7 @@ const onSelectNew = (): void => {
       </div>
 
       <div
-        class="rounded-xl border border-lf-border-soft bg-lf-surface-muted px-3.5 py-3 text-xs leading-5 text-lf-text-muted"
+        class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted px-3.5 py-3 text-xs leading-5 text-lf-text-muted"
       >
         {{ t('epubRotate.privacyNote') }}
       </div>
@@ -163,7 +161,7 @@ const onSelectNew = (): void => {
           @click="onConvert"
         >
           <template #icon>
-            <IconifyIcon icon="carbon:text-vertical-alignment" class="text-base" />
+            <IconCarbonTextVerticalAlignment class="text-base" />
           </template>
           {{ busy ? t('epubRotate.processing') : t('epubRotate.convert') }}
         </NButton>
@@ -175,7 +173,7 @@ const onSelectNew = (): void => {
         </NButton>
         <NButton v-if="result" secondary :disabled="busy" @click="downloadResult">
           <template #icon>
-            <IconifyIcon icon="carbon:download" class="text-base" />
+            <IconCarbonDownload class="text-base" />
           </template>
           {{ t('epubRotate.download') }}
         </NButton>
@@ -196,7 +194,7 @@ const onSelectNew = (): void => {
 
       <div
         v-if="result"
-        class="rounded-xl border border-lf-border-soft bg-lf-surface-muted px-3.5 py-3 text-sm text-lf-text"
+        class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted px-3.5 py-3 text-sm text-lf-text"
       >
         <p class="font-medium text-lf-text-strong">{{ t('epubRotate.downloadReady') }}</p>
         <p class="mt-1 text-xs leading-5 text-lf-text-muted">

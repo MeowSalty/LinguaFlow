@@ -18,6 +18,7 @@ import {
   roundCellView,
   statusTagType,
 } from '@/composables/useWorkspaceUtils'
+import StackedProgressBar from '@/components/common/StackedProgressBar.vue'
 import { t } from '@/i18n'
 
 const props = defineProps<{
@@ -85,13 +86,10 @@ const showRoundStrip = computed(
   () => props.job.status !== 'completed' && roundStrip.value.length > 0,
 )
 
-const barColor = computed(() => {
-  if (props.job.status === 'completed' && !hasFailures.value && !hasWarnings.value)
-    return 'bg-green-500'
-  if (props.job.status === 'completed' && hasWarnings.value && !hasFailures.value)
-    return 'bg-amber-500'
-  if (props.job.status === 'failed') return 'bg-red-500'
-  return 'bg-brand-500'
+const barTone = computed<'brand' | 'success' | 'warning'>(() => {
+  if (props.job.status === 'completed' && !hasFailures.value && !hasWarnings.value) return 'success'
+  if (props.job.status === 'completed' && hasWarnings.value && !hasFailures.value) return 'warning'
+  return 'brand'
 })
 
 const etaText = computed(() => {
@@ -107,7 +105,7 @@ const speedText = computed(() => {
 
 <template>
   <div
-    class="rounded-xl border border-lf-border-soft bg-linear-to-br from-lf-surface to-lf-surface-muted p-4 space-y-3"
+    class="rounded-lf-card border border-lf-border-soft bg-linear-to-br from-lf-surface to-lf-surface-muted p-4 space-y-3"
     :class="{
       'border-l-3 border-brand-500': job.status === 'running',
       'border-l-3 border-green-500': job.status === 'completed' && !hasFailures && !hasWarnings,
@@ -156,34 +154,17 @@ const speedText = computed(() => {
       </NTooltip>
     </div>
 
-    <!-- 主进度条（自定义堆叠条） -->
+    <!-- 主进度条（StackedProgressBar：主段 + 失败段 + 跳过段） -->
     <div class="space-y-1">
       <div class="text-xs text-lf-text-muted">{{ getJobProgressText(job) }}</div>
-      <div class="relative h-1.5 w-full overflow-hidden rounded-full bg-lf-border/60">
-        <!-- 已完成工作量 -->
-        <div
-          class="absolute inset-y-0 left-0 transition-all duration-300"
-          :class="[
-            barColor,
-            job.status === 'running' ? 'animate-pulse' : '',
-            failedBarPct > 0 || skippedBarPct > 0 ? 'rounded-l-full' : 'rounded-full',
-          ]"
-          :style="{ width: `${completedPct}%` }"
-        />
-        <!-- 失败工作量（紧接已完成段右侧） -->
-        <div
-          v-if="failedBarPct > 0"
-          class="absolute inset-y-0 bg-red-400 transition-all duration-300"
-          :class="skippedBarPct > 0 ? '' : 'rounded-r-full'"
-          :style="{ left: `${completedPct}%`, width: `${failedBarPct}%` }"
-        />
-        <!-- 跳过段（最后） -->
-        <div
-          v-if="skippedBarPct > 0"
-          class="absolute inset-y-0 rounded-r-full bg-lf-text-muted/40 transition-all duration-300"
-          :style="{ left: `${completedPct + failedBarPct}%`, width: `${skippedBarPct}%` }"
-        />
-      </div>
+      <StackedProgressBar
+        :value="completedPct"
+        :error-value="failedBarPct"
+        :skipped-value="skippedBarPct"
+        :error="job.status === 'failed'"
+        :tone="barTone"
+        :class="job.status === 'running' ? 'animate-pulse' : ''"
+      />
     </div>
 
     <!-- 轮次管线条：各轮跨资源聚合进度 -->

@@ -9,12 +9,11 @@ const { t } = useI18n()
 <template>
   <div class="lf-page">
     <section class="lf-page-header">
-      <div class="space-y-3">
-        <div class="lf-eyebrow">{{ t('nav.tools') }}</div>
-        <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
+      <div class="space-y-1.5">
+        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
           {{ t('quickTranslate.pageTitle') }}
         </h1>
-        <p class="max-w-3xl text-sm leading-7 text-lf-text-muted">
+        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
           {{ t('quickTranslate.pageSubtitle') }}
         </p>
       </div>

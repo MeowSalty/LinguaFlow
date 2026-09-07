@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
+import StackedProgressBar from '@/components/common/StackedProgressBar.vue'
 import { useStatsStore } from '@/stores/stats'
 
 const stats = useStatsStore()
@@ -31,8 +32,8 @@ const failedPercent = computed(() => {
     <div v-if="stats.statsLoading" class="mt-6 space-y-4">
       <div class="h-3 w-full animate-pulse rounded-full bg-lf-border-soft" />
       <div class="grid grid-cols-2 gap-3">
-        <div class="h-20 animate-pulse rounded-xl bg-lf-border-soft" />
-        <div class="h-20 animate-pulse rounded-xl bg-lf-border-soft" />
+        <div class="h-20 animate-pulse rounded-lf-card bg-lf-border-soft" />
+        <div class="h-20 animate-pulse rounded-lf-card bg-lf-border-soft" />
       </div>
     </div>
 
@@ -46,34 +47,28 @@ const failedPercent = computed(() => {
             t('dashboard.jobStatus.successRate', { percent: completedPercent })
           }}</span>
         </div>
-        <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-lf-border-soft">
-          <div class="flex h-full">
-            <div
-              class="bg-brand-500 transition-all duration-500"
-              :style="{ width: `${completedPercent}%` }"
-            />
-            <div
-              class="bg-red-500 transition-all duration-500"
-              :style="{ width: `${failedPercent}%` }"
-            />
-          </div>
-        </div>
+        <StackedProgressBar
+          class="mt-2"
+          :value="completedPercent"
+          :error-value="failedPercent"
+          height="8px"
+        />
       </div>
 
       <div class="mt-5 grid grid-cols-2 gap-3">
-        <div class="rounded-xl border border-lf-border-soft bg-lf-success-soft p-4">
+        <div class="rounded-lf-card border border-lf-border-soft bg-lf-success-soft p-4">
           <div class="text-xs font-medium text-brand-600">
             {{ t('dashboard.jobStatus.completed') }}
           </div>
-          <div class="mt-1.5 text-2xl font-semibold tracking-tight text-lf-text-strong">
+          <div class="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-lf-text-strong">
             {{ n(completedJobs) }}
           </div>
         </div>
-        <div class="rounded-xl border border-lf-border-soft bg-lf-danger-soft p-4">
+        <div class="rounded-lf-card border border-lf-border-soft bg-lf-danger-soft p-4">
           <div class="text-xs font-medium text-red-500">
             {{ t('dashboard.jobStatus.failed') }}
           </div>
-          <div class="mt-1.5 text-2xl font-semibold tracking-tight text-lf-text-strong">
+          <div class="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-lf-text-strong">
             {{ n(failedJobs) }}
           </div>
         </div>

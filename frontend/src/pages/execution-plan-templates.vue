@@ -3,13 +3,11 @@ import {
   NButton,
   NDrawer,
   NDrawerContent,
-  NEmpty,
   NForm,
   NFormItem,
   NInput,
   NModal,
   NSelect,
-  NSkeleton,
   NTag,
   useMessage,
   type FormInst,
@@ -126,6 +124,13 @@ const filterScopeOptions = computed<SelectOption[]>(() => [
 const hasActiveFilters = computed(
   () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
 )
+
+const metrics = computed(() => [
+  { label: t('executionPlanTemplates.stats.total'), value: store.totalCount },
+  { label: t('executionPlanTemplates.stats.system'), value: store.systemCount },
+  { label: t('executionPlanTemplates.stats.user'), value: store.userCount },
+  { label: t('executionPlanTemplates.stats.avgRounds'), value: store.avgRoundsPerPlan },
+])
 
 const isEditMode = computed(() => Boolean(editingItem.value))
 const isSystemScope = computed(() => editingItem.value?.scope === 'system')
@@ -483,108 +488,61 @@ watch(
 </script>
 
 <template>
-  <div class="lf-page">
-    <!-- 页面头部 -->
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('executionPlanTemplates.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('executionPlanTemplates.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('executionPlanTemplates.subtitle') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="store.loading" @click="store.loadTemplates">
-            {{ t('executionPlanTemplates.actions.refresh') }}
-          </NButton>
-          <NButton type="primary" @click="openCreateDrawer">
-            {{ t('executionPlanTemplates.actions.create') }}
-          </NButton>
-        </div>
-      </div>
-    </section>
+  <EntityListPage
+    :title="t('executionPlanTemplates.title')"
+    :subtitle="t('executionPlanTemplates.subtitle')"
+    :metrics="metrics"
+    :loading="store.loading"
+    :empty="store.filteredItems.length === 0"
+    :empty-description="
+      hasActiveFilters
+        ? t('executionPlanTemplates.empty.filtered')
+        : t('executionPlanTemplates.empty.default')
+    "
+  >
+    <template #actions>
+      <NButton secondary :loading="store.loading" @click="store.loadTemplates">
+        {{ t('executionPlanTemplates.actions.refresh') }}
+      </NButton>
+      <NButton type="primary" @click="openCreateDrawer">
+        {{ t('executionPlanTemplates.actions.create') }}
+      </NButton>
+    </template>
 
-    <!-- 统计卡片 -->
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.total') }}</div>
-        <div class="lf-metric-value">{{ store.totalCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.system') }}</div>
-        <div class="lf-metric-value">{{ store.systemCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.user') }}</div>
-        <div class="lf-metric-value">{{ store.userCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.avgRounds') }}</div>
-        <div class="lf-metric-value">{{ store.avgRoundsPerPlan }}</div>
-      </div>
-    </div>
-
-    <div class="lf-panel px-4 py-3">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <NInput
-          v-model:value="store.searchQuery"
-          clearable
-          class="lg:max-w-sm"
-          :placeholder="t('executionPlanTemplates.filters.searchPlaceholder')"
-        />
-        <div class="flex flex-wrap gap-3">
-          <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
-          <NButton
-            v-if="hasActiveFilters"
-            quaternary
-            @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-          >
-            {{ t('executionPlanTemplates.filters.reset') }}
-          </NButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- 加载骨架屏 -->
-    <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <div v-for="index in 6" :key="index" class="lf-panel p-5">
-        <NSkeleton text :repeat="4" />
-      </div>
-    </div>
-
-    <!-- 空状态 -->
-    <NEmpty
-      v-else-if="store.filteredItems.length === 0"
-      class="lf-panel py-16"
-      :description="
-        hasActiveFilters
-          ? t('executionPlanTemplates.empty.filtered')
-          : t('executionPlanTemplates.empty.default')
-      "
-    >
-      <template #extra>
+    <template #filters>
+      <NInput
+        v-model:value="store.searchQuery"
+        clearable
+        class="lg:max-w-sm"
+        :placeholder="t('executionPlanTemplates.filters.searchPlaceholder')"
+      />
+      <div class="flex flex-wrap gap-3">
+        <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
         <NButton
           v-if="hasActiveFilters"
-          secondary
+          quaternary
           @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
         >
           {{ t('executionPlanTemplates.filters.reset') }}
         </NButton>
-        <NButton v-else type="primary" @click="openCreateDrawer">
-          {{ t('executionPlanTemplates.actions.createFirst') }}
-        </NButton>
-      </template>
-    </NEmpty>
+      </div>
+    </template>
+
+    <template #empty-extra>
+      <NButton
+        v-if="hasActiveFilters"
+        secondary
+        @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
+      >
+        {{ t('executionPlanTemplates.filters.reset') }}
+      </NButton>
+      <NButton v-else type="primary" @click="openCreateDrawer">
+        {{ t('executionPlanTemplates.actions.createFirst') }}
+      </NButton>
+    </template>
 
     <!-- 卡片网格 -->
-    <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="item in store.filteredItems"
         :key="item.id"
@@ -689,108 +647,108 @@ watch(
         </div>
       </div>
     </div>
+  </EntityListPage>
 
-    <!-- 创建/编辑抽屉 -->
-    <NDrawer v-model:show="drawerVisible" :width="'min(720px, 100vw)'" placement="right">
-      <NDrawerContent :native-scrollbar="false">
-        <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-          </div>
-        </template>
+  <!-- 创建/编辑抽屉 -->
+  <NDrawer v-model:show="drawerVisible" :width="'min(720px, 100vw)'" placement="right">
+    <NDrawerContent :native-scrollbar="false">
+      <template #header>
+        <div>
+          <div class="text-lg font-semibold">{{ drawerTitle }}</div>
+        </div>
+      </template>
 
-        <NForm
-          ref="formRef"
-          :model="formModel"
-          :rules="rules"
-          label-placement="top"
-          require-mark-placement="right-hanging"
-        >
-          <NFormItem :label="t('executionPlanTemplates.form.name')" path="name">
-            <NInput
-              v-model:value="formModel.name"
-              :placeholder="t('executionPlanTemplates.form.namePlaceholder')"
+      <NForm
+        ref="formRef"
+        :model="formModel"
+        :rules="rules"
+        label-placement="top"
+        require-mark-placement="right-hanging"
+      >
+        <NFormItem :label="t('executionPlanTemplates.form.name')" path="name">
+          <NInput
+            v-model:value="formModel.name"
+            :placeholder="t('executionPlanTemplates.form.namePlaceholder')"
+            :disabled="isSystemScope"
+          />
+        </NFormItem>
+
+        <NFormItem :label="t('executionPlanTemplates.form.description')" path="description">
+          <NInput
+            v-model:value="formModel.description"
+            type="textarea"
+            :placeholder="t('executionPlanTemplates.form.descriptionPlaceholder')"
+            :rows="3"
+            :disabled="isSystemScope"
+          />
+        </NFormItem>
+
+        <NFormItem :label="t('executionPlanTemplates.form.profile')" path="profile_id">
+          <div class="w-full">
+            <NSelect
+              v-model:value="formModel.profile_id"
+              :options="executionProfileOptions"
+              :placeholder="t('executionPlanTemplates.form.profilePlaceholder')"
               :disabled="isSystemScope"
             />
-          </NFormItem>
-
-          <NFormItem :label="t('executionPlanTemplates.form.description')" path="description">
-            <NInput
-              v-model:value="formModel.description"
-              type="textarea"
-              :placeholder="t('executionPlanTemplates.form.descriptionPlaceholder')"
-              :rows="3"
-              :disabled="isSystemScope"
-            />
-          </NFormItem>
-
-          <NFormItem :label="t('executionPlanTemplates.form.profile')" path="profile_id">
-            <div class="w-full">
-              <NSelect
-                v-model:value="formModel.profile_id"
-                :options="executionProfileOptions"
-                :placeholder="t('executionPlanTemplates.form.profilePlaceholder')"
-                :disabled="isSystemScope"
-              />
-              <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
-                {{ t('executionPlanTemplates.form.profileHint') }}
-              </div>
+            <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+              {{ t('executionPlanTemplates.form.profileHint') }}
             </div>
-          </NFormItem>
-
-          <!-- 轮次编辑器 -->
-          <div class="mb-4">
-            <span class="mb-2 block text-sm font-medium text-lf-text-strong">
-              {{ t('executionPlanTemplates.form.rounds') }}
-            </span>
-            <ExecutionPlanEditor
-              :rounds="formModel.rounds"
-              :ruby-retry="formModel.ruby_retry"
-              :backends="backendOptions"
-              :prompt-templates="promptTemplateOptions"
-              :bootstrap-prompt-templates="bootstrapPromptTemplateOptions"
-              :disabled="isSystemScope"
-              @update:rounds="formModel.rounds = $event"
-              @update:ruby-retry="formModel.ruby_retry = $event"
-            />
           </div>
-        </NForm>
+        </NFormItem>
 
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <NButton @click="drawerVisible = false">
-              {{ t('executionPlanTemplates.actions.cancel') }}
-            </NButton>
-            <NButton
-              v-if="!isSystemScope"
-              type="primary"
-              :loading="store.creating || store.updating"
-              @click="onSubmit"
-            >
-              {{
-                isEditMode
-                  ? t('executionPlanTemplates.actions.submitUpdate')
-                  : t('executionPlanTemplates.actions.submitCreate')
-              }}
-            </NButton>
-          </div>
-        </template>
-      </NDrawerContent>
-    </NDrawer>
+        <!-- 轮次编辑器 -->
+        <div class="mb-4">
+          <span class="mb-2 block text-sm font-medium text-lf-text-strong">
+            {{ t('executionPlanTemplates.form.rounds') }}
+          </span>
+          <ExecutionPlanEditor
+            :rounds="formModel.rounds"
+            :ruby-retry="formModel.ruby_retry"
+            :backends="backendOptions"
+            :prompt-templates="promptTemplateOptions"
+            :bootstrap-prompt-templates="bootstrapPromptTemplateOptions"
+            :disabled="isSystemScope"
+            @update:rounds="formModel.rounds = $event"
+            @update:ruby-retry="formModel.ruby_retry = $event"
+          />
+        </div>
+      </NForm>
 
-    <!-- 删除确认弹窗 -->
-    <NModal
-      v-model:show="deleteModalVisible"
-      preset="dialog"
-      type="warning"
-      :title="t('executionPlanTemplates.actions.confirmDelete')"
-      :content="
-        deletingItem ? t('executionPlanTemplates.delete.confirm', { name: deletingItem.name }) : ''
-      "
-      :positive-text="t('executionPlanTemplates.actions.confirmDelete')"
-      :negative-text="t('executionPlanTemplates.actions.cancel')"
-      :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
-      @positive-click="executeDelete"
-    />
-  </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <NButton @click="drawerVisible = false">
+            {{ t('executionPlanTemplates.actions.cancel') }}
+          </NButton>
+          <NButton
+            v-if="!isSystemScope"
+            type="primary"
+            :loading="store.creating || store.updating"
+            @click="onSubmit"
+          >
+            {{
+              isEditMode
+                ? t('executionPlanTemplates.actions.submitUpdate')
+                : t('executionPlanTemplates.actions.submitCreate')
+            }}
+          </NButton>
+        </div>
+      </template>
+    </NDrawerContent>
+  </NDrawer>
+
+  <!-- 删除确认弹窗 -->
+  <NModal
+    v-model:show="deleteModalVisible"
+    preset="dialog"
+    type="warning"
+    :title="t('executionPlanTemplates.actions.confirmDelete')"
+    :content="
+      deletingItem ? t('executionPlanTemplates.delete.confirm', { name: deletingItem.name }) : ''
+    "
+    :positive-text="t('executionPlanTemplates.actions.confirmDelete')"
+    :negative-text="t('executionPlanTemplates.actions.cancel')"
+    :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
+    @positive-click="executeDelete"
+  />
 </template>
