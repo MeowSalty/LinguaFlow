@@ -57,7 +57,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="space-y-2 rounded-xl border border-lf-border-soft bg-lf-surface p-3">
+  <div class="space-y-2 rounded-lf-card border border-lf-border-soft bg-lf-surface p-3">
     <!-- 序号与状态 -->
     <div class="flex items-center justify-between">
       <span class="text-xs text-lf-text-muted">#{{ segment.segment_index }}</span>
@@ -174,7 +174,7 @@ const emit = defineEmits<{
     <!-- 评论编辑区（行内展开） -->
     <div
       v-if="showComment && isCommentVisible"
-      class="rounded-lg border border-lf-border-soft bg-lf-surface-muted p-3"
+      class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted p-3"
     >
       <p class="mb-2 text-xs text-lf-text-muted">{{ t('workspace.segment.form.comment') }}</p>
       <NInput

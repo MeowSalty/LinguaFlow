@@ -289,28 +289,21 @@ watch(
 <template>
   <div class="lf-page">
     <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('admin.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('admin.users.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('admin.users.description') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="admin.usersLoading" @click="admin.loadUsers">
-            {{ t('admin.users.actions.refresh') }}
-          </NButton>
-          <NButton type="primary" @click="openCreateDrawer">
-            {{ t('admin.users.actions.create') }}
-          </NButton>
-        </div>
+      <div class="space-y-1.5">
+        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
+          {{ t('admin.users.title') }}
+        </h1>
+        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
+          {{ t('admin.users.description') }}
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <NButton secondary :loading="admin.usersLoading" @click="admin.loadUsers">
+          {{ t('admin.users.actions.refresh') }}
+        </NButton>
+        <NButton type="primary" @click="openCreateDrawer">
+          {{ t('admin.users.actions.create') }}
+        </NButton>
       </div>
     </section>
 
@@ -359,11 +352,11 @@ watch(
       >
         <div class="h-9 w-9 animate-pulse rounded-full bg-lf-border-soft" />
         <div class="min-w-0 flex-1 space-y-2">
-          <NSkeleton text style="width: 40%" />
-          <NSkeleton text style="width: 24%" />
+          <NSkeleton text class="w-2/5" />
+          <NSkeleton text class="w-1/4" />
         </div>
-        <NSkeleton text style="width: 18%" class="hidden md:block" />
-        <NSkeleton text style="width: 10%" class="hidden sm:block" />
+        <NSkeleton text class="hidden w-[18%] md:block" />
+        <NSkeleton text class="hidden w-[10%] sm:block" />
       </div>
     </div>
 
@@ -386,8 +379,7 @@ watch(
 
     <div v-else class="lf-data-list">
       <div
-        class="lf-data-list__head"
-        style="grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 110px 100px 200px"
+        class="lf-data-list__head md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_110px_100px_200px]"
       >
         <span>{{ t('admin.users.columns.username') }}</span>
         <span>{{ t('admin.users.columns.email') }}</span>
@@ -560,7 +552,7 @@ watch(
       @positive-click="executeDisable"
     />
 
-    <NModal v-model:show="resetPasswordModalVisible" preset="card" style="max-width: 420px">
+    <NModal v-model:show="resetPasswordModalVisible" preset="card" class="max-w-[420px]">
       <template #header>
         <div class="text-lg font-semibold">{{ t('admin.users.resetPassword.title') }}</div>
       </template>

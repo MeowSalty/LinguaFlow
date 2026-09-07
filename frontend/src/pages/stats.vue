@@ -17,27 +17,22 @@ onMounted(() => {
 <template>
   <div class="lf-page">
     <section class="lf-page-header">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">{{ t('nav.stats') }}</div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('stats.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('stats.subtitle') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton
-            secondary
-            :loading="stats.statsLoading || stats.activitiesLoading"
-            @click="stats.loadAll()"
-          >
-            {{ t('projects.actions.refresh') }}
-          </NButton>
-        </div>
+      <div class="space-y-1.5">
+        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
+          {{ t('stats.title') }}
+        </h1>
+        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
+          {{ t('stats.subtitle') }}
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <NButton
+          secondary
+          :loading="stats.statsLoading || stats.activitiesLoading"
+          @click="stats.loadAll()"
+        >
+          {{ t('projects.actions.refresh') }}
+        </NButton>
       </div>
     </section>
 

@@ -54,7 +54,12 @@ const resourceColumns = computed<DataTableColumns<SyncImpactResource>>(() => [
     key: 'affected_count',
     width: 120,
     align: 'right',
-    render: (row) => h(NText, { type: 'warning' }, { default: () => `${row.affected_count}` }),
+    render: (row) =>
+      h(
+        NText,
+        { type: 'warning', class: 'tabular-nums' },
+        { default: () => `${row.affected_count}` },
+      ),
   },
 ])
 
@@ -70,14 +75,20 @@ const resultColumns = computed<DataTableColumns<SyncExecuteResourceResult>>(() =
     key: 'updated_count',
     width: 100,
     align: 'right',
-    render: (row) => h(NText, { type: 'success' }, { default: () => `${row.updated_count}` }),
+    render: (row) =>
+      h(
+        NText,
+        { type: 'success', class: 'tabular-nums' },
+        { default: () => `${row.updated_count}` },
+      ),
   },
   {
     title: t('workspace.glossary.sync.skippedCount'),
     key: 'skipped_count',
     width: 100,
     align: 'right',
-    render: (row) => h(NText, { depth: 3 }, { default: () => `${row.skipped_count}` }),
+    render: (row) =>
+      h(NText, { depth: 3, class: 'tabular-nums' }, { default: () => `${row.skipped_count}` }),
   },
 ])
 
@@ -239,7 +250,7 @@ onUnmounted(() => {
       <!-- 影响分析结果 -->
       <template v-else-if="glossary.syncImpactData">
         <!-- 译文变更提示（含术语源文展示） -->
-        <div class="mb-4 rounded-lg border border-lf-border-soft bg-lf-surface-muted/60 p-4">
+        <div class="mb-4 rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/60 p-4">
           <div class="mb-2 text-sm text-lf-text-muted">
             {{
               t('workspace.glossary.sync.targetChangedWithSource', { source: glossary.syncSource })
@@ -347,7 +358,7 @@ onUnmounted(() => {
         class="mb-3"
       />
 
-      <div class="mb-6 text-center text-sm text-lf-text-muted">
+      <div class="mb-6 text-center text-sm tabular-nums text-lf-text-muted">
         {{
           t('workspace.glossary.sync.progress', {
             processed: glossary.syncProcessed,
@@ -370,13 +381,17 @@ onUnmounted(() => {
       </NAlert>
 
       <div class="mb-4 grid grid-cols-2 gap-4">
-        <div class="rounded-lg border border-lf-border-soft bg-lf-surface-muted/60 p-4">
+        <div
+          class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/60 p-4 tabular-nums"
+        >
           <NStatistic
             :label="t('workspace.glossary.sync.updated')"
             :value="glossary.syncResult?.total_updated ?? 0"
           />
         </div>
-        <div class="rounded-lg border border-lf-border-soft bg-lf-surface-muted/60 p-4">
+        <div
+          class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/60 p-4 tabular-nums"
+        >
           <NStatistic
             :label="t('workspace.glossary.sync.skipped')"
             :value="glossary.syncResult?.total_skipped ?? 0"
@@ -420,13 +435,17 @@ onUnmounted(() => {
       </NAlert>
 
       <div class="mb-4 grid grid-cols-2 gap-4">
-        <div class="rounded-lg border border-lf-border-soft bg-lf-surface-muted/60 p-4">
+        <div
+          class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/60 p-4 tabular-nums"
+        >
           <NStatistic
             :label="t('workspace.glossary.sync.processed')"
             :value="glossary.syncProcessed"
           />
         </div>
-        <div class="rounded-lg border border-lf-border-soft bg-lf-surface-muted/60 p-4">
+        <div
+          class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/60 p-4 tabular-nums"
+        >
           <NStatistic
             :label="t('workspace.glossary.sync.unprocessed')"
             :value="glossary.syncTotal - glossary.syncProcessed"

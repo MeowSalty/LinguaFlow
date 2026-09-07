@@ -278,7 +278,7 @@ onUnmounted(() => {
     >
       <div v-if="segment" class="space-y-4 pb-4">
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-sm font-semibold text-lf-text-strong">
+          <span class="text-sm font-semibold text-lf-text-strong tabular-nums">
             #{{ segment.segment_index }}
           </span>
           <NTag size="small" :type="statusTagType(appliedSegment?.status ?? segment.status)">
@@ -295,7 +295,7 @@ onUnmounted(() => {
             {{ t('workspace.segment.translationPreview.source') }}
           </div>
           <div
-            class="max-h-48 overflow-auto rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 p-3 text-sm leading-6"
+            class="max-h-48 overflow-auto rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/40 p-3 text-sm leading-6"
           >
             <SegmentTextDisplay :text="sourceText" :mode="textRenderMode" />
           </div>
@@ -306,7 +306,7 @@ onUnmounted(() => {
             {{ t('workspace.segment.translationPreview.currentTarget') }}
           </div>
           <div
-            class="max-h-40 overflow-auto rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 p-3 text-sm leading-6"
+            class="max-h-40 overflow-auto rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/40 p-3 text-sm leading-6"
           >
             <SegmentTextDisplay :text="currentTargetText" :mode="textRenderMode" />
           </div>
@@ -383,7 +383,7 @@ onUnmounted(() => {
           <NAlert v-if="tokenExpired" type="warning" :bordered="false">
             {{ t('workspace.segment.translationPreview.tokenExpired') }}
           </NAlert>
-          <div v-if="preview.apply_expires_at" class="text-xs text-lf-text-muted">
+          <div v-if="preview.apply_expires_at" class="text-xs text-lf-text-muted tabular-nums">
             {{
               t('workspace.segment.translationPreview.expiresAt', {
                 time: new Intl.DateTimeFormat('zh-Hans', {

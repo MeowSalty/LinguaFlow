@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
-import { Icon as IconifyIcon } from '@iconify/vue'
 
 import { quickTranslate } from '@/api/client'
 import type { ApiSchemas } from '@/api/client'
@@ -197,10 +196,8 @@ onMounted(() => {
         class="flex items-center gap-1.5 text-sm font-medium text-lf-text-muted transition-colors hover:text-lf-text-strong"
         @click="advancedOpen = !advancedOpen"
       >
-        <IconifyIcon
-          :icon="advancedOpen ? 'carbon:chevron-up' : 'carbon:chevron-down'"
-          class="text-base"
-        />
+        <IconCarbonChevronUp v-if="advancedOpen" class="text-base" />
+        <IconCarbonChevronDown v-else class="text-base" />
         {{ t('quickTranslate.advancedToggle') }}
       </button>
 
@@ -252,11 +249,11 @@ onMounted(() => {
               :aria-label="t('quickTranslate.glossaryRemove')"
               @click="removeGlossaryRow(row.id)"
             >
-              <IconifyIcon icon="carbon:close" />
+              <IconCarbonClose />
             </NButton>
           </div>
           <NButton dashed size="small" @click="addGlossaryRow">
-            <IconifyIcon icon="carbon:add" />
+            <IconCarbonAdd />
             {{ t('quickTranslate.glossaryAdd') }}
           </NButton>
         </div>
@@ -272,7 +269,7 @@ onMounted(() => {
         :disabled="!canSubmit"
         @click="onSubmit"
       >
-        <IconifyIcon icon="carbon:translate" />
+        <IconCarbonTranslate />
         {{ submitting ? t('quickTranslate.submitting') : t('quickTranslate.submit') }}
       </NButton>
     </div>
@@ -304,7 +301,7 @@ onMounted(() => {
           </span>
         </div>
         <NButton v-if="result.target_text" quaternary size="small" @click="onCopy">
-          <IconifyIcon icon="carbon:copy" />
+          <IconCarbonCopy />
           {{ t('quickTranslate.copy') }}
         </NButton>
       </div>

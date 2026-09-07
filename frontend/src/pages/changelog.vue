@@ -86,9 +86,8 @@ onMounted(() => {
 <template>
   <div class="lf-page">
     <section class="lf-page-header">
-      <div class="space-y-3">
-        <div class="lf-eyebrow">{{ t('nav.changelog') }}</div>
-        <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
+      <div class="space-y-1.5">
+        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
           {{ t('changelog.title') }}
         </h1>
         <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">

@@ -62,12 +62,12 @@ const itemToneClass = (item: PendingUploadItem): string => {
     return 'border-lf-border bg-lf-surface-muted/40'
   }
   if (item.precheck.action === 'create') {
-    return 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/5'
+    return 'border-lf-success-soft bg-lf-success-soft/60'
   }
   if (item.precheck.action === 'conflict') {
-    return 'border-amber-200 bg-amber-50/40 dark:border-amber-500/20 dark:bg-amber-500/5'
+    return 'border-lf-warning-soft bg-lf-warning-soft/60'
   }
-  return 'border-red-200 bg-red-50/40 dark:border-red-500/20 dark:bg-red-500/5'
+  return 'border-lf-danger-soft bg-lf-danger-soft/60'
 }
 
 const getReason = (item: PendingUploadItem): string => {
@@ -101,7 +101,7 @@ const getResolutionHint = (item: PendingUploadItem): string => {
 
 <template>
   <div class="space-y-5">
-    <div class="rounded-2xl border border-lf-border bg-lf-surface-muted/70 p-4 shadow-sm">
+    <div class="rounded-lf-card border border-lf-border bg-lf-surface-muted/70 p-4 shadow-sm">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="min-w-0">
           <div class="text-base font-semibold text-lf-text-strong">
@@ -116,42 +116,32 @@ const getResolutionHint = (item: PendingUploadItem): string => {
           </p>
         </div>
         <div class="grid shrink-0 grid-cols-3 gap-2 text-center sm:grid-cols-5">
-          <div class="rounded-xl bg-emerald-50 px-3 py-2 dark:bg-emerald-500/10">
-            <div class="text-lg font-bold text-emerald-600">{{ createCount }}</div>
-            <div class="text-xs text-emerald-700 dark:text-emerald-300">
-              {{ t('workspace.uploadPrecheck.summary.creatable') }}
-            </div>
+          <div class="rounded-lf-ctl bg-lf-success-soft px-3 py-2">
+            <div class="text-lg font-bold tabular-nums text-lf-success">{{ createCount }}</div>
+            <div class="text-xs text-lf-success">{{ t('workspace.uploadPrecheck.summary.creatable') }}</div>
           </div>
-          <div class="rounded-xl bg-amber-50 px-3 py-2 dark:bg-amber-500/10">
-            <div class="text-lg font-bold text-amber-600">{{ conflictCount }}</div>
-            <div class="text-xs text-amber-700 dark:text-amber-300">
-              {{ t('workspace.uploadPrecheck.summary.conflicts') }}
-            </div>
+          <div class="rounded-lf-ctl bg-lf-warning-soft px-3 py-2">
+            <div class="text-lg font-bold tabular-nums text-lf-warning">{{ conflictCount }}</div>
+            <div class="text-xs text-lf-warning">{{ t('workspace.uploadPrecheck.summary.conflicts') }}</div>
           </div>
-          <div class="rounded-xl bg-blue-50 px-3 py-2 dark:bg-blue-500/10">
-            <div class="text-lg font-bold text-blue-600">{{ incrementalUpdateCount }}</div>
-            <div class="text-xs text-blue-700 dark:text-blue-300">
-              {{ t('workspace.uploadPrecheck.summary.incrementalUpdates') }}
-            </div>
+          <div class="rounded-lf-ctl bg-lf-info-soft px-3 py-2">
+            <div class="text-lg font-bold tabular-nums text-lf-info">{{ incrementalUpdateCount }}</div>
+            <div class="text-xs text-lf-info">{{ t('workspace.uploadPrecheck.summary.incrementalUpdates') }}</div>
           </div>
-          <div class="rounded-xl bg-purple-50 px-3 py-2 dark:bg-purple-500/10">
-            <div class="text-lg font-bold text-purple-600">{{ replaceCount }}</div>
-            <div class="text-xs text-purple-700 dark:text-purple-300">
-              {{ t('workspace.uploadPrecheck.summary.replaces') }}
-            </div>
+          <div class="rounded-lf-ctl bg-lf-brand-soft px-3 py-2">
+            <div class="text-lg font-bold tabular-nums text-brand-600">{{ replaceCount }}</div>
+            <div class="text-xs text-brand-600">{{ t('workspace.uploadPrecheck.summary.replaces') }}</div>
           </div>
-          <div class="rounded-xl bg-red-50 px-3 py-2 dark:bg-red-500/10">
-            <div class="text-lg font-bold text-red-600">{{ duplicateCount }}</div>
-            <div class="text-xs text-red-700 dark:text-red-300">
-              {{ t('workspace.uploadPrecheck.summary.duplicates') }}
-            </div>
+          <div class="rounded-lf-ctl bg-lf-danger-soft px-3 py-2">
+            <div class="text-lg font-bold tabular-nums text-lf-danger">{{ duplicateCount }}</div>
+            <div class="text-xs text-lf-danger">{{ t('workspace.uploadPrecheck.summary.duplicates') }}</div>
           </div>
         </div>
       </div>
 
       <div
         v-if="creatableItems.length > 0"
-        class="mt-4 flex flex-col gap-3 rounded-xl border border-lf-border bg-lf-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+        class="mt-4 flex flex-col gap-3 rounded-lf-ctl border border-lf-border bg-lf-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
       >
         <div class="text-sm text-lf-text-muted">
           {{ t('workspace.uploadPrecheck.columns.selectAllCreatable') }}
@@ -170,7 +160,7 @@ const getResolutionHint = (item: PendingUploadItem): string => {
       <div
         v-for="item in props.items"
         :key="item.id"
-        class="rounded-2xl border p-4 transition-colors"
+        class="rounded-lf-card border p-4 transition-colors"
         :class="itemToneClass(item)"
       >
         <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
@@ -205,7 +195,7 @@ const getResolutionHint = (item: PendingUploadItem): string => {
             </div>
           </div>
 
-          <div class="rounded-xl border border-lf-border/70 bg-lf-surface/80 p-3">
+          <div class="rounded-lf-ctl border border-lf-border/70 bg-lf-surface/80 p-3">
             <template v-if="item.precheck.action === 'create'">
               <div class="flex items-center justify-between gap-3">
                 <span class="text-xs font-medium text-lf-text-muted">

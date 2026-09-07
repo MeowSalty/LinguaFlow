@@ -261,31 +261,23 @@ watch(
   <RouterView v-if="!isProjectListRoute" />
   <div v-else class="lf-page">
     <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('projects.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('projects.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('projects.subtitle') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="projects.loading" @click="projects.loadProjects">
-            {{ t('projects.actions.refresh') }}
-          </NButton>
-          <NButton type="primary" @click="openCreateDrawer">
-            {{ t('projects.actions.create') }}
-          </NButton>
-        </div>
+      <div class="space-y-1.5">
+        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
+          {{ t('projects.title') }}
+        </h1>
+        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
+          {{ t('projects.subtitle') }}
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <NButton secondary :loading="projects.loading" @click="projects.loadProjects">
+          {{ t('projects.actions.refresh') }}
+        </NButton>
+        <NButton type="primary" @click="openCreateDrawer">
+          {{ t('projects.actions.create') }}
+        </NButton>
       </div>
     </section>
-
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div class="lf-metric">
         <div class="lf-metric-label">{{ t('projects.stats.total') }}</div>
@@ -357,7 +349,7 @@ watch(
               >
                 {{ project.name }}
               </h2>
-              <p class="mt-1 text-xs text-lf-text-subtle">
+              <p class="mt-1 text-xs tabular-nums text-lf-text-subtle">
                 {{ t('projects.card.projectId', { id: project.id }) }}
               </p>
             </div>
@@ -398,7 +390,7 @@ watch(
           </div>
 
           <div
-            class="flex items-center gap-2 rounded-xl bg-lf-surface-muted px-3 py-2.5 text-sm text-lf-text-muted"
+            class="flex items-center gap-2 rounded-lf-ctl bg-lf-surface-muted px-3 py-2.5 text-sm text-lf-text-muted"
           >
             <IconCarbonLanguage class="h-4 w-4 shrink-0 text-brand-500" />
             <span class="truncate font-medium text-lf-text-strong">
@@ -412,7 +404,7 @@ watch(
 
           <div class="mt-auto border-t border-lf-border-soft pt-4">
             <div class="flex items-center justify-between gap-3">
-              <span class="inline-flex items-center gap-1.5 text-xs text-lf-text-subtle">
+              <span class="inline-flex items-center gap-1.5 text-xs tabular-nums text-lf-text-subtle">
                 <IconCarbonTime class="h-3.5 w-3.5 shrink-0" />
                 {{ t('projects.card.updatedAt') }}
                 {{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}
@@ -437,7 +429,7 @@ watch(
 
     <NDrawer v-model:show="drawerVisible" :width="'min(420px, 100vw)'" placement="right">
       <NDrawerContent :title="drawerTitle" closable>
-        <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
+        <div class="mb-6 rounded-lf-card bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
           {{ drawerDescription }}
         </div>
 

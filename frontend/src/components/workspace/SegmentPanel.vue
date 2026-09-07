@@ -213,9 +213,9 @@ const chipClass = (active: boolean, tone: 'default' | 'danger' | 'warning' = 'de
       return `${base} cursor-pointer border-red-500/30 bg-lf-danger-soft text-red-600 shadow-sm shadow-lf-shadow`
     }
     if (tone === 'warning') {
-      return `${base} cursor-pointer border-amber-500/30 bg-amber-500/10 text-amber-700 shadow-sm shadow-lf-shadow dark:text-amber-300`
+      return `${base} cursor-pointer border-lf-warning-soft bg-lf-warning-soft/50 text-lf-warning shadow-sm shadow-lf-shadow`
     }
-    return `${base} cursor-pointer border-brand-500/35 bg-lf-brand-soft text-brand-700 shadow-sm shadow-lf-shadow dark:text-brand-100`
+    return `${base} cursor-pointer border-brand-500/35 bg-lf-brand-soft text-brand-700 shadow-sm shadow-lf-shadow`
   }
   return `${base} cursor-pointer border-lf-border-soft bg-lf-surface text-lf-text-muted hover:border-lf-border hover:bg-lf-surface-elevated hover:text-lf-text-strong`
 }
@@ -306,7 +306,7 @@ const handleCloseInlineComment = (): void => {
 <template>
   <div class="space-y-3">
     <div
-      class="flex flex-col gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5"
+      class="flex flex-col gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5"
     >
       <div class="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
         <div class="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center">
@@ -470,7 +470,7 @@ const handleCloseInlineComment = (): void => {
       :description="t('workspace.segment.noResource')"
     />
 
-    <div v-else class="lf-table overflow-hidden rounded-xl border border-lf-border-soft">
+    <div v-else class="lf-table overflow-hidden rounded-lf-card border border-lf-border-soft">
       <SegmentDataTable
         ref="segmentDataTableRef"
         :segments="workspace.segments"

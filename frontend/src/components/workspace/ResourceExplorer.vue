@@ -509,7 +509,7 @@ const currentViewEvents = computed(() => {
 <template>
   <div class="space-y-3" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
     <div
-      class="flex flex-wrap items-center gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2"
+      class="flex flex-wrap items-center gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2"
     >
       <NButton
         v-if="toolbarMeta.showBackButton"
@@ -583,15 +583,15 @@ const currentViewEvents = computed(() => {
     >
       <div
         v-if="dragOver"
-        class="flex items-center justify-center rounded-xl border-2 border-dashed border-brand-500/45 bg-lf-brand-soft/80 py-8 dark:border-brand-500/55 dark:bg-lf-brand-soft/70"
+        class="flex items-center justify-center rounded-lf-card border-2 border-dashed border-brand-500/45 bg-lf-brand-soft/80 py-8"
       >
         <div class="text-center">
           <div
-            class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow dark:bg-brand-500/15 dark:text-brand-100"
+            class="mx-auto flex h-12 w-12 items-center justify-center rounded-lf-ctl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow"
           >
             <NIcon size="26"><IconCarbonUpload /></NIcon>
           </div>
-          <p class="mt-3 text-sm font-medium text-brand-700 dark:text-brand-100">
+          <p class="mt-3 text-sm font-medium text-brand-700">
             {{ t('workspace.explorer.dropToUpload') }}
           </p>
         </div>
@@ -601,10 +601,10 @@ const currentViewEvents = computed(() => {
     <!-- 加载状态 -->
     <div
       v-if="workspace.loadingResourceTree"
-      class="flex items-center justify-center rounded-xl border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-8 text-center"
+      class="flex items-center justify-center rounded-lf-card border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-8 text-center"
     >
       <div
-        class="flex h-12 w-12 items-center justify-center rounded-xl bg-lf-surface-elevated text-brand-600 shadow-sm shadow-lf-shadow dark:text-brand-100"
+        class="flex h-12 w-12 items-center justify-center rounded-lf-ctl bg-lf-surface-elevated text-brand-600 shadow-sm shadow-lf-shadow"
       >
         <NIcon size="24" class="animate-spin"><IconCarbonCircleDash /></NIcon>
       </div>
@@ -613,7 +613,7 @@ const currentViewEvents = computed(() => {
     <!-- 空状态 -->
     <div
       v-else-if="isEmpty && !dragOver"
-      class="rounded-xl border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-8"
+      class="rounded-lf-card border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-8"
     >
       <NEmpty :description="t('workspace.explorer.emptyDirectory')">
         <template #extra>

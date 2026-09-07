@@ -253,27 +253,27 @@ const requestClose = (): void => {
         </NAlert>
 
         <div class="grid grid-cols-2 gap-3">
-          <div class="rounded-lg bg-blue-50 p-4 text-center dark:bg-blue-500/10">
-            <div class="text-2xl font-bold text-blue-600">{{ result.segments_checked }}</div>
-            <div class="mt-1 text-xs text-blue-600/70">
+          <div class="rounded-lf-ctl bg-lf-info-soft p-4 text-center">
+            <div class="text-2xl font-bold tabular-nums text-lf-info">{{ result.segments_checked }}</div>
+            <div class="mt-1 text-xs text-lf-info/70">
               {{ t('workspace.qaRecheck.resultSegmentsChecked') }}
             </div>
           </div>
-          <div class="rounded-lg bg-gray-50 p-4 text-center dark:bg-gray-500/10">
-            <div class="text-2xl font-bold text-gray-600">{{ result.resources_checked }}</div>
-            <div class="mt-1 text-xs text-gray-600/70">
+          <div class="rounded-lf-ctl bg-lf-surface-muted p-4 text-center">
+            <div class="text-2xl font-bold tabular-nums text-lf-text-muted">{{ result.resources_checked }}</div>
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('workspace.qaRecheck.resultResourcesChecked') }}
             </div>
           </div>
-          <div class="rounded-lg bg-red-50 p-4 text-center dark:bg-red-500/10">
-            <div class="text-2xl font-bold text-red-600">{{ result.issues_new }}</div>
-            <div class="mt-1 text-xs text-red-600/70">
+          <div class="rounded-lf-ctl bg-lf-danger-soft p-4 text-center">
+            <div class="text-2xl font-bold tabular-nums text-lf-danger">{{ result.issues_new }}</div>
+            <div class="mt-1 text-xs text-lf-danger/70">
               {{ t('workspace.qaRecheck.resultIssuesNew') }}
             </div>
           </div>
-          <div class="rounded-lg bg-emerald-50 p-4 text-center dark:bg-emerald-500/10">
-            <div class="text-2xl font-bold text-emerald-600">{{ result.issues_cleared }}</div>
-            <div class="mt-1 text-xs text-emerald-600/70">
+          <div class="rounded-lf-ctl bg-lf-success-soft p-4 text-center">
+            <div class="text-2xl font-bold tabular-nums text-lf-success">{{ result.issues_cleared }}</div>
+            <div class="mt-1 text-xs text-lf-success/70">
               {{ t('workspace.qaRecheck.resultIssuesCleared') }}
             </div>
           </div>
@@ -329,7 +329,7 @@ const requestClose = (): void => {
           <div
             v-for="resource in result.resources"
             :key="resource.resource_id"
-            class="rounded-lg border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2 text-sm text-lf-text-muted"
+            class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2 text-sm text-lf-text-muted"
           >
             {{ resourceResultLabel(resource) }}
           </div>

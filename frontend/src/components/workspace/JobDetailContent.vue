@@ -222,7 +222,7 @@ const resourceColumns = computed(() => {
         if (row.warning_message) {
           return h(
             'span',
-            { class: 'text-xs text-amber-600 dark:text-amber-400' },
+            { class: 'text-xs text-lf-warning' },
             { default: () => row.warning_message },
           )
         }

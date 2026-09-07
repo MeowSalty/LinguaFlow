@@ -59,22 +59,22 @@ const formatConfig = computed(() => {
   const format = props.resource.format
   const map: Record<string, { bgClass: string; textClass: string }> = {
     epub: {
-      bgClass: 'bg-indigo-50 dark:bg-indigo-500/15',
-      textClass: 'text-indigo-600 dark:text-indigo-300',
+      bgClass: 'bg-lf-info-soft',
+      textClass: 'text-lf-info',
     },
     json: {
-      bgClass: 'bg-emerald-50 dark:bg-emerald-500/15',
-      textClass: 'text-emerald-600 dark:text-emerald-300',
+      bgClass: 'bg-lf-success-soft',
+      textClass: 'text-lf-success',
     },
     srt: {
-      bgClass: 'bg-purple-50 dark:bg-purple-500/15',
-      textClass: 'text-purple-600 dark:text-purple-300',
+      bgClass: 'bg-lf-brand-soft',
+      textClass: 'text-brand-600',
     },
   }
   return (
     map[format] ?? {
-      bgClass: 'bg-blue-50 dark:bg-blue-500/15',
-      textClass: 'text-blue-600 dark:text-blue-300',
+      bgClass: 'bg-lf-info-soft',
+      textClass: 'text-lf-info',
     }
   )
 })
@@ -131,8 +131,7 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
     key: 'dangerDivider',
   },
   {
-    label: () =>
-      h('span', { class: 'text-red-500 dark:text-red-300' }, t('workspace.common.delete')),
+      label: () => h('span', { class: 'text-lf-danger' }, t('workspace.common.delete')),
     key: 'delete',
     disabled: isBusy.value,
   },

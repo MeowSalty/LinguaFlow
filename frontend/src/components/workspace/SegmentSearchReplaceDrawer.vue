@@ -394,10 +394,10 @@ defineExpose({ open })
         <!-- 预览结果 -->
         <template v-if="preview">
           <section
-            class="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3.5 py-3 text-sm"
+            class="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3.5 py-3 text-sm"
           >
             <span>
-              <span class="font-semibold text-lf-text-strong">
+              <span class="font-semibold text-lf-text-strong tabular-nums">
                 {{ preview.matched_segment_count }}
               </span>
               <span class="text-lf-text-muted">
@@ -406,7 +406,7 @@ defineExpose({ open })
             </span>
             <span class="h-3.5 w-px bg-lf-border-soft" />
             <span>
-              <span class="font-semibold text-lf-text-strong">
+              <span class="font-semibold text-lf-text-strong tabular-nums">
                 {{ preview.total_replacements }}
               </span>
               <span class="text-lf-text-muted">
@@ -435,16 +435,16 @@ defineExpose({ open })
             <div
               v-for="item in preview.items"
               :key="item.segment_id"
-              class="space-y-1.5 rounded-xl border border-lf-border-soft bg-lf-surface px-3.5 py-3"
+              class="space-y-1.5 rounded-lf-card border border-lf-border-soft bg-lf-surface px-3.5 py-3"
             >
-              <div class="flex items-center gap-2 text-xs text-lf-text-muted">
+              <div class="flex items-center gap-2 text-xs text-lf-text-muted tabular-nums">
                 <span class="font-medium">#{{ item.segment_index }}</span>
                 <NTag size="tiny" :bordered="false">
                   {{ t('workspace.segment.searchReplace.matchCount', { count: item.match_count }) }}
                 </NTag>
               </div>
               <div
-                class="max-h-24 overflow-auto rounded-lg bg-lf-surface-muted/40 px-2.5 py-2 text-xs leading-5 text-lf-text-subtle"
+                class="max-h-24 overflow-auto rounded-lf-ctl bg-lf-surface-muted/40 px-2.5 py-2 text-xs leading-5 text-lf-text-subtle"
               >
                 <SegmentTextDisplay :text="item.source_text" :mode="textRenderMode" />
               </div>
@@ -489,13 +489,13 @@ defineExpose({ open })
         <!-- 应用结果 -->
         <section
           v-if="lastApplyResult"
-          class="space-y-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3.5 py-3"
+          class="space-y-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3.5 py-3"
         >
           <div class="flex flex-wrap items-center gap-2 text-sm">
             <span class="font-semibold text-lf-text-strong">
               {{ t('workspace.segment.searchReplace.applyResultTitle') }}
             </span>
-            <NTag size="small" type="success" :bordered="false">
+            <NTag size="small" type="success" :bordered="false" class="tabular-nums">
               {{
                 t('workspace.segment.searchReplace.appliedCount', {
                   count: lastApplyResult.applied_count,
@@ -507,6 +507,7 @@ defineExpose({ open })
               size="small"
               type="warning"
               :bordered="false"
+              class="tabular-nums"
             >
               {{
                 t('workspace.segment.searchReplace.skippedCount', {
@@ -519,7 +520,7 @@ defineExpose({ open })
             <div
               v-for="item in lastApplyResult.skipped"
               :key="item.segment_id"
-              class="text-xs text-lf-text-muted"
+              class="text-xs text-lf-text-muted tabular-nums"
             >
               #{{ item.segment_id }} · {{ skippedReasonLabel(item.reason) }}
             </div>

@@ -554,7 +554,7 @@ onMounted(() => {
 
 <template>
   <div class="space-y-3">
-    <section class="lf-page-header px-4! py-3! sm:px-5!">
+    <section class="lf-page-header px-4 py-3 sm:px-5">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <NButton quaternary size="small" @click="router.push('/projects')">
@@ -863,7 +863,7 @@ onMounted(() => {
     <!-- 编辑项目抽屉 -->
     <NDrawer v-model:show="editDrawerVisible" :width="'min(420px, 100vw)'" placement="right">
       <NDrawerContent :title="t('projects.edit.title')" closable>
-        <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
+        <div class="mb-6 rounded-lf-card bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
           {{ t('projects.edit.description') }}
         </div>
 

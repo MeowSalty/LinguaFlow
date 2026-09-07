@@ -100,33 +100,26 @@ watch(
 <template>
   <div class="lf-page">
     <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('admin.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('admin.settings.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('admin.settings.description') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="admin.settingsLoading" @click="admin.loadSettings">
-            {{ t('admin.settings.actions.refresh') }}
-          </NButton>
-          <NButton
-            type="primary"
-            :loading="admin.settingsSaving"
-            :disabled="!hasChanges"
-            @click="saveSettings"
-          >
-            {{ t('admin.settings.actions.save') }}
-          </NButton>
-        </div>
+      <div class="space-y-1.5">
+        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
+          {{ t('admin.settings.title') }}
+        </h1>
+        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
+          {{ t('admin.settings.description') }}
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <NButton secondary :loading="admin.settingsLoading" @click="admin.loadSettings">
+          {{ t('admin.settings.actions.refresh') }}
+        </NButton>
+        <NButton
+          type="primary"
+          :loading="admin.settingsSaving"
+          :disabled="!hasChanges"
+          @click="saveSettings"
+        >
+          {{ t('admin.settings.actions.save') }}
+        </NButton>
       </div>
     </section>
 
@@ -135,7 +128,9 @@ watch(
         <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
           {{ t('admin.settings.title') }}
         </h2>
-        <span class="text-xs text-lf-text-subtle"> {{ editingSettings.length }} keys </span>
+        <span class="text-xs tabular-nums text-lf-text-subtle">
+          {{ editingSettings.length }} keys
+        </span>
       </div>
 
       <div v-if="admin.settingsLoading" class="space-y-3">
@@ -152,7 +147,7 @@ watch(
         <div
           v-for="(entry, index) in editingSettings"
           :key="index"
-          class="flex items-start gap-3 rounded-xl border border-lf-border-soft bg-lf-surface-muted p-3.5 sm:gap-4 sm:p-4"
+          class="flex items-start gap-3 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted p-3.5 sm:gap-4 sm:p-4"
         >
           <div class="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
             <div>

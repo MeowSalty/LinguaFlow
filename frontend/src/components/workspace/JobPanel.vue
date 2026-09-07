@@ -46,7 +46,7 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
 <template>
   <div class="space-y-3">
     <div
-      class="flex flex-col gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+      class="flex flex-col gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
     >
       <NSelect
         v-model:value="workspace.jobStatusFilter"
@@ -91,7 +91,7 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
       {{ workspace.jobsError }}
     </NAlert>
 
-    <div class="lf-table overflow-hidden rounded-xl border border-lf-border-soft">
+    <div class="lf-table overflow-hidden rounded-lf-card border border-lf-border-soft">
       <NDataTable
         remote
         size="small"

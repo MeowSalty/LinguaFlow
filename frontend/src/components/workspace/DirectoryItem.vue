@@ -45,7 +45,7 @@ const selectionAriaLabel = computed(() =>
       @click="emit('open', path)"
     >
       <div
-        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300"
+        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-lf-warning-soft text-lf-warning"
       >
         <NIcon size="14"><IconCarbonFolder /></NIcon>
       </div>
@@ -59,7 +59,7 @@ const selectionAriaLabel = computed(() =>
           <span class="block max-w-xs break-all">{{ path || name }}</span>
         </NTooltip>
         <div
-          class="mt-0.5 inline-flex rounded-full bg-amber-50 px-2 py-px text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
+          class="mt-0.5 inline-flex rounded-full bg-lf-warning-soft px-2 py-px text-xs text-lf-warning"
         >
           {{ t('workspace.explorer.childCount', { count: childCount }) }}
         </div>

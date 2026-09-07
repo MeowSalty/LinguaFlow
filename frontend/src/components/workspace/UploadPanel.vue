@@ -266,7 +266,7 @@ const summaryItems = computed(() => {
       label: t('workspace.uploadResult.summary.skipped'),
       value: result.summary.skipped,
       tier: 'secondary',
-      dotColor: 'bg-slate-400 dark:bg-slate-500',
+      dotColor: 'bg-lf-text-subtle',
     },
     {
       key: 'failed',
@@ -359,8 +359,8 @@ const getActionTagType = (action: string): 'success' | 'warning' | 'error' | 'de
 }
 
 const getRowAccentClass = (action: string): string => {
-  if (action === 'failed') return 'border-l-red-300 dark:border-l-red-500/60'
-  if (action === 'conflict') return 'border-l-amber-300 dark:border-l-amber-500/60'
+  if (action === 'failed') return 'border-l-lf-danger/50'
+  if (action === 'conflict') return 'border-l-lf-warning/50'
   return 'border-l-transparent'
 }
 
@@ -408,12 +408,12 @@ const getStageTagType = (
 /** 阶段对应的图标背景色 */
 const stageIconBgClass = (stage: UploadTask['stage']): string => {
   const map: Record<UploadTask['stage'], string> = {
-    prechecking: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300',
-    uploading: 'bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300',
-    processing: 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300',
-    complete: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300',
-    partial: 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300',
-    error: 'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300',
+    prechecking: 'bg-lf-info-soft text-lf-info',
+    uploading: 'bg-lf-info-soft text-lf-info',
+    processing: 'bg-lf-warning-soft text-lf-warning',
+    complete: 'bg-lf-success-soft text-lf-success',
+    partial: 'bg-lf-warning-soft text-lf-warning',
+    error: 'bg-lf-danger-soft text-lf-danger',
   }
   return map[stage]
 }
@@ -426,7 +426,7 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
       class="fixed inset-x-0 bottom-0 z-40"
     >
       <div
-        class="mx-auto w-full max-w-4xl overflow-hidden rounded-t-2xl border-t border-lf-border-soft bg-lf-surface/95 shadow-[0_-2px_16px_rgba(0,0,0,0.08)] backdrop-blur-xl"
+        class="mx-auto w-full max-w-4xl overflow-hidden rounded-t-lf-card border-t border-lf-border-soft bg-lf-surface/95 shadow-[0_-2px_16px_rgba(0,0,0,0.08)] backdrop-blur-xl"
       >
         <!-- 收缩态头部 -->
         <button
@@ -436,7 +436,7 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
         >
           <!-- 状态图标 -->
           <div
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lf-ctl"
             :class="stageIconBgClass(dominantStage === 'idle' ? 'complete' : dominantStage)"
           >
             <IconCarbonAsync
@@ -501,7 +501,7 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
               <div
                 v-for="task in workspace.uploadTasks"
                 :key="task.id"
-                class="flex flex-col gap-1.5 rounded-lg border border-lf-border/60 bg-lf-surface px-3 py-2.5"
+                class="flex flex-col gap-1.5 rounded-lf-ctl border border-lf-border/60 bg-lf-surface px-3 py-2.5"
               >
                 <div class="flex items-center gap-2">
                   <span class="min-w-0 flex-1 truncate text-sm font-medium text-lf-text-strong">
@@ -524,7 +524,7 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
                     {{ task.progress }}%
                   </span>
                 </div>
-                <p v-else-if="task.errorMessage" class="text-xs text-red-500 dark:text-red-400">
+                <p v-else-if="task.errorMessage" class="text-xs text-lf-danger">
                   {{ task.errorMessage }}
                 </p>
               </div>
@@ -543,7 +543,7 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
                   :class="{ 'opacity-40': item.value === 0 }"
                 >
                   <span class="h-2 w-2 shrink-0 rounded-full" :class="item.dotColor" />
-                  <span class="text-sm font-semibold text-lf-text-strong">{{ item.value }}</span>
+                  <span class="text-sm font-semibold tabular-nums text-lf-text-strong">{{ item.value }}</span>
                   <span class="text-xs text-lf-text-muted">{{ item.label }}</span>
                 </div>
               </div>
@@ -553,7 +553,7 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
                 <div
                   v-for="row in resultRows"
                   :key="`${row.rowType}:${row.path}:${row.action}`"
-                  class="flex flex-col gap-1.5 rounded-lg border border-l-3 border-lf-border/60 bg-lf-surface px-3 py-2.5"
+                  class="flex flex-col gap-1.5 rounded-lf-ctl border border-l-3 border-lf-border/60 bg-lf-surface px-3 py-2.5"
                   :class="getRowAccentClass(row.action)"
                 >
                   <div class="flex items-center gap-2">
@@ -564,7 +564,7 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
                       {{ getActionLabel(row.action) }}
                     </NTag>
                   </div>
-                  <p v-if="row.error" class="text-xs text-red-500 dark:text-red-400">
+                  <p v-if="row.error" class="text-xs text-lf-danger">
                     {{ row.error }}
                   </p>
                   <p v-else class="text-xs leading-5 text-lf-text-muted">

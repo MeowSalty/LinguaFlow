@@ -94,24 +94,17 @@ watch(
 <template>
   <div class="lf-page">
     <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('admin.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('admin.auditLogs.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('admin.auditLogs.description') }}
-            </p>
-          </div>
-        </div>
-        <NButton secondary :loading="admin.auditLogsLoading" @click="admin.loadAuditLogs(true)">
-          {{ t('admin.auditLogs.refresh') }}
-        </NButton>
+      <div class="space-y-1.5">
+        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
+          {{ t('admin.auditLogs.title') }}
+        </h1>
+        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
+          {{ t('admin.auditLogs.description') }}
+        </p>
       </div>
+      <NButton secondary :loading="admin.auditLogsLoading" @click="admin.loadAuditLogs(true)">
+        {{ t('admin.auditLogs.refresh') }}
+      </NButton>
     </section>
 
     <div class="lf-panel lf-table overflow-hidden">

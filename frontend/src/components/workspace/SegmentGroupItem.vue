@@ -40,11 +40,11 @@ const approvedPercent = computed(() => {
   >
     <!-- 进度背景层：双重重叠进度条 -->
     <div
-      class="pointer-events-none absolute inset-y-0 left-0 bg-blue-500/10 transition-all duration-500"
+      class="pointer-events-none absolute inset-y-0 left-0 bg-lf-info/10 transition-all duration-500"
       :style="{ width: `${progressPercent}%` }"
     />
     <div
-      class="pointer-events-none absolute inset-y-0 left-0 bg-emerald-500/10 transition-all duration-500"
+      class="pointer-events-none absolute inset-y-0 left-0 bg-lf-success/10 transition-all duration-500"
       :style="{ width: `${approvedPercent}%` }"
     />
     <div class="flex min-h-14 items-center gap-3">
@@ -55,7 +55,7 @@ const approvedPercent = computed(() => {
         @click.stop
       />
       <div
-        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
+        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-lf-info-soft text-lf-info"
       >
         <NIcon size="14"><IconCarbonDocument /></NIcon>
       </div>
@@ -94,8 +94,8 @@ const approvedPercent = computed(() => {
               </template>
               <span class="block max-w-sm break-all">{{ group.group_key }}</span>
             </NTooltip>
-            <span class="text-[10px] text-blue-500/80"> {{ progressPercent }}%</span>
-            <span class="text-[10px] text-emerald-500/80"> {{ approvedPercent }}%</span>
+            <span class="text-[10px] text-lf-info/80"> {{ progressPercent }}%</span>
+            <span class="text-[10px] text-lf-success/80"> {{ approvedPercent }}%</span>
           </div>
         </div>
 

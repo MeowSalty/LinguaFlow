@@ -178,15 +178,15 @@ const previewStats = computed(() => {
       key: 'delete',
       label: t('workspace.glossary.prune.toDelete'),
       value: preview.value.to_delete,
-      valueClass: 'text-red-500',
-      accentClass: 'bg-red-500',
+      valueClass: 'text-lf-danger',
+      accentClass: 'bg-lf-danger',
     },
     {
       key: 'update',
       label: t('workspace.glossary.prune.toUpdate'),
       value: preview.value.to_update,
-      valueClass: 'text-amber-500',
-      accentClass: 'bg-amber-500',
+      valueClass: 'text-lf-warning',
+      accentClass: 'bg-lf-warning',
     },
     {
       key: 'keep',
@@ -205,19 +205,19 @@ const resultStats = computed(() => {
       key: 'deleted',
       label: t('workspace.glossary.prune.deleted'),
       value: result.value.deleted,
-      valueClass: 'text-red-500',
+      valueClass: 'text-lf-danger',
     },
     {
       key: 'updated',
       label: t('workspace.glossary.prune.updated'),
       value: result.value.updated,
-      valueClass: 'text-amber-500',
+      valueClass: 'text-lf-warning',
     },
     {
       key: 'failed',
       label: t('workspace.glossary.prune.failed'),
       value: result.value.failed,
-      valueClass: result.value.failed ? 'text-red-500' : 'text-lf-text-strong',
+      valueClass: result.value.failed ? 'text-lf-danger' : 'text-lf-text-strong',
     },
   ]
 })
@@ -386,10 +386,13 @@ watch(show, (visible) => {
           <div
             v-for="stat in resultStats"
             :key="stat.key"
-            class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 px-4 py-3"
+            class="rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/60 px-4 py-3"
           >
             <div class="text-xs font-medium text-lf-text-muted">{{ stat.label }}</div>
-            <div class="mt-1.5 text-2xl font-semibold tracking-tight" :class="stat.valueClass">
+            <div
+              class="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums"
+              :class="stat.valueClass"
+            >
               {{ stat.value.toLocaleString() }}
             </div>
           </div>
@@ -440,7 +443,7 @@ watch(show, (visible) => {
             <div
               v-for="stat in previewStats"
               :key="stat.key"
-              class="relative overflow-hidden rounded-xl border border-lf-border-soft bg-lf-surface px-3.5 py-3 shadow-sm shadow-lf-shadow"
+              class="relative overflow-hidden rounded-lf-card border border-lf-border-soft bg-lf-surface px-3.5 py-3 shadow-sm shadow-lf-shadow"
             >
               <div
                 class="absolute inset-y-0 left-0 w-0.5"
@@ -448,7 +451,10 @@ watch(show, (visible) => {
                 aria-hidden="true"
               />
               <div class="text-xs font-medium text-lf-text-muted">{{ stat.label }}</div>
-              <div class="mt-1.5 text-2xl font-semibold tracking-tight" :class="stat.valueClass">
+              <div
+                class="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums"
+                :class="stat.valueClass"
+              >
                 {{ stat.value.toLocaleString() }}
               </div>
             </div>
@@ -480,7 +486,7 @@ watch(show, (visible) => {
                     >
                       <span class="shrink-0 text-xs text-lf-text-muted">{{ metric.label }}</span>
                       <span
-                        class="min-w-0 text-right text-xs font-medium text-lf-text-strong"
+                        class="min-w-0 text-right text-xs font-medium tabular-nums text-lf-text-strong"
                         :class="metric.mono ? 'font-mono' : ''"
                       >
                         {{ metric.value }}
@@ -526,7 +532,7 @@ watch(show, (visible) => {
             {{ t('workspace.glossary.prune.diagnostics.noData') }}
           </div>
 
-          <div class="overflow-hidden rounded-xl border border-lf-border-soft">
+          <div class="overflow-hidden rounded-lf-card border border-lf-border-soft">
             <NDataTable
               v-model:checked-row-keys="selectedKeys"
               :columns="columns"
