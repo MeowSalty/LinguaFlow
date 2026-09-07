@@ -118,6 +118,10 @@ const messages = {
   },
   layout: {
     localModeBadge: '本地模式',
+    sidebar: {
+      collapse: '收起侧栏',
+      expand: '展开侧栏',
+    },
     userMenu: {
       switchService: '切换服务器',
       connectRemoteService: '连接远程服务',
@@ -296,7 +300,6 @@ const messages = {
     subtitle: '查看调用量、令牌消耗与最近活动。',
   },
   projects: {
-    eyebrow: 'Project Workspace',
     title: '翻译项目',
     subtitle: '集中管理您的多语言翻译项目，快速查看语言方向、资源归属与最近更新时间。',
     actions: {
@@ -1377,7 +1380,6 @@ const messages = {
     },
   },
   backends: {
-    eyebrow: 'AI Backend',
     title: 'AI 后端管理',
     subtitle: '配置和管理您的 AI 翻译后端，支持 OpenAI、Anthropic、Google Gemini 等多种服务。',
     stats: {
@@ -1491,7 +1493,6 @@ const messages = {
     },
   },
   promptTemplates: {
-    eyebrow: 'Prompt Templates',
     title: '提示词模板',
     subtitle: '管理翻译提示词，定义 AI 翻译的行为指令和上下文信息。',
     stats: {
@@ -1557,7 +1558,6 @@ const messages = {
     },
   },
   bootstrapPromptTemplates: {
-    eyebrow: 'Bootstrap Templates',
     title: '术语抽取模板',
     subtitle: '管理术语抽取（Bootstrap）的提示词模板，用于从源文本中自动提取翻译术语。',
     stats: {
@@ -1623,7 +1623,6 @@ const messages = {
     },
   },
   prunePromptTemplates: {
-    eyebrow: 'Glossary Prune',
     title: '术语精简提示词',
     subtitle: '管理 AI 术语表精简所使用的分析指令，控制删除、合并与译文优化建议。',
     stats: {
@@ -1687,7 +1686,6 @@ const messages = {
     },
   },
   executionProfiles: {
-    eyebrow: 'Execution Profiles',
     title: '执行策略',
     subtitle: '管理执行流水线的处理策略，配置分段、保护、修复、后处理和术语表规则。',
     stats: {
@@ -1841,7 +1839,6 @@ const messages = {
     },
   },
   executionPlanTemplates: {
-    eyebrow: 'Execution Plan Templates',
     title: '执行计划模板',
     subtitle: '定义任务的执行流程，配置多轮执行策略、后端选择和并发参数。',
     stats: {
@@ -2069,7 +2066,6 @@ const messages = {
     noDescription: '该版本暂无详细说明。',
   },
   admin: {
-    eyebrow: 'Administration',
     title: '管理后台',
     subtitle: '管理系统用户、查看全局统计、审计日志和系统配置。',
     dashboard: {
@@ -2287,7 +2283,6 @@ const messages = {
       downloadResourceResultFailed: '下载结果失败',
       downloadResourceResultEmpty: '该资源暂无结果',
       downloadTranslatedFailed: '下载译文失败',
-      fetchOrganizationsFailed: '获取组织列表失败',
       loadStatsFailed: '加载统计失败',
       loadActivityFailed: '加载活动失败',
       loadProjectsFailed: '加载项目失败',
