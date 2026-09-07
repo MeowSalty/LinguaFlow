@@ -113,7 +113,7 @@ const onSubmit = async () => {
 
 <template>
   <BlankLayout :title="t('service.title')" :subtitle="t('service.subtitle')">
-    <div class="lf-panel border-lf-border/80 p-6 shadow-lg shadow-lf-shadow-strong">
+    <div class="lf-panel p-6">
       <NForm
         ref="formRef"
         :model="formValue"

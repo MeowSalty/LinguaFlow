@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { useMessage, type DropdownOption } from 'naive-ui'
-import { Icon as IconifyIcon } from '@iconify/vue'
 
+import AppLogo from '@/components/AppLogo.vue'
+import { APP_NAV_SECTIONS, type AppNavItem } from '@/layouts/navigation'
 import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
 import { useServiceStore } from '@/stores/service'
@@ -16,6 +17,16 @@ const service = useServiceStore()
 const theme = useThemeStore()
 const message = useMessage()
 const { t } = useI18n()
+
+const SIDEBAR_STORAGE_KEY = 'linguaflow.sidebar.collapsed'
+
+const sidebarCollapsed = ref(
+  typeof window !== 'undefined' && window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1',
+)
+
+watch(sidebarCollapsed, (collapsed) => {
+  window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0')
+})
 
 const displayName = computed(() => {
   if (!auth.user) {
@@ -36,16 +47,29 @@ const serviceSummary = computed(() => {
   return service.displayName.trim() || service.baseUrl
 })
 
+const isAdmin = computed(() => auth.user?.role === 'admin')
+
+const navSections = computed(() =>
+  APP_NAV_SECTIONS.filter((section) => !section.adminOnly || isAdmin.value),
+)
+
+const isActive = (item: AppNavItem): boolean => {
+  if (item.path === '/') {
+    return route.path === '/'
+  }
+  return route.path === item.path || route.path.startsWith(`${item.path}/`)
+}
+
 const userOptions = computed<DropdownOption[]>(() => {
   const items: DropdownOption[] = [
     {
-      key: 'username-info',
+      key: 'user-info',
       type: 'render',
       render: () =>
         h('div', { class: 'px-3 py-2 min-w-[180px]' }, [
           h('div', { class: 'text-sm font-medium text-lf-text-strong' }, displayName.value),
           auth.user?.email
-            ? h('div', { class: 'text-xs text-lf-text-muted mt-0.5' }, auth.user.email)
+            ? h('div', { class: 'mt-0.5 text-xs text-lf-text-muted' }, auth.user.email)
             : null,
           h(
             'div',
@@ -58,24 +82,13 @@ const userOptions = computed<DropdownOption[]>(() => {
         ]),
     },
     { type: 'divider', key: 'divider-1' },
-    {
-      label: t('nav.changelog'),
-      key: 'changelog',
-      icon: () => h(IconifyIcon, { icon: 'carbon:catalog', class: 'text-base' }),
-    },
-    {
-      label: t('nav.about'),
-      key: 'about',
-      icon: () => h(IconifyIcon, { icon: 'carbon:information', class: 'text-base' }),
-    },
+    { label: t('nav.changelog'), key: 'changelog' },
+    { label: t('nav.about'), key: 'about' },
     { type: 'divider', key: 'divider-2' },
   ]
 
   if (service.isLocal) {
-    items.push({
-      label: t('layout.userMenu.connectRemoteService'),
-      key: 'switch-service',
-    })
+    items.push({ label: t('layout.userMenu.connectRemoteService'), key: 'switch-service' })
   } else {
     items.push(
       { label: t('layout.userMenu.switchService'), key: 'switch-service' },
@@ -99,13 +112,6 @@ const themeOptions = computed<DropdownOption[]>(() => [
   { label: `☾ ${t('theme.dark')}`, key: 'dark' },
 ])
 
-const themeIcon = computed(() => {
-  if (theme.mode === 'system') {
-    return 'carbon:contrast'
-  }
-  return theme.resolvedTheme === 'dark' ? 'carbon:moon' : 'carbon:sun'
-})
-
 const onSelectUserAction = async (key: string | number) => {
   if (key === 'logout') {
     try {
@@ -126,67 +132,6 @@ const onSelectUserAction = async (key: string | number) => {
   }
 }
 
-interface NavItem {
-  path: string
-  icon: string
-  labelKey: string
-}
-
-const toDropdownOption = (item: NavItem): DropdownOption => ({
-  label: t(item.labelKey),
-  key: item.path,
-  icon: () => h(IconifyIcon, { icon: item.icon, class: 'text-base' }),
-})
-
-const templateNavItems = computed<NavItem[]>(() => [
-  { path: '/prompt-templates', icon: 'carbon:prompt-template', labelKey: 'nav.promptTemplates' },
-  {
-    path: '/bootstrap-prompt-templates',
-    icon: 'carbon:text-mining',
-    labelKey: 'nav.bootstrapPromptTemplates',
-  },
-  { path: '/prune-prompt-templates', icon: 'carbon:clean', labelKey: 'nav.prunePromptTemplates' },
-  { path: '/execution-profiles', icon: 'carbon:flow', labelKey: 'nav.executionProfiles' },
-  {
-    path: '/execution-plan-templates',
-    icon: 'carbon:plan',
-    labelKey: 'nav.executionPlanTemplates',
-  },
-])
-
-const templateNavOptions = computed<DropdownOption[]>(() =>
-  templateNavItems.value.map(toDropdownOption),
-)
-
-const isAdmin = computed(() => auth.user?.role === 'admin')
-
-const isTemplateRoute = computed(() =>
-  templateNavItems.value.some((item) => route.path.startsWith(item.path)),
-)
-
-const toolsNavItems = computed<NavItem[]>(() => [
-  { path: '/tools/quick-translate', icon: 'carbon:translate', labelKey: 'nav.quickTranslate' },
-  {
-    path: '/tools/epub-rotate',
-    icon: 'carbon:text-vertical-alignment',
-    labelKey: 'nav.epubRotate',
-  },
-])
-
-const toolsNavOptions = computed<DropdownOption[]>(() => toolsNavItems.value.map(toDropdownOption))
-
-const isToolsRoute = computed(() => route.path.startsWith('/tools'))
-
-const isAdminRoute = computed(() => route.path.startsWith('/admin'))
-
-const onSelectTemplateNav = (key: string | number): void => {
-  router.push(String(key))
-}
-
-const onSelectToolsNav = (key: string | number): void => {
-  router.push(String(key))
-}
-
 const onSelectTheme = (key: string | number): void => {
   theme.setMode(String(key) as ThemeMode)
 }
@@ -194,10 +139,6 @@ const onSelectTheme = (key: string | number): void => {
 const onSelectLocale = (key: string | number): void => {
   locale.setLocale(String(key))
 }
-
-const navLinkClass =
-  'relative flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-lf-text-muted no-underline transition-colors hover:bg-lf-surface-muted hover:text-lf-text-strong'
-const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
 
 const mobileNavOpen = ref(false)
 
@@ -208,96 +149,102 @@ const navigateTo = (path: string): void => {
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col bg-lf-bg text-lf-text">
-    <header
-      class="sticky top-0 z-20 border-b border-lf-border-soft backdrop-blur-xl"
-      style="background: var(--lf-header-bg)"
+  <div class="flex min-h-screen bg-lf-bg text-lf-text">
+    <!-- 桌面侧边栏（可折叠为图标窄栏） -->
+    <aside
+      class="sticky top-0 hidden h-screen shrink-0 flex-col border-r border-lf-border-soft bg-lf-surface py-3.5 transition-[width] duration-200 lg:flex"
+      :class="sidebarCollapsed ? 'w-[60px] px-2' : 'w-[232px] px-3'"
     >
-      <div class="mx-auto flex h-14 max-w-275 items-center gap-6 px-6 lg:px-8">
-        <RouterLink
-          to="/"
-          class="group inline-flex shrink-0 items-center gap-2 text-lg font-semibold tracking-tight text-lf-text-strong no-underline"
-        >
-          <span
-            class="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-xs font-bold text-white shadow-sm shadow-brand-500/30"
-          >
-            L
-          </span>
-          <span class="hidden sm:inline">{{ t('common.appName') }}</span>
-        </RouterLink>
+      <RouterLink
+        to="/"
+        class="mb-4 flex items-center rounded-lf-ctl no-underline"
+        :class="sidebarCollapsed ? 'justify-center' : 'px-2'"
+        :aria-label="t('common.appName')"
+      >
+        <AppLogo size="md" :wordmark="!sidebarCollapsed" />
+      </RouterLink>
 
+      <nav
+        class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto"
+        :aria-label="t('nav.main')"
+      >
+        <template v-for="(section, si) in navSections" :key="`section-${si}`">
+          <div
+            v-if="si > 0 && section.labelKey === null"
+            class="my-3 border-t border-lf-border-soft"
+          />
+          <div
+            v-else-if="section.labelKey !== null && !sidebarCollapsed"
+            class="mt-5 mb-1 px-2.5 text-[11px] font-semibold tracking-wide text-lf-text-subtle"
+          >
+            {{ t(section.labelKey) }}
+          </div>
+
+          <RouterLink
+            v-for="item in section.items"
+            :key="item.path"
+            :to="item.path"
+            class="flex h-[34px] items-center gap-2.5 rounded-lf-ctl text-[13.5px] font-medium no-underline transition-colors"
+            :class="[
+              sidebarCollapsed ? 'justify-center px-0' : 'px-2.5',
+              isActive(item)
+                ? 'bg-lf-brand-soft text-brand-600'
+                : 'text-lf-text-muted hover:bg-lf-surface-muted hover:text-lf-text',
+            ]"
+            :title="sidebarCollapsed ? t(item.labelKey) : undefined"
+          >
+            <component
+              :is="item.icon"
+              class="h-[18px] w-[18px] shrink-0"
+              :class="isActive(item) ? 'text-brand-500' : 'text-lf-text-subtle'"
+            />
+            <span v-if="!sidebarCollapsed" class="whitespace-nowrap">
+              {{ t(item.labelKey) }}
+            </span>
+          </RouterLink>
+        </template>
+      </nav>
+
+      <div class="mt-2 border-t border-lf-border-soft pt-2">
+        <button
+          type="button"
+          class="flex h-[34px] w-full items-center gap-2.5 rounded-lf-ctl text-[13px] font-medium text-lf-text-subtle transition-colors hover:bg-lf-surface-muted hover:text-lf-text"
+          :class="sidebarCollapsed ? 'justify-center px-0' : 'px-2.5'"
+          :title="sidebarCollapsed ? t('layout.sidebar.expand') : t('layout.sidebar.collapse')"
+          @click="sidebarCollapsed = !sidebarCollapsed"
+        >
+          <IconCarbonChevronLeft
+            class="h-[18px] w-[18px] shrink-0 transition-transform duration-200"
+            :class="sidebarCollapsed ? 'rotate-180' : ''"
+          />
+          <span v-if="!sidebarCollapsed" class="whitespace-nowrap">
+            {{ t('layout.sidebar.collapse') }}
+          </span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- 主区 -->
+    <div class="flex min-w-0 flex-1 flex-col">
+      <header
+        class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-lf-border-soft bg-lf-surface px-4 sm:gap-3 sm:px-6"
+      >
         <NButton
           quaternary
           circle
-          class="flex! md:hidden!"
+          class="lg:hidden"
           :aria-label="t('nav.menu')"
           :title="t('nav.menu')"
           @click="mobileNavOpen = true"
         >
           <template #icon>
-            <IconifyIcon icon="carbon:menu" class="text-lg" />
+            <IconCarbonMenu class="text-lg" />
           </template>
         </NButton>
 
-        <nav
-          class="hidden min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm md:flex"
-          :aria-label="t('nav.main')"
-        >
-          <RouterLink to="/" :class="[navLinkClass]" :active-class="navActiveClass">
-            <IconifyIcon icon="carbon:dashboard" class="text-base" />
-            <span class="whitespace-nowrap">{{ t('nav.dashboard') }}</span>
-          </RouterLink>
-          <RouterLink to="/projects" :class="[navLinkClass]" :active-class="navActiveClass">
-            <IconifyIcon icon="carbon:folder" class="text-base" />
-            <span class="whitespace-nowrap">{{ t('nav.projects') }}</span>
-          </RouterLink>
-          <RouterLink to="/backends" :class="[navLinkClass]" :active-class="navActiveClass">
-            <IconifyIcon icon="carbon:server-proxy" class="text-base" />
-            <span class="whitespace-nowrap">{{ t('nav.backends') }}</span>
-          </RouterLink>
-          <RouterLink to="/stats" :class="[navLinkClass]" :active-class="navActiveClass">
-            <IconifyIcon icon="carbon:chart-bar" class="text-base" />
-            <span class="whitespace-nowrap">{{ t('nav.stats') }}</span>
-          </RouterLink>
-          <NDropdown
-            trigger="hover"
-            :options="templateNavOptions"
-            placement="bottom-start"
-            @select="onSelectTemplateNav"
-          >
-            <RouterLink
-              to="/prompt-templates"
-              :class="[navLinkClass, { [navActiveClass]: isTemplateRoute }]"
-            >
-              <IconifyIcon icon="carbon:settings" class="text-base" />
-              <span class="whitespace-nowrap">{{ t('nav.executionConfig') }}</span>
-            </RouterLink>
-          </NDropdown>
-          <NDropdown
-            trigger="hover"
-            :options="toolsNavOptions"
-            placement="bottom-start"
-            @select="onSelectToolsNav"
-          >
-            <RouterLink
-              to="/tools/epub-rotate"
-              :class="[navLinkClass, { [navActiveClass]: isToolsRoute }]"
-            >
-              <IconifyIcon icon="carbon:tool-kit" class="text-base" />
-              <span class="whitespace-nowrap">{{ t('nav.tools') }}</span>
-            </RouterLink>
-          </NDropdown>
-          <RouterLink
-            v-if="isAdmin"
-            to="/admin"
-            :class="[navLinkClass, { [navActiveClass]: isAdminRoute }]"
-          >
-            <IconifyIcon icon="carbon:security" class="text-base" />
-            <span class="whitespace-nowrap">{{ t('nav.admin') }}</span>
-          </RouterLink>
-        </nav>
+        <div class="flex-1" />
 
-        <div class="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+        <div class="flex items-center gap-2 sm:gap-3">
           <NDropdown
             v-if="locale.hasMultipleLocales"
             trigger="click"
@@ -317,7 +264,9 @@ const navigateTo = (path: string): void => {
           >
             <NButton quaternary circle :title="t('common.theme')" :aria-label="t('common.theme')">
               <template #icon>
-                <IconifyIcon :icon="themeIcon" class="text-lg" />
+                <IconCarbonContrast v-if="theme.mode === 'system'" class="text-lg" />
+                <IconCarbonMoon v-else-if="theme.isDark" class="text-lg" />
+                <IconCarbonSun v-else class="text-lg" />
               </template>
             </NButton>
           </NDropdown>
@@ -333,114 +282,58 @@ const navigateTo = (path: string): void => {
           >
             <button
               type="button"
-              class="flex items-center gap-2 rounded-full border border-lf-border-soft bg-lf-surface px-1.5 py-1 transition-colors hover:border-brand-500/40 hover:bg-lf-surface-elevated"
+              class="lf-grad-bg flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-xs font-semibold text-white"
+              :aria-label="displayName"
             >
-              <NAvatar round size="small" class="bg-brand-500 text-xs font-semibold text-white">
-                {{ initial }}
-              </NAvatar>
-              <span class="hidden pr-2 text-sm text-lf-text sm:inline">{{ displayName }}</span>
+              {{ initial }}
             </button>
           </NDropdown>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <main class="flex-1 px-6 py-8 lg:px-8">
-      <div class="mx-auto max-w-275">
-        <slot />
-      </div>
-    </main>
+      <main class="flex-1 px-5 py-7 sm:px-8">
+        <div class="mx-auto max-w-275">
+          <slot />
+        </div>
+      </main>
+    </div>
 
+    <!-- 移动端导航抽屉（与桌面侧边栏共用导航数据） -->
     <NDrawer v-model:show="mobileNavOpen" placement="left" :width="280">
       <NDrawerContent :title="t('common.appName')" closable>
-        <nav class="flex flex-col gap-1 py-2">
-          <button
-            type="button"
-            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
-            :class="{ '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path === '/' }"
-            @click="navigateTo('/')"
-          >
-            <IconifyIcon icon="carbon:dashboard" class="text-base" />
-            {{ t('nav.dashboard') }}
-          </button>
-          <button
-            type="button"
-            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
-            :class="{
-              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith('/projects'),
-            }"
-            @click="navigateTo('/projects')"
-          >
-            <IconifyIcon icon="carbon:folder" class="text-base" />
-            {{ t('nav.projects') }}
-          </button>
-          <button
-            type="button"
-            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
-            :class="{
-              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith('/backends'),
-            }"
-            @click="navigateTo('/backends')"
-          >
-            <IconifyIcon icon="carbon:server-proxy" class="text-base" />
-            {{ t('nav.backends') }}
-          </button>
-          <button
-            type="button"
-            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
-            :class="{
-              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith('/stats'),
-            }"
-            @click="navigateTo('/stats')"
-          >
-            <IconifyIcon icon="carbon:chart-bar" class="text-base" />
-            {{ t('nav.stats') }}
-          </button>
+        <nav class="flex flex-col gap-0.5 py-2" :aria-label="t('nav.main')">
+          <template v-for="(section, si) in navSections" :key="`drawer-section-${si}`">
+            <div
+              v-if="si > 0 && section.labelKey === null"
+              class="my-2 border-t border-lf-border-soft"
+            />
+            <div
+              v-else-if="section.labelKey !== null"
+              class="mt-4 mb-1 px-2.5 text-[11px] font-semibold tracking-wide text-lf-text-subtle"
+            >
+              {{ t(section.labelKey) }}
+            </div>
 
-          <div class="mt-2 px-3 text-xs font-medium text-lf-text-subtle">
-            {{ t('nav.executionConfig') }}
-          </div>
-          <button
-            v-for="item in templateNavItems"
-            :key="item.path"
-            type="button"
-            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
-            :class="{
-              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith(item.path),
-            }"
-            @click="navigateTo(item.path)"
-          >
-            <IconifyIcon :icon="item.icon" class="text-base" />
-            {{ t(item.labelKey) }}
-          </button>
-
-          <div class="mt-2 px-3 text-xs font-medium text-lf-text-subtle">
-            {{ t('nav.tools') }}
-          </div>
-          <button
-            v-for="item in toolsNavItems"
-            :key="item.path"
-            type="button"
-            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
-            :class="{
-              '!bg-lf-brand-soft !text-brand-600 font-semibold': route.path.startsWith(item.path),
-            }"
-            @click="navigateTo(item.path)"
-          >
-            <IconifyIcon :icon="item.icon" class="text-base" />
-            {{ t(item.labelKey) }}
-          </button>
-
-          <button
-            v-if="isAdmin"
-            type="button"
-            class="mt-2 flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-lf-surface-muted"
-            :class="{ '!bg-lf-brand-soft !text-brand-600 font-semibold': isAdminRoute }"
-            @click="navigateTo('/admin')"
-          >
-            <IconifyIcon icon="carbon:security" class="text-base" />
-            {{ t('nav.admin') }}
-          </button>
+            <button
+              v-for="item in section.items"
+              :key="item.path"
+              type="button"
+              class="flex items-center gap-2.5 rounded-lf-ctl px-2.5 py-2 text-left text-sm transition-colors"
+              :class="
+                isActive(item)
+                  ? 'bg-lf-brand-soft font-semibold text-brand-600'
+                  : 'text-lf-text-muted hover:bg-lf-surface-muted'
+              "
+              @click="navigateTo(item.path)"
+            >
+              <component
+                :is="item.icon"
+                class="h-[18px] w-[18px] shrink-0"
+                :class="isActive(item) ? 'text-brand-500' : 'text-lf-text-subtle'"
+              />
+              <span class="whitespace-nowrap">{{ t(item.labelKey) }}</span>
+            </button>
+          </template>
         </nav>
       </NDrawerContent>
     </NDrawer>
