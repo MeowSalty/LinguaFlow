@@ -140,7 +140,7 @@ const confirmDelete = (): void => {
   dialog.warning({
     title: t('common.delete'),
     content: t('workspace.resource.deleteConfirm', { name: props.resource.name }),
-    positiveText: t('common.confirm'),
+    positiveText: t('common.actions.deleteConfirmAction'),
     negativeText: t('common.cancel'),
     positiveButtonProps: {
       type: 'error',

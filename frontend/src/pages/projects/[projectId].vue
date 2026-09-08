@@ -282,16 +282,8 @@ const handleTranslateEpubChapters = (): void => {
   const epubResourceId = workspace.epubDirectoryResourceId
   if (!epubResourceId) return
   const groupKeys = [...workspace.epubSelectedGroupKeys]
-  console.debug('[projectId] handleTranslateEpubChapters:', {
-    epubResourceId,
-    groupKeys,
-    setBeforeClear: [...workspace.epubSelectedGroupKeys],
-  })
   jobMgmt.openResourceJobDrawerWithIds([epubResourceId], groupKeys)
   workspace.epubSelectedGroupKeys = new Set()
-  console.debug('[projectId] after clear:', {
-    setAfterClear: [...workspace.epubSelectedGroupKeys],
-  })
 }
 
 /** 清除 EPUB 章节选中 */
