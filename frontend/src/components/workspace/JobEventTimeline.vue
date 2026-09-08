@@ -326,12 +326,11 @@ const scrollToBottom = (): void => {
   hasNewEvents.value = false
 }
 
+// 触发源用首/尾 seq 而非数组长度：store 窗口化裁剪后「尾部 +1 / 头部 -1」时 length 不变，
+// 只有 seq 对能可靠感知前插与推进
 watch(
-  () => props.events.length,
-  (newLen) => {
-    const newTail = props.events.at(-1)?.seq ?? 0
-    const newHead = props.events.at(0)?.seq ?? 0
-
+  () => [props.events[0]?.seq ?? 0, props.events.at(-1)?.seq ?? 0] as const,
+  ([newHead, newTail]) => {
     // 头部前插（loadOlder）：头部 seq 变小 → 记录滚动位置和内容高度，前插后恢复
     if (newHead < headSeq.value) {
       const el = scrollContainerRef.value
@@ -339,11 +338,18 @@ watch(
         prevScrollHeight.value = el.scrollHeight
         pendingScrollRestore.value = el.scrollTop
       }
+      // 恢复原滚动位置（补偿新增内容高度），消除跳动
+      nextTick(() => {
+        const saved = pendingScrollRestore.value
+        if (saved == null) return
+        const target = scrollContainerRef.value
+        if (target) target.scrollTop = saved + (target.scrollHeight - prevScrollHeight.value)
+        pendingScrollRestore.value = null
+      })
     } else if (newTail > tailSeq.value) {
       // 尾部推进（新事件）：自动滚底或提示
-      tailSeq.value = newTail
       if (isNearBottom.value) {
-        prevEventsLength.value = newLen
+        prevEventsLength.value = props.events.length
         nextTick(() => {
           scrollToBottom()
         })
@@ -351,23 +357,9 @@ watch(
         hasNewEvents.value = true
       }
     }
-
+    // 头部 seq 变大（超出窗口被裁剪）不做补偿，仅更新游标
     headSeq.value = newHead
     if (newTail > tailSeq.value) tailSeq.value = newTail
-  },
-)
-
-// 前插更早事件后，恢复原滚动位置（补偿新增内容高度），消除跳动
-watch(
-  () => props.events.length,
-  () => {
-    const saved = pendingScrollRestore.value
-    if (saved == null) return
-    nextTick(() => {
-      const el = scrollContainerRef.value
-      if (el) el.scrollTop = saved + (el.scrollHeight - prevScrollHeight.value)
-      pendingScrollRestore.value = null
-    })
   },
 )
 
@@ -478,7 +470,7 @@ onUnmounted(() => {
             <div
               v-for="row in logRows"
               :key="row.key"
-              class="group flex items-start gap-2.5 rounded-md px-2"
+              class="group flex items-start gap-2.5 rounded-md px-2 [content-visibility:auto] [contain-intrinsic-size:auto_24px]"
               :class="[
                 row.clickable ? 'cursor-pointer hover:bg-lf-hover' : '',
                 row.dim ? 'py-px text-[11.5px]' : 'py-0.5 text-[12.5px]',
