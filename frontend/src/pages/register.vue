@@ -4,6 +4,7 @@ import { useMessage, type FormInst, type FormItemRule, type FormRules } from 'na
 
 import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useAuthStore } from '@/stores/auth'
+import { extractErrorMessage } from '@/utils/errors'
 
 definePage({
   meta: {
@@ -78,23 +79,6 @@ const rules = computed<FormRules>(() => ({
     { trigger: ['blur', 'input'], validator: validatePasswordConfirm },
   ],
 }))
-
-interface ApiProblem {
-  status?: number
-  title?: string
-  detail?: string
-}
-
-const extractErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-  if (error && typeof error === 'object') {
-    const problem = error as ApiProblem
-    return problem.detail || problem.title || fallback
-  }
-  return fallback
-}
 
 const onSubmit = async () => {
   try {

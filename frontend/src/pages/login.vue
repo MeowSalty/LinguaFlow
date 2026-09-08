@@ -5,6 +5,7 @@ import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
+import { extractErrorMessage } from '@/utils/errors'
 
 definePage({
   meta: {
@@ -36,23 +37,6 @@ const rules = computed<FormRules>(() => ({
     { required: true, trigger: ['blur', 'input'], message: t('login.validation.passwordRequired') },
   ],
 }))
-
-interface ApiProblem {
-  status?: number
-  title?: string
-  detail?: string
-}
-
-const extractErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-  if (error && typeof error === 'object') {
-    const problem = error as ApiProblem
-    return problem.detail || problem.title || fallback
-  }
-  return fallback
-}
 
 const onSubmit = async () => {
   try {

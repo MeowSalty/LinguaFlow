@@ -5,6 +5,7 @@ import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
+import { extractErrorMessage } from '@/utils/errors'
 
 definePage({
   meta: {
@@ -51,12 +52,6 @@ const rules = computed<FormRules>(() => ({
   ],
 }))
 
-interface ApiProblem {
-  status?: number
-  title?: string
-  detail?: string
-}
-
 const isLikelyLocalLoopbackUrl = (url: string): boolean => {
   const trimmed = url.trim()
   if (!trimmed || trimmed.startsWith('/')) {
@@ -68,17 +63,6 @@ const isLikelyLocalLoopbackUrl = (url: string): boolean => {
   } catch {
     return false
   }
-}
-
-const extractErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-  if (error && typeof error === 'object') {
-    const problem = error as ApiProblem
-    return problem.detail || problem.title || fallback
-  }
-  return fallback
 }
 
 const onSubmit = async () => {

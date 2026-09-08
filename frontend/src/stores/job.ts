@@ -11,14 +11,12 @@ import {
   retryJob as retryJobRequest,
 } from '@/api/client'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 
 type Job = ApiSchemas['Job']
 type CreateJobRequest = ApiSchemas['CreateJobRequest']
 
 export type JobStatusFilter = Job['status'] | 'all'
-
-const getErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error ? error.message : fallback
 
 const upsertById = <T extends { id: number }>(items: T[], item: T): T[] => [
   item,
@@ -59,7 +57,7 @@ export const useJobStore = defineStore('job', () => {
       jobs.value = append ? [...jobs.value, ...response.items] : response.items
       jobsCursor.value = response.next_cursor ?? null
     } catch (error) {
-      jobsError.value = getErrorMessage(error, t('api.errors.fetchJobsFailed'))
+      jobsError.value = extractErrorMessage(error, t('api.errors.fetchJobsFailed'))
     } finally {
       loadingJobs.value = false
     }
@@ -74,7 +72,7 @@ export const useJobStore = defineStore('job', () => {
       jobs.value = upsertById(jobs.value, job)
       return job
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.createJobFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.createJobFailed'))
       throw error
     } finally {
       creatingJob.value = false
@@ -89,7 +87,7 @@ export const useJobStore = defineStore('job', () => {
       const job = await cancelJobRequest(jobId)
       jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.cancelJobFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.cancelJobFailed'))
       throw error
     } finally {
       cancellingJobIds.value = cancellingJobIds.value.filter((id) => id !== jobId)
@@ -104,7 +102,7 @@ export const useJobStore = defineStore('job', () => {
       const job = await retryJobRequest(jobId)
       jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.retryJobFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.retryJobFailed'))
       throw error
     } finally {
       retryingJobIds.value = retryingJobIds.value.filter((id) => id !== jobId)
@@ -119,7 +117,7 @@ export const useJobStore = defineStore('job', () => {
       const job = await pauseJobRequest(jobId)
       jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.pauseJobFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.pauseJobFailed'))
       throw error
     } finally {
       pausingJobIds.value = pausingJobIds.value.filter((id) => id !== jobId)
@@ -134,7 +132,7 @@ export const useJobStore = defineStore('job', () => {
       const job = await resumeJobRequest(jobId)
       jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.resumeJobFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.resumeJobFailed'))
       throw error
     } finally {
       resumingJobIds.value = resumingJobIds.value.filter((id) => id !== jobId)

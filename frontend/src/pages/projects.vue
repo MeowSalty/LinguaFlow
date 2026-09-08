@@ -5,7 +5,9 @@ import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
 import { useLanguageOptions } from '@/composables/useLanguageOptions'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useProjectsStore } from '@/stores/projects'
+import { formatRelativeTime } from '@/utils/datetime'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type Project = ApiSchemas['Project']
@@ -21,7 +23,7 @@ const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
 const message = useMessage()
-const { t, d } = useI18n()
+const { t } = useI18n()
 const { targetLanguageOptions, sourceLanguageOptions } = useLanguageOptions()
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
@@ -107,29 +109,6 @@ const closeCreateDrawer = (): void => {
   drawerVisible.value = false
   editingProject.value = null
   resetForm()
-}
-
-const formatRelativeTime = (dateStr: string | null): string => {
-  if (!dateStr) return t('projects.card.noDate')
-
-  const now = Date.now()
-  const date = new Date(dateStr).getTime()
-  const diffMs = now - date
-
-  if (diffMs < 0) return t('dashboard.activity.relativeTime.justNow')
-
-  const diffSeconds = Math.floor(diffMs / 1000)
-  const diffMinutes = Math.floor(diffSeconds / 60)
-  const diffHours = Math.floor(diffMinutes / 60)
-  const diffDays = Math.floor(diffHours / 24)
-
-  if (diffSeconds < 60) return t('dashboard.activity.relativeTime.justNow')
-  if (diffMinutes < 60)
-    return t('dashboard.activity.relativeTime.minutesAgo', { count: diffMinutes })
-  if (diffHours < 24) return t('dashboard.activity.relativeTime.hoursAgo', { count: diffHours })
-  if (diffDays < 30) return t('dashboard.activity.relativeTime.daysAgo', { count: diffDays })
-
-  return d(new Date(dateStr), 'short')
 }
 
 const buildProjectPayload = (): ApiSchemas['CreateProjectRequest'] => {
@@ -249,13 +228,10 @@ onMounted(() => {
   }
 })
 
-watch(
+useStoreErrorToast(
   () => projects.error,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      projects.error = null
-    }
+  () => {
+    projects.error = null
   },
 )
 </script>
@@ -424,7 +400,7 @@ watch(
             />
           </NFormItem>
 
-          <NFormItem path="glossary_enabled" :label="t('projects.form.glossaryEnabled')">
+          <NFormItem path="glossary_enabled" :label="t('projects.form.glossaryToggle')">
             <NSwitch v-model:value="formModel.glossary_enabled" />
           </NFormItem>
 
@@ -469,7 +445,7 @@ watch(
       type="warning"
       :title="t('common.actions.confirmDelete')"
       :content="t('projects.delete.confirm', { name: deletingProject?.name ?? '' })"
-      :positive-text="t('common.actions.delete')"
+      :positive-text="t('common.actions.deleteConfirmAction')"
       :negative-text="t('common.cancel')"
       :loading="projects.deletingProjectIds.length > 0"
       @positive-click="confirmDelete"

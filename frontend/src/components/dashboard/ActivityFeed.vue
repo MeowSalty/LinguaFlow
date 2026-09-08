@@ -2,29 +2,10 @@
 import { useI18n } from 'vue-i18n'
 
 import { useStatsStore } from '@/stores/stats'
+import { formatRelativeTime } from '@/utils/datetime'
 
 const stats = useStatsStore()
-const { d, t } = useI18n()
-
-const relativeTime = (dateStr: string): string => {
-  const now = Date.now()
-  const date = new Date(dateStr).getTime()
-  const diff = now - date
-
-  const seconds = Math.floor(diff / 1000)
-  if (seconds < 60) return t('dashboard.activity.relativeTime.justNow')
-
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return t('dashboard.activity.relativeTime.minutesAgo', { count: minutes })
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return t('dashboard.activity.relativeTime.hoursAgo', { count: hours })
-
-  const days = Math.floor(hours / 24)
-  if (days < 30) return t('dashboard.activity.relativeTime.daysAgo', { count: days })
-
-  return d(new Date(dateStr), 'short')
-}
+const { t } = useI18n()
 
 const getActionLabel = (action: string): string => {
   const key = `dashboard.activity.actions.${action}`
@@ -84,7 +65,9 @@ const getActionLabel = (action: string): string => {
               — {{ activity.message }}</span
             >
           </p>
-          <time class="text-xs text-lf-text-subtle">{{ relativeTime(activity.created_at) }}</time>
+          <time class="text-xs text-lf-text-subtle">{{
+            formatRelativeTime(activity.created_at)
+          }}</time>
         </div>
       </div>
 
