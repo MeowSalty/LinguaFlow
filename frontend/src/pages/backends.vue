@@ -25,6 +25,7 @@ import { useI18n } from 'vue-i18n'
 
 import { listBackendModels, type ApiSchemas } from '@/api/client'
 import { useBackendsStore } from '@/stores/backends'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type Backend = ApiSchemas['Backend']
@@ -593,13 +594,10 @@ onMounted(() => {
   backends.loadBackends()
 })
 
-watch(
+useStoreErrorToast(
   () => backends.error,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      backends.error = null
-    }
+  () => {
+    backends.error = null
   },
 )
 </script>
@@ -714,12 +712,9 @@ watch(
 
   <!-- 创建/编辑抽屉 -->
   <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.m" placement="right">
-    <NDrawerContent :title="drawerTitle" :native-scrollbar="false">
+    <NDrawerContent :native-scrollbar="false">
       <template #header>
-        <div>
-          <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-          <div class="mt-1 text-xs text-lf-text-muted">{{ drawerDescription }}</div>
-        </div>
+        <DrawerHeader :title="drawerTitle" :subtitle="drawerDescription" />
       </template>
 
       <NForm
@@ -961,7 +956,7 @@ watch(
     type="warning"
     :title="t('common.actions.confirmDelete')"
     :content="deletingBackend ? t('backends.delete.confirm', { name: deletingBackend.name }) : ''"
-    :positive-text="t('common.confirm')"
+    :positive-text="t('common.actions.deleteConfirmAction')"
     :negative-text="t('common.cancel')"
     :loading="deletingBackend ? backends.deletingBackendIds.includes(deletingBackend.id) : false"
     @positive-click="executeDelete"

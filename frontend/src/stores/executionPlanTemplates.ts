@@ -57,7 +57,6 @@ export const useExecutionPlanTemplatesStore = defineStore('executionPlanTemplate
   const totalCount = computed(() => items.value.length)
   const systemCount = computed(() => items.value.filter((i) => i.scope === 'system').length)
   const userCount = computed(() => items.value.filter((i) => i.scope === 'user').length)
-  const orgCount = computed(() => items.value.filter((i) => i.scope === 'org').length)
 
   // ── 轮次统计 ──
   const avgRoundsPerPlan = computed(() => {
@@ -182,7 +181,6 @@ export const useExecutionPlanTemplatesStore = defineStore('executionPlanTemplate
     totalCount,
     systemCount,
     userCount,
-    orgCount,
     avgRoundsPerPlan,
     maxRoundsPlan,
     loadTemplates,

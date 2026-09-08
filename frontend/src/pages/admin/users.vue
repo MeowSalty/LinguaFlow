@@ -3,13 +3,11 @@ import {
   NButton,
   NDrawer,
   NDrawerContent,
-  NEmpty,
   NForm,
   NFormItem,
   NInput,
   NModal,
   NSelect,
-  NSkeleton,
   NTag,
   useMessage,
   type FormInst,
@@ -21,6 +19,7 @@ import { useI18n } from 'vue-i18n'
 import { type ApiSchemas } from '@/api/client'
 import { useAdminStore } from '@/stores/admin'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 
 type User = ApiSchemas['User']
 
@@ -95,6 +94,12 @@ const submitting = computed(() => admin.creatingUser || admin.updatingUser)
 const totalUsers = computed(() => admin.users.length)
 const activeUsers = computed(() => admin.users.filter((user) => user.active).length)
 const adminUsers = computed(() => admin.users.filter((user) => user.role === 'admin').length)
+
+const metrics = computed(() => [
+  { label: t('admin.users.stats.total'), value: totalUsers.value },
+  { label: t('admin.users.stats.active'), value: activeUsers.value },
+  { label: t('admin.users.stats.admins'), value: adminUsers.value },
+])
 
 const rules = computed<FormRules>(() => ({
   username: [
@@ -270,45 +275,36 @@ onMounted(() => {
   admin.loadUsers()
 })
 
-watch(
+useStoreErrorToast(
   () => admin.usersError,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      admin.usersError = null
-    }
+  () => {
+    admin.usersError = null
   },
 )
 </script>
 
 <template>
-  <div class="lf-page">
-    <PageHeader :title="t('admin.users.title')" :subtitle="t('admin.users.description')">
-      <NButton secondary :loading="admin.usersLoading" @click="admin.loadUsers">
-        {{ t('common.actions.refresh') }}
-      </NButton>
-      <NButton type="primary" @click="openCreateDrawer">
-        {{ t('admin.users.actions.create') }}
-      </NButton>
-    </PageHeader>
+  <div>
+    <EntityListPage
+      :title="t('admin.users.title')"
+      :subtitle="t('admin.users.description')"
+      :metrics="metrics"
+      :loading="admin.usersLoading"
+      :empty="admin.filteredUsers.length === 0"
+      :empty-description="
+        hasActiveFilters ? t('admin.users.empty.filtered') : t('admin.users.empty.default')
+      "
+    >
+      <template #actions>
+        <NButton secondary :loading="admin.usersLoading" @click="admin.loadUsers">
+          {{ t('common.actions.refresh') }}
+        </NButton>
+        <NButton type="primary" @click="openCreateDrawer">
+          {{ t('admin.users.actions.create') }}
+        </NButton>
+      </template>
 
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('admin.users.stats.total') }}</div>
-        <div class="lf-metric-value">{{ totalUsers }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('admin.users.stats.active') }}</div>
-        <div class="lf-metric-value">{{ activeUsers }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('admin.users.stats.admins') }}</div>
-        <div class="lf-metric-value">{{ adminUsers }}</div>
-      </div>
-    </div>
-
-    <div class="lf-panel px-4 py-3">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <template #filters>
         <NInput
           v-model:value="admin.userSearchQuery"
           clearable
@@ -330,33 +326,9 @@ watch(
             {{ t('admin.users.filters.reset') }}
           </NButton>
         </div>
-      </div>
-    </div>
+      </template>
 
-    <div v-if="admin.usersLoading" class="lf-data-list">
-      <div
-        v-for="i in 6"
-        :key="i"
-        class="flex items-center gap-4 border-b border-lf-border-soft px-4 py-4 last:border-b-0"
-      >
-        <NSkeleton circle class="h-9 w-9" />
-        <div class="min-w-0 flex-1 space-y-2">
-          <NSkeleton text class="w-2/5" />
-          <NSkeleton text class="w-1/4" />
-        </div>
-        <NSkeleton text class="hidden w-[18%] md:block" />
-        <NSkeleton text class="hidden w-[10%] sm:block" />
-      </div>
-    </div>
-
-    <NEmpty
-      v-else-if="admin.filteredUsers.length === 0"
-      class="lf-panel py-16"
-      :description="
-        hasActiveFilters ? t('admin.users.empty.filtered') : t('admin.users.empty.default')
-      "
-    >
-      <template #extra>
+      <template #empty-extra>
         <NButton v-if="hasActiveFilters" secondary @click="admin.resetUserFilters()">
           {{ t('admin.users.filters.reset') }}
         </NButton>
@@ -364,103 +336,102 @@ watch(
           {{ t('admin.users.actions.create') }}
         </NButton>
       </template>
-    </NEmpty>
 
-    <div v-else class="lf-data-list">
-      <div
-        class="lf-data-list__head md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_110px_100px_200px]"
-      >
-        <span>{{ t('admin.users.columns.username') }}</span>
-        <span>{{ t('admin.users.columns.email') }}</span>
-        <span>{{ t('admin.users.columns.role') }}</span>
-        <span>{{ t('admin.users.columns.status') }}</span>
-        <span class="text-right">{{ t('admin.users.columns.actions') }}</span>
-      </div>
-
-      <div
-        v-for="user in admin.filteredUsers"
-        :key="user.id"
-        class="lf-data-list__row grid-cols-1 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_110px_100px_200px]"
-      >
-        <div class="flex min-w-0 items-center gap-3">
-          <div class="lf-avatar">{{ userInitial(user) }}</div>
-          <div class="min-w-0">
-            <div class="truncate text-sm font-medium tracking-tight text-lf-text-strong">
-              {{ displayName(user) }}
-            </div>
-            <div class="mt-0.5 truncate font-mono text-xs text-lf-text-subtle">
-              @{{ user.username }}
-            </div>
-          </div>
+      <div class="lf-data-list">
+        <div
+          class="lf-data-list__head md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_110px_100px_200px]"
+        >
+          <span>{{ t('admin.users.columns.username') }}</span>
+          <span>{{ t('admin.users.columns.email') }}</span>
+          <span>{{ t('admin.users.columns.role') }}</span>
+          <span>{{ t('admin.users.columns.status') }}</span>
+          <span class="text-right">{{ t('admin.users.columns.actions') }}</span>
         </div>
 
-        <div class="min-w-0 pl-12 md:pl-0">
-          <div class="truncate text-sm text-lf-text-muted md:text-lf-text">
+        <div
+          v-for="user in admin.filteredUsers"
+          :key="user.id"
+          class="lf-data-list__row grid-cols-1 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_110px_100px_200px]"
+        >
+          <div class="flex min-w-0 items-center gap-3">
+            <div class="lf-avatar">{{ userInitial(user) }}</div>
+            <div class="min-w-0">
+              <div class="truncate text-sm font-medium tracking-tight text-lf-text-strong">
+                {{ displayName(user) }}
+              </div>
+              <div class="mt-0.5 truncate font-mono text-xs text-lf-text-subtle">
+                @{{ user.username }}
+              </div>
+            </div>
+          </div>
+
+          <div class="min-w-0 pl-12 md:pl-0">
+            <div class="truncate text-sm text-lf-text-muted md:text-lf-text">
+              <span class="mr-2 text-[11px] text-lf-text-subtle md:hidden">
+                {{ t('admin.users.columns.email') }}
+              </span>
+              {{ user.email }}
+            </div>
+          </div>
+
+          <div class="pl-12 md:pl-0">
             <span class="mr-2 text-[11px] text-lf-text-subtle md:hidden">
-              {{ t('admin.users.columns.email') }}
+              {{ t('admin.users.columns.role') }}
             </span>
-            {{ user.email }}
+            <NTag
+              size="small"
+              round
+              :bordered="false"
+              :type="user.role === 'admin' ? 'warning' : 'default'"
+            >
+              {{ t(`admin.users.roles.${user.role}`) }}
+            </NTag>
+          </div>
+
+          <div class="flex items-center gap-2 pl-12 md:pl-0">
+            <span class="mr-2 text-[11px] text-lf-text-subtle md:hidden">
+              {{ t('admin.users.columns.status') }}
+            </span>
+            <span
+              class="lf-status-dot"
+              :class="user.active ? 'lf-status-dot--active' : 'lf-status-dot--inactive'"
+            />
+            <span
+              class="text-xs font-medium"
+              :class="user.active ? 'text-brand-600' : 'text-lf-text-subtle'"
+            >
+              {{
+                user.active ? t('admin.users.filters.active') : t('admin.users.filters.inactive')
+              }}
+            </span>
+          </div>
+
+          <div class="lf-data-list__actions pl-12 md:pl-0">
+            <NButton size="tiny" quaternary type="primary" @click="openEditDrawer(user)">
+              {{ t('admin.users.actions.edit') }}
+            </NButton>
+            <NButton size="tiny" quaternary @click="openResetPasswordModal(user)">
+              {{ t('admin.users.actions.resetPassword') }}
+            </NButton>
+            <NButton
+              v-if="user.active"
+              size="tiny"
+              quaternary
+              type="error"
+              :loading="admin.disablingUserIds.includes(user.id)"
+              @click="confirmDisable(user)"
+            >
+              {{ t('admin.users.actions.disable') }}
+            </NButton>
           </div>
         </div>
-
-        <div class="pl-12 md:pl-0">
-          <span class="mr-2 text-[11px] text-lf-text-subtle md:hidden">
-            {{ t('admin.users.columns.role') }}
-          </span>
-          <NTag
-            size="small"
-            round
-            :bordered="false"
-            :type="user.role === 'admin' ? 'warning' : 'default'"
-          >
-            {{ t(`admin.users.roles.${user.role}`) }}
-          </NTag>
-        </div>
-
-        <div class="flex items-center gap-2 pl-12 md:pl-0">
-          <span class="mr-2 text-[11px] text-lf-text-subtle md:hidden">
-            {{ t('admin.users.columns.status') }}
-          </span>
-          <span
-            class="lf-status-dot"
-            :class="user.active ? 'lf-status-dot--active' : 'lf-status-dot--inactive'"
-          />
-          <span
-            class="text-xs font-medium"
-            :class="user.active ? 'text-brand-600' : 'text-lf-text-subtle'"
-          >
-            {{ user.active ? t('admin.users.filters.active') : t('admin.users.filters.inactive') }}
-          </span>
-        </div>
-
-        <div class="lf-data-list__actions pl-12 md:pl-0">
-          <NButton size="tiny" quaternary type="primary" @click="openEditDrawer(user)">
-            {{ t('admin.users.actions.edit') }}
-          </NButton>
-          <NButton size="tiny" quaternary @click="openResetPasswordModal(user)">
-            {{ t('admin.users.actions.resetPassword') }}
-          </NButton>
-          <NButton
-            v-if="user.active"
-            size="tiny"
-            quaternary
-            type="error"
-            :loading="admin.disablingUserIds.includes(user.id)"
-            @click="confirmDisable(user)"
-          >
-            {{ t('admin.users.actions.disable') }}
-          </NButton>
-        </div>
       </div>
-    </div>
+    </EntityListPage>
 
     <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.m" placement="right">
-      <NDrawerContent :title="drawerTitle" :native-scrollbar="false">
+      <NDrawerContent :native-scrollbar="false">
         <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-            <div class="mt-1 text-xs text-lf-text-muted">{{ drawerDescription }}</div>
-          </div>
+          <DrawerHeader :title="drawerTitle" :subtitle="drawerDescription" />
         </template>
 
         <NForm

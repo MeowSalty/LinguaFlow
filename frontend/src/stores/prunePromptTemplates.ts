@@ -48,7 +48,6 @@ export const usePrunePromptTemplatesStore = defineStore('prunePromptTemplates', 
   const totalCount = computed(() => items.value.length)
   const systemCount = computed(() => items.value.filter((i) => i.scope === 'system').length)
   const userCount = computed(() => items.value.filter((i) => i.scope === 'user').length)
-  const orgCount = computed(() => items.value.filter((i) => i.scope === 'org').length)
 
   const loadTemplates = async (): Promise<void> => {
     loading.value = true
@@ -134,7 +133,6 @@ export const usePrunePromptTemplatesStore = defineStore('prunePromptTemplates', 
     totalCount,
     systemCount,
     userCount,
-    orgCount,
     loadTemplates,
     createTemplate,
     updateTemplate,

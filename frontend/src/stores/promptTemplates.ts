@@ -57,7 +57,6 @@ export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
   const totalCount = computed(() => items.value.length)
   const systemCount = computed(() => items.value.filter((i) => i.scope === 'system').length)
   const userCount = computed(() => items.value.filter((i) => i.scope === 'user').length)
-  const orgCount = computed(() => items.value.filter((i) => i.scope === 'org').length)
 
   // ── 方法 ──
   const loadTemplates = async (): Promise<void> => {
@@ -154,7 +153,6 @@ export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
     totalCount,
     systemCount,
     userCount,
-    orgCount,
     loadTemplates,
     createTemplate,
     updateTemplate,

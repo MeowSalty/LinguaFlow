@@ -57,7 +57,6 @@ export const useExecutionProfilesStore = defineStore('executionProfiles', () => 
   const totalCount = computed(() => items.value.length)
   const systemCount = computed(() => items.value.filter((i) => i.scope === 'system').length)
   const userCount = computed(() => items.value.filter((i) => i.scope === 'user').length)
-  const orgCount = computed(() => items.value.filter((i) => i.scope === 'org').length)
 
   // ── 配置特征统计 ──
   const withGlossaryCount = computed(
@@ -161,7 +160,6 @@ export const useExecutionProfilesStore = defineStore('executionProfiles', () => 
     totalCount,
     systemCount,
     userCount,
-    orgCount,
     withGlossaryCount,
     loadProfiles,
     createProfile,

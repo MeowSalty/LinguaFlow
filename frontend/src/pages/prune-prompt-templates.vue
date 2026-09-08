@@ -12,19 +12,20 @@ import {
   useMessage,
   type FormInst,
   type FormRules,
-  type SelectOption,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import PromptTemplateEditor from '@/components/templates/PromptTemplateEditor.vue'
+import { useEntityCrud } from '@/composables/useEntityCrud'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { usePrunePromptTemplatesStore } from '@/stores/prunePromptTemplates'
+import { formatDateTime } from '@/utils/datetime'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type PrunePromptTemplate = ApiSchemas['PrunePromptTemplate']
 type CreateRequest = ApiSchemas['CreatePrunePromptTemplateRequest']
 type UpdateRequest = ApiSchemas['UpdatePrunePromptTemplateRequest']
-type Scope = PrunePromptTemplate['scope']
 
 interface FormModel {
   name: string
@@ -36,24 +37,28 @@ const store = usePrunePromptTemplatesStore()
 const message = useMessage()
 const { t } = useI18n()
 
+const {
+  filterScopeOptions,
+  getScopeTagType,
+  deleteModalVisible,
+  deletingItem,
+  confirmDelete,
+  executeDelete,
+} = useEntityCrud<PrunePromptTemplate>({
+  i18nPrefix: 'prunePromptTemplates',
+  deleteItem: store.deleteTemplate,
+  isDeleting: (id) => store.deletingIds.includes(id),
+})
+
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
 const editingItem = ref<PrunePromptTemplate | null>(null)
-const deleteModalVisible = ref(false)
-const deletingItem = ref<PrunePromptTemplate | null>(null)
 
 const formModel = reactive<FormModel>({
   name: '',
   description: '',
   content: '',
 })
-
-const filterScopeOptions = computed<SelectOption[]>(() => [
-  { label: t('prunePromptTemplates.filters.allScopes'), value: 'all' },
-  { label: t('prunePromptTemplates.scopes.system'), value: 'system' },
-  { label: t('prunePromptTemplates.scopes.user'), value: 'user' },
-  { label: t('prunePromptTemplates.scopes.org'), value: 'org' },
-])
 
 const hasActiveFilters = computed(
   () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
@@ -63,7 +68,6 @@ const metrics = computed(() => [
   { label: t('prunePromptTemplates.stats.total'), value: store.totalCount },
   { label: t('prunePromptTemplates.stats.system'), value: store.systemCount },
   { label: t('prunePromptTemplates.stats.user'), value: store.userCount },
-  { label: t('prunePromptTemplates.stats.org'), value: store.orgCount },
 ])
 
 const isEditMode = computed(() => Boolean(editingItem.value))
@@ -137,46 +141,8 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (item: PrunePromptTemplate, event?: MouseEvent): void => {
-  event?.stopPropagation()
-  if (item.scope === 'system') {
-    message.warning(t('prunePromptTemplates.messages.systemDeleteForbidden'))
-    return
-  }
-  deletingItem.value = item
-  deleteModalVisible.value = true
-}
-
-const executeDelete = async (): Promise<void> => {
-  if (!deletingItem.value) return
-
-  try {
-    await store.deleteTemplate(deletingItem.value.id)
-    message.success(t('prunePromptTemplates.messages.deleteSuccess'))
-    deleteModalVisible.value = false
-    deletingItem.value = null
-  } catch {
-    // Error is handled by the store
-  }
-}
-
-const getScopeTagType = (scope: Scope): 'default' | 'info' | 'success' => {
-  switch (scope) {
-    case 'system':
-      return 'default'
-    case 'user':
-      return 'info'
-    case 'org':
-      return 'success'
-    default:
-      return 'default'
-  }
-}
-
-const formatDate = (dateStr: string | undefined): string => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString()
-}
+const formatDate = (dateStr: string | undefined): string =>
+  dateStr ? formatDateTime(dateStr, { dateStyle: 'short' }) : '—'
 
 const resetFilters = (): void => {
   store.searchQuery = ''
@@ -187,13 +153,10 @@ onMounted(() => {
   store.loadTemplates()
 })
 
-watch(
+useStoreErrorToast(
   () => store.error,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      store.error = null
-    }
+  () => {
+    store.error = null
   },
 )
 </script>
@@ -322,9 +285,7 @@ watch(
   <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.m" placement="right">
     <NDrawerContent :native-scrollbar="false">
       <template #header>
-        <div>
-          <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-        </div>
+        <DrawerHeader :title="drawerTitle" />
       </template>
 
       <NForm
@@ -392,7 +353,7 @@ watch(
     :content="
       deletingItem ? t('prunePromptTemplates.delete.confirm', { name: deletingItem.name }) : ''
     "
-    :positive-text="t('common.actions.confirmDelete')"
+    :positive-text="t('common.actions.deleteConfirmAction')"
     :negative-text="t('common.cancel')"
     :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
     @positive-click="executeDelete"

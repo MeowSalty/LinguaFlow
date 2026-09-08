@@ -12,19 +12,20 @@ import {
   useMessage,
   type FormInst,
   type FormRules,
-  type SelectOption,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import PromptTemplateEditor from '@/components/templates/PromptTemplateEditor.vue'
+import { useEntityCrud } from '@/composables/useEntityCrud'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { usePromptTemplatesStore } from '@/stores/promptTemplates'
+import { formatDateTime } from '@/utils/datetime'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type TranslationPromptTemplate = ApiSchemas['TranslationPromptTemplate']
 type CreateRequest = ApiSchemas['CreateTranslationPromptTemplateRequest']
 type UpdateRequest = ApiSchemas['UpdateTranslationPromptTemplateRequest']
-type Scope = TranslationPromptTemplate['scope']
 
 interface FormModel {
   name: string
@@ -38,13 +39,24 @@ const store = usePromptTemplatesStore()
 const message = useMessage()
 const { t } = useI18n()
 
+const {
+  filterScopeOptions,
+  getScopeTagType,
+  deleteModalVisible,
+  deletingItem,
+  confirmDelete,
+  executeDelete,
+} = useEntityCrud<TranslationPromptTemplate>({
+  i18nPrefix: 'promptTemplates',
+  deleteItem: store.deleteTemplate,
+  isDeleting: (id) => store.deletingIds.includes(id),
+})
+
 // ── 表单状态 ──────────────────────────────────────────────────
 
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
 const editingItem = ref<TranslationPromptTemplate | null>(null)
-const deleteModalVisible = ref(false)
-const deletingItem = ref<TranslationPromptTemplate | null>(null)
 
 const formModel = reactive<FormModel>({
   name: '',
@@ -54,13 +66,6 @@ const formModel = reactive<FormModel>({
 
 // ── 计算属性 ──────────────────────────────────────────────────
 
-const filterScopeOptions = computed<SelectOption[]>(() => [
-  { label: t('promptTemplates.filters.allScopes'), value: 'all' },
-  { label: t('promptTemplates.scopes.system'), value: 'system' },
-  { label: t('promptTemplates.scopes.user'), value: 'user' },
-  { label: t('promptTemplates.scopes.org'), value: 'org' },
-])
-
 const hasActiveFilters = computed(
   () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
 )
@@ -69,7 +74,6 @@ const metrics = computed(() => [
   { label: t('promptTemplates.stats.total'), value: store.totalCount },
   { label: t('promptTemplates.stats.system'), value: store.systemCount },
   { label: t('promptTemplates.stats.user'), value: store.userCount },
-  { label: t('promptTemplates.stats.org'), value: store.orgCount },
 ])
 
 const isEditMode = computed(() => Boolean(editingItem.value))
@@ -145,45 +149,8 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (item: TranslationPromptTemplate): void => {
-  if (item.scope === 'system') {
-    message.warning(t('promptTemplates.messages.systemDeleteForbidden'))
-    return
-  }
-  deletingItem.value = item
-  deleteModalVisible.value = true
-}
-
-const executeDelete = async (): Promise<void> => {
-  if (!deletingItem.value) return
-
-  try {
-    await store.deleteTemplate(deletingItem.value.id)
-    message.success(t('promptTemplates.messages.deleteSuccess'))
-    deleteModalVisible.value = false
-    deletingItem.value = null
-  } catch {
-    // Error is handled by the store
-  }
-}
-
-const getScopeTagType = (scope: Scope): 'default' | 'info' | 'success' => {
-  switch (scope) {
-    case 'system':
-      return 'default'
-    case 'user':
-      return 'info'
-    case 'org':
-      return 'success'
-    default:
-      return 'default'
-  }
-}
-
-const formatDate = (dateStr: string | undefined): string => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString()
-}
+const formatDate = (dateStr: string | undefined): string =>
+  dateStr ? formatDateTime(dateStr, { dateStyle: 'short' }) : '—'
 
 // ── 生命周期 ──────────────────────────────────────────────────
 
@@ -191,13 +158,10 @@ onMounted(() => {
   store.loadTemplates()
 })
 
-watch(
+useStoreErrorToast(
   () => store.error,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      store.error = null
-    }
+  () => {
+    store.error = null
   },
 )
 </script>
@@ -326,9 +290,7 @@ watch(
   <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.m" placement="right">
     <NDrawerContent :native-scrollbar="false">
       <template #header>
-        <div>
-          <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-        </div>
+        <DrawerHeader :title="drawerTitle" />
       </template>
 
       <NForm
@@ -397,7 +359,7 @@ watch(
     type="warning"
     :title="t('common.actions.confirmDelete')"
     :content="deletingItem ? t('promptTemplates.delete.confirm', { name: deletingItem.name }) : ''"
-    :positive-text="t('common.actions.confirmDelete')"
+    :positive-text="t('common.actions.deleteConfirmAction')"
     :negative-text="t('common.cancel')"
     :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
     @positive-click="executeDelete"

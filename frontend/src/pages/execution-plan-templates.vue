@@ -18,11 +18,14 @@ import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import ExecutionPlanEditor from '@/components/templates/ExecutionPlanEditor.vue'
+import { useEntityCrud } from '@/composables/useEntityCrud'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useBackendsStore } from '@/stores/backends'
 import { useBootstrapPromptTemplatesStore } from '@/stores/bootstrapPromptTemplates'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { usePromptTemplatesStore } from '@/stores/promptTemplates'
 import { useExecutionProfilesStore } from '@/stores/executionProfiles'
+import { formatDateTime } from '@/utils/datetime'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
@@ -30,7 +33,6 @@ type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 type CreateRequest = ApiSchemas['CreateExecutionPlanTemplateRequest']
 type UpdateRequest = ApiSchemas['UpdateExecutionPlanTemplateRequest']
-type Scope = ExecutionPlanTemplate['scope']
 
 interface FormModel {
   name: string
@@ -75,13 +77,24 @@ const executionProfilesStore = useExecutionProfilesStore()
 const message = useMessage()
 const { t } = useI18n()
 
+const {
+  filterScopeOptions,
+  getScopeTagType,
+  deleteModalVisible,
+  deletingItem,
+  confirmDelete,
+  executeDelete,
+} = useEntityCrud<ExecutionPlanTemplate>({
+  i18nPrefix: 'executionPlanTemplates',
+  deleteItem: store.deleteTemplate,
+  isDeleting: (id) => store.deletingIds.includes(id),
+})
+
 // ── 表单状态 ──────────────────────────────────────────────────
 
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
 const editingItem = ref<ExecutionPlanTemplate | null>(null)
-const deleteModalVisible = ref(false)
-const deletingItem = ref<ExecutionPlanTemplate | null>(null)
 
 const formModel = reactive<FormModel>({
   name: '',
@@ -114,13 +127,6 @@ const profileNameById = computed(
 )
 
 // ── 计算属性 ──────────────────────────────────────────────────
-
-const filterScopeOptions = computed<SelectOption[]>(() => [
-  { label: t('executionPlanTemplates.filters.allScopes'), value: 'all' },
-  { label: t('executionPlanTemplates.scopes.system'), value: 'system' },
-  { label: t('executionPlanTemplates.scopes.user'), value: 'user' },
-  { label: t('executionPlanTemplates.scopes.org'), value: 'org' },
-])
 
 const hasActiveFilters = computed(
   () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
@@ -159,6 +165,18 @@ const rules = computed<FormRules>(() => ({
 
 // ── 方法 ──────────────────────────────────────────────────────
 
+// 抽屉依赖（后端/提示词/引导提示词）按需加载，首次打开抽屉时并行拉取；
+// 执行策略随首屏加载（卡片标签依赖），不在此列
+const dependenciesLoaded = ref(false)
+
+const ensureDependenciesLoaded = (): void => {
+  if (dependenciesLoaded.value) return
+  dependenciesLoaded.value = true
+  void backendsStore.loadBackends()
+  void promptTemplatesStore.loadTemplates()
+  void bootstrapPromptTemplatesStore.loadTemplates()
+}
+
 const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
@@ -170,6 +188,7 @@ const resetForm = (): void => {
 
 const openCreateDrawer = (): void => {
   resetForm()
+  ensureDependenciesLoaded()
   drawerVisible.value = true
 }
 
@@ -182,6 +201,7 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
     ? deepClone(item.ruby_retry)
     : deepClone(DEFAULT_RUBY_RETRY)
   formModel.rounds = item.rounds?.length ? deepClone(item.rounds) : [deepClone(DEFAULT_ROUND)]
+  ensureDependenciesLoaded()
   drawerVisible.value = true
 }
 
@@ -405,45 +425,8 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (item: ExecutionPlanTemplate): void => {
-  if (item.scope === 'system') {
-    message.warning(t('executionPlanTemplates.messages.systemDeleteForbidden'))
-    return
-  }
-  deletingItem.value = item
-  deleteModalVisible.value = true
-}
-
-const executeDelete = async (): Promise<void> => {
-  if (!deletingItem.value) return
-
-  try {
-    await store.deleteTemplate(deletingItem.value.id)
-    message.success(t('executionPlanTemplates.messages.deleteSuccess'))
-    deleteModalVisible.value = false
-    deletingItem.value = null
-  } catch {
-    // Error is handled by the store
-  }
-}
-
-const getScopeTagType = (scope: Scope): 'default' | 'info' | 'success' => {
-  switch (scope) {
-    case 'system':
-      return 'default'
-    case 'user':
-      return 'info'
-    case 'org':
-      return 'success'
-    default:
-      return 'default'
-  }
-}
-
-const formatDate = (dateStr: string | undefined): string => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString()
-}
+const formatDate = (dateStr: string | undefined): string =>
+  dateStr ? formatDateTime(dateStr, { dateStyle: 'short' }) : '—'
 
 const modeBadgeClass = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
@@ -465,23 +448,16 @@ const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
 
 // ── 生命周期 ──────────────────────────────────────────────────
 
-onMounted(async () => {
-  await Promise.all([
-    store.loadTemplates(),
-    backendsStore.loadBackends(),
-    promptTemplatesStore.loadTemplates(),
-    bootstrapPromptTemplatesStore.loadTemplates(),
-    executionProfilesStore.loadProfiles(),
-  ])
+onMounted(() => {
+  store.loadTemplates()
+  // 卡片上的执行策略名称标签依赖 profiles，需随首屏加载
+  executionProfilesStore.loadProfiles()
 })
 
-watch(
+useStoreErrorToast(
   () => store.error,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      store.error = null
-    }
+  () => {
+    store.error = null
   },
 )
 </script>
@@ -644,9 +620,7 @@ watch(
   <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.l" placement="right">
     <NDrawerContent :native-scrollbar="false">
       <template #header>
-        <div>
-          <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-        </div>
+        <DrawerHeader :title="drawerTitle" />
       </template>
 
       <NForm
@@ -737,7 +711,7 @@ watch(
     :content="
       deletingItem ? t('executionPlanTemplates.delete.confirm', { name: deletingItem.name }) : ''
     "
-    :positive-text="t('common.actions.confirmDelete')"
+    :positive-text="t('common.actions.deleteConfirmAction')"
     :negative-text="t('common.cancel')"
     :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
     @positive-click="executeDelete"
