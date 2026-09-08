@@ -219,7 +219,7 @@ useStoreErrorToast(
       <div
         v-for="item in store.filteredItems"
         :key="item.id"
-        class="lf-interactive-card group flex h-full flex-col gap-4 p-5"
+        class="lf-interactive-card flex h-full flex-col gap-4 p-5"
         @click="openEditDrawer(item)"
       >
         <!-- 头部：名称 + 作用域标签 -->
