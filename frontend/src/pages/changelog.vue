@@ -68,13 +68,13 @@ async function fetchReleases(): Promise<void> {
     )
 
     if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.status}`)
+      throw new Error(t('changelog.fetchError'))
     }
 
     const data = (await response.json()) as GitHubRelease[]
     releases.value = data.filter((r) => !r.prerelease)
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : t('changelog.fetchError')
+  } catch {
+    error.value = t('changelog.fetchError')
   } finally {
     loading.value = false
   }

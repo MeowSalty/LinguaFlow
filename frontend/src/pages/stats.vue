@@ -33,6 +33,7 @@ onMounted(() => {
         icon="carbon:api"
         tone="brand"
         :loading="stats.statsLoading"
+        :error="stats.statsError"
       />
       <StatsCard
         :title="t('dashboard.stats.inputTokens')"
@@ -40,6 +41,7 @@ onMounted(() => {
         icon="carbon:cloud-upload"
         tone="info"
         :loading="stats.statsLoading"
+        :error="stats.statsError"
       />
       <StatsCard
         :title="t('dashboard.stats.outputTokens')"
@@ -47,6 +49,7 @@ onMounted(() => {
         icon="carbon:cloud-download"
         tone="accent"
         :loading="stats.statsLoading"
+        :error="stats.statsError"
       />
       <StatsCard
         :title="t('dashboard.stats.segmentCount')"
@@ -54,6 +57,7 @@ onMounted(() => {
         icon="carbon:chart-column"
         tone="neutral"
         :loading="stats.statsLoading"
+        :error="stats.statsError"
       />
     </div>
 

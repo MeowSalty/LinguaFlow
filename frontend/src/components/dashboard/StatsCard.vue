@@ -7,6 +7,10 @@ import IconCarbonArrowsHorizontal from '~icons/carbon/arrows-horizontal'
 import IconCarbonChartColumn from '~icons/carbon/chart-column'
 import IconCarbonCloudDownload from '~icons/carbon/cloud-download'
 import IconCarbonCloudUpload from '~icons/carbon/cloud-upload'
+import IconCarbonWarning from '~icons/carbon/warning'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 withDefaults(
   defineProps<{
@@ -17,6 +21,7 @@ withDefaults(
     trend?: 'up' | 'down' | 'neutral'
     trendValue?: string
     loading?: boolean
+    error?: string | null
   }>(),
   {
     tone: 'brand',
@@ -67,6 +72,22 @@ const trendIcons: Record<string, Component> = {
         <NSkeleton width="40px" height="40px" />
       </div>
       <NSkeleton class="mt-4" width="96px" height="32px" />
+    </template>
+
+    <template v-else-if="error">
+      <div class="relative flex items-center justify-between gap-3">
+        <span class="lf-metric-label">{{ title }}</span>
+        <div
+          class="flex h-10 w-10 items-center justify-center rounded-lf-ctl bg-lf-danger-soft text-lg text-lf-danger"
+        >
+          <IconCarbonWarning />
+        </div>
+      </div>
+
+      <div class="relative mt-3">
+        <p class="text-sm text-lf-danger">{{ error }}</p>
+        <p class="mt-1 text-xs text-lf-text-subtle">{{ t('stats.loadFailed') }}</p>
+      </div>
     </template>
 
     <template v-else>

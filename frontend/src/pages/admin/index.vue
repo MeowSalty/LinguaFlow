@@ -61,13 +61,15 @@ const statCards = computed<Array<{ title: string; value: number; icon: Component
   ],
 )
 
-const quickActions: Array<{
-  title: string
-  description: string
-  icon: Component
-  path: string
-  tone: string
-}> = [
+const quickActions = computed<
+  Array<{
+    title: string
+    description: string
+    icon: Component
+    path: string
+    tone: string
+  }>
+>(() => [
   {
     title: t('admin.users.title'),
     description: t('admin.users.description'),
@@ -89,7 +91,7 @@ const quickActions: Array<{
     path: '/admin/settings',
     tone: 'bg-lf-surface-muted text-lf-text-muted',
   },
-]
+])
 </script>
 
 <template>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { NButton, NEmpty, NInput, NSkeleton, useMessage } from 'naive-ui'
+import { NButton, NEmpty, NInput, NModal, NSkeleton, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { useAdminStore } from '@/stores/admin'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 
 const admin = useAdminStore()
 const message = useMessage()
@@ -17,6 +18,8 @@ interface SettingEntry {
 const editingSettings = ref<SettingEntry[]>([])
 const newKey = ref('')
 const newValue = ref('')
+const deleteConfirmVisible = ref(false)
+const deletingSettingIndex = ref<number | null>(null)
 
 const buildEditingSettings = (): void => {
   editingSettings.value = Object.entries(admin.settings).map(([key, value]) => ({
@@ -51,7 +54,20 @@ const addSetting = (): void => {
 }
 
 const removeSetting = (index: number): void => {
-  editingSettings.value.splice(index, 1)
+  deletingSettingIndex.value = index
+  deleteConfirmVisible.value = true
+}
+
+const confirmRemoveSetting = (): void => {
+  if (deletingSettingIndex.value !== null) {
+    editingSettings.value.splice(deletingSettingIndex.value, 1)
+  }
+  closeDeleteConfirm()
+}
+
+const closeDeleteConfirm = (): void => {
+  deleteConfirmVisible.value = false
+  deletingSettingIndex.value = null
 }
 
 const saveSettings = async (): Promise<void> => {
@@ -86,13 +102,10 @@ onMounted(() => {
   admin.loadSettings()
 })
 
-watch(
+useStoreErrorToast(
   () => admin.settingsError,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      admin.settingsError = null
-    }
+  () => {
+    admin.settingsError = null
   },
 )
 </script>
@@ -198,5 +211,17 @@ watch(
         </NButton>
       </div>
     </div>
+
+    <NModal
+      v-model:show="deleteConfirmVisible"
+      preset="dialog"
+      type="warning"
+      :title="t('common.actions.confirmDelete')"
+      :content="t('admin.settings.deleteConfirm')"
+      :positive-text="t('common.actions.deleteConfirmAction')"
+      :negative-text="t('common.cancel')"
+      @positive-click="confirmRemoveSetting"
+      @negative-click="closeDeleteConfirm"
+    />
   </div>
 </template>
