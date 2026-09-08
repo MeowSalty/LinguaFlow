@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { useMessage, type DropdownOption } from 'naive-ui'
+import { NButton, NIcon, useMessage, type DropdownOption } from 'naive-ui'
+import IconCarbonMoon from '~icons/carbon/moon'
+import IconCarbonScreen from '~icons/carbon/screen'
+import IconCarbonSun from '~icons/carbon/sun'
 
 import AppLogo from '@/components/AppLogo.vue'
 import { APP_NAV_SECTIONS, type AppNavItem } from '@/layouts/navigation'
@@ -107,9 +110,21 @@ const localeOptions = computed<DropdownOption[]>(() =>
 )
 
 const themeOptions = computed<DropdownOption[]>(() => [
-  { label: `◐ ${t('theme.system')}`, key: 'system' },
-  { label: `☀ ${t('theme.light')}`, key: 'light' },
-  { label: `☾ ${t('theme.dark')}`, key: 'dark' },
+  {
+    label: t('theme.system'),
+    key: 'system',
+    icon: () => h(NIcon, null, { default: () => h(IconCarbonScreen) }),
+  },
+  {
+    label: t('theme.light'),
+    key: 'light',
+    icon: () => h(NIcon, null, { default: () => h(IconCarbonSun) }),
+  },
+  {
+    label: t('theme.dark'),
+    key: 'dark',
+    icon: () => h(NIcon, null, { default: () => h(IconCarbonMoon) }),
+  },
 ])
 
 const onSelectUserAction = async (key: string | number) => {
@@ -142,6 +157,16 @@ const onSelectLocale = (key: string | number): void => {
 
 const mobileNavOpen = ref(false)
 
+// 视口跨过 lg 断点（桌面侧边栏接管导航）时自动收起移动端抽屉，避免两套导航并存
+const desktopNavQuery = window.matchMedia('(min-width: 64rem)')
+const onDesktopNavChange = (event: MediaQueryListEvent): void => {
+  if (event.matches) {
+    mobileNavOpen.value = false
+  }
+}
+onMounted(() => desktopNavQuery.addEventListener('change', onDesktopNavChange))
+onUnmounted(() => desktopNavQuery.removeEventListener('change', onDesktopNavChange))
+
 const navigateTo = (path: string): void => {
   mobileNavOpen.value = false
   void router.push(path)
@@ -164,10 +189,7 @@ const navigateTo = (path: string): void => {
         <AppLogo size="md" :wordmark="!sidebarCollapsed" />
       </RouterLink>
 
-      <nav
-        class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto"
-        :aria-label="t('nav.main')"
-      >
+      <nav class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" :aria-label="t('nav.main')">
         <template v-for="(section, si) in navSections" :key="`section-${si}`">
           <div
             v-if="si > 0 && section.labelKey === null"
@@ -229,10 +251,11 @@ const navigateTo = (path: string): void => {
       <header
         class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-lf-border-soft bg-lf-surface px-4 sm:gap-3 sm:px-6"
       >
+        <!-- lg:hidden! 用 important 覆盖 naive-ui 注入的 .n-button display（分层样式斗不过未分层样式） -->
         <NButton
           quaternary
           circle
-          class="lg:hidden"
+          class="lg:hidden!"
           :aria-label="t('nav.menu')"
           :title="t('nav.menu')"
           @click="mobileNavOpen = true"
@@ -264,7 +287,7 @@ const navigateTo = (path: string): void => {
           >
             <NButton quaternary circle :title="t('common.theme')" :aria-label="t('common.theme')">
               <template #icon>
-                <IconCarbonContrast v-if="theme.mode === 'system'" class="text-lg" />
+                <IconCarbonScreen v-if="theme.mode === 'system'" class="text-lg" />
                 <IconCarbonMoon v-else-if="theme.isDark" class="text-lg" />
                 <IconCarbonSun v-else class="text-lg" />
               </template>
