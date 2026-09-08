@@ -38,7 +38,6 @@ const messages = {
     executionPlanTemplates: '执行计划',
     tools: '工具',
     epubRotate: 'EPUB 横竖排转换',
-    quickTranslate: '即时翻译',
     stats: '用量概览',
     changelog: '更新日志',
     about: '关于',
@@ -88,8 +87,6 @@ const messages = {
     },
   },
   quickTranslate: {
-    pageTitle: '即时翻译',
-    pageSubtitle: '单段即时翻译，译文临时不落库；可选用执行计划、项目术语表与内联术语表',
     sourceLabel: '原文',
     sourcePlaceholder: '粘贴需要翻译的文本…',
     sourceLangLabel: '源语言',
@@ -281,10 +278,6 @@ const messages = {
       createProject: {
         title: '新建项目',
         description: '创建专业翻译项目',
-      },
-      viewProjects: {
-        title: '查看项目',
-        description: '进入项目工作区',
       },
     },
     activity: {

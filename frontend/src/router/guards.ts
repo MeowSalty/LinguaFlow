@@ -29,7 +29,6 @@ const ROUTE_TITLES: Record<string, string> = {
   '/service': 'service.title',
   '/stats': 'nav.stats',
   '/tools/epub-rotate': 'nav.epubRotate',
-  '/tools/quick-translate': 'nav.quickTranslate',
   '/[...all]': 'notFound.title',
 }
 

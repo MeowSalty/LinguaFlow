@@ -178,13 +178,6 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
-    '/tools/quick-translate': RouteRecordInfo<
-      '/tools/quick-translate',
-      '/tools/quick-translate',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
   }
 
   /**
@@ -322,12 +315,6 @@ declare module 'vue-router/auto-routes' {
     'src/pages/tools/epub-rotate.vue': {
       routes:
         | '/tools/epub-rotate'
-      views:
-        | never
-    }
-    'src/pages/tools/quick-translate.vue': {
-      routes:
-        | '/tools/quick-translate'
       views:
         | never
     }

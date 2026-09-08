@@ -16,6 +16,6 @@ const { t } = useI18n()
       </NButton>
     </PageHeader>
 
-    <QuickTranslateWidget variant="hero" />
+    <QuickTranslateWidget />
   </div>
 </template>

@@ -9,7 +9,6 @@ import IconCarbonTextMining from '~icons/carbon/text-mining'
 import IconCarbonClean from '~icons/carbon/clean'
 import IconCarbonFlow from '~icons/carbon/flow'
 import IconCarbonPlan from '~icons/carbon/plan'
-import IconCarbonTranslate from '~icons/carbon/translate'
 import IconCarbonTextVerticalAlignment from '~icons/carbon/text-vertical-alignment'
 import IconCarbonSecurity from '~icons/carbon/security'
 
@@ -68,7 +67,6 @@ export const APP_NAV_SECTIONS: AppNavSection[] = [
   {
     labelKey: 'nav.tools',
     items: [
-      { path: '/tools/quick-translate', labelKey: 'nav.quickTranslate', icon: IconCarbonTranslate },
       {
         path: '/tools/epub-rotate',
         labelKey: 'nav.epubRotate',

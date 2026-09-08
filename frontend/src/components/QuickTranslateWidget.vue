@@ -11,8 +11,6 @@ import { renderQualityHighlightedText, getQualityCodeLabel } from '@/composables
 import { formatTokens, batchStatusTimelineType } from '@/composables/useWorkspaceUtils'
 import SegmentTranslationPreviewDiagnostic from '@/components/workspace/SegmentTranslationPreviewDiagnostic.vue'
 
-const props = withDefaults(defineProps<{ variant?: 'hero' | 'full' }>(), { variant: 'hero' })
-
 const { t } = useI18n()
 const message = useMessage()
 
@@ -27,7 +25,7 @@ const executionPlanId = ref<number | null>(null)
 const projectId = ref<number | null>(null)
 const glossary = ref<Array<{ id: number; source: string; target: string; notes: string }>>([])
 const glossarySeq = ref(0)
-const advancedOpen = ref(props.variant === 'full')
+const advancedOpen = ref(false)
 const submitting = ref(false)
 const result = ref<ApiSchemas['QuickTranslateResponse'] | null>(null)
 
@@ -406,7 +404,7 @@ onMounted(() => {
 
       <!-- 诊断批次（默认收起） -->
       <div v-if="result.batches?.length" class="border-t border-lf-border-soft px-4 py-3">
-        <NCollapse :default-expanded-names="props.variant === 'full' ? ['batches'] : []">
+        <NCollapse>
           <NCollapseItem name="batches" :title="t('quickTranslate.batchesTitle')">
             <div class="space-y-3">
               <SegmentTranslationPreviewDiagnostic
