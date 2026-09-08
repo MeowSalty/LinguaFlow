@@ -20,6 +20,7 @@ const messages = {
       delete: '删除',
       more: '更多',
       confirmDelete: '确认删除',
+      deleteConfirmAction: '删除',
     },
     actionsColumn: '操作',
   },
@@ -296,7 +297,7 @@ const messages = {
         complete: '完成了',
         fail: '失败了',
         approve: '批准了',
-        reject: '驳回了',
+        reject: '拒绝了',
       },
       relativeTime: {
         justNow: '刚刚',
@@ -315,7 +316,8 @@ const messages = {
   },
   stats: {
     title: '用量概览',
-    subtitle: '查看调用量、令牌消耗与最近活动',
+    subtitle: '查看调用量、Token 消耗与最近活动',
+    loadFailed: '加载失败',
   },
   projects: {
     title: '翻译项目',
@@ -381,6 +383,7 @@ const messages = {
       languagePlaceholder: '选择或输入语言代码',
       glossaryEnabled: '术语表已启用',
       glossaryDisabled: '术语表未启用',
+      glossaryToggle: '启用术语表',
     },
     validation: {
       nameRequired: '请输入项目名称',
@@ -417,7 +420,7 @@ const messages = {
     selection: {
       translate: '处理选中',
       approve: '批准',
-      reject: '驳回',
+      reject: '拒绝',
       clear: '取消选择',
       qaRecheck: 'QA 重检',
     },
@@ -611,17 +614,17 @@ const messages = {
         duplicateSourceDivergence: '同源译文偏差',
       },
       disposition: {
-        dismissed: '已驳回',
+        dismissed: '已忽略',
         dismissAction: '判定不是问题',
         reinstateAction: '撤销裁决',
-        dismissTitle: '驳回质量问题',
-        reinstateTitle: '撤销驳回',
+        dismissTitle: '忽略质量问题',
+        reinstateTitle: '撤销忽略',
         noteLabel: '裁决说明',
         notePlaceholder: '可选，如「专有名词，有意保留」',
-        confirmDismiss: '确定驳回',
+        confirmDismiss: '确定忽略',
         confirmReinstate: '确定撤销',
         cancel: '取消',
-        dismissSuccess: '已驳回该质量问题',
+        dismissSuccess: '已忽略该质量问题',
         reinstateSuccess: '已撤销裁决',
         dismissedHint: '已判定为非问题',
         decidedByLlm: 'LLM 裁决',
@@ -668,7 +671,7 @@ const messages = {
         translated: '已翻译',
         edited: '已编辑',
         approved: '已批准',
-        rejected: '已驳回',
+        rejected: '已拒绝',
       },
       searchReplace: {
         title: '搜索替换',
@@ -771,7 +774,7 @@ const messages = {
           attempt: '第 {count} 次尝试',
           duration: '{ms} ms',
           segmentCount: '{count} 段',
-          tokens: '{input}↑ {output}↓ tokens',
+          tokens: '{input}↑ {output}↓ Token',
           errorType: '错误类型',
           errorMessage: '错误信息',
           httpStatus: 'HTTP 状态',
@@ -779,7 +782,7 @@ const messages = {
           shrinkAttempted: '已尝试缩减请求',
           truncated: '输出被截断',
           truncatedHint:
-            '响应因输出 token 上限被截断，已由修复链抢救有效前缀，缺失条目将走重跑通道',
+            '响应因输出 Token 上限被截断，已由修复链抢救有效前缀，缺失条目将走重跑通道',
           repaired: '解析修复 {ops}',
           repairedHint: '响应解析修复算子链，按应用顺序记录',
           expand: '查看详情',
@@ -808,7 +811,7 @@ const messages = {
         fixIssues: '本次修复目标',
         result: '修订结果',
         unchanged: '修订译文与原译文相同，LLM 判定无需改动',
-        usageSummary: '{calls} 次调用 · {input}↑ {output}↓ tokens',
+        usageSummary: '{calls} 次调用 · {input}↑ {output}↓ Token',
         roundItem: '修订轮 {index}',
         synthesizedRound: '默认修订轮（由翻译轮合成）',
         stalePlan: '已更换执行计划或筛选条件，当前结果已过期，请重新修订后再应用',
@@ -852,7 +855,7 @@ const messages = {
       confirmSummary:
         '将使用「{planName}」为 {resourceCount} 个资源（{segmentCount} 个段落）创建任务',
       segmentFilter: {
-        pendingOnly: '仅待翻译（处理待翻译和已驳回的段落）',
+        pendingOnly: '仅待翻译（处理待翻译和已拒绝的段落）',
         skipApproved: '跳过已批准（处理除已批准外的所有段落）',
         all: '全部段落（处理所有状态的段落）',
       },
@@ -884,7 +887,7 @@ const messages = {
       form: {
         executionPlan: '执行计划模板',
         executionPlanPlaceholder: '选择执行计划模板',
-        autoApprove: '翻译完成后自动审批',
+        autoApprove: '翻译完成后自动审核',
         autoApproveHint: '开启后，任务完成时将自动批准所有段落',
         sourceLang: '源语言',
         targetLang: '目标语言',
@@ -913,7 +916,7 @@ const messages = {
       round: {
         roundLabel: '轮次 {index}',
         status: {
-          pending: '待执行',
+          pending: '等待中',
           running: '执行中',
           completed: '已完成',
           failed: '失败',
@@ -983,7 +986,7 @@ const messages = {
             failed: '失败',
           },
           segments: '{count} 段',
-          tokens: '{input}↑ {output}↓ tokens',
+          tokens: '{input}↑ {output}↓ Token',
           glossaryUsed: '{count} 使用',
           glossaryAdded: '{count} 新增',
           detailTitle: '批次详情',
@@ -1004,7 +1007,7 @@ const messages = {
           shrinkAttempted: '已尝试缩放',
           truncated: '输出被截断',
           truncatedHint:
-            '响应因输出 token 上限被截断，已由修复链抢救有效前缀，缺失条目将走重跑通道',
+            '响应因输出 Token 上限被截断，已由修复链抢救有效前缀，缺失条目将走重跑通道',
           repaired: '解析修复 {ops}',
           repairedHint: '响应解析修复算子链，按应用顺序记录',
           noContent: '无内容',
@@ -1023,7 +1026,7 @@ const messages = {
         executionPlan: '执行计划',
       },
       status: {
-        pending: '待执行',
+        pending: '等待中',
         running: '运行中',
         paused: '已暂停',
         completed: '已完成',
@@ -1055,7 +1058,7 @@ const messages = {
       title: 'QA 重检',
       action: 'QA 重检',
       intro:
-        '按所选执行策略当前的 QA 配置，对既有译文重跑质量检查。仅更新质量问题，不修改译文与段落状态；已有人工裁决（含驳回）按指纹自动继承',
+        '按所选执行策略当前的 QA 配置，对既有译文重跑质量检查。仅更新质量问题，不修改译文与段落状态；已有人工裁决（含忽略）按指纹自动继承',
       profileLabel: '执行策略',
       profilePlaceholder: '选择要使用的执行策略',
       profileHint: 'QA 检查项与阈值取自该策略的当前配置；未启用质量检测的策略不可选',
@@ -1084,7 +1087,7 @@ const messages = {
       resultResourcesChecked: '重检资源',
       resultIssuesNew: '新增问题',
       resultIssuesCleared: '已清除问题',
-      resultDispositionsInherited: '继承既有裁决 {count} 项（含已驳回）',
+      resultDispositionsInherited: '继承既有裁决 {count} 项（含已忽略）',
       resultSkippedNoTarget: '{count} 个段落因无译文跳过',
       resultSkippedConcurrent: '{count} 个段落因译文被并发修改跳过',
       resultSkippedBusyTitle: '以下资源存在未完成任务，已跳过：',
@@ -1097,7 +1100,7 @@ const messages = {
       chapterCount: '{count} 个章节',
       translatedProgress: '{translated}/{total} 已翻译',
       translateChapter: '翻译本章',
-      approveChapter: '审批本章',
+      approveChapter: '审核本章',
       backToChapterList: '返回章节列表',
       backToResources: '返回资源列表',
       chapterList: '章节列表',
@@ -1244,9 +1247,9 @@ const messages = {
             template: '模板',
             duration: '耗时',
             durationValue: '{ms} ms',
-            promptTokens: '输入 Tokens',
-            completionTokens: '输出 Tokens',
-            totalTokens: 'Tokens 总量',
+            promptTokens: '输入 Token',
+            completionTokens: '输出 Token',
+            totalTokens: 'Token 总量',
             totalTokensValue: '{total}',
             httpStatus: 'HTTP 状态',
             entryCount: '条目总数',
@@ -1298,7 +1301,7 @@ const messages = {
         retry: '重试',
 
         // 步骤 2: 执行进度
-        pending: '等待执行…',
+        pending: '等待中',
         executingWithSource: '正在同步术语「{source}」的译文…',
         progress: '已处理 {processed} / {total} 段落',
         cancel: '取消同步',
@@ -1408,7 +1411,7 @@ const messages = {
       typePlaceholder: '选择后端类型',
       options: '高级配置',
       apiKey: 'API Key',
-      apiKeyPlaceholder: 'sk-...',
+      apiKeyPlaceholder: 'sk-…',
       apiKeyRequired: 'API Key 为必填项',
       baseUrl: 'Base URL（可选）',
       baseUrlPlaceholder: '留空使用官方地址',
@@ -1482,7 +1485,6 @@ const messages = {
       total: '全部模板',
       system: '系统模板',
       user: '用户模板',
-      org: '组织模板',
     },
     actions: {
       create: '新建模板',
@@ -1498,7 +1500,6 @@ const messages = {
     scopes: {
       system: '系统',
       user: '用户',
-      org: '组织',
     },
     card: {
       createdAt: '创建时间',
@@ -1570,7 +1571,6 @@ const messages = {
       total: '全部模板',
       system: '系统模板',
       user: '用户模板',
-      org: '组织模板',
     },
     actions: {
       create: '新建模板',
@@ -1586,7 +1586,6 @@ const messages = {
     scopes: {
       system: '系统',
       user: '用户',
-      org: '组织',
     },
     card: {
       updatedAt: '更新时间',
@@ -1629,7 +1628,6 @@ const messages = {
       total: '全部模板',
       system: '系统模板',
       user: '用户模板',
-      org: '组织模板',
     },
     actions: {
       create: '新建模板',
@@ -1645,7 +1643,6 @@ const messages = {
     scopes: {
       system: '系统',
       user: '用户',
-      org: '组织',
     },
     card: {
       updatedAt: '更新时间',
@@ -1685,7 +1682,6 @@ const messages = {
       total: '全部策略',
       system: '系统策略',
       user: '用户策略',
-      org: '组织策略',
     },
     actions: {
       create: '新建策略',
@@ -1701,7 +1697,6 @@ const messages = {
     scopes: {
       system: '系统',
       user: '用户',
-      org: '组织',
     },
     card: {
       createdAt: '创建时间',
@@ -1797,7 +1792,7 @@ const messages = {
     qa: {
       title: '质量检测',
       enabled: '启用质量检测',
-      autoReject: '错误自动驳回',
+      autoReject: '错误自动拒绝',
       lengthMethod: '长度计算方式',
       lengthMethodCharWeight: '字符加权（CJK×2）',
       lengthMethodWordCount: '字（词）计数',
@@ -1858,7 +1853,6 @@ const messages = {
     scopes: {
       system: '系统',
       user: '用户',
-      org: '组织',
     },
     card: {
       createdAt: '创建时间',
@@ -2034,7 +2028,7 @@ const messages = {
     featureGlossary: '术语管理',
     featureGlossaryDesc: 'CSV 导入导出，自动术语提取，术语修改后自动同步已翻译段落',
     featureReview: '翻译审核',
-    featureReviewDesc: '按状态筛选，行内编辑译文，批量批准/驳回，添加备注',
+    featureReviewDesc: '按状态筛选，行内编辑译文，批量批准/拒绝，添加备注',
     featureConfig: '灵活配置',
     featureConfigDesc: '自定义提示词、执行策略、执行计划，定义多轮执行流程',
     techStack: '技术架构',
@@ -2175,13 +2169,21 @@ const messages = {
         jobRetry: '重试任务',
         segmentUpdate: '编辑段落',
         segmentApprove: '批准',
-        segmentReject: '驳回',
+        segmentReject: '拒绝',
         segmentBatchReview: '批量审核',
         segmentApproveAll: '全部批准',
-        segmentRetranslateRejected: '重译已驳回段落',
+        segmentRetranslateRejected: '重译已拒绝段落',
         glossarySync: '术语同步',
         quickTranslate: '即时翻译',
         segmentPreviewApply: '应用预览翻译',
+      },
+      resourceTypes: {
+        job: '任务',
+        project: '项目',
+        resource: '资源',
+        segment: '段落',
+        glossary_entry: '术语条目',
+        quick_translate: '即时翻译',
       },
       empty: '暂无审计日志',
       refresh: '刷新',
@@ -2207,7 +2209,15 @@ const messages = {
       },
       keyCount: '{count} 个配置项',
       empty: '暂无系统配置项',
+      deleteConfirm: '确定要删除该配置项吗？',
     },
+  },
+  notFound: {
+    code: '404',
+    title: '页面不存在',
+    description: '你访问的页面不存在或已被移动',
+    backHome: '返回工作台',
+    backPrev: '返回上一页',
   },
   globalJobTracker: {
     title: '任务追踪',
