@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
+import { formatDateTime } from '@/utils/datetime'
+
 const { t } = useI18n()
 
 interface GitHubRelease {
@@ -18,7 +20,7 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('zh-CN', {
+  return formatDateTime(dateStr, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -85,16 +87,7 @@ onMounted(() => {
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('changelog.title') }}
-        </h1>
-        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ t('changelog.description') }}
-        </p>
-      </div>
-    </section>
+    <PageHeader :title="t('changelog.title')" :subtitle="t('changelog.description')" />
 
     <div v-if="loading" class="space-y-4">
       <div v-for="i in 3" :key="i" class="lf-panel p-5">

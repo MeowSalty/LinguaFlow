@@ -8,16 +8,10 @@ const { t } = useI18n()
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('quickTranslate.pageTitle') }}
-        </h1>
-        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ t('quickTranslate.pageSubtitle') }}
-        </p>
-      </div>
-    </section>
+    <PageHeader
+      :title="t('quickTranslate.pageTitle')"
+      :subtitle="t('quickTranslate.pageSubtitle')"
+    />
 
     <QuickTranslateWidget variant="full" />
   </div>

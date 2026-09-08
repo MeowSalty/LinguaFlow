@@ -162,6 +162,11 @@ export const useExecutionPlanTemplatesStore = defineStore('executionPlanTemplate
     }
   }
 
+  const resetFilters = (): void => {
+    searchQuery.value = ''
+    scopeFilter.value = 'all'
+  }
+
   return {
     items,
     loading,
@@ -171,6 +176,7 @@ export const useExecutionPlanTemplatesStore = defineStore('executionPlanTemplate
     error,
     searchQuery,
     scopeFilter,
+    resetFilters,
     sortedItems,
     filteredItems,
     totalCount,

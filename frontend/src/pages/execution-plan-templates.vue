@@ -23,6 +23,7 @@ import { useBootstrapPromptTemplatesStore } from '@/stores/bootstrapPromptTempla
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { usePromptTemplatesStore } from '@/stores/promptTemplates'
 import { useExecutionProfilesStore } from '@/stores/executionProfiles'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
@@ -135,9 +136,7 @@ const metrics = computed(() => [
 const isEditMode = computed(() => Boolean(editingItem.value))
 const isSystemScope = computed(() => editingItem.value?.scope === 'system')
 const drawerTitle = computed(() =>
-  isEditMode.value
-    ? t('executionPlanTemplates.actions.edit')
-    : t('executionPlanTemplates.actions.create'),
+  isEditMode.value ? t('common.actions.edit') : t('executionPlanTemplates.actions.create'),
 )
 
 const rules = computed<FormRules>(() => ({
@@ -448,11 +447,11 @@ const formatDate = (dateStr: string | undefined): string => {
 
 const modeBadgeClass = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
-  if (mode === 'extract') return 'bg-amber-50 text-amber-600'
-  if (mode === 'adjudicate') return 'bg-violet-50 text-violet-600'
-  if (mode === 'semantic_qa') return 'bg-emerald-50 text-emerald-600'
-  if (mode === 'revise') return 'bg-rose-50 text-rose-600'
-  return 'bg-sky-50 text-sky-600'
+  if (mode === 'extract') return 'bg-lf-accent-amber-soft text-lf-accent-amber'
+  if (mode === 'adjudicate') return 'bg-lf-accent-violet-soft text-lf-accent-violet'
+  if (mode === 'semantic_qa') return 'bg-lf-accent-emerald-soft text-lf-accent-emerald'
+  if (mode === 'revise') return 'bg-lf-accent-rose-soft text-lf-accent-rose'
+  return 'bg-lf-accent-sky-soft text-lf-accent-sky'
 }
 
 const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
@@ -502,7 +501,7 @@ watch(
   >
     <template #actions>
       <NButton secondary :loading="store.loading" @click="store.loadTemplates">
-        {{ t('executionPlanTemplates.actions.refresh') }}
+        {{ t('common.actions.refresh') }}
       </NButton>
       <NButton type="primary" @click="openCreateDrawer">
         {{ t('executionPlanTemplates.actions.create') }}
@@ -513,27 +512,19 @@ watch(
       <NInput
         v-model:value="store.searchQuery"
         clearable
-        class="lg:max-w-sm"
+        class="lg:max-w-sm!"
         :placeholder="t('executionPlanTemplates.filters.searchPlaceholder')"
       />
       <div class="flex flex-wrap gap-3">
-        <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
-        <NButton
-          v-if="hasActiveFilters"
-          quaternary
-          @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-        >
+        <NSelect v-model:value="store.scopeFilter" class="w-44!" :options="filterScopeOptions" />
+        <NButton v-if="hasActiveFilters" quaternary @click="store.resetFilters()">
           {{ t('executionPlanTemplates.filters.reset') }}
         </NButton>
       </div>
     </template>
 
     <template #empty-extra>
-      <NButton
-        v-if="hasActiveFilters"
-        secondary
-        @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-      >
+      <NButton v-if="hasActiveFilters" secondary @click="store.resetFilters()">
         {{ t('executionPlanTemplates.filters.reset') }}
       </NButton>
       <NButton v-else type="primary" @click="openCreateDrawer">
@@ -622,7 +613,7 @@ watch(
                 class="font-medium"
                 @click="openEditDrawer(item)"
               >
-                {{ t('executionPlanTemplates.actions.edit') }}
+                {{ t('common.actions.edit') }}
               </NButton>
               <NButton
                 v-if="item.scope !== 'system'"
@@ -631,7 +622,7 @@ watch(
                 class="font-medium"
                 @click="confirmDelete(item)"
               >
-                {{ t('executionPlanTemplates.actions.delete') }}
+                {{ t('common.actions.delete') }}
               </NButton>
               <NButton
                 v-if="item.scope === 'system'"
@@ -640,7 +631,7 @@ watch(
                 class="font-medium"
                 @click="openEditDrawer(item)"
               >
-                {{ t('executionPlanTemplates.actions.view') }}
+                {{ t('common.actions.view') }}
               </NButton>
             </div>
           </div>
@@ -650,7 +641,7 @@ watch(
   </EntityListPage>
 
   <!-- 创建/编辑抽屉 -->
-  <NDrawer v-model:show="drawerVisible" :width="'min(720px, 100vw)'" placement="right">
+  <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.l" placement="right">
     <NDrawerContent :native-scrollbar="false">
       <template #header>
         <div>
@@ -718,7 +709,7 @@ watch(
       <template #footer>
         <div class="flex justify-end gap-3">
           <NButton @click="drawerVisible = false">
-            {{ t('executionPlanTemplates.actions.cancel') }}
+            {{ t('common.cancel') }}
           </NButton>
           <NButton
             v-if="!isSystemScope"
@@ -742,12 +733,12 @@ watch(
     v-model:show="deleteModalVisible"
     preset="dialog"
     type="warning"
-    :title="t('executionPlanTemplates.actions.confirmDelete')"
+    :title="t('common.actions.confirmDelete')"
     :content="
       deletingItem ? t('executionPlanTemplates.delete.confirm', { name: deletingItem.name }) : ''
     "
-    :positive-text="t('executionPlanTemplates.actions.confirmDelete')"
-    :negative-text="t('executionPlanTemplates.actions.cancel')"
+    :positive-text="t('common.actions.confirmDelete')"
+    :negative-text="t('common.cancel')"
     :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
     @positive-click="executeDelete"
   />

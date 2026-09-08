@@ -97,16 +97,7 @@ const onSelectNew = (): void => {
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('epubRotate.title') }}
-        </h1>
-        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ t('epubRotate.description') }}
-        </p>
-      </div>
-    </section>
+    <PageHeader :title="t('epubRotate.title')" :subtitle="t('epubRotate.description')" />
 
     <section class="lf-panel space-y-5 p-5">
       <div class="space-y-2">

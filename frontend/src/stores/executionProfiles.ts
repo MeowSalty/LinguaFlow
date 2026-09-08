@@ -141,6 +141,11 @@ export const useExecutionProfilesStore = defineStore('executionProfiles', () => 
     }
   }
 
+  const resetFilters = (): void => {
+    searchQuery.value = ''
+    scopeFilter.value = 'all'
+  }
+
   return {
     items,
     loading,
@@ -150,6 +155,7 @@ export const useExecutionProfilesStore = defineStore('executionProfiles', () => 
     error,
     searchQuery,
     scopeFilter,
+    resetFilters,
     sortedItems,
     filteredItems,
     totalCount,

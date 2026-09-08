@@ -134,6 +134,11 @@ export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
     }
   }
 
+  const resetFilters = (): void => {
+    searchQuery.value = ''
+    scopeFilter.value = 'all'
+  }
+
   return {
     items,
     loading,
@@ -143,6 +148,7 @@ export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
     error,
     searchQuery,
     scopeFilter,
+    resetFilters,
     sortedItems,
     filteredItems,
     totalCount,

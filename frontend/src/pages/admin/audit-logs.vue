@@ -93,19 +93,11 @@ watch(
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('admin.auditLogs.title') }}
-        </h1>
-        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ t('admin.auditLogs.description') }}
-        </p>
-      </div>
+    <PageHeader :title="t('admin.auditLogs.title')" :subtitle="t('admin.auditLogs.description')">
       <NButton secondary :loading="admin.auditLogsLoading" @click="admin.loadAuditLogs(true)">
         {{ t('admin.auditLogs.refresh') }}
       </NButton>
-    </section>
+    </PageHeader>
 
     <div class="lf-panel lf-table overflow-hidden">
       <div v-if="admin.auditLogsLoading" class="space-y-3 p-5">

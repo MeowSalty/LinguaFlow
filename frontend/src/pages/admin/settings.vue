@@ -99,29 +99,19 @@ watch(
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('admin.settings.title') }}
-        </h1>
-        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ t('admin.settings.description') }}
-        </p>
-      </div>
-      <div class="flex flex-wrap gap-3">
-        <NButton secondary :loading="admin.settingsLoading" @click="admin.loadSettings">
-          {{ t('admin.settings.actions.refresh') }}
-        </NButton>
-        <NButton
-          type="primary"
-          :loading="admin.settingsSaving"
-          :disabled="!hasChanges"
-          @click="saveSettings"
-        >
-          {{ t('admin.settings.actions.save') }}
-        </NButton>
-      </div>
-    </section>
+    <PageHeader :title="t('admin.settings.title')" :subtitle="t('admin.settings.description')">
+      <NButton secondary :loading="admin.settingsLoading" @click="admin.loadSettings">
+        {{ t('admin.settings.actions.refresh') }}
+      </NButton>
+      <NButton
+        type="primary"
+        :loading="admin.settingsSaving"
+        :disabled="!hasChanges"
+        @click="saveSettings"
+      >
+        {{ t('admin.settings.actions.save') }}
+      </NButton>
+    </PageHeader>
 
     <div class="lf-panel p-5">
       <div class="mb-4 flex items-center justify-between gap-3">
@@ -129,7 +119,7 @@ watch(
           {{ t('admin.settings.title') }}
         </h2>
         <span class="text-xs tabular-nums text-lf-text-subtle">
-          {{ editingSettings.length }} keys
+          {{ t('admin.settings.keyCount', { count: editingSettings.length }) }}
         </span>
       </div>
 

@@ -20,6 +20,7 @@ import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
 import { useAdminStore } from '@/stores/admin'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type User = ApiSchemas['User']
 
@@ -265,12 +266,6 @@ const executeResetPassword = async (): Promise<void> => {
   }
 }
 
-const resetFilters = (): void => {
-  admin.userSearchQuery = ''
-  admin.userRoleFilter = 'all'
-  admin.userActiveFilter = 'all'
-}
-
 onMounted(() => {
   admin.loadUsers()
 })
@@ -288,24 +283,14 @@ watch(
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('admin.users.title') }}
-        </h1>
-        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ t('admin.users.description') }}
-        </p>
-      </div>
-      <div class="flex flex-wrap gap-3">
-        <NButton secondary :loading="admin.usersLoading" @click="admin.loadUsers">
-          {{ t('admin.users.actions.refresh') }}
-        </NButton>
-        <NButton type="primary" @click="openCreateDrawer">
-          {{ t('admin.users.actions.create') }}
-        </NButton>
-      </div>
-    </section>
+    <PageHeader :title="t('admin.users.title')" :subtitle="t('admin.users.description')">
+      <NButton secondary :loading="admin.usersLoading" @click="admin.loadUsers">
+        {{ t('common.actions.refresh') }}
+      </NButton>
+      <NButton type="primary" @click="openCreateDrawer">
+        {{ t('admin.users.actions.create') }}
+      </NButton>
+    </PageHeader>
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div class="lf-metric">
@@ -327,17 +312,21 @@ watch(
         <NInput
           v-model:value="admin.userSearchQuery"
           clearable
-          class="lg:max-w-sm"
+          class="lg:max-w-sm!"
           :placeholder="t('admin.users.filters.searchPlaceholder')"
         />
         <div class="flex flex-wrap gap-3">
-          <NSelect v-model:value="admin.userRoleFilter" class="w-36" :options="filterRoleOptions" />
+          <NSelect
+            v-model:value="admin.userRoleFilter"
+            class="w-36!"
+            :options="filterRoleOptions"
+          />
           <NSelect
             v-model:value="admin.userActiveFilter"
-            class="w-36"
+            class="w-36!"
             :options="filterActiveOptions"
           />
-          <NButton v-if="hasActiveFilters" quaternary @click="resetFilters">
+          <NButton v-if="hasActiveFilters" quaternary @click="admin.resetUserFilters()">
             {{ t('admin.users.filters.reset') }}
           </NButton>
         </div>
@@ -350,7 +339,7 @@ watch(
         :key="i"
         class="flex items-center gap-4 border-b border-lf-border-soft px-4 py-4 last:border-b-0"
       >
-        <div class="h-9 w-9 animate-pulse rounded-full bg-lf-border-soft" />
+        <NSkeleton circle class="h-9 w-9" />
         <div class="min-w-0 flex-1 space-y-2">
           <NSkeleton text class="w-2/5" />
           <NSkeleton text class="w-1/4" />
@@ -368,7 +357,7 @@ watch(
       "
     >
       <template #extra>
-        <NButton v-if="hasActiveFilters" secondary @click="resetFilters">
+        <NButton v-if="hasActiveFilters" secondary @click="admin.resetUserFilters()">
           {{ t('admin.users.filters.reset') }}
         </NButton>
         <NButton v-else type="primary" @click="openCreateDrawer">
@@ -465,7 +454,7 @@ watch(
       </div>
     </div>
 
-    <NDrawer v-model:show="drawerVisible" :width="'min(480px, 100vw)'" placement="right">
+    <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.m" placement="right">
       <NDrawerContent :title="drawerTitle" :native-scrollbar="false">
         <template #header>
           <div>
@@ -524,10 +513,10 @@ watch(
         <template #footer>
           <div class="flex justify-end gap-3">
             <NButton @click="drawerVisible = false">
-              {{ t('workspace.common.cancel') }}
+              {{ t('common.cancel') }}
             </NButton>
             <NButton type="primary" :loading="submitting" @click="onSubmit">
-              {{ t('workspace.common.save') }}
+              {{ t('common.save') }}
             </NButton>
           </div>
         </template>
@@ -546,8 +535,8 @@ watch(
             })
           : ''
       "
-      :positive-text="t('workspace.common.confirm')"
-      :negative-text="t('workspace.common.cancel')"
+      :positive-text="t('common.confirm')"
+      :negative-text="t('common.cancel')"
       :loading="disablingUser ? admin.disablingUserIds.includes(disablingUser.id) : false"
       @positive-click="executeDisable"
     />
@@ -580,7 +569,7 @@ watch(
       <template #footer>
         <div class="flex justify-end gap-3">
           <NButton @click="resetPasswordModalVisible = false">
-            {{ t('workspace.common.cancel') }}
+            {{ t('common.cancel') }}
           </NButton>
           <NButton
             type="primary"

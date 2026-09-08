@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { type ApiSchemas } from '@/api/client'
 import { useLanguageOptions } from '@/composables/useLanguageOptions'
 import { useProjectsStore } from '@/stores/projects'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type Project = ApiSchemas['Project']
 
@@ -13,7 +14,6 @@ interface ProjectFormModel {
   name: string
   source_lang: string
   target_lang: string
-  owner_type: 'personal' | 'organization'
   glossary_enabled: boolean
 }
 
@@ -33,11 +33,16 @@ const formModel = reactive<ProjectFormModel>({
   name: '',
   source_lang: 'auto',
   target_lang: 'zh-Hans',
-  owner_type: 'personal',
   glossary_enabled: false,
 })
 
 const hasActiveFilters = computed(() => projects.searchQuery.trim().length > 0)
+
+const metrics = computed(() => [
+  { label: t('projects.stats.total'), value: projects.projectCount },
+  { label: t('projects.stats.languagePairs'), value: projects.languagePairCount },
+  { label: t('projects.stats.glossaryEnabled'), value: projects.glossaryEnabledCount },
+])
 
 const isEditMode = computed(() => Boolean(editingProject.value))
 const drawerTitle = computed(() =>
@@ -80,7 +85,6 @@ const resetForm = (): void => {
   formModel.name = ''
   formModel.source_lang = 'auto'
   formModel.target_lang = 'zh-Hans'
-  formModel.owner_type = 'personal'
   formModel.glossary_enabled = false
 }
 
@@ -95,7 +99,6 @@ const openEditDrawer = (project: Project): void => {
   formModel.name = project.name
   formModel.source_lang = project.source_lang || 'auto'
   formModel.target_lang = project.target_lang || 'en-US'
-  formModel.owner_type = 'personal'
   formModel.glossary_enabled = project.glossary_enabled ?? false
   drawerVisible.value = true
 }
@@ -198,13 +201,13 @@ const confirmDelete = async (): Promise<void> => {
 
 const cardDropdownOptions = computed<DropdownOption[]>(() => [
   { label: t('projects.actions.details'), key: 'details' },
-  { label: t('projects.actions.edit'), key: 'edit' },
+  { label: t('common.actions.edit'), key: 'edit' },
   { label: t('projects.actions.jobs'), key: 'jobs' },
   { label: t('projects.actions.glossary'), key: 'glossary' },
   { type: 'divider', key: 'd1' },
   {
     key: 'delete',
-    label: () => h(NText, { type: 'error' }, { default: () => t('projects.actions.delete') }),
+    label: () => h(NText, { type: 'error' }, { default: () => t('common.actions.delete') }),
   },
 ])
 
@@ -259,76 +262,48 @@ watch(
 
 <template>
   <RouterView v-if="!isProjectListRoute" />
-  <div v-else class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('projects.title') }}
-        </h1>
-        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ t('projects.subtitle') }}
-        </p>
-      </div>
-      <div class="flex flex-wrap gap-3">
-        <NButton secondary :loading="projects.loading" @click="projects.loadProjects">
-          {{ t('projects.actions.refresh') }}
-        </NButton>
-        <NButton type="primary" @click="openCreateDrawer">
-          {{ t('projects.actions.create') }}
-        </NButton>
-      </div>
-    </section>
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('projects.stats.total') }}</div>
-        <div class="lf-metric-value">{{ projects.projectCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('projects.stats.languagePairs') }}</div>
-        <div class="lf-metric-value">{{ projects.languagePairCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('projects.stats.glossaryEnabled') }}</div>
-        <div class="lf-metric-value">{{ projects.glossaryEnabledCount }}</div>
-      </div>
-    </div>
+  <EntityListPage
+    v-else
+    :title="t('projects.title')"
+    :subtitle="t('projects.subtitle')"
+    :metrics="metrics"
+    :loading="projects.loading"
+    :empty="projects.filteredItems.length === 0"
+    :empty-description="
+      hasActiveFilters ? t('projects.empty.filtered') : t('projects.empty.default')
+    "
+  >
+    <template #actions>
+      <NButton secondary :loading="projects.loading" @click="projects.loadProjects">
+        {{ t('common.actions.refresh') }}
+      </NButton>
+      <NButton type="primary" @click="openCreateDrawer">
+        {{ t('projects.actions.create') }}
+      </NButton>
+    </template>
 
-    <div class="lf-panel px-4 py-3">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <NInput
-          v-model:value="projects.searchQuery"
-          clearable
-          class="sm:max-w-sm"
-          :placeholder="t('projects.filters.searchPlaceholder')"
-        />
-        <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
-          {{ t('projects.filters.reset') }}
-        </NButton>
-      </div>
-    </div>
+    <template #filters>
+      <NInput
+        v-model:value="projects.searchQuery"
+        clearable
+        class="sm:max-w-sm!"
+        :placeholder="t('projects.filters.searchPlaceholder')"
+      />
+      <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
+        {{ t('projects.filters.reset') }}
+      </NButton>
+    </template>
 
-    <div v-if="projects.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <div v-for="index in 6" :key="index" class="lf-panel p-5">
-        <NSkeleton text :repeat="5" />
-      </div>
-    </div>
+    <template #empty-extra>
+      <NButton v-if="hasActiveFilters" secondary @click="projects.resetFilters">
+        {{ t('projects.filters.reset') }}
+      </NButton>
+      <NButton v-else type="primary" @click="openCreateDrawer">
+        {{ t('projects.actions.createFirst') }}
+      </NButton>
+    </template>
 
-    <NEmpty
-      v-else-if="projects.filteredItems.length === 0"
-      class="lf-panel py-16"
-      :description="hasActiveFilters ? t('projects.empty.filtered') : t('projects.empty.default')"
-    >
-      <template #extra>
-        <NButton v-if="hasActiveFilters" secondary @click="projects.resetFilters">
-          {{ t('projects.filters.reset') }}
-        </NButton>
-        <NButton v-else type="primary" @click="openCreateDrawer">
-          {{ t('projects.actions.createFirst') }}
-        </NButton>
-      </template>
-    </NEmpty>
-
-    <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="project in projects.filteredItems"
         :key="project.id"
@@ -378,7 +353,7 @@ watch(
                 placement="bottom-end"
                 @select="(key: string | number) => handleCardDropdownSelect(project, key)"
               >
-                <NButton quaternary circle size="tiny" :aria-label="t('projects.actions.more')">
+                <NButton quaternary circle size="tiny" :aria-label="t('common.actions.more')">
                   <template #icon>
                     <NIcon size="14">
                       <IconCarbonOverflowMenuHorizontal />
@@ -404,7 +379,9 @@ watch(
 
           <div class="mt-auto border-t border-lf-border-soft pt-4">
             <div class="flex items-center justify-between gap-3">
-              <span class="inline-flex items-center gap-1.5 text-xs tabular-nums text-lf-text-subtle">
+              <span
+                class="inline-flex items-center gap-1.5 text-xs tabular-nums text-lf-text-subtle"
+              >
                 <IconCarbonTime class="h-3.5 w-3.5 shrink-0" />
                 {{ t('projects.card.updatedAt') }}
                 {{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}
@@ -426,10 +403,14 @@ watch(
         />
       </div>
     </div>
+  </EntityListPage>
 
-    <NDrawer v-model:show="drawerVisible" :width="'min(420px, 100vw)'" placement="right">
+  <template v-if="isProjectListRoute">
+    <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.s" placement="right">
       <NDrawerContent :title="drawerTitle" closable>
-        <div class="mb-6 rounded-lf-card bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
+        <div
+          class="mb-6 rounded-lf-card bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted"
+        >
           {{ drawerDescription }}
         </div>
 
@@ -467,26 +448,12 @@ watch(
               />
             </NFormItem>
           </div>
-
-          <NFormItem :label="t('projects.form.ownerType')">
-            <NRadioGroup v-model:value="formModel.owner_type">
-              <NRadio value="personal">
-                {{ t('projects.form.personal') }}
-              </NRadio>
-              <NRadio value="organization" disabled>
-                {{ t('projects.form.orgOwner') }}
-                <NText depth="3" class="ml-1 text-xs">
-                  ({{ t('projects.form.comingSoon') }})
-                </NText>
-              </NRadio>
-            </NRadioGroup>
-          </NFormItem>
         </NForm>
 
         <template #footer>
           <div class="flex justify-end gap-3">
             <NButton :disabled="submitting" @click="closeCreateDrawer">
-              {{ t('projects.actions.cancel') }}
+              {{ t('common.cancel') }}
             </NButton>
             <NButton type="primary" :loading="submitting" @click="submitProject">
               {{ submitButtonText }}
@@ -500,13 +467,13 @@ watch(
       v-model:show="deleteConfirmVisible"
       preset="dialog"
       type="warning"
-      :title="t('projects.actions.confirmDelete')"
+      :title="t('common.actions.confirmDelete')"
       :content="t('projects.delete.confirm', { name: deletingProject?.name ?? '' })"
-      :positive-text="t('projects.actions.delete')"
-      :negative-text="t('projects.actions.cancel')"
+      :positive-text="t('common.actions.delete')"
+      :negative-text="t('common.cancel')"
       :loading="projects.deletingProjectIds.length > 0"
       @positive-click="confirmDelete"
       @negative-click="closeDeleteConfirm"
     />
-  </div>
+  </template>
 </template>

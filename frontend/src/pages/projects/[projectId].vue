@@ -46,6 +46,7 @@ import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlossaryStore } from '@/stores/glossary'
 import { useProjectsStore } from '@/stores/projects'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type Resource = ApiSchemas['Resource']
 
@@ -572,7 +573,7 @@ onMounted(() => {
             quaternary
             circle
             size="tiny"
-            :title="t('projects.actions.edit')"
+            :title="t('common.actions.edit')"
             @click="openEditDrawer"
           >
             <template #icon>
@@ -616,7 +617,7 @@ onMounted(() => {
             <template #icon>
               <NIcon><IconCarbonRenew /></NIcon>
             </template>
-            {{ t('workspace.actions.refresh') }}
+            {{ t('common.actions.refresh') }}
           </NButton>
         </div>
       </div>
@@ -861,9 +862,11 @@ onMounted(() => {
     />
 
     <!-- 编辑项目抽屉 -->
-    <NDrawer v-model:show="editDrawerVisible" :width="'min(420px, 100vw)'" placement="right">
+    <NDrawer v-model:show="editDrawerVisible" :width="DRAWER_WIDTH.s" placement="right">
       <NDrawerContent :title="t('projects.edit.title')" closable>
-        <div class="mb-6 rounded-lf-card bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
+        <div
+          class="mb-6 rounded-lf-card bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted"
+        >
           {{ t('projects.edit.description') }}
         </div>
 
@@ -911,7 +914,7 @@ onMounted(() => {
         <template #footer>
           <div class="flex justify-end gap-3">
             <NButton :disabled="editSubmitting" @click="closeEditDrawer">
-              {{ t('projects.actions.cancel') }}
+              {{ t('common.cancel') }}
             </NButton>
             <NButton type="primary" :loading="editSubmitting" @click="submitEditProject">
               {{ t('projects.actions.submitUpdate') }}

@@ -20,46 +20,46 @@ onMounted(() => {
   admin.loadStats()
 })
 
-const statCards = computed<
-  Array<{ title: string; value: number; icon: Component; tone: string }>
->(() => [
-  {
-    title: t('admin.dashboard.stats.totalUsers'),
-    value: admin.stats?.total_users ?? 0,
-    icon: IconCarbonUserMultiple,
-    tone: 'bg-lf-info-soft text-lf-info',
-  },
-  {
-    title: t('admin.dashboard.stats.activeUsers'),
-    value: admin.stats?.active_users ?? 0,
-    icon: IconCarbonUserOnline,
-    tone: 'bg-lf-brand-soft text-brand-600',
-  },
-  {
-    title: t('admin.dashboard.stats.totalProjects'),
-    value: admin.stats?.total_projects ?? 0,
-    icon: IconCarbonFolder,
-    tone: 'bg-lf-brand-soft text-brand-600',
-  },
-  {
-    title: t('admin.dashboard.stats.totalOrganizations'),
-    value: admin.stats?.total_organizations ?? 0,
-    icon: IconCarbonEnterprise,
-    tone: 'bg-lf-surface-muted text-lf-text-muted',
-  },
-  {
-    title: t('admin.dashboard.stats.totalJobs'),
-    value: admin.stats?.total_jobs ?? 0,
-    icon: IconCarbonDocumentTasks,
-    tone: 'bg-lf-info-soft text-lf-info',
-  },
-  {
-    title: t('admin.dashboard.stats.totalResources'),
-    value: admin.stats?.total_resources ?? 0,
-    icon: IconCarbonDocument,
-    tone: 'bg-lf-brand-soft text-brand-600',
-  },
-])
+const statCards = computed<Array<{ title: string; value: number; icon: Component; tone: string }>>(
+  () => [
+    {
+      title: t('admin.dashboard.stats.totalUsers'),
+      value: admin.stats?.total_users ?? 0,
+      icon: IconCarbonUserMultiple,
+      tone: 'bg-lf-info-soft text-lf-info',
+    },
+    {
+      title: t('admin.dashboard.stats.activeUsers'),
+      value: admin.stats?.active_users ?? 0,
+      icon: IconCarbonUserOnline,
+      tone: 'bg-lf-brand-soft text-brand-600',
+    },
+    {
+      title: t('admin.dashboard.stats.totalProjects'),
+      value: admin.stats?.total_projects ?? 0,
+      icon: IconCarbonFolder,
+      tone: 'bg-lf-brand-soft text-brand-600',
+    },
+    {
+      title: t('admin.dashboard.stats.totalOrganizations'),
+      value: admin.stats?.total_organizations ?? 0,
+      icon: IconCarbonEnterprise,
+      tone: 'bg-lf-surface-muted text-lf-text-muted',
+    },
+    {
+      title: t('admin.dashboard.stats.totalJobs'),
+      value: admin.stats?.total_jobs ?? 0,
+      icon: IconCarbonDocumentTasks,
+      tone: 'bg-lf-info-soft text-lf-info',
+    },
+    {
+      title: t('admin.dashboard.stats.totalResources'),
+      value: admin.stats?.total_resources ?? 0,
+      icon: IconCarbonDocument,
+      tone: 'bg-lf-brand-soft text-brand-600',
+    },
+  ],
+)
 
 const quickActions: Array<{
   title: string
@@ -94,19 +94,11 @@ const quickActions: Array<{
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('admin.dashboard.title') }}
-        </h1>
-        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ t('admin.dashboard.description') }}
-        </p>
-      </div>
+    <PageHeader :title="t('admin.dashboard.title')" :subtitle="t('admin.dashboard.description')">
       <NButton secondary :loading="admin.statsLoading" @click="admin.loadStats">
-        {{ t('admin.users.actions.refresh') }}
+        {{ t('common.actions.refresh') }}
       </NButton>
-    </section>
+    </PageHeader>
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <div v-for="card in statCards" :key="card.title" class="lf-metric">
@@ -116,10 +108,7 @@ const quickActions: Array<{
           </div>
           <div>
             <div class="lf-metric-label">{{ card.title }}</div>
-            <div
-              v-if="admin.statsLoading"
-              class="mt-1 h-8 w-16 animate-pulse rounded bg-lf-border-soft"
-            />
+            <NSkeleton v-if="admin.statsLoading" class="mt-1" width="64px" height="32px" />
             <div v-else class="lf-metric-value">
               {{ card.value.toLocaleString() }}
             </div>

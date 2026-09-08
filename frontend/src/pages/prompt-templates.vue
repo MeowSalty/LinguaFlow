@@ -19,6 +19,7 @@ import { useI18n } from 'vue-i18n'
 import type { ApiSchemas } from '@/api/client'
 import PromptTemplateEditor from '@/components/templates/PromptTemplateEditor.vue'
 import { usePromptTemplatesStore } from '@/stores/promptTemplates'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type TranslationPromptTemplate = ApiSchemas['TranslationPromptTemplate']
 type CreateRequest = ApiSchemas['CreateTranslationPromptTemplateRequest']
@@ -74,7 +75,7 @@ const metrics = computed(() => [
 const isEditMode = computed(() => Boolean(editingItem.value))
 const isSystemScope = computed(() => editingItem.value?.scope === 'system')
 const drawerTitle = computed(() =>
-  isEditMode.value ? t('promptTemplates.actions.edit') : t('promptTemplates.actions.create'),
+  isEditMode.value ? t('common.actions.edit') : t('promptTemplates.actions.create'),
 )
 
 const rules = computed<FormRules>(() => ({
@@ -214,7 +215,7 @@ watch(
   >
     <template #actions>
       <NButton secondary :loading="store.loading" @click="store.loadTemplates">
-        {{ t('promptTemplates.actions.refresh') }}
+        {{ t('common.actions.refresh') }}
       </NButton>
       <NButton type="primary" @click="openCreateDrawer">
         {{ t('promptTemplates.actions.create') }}
@@ -225,27 +226,19 @@ watch(
       <NInput
         v-model:value="store.searchQuery"
         clearable
-        class="lg:max-w-sm"
+        class="lg:max-w-sm!"
         :placeholder="t('promptTemplates.filters.searchPlaceholder')"
       />
       <div class="flex flex-wrap gap-3">
-        <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
-        <NButton
-          v-if="hasActiveFilters"
-          quaternary
-          @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-        >
+        <NSelect v-model:value="store.scopeFilter" class="w-44!" :options="filterScopeOptions" />
+        <NButton v-if="hasActiveFilters" quaternary @click="store.resetFilters()">
           {{ t('promptTemplates.filters.reset') }}
         </NButton>
       </div>
     </template>
 
     <template #empty-extra>
-      <NButton
-        v-if="hasActiveFilters"
-        secondary
-        @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-      >
+      <NButton v-if="hasActiveFilters" secondary @click="store.resetFilters()">
         {{ t('promptTemplates.filters.reset') }}
       </NButton>
       <NButton v-else type="primary" @click="openCreateDrawer">
@@ -302,7 +295,7 @@ watch(
                 class="font-medium"
                 @click="openEditDrawer(item)"
               >
-                {{ t('promptTemplates.actions.edit') }}
+                {{ t('common.actions.edit') }}
               </NButton>
               <NButton
                 v-if="item.scope !== 'system'"
@@ -311,7 +304,7 @@ watch(
                 class="font-medium"
                 @click="confirmDelete(item)"
               >
-                {{ t('promptTemplates.actions.delete') }}
+                {{ t('common.actions.delete') }}
               </NButton>
               <NButton
                 v-if="item.scope === 'system'"
@@ -320,7 +313,7 @@ watch(
                 class="font-medium"
                 @click="openEditDrawer(item)"
               >
-                {{ t('promptTemplates.actions.view') }}
+                {{ t('common.actions.view') }}
               </NButton>
             </div>
           </div>
@@ -330,7 +323,7 @@ watch(
   </EntityListPage>
 
   <!-- 创建/编辑抽屉 -->
-  <NDrawer v-model:show="drawerVisible" :width="'min(640px, 100vw)'" placement="right">
+  <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.m" placement="right">
     <NDrawerContent :native-scrollbar="false">
       <template #header>
         <div>
@@ -378,7 +371,7 @@ watch(
       <template #footer>
         <div class="flex justify-end gap-3">
           <NButton @click="drawerVisible = false">
-            {{ t('promptTemplates.actions.cancel') }}
+            {{ t('common.cancel') }}
           </NButton>
           <NButton
             v-if="!isSystemScope"
@@ -402,10 +395,10 @@ watch(
     v-model:show="deleteModalVisible"
     preset="dialog"
     type="warning"
-    :title="t('promptTemplates.actions.confirmDelete')"
+    :title="t('common.actions.confirmDelete')"
     :content="deletingItem ? t('promptTemplates.delete.confirm', { name: deletingItem.name }) : ''"
-    :positive-text="t('promptTemplates.actions.confirmDelete')"
-    :negative-text="t('promptTemplates.actions.cancel')"
+    :positive-text="t('common.actions.confirmDelete')"
+    :negative-text="t('common.cancel')"
     :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
     @positive-click="executeDelete"
   />

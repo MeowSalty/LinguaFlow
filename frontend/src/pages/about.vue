@@ -68,16 +68,7 @@ const techStack = [
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('about.title') }}
-        </h1>
-        <p class="max-w-3xl text-sm leading-6 text-lf-text-muted">
-          {{ t('about.description') }}
-        </p>
-      </div>
-    </section>
+    <PageHeader :title="t('about.title')" :subtitle="t('about.description')" />
 
     <section class="lf-panel p-5">
       <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">

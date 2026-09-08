@@ -136,6 +136,11 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
     }
   }
 
+  const resetFilters = (): void => {
+    searchQuery.value = ''
+    scopeFilter.value = 'all'
+  }
+
   return {
     items,
     loading,
@@ -145,6 +150,7 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
     error,
     searchQuery,
     scopeFilter,
+    resetFilters,
     sortedItems,
     filteredItems,
     totalCount,

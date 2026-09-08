@@ -25,6 +25,7 @@ import { useI18n } from 'vue-i18n'
 
 import { listBackendModels, type ApiSchemas } from '@/api/client'
 import { useBackendsStore } from '@/stores/backends'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type Backend = ApiSchemas['Backend']
 type BackendType = Backend['type']
@@ -99,10 +100,10 @@ const filterTypeOptions = computed<SelectOption[]>(() => [
 ])
 
 const responseFormatOptions = computed<SelectOption[]>(() => [
-  { label: 'json_schema', value: 'json_schema' },
-  { label: 'json_object', value: 'json_object' },
-  { label: 'text', value: 'text' },
-  { label: 'none', value: 'none' },
+  { label: t('backends.form.responseFormatOptions.jsonSchema'), value: 'json_schema' },
+  { label: t('backends.form.responseFormatOptions.jsonObject'), value: 'json_object' },
+  { label: t('backends.form.responseFormatOptions.text'), value: 'text' },
+  { label: t('backends.form.responseFormatOptions.none'), value: 'none' },
 ])
 
 const thinkingLevelOptions = computed<SelectOption[]>(() =>
@@ -572,10 +573,10 @@ const getThinkingLevelDisplay = (backend: Backend): ThinkingLevel => {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const buildCardActions = (backend: Backend): DropdownOption[] => [
-  { label: t('projects.actions.edit'), key: 'edit' },
+  { label: t('common.actions.edit'), key: 'edit' },
   { label: t('backends.actions.copy'), key: 'copy' },
   { type: 'divider', key: 'divider' },
-  { label: t('projects.actions.delete'), key: 'delete' },
+  { label: t('common.actions.delete'), key: 'delete' },
 ]
 
 const handleCardAction = (backend: Backend, key: string | number): void => {
@@ -616,7 +617,7 @@ watch(
   >
     <template #actions>
       <NButton secondary :loading="backends.loading" @click="backends.loadBackends">
-        {{ t('projects.actions.refresh') }}
+        {{ t('common.actions.refresh') }}
       </NButton>
       <NButton type="primary" @click="openCreateDrawer">
         {{ t('backends.create.title') }}
@@ -627,27 +628,19 @@ watch(
       <NInput
         v-model:value="backends.searchQuery"
         clearable
-        class="lg:max-w-sm"
+        class="lg:max-w-sm!"
         :placeholder="t('backends.filters.searchPlaceholder')"
       />
       <div class="flex flex-wrap gap-3">
-        <NSelect v-model:value="backends.typeFilter" class="w-44" :options="filterTypeOptions" />
-        <NButton
-          v-if="hasActiveFilters"
-          quaternary
-          @click="((backends.searchQuery = ''), (backends.typeFilter = 'all'))"
-        >
+        <NSelect v-model:value="backends.typeFilter" class="w-44!" :options="filterTypeOptions" />
+        <NButton v-if="hasActiveFilters" quaternary @click="backends.resetFilters()">
           {{ t('backends.filters.reset') }}
         </NButton>
       </div>
     </template>
 
     <template #empty-extra>
-      <NButton
-        v-if="hasActiveFilters"
-        secondary
-        @click="((backends.searchQuery = ''), (backends.typeFilter = 'all'))"
-      >
+      <NButton v-if="hasActiveFilters" secondary @click="backends.resetFilters()">
         {{ t('backends.filters.reset') }}
       </NButton>
       <NButton v-else type="primary" @click="openCreateDrawer">
@@ -671,7 +664,7 @@ watch(
               <h2 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
                 {{ backend.name }}
               </h2>
-              <p class="mt-1 font-mono text-xs text-lf-text-subtle">ID #{{ backend.id }}</p>
+              <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ backend.id }}</p>
             </div>
             <NTag round size="small" :bordered="false" :type="getBackendTypeTagType(backend.type)">
               {{ t(`backends.types.${backend.type}`) }}
@@ -701,7 +694,7 @@ watch(
           <div class="mt-auto border-t border-lf-border-soft pt-4">
             <div class="flex items-center justify-between gap-3">
               <NButton text type="primary" class="font-medium" @click="openEditDrawer(backend)">
-                {{ t('projects.actions.edit') }}
+                {{ t('common.actions.edit') }}
               </NButton>
               <NDropdown
                 trigger="click"
@@ -709,7 +702,7 @@ watch(
                 @select="(key) => handleCardAction(backend, key)"
               >
                 <NButton quaternary size="small">
-                  {{ t('projects.actions.more') }}
+                  {{ t('common.actions.more') }}
                 </NButton>
               </NDropdown>
             </div>
@@ -720,7 +713,7 @@ watch(
   </EntityListPage>
 
   <!-- 创建/编辑抽屉 -->
-  <NDrawer v-model:show="drawerVisible" :width="'min(480px, 100vw)'" placement="right">
+  <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.m" placement="right">
     <NDrawerContent :title="drawerTitle" :native-scrollbar="false">
       <template #header>
         <div>
@@ -849,10 +842,7 @@ watch(
 
         <NFormItem :label="t('backends.form.topP')" path="top_p">
           <div class="flex w-full items-center gap-3">
-            <NSwitch
-              v-model:value="formModel.top_pEnabled"
-              :disabled="samplingControlsDisabled"
-            />
+            <NSwitch v-model:value="formModel.top_pEnabled" :disabled="samplingControlsDisabled" />
             <template v-if="!samplingControlsDisabled && formModel.top_pEnabled">
               <NSlider
                 v-model:value="formModel.top_p"
@@ -892,10 +882,7 @@ watch(
                 {{ t('backends.form.useApiDefault') }}
               </span>
             </div>
-            <p
-              v-if="isAnthropic && isThinkingEnabled"
-              class="text-xs leading-5 text-lf-text-muted"
-            >
+            <p v-if="isAnthropic && isThinkingEnabled" class="text-xs leading-5 text-lf-text-muted">
               {{ t('backends.form.maxTokensThinkingHint') }}
             </p>
           </div>
@@ -957,10 +944,10 @@ watch(
       <template #footer>
         <div class="flex justify-end gap-3">
           <NButton @click="drawerVisible = false">
-            {{ t('workspace.common.cancel') }}
+            {{ t('common.cancel') }}
           </NButton>
           <NButton type="primary" :loading="submitting" @click="onSubmit">
-            {{ t('workspace.common.save') }}
+            {{ t('common.save') }}
           </NButton>
         </div>
       </template>
@@ -972,10 +959,10 @@ watch(
     v-model:show="deleteModalVisible"
     preset="dialog"
     type="warning"
-    :title="t('projects.actions.confirmDelete')"
+    :title="t('common.actions.confirmDelete')"
     :content="deletingBackend ? t('backends.delete.confirm', { name: deletingBackend.name }) : ''"
-    :positive-text="t('workspace.common.confirm')"
-    :negative-text="t('workspace.common.cancel')"
+    :positive-text="t('common.confirm')"
+    :negative-text="t('common.cancel')"
     :loading="deletingBackend ? backends.deletingBackendIds.includes(deletingBackend.id) : false"
     @positive-click="executeDelete"
   />
