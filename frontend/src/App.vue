@@ -73,12 +73,18 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => ({
   Input: {
     borderRadius: '8px',
     heightMedium: '34px',
+    // naive 暗色主题将输入框静止边框硬编码为透明（border: 1px solid #0000），
+    // 与亮色的 borderColor 派生值不对称；此处显式取 token 保证明暗一致
+    border: `1px solid ${tok('--lf-border')}`,
+    borderDisabled: `1px solid ${tok('--lf-border')}`,
   },
   Select: {
     peers: {
       InternalSelection: {
         borderRadius: '8px',
         heightMedium: '34px',
+        border: `1px solid ${tok('--lf-border')}`,
+        borderDisabled: `1px solid ${tok('--lf-border')}`,
       },
     },
   },

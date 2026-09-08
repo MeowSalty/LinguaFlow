@@ -373,6 +373,6 @@ defineExpose({ insertAtCursor })
 }
 
 .prompt-editor-textarea::placeholder {
-  color: var(--lf-text-subtle, #9ca3af);
+  color: var(--lf-text-subtle);
 }
 </style>

@@ -42,6 +42,18 @@
   --color-lf-warning: var(--lf-warning);
   --color-lf-warning-soft: var(--lf-warning-soft);
 
+  /* accent 语义色（模式徽章等五色强调场景） */
+  --color-lf-accent-amber: var(--lf-accent-amber);
+  --color-lf-accent-amber-soft: var(--lf-accent-amber-soft);
+  --color-lf-accent-violet: var(--lf-accent-violet);
+  --color-lf-accent-violet-soft: var(--lf-accent-violet-soft);
+  --color-lf-accent-emerald: var(--lf-accent-emerald);
+  --color-lf-accent-emerald-soft: var(--lf-accent-emerald-soft);
+  --color-lf-accent-rose: var(--lf-accent-rose);
+  --color-lf-accent-rose-soft: var(--lf-accent-rose-soft);
+  --color-lf-accent-sky: var(--lf-accent-sky);
+  --color-lf-accent-sky-soft: var(--lf-accent-sky-soft);
+
   /* Go template syntax highlighting */
   --color-lf-tmpl-bg: var(--lf-tmpl-bg);
   --color-lf-tmpl-delim: var(--lf-tmpl-delim);
@@ -94,6 +106,17 @@
   --lf-warning: #b45309;
   --lf-warning-soft: rgb(180 83 9 / 10%);
 
+  --lf-accent-amber: #d97706;
+  --lf-accent-amber-soft: rgb(217 119 6 / 10%);
+  --lf-accent-violet: #7c3aed;
+  --lf-accent-violet-soft: rgb(124 58 237 / 9%);
+  --lf-accent-emerald: #059669;
+  --lf-accent-emerald-soft: rgb(5 150 105 / 10%);
+  --lf-accent-rose: #e11d48;
+  --lf-accent-rose-soft: rgb(225 29 72 / 9%);
+  --lf-accent-sky: #0284c7;
+  --lf-accent-sky-soft: rgb(2 132 199 / 10%);
+
   /* Go template syntax highlighting (light mode) */
   --lf-tmpl-bg: rgb(37 99 235 / 8%);
   --lf-tmpl-delim: #71717a;
@@ -115,7 +138,8 @@ html[data-theme='dark'] {
   --lf-text-strong: #fafafa;
   --lf-text-muted: #a1a1aa;
   --lf-text-subtle: #71717a;
-  --lf-border: #27272a;
+  /* 暗色下交互控件边框需明显高于表面（naive 暗色默认边框为透明，App.vue 会显式取此 token） */
+  --lf-border: #333338;
   --lf-border-soft: #202023;
   --lf-border-strong: #3f3f46;
   --lf-hover: rgb(255 255 255 / 5.5%);
@@ -142,6 +166,17 @@ html[data-theme='dark'] {
   --lf-danger-soft: rgb(248 113 113 / 12%);
   --lf-warning: #f59e0b;
   --lf-warning-soft: rgb(245 158 11 / 13%);
+
+  --lf-accent-amber: #fbbf24;
+  --lf-accent-amber-soft: rgb(251 191 36 / 13%);
+  --lf-accent-violet: #c4b5fd;
+  --lf-accent-violet-soft: rgb(196 181 253 / 13%);
+  --lf-accent-emerald: #6ee7b7;
+  --lf-accent-emerald-soft: rgb(110 231 183 / 12%);
+  --lf-accent-rose: #fda4af;
+  --lf-accent-rose-soft: rgb(253 164 175 / 12%);
+  --lf-accent-sky: #7dd3fc;
+  --lf-accent-sky-soft: rgb(125 211 252 / 13%);
 
   /* Go template syntax highlighting (dark mode) */
   --lf-tmpl-bg: rgb(59 130 246 / 12%);
@@ -179,6 +214,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
+
+/* 注意：naive-ui 运行时注入的样式未分层（unlayered），级联层规则下永远压过
+   Tailwind v4 分层工具类。因此在 naive 输入类组件上控制宽度时：
+   NSelect 用 w-*（会被 .n-select{width:100%} 覆盖）、NInput 用 max-w-*
+   （会被 .n-input{max-width:100%} 覆盖）必须加 important 后缀（如 w-44!）。
+   min-w-* 与 NSelect 的 max-w-* 无冲突，可正常使用。 */
 
 /* ── Design system primitives ── */
 
