@@ -307,6 +307,9 @@ body {
   --n-merged-th-color: transparent;
   --n-merged-td-color: transparent;
   --n-merged-border-color: var(--lf-border-soft);
+  /* naive 的 td hover 色为半透明合成色，会把固定列的不透明背景顶掉，导致横滚内容透出；
+     交由下方 tr:hover 规则统一接管（--lf-hover） */
+  --n-merged-td-color-hover: var(--lf-hover);
 }
 
 .lf-table .n-data-table-th {
@@ -341,9 +344,11 @@ body {
   background: var(--lf-hover);
 }
 
-.lf-table .n-data-table-tr:hover .n-data-table-td--fixed-left,
-.lf-table .n-data-table-tr:hover .n-data-table-td--fixed-right {
-  background: color-mix(in srgb, var(--lf-surface) 96%, var(--lf-brand-500));
+/* 固定列任何状态都必须不透明（含 hover），否则横向滚动内容会从固定列后透出；
+   用与 naive 原生规则（tr:not(summary):hover > td）同强度选择器 + !important 兜底 */
+.lf-table .n-data-table-tr:not(.n-data-table-tr--summary):hover > .n-data-table-td--fixed-left,
+.lf-table .n-data-table-tr:not(.n-data-table-tr--summary):hover > .n-data-table-td--fixed-right {
+  background: color-mix(in srgb, var(--lf-surface) 96%, var(--lf-brand-500)) !important;
 }
 
 .lf-table .n-data-table-tr:last-child .n-data-table-td {
