@@ -20,6 +20,7 @@ import { type ApiSchemas } from '@/api/client'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 
 import type { JobTargetMode } from '@/composables/useJobActions'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
@@ -131,7 +132,7 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
 </script>
 
 <template>
-  <NDrawer v-model:show="show" :width="'min(480px, 100vw)'" placement="right">
+  <NDrawer v-model:show="show" :width="DRAWER_WIDTH.m" placement="right">
     <NDrawerContent :title="t('workspace.job.createTitle')" closable>
       <!-- 翻译内容摘要 -->
       <NAlert type="info" :bordered="false" class="mb-4">
@@ -271,7 +272,7 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
       <template #footer>
         <div class="flex justify-end gap-3">
           <NButton :disabled="submitting" @click="emit('close')">
-            {{ t('workspace.common.cancel') }}
+            {{ t('common.cancel') }}
           </NButton>
           <NButton
             type="primary"

@@ -32,7 +32,7 @@ const toneClass: Record<string, string> = {
 
 const trendColors: Record<string, string> = {
   up: 'text-brand-600',
-  down: 'text-red-500',
+  down: 'text-lf-danger',
   neutral: 'text-lf-text-subtle',
 }
 
@@ -63,10 +63,10 @@ const trendIcons: Record<string, Component> = {
 
     <template v-if="loading">
       <div class="flex items-center justify-between">
-        <div class="h-4 w-20 animate-pulse rounded bg-lf-border-soft" />
-        <div class="h-10 w-10 animate-pulse rounded-lf-ctl bg-lf-border-soft" />
+        <NSkeleton width="80px" height="16px" />
+        <NSkeleton width="40px" height="40px" />
       </div>
-      <div class="mt-4 h-8 w-24 animate-pulse rounded bg-lf-border-soft" />
+      <NSkeleton class="mt-4" width="96px" height="32px" />
     </template>
 
     <template v-else>

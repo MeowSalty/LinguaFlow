@@ -12,6 +12,7 @@ import { computed, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
+import { formatDateTime } from '@/utils/datetime'
 
 type Resource = ApiSchemas['Resource']
 
@@ -44,15 +45,15 @@ const dialog = useDialog()
 
 const formatDate = (value?: string): string => {
   if (!value) {
-    return t('workspace.common.noDate')
+    return t('common.noDate')
   }
 
-  return new Intl.DateTimeFormat('zh-Hans', {
+  return formatDateTime(value, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(value))
+  })
 }
 
 const formatConfig = computed(() => {
@@ -113,9 +114,7 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
     disabled: isBusy.value,
   },
   {
-    label: props.downloading
-      ? t('workspace.resource.actions.downloading')
-      : t('workspace.common.download'),
+    label: props.downloading ? t('workspace.resource.actions.downloading') : t('common.download'),
     key: 'download',
     disabled: isBusy.value,
   },
@@ -131,7 +130,7 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
     key: 'dangerDivider',
   },
   {
-      label: () => h('span', { class: 'text-lf-danger' }, t('workspace.common.delete')),
+    label: () => h('span', { class: 'text-lf-danger' }, t('common.delete')),
     key: 'delete',
     disabled: isBusy.value,
   },
@@ -139,10 +138,10 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
 
 const confirmDelete = (): void => {
   dialog.warning({
-    title: t('workspace.common.delete'),
+    title: t('common.delete'),
     content: t('workspace.resource.deleteConfirm', { name: props.resource.name }),
-    positiveText: t('workspace.common.confirm'),
-    negativeText: t('workspace.common.cancel'),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
     positiveButtonProps: {
       type: 'error',
     },

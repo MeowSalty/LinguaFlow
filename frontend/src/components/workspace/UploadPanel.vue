@@ -245,21 +245,21 @@ const summaryItems = computed(() => {
       label: t('workspace.uploadResult.summary.created'),
       value: result.summary.created,
       tier: 'primary',
-      dotColor: 'bg-emerald-500',
+      dotColor: 'bg-lf-success',
     },
     {
       key: 'incrementallyUpdated',
       label: t('workspace.uploadResult.summary.incrementallyUpdated'),
       value: result.summary.incrementallyUpdated,
       tier: 'secondary',
-      dotColor: 'bg-blue-400',
+      dotColor: 'bg-lf-info',
     },
     {
       key: 'replaced',
       label: t('workspace.uploadResult.summary.replaced'),
       value: result.summary.replaced,
       tier: 'secondary',
-      dotColor: 'bg-violet-400',
+      dotColor: 'bg-lf-accent-violet',
     },
     {
       key: 'skipped',
@@ -273,7 +273,7 @@ const summaryItems = computed(() => {
       label: t('workspace.uploadResult.summary.failed'),
       value: result.summary.failed,
       tier: 'primary',
-      dotColor: 'bg-red-500',
+      dotColor: 'bg-lf-danger',
     },
   ]
 })
@@ -543,7 +543,9 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
                   :class="{ 'opacity-40': item.value === 0 }"
                 >
                   <span class="h-2 w-2 shrink-0 rounded-full" :class="item.dotColor" />
-                  <span class="text-sm font-semibold tabular-nums text-lf-text-strong">{{ item.value }}</span>
+                  <span class="text-sm font-semibold tabular-nums text-lf-text-strong">{{
+                    item.value
+                  }}</span>
                   <span class="text-xs text-lf-text-muted">{{ item.label }}</span>
                 </div>
               </div>
@@ -636,7 +638,7 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
 
 /* 进度条自定义样式 */
 .upload-progress-bar :deep(.n-progress-graph-line-fill) {
-  background: linear-gradient(90deg, #3b82f6, #6366f1);
+  background: var(--lf-brand-grad);
   border-radius: 3px;
   transition: width 0.3s ease-out;
 }

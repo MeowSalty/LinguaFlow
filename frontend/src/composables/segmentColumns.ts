@@ -28,6 +28,7 @@ import {
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 import { t } from '@/i18n'
+import { formatDateTime } from '@/utils/datetime'
 
 type Segment = ApiSchemas['Segment']
 
@@ -373,7 +374,7 @@ export function useSegmentColumns(
                       type: 'primary',
                       onClick: () => deps.saveInlineComment(row),
                     },
-                    { default: () => t('workspace.common.save') },
+                    { default: () => t('common.save') },
                   ),
                 ]),
               ],
@@ -413,23 +414,23 @@ export function useSegmentColumns(
     // ── Updated At 列（条件显示） ──
     if (config.value.showUpdatedAt) {
       columns.push({
-        title: t('workspace.common.updatedAt'),
+        title: t('common.updatedAt'),
         key: 'updated_at',
         width: 95,
         render: (row) => {
           if (!row.updated_at) {
-            return h('span', { class: 'text-lf-text-muted' }, t('workspace.common.noDate'))
+            return h('span', { class: 'text-lf-text-muted' }, t('common.noDate'))
           }
           const date = new Date(row.updated_at)
-          const dateStr = new Intl.DateTimeFormat('zh-Hans', {
+          const dateStr = formatDateTime(date, {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
-          }).format(date)
-          const timeStr = new Intl.DateTimeFormat('zh-Hans', {
+          })
+          const timeStr = formatDateTime(date, {
             hour: '2-digit',
             minute: '2-digit',
-          }).format(date)
+          })
           return h('div', { class: 'leading-tight' }, [
             h('div', { class: 'text-xs text-lf-text-muted' }, dateStr),
             h('div', { class: 'text-sm' }, timeStr),
@@ -440,7 +441,7 @@ export function useSegmentColumns(
 
     // ── Actions 列 ──
     columns.push({
-      title: t('workspace.common.actions'),
+      title: t('common.actionsColumn'),
       key: 'actions',
       width: 160,
       fixed: 'right',

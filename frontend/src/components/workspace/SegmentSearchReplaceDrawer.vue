@@ -28,6 +28,7 @@ import {
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 import SegmentTextDisplay from './SegmentTextDisplay.vue'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type PreviewResponse = ApiSchemas['SearchReplacePreviewResponse']
 
@@ -175,8 +176,8 @@ const handleApply = (): void => {
       segments: matchedCount,
       replacements,
     }),
-    positiveText: t('workspace.common.confirm'),
-    negativeText: t('workspace.common.cancel'),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
     onPositiveClick: () => {
       void doApply()
     },
@@ -223,8 +224,8 @@ const handleUndo = (): void => {
   dialog.warning({
     title: t('workspace.segment.searchReplace.undoConfirmTitle'),
     content: t('workspace.segment.searchReplace.undoConfirmContent'),
-    positiveText: t('workspace.common.confirm'),
-    negativeText: t('workspace.common.cancel'),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
     onPositiveClick: () => {
       void doUndo()
     },
@@ -274,7 +275,7 @@ defineExpose({ open })
   <NDrawer
     :show="show"
     placement="right"
-    :width="'min(720px, 100vw)'"
+    :width="DRAWER_WIDTH.xl"
     :mask-closable="!busy"
     :close-on-esc="!busy"
     @update:show="(value: boolean) => (value ? (show = true) : requestClose())"
@@ -546,7 +547,7 @@ defineExpose({ open })
             {{ t('workspace.segment.searchReplace.undo') }}
           </NButton>
           <NButton quaternary size="small" :disabled="busy" @click="close">
-            {{ t('workspace.common.close') }}
+            {{ t('common.close') }}
           </NButton>
         </div>
       </template>

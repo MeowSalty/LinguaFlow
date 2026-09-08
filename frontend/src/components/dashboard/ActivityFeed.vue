@@ -44,10 +44,10 @@ const getActionLabel = (action: string): string => {
 
     <div v-if="stats.activitiesLoading && stats.activities.length === 0" class="mt-4 space-y-4">
       <div v-for="i in 5" :key="i" class="flex items-start gap-3">
-        <div class="mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lf-border-soft" />
+        <NSkeleton class="mt-1 shrink-0" width="8px" height="8px" />
         <div class="flex-1 space-y-1.5">
-          <div class="h-4 w-3/4 animate-pulse rounded bg-lf-border-soft" />
-          <div class="h-3 w-1/3 animate-pulse rounded bg-lf-border-soft" />
+          <NSkeleton width="75%" height="16px" />
+          <NSkeleton width="33%" height="12px" />
         </div>
       </div>
     </div>

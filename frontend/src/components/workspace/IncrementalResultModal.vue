@@ -3,6 +3,7 @@ import { NButton, NModal } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type IncrementalUpdateResponse = ApiSchemas['IncrementalUpdateResponse']
 
@@ -24,7 +25,7 @@ const { t } = useI18n()
     :show="show"
     preset="card"
     :title="t('workspace.incremental.resultTitle')"
-    :style="{ width: 'min(480px, calc(100vw - 32px))' }"
+    :style="{ width: DRAWER_WIDTH.s }"
     :bordered="false"
     :mask-closable="false"
     @update:show="(value: boolean) => emit('update:show', value)"
@@ -66,7 +67,7 @@ const { t } = useI18n()
     <template #footer>
       <div class="flex justify-end">
         <NButton type="primary" @click="emit('confirm')">
-          {{ t('workspace.common.confirm') }}
+          {{ t('common.confirm') }}
         </NButton>
       </div>
     </template>

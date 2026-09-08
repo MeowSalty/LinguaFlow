@@ -51,7 +51,7 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
       <NSelect
         v-model:value="workspace.jobStatusFilter"
         size="small"
-        class="w-full sm:w-36"
+        class="w-full sm:w-36!"
         :options="jobStatusOptions"
       />
       <div class="flex items-center gap-3">
@@ -77,7 +77,7 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
           circle
           size="small"
           :loading="workspace.loadingJobs"
-          :title="t('workspace.actions.refresh')"
+          :title="t('common.actions.refresh')"
           @click="projectId && workspace.loadJobs(projectId)"
         >
           <template #icon>

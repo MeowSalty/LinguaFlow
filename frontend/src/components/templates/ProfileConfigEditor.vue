@@ -139,15 +139,18 @@ watch(
 // ─── 选项常量 ────────────────────────────────────────────────
 
 const protectRuleOptions = computed(() => [
-  { label: 'code', value: 'code' },
-  { label: 'link', value: 'link' },
-  { label: 'placeholder', value: 'placeholder' },
-  { label: 'xml', value: 'xml' },
+  { label: t('profileConfigEditor.protect.ruleOptions.code'), value: 'code' },
+  { label: t('profileConfigEditor.protect.ruleOptions.link'), value: 'link' },
+  { label: t('profileConfigEditor.protect.ruleOptions.placeholder'), value: 'placeholder' },
+  { label: t('profileConfigEditor.protect.ruleOptions.xml'), value: 'xml' },
 ])
 
 const inlineConflictStrategyOptions = computed(() => [
-  { label: 'off', value: 'off' },
-  { label: 'rewrite-local', value: 'rewrite-local' },
+  { label: t('profileConfigEditor.glossary.conflictStrategyOptions.off'), value: 'off' },
+  {
+    label: t('profileConfigEditor.glossary.conflictStrategyOptions.rewriteLocal'),
+    value: 'rewrite-local',
+  },
 ])
 
 const rubyPreserveKindsOptions = computed(() => [
@@ -250,7 +253,7 @@ defineExpose({ lengthRatioError })
     <!-- 内容保护 -->
     <NCard size="small" :bordered="true">
       <template #header>
-        <span class="text-sm font-semibold">🛡 {{ t('profileConfigEditor.protect.title') }}</span>
+        <span class="text-sm font-semibold">{{ t('profileConfigEditor.protect.title') }}</span>
       </template>
       <div class="flex items-center justify-between mb-3">
         <span class="text-sm">{{ t('profileConfigEditor.protect.enabled') }}</span>
@@ -279,7 +282,7 @@ defineExpose({ lengthRatioError })
     <!-- Ruby 注音 -->
     <NCard size="small" :bordered="true">
       <template #header>
-        <span class="text-sm font-semibold">🔤 {{ t('profileConfigEditor.ruby.title') }}</span>
+        <span class="text-sm font-semibold">{{ t('profileConfigEditor.ruby.title') }}</span>
       </template>
       <div class="flex flex-col gap-3">
         <div class="flex items-center justify-between">
@@ -322,9 +325,7 @@ defineExpose({ lengthRatioError })
     <!-- 后处理 -->
     <NCard size="small" :bordered="true">
       <template #header>
-        <span class="text-sm font-semibold"
-          >✨ {{ t('profileConfigEditor.postprocess.title') }}</span
-        >
+        <span class="text-sm font-semibold">{{ t('profileConfigEditor.postprocess.title') }}</span>
       </template>
       <div class="flex flex-col gap-3">
         <div class="flex items-center justify-between">
@@ -354,7 +355,7 @@ defineExpose({ lengthRatioError })
     <!-- 响应修复 -->
     <NCard size="small" :bordered="true">
       <template #header>
-        <span class="text-sm font-semibold">🔧 {{ t('profileConfigEditor.repair.title') }}</span>
+        <span class="text-sm font-semibold">{{ t('profileConfigEditor.repair.title') }}</span>
       </template>
       <div class="flex flex-col gap-3">
         <div class="flex items-center justify-between">
@@ -412,7 +413,7 @@ defineExpose({ lengthRatioError })
     <!-- 术语表 -->
     <NCard size="small" :bordered="true">
       <template #header>
-        <span class="text-sm font-semibold">📚 {{ t('profileConfigEditor.glossary.title') }}</span>
+        <span class="text-sm font-semibold">{{ t('profileConfigEditor.glossary.title') }}</span>
       </template>
       <div class="flex flex-col gap-3">
         <div class="flex items-center justify-between">
@@ -470,7 +471,7 @@ defineExpose({ lengthRatioError })
     <!-- 上下文窗口 -->
     <NCard size="small" :bordered="true">
       <template #header>
-        <span class="text-sm font-semibold">📖 {{ t('profileConfigEditor.context.title') }}</span>
+        <span class="text-sm font-semibold">{{ t('profileConfigEditor.context.title') }}</span>
       </template>
       <div class="flex flex-col gap-3">
         <div class="flex items-center justify-between">
@@ -532,7 +533,7 @@ defineExpose({ lengthRatioError })
     <!-- 质量检测 -->
     <NCard size="small" :bordered="true">
       <template #header>
-        <span class="text-sm font-semibold">🔍 {{ t('profileConfigEditor.qa.title') }}</span>
+        <span class="text-sm font-semibold">{{ t('profileConfigEditor.qa.title') }}</span>
       </template>
       <div class="flex flex-col gap-3">
         <div class="flex items-center justify-between">
@@ -666,7 +667,7 @@ defineExpose({ lengthRatioError })
           <div class="mt-1 text-xs text-lf-text-subtle">
             {{ t('profileConfigEditor.qa.lengthRatioHint') }}
           </div>
-          <div v-if="lengthRatioError" class="mt-1 text-xs text-red-500">
+          <div v-if="lengthRatioError" class="mt-1 text-xs text-lf-danger">
             {{ lengthRatioError }}
           </div>
         </div>

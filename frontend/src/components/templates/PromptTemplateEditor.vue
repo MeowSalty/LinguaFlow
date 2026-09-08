@@ -27,46 +27,32 @@ const editorRef = ref<InstanceType<typeof HighlightTextarea> | null>(null)
 
 // ─── 内置变量列表 ────────────────────────────────────────────
 
-const systemVariables = [
-  { key: 'SourceLang', label: '源语言' },
-  { key: 'TargetLang', label: '目标语言' },
-  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
-  { key: 'SourceContent', label: '源内容' },
-  { key: 'TargetContent', label: '目标内容' },
-  { key: 'GlossaryTerms', label: '术语表' },
-  { key: 'InlineBootstrap', label: '是否内联术语抽取' },
-  { key: 'MaxBootstrapTerms', label: '内联术语上限' },
-  { key: 'RubyMode', label: '注音模式 json|section|inline' },
-  { key: 'FileFormat', label: '文件格式' },
-  { key: 'FileName', label: '文件名' },
-  { key: 'OriginalText', label: '原始文本' },
-  { key: 'TranslatedText', label: '已翻译文本' },
-] as const
+const variableGroups = {
+  system: [
+    'SourceLang',
+    'TargetLang',
+    'Protocol',
+    'SourceContent',
+    'TargetContent',
+    'GlossaryTerms',
+    'InlineBootstrap',
+    'MaxBootstrapTerms',
+    'RubyMode',
+    'FileFormat',
+    'FileName',
+    'OriginalText',
+    'TranslatedText',
+  ],
+  bootstrap: ['SourceLang', 'TargetLang', 'Protocol', 'MaxTerms'],
+  prune: ['SourceLang', 'TargetLang', 'Protocol', 'Entries'],
+} as const
 
-const bootstrapVariables = [
-  { key: 'SourceLang', label: '源语言' },
-  { key: 'TargetLang', label: '目标语言' },
-  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
-  { key: 'MaxTerms', label: '最大术语数' },
-] as const
+type VariableGroup = keyof typeof variableGroups
 
-const pruneVariables = [
-  { key: 'SourceLang', label: '源语言' },
-  { key: 'TargetLang', label: '目标语言' },
-  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
-  { key: 'Entries', label: '完整术语条目集合' },
-] as const
+const builtinVariables = computed(() => variableGroups[props.variableSet])
 
-const builtinVariables = computed(() => {
-  switch (props.variableSet) {
-    case 'bootstrap':
-      return bootstrapVariables
-    case 'prune':
-      return pruneVariables
-    default:
-      return systemVariables
-  }
-})
+const variableLabel = (group: VariableGroup, key: string): string =>
+  t(`promptTemplates.variables.${group}.${key}`)
 
 const placeholder = computed(() =>
   props.variableSet === 'prune'
@@ -108,15 +94,15 @@ const insertVariable = (varName: string): void => {
       </span>
       <NButton
         v-for="v in builtinVariables"
-        :key="v.key"
+        :key="v"
         size="tiny"
         quaternary
         type="info"
-        :title="v.label"
+        :title="variableLabel(variableSet, v)"
         :disabled="disabled"
-        @click="insertVariable(v.key)"
+        @click="insertVariable(v)"
       >
-        {{ formatVar(v.key) }}
+        {{ formatVar(v) }}
       </NButton>
     </div>
   </div>

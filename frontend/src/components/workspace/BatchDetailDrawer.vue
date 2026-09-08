@@ -7,6 +7,7 @@ import { useBatchEventMeta } from '@/composables/useBatchEventMeta'
 
 import BatchContentViewer from './BatchContentViewer.vue'
 import GlossaryDiffTable from './GlossaryDiffTable.vue'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 const { t } = useI18n()
 
@@ -29,7 +30,7 @@ const { meta, tokenLine, glossaryUsedCount, glossaryAddedCount, statusTagType, h
 <template>
   <NDrawer
     :show="show"
-    :width="'min(560px, 100vw)'"
+    :width="DRAWER_WIDTH.l"
     placement="right"
     @update:show="emit('update:show', $event)"
   >

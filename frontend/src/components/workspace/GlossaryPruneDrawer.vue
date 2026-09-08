@@ -24,6 +24,7 @@ import BatchContentViewer from '@/components/workspace/BatchContentViewer.vue'
 import { useBackendsStore } from '@/stores/backends'
 import type { GlossarySyncQueueItem } from '@/stores/glossary'
 import { usePrunePromptTemplatesStore } from '@/stores/prunePromptTemplates'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type Suggestion = ApiSchemas['GlossaryPruneSuggestion']
 type Preview = ApiSchemas['GlossaryPrunePreview']
@@ -376,7 +377,7 @@ watch(show, (visible) => {
 </script>
 
 <template>
-  <NDrawer v-model:show="show" :width="'min(760px, 100vw)'" placement="right">
+  <NDrawer v-model:show="show" :width="DRAWER_WIDTH.l" placement="right">
     <NDrawerContent :title="t('workspace.glossary.prune.title')" closable :native-scrollbar="false">
       <div v-if="result" class="space-y-5">
         <NAlert :type="result.failed ? 'warning' : 'success'" :bordered="false">

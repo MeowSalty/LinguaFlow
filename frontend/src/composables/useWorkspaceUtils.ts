@@ -2,6 +2,7 @@ import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
 import type { BatchEventMetadata, PoolEventMetadata, SSEEvent } from '@/composables/sseShared'
 import { normalizeSSELevel } from '@/composables/sseShared'
 import { t } from '@/i18n'
+import { formatDateTime } from '@/utils/datetime'
 
 type Job = ApiSchemas['Job']
 type JobResource = ApiSchemas['JobResource']
@@ -12,16 +13,16 @@ type JobRound = ApiSchemas['JobResourceRound']
  */
 export const formatDate = (value?: string): string => {
   if (!value) {
-    return t('workspace.common.noDate')
+    return t('common.noDate')
   }
 
-  return new Intl.DateTimeFormat('zh-Hans', {
+  return formatDateTime(value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(value))
+  })
 }
 
 /**
@@ -297,7 +298,7 @@ export const roundCellView = (
 ): RoundCellView => {
   switch (status) {
     case 'completed':
-      return { text: '✓', class: 'text-green-600 dark:text-green-400', pulse: false }
+      return { text: '✓', class: 'text-lf-success', pulse: false }
     case 'running':
       return {
         text: `${completed}/${total}`,
@@ -305,7 +306,7 @@ export const roundCellView = (
         pulse: true,
       }
     case 'failed':
-      return { text: '✗', class: 'text-red-500 dark:text-red-400', pulse: false }
+      return { text: '✗', class: 'text-lf-danger', pulse: false }
     case 'skipped':
       return { text: '–', class: 'text-lf-text-subtle', pulse: false }
     default:

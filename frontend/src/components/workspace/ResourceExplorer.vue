@@ -14,6 +14,7 @@ import {
   type ReplaceUploadResult,
 } from '@/stores/projectWorkspace'
 import { isCapabilityBlocked } from '@/utils/secureContext'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type Resource = ApiSchemas['Resource']
 type IncrementalUpdateResponse = ApiSchemas['IncrementalUpdateResponse']
@@ -179,7 +180,7 @@ const downloadResourceResult = async (resource: Resource): Promise<void> => {
       dialog.error({
         title: t('api.errors.downloadTranslatedFailed'),
         content: error.problem?.detail || t('api.errors.downloadResourceResultEmpty'),
-        positiveText: t('workspace.common.close'),
+        positiveText: t('common.close'),
       })
       return
     }
@@ -644,7 +645,7 @@ const currentViewEvents = computed(() => {
       v-model:show="uploadPrecheckVisible"
       preset="card"
       :title="t('workspace.uploadPrecheck.modalTitle')"
-      :style="{ width: 'min(1120px, calc(100vw - 32px))' }"
+      :style="{ width: DRAWER_WIDTH.xl }"
       :mask-closable="false"
     >
       <UploadPrecheckPanel

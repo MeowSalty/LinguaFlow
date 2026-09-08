@@ -15,6 +15,7 @@ import {
 import { useI18n } from 'vue-i18n'
 
 import type { GlossaryFormModel } from '@/composables/useGlossaryManagement'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 const { t } = useI18n()
 
@@ -100,7 +101,7 @@ const toggleNotePreset = (preset: string): void => {
 </script>
 
 <template>
-  <NDrawer v-model:show="show" :width="'min(480px, 100vw)'" placement="right">
+  <NDrawer v-model:show="show" :width="DRAWER_WIDTH.m" placement="right">
     <NDrawerContent :title="drawerTitle" closable>
       <NAlert v-if="error" type="error" :bordered="false" class="mb-4">
         {{ error }}
@@ -187,10 +188,10 @@ const toggleNotePreset = (preset: string): void => {
       <template #footer>
         <div class="flex justify-end gap-3">
           <NButton :disabled="submitting" @click="emit('close')">
-            {{ t('workspace.common.cancel') }}
+            {{ t('common.cancel') }}
           </NButton>
           <NButton type="primary" :loading="submitting" @click="emit('submit')">
-            {{ t('workspace.common.save') }}
+            {{ t('common.save') }}
           </NButton>
         </div>
       </template>

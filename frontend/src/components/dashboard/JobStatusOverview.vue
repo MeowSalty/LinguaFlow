@@ -30,10 +30,10 @@ const failedPercent = computed(() => {
     </h2>
 
     <div v-if="stats.statsLoading" class="mt-6 space-y-4">
-      <div class="h-3 w-full animate-pulse rounded-full bg-lf-border-soft" />
+      <NSkeleton width="100%" height="12px" />
       <div class="grid grid-cols-2 gap-3">
-        <div class="h-20 animate-pulse rounded-lf-card bg-lf-border-soft" />
-        <div class="h-20 animate-pulse rounded-lf-card bg-lf-border-soft" />
+        <NSkeleton width="100%" height="80px" />
+        <NSkeleton width="100%" height="80px" />
       </div>
     </div>
 
@@ -60,15 +60,19 @@ const failedPercent = computed(() => {
           <div class="text-xs font-medium text-brand-600">
             {{ t('dashboard.jobStatus.completed') }}
           </div>
-          <div class="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-lf-text-strong">
+          <div
+            class="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-lf-text-strong"
+          >
             {{ n(completedJobs) }}
           </div>
         </div>
         <div class="rounded-lf-card border border-lf-border-soft bg-lf-danger-soft p-4">
-          <div class="text-xs font-medium text-red-500">
+          <div class="text-xs font-medium text-lf-danger">
             {{ t('dashboard.jobStatus.failed') }}
           </div>
-          <div class="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-lf-text-strong">
+          <div
+            class="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-lf-text-strong"
+          >
             {{ n(failedJobs) }}
           </div>
         </div>

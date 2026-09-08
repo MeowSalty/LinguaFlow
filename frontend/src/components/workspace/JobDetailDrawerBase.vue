@@ -6,6 +6,7 @@ import type { ApiSchemas } from '@/api/client'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 
 import JobDetailContent from './JobDetailContent.vue'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type Job = ApiSchemas['Job']
 
@@ -43,7 +44,7 @@ const clearEventsAndCache = (): void => {
 <template>
   <NDrawer
     :show="show"
-    :width="'min(720px, 100vw)'"
+    :width="DRAWER_WIDTH.l"
     placement="right"
     @update:show="(value: boolean) => emit('update:show', value)"
   >

@@ -118,23 +118,35 @@ const getResolutionHint = (item: PendingUploadItem): string => {
         <div class="grid shrink-0 grid-cols-3 gap-2 text-center sm:grid-cols-5">
           <div class="rounded-lf-ctl bg-lf-success-soft px-3 py-2">
             <div class="text-lg font-bold tabular-nums text-lf-success">{{ createCount }}</div>
-            <div class="text-xs text-lf-success">{{ t('workspace.uploadPrecheck.summary.creatable') }}</div>
+            <div class="text-xs text-lf-success">
+              {{ t('workspace.uploadPrecheck.summary.creatable') }}
+            </div>
           </div>
           <div class="rounded-lf-ctl bg-lf-warning-soft px-3 py-2">
             <div class="text-lg font-bold tabular-nums text-lf-warning">{{ conflictCount }}</div>
-            <div class="text-xs text-lf-warning">{{ t('workspace.uploadPrecheck.summary.conflicts') }}</div>
+            <div class="text-xs text-lf-warning">
+              {{ t('workspace.uploadPrecheck.summary.conflicts') }}
+            </div>
           </div>
           <div class="rounded-lf-ctl bg-lf-info-soft px-3 py-2">
-            <div class="text-lg font-bold tabular-nums text-lf-info">{{ incrementalUpdateCount }}</div>
-            <div class="text-xs text-lf-info">{{ t('workspace.uploadPrecheck.summary.incrementalUpdates') }}</div>
+            <div class="text-lg font-bold tabular-nums text-lf-info">
+              {{ incrementalUpdateCount }}
+            </div>
+            <div class="text-xs text-lf-info">
+              {{ t('workspace.uploadPrecheck.summary.incrementalUpdates') }}
+            </div>
           </div>
           <div class="rounded-lf-ctl bg-lf-brand-soft px-3 py-2">
             <div class="text-lg font-bold tabular-nums text-brand-600">{{ replaceCount }}</div>
-            <div class="text-xs text-brand-600">{{ t('workspace.uploadPrecheck.summary.replaces') }}</div>
+            <div class="text-xs text-brand-600">
+              {{ t('workspace.uploadPrecheck.summary.replaces') }}
+            </div>
           </div>
           <div class="rounded-lf-ctl bg-lf-danger-soft px-3 py-2">
             <div class="text-lg font-bold tabular-nums text-lf-danger">{{ duplicateCount }}</div>
-            <div class="text-xs text-lf-danger">{{ t('workspace.uploadPrecheck.summary.duplicates') }}</div>
+            <div class="text-xs text-lf-danger">
+              {{ t('workspace.uploadPrecheck.summary.duplicates') }}
+            </div>
           </div>
         </div>
       </div>
@@ -264,7 +276,7 @@ const getResolutionHint = (item: PendingUploadItem): string => {
       </p>
       <div class="flex justify-end gap-2">
         <NButton :disabled="loading" @click="emit('cancel')">
-          {{ t('workspace.common.cancel') }}
+          {{ t('common.cancel') }}
         </NButton>
         <NButton
           type="primary"

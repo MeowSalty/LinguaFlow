@@ -63,7 +63,7 @@ const handlePruneApplied = async (payload: {
           v-model:value="glossary.searchQuery"
           clearable
           size="small"
-          class="w-full sm:max-w-xs"
+          class="w-full sm:max-w-xs!"
           :placeholder="t('workspace.segment.searchPlaceholder')"
         />
         <span

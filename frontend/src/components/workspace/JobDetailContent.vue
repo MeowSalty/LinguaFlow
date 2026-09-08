@@ -217,7 +217,11 @@ const resourceColumns = computed(() => {
       ellipsis: { tooltip: true },
       render: (row: JobResource) => {
         if (row.error_message) {
-          return h('span', { class: 'text-xs text-red-500' }, { default: () => row.error_message })
+          return h(
+            'span',
+            { class: 'text-xs text-lf-danger' },
+            { default: () => row.error_message },
+          )
         }
         if (row.warning_message) {
           return h(
@@ -229,7 +233,7 @@ const resourceColumns = computed(() => {
         // 资源自身无错误时回退最近失败轮次的错误信息
         const roundError = getRoundError(row)
         if (roundError) {
-          return h('span', { class: 'text-xs text-red-500' }, { default: () => roundError })
+          return h('span', { class: 'text-xs text-lf-danger' }, { default: () => roundError })
         }
         return h(NText, { depth: 3 }, { default: () => '-' })
       },
@@ -289,13 +293,13 @@ const tableScrollX = computed(() => 200 + 80 + roundColumnsDef.value.length * 76
         </div>
       </div>
       <div>
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.common.createdAt') }}</div>
+        <div class="text-xs text-lf-text-muted">{{ t('common.createdAt') }}</div>
         <div class="text-sm font-medium font-mono tabular-nums">
           {{ formatDate(job.created_at) }}
         </div>
       </div>
       <div v-if="job.updated_at">
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.common.updatedAt') }}</div>
+        <div class="text-xs text-lf-text-muted">{{ t('common.updatedAt') }}</div>
         <div class="text-sm font-medium font-mono tabular-nums">
           {{ formatDate(job.updated_at) }}
         </div>

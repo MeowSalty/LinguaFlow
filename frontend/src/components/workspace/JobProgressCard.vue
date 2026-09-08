@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NIcon, NTag, NTooltip } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import {
@@ -19,7 +20,8 @@ import {
   statusTagType,
 } from '@/composables/useWorkspaceUtils'
 import StackedProgressBar from '@/components/common/StackedProgressBar.vue'
-import { t } from '@/i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   job: ApiSchemas['Job']
@@ -108,10 +110,10 @@ const speedText = computed(() => {
     class="rounded-lf-card border border-lf-border-soft bg-linear-to-br from-lf-surface to-lf-surface-muted p-4 space-y-3"
     :class="{
       'border-l-3 border-brand-500': job.status === 'running',
-      'border-l-3 border-green-500': job.status === 'completed' && !hasFailures && !hasWarnings,
-      'border-l-3 border-amber-500':
+      'border-l-3 border-lf-success': job.status === 'completed' && !hasFailures && !hasWarnings,
+      'border-l-3 border-lf-warning':
         job.status === 'paused' || (job.status === 'completed' && (hasFailures || hasWarnings)),
-      'border-l-3 border-red-500': job.status === 'failed',
+      'border-l-3 border-lf-danger': job.status === 'failed',
     }"
   >
     <!-- 顶部信息行：左侧标签 + 右侧大号百分比 -->
@@ -195,7 +197,7 @@ const speedText = computed(() => {
         </span>
       </span>
       <span v-if="hasFailures" class="flex items-center gap-1 text-lf-text-muted">
-        <span class="inline-block h-2 w-2 rounded-full bg-red-400" />
+        <span class="inline-block h-2 w-2 rounded-full bg-lf-danger" />
         {{ t('workspace.job.stats.failed') }}
         <span class="font-mono tabular-nums font-medium text-lf-text-strong">
           {{ job.progress.failed_resources }}
@@ -205,7 +207,7 @@ const speedText = computed(() => {
         </span>
       </span>
       <span v-if="hasWarnings" class="flex items-center gap-1 text-lf-text-muted">
-        <span class="inline-block h-2 w-2 rounded-full bg-amber-400" />
+        <span class="inline-block h-2 w-2 rounded-full bg-lf-warning" />
         {{ t('workspace.job.stats.warned') }}
         <span class="font-mono tabular-nums font-medium text-lf-text-strong">
           {{ warnedResourceCount }}
@@ -245,7 +247,7 @@ const speedText = computed(() => {
           <IconCarbonTime />
         </NIcon>
         <div class="flex flex-col">
-          <span class="text-[10px] text-lf-text-muted">ETA</span>
+          <span class="text-[10px] text-lf-text-muted">{{ t('workspace.job.eta.label') }}</span>
           <span class="font-mono tabular-nums text-sm text-lf-text-strong">{{ etaText }}</span>
         </div>
       </div>
@@ -254,7 +256,7 @@ const speedText = computed(() => {
         class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
       >
         <div class="flex flex-col">
-          <span class="text-[10px] text-lf-text-muted">速度</span>
+          <span class="text-[10px] text-lf-text-muted">{{ t('workspace.job.speed.label') }}</span>
           <span class="font-mono tabular-nums text-sm text-lf-text-strong">{{ speedText }}</span>
         </div>
       </div>

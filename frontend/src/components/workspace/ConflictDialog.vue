@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NAlert, NButton, NModal } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 const { t } = useI18n()
 
@@ -22,7 +23,7 @@ const emit = defineEmits<{
     :show="show"
     preset="card"
     :title="t('workspace.conflict.title')"
-    :style="{ width: 'min(440px, calc(100vw - 32px))' }"
+    :style="{ width: DRAWER_WIDTH.s }"
     :bordered="false"
     :mask-closable="false"
     @update:show="(value: boolean) => emit('update:show', value)"
@@ -38,7 +39,7 @@ const emit = defineEmits<{
     <template #footer>
       <div class="flex justify-end gap-3">
         <NButton @click="emit('update:show', false)">
-          {{ t('workspace.common.cancel') }}
+          {{ t('common.cancel') }}
         </NButton>
         <NButton :loading="loading" @click="emit('replace')">
           {{ t('workspace.conflict.fullReplace') }}

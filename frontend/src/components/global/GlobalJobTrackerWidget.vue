@@ -100,25 +100,25 @@ const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
               <!-- 状态指示器 -->
               <span
                 v-if="job.status === 'running'"
-                class="h-2 w-2 shrink-0 rounded-full bg-blue-500 animate-pulse"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-info animate-pulse"
               />
               <span
                 v-else-if="job.status === 'pending'"
-                class="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-warning"
               />
               <span
                 v-else-if="job.status === 'paused'"
-                class="h-2 w-2 shrink-0 rounded-full bg-amber-400"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-warning"
               />
               <span
                 v-else-if="job.status === 'completed'"
-                class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-success"
               />
               <span
                 v-else-if="job.status === 'failed'"
-                class="h-2 w-2 shrink-0 rounded-full bg-red-500"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-danger"
               />
-              <span v-else class="h-2 w-2 shrink-0 rounded-full bg-gray-400" />
+              <span v-else class="h-2 w-2 shrink-0 rounded-full bg-lf-text-subtle" />
 
               <span class="text-xs font-mono text-lf-text-muted">#{{ job.id }}</span>
               <span v-if="job.project_name" class="mx-0.5 text-xs text-lf-text-subtle">·</span>

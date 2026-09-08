@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { NButton, NIcon, NInput, NPopover, NTag, NText } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import IconCarbonChat from '~icons/carbon/chat'
 import IconCarbonUndo from '~icons/carbon/undo'
@@ -16,9 +17,10 @@ import {
 } from '@/composables/useQualityIssues'
 import { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
-import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
+
+const { t } = useI18n()
 
 const props = defineProps<{
   segment: Segment
@@ -189,7 +191,7 @@ const emit = defineEmits<{
           {{ t('workspace.segment.actions.cancelInline') }}
         </NButton>
         <NButton size="tiny" type="primary" @click="emit('saveComment', segment)">
-          {{ t('workspace.common.save') }}
+          {{ t('common.save') }}
         </NButton>
       </div>
     </div>

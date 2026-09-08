@@ -19,6 +19,7 @@ import type { ApiSchemas } from '@/api/client'
 import { qaRecheck } from '@/api/projects'
 import { useExecutionProfilesStore } from '@/stores/executionProfiles'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type QaRecheckResult = ApiSchemas['QaRecheckResult']
 type QaRecheckResourceResult = ApiSchemas['QaRecheckResourceResult']
@@ -190,8 +191,8 @@ const handleSubmit = (): void => {
     content: t('workspace.qaRecheck.confirmContent', {
       profile: selectedProfile.value?.name ?? '',
     }),
-    positiveText: t('workspace.common.confirm'),
-    negativeText: t('workspace.common.cancel'),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
     onPositiveClick: () => {
       void submit()
     },
@@ -240,7 +241,7 @@ const requestClose = (): void => {
   <NDrawer
     :show="show"
     placement="right"
-    :width="'min(520px, 100vw)'"
+    :width="DRAWER_WIDTH.l"
     :mask-closable="!busy"
     :close-on-esc="!busy"
     @update:show="(value: boolean) => (value ? (show = true) : requestClose())"
@@ -254,25 +255,33 @@ const requestClose = (): void => {
 
         <div class="grid grid-cols-2 gap-3">
           <div class="rounded-lf-ctl bg-lf-info-soft p-4 text-center">
-            <div class="text-2xl font-bold tabular-nums text-lf-info">{{ result.segments_checked }}</div>
+            <div class="text-2xl font-bold tabular-nums text-lf-info">
+              {{ result.segments_checked }}
+            </div>
             <div class="mt-1 text-xs text-lf-info/70">
               {{ t('workspace.qaRecheck.resultSegmentsChecked') }}
             </div>
           </div>
           <div class="rounded-lf-ctl bg-lf-surface-muted p-4 text-center">
-            <div class="text-2xl font-bold tabular-nums text-lf-text-muted">{{ result.resources_checked }}</div>
+            <div class="text-2xl font-bold tabular-nums text-lf-text-muted">
+              {{ result.resources_checked }}
+            </div>
             <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('workspace.qaRecheck.resultResourcesChecked') }}
             </div>
           </div>
           <div class="rounded-lf-ctl bg-lf-danger-soft p-4 text-center">
-            <div class="text-2xl font-bold tabular-nums text-lf-danger">{{ result.issues_new }}</div>
+            <div class="text-2xl font-bold tabular-nums text-lf-danger">
+              {{ result.issues_new }}
+            </div>
             <div class="mt-1 text-xs text-lf-danger/70">
               {{ t('workspace.qaRecheck.resultIssuesNew') }}
             </div>
           </div>
           <div class="rounded-lf-ctl bg-lf-success-soft p-4 text-center">
-            <div class="text-2xl font-bold tabular-nums text-lf-success">{{ result.issues_cleared }}</div>
+            <div class="text-2xl font-bold tabular-nums text-lf-success">
+              {{ result.issues_cleared }}
+            </div>
             <div class="mt-1 text-xs text-lf-success/70">
               {{ t('workspace.qaRecheck.resultIssuesCleared') }}
             </div>
@@ -407,12 +416,12 @@ const requestClose = (): void => {
       <template #footer>
         <div v-if="result" class="flex justify-end">
           <NButton type="primary" @click="requestClose">
-            {{ t('workspace.common.confirm') }}
+            {{ t('common.confirm') }}
           </NButton>
         </div>
         <div v-else class="flex justify-end gap-3">
           <NButton :disabled="busy" @click="requestClose">
-            {{ t('workspace.common.cancel') }}
+            {{ t('common.cancel') }}
           </NButton>
           <NButton
             type="primary"

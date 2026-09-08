@@ -3,6 +3,7 @@ import { NAlert, NButton, NIcon, NModal, NUpload, type UploadFileInfo } from 'na
 import { useI18n } from 'vue-i18n'
 
 import { useGlossaryStore } from '@/stores/glossary'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 const { t } = useI18n()
 const glossary = useGlossaryStore()
@@ -18,6 +19,21 @@ const handleChange = (options: { file: UploadFileInfo }): void => {
     emit('import', options.file.file)
   }
 }
+
+const resultText = computed(() => {
+  const result = glossary.importResult
+  if (!result) return ''
+  const parts = [t('workspace.glossary.import.result', { added: result.added })]
+  if (result.skipped?.length) {
+    parts.push(
+      t('workspace.glossary.import.skipped', {
+        count: result.skipped.length,
+        reasons: result.skipped.join('、'),
+      }),
+    )
+  }
+  return parts.join('；')
+})
 </script>
 
 <template>
@@ -25,7 +41,7 @@ const handleChange = (options: { file: UploadFileInfo }): void => {
     v-model:show="show"
     preset="card"
     :title="t('workspace.glossary.import.title')"
-    :style="{ width: 'min(480px, calc(100vw - 32px))' }"
+    :style="{ width: DRAWER_WIDTH.s }"
     :bordered="false"
     :mask-closable="false"
   >
@@ -42,20 +58,13 @@ const handleChange = (options: { file: UploadFileInfo }): void => {
         </NButton>
       </NUpload>
       <NAlert v-if="glossary.importResult" type="success" :bordered="false">
-        {{ t('workspace.glossary.import.result', { added: glossary.importResult.added }) }}
-        <template v-if="glossary.importResult.skipped?.length">
-          ，{{
-            t('workspace.glossary.import.skipped', {
-              count: glossary.importResult.skipped.length,
-            })
-          }}
-        </template>
+        {{ resultText }}
       </NAlert>
     </div>
     <template #footer>
       <div class="flex justify-end">
         <NButton @click="show = false">
-          {{ t('workspace.common.close') }}
+          {{ t('common.close') }}
         </NButton>
       </div>
     </template>

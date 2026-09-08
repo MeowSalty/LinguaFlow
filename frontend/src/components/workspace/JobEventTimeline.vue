@@ -14,6 +14,7 @@ import {
   isPoolEvent,
   poolTimelineType,
 } from '@/composables/useWorkspaceUtils'
+import { formatDateTime } from '@/utils/datetime'
 
 import BatchDetailDrawer from './BatchDetailDrawer.vue'
 import BatchEventCard from './BatchEventCard.vue'
@@ -68,11 +69,11 @@ const openBatchDetail = (event: SSEEvent): void => {
 }
 
 const formatEventTime = (value: string): string => {
-  return new Intl.DateTimeFormat('zh-Hans', {
+  return formatDateTime(value, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  }).format(new Date(value))
+  })
 }
 
 const getBatchSummary = (event: SSEEvent): string => {
@@ -330,24 +331,24 @@ onUnmounted(() => {
       <div class="flex items-center gap-2">
         <span
           v-if="jobEnded"
-          class="inline-flex items-center gap-1 rounded-full bg-gray-400/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
+          class="inline-flex items-center gap-1 rounded-full bg-lf-text-subtle/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
         >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400" />
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-lf-text-subtle" />
           {{ t('workspace.job.events.jobEnded') }}
         </span>
         <span
           v-else-if="connected"
-          class="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-500"
+          class="inline-flex items-center gap-1 rounded-full bg-lf-success-soft px-1.5 py-0.5 text-[10px] text-lf-success"
         >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-          实时
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-lf-success" />
+          {{ t('workspace.job.events.live') }}
         </span>
         <span
           v-else
-          class="inline-flex items-center gap-1 rounded-full bg-gray-400/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
+          class="inline-flex items-center gap-1 rounded-full bg-lf-text-subtle/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
         >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400" />
-          离线
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-lf-text-subtle" />
+          {{ t('workspace.job.events.offline') }}
         </span>
         <NButton quaternary size="tiny" @click="emit('clear')">
           {{ t('workspace.actions.clear') }}

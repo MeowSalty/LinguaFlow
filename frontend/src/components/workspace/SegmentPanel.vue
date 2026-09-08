@@ -202,22 +202,25 @@ const clearQualityFilters = (): void => {
   workspace.segmentQualityCodeFilter = 'all'
 }
 
+const CHIP_BASE =
+  'inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium transition-all select-none'
+
+const CHIP_CLASSES = {
+  disabled: `${CHIP_BASE} cursor-not-allowed border-lf-border-soft bg-lf-surface-muted/40 text-lf-text-subtle`,
+  activeDanger: `${CHIP_BASE} cursor-pointer border-lf-danger-soft bg-lf-danger-soft text-lf-danger shadow-sm shadow-lf-shadow`,
+  activeWarning: `${CHIP_BASE} cursor-pointer border-lf-warning-soft bg-lf-warning-soft/50 text-lf-warning shadow-sm shadow-lf-shadow`,
+  active: `${CHIP_BASE} cursor-pointer border-brand-500/35 bg-lf-brand-soft text-brand-700 shadow-sm shadow-lf-shadow`,
+  inactive: `${CHIP_BASE} cursor-pointer border-lf-border-soft bg-lf-surface text-lf-text-muted hover:border-lf-border hover:bg-lf-surface-elevated hover:text-lf-text-strong`,
+} as const
+
 const chipClass = (active: boolean, tone: 'default' | 'danger' | 'warning' = 'default'): string => {
-  const base =
-    'inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium transition-all select-none'
-  if (!workspace.activeResourceId) {
-    return `${base} cursor-not-allowed border-lf-border-soft bg-lf-surface-muted/40 text-lf-text-subtle`
-  }
+  if (!workspace.activeResourceId) return CHIP_CLASSES.disabled
   if (active) {
-    if (tone === 'danger') {
-      return `${base} cursor-pointer border-red-500/30 bg-lf-danger-soft text-red-600 shadow-sm shadow-lf-shadow`
-    }
-    if (tone === 'warning') {
-      return `${base} cursor-pointer border-lf-warning-soft bg-lf-warning-soft/50 text-lf-warning shadow-sm shadow-lf-shadow`
-    }
-    return `${base} cursor-pointer border-brand-500/35 bg-lf-brand-soft text-brand-700 shadow-sm shadow-lf-shadow`
+    if (tone === 'danger') return CHIP_CLASSES.activeDanger
+    if (tone === 'warning') return CHIP_CLASSES.activeWarning
+    return CHIP_CLASSES.active
   }
-  return `${base} cursor-pointer border-lf-border-soft bg-lf-surface text-lf-text-muted hover:border-lf-border hover:bg-lf-surface-elevated hover:text-lf-text-strong`
+  return CHIP_CLASSES.inactive
 }
 
 // ── 章节切换处理 ──
@@ -309,12 +312,13 @@ const handleCloseInlineComment = (): void => {
       class="flex flex-col gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5"
     >
       <div class="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
-        <div class="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center">
+        <!-- md:flex-wrap：空间不足时控件换行而非挤压；各控件设宽度下限/防收缩，避免条件渲染的元素挤塌搜索框 -->
+        <div class="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
           <NSelect
             v-model:value="workspace.activeResourceId"
             clearable
             size="small"
-            class="md:max-w-xs"
+            class="md:min-w-36 md:max-w-xs"
             :options="
               workspace.resources.map((resource) => ({
                 label: resource.path,
@@ -328,7 +332,7 @@ const handleCloseInlineComment = (): void => {
             v-if="workspace.isEpubResource"
             :value="chapterSelectValue"
             size="small"
-            class="md:max-w-xs"
+            class="md:min-w-32 md:max-w-xs"
             :options="chapterOptions"
             :loading="workspace.loadingSegmentGroups"
             :placeholder="t('workspace.segment.chapterPlaceholder')"
@@ -338,7 +342,7 @@ const handleCloseInlineComment = (): void => {
             v-model:value="workspace.segmentSearch"
             clearable
             size="small"
-            class="md:max-w-xs"
+            class="md:min-w-44 md:max-w-xs!"
             :disabled="!workspace.activeResourceId"
             :placeholder="t('workspace.segment.searchPlaceholder')"
           />
@@ -346,14 +350,14 @@ const handleCloseInlineComment = (): void => {
             v-if="hasSearchText"
             v-model:value="workspace.segmentSearchFieldFilter"
             size="small"
-            class="md:w-32"
+            class="w-32! shrink-0"
             :disabled="!workspace.activeResourceId"
             :options="searchFieldOptions"
           />
           <NButton
             v-if="hasSearchText"
             size="small"
-            class="px-2.5 font-semibold"
+            class="shrink-0 px-2.5 font-semibold"
             :type="workspace.segmentSearchCaseSensitive ? 'primary' : 'default'"
             :secondary="!workspace.segmentSearchCaseSensitive"
             :disabled="!workspace.activeResourceId"
@@ -365,7 +369,7 @@ const handleCloseInlineComment = (): void => {
           <NSelect
             v-model:value="workspace.segmentStatusFilter"
             size="small"
-            class="md:w-36"
+            class="w-36! shrink-0"
             :disabled="!workspace.activeResourceId"
             :options="segmentStatusOptions"
           />
@@ -395,7 +399,7 @@ const handleCloseInlineComment = (): void => {
             :loading="workspace.loadingSegments"
             @click="handleRefresh"
           >
-            {{ t('workspace.actions.refresh') }}
+            {{ t('common.actions.refresh') }}
           </NButton>
         </div>
       </div>

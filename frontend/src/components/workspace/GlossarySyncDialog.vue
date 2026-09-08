@@ -17,6 +17,7 @@ import {
 import { useI18n } from 'vue-i18n'
 
 import { useGlossaryStore } from '@/stores/glossary'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type SyncStep = 'impact' | 'executing' | 'result' | 'cancelled' | 'error'
 type SyncImpactResource = NonNullable<
@@ -216,7 +217,7 @@ onUnmounted(() => {
     v-model:show="show"
     preset="card"
     :title="dialogTitle"
-    :style="{ width: 'min(640px, 90vw)' }"
+    :style="{ width: DRAWER_WIDTH.l }"
     :bordered="false"
     :mask-closable="false"
     :closable="glossary.syncStep !== 'executing'"
@@ -274,11 +275,7 @@ onUnmounted(() => {
               :loading="glossary.syncAdvancing"
               @click="handleSkip"
             >
-              {{
-                isQueueMode
-                  ? t('workspace.glossary.sync.continueNext')
-                  : t('workspace.common.close')
-              }}
+              {{ isQueueMode ? t('workspace.glossary.sync.continueNext') : t('common.close') }}
             </NButton>
           </div>
         </template>
@@ -421,9 +418,7 @@ onUnmounted(() => {
           :loading="glossary.syncAdvancing"
           @click="handleClose"
         >
-          {{
-            isQueueMode ? t('workspace.glossary.sync.continueNext') : t('workspace.common.confirm')
-          }}
+          {{ isQueueMode ? t('workspace.glossary.sync.continueNext') : t('common.confirm') }}
         </NButton>
       </div>
     </div>
@@ -464,9 +459,7 @@ onUnmounted(() => {
           :loading="glossary.syncAdvancing"
           @click="handleClose"
         >
-          {{
-            isQueueMode ? t('workspace.glossary.sync.continueNext') : t('workspace.common.confirm')
-          }}
+          {{ isQueueMode ? t('workspace.glossary.sync.continueNext') : t('common.confirm') }}
         </NButton>
       </div>
     </div>
@@ -479,9 +472,7 @@ onUnmounted(() => {
 
       <div class="flex justify-end">
         <NButton :disabled="isAdvanceBusy" :loading="glossary.syncAdvancing" @click="handleClose">
-          {{
-            isQueueMode ? t('workspace.glossary.sync.continueNext') : t('workspace.common.close')
-          }}
+          {{ isQueueMode ? t('workspace.glossary.sync.continueNext') : t('common.close') }}
         </NButton>
       </div>
     </div>
