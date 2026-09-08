@@ -33,19 +33,11 @@ withDefaults(
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-1.5">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ title }}
-        </h1>
-        <p v-if="subtitle" class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ subtitle }}
-        </p>
-      </div>
-      <div v-if="$slots.actions" class="flex flex-wrap items-center gap-3">
+    <PageHeader :title="title" :subtitle="subtitle || undefined">
+      <template v-if="$slots.actions" #actions>
         <slot name="actions" />
-      </div>
-    </section>
+      </template>
+    </PageHeader>
 
     <div
       v-if="metrics.length > 0"
@@ -70,11 +62,7 @@ withDefaults(
       </div>
     </div>
 
-    <NEmpty
-      v-else-if="empty"
-      class="lf-panel py-16"
-      :description="emptyDescription"
-    >
+    <NEmpty v-else-if="empty" class="lf-panel py-16" :description="emptyDescription">
       <template v-if="$slots['empty-extra']" #extra>
         <slot name="empty-extra" />
       </template>

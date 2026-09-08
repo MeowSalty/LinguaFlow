@@ -2,8 +2,6 @@
 import {
   NButton,
   NCard,
-  NCollapse,
-  NCollapseItem,
   NGrid,
   NGi,
   NInputNumber,
@@ -446,11 +444,11 @@ const onReviseSegmentScopeChange = (round: RoundModel, scope: ReviseSegmentScope
 
 const modeBadgeClass = (mode: RoundMode): string => {
   if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
-  if (mode === 'extract') return 'bg-amber-50 text-amber-600'
-  if (mode === 'adjudicate') return 'bg-violet-50 text-violet-600'
-  if (mode === 'semantic_qa') return 'bg-emerald-50 text-emerald-600'
-  if (mode === 'revise') return 'bg-rose-50 text-rose-600'
-  return 'bg-sky-50 text-sky-600'
+  if (mode === 'extract') return 'bg-lf-accent-amber-soft text-lf-accent-amber'
+  if (mode === 'adjudicate') return 'bg-lf-accent-violet-soft text-lf-accent-violet'
+  if (mode === 'semantic_qa') return 'bg-lf-accent-emerald-soft text-lf-accent-emerald'
+  if (mode === 'revise') return 'bg-lf-accent-rose-soft text-lf-accent-rose'
+  return 'bg-lf-accent-sky-soft text-lf-accent-sky'
 }
 
 const modeLabel = (mode: RoundMode): string => {
@@ -613,7 +611,7 @@ const emitUpdate = (): void => {
       <div>
         <div class="mb-1 text-xs text-lf-text-subtle">
           {{ t('executionPlanEditor.round.mode') }}
-          <span class="text-red-400">*</span>
+          <span class="text-lf-danger">*</span>
         </div>
         <NRadioGroup
           :value="round.mode"
@@ -635,7 +633,7 @@ const emitUpdate = (): void => {
         <div v-if="round.mode !== 'correct'">
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.backend') }}
-            <span class="text-red-400">*</span>
+            <span class="text-lf-danger">*</span>
           </div>
           <NSelect
             v-model:value="round.backend_id"
@@ -648,7 +646,7 @@ const emitUpdate = (): void => {
         <div v-if="round.mode !== 'correct'">
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.concurrency') }}
-            <span class="text-red-400">*</span>
+            <span class="text-lf-danger">*</span>
           </div>
           <NInputNumber
             v-model:value="round.concurrency"
@@ -713,7 +711,7 @@ const emitUpdate = (): void => {
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.fallbackShrink') }}
-              <span class="text-red-400">*</span>
+              <span class="text-lf-danger">*</span>
             </div>
             <NInputNumber
               v-model:value="round.translate.fallback_shrink"
@@ -749,51 +747,7 @@ const emitUpdate = (): void => {
         </div>
 
         <!-- 高级配置（可折叠） -->
-        <NCollapse class="mt-3">
-          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-            <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
-                </div>
-                <NInputNumber
-                  v-if="round.translate.retry"
-                  v-model:value="round.translate.retry.max_attempts"
-                  :min="0"
-                  :max="10"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
-                </div>
-                <NInputNumber
-                  v-if="round.translate.retry"
-                  v-model:value="round.translate.retry.backoff_ms"
-                  :min="0"
-                  :max="60000"
-                  :step="100"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-            </NGrid>
-            <div v-if="round.translate.retry" class="mt-2 flex items-center gap-2">
-              <NSwitch
-                v-model:value="round.translate.retry.jitter"
-                size="small"
-                :disabled="disabled"
-              />
-              <span class="text-xs text-lf-text-subtle">
-                {{ t('executionPlanEditor.round.retryJitter') }}
-              </span>
-            </div>
-          </NCollapseItem>
-        </NCollapse>
+        <RoundAdvancedSettings :round="round" :disabled="disabled" />
       </template>
 
       <!-- 术语抽取模式配置 -->
@@ -898,51 +852,7 @@ const emitUpdate = (): void => {
         </div>
 
         <!-- 高级配置（可折叠） -->
-        <NCollapse class="mt-3">
-          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-            <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
-                </div>
-                <NInputNumber
-                  v-if="round.extract.retry"
-                  v-model:value="round.extract.retry.max_attempts"
-                  :min="0"
-                  :max="10"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
-                </div>
-                <NInputNumber
-                  v-if="round.extract.retry"
-                  v-model:value="round.extract.retry.backoff_ms"
-                  :min="0"
-                  :max="60000"
-                  :step="100"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-            </NGrid>
-            <div v-if="round.extract.retry" class="mt-2 flex items-center gap-2">
-              <NSwitch
-                v-model:value="round.extract.retry.jitter"
-                size="small"
-                :disabled="disabled"
-              />
-              <span class="text-xs text-lf-text-subtle">
-                {{ t('executionPlanEditor.round.retryJitter') }}
-              </span>
-            </div>
-          </NCollapseItem>
-        </NCollapse>
+        <RoundAdvancedSettings :round="round" :disabled="disabled" />
       </template>
 
       <!-- 质量裁决模式配置 -->
@@ -1005,51 +915,7 @@ const emitUpdate = (): void => {
           </div>
         </div>
 
-        <NCollapse class="mt-3">
-          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-            <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
-                </div>
-                <NInputNumber
-                  v-if="round.adjudicate.retry"
-                  v-model:value="round.adjudicate.retry.max_attempts"
-                  :min="0"
-                  :max="10"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
-                </div>
-                <NInputNumber
-                  v-if="round.adjudicate.retry"
-                  v-model:value="round.adjudicate.retry.backoff_ms"
-                  :min="0"
-                  :max="60000"
-                  :step="100"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-            </NGrid>
-            <div v-if="round.adjudicate.retry" class="mt-2 flex items-center gap-2">
-              <NSwitch
-                v-model:value="round.adjudicate.retry.jitter"
-                size="small"
-                :disabled="disabled"
-              />
-              <span class="text-xs text-lf-text-subtle">
-                {{ t('executionPlanEditor.round.retryJitter') }}
-              </span>
-            </div>
-          </NCollapseItem>
-        </NCollapse>
+        <RoundAdvancedSettings :round="round" :disabled="disabled" />
       </template>
 
       <!-- 语义质检模式配置 -->
@@ -1131,51 +997,7 @@ const emitUpdate = (): void => {
           </div>
         </div>
 
-        <NCollapse class="mt-3">
-          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-            <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
-                </div>
-                <NInputNumber
-                  v-if="round.semantic_qa.retry"
-                  v-model:value="round.semantic_qa.retry.max_attempts"
-                  :min="0"
-                  :max="10"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
-                </div>
-                <NInputNumber
-                  v-if="round.semantic_qa.retry"
-                  v-model:value="round.semantic_qa.retry.backoff_ms"
-                  :min="0"
-                  :max="60000"
-                  :step="100"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-            </NGrid>
-            <div v-if="round.semantic_qa.retry" class="mt-2 flex items-center gap-2">
-              <NSwitch
-                v-model:value="round.semantic_qa.retry.jitter"
-                size="small"
-                :disabled="disabled"
-              />
-              <span class="text-xs text-lf-text-subtle">
-                {{ t('executionPlanEditor.round.retryJitter') }}
-              </span>
-            </div>
-          </NCollapseItem>
-        </NCollapse>
+        <RoundAdvancedSettings :round="round" :disabled="disabled" />
       </template>
 
       <!-- LLM 修订模式配置 -->
@@ -1255,51 +1077,7 @@ const emitUpdate = (): void => {
           </div>
         </div>
 
-        <NCollapse class="mt-3">
-          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-            <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
-                </div>
-                <NInputNumber
-                  v-if="round.revise.retry"
-                  v-model:value="round.revise.retry.max_attempts"
-                  :min="0"
-                  :max="10"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-              <NGi>
-                <div class="mb-1 text-xs text-lf-text-subtle">
-                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
-                </div>
-                <NInputNumber
-                  v-if="round.revise.retry"
-                  v-model:value="round.revise.retry.backoff_ms"
-                  :min="0"
-                  :max="60000"
-                  :step="100"
-                  size="small"
-                  :disabled="disabled"
-                  class="w-full"
-                />
-              </NGi>
-            </NGrid>
-            <div v-if="round.revise.retry" class="mt-2 flex items-center gap-2">
-              <NSwitch
-                v-model:value="round.revise.retry.jitter"
-                size="small"
-                :disabled="disabled"
-              />
-              <span class="text-xs text-lf-text-subtle">
-                {{ t('executionPlanEditor.round.retryJitter') }}
-              </span>
-            </div>
-          </NCollapseItem>
-        </NCollapse>
+        <RoundAdvancedSettings :round="round" :disabled="disabled" />
       </template>
 
       <!-- 本地改写模式配置 -->
@@ -1314,7 +1092,7 @@ const emitUpdate = (): void => {
         <div class="mt-3">
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.correctRules') }}
-            <span class="text-red-400">*</span>
+            <span class="text-lf-danger">*</span>
           </div>
           <div class="space-y-2">
             <div
