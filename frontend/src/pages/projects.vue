@@ -287,10 +287,6 @@ useStoreErrorToast(
         :class="{ 'pointer-events-none opacity-60': projects.isDeletingProject(project.id) }"
         @click="openProjectWorkspace(project)"
       >
-        <div
-          class="absolute inset-y-0 left-0 w-0.5 bg-brand-500/0 transition-all duration-200 group-hover:bg-brand-500/70"
-        />
-
         <div class="flex h-full flex-col gap-4 p-5">
           <div class="flex items-start gap-3">
             <div class="min-w-0 flex-1">

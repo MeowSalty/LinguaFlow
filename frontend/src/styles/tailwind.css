@@ -252,7 +252,7 @@ body {
   @apply rounded-lf-ctl border border-lf-border-soft bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted;
 }
 
-/* 可点击卡片：扁平表面，仅边框反馈 */
+/* 可点击卡片：扁平表面，悬停仅边框反馈——页面内不要叠加其他悬停装饰（色条/渐变线等） */
 .lf-interactive-card {
   @apply rounded-lf-card border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow transition-colors;
   @apply hover:border-lf-border-strong;

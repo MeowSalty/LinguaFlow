@@ -651,11 +651,8 @@ useStoreErrorToast(
       <div
         v-for="backend in backends.filteredItems"
         :key="backend.id"
-        class="lf-interactive-card group relative overflow-hidden p-5"
+        class="lf-interactive-card p-5"
       >
-        <div
-          class="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-brand-500/0 via-brand-500/70 to-brand-500/0 opacity-0 transition-opacity group-hover:opacity-100"
-        />
         <div class="flex h-full flex-col gap-5">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
