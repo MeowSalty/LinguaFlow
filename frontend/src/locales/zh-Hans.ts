@@ -984,6 +984,7 @@ const messages = {
           },
           segments: '{count} 段',
           tokens: '{input}↑ {output}↓ Token',
+          tokenSpeed: '{rate} tok/s',
           glossaryUsed: '{count} 使用',
           glossaryAdded: '{count} 新增',
           detailTitle: '批次详情',
