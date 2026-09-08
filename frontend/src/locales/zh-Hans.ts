@@ -867,6 +867,8 @@ const messages = {
         error: '错误信息',
         remark: '备注',
         startedAt: '开始时间',
+        duration: '耗时',
+        languagePair: '语言方向',
       },
       warnings: {
         badge: '{count} 项警告',
@@ -922,6 +924,8 @@ const messages = {
         segments: '{completed}/{total} 段',
         startedAt: '开始 {time}',
         finishedAt: '结束 {time}',
+        etaRemaining: '预计剩余 {duration}',
+        expectedFinish: '预计完成 {time}',
         legacyHint: '旧版任务无轮次明细',
         skippedHint: '本轮无段可处理',
       },
@@ -936,6 +940,7 @@ const messages = {
         completed: '翻译完成',
         failed: '翻译失败',
         cancelled: '已取消',
+        workload: '已完成工作量 {completed}/{total}',
       },
       // ETA 文案
       eta: {
@@ -944,12 +949,22 @@ const messages = {
         minutes: '约 {count} 分钟',
         hours: '约 {count} 小时',
         hoursMinutes: '约 {hours} 小时 {minutes} 分钟',
+        expectedLabel: '预计完成',
+        expectedToday: '今天 {time}',
+        expectedDate: '{date} {time}',
       },
       // 速度文案
       speed: {
         label: '翻译速度',
         verySlow: '速度较慢',
         perMinute: '{count} 段落/分钟',
+      },
+      // 任务耗时文案
+      duration: {
+        seconds: '{count} 秒',
+        minutes: '{count} 分钟',
+        hours: '{count} 小时',
+        hoursMinutes: '{hours} 小时 {minutes} 分',
       },
       // 统计标签
       stats: {

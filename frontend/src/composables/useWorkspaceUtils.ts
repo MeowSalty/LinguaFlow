@@ -195,6 +195,66 @@ export const formatETA = (seconds: number | null): string => {
   return t('workspace.job.eta.hoursMinutes', { hours, minutes: remainMinutes })
 }
 
+/** ETA 秒数 → 预计完成绝对时刻：当天「今天 17:24」，跨天「09/09 01:30」 */
+export const formatEtaCompletionTime = (seconds: number | null): string => {
+  if (seconds == null || seconds <= 0) return ''
+  const target = new Date(Date.now() + seconds * 1000)
+  const now = new Date()
+  const time = formatDateTime(target, { hour: '2-digit', minute: '2-digit' })
+  const sameDay =
+    target.getFullYear() === now.getFullYear() &&
+    target.getMonth() === now.getMonth() &&
+    target.getDate() === now.getDate()
+  if (sameDay) return t('workspace.job.eta.expectedToday', { time })
+  return t('workspace.job.eta.expectedDate', {
+    date: formatDateTime(target, { month: '2-digit', day: '2-digit' }),
+    time,
+  })
+}
+
+/** 紧凑时刻：当天 HH:mm，跨天 MM/dd HH:mm（轮次悬停、预计完成等紧凑场景） */
+export const formatCompactTime = (value: string | number | Date): string => {
+  const date = new Date(value)
+  const now = new Date()
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  if (sameDay) return formatDateTime(value, { hour: '2-digit', minute: '2-digit' })
+  return formatDateTime(value, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// ── 任务耗时 ──
+
+/** 任务耗时（秒，墙钟口径）：终态 = 更新 − 开始；运行/暂停 = 当前 − 开始 */
+export const getJobDurationSeconds = (job: Job): number | null => {
+  if (!job.started_at) return null
+  const start = new Date(job.started_at).getTime()
+  const terminal = ['completed', 'failed', 'cancelled'].includes(job.status)
+  const end = terminal && job.updated_at ? new Date(job.updated_at).getTime() : Date.now()
+  return Math.max(0, (end - start) / 1000)
+}
+
+/** 格式化任务耗时：「42 秒 / 12 分钟 / 3 小时 12 分」 */
+export const formatJobDuration = (job: Job): string => {
+  const seconds = getJobDurationSeconds(job)
+  if (seconds == null) return '-'
+  if (seconds < 60) {
+    return t('workspace.job.duration.seconds', { count: Math.max(1, Math.round(seconds)) })
+  }
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return t('workspace.job.duration.minutes', { count: minutes })
+  const hours = Math.floor(minutes / 60)
+  const remainMinutes = minutes % 60
+  if (remainMinutes === 0) return t('workspace.job.duration.hours', { count: hours })
+  return t('workspace.job.duration.hoursMinutes', { hours, minutes: remainMinutes })
+}
+
 // ── 速度计算 ──
 
 /**
@@ -312,6 +372,19 @@ export const roundCellView = (
     default:
       return { text: '·', class: 'text-lf-text-subtle', pulse: false }
   }
+}
+
+/**
+ * 估算进行中轮次的剩余秒数（该轮自身节奏外推：余量 × 已运行时长 ÷ 已完成段数）。
+ * 并行争用、缩批、重试的影响会自然反映在节奏里；暂停期间偏保守，属可接受近似。
+ */
+export const estimateRoundRemaining = (round: JobRound): number | null => {
+  if (round.status !== 'running' || !round.started_at || round.segment_completed < 1) return null
+  const elapsed = (Date.now() - new Date(round.started_at).getTime()) / 1000
+  if (elapsed <= 0) return null
+  const remaining = round.segment_total - round.segment_completed
+  if (remaining <= 0) return null
+  return (remaining * elapsed) / round.segment_completed
 }
 
 /** 汇总资源跨轮工作量（段×轮）；遗留任务（rounds 空）回退去重段落口径 */

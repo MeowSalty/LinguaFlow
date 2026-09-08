@@ -9,6 +9,7 @@ import {
   calculateJobETA,
   calculateJobSpeed,
   formatETA,
+  formatEtaCompletionTime,
   formatJobSpeed,
   getJobProgress,
   getJobProgressNumbers,
@@ -94,10 +95,11 @@ const barTone = computed<'brand' | 'success' | 'warning'>(() => {
   return 'brand'
 })
 
-const etaText = computed(() => {
-  const seconds = calculateJobETA(props.job)
-  return formatETA(seconds)
-})
+const etaSeconds = computed(() => calculateJobETA(props.job))
+
+const etaText = computed(() => formatETA(etaSeconds.value))
+
+const etaCompletionText = computed(() => formatEtaCompletionTime(etaSeconds.value))
 
 const speedText = computed(() => {
   const speed = calculateJobSpeed(props.job)
@@ -112,7 +114,9 @@ const speedText = computed(() => {
       'border-l-3 border-brand-500': job.status === 'running',
       'border-l-3 border-lf-success': job.status === 'completed' && !hasFailures && !hasWarnings,
       'border-l-3 border-lf-warning':
-        job.status === 'paused' || (job.status === 'completed' && (hasFailures || hasWarnings)),
+        job.status === 'paused' ||
+        job.status === 'cancelled' ||
+        (job.status === 'completed' && (hasFailures || hasWarnings)),
       'border-l-3 border-lf-danger': job.status === 'failed',
     }"
   >
@@ -158,7 +162,23 @@ const speedText = computed(() => {
 
     <!-- 主进度条（StackedProgressBar：主段 + 失败段 + 跳过段） -->
     <div class="space-y-1">
-      <div class="text-xs text-lf-text-muted">{{ getJobProgressText(job) }}</div>
+      <!-- 终态显示工作量计数（状态语义交给 NTag）；运行/排队沿用进度文案 -->
+      <div class="text-xs text-lf-text-muted">
+        <template v-if="isTerminal">
+          {{
+            t('workspace.job.progress.workload', {
+              completed: completedCount,
+              total: job.progress.progress_total,
+            })
+          }}
+          <span class="ml-1 text-[10px] text-lf-text-subtle">
+            {{ t('workspace.job.stats.unitWorkload') }}
+          </span>
+        </template>
+        <template v-else>
+          {{ getJobProgressText(job) }}
+        </template>
+      </div>
       <StackedProgressBar
         :value="completedPct"
         :error-value="failedBarPct"
@@ -237,8 +257,11 @@ const speedText = computed(() => {
       </span>
     </div>
 
-    <!-- ETA 与速度行：网格卡片布局 -->
-    <div v-if="job.status === 'running' && (etaText || speedText)" class="grid grid-cols-2 gap-2">
+    <!-- ETA / 预计完成 / 速度行：网格卡片布局（仅运行中） -->
+    <div
+      v-if="job.status === 'running' && (etaText || speedText)"
+      class="grid grid-cols-2 gap-2 sm:grid-cols-3"
+    >
       <div
         v-if="etaText"
         class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
@@ -249,6 +272,22 @@ const speedText = computed(() => {
         <div class="flex flex-col">
           <span class="text-[10px] text-lf-text-muted">{{ t('workspace.job.eta.label') }}</span>
           <span class="font-mono tabular-nums text-sm text-lf-text-strong">{{ etaText }}</span>
+        </div>
+      </div>
+      <div
+        v-if="etaCompletionText"
+        class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
+      >
+        <NIcon size="14" class="text-lf-text-muted">
+          <IconCarbonCalendar />
+        </NIcon>
+        <div class="flex flex-col">
+          <span class="text-[10px] text-lf-text-muted">
+            {{ t('workspace.job.eta.expectedLabel') }}
+          </span>
+          <span class="font-mono tabular-nums text-sm text-lf-text-strong">
+            {{ etaCompletionText }}
+          </span>
         </div>
       </div>
       <div
