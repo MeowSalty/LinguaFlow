@@ -1490,21 +1490,19 @@ const messages = {
   },
   promptTemplates: {
     title: '翻译提示词',
-    subtitle: '管理翻译提示词，定义 AI 翻译的行为指令与上下文',
-    stats: {
-      total: '全部模板',
-      system: '系统模板',
-      user: '用户模板',
-    },
+    subtitle: '定义 AI 翻译的行为指令与输出规则，翻译任务执行时套用',
     actions: {
       create: '新建模板',
       createFirst: '创建第一个模板',
       submitCreate: '创建模板',
       submitUpdate: '保存',
+      createTitle: '新建翻译提示词',
+      editTitle: '编辑翻译提示词',
+      viewTitle: '查看翻译提示词',
     },
     filters: {
       searchPlaceholder: '搜索模板名称或描述',
-      allScopes: '全部类型',
+      all: '全部',
       reset: '重置筛选',
     },
     scopes: {
@@ -1512,33 +1510,31 @@ const messages = {
       user: '用户',
     },
     card: {
-      createdAt: '创建时间',
+      updatedAt: '更新于',
       noDescription: '暂无描述',
-      noPromptContent: '暂无提示词内容',
+      noContent: '暂无提示词内容',
     },
     form: {
       name: '模板名称',
       namePlaceholder: '例如：技术文档翻译提示词',
       description: '模板描述',
       descriptionPlaceholder: '简要说明模板的用途和适用场景',
-      systemPromptContent: '系统提示词',
+      content: '系统提示词',
       contentPlaceholder: '输入提示词内容',
       insertBuiltinVar: '插入变量：',
+      createHint: '名称与描述便于识别，提示词将在翻译任务中作为系统指令生效',
     },
     validation: {
       nameRequired: '请输入模板名称',
     },
     messages: {
       createSuccess: '翻译提示词已创建',
-      createFailed: '翻译提示词创建失败',
       updateSuccess: '翻译提示词已更新',
-      updateFailed: '翻译提示词更新失败',
       deleteSuccess: '翻译提示词已删除',
-      deleteFailed: '翻译提示词删除失败',
       systemDeleteForbidden: '系统模板不可删除',
     },
     empty: {
-      default: '暂无翻译提示词，创建一个开始定义翻译指令',
+      default: '还没有翻译提示词，创建一个来定义翻译行为',
       filtered: '没有找到符合条件的模板',
     },
     delete: {
@@ -1576,21 +1572,19 @@ const messages = {
   },
   bootstrapPromptTemplates: {
     title: '术语抽取提示词',
-    subtitle: '管理术语抽取提示词，用于从源文本中自动提取翻译术语',
-    stats: {
-      total: '全部模板',
-      system: '系统模板',
-      user: '用户模板',
-    },
+    subtitle: '定义从源文本中抽取翻译术语的指令，供术语库构建使用',
     actions: {
       create: '新建模板',
       createFirst: '创建第一个模板',
       submitCreate: '创建模板',
       submitUpdate: '保存',
+      createTitle: '新建术语抽取提示词',
+      editTitle: '编辑术语抽取提示词',
+      viewTitle: '查看术语抽取提示词',
     },
     filters: {
       searchPlaceholder: '搜索模板名称或描述',
-      allScopes: '全部类型',
+      all: '全部',
       reset: '重置筛选',
     },
     scopes: {
@@ -1598,7 +1592,7 @@ const messages = {
       user: '用户',
     },
     card: {
-      updatedAt: '更新时间',
+      updatedAt: '更新于',
       noDescription: '暂无描述',
       noContent: '暂无提示词内容',
     },
@@ -1610,21 +1604,19 @@ const messages = {
       content: '术语抽取提示词',
       contentPlaceholder: '输入术语抽取提示词内容',
       insertBuiltinVar: '插入变量：',
+      createHint: '名称与描述便于识别，提示词将在术语抽取时生效',
     },
     validation: {
       nameRequired: '请输入模板名称',
     },
     messages: {
       createSuccess: '术语抽取提示词已创建',
-      createFailed: '术语抽取提示词创建失败',
       updateSuccess: '术语抽取提示词已更新',
-      updateFailed: '术语抽取提示词更新失败',
       deleteSuccess: '术语抽取提示词已删除',
-      deleteFailed: '术语抽取提示词删除失败',
       systemDeleteForbidden: '系统模板不可删除',
     },
     empty: {
-      default: '暂无术语抽取提示词，创建一个开始定义术语抽取指令',
+      default: '还没有术语抽取提示词，创建一个来定义抽取规则',
       filtered: '没有找到符合条件的模板',
     },
     delete: {
@@ -1633,21 +1625,19 @@ const messages = {
   },
   prunePromptTemplates: {
     title: '术语精简提示词',
-    subtitle: '管理 AI 术语表精简所使用的分析指令，控制删除、合并与译文优化建议',
-    stats: {
-      total: '全部模板',
-      system: '系统模板',
-      user: '用户模板',
-    },
+    subtitle: '定义术语表精简的分析指令，控制术语的删除、合并与译文优化',
     actions: {
       create: '新建模板',
       createFirst: '创建第一个模板',
       submitCreate: '创建模板',
       submitUpdate: '保存',
+      createTitle: '新建术语精简提示词',
+      editTitle: '编辑术语精简提示词',
+      viewTitle: '查看术语精简提示词',
     },
     filters: {
       searchPlaceholder: '搜索模板名称或描述',
-      allScopes: '全部类型',
+      all: '全部',
       reset: '重置筛选',
     },
     scopes: {
@@ -1655,7 +1645,7 @@ const messages = {
       user: '用户',
     },
     card: {
-      updatedAt: '更新时间',
+      updatedAt: '更新于',
       noDescription: '暂无描述',
       noContent: '暂无提示词内容',
     },
@@ -1667,6 +1657,7 @@ const messages = {
       content: '精简提示词',
       contentPlaceholder: '输入用于分析术语表的提示词内容',
       insertBuiltinVar: '插入变量：',
+      createHint: '名称与描述便于识别，提示词将在术语表精简时生效',
     },
     validation: {
       nameRequired: '请输入模板名称',
@@ -1678,7 +1669,7 @@ const messages = {
       systemDeleteForbidden: '系统模板不可删除',
     },
     empty: {
-      default: '暂无术语精简提示词，内置默认模板仍可直接用于分析',
+      default: '暂无自定义精简提示词，精简时将使用内置默认模板',
       filtered: '没有找到符合条件的模板',
     },
     delete: {
