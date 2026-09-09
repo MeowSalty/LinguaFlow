@@ -19,6 +19,9 @@ const includesNormalized = (source: string | undefined, query: string): boolean 
   return source?.toLowerCase().includes(query) ?? false
 }
 
+const sortTimestamp = (item: TranslationPromptTemplate): number =>
+  new Date(item.updated_at ?? item.created_at ?? '').getTime()
+
 export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
   // ── 状态 ──
   const items = ref<TranslationPromptTemplate[]>([])
@@ -35,9 +38,7 @@ export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
 
   // ── 计算属性 ──
   const sortedItems = computed(() =>
-    [...items.value].sort(
-      (a, b) => new Date(b.created_at ?? '').getTime() - new Date(a.created_at ?? '').getTime(),
-    ),
+    [...items.value].sort((a, b) => sortTimestamp(b) - sortTimestamp(a)),
   )
 
   const filteredItems = computed(() => {
@@ -138,6 +139,18 @@ export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
     scopeFilter.value = 'all'
   }
 
+  const setSearchQuery = (query: string): void => {
+    searchQuery.value = query
+  }
+
+  const setScopeFilter = (scope: Scope | 'all'): void => {
+    scopeFilter.value = scope
+  }
+
+  const clearError = (): void => {
+    error.value = null
+  }
+
   return {
     items,
     loading,
@@ -148,6 +161,9 @@ export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
     searchQuery,
     scopeFilter,
     resetFilters,
+    setSearchQuery,
+    setScopeFilter,
+    clearError,
     sortedItems,
     filteredItems,
     totalCount,

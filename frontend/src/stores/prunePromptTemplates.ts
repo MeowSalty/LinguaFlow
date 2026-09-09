@@ -18,6 +18,9 @@ type Scope = PrunePromptTemplate['scope']
 const includesNormalized = (source: string | undefined, query: string): boolean =>
   source?.toLowerCase().includes(query) ?? false
 
+const sortTimestamp = (item: PrunePromptTemplate): number =>
+  new Date(item.updated_at ?? item.created_at ?? '').getTime()
+
 export const usePrunePromptTemplatesStore = defineStore('prunePromptTemplates', () => {
   const items = ref<PrunePromptTemplate[]>([])
   const loading = ref(false)
@@ -29,9 +32,7 @@ export const usePrunePromptTemplatesStore = defineStore('prunePromptTemplates', 
   const scopeFilter = ref<Scope | 'all'>('all')
 
   const sortedItems = computed(() =>
-    [...items.value].sort(
-      (a, b) => new Date(b.updated_at ?? '').getTime() - new Date(a.updated_at ?? '').getTime(),
-    ),
+    [...items.value].sort((a, b) => sortTimestamp(b) - sortTimestamp(a)),
   )
 
   const filteredItems = computed(() => {
@@ -120,6 +121,23 @@ export const usePrunePromptTemplatesStore = defineStore('prunePromptTemplates', 
     }
   }
 
+  const resetFilters = (): void => {
+    searchQuery.value = ''
+    scopeFilter.value = 'all'
+  }
+
+  const setSearchQuery = (query: string): void => {
+    searchQuery.value = query
+  }
+
+  const setScopeFilter = (scope: Scope | 'all'): void => {
+    scopeFilter.value = scope
+  }
+
+  const clearError = (): void => {
+    error.value = null
+  }
+
   return {
     items,
     loading,
@@ -129,6 +147,10 @@ export const usePrunePromptTemplatesStore = defineStore('prunePromptTemplates', 
     error,
     searchQuery,
     scopeFilter,
+    resetFilters,
+    setSearchQuery,
+    setScopeFilter,
+    clearError,
     filteredItems,
     totalCount,
     systemCount,

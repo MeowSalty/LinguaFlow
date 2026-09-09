@@ -19,6 +19,9 @@ const includesNormalized = (source: string | undefined, query: string): boolean 
   return source?.toLowerCase().includes(query) ?? false
 }
 
+const sortTimestamp = (item: BootstrapPromptTemplate): number =>
+  new Date(item.updated_at ?? item.created_at ?? '').getTime()
+
 export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemplates', () => {
   // ── 状态 ──
   const items = ref<BootstrapPromptTemplate[]>([])
@@ -35,9 +38,7 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
 
   // ── 计算属性 ──
   const sortedItems = computed(() =>
-    [...items.value].sort(
-      (a, b) => new Date(b.updated_at ?? '').getTime() - new Date(a.updated_at ?? '').getTime(),
-    ),
+    [...items.value].sort((a, b) => sortTimestamp(b) - sortTimestamp(a)),
   )
 
   const filteredItems = computed(() => {
@@ -140,6 +141,18 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
     scopeFilter.value = 'all'
   }
 
+  const setSearchQuery = (query: string): void => {
+    searchQuery.value = query
+  }
+
+  const setScopeFilter = (scope: Scope | 'all'): void => {
+    scopeFilter.value = scope
+  }
+
+  const clearError = (): void => {
+    error.value = null
+  }
+
   return {
     items,
     loading,
@@ -150,6 +163,9 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
     searchQuery,
     scopeFilter,
     resetFilters,
+    setSearchQuery,
+    setScopeFilter,
+    clearError,
     sortedItems,
     filteredItems,
     totalCount,
