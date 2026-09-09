@@ -7,7 +7,6 @@ import {
   NFormItem,
   NInput,
   NModal,
-  NSelect,
   NTag,
   useMessage,
   type FormInst,
@@ -16,6 +15,7 @@ import {
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
+import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
 import ProfileConfigEditor from '@/components/templates/ProfileConfigEditor.vue'
 import { useEntityCrud } from '@/composables/useEntityCrud'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
@@ -79,18 +79,12 @@ const store = useExecutionProfilesStore()
 const message = useMessage()
 const { t } = useI18n()
 
-const {
-  filterScopeOptions,
-  getScopeTagType,
-  deleteModalVisible,
-  deletingItem,
-  confirmDelete,
-  executeDelete,
-} = useEntityCrud<ExecutionProfile>({
-  i18nPrefix: 'executionProfiles',
-  deleteItem: store.deleteProfile,
-  isDeleting: (id) => store.deletingIds.includes(id),
-})
+const { getScopeTagType, deleteModalVisible, deletingItem, confirmDelete, executeDelete } =
+  useEntityCrud<ExecutionProfile>({
+    i18nPrefix: 'executionProfiles',
+    deleteItem: store.deleteProfile,
+    isDeleting: (id) => store.deletingIds.includes(id),
+  })
 
 // ── 表单状态 ──────────────────────────────────────────────────
 
@@ -111,19 +105,42 @@ const hasActiveFilters = computed(
   () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
 )
 
-const metrics = computed(() => [
-  { label: t('executionProfiles.stats.total'), value: store.totalCount },
-  { label: t('executionProfiles.stats.system'), value: store.systemCount },
-  { label: t('executionProfiles.stats.user'), value: store.userCount },
+const filterTabs = computed(() => [
+  { name: 'all', label: t('executionProfiles.filters.all'), count: store.totalCount },
+  { name: 'system', label: t('executionProfiles.scopes.system'), count: store.systemCount },
+  { name: 'user', label: t('executionProfiles.scopes.user'), count: store.userCount },
 ])
 
 const isEditMode = computed(() => Boolean(editingItem.value))
 const isSystemScope = computed(() => editingItem.value?.scope === 'system')
 const drawerTitle = computed(() =>
-  isEditMode.value ? t('common.actions.edit') : t('executionProfiles.actions.create'),
+  isSystemScope.value
+    ? t('executionProfiles.actions.viewTitle')
+    : isEditMode.value
+      ? t('executionProfiles.actions.editTitle')
+      : t('executionProfiles.actions.createTitle'),
 )
 
+const drawerSubtitle = computed(() => {
+  if (!editingItem.value) return t('executionProfiles.form.createHint')
+  return isSystemScope.value
+    ? `${t('executionProfiles.scopes.system')} · ${editingItem.value.name}`
+    : editingItem.value.name
+})
+
 const hasConfigError = computed(() => Boolean(configEditorRef.value?.lengthRatioError))
+
+/** 卡片是否有任一启用的配置特征标签（无则展示「无启用能力」占位文案） */
+const hasFeatures = (item: ExecutionProfile): boolean =>
+  Boolean(
+    item.config?.protect?.enabled ||
+    item.config?.ruby?.enabled ||
+    item.config?.repair?.enabled ||
+    item.config?.postprocess?.enabled ||
+    item.config?.glossary?.bootstrap?.enabled ||
+    item.config?.context?.enabled ||
+    item.config?.qa?.enabled,
+  )
 
 const rules = computed<FormRules>(() => ({
   name: [
@@ -223,8 +240,15 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const formatDate = (dateStr: string | undefined): string =>
-  dateStr ? formatDateTime(dateStr, { dateStyle: 'short' }) : '—'
+const cardDate = (item: ExecutionProfile): string => {
+  const value = item.updated_at ?? item.created_at
+  return value ? formatDateTime(value, { dateStyle: 'short' }) : '—'
+}
+
+const cardDateTitle = (item: ExecutionProfile): string => {
+  const value = item.updated_at ?? item.created_at
+  return value ? formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' }) : ''
+}
 
 // ── 生命周期 ──────────────────────────────────────────────────
 
@@ -244,7 +268,6 @@ useStoreErrorToast(
   <EntityListPage
     :title="t('executionProfiles.title')"
     :subtitle="t('executionProfiles.subtitle')"
-    :metrics="metrics"
     :loading="store.loading"
     :empty="store.filteredItems.length === 0"
     :empty-description="
@@ -263,18 +286,17 @@ useStoreErrorToast(
     </template>
 
     <template #filters>
+      <ScopeFilterTabs
+        :tabs="filterTabs"
+        :value="store.scopeFilter"
+        @update:value="(v: string) => (store.scopeFilter = v as ExecutionProfile['scope'] | 'all')"
+      />
       <NInput
         v-model:value="store.searchQuery"
         clearable
         class="lg:max-w-sm!"
         :placeholder="t('executionProfiles.filters.searchPlaceholder')"
       />
-      <div class="flex flex-wrap gap-3">
-        <NSelect v-model:value="store.scopeFilter" class="w-44!" :options="filterScopeOptions" />
-        <NButton v-if="hasActiveFilters" quaternary @click="store.resetFilters()">
-          {{ t('executionProfiles.filters.reset') }}
-        </NButton>
-      </div>
     </template>
 
     <template #empty-extra>
@@ -291,33 +313,41 @@ useStoreErrorToast(
       <div
         v-for="item in store.filteredItems"
         :key="item.id"
-        class="lf-interactive-card flex h-full flex-col gap-4 p-5"
+        class="lf-interactive-card flex h-full cursor-pointer flex-col gap-4 p-5"
+        @click="openEditDrawer(item)"
       >
-        <!-- 头部：名称 + 作用域标签 -->
+        <!-- 头部：名称 + 编号 + 作用域标签 -->
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0">
-            <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+            <h2
+              class="truncate text-lg font-semibold tracking-tight text-lf-text-strong"
+              :title="item.name"
+            >
               {{ item.name }}
             </h2>
+            <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ item.id }}</p>
           </div>
-          <NTag round size="small" :type="getScopeTagType(item.scope)">
+          <NTag round size="small" :bordered="false" :type="getScopeTagType(item.scope)">
             {{ t(`executionProfiles.scopes.${item.scope}`) }}
           </NTag>
         </div>
 
         <!-- 描述 -->
         <p
-          class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
-          :class="{ 'italic text-lf-text-subtle': !item.description }"
+          class="line-clamp-2 text-sm leading-6"
+          :class="item.description ? 'text-lf-text-muted' : 'text-lf-text-subtle'"
         >
           {{ item.description || t('executionProfiles.card.noDescription') }}
         </p>
 
         <!-- 专属摘要：配置特征标签 -->
-        <div class="flex flex-wrap gap-1.5">
+        <div v-if="hasFeatures(item)" class="flex flex-wrap gap-1.5">
           <NTag v-if="item.config?.protect?.enabled" size="small" :bordered="false">
             {{ t('executionProfiles.feature.protect') }}:
             {{ item.config.protect.rules?.length ?? 0 }}
+          </NTag>
+          <NTag v-if="item.config?.ruby?.enabled" size="small" :bordered="false">
+            {{ t('executionProfiles.feature.ruby') }}
           </NTag>
           <NTag v-if="item.config?.repair?.enabled" size="small" :bordered="false">
             {{ t('executionProfiles.feature.repair') }}
@@ -331,40 +361,30 @@ useStoreErrorToast(
           <NTag v-if="item.config?.context?.enabled" size="small" :bordered="false">
             {{ t('executionProfiles.feature.context') }}
           </NTag>
+          <NTag v-if="item.config?.qa?.enabled" size="small" :bordered="false">
+            {{ t('executionProfiles.feature.qa') }}
+          </NTag>
         </div>
+        <p v-else class="text-xs text-lf-text-subtle">
+          {{ t('executionProfiles.card.noFeatures') }}
+        </p>
 
-        <!-- 底部：时间 + 操作 -->
+        <!-- 底部：更新时间 + 操作 -->
         <div class="mt-auto border-t border-lf-border-soft pt-4">
           <div class="flex items-center justify-between gap-3">
-            <span class="text-xs text-lf-text-subtle">
-              {{ t('executionProfiles.card.createdAt') }} {{ formatDate(item.created_at) }}
+            <span class="text-xs text-lf-text-subtle" :title="cardDateTitle(item)">
+              {{ t('executionProfiles.card.updatedAt') }} {{ cardDate(item) }}
             </span>
-            <div class="flex items-center gap-2">
-              <NButton
-                v-if="item.scope !== 'system'"
-                text
-                type="primary"
-                class="font-medium"
-                @click="openEditDrawer(item)"
-              >
-                {{ t('common.actions.edit') }}
-              </NButton>
-              <NButton
-                v-if="item.scope !== 'system'"
-                text
-                type="error"
-                class="font-medium"
-                @click="confirmDelete(item)"
-              >
-                {{ t('common.actions.delete') }}
-              </NButton>
-              <NButton
-                v-if="item.scope === 'system'"
-                text
-                type="info"
-                class="font-medium"
-                @click="openEditDrawer(item)"
-              >
+            <div class="flex items-center gap-2" @click.stop>
+              <template v-if="item.scope !== 'system'">
+                <NButton text type="primary" class="font-medium" @click="openEditDrawer(item)">
+                  {{ t('common.actions.edit') }}
+                </NButton>
+                <NButton text type="error" class="font-medium" @click="confirmDelete(item)">
+                  {{ t('common.actions.delete') }}
+                </NButton>
+              </template>
+              <NButton v-else text type="info" class="font-medium" @click="openEditDrawer(item)">
                 {{ t('common.actions.view') }}
               </NButton>
             </div>
@@ -378,7 +398,7 @@ useStoreErrorToast(
   <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.m" placement="right">
     <NDrawerContent :native-scrollbar="false">
       <template #header>
-        <DrawerHeader :title="drawerTitle" />
+        <DrawerHeader :title="drawerTitle" :subtitle="drawerSubtitle" />
       </template>
 
       <NForm
@@ -407,17 +427,12 @@ useStoreErrorToast(
         </NFormItem>
 
         <!-- 翻译配置编辑器 -->
-        <div class="mb-4">
-          <span class="mb-2 block text-sm font-medium text-lf-text-strong">
-            {{ t('executionProfiles.form.executionConfig') }}
-          </span>
-          <ProfileConfigEditor
-            ref="configEditorRef"
-            :config="formModel.config"
-            :disabled="isSystemScope"
-            @update:config="formModel.config = $event"
-          />
-        </div>
+        <ProfileConfigEditor
+          ref="configEditorRef"
+          :config="formModel.config"
+          :disabled="isSystemScope"
+          @update:config="formModel.config = $event"
+        />
       </NForm>
 
       <template #footer>

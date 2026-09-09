@@ -58,11 +58,6 @@ export const useExecutionProfilesStore = defineStore('executionProfiles', () => 
   const systemCount = computed(() => items.value.filter((i) => i.scope === 'system').length)
   const userCount = computed(() => items.value.filter((i) => i.scope === 'user').length)
 
-  // ── 配置特征统计 ──
-  const withGlossaryCount = computed(
-    () => items.value.filter((i) => i.config?.glossary?.bootstrap?.max_terms_per_1000_chars).length,
-  )
-
   // ── 方法 ──
   const loadProfiles = async (): Promise<void> => {
     loading.value = true
@@ -160,7 +155,6 @@ export const useExecutionProfilesStore = defineStore('executionProfiles', () => 
     totalCount,
     systemCount,
     userCount,
-    withGlossaryCount,
     loadProfiles,
     createProfile,
     updateProfile,
