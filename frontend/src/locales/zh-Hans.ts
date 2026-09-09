@@ -1678,21 +1678,19 @@ const messages = {
   },
   executionProfiles: {
     title: '执行策略',
-    subtitle: '管理执行流水线的处理策略，配置分段、保护、修复、后处理和术语表规则',
-    stats: {
-      total: '全部策略',
-      system: '系统策略',
-      user: '用户策略',
-    },
+    subtitle: '定义翻译任务执行时的保护、注音、修复、后处理与质检规则，供执行计划引用',
     actions: {
       create: '新建策略',
       createFirst: '创建第一个策略',
+      createTitle: '新建执行策略',
+      editTitle: '编辑执行策略',
+      viewTitle: '查看执行策略',
       submitCreate: '创建策略',
       submitUpdate: '保存',
     },
     filters: {
       searchPlaceholder: '搜索策略名称或描述',
-      allScopes: '全部类型',
+      all: '全部',
       reset: '重置筛选',
     },
     scopes: {
@@ -1700,23 +1698,25 @@ const messages = {
       user: '用户',
     },
     card: {
-      createdAt: '创建时间',
-      updatedAt: '更新时间',
+      updatedAt: '更新于',
       noDescription: '暂无描述',
+      noFeatures: '未启用任何处理能力',
     },
     feature: {
       protect: '保护',
+      ruby: '注音',
       repair: '修复',
       postprocess: '后处理',
       glossary: '术语表',
       context: '上下文',
+      qa: '质检',
     },
     form: {
       name: '策略名称',
       namePlaceholder: '例如：技术文档执行策略',
       description: '策略描述',
       descriptionPlaceholder: '简要说明策略的用途和适用场景',
-      executionConfig: '执行策略',
+      createHint: '名称与描述便于识别，下方按需开启各处理能力',
     },
     validation: {
       nameRequired: '请输入策略名称',
@@ -1741,6 +1741,7 @@ const messages = {
   profileConfigEditor: {
     protect: {
       title: '内容保护',
+      description: '防止译文破坏代码块、链接、占位符等原文结构',
       enabled: '启用保护',
       rules: '保护规则',
       ruleOptions: {
@@ -1752,6 +1753,7 @@ const messages = {
     },
     ruby: {
       title: '注音处理',
+      description: '为 CJK 文本生成注音，并按分类决定保留范围',
       enabled: '启用处理',
       preserveKinds: '保留注音分类',
       preserveKindsPhonetic: '音注',
@@ -1760,11 +1762,13 @@ const messages = {
     },
     postprocess: {
       title: '后处理',
+      description: '译文落库前的确定性清理',
       enabled: '启用后处理',
       trimSpaces: '去除多余空格',
     },
     repair: {
       title: '响应修复',
+      description: '自动修复 LLM 响应中的常见格式问题',
       enabled: '启用响应修复',
       jsonStructural: 'JSON 结构修复',
       schemaAliases: 'Schema 别名映射',
@@ -1773,6 +1777,7 @@ const messages = {
     },
     glossary: {
       title: '术语表',
+      description: '翻译前从源文内联抽取术语并注入提示词',
       bootstrapEnabled: '启用内联自举',
       bootstrapMaxTerms: '每千字符最大术语数',
       bootstrapMinSourceLen: '最短源术语长度',
@@ -1784,6 +1789,7 @@ const messages = {
     },
     context: {
       title: '上下文窗口',
+      description: '为每段译文附带前后文段落，提升连贯性',
       enabled: '启用上下文窗口',
       before: '前文段落数',
       after: '后文段落数',
@@ -1792,6 +1798,7 @@ const messages = {
     },
     qa: {
       title: '质量检测',
+      description: '对译文执行确定性规则检查，未通过可自动拒绝',
       enabled: '启用质量检测',
       autoReject: '错误自动拒绝',
       lengthMethod: '长度计算方式',
@@ -1833,22 +1840,19 @@ const messages = {
   },
   executionPlanTemplates: {
     title: '执行计划',
-    subtitle: '定义任务的执行流程，配置多轮执行策略、后端选择和并发参数',
-    stats: {
-      total: '全部计划',
-      system: '系统计划',
-      user: '用户计划',
-      avgRounds: '平均轮次',
-    },
+    subtitle: '编排翻译任务的轮次流程，安排每轮的模式、AI 后端与并发参数',
     actions: {
       create: '新建计划',
       createFirst: '创建第一个计划',
+      createTitle: '新建执行计划',
+      editTitle: '编辑执行计划',
+      viewTitle: '查看执行计划',
       submitCreate: '创建计划',
       submitUpdate: '保存',
     },
     filters: {
       searchPlaceholder: '搜索计划名称或描述',
-      allScopes: '全部类型',
+      all: '全部',
       reset: '重置筛选',
     },
     scopes: {
@@ -1856,11 +1860,8 @@ const messages = {
       user: '用户',
     },
     card: {
-      createdAt: '创建时间',
-      updatedAt: '更新时间',
+      updatedAt: '更新于',
       noDescription: '暂无描述',
-      rounds: '个轮次',
-      moreRounds: '个更多轮次',
       profile: '策略',
     },
     form: {
@@ -1868,6 +1869,7 @@ const messages = {
       namePlaceholder: '例如：多轮精翻计划',
       description: '计划描述',
       descriptionPlaceholder: '简要说明计划的执行策略',
+      createHint: '命名计划并选择执行策略，再按顺序编排轮次',
       profile: '执行策略',
       profilePlaceholder: '选择计划引用的执行策略',
       profileHint:
@@ -1907,6 +1909,7 @@ const messages = {
   executionPlanEditor: {
     rubyRetry: {
       title: '注音对齐重试',
+      description: '注音对齐失败时自动重试，可指定独立后端',
       enabled: '启用注音对齐重试',
       backend: '注音对齐后端',
       backendPlaceholder: '留空则使用翻译主后端',
@@ -2009,6 +2012,9 @@ const messages = {
     },
     actions: {
       addRound: '添加轮次',
+      moveUp: '上移',
+      moveDown: '下移',
+      removeRound: '删除轮次',
     },
   },
   about: {
