@@ -1,15 +1,5 @@
 <script setup lang="ts">
-import {
-  NButton,
-  NCard,
-  NGrid,
-  NGi,
-  NInputNumber,
-  NSelect,
-  NSwitch,
-  NRadioGroup,
-  NRadioButton,
-} from 'naive-ui'
+import { NButton, NInputNumber, NSelect, NSwitch, NRadioGroup, NRadioButton } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -19,6 +9,8 @@ import {
   QUALITY_CODES,
   SEMANTIC_REPAIR_ISSUE_CODES,
 } from '@/composables/useQualityIssues'
+
+import ConfigSectionPanel from './ConfigSectionPanel.vue'
 
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type TranslateRoundConfig = NonNullable<ExecutionRoundConfig['translate']>
@@ -512,58 +504,56 @@ const emitUpdate = (): void => {
 <template>
   <div class="flex flex-col gap-4">
     <!-- Ruby Retry 注音对齐重试配置 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">{{ t('executionPlanEditor.rubyRetry.title') }}</span>
+    <ConfigSectionPanel
+      :title="t('executionPlanEditor.rubyRetry.title')"
+      :description="t('executionPlanEditor.rubyRetry.description')"
+      :enabled="rubyRetryModel.enabled"
+    >
+      <template #actions>
+        <NSwitch
+          v-model:value="rubyRetryModel.enabled"
+          size="small"
+          :disabled="disabled"
+          :aria-label="t('executionPlanEditor.rubyRetry.enabled')"
+        />
       </template>
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-sm">{{ t('executionPlanEditor.rubyRetry.enabled') }}</span>
-        <NSwitch v-model:value="rubyRetryModel.enabled" size="small" :disabled="disabled" />
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.rubyRetry.backend') }}
+          </div>
+          <NSelect
+            v-model:value="rubyRetryModel.backend_id"
+            :options="backends"
+            size="small"
+            :disabled="disabled"
+            clearable
+            :placeholder="t('executionPlanEditor.rubyRetry.backendPlaceholder')"
+            class="w-full"
+          />
+        </div>
+        <div>
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.rubyRetry.maxAttempts') }}
+          </div>
+          <NInputNumber
+            v-model:value="rubyRetryModel.max_attempts"
+            :min="1"
+            :max="10"
+            size="small"
+            :disabled="disabled"
+            class="w-full"
+          />
+          <div class="mt-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.rubyRetry.maxAttemptsHint') }}
+          </div>
+        </div>
       </div>
-      <div :class="{ 'opacity-50 pointer-events-none': !rubyRetryModel.enabled }">
-        <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10">
-          <NGi>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.rubyRetry.backend') }}
-            </div>
-            <NSelect
-              v-model:value="rubyRetryModel.backend_id"
-              :options="backends"
-              size="small"
-              :disabled="disabled || !rubyRetryModel.enabled"
-              clearable
-              :placeholder="t('executionPlanEditor.rubyRetry.backendPlaceholder')"
-            />
-          </NGi>
-          <NGi>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.rubyRetry.maxAttempts') }}
-            </div>
-            <NInputNumber
-              v-model:value="rubyRetryModel.max_attempts"
-              :min="1"
-              :max="10"
-              size="small"
-              :disabled="disabled || !rubyRetryModel.enabled"
-              class="w-full"
-            />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
-              {{ t('executionPlanEditor.rubyRetry.maxAttemptsHint') }}
-            </div>
-          </NGi>
-        </NGrid>
-      </div>
-    </NCard>
+    </ConfigSectionPanel>
 
     <!-- 轮次列表 -->
-    <NCard
-      v-for="(round, index) in roundsModel"
-      :key="index"
-      size="small"
-      :bordered="true"
-      class="relative"
-    >
-      <template #header>
+    <ConfigSectionPanel v-for="(round, index) in roundsModel" :key="index">
+      <template #title>
         <div class="flex items-center gap-2">
           <span
             class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
@@ -571,38 +561,47 @@ const emitUpdate = (): void => {
           >
             {{ index + 1 }}
           </span>
-          <span class="text-sm font-semibold">
-            {{ modeLabel(round.mode) }}
-          </span>
+          <span class="text-sm font-semibold text-lf-text-strong">{{ modeLabel(round.mode) }}</span>
         </div>
       </template>
-
-      <template #header-extra>
+      <template #actions>
         <div class="flex items-center gap-1">
           <NButton
-            text
+            quaternary
+            circle
             size="small"
             :disabled="disabled || index === 0"
+            :aria-label="t('executionPlanEditor.actions.moveUp')"
             @click="moveRound(index, -1)"
           >
-            ▲
+            <template #icon>
+              <NIcon size="14"><IconCarbonArrowUp /></NIcon>
+            </template>
           </NButton>
           <NButton
-            text
+            quaternary
+            circle
             size="small"
             :disabled="disabled || index === roundsModel.length - 1"
+            :aria-label="t('executionPlanEditor.actions.moveDown')"
             @click="moveRound(index, 1)"
           >
-            ▼
+            <template #icon>
+              <NIcon size="14"><IconCarbonArrowDown /></NIcon>
+            </template>
           </NButton>
           <NButton
-            text
+            quaternary
+            circle
             type="error"
             size="small"
             :disabled="disabled || roundsModel.length <= 1"
+            :aria-label="t('executionPlanEditor.actions.removeRound')"
             @click="removeRound(index)"
           >
-            ✕
+            <template #icon>
+              <NIcon size="14"><IconCarbonClose /></NIcon>
+            </template>
           </NButton>
         </div>
       </template>
@@ -629,7 +628,7 @@ const emitUpdate = (): void => {
       </div>
 
       <!-- 公共字段：后端 + 并发 -->
-      <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div v-if="round.mode !== 'correct'">
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.backend') }}
@@ -641,6 +640,7 @@ const emitUpdate = (): void => {
             size="small"
             :disabled="disabled"
             :placeholder="t('executionPlanEditor.round.backendPlaceholder')"
+            class="w-full"
           />
         </div>
         <div v-if="round.mode !== 'correct'">
@@ -661,7 +661,7 @@ const emitUpdate = (): void => {
 
       <!-- 翻译模式配置 -->
       <template v-if="round.mode === 'translate' && round.translate">
-        <div class="mt-3">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.promptTemplate') }}
           </div>
@@ -672,10 +672,11 @@ const emitUpdate = (): void => {
             :disabled="disabled"
             :placeholder="t('executionPlanEditor.round.promptTemplatePlaceholder')"
             clearable
+            class="w-full"
           />
         </div>
 
-        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.batchSize') }}
@@ -688,7 +689,7 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.batchSizeHint') }}
             </div>
           </div>
@@ -704,7 +705,7 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.maxWordsPerBatchHint') }}
             </div>
           </div>
@@ -723,14 +724,14 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.fallbackShrinkHint') }}
             </div>
           </div>
         </div>
 
         <!-- 段落过滤配置 -->
-        <div class="mt-3">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.segmentFilter') }}
           </div>
@@ -740,8 +741,9 @@ const emitUpdate = (): void => {
             :options="segmentFilterOptions"
             size="small"
             :disabled="disabled"
+            class="w-full"
           />
-          <div class="mt-1 text-[11px] text-lf-text-subtle">
+          <div class="mt-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.segmentFilterHint') }}
           </div>
         </div>
@@ -752,7 +754,7 @@ const emitUpdate = (): void => {
 
       <!-- 术语抽取模式配置 -->
       <template v-if="round.mode === 'extract' && round.extract">
-        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.extractTemplate') }}
@@ -764,6 +766,7 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               :placeholder="t('executionPlanEditor.round.extractTemplatePlaceholder')"
               clearable
+              class="w-full"
             />
           </div>
           <div>
@@ -781,7 +784,7 @@ const emitUpdate = (): void => {
           </div>
         </div>
 
-        <div class="mt-3">
+        <div>
           <div class="mb-2 flex items-center gap-2">
             <NSwitch
               :value="isNoBatch(round.extract.batch_size, round.extract.max_words_per_batch)"
@@ -814,7 +817,7 @@ const emitUpdate = (): void => {
                 :disabled="disabled"
                 class="w-full"
               />
-              <div class="mt-1 text-[11px] text-lf-text-subtle">
+              <div class="mt-1 text-xs text-lf-text-subtle">
                 {{ t('executionPlanEditor.round.extractBatchSizeHint') }}
               </div>
             </div>
@@ -830,7 +833,7 @@ const emitUpdate = (): void => {
                 :disabled="disabled"
                 class="w-full"
               />
-              <div class="mt-1 text-[11px] text-lf-text-subtle">
+              <div class="mt-1 text-xs text-lf-text-subtle">
                 {{ t('executionPlanEditor.round.extractMaxWordsPerBatchHint') }}
               </div>
             </div>
@@ -857,13 +860,13 @@ const emitUpdate = (): void => {
 
       <!-- 质量裁决模式配置 -->
       <template v-if="round.mode === 'adjudicate' && round.adjudicate">
-        <div class="mt-3 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
+        <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
           <p class="text-xs leading-5 text-lf-text-muted">
             {{ t('executionPlanEditor.round.adjudicatePromptHint') }}
           </p>
         </div>
 
-        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.adjudicateBatchSize') }}
@@ -876,7 +879,7 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.adjudicateBatchSizeHint') }}
             </div>
           </div>
@@ -892,13 +895,13 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.adjudicateMaxWordsPerBatchHint') }}
             </div>
           </div>
         </div>
 
-        <div class="mt-3">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.adjudicateCodes') }}
           </div>
@@ -909,8 +912,9 @@ const emitUpdate = (): void => {
             size="small"
             :disabled="disabled"
             :placeholder="t('executionPlanEditor.round.adjudicateCodesPlaceholder')"
+            class="w-full"
           />
-          <div class="mt-1 text-[11px] text-lf-text-subtle">
+          <div class="mt-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.adjudicateCodesHint') }}
           </div>
         </div>
@@ -920,13 +924,13 @@ const emitUpdate = (): void => {
 
       <!-- 语义质检模式配置 -->
       <template v-if="round.mode === 'semantic_qa' && round.semantic_qa">
-        <div class="mt-3 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
+        <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
           <p class="text-xs leading-5 text-lf-text-muted">
             {{ t('executionPlanEditor.round.semanticQAPromptHint') }}
           </p>
         </div>
 
-        <div class="mt-3">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.semanticQASegmentScope') }}
           </div>
@@ -936,16 +940,17 @@ const emitUpdate = (): void => {
             size="small"
             :disabled="disabled"
             :placeholder="t('executionPlanEditor.round.semanticQASegmentScopePlaceholder')"
+            class="w-full"
             @update:value="
               (val: SemanticQASegmentScope) => onSemanticQASegmentScopeChange(round, val)
             "
           />
-          <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+          <div class="mt-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.semanticQASegmentScopeHint') }}
           </div>
         </div>
 
-        <div v-if="round.semantic_qa.segment_scope === 'with_issue_codes'" class="mt-3">
+        <div v-if="round.semantic_qa.segment_scope === 'with_issue_codes'">
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.semanticQAIssueCodes') }}
           </div>
@@ -956,13 +961,14 @@ const emitUpdate = (): void => {
             size="small"
             :disabled="disabled"
             :placeholder="t('executionPlanEditor.round.semanticQAIssueCodesPlaceholder')"
+            class="w-full"
           />
-          <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+          <div class="mt-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.semanticQAIssueCodesHint') }}
           </div>
         </div>
 
-        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.semanticQABatchSize') }}
@@ -975,7 +981,7 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.semanticQABatchSizeHint') }}
             </div>
           </div>
@@ -991,7 +997,7 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.semanticQAMaxWordsPerBatchHint') }}
             </div>
           </div>
@@ -1002,13 +1008,13 @@ const emitUpdate = (): void => {
 
       <!-- LLM 修订模式配置 -->
       <template v-if="round.mode === 'revise' && round.revise">
-        <div class="mt-3 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
+        <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
           <p class="text-xs leading-5 text-lf-text-muted">
             {{ t('executionPlanEditor.round.revisePromptHint') }}
           </p>
         </div>
 
-        <div class="mt-3">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.reviseSegmentScope') }}
           </div>
@@ -1018,14 +1024,15 @@ const emitUpdate = (): void => {
             size="small"
             :disabled="disabled"
             :placeholder="t('executionPlanEditor.round.reviseSegmentScopePlaceholder')"
+            class="w-full"
             @update:value="(val: ReviseSegmentScope) => onReviseSegmentScopeChange(round, val)"
           />
-          <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+          <div class="mt-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.reviseSegmentScopeHint') }}
           </div>
         </div>
 
-        <div v-if="round.revise.segment_scope === 'with_issue_codes'" class="mt-3">
+        <div v-if="round.revise.segment_scope === 'with_issue_codes'">
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.reviseIssueCodes') }}
           </div>
@@ -1036,13 +1043,14 @@ const emitUpdate = (): void => {
             size="small"
             :disabled="disabled"
             :placeholder="t('executionPlanEditor.round.reviseIssueCodesPlaceholder')"
+            class="w-full"
           />
-          <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+          <div class="mt-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.reviseIssueCodesHint') }}
           </div>
         </div>
 
-        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.reviseBatchSize') }}
@@ -1055,7 +1063,7 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.reviseBatchSizeHint') }}
             </div>
           </div>
@@ -1071,7 +1079,7 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
-            <div class="mt-1 text-[11px] text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.reviseMaxWordsPerBatchHint') }}
             </div>
           </div>
@@ -1082,14 +1090,14 @@ const emitUpdate = (): void => {
 
       <!-- 本地改写模式配置 -->
       <template v-if="round.mode === 'correct' && round.correct">
-        <div class="mt-3 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
+        <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
           <p class="text-xs leading-5 text-lf-text-muted">
             {{ t('executionPlanEditor.round.correctPromptHint') }}
           </p>
         </div>
 
         <!-- 改写规则列表 -->
-        <div class="mt-3">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.correctRules') }}
             <span class="text-lf-danger">*</span>
@@ -1098,28 +1106,31 @@ const emitUpdate = (): void => {
             <div
               v-for="(rule, rIdx) in round.correct.rules"
               :key="rIdx"
-              class="flex items-start gap-3 rounded-lg border border-lf-border-soft bg-lf-surface px-3 py-2"
+              class="flex items-start gap-3 rounded-lf-ctl border border-lf-border-soft bg-lf-surface px-3 py-2"
             >
               <div class="flex flex-1 flex-col gap-1">
                 <span class="text-sm font-medium text-lf-text-strong">
                   {{ correctRuleLabelMap[rule.name] }}
                 </span>
-                <span class="text-[11px] leading-4 text-lf-text-subtle">
+                <span class="text-xs text-lf-text-subtle">
                   {{ correctRuleHintMap[rule.name] }}
                 </span>
               </div>
               <NSwitch v-model:value="rule.enabled" size="small" :disabled="disabled" />
             </div>
           </div>
-          <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+          <div class="mt-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.correctRulesHint') }}
           </div>
         </div>
       </template>
-    </NCard>
+    </ConfigSectionPanel>
 
     <!-- 添加轮次按钮 -->
     <NButton dashed block :disabled="disabled" @click="addRound">
+      <template #icon>
+        <NIcon size="16"><IconCarbonAdd /></NIcon>
+      </template>
       {{ t('executionPlanEditor.actions.addRound') }}
     </NButton>
   </div>

@@ -18,6 +18,7 @@ import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import ExecutionPlanEditor from '@/components/templates/ExecutionPlanEditor.vue'
+import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
 import { useEntityCrud } from '@/composables/useEntityCrud'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useBackendsStore } from '@/stores/backends'
@@ -77,18 +78,12 @@ const executionProfilesStore = useExecutionProfilesStore()
 const message = useMessage()
 const { t } = useI18n()
 
-const {
-  filterScopeOptions,
-  getScopeTagType,
-  deleteModalVisible,
-  deletingItem,
-  confirmDelete,
-  executeDelete,
-} = useEntityCrud<ExecutionPlanTemplate>({
-  i18nPrefix: 'executionPlanTemplates',
-  deleteItem: store.deleteTemplate,
-  isDeleting: (id) => store.deletingIds.includes(id),
-})
+const { getScopeTagType, deleteModalVisible, deletingItem, confirmDelete, executeDelete } =
+  useEntityCrud<ExecutionPlanTemplate>({
+    i18nPrefix: 'executionPlanTemplates',
+    deleteItem: store.deleteTemplate,
+    isDeleting: (id) => store.deletingIds.includes(id),
+  })
 
 // ── 表单状态 ──────────────────────────────────────────────────
 
@@ -132,18 +127,27 @@ const hasActiveFilters = computed(
   () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
 )
 
-const metrics = computed(() => [
-  { label: t('executionPlanTemplates.stats.total'), value: store.totalCount },
-  { label: t('executionPlanTemplates.stats.system'), value: store.systemCount },
-  { label: t('executionPlanTemplates.stats.user'), value: store.userCount },
-  { label: t('executionPlanTemplates.stats.avgRounds'), value: store.avgRoundsPerPlan },
+const filterTabs = computed(() => [
+  { name: 'all', label: t('executionPlanTemplates.filters.all'), count: store.totalCount },
+  { name: 'system', label: t('executionPlanTemplates.scopes.system'), count: store.systemCount },
+  { name: 'user', label: t('executionPlanTemplates.scopes.user'), count: store.userCount },
 ])
 
 const isEditMode = computed(() => Boolean(editingItem.value))
 const isSystemScope = computed(() => editingItem.value?.scope === 'system')
 const drawerTitle = computed(() =>
-  isEditMode.value ? t('common.actions.edit') : t('executionPlanTemplates.actions.create'),
+  isSystemScope.value
+    ? t('executionPlanTemplates.actions.viewTitle')
+    : isEditMode.value
+      ? t('executionPlanTemplates.actions.editTitle')
+      : t('executionPlanTemplates.actions.createTitle'),
 )
+const drawerSubtitle = computed(() => {
+  if (!editingItem.value) return t('executionPlanTemplates.form.createHint')
+  return isSystemScope.value
+    ? `${t('executionPlanTemplates.scopes.system')} · ${editingItem.value.name}`
+    : editingItem.value.name
+})
 
 const rules = computed<FormRules>(() => ({
   name: [
@@ -425,8 +429,15 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const formatDate = (dateStr: string | undefined): string =>
-  dateStr ? formatDateTime(dateStr, { dateStyle: 'short' }) : '—'
+const cardDate = (item: ExecutionPlanTemplate): string => {
+  const value = item.updated_at ?? item.created_at
+  return value ? formatDateTime(value, { dateStyle: 'short' }) : '—'
+}
+
+const cardDateTitle = (item: ExecutionPlanTemplate): string => {
+  const value = item.updated_at ?? item.created_at
+  return value ? formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' }) : ''
+}
 
 const modeBadgeClass = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
@@ -466,7 +477,6 @@ useStoreErrorToast(
   <EntityListPage
     :title="t('executionPlanTemplates.title')"
     :subtitle="t('executionPlanTemplates.subtitle')"
-    :metrics="metrics"
     :loading="store.loading"
     :empty="store.filteredItems.length === 0"
     :empty-description="
@@ -485,18 +495,19 @@ useStoreErrorToast(
     </template>
 
     <template #filters>
+      <ScopeFilterTabs
+        :tabs="filterTabs"
+        :value="store.scopeFilter"
+        @update:value="
+          (v: string) => (store.scopeFilter = v as ExecutionPlanTemplate['scope'] | 'all')
+        "
+      />
       <NInput
         v-model:value="store.searchQuery"
         clearable
         class="lg:max-w-sm!"
         :placeholder="t('executionPlanTemplates.filters.searchPlaceholder')"
       />
-      <div class="flex flex-wrap gap-3">
-        <NSelect v-model:value="store.scopeFilter" class="w-44!" :options="filterScopeOptions" />
-        <NButton v-if="hasActiveFilters" quaternary @click="store.resetFilters()">
-          {{ t('executionPlanTemplates.filters.reset') }}
-        </NButton>
-      </div>
     </template>
 
     <template #empty-extra>
@@ -513,100 +524,79 @@ useStoreErrorToast(
       <div
         v-for="item in store.filteredItems"
         :key="item.id"
-        class="lf-interactive-card flex h-full flex-col gap-4 p-5"
+        class="lf-interactive-card flex h-full cursor-pointer flex-col gap-4 p-5"
+        @click="openEditDrawer(item)"
       >
-        <!-- 头部：名称 + 作用域标签 -->
+        <!-- 头部：名称 + 编号 + 作用域标签 -->
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0">
-            <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+            <h2
+              class="truncate text-lg font-semibold tracking-tight text-lf-text-strong"
+              :title="item.name"
+            >
               {{ item.name }}
             </h2>
+            <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ item.id }}</p>
           </div>
-          <NTag round size="small" :type="getScopeTagType(item.scope)">
+          <NTag round size="small" :bordered="false" :type="getScopeTagType(item.scope)">
             {{ t(`executionPlanTemplates.scopes.${item.scope}`) }}
           </NTag>
         </div>
 
         <!-- 描述 -->
         <p
-          class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
-          :class="{ 'italic text-lf-text-subtle': !item.description }"
+          class="line-clamp-2 text-sm leading-6"
+          :class="item.description ? 'text-lf-text-muted' : 'text-lf-text-subtle'"
         >
           {{ item.description || t('executionPlanTemplates.card.noDescription') }}
         </p>
 
-        <!-- 轮次概览 -->
-        <div class="space-y-2">
-          <div class="flex items-center gap-2">
-            <NTag size="small" type="info" :bordered="false">
-              {{ item.rounds?.length ?? 0 }} {{ t('executionPlanTemplates.card.rounds') }}
-            </NTag>
-            <NTag
-              v-if="profileNameById.get(item.profile_id)"
-              size="small"
-              :bordered="false"
-              class="max-w-[160px]"
-            >
-              <span class="truncate">
-                {{ t('executionPlanTemplates.card.profile') }}:
-                {{ profileNameById.get(item.profile_id) }}
-              </span>
-            </NTag>
-          </div>
-          <div v-if="item.rounds?.length" class="space-y-1">
-            <div
-              v-for="(round, idx) in item.rounds.slice(0, 3)"
-              :key="idx"
-              class="flex items-center gap-2 text-xs text-lf-text-muted"
-            >
-              <span
-                class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
-                :class="modeBadgeClass(round.mode)"
-              >
-                {{ idx + 1 }}
-              </span>
-              <span class="truncate">
-                {{ modeLabel(round.mode) }}
-              </span>
-            </div>
-            <div v-if="item.rounds.length > 3" class="text-xs text-lf-text-subtle">
-              +{{ item.rounds.length - 3 }} {{ t('executionPlanTemplates.card.moreRounds') }}
-            </div>
-          </div>
+        <!-- 策略信息行 -->
+        <div class="flex items-baseline gap-3">
+          <span class="w-14 shrink-0 text-xs text-lf-text-subtle">
+            {{ t('executionPlanTemplates.card.profile') }}
+          </span>
+          <span
+            class="min-w-0 flex-1 truncate text-[13px] text-lf-text"
+            :title="profileNameById.get(item.profile_id) ?? ''"
+          >
+            {{ profileNameById.get(item.profile_id) ?? '—' }}
+          </span>
         </div>
 
-        <!-- 底部：时间 + 操作 -->
+        <!-- 轮次徽章 -->
+        <div v-if="item.rounds?.length" class="flex flex-wrap gap-1.5">
+          <span
+            v-for="(round, idx) in item.rounds"
+            :key="idx"
+            class="inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-xs font-medium"
+            :class="modeBadgeClass(round.mode)"
+          >
+            <span
+              class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-lf-surface text-[11px] font-bold"
+            >
+              {{ idx + 1 }}
+            </span>
+            {{ modeLabel(round.mode) }}
+          </span>
+        </div>
+
+        <!-- 底部：更新时间 + 操作 -->
         <div class="mt-auto border-t border-lf-border-soft pt-4">
           <div class="flex items-center justify-between gap-3">
-            <span class="text-xs text-lf-text-subtle">
-              {{ t('executionPlanTemplates.card.createdAt') }} {{ formatDate(item.created_at) }}
+            <span class="text-xs text-lf-text-subtle" :title="cardDateTitle(item)">
+              {{ t('executionPlanTemplates.card.updatedAt') }} {{ cardDate(item) }}
             </span>
-            <div class="flex items-center gap-2">
-              <NButton
-                v-if="item.scope !== 'system'"
-                text
-                type="primary"
-                class="font-medium"
-                @click="openEditDrawer(item)"
-              >
-                {{ t('common.actions.edit') }}
-              </NButton>
-              <NButton
-                v-if="item.scope !== 'system'"
-                text
-                type="error"
-                class="font-medium"
-                @click="confirmDelete(item)"
-              >
-                {{ t('common.actions.delete') }}
-              </NButton>
-              <NButton
-                v-if="item.scope === 'system'"
-                text
-                type="info"
-                class="font-medium"
-                @click="openEditDrawer(item)"
-              >
+            <div class="flex items-center gap-2" @click.stop>
+              <template v-if="item.scope !== 'system'">
+                <NButton text type="primary" class="font-medium" @click="openEditDrawer(item)">
+                  {{ t('common.actions.edit') }}
+                </NButton>
+                <NButton text type="error" class="font-medium" @click="confirmDelete(item)">
+                  {{ t('common.actions.delete') }}
+                </NButton>
+              </template>
+              <NButton v-else text type="info" class="font-medium" @click="openEditDrawer(item)">
                 {{ t('common.actions.view') }}
               </NButton>
             </div>
@@ -620,7 +610,7 @@ useStoreErrorToast(
   <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.l" placement="right">
     <NDrawerContent :native-scrollbar="false">
       <template #header>
-        <DrawerHeader :title="drawerTitle" />
+        <DrawerHeader :title="drawerTitle" :subtitle="drawerSubtitle" />
       </template>
 
       <NForm
@@ -656,7 +646,7 @@ useStoreErrorToast(
               :placeholder="t('executionPlanTemplates.form.profilePlaceholder')"
               :disabled="isSystemScope"
             />
-            <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+            <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanTemplates.form.profileHint') }}
             </div>
           </div>
