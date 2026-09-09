@@ -1,7 +1,7 @@
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { useMessage, type SelectOption } from 'naive-ui'
+import { useMessage } from 'naive-ui'
 
 interface ScopeEntity {
   id: number
@@ -18,7 +18,7 @@ interface UseEntityCrudOptions {
 }
 
 /**
- * 模板/配置类管理页的同构样板：作用域筛选项、作用域标签配色、删除确认弹窗。
+ * 模板/配置类管理页的同构样板：作用域标签配色、删除确认弹窗。
  * 各页保留自己的 store、表单与编辑器；错误 toast 走 useStoreErrorToast，不在此处理。
  */
 export const useEntityCrud = <T extends ScopeEntity>(options: UseEntityCrudOptions) => {
@@ -27,12 +27,6 @@ export const useEntityCrud = <T extends ScopeEntity>(options: UseEntityCrudOptio
 
   const deleteModalVisible = ref(false)
   const deletingItem = ref<T | null>(null)
-
-  const filterScopeOptions = computed<SelectOption[]>(() => [
-    { label: t(`${options.i18nPrefix}.filters.allScopes`), value: 'all' },
-    { label: t(`${options.i18nPrefix}.scopes.system`), value: 'system' },
-    { label: t(`${options.i18nPrefix}.scopes.user`), value: 'user' },
-  ])
 
   const getScopeTagType = (scope: string): 'default' | 'info' | 'success' => {
     switch (scope) {
@@ -69,7 +63,6 @@ export const useEntityCrud = <T extends ScopeEntity>(options: UseEntityCrudOptio
   }
 
   return {
-    filterScopeOptions,
     getScopeTagType,
     deleteModalVisible,
     deletingItem,

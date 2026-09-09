@@ -17,7 +17,13 @@ const props = withDefaults(
     /** 变量插入区标签，默认回退 promptTemplates.form.insertBuiltinVar */
     insertLabel?: string
   }>(),
-  { disabled: false, rows: 6, variableSet: 'system', placeholder: undefined, insertLabel: undefined },
+  {
+    disabled: false,
+    rows: 6,
+    variableSet: 'system',
+    placeholder: undefined,
+    insertLabel: undefined,
+  },
 )
 
 const emit = defineEmits<{
@@ -58,7 +64,9 @@ const builtinVariables = computed(() => variableGroups[props.variableSet])
 const variableLabel = (group: VariableGroup, key: string): string =>
   t(`promptTemplates.variables.${group}.${key}`)
 
-const placeholder = computed(() => props.placeholder ?? t('promptTemplates.form.contentPlaceholder'))
+const placeholder = computed(
+  () => props.placeholder ?? t('promptTemplates.form.contentPlaceholder'),
+)
 
 const insertLabel = computed(() => props.insertLabel ?? t('promptTemplates.form.insertBuiltinVar'))
 
