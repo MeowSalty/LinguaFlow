@@ -13,7 +13,9 @@ import {
   NSelect,
   NSlider,
   NSwitch,
+  NTab,
   NTag,
+  NTabs,
   useMessage,
   type DropdownOption,
   type FormInst,
@@ -95,10 +97,22 @@ const typeOptions = computed<SelectOption[]>(() => [
   { label: t('backends.types.google'), value: 'google' },
 ])
 
-const filterTypeOptions = computed<SelectOption[]>(() => [
-  { label: t('backends.filters.allTypes'), value: 'all' },
-  ...typeOptions.value,
+const filterTabs = computed(() => [
+  { name: 'all', label: t('backends.filters.all'), count: backends.backendCount },
+  { name: 'openai', label: t('backends.types.openai'), count: backends.openaiCount },
+  { name: 'anthropic', label: t('backends.types.anthropic'), count: backends.anthropicCount },
+  { name: 'google', label: t('backends.types.google'), count: backends.googleCount },
 ])
+
+const renderFilterTab = (tab: (typeof filterTabs.value)[number]): ReturnType<typeof h> =>
+  h('span', { class: 'inline-flex items-baseline gap-1.5' }, [
+    tab.label,
+    h(
+      'span',
+      { class: 'hidden text-xs font-normal text-lf-text-subtle sm:inline' },
+      String(tab.count),
+    ),
+  ])
 
 const responseFormatOptions = computed<SelectOption[]>(() => [
   { label: t('backends.form.responseFormatOptions.jsonSchema'), value: 'json_schema' },
@@ -117,13 +131,6 @@ const thinkingLevelOptions = computed<SelectOption[]>(() =>
 const hasActiveFilters = computed(
   () => backends.searchQuery.trim().length > 0 || backends.typeFilter !== 'all',
 )
-
-const metrics = computed(() => [
-  { label: t('backends.stats.total'), value: backends.backendCount },
-  { label: t('backends.stats.openai'), value: backends.openaiCount },
-  { label: t('backends.stats.anthropic'), value: backends.anthropicCount },
-  { label: t('backends.stats.google'), value: backends.googleCount },
-])
 
 const isEditMode = computed(() => Boolean(editingBackend.value))
 const drawerTitle = computed(() =>
@@ -567,6 +574,18 @@ const getModelDisplay = (backend: Backend): string => {
   return '-'
 }
 
+const getBaseUrlHost = (backend: Backend): string => {
+  const opts = backend.options as Record<string, unknown> | undefined
+  if (typeof opts?.base_url !== 'string' || !opts.base_url.trim()) {
+    return ''
+  }
+  try {
+    return new URL(opts.base_url).host || opts.base_url
+  } catch {
+    return opts.base_url
+  }
+}
+
 const getThinkingLevelDisplay = (backend: Backend): ThinkingLevel => {
   const opts = backend.options as Record<string, unknown> | undefined
   return parseThinkingLevel(opts?.thinking_level)
@@ -606,7 +625,6 @@ useStoreErrorToast(
   <EntityListPage
     :title="t('backends.title')"
     :subtitle="t('backends.subtitle')"
-    :metrics="metrics"
     :loading="backends.loading"
     :empty="backends.filteredItems.length === 0"
     :empty-description="
@@ -623,18 +641,28 @@ useStoreErrorToast(
     </template>
 
     <template #filters>
+      <NTabs
+        :value="backends.typeFilter"
+        type="segment"
+        size="small"
+        class="min-w-0"
+        @update:value="
+          (value: string | number) => (backends.typeFilter = value as BackendType | 'all')
+        "
+      >
+        <NTab
+          v-for="tab in filterTabs"
+          :key="tab.name"
+          :name="tab.name"
+          :tab="() => renderFilterTab(tab)"
+        />
+      </NTabs>
       <NInput
         v-model:value="backends.searchQuery"
         clearable
         class="lg:max-w-sm!"
         :placeholder="t('backends.filters.searchPlaceholder')"
       />
-      <div class="flex flex-wrap gap-3">
-        <NSelect v-model:value="backends.typeFilter" class="w-44!" :options="filterTypeOptions" />
-        <NButton v-if="hasActiveFilters" quaternary @click="backends.resetFilters()">
-          {{ t('backends.filters.reset') }}
-        </NButton>
-      </div>
     </template>
 
     <template #empty-extra>
@@ -653,10 +681,13 @@ useStoreErrorToast(
         :key="backend.id"
         class="lf-interactive-card p-5"
       >
-        <div class="flex h-full flex-col gap-5">
+        <div class="flex h-full flex-col gap-4">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
+              <h2
+                class="truncate text-lg font-semibold tracking-tight text-lf-text-strong"
+                :title="backend.name"
+              >
                 {{ backend.name }}
               </h2>
               <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ backend.id }}</p>
@@ -666,23 +697,47 @@ useStoreErrorToast(
             </NTag>
           </div>
 
-          <div class="space-y-3">
-            <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-code-bg px-3.5 py-3">
-              <div class="text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase">
+          <div class="space-y-2.5">
+            <div class="flex items-baseline gap-3">
+              <span class="w-14 shrink-0 text-xs text-lf-text-subtle">
                 {{ t('backends.card.model') }}
-              </div>
-              <div class="mt-1.5 truncate font-mono text-sm font-semibold text-lf-text-strong">
+              </span>
+              <span
+                class="min-w-0 flex-1 truncate font-mono text-[13px] font-medium text-lf-text-strong"
+                :title="getModelDisplay(backend)"
+              >
                 {{ getModelDisplay(backend) }}
-              </div>
+              </span>
             </div>
             <div
               v-if="getThinkingLevelDisplay(backend) !== 'off'"
-              class="flex items-center justify-between rounded-lf-ctl border border-lf-border-soft px-3.5 py-2.5"
+              class="flex items-baseline gap-3"
             >
-              <span class="text-xs text-lf-text-muted">{{ t('backends.card.thinking') }}</span>
-              <NTag size="small" round :bordered="false" type="info">
+              <span class="w-14 shrink-0 text-xs text-lf-text-subtle">
+                {{ t('backends.card.thinking') }}
+              </span>
+              <span class="text-[13px] text-lf-text">
                 {{ t(`backends.form.thinkingLevels.${getThinkingLevelDisplay(backend)}`) }}
-              </NTag>
+              </span>
+            </div>
+            <div v-if="getBaseUrlHost(backend)" class="flex items-baseline gap-3">
+              <span class="w-14 shrink-0 text-xs text-lf-text-subtle">
+                {{ t('backends.card.baseUrl') }}
+              </span>
+              <span
+                class="min-w-0 flex-1 truncate font-mono text-[13px] text-lf-text"
+                :title="getBaseUrlHost(backend)"
+              >
+                {{ getBaseUrlHost(backend) }}
+              </span>
+            </div>
+            <div v-if="(backend.rate_limit_per_minute ?? 0) > 0" class="flex items-baseline gap-3">
+              <span class="w-14 shrink-0 text-xs text-lf-text-subtle">
+                {{ t('backends.card.rateLimit') }}
+              </span>
+              <span class="text-[13px] text-lf-text">
+                {{ t('backends.card.rateLimitValue', { n: backend.rate_limit_per_minute }) }}
+              </span>
             </div>
           </div>
 
@@ -693,11 +748,16 @@ useStoreErrorToast(
               </NButton>
               <NDropdown
                 trigger="click"
+                placement="bottom-end"
                 :options="buildCardActions(backend)"
                 @select="(key) => handleCardAction(backend, key)"
               >
-                <NButton quaternary size="small">
-                  {{ t('common.actions.more') }}
+                <NButton quaternary circle size="small" :aria-label="t('common.actions.more')">
+                  <template #icon>
+                    <NIcon size="16">
+                      <IconCarbonOverflowMenuHorizontal />
+                    </NIcon>
+                  </template>
                 </NButton>
               </NDropdown>
             </div>

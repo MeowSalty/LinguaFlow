@@ -1374,27 +1374,24 @@ const messages = {
     },
   },
   backends: {
-    title: 'AI 后端管理',
-    subtitle: '配置和管理 AI 后端，支持 OpenAI、Anthropic、Google Gemini 等多种服务',
-    stats: {
-      total: '全部后端',
-      openai: 'OpenAI',
-      anthropic: 'Anthropic',
-      google: 'Google',
-    },
+    title: 'AI 后端',
+    subtitle: '接入并管理 OpenAI、Anthropic、Google Gemini 等模型服务',
     filters: {
+      all: '全部',
       searchPlaceholder: '搜索后端名称或模型',
-      allTypes: '全部类型',
       reset: '重置筛选',
     },
     types: {
       openai: 'OpenAI',
       anthropic: 'Anthropic',
-      google: 'Google Gemini',
+      google: 'Gemini',
     },
     card: {
       model: '模型',
       thinking: '思考强度',
+      baseUrl: 'Base URL',
+      rateLimit: '限速',
+      rateLimitValue: '{n} 次/分',
     },
     empty: {
       default: '暂无 AI 后端，添加一个开始使用翻译服务',
