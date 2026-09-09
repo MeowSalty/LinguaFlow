@@ -3,7 +3,6 @@ import type { FormInst, FormRules } from 'naive-ui'
 import {
   NAlert,
   NButton,
-  NCard,
   NDrawer,
   NDrawerContent,
   NForm,
@@ -133,13 +132,21 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
 
 <template>
   <NDrawer v-model:show="show" :width="DRAWER_WIDTH.m" placement="right">
-    <NDrawerContent :title="t('workspace.job.createTitle')" closable>
+    <NDrawerContent closable>
+      <template #header>
+        <DrawerHeader
+          :title="t('workspace.job.createTitle')"
+          :subtitle="t('workspace.job.createSubtitle')"
+        />
+      </template>
       <!-- 翻译内容摘要 -->
-      <NAlert type="info" :bordered="false" class="mb-4">
-        <template #header>
+      <div
+        class="mb-4 rounded-lf-ctl bg-lf-surface-muted px-3 py-2.5 text-sm leading-6 text-lf-text-muted"
+      >
+        <div class="mb-1 font-medium text-lf-text-strong">
           {{ t('workspace.job.contentSummaryTitle') }}
-        </template>
-        <div class="space-y-1 text-sm">
+        </div>
+        <div class="space-y-1">
           <div v-if="targetMode === 'resources' && targetGroupKeys.length > 0">
             {{ t('workspace.job.contentSummaryChapters', { count: targetGroupKeys.length }) }}
           </div>
@@ -153,13 +160,14 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
             {{ t('workspace.job.contentSummarySegments', { count: segmentCount }) }}
           </div>
         </div>
-      </NAlert>
+      </div>
 
       <NForm
         ref="formRef"
         :model="{ execution_plan_id: executionPlanId, auto_approve: autoApprove }"
         :rules="formRules"
         label-placement="top"
+        require-mark-placement="right-hanging"
       >
         <NFormItem :label="t('workspace.job.form.executionPlan')" path="execution_plan_id">
           <NSelect
@@ -220,13 +228,13 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
       </NForm>
 
       <!-- 执行计划详情预览 -->
-      <NCard
+      <div
         v-if="selectedPlanTemplate"
-        :title="t('workspace.job.planPreviewTitle')"
-        size="small"
-        :bordered="true"
-        class="mb-4"
+        class="mb-4 rounded-lf-card border border-lf-border-soft bg-lf-surface p-4"
       >
+        <div class="mb-2 text-sm font-semibold text-lf-text-strong">
+          {{ t('workspace.job.planPreviewTitle') }}
+        </div>
         <div class="space-y-2 text-sm">
           <div class="font-medium text-lf-text-strong">
             {{ selectedPlanTemplate.name }}
@@ -251,7 +259,7 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
             </li>
           </ul>
         </div>
-      </NCard>
+      </div>
 
       <!-- 确认步骤摘要 -->
       <NAlert

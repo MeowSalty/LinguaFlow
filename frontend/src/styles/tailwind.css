@@ -375,18 +375,6 @@ body {
   @apply flex min-h-screen w-full flex-col items-center justify-center bg-lf-bg px-4 py-10;
 }
 
-/* 空译文占位样式 */
-.target-empty {
-  border: 1px dashed var(--lf-border-soft);
-  border-radius: 8px;
-  padding: 8px 12px;
-  background: var(--lf-info-soft);
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 /* 段落表格行视觉区分 */
 .segment-row--editing td:first-child {
   border-left: 3px solid var(--color-brand-500);

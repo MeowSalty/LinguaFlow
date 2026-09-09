@@ -108,7 +108,11 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
           })
         "
         :scroll-x="1180"
-      />
+      >
+        <template #empty>
+          <NEmpty class="py-10" :description="t('workspace.job.empty')" />
+        </template>
+      </NDataTable>
     </div>
     <div v-if="workspace.jobsCursor" class="flex justify-center pt-1">
       <NButton
@@ -119,10 +123,5 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
         {{ t('common.loadMore') }}
       </NButton>
     </div>
-    <NEmpty
-      v-if="!workspace.loadingJobs && workspace.jobs.length === 0"
-      class="py-10"
-      :description="t('workspace.job.empty')"
-    />
   </div>
 </template>

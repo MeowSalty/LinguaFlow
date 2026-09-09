@@ -20,6 +20,7 @@ type Segment = ApiSchemas['Segment']
 
 defineProps<{
   title: string
+  subtitle?: string
   segment: Segment | null
   appliedSegment: Segment | null
   textRenderMode: 'plaintext' | 'html'
@@ -75,7 +76,13 @@ const expiresAtText = (expiresAt: string): string =>
     :close-on-esc="false"
     @update:show="(value) => (value ? (show = true) : emit('request-close'))"
   >
-    <NDrawerContent :title="title" closable @close="emit('request-close')">
+    <NDrawerContent closable @close="emit('request-close')">
+      <template #header>
+        <DrawerHeader
+          :title="title"
+          :subtitle="subtitle ?? t('workspace.segment.previewSubtitle')"
+        />
+      </template>
       <div v-if="segment" class="space-y-4 pb-4">
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-sm font-semibold text-lf-text-strong tabular-nums">

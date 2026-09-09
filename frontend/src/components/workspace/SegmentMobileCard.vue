@@ -153,7 +153,10 @@ const emit = defineEmits<{
           :mode="textRenderMode"
           :active-issue-index="activeIssueIndex"
         />
-        <div v-else class="target-empty">
+        <div
+          v-else
+          class="flex min-h-10 items-center justify-center rounded-lf-ctl border border-dashed border-lf-border-soft bg-lf-info-soft px-3 py-2"
+        >
           <NText depth="3">{{ t('workspace.segment.emptyTarget') }}</NText>
         </div>
       </template>

@@ -34,11 +34,13 @@ const { meta, tokenLine, glossaryUsedCount, glossaryAddedCount, statusTagType, h
     placement="right"
     @update:show="emit('update:show', $event)"
   >
-    <NDrawerContent
-      :title="t('workspace.job.events.batch.detailTitle')"
-      closable
-      :native-scrollbar="false"
-    >
+    <NDrawerContent closable :native-scrollbar="false">
+      <template #header>
+        <DrawerHeader
+          :title="t('workspace.job.events.batch.detailTitle')"
+          :subtitle="t('workspace.job.events.batch.detailSubtitle')"
+        />
+      </template>
       <div v-if="meta" class="space-y-4">
         <!-- Tags summary -->
         <div class="flex flex-wrap items-center gap-1">

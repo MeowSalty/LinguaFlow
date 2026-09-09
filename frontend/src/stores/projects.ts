@@ -28,6 +28,9 @@ const includesNormalized = (source: string | undefined, query: string): boolean 
   return source?.toLowerCase().includes(query) ?? false
 }
 
+/** 术语表启用维度的分段筛选值，与列表页 ScopeFilterTabs 对应 */
+export type GlossaryFilter = 'all' | 'enabled' | 'disabled'
+
 export const useProjectsStore = defineStore('projects', () => {
   const items = ref<Project[]>([])
 
@@ -42,6 +45,7 @@ export const useProjectsStore = defineStore('projects', () => {
   const deleteError = ref<string | null>(null)
 
   const searchQuery = ref('')
+  const glossaryFilter = ref<GlossaryFilter>('all')
 
   const sortedItems = computed(() =>
     [...items.value].sort((left, right) => getProjectTime(right) - getProjectTime(left)),
@@ -57,20 +61,19 @@ export const useProjectsStore = defineStore('projects', () => {
         includesNormalized(project.source_lang, query) ||
         includesNormalized(project.target_lang, query)
 
-      return matchesQuery
+      const matchesGlossary =
+        glossaryFilter.value === 'all' ||
+        (glossaryFilter.value === 'enabled') === project.glossary_enabled
+
+      return matchesQuery && matchesGlossary
     })
   })
 
-  const projectCount = computed(() => items.value.length)
-  const languagePairCount = computed(
-    () =>
-      new Set(
-        items.value.map((project) => `${project.source_lang || '-'}>${project.target_lang || '-'}`),
-      ).size,
-  )
+  const totalCount = computed(() => items.value.length)
   const glossaryEnabledCount = computed(
     () => items.value.filter((project) => project.glossary_enabled).length,
   )
+  const glossaryDisabledCount = computed(() => totalCount.value - glossaryEnabledCount.value)
 
   const loadProjectsPromise = ref<Promise<void> | null>(null)
 
@@ -156,6 +159,11 @@ export const useProjectsStore = defineStore('projects', () => {
 
   const resetFilters = (): void => {
     searchQuery.value = ''
+    glossaryFilter.value = 'all'
+  }
+
+  const setGlossaryFilter = (filter: GlossaryFilter): void => {
+    glossaryFilter.value = filter
   }
 
   return {
@@ -169,16 +177,18 @@ export const useProjectsStore = defineStore('projects', () => {
     updateError,
     deleteError,
     searchQuery,
+    glossaryFilter,
     sortedItems,
     filteredItems,
-    projectCount,
-    languagePairCount,
+    totalCount,
     glossaryEnabledCount,
+    glossaryDisabledCount,
     loadProjects,
     createProject,
     updateProject,
     deleteProject,
     isDeletingProject,
     resetFilters,
+    setGlossaryFilter,
   }
 })

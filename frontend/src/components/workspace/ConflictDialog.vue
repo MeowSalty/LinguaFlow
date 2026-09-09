@@ -41,7 +41,7 @@ const emit = defineEmits<{
         <NButton @click="emit('update:show', false)">
           {{ t('common.cancel') }}
         </NButton>
-        <NButton :loading="loading" @click="emit('replace')">
+        <NButton type="error" :loading="loading" @click="emit('replace')">
           {{ t('workspace.conflict.fullReplace') }}
         </NButton>
         <NButton type="primary" @click="emit('incremental')">

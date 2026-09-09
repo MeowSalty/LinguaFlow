@@ -378,7 +378,13 @@ watch(show, (visible) => {
 
 <template>
   <NDrawer v-model:show="show" :width="DRAWER_WIDTH.l" placement="right">
-    <NDrawerContent :title="t('workspace.glossary.prune.title')" closable :native-scrollbar="false">
+    <NDrawerContent closable :native-scrollbar="false">
+      <template #header>
+        <DrawerHeader
+          :title="t('workspace.glossary.prune.title')"
+          :subtitle="t('workspace.glossary.prune.subtitle')"
+        />
+      </template>
       <div v-if="result" class="space-y-5">
         <NAlert :type="result.failed ? 'warning' : 'success'" :bordered="false">
           {{ t('workspace.glossary.prune.resultSummary') }}
@@ -553,9 +559,9 @@ watch(show, (visible) => {
 
       <template #footer>
         <div class="flex w-full flex-wrap items-center justify-between gap-3">
-          <NText v-if="preview && !result" depth="3" class="text-xs">
+          <span v-if="preview && !result" class="text-xs text-lf-text-subtle">
             {{ t('workspace.glossary.prune.selectedCount', { count: selectedKeys.length }) }}
-          </NText>
+          </span>
           <span v-else />
           <div class="flex gap-2">
             <NButton @click="show = false">{{ t('workspace.glossary.prune.close') }}</NButton>

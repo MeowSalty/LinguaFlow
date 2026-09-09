@@ -36,7 +36,7 @@ const approvedPercent = computed(() => {
 
 <template>
   <div
-    class="group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-4 py-2.5 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow"
+    class="group relative overflow-hidden rounded-lf-card border border-transparent bg-lf-surface/80 px-4 py-2.5 transition-colors hover:bg-lf-surface-muted/60"
   >
     <!-- 进度背景层：双重重叠进度条 -->
     <div
@@ -55,7 +55,7 @@ const approvedPercent = computed(() => {
         @click.stop
       />
       <div
-        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-lf-info-soft text-lf-info"
+        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lf-ctl bg-lf-info-soft text-lf-info"
       >
         <NIcon size="14"><IconCarbonDocument /></NIcon>
       </div>
@@ -94,8 +94,8 @@ const approvedPercent = computed(() => {
               </template>
               <span class="block max-w-sm break-all">{{ group.group_key }}</span>
             </NTooltip>
-            <span class="text-[10px] text-lf-info/80"> {{ progressPercent }}%</span>
-            <span class="text-[10px] text-lf-success/80"> {{ approvedPercent }}%</span>
+            <span class="text-[10px] text-lf-info"> {{ progressPercent }}%</span>
+            <span class="text-[10px] text-lf-success"> {{ approvedPercent }}%</span>
           </div>
         </div>
 

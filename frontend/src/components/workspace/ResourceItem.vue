@@ -195,7 +195,7 @@ const handleDropdownSelect = (key: string) => {
 <template>
   <div
     :class="[
-      'group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-3 py-2 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow',
+      'group relative overflow-hidden rounded-lf-card border border-transparent bg-lf-surface/80 px-3 py-2 transition-colors hover:bg-lf-surface-muted/60',
     ]"
     @click="handleRowClick"
   >
@@ -204,7 +204,7 @@ const handleDropdownSelect = (key: string) => {
       :style="{ width: `${translatedPercent}%` }"
     />
     <div
-      class="pointer-events-none absolute inset-y-0 left-0 bg-brand-500/10 transition-all duration-500"
+      class="pointer-events-none absolute inset-y-0 left-0 bg-lf-brand-soft transition-all duration-500"
       :style="{ width: `${approvedPercent}%` }"
     />
     <div class="flex min-h-11 items-center gap-2.5">
@@ -216,7 +216,7 @@ const handleDropdownSelect = (key: string) => {
       />
       <div
         :class="[
-          'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+          'flex h-7 w-7 shrink-0 items-center justify-center rounded-lf-ctl',
           formatConfig.bgClass,
           formatConfig.textClass,
         ]"
@@ -271,8 +271,8 @@ const handleDropdownSelect = (key: string) => {
             >
               {{ props.resource.format || '-' }}
             </span>
-            <span class="shrink-0 text-xs text-lf-info/80"> {{ translatedPercent }}% </span>
-            <span class="shrink-0 text-xs text-brand-500/80"> {{ approvedPercent }}% </span>
+            <span class="shrink-0 text-xs text-lf-info"> {{ translatedPercent }}% </span>
+            <span class="shrink-0 text-xs text-lf-success"> {{ approvedPercent }}% </span>
           </div>
         </div>
 

@@ -1,5 +1,14 @@
 ﻿<script setup lang="ts">
-import { NAlert, NButton, NEmpty, NIcon, NModal, useDialog, useMessage } from 'naive-ui'
+import {
+  NAlert,
+  NButton,
+  NDrawer,
+  NDrawerContent,
+  NEmpty,
+  NIcon,
+  useDialog,
+  useMessage,
+} from 'naive-ui'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -619,7 +628,7 @@ const currentViewEvents = computed(() => {
       <NEmpty :description="t('workspace.explorer.emptyDirectory')">
         <template #extra>
           <div class="flex flex-col items-center gap-3">
-            <p class="max-w-md text-center text-xs leading-5 text-lf-text-muted">
+            <p class="max-w-md text-center text-xs leading-5 text-lf-text-subtle">
               {{ t('workspace.explorer.dropHint') }}
             </p>
             <NButton type="primary" @click="chooseUploadFiles">
@@ -641,22 +650,30 @@ const currentViewEvents = computed(() => {
       v-on="currentViewEvents"
     />
 
-    <NModal
+    <NDrawer
       v-model:show="uploadPrecheckVisible"
-      preset="card"
-      :title="t('workspace.uploadPrecheck.modalTitle')"
-      :style="{ width: DRAWER_WIDTH.xl }"
+      :width="DRAWER_WIDTH.xl"
+      placement="right"
       :mask-closable="false"
+      :close-on-esc="!uploadConfirming"
     >
-      <UploadPrecheckPanel
-        :items="workspace.pendingUploadItems"
-        :loading="uploadConfirming"
-        @confirm="confirmPrecheckedUpload"
-        @cancel="cancelPrecheckedUpload"
-        @update-selected="workspace.setPendingUploadItemSelected"
-        @update-strategy="workspace.setPendingUploadItemStrategy"
-        @update-all-creatable="workspace.setAllCreatablePendingUploadItemsSelected"
-      />
-    </NModal>
+      <NDrawerContent :native-scrollbar="false">
+        <template #header>
+          <DrawerHeader
+            :title="t('workspace.uploadPrecheck.drawerTitle')"
+            :subtitle="t('workspace.uploadPrecheck.drawerSubtitle')"
+          />
+        </template>
+        <UploadPrecheckPanel
+          :items="workspace.pendingUploadItems"
+          :loading="uploadConfirming"
+          @confirm="confirmPrecheckedUpload"
+          @cancel="cancelPrecheckedUpload"
+          @update-selected="workspace.setPendingUploadItemSelected"
+          @update-strategy="workspace.setPendingUploadItemStrategy"
+          @update-all-creatable="workspace.setAllCreatablePendingUploadItemsSelected"
+        />
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>

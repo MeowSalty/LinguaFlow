@@ -442,7 +442,7 @@ onUnmounted(() => {
     </div>
 
     <div class="relative min-h-50">
-      <div class="rounded-lg border border-lf-border-soft bg-lf-surface/40 p-3">
+      <div class="rounded-lf-card border border-lf-border-soft bg-lf-surface/40 p-3">
         <div
           v-if="logRows.length > 0"
           ref="scrollContainerRef"
@@ -470,7 +470,7 @@ onUnmounted(() => {
             <div
               v-for="row in logRows"
               :key="row.key"
-              class="group flex items-start gap-2.5 rounded-md px-2 [content-visibility:auto] [contain-intrinsic-size:auto_24px]"
+              class="group flex items-start gap-2.5 rounded-lf-ctl px-2 [content-visibility:auto] [contain-intrinsic-size:auto_24px]"
               :class="[
                 row.clickable ? 'cursor-pointer hover:bg-lf-hover' : '',
                 row.dim ? 'py-px text-[11.5px]' : 'py-0.5 text-[12.5px]',

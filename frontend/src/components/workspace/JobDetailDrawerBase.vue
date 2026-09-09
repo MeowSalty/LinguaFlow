@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NDrawer, NDrawerContent, NEmpty, NSpin } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
@@ -10,7 +11,7 @@ import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type Job = ApiSchemas['Job']
 
-defineProps<{
+const props = defineProps<{
   show: boolean
   job: Job | null
   loading: boolean
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
 }>()
 
+const { t } = useI18n()
 const tracker = useGlobalJobTrackerStore()
 
 const events = computed(() => tracker.getJobEvents())
@@ -35,6 +37,18 @@ const hasOlder = computed(() => tracker.hasOlder)
 const loadingOlder = computed(() => tracker.loadingOlder)
 
 const jobEnded = computed(() => tracker.jobEnded)
+
+const headerTitle = computed(() =>
+  props.job
+    ? props.titlePrefix
+      ? `${props.titlePrefix} #${props.job.id}`
+      : `#${props.job.id}`
+    : '',
+)
+
+const headerSubtitle = computed(() =>
+  props.job ? t(`workspace.job.statusSubtitle.${props.job.status}`) : undefined,
+)
 
 const clearEventsAndCache = (): void => {
   tracker.clearJobEvents()
@@ -48,11 +62,10 @@ const clearEventsAndCache = (): void => {
     placement="right"
     @update:show="(value: boolean) => emit('update:show', value)"
   >
-    <NDrawerContent
-      :title="job && titlePrefix ? `${titlePrefix} #${job.id}` : job ? `#${job.id}` : ''"
-      closable
-      :header-style="{ borderBottom: '1px solid var(--lf-border-soft)' }"
-    >
+    <NDrawerContent closable>
+      <template #header>
+        <DrawerHeader :title="headerTitle" :subtitle="headerSubtitle" />
+      </template>
       <NSpin :show="loading && !job">
         <JobDetailContent
           v-if="job"

@@ -101,7 +101,7 @@ const getResolutionHint = (item: PendingUploadItem): string => {
 
 <template>
   <div class="space-y-5">
-    <div class="rounded-lf-card border border-lf-border bg-lf-surface-muted/70 p-4 shadow-sm">
+    <div class="rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/70 p-4 shadow-sm">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="min-w-0">
           <div class="text-base font-semibold text-lf-text-strong">
@@ -153,7 +153,7 @@ const getResolutionHint = (item: PendingUploadItem): string => {
 
       <div
         v-if="creatableItems.length > 0"
-        class="mt-4 flex flex-col gap-3 rounded-lf-ctl border border-lf-border bg-lf-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+        class="mt-4 flex flex-col gap-3 rounded-lf-ctl border border-lf-border-soft bg-lf-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
       >
         <div class="text-sm text-lf-text-muted">
           {{ t('workspace.uploadPrecheck.columns.selectAllCreatable') }}
@@ -207,7 +207,7 @@ const getResolutionHint = (item: PendingUploadItem): string => {
             </div>
           </div>
 
-          <div class="rounded-lf-ctl border border-lf-border/70 bg-lf-surface/80 p-3">
+          <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface/80 p-3">
             <template v-if="item.precheck.action === 'create'">
               <div class="flex items-center justify-between gap-3">
                 <span class="text-xs font-medium text-lf-text-muted">
@@ -234,7 +234,7 @@ const getResolutionHint = (item: PendingUploadItem): string => {
                 "
               >
                 <div
-                  class="grid grid-cols-3 overflow-hidden rounded-lg border border-lf-border bg-lf-surface"
+                  class="grid grid-cols-3 overflow-hidden rounded-lf-ctl border border-lf-border-soft bg-lf-surface"
                 >
                   <NRadioButton value="incremental_update" class="text-center">
                     {{ t('workspace.uploadPrecheck.strategies.incrementalUpdate') }}

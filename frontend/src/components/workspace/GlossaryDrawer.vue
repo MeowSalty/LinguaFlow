@@ -102,11 +102,23 @@ const toggleNotePreset = (preset: string): void => {
 
 <template>
   <NDrawer v-model:show="show" :width="DRAWER_WIDTH.m" placement="right">
-    <NDrawerContent :title="drawerTitle" closable>
+    <NDrawerContent closable>
+      <template #header>
+        <DrawerHeader
+          :title="drawerTitle"
+          :subtitle="t('workspace.glossary.form.drawerSubtitle')"
+        />
+      </template>
       <NAlert v-if="error" type="error" :bordered="false" class="mb-4">
         {{ error }}
       </NAlert>
-      <NForm ref="formRef" :model="form" :rules="formRules" label-placement="top">
+      <NForm
+        ref="formRef"
+        :model="form"
+        :rules="formRules"
+        label-placement="top"
+        require-mark-placement="right-hanging"
+      >
         <NFormItem :label="t('workspace.glossary.form.source')" path="source">
           <NInput
             :value="form.source"

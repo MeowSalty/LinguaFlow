@@ -1,5 +1,5 @@
 import type { DataTableColumns } from 'naive-ui'
-import { NButton, NIcon, NInput, NPopover, NSpace, NTag, NText, NTooltip } from 'naive-ui'
+import { NButton, NIcon, NInput, NPopover, NSpace, NTag, NTooltip } from 'naive-ui'
 import type { ComputedRef, Ref, VNode } from 'vue'
 import { computed, h } from 'vue'
 
@@ -212,9 +212,14 @@ export function useSegmentColumns(
         } else {
           if (!row.target_text) {
             elements.push(
-              h('div', { class: 'target-empty' }, [
-                h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') }),
-              ]),
+              h(
+                'div',
+                {
+                  class:
+                    'flex min-h-10 items-center justify-center rounded-lf-ctl border border-dashed border-lf-border-soft bg-lf-info-soft px-3 py-2',
+                },
+                [h('span', { class: 'text-lf-text-subtle' }, t('workspace.segment.emptyTarget'))],
+              ),
             )
           } else {
             const activeIssueIndex = resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id)

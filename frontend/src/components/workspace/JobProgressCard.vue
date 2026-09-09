@@ -109,7 +109,7 @@ const speedText = computed(() => {
 
 <template>
   <div
-    class="rounded-lf-card border border-lf-border-soft bg-linear-to-br from-lf-surface to-lf-surface-muted p-4 space-y-3"
+    class="rounded-lf-card border border-lf-border-soft bg-lf-surface p-4 space-y-3"
     :class="{
       'border-l-3 border-brand-500': job.status === 'running',
       'border-l-3 border-lf-success': job.status === 'completed' && !hasFailures && !hasWarnings,
@@ -264,7 +264,7 @@ const speedText = computed(() => {
     >
       <div
         v-if="etaText"
-        class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
+        class="flex items-center gap-1.5 rounded-lf-ctl bg-lf-surface/60 px-2.5 py-1.5"
       >
         <NIcon size="14" class="text-lf-text-muted">
           <IconCarbonTime />
@@ -276,7 +276,7 @@ const speedText = computed(() => {
       </div>
       <div
         v-if="etaCompletionText"
-        class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
+        class="flex items-center gap-1.5 rounded-lf-ctl bg-lf-surface/60 px-2.5 py-1.5"
       >
         <NIcon size="14" class="text-lf-text-muted">
           <IconCarbonCalendar />
@@ -292,7 +292,7 @@ const speedText = computed(() => {
       </div>
       <div
         v-if="speedText"
-        class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
+        class="flex items-center gap-1.5 rounded-lf-ctl bg-lf-surface/60 px-2.5 py-1.5"
       >
         <div class="flex flex-col">
           <span class="text-[10px] text-lf-text-muted">{{ t('workspace.job.speed.label') }}</span>

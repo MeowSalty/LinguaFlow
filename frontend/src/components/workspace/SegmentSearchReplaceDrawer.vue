@@ -280,16 +280,14 @@ defineExpose({ open })
     :close-on-esc="!busy"
     @update:show="(value: boolean) => (value ? (show = true) : requestClose())"
   >
-    <NDrawerContent
-      :title="t('workspace.segment.searchReplace.title')"
-      closable
-      @close="requestClose"
-    >
+    <NDrawerContent closable @close="requestClose">
+      <template #header>
+        <DrawerHeader
+          :title="t('workspace.segment.searchReplace.title')"
+          :subtitle="t('workspace.segment.searchReplace.subtitle')"
+        />
+      </template>
       <div class="space-y-4 pb-4">
-        <NAlert type="info" :bordered="false" :show-icon="true">
-          {{ t('workspace.segment.searchReplace.hint') }}
-        </NAlert>
-
         <section class="space-y-3">
           <NFormItem
             :label="t('workspace.segment.searchReplace.findLabel')"

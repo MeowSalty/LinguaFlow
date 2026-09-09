@@ -328,7 +328,7 @@ const tableScrollX = computed(() => 200 + 80 + roundColumnsDef.value.length * 88
 
     <!-- KV Grid 详情：固定三列（窄屏两列），语言方向合并一格 -->
     <div
-      class="grid grid-cols-2 gap-x-6 gap-y-2.5 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 p-3 sm:grid-cols-3"
+      class="grid grid-cols-2 gap-x-6 gap-y-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/40 p-3 sm:grid-cols-3"
     >
       <div v-if="projectName" class="col-span-full">
         <div class="text-xs text-lf-text-muted">{{ t('globalJobTracker.project') }}</div>
@@ -375,7 +375,7 @@ const tableScrollX = computed(() => 200 + 80 + roundColumnsDef.value.length * 88
         {{ t('workspace.job.resourcesTitle') }}
       </div>
       <NDataTable
-        class="rounded-lg overflow-hidden"
+        class="rounded-lf-card overflow-hidden"
         :data="job.job_resources ?? []"
         :columns="resourceColumns"
         :row-key="(row: JobResource) => row.id"

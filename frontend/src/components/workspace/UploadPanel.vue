@@ -417,16 +417,25 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
   }
   return map[stage]
 }
+
+// NProgress 的 color prop 直接渲染为 fill 的 background，CSS 变量保持主题响应
+const PROGRESS_FILL = 'linear-gradient(135deg, var(--lf-brand-grad-a), var(--lf-brand-grad-b))'
+const PROGRESS_RAIL = 'var(--lf-border-soft)'
 </script>
 
 <template>
-  <Transition name="panel">
+  <Transition
+    enter-active-class="transition-all duration-300 ease-out"
+    leave-active-class="transition-all duration-200 ease-in"
+    enter-from-class="translate-y-full opacity-0"
+    leave-to-class="translate-y-full opacity-0"
+  >
     <div
       v-show="workspace.uploadTasks.length > 0 || hasResult"
       class="fixed inset-x-0 bottom-0 z-40"
     >
       <div
-        class="mx-auto w-full max-w-4xl overflow-hidden rounded-t-lf-card border-t border-lf-border-soft bg-lf-surface/95 shadow-[0_-2px_16px_rgba(0,0,0,0.08)] backdrop-blur-xl"
+        class="mx-auto w-full max-w-4xl overflow-hidden rounded-t-lf-card border-t border-lf-border-soft bg-lf-surface/95 shadow-lg shadow-lf-shadow backdrop-blur-xl"
       >
         <!-- 收缩态头部 -->
         <button
@@ -464,8 +473,8 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
               :percentage="averageProgress"
               :show-indicator="false"
               :stroke-width="6"
-              status="info"
-              class="upload-progress-bar"
+              :color="PROGRESS_FILL"
+              :rail-color="PROGRESS_RAIL"
             />
           </div>
 
@@ -494,7 +503,12 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
         </button>
 
         <!-- 展开态内容 -->
-        <Transition name="expand">
+        <Transition
+          enter-active-class="max-h-[60vh] overflow-hidden transition-[max-height,opacity] duration-[250ms] ease-out"
+          leave-active-class="overflow-hidden transition-[max-height,opacity] duration-[200ms] ease-in"
+          enter-from-class="max-h-14 opacity-0"
+          leave-to-class="max-h-14 opacity-0"
+        >
           <div v-if="isExpanded" class="border-t border-lf-border-soft">
             <!-- 进行中任务列表（有活跃任务时显示） -->
             <div v-if="hasActiveTasks" class="max-h-[40vh] space-y-2 overflow-y-auto px-4 py-3">
@@ -517,8 +531,9 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
                     :percentage="task.progress"
                     :show-indicator="false"
                     :stroke-width="4"
-                    status="info"
-                    class="upload-progress-bar min-w-0 flex-1"
+                    :color="PROGRESS_FILL"
+                    :rail-color="PROGRESS_RAIL"
+                    class="min-w-0 flex-1"
                   />
                   <span class="w-9 shrink-0 text-right text-xs tabular-nums text-lf-text-muted">
                     {{ task.progress }}%
@@ -555,7 +570,7 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
                 <div
                   v-for="row in resultRows"
                   :key="`${row.rowType}:${row.path}:${row.action}`"
-                  class="flex flex-col gap-1.5 rounded-lf-ctl border border-l-3 border-lf-border/60 bg-lf-surface px-3 py-2.5"
+                  class="flex flex-col gap-1.5 rounded-lf-ctl border border-l-2 border-lf-border-soft bg-lf-surface px-3 py-2.5"
                   :class="getRowAccentClass(row.action)"
                 >
                   <div class="flex items-center gap-2">
@@ -591,60 +606,3 @@ const stageIconBgClass = (stage: UploadTask['stage']): string => {
     </div>
   </Transition>
 </template>
-
-<style scoped>
-/* 面板整体出现/消失 */
-.panel-enter-active {
-  transition:
-    transform 0.3s ease-out,
-    opacity 0.3s ease-out;
-}
-.panel-leave-active {
-  transition:
-    transform 0.2s ease-in,
-    opacity 0.2s ease-in;
-}
-.panel-enter-from {
-  transform: translateY(100%);
-  opacity: 0;
-}
-.panel-leave-to {
-  transform: translateY(100%);
-  opacity: 0;
-}
-
-/* 展开/收缩过渡 */
-.expand-enter-active {
-  transition:
-    max-height 0.25s ease-out,
-    opacity 0.25s ease-out;
-  max-height: 60vh;
-  overflow: hidden;
-}
-.expand-leave-active {
-  transition:
-    max-height 0.2s ease-in,
-    opacity 0.2s ease-in;
-  overflow: hidden;
-}
-.expand-enter-from {
-  max-height: 56px;
-  opacity: 0;
-}
-.expand-leave-to {
-  max-height: 56px;
-  opacity: 0;
-}
-
-/* 进度条自定义样式 */
-.upload-progress-bar :deep(.n-progress-graph-line-fill) {
-  background: var(--lf-brand-grad);
-  border-radius: 3px;
-  transition: width 0.3s ease-out;
-}
-
-.upload-progress-bar :deep(.n-progress-graph-line-rail) {
-  background: var(--lf-border-soft);
-  border-radius: 3px;
-}
-</style>

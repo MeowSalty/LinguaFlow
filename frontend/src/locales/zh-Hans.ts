@@ -318,22 +318,19 @@ const messages = {
   },
   projects: {
     title: '翻译项目',
-    subtitle: '集中管理多语言翻译项目，快速查看语言方向与最近更新',
+    subtitle: '管理项目的资源、段落、任务与术语表，跟踪整体翻译进度',
     actions: {
       create: '新建项目',
       createFirst: '创建第一个项目',
+      createTitle: '新建翻译项目',
+      editTitle: '编辑翻译项目',
       submitCreate: '创建项目',
       submitUpdate: '保存',
-      details: '查看详情',
-      jobs: '任务',
-      glossary: '术语表',
-    },
-    stats: {
-      total: '全部项目',
-      languagePairs: '语言方向',
-      glossaryEnabled: '术语表启用',
     },
     filters: {
+      all: '全部',
+      glossaryEnabled: '术语表启用',
+      glossaryDisabled: '术语表停用',
       searchPlaceholder: '搜索项目名称或语言代码',
       reset: '重置筛选',
     },
@@ -350,24 +347,11 @@ const messages = {
       es: '西班牙语 · es',
     },
     card: {
-      projectId: '项目 #{id}',
-      source: '源语言',
-      target: '目标语言',
-      updatedAt: '最近更新',
-      noDate: '暂无时间',
-      openWorkspace: '进入工作区',
+      updatedAt: '更新于',
     },
     empty: {
       default: '暂无项目，创建一个开始管理翻译流程',
       filtered: '没有找到符合条件的项目',
-    },
-    create: {
-      title: '新建翻译项目',
-      description: '填写项目基础信息，创建后可继续配置术语表、AI 后端与任务流程',
-    },
-    edit: {
-      title: '编辑翻译项目',
-      description: '更新项目基础信息，保存后项目列表会同步刷新',
     },
     delete: {
       confirm: '确定要删除项目「{name}」吗？此操作无法撤销。',
@@ -381,6 +365,7 @@ const messages = {
       glossaryEnabled: '术语表已启用',
       glossaryDisabled: '术语表未启用',
       glossaryToggle: '启用术语表',
+      createHint: '填写名称与语言方向，创建后可在工作区内上传资源并创建翻译任务',
     },
     validation: {
       nameRequired: '请输入项目名称',
@@ -505,7 +490,8 @@ const messages = {
       },
     },
     uploadPrecheck: {
-      modalTitle: '上传预检',
+      drawerTitle: '上传预检',
+      drawerSubtitle: '确认各文件的处理方式后开始上传',
       title: '确认上传文件',
       descriptionReady: '所有文件均可创建，将直接上传所选文件',
       descriptionWithProblems: '检测到冲突或重复路径，冲突文件默认增量更新，也可切换为覆盖或跳过',
@@ -640,6 +626,7 @@ const messages = {
       },
       qualityCodePlaceholder: '按问题类型筛选',
       editTitle: '编辑段落',
+      previewSubtitle: '对比原文与译文并检查质量问题，确认无误后应用结果',
       columns: {
         source: '原文',
         target: '译文',
@@ -672,7 +659,7 @@ const messages = {
       },
       searchReplace: {
         title: '搜索替换',
-        hint: '在当前资源的译文上批量查找并替换。先预览确认影响范围，再应用；应用后可撤销',
+        subtitle: '批量替换当前资源的译文，支持预览影响范围与撤销',
         findLabel: '查找',
         findPlaceholder: '输入要查找的文本',
         findHint: '仅匹配译文；正则模式支持 $1 捕获引用',
@@ -826,6 +813,7 @@ const messages = {
       autoRefresh: '自动刷新',
       legacyPlan: '旧版任务',
       createTitle: '创建任务',
+      createSubtitle: '选择执行计划模板与段落过滤策略，为选中的资源或段落创建翻译任务',
       detailTitle: '任务 #{id}',
       detailFallbackTitle: '任务详情',
       detailEmpty: '暂无任务详情',
@@ -1003,6 +991,7 @@ const messages = {
           glossaryUsed: '{count} 使用',
           glossaryAdded: '{count} 新增',
           detailTitle: '批次详情',
+          detailSubtitle: '查看该批次的请求与响应内容、Token 用量与术语命中明细',
           errorBadge: '错误',
           sentContent: '发送内容',
           receivedContent: '接收内容',
@@ -1046,6 +1035,14 @@ const messages = {
         failed: '失败',
         cancelled: '已取消',
       },
+      statusSubtitle: {
+        pending: '任务正在排队，开始执行后进度将实时更新',
+        running: '任务正在执行，进度与事件日志实时更新',
+        paused: '任务已暂停，可随时恢复执行',
+        completed: '任务已执行完成，可查看各资源的执行明细',
+        failed: '任务执行失败，可根据错误信息排查后重试',
+        cancelled: '任务已取消，已完成部分的结果仍会保留',
+      },
       trigger: {
         manual: '手动',
         file_update: '文件更新',
@@ -1069,6 +1066,7 @@ const messages = {
     },
     qaRecheck: {
       title: 'QA 重检',
+      drawerSubtitle: '按执行策略当前的 QA 配置重跑质量检查，仅更新问题列表，不修改译文',
       action: 'QA 重检',
       intro:
         '按所选执行策略当前的 QA 配置，对既有译文重跑质量检查。仅更新质量问题，不修改译文与段落状态；已有人工裁决（含忽略）按指纹自动继承',
@@ -1139,6 +1137,7 @@ const messages = {
         notes: '备注',
       },
       form: {
+        drawerSubtitle: '维护术语的推荐译法与处理规则，翻译时将按条目保持一致',
         source: '源术语',
         sourcePlaceholder: '输入源语言术语',
         target: '目标译文',
@@ -1213,6 +1212,7 @@ const messages = {
       },
       prune: {
         title: '智能精简术语表',
+        subtitle: '由 AI 分析术语表并给出删除或更新建议，确认后才会应用',
         description:
           'AI 将分析当前术语表并给出删除或更新建议；预览不会修改数据，仅勾选并确认的建议才会应用',
         backend: 'AI 后端',
@@ -1285,7 +1285,8 @@ const messages = {
         },
       },
       sync: {
-        // 对话框标题
+        drawerSubtitle: '确认术语变更对各资源的影响，选择同步范围后执行',
+        // 抽屉标题
         titleImpact: '术语同步更新',
         titleExecuting: '术语同步更新 — 执行中',
         titleCompleted: '术语同步更新 — 已完成',

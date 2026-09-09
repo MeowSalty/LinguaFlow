@@ -246,7 +246,13 @@ const requestClose = (): void => {
     :close-on-esc="!busy"
     @update:show="(value: boolean) => (value ? (show = true) : requestClose())"
   >
-    <NDrawerContent :title="t('workspace.qaRecheck.title')" closable @close="requestClose">
+    <NDrawerContent closable @close="requestClose">
+      <template #header>
+        <DrawerHeader
+          :title="t('workspace.qaRecheck.title')"
+          :subtitle="t('workspace.qaRecheck.drawerSubtitle')"
+        />
+      </template>
       <!-- 重检结果 -->
       <div v-if="result" class="space-y-4 pb-4">
         <NAlert type="success" :bordered="false">
@@ -347,17 +353,22 @@ const requestClose = (): void => {
 
       <!-- 重检配置表单 -->
       <div v-else class="space-y-4 pb-4">
-        <NAlert type="info" :bordered="false">
+        <div
+          class="rounded-lf-ctl bg-lf-surface-muted px-3 py-2.5 text-sm leading-6 text-lf-text-muted"
+        >
           {{ t('workspace.qaRecheck.intro') }}
-        </NAlert>
+        </div>
 
         <!-- 固定目标摘要（由资源/章节/段落选择胶囊触发时） -->
-        <NAlert v-if="isFixedTarget" type="success" :bordered="false">
-          <template #header>
+        <div
+          v-if="isFixedTarget"
+          class="rounded-lf-ctl bg-lf-surface-muted px-3 py-2.5 text-sm leading-6 text-lf-text-muted"
+        >
+          <span class="font-medium text-lf-text-strong">
             {{ t('workspace.qaRecheck.targetLabel') }}
-          </template>
+          </span>
           {{ targetSummary }}
-        </NAlert>
+        </div>
 
         <NAlert v-if="profilesStore.error" type="error" :bordered="false">
           {{ profilesStore.error }}
