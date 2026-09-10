@@ -5,13 +5,9 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
-)
 
-// rubyElementRe 匹配 <ruby>BASE<rt>READING</rt>TRAILING</ruby>
-// （与 ruby 包内部正则同形态：BASE 可能含 <rp> 等辅助标签，TRAILING 可能含闭合辅助标签）。
-// ruby 包不导出正则、本处需要的是元素「位置」而非剥除结果（剥离统一走
-// ruby.StripRubyTags），故保留本地副本仅用于区域屏蔽。
-var rubyElementRe = regexp.MustCompile(`<ruby>(.*?)<rt>(.*?)</rt>(.*?)</ruby>`)
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
+)
 
 // htmlTagRe 匹配 HTML/XML 标签，用于裸标签的兜底屏蔽。
 var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
@@ -48,20 +44,22 @@ func protectedOccurrences(target string, protected map[string]string) [][2]int {
 	return raw
 }
 
-// rubyRegions 在 target 中找出所有 <ruby>BASE<rt>READ</rt>TRAILING</ruby> 元素的位置（字节→rune 偏移），
-// 返回尚未排序合并的原始区域。每个 ruby 元素整体作为一个区域（含基底文本），以便后续
-// StripRegions 整段删去，避免 ruby 标签的 <> 被当半角标点误报。
+// rubyRegions 在 target 中找出所有含完整注音对的 <ruby>…</ruby> 元素的位置
+// （字节→rune 偏移），返回尚未排序合并的原始区域。每个 ruby 元素整体作为一个
+// 区域（含基底文本），以便后续 StripRegions 整段删去，避免 ruby 标签的 <>
+// 被当半角标点误报。
 //
-// 复用包级 rubyElementRe（与 ruby 包内部正则同形态）。
+// 区域定位的单一来源是 ruby.ElementSpans（与包内提取/剥离同一扫描口径，
+// 含多段 <rt> 的元素同样覆盖）。
 // 剥离语义的单一来源是 ruby.StripRubyTags；本处只定位元素区域，不做剥除。
 func rubyRegions(target string) [][2]int {
-	matches := rubyElementRe.FindAllStringSubmatchIndex(target, -1)
-	if len(matches) == 0 {
+	spans := ruby.ElementSpans(target)
+	if len(spans) == 0 {
 		return nil
 	}
-	raw := make([][2]int, 0, len(matches))
-	for _, loc := range matches {
-		startByte, endByte := loc[0], loc[1]
+	raw := make([][2]int, 0, len(spans))
+	for _, span := range spans {
+		startByte, endByte := span[0], span[1]
 		start := utf8RuneOffset(target, startByte)
 		end := start + utf8.RuneCountInString(target[startByte:endByte])
 		raw = append(raw, [2]int{start, end})
@@ -71,7 +69,7 @@ func rubyRegions(target string) [][2]int {
 
 // tagRegions 是通用内联标签屏蔽通道：在无 Protected 映射（如手动编辑从 DB 重载）时
 // 兜底屏蔽 `<a href="x">`、`<b>` 等裸标签，使标记字符（`<`/`>`/`"`/`=`）不被 width_mix
-// 等标点类 checker 当成正文误报。复用同包 htmlTagRe（与 ruby 包内部正则同形态）。
+// 等标点类 checker 当成正文误报。复用同包 htmlTagRe（与 ruby 包内部剥标签用正则同形态）。
 // 返回尚未排序合并的原始区域（字节→rune 偏移），无匹配返回 nil。
 func tagRegions(target string) [][2]int {
 	matches := htmlTagRe.FindAllStringIndex(target, -1)
@@ -93,7 +91,8 @@ func tagRegions(target string) [][2]int {
 //
 // 覆盖三条保护通道：
 //   - protect 通道（XMLProtector）把 span 等保护片段写入 seg.Protected 映射；
-//   - ruby 通道（ruby.Restorer 在 Unprotect 之后把 <ruby> 插回 seg.Target），不进 seg.Protected；
+//   - ruby 通道（ruby.Restorer 在 Unprotect 之后把 <ruby> 插回 seg.Target），不进 seg.Protected，
+//     区域定位复用 ruby.ElementSpans（与 ruby.StripRubyTags 同一扫描口径）；
 //   - 标签通道（htmlTagRe）兜底屏蔽裸 `<tag>` 标签，覆盖 Protected 映射缺失的手动编辑等场景。
 //
 // 消费者一律 regions := InlineMarkupRegions(text, seg.Protected); clean := StripRegions(text, regions)，

@@ -10,6 +10,7 @@ import {
 import { fetchSegmentGroups, type ResourceSegmentGroup } from '@/api/epub'
 import type { ResourceSegmentQualityCode } from '@/api/projects'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 
 export type { ResourceSegmentGroup }
 
@@ -37,9 +38,6 @@ export interface SegmentProgress {
   rejected: number
   total: number
 }
-
-const getErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error ? error.message : fallback
 
 export const useSegmentStore = defineStore('segment', () => {
   // ── 段落状态 ──
@@ -177,7 +175,7 @@ export const useSegmentStore = defineStore('segment', () => {
         updateSegmentProgressCache(resourceId, segments.value)
       }
     } catch (error) {
-      segmentsError.value = getErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
+      segmentsError.value = extractErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
     } finally {
       loadingSegments.value = false
     }
@@ -201,7 +199,7 @@ export const useSegmentStore = defineStore('segment', () => {
 
       return segment
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.updateSegmentFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.updateSegmentFailed'))
       throw error
     } finally {
       editingSegmentIds.value = editingSegmentIds.value.filter((id) => id !== segmentId)
@@ -226,7 +224,7 @@ export const useSegmentStore = defineStore('segment', () => {
       segments.value = segments.value.map((item) => (item.id === segment.id ? segment : item))
       return segment
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.setIssueDispositionFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.setIssueDispositionFailed'))
       throw error
     } finally {
       editingSegmentIds.value = editingSegmentIds.value.filter((id) => id !== segmentId)
@@ -244,7 +242,10 @@ export const useSegmentStore = defineStore('segment', () => {
       const response = await fetchSegmentGroups(projectId, resourceId)
       segmentGroups.value = response.items
     } catch (error) {
-      segmentGroupsError.value = getErrorMessage(error, t('api.errors.fetchSegmentGroupsFailed'))
+      segmentGroupsError.value = extractErrorMessage(
+        error,
+        t('api.errors.fetchSegmentGroupsFailed'),
+      )
     } finally {
       loadingSegmentGroups.value = false
     }
@@ -264,7 +265,6 @@ export const useSegmentStore = defineStore('segment', () => {
 
   /** 切换章节选中状态 */
   const toggleEpubGroupSelection = (groupKey: string): void => {
-    const currentKeys = [...epubSelectedGroupKeys.value]
     const newSet = new Set(epubSelectedGroupKeys.value)
     if (newSet.has(groupKey)) {
       newSet.delete(groupKey)
@@ -272,12 +272,6 @@ export const useSegmentStore = defineStore('segment', () => {
       newSet.add(groupKey)
     }
     epubSelectedGroupKeys.value = newSet
-    console.debug('[segmentStore] toggleEpubGroupSelection:', {
-      toggledKey: groupKey,
-      before: currentKeys,
-      after: [...newSet],
-      storeId: 'segment',
-    })
   }
 
   /**
@@ -311,12 +305,7 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentGroupsError.value = null
     epubActiveGroupKey.value = null
     epubActiveGroupTitle.value = ''
-    const before = [...epubSelectedGroupKeys.value]
     epubSelectedGroupKeys.value = new Set()
-    console.debug('[segmentStore] resetEpubState:', {
-      clearedKeys: before,
-      after: [...epubSelectedGroupKeys.value],
-    })
   }
 
   const reset = (): void => {

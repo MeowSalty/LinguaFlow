@@ -1,11 +1,41 @@
 import type { Router } from 'vue-router'
 
 import { setUnauthorizedHandler } from '@/api/client'
+import { t } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 
 const PUBLIC_PATHS = new Set(['/login', '/register', '/service'])
 const AUTH_ENTRY_PATHS = new Set(['/login', '/register'])
+
+const ROUTE_TITLES: Record<string, string> = {
+  '/': 'nav.dashboard',
+  '/about': 'nav.about',
+  '/admin/': 'nav.adminDashboard',
+  '/admin/audit-logs': 'nav.adminAuditLogs',
+  '/admin/settings': 'nav.adminSettings',
+  '/admin/users': 'nav.adminUsers',
+  '/backends': 'nav.backends',
+  '/bootstrap-prompt-templates': 'nav.bootstrapPromptTemplates',
+  '/changelog': 'nav.changelog',
+  '/execution-plan-templates': 'nav.executionPlanTemplates',
+  '/execution-profiles': 'nav.executionProfiles',
+  '/login': 'login.title',
+  '/projects': 'nav.projects',
+  '/projects/[projectId]': 'nav.projects',
+  '/prompt-templates': 'nav.promptTemplates',
+  '/prune-prompt-templates': 'nav.prunePromptTemplates',
+  '/register': 'register.title',
+  '/service': 'service.title',
+  '/stats': 'nav.stats',
+  '/tools/epub-rotate': 'nav.epubRotate',
+  '/[...all]': 'notFound.title',
+}
+
+const applyDocumentTitle = (routeName: string | symbol | null | undefined): void => {
+  const key = typeof routeName === 'string' ? ROUTE_TITLES[routeName] : undefined
+  document.title = key ? `${t(key)} · LinguaFlow` : 'LinguaFlow'
+}
 
 export const installRouterGuards = (router: Router): void => {
   const service = useServiceStore()
@@ -68,5 +98,9 @@ export const installRouterGuards = (router: Router): void => {
     }
 
     return undefined
+  })
+
+  router.afterEach((to) => {
+    applyDocumentTitle(to.name)
   })
 }

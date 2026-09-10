@@ -1,26 +1,13 @@
 <script setup lang="ts">
-import { NButton, NEmpty, NSkeleton, NTag, useMessage } from 'naive-ui'
+import { NButton, NEmpty, NSkeleton, NTag } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { useAdminStore } from '@/stores/admin'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
+import { formatRelativeTime } from '@/utils/datetime'
 
 const admin = useAdminStore()
-const message = useMessage()
 const { t } = useI18n()
-
-const formatTime = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
-  if (minutes < 1) return t('dashboard.activity.relativeTime.justNow')
-  if (minutes < 60) return t('dashboard.activity.relativeTime.minutesAgo', { count: minutes })
-  if (hours < 24) return t('dashboard.activity.relativeTime.hoursAgo', { count: hours })
-  return t('dashboard.activity.relativeTime.daysAgo', { count: days })
-}
 
 const getActionType = (action: string): 'success' | 'warning' | 'error' | 'info' | 'default' => {
   if (action.includes('create') || action.includes('approve') || action.includes('retry')) {
@@ -57,6 +44,20 @@ const getActionLabel = (action: string): string => {
   return action
 }
 
+const resourceTypeLabels = computed<Record<string, string>>(() => ({
+  job: t('admin.auditLogs.resourceTypes.job'),
+  project: t('admin.auditLogs.resourceTypes.project'),
+  resource: t('admin.auditLogs.resourceTypes.resource'),
+  segment: t('admin.auditLogs.resourceTypes.segment'),
+  glossary_entry: t('admin.auditLogs.resourceTypes.glossary_entry'),
+  quick_translate: t('admin.auditLogs.resourceTypes.quick_translate'),
+}))
+
+const getResourceTypeLabel = (resourceType: string | null): string => {
+  if (!resourceType) return '-'
+  return resourceTypeLabels.value[resourceType] ?? resourceType
+}
+
 const columns = computed(() => [
   {
     title: t('admin.auditLogs.columns.time'),
@@ -80,39 +81,21 @@ onMounted(() => {
   admin.loadAuditLogs(true)
 })
 
-watch(
+useStoreErrorToast(
   () => admin.auditLogsError,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      admin.auditLogsError = null
-    }
+  () => {
+    admin.auditLogsError = null
   },
 )
 </script>
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('admin.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('admin.auditLogs.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('admin.auditLogs.description') }}
-            </p>
-          </div>
-        </div>
-        <NButton secondary :loading="admin.auditLogsLoading" @click="admin.loadAuditLogs(true)">
-          {{ t('admin.auditLogs.refresh') }}
-        </NButton>
-      </div>
-    </section>
+    <PageHeader :title="t('admin.auditLogs.title')" :subtitle="t('admin.auditLogs.description')">
+      <NButton secondary :loading="admin.auditLogsLoading" @click="admin.loadAuditLogs(true)">
+        {{ t('admin.auditLogs.refresh') }}
+      </NButton>
+    </PageHeader>
 
     <div class="lf-panel lf-table overflow-hidden">
       <div v-if="admin.auditLogsLoading" class="space-y-3 p-5">
@@ -144,7 +127,7 @@ watch(
             <div class="text-xs text-lf-text-subtle md:hidden">
               {{ t('admin.auditLogs.columns.time') }}
             </div>
-            <span class="text-sm text-lf-text-muted">{{ formatTime(log.created_at) }}</span>
+            <span class="text-sm text-lf-text-muted">{{ formatRelativeTime(log.created_at) }}</span>
           </div>
 
           <div class="min-w-0">
@@ -168,7 +151,7 @@ watch(
               {{ t('admin.auditLogs.columns.resource') }}
             </div>
             <span class="truncate font-mono text-sm text-lf-text">
-              {{ log.resource_type ?? '-' }}
+              {{ getResourceTypeLabel(log.resource_type) }}
             </span>
           </div>
 

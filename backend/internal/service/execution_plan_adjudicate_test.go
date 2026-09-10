@@ -110,13 +110,13 @@ func TestValidateExecutionRounds_Adjudicate(t *testing.T) {
 			Adjudicate: &schema.AdjudicateRoundConfig{
 				BatchSize:       10,
 				Concurrency:     1,
-				AdjudicateCodes: []string{"untranslated"},
+				AdjudicateCodes: []string{"nonsense"},
 			},
 		}})
 		if !errors.Is(err, ErrExecutionPlanConfigInvalid) {
 			t.Fatalf("err=%v want ErrExecutionPlanConfigInvalid", err)
 		}
-		const want = "allowed: source_residual, length_ratio, punctuation_surplus"
+		const want = "allowed: untranslated, source_residual, length_ratio, punctuation_surplus"
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("err=%v want substring %q", err, want)
 		}

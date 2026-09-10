@@ -1,29 +1,34 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+import AppLogo from '@/components/AppLogo.vue'
+
 defineProps<{
   title?: string
   subtitle?: string
 }>()
+
+const { t } = useI18n()
 </script>
 
 <template>
-  <div class="lf-auth-shell flex min-h-screen w-full items-center justify-center px-4 py-10">
+  <div class="lf-auth-shell">
     <div class="w-full max-w-105">
-      <div class="mb-8 text-center">
+      <div class="mb-7 flex flex-col items-center gap-3 text-center">
         <RouterLink
           to="/"
-          class="inline-flex items-center gap-2.5 text-2xl font-semibold tracking-tight text-lf-text-strong no-underline"
+          class="flex flex-col items-center gap-2.5 no-underline"
+          :aria-label="t('common.appName')"
         >
-          <span
-            class="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-sm font-bold text-white shadow-lg shadow-brand-500/30"
-          >
-            L
+          <AppLogo size="lg" :wordmark="false" />
+          <span class="text-lg font-bold tracking-tight text-lf-text-strong">
+            {{ t('common.appName') }}
           </span>
-          LinguaFlow
         </RouterLink>
-        <h1 v-if="title" class="mt-6 text-2xl font-semibold tracking-tight text-lf-text-strong">
+        <h1 v-if="title" class="text-lg font-semibold text-lf-text-strong">
           {{ title }}
         </h1>
-        <p v-if="subtitle" class="mt-2 text-sm leading-6 text-lf-text-muted">
+        <p v-if="subtitle" class="max-w-sm text-sm leading-6 text-lf-text-muted">
           {{ subtitle }}
         </p>
       </div>

@@ -6,15 +6,18 @@ export function useLanguageOptions() {
   const { t } = useI18n()
 
   const targetLanguageOptions = computed<SelectOption[]>(() => [
+    { label: t('projects.languages.en'), value: 'en' },
     { label: t('projects.languages.zhHans'), value: 'zh-Hans' },
     { label: t('projects.languages.zhHant'), value: 'zh-Hant' },
-    { label: t('projects.languages.enUS'), value: 'en-US' },
-    { label: t('projects.languages.enGB'), value: 'en-GB' },
-    { label: t('projects.languages.ja'), value: 'ja' },
-    { label: t('projects.languages.ko'), value: 'ko' },
+    { label: t('projects.languages.es'), value: 'es' },
     { label: t('projects.languages.fr'), value: 'fr' },
     { label: t('projects.languages.de'), value: 'de' },
-    { label: t('projects.languages.es'), value: 'es' },
+    { label: t('projects.languages.pt'), value: 'pt' },
+    { label: t('projects.languages.ja'), value: 'ja' },
+    { label: t('projects.languages.ko'), value: 'ko' },
+    { label: t('projects.languages.ar'), value: 'ar' },
+    { label: t('projects.languages.ru'), value: 'ru' },
+    { label: t('projects.languages.it'), value: 'it' },
   ])
 
   const sourceLanguageOptions = computed<SelectOption[]>(() => [

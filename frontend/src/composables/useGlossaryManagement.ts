@@ -135,13 +135,13 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
       render: (row) => row.notes || h(NText, { depth: 3 }, { default: () => '—' }),
     },
     {
-      title: t('workspace.common.updatedAt'),
+      title: t('common.updatedAt'),
       key: 'updated_at',
       width: 170,
       render: (row) => formatDate(row.updated_at),
     },
     {
-      title: t('workspace.common.actions'),
+      title: t('common.actionsColumn'),
       key: 'actions',
       width: 160,
       fixed: 'right',
@@ -166,7 +166,7 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
               loading: glossary.deletingEntryIds.includes(row.id),
               onClick: () => deleteGlossaryEntry(row),
             },
-            { default: () => t('workspace.common.delete') },
+            { default: () => t('common.delete') },
           ),
         ]),
     },
@@ -285,12 +285,16 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
 
     try {
       const result = await glossary.importCSV(projectId.value, file)
-      message.success(
-        t('workspace.glossary.import.result', { added: result.added }) +
-          (result.skipped?.length
-            ? `，${t('workspace.glossary.import.skipped', { count: result.skipped.length })}`
-            : ''),
-      )
+      const parts = [t('workspace.glossary.import.result', { added: result.added })]
+      if (result.skipped?.length) {
+        parts.push(
+          t('workspace.glossary.import.skipped', {
+            count: result.skipped.length,
+            reasons: result.skipped.join('、'),
+          }),
+        )
+      }
+      message.success(parts.join('；'))
       glossaryImportVisible.value = false
     } catch (error) {
       console.error(error)

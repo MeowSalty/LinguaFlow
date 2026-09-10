@@ -2,15 +2,17 @@
 import type { DataTableRowKey } from 'naive-ui'
 import { NButton, NDataTable, NEmpty, NSpin } from 'naive-ui'
 import { ref, toRef, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
 import type { SegmentTableConfig, SegmentColumnDeps } from '@/composables/segmentColumns'
 import { useSegmentColumns } from '@/composables/segmentColumns'
 import SegmentMobileCard from '@/components/workspace/SegmentMobileCard.vue'
-import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
+
+const { t } = useI18n()
 
 // ── Props ──
 const props = defineProps<{

@@ -222,6 +222,12 @@ export const useAdminStore = defineStore('admin', () => {
     await Promise.all([loadStats(), loadUsers()])
   }
 
+  const resetUserFilters = (): void => {
+    userSearchQuery.value = ''
+    userRoleFilter.value = 'all'
+    userActiveFilter.value = 'all'
+  }
+
   return {
     stats,
     statsLoading,
@@ -233,6 +239,7 @@ export const useAdminStore = defineStore('admin', () => {
     userSearchQuery,
     userRoleFilter,
     userActiveFilter,
+    resetUserFilters,
     filteredUsers,
     auditLogs,
     auditLogsTotal,

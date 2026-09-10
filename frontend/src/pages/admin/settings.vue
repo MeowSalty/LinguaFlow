@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { NButton, NEmpty, NInput, NSkeleton, useMessage } from 'naive-ui'
+import { NButton, NEmpty, NInput, NModal, NSkeleton, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { useAdminStore } from '@/stores/admin'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 
 const admin = useAdminStore()
 const message = useMessage()
@@ -17,6 +18,8 @@ interface SettingEntry {
 const editingSettings = ref<SettingEntry[]>([])
 const newKey = ref('')
 const newValue = ref('')
+const deleteConfirmVisible = ref(false)
+const deletingSettingIndex = ref<number | null>(null)
 
 const buildEditingSettings = (): void => {
   editingSettings.value = Object.entries(admin.settings).map(([key, value]) => ({
@@ -51,7 +54,20 @@ const addSetting = (): void => {
 }
 
 const removeSetting = (index: number): void => {
-  editingSettings.value.splice(index, 1)
+  deletingSettingIndex.value = index
+  deleteConfirmVisible.value = true
+}
+
+const confirmRemoveSetting = (): void => {
+  if (deletingSettingIndex.value !== null) {
+    editingSettings.value.splice(deletingSettingIndex.value, 1)
+  }
+  closeDeleteConfirm()
+}
+
+const closeDeleteConfirm = (): void => {
+  deleteConfirmVisible.value = false
+  deletingSettingIndex.value = null
 }
 
 const saveSettings = async (): Promise<void> => {
@@ -86,56 +102,38 @@ onMounted(() => {
   admin.loadSettings()
 })
 
-watch(
+useStoreErrorToast(
   () => admin.settingsError,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      admin.settingsError = null
-    }
+  () => {
+    admin.settingsError = null
   },
 )
 </script>
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('admin.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('admin.settings.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('admin.settings.description') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="admin.settingsLoading" @click="admin.loadSettings">
-            {{ t('admin.settings.actions.refresh') }}
-          </NButton>
-          <NButton
-            type="primary"
-            :loading="admin.settingsSaving"
-            :disabled="!hasChanges"
-            @click="saveSettings"
-          >
-            {{ t('admin.settings.actions.save') }}
-          </NButton>
-        </div>
-      </div>
-    </section>
+    <PageHeader :title="t('admin.settings.title')" :subtitle="t('admin.settings.description')">
+      <NButton secondary :loading="admin.settingsLoading" @click="admin.loadSettings">
+        {{ t('admin.settings.actions.refresh') }}
+      </NButton>
+      <NButton
+        type="primary"
+        :loading="admin.settingsSaving"
+        :disabled="!hasChanges"
+        @click="saveSettings"
+      >
+        {{ t('admin.settings.actions.save') }}
+      </NButton>
+    </PageHeader>
 
     <div class="lf-panel p-5">
       <div class="mb-4 flex items-center justify-between gap-3">
         <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
           {{ t('admin.settings.title') }}
         </h2>
-        <span class="text-xs text-lf-text-subtle"> {{ editingSettings.length }} keys </span>
+        <span class="text-xs tabular-nums text-lf-text-subtle">
+          {{ t('admin.settings.keyCount', { count: editingSettings.length }) }}
+        </span>
       </div>
 
       <div v-if="admin.settingsLoading" class="space-y-3">
@@ -152,7 +150,7 @@ watch(
         <div
           v-for="(entry, index) in editingSettings"
           :key="index"
-          class="flex items-start gap-3 rounded-xl border border-lf-border-soft bg-lf-surface-muted p-3.5 sm:gap-4 sm:p-4"
+          class="flex items-start gap-3 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted p-3.5 sm:gap-4 sm:p-4"
         >
           <div class="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
@@ -213,5 +211,17 @@ watch(
         </NButton>
       </div>
     </div>
+
+    <NModal
+      v-model:show="deleteConfirmVisible"
+      preset="dialog"
+      type="warning"
+      :title="t('common.actions.confirmDelete')"
+      :content="t('admin.settings.deleteConfirm')"
+      :positive-text="t('common.actions.deleteConfirmAction')"
+      :negative-text="t('common.cancel')"
+      @positive-click="confirmRemoveSetting"
+      @negative-click="closeDeleteConfirm"
+    />
   </div>
 </template>

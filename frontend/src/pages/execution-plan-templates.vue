@@ -3,13 +3,11 @@ import {
   NButton,
   NDrawer,
   NDrawerContent,
-  NEmpty,
   NForm,
   NFormItem,
   NInput,
   NModal,
   NSelect,
-  NSkeleton,
   NTag,
   useMessage,
   type FormInst,
@@ -20,18 +18,22 @@ import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import ExecutionPlanEditor from '@/components/templates/ExecutionPlanEditor.vue'
+import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
+import { useEntityCrud } from '@/composables/useEntityCrud'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useBackendsStore } from '@/stores/backends'
 import { useBootstrapPromptTemplatesStore } from '@/stores/bootstrapPromptTemplates'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { usePromptTemplatesStore } from '@/stores/promptTemplates'
 import { useExecutionProfilesStore } from '@/stores/executionProfiles'
+import { formatDateTime } from '@/utils/datetime'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 type CreateRequest = ApiSchemas['CreateExecutionPlanTemplateRequest']
 type UpdateRequest = ApiSchemas['UpdateExecutionPlanTemplateRequest']
-type Scope = ExecutionPlanTemplate['scope']
 
 interface FormModel {
   name: string
@@ -76,13 +78,18 @@ const executionProfilesStore = useExecutionProfilesStore()
 const message = useMessage()
 const { t } = useI18n()
 
+const { getScopeTagType, deleteModalVisible, deletingItem, confirmDelete, executeDelete } =
+  useEntityCrud<ExecutionPlanTemplate>({
+    i18nPrefix: 'executionPlanTemplates',
+    deleteItem: store.deleteTemplate,
+    isDeleting: (id) => store.deletingIds.includes(id),
+  })
+
 // ── 表单状态 ──────────────────────────────────────────────────
 
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
 const editingItem = ref<ExecutionPlanTemplate | null>(null)
-const deleteModalVisible = ref(false)
-const deletingItem = ref<ExecutionPlanTemplate | null>(null)
 
 const formModel = reactive<FormModel>({
   name: '',
@@ -116,24 +123,31 @@ const profileNameById = computed(
 
 // ── 计算属性 ──────────────────────────────────────────────────
 
-const filterScopeOptions = computed<SelectOption[]>(() => [
-  { label: t('executionPlanTemplates.filters.allScopes'), value: 'all' },
-  { label: t('executionPlanTemplates.scopes.system'), value: 'system' },
-  { label: t('executionPlanTemplates.scopes.user'), value: 'user' },
-  { label: t('executionPlanTemplates.scopes.org'), value: 'org' },
-])
-
 const hasActiveFilters = computed(
   () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
 )
 
+const filterTabs = computed(() => [
+  { name: 'all', label: t('executionPlanTemplates.filters.all'), count: store.totalCount },
+  { name: 'system', label: t('executionPlanTemplates.scopes.system'), count: store.systemCount },
+  { name: 'user', label: t('executionPlanTemplates.scopes.user'), count: store.userCount },
+])
+
 const isEditMode = computed(() => Boolean(editingItem.value))
 const isSystemScope = computed(() => editingItem.value?.scope === 'system')
 const drawerTitle = computed(() =>
-  isEditMode.value
-    ? t('executionPlanTemplates.actions.edit')
-    : t('executionPlanTemplates.actions.create'),
+  isSystemScope.value
+    ? t('executionPlanTemplates.actions.viewTitle')
+    : isEditMode.value
+      ? t('executionPlanTemplates.actions.editTitle')
+      : t('executionPlanTemplates.actions.createTitle'),
 )
+const drawerSubtitle = computed(() => {
+  if (!editingItem.value) return t('executionPlanTemplates.form.createHint')
+  return isSystemScope.value
+    ? `${t('executionPlanTemplates.scopes.system')} · ${editingItem.value.name}`
+    : editingItem.value.name
+})
 
 const rules = computed<FormRules>(() => ({
   name: [
@@ -155,6 +169,18 @@ const rules = computed<FormRules>(() => ({
 
 // ── 方法 ──────────────────────────────────────────────────────
 
+// 抽屉依赖（后端/提示词/引导提示词）按需加载，首次打开抽屉时并行拉取；
+// 执行策略随首屏加载（卡片标签依赖），不在此列
+const dependenciesLoaded = ref(false)
+
+const ensureDependenciesLoaded = (): void => {
+  if (dependenciesLoaded.value) return
+  dependenciesLoaded.value = true
+  void backendsStore.loadBackends()
+  void promptTemplatesStore.loadTemplates()
+  void bootstrapPromptTemplatesStore.loadTemplates()
+}
+
 const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
@@ -166,6 +192,7 @@ const resetForm = (): void => {
 
 const openCreateDrawer = (): void => {
   resetForm()
+  ensureDependenciesLoaded()
   drawerVisible.value = true
 }
 
@@ -178,6 +205,7 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
     ? deepClone(item.ruby_retry)
     : deepClone(DEFAULT_RUBY_RETRY)
   formModel.rounds = item.rounds?.length ? deepClone(item.rounds) : [deepClone(DEFAULT_ROUND)]
+  ensureDependenciesLoaded()
   drawerVisible.value = true
 }
 
@@ -401,53 +429,23 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (item: ExecutionPlanTemplate): void => {
-  if (item.scope === 'system') {
-    message.warning(t('executionPlanTemplates.messages.systemDeleteForbidden'))
-    return
-  }
-  deletingItem.value = item
-  deleteModalVisible.value = true
+const cardDate = (item: ExecutionPlanTemplate): string => {
+  const value = item.updated_at ?? item.created_at
+  return value ? formatDateTime(value, { dateStyle: 'short' }) : '—'
 }
 
-const executeDelete = async (): Promise<void> => {
-  if (!deletingItem.value) return
-
-  try {
-    await store.deleteTemplate(deletingItem.value.id)
-    message.success(t('executionPlanTemplates.messages.deleteSuccess'))
-    deleteModalVisible.value = false
-    deletingItem.value = null
-  } catch {
-    // Error is handled by the store
-  }
-}
-
-const getScopeTagType = (scope: Scope): 'default' | 'info' | 'success' => {
-  switch (scope) {
-    case 'system':
-      return 'default'
-    case 'user':
-      return 'info'
-    case 'org':
-      return 'success'
-    default:
-      return 'default'
-  }
-}
-
-const formatDate = (dateStr: string | undefined): string => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString()
+const cardDateTitle = (item: ExecutionPlanTemplate): string => {
+  const value = item.updated_at ?? item.created_at
+  return value ? formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' }) : ''
 }
 
 const modeBadgeClass = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
-  if (mode === 'extract') return 'bg-amber-50 text-amber-600'
-  if (mode === 'adjudicate') return 'bg-violet-50 text-violet-600'
-  if (mode === 'semantic_qa') return 'bg-emerald-50 text-emerald-600'
-  if (mode === 'revise') return 'bg-rose-50 text-rose-600'
-  return 'bg-sky-50 text-sky-600'
+  if (mode === 'extract') return 'bg-lf-accent-amber-soft text-lf-accent-amber'
+  if (mode === 'adjudicate') return 'bg-lf-accent-violet-soft text-lf-accent-violet'
+  if (mode === 'semantic_qa') return 'bg-lf-accent-emerald-soft text-lf-accent-emerald'
+  if (mode === 'revise') return 'bg-lf-accent-rose-soft text-lf-accent-rose'
+  return 'bg-lf-accent-sky-soft text-lf-accent-sky'
 }
 
 const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
@@ -461,336 +459,251 @@ const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
 
 // ── 生命周期 ──────────────────────────────────────────────────
 
-onMounted(async () => {
-  await Promise.all([
-    store.loadTemplates(),
-    backendsStore.loadBackends(),
-    promptTemplatesStore.loadTemplates(),
-    bootstrapPromptTemplatesStore.loadTemplates(),
-    executionProfilesStore.loadProfiles(),
-  ])
+onMounted(() => {
+  store.loadTemplates()
+  // 卡片上的执行策略名称标签依赖 profiles，需随首屏加载
+  executionProfilesStore.loadProfiles()
 })
 
-watch(
+useStoreErrorToast(
   () => store.error,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      store.error = null
-    }
+  () => {
+    store.error = null
   },
 )
 </script>
 
 <template>
-  <div class="lf-page">
-    <!-- 页面头部 -->
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('executionPlanTemplates.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('executionPlanTemplates.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('executionPlanTemplates.subtitle') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="store.loading" @click="store.loadTemplates">
-            {{ t('executionPlanTemplates.actions.refresh') }}
-          </NButton>
-          <NButton type="primary" @click="openCreateDrawer">
-            {{ t('executionPlanTemplates.actions.create') }}
-          </NButton>
-        </div>
-      </div>
-    </section>
+  <EntityListPage
+    :title="t('executionPlanTemplates.title')"
+    :subtitle="t('executionPlanTemplates.subtitle')"
+    :loading="store.loading"
+    :empty="store.filteredItems.length === 0"
+    :empty-description="
+      hasActiveFilters
+        ? t('executionPlanTemplates.empty.filtered')
+        : t('executionPlanTemplates.empty.default')
+    "
+  >
+    <template #actions>
+      <NButton secondary :loading="store.loading" @click="store.loadTemplates">
+        {{ t('common.actions.refresh') }}
+      </NButton>
+      <NButton type="primary" @click="openCreateDrawer">
+        {{ t('executionPlanTemplates.actions.create') }}
+      </NButton>
+    </template>
 
-    <!-- 统计卡片 -->
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.total') }}</div>
-        <div class="lf-metric-value">{{ store.totalCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.system') }}</div>
-        <div class="lf-metric-value">{{ store.systemCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.user') }}</div>
-        <div class="lf-metric-value">{{ store.userCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.avgRounds') }}</div>
-        <div class="lf-metric-value">{{ store.avgRoundsPerPlan }}</div>
-      </div>
-    </div>
+    <template #filters>
+      <ScopeFilterTabs
+        :tabs="filterTabs"
+        :value="store.scopeFilter"
+        @update:value="
+          (v: string) => (store.scopeFilter = v as ExecutionPlanTemplate['scope'] | 'all')
+        "
+      />
+      <NInput
+        v-model:value="store.searchQuery"
+        clearable
+        class="lg:max-w-sm!"
+        :placeholder="t('executionPlanTemplates.filters.searchPlaceholder')"
+      />
+    </template>
 
-    <div class="lf-panel px-4 py-3">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <NInput
-          v-model:value="store.searchQuery"
-          clearable
-          class="lg:max-w-sm"
-          :placeholder="t('executionPlanTemplates.filters.searchPlaceholder')"
-        />
-        <div class="flex flex-wrap gap-3">
-          <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
-          <NButton
-            v-if="hasActiveFilters"
-            quaternary
-            @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-          >
-            {{ t('executionPlanTemplates.filters.reset') }}
-          </NButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- 加载骨架屏 -->
-    <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <div v-for="index in 6" :key="index" class="lf-panel p-5">
-        <NSkeleton text :repeat="4" />
-      </div>
-    </div>
-
-    <!-- 空状态 -->
-    <NEmpty
-      v-else-if="store.filteredItems.length === 0"
-      class="lf-panel py-16"
-      :description="
-        hasActiveFilters
-          ? t('executionPlanTemplates.empty.filtered')
-          : t('executionPlanTemplates.empty.default')
-      "
-    >
-      <template #extra>
-        <NButton
-          v-if="hasActiveFilters"
-          secondary
-          @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-        >
-          {{ t('executionPlanTemplates.filters.reset') }}
-        </NButton>
-        <NButton v-else type="primary" @click="openCreateDrawer">
-          {{ t('executionPlanTemplates.actions.createFirst') }}
-        </NButton>
-      </template>
-    </NEmpty>
+    <template #empty-extra>
+      <NButton v-if="hasActiveFilters" secondary @click="store.resetFilters()">
+        {{ t('executionPlanTemplates.filters.reset') }}
+      </NButton>
+      <NButton v-else type="primary" @click="openCreateDrawer">
+        {{ t('executionPlanTemplates.actions.createFirst') }}
+      </NButton>
+    </template>
 
     <!-- 卡片网格 -->
-    <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="item in store.filteredItems"
         :key="item.id"
-        class="lf-interactive-card group flex h-full flex-col gap-4 p-5"
+        class="lf-interactive-card flex h-full cursor-pointer flex-col gap-4 p-5"
+        @click="openEditDrawer(item)"
       >
-        <!-- 头部：名称 + 作用域标签 -->
+        <!-- 头部：名称 + 编号 + 作用域标签 -->
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0">
-            <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+            <h2
+              class="truncate text-lg font-semibold tracking-tight text-lf-text-strong"
+              :title="item.name"
+            >
               {{ item.name }}
             </h2>
+            <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ item.id }}</p>
           </div>
-          <NTag round size="small" :type="getScopeTagType(item.scope)">
+          <NTag round size="small" :bordered="false" :type="getScopeTagType(item.scope)">
             {{ t(`executionPlanTemplates.scopes.${item.scope}`) }}
           </NTag>
         </div>
 
         <!-- 描述 -->
         <p
-          class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
-          :class="{ 'italic text-lf-text-subtle': !item.description }"
+          class="line-clamp-2 text-sm leading-6"
+          :class="item.description ? 'text-lf-text-muted' : 'text-lf-text-subtle'"
         >
           {{ item.description || t('executionPlanTemplates.card.noDescription') }}
         </p>
 
-        <!-- 轮次概览 -->
-        <div class="space-y-2">
-          <div class="flex items-center gap-2">
-            <NTag size="small" type="info" :bordered="false">
-              {{ item.rounds?.length ?? 0 }} {{ t('executionPlanTemplates.card.rounds') }}
-            </NTag>
-            <NTag
-              v-if="profileNameById.get(item.profile_id)"
-              size="small"
-              :bordered="false"
-              class="max-w-[160px]"
-            >
-              <span class="truncate">
-                {{ t('executionPlanTemplates.card.profile') }}:
-                {{ profileNameById.get(item.profile_id) }}
-              </span>
-            </NTag>
-          </div>
-          <div v-if="item.rounds?.length" class="space-y-1">
-            <div
-              v-for="(round, idx) in item.rounds.slice(0, 3)"
-              :key="idx"
-              class="flex items-center gap-2 text-xs text-lf-text-muted"
-            >
-              <span
-                class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
-                :class="modeBadgeClass(round.mode)"
-              >
-                {{ idx + 1 }}
-              </span>
-              <span class="truncate">
-                {{ modeLabel(round.mode) }}
-              </span>
-            </div>
-            <div v-if="item.rounds.length > 3" class="text-xs text-lf-text-subtle">
-              +{{ item.rounds.length - 3 }} {{ t('executionPlanTemplates.card.moreRounds') }}
-            </div>
-          </div>
+        <!-- 策略信息行 -->
+        <div class="flex items-baseline gap-3">
+          <span class="w-14 shrink-0 text-xs text-lf-text-subtle">
+            {{ t('executionPlanTemplates.card.profile') }}
+          </span>
+          <span
+            class="min-w-0 flex-1 truncate text-[13px] text-lf-text"
+            :title="profileNameById.get(item.profile_id) ?? ''"
+          >
+            {{ profileNameById.get(item.profile_id) ?? '—' }}
+          </span>
         </div>
 
-        <!-- 底部：时间 + 操作 -->
+        <!-- 轮次徽章 -->
+        <div v-if="item.rounds?.length" class="flex flex-wrap gap-1.5">
+          <span
+            v-for="(round, idx) in item.rounds"
+            :key="idx"
+            class="inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-xs font-medium"
+            :class="modeBadgeClass(round.mode)"
+          >
+            <span
+              class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-lf-surface text-[11px] font-bold"
+            >
+              {{ idx + 1 }}
+            </span>
+            {{ modeLabel(round.mode) }}
+          </span>
+        </div>
+
+        <!-- 底部：更新时间 + 操作 -->
         <div class="mt-auto border-t border-lf-border-soft pt-4">
           <div class="flex items-center justify-between gap-3">
-            <span class="text-xs text-lf-text-subtle">
-              {{ t('executionPlanTemplates.card.createdAt') }} {{ formatDate(item.created_at) }}
+            <span class="text-xs text-lf-text-subtle" :title="cardDateTitle(item)">
+              {{ t('executionPlanTemplates.card.updatedAt') }} {{ cardDate(item) }}
             </span>
-            <div class="flex items-center gap-2">
-              <NButton
-                v-if="item.scope !== 'system'"
-                text
-                type="primary"
-                class="font-medium"
-                @click="openEditDrawer(item)"
-              >
-                {{ t('executionPlanTemplates.actions.edit') }}
-              </NButton>
-              <NButton
-                v-if="item.scope !== 'system'"
-                text
-                type="error"
-                class="font-medium"
-                @click="confirmDelete(item)"
-              >
-                {{ t('executionPlanTemplates.actions.delete') }}
-              </NButton>
-              <NButton
-                v-if="item.scope === 'system'"
-                text
-                type="info"
-                class="font-medium"
-                @click="openEditDrawer(item)"
-              >
-                {{ t('executionPlanTemplates.actions.view') }}
+            <div class="flex items-center gap-2" @click.stop>
+              <template v-if="item.scope !== 'system'">
+                <NButton text type="primary" class="font-medium" @click="openEditDrawer(item)">
+                  {{ t('common.actions.edit') }}
+                </NButton>
+                <NButton text type="error" class="font-medium" @click="confirmDelete(item)">
+                  {{ t('common.actions.delete') }}
+                </NButton>
+              </template>
+              <NButton v-else text type="info" class="font-medium" @click="openEditDrawer(item)">
+                {{ t('common.actions.view') }}
               </NButton>
             </div>
           </div>
         </div>
       </div>
     </div>
+  </EntityListPage>
 
-    <!-- 创建/编辑抽屉 -->
-    <NDrawer v-model:show="drawerVisible" :width="'min(720px, 100vw)'" placement="right">
-      <NDrawerContent :native-scrollbar="false">
-        <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-          </div>
-        </template>
+  <!-- 创建/编辑抽屉 -->
+  <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.l" placement="right">
+    <NDrawerContent :native-scrollbar="false">
+      <template #header>
+        <DrawerHeader :title="drawerTitle" :subtitle="drawerSubtitle" />
+      </template>
 
-        <NForm
-          ref="formRef"
-          :model="formModel"
-          :rules="rules"
-          label-placement="top"
-          require-mark-placement="right-hanging"
-        >
-          <NFormItem :label="t('executionPlanTemplates.form.name')" path="name">
-            <NInput
-              v-model:value="formModel.name"
-              :placeholder="t('executionPlanTemplates.form.namePlaceholder')"
+      <NForm
+        ref="formRef"
+        :model="formModel"
+        :rules="rules"
+        label-placement="top"
+        require-mark-placement="right-hanging"
+      >
+        <NFormItem :label="t('executionPlanTemplates.form.name')" path="name">
+          <NInput
+            v-model:value="formModel.name"
+            :placeholder="t('executionPlanTemplates.form.namePlaceholder')"
+            :disabled="isSystemScope"
+          />
+        </NFormItem>
+
+        <NFormItem :label="t('executionPlanTemplates.form.description')" path="description">
+          <NInput
+            v-model:value="formModel.description"
+            type="textarea"
+            :placeholder="t('executionPlanTemplates.form.descriptionPlaceholder')"
+            :rows="3"
+            :disabled="isSystemScope"
+          />
+        </NFormItem>
+
+        <NFormItem :label="t('executionPlanTemplates.form.profile')" path="profile_id">
+          <div class="w-full">
+            <NSelect
+              v-model:value="formModel.profile_id"
+              :options="executionProfileOptions"
+              :placeholder="t('executionPlanTemplates.form.profilePlaceholder')"
               :disabled="isSystemScope"
             />
-          </NFormItem>
-
-          <NFormItem :label="t('executionPlanTemplates.form.description')" path="description">
-            <NInput
-              v-model:value="formModel.description"
-              type="textarea"
-              :placeholder="t('executionPlanTemplates.form.descriptionPlaceholder')"
-              :rows="3"
-              :disabled="isSystemScope"
-            />
-          </NFormItem>
-
-          <NFormItem :label="t('executionPlanTemplates.form.profile')" path="profile_id">
-            <div class="w-full">
-              <NSelect
-                v-model:value="formModel.profile_id"
-                :options="executionProfileOptions"
-                :placeholder="t('executionPlanTemplates.form.profilePlaceholder')"
-                :disabled="isSystemScope"
-              />
-              <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
-                {{ t('executionPlanTemplates.form.profileHint') }}
-              </div>
+            <div class="mt-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanTemplates.form.profileHint') }}
             </div>
-          </NFormItem>
-
-          <!-- 轮次编辑器 -->
-          <div class="mb-4">
-            <span class="mb-2 block text-sm font-medium text-lf-text-strong">
-              {{ t('executionPlanTemplates.form.rounds') }}
-            </span>
-            <ExecutionPlanEditor
-              :rounds="formModel.rounds"
-              :ruby-retry="formModel.ruby_retry"
-              :backends="backendOptions"
-              :prompt-templates="promptTemplateOptions"
-              :bootstrap-prompt-templates="bootstrapPromptTemplateOptions"
-              :disabled="isSystemScope"
-              @update:rounds="formModel.rounds = $event"
-              @update:ruby-retry="formModel.ruby_retry = $event"
-            />
           </div>
-        </NForm>
+        </NFormItem>
 
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <NButton @click="drawerVisible = false">
-              {{ t('executionPlanTemplates.actions.cancel') }}
-            </NButton>
-            <NButton
-              v-if="!isSystemScope"
-              type="primary"
-              :loading="store.creating || store.updating"
-              @click="onSubmit"
-            >
-              {{
-                isEditMode
-                  ? t('executionPlanTemplates.actions.submitUpdate')
-                  : t('executionPlanTemplates.actions.submitCreate')
-              }}
-            </NButton>
-          </div>
-        </template>
-      </NDrawerContent>
-    </NDrawer>
+        <!-- 轮次编辑器 -->
+        <div class="mb-4">
+          <span class="mb-2 block text-sm font-medium text-lf-text-strong">
+            {{ t('executionPlanTemplates.form.rounds') }}
+          </span>
+          <ExecutionPlanEditor
+            :rounds="formModel.rounds"
+            :ruby-retry="formModel.ruby_retry"
+            :backends="backendOptions"
+            :prompt-templates="promptTemplateOptions"
+            :bootstrap-prompt-templates="bootstrapPromptTemplateOptions"
+            :disabled="isSystemScope"
+            @update:rounds="formModel.rounds = $event"
+            @update:ruby-retry="formModel.ruby_retry = $event"
+          />
+        </div>
+      </NForm>
 
-    <!-- 删除确认弹窗 -->
-    <NModal
-      v-model:show="deleteModalVisible"
-      preset="dialog"
-      type="warning"
-      :title="t('executionPlanTemplates.actions.confirmDelete')"
-      :content="
-        deletingItem ? t('executionPlanTemplates.delete.confirm', { name: deletingItem.name }) : ''
-      "
-      :positive-text="t('executionPlanTemplates.actions.confirmDelete')"
-      :negative-text="t('executionPlanTemplates.actions.cancel')"
-      :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
-      @positive-click="executeDelete"
-    />
-  </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <NButton @click="drawerVisible = false">
+            {{ t('common.cancel') }}
+          </NButton>
+          <NButton
+            v-if="!isSystemScope"
+            type="primary"
+            :loading="store.creating || store.updating"
+            @click="onSubmit"
+          >
+            {{
+              isEditMode
+                ? t('executionPlanTemplates.actions.submitUpdate')
+                : t('executionPlanTemplates.actions.submitCreate')
+            }}
+          </NButton>
+        </div>
+      </template>
+    </NDrawerContent>
+  </NDrawer>
+
+  <!-- 删除确认弹窗 -->
+  <NModal
+    v-model:show="deleteModalVisible"
+    preset="dialog"
+    type="warning"
+    :title="t('common.actions.confirmDelete')"
+    :content="
+      deletingItem ? t('executionPlanTemplates.delete.confirm', { name: deletingItem.name }) : ''
+    "
+    :positive-text="t('common.actions.deleteConfirmAction')"
+    :negative-text="t('common.cancel')"
+    :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
+    @positive-click="executeDelete"
+  />
 </template>

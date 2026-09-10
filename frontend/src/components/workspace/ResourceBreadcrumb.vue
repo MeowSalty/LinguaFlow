@@ -167,7 +167,7 @@ onBeforeUnmount(() => {
             <NDropdown :options="collapsedOptions" trigger="click" @select="handleCollapsedSelect">
               <button
                 type="button"
-                class="inline-flex h-6 items-center rounded-md px-1.5 text-lf-text-muted transition-colors hover:bg-lf-surface-muted hover:text-lf-text-strong"
+                class="inline-flex h-6 items-center rounded-lf-ctl px-1.5 text-lf-text-muted transition-colors hover:bg-lf-surface-muted hover:text-lf-text-strong"
                 :title="collapsedItems.map((item) => item.label).join(' / ')"
                 @click.stop
               >

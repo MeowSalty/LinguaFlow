@@ -56,14 +56,14 @@ const handlePruneApplied = async (payload: {
 <template>
   <div class="space-y-3">
     <div
-      class="flex flex-col gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+      class="flex flex-col gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
     >
       <div class="flex min-w-0 flex-1 items-center gap-3">
         <NInput
           v-model:value="glossary.searchQuery"
           clearable
           size="small"
-          class="w-full sm:max-w-xs"
+          class="w-full sm:max-w-xs!"
           :placeholder="t('workspace.segment.searchPlaceholder')"
         />
         <span
@@ -152,7 +152,7 @@ const handlePruneApplied = async (payload: {
       {{ glossary.importError }}
     </NAlert>
 
-    <div class="lf-table overflow-hidden rounded-xl border border-lf-border-soft">
+    <div class="lf-table overflow-hidden rounded-lf-card border border-lf-border-soft">
       <NDataTable
         size="small"
         :columns="glossaryMgmt.glossaryColumns.value"

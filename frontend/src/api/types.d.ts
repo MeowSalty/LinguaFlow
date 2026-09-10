@@ -3310,9 +3310,10 @@ export interface components {
             max_words_per_batch?: number;
             /**
              * @description 可裁决的质量问题 code 子集。空或不传时默认 ["source_residual", "punctuation_surplus"]。
-             *     untranslated 与 duplicate 为硬规则，不可裁决。
+             *     duplicate 为硬规则，不可裁决（需同批多段输入，无单段裁决语义）。
+             *     untranslated 可裁决：源语与目标语共用文字系统时，同形译文（专有名词、纯汉字标题、原样保留的英文片段）在确定性层面与真正的原文回传不可区分，需 LLM 判断是否为有意保留。
              */
-            adjudicate_codes?: ("source_residual" | "length_ratio" | "punctuation_surplus")[];
+            adjudicate_codes?: ("source_residual" | "length_ratio" | "punctuation_surplus" | "untranslated")[];
             retry?: components["schemas"]["RetryConfig"];
         };
         /** @description 语义质检轮次配置。system prompt 内置不可见，无 prompt_template_id；产出 warning 级语义 issue 直接进人审。 */
@@ -3498,7 +3499,7 @@ export interface components {
              */
             enabled: boolean;
             /**
-             * @description error 级别问题自动 reject
+             * @description error 级别问题自动 reject；untranslated 例外——源语与目标语共用文字系统时降为 warning，该类"译文与原文相同"的段落不会被自动 reject
              * @default false
              */
             auto_reject: boolean;

@@ -1,22 +1,6 @@
 <script setup lang="ts">
-import {
-  NAlert,
-  NButton,
-  NDrawer,
-  NDrawerContent,
-  NForm,
-  NFormItem,
-  NIcon,
-  NInput,
-  NSelect,
-  NSwitch,
-  NTabPane,
-  NTabs,
-  useMessage,
-  type FormInst,
-  type FormRules,
-} from 'naive-ui'
-import { ref, computed, reactive, watch, onMounted, onBeforeUnmount, provide } from 'vue'
+import { NAlert, NButton, NIcon, NTabPane, NTabs } from 'naive-ui'
+import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -28,7 +12,7 @@ import WorkspaceMetricsBar from '@/components/workspace/WorkspaceMetricsBar.vue'
 import GlossaryPanel from '@/components/workspace/GlossaryPanel.vue'
 import GlossaryDrawer from '@/components/workspace/GlossaryDrawer.vue'
 import GlossaryImportModal from '@/components/workspace/GlossaryImportModal.vue'
-import GlossarySyncDialog from '@/components/workspace/GlossarySyncDialog.vue'
+import GlossarySyncDrawer from '@/components/workspace/GlossarySyncDrawer.vue'
 import SegmentPanel from '@/components/workspace/SegmentPanel.vue'
 import SegmentTranslationPreviewDrawer from '@/components/workspace/SegmentTranslationPreviewDrawer.vue'
 import SegmentRevisionPreviewDrawer from '@/components/workspace/SegmentRevisionPreviewDrawer.vue'
@@ -37,14 +21,13 @@ import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
 import QaRecheckDrawer from '@/components/workspace/QaRecheckDrawer.vue'
 import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
 import IncrementalResultModal from '@/components/workspace/IncrementalResultModal.vue'
+import ProjectFormDrawer from '@/components/projects/ProjectFormDrawer.vue'
 import { useGlossaryManagement, GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
 import { useJobActions } from '@/composables/useJobActions'
 import { useConflictHandling } from '@/composables/useConflictHandling'
-import { useLanguageOptions } from '@/composables/useLanguageOptions'
 import { formatDate } from '@/composables/useWorkspaceUtils'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlossaryStore } from '@/stores/glossary'
-import { useProjectsStore } from '@/stores/projects'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
@@ -54,11 +37,9 @@ type WorkspaceTab = 'resources' | 'segments' | 'jobs' | 'glossary'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
-const message = useMessage()
 const workspace = useProjectWorkspaceStore()
 const glossary = useGlossaryStore()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
-const projectsStore = useProjectsStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
 const segmentPanelRef = ref<InstanceType<typeof SegmentPanel> | null>(null)
@@ -95,78 +76,12 @@ const loadTabData = async (tab: WorkspaceTab): Promise<void> => {
   loadedTabs.add(tab)
 }
 
-// ── 编辑项目抽屉 ──
+// ── 编辑项目抽屉（表单在共享 ProjectFormDrawer 内） ──
 const editDrawerVisible = ref(false)
-const editFormRef = ref<FormInst | null>(null)
-const editSubmitting = ref(false)
-
-const editFormModel = reactive({
-  name: '',
-  source_lang: 'auto',
-  target_lang: 'en-US',
-  glossary_enabled: false,
-})
-
-const { targetLanguageOptions, sourceLanguageOptions } = useLanguageOptions()
-
-const editFormRules = computed<FormRules>(() => ({
-  name: [
-    {
-      required: true,
-      message: t('projects.validation.nameRequired'),
-      trigger: ['input', 'blur'],
-    },
-  ],
-  source_lang: [
-    {
-      required: true,
-      message: t('projects.validation.sourceLangRequired'),
-      trigger: ['change', 'blur'],
-    },
-  ],
-  target_lang: [
-    {
-      required: true,
-      message: t('projects.validation.targetLangRequired'),
-      trigger: ['change', 'blur'],
-    },
-  ],
-}))
 
 const openEditDrawer = (): void => {
   if (!workspace.project) return
-  editFormModel.name = workspace.project.name
-  editFormModel.source_lang = workspace.project.source_lang || 'auto'
-  editFormModel.target_lang = workspace.project.target_lang || 'en-US'
-  editFormModel.glossary_enabled = workspace.project.glossary_enabled ?? false
   editDrawerVisible.value = true
-}
-
-const closeEditDrawer = (): void => {
-  editDrawerVisible.value = false
-}
-
-const submitEditProject = async (): Promise<void> => {
-  await editFormRef.value?.validate()
-  if (!projectId.value) return
-
-  editSubmitting.value = true
-  try {
-    const updated = await projectsStore.updateProject(projectId.value, {
-      name: editFormModel.name.trim(),
-      source_lang: editFormModel.source_lang.trim(),
-      target_lang: editFormModel.target_lang.trim(),
-      glossary_enabled: editFormModel.glossary_enabled,
-    })
-    workspace.project = updated
-    message.success(t('projects.messages.updateSuccess'))
-    closeEditDrawer()
-  } catch (err) {
-    console.error(err)
-    message.error(projectsStore.updateError || t('projects.messages.updateFailed'))
-  } finally {
-    editSubmitting.value = false
-  }
 }
 
 // ── projectId ──
@@ -281,16 +196,8 @@ const handleTranslateEpubChapters = (): void => {
   const epubResourceId = workspace.epubDirectoryResourceId
   if (!epubResourceId) return
   const groupKeys = [...workspace.epubSelectedGroupKeys]
-  console.debug('[projectId] handleTranslateEpubChapters:', {
-    epubResourceId,
-    groupKeys,
-    setBeforeClear: [...workspace.epubSelectedGroupKeys],
-  })
   jobMgmt.openResourceJobDrawerWithIds([epubResourceId], groupKeys)
   workspace.epubSelectedGroupKeys = new Set()
-  console.debug('[projectId] after clear:', {
-    setAfterClear: [...workspace.epubSelectedGroupKeys],
-  })
 }
 
 /** 清除 EPUB 章节选中 */
@@ -553,8 +460,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-3">
-    <section class="lf-page-header px-4! py-3! sm:px-5!">
+  <div class="lf-page">
+    <section class="lf-page-header">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <NButton quaternary size="small" @click="router.push('/projects')">
@@ -572,7 +479,7 @@ onMounted(() => {
             quaternary
             circle
             size="tiny"
-            :title="t('projects.actions.edit')"
+            :title="t('common.actions.edit')"
             @click="openEditDrawer"
           >
             <template #icon>
@@ -616,7 +523,7 @@ onMounted(() => {
             <template #icon>
               <NIcon><IconCarbonRenew /></NIcon>
             </template>
-            {{ t('workspace.actions.refresh') }}
+            {{ t('common.actions.refresh') }}
           </NButton>
         </div>
       </div>
@@ -808,8 +715,8 @@ onMounted(() => {
       @import="(file) => glossaryMgmt.handleGlossaryImport(file)"
     />
 
-    <!-- 术语表同步对话框 -->
-    <GlossarySyncDialog
+    <!-- 术语表同步抽屉 -->
+    <GlossarySyncDrawer
       v-model:show="glossaryMgmt.syncDialogVisible.value"
       :project-id="projectId!"
       @close="glossaryMgmt.closeSyncDialog"
@@ -861,64 +768,10 @@ onMounted(() => {
     />
 
     <!-- 编辑项目抽屉 -->
-    <NDrawer v-model:show="editDrawerVisible" :width="'min(420px, 100vw)'" placement="right">
-      <NDrawerContent :title="t('projects.edit.title')" closable>
-        <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
-          {{ t('projects.edit.description') }}
-        </div>
-
-        <NForm
-          ref="editFormRef"
-          :model="editFormModel"
-          :rules="editFormRules"
-          label-placement="top"
-        >
-          <NFormItem path="name" :label="t('projects.form.name')">
-            <NInput
-              v-model:value="editFormModel.name"
-              :placeholder="t('projects.form.namePlaceholder')"
-              maxlength="80"
-              show-count
-            />
-          </NFormItem>
-
-          <NFormItem path="glossary_enabled" :label="t('projects.form.glossaryEnabled')">
-            <NSwitch v-model:value="editFormModel.glossary_enabled" />
-          </NFormItem>
-
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <NFormItem path="source_lang" :label="t('projects.form.sourceLang')">
-              <NSelect
-                v-model:value="editFormModel.source_lang"
-                filterable
-                tag
-                :options="sourceLanguageOptions"
-                :placeholder="t('projects.form.languagePlaceholder')"
-              />
-            </NFormItem>
-            <NFormItem path="target_lang" :label="t('projects.form.targetLang')">
-              <NSelect
-                v-model:value="editFormModel.target_lang"
-                filterable
-                tag
-                :options="targetLanguageOptions"
-                :placeholder="t('projects.form.languagePlaceholder')"
-              />
-            </NFormItem>
-          </div>
-        </NForm>
-
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <NButton :disabled="editSubmitting" @click="closeEditDrawer">
-              {{ t('projects.actions.cancel') }}
-            </NButton>
-            <NButton type="primary" :loading="editSubmitting" @click="submitEditProject">
-              {{ t('projects.actions.submitUpdate') }}
-            </NButton>
-          </div>
-        </template>
-      </NDrawerContent>
-    </NDrawer>
+    <ProjectFormDrawer
+      v-model:show="editDrawerVisible"
+      :project="workspace.project"
+      @saved="(project) => (workspace.project = project)"
+    />
   </div>
 </template>

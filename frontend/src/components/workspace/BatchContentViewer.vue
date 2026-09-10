@@ -106,10 +106,8 @@ function tryParseJson(input: string): { formatted: string; valid: boolean } {
         </NButton>
       </div>
     </div>
-    <div v-if="content" class="max-h-60 overflow-auto rounded-lg bg-lf-code-bg p-3">
-      <pre
-        class="text-xs text-lf-text whitespace-pre-wrap break-all"
-      ><code>{{ displayContent }}</code></pre>
+    <div v-if="content" class="lf-code-panel max-h-60 overflow-auto">
+      <pre class="whitespace-pre-wrap break-all"><code>{{ displayContent }}</code></pre>
     </div>
     <div v-else class="py-2 text-center text-xs text-lf-text-muted">
       {{ t('workspace.job.events.batch.noContent') }}
