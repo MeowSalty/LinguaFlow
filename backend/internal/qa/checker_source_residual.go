@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // 可调常量：强档独立脚本默认最小连续长度；kana/hangul 为 1。
@@ -75,7 +77,10 @@ func (c *SourceResidualChecker) Check(_ context.Context, segments []CheckInput) 
 		if src == "" || tgt == "" {
 			continue
 		}
-		if src == tgt {
+		// 交接守卫与 untranslated 同口径：比较在 ruby 剥离形态上进行，
+		// 否则 LLM 回传剥离形态原文时译文含残留假名，本检测器会在
+		// untranslated 的 error 之外再刷冗余 warning，破坏二者分工。
+		if strings.TrimSpace(ruby.StripRubyTags(src)) == strings.TrimSpace(ruby.StripRubyTags(tgt)) {
 			continue // 整段未译由 untranslated 负责
 		}
 		cleanedTgt := stripPlaceholders(tgt)
