@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"unicode"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // UntranslatedChecker 检测未翻译的段落（source == target）。
@@ -31,8 +33,13 @@ func (c *UntranslatedChecker) Name() string { return CheckUntranslated }
 func (c *UntranslatedChecker) Check(_ context.Context, segments []CheckInput) []QualityIssue {
 	var issues []QualityIssue
 	for _, seg := range segments {
-		src := strings.TrimSpace(seg.SourceText)
-		tgt := strings.TrimSpace(seg.TargetText)
+		rawTgt := strings.TrimSpace(seg.TargetText)
+		// 相等比较用基底形态：LLM 原样回传 ruby 剥离形态时 译文 == strip(原文)，
+		// 但与含标签的原文精确比较永不相等，检测会被绕过。复用 ruby.StripRubyTags
+		// 单一来源（与 LengthRatioChecker 同口径）；span 定位仍用原始译文形态，
+		// MatchedText 必须是用户可见的真实译文，不能泄漏剥离出的标签形态。
+		src := strings.TrimSpace(ruby.StripRubyTags(seg.SourceText))
+		tgt := strings.TrimSpace(ruby.StripRubyTags(seg.TargetText))
 		if src == "" || tgt == "" {
 			continue
 		}
@@ -45,9 +52,9 @@ func (c *UntranslatedChecker) Check(_ context.Context, segments []CheckInput) []
 			continue
 		}
 		severity, message := untranslatedVerdict(c, tgt)
-		span := LocateSpan(seg.TargetText, tgt)
+		span := LocateSpan(seg.TargetText, rawTgt)
 		if span == nil {
-			span = &Span{MatchedText: tgt}
+			span = &Span{MatchedText: rawTgt}
 		}
 		issues = append(issues, QualityIssue{
 			SegmentIndex: seg.Index,

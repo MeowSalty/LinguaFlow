@@ -2,6 +2,7 @@ package qa
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -308,5 +309,114 @@ func TestUntranslatedChecker_EngineRun(t *testing.T) {
 	}
 	if issues[0].Severity != SeverityWarning {
 		t.Errorf("severity=%s, want warning（ja→zh 汉字共用）", issues[0].Severity)
+	}
+}
+
+// TestUntranslatedChecker_RubyStrippedIdentity 覆盖 ruby 剥离形态的恒等回传：
+// ruby protector 剥标签送 LLM、注音还原未插回时，落库译文等于 strip(原文)，
+// 与含标签原文精确比较永不相等，检测被绕过。比较须在基底形态上进行
+// （与 LengthRatioChecker 同口径），span 定位仍用原始译文形态。
+func TestUntranslatedChecker_RubyStrippedIdentity(t *testing.T) {
+	c := NewUntranslatedChecker("ja", "zh")
+	cases := []struct {
+		name         string
+		source       string
+		target       string
+		wantIssues   int
+		wantSeverity IssueSeverity // wantIssues 为 0 时不校验
+		wantMatched  string        // 非空时断言 span.MatchedText
+		noRubyTags   bool          // 断言 MatchedText 不含剥离出的标签形态
+	}{
+		{
+			name:         "ja→zh 译文为剥离形态（含残留假名）报 error",
+			source:       "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>、隠し通路の情報を炎神皇サイドに流したんだ？",
+			target:       "何故ぜ、隠し通路の情報を炎神皇サイドに流したんだ？",
+			wantIssues:   1,
+			wantSeverity: SeverityError,
+			wantMatched:  "何故ぜ、隠し通路の情報を炎神皇サイドに流したんだ？",
+			noRubyTags:   true,
+		},
+		{
+			name:       "译文为正常中文翻译不报",
+			source:     "<ruby>隠<rt>かく</rt>し通路</ruby>の情報",
+			target:     "秘密通道的情报",
+			wantIssues: 0,
+		},
+		{
+			name:       "译文为含正常还原 ruby 标签的翻译不报",
+			source:     "<ruby>隠<rt>かく</rt>し通路</ruby>の情報",
+			target:     "<ruby>秘密<rt>mìmì</rt></ruby>通道的情报",
+			wantIssues: 0,
+		},
+		{
+			name:         "译文与原文（含标签）完全相同仍报（行为不变）",
+			source:       "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>、隠し通路の情報を炎神皇サイドに流したんだ？",
+			target:       "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>、隠し通路の情報を炎神皇サイドに流したんだ？",
+			wantIssues:   1,
+			wantSeverity: SeverityError,
+			wantMatched:  "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>、隠し通路の情報を炎神皇サイドに流したんだ？",
+		},
+		{
+			name:         "译文为纯汉字回传降 warning（走三分裁决，无假名）",
+			source:       "<ruby>北海道<rt>ほっかいどう</rt></ruby>",
+			target:       "北海道",
+			wantIssues:   1,
+			wantSeverity: SeverityWarning,
+			wantMatched:  "北海道",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			issues := c.Check(context.Background(), []CheckInput{
+				{Index: 0, SourceText: tc.source, TargetText: tc.target},
+			})
+			if len(issues) != tc.wantIssues {
+				t.Fatalf("source=%q target=%q want %d issues, got %d: %+v",
+					tc.source, tc.target, tc.wantIssues, len(issues), issues)
+			}
+			if tc.wantIssues == 0 {
+				return
+			}
+			issue := issues[0]
+			if issue.Code != CheckUntranslated {
+				t.Errorf("code=%s, want %s", issue.Code, CheckUntranslated)
+			}
+			if issue.Severity != tc.wantSeverity {
+				t.Errorf("severity=%s, want %s", issue.Severity, tc.wantSeverity)
+			}
+			if issue.Span == nil {
+				t.Fatal("expected span on untranslated issue")
+			}
+			if issue.Span.MatchedText != tc.wantMatched {
+				t.Errorf("matched=%q, want %q", issue.Span.MatchedText, tc.wantMatched)
+			}
+			// MatchedText 是用户可见的真实译文，不得泄漏剥离出的标签形态。
+			if tc.noRubyTags &&
+				(strings.Contains(issue.Span.MatchedText, "<rt>") || strings.Contains(issue.Span.MatchedText, "<ruby>")) {
+				t.Errorf("matched=%q 不应含 ruby 剥离标签形态", issue.Span.MatchedText)
+			}
+		})
+	}
+}
+
+// 引擎集成：LLM 原样回传 ruby 剥离形态（译文 == strip(原文)，含残留假名）
+// 端到端产出 untranslated 的 error issue，证明注音还原失败不再绕过检测。
+func TestUntranslatedChecker_EngineRun_RubyStrippedIdentity(t *testing.T) {
+	e := NewEngine(Config{Enabled: true, Checks: []string{CheckUntranslated}, SourceLang: "ja", TargetLang: "zh"}, nil)
+	issues := e.Run(context.Background(), []CheckInput{
+		{
+			Index:      0,
+			SourceText: "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>、隠し通路の情報を炎神皇サイドに流したんだ？",
+			TargetText: "何故ぜ、隠し通路の情報を炎神皇サイドに流したんだ？",
+		},
+	})
+	if len(issues) != 1 {
+		t.Fatalf("want 1 issue, got %d: %+v", len(issues), issues)
+	}
+	if issues[0].Code != CheckUntranslated {
+		t.Errorf("code=%s, want %s", issues[0].Code, CheckUntranslated)
+	}
+	if issues[0].Severity != SeverityError {
+		t.Errorf("severity=%s, want error（译文含假名，真回传强证据）", issues[0].Severity)
 	}
 }
