@@ -358,6 +358,10 @@ const adjudicateCodeOptions = computed(() => [
     label: t('executionPlanEditor.round.adjudicateCodePunctuationSurplus'),
     value: 'punctuation_surplus' as AdjudicateCode,
   },
+  {
+    label: t('executionPlanEditor.round.adjudicateCodeUntranslated'),
+    value: 'untranslated' as AdjudicateCode,
+  },
 ])
 
 const semanticQASegmentScopeOptions = computed(() => [
