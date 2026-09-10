@@ -1,8 +1,11 @@
 name: Deploy to Hugging Face
 
+# 部署依赖 ghcr 镜像就绪（HF 收到推送后会立刻构建并拉取基础镜像），
+# 因此挂在本仓库 "Release Docker" 工作流成功完成之后，
+# 而非 Release 草稿创建时（镜像尚未构建）或 release published 瞬间（镜像仍在推送）
 on:
   workflow_run:
-    workflows: ["Release"]
+    workflows: ["Release Docker"]
     types:
       - completed
 
@@ -12,26 +15,62 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: 推送到 Hugging Face Spaces
+      - name: 推送最小部署内容到 Hugging Face Spaces
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # workflow_run 事件的 ref 是默认分支，版本号须从触发的原始事件取：
+          # Release Docker 由 release published 触发，其 head_branch 即 release tag（如 v0.10.0）
+          TAG: ${{ github.event.workflow_run.head_branch }}
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          
-          # 使用 Hugging Face 专用的 Dockerfile
-          mv Dockerfile.hf Dockerfile
-          
-          # 更新镜像版本为当前 tag
-          sed -i "s/:latest/:${GITHUB_REF_NAME}/" Dockerfile
-          
-          git add Dockerfile
-          git commit -m "chore: deploy ${GITHUB_REF_NAME}" || true
-          
-          # 添加 Hugging Face 远程仓库
-          git remote add hf https://MeowSalty:${HF_TOKEN}@huggingface.co/spaces/MeowSalty/linguaflow
-          
-          # 推送
-          git push hf main --force
+          set -euo pipefail
+
+          # ghcr 镜像 tag 不带 v 前缀（如 v0.10.0 -> 0.10.0）
+          IMAGE_TAG="${TAG#v}"
+          if [ -z "$IMAGE_TAG" ]; then
+            echo "::error::无法确定镜像 tag（workflow_run.head_branch 为空），中止部署"
+            exit 1
+          fi
+
+          WORKDIR=$(mktemp -d)
+          cd "$WORKDIR"
+
+          # Space 仓库只放最小内容，避免 force push 覆盖无关文件：
+          # - Dockerfile: 引用 ghcr 发布镜像，HF 收到推送后立刻以它构建 Space
+          # - README.md: HF 规定 Docker Space 必须携带 front-matter（sdk/app_port），
+          #   由部署现场生成，避免 GitHub 版 README 覆盖 Space 配置
+          cat > Dockerfile <<EOF
+          FROM ghcr.io/meowsalty/linguaflow:${IMAGE_TAG}
+          EXPOSE 7860
+          CMD ["serve", "--port", "7860", "--host", "0.0.0.0"]
+          EOF
+
+          cat > README.md <<EOF
+          ---
+          title: LinguaFlow
+          emoji: 🌐
+          colorFrom: indigo
+          colorTo: blue
+          sdk: docker
+          app_port: 7860
+          pinned: true
+          license: agpl-3.0
+          short_description: AI 驱动的多语言翻译工作台
+          ---
+
+          # LinguaFlow
+
+          AI 驱动的多语言翻译工作台：上传文档、字幕、电子书，配置 AI 后端即可批量翻译，
+          支持术语管理、质量检测、翻译审核与进度追踪。
+
+          - 源码：https://github.com/MeowSalty/LinguaFlow
+          - 镜像：ghcr.io/meowsalty/linguaflow:${IMAGE_TAG}
+          EOF
+
+          git init -b main
+          # 身份限定在孤儿仓库内：本地重跑脚本验证时不会改写全局 git 配置
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add Dockerfile README.md
+          git commit -m "chore: deploy ${TAG}"
+
+          git push "https://MeowSalty:${HF_TOKEN}@huggingface.co/spaces/MeowSalty/linguaflow" main --force

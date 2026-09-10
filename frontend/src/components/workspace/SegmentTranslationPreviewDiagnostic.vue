@@ -54,8 +54,8 @@ const hasErrorInfo = computed(
 </script>
 
 <template>
-  <div class="rounded-lg border border-lf-border-soft bg-lf-surface-muted/30 p-3">
-    <div class="flex flex-wrap items-center gap-1.5">
+  <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/30 p-3">
+    <div class="flex flex-wrap items-center gap-1.5 tabular-nums">
       <span class="text-xs font-medium text-lf-text-strong">
         {{ t('workspace.segment.translationPreview.diagnostic.batch', { index: index + 1 }) }}
       </span>
@@ -110,7 +110,7 @@ const hasErrorInfo = computed(
       </NTag>
     </div>
 
-    <div v-if="hasErrorInfo" class="mt-2 space-y-1 text-xs text-lf-text-muted">
+    <div v-if="hasErrorInfo" class="mt-2 space-y-1 text-xs text-lf-text-muted tabular-nums">
       <div v-if="batch.error_type">
         <span class="font-medium text-lf-text-strong">
           {{ t('workspace.segment.translationPreview.diagnostic.errorType') }}:

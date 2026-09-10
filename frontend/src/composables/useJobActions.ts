@@ -97,11 +97,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = [...resourceIds]
     jobTargetSegmentIds.value = []
     jobTargetGroupKeys.value = groupKeys ? [...groupKeys] : []
-    console.debug('[useJobActions] openResourceJobDrawerWithIds:', {
-      resourceIds: [...resourceIds],
-      groupKeys: groupKeys ? [...groupKeys] : [],
-      jobTargetGroupKeys: [...jobTargetGroupKeys.value],
-    })
     jobForm.execution_plan_id = null
     jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
@@ -159,15 +154,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       payload.segment_ids = jobTargetSegmentIds.value
     }
 
-    console.debug('[useJobActions] submitJob payload:', {
-      targetMode: jobTargetMode.value,
-      resourceIds: [...jobTargetResourceIds.value],
-      groupKeys: [...jobTargetGroupKeys.value],
-      segmentIds: [...jobTargetSegmentIds.value],
-      payloadGroupKeys: payload.segment_group_keys ? [...payload.segment_group_keys] : undefined,
-      payloadSegmentIds: payload.segment_ids ? [...payload.segment_ids] : undefined,
-    })
-
     try {
       const job = await workspace.createJob(projectId.value, payload)
       message.success(t('workspace.messages.jobCreated'))
@@ -205,6 +191,26 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
+  const pauseJob = async (job: Job): Promise<void> => {
+    try {
+      await workspace.pauseJob(job.id)
+      message.success(t('workspace.messages.jobPaused'))
+    } catch (error) {
+      console.error(error)
+      message.error(workspace.actionError || t('workspace.messages.jobPauseFailed'))
+    }
+  }
+
+  const resumeJob = async (job: Job): Promise<void> => {
+    try {
+      await workspace.resumeJob(job.id)
+      message.success(t('workspace.messages.jobResumed'))
+    } catch (error) {
+      console.error(error)
+      message.error(workspace.actionError || t('workspace.messages.jobResumeFailed'))
+    }
+  }
+
   const openJobDetail = async (job: Job): Promise<void> => {
     const globalTracker = useGlobalJobTrackerStore()
     globalTracker.trackJob(job, workspace.project?.name)
@@ -234,6 +240,8 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     submitJob,
     cancelJob,
     retryJob,
+    pauseJob,
+    resumeJob,
     openJobDetail,
     clearResourceSelection,
   }

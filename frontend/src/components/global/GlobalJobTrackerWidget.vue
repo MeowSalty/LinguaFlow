@@ -66,7 +66,7 @@ const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
     <Transition name="tracker-panel">
       <div
         v-if="isPanelOpen"
-        class="absolute bottom-16 right-0 w-80 max-w-[calc(100vw-3rem)] max-h-[60vh] flex flex-col overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface/95 shadow-[0_4px_24px_rgba(0,0,0,0.12)] backdrop-blur-xl"
+        class="absolute bottom-16 right-0 w-80 max-w-[calc(100vw-3rem)] max-h-[60vh] flex flex-col overflow-hidden rounded-lf-card border border-lf-border-soft bg-lf-surface/95 shadow-[0_4px_24px_rgba(0,0,0,0.12)] backdrop-blur-xl"
       >
         <!-- 头部 -->
         <div class="flex items-center justify-between border-b border-lf-border-soft px-4 py-3">
@@ -100,21 +100,25 @@ const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
               <!-- 状态指示器 -->
               <span
                 v-if="job.status === 'running'"
-                class="h-2 w-2 shrink-0 rounded-full bg-blue-500 animate-pulse"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-info animate-pulse"
               />
               <span
                 v-else-if="job.status === 'pending'"
-                class="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-warning"
+              />
+              <span
+                v-else-if="job.status === 'paused'"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-warning"
               />
               <span
                 v-else-if="job.status === 'completed'"
-                class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-success"
               />
               <span
                 v-else-if="job.status === 'failed'"
-                class="h-2 w-2 shrink-0 rounded-full bg-red-500"
+                class="h-2 w-2 shrink-0 rounded-full bg-lf-danger"
               />
-              <span v-else class="h-2 w-2 shrink-0 rounded-full bg-gray-400" />
+              <span v-else class="h-2 w-2 shrink-0 rounded-full bg-lf-text-subtle" />
 
               <span class="text-xs font-mono text-lf-text-muted">#{{ job.id }}</span>
               <span v-if="job.project_name" class="mx-0.5 text-xs text-lf-text-subtle">·</span>

@@ -12,8 +12,18 @@ const props = withDefaults(
     disabled?: boolean
     rows?: number
     variableSet?: 'system' | 'bootstrap' | 'prune'
+    /** 编辑器占位文案，默认回退 promptTemplates.form.contentPlaceholder */
+    placeholder?: string
+    /** 变量插入区标签，默认回退 promptTemplates.form.insertBuiltinVar */
+    insertLabel?: string
   }>(),
-  { disabled: false, rows: 6, variableSet: 'system' },
+  {
+    disabled: false,
+    rows: 6,
+    variableSet: 'system',
+    placeholder: undefined,
+    insertLabel: undefined,
+  },
 )
 
 const emit = defineEmits<{
@@ -27,58 +37,38 @@ const editorRef = ref<InstanceType<typeof HighlightTextarea> | null>(null)
 
 // ─── 内置变量列表 ────────────────────────────────────────────
 
-const systemVariables = [
-  { key: 'SourceLang', label: '源语言' },
-  { key: 'TargetLang', label: '目标语言' },
-  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
-  { key: 'SourceContent', label: '源内容' },
-  { key: 'TargetContent', label: '目标内容' },
-  { key: 'GlossaryTerms', label: '术语表' },
-  { key: 'InlineBootstrap', label: '是否内联术语抽取' },
-  { key: 'MaxBootstrapTerms', label: '内联术语上限' },
-  { key: 'RubyMode', label: '注音模式 json|section|inline' },
-  { key: 'FileFormat', label: '文件格式' },
-  { key: 'FileName', label: '文件名' },
-  { key: 'OriginalText', label: '原始文本' },
-  { key: 'TranslatedText', label: '已翻译文本' },
-] as const
+const variableGroups = {
+  system: [
+    'SourceLang',
+    'TargetLang',
+    'Protocol',
+    'SourceContent',
+    'TargetContent',
+    'GlossaryTerms',
+    'InlineBootstrap',
+    'MaxBootstrapTerms',
+    'RubyMode',
+    'FileFormat',
+    'FileName',
+    'OriginalText',
+    'TranslatedText',
+  ],
+  bootstrap: ['SourceLang', 'TargetLang', 'Protocol', 'MaxTerms'],
+  prune: ['SourceLang', 'TargetLang', 'Protocol', 'Entries'],
+} as const
 
-const bootstrapVariables = [
-  { key: 'SourceLang', label: '源语言' },
-  { key: 'TargetLang', label: '目标语言' },
-  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
-  { key: 'MaxTerms', label: '最大术语数' },
-] as const
+type VariableGroup = keyof typeof variableGroups
 
-const pruneVariables = [
-  { key: 'SourceLang', label: '源语言' },
-  { key: 'TargetLang', label: '目标语言' },
-  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
-  { key: 'Entries', label: '完整术语条目集合' },
-] as const
+const builtinVariables = computed(() => variableGroups[props.variableSet])
 
-const builtinVariables = computed(() => {
-  switch (props.variableSet) {
-    case 'bootstrap':
-      return bootstrapVariables
-    case 'prune':
-      return pruneVariables
-    default:
-      return systemVariables
-  }
-})
+const variableLabel = (group: VariableGroup, key: string): string =>
+  t(`promptTemplates.variables.${group}.${key}`)
 
-const placeholder = computed(() =>
-  props.variableSet === 'prune'
-    ? t('prunePromptTemplates.form.contentPlaceholder')
-    : t('promptTemplates.form.contentPlaceholder'),
+const placeholder = computed(
+  () => props.placeholder ?? t('promptTemplates.form.contentPlaceholder'),
 )
 
-const insertLabel = computed(() =>
-  props.variableSet === 'prune'
-    ? t('prunePromptTemplates.form.insertBuiltinVar')
-    : t('promptTemplates.form.insertBuiltinVar'),
-)
+const insertLabel = computed(() => props.insertLabel ?? t('promptTemplates.form.insertBuiltinVar'))
 
 // ─── 方法 ────────────────────────────────────────────────────
 
@@ -94,6 +84,24 @@ const insertVariable = (varName: string): void => {
 
 <template>
   <div class="w-full">
+    <!-- 变量工具栏置于编辑器上方：任意视口高度下都可见 -->
+    <div class="mb-2 flex flex-wrap items-center gap-1.5">
+      <span class="text-xs text-lf-text-muted">
+        {{ insertLabel }}
+      </span>
+      <NButton
+        v-for="v in builtinVariables"
+        :key="v"
+        size="tiny"
+        quaternary
+        type="info"
+        :title="variableLabel(variableSet, v)"
+        :disabled="disabled"
+        @click="insertVariable(v)"
+      >
+        {{ formatVar(v) }}
+      </NButton>
+    </div>
     <HighlightTextarea
       ref="editorRef"
       :value="modelValue"
@@ -102,22 +110,5 @@ const insertVariable = (varName: string): void => {
       :disabled="disabled"
       @update:value="emit('update:modelValue', $event)"
     />
-    <div class="mt-2 flex flex-wrap items-center gap-1.5">
-      <span class="text-xs text-lf-text-muted">
-        {{ insertLabel }}
-      </span>
-      <NButton
-        v-for="v in builtinVariables"
-        :key="v.key"
-        size="tiny"
-        quaternary
-        type="info"
-        :title="v.label"
-        :disabled="disabled"
-        @click="insertVariable(v.key)"
-      >
-        {{ formatVar(v.key) }}
-      </NButton>
-    </div>
   </div>
 </template>

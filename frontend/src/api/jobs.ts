@@ -7,7 +7,7 @@ import { buildRequestFailureError } from './utils'
 export const fetchJobs = async (
   projectId: number,
   params?: {
-    status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+    status?: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
     trigger_type?: 'manual' | 'file_update' | 'glossary_change' | 'web_edit'
     cursor?: string
     limit?: number
@@ -82,6 +82,36 @@ export const retryJob = async (
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.retryJobFailed'), error, response)
+  }
+
+  return data
+}
+
+export const pauseJob = async (
+  jobId: number,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['Job']> => {
+  const { data, error, response } = await client.POST('/jobs/{jobId}/pause', {
+    params: { path: { jobId } },
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.pauseJobFailed'), error, response)
+  }
+
+  return data
+}
+
+export const resumeJob = async (
+  jobId: number,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['Job']> => {
+  const { data, error, response } = await client.POST('/jobs/{jobId}/resume', {
+    params: { path: { jobId } },
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.resumeJobFailed'), error, response)
   }
 
   return data

@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import { Icon as IconifyIcon } from '@iconify/vue'
+import type { Component } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IconCarbonBook from '~icons/carbon/book'
+import IconCarbonCheckmarkOutline from '~icons/carbon/checkmark-outline'
+import IconCarbonDataGlossary from '~icons/carbon/data-glossary'
+import IconCarbonFolder from '~icons/carbon/folder'
+import IconCarbonMagicWand from '~icons/carbon/magic-wand'
+import IconCarbonSettings from '~icons/carbon/settings'
+import IconCarbonStackedMove from '~icons/carbon/stacked-move'
 
 const { t } = useI18n()
 
@@ -13,39 +20,39 @@ const formatBadges = [
   { label: 'TXT', variants: '.txt' },
 ]
 
-const features = [
+const features: Array<{ icon: Component; title: string; desc: string }> = [
   {
-    icon: 'carbon:folder',
+    icon: IconCarbonFolder,
     title: 'about.featureProject',
     desc: 'about.featureProjectDesc',
   },
   {
-    icon: 'carbon:magic-wand',
+    icon: IconCarbonMagicWand,
     title: 'about.featureTranslation',
     desc: 'about.featureTranslationDesc',
   },
   {
-    icon: 'carbon:stack',
+    icon: IconCarbonStackedMove,
     title: 'about.featureBatch',
     desc: 'about.featureBatchDesc',
   },
   {
-    icon: 'carbon:book',
+    icon: IconCarbonBook,
     title: 'about.featureEpub',
     desc: 'about.featureEpubDesc',
   },
   {
-    icon: 'carbon:dictionary',
+    icon: IconCarbonDataGlossary,
     title: 'about.featureGlossary',
     desc: 'about.featureGlossaryDesc',
   },
   {
-    icon: 'carbon:checkmark-outline',
+    icon: IconCarbonCheckmarkOutline,
     title: 'about.featureReview',
     desc: 'about.featureReviewDesc',
   },
   {
-    icon: 'carbon:settings',
+    icon: IconCarbonSettings,
     title: 'about.featureConfig',
     desc: 'about.featureConfigDesc',
   },
@@ -61,17 +68,7 @@ const techStack = [
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-3">
-        <div class="lf-eyebrow">{{ t('nav.about') }}</div>
-        <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('about.title') }}
-        </h1>
-        <p class="max-w-3xl text-sm leading-7 text-lf-text-muted">
-          {{ t('about.description') }}
-        </p>
-      </div>
-    </section>
+    <PageHeader :title="t('about.title')" :subtitle="t('about.description')" />
 
     <section class="lf-panel p-5">
       <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
@@ -97,12 +94,12 @@ const techStack = [
         <div
           v-for="f in features"
           :key="f.title"
-          class="lf-panel flex gap-3 p-4 transition-colors hover:border-brand-500/20"
+          class="lf-panel flex gap-3 p-4 transition-colors hover:border-lf-border-strong"
         >
           <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lf-brand-soft text-brand-600"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lf-ctl bg-lf-brand-soft text-brand-600"
           >
-            <IconifyIcon :icon="f.icon" class="text-base" />
+            <component :is="f.icon" class="text-base" />
           </div>
           <div class="min-w-0">
             <p class="text-sm font-medium text-lf-text-strong">{{ t(f.title) }}</p>
@@ -121,7 +118,7 @@ const techStack = [
           <div
             v-for="item in techStack"
             :key="item.layer"
-            class="flex items-start justify-between gap-4 rounded-xl border border-lf-border-soft bg-lf-surface-muted px-3.5 py-3"
+            class="flex items-start justify-between gap-4 rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted px-3.5 py-3"
           >
             <span class="text-xs font-medium text-lf-text-muted">{{ t(item.layer) }}</span>
             <span class="text-right font-mono text-xs text-lf-text-strong">{{ item.tech }}</span>
@@ -137,7 +134,7 @@ const techStack = [
           {{ t('about.licenseDesc') }}
         </p>
         <p
-          class="mt-3 rounded-xl border border-lf-border-soft bg-lf-code-bg px-3.5 py-3 text-sm text-lf-text-muted"
+          class="mt-3 rounded-lf-ctl border border-lf-border-soft bg-lf-code-bg px-3.5 py-3 text-sm text-lf-text-muted"
         >
           {{ t('about.licenseAgpl') }}
         </p>

@@ -1,23 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NButton, NEmpty, NTimeline, NTimelineItem } from 'naive-ui'
+import { NButton, NEmpty } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
-import type { BatchEventMetadata, SSEEvent } from '@/composables/sseShared'
+import type { BatchEventMetadata, PoolEventMetadata, SSEEvent } from '@/composables/sseShared'
 import {
-  batchStatusTimelineType,
   eventLevelType,
   formatDuration,
-  getPoolSummary,
+  formatTokens,
   getStageLabel,
   isBatchEvent,
   isPoolEvent,
   poolTimelineType,
 } from '@/composables/useWorkspaceUtils'
+import { formatDateTime } from '@/utils/datetime'
 
 import BatchDetailDrawer from './BatchDetailDrawer.vue'
-import BatchEventCard from './BatchEventCard.vue'
-import PoolEventCard from './PoolEventCard.vue'
 
 const { t } = useI18n()
 
@@ -67,14 +65,42 @@ const openBatchDetail = (event: SSEEvent): void => {
   detailDrawerShow.value = true
 }
 
+// ── 日志行视图：每事件一行（时间 + 状态点 + 消息 + 行内元数据）──
+
+/** 行级别：状态点颜色与消息着色的依据 */
+type LogLevel = 'info' | 'success' | 'warning' | 'error' | 'dim'
+
+interface LogRow {
+  key: string
+  time: string
+  level: LogLevel
+  message: string
+  /** 右对齐淡显元数据（后端名 · Token 用量），仅批次事件有 */
+  meta: string
+  /** 批次事件：整行可点击打开批次详情 */
+  clickable: boolean
+  /** 池事件：弱化显示（小号灰字、空心点） */
+  dim: boolean
+  event: SSEEvent
+}
+
+const DOT_CLASS: Record<LogLevel, string> = {
+  info: 'bg-brand-500',
+  success: 'bg-lf-success',
+  warning: 'bg-lf-warning',
+  error: 'bg-lf-danger',
+  dim: 'border border-lf-text-subtle bg-transparent',
+}
+
 const formatEventTime = (value: string): string => {
-  return new Intl.DateTimeFormat('zh-Hans', {
+  return formatDateTime(value, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  }).format(new Date(value))
+  })
 }
 
+/** 批次事件摘要：「翻译 · 66 段 · 1.7s」 */
 const getBatchSummary = (event: SSEEvent): string => {
   const meta = event.metadata as unknown as BatchEventMetadata | undefined
   if (!meta) return event.message
@@ -85,42 +111,112 @@ const getBatchSummary = (event: SSEEvent): string => {
   return parts.join(' · ')
 }
 
-const getBatchTimelineType = (event: SSEEvent): 'success' | 'warning' | 'error' | 'info' => {
+/** 批次事件行右端元数据：「线衣 | DS V4F · 1.2k↑ 3.4k↓ Token · 2.0k tok/s」 */
+const getBatchMeta = (event: SSEEvent): string => {
   const meta = event.metadata as unknown as BatchEventMetadata | undefined
-  return batchStatusTimelineType(meta?.status, event.level)
+  if (!meta) return ''
+  const parts: string[] = [meta.backend_name]
+  if (meta.input_tokens || meta.output_tokens) {
+    parts.push(
+      t('workspace.job.events.batch.tokens', {
+        input: formatTokens(meta.input_tokens),
+        output: formatTokens(meta.output_tokens),
+      }),
+    )
+  }
+  // 输出速度：输出 Token ÷ 耗时（失败批次通常无输出，自然不显示）
+  if (meta.output_tokens > 0 && meta.duration_ms > 0) {
+    const rate = Math.round((meta.output_tokens / meta.duration_ms) * 1000)
+    parts.push(t('workspace.job.events.batch.tokenSpeed', { rate: formatTokens(rate) }))
+  }
+  return parts.filter(Boolean).join(' · ')
 }
 
-const getPoolTimelineType = (event: SSEEvent): 'info' | 'warning' | 'error' => {
-  const meta = event.metadata as unknown as { phase?: 'pool_start' | 'pool_advance' } | undefined
-  return poolTimelineType(meta?.phase, event.level)
+/** 池事件单行：「质量裁决 · 池开始 · 池 1/4 · 1 批 · 1 段待处理 · 缩放 1.00」 */
+const getPoolLine = (event: SSEEvent): string => {
+  const meta = event.metadata as unknown as PoolEventMetadata | undefined
+  const parts: string[] = []
+  if (event.stage) parts.push(getStageLabel(event.stage))
+  if (meta) {
+    parts.push(
+      t(
+        meta.phase === 'pool_advance'
+          ? 'workspace.job.events.pool.poolAdvance'
+          : 'workspace.job.events.pool.poolStart',
+      ),
+    )
+    parts.push(
+      t('workspace.job.events.pool.progress', {
+        index: meta.pool_index + 1,
+        total: meta.max_pools,
+      }),
+    )
+    parts.push(t('workspace.job.events.pool.batches', { count: meta.batches }))
+    parts.push(t('workspace.job.events.pool.pending', { count: meta.pending }))
+    parts.push(t('workspace.job.events.pool.shrinkRate', { rate: meta.shrink_rate.toFixed(2) }))
+  }
+  return parts.join(' · ')
 }
 
-type TimelineType = 'success' | 'warning' | 'error' | 'info' | 'default'
-
-const getEventTimelineType = (event: SSEEvent): TimelineType => {
-  if (isPoolEvent(event.type)) return getPoolTimelineType(event)
-  if (isBatchEvent(event.type)) return getBatchTimelineType(event)
-  return eventLevelType(event.level)
-}
-
-const getEventTitle = (event: SSEEvent): string => {
-  if (isBatchEvent(event.type)) return getBatchSummary(event)
-  if (isPoolEvent(event.type)) return getPoolSummary(event)
+/** 轮次开始/完成消息内联阶段名：「轮次开始: adjudicate (1 段)」→「轮次开始 · 质量裁决 · 1 段」 */
+const formatRoundMessage = (event: SSEEvent): string => {
+  if ((event.type === 'stage_start' || event.type === 'stage_done') && event.stage) {
+    const match = event.message.match(/^(.*?):\s*\w+\s*\((.*)\)$/)
+    if (match) return [match[1], getStageLabel(event.stage), match[2]].join(' · ')
+  }
   return event.message
 }
 
-const realItemCache = new WeakMap<SSEEvent, SSEEvent & { _key: string }>()
+const getRowLevel = (event: SSEEvent): LogLevel => {
+  if (isPoolEvent(event.type)) {
+    const meta = event.metadata as unknown as PoolEventMetadata | undefined
+    return poolTimelineType(meta?.phase, event.level) === 'error' ? 'error' : 'dim'
+  }
+  if (isBatchEvent(event.type)) {
+    const meta = event.metadata as unknown as BatchEventMetadata | undefined
+    if (meta?.status === 'failed') return 'error'
+    if (meta?.status === 'partial') return 'warning'
+    if (meta?.status === 'success') return 'success'
+    return eventLevelType(event.level)
+  }
+  // 完成类事件用成功色，其余按事件级别
+  if (
+    event.type === 'job_completed' ||
+    event.type === 'resource_completed' ||
+    event.type === 'stage_done'
+  ) {
+    return 'success'
+  }
+  return eventLevelType(event.level)
+}
 
-const timelineItems = computed<Array<SSEEvent & { _key: string }>>(() => {
-  return props.events.map((e) => {
-    let cached = realItemCache.get(e)
+const buildLogRow = (event: SSEEvent): LogRow => {
+  const batch = isBatchEvent(event.type)
+  const pool = isPoolEvent(event.type)
+  return {
+    key: String(event.seq),
+    time: formatEventTime(event.created_at),
+    level: getRowLevel(event),
+    message: batch ? getBatchSummary(event) : pool ? getPoolLine(event) : formatRoundMessage(event),
+    meta: batch ? getBatchMeta(event) : '',
+    clickable: batch,
+    dim: pool,
+    event,
+  }
+}
+
+const rowCache = new WeakMap<SSEEvent, LogRow>()
+
+const logRows = computed<LogRow[]>(() =>
+  props.events.map((event) => {
+    let cached = rowCache.get(event)
     if (!cached) {
-      cached = { ...e, _key: String(e.seq) }
-      realItemCache.set(e, cached)
+      cached = buildLogRow(event)
+      rowCache.set(event, cached)
     }
     return cached
-  })
-})
+  }),
+)
 
 let scrollTicking = false
 
@@ -230,12 +326,11 @@ const scrollToBottom = (): void => {
   hasNewEvents.value = false
 }
 
+// 触发源用首/尾 seq 而非数组长度：store 窗口化裁剪后「尾部 +1 / 头部 -1」时 length 不变，
+// 只有 seq 对能可靠感知前插与推进
 watch(
-  () => props.events.length,
-  (newLen) => {
-    const newTail = props.events.at(-1)?.seq ?? 0
-    const newHead = props.events.at(0)?.seq ?? 0
-
+  () => [props.events[0]?.seq ?? 0, props.events.at(-1)?.seq ?? 0] as const,
+  ([newHead, newTail]) => {
     // 头部前插（loadOlder）：头部 seq 变小 → 记录滚动位置和内容高度，前插后恢复
     if (newHead < headSeq.value) {
       const el = scrollContainerRef.value
@@ -243,11 +338,18 @@ watch(
         prevScrollHeight.value = el.scrollHeight
         pendingScrollRestore.value = el.scrollTop
       }
+      // 恢复原滚动位置（补偿新增内容高度），消除跳动
+      nextTick(() => {
+        const saved = pendingScrollRestore.value
+        if (saved == null) return
+        const target = scrollContainerRef.value
+        if (target) target.scrollTop = saved + (target.scrollHeight - prevScrollHeight.value)
+        pendingScrollRestore.value = null
+      })
     } else if (newTail > tailSeq.value) {
       // 尾部推进（新事件）：自动滚底或提示
-      tailSeq.value = newTail
       if (isNearBottom.value) {
-        prevEventsLength.value = newLen
+        prevEventsLength.value = props.events.length
         nextTick(() => {
           scrollToBottom()
         })
@@ -255,23 +357,9 @@ watch(
         hasNewEvents.value = true
       }
     }
-
+    // 头部 seq 变大（超出窗口被裁剪）不做补偿，仅更新游标
     headSeq.value = newHead
     if (newTail > tailSeq.value) tailSeq.value = newTail
-  },
-)
-
-// 前插更早事件后，恢复原滚动位置（补偿新增内容高度），消除跳动
-watch(
-  () => props.events.length,
-  () => {
-    const saved = pendingScrollRestore.value
-    if (saved == null) return
-    nextTick(() => {
-      const el = scrollContainerRef.value
-      if (el) el.scrollTop = saved + (el.scrollHeight - prevScrollHeight.value)
-      pendingScrollRestore.value = null
-    })
   },
 )
 
@@ -322,32 +410,30 @@ onUnmounted(() => {
 <template>
   <div class="space-y-2">
     <div class="flex items-center justify-between">
-      <h4
-        class="border-l-2 border-brand-500 pl-2 text-xs font-semibold uppercase tracking-wider text-lf-text-muted"
-      >
+      <h4 class="text-[11px] font-medium tracking-wide uppercase text-lf-text-subtle">
         {{ t('workspace.job.events.title') }}
       </h4>
       <div class="flex items-center gap-2">
         <span
           v-if="jobEnded"
-          class="inline-flex items-center gap-1 rounded-full bg-gray-400/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
+          class="inline-flex items-center gap-1 rounded-full bg-lf-text-subtle/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
         >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400" />
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-lf-text-subtle" />
           {{ t('workspace.job.events.jobEnded') }}
         </span>
         <span
           v-else-if="connected"
-          class="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-500"
+          class="inline-flex items-center gap-1 rounded-full bg-lf-success-soft px-1.5 py-0.5 text-[10px] text-lf-success"
         >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-          实时
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-lf-success" />
+          {{ t('workspace.job.events.live') }}
         </span>
         <span
           v-else
-          class="inline-flex items-center gap-1 rounded-full bg-gray-400/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
+          class="inline-flex items-center gap-1 rounded-full bg-lf-text-subtle/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
         >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400" />
-          离线
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-lf-text-subtle" />
+          {{ t('workspace.job.events.offline') }}
         </span>
         <NButton quaternary size="tiny" @click="emit('clear')">
           {{ t('workspace.actions.clear') }}
@@ -356,9 +442,9 @@ onUnmounted(() => {
     </div>
 
     <div class="relative min-h-50">
-      <div class="rounded-lg border border-lf-border-soft bg-lf-surface/40 p-3">
+      <div class="rounded-lf-card border border-lf-border-soft bg-lf-surface/40 p-3">
         <div
-          v-if="timelineItems.length > 0"
+          v-if="logRows.length > 0"
           ref="scrollContainerRef"
           class="max-h-[60vh] overflow-y-auto"
           style="overflow-anchor: none"
@@ -379,29 +465,53 @@ onUnmounted(() => {
           >
             <span v-if="pullDistance > 0 || isNearTop">{{ pullIndicatorLabel }}</span>
           </div>
-          <NTimeline :icon-size="16">
-            <NTimelineItem
-              v-for="(item, index) in timelineItems"
-              :key="item._key"
-              :type="getEventTimelineType(item)"
-              :title="getEventTitle(item)"
-              :content="
-                item.stage && !isBatchEvent(item.type) && !isPoolEvent(item.type)
-                  ? getStageLabel(item.stage)
-                  : undefined
-              "
-              :time="formatEventTime(item.created_at)"
-              :line-type="index === timelineItems.length - 1 ? undefined : 'default'"
-              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs"
+          <!-- 控制台式日志流：时间 + 状态点 + 消息 + 行内元数据 -->
+          <div>
+            <div
+              v-for="row in logRows"
+              :key="row.key"
+              class="group flex items-start gap-2.5 rounded-lf-ctl px-2 [content-visibility:auto] [contain-intrinsic-size:auto_24px]"
+              :class="[
+                row.clickable ? 'cursor-pointer hover:bg-lf-hover' : '',
+                row.dim ? 'py-px text-[11.5px]' : 'py-0.5 text-[12.5px]',
+              ]"
+              @click="row.clickable && openBatchDetail(row.event)"
             >
-              <PoolEventCard v-if="isPoolEvent(item.type)" :event="item" />
-              <BatchEventCard
-                v-else-if="isBatchEvent(item.type)"
-                :event="item"
-                @open-detail="openBatchDetail"
+              <span
+                class="w-14 shrink-0 pt-px font-mono text-[11px] leading-5 tabular-nums text-lf-text-subtle"
+              >
+                {{ row.time }}
+              </span>
+              <span
+                class="mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full"
+                :class="DOT_CLASS[row.level]"
               />
-            </NTimelineItem>
-          </NTimeline>
+              <span
+                class="min-w-0 flex-1 break-words leading-5"
+                :class="
+                  row.level === 'error'
+                    ? 'text-lf-danger'
+                    : row.dim
+                      ? 'text-lf-text-subtle'
+                      : 'text-lf-text'
+                "
+              >
+                {{ row.message }}
+              </span>
+              <span
+                v-if="row.meta"
+                class="hidden shrink-0 pl-3 pt-px font-mono text-[11px] leading-5 tabular-nums text-lf-text-subtle sm:inline"
+              >
+                {{ row.meta }}
+              </span>
+              <span
+                v-if="row.clickable"
+                class="shrink-0 pt-px text-[11px] leading-5 text-lf-text-subtle opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                ›
+              </span>
+            </div>
+          </div>
         </div>
         <div v-else class="py-6 text-center">
           <NEmpty size="small" :description="t('workspace.job.events.empty')" />

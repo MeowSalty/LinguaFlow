@@ -24,16 +24,16 @@ jobs:
     name: OpenAPI 规范验证
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: 安装 pnpm
         if: github.ref_name != 'backend'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           run_install: false
           package_json_file: frontend/package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
@@ -57,7 +57,7 @@ jobs:
 
       - name: 安装 Go
         if: github.ref_name != 'frontend'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.25'
 

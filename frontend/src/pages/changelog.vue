@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
+import { formatDateTime } from '@/utils/datetime'
+
 const { t } = useI18n()
 
 interface GitHubRelease {
@@ -18,7 +20,7 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('zh-CN', {
+  return formatDateTime(dateStr, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -66,13 +68,13 @@ async function fetchReleases(): Promise<void> {
     )
 
     if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.status}`)
+      throw new Error(t('changelog.fetchError'))
     }
 
     const data = (await response.json()) as GitHubRelease[]
     releases.value = data.filter((r) => !r.prerelease)
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : t('changelog.fetchError')
+  } catch {
+    error.value = t('changelog.fetchError')
   } finally {
     loading.value = false
   }
@@ -85,17 +87,7 @@ onMounted(() => {
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="space-y-3">
-        <div class="lf-eyebrow">{{ t('nav.changelog') }}</div>
-        <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-          {{ t('changelog.title') }}
-        </h1>
-        <p class="max-w-2xl text-sm leading-6 text-lf-text-muted">
-          {{ t('changelog.description') }}
-        </p>
-      </div>
-    </section>
+    <PageHeader :title="t('changelog.title')" :subtitle="t('changelog.description')" />
 
     <div v-if="loading" class="space-y-4">
       <div v-for="i in 3" :key="i" class="lf-panel p-5">

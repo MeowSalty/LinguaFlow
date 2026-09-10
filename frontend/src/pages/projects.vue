@@ -1,177 +1,69 @@
 <script setup lang="ts">
-import { NText, useMessage, type DropdownOption, type FormInst, type FormRules } from 'naive-ui'
-import { h } from 'vue'
+import { NButton, NInput, NModal, NTag, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
-import { useLanguageOptions } from '@/composables/useLanguageOptions'
-import { useProjectsStore } from '@/stores/projects'
+import ProjectFormDrawer from '@/components/projects/ProjectFormDrawer.vue'
+import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
+import { useProjectsStore, type GlossaryFilter } from '@/stores/projects'
+import { formatDateTime } from '@/utils/datetime'
 
 type Project = ApiSchemas['Project']
-
-interface ProjectFormModel {
-  name: string
-  source_lang: string
-  target_lang: string
-  owner_type: 'personal' | 'organization'
-  glossary_enabled: boolean
-}
 
 const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
 const message = useMessage()
-const { t, d } = useI18n()
-const { targetLanguageOptions, sourceLanguageOptions } = useLanguageOptions()
-const formRef = ref<FormInst | null>(null)
-const drawerVisible = ref(false)
+const { t } = useI18n()
+
+const formDrawerVisible = ref(false)
 const editingProject = ref<Project | null>(null)
 const deleteConfirmVisible = ref(false)
 const deletingProject = ref<Project | null>(null)
 
-const formModel = reactive<ProjectFormModel>({
-  name: '',
-  source_lang: 'auto',
-  target_lang: 'zh-Hans',
-  owner_type: 'personal',
-  glossary_enabled: false,
-})
+const hasActiveFilters = computed(
+  () => projects.searchQuery.trim().length > 0 || projects.glossaryFilter !== 'all',
+)
 
-const hasActiveFilters = computed(() => projects.searchQuery.trim().length > 0)
+const filterTabs = computed(() => [
+  { name: 'all', label: t('projects.filters.all'), count: projects.totalCount },
+  {
+    name: 'enabled',
+    label: t('projects.filters.glossaryEnabled'),
+    count: projects.glossaryEnabledCount,
+  },
+  {
+    name: 'disabled',
+    label: t('projects.filters.glossaryDisabled'),
+    count: projects.glossaryDisabledCount,
+  },
+])
 
-const isEditMode = computed(() => Boolean(editingProject.value))
-const drawerTitle = computed(() =>
-  isEditMode.value ? t('projects.edit.title') : t('projects.create.title'),
-)
-const drawerDescription = computed(() =>
-  isEditMode.value ? t('projects.edit.description') : t('projects.create.description'),
-)
-const submitButtonText = computed(() =>
-  isEditMode.value ? t('projects.actions.submitUpdate') : t('projects.actions.submitCreate'),
-)
-const submitting = computed(() => projects.creating || projects.updating)
 const isProjectListRoute = computed(() => route.path === '/projects')
 
-const rules = computed<FormRules>(() => ({
-  name: [
-    {
-      required: true,
-      message: t('projects.validation.nameRequired'),
-      trigger: ['input', 'blur'],
-    },
-  ],
-  source_lang: [
-    {
-      required: true,
-      message: t('projects.validation.sourceLangRequired'),
-      trigger: ['change', 'blur'],
-    },
-  ],
-  target_lang: [
-    {
-      required: true,
-      message: t('projects.validation.targetLangRequired'),
-      trigger: ['change', 'blur'],
-    },
-  ],
-}))
+const cardDate = (project: Project): string => {
+  const value = project.updated_at ?? project.created_at
+  return value ? formatDateTime(value, { dateStyle: 'short' }) : '—'
+}
 
-const resetForm = (): void => {
-  formModel.name = ''
-  formModel.source_lang = 'auto'
-  formModel.target_lang = 'zh-Hans'
-  formModel.owner_type = 'personal'
-  formModel.glossary_enabled = false
+const cardDateTitle = (project: Project): string => {
+  const value = project.updated_at ?? project.created_at
+  return value ? formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' }) : ''
 }
 
 const openCreateDrawer = (): void => {
   editingProject.value = null
-  resetForm()
-  drawerVisible.value = true
+  formDrawerVisible.value = true
 }
 
 const openEditDrawer = (project: Project): void => {
   editingProject.value = project
-  formModel.name = project.name
-  formModel.source_lang = project.source_lang || 'auto'
-  formModel.target_lang = project.target_lang || 'en-US'
-  formModel.owner_type = 'personal'
-  formModel.glossary_enabled = project.glossary_enabled ?? false
-  drawerVisible.value = true
+  formDrawerVisible.value = true
 }
 
-const closeCreateDrawer = (): void => {
-  drawerVisible.value = false
-  editingProject.value = null
-  resetForm()
-}
-
-const formatRelativeTime = (dateStr: string | null): string => {
-  if (!dateStr) return t('projects.card.noDate')
-
-  const now = Date.now()
-  const date = new Date(dateStr).getTime()
-  const diffMs = now - date
-
-  if (diffMs < 0) return t('dashboard.activity.relativeTime.justNow')
-
-  const diffSeconds = Math.floor(diffMs / 1000)
-  const diffMinutes = Math.floor(diffSeconds / 60)
-  const diffHours = Math.floor(diffMinutes / 60)
-  const diffDays = Math.floor(diffHours / 24)
-
-  if (diffSeconds < 60) return t('dashboard.activity.relativeTime.justNow')
-  if (diffMinutes < 60)
-    return t('dashboard.activity.relativeTime.minutesAgo', { count: diffMinutes })
-  if (diffHours < 24) return t('dashboard.activity.relativeTime.hoursAgo', { count: diffHours })
-  if (diffDays < 30) return t('dashboard.activity.relativeTime.daysAgo', { count: diffDays })
-
-  return d(new Date(dateStr), 'short')
-}
-
-const buildProjectPayload = (): ApiSchemas['CreateProjectRequest'] => {
-  return {
-    name: formModel.name.trim(),
-    source_lang: formModel.source_lang.trim(),
-    target_lang: formModel.target_lang.trim(),
-    glossary_enabled: formModel.glossary_enabled,
-  }
-}
-
-const submitProject = async (): Promise<void> => {
-  await formRef.value?.validate()
-
-  try {
-    if (editingProject.value) {
-      const payload = buildProjectPayload()
-      await projects.updateProject(editingProject.value.id, {
-        name: payload.name,
-        source_lang: payload.source_lang,
-        target_lang: payload.target_lang,
-        glossary_enabled: payload.glossary_enabled,
-      })
-      message.success(t('projects.messages.updateSuccess'))
-    } else {
-      await projects.createProject(buildProjectPayload())
-      message.success(t('projects.messages.createSuccess'))
-    }
-
-    closeCreateDrawer()
-  } catch (error) {
-    console.error(error)
-    message.error(
-      editingProject.value
-        ? projects.updateError || t('projects.messages.updateFailed')
-        : projects.createError || t('projects.messages.createFailed'),
-    )
-  }
-}
-
-const openProjectWorkspace = (project: Project, tab?: string): void => {
-  void router.push({
-    path: `/projects/${project.id}`,
-    query: tab ? { tab } : undefined,
-  })
+const openProjectWorkspace = (project: Project): void => {
+  void router.push(`/projects/${project.id}`)
 }
 
 const openDeleteConfirm = (project: Project): void => {
@@ -196,38 +88,6 @@ const confirmDelete = async (): Promise<void> => {
   }
 }
 
-const cardDropdownOptions = computed<DropdownOption[]>(() => [
-  { label: t('projects.actions.details'), key: 'details' },
-  { label: t('projects.actions.edit'), key: 'edit' },
-  { label: t('projects.actions.jobs'), key: 'jobs' },
-  { label: t('projects.actions.glossary'), key: 'glossary' },
-  { type: 'divider', key: 'd1' },
-  {
-    key: 'delete',
-    label: () => h(NText, { type: 'error' }, { default: () => t('projects.actions.delete') }),
-  },
-])
-
-const handleCardDropdownSelect = (project: Project, key: string | number): void => {
-  switch (key) {
-    case 'details':
-      openProjectWorkspace(project)
-      break
-    case 'edit':
-      void openEditDrawer(project)
-      break
-    case 'jobs':
-      openProjectWorkspace(project, 'jobs')
-      break
-    case 'glossary':
-      openProjectWorkspace(project, 'glossary')
-      break
-    case 'delete':
-      openDeleteConfirm(project)
-      break
-  }
-}
-
 watch(isProjectListRoute, (isList) => {
   if (isList) {
     projects.loadProjects()
@@ -246,182 +106,118 @@ onMounted(() => {
   }
 })
 
-watch(
+useStoreErrorToast(
   () => projects.error,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      projects.error = null
-    }
+  () => {
+    projects.error = null
   },
 )
 </script>
 
 <template>
   <RouterView v-if="!isProjectListRoute" />
-  <div v-else class="lf-page">
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('projects.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('projects.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('projects.subtitle') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="projects.loading" @click="projects.loadProjects">
-            {{ t('projects.actions.refresh') }}
-          </NButton>
-          <NButton type="primary" @click="openCreateDrawer">
-            {{ t('projects.actions.create') }}
-          </NButton>
-        </div>
-      </div>
-    </section>
+  <EntityListPage
+    v-else
+    :title="t('projects.title')"
+    :subtitle="t('projects.subtitle')"
+    :loading="projects.loading"
+    :empty="projects.filteredItems.length === 0"
+    :empty-description="
+      hasActiveFilters ? t('projects.empty.filtered') : t('projects.empty.default')
+    "
+  >
+    <template #actions>
+      <NButton secondary :loading="projects.loading" @click="projects.loadProjects">
+        {{ t('common.actions.refresh') }}
+      </NButton>
+      <NButton type="primary" @click="openCreateDrawer">
+        {{ t('projects.actions.create') }}
+      </NButton>
+    </template>
 
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('projects.stats.total') }}</div>
-        <div class="lf-metric-value">{{ projects.projectCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('projects.stats.languagePairs') }}</div>
-        <div class="lf-metric-value">{{ projects.languagePairCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('projects.stats.glossaryEnabled') }}</div>
-        <div class="lf-metric-value">{{ projects.glossaryEnabledCount }}</div>
-      </div>
-    </div>
+    <template #filters>
+      <ScopeFilterTabs
+        :tabs="filterTabs"
+        :value="projects.glossaryFilter"
+        @update:value="(value: string) => projects.setGlossaryFilter(value as GlossaryFilter)"
+      />
+      <NInput
+        v-model:value="projects.searchQuery"
+        clearable
+        class="lg:max-w-sm!"
+        :placeholder="t('projects.filters.searchPlaceholder')"
+      />
+    </template>
 
-    <div class="lf-panel px-4 py-3">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <NInput
-          v-model:value="projects.searchQuery"
-          clearable
-          class="sm:max-w-sm"
-          :placeholder="t('projects.filters.searchPlaceholder')"
-        />
-        <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
-          {{ t('projects.filters.reset') }}
-        </NButton>
-      </div>
-    </div>
+    <template #empty-extra>
+      <NButton v-if="hasActiveFilters" secondary @click="projects.resetFilters">
+        {{ t('projects.filters.reset') }}
+      </NButton>
+      <NButton v-else type="primary" @click="openCreateDrawer">
+        {{ t('projects.actions.createFirst') }}
+      </NButton>
+    </template>
 
-    <div v-if="projects.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <div v-for="index in 6" :key="index" class="lf-panel p-5">
-        <NSkeleton text :repeat="5" />
-      </div>
-    </div>
-
-    <NEmpty
-      v-else-if="projects.filteredItems.length === 0"
-      class="lf-panel py-16"
-      :description="hasActiveFilters ? t('projects.empty.filtered') : t('projects.empty.default')"
-    >
-      <template #extra>
-        <NButton v-if="hasActiveFilters" secondary @click="projects.resetFilters">
-          {{ t('projects.filters.reset') }}
-        </NButton>
-        <NButton v-else type="primary" @click="openCreateDrawer">
-          {{ t('projects.actions.createFirst') }}
-        </NButton>
-      </template>
-    </NEmpty>
-
-    <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <!-- 卡片网格 -->
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="project in projects.filteredItems"
         :key="project.id"
-        class="lf-interactive-card group relative cursor-pointer overflow-hidden focus-within:border-brand-500/30 focus-within:ring-2 focus-within:ring-brand-500/15"
+        class="lf-interactive-card relative flex h-full cursor-pointer flex-col gap-4 overflow-hidden p-5"
         :class="{ 'pointer-events-none opacity-60': projects.isDeletingProject(project.id) }"
         @click="openProjectWorkspace(project)"
       >
-        <div
-          class="absolute inset-y-0 left-0 w-0.5 bg-brand-500/0 transition-all duration-200 group-hover:bg-brand-500/70"
-        />
-
-        <div class="flex h-full flex-col gap-4 p-5">
-          <div class="flex items-start gap-3">
-            <div class="min-w-0 flex-1">
-              <h2
-                class="truncate text-lg font-semibold tracking-tight text-lf-text-strong"
-                :title="project.name"
-              >
-                {{ project.name }}
-              </h2>
-              <p class="mt-1 text-xs text-lf-text-subtle">
-                {{ t('projects.card.projectId', { id: project.id }) }}
-              </p>
-            </div>
-
-            <NTag
-              size="small"
-              round
-              :bordered="false"
-              :type="project.glossary_enabled ? 'success' : 'default'"
-              class="shrink-0"
+        <!-- 头部：名称 + 编号 + 术语表状态标签 -->
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h2
+              class="truncate text-lg font-semibold tracking-tight text-lf-text-strong"
+              :title="project.name"
             >
-              {{
-                project.glossary_enabled
-                  ? t('projects.form.glossaryEnabled')
-                  : t('projects.form.glossaryDisabled')
-              }}
-            </NTag>
-
-            <div
-              class="shrink-0 opacity-60 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
-              @click.stop
-            >
-              <NDropdown
-                trigger="click"
-                :options="cardDropdownOptions"
-                placement="bottom-end"
-                @select="(key: string | number) => handleCardDropdownSelect(project, key)"
-              >
-                <NButton quaternary circle size="tiny" :aria-label="t('projects.actions.more')">
-                  <template #icon>
-                    <NIcon size="14">
-                      <IconCarbonOverflowMenuHorizontal />
-                    </NIcon>
-                  </template>
-                </NButton>
-              </NDropdown>
-            </div>
+              {{ project.name }}
+            </h2>
+            <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ project.id }}</p>
           </div>
-
-          <div
-            class="flex items-center gap-2 rounded-xl bg-lf-surface-muted px-3 py-2.5 text-sm text-lf-text-muted"
+          <NTag
+            round
+            size="small"
+            :bordered="false"
+            :type="project.glossary_enabled ? 'success' : 'default'"
+            class="shrink-0"
           >
-            <IconCarbonLanguage class="h-4 w-4 shrink-0 text-brand-500" />
-            <span class="truncate font-medium text-lf-text-strong">
-              {{ project.source_lang || 'auto' }}
-            </span>
-            <span class="text-lf-text-subtle">→</span>
-            <span class="truncate font-medium text-lf-text-strong">
-              {{ project.target_lang }}
-            </span>
-          </div>
+            {{
+              project.glossary_enabled
+                ? t('projects.form.glossaryEnabled')
+                : t('projects.form.glossaryDisabled')
+            }}
+          </NTag>
+        </div>
 
-          <div class="mt-auto border-t border-lf-border-soft pt-4">
-            <div class="flex items-center justify-between gap-3">
-              <span class="inline-flex items-center gap-1.5 text-xs text-lf-text-subtle">
-                <IconCarbonTime class="h-3.5 w-3.5 shrink-0" />
-                {{ t('projects.card.updatedAt') }}
-                {{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}
-              </span>
-              <span
-                class="text-xs font-medium text-brand-600 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-              >
-                {{ t('projects.card.openWorkspace') }}
-              </span>
+        <!-- 语言方向 -->
+        <div class="flex items-center gap-2 rounded-lf-ctl bg-lf-surface-muted px-3 py-2.5 text-sm">
+          <IconCarbonLanguage class="h-4 w-4 shrink-0 text-brand-500" />
+          <span class="truncate font-medium text-lf-text-strong">
+            {{ project.source_lang || 'auto' }}
+          </span>
+          <span class="text-lf-text-subtle">→</span>
+          <span class="truncate font-medium text-lf-text-strong">
+            {{ project.target_lang }}
+          </span>
+        </div>
+
+        <!-- 底部：更新时间 + 操作 -->
+        <div class="mt-auto border-t border-lf-border-soft pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-xs text-lf-text-subtle" :title="cardDateTitle(project)">
+              {{ t('projects.card.updatedAt') }} {{ cardDate(project) }}
+            </span>
+            <div class="flex items-center gap-2" @click.stop>
+              <NButton text type="primary" class="font-medium" @click="openEditDrawer(project)">
+                {{ t('common.actions.edit') }}
+              </NButton>
+              <NButton text type="error" class="font-medium" @click="openDeleteConfirm(project)">
+                {{ t('common.actions.delete') }}
+              </NButton>
             </div>
           </div>
         </div>
@@ -434,87 +230,24 @@ watch(
         />
       </div>
     </div>
+  </EntityListPage>
 
-    <NDrawer v-model:show="drawerVisible" :width="'min(420px, 100vw)'" placement="right">
-      <NDrawerContent :title="drawerTitle" closable>
-        <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
-          {{ drawerDescription }}
-        </div>
+  <template v-if="isProjectListRoute">
+    <!-- 新建/编辑项目抽屉 -->
+    <ProjectFormDrawer v-model:show="formDrawerVisible" :project="editingProject" />
 
-        <NForm ref="formRef" :model="formModel" :rules="rules" label-placement="top">
-          <NFormItem path="name" :label="t('projects.form.name')">
-            <NInput
-              v-model:value="formModel.name"
-              :placeholder="t('projects.form.namePlaceholder')"
-              maxlength="80"
-              show-count
-            />
-          </NFormItem>
-
-          <NFormItem path="glossary_enabled" :label="t('projects.form.glossaryEnabled')">
-            <NSwitch v-model:value="formModel.glossary_enabled" />
-          </NFormItem>
-
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <NFormItem path="source_lang" :label="t('projects.form.sourceLang')">
-              <NSelect
-                v-model:value="formModel.source_lang"
-                filterable
-                tag
-                :options="sourceLanguageOptions"
-                :placeholder="t('projects.form.languagePlaceholder')"
-              />
-            </NFormItem>
-            <NFormItem path="target_lang" :label="t('projects.form.targetLang')">
-              <NSelect
-                v-model:value="formModel.target_lang"
-                filterable
-                tag
-                :options="targetLanguageOptions"
-                :placeholder="t('projects.form.languagePlaceholder')"
-              />
-            </NFormItem>
-          </div>
-
-          <NFormItem :label="t('projects.form.ownerType')">
-            <NRadioGroup v-model:value="formModel.owner_type">
-              <NRadio value="personal">
-                {{ t('projects.form.personal') }}
-              </NRadio>
-              <NRadio value="organization" disabled>
-                {{ t('projects.form.orgOwner') }}
-                <NText depth="3" class="ml-1 text-xs">
-                  ({{ t('projects.form.comingSoon') }})
-                </NText>
-              </NRadio>
-            </NRadioGroup>
-          </NFormItem>
-        </NForm>
-
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <NButton :disabled="submitting" @click="closeCreateDrawer">
-              {{ t('projects.actions.cancel') }}
-            </NButton>
-            <NButton type="primary" :loading="submitting" @click="submitProject">
-              {{ submitButtonText }}
-            </NButton>
-          </div>
-        </template>
-      </NDrawerContent>
-    </NDrawer>
-
+    <!-- 删除确认弹窗 -->
     <NModal
       v-model:show="deleteConfirmVisible"
       preset="dialog"
       type="warning"
-      :title="t('projects.actions.confirmDelete')"
+      :title="t('common.actions.confirmDelete')"
       :content="t('projects.delete.confirm', { name: deletingProject?.name ?? '' })"
-      :positive-text="t('projects.actions.delete')"
-      :negative-text="t('projects.actions.cancel')"
+      :positive-text="t('common.actions.deleteConfirmAction')"
+      :negative-text="t('common.cancel')"
       :loading="projects.deletingProjectIds.length > 0"
       @positive-click="confirmDelete"
       @negative-click="closeDeleteConfirm"
     />
-  </div>
+  </template>
 </template>

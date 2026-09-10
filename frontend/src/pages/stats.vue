@@ -16,30 +16,15 @@ onMounted(() => {
 
 <template>
   <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">{{ t('nav.stats') }}</div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('stats.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('stats.subtitle') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton
-            secondary
-            :loading="stats.statsLoading || stats.activitiesLoading"
-            @click="stats.loadAll()"
-          >
-            {{ t('projects.actions.refresh') }}
-          </NButton>
-        </div>
-      </div>
-    </section>
+    <PageHeader :title="t('stats.title')" :subtitle="t('stats.subtitle')">
+      <NButton
+        secondary
+        :loading="stats.statsLoading || stats.activitiesLoading"
+        @click="stats.loadAll()"
+      >
+        {{ t('common.actions.refresh') }}
+      </NButton>
+    </PageHeader>
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatsCard
@@ -48,6 +33,7 @@ onMounted(() => {
         icon="carbon:api"
         tone="brand"
         :loading="stats.statsLoading"
+        :error="stats.statsError"
       />
       <StatsCard
         :title="t('dashboard.stats.inputTokens')"
@@ -55,6 +41,7 @@ onMounted(() => {
         icon="carbon:cloud-upload"
         tone="info"
         :loading="stats.statsLoading"
+        :error="stats.statsError"
       />
       <StatsCard
         :title="t('dashboard.stats.outputTokens')"
@@ -62,6 +49,7 @@ onMounted(() => {
         icon="carbon:cloud-download"
         tone="accent"
         :loading="stats.statsLoading"
+        :error="stats.statsError"
       />
       <StatsCard
         :title="t('dashboard.stats.segmentCount')"
@@ -69,6 +57,7 @@ onMounted(() => {
         icon="carbon:chart-column"
         tone="neutral"
         :loading="stats.statsLoading"
+        :error="stats.statsError"
       />
     </div>
 

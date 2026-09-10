@@ -4,12 +4,17 @@
 @custom-variant dark (&:where(html[data-theme='dark'], html[data-theme='dark'] *));
 
 @theme {
-  --color-brand-50: #ecfdf5;
-  --color-brand-100: #d1fae5;
-  --color-brand-400: #34d399;
-  --color-brand-500: #10b981;
-  --color-brand-600: #059669;
-  --color-brand-700: #047857;
+  /* 圆角体系：卡片 10px / 控件 8px */
+  --radius-lf-card: 10px;
+  --radius-lf-ctl: 8px;
+
+  /* 品牌色阶（主题响应：--lf-brand-* 在暗色块中被覆盖为提亮值） */
+  --color-brand-50: var(--lf-brand-50);
+  --color-brand-100: var(--lf-brand-100);
+  --color-brand-400: var(--lf-brand-400);
+  --color-brand-500: var(--lf-brand-500);
+  --color-brand-600: var(--lf-brand-600);
+  --color-brand-700: var(--lf-brand-700);
 
   --color-lf-bg: var(--lf-bg);
   --color-lf-bg-soft: var(--lf-bg-soft);
@@ -22,16 +27,32 @@
   --color-lf-text-subtle: var(--lf-text-subtle);
   --color-lf-border: var(--lf-border);
   --color-lf-border-soft: var(--lf-border-soft);
+  --color-lf-border-strong: var(--lf-border-strong);
+  --color-lf-hover: var(--lf-hover);
   --color-lf-shadow: var(--lf-shadow);
   --color-lf-shadow-strong: var(--lf-shadow-strong);
   --color-lf-code-bg: var(--lf-code-bg);
   --color-lf-brand-soft: var(--lf-brand-soft);
   --color-lf-info: var(--lf-info);
   --color-lf-info-soft: var(--lf-info-soft);
+  --color-lf-success: var(--lf-success);
   --color-lf-success-soft: var(--lf-success-soft);
+  --color-lf-danger: var(--lf-danger);
   --color-lf-danger-soft: var(--lf-danger-soft);
-  --color-lf-accent: var(--lf-accent);
-  --color-lf-accent-soft: var(--lf-accent-soft);
+  --color-lf-warning: var(--lf-warning);
+  --color-lf-warning-soft: var(--lf-warning-soft);
+
+  /* accent 语义色（模式徽章等五色强调场景） */
+  --color-lf-accent-amber: var(--lf-accent-amber);
+  --color-lf-accent-amber-soft: var(--lf-accent-amber-soft);
+  --color-lf-accent-violet: var(--lf-accent-violet);
+  --color-lf-accent-violet-soft: var(--lf-accent-violet-soft);
+  --color-lf-accent-emerald: var(--lf-accent-emerald);
+  --color-lf-accent-emerald-soft: var(--lf-accent-emerald-soft);
+  --color-lf-accent-rose: var(--lf-accent-rose);
+  --color-lf-accent-rose-soft: var(--lf-accent-rose-soft);
+  --color-lf-accent-sky: var(--lf-accent-sky);
+  --color-lf-accent-sky-soft: var(--lf-accent-sky-soft);
 
   /* Go template syntax highlighting */
   --color-lf-tmpl-bg: var(--lf-tmpl-bg);
@@ -43,80 +64,128 @@
   --color-lf-tmpl-pipe: var(--lf-tmpl-pipe);
 }
 
+/* ── 浅色（默认）── */
 :root {
-  --lf-bg: #f4f7fb;
-  --lf-bg-soft: #eef2f7;
+  --lf-bg: #f6f7f9;
+  --lf-bg-soft: #eef0f3;
   --lf-surface: #ffffff;
   --lf-surface-elevated: #ffffff;
-  --lf-surface-muted: #f7f9fc;
-  --lf-text: #0f172a;
-  --lf-text-strong: #020617;
-  --lf-text-muted: #64748b;
-  --lf-text-subtle: #94a3b8;
-  --lf-border: #e2e8f0;
-  --lf-border-soft: #edf2f7;
-  --lf-shadow: rgb(15 23 42 / 0.06);
-  --lf-shadow-strong: rgb(15 23 42 / 0.12);
-  --lf-code-bg: #f1f5f9;
-  --lf-brand-soft: rgb(16 185 129 / 0.1);
-  --lf-info: #3b82f6;
-  --lf-info-soft: rgb(59 130 246 / 0.1);
-  --lf-success-soft: rgb(16 185 129 / 0.1);
-  --lf-danger-soft: rgb(239 68 68 / 0.1);
-  --lf-accent: #6366f1;
-  --lf-accent-soft: rgb(99 102 241 / 0.1);
-  --lf-header-bg: rgb(255 255 255 / 0.82);
-  --lf-mesh-a: rgb(16 185 129 / 0.09);
-  --lf-mesh-b: rgb(59 130 246 / 0.07);
-  --lf-mesh-c: rgb(99 102 241 / 0.05);
-  --lf-grid-line: rgb(15 23 42 / 0.035);
+  --lf-surface-muted: #f4f5f7;
+  --lf-text: #18181b;
+  --lf-text-strong: #09090b;
+  --lf-text-muted: #52525b;
+  --lf-text-subtle: #71717a;
+  --lf-border: #e5e7eb;
+  --lf-border-soft: #eceef1;
+  --lf-border-strong: #d4d4d8;
+  --lf-hover: rgb(24 24 27 / 4.5%);
+  --lf-shadow: rgb(16 24 40 / 5%);
+  --lf-shadow-strong: rgb(16 24 40 / 10%);
+  --lf-shadow-1: 0 1px 2px rgb(16 24 40 / 5%);
+  --lf-shadow-2: 0 8px 24px rgb(16 24 40 / 8%);
+  --lf-shadow-3: 0 16px 40px rgb(16 24 40 / 12%);
+  --lf-code-bg: #f4f5f7;
+
+  --lf-brand-50: #eff6ff;
+  --lf-brand-100: #dbeafe;
+  --lf-brand-400: #60a5fa;
+  --lf-brand-500: #2563eb;
+  --lf-brand-600: #1d4ed8;
+  --lf-brand-700: #1e40af;
+  --lf-brand-soft: rgb(37 99 235 / 9%);
+  --lf-brand-grad-a: #3b82f6;
+  --lf-brand-grad-b: #2dd4bf;
+  --lf-brand-grad: linear-gradient(135deg, var(--lf-brand-grad-a), var(--lf-brand-grad-b));
+
+  --lf-info: #2563eb;
+  --lf-info-soft: rgb(37 99 235 / 8%);
+  --lf-success: #16a34a;
+  --lf-success-soft: rgb(22 163 74 / 9%);
+  --lf-danger: #dc2626;
+  --lf-danger-soft: rgb(220 38 38 / 8%);
+  --lf-warning: #b45309;
+  --lf-warning-soft: rgb(180 83 9 / 10%);
+
+  --lf-accent-amber: #d97706;
+  --lf-accent-amber-soft: rgb(217 119 6 / 10%);
+  --lf-accent-violet: #7c3aed;
+  --lf-accent-violet-soft: rgb(124 58 237 / 9%);
+  --lf-accent-emerald: #059669;
+  --lf-accent-emerald-soft: rgb(5 150 105 / 10%);
+  --lf-accent-rose: #e11d48;
+  --lf-accent-rose-soft: rgb(225 29 72 / 9%);
+  --lf-accent-sky: #0284c7;
+  --lf-accent-sky-soft: rgb(2 132 199 / 10%);
 
   /* Go template syntax highlighting (light mode) */
-  --lf-tmpl-bg: rgb(16 185 129 / 0.1);
-  --lf-tmpl-delim: #94a3b8;
+  --lf-tmpl-bg: rgb(37 99 235 / 8%);
+  --lf-tmpl-delim: #71717a;
   --lf-tmpl-keyword: #7c3aed;
   --lf-tmpl-field: #2563eb;
   --lf-tmpl-func: #0891b2;
-  --lf-tmpl-string: #059669;
-  --lf-tmpl-pipe: #64748b;
+  --lf-tmpl-string: #16a34a;
+  --lf-tmpl-pipe: #52525b;
 }
 
+/* ── 暗色（zinc 中性，主色提亮）── */
 html[data-theme='dark'] {
-  --lf-bg: #0b1118;
-  --lf-bg-soft: #101821;
-  --lf-surface: #121a24;
-  --lf-surface-elevated: #172131;
-  --lf-surface-muted: #0e151e;
-  --lf-text: #e2e8f0;
-  --lf-text-strong: #f8fafc;
-  --lf-text-muted: #94a3b8;
-  --lf-text-subtle: #64748b;
-  --lf-border: #243041;
-  --lf-border-soft: #1a2433;
-  --lf-shadow: rgb(0 0 0 / 0.32);
-  --lf-shadow-strong: rgb(0 0 0 / 0.48);
-  --lf-code-bg: #0f1720;
-  --lf-brand-soft: rgb(16 185 129 / 0.14);
+  --lf-bg: #101013;
+  --lf-bg-soft: #16161a;
+  --lf-surface: #17171a;
+  --lf-surface-elevated: #1d1d21;
+  --lf-surface-muted: #1e1e22;
+  --lf-text: #e4e4e7;
+  --lf-text-strong: #fafafa;
+  --lf-text-muted: #a1a1aa;
+  --lf-text-subtle: #71717a;
+  /* 暗色下交互控件边框需明显高于表面（naive 暗色默认边框为透明，App.vue 会显式取此 token） */
+  --lf-border: #333338;
+  --lf-border-soft: #202023;
+  --lf-border-strong: #3f3f46;
+  --lf-hover: rgb(255 255 255 / 5.5%);
+  --lf-shadow: rgb(0 0 0 / 40%);
+  --lf-shadow-strong: rgb(0 0 0 / 55%);
+  --lf-shadow-1: 0 1px 2px rgb(0 0 0 / 40%);
+  --lf-shadow-2: 0 8px 24px rgb(0 0 0 / 45%);
+  --lf-shadow-3: 0 16px 40px rgb(0 0 0 / 55%);
+  --lf-code-bg: #131316;
+
+  --lf-brand-50: rgb(59 130 246 / 14%);
+  --lf-brand-100: rgb(59 130 246 / 20%);
+  --lf-brand-400: #93c5fd;
+  --lf-brand-500: #3b82f6;
+  --lf-brand-600: #60a5fa;
+  --lf-brand-700: #93c5fd;
+  --lf-brand-soft: rgb(59 130 246 / 14%);
+
   --lf-info: #60a5fa;
-  --lf-info-soft: rgb(59 130 246 / 0.14);
-  --lf-success-soft: rgb(16 185 129 / 0.14);
-  --lf-danger-soft: rgb(239 68 68 / 0.14);
-  --lf-accent: #818cf8;
-  --lf-accent-soft: rgb(99 102 241 / 0.16);
-  --lf-header-bg: rgb(11 17 24 / 0.78);
-  --lf-mesh-a: rgb(16 185 129 / 0.08);
-  --lf-mesh-b: rgb(59 130 246 / 0.07);
-  --lf-mesh-c: rgb(99 102 241 / 0.06);
-  --lf-grid-line: rgb(148 163 184 / 0.05);
+  --lf-info-soft: rgb(59 130 246 / 13%);
+  --lf-success: #34d399;
+  --lf-success-soft: rgb(52 211 153 / 12%);
+  --lf-danger: #f87171;
+  --lf-danger-soft: rgb(248 113 113 / 12%);
+  --lf-warning: #f59e0b;
+  --lf-warning-soft: rgb(245 158 11 / 13%);
+
+  --lf-accent-amber: #fbbf24;
+  --lf-accent-amber-soft: rgb(251 191 36 / 13%);
+  --lf-accent-violet: #c4b5fd;
+  --lf-accent-violet-soft: rgb(196 181 253 / 13%);
+  --lf-accent-emerald: #6ee7b7;
+  --lf-accent-emerald-soft: rgb(110 231 183 / 12%);
+  --lf-accent-rose: #fda4af;
+  --lf-accent-rose-soft: rgb(253 164 175 / 12%);
+  --lf-accent-sky: #7dd3fc;
+  --lf-accent-sky-soft: rgb(125 211 252 / 13%);
 
   /* Go template syntax highlighting (dark mode) */
-  --lf-tmpl-bg: rgb(16 185 129 / 0.12);
-  --lf-tmpl-delim: #64748b;
+  --lf-tmpl-bg: rgb(59 130 246 / 12%);
+  --lf-tmpl-delim: #71717a;
   --lf-tmpl-keyword: #a78bfa;
   --lf-tmpl-field: #60a5fa;
   --lf-tmpl-func: #22d3ee;
   --lf-tmpl-string: #34d399;
-  --lf-tmpl-pipe: #94a3b8;
+  --lf-tmpl-pipe: #a1a1aa;
 }
 
 html,
@@ -146,11 +215,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-* {
-  transition-property: background-color, border-color, color, box-shadow, opacity, transform;
-  transition-duration: 160ms;
-  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-}
+/* 注意：naive-ui 运行时注入的样式未分层（unlayered），级联层规则下永远压过
+   Tailwind v4 分层工具类。因此在 naive 输入类组件上控制宽度时：
+   NSelect 用 w-*（会被 .n-select{width:100%} 覆盖）、NInput 用 max-w-*
+   （会被 .n-input{max-width:100%} 覆盖）必须加 important 后缀（如 w-44!）。
+   min-w-* 与 NSelect 的 max-w-* 无冲突，可正常使用。 */
 
 /* ── Design system primitives ── */
 
@@ -158,67 +227,49 @@ body {
   @apply space-y-6;
 }
 
+/* 页头：纯排版（标题 + 副标题 + 操作区），无卡片装饰 */
 .lf-page-header {
-  @apply relative overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface p-6 shadow-sm shadow-lf-shadow;
-}
-
-.lf-page-header::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 70% 90% at 0% 0%, var(--lf-mesh-a), transparent 55%),
-    radial-gradient(ellipse 50% 70% at 100% 0%, var(--lf-mesh-b), transparent 50%);
-  opacity: 0.9;
-}
-
-.lf-page-header > * {
-  position: relative;
-  z-index: 1;
-}
-
-.lf-eyebrow {
-  @apply inline-flex items-center rounded-full border border-brand-500/15 bg-lf-brand-soft px-3 py-1 text-xs font-medium tracking-wide text-brand-600;
+  @apply flex flex-wrap items-end justify-between gap-x-6 gap-y-4;
 }
 
 .lf-metric {
-  @apply rounded-2xl border border-lf-border-soft bg-lf-surface p-4 shadow-sm shadow-lf-shadow;
+  @apply rounded-lf-card border border-lf-border-soft bg-lf-surface p-4 shadow-sm shadow-lf-shadow;
 }
 
 .lf-metric-label {
-  @apply text-xs font-medium tracking-wide text-lf-text-muted;
+  @apply text-xs font-medium text-lf-text-muted;
 }
 
 .lf-metric-value {
-  @apply mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong;
+  @apply mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong tabular-nums;
 }
 
 .lf-panel {
-  @apply rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow;
+  @apply rounded-lf-card border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow;
 }
 
 .lf-code-panel {
-  @apply rounded-xl border border-lf-border-soft bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted;
+  @apply rounded-lf-ctl border border-lf-border-soft bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted;
 }
 
+/* 可点击卡片：扁平表面，悬停仅边框反馈——页面内不要叠加其他悬停装饰（色条/渐变线等） */
 .lf-interactive-card {
-  @apply rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow transition-all duration-200;
-  @apply hover:-translate-y-0.5 hover:border-brand-500/25 hover:shadow-lg hover:shadow-lf-shadow-strong;
+  @apply rounded-lf-card border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow transition-colors;
+  @apply hover:border-lf-border-strong;
 }
 
-/* Compact modern data list (Linear/Vercel style) */
+/* Compact modern data list */
 .lf-data-list {
-  @apply overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow;
+  @apply overflow-hidden rounded-lf-card border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow;
 }
 
 .lf-data-list__head {
-  @apply hidden items-center gap-4 border-b border-lf-border-soft bg-lf-surface-muted/70 px-4 py-2.5 text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase md:grid;
+  @apply hidden items-center gap-4 border-b border-lf-border-soft bg-lf-surface-muted px-4 py-2.5 text-xs font-medium text-lf-text-subtle md:grid;
 }
 
 .lf-data-list__row {
-  @apply grid items-center gap-3 border-b border-lf-border-soft/80 px-4 py-3.5 transition-colors last:border-b-0;
-  @apply hover:bg-lf-brand-soft/40 md:gap-4;
+  @apply grid items-center gap-3 border-b border-lf-border-soft px-4 py-3.5 transition-colors last:border-b-0;
+  @apply hover:bg-lf-surface-muted/60 md:gap-4;
 }
 
 .lf-data-list__row:hover .lf-data-list__actions {
@@ -229,11 +280,14 @@ body {
   @apply flex items-center justify-end gap-1 opacity-100 transition-opacity md:opacity-0;
 }
 
+/* 品牌渐变（Logo、头像等品牌时刻） */
+.lf-grad-bg {
+  background: var(--lf-brand-grad);
+}
+
 .lf-avatar {
-  @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold tracking-wide;
-  background: linear-gradient(135deg, rgb(16 185 129 / 0.18), rgb(59 130 246 / 0.14));
-  color: var(--color-brand-600);
-  box-shadow: inset 0 0 0 1px rgb(16 185 129 / 0.18);
+  @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold tracking-wide text-white;
+  background: var(--lf-brand-grad);
 }
 
 .lf-status-dot {
@@ -241,7 +295,7 @@ body {
 }
 
 .lf-status-dot--active {
-  @apply bg-brand-500 shadow-[0_0_0_3px_rgb(16_185_129_/_0.18)];
+  @apply bg-brand-500 shadow-[0_0_0_3px_var(--lf-brand-soft)];
 }
 
 .lf-status-dot--inactive {
@@ -250,52 +304,55 @@ body {
 
 /* Soften naive DataTable for remaining table screens */
 .lf-table .n-data-table {
-  --n-merged-th-color: transparent !important;
-  --n-merged-td-color: transparent !important;
-  --n-merged-border-color: var(--lf-border-soft) !important;
+  --n-merged-th-color: transparent;
+  --n-merged-td-color: transparent;
+  --n-merged-border-color: var(--lf-border-soft);
+  /* naive 的 td hover 色为半透明合成色，会把固定列的不透明背景顶掉，导致横滚内容透出；
+     交由下方 tr:hover 规则统一接管（--lf-hover） */
+  --n-merged-td-color-hover: var(--lf-hover);
 }
 
 .lf-table .n-data-table-th {
-  font-size: 11px !important;
-  font-weight: 500 !important;
-  letter-spacing: 0.04em !important;
-  text-transform: uppercase !important;
-  color: var(--lf-text-subtle) !important;
-  background: var(--lf-surface-muted) !important;
-  border-bottom: 1px solid var(--lf-border-soft) !important;
-  padding-top: 10px !important;
-  padding-bottom: 10px !important;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lf-text-subtle);
+  background: var(--lf-surface-muted);
+  border-bottom: 1px solid var(--lf-border-soft);
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 .lf-table .n-data-table-td {
-  border-bottom: 1px solid var(--lf-border-soft) !important;
-  padding-top: 14px !important;
-  padding-bottom: 14px !important;
-  background: transparent !important;
+  border-bottom: 1px solid var(--lf-border-soft);
+  padding-top: 12px;
+  padding-bottom: 12px;
+  background: transparent;
 }
 
 /* Fixed columns need opaque bg so scrolled cells don't show through */
 .lf-table .n-data-table-th--fixed-left,
 .lf-table .n-data-table-th--fixed-right {
-  background: var(--lf-surface-muted) !important;
+  background: var(--lf-surface-muted);
 }
 
 .lf-table .n-data-table-td--fixed-left,
 .lf-table .n-data-table-td--fixed-right {
-  background: var(--lf-surface) !important;
+  background: var(--lf-surface);
 }
 
 .lf-table .n-data-table-tr:hover .n-data-table-td {
-  background: rgb(16 185 129 / 0.04) !important;
+  background: var(--lf-hover);
 }
 
-.lf-table .n-data-table-tr:hover .n-data-table-td--fixed-left,
-.lf-table .n-data-table-tr:hover .n-data-table-td--fixed-right {
-  background: color-mix(in srgb, var(--lf-surface) 96%, rgb(16 185 129)) !important;
+/* 固定列任何状态都必须不透明（含 hover），否则横向滚动内容会从固定列后透出；
+   用与 naive 原生规则（tr:not(summary):hover > td）同强度选择器 + !important 兜底 */
+.lf-table .n-data-table-tr:not(.n-data-table-tr--summary):hover > .n-data-table-td--fixed-left,
+.lf-table .n-data-table-tr:not(.n-data-table-tr--summary):hover > .n-data-table-td--fixed-right {
+  background: color-mix(in srgb, var(--lf-surface) 96%, var(--lf-brand-500)) !important;
 }
 
 .lf-table .n-data-table-tr:last-child .n-data-table-td {
-  border-bottom: none !important;
+  border-bottom: none;
 }
 
 /* Workspace tabs: denser chrome */
@@ -304,47 +361,18 @@ body {
 }
 
 .workspace-tabs .n-tabs-tab {
-  padding-top: 8px !important;
-  padding-bottom: 8px !important;
-  font-size: 13px !important;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: 13px;
 }
 
 .workspace-tabs .n-tab-pane {
-  padding-top: 0 !important;
+  padding-top: 0;
 }
 
+/* 登录/注册壳：纯色底、居中布局 */
 .lf-auth-shell {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  background:
-    radial-gradient(ellipse 60% 50% at 15% 20%, var(--lf-mesh-a), transparent 55%),
-    radial-gradient(ellipse 50% 45% at 85% 15%, var(--lf-mesh-b), transparent 50%),
-    radial-gradient(ellipse 40% 40% at 70% 85%, var(--lf-mesh-c), transparent 45%), var(--lf-bg);
-}
-
-.lf-auth-shell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image:
-    linear-gradient(var(--lf-grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--lf-grid-line) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent 75%);
-}
-
-/* 空译文占位样式 */
-.target-empty {
-  border: 1px dashed var(--lf-border-soft);
-  border-radius: 8px;
-  padding: 8px 12px;
-  background: var(--lf-info-soft);
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @apply flex min-h-screen w-full flex-col items-center justify-center bg-lf-bg px-4 py-10;
 }
 
 /* 段落表格行视觉区分 */
@@ -353,7 +381,7 @@ body {
 }
 
 .segment-row--editing td:not(.n-data-table-td--fixed-right) {
-  background: var(--lf-brand-soft) !important;
+  background: var(--lf-brand-soft);
 }
 
 .segment-row--focused {
@@ -361,19 +389,19 @@ body {
 }
 
 .segment-row--focused td:not(.n-data-table-td--fixed-right) {
-  background: var(--lf-info-soft) !important;
+  background: var(--lf-info-soft);
 }
 
 .segment-row--translated td:not(.n-data-table-td--fixed-right) {
-  background: var(--lf-success-soft) !important;
+  background: var(--lf-success-soft);
 }
 
 .segment-row--approved td:not(.n-data-table-td--fixed-right) {
-  background: var(--lf-success-soft) !important;
+  background: var(--lf-success-soft);
 }
 
 .segment-row--rejected td:not(.n-data-table-td--fixed-right) {
-  background: var(--lf-danger-soft) !important;
+  background: var(--lf-danger-soft);
 }
 
 /* ── Quality issue span highlights ── */
@@ -391,25 +419,15 @@ body {
 }
 
 .quality-span--warning {
-  background: rgb(245 158 11 / 0.22);
+  background: rgb(245 158 11 / 0.2);
   color: inherit;
   box-shadow: inset 0 -1px 0 0 rgb(245 158 11 / 0.45);
 }
 
 .quality-span--error {
-  background: rgb(239 68 68 / 0.18);
+  background: rgb(239 68 68 / 0.16);
   color: inherit;
   box-shadow: inset 0 -1px 0 0 rgb(239 68 68 / 0.5);
-}
-
-.dark .quality-span--warning {
-  background: rgb(245 158 11 / 0.28);
-  box-shadow: inset 0 -1px 0 0 rgb(251 191 36 / 0.55);
-}
-
-.dark .quality-span--error {
-  background: rgb(239 68 68 / 0.28);
-  box-shadow: inset 0 -1px 0 0 rgb(248 113 113 / 0.55);
 }
 
 /* hover/tap 联动强调：加深刻度与下划线，凸显当前问题的精确边界 */
@@ -423,39 +441,18 @@ body {
   box-shadow: inset 0 -2px 0 0 rgb(220 38 38 / 0.9);
 }
 
-.dark .quality-span--active.quality-span--warning {
-  background: rgb(245 158 11 / 0.45);
-  box-shadow: inset 0 -2px 0 0 rgb(251 191 36 / 0.9);
-}
-
-.dark .quality-span--active.quality-span--error {
-  background: rgb(239 68 68 / 0.42);
-  box-shadow: inset 0 -2px 0 0 rgb(248 113 113 / 0.9);
-}
-
 /* 已驳回（dismissed）的问题：淡化高亮，表示已判定不是问题 */
 .quality-span--dismissed {
   color: inherit;
-  background: rgb(115 115 115 / 0.14);
-  box-shadow: inset 0 -1px 0 0 rgb(115 115 115 / 0.35);
+  background: rgb(113 113 122 / 0.14);
+  box-shadow: inset 0 -1px 0 0 rgb(113 113 122 / 0.35);
   text-decoration: line-through;
-  text-decoration-color: rgb(115 115 115 / 0.5);
-}
-
-.dark .quality-span--dismissed {
-  background: rgb(161 161 170 / 0.18);
-  box-shadow: inset 0 -1px 0 0 rgb(161 161 170 / 0.4);
-  text-decoration-color: rgb(161 161 170 / 0.55);
+  text-decoration-color: rgb(113 113 122 / 0.5);
 }
 
 .quality-span--dismissed.quality-span--active {
-  background: rgb(115 115 115 / 0.22);
-  box-shadow: inset 0 -2px 0 0 rgb(115 115 115 / 0.6);
-}
-
-.dark .quality-span--dismissed.quality-span--active {
-  background: rgb(161 161 170 / 0.28);
-  box-shadow: inset 0 -2px 0 0 rgb(161 161 170 / 0.65);
+  background: rgb(113 113 122 / 0.22);
+  box-shadow: inset 0 -2px 0 0 rgb(113 113 122 / 0.6);
 }
 
 /* HTML 模式高亮容器：HTML 内联标签样式的唯一来源（全局，因 VNode 渲染无 scoped 属性） */

@@ -3,6 +3,7 @@ import { computed, ref, watch, onScopeDispose } from 'vue'
 
 import { type ApiSchemas, fetchJob, listJobEvents } from '@/api/client'
 import { type SSEEvent, KNOWN_EVENT_TYPES, resolveStreamUrl } from '@/composables/sseShared'
+import { createAdaptivePoller, resolveAdaptiveInterval } from '@/utils/adaptivePolling'
 
 type Job = ApiSchemas['Job']
 
@@ -12,10 +13,16 @@ export interface TrackedJob extends Job {
 
 const STORAGE_KEY = 'linguaflow:globalTracker:jobIds'
 const MAX_TRACKED_JOBS = 20
+// 日志流滚动窗口上限：drawerEvents 内存中只保留最近 N 条，更早事件按需通过 loadOlder 回溯
+const MAX_DRAWER_EVENTS = 1000
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 
-const RUNNING_POLL_INTERVAL = 3_000
-const PENDING_POLL_INTERVAL = 8_000
+// 全局跟踪轮询比工作区列表轮询更保守（跟踪任务可跨页面长期存在）
+const TRACKER_POLL_INTERVALS = {
+  running: 3_000,
+  pending: 8_000,
+  paused: 15_000,
+} as const
 
 export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   // ── 状态 ──
@@ -117,6 +124,17 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     if (evt.seq > 0) {
       minSeqLoaded.value =
         minSeqLoaded.value === 0 ? evt.seq : Math.min(minSeqLoaded.value, evt.seq)
+    }
+    // 滚动窗口裁剪：超出上限时从头部移除最旧事件。
+    // 已知边角：SSE 断线重连重放全量历史时，数组会先膨胀再被裁回上限（一次性 churn，可接受）。
+    const overflow = list.length - MAX_DRAWER_EVENTS
+    if (overflow > 0) {
+      // 同步清除被裁事件的去重标记，否则之后 loadOlder 回拉这些事件会被 seenSeqs 静默丢弃
+      for (const removed of list.splice(0, overflow)) {
+        if (removed.seq > 0) seenSeqs.delete(removed.seq)
+      }
+      minSeqLoaded.value = list[0]!.seq
+      hasOlder.value = true
     }
   }
 
@@ -332,15 +350,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   }
 
   // ── 轮询 ──
-  let pollTimer: ReturnType<typeof setInterval> | null = null
   let detailPollTimer: ReturnType<typeof setInterval> | null = null
-
-  const clearPollTimer = (): void => {
-    if (pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
-    }
-  }
 
   const clearDetailPollTimer = (): void => {
     if (detailPollTimer) {
@@ -349,40 +359,20 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     }
   }
 
-  const resolvePollInterval = (): number | null => {
-    const jobs = trackedJobs.value
-    if (jobs.length === 0) return null
-
-    const hasRunning = jobs.some((j) => j.status === 'running')
-    if (hasRunning) return RUNNING_POLL_INTERVAL
-
-    const hasPending = jobs.some((j) => j.status === 'pending')
-    if (hasPending) return PENDING_POLL_INTERVAL
-
-    return null
-  }
-
-  const startPolling = (): void => {
-    clearPollTimer()
-    const interval = resolvePollInterval()
-    if (interval == null) return
-
-    pollTimer = setInterval(() => {
+  const poller = createAdaptivePoller(
+    () =>
+      resolveAdaptiveInterval(
+        trackedJobs.value.map((j) => j.status),
+        TRACKER_POLL_INTERVALS,
+      ),
+    () => {
       if (document.hidden) return
-
-      const newInterval = resolvePollInterval()
-      if (newInterval == null) {
-        clearPollTimer()
-        return
-      }
-
-      // Poll active jobs
       const active = trackedJobs.value.filter((j) => !TERMINAL_STATUSES.has(j.status))
       for (const job of active) {
         void refreshJob(job.id)
       }
-    }, interval)
-  }
+    },
+  )
 
   const startDetailPolling = (): void => {
     clearDetailPollTimer()
@@ -409,9 +399,9 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   // ── 监听活跃任务变化，自动启停轮询 ──
   watch(hasActiveJobs, (active) => {
     if (active) {
-      startPolling()
+      poller.start()
     } else {
-      clearPollTimer()
+      poller.stop()
     }
   })
 
@@ -450,8 +440,8 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     }
 
     // Restart polling if needed
-    if (hasActiveJobs.value && !pollTimer) {
-      startPolling()
+    if (hasActiveJobs.value && !poller.isRunning()) {
+      poller.start()
     }
   }
 
@@ -476,7 +466,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     persistIds()
 
     if (hasActiveJobs.value) {
-      startPolling()
+      poller.start()
     }
   }
 
@@ -487,7 +477,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
 
   // ── 清理 ──
   onScopeDispose(() => {
-    clearPollTimer()
+    poller.stop()
     clearDetailPollTimer()
     disconnectDrawerSSE()
     if (typeof document !== 'undefined') {

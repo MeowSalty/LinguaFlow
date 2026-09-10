@@ -136,16 +136,25 @@ Compose 示例中常用变量：
 
 LinguaFlow 支持部署到 HuggingFace Spaces，使用 `Dockerfile.hf` 构建。
 
-#### 部署步骤
+#### 自动部署（推荐）
+
+每次发布新版本（Release 正式发布、Docker 镜像构建完成后），CI 会自动把最小部署内容（引用发布镜像的 `Dockerfile` 与含 Space 配置的 `README.md`）推送到 Space 仓库 `MeowSalty/linguaflow`，无需手动操作。
+
+#### 手动部署
 
 1. **创建 Space**
    - 访问 [HuggingFace Spaces](https://huggingface.co/new-space)
    - 选择 **Docker** 作为 SDK
    - 设置 Space 名称和可见性
 
-2. **配置仓库**
+2. **准备部署文件**
 
-   将项目代码推送到 Space 仓库，或直接在 Space 中关联 GitHub 仓库。
+   Space 仓库只需两个文件（CI 自动部署即是推送这两个文件）：
+
+   - `Dockerfile`：将 `Dockerfile.hf` 中的镜像 tag 替换为具体版本（如 `ghcr.io/meowsalty/linguaflow:0.10.0`）
+   - `README.md`：顶部 front-matter 必须包含 `sdk: docker` 与 `app_port: 7860`，HF 依赖它识别 Docker Space 并转发端口
+
+   推送时使用全新孤儿提交，避免覆盖 Space 仓库中的其他配置。
 
 3. **环境变量配置**
 
@@ -155,6 +164,10 @@ LinguaFlow 支持部署到 HuggingFace Spaces，使用 `Dockerfile.hf` 构建。
    | --------------------------- | ------------ |
    | `LINGUAFLOW_ADMIN_USERNAME` | 管理员用户名 |
    | `LINGUAFLOW_ADMIN_PASSWORD` | 管理员密码   |
+
+   ::: warning
+   Space 容器仅 `/data` 目录持久化。如需保留 SQLite 数据，请设置 `LINGUAFLOW_DATA_DIR=/data`，否则重启后数据丢失。
+   :::
 
 4. **访问服务**
 

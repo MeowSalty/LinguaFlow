@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import {
-  NCard,
   NCheckbox,
   NCheckboxGroup,
-  NGrid,
-  NGi,
   NInputNumber,
   NRadio,
   NRadioGroup,
@@ -14,6 +11,8 @@ import {
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
+
+import ConfigSectionPanel from './ConfigSectionPanel.vue'
 
 type ExecutionProfileConfig = ApiSchemas['ExecutionProfileConfig']
 
@@ -139,15 +138,18 @@ watch(
 // ─── 选项常量 ────────────────────────────────────────────────
 
 const protectRuleOptions = computed(() => [
-  { label: 'code', value: 'code' },
-  { label: 'link', value: 'link' },
-  { label: 'placeholder', value: 'placeholder' },
-  { label: 'xml', value: 'xml' },
+  { label: t('profileConfigEditor.protect.ruleOptions.code'), value: 'code' },
+  { label: t('profileConfigEditor.protect.ruleOptions.link'), value: 'link' },
+  { label: t('profileConfigEditor.protect.ruleOptions.placeholder'), value: 'placeholder' },
+  { label: t('profileConfigEditor.protect.ruleOptions.xml'), value: 'xml' },
 ])
 
 const inlineConflictStrategyOptions = computed(() => [
-  { label: 'off', value: 'off' },
-  { label: 'rewrite-local', value: 'rewrite-local' },
+  { label: t('profileConfigEditor.glossary.conflictStrategyOptions.off'), value: 'off' },
+  {
+    label: t('profileConfigEditor.glossary.conflictStrategyOptions.rewriteLocal'),
+    value: 'rewrite-local',
+  },
 ])
 
 const rubyPreserveKindsOptions = computed(() => [
@@ -248,67 +250,339 @@ defineExpose({ lengthRatioError })
 <template>
   <div class="flex flex-col gap-4">
     <!-- 内容保护 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">🛡 {{ t('profileConfigEditor.protect.title') }}</span>
+    <ConfigSectionPanel
+      :title="t('profileConfigEditor.protect.title')"
+      :description="t('profileConfigEditor.protect.description')"
+      :enabled="configModel.protect.enabled"
+    >
+      <template #actions>
+        <NSwitch
+          v-model:value="configModel.protect.enabled"
+          size="small"
+          :disabled="disabled"
+          :aria-label="t('profileConfigEditor.protect.enabled')"
+        />
       </template>
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-sm">{{ t('profileConfigEditor.protect.enabled') }}</span>
-        <NSwitch v-model:value="configModel.protect.enabled" size="small" :disabled="disabled" />
-      </div>
-      <div :class="{ 'opacity-50 pointer-events-none': !configModel.protect.enabled }">
-        <div class="mb-1 text-xs text-lf-text-subtle">
-          {{ t('profileConfigEditor.protect.rules') }}
-        </div>
-        <NCheckboxGroup
-          v-model:value="configModel.protect.rules"
-          :disabled="disabled || !configModel.protect.enabled"
-        >
-          <div class="flex flex-wrap gap-3">
-            <NCheckbox
-              v-for="opt in protectRuleOptions"
-              :key="opt.value"
-              :value="opt.value"
-              :label="opt.label"
-            />
-          </div>
-        </NCheckboxGroup>
-      </div>
-    </NCard>
 
-    <!-- Ruby 注音 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">🔤 {{ t('profileConfigEditor.ruby.title') }}</span>
-      </template>
-      <div class="flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <span class="text-sm">{{ t('profileConfigEditor.ruby.enabled') }}</span>
-          <NSwitch
-            :value="configModel.ruby?.enabled ?? false"
-            :disabled="disabled"
-            @update:value="(val: boolean) => onRubyUpdate('enabled', val)"
+      <div class="mb-1 text-xs text-lf-text-subtle">
+        {{ t('profileConfigEditor.protect.rules') }}
+      </div>
+      <NCheckboxGroup v-model:value="configModel.protect.rules" :disabled="disabled">
+        <div class="flex flex-wrap gap-x-4 gap-y-2">
+          <NCheckbox
+            v-for="opt in protectRuleOptions"
+            :key="opt.value"
+            :value="opt.value"
+            :label="opt.label"
           />
         </div>
-        <div
-          :class="{
-            'opacity-50 pointer-events-none': !(configModel.ruby?.enabled ?? false),
-          }"
-        >
+      </NCheckboxGroup>
+    </ConfigSectionPanel>
+
+    <!-- Ruby 注音 -->
+    <ConfigSectionPanel
+      :title="t('profileConfigEditor.ruby.title')"
+      :description="t('profileConfigEditor.ruby.description')"
+      :enabled="configModel.ruby?.enabled ?? false"
+    >
+      <template #actions>
+        <NSwitch
+          :value="configModel.ruby?.enabled ?? false"
+          size="small"
+          :disabled="disabled"
+          :aria-label="t('profileConfigEditor.ruby.enabled')"
+          @update:value="(val: boolean) => onRubyUpdate('enabled', val)"
+        />
+      </template>
+
+      <div class="mb-1 text-xs text-lf-text-subtle">
+        {{ t('profileConfigEditor.ruby.preserveKinds') }}
+      </div>
+      <NCheckboxGroup
+        :value="configModel.ruby?.preserve_kinds ?? ['phonetic', 'semantic', 'creative']"
+        :disabled="disabled"
+        @update:value="
+          (val: (string | number)[]) =>
+            onRubyUpdate('preserve_kinds', val as ('phonetic' | 'semantic' | 'creative')[])
+        "
+      >
+        <div class="flex flex-wrap gap-x-4 gap-y-2">
+          <NCheckbox
+            v-for="opt in rubyPreserveKindsOptions"
+            :key="opt.value"
+            :value="opt.value"
+            :label="opt.label"
+          />
+        </div>
+      </NCheckboxGroup>
+    </ConfigSectionPanel>
+
+    <!-- 后处理 -->
+    <ConfigSectionPanel
+      :title="t('profileConfigEditor.postprocess.title')"
+      :description="t('profileConfigEditor.postprocess.description')"
+      :enabled="configModel.postprocess.enabled"
+    >
+      <template #actions>
+        <NSwitch
+          v-model:value="configModel.postprocess.enabled"
+          size="small"
+          :disabled="disabled"
+          :aria-label="t('profileConfigEditor.postprocess.enabled')"
+        />
+      </template>
+
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-lf-text">{{
+          t('profileConfigEditor.postprocess.trimSpaces')
+        }}</span>
+        <NSwitch
+          v-model:value="configModel.postprocess.trim_spaces"
+          size="small"
+          :disabled="disabled"
+        />
+      </div>
+    </ConfigSectionPanel>
+
+    <!-- 响应修复 -->
+    <ConfigSectionPanel
+      :title="t('profileConfigEditor.repair.title')"
+      :description="t('profileConfigEditor.repair.description')"
+      :enabled="configModel.repair.enabled"
+    >
+      <template #actions>
+        <NSwitch
+          v-model:value="configModel.repair.enabled"
+          size="small"
+          :disabled="disabled"
+          :aria-label="t('profileConfigEditor.repair.enabled')"
+        />
+      </template>
+
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-lf-text">{{
+          t('profileConfigEditor.repair.jsonStructural')
+        }}</span>
+        <NSwitch
+          v-model:value="configModel.repair.json_structural"
+          size="small"
+          :disabled="disabled"
+        />
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-lf-text">{{
+          t('profileConfigEditor.repair.schemaAliases')
+        }}</span>
+        <NSwitch
+          v-model:value="configModel.repair.schema_aliases"
+          size="small"
+          :disabled="disabled"
+        />
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-lf-text">
+          {{ t('profileConfigEditor.repair.placeholderNormalize') }}
+        </span>
+        <NSwitch
+          v-model:value="configModel.repair.placeholder_normalize"
+          size="small"
+          :disabled="disabled"
+        />
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-lf-text">{{
+          t('profileConfigEditor.repair.promptUpgrade')
+        }}</span>
+        <NSwitch
+          v-model:value="configModel.repair.prompt_upgrade"
+          size="small"
+          :disabled="disabled"
+        />
+      </div>
+    </ConfigSectionPanel>
+
+    <!-- 术语表 -->
+    <ConfigSectionPanel
+      :title="t('profileConfigEditor.glossary.title')"
+      :description="t('profileConfigEditor.glossary.description')"
+      :enabled="configModel.glossary.bootstrap.enabled"
+    >
+      <template #actions>
+        <NSwitch
+          v-model:value="configModel.glossary.bootstrap.enabled"
+          size="small"
+          :disabled="disabled"
+          :aria-label="t('profileConfigEditor.glossary.bootstrapEnabled')"
+        />
+      </template>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.ruby.preserveKinds') }}
+            {{ t('profileConfigEditor.glossary.bootstrapMaxTerms') }}
           </div>
-          <NCheckboxGroup
-            :value="configModel.ruby?.preserve_kinds ?? ['phonetic', 'semantic', 'creative']"
-            :disabled="disabled || !(configModel.ruby?.enabled ?? false)"
+          <NInputNumber
+            v-model:value="configModel.glossary.bootstrap.max_terms_per_1000_chars"
+            :min="0"
+            :max="100"
+            :step="0.1"
+            size="small"
+            :disabled="disabled"
+            class="w-full"
+          />
+        </div>
+        <div>
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('profileConfigEditor.glossary.bootstrapMinSourceLen') }}
+          </div>
+          <NInputNumber
+            v-model:value="configModel.glossary.bootstrap.min_source_len"
+            :min="1"
+            :max="100"
+            :step="1"
+            size="small"
+            :disabled="disabled"
+            class="w-full"
+          />
+        </div>
+      </div>
+      <div>
+        <div class="mb-1 text-xs text-lf-text-subtle">
+          {{ t('profileConfigEditor.glossary.bootstrapConflictStrategy') }}
+        </div>
+        <NSelect
+          v-model:value="configModel.glossary.bootstrap.inline_conflict_strategy"
+          :options="inlineConflictStrategyOptions"
+          size="small"
+          :disabled="disabled"
+          class="w-full"
+        />
+      </div>
+    </ConfigSectionPanel>
+
+    <!-- 上下文窗口 -->
+    <ConfigSectionPanel
+      :title="t('profileConfigEditor.context.title')"
+      :description="t('profileConfigEditor.context.description')"
+      :enabled="configModel.context.enabled"
+    >
+      <template #actions>
+        <NSwitch
+          v-model:value="configModel.context.enabled"
+          size="small"
+          :disabled="disabled"
+          :aria-label="t('profileConfigEditor.context.enabled')"
+        />
+      </template>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div>
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('profileConfigEditor.context.before') }}
+          </div>
+          <NInputNumber
+            v-model:value="configModel.context.before"
+            :min="0"
+            :max="10"
+            :step="1"
+            size="small"
+            :disabled="disabled"
+            class="w-full"
+          />
+        </div>
+        <div>
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('profileConfigEditor.context.after') }}
+          </div>
+          <NInputNumber
+            v-model:value="configModel.context.after"
+            :min="0"
+            :max="10"
+            :step="1"
+            size="small"
+            :disabled="disabled"
+            class="w-full"
+          />
+        </div>
+        <div>
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('profileConfigEditor.context.maxChars') }}
+          </div>
+          <NInputNumber
+            v-model:value="configModel.context.max_chars"
+            :min="0"
+            :max="10000"
+            :step="100"
+            size="small"
+            :disabled="disabled"
+            class="w-full"
+          />
+          <div class="mt-1 text-xs text-lf-text-subtle">
+            {{ t('profileConfigEditor.context.maxCharsHint') }}
+          </div>
+        </div>
+      </div>
+    </ConfigSectionPanel>
+
+    <!-- 质量检测 -->
+    <ConfigSectionPanel
+      :title="t('profileConfigEditor.qa.title')"
+      :description="t('profileConfigEditor.qa.description')"
+      :enabled="configModel.qa!.enabled"
+    >
+      <template #actions>
+        <NSwitch
+          v-model:value="configModel.qa!.enabled"
+          size="small"
+          :disabled="disabled"
+          :aria-label="t('profileConfigEditor.qa.enabled')"
+        />
+      </template>
+
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-lf-text">{{ t('profileConfigEditor.qa.autoReject') }}</span>
+        <NSwitch v-model:value="configModel.qa!.auto_reject" size="small" :disabled="disabled" />
+      </div>
+
+      <!-- 确定性检查项 -->
+      <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/40 p-3">
+        <div class="mb-2 flex items-center justify-between">
+          <span class="text-xs font-medium text-lf-text-strong">
+            {{ t('profileConfigEditor.qa.checksTitle') }}
+          </span>
+          <NRadioGroup
+            :value="checksModeAll ? 'all' : 'custom'"
+            size="small"
+            :disabled="disabled"
             @update:value="
-              (val: (string | number)[]) =>
-                onRubyUpdate('preserve_kinds', val as ('phonetic' | 'semantic' | 'creative')[])
+              (val: string) => {
+                checksModeAll = val === 'all'
+              }
             "
           >
-            <div class="flex flex-wrap gap-3">
+            <NRadio value="all">{{ t('profileConfigEditor.qa.checksAll') }}</NRadio>
+            <NRadio value="custom">{{ t('profileConfigEditor.qa.checksCustom') }}</NRadio>
+          </NRadioGroup>
+        </div>
+        <div v-if="checksModeAll" class="text-xs text-lf-text-subtle">
+          {{ t('profileConfigEditor.qa.checksAllHint') }}
+        </div>
+        <div v-else>
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('profileConfigEditor.qa.checksHint') }}
+          </div>
+          <NCheckboxGroup
+            :value="selectedChecks"
+            :disabled="disabled"
+            @update:value="
+              (val: Array<string | number>) => {
+                selectedChecks = val as QACheckName[]
+              }
+            "
+          >
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
               <NCheckbox
-                v-for="opt in rubyPreserveKindsOptions"
+                v-for="opt in checkOptions"
                 :key="opt.value"
                 :value="opt.value"
                 :label="opt.label"
@@ -317,360 +591,78 @@ defineExpose({ lengthRatioError })
           </NCheckboxGroup>
         </div>
       </div>
-    </NCard>
 
-    <!-- 后处理 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold"
-          >✨ {{ t('profileConfigEditor.postprocess.title') }}</span
-        >
-      </template>
-      <div class="flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <span class="text-sm">{{ t('profileConfigEditor.postprocess.enabled') }}</span>
-          <NSwitch
-            v-model:value="configModel.postprocess.enabled"
+      <!-- 长度计算方式 -->
+      <div>
+        <div class="mb-1 text-xs text-lf-text-subtle">
+          {{ t('profileConfigEditor.qa.lengthMethod') }}
+        </div>
+        <NSelect
+          v-model:value="configModel.qa!.length_method"
+          :options="lengthMethodOptions"
+          size="small"
+          :disabled="disabled"
+          class="w-full"
+        />
+      </div>
+
+      <!-- 长度比 -->
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <div class="mb-1 flex items-center gap-2">
+            <NCheckbox
+              :checked="configModel.qa!.length_ratio_min > 0"
+              :disabled="disabled"
+              @update:checked="
+                (val: boolean) => {
+                  configModel.qa!.length_ratio_min = val ? 0.2 : 0
+                }
+              "
+            />
+            <span class="text-xs text-lf-text-subtle">
+              {{ t('profileConfigEditor.qa.lengthRatioMin') }}
+            </span>
+          </div>
+          <NInputNumber
+            v-model:value="configModel.qa!.length_ratio_min"
+            :min="0.01"
+            :step="0.05"
             size="small"
-            :disabled="disabled"
+            :disabled="disabled || configModel.qa!.length_ratio_min === 0"
+            class="w-full"
           />
         </div>
-        <div
-          class="flex items-center justify-between"
-          :class="{ 'opacity-50 pointer-events-none': !configModel.postprocess.enabled }"
-        >
-          <span class="text-xs text-lf-text-subtle">{{
-            t('profileConfigEditor.postprocess.trimSpaces')
-          }}</span>
-          <NSwitch
-            v-model:value="configModel.postprocess.trim_spaces"
+        <div>
+          <div class="mb-1 flex items-center gap-2">
+            <NCheckbox
+              :checked="configModel.qa!.length_ratio_max > 0"
+              :disabled="disabled"
+              @update:checked="
+                (val: boolean) => {
+                  configModel.qa!.length_ratio_max = val ? 3 : 0
+                }
+              "
+            />
+            <span class="text-xs text-lf-text-subtle">
+              {{ t('profileConfigEditor.qa.lengthRatioMax') }}
+            </span>
+          </div>
+          <NInputNumber
+            v-model:value="configModel.qa!.length_ratio_max"
+            :min="0.01"
+            :max="10"
+            :step="0.05"
             size="small"
-            :disabled="disabled || !configModel.postprocess.enabled"
+            :disabled="disabled || configModel.qa!.length_ratio_max === 0"
+            class="w-full"
           />
         </div>
       </div>
-    </NCard>
 
-    <!-- 响应修复 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">🔧 {{ t('profileConfigEditor.repair.title') }}</span>
-      </template>
-      <div class="flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <span class="text-sm">{{ t('profileConfigEditor.repair.enabled') }}</span>
-          <NSwitch v-model:value="configModel.repair.enabled" size="small" :disabled="disabled" />
-        </div>
-        <div
-          class="ml-4 flex flex-col gap-2"
-          :class="{ 'opacity-50 pointer-events-none': !configModel.repair.enabled }"
-        >
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.repair.jsonStructural')
-            }}</span>
-            <NSwitch
-              v-model:value="configModel.repair.json_structural"
-              size="small"
-              :disabled="disabled || !configModel.repair.enabled"
-            />
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.repair.schemaAliases')
-            }}</span>
-            <NSwitch
-              v-model:value="configModel.repair.schema_aliases"
-              size="small"
-              :disabled="disabled || !configModel.repair.enabled"
-            />
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.repair.placeholderNormalize')
-            }}</span>
-            <NSwitch
-              v-model:value="configModel.repair.placeholder_normalize"
-              size="small"
-              :disabled="disabled || !configModel.repair.enabled"
-            />
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.repair.promptUpgrade')
-            }}</span>
-            <NSwitch
-              v-model:value="configModel.repair.prompt_upgrade"
-              size="small"
-              :disabled="disabled || !configModel.repair.enabled"
-            />
-          </div>
-        </div>
+      <div class="text-xs text-lf-text-subtle">
+        {{ t('profileConfigEditor.qa.lengthRatioHint') }}
       </div>
-    </NCard>
-
-    <!-- 术语表 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">📚 {{ t('profileConfigEditor.glossary.title') }}</span>
-      </template>
-      <div class="flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <span class="text-sm">{{ t('profileConfigEditor.glossary.bootstrapEnabled') }}</span>
-          <NSwitch
-            v-model:value="configModel.glossary.bootstrap.enabled"
-            size="small"
-            :disabled="disabled"
-          />
-        </div>
-        <div :class="{ 'opacity-50 pointer-events-none': !configModel.glossary.bootstrap.enabled }">
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.glossary.bootstrapMaxTerms')
-            }}</span>
-            <NInputNumber
-              v-model:value="configModel.glossary.bootstrap.max_terms_per_1000_chars"
-              :min="0"
-              :max="100"
-              :step="0.1"
-              size="tiny"
-              :disabled="disabled || !configModel.glossary.bootstrap.enabled"
-              class="w-24"
-            />
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.glossary.bootstrapMinSourceLen')
-            }}</span>
-            <NInputNumber
-              v-model:value="configModel.glossary.bootstrap.min_source_len"
-              :min="1"
-              :max="100"
-              :step="1"
-              size="tiny"
-              :disabled="disabled || !configModel.glossary.bootstrap.enabled"
-              class="w-24"
-            />
-          </div>
-          <div>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('profileConfigEditor.glossary.bootstrapConflictStrategy') }}
-            </div>
-            <NSelect
-              v-model:value="configModel.glossary.bootstrap.inline_conflict_strategy"
-              :options="inlineConflictStrategyOptions"
-              size="small"
-              :disabled="disabled || !configModel.glossary.bootstrap.enabled"
-            />
-          </div>
-        </div>
-      </div>
-    </NCard>
-
-    <!-- 上下文窗口 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">📖 {{ t('profileConfigEditor.context.title') }}</span>
-      </template>
-      <div class="flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <span class="text-sm">{{ t('profileConfigEditor.context.enabled') }}</span>
-          <NSwitch v-model:value="configModel.context.enabled" size="small" :disabled="disabled" />
-        </div>
-        <div :class="{ 'opacity-50 pointer-events-none': !configModel.context.enabled }">
-          <NGrid cols="1 s:2 m:3" responsive="screen" :x-gap="12" :y-gap="10">
-            <NGi>
-              <div class="mb-1 text-xs text-lf-text-subtle">
-                {{ t('profileConfigEditor.context.before') }}
-              </div>
-              <NInputNumber
-                v-model:value="configModel.context.before"
-                :min="0"
-                :max="10"
-                :step="1"
-                size="small"
-                :disabled="disabled || !configModel.context.enabled"
-                class="w-full"
-              />
-            </NGi>
-            <NGi>
-              <div class="mb-1 text-xs text-lf-text-subtle">
-                {{ t('profileConfigEditor.context.after') }}
-              </div>
-              <NInputNumber
-                v-model:value="configModel.context.after"
-                :min="0"
-                :max="10"
-                :step="1"
-                size="small"
-                :disabled="disabled || !configModel.context.enabled"
-                class="w-full"
-              />
-            </NGi>
-            <NGi>
-              <div class="mb-1 text-xs text-lf-text-subtle">
-                {{ t('profileConfigEditor.context.maxChars') }}
-              </div>
-              <NInputNumber
-                v-model:value="configModel.context.max_chars"
-                :min="0"
-                :max="10000"
-                :step="100"
-                size="small"
-                :disabled="disabled || !configModel.context.enabled"
-                class="w-full"
-              />
-              <div class="mt-1 text-xs text-lf-text-subtle">
-                {{ t('profileConfigEditor.context.maxCharsHint') }}
-              </div>
-            </NGi>
-          </NGrid>
-        </div>
-      </div>
-    </NCard>
-
-    <!-- 质量检测 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">🔍 {{ t('profileConfigEditor.qa.title') }}</span>
-      </template>
-      <div class="flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <span class="text-sm">{{ t('profileConfigEditor.qa.enabled') }}</span>
-          <NSwitch v-model:value="configModel.qa!.enabled" size="small" :disabled="disabled" />
-        </div>
-        <div :class="{ 'opacity-50 pointer-events-none': !configModel.qa!.enabled }">
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.qa.autoReject')
-            }}</span>
-            <NSwitch
-              v-model:value="configModel.qa!.auto_reject"
-              size="small"
-              :disabled="disabled || !configModel.qa!.enabled"
-            />
-          </div>
-          <!-- 确定性检查项 -->
-          <div class="mt-3 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 p-3">
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-xs font-medium text-lf-text-strong">
-                {{ t('profileConfigEditor.qa.checksTitle') }}
-              </span>
-              <NRadioGroup
-                :value="checksModeAll ? 'all' : 'custom'"
-                size="small"
-                :disabled="disabled || !configModel.qa!.enabled"
-                @update:value="
-                  (val: string) => {
-                    checksModeAll = val === 'all'
-                  }
-                "
-              >
-                <NRadio value="all">{{ t('profileConfigEditor.qa.checksAll') }}</NRadio>
-                <NRadio value="custom">{{ t('profileConfigEditor.qa.checksCustom') }}</NRadio>
-              </NRadioGroup>
-            </div>
-            <div v-if="checksModeAll" class="text-xs text-lf-text-subtle">
-              {{ t('profileConfigEditor.qa.checksAllHint') }}
-            </div>
-            <div v-else>
-              <div class="mb-1 text-xs text-lf-text-subtle">
-                {{ t('profileConfigEditor.qa.checksHint') }}
-              </div>
-              <NCheckboxGroup
-                :value="selectedChecks"
-                :disabled="disabled || !configModel.qa!.enabled"
-                @update:value="
-                  (val: Array<string | number>) => {
-                    selectedChecks = val as QACheckName[]
-                  }
-                "
-              >
-                <div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-                  <NCheckbox
-                    v-for="opt in checkOptions"
-                    :key="opt.value"
-                    :value="opt.value"
-                    :label="opt.label"
-                  />
-                </div>
-              </NCheckboxGroup>
-            </div>
-          </div>
-          <div class="mt-2">
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('profileConfigEditor.qa.lengthMethod') }}
-            </div>
-            <NSelect
-              v-model:value="configModel.qa!.length_method"
-              :options="lengthMethodOptions"
-              size="small"
-              :disabled="disabled || !configModel.qa!.enabled"
-            />
-          </div>
-          <NGrid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="10" class="mt-2">
-            <NGi>
-              <div class="mb-1 flex items-center gap-2">
-                <NCheckbox
-                  :checked="configModel.qa!.length_ratio_min > 0"
-                  :disabled="disabled || !configModel.qa!.enabled"
-                  @update:checked="
-                    (val: boolean) => {
-                      configModel.qa!.length_ratio_min = val ? 0.2 : 0
-                    }
-                  "
-                />
-                <span class="text-xs text-lf-text-subtle">
-                  {{ t('profileConfigEditor.qa.lengthRatioMin') }}
-                </span>
-              </div>
-              <NInputNumber
-                v-model:value="configModel.qa!.length_ratio_min"
-                :min="0.01"
-                :step="0.05"
-                size="tiny"
-                :disabled="
-                  disabled || !configModel.qa!.enabled || configModel.qa!.length_ratio_min === 0
-                "
-                class="w-full"
-              />
-            </NGi>
-            <NGi>
-              <div class="mb-1 flex items-center gap-2">
-                <NCheckbox
-                  :checked="configModel.qa!.length_ratio_max > 0"
-                  :disabled="disabled || !configModel.qa!.enabled"
-                  @update:checked="
-                    (val: boolean) => {
-                      configModel.qa!.length_ratio_max = val ? 3 : 0
-                    }
-                  "
-                />
-                <span class="text-xs text-lf-text-subtle">
-                  {{ t('profileConfigEditor.qa.lengthRatioMax') }}
-                </span>
-              </div>
-              <NInputNumber
-                v-model:value="configModel.qa!.length_ratio_max"
-                :min="0.01"
-                :max="10"
-                :step="0.05"
-                size="tiny"
-                :disabled="
-                  disabled || !configModel.qa!.enabled || configModel.qa!.length_ratio_max === 0
-                "
-                class="w-full"
-              />
-            </NGi>
-          </NGrid>
-          <div class="mt-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.qa.lengthRatioHint') }}
-          </div>
-          <div v-if="lengthRatioError" class="mt-1 text-xs text-red-500">
-            {{ lengthRatioError }}
-          </div>
-        </div>
-      </div>
-    </NCard>
+      <div v-if="lengthRatioError" class="text-xs text-lf-danger">{{ lengthRatioError }}</div>
+    </ConfigSectionPanel>
   </div>
 </template>

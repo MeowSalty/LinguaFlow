@@ -119,6 +119,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     creatingJob,
     cancellingJobIds,
     retryingJobIds,
+    pausingJobIds,
+    resumingJobIds,
     jobStatusFilter,
   } = storeToRefs(jobStore)
 
@@ -189,7 +191,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   } = segmentStore
 
   // ── 直接委托的任务方法 ──
-  const { loadJobs, createJob, cancelJob, retryJob } = jobStore
+  const { loadJobs, createJob, cancelJob, retryJob, pauseJob, resumeJob } = jobStore
 
   // ── 协调跨域操作 ──
 
@@ -282,6 +284,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     creatingJob,
     cancellingJobIds,
     retryingJobIds,
+    pausingJobIds,
+    resumingJobIds,
     downloadingKeys,
     // 错误
     projectError,
@@ -357,6 +361,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     createJob,
     cancelJob,
     retryJob,
+    pauseJob,
+    resumeJob,
     downloadResource,
     downloadResourceResult,
     setActiveResource,

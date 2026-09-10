@@ -2,25 +2,27 @@ import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
 import type { BatchEventMetadata, PoolEventMetadata, SSEEvent } from '@/composables/sseShared'
 import { normalizeSSELevel } from '@/composables/sseShared'
 import { t } from '@/i18n'
+import { formatDateTime } from '@/utils/datetime'
 
 type Job = ApiSchemas['Job']
 type JobResource = ApiSchemas['JobResource']
+type JobRound = ApiSchemas['JobResourceRound']
 
 /**
  * 格式化日期为中文格式 (yyyy/MM/dd HH:mm)
  */
 export const formatDate = (value?: string): string => {
   if (!value) {
-    return t('workspace.common.noDate')
+    return t('common.noDate')
   }
 
-  return new Intl.DateTimeFormat('zh-Hans', {
+  return formatDateTime(value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(value))
+  })
 }
 
 /**
@@ -39,6 +41,8 @@ export const statusTagType = (status: string): StatusTagType => {
     case 'pending':
     case 'running':
       return 'info'
+    case 'paused':
+      return 'warning'
     case 'error':
     case 'failed':
     case 'rejected':
@@ -69,24 +73,22 @@ export const getJobTriggerLabel = (trigger: Job['trigger_type']): string =>
   t(`workspace.job.trigger.${trigger}`)
 
 /**
- * 获取任务主进度的分子/分母。
- * 运行期优先使用 weighted_*（跨轮工作量，实时、单调），它是主进度的权威来源；
- * 缺失时回退到 completed_segments/total_segments（终态去重段数/总段数）。
+ * 获取任务主进度的分子/分母（工作量口径，单位=段落×轮）。
+ * progress_total 为"已知工作量"——仅在新轮次首次启动时累加分母，
+ * 因此百分比可能随轮次启动暂时回落。
  */
 export const getJobProgressNumbers = (job: Job): { completed: number; total: number } => {
   const p = job.progress
-  if (p.weighted_total != null && p.weighted_total > 0) {
-    return { completed: p.weighted_completed ?? 0, total: p.weighted_total }
-  }
-  return { completed: p.completed_segments, total: p.total_segments }
+  return { completed: p.progress_completed, total: p.progress_total }
 }
 
 /**
- * 计算任务进度百分比
+ * 计算任务进度百分比。
+ * 非完成状态一律显示真实完成比例——失败/取消可从断点续跑，
+ * "停在哪"比"归零"更有价值。
  */
 export const getJobProgress = (job: Job): number => {
   if (job.status === 'completed') return 100
-  if (job.status === 'failed' || job.status === 'cancelled') return 0
   const { completed, total } = getJobProgressNumbers(job)
   if (total <= 0) return 0
 
@@ -135,7 +137,7 @@ export const getStageLabel = (stage: string | undefined): string => {
 // ── 进度文案 ──
 
 /**
- * 生成进度描述文案，整合阶段、段落计数、队列信息
+ * 生成进度描述文案，整合工作量计数、队列信息
  */
 export const getJobProgressText = (job: Job): string => {
   if (job.status === 'pending') {
@@ -149,18 +151,11 @@ export const getJobProgressText = (job: Job): string => {
   }
 
   if (job.status === 'running') {
-    const skipped = job.progress.skipped_segments
-    const key =
-      skipped > 0 ? 'workspace.job.progress.runningWithSkipped' : 'workspace.job.progress.running'
     const { completed, total } = getJobProgressNumbers(job)
-    return t(key, {
-      stage: '',
-      completed,
-      total,
-      skipped,
-    })
+    return t('workspace.job.progress.running', { completed, total })
   }
 
+  if (job.status === 'paused') return t('workspace.job.progress.paused')
   if (job.status === 'completed') return t('workspace.job.progress.completed')
   if (job.status === 'failed') return t('workspace.job.progress.failed')
   if (job.status === 'cancelled') return t('workspace.job.progress.cancelled')
@@ -200,6 +195,66 @@ export const formatETA = (seconds: number | null): string => {
   return t('workspace.job.eta.hoursMinutes', { hours, minutes: remainMinutes })
 }
 
+/** ETA 秒数 → 预计完成绝对时刻：当天「今天 17:24」，跨天「09/09 01:30」 */
+export const formatEtaCompletionTime = (seconds: number | null): string => {
+  if (seconds == null || seconds <= 0) return ''
+  const target = new Date(Date.now() + seconds * 1000)
+  const now = new Date()
+  const time = formatDateTime(target, { hour: '2-digit', minute: '2-digit' })
+  const sameDay =
+    target.getFullYear() === now.getFullYear() &&
+    target.getMonth() === now.getMonth() &&
+    target.getDate() === now.getDate()
+  if (sameDay) return t('workspace.job.eta.expectedToday', { time })
+  return t('workspace.job.eta.expectedDate', {
+    date: formatDateTime(target, { month: '2-digit', day: '2-digit' }),
+    time,
+  })
+}
+
+/** 紧凑时刻：当天 HH:mm，跨天 MM/dd HH:mm（轮次悬停、预计完成等紧凑场景） */
+export const formatCompactTime = (value: string | number | Date): string => {
+  const date = new Date(value)
+  const now = new Date()
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  if (sameDay) return formatDateTime(value, { hour: '2-digit', minute: '2-digit' })
+  return formatDateTime(value, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// ── 任务耗时 ──
+
+/** 任务耗时（秒，墙钟口径）：终态 = 更新 − 开始；运行/暂停 = 当前 − 开始 */
+export const getJobDurationSeconds = (job: Job): number | null => {
+  if (!job.started_at) return null
+  const start = new Date(job.started_at).getTime()
+  const terminal = ['completed', 'failed', 'cancelled'].includes(job.status)
+  const end = terminal && job.updated_at ? new Date(job.updated_at).getTime() : Date.now()
+  return Math.max(0, (end - start) / 1000)
+}
+
+/** 格式化任务耗时：「42 秒 / 12 分钟 / 3 小时 12 分」 */
+export const formatJobDuration = (job: Job): string => {
+  const seconds = getJobDurationSeconds(job)
+  if (seconds == null) return '-'
+  if (seconds < 60) {
+    return t('workspace.job.duration.seconds', { count: Math.max(1, Math.round(seconds)) })
+  }
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return t('workspace.job.duration.minutes', { count: minutes })
+  const hours = Math.floor(minutes / 60)
+  const remainMinutes = minutes % 60
+  if (remainMinutes === 0) return t('workspace.job.duration.hours', { count: hours })
+  return t('workspace.job.duration.hoursMinutes', { hours, minutes: remainMinutes })
+}
+
 // ── 速度计算 ──
 
 /**
@@ -225,13 +280,136 @@ export const formatJobSpeed = (speed: number | null): string => {
   return t('workspace.job.speed.perMinute', { count: speed.toFixed(1) })
 }
 
-// ── 资源级阶段进度 ──
+// ── 轮次矩阵工具 ──
 
-/** 获取资源的阶段进度文案，如 "翻译 18/30" */
-export const getResourceStageProgress = (resource: JobResource): string => {
-  if (!resource.current_stage || !resource.stage_total) return ''
-  const label = getStageLabel(resource.current_stage)
-  return `${label} ${resource.stage_completed ?? 0}/${resource.stage_total}`
+/** 轮次列定义：矩阵的一列（同一任务所有资源共享同一轮次序列） */
+export interface RoundColumn {
+  roundIndex: number
+  mode: JobRound['mode']
+}
+
+/** 跨资源按 round_index 求并集，得轮次列定义（按序号升序） */
+export const getRoundColumns = (job: Job): RoundColumn[] => {
+  const byIndex = new Map<number, RoundColumn>()
+  for (const resource of job.job_resources ?? []) {
+    for (const round of resource.rounds ?? []) {
+      if (!byIndex.has(round.round_index)) {
+        byIndex.set(round.round_index, { roundIndex: round.round_index, mode: round.mode })
+      }
+    }
+  }
+  return [...byIndex.values()].sort((a, b) => a.roundIndex - b.roundIndex)
+}
+
+/** 资源在指定轮次的行（无则 undefined） */
+export const getResourceRound = (resource: JobResource, roundIndex: number): JobRound | undefined =>
+  (resource.rounds ?? []).find((r) => r.round_index === roundIndex)
+
+/** 某轮跨资源聚合（进度卡管线条用） */
+export interface RoundAggregate {
+  status: JobRound['status']
+  completed: number
+  total: number
+}
+
+/** 聚合指定轮次：任意 running → running；否则任意 failed → failed；全部 skipped → skipped；全部终态（completed/skipped 混合）→ completed；其余 → pending */
+export const aggregateRound = (job: Job, roundIndex: number): RoundAggregate | null => {
+  let completed = 0
+  let total = 0
+  let found = false
+  let hasRunning = false
+  let hasFailed = false
+  let allSkipped = true
+  let allTerminal = true
+  for (const resource of job.job_resources ?? []) {
+    const round = getResourceRound(resource, roundIndex)
+    if (!round) continue
+    found = true
+    completed += round.segment_completed
+    total += round.segment_total
+    if (round.status === 'running') hasRunning = true
+    if (round.status === 'failed') hasFailed = true
+    if (round.status !== 'skipped') allSkipped = false
+    if (round.status !== 'completed' && round.status !== 'skipped') allTerminal = false
+  }
+  if (!found) return null
+  if (hasRunning) return { status: 'running', completed, total }
+  if (hasFailed) return { status: 'failed', completed, total }
+  if (allSkipped) return { status: 'skipped', completed, total }
+  if (allTerminal) return { status: 'completed', completed, total }
+  return { status: 'pending', completed, total }
+}
+
+/** 轮次单元格/管线条的统一视觉语言：完成的退后，进行中的突出 */
+export interface RoundCellView {
+  /** 紧凑字形：✓ / x/y / · / ✗ / – */
+  text: string
+  /** 文字样式（tailwind class） */
+  class: string
+  /** 是否脉冲动效（仅 running，全表唯一动效） */
+  pulse: boolean
+}
+
+/** 状态 → 字形/颜色映射；进度卡管线条与资源矩阵单元格共用 */
+export const roundCellView = (
+  status: JobRound['status'],
+  completed: number,
+  total: number,
+): RoundCellView => {
+  switch (status) {
+    case 'completed':
+      return { text: '✓', class: 'text-lf-success', pulse: false }
+    case 'running':
+      return {
+        text: `${completed}/${total}`,
+        class: 'font-mono tabular-nums text-brand-500',
+        pulse: true,
+      }
+    case 'failed':
+      return { text: '✗', class: 'text-lf-danger', pulse: false }
+    case 'skipped':
+      return { text: '–', class: 'text-lf-text-subtle', pulse: false }
+    default:
+      return { text: '·', class: 'text-lf-text-subtle', pulse: false }
+  }
+}
+
+/**
+ * 估算进行中轮次的剩余秒数（该轮自身节奏外推：余量 × 已运行时长 ÷ 已完成段数）。
+ * 并行争用、缩批、重试的影响会自然反映在节奏里；暂停期间偏保守，属可接受近似。
+ */
+export const estimateRoundRemaining = (round: JobRound): number | null => {
+  if (round.status !== 'running' || !round.started_at || round.segment_completed < 1) return null
+  const elapsed = (Date.now() - new Date(round.started_at).getTime()) / 1000
+  if (elapsed <= 0) return null
+  const remaining = round.segment_total - round.segment_completed
+  if (remaining <= 0) return null
+  return (remaining * elapsed) / round.segment_completed
+}
+
+/** 汇总资源跨轮工作量（段×轮）；遗留任务（rounds 空）回退去重段落口径 */
+export const getResourceWorkTotals = (
+  resource: JobResource,
+): { completed: number; total: number } => {
+  const rounds = resource.rounds ?? []
+  if (rounds.length === 0) {
+    return { completed: resource.completed_segments, total: resource.segment_count }
+  }
+  let total = 0
+  let completed = 0
+  for (const round of rounds) {
+    total += round.segment_total
+    completed += round.segment_completed
+  }
+  return { completed, total }
+}
+
+/** 最近失败轮次的错误信息（资源自身无 error 时的回退） */
+export const getRoundError = (resource: JobResource): string | null => {
+  const failed = (resource.rounds ?? [])
+    .filter((round) => round.status === 'failed' && round.error_message)
+    .sort((a, b) => b.round_index - a.round_index)
+  return failed[0]?.error_message ?? null
 }
 
 // ── 批次事件工具 ──

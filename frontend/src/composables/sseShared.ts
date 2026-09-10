@@ -81,6 +81,8 @@ export const KNOWN_EVENT_TYPES = [
   'job_completed',
   'job_failed',
   'job_cancelled',
+  'job_paused',
+  'job_resumed',
 ] as const
 
 export const resolveStreamUrl = (jobId: number): string | null => {

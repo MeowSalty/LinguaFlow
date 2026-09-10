@@ -28,7 +28,7 @@ const selectionAriaLabel = computed(() =>
 
 <template>
   <div
-    class="group flex min-h-11 w-full items-center gap-2.5 rounded-lg border border-transparent bg-lf-surface/80 px-3 py-2 text-left transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow focus:outline-none focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/20"
+    class="group flex min-h-11 w-full items-center gap-2.5 rounded-lf-card border border-transparent bg-lf-surface/80 px-3 py-2 text-left transition-colors hover:bg-lf-surface-muted/60 focus:outline-none focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/20"
   >
     <NCheckbox
       :checked="checked"
@@ -41,11 +41,11 @@ const selectionAriaLabel = computed(() =>
     />
     <button
       type="button"
-      class="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/20"
+      class="flex min-w-0 flex-1 items-center gap-3 rounded-lf-ctl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/20"
       @click="emit('open', path)"
     >
       <div
-        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300"
+        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lf-ctl bg-lf-surface-muted text-lf-text-muted"
       >
         <NIcon size="14"><IconCarbonFolder /></NIcon>
       </div>
@@ -59,7 +59,7 @@ const selectionAriaLabel = computed(() =>
           <span class="block max-w-xs break-all">{{ path || name }}</span>
         </NTooltip>
         <div
-          class="mt-0.5 inline-flex rounded-full bg-amber-50 px-2 py-px text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
+          class="mt-0.5 inline-flex rounded-full bg-lf-surface-muted px-2 py-px text-xs text-lf-text-muted"
         >
           {{ t('workspace.explorer.childCount', { count: childCount }) }}
         </div>
