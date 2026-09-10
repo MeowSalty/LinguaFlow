@@ -1962,10 +1962,11 @@ const messages = {
       adjudicateMaxWordsPerBatchHint: '0 表示不限制，与段落数上限至少填一项',
       adjudicateCodes: '可裁决问题',
       adjudicateCodesPlaceholder: '默认：源文残留 + 标点多余',
-      adjudicateCodesHint: '未翻译与重复译文为硬规则，不可裁决。空则默认源文残留、标点多余',
+      adjudicateCodesHint: '重复译文为硬规则，不可裁决。空则默认源文残留、标点多余',
       adjudicateCodeSourceResidual: '源文残留',
       adjudicateCodeLengthRatio: '长度异常',
       adjudicateCodePunctuationSurplus: '标点多余',
+      adjudicateCodeUntranslated: '未翻译',
       semanticQAPromptHint:
         '语义质检系统提示词已内置，无需选择提示词模板；产出的警告级语义问题直接进入人工审核',
       semanticQASegmentScope: '段落扫描范围',
