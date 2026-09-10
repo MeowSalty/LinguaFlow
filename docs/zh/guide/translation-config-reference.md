@@ -255,7 +255,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 | `length.max_ratio`     | float    | `2.5`  | 最大比                                                                                     |
 | `length.unit`          | string   | `char` | `char` \| `word`                                                                           |
 | `repetition.enabled`   | bool     | `true` | 相邻重复（与 `checks` 中的 `duplicate` 名等价）                                            |
-| `untranslated.enabled` | bool     | `true` | 译文=原文（与 `checks` 中的 `untranslated` 名等价）                                        |
+| `untranslated.enabled` | bool     | `true` | 译文=原文，按语言对分级（与 `checks` 中的 `untranslated` 名等价）                        |
 
 #### 可配置 checker 名称（`qa.checks`）
 
@@ -263,7 +263,7 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 | 名称                          | 说明                                           |
 | ----------------------------- | ---------------------------------------------- |
-| `untranslated`                | 译文=原文                                       |
+| `untranslated`                | 译文=原文，按语言对分级（详见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)） |
 | `length_ratio`                | 长度过短/过长                                   |
 | `duplicate`                   | 相邻译文相同                                    |
 | `source_residual`             | 源语脚本残留（按语言对分档）                    |
@@ -405,10 +405,10 @@ context:
 | --------------------- | -------- | --------------------- | ------------------------------------- |
 | `batch_size`          | int      | —                     | 与 `max_words_per_batch` 至少填一项   |
 | `max_words_per_batch` | int      | —                     | 每批字词上限                          |
-| `adjudicate_codes`    | []string | `["source_residual", "punctuation_surplus"]` | `source_residual` / `length_ratio` / `punctuation_surplus` |
+| `adjudicate_codes`    | []string | `["source_residual", "punctuation_surplus"]` | `source_residual` / `length_ratio` / `punctuation_surplus` / `untranslated` |
 | `retry`               | object   | —                     | 重试                                  |
 
-裁决提示词内置。空或不传 `adjudicate_codes` 时默认裁决 `source_residual` 与 `punctuation_surplus`；`length_ratio` 依赖用户配置的长度比阈值，需显式选用。`untranslated` / `duplicate` 为硬规则，不可裁决。模型判定 `false_positive` 的问题不会被删除，而是标记为 `dismissed` 保留（记录裁决时间与 LLM 理由），后续轮次跳过；`real` 的问题保持 `pending`。人工也可在审校界面 [驳回问题](/zh/guide/review#质量问题裁决)，效果相同。
+裁决提示词内置。空或不传 `adjudicate_codes` 时默认裁决 `source_residual` 与 `punctuation_surplus`；`length_ratio` 依赖用户配置的长度比阈值，需显式选用。`untranslated` 自引入语言对分级后成为可裁决的软规则（共用文字系统语言对降为 `warning`，专名等合理原样保留常见误报，见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)）；`duplicate` 为硬规则，不可裁决。模型判定 `false_positive` 的问题不会被删除，而是标记为 `dismissed` 保留（记录裁决时间与 LLM 理由），后续轮次跳过；`real` 的问题保持 `pending`。人工也可在审校界面 [驳回问题](/zh/guide/review#质量问题裁决)，效果相同。
 
 输入/输出协议随后端 `response_format` 自动切换：
 
