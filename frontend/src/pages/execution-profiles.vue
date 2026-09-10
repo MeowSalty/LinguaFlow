@@ -3,30 +3,30 @@ import {
   NButton,
   NDrawer,
   NDrawerContent,
-  NEmpty,
   NForm,
   NFormItem,
   NInput,
   NModal,
-  NSelect,
-  NSkeleton,
   NTag,
   useMessage,
   type FormInst,
   type FormRules,
-  type SelectOption,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
+import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
 import ProfileConfigEditor from '@/components/templates/ProfileConfigEditor.vue'
+import { useEntityCrud } from '@/composables/useEntityCrud'
+import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useExecutionProfilesStore } from '@/stores/executionProfiles'
+import { formatDateTime } from '@/utils/datetime'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type ExecutionProfile = ApiSchemas['ExecutionProfile']
 type ExecutionProfileConfig = ApiSchemas['ExecutionProfileConfig']
 type CreateRequest = ApiSchemas['CreateExecutionProfileRequest']
 type UpdateRequest = ApiSchemas['UpdateExecutionProfileRequest']
-type Scope = ExecutionProfile['scope']
 
 interface FormModel {
   name: string
@@ -79,14 +79,19 @@ const store = useExecutionProfilesStore()
 const message = useMessage()
 const { t } = useI18n()
 
+const { getScopeTagType, deleteModalVisible, deletingItem, confirmDelete, executeDelete } =
+  useEntityCrud<ExecutionProfile>({
+    i18nPrefix: 'executionProfiles',
+    deleteItem: store.deleteProfile,
+    isDeleting: (id) => store.deletingIds.includes(id),
+  })
+
 // ── 表单状态 ──────────────────────────────────────────────────
 
 const formRef = ref<FormInst | null>(null)
 const configEditorRef = ref<InstanceType<typeof ProfileConfigEditor> | null>(null)
 const drawerVisible = ref(false)
 const editingItem = ref<ExecutionProfile | null>(null)
-const deleteModalVisible = ref(false)
-const deletingItem = ref<ExecutionProfile | null>(null)
 
 const formModel = reactive<FormModel>({
   name: '',
@@ -96,24 +101,46 @@ const formModel = reactive<FormModel>({
 
 // ── 计算属性 ──────────────────────────────────────────────────
 
-const filterScopeOptions = computed<SelectOption[]>(() => [
-  { label: t('executionProfiles.filters.allScopes'), value: 'all' },
-  { label: t('executionProfiles.scopes.system'), value: 'system' },
-  { label: t('executionProfiles.scopes.user'), value: 'user' },
-  { label: t('executionProfiles.scopes.org'), value: 'org' },
-])
-
 const hasActiveFilters = computed(
   () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
 )
 
+const filterTabs = computed(() => [
+  { name: 'all', label: t('executionProfiles.filters.all'), count: store.totalCount },
+  { name: 'system', label: t('executionProfiles.scopes.system'), count: store.systemCount },
+  { name: 'user', label: t('executionProfiles.scopes.user'), count: store.userCount },
+])
+
 const isEditMode = computed(() => Boolean(editingItem.value))
 const isSystemScope = computed(() => editingItem.value?.scope === 'system')
 const drawerTitle = computed(() =>
-  isEditMode.value ? t('executionProfiles.actions.edit') : t('executionProfiles.actions.create'),
+  isSystemScope.value
+    ? t('executionProfiles.actions.viewTitle')
+    : isEditMode.value
+      ? t('executionProfiles.actions.editTitle')
+      : t('executionProfiles.actions.createTitle'),
 )
 
+const drawerSubtitle = computed(() => {
+  if (!editingItem.value) return t('executionProfiles.form.createHint')
+  return isSystemScope.value
+    ? `${t('executionProfiles.scopes.system')} · ${editingItem.value.name}`
+    : editingItem.value.name
+})
+
 const hasConfigError = computed(() => Boolean(configEditorRef.value?.lengthRatioError))
+
+/** 卡片是否有任一启用的配置特征标签（无则展示「无启用能力」占位文案） */
+const hasFeatures = (item: ExecutionProfile): boolean =>
+  Boolean(
+    item.config?.protect?.enabled ||
+    item.config?.ruby?.enabled ||
+    item.config?.repair?.enabled ||
+    item.config?.postprocess?.enabled ||
+    item.config?.glossary?.bootstrap?.enabled ||
+    item.config?.context?.enabled ||
+    item.config?.qa?.enabled,
+  )
 
 const rules = computed<FormRules>(() => ({
   name: [
@@ -213,44 +240,14 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (item: ExecutionProfile): void => {
-  if (item.scope === 'system') {
-    message.warning(t('executionProfiles.messages.systemDeleteForbidden'))
-    return
-  }
-  deletingItem.value = item
-  deleteModalVisible.value = true
+const cardDate = (item: ExecutionProfile): string => {
+  const value = item.updated_at ?? item.created_at
+  return value ? formatDateTime(value, { dateStyle: 'short' }) : '—'
 }
 
-const executeDelete = async (): Promise<void> => {
-  if (!deletingItem.value) return
-
-  try {
-    await store.deleteProfile(deletingItem.value.id)
-    message.success(t('executionProfiles.messages.deleteSuccess'))
-    deleteModalVisible.value = false
-    deletingItem.value = null
-  } catch {
-    // Error is handled by the store
-  }
-}
-
-const getScopeTagType = (scope: Scope): 'default' | 'info' | 'success' => {
-  switch (scope) {
-    case 'system':
-      return 'default'
-    case 'user':
-      return 'info'
-    case 'org':
-      return 'success'
-    default:
-      return 'default'
-  }
-}
-
-const formatDate = (dateStr: string | undefined): string => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString()
+const cardDateTitle = (item: ExecutionProfile): string => {
+  const value = item.updated_at ?? item.created_at
+  return value ? formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' }) : ''
 }
 
 // ── 生命周期 ──────────────────────────────────────────────────
@@ -259,150 +256,98 @@ onMounted(() => {
   store.loadProfiles()
 })
 
-watch(
+useStoreErrorToast(
   () => store.error,
-  (err) => {
-    if (err) {
-      message.error(err, { duration: 0, closable: true })
-      store.error = null
-    }
+  () => {
+    store.error = null
   },
 )
 </script>
 
 <template>
-  <div class="lf-page">
-    <!-- 页面头部 -->
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-3">
-          <div class="lf-eyebrow">
-            {{ t('executionProfiles.eyebrow') }}
-          </div>
-          <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('executionProfiles.title') }}
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('executionProfiles.subtitle') }}
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton secondary :loading="store.loading" @click="store.loadProfiles">
-            {{ t('executionProfiles.actions.refresh') }}
-          </NButton>
-          <NButton type="primary" @click="openCreateDrawer">
-            {{ t('executionProfiles.actions.create') }}
-          </NButton>
-        </div>
-      </div>
-    </section>
+  <EntityListPage
+    :title="t('executionProfiles.title')"
+    :subtitle="t('executionProfiles.subtitle')"
+    :loading="store.loading"
+    :empty="store.filteredItems.length === 0"
+    :empty-description="
+      hasActiveFilters
+        ? t('executionProfiles.empty.filtered')
+        : t('executionProfiles.empty.default')
+    "
+  >
+    <template #actions>
+      <NButton secondary :loading="store.loading" @click="store.loadProfiles">
+        {{ t('common.actions.refresh') }}
+      </NButton>
+      <NButton type="primary" @click="openCreateDrawer">
+        {{ t('executionProfiles.actions.create') }}
+      </NButton>
+    </template>
 
-    <!-- 统计卡片 -->
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionProfiles.stats.total') }}</div>
-        <div class="lf-metric-value">{{ store.totalCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionProfiles.stats.system') }}</div>
-        <div class="lf-metric-value">{{ store.systemCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionProfiles.stats.user') }}</div>
-        <div class="lf-metric-value">{{ store.userCount }}</div>
-      </div>
-      <div class="lf-metric">
-        <div class="lf-metric-label">{{ t('executionProfiles.stats.org') }}</div>
-        <div class="lf-metric-value">{{ store.orgCount }}</div>
-      </div>
-    </div>
+    <template #filters>
+      <ScopeFilterTabs
+        :tabs="filterTabs"
+        :value="store.scopeFilter"
+        @update:value="(v: string) => (store.scopeFilter = v as ExecutionProfile['scope'] | 'all')"
+      />
+      <NInput
+        v-model:value="store.searchQuery"
+        clearable
+        class="lg:max-w-sm!"
+        :placeholder="t('executionProfiles.filters.searchPlaceholder')"
+      />
+    </template>
 
-    <div class="lf-panel px-4 py-3">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <NInput
-          v-model:value="store.searchQuery"
-          clearable
-          class="lg:max-w-sm"
-          :placeholder="t('executionProfiles.filters.searchPlaceholder')"
-        />
-        <div class="flex flex-wrap gap-3">
-          <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
-          <NButton
-            v-if="hasActiveFilters"
-            quaternary
-            @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-          >
-            {{ t('executionProfiles.filters.reset') }}
-          </NButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- 加载骨架屏 -->
-    <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <div v-for="index in 6" :key="index" class="lf-panel p-5">
-        <NSkeleton text :repeat="4" />
-      </div>
-    </div>
-
-    <!-- 空状态 -->
-    <NEmpty
-      v-else-if="store.filteredItems.length === 0"
-      class="lf-panel py-16"
-      :description="
-        hasActiveFilters
-          ? t('executionProfiles.empty.filtered')
-          : t('executionProfiles.empty.default')
-      "
-    >
-      <template #extra>
-        <NButton
-          v-if="hasActiveFilters"
-          secondary
-          @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
-        >
-          {{ t('executionProfiles.filters.reset') }}
-        </NButton>
-        <NButton v-else type="primary" @click="openCreateDrawer">
-          {{ t('executionProfiles.actions.createFirst') }}
-        </NButton>
-      </template>
-    </NEmpty>
+    <template #empty-extra>
+      <NButton v-if="hasActiveFilters" secondary @click="store.resetFilters()">
+        {{ t('executionProfiles.filters.reset') }}
+      </NButton>
+      <NButton v-else type="primary" @click="openCreateDrawer">
+        {{ t('executionProfiles.actions.createFirst') }}
+      </NButton>
+    </template>
 
     <!-- 卡片网格 -->
-    <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="item in store.filteredItems"
         :key="item.id"
-        class="lf-interactive-card group flex h-full flex-col gap-4 p-5"
+        class="lf-interactive-card flex h-full cursor-pointer flex-col gap-4 p-5"
+        @click="openEditDrawer(item)"
       >
-        <!-- 头部：名称 + 作用域标签 -->
+        <!-- 头部：名称 + 编号 + 作用域标签 -->
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0">
-            <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+            <h2
+              class="truncate text-lg font-semibold tracking-tight text-lf-text-strong"
+              :title="item.name"
+            >
               {{ item.name }}
             </h2>
+            <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ item.id }}</p>
           </div>
-          <NTag round size="small" :type="getScopeTagType(item.scope)">
+          <NTag round size="small" :bordered="false" :type="getScopeTagType(item.scope)">
             {{ t(`executionProfiles.scopes.${item.scope}`) }}
           </NTag>
         </div>
 
         <!-- 描述 -->
         <p
-          class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
-          :class="{ 'italic text-lf-text-subtle': !item.description }"
+          class="line-clamp-2 text-sm leading-6"
+          :class="item.description ? 'text-lf-text-muted' : 'text-lf-text-subtle'"
         >
           {{ item.description || t('executionProfiles.card.noDescription') }}
         </p>
 
         <!-- 专属摘要：配置特征标签 -->
-        <div class="flex flex-wrap gap-1.5">
+        <div v-if="hasFeatures(item)" class="flex flex-wrap gap-1.5">
           <NTag v-if="item.config?.protect?.enabled" size="small" :bordered="false">
             {{ t('executionProfiles.feature.protect') }}:
             {{ item.config.protect.rules?.length ?? 0 }}
+          </NTag>
+          <NTag v-if="item.config?.ruby?.enabled" size="small" :bordered="false">
+            {{ t('executionProfiles.feature.ruby') }}
           </NTag>
           <NTag v-if="item.config?.repair?.enabled" size="small" :bordered="false">
             {{ t('executionProfiles.feature.repair') }}
@@ -416,132 +361,115 @@ watch(
           <NTag v-if="item.config?.context?.enabled" size="small" :bordered="false">
             {{ t('executionProfiles.feature.context') }}
           </NTag>
+          <NTag v-if="item.config?.qa?.enabled" size="small" :bordered="false">
+            {{ t('executionProfiles.feature.qa') }}
+          </NTag>
         </div>
+        <p v-else class="text-xs text-lf-text-subtle">
+          {{ t('executionProfiles.card.noFeatures') }}
+        </p>
 
-        <!-- 底部：时间 + 操作 -->
+        <!-- 底部：更新时间 + 操作 -->
         <div class="mt-auto border-t border-lf-border-soft pt-4">
           <div class="flex items-center justify-between gap-3">
-            <span class="text-xs text-lf-text-subtle">
-              {{ t('executionProfiles.card.createdAt') }} {{ formatDate(item.created_at) }}
+            <span class="text-xs text-lf-text-subtle" :title="cardDateTitle(item)">
+              {{ t('executionProfiles.card.updatedAt') }} {{ cardDate(item) }}
             </span>
-            <div class="flex items-center gap-2">
-              <NButton
-                v-if="item.scope !== 'system'"
-                text
-                type="primary"
-                class="font-medium"
-                @click="openEditDrawer(item)"
-              >
-                {{ t('executionProfiles.actions.edit') }}
-              </NButton>
-              <NButton
-                v-if="item.scope !== 'system'"
-                text
-                type="error"
-                class="font-medium"
-                @click="confirmDelete(item)"
-              >
-                {{ t('executionProfiles.actions.delete') }}
-              </NButton>
-              <NButton
-                v-if="item.scope === 'system'"
-                text
-                type="info"
-                class="font-medium"
-                @click="openEditDrawer(item)"
-              >
-                {{ t('executionProfiles.actions.view') }}
+            <div class="flex items-center gap-2" @click.stop>
+              <template v-if="item.scope !== 'system'">
+                <NButton text type="primary" class="font-medium" @click="openEditDrawer(item)">
+                  {{ t('common.actions.edit') }}
+                </NButton>
+                <NButton text type="error" class="font-medium" @click="confirmDelete(item)">
+                  {{ t('common.actions.delete') }}
+                </NButton>
+              </template>
+              <NButton v-else text type="info" class="font-medium" @click="openEditDrawer(item)">
+                {{ t('common.actions.view') }}
               </NButton>
             </div>
           </div>
         </div>
       </div>
     </div>
+  </EntityListPage>
 
-    <!-- 创建/编辑抽屉 -->
-    <NDrawer v-model:show="drawerVisible" :width="'min(640px, 100vw)'" placement="right">
-      <NDrawerContent :native-scrollbar="false">
-        <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ drawerTitle }}</div>
-          </div>
-        </template>
+  <!-- 创建/编辑抽屉 -->
+  <NDrawer v-model:show="drawerVisible" :width="DRAWER_WIDTH.m" placement="right">
+    <NDrawerContent :native-scrollbar="false">
+      <template #header>
+        <DrawerHeader :title="drawerTitle" :subtitle="drawerSubtitle" />
+      </template>
 
-        <NForm
-          ref="formRef"
-          :model="formModel"
-          :rules="rules"
-          label-placement="top"
-          require-mark-placement="right-hanging"
-        >
-          <NFormItem :label="t('executionProfiles.form.name')" path="name">
-            <NInput
-              v-model:value="formModel.name"
-              :placeholder="t('executionProfiles.form.namePlaceholder')"
-              :disabled="isSystemScope"
-            />
-          </NFormItem>
+      <NForm
+        ref="formRef"
+        :model="formModel"
+        :rules="rules"
+        label-placement="top"
+        require-mark-placement="right-hanging"
+      >
+        <NFormItem :label="t('executionProfiles.form.name')" path="name">
+          <NInput
+            v-model:value="formModel.name"
+            :placeholder="t('executionProfiles.form.namePlaceholder')"
+            :disabled="isSystemScope"
+          />
+        </NFormItem>
 
-          <NFormItem :label="t('executionProfiles.form.description')" path="description">
-            <NInput
-              v-model:value="formModel.description"
-              type="textarea"
-              :placeholder="t('executionProfiles.form.descriptionPlaceholder')"
-              :rows="3"
-              :disabled="isSystemScope"
-            />
-          </NFormItem>
+        <NFormItem :label="t('executionProfiles.form.description')" path="description">
+          <NInput
+            v-model:value="formModel.description"
+            type="textarea"
+            :placeholder="t('executionProfiles.form.descriptionPlaceholder')"
+            :rows="3"
+            :disabled="isSystemScope"
+          />
+        </NFormItem>
 
-          <!-- 翻译配置编辑器 -->
-          <div class="mb-4">
-            <span class="mb-2 block text-sm font-medium text-lf-text-strong">
-              {{ t('executionProfiles.form.executionConfig') }}
-            </span>
-            <ProfileConfigEditor
-              ref="configEditorRef"
-              :config="formModel.config"
-              :disabled="isSystemScope"
-              @update:config="formModel.config = $event"
-            />
-          </div>
-        </NForm>
+        <!-- 翻译配置编辑器 -->
+        <ProfileConfigEditor
+          ref="configEditorRef"
+          :config="formModel.config"
+          :disabled="isSystemScope"
+          @update:config="formModel.config = $event"
+        />
+      </NForm>
 
-        <template #footer>
-          <div class="flex justify-end gap-3">
-            <NButton @click="drawerVisible = false">
-              {{ t('executionProfiles.actions.cancel') }}
-            </NButton>
-            <NButton
-              v-if="!isSystemScope"
-              type="primary"
-              :loading="store.creating || store.updating"
-              :disabled="hasConfigError"
-              @click="onSubmit"
-            >
-              {{
-                isEditMode
-                  ? t('executionProfiles.actions.submitUpdate')
-                  : t('executionProfiles.actions.submitCreate')
-              }}
-            </NButton>
-          </div>
-        </template>
-      </NDrawerContent>
-    </NDrawer>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <NButton @click="drawerVisible = false">
+            {{ t('common.cancel') }}
+          </NButton>
+          <NButton
+            v-if="!isSystemScope"
+            type="primary"
+            :loading="store.creating || store.updating"
+            :disabled="hasConfigError"
+            @click="onSubmit"
+          >
+            {{
+              isEditMode
+                ? t('executionProfiles.actions.submitUpdate')
+                : t('executionProfiles.actions.submitCreate')
+            }}
+          </NButton>
+        </div>
+      </template>
+    </NDrawerContent>
+  </NDrawer>
 
-    <!-- 删除确认弹窗 -->
-    <NModal
-      v-model:show="deleteModalVisible"
-      preset="dialog"
-      type="warning"
-      :title="t('executionProfiles.actions.confirmDelete')"
-      :content="
-        deletingItem ? t('executionProfiles.delete.confirm', { name: deletingItem.name }) : ''
-      "
-      :positive-text="t('executionProfiles.actions.confirmDelete')"
-      :negative-text="t('executionProfiles.actions.cancel')"
-      :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
-      @positive-click="executeDelete"
-    />
-  </div>
+  <!-- 删除确认弹窗 -->
+  <NModal
+    v-model:show="deleteModalVisible"
+    preset="dialog"
+    type="warning"
+    :title="t('common.actions.confirmDelete')"
+    :content="
+      deletingItem ? t('executionProfiles.delete.confirm', { name: deletingItem.name }) : ''
+    "
+    :positive-text="t('common.actions.deleteConfirmAction')"
+    :negative-text="t('common.cancel')"
+    :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
+    @positive-click="executeDelete"
+  />
 </template>

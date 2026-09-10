@@ -46,12 +46,12 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
 <template>
   <div class="space-y-3">
     <div
-      class="flex flex-col gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+      class="flex flex-col gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
     >
       <NSelect
         v-model:value="workspace.jobStatusFilter"
         size="small"
-        class="w-full sm:w-36"
+        class="w-full sm:w-36!"
         :options="jobStatusOptions"
       />
       <div class="flex items-center gap-3">
@@ -77,7 +77,7 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
           circle
           size="small"
           :loading="workspace.loadingJobs"
-          :title="t('workspace.actions.refresh')"
+          :title="t('common.actions.refresh')"
           @click="projectId && workspace.loadJobs(projectId)"
         >
           <template #icon>
@@ -91,7 +91,7 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
       {{ workspace.jobsError }}
     </NAlert>
 
-    <div class="lf-table overflow-hidden rounded-xl border border-lf-border-soft">
+    <div class="lf-table overflow-hidden rounded-lf-card border border-lf-border-soft">
       <NDataTable
         remote
         size="small"
@@ -108,7 +108,11 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
           })
         "
         :scroll-x="1180"
-      />
+      >
+        <template #empty>
+          <NEmpty class="py-10" :description="t('workspace.job.empty')" />
+        </template>
+      </NDataTable>
     </div>
     <div v-if="workspace.jobsCursor" class="flex justify-center pt-1">
       <NButton
@@ -119,10 +123,5 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
         {{ t('common.loadMore') }}
       </NButton>
     </div>
-    <NEmpty
-      v-if="!workspace.loadingJobs && workspace.jobs.length === 0"
-      class="py-10"
-      :description="t('workspace.job.empty')"
-    />
   </div>
 </template>

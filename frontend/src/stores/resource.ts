@@ -16,6 +16,7 @@ import {
 } from '@/api/client'
 import { fetchSegmentGroups, type ResourceSegmentGroup } from '@/api/epub'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 
 // Re-export SegmentGroup 类型供外部使用
 export type { ResourceSegmentGroup as SegmentGroup }
@@ -90,9 +91,6 @@ export interface UploadExecutionResult {
   replaceResults: ReplaceUploadResult[]
   summary: UploadResultSummary
 }
-
-const getErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error ? error.message : fallback
 
 /**
  * 从资源树中定位指定路径的目录节点。
@@ -375,7 +373,7 @@ export const useResourceStore = defineStore('resource', () => {
       resourceTree.value = response.root
       syncResourcesFromTree()
     } catch (error) {
-      resourceTreeError.value = getErrorMessage(error, t('api.errors.fetchResourceTreeFailed'))
+      resourceTreeError.value = extractErrorMessage(error, t('api.errors.fetchResourceTreeFailed'))
     } finally {
       loadingResourceTree.value = false
     }
@@ -399,7 +397,6 @@ export const useResourceStore = defineStore('resource', () => {
 
   /** 退出 EPUB 虚拟目录 */
   const exitEpub = (): void => {
-    console.debug('[resourceStore] exitEpub called')
     epubDirectoryResourceId.value = null
     epubDirectoryResourceName.value = ''
     epubDirectoryChapters.value = []
@@ -471,7 +468,7 @@ export const useResourceStore = defineStore('resource', () => {
         activeResourceId.value = resources.value[0]?.id ?? null
       }
     } catch (error) {
-      resourcesError.value = getErrorMessage(error, t('api.errors.fetchResourcesFailed'))
+      resourcesError.value = extractErrorMessage(error, t('api.errors.fetchResourcesFailed'))
     } finally {
       loadingResources.value = false
     }
@@ -667,7 +664,7 @@ export const useResourceStore = defineStore('resource', () => {
       }
       return result
     } catch (error) {
-      const message = getErrorMessage(error, t('api.errors.uploadResourcesFailed'))
+      const message = extractErrorMessage(error, t('api.errors.uploadResourcesFailed'))
       actionError.value = message
       if (taskId) {
         updateUploadTaskStage(taskId, 'error', message)
@@ -700,7 +697,7 @@ export const useResourceStore = defineStore('resource', () => {
         resetSegments?.()
       }
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.replaceResourceFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.replaceResourceFailed'))
       throw error
     } finally {
       replacingResourceIds.value = replacingResourceIds.value.filter((id) => id !== resourceId)
@@ -726,7 +723,7 @@ export const useResourceStore = defineStore('resource', () => {
       }
       return result
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.incrementalUpdateFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.incrementalUpdateFailed'))
       throw error
     } finally {
       incrementalUpdatingIds.value = incrementalUpdatingIds.value.filter((id) => id !== resourceId)
@@ -750,7 +747,7 @@ export const useResourceStore = defineStore('resource', () => {
         resetSegments?.()
       }
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.deleteResourceFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.deleteResourceFailed'))
       throw error
     } finally {
       deletingResourceIds.value = deletingResourceIds.value.filter((id) => id !== resourceId)
@@ -770,7 +767,7 @@ export const useResourceStore = defineStore('resource', () => {
     try {
       return await downloadProjectResourceRequest(projectId, resourceId)
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.downloadResourceFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.downloadResourceFailed'))
       throw error
     } finally {
       downloadingKeys.value = downloadingKeys.value.filter((item) => item !== key)
@@ -788,7 +785,7 @@ export const useResourceStore = defineStore('resource', () => {
     try {
       return await downloadResourceResultRequest(projectId, resourceId)
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.downloadResourceResultFailed'))
+      actionError.value = extractErrorMessage(error, t('api.errors.downloadResourceResultFailed'))
       throw error
     } finally {
       downloadingKeys.value = downloadingKeys.value.filter((item) => item !== key)

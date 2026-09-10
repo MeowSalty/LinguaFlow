@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { NButton, NIcon, NInput, NPopover, NTag, NText } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import IconCarbonChat from '~icons/carbon/chat'
 import IconCarbonUndo from '~icons/carbon/undo'
@@ -16,9 +17,10 @@ import {
 } from '@/composables/useQualityIssues'
 import { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
-import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
+
+const { t } = useI18n()
 
 const props = defineProps<{
   segment: Segment
@@ -57,7 +59,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="space-y-2 rounded-xl border border-lf-border-soft bg-lf-surface p-3">
+  <div class="space-y-2 rounded-lf-card border border-lf-border-soft bg-lf-surface p-3">
     <!-- 序号与状态 -->
     <div class="flex items-center justify-between">
       <span class="text-xs text-lf-text-muted">#{{ segment.segment_index }}</span>
@@ -151,7 +153,10 @@ const emit = defineEmits<{
           :mode="textRenderMode"
           :active-issue-index="activeIssueIndex"
         />
-        <div v-else class="target-empty">
+        <div
+          v-else
+          class="flex min-h-10 items-center justify-center rounded-lf-ctl border border-dashed border-lf-border-soft bg-lf-info-soft px-3 py-2"
+        >
           <NText depth="3">{{ t('workspace.segment.emptyTarget') }}</NText>
         </div>
       </template>
@@ -174,7 +179,7 @@ const emit = defineEmits<{
     <!-- 评论编辑区（行内展开） -->
     <div
       v-if="showComment && isCommentVisible"
-      class="rounded-lg border border-lf-border-soft bg-lf-surface-muted p-3"
+      class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted p-3"
     >
       <p class="mb-2 text-xs text-lf-text-muted">{{ t('workspace.segment.form.comment') }}</p>
       <NInput
@@ -189,7 +194,7 @@ const emit = defineEmits<{
           {{ t('workspace.segment.actions.cancelInline') }}
         </NButton>
         <NButton size="tiny" type="primary" @click="emit('saveComment', segment)">
-          {{ t('workspace.common.save') }}
+          {{ t('common.save') }}
         </NButton>
       </div>
     </div>

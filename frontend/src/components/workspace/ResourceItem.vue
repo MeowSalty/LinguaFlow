@@ -12,6 +12,7 @@ import { computed, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
+import { formatDateTime } from '@/utils/datetime'
 
 type Resource = ApiSchemas['Resource']
 
@@ -44,37 +45,37 @@ const dialog = useDialog()
 
 const formatDate = (value?: string): string => {
   if (!value) {
-    return t('workspace.common.noDate')
+    return t('common.noDate')
   }
 
-  return new Intl.DateTimeFormat('zh-Hans', {
+  return formatDateTime(value, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(value))
+  })
 }
 
 const formatConfig = computed(() => {
   const format = props.resource.format
   const map: Record<string, { bgClass: string; textClass: string }> = {
     epub: {
-      bgClass: 'bg-indigo-50 dark:bg-indigo-500/15',
-      textClass: 'text-indigo-600 dark:text-indigo-300',
+      bgClass: 'bg-lf-info-soft',
+      textClass: 'text-lf-info',
     },
     json: {
-      bgClass: 'bg-emerald-50 dark:bg-emerald-500/15',
-      textClass: 'text-emerald-600 dark:text-emerald-300',
+      bgClass: 'bg-lf-success-soft',
+      textClass: 'text-lf-success',
     },
     srt: {
-      bgClass: 'bg-purple-50 dark:bg-purple-500/15',
-      textClass: 'text-purple-600 dark:text-purple-300',
+      bgClass: 'bg-lf-brand-soft',
+      textClass: 'text-brand-600',
     },
   }
   return (
     map[format] ?? {
-      bgClass: 'bg-blue-50 dark:bg-blue-500/15',
-      textClass: 'text-blue-600 dark:text-blue-300',
+      bgClass: 'bg-lf-info-soft',
+      textClass: 'text-lf-info',
     }
   )
 })
@@ -113,9 +114,7 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
     disabled: isBusy.value,
   },
   {
-    label: props.downloading
-      ? t('workspace.resource.actions.downloading')
-      : t('workspace.common.download'),
+    label: props.downloading ? t('workspace.resource.actions.downloading') : t('common.download'),
     key: 'download',
     disabled: isBusy.value,
   },
@@ -131,8 +130,7 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
     key: 'dangerDivider',
   },
   {
-    label: () =>
-      h('span', { class: 'text-red-500 dark:text-red-300' }, t('workspace.common.delete')),
+    label: () => h('span', { class: 'text-lf-danger' }, t('common.delete')),
     key: 'delete',
     disabled: isBusy.value,
   },
@@ -140,10 +138,10 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
 
 const confirmDelete = (): void => {
   dialog.warning({
-    title: t('workspace.common.delete'),
+    title: t('common.delete'),
     content: t('workspace.resource.deleteConfirm', { name: props.resource.name }),
-    positiveText: t('workspace.common.confirm'),
-    negativeText: t('workspace.common.cancel'),
+    positiveText: t('common.actions.deleteConfirmAction'),
+    negativeText: t('common.cancel'),
     positiveButtonProps: {
       type: 'error',
     },
@@ -197,7 +195,7 @@ const handleDropdownSelect = (key: string) => {
 <template>
   <div
     :class="[
-      'group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-3 py-2 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow',
+      'group relative overflow-hidden rounded-lf-card border border-transparent bg-lf-surface/80 px-3 py-2 transition-colors hover:bg-lf-surface-muted/60',
     ]"
     @click="handleRowClick"
   >
@@ -206,7 +204,7 @@ const handleDropdownSelect = (key: string) => {
       :style="{ width: `${translatedPercent}%` }"
     />
     <div
-      class="pointer-events-none absolute inset-y-0 left-0 bg-brand-500/10 transition-all duration-500"
+      class="pointer-events-none absolute inset-y-0 left-0 bg-lf-brand-soft transition-all duration-500"
       :style="{ width: `${approvedPercent}%` }"
     />
     <div class="flex min-h-11 items-center gap-2.5">
@@ -218,7 +216,7 @@ const handleDropdownSelect = (key: string) => {
       />
       <div
         :class="[
-          'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+          'flex h-7 w-7 shrink-0 items-center justify-center rounded-lf-ctl',
           formatConfig.bgClass,
           formatConfig.textClass,
         ]"
@@ -273,8 +271,8 @@ const handleDropdownSelect = (key: string) => {
             >
               {{ props.resource.format || '-' }}
             </span>
-            <span class="shrink-0 text-xs text-lf-info/80"> {{ translatedPercent }}% </span>
-            <span class="shrink-0 text-xs text-brand-500/80"> {{ approvedPercent }}% </span>
+            <span class="shrink-0 text-xs text-lf-info"> {{ translatedPercent }}% </span>
+            <span class="shrink-0 text-xs text-lf-success"> {{ approvedPercent }}% </span>
           </div>
         </div>
 

@@ -46,16 +46,21 @@ defineEmits<{
 </script>
 
 <template>
-  <Transition name="slide-up">
+  <Transition
+    enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+    leave-active-class="transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+    enter-from-class="translate-y-4 opacity-0"
+    leave-to-class="translate-y-4 opacity-0"
+  >
     <div
       v-if="count > 0"
       class="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-4"
     >
       <div
-        class="pointer-events-auto flex max-w-full flex-wrap items-center gap-3 rounded-2xl border border-lf-border-soft bg-lf-surface/95 px-4 py-2.5 shadow-lg shadow-lf-shadow-strong backdrop-blur-md"
+        class="pointer-events-auto flex max-w-full flex-wrap items-center gap-3 rounded-lf-card border border-lf-border-soft bg-lf-surface/95 px-4 py-2.5 shadow-lg shadow-lf-shadow-strong backdrop-blur-md"
       >
         <!-- 选中数量 -->
-        <NBadge :value="count" :max="99" type="success" />
+        <NBadge :value="count" :max="99" type="default" />
 
         <!-- 分隔线 -->
         <span class="h-5 w-px bg-lf-border-soft" />
@@ -113,20 +118,3 @@ defineEmits<{
     </div>
   </Transition>
 </template>
-
-<style scoped>
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.slide-up-enter-from,
-.slide-up-leave-to {
-  opacity: 0;
-  transform: translateY(16px);
-}
-.slide-up-enter-to,
-.slide-up-leave-from {
-  opacity: 1;
-  transform: translateY(0);
-}
-</style>
