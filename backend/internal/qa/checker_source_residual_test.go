@@ -200,6 +200,27 @@ func TestSourceResidual_SrcEqTgtDedup(t *testing.T) {
 	}
 }
 
+// 交接守卫须在 ruby 剥离形态上比较：LLM 回传剥离形态原文（译文含残留假名）
+// 时，本检测器应让位给 untranslated，不叠加冗余 warning。
+func TestSourceResidual_RubyStrippedIdentityDedup(t *testing.T) {
+	c := NewSourceResidualChecker("ja", "zh")
+	issues := c.Check(context.Background(), []CheckInput{
+		{
+			Index:      0,
+			SourceText: "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>、隠し通路の情報を炎神皇サイドに流したんだ？",
+			TargetText: "何故、隠し通路の情報を炎神皇サイドに流したんだ？",
+		},
+		{
+			Index:      1,
+			SourceText: "<ruby>右<rt>みぎ</rt>掌<rt>て</rt></ruby>を突き出してクラークの言葉を制し、僕は言葉を続ける。",
+			TargetText: "右掌を突き出してクラークの言葉を制し、僕は言葉を続ける。",
+		},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("ruby-stripped identity should skip residual (untranslated owns it), got %d: %+v", len(issues), issues)
+	}
+}
+
 func TestSourceResidual_PlaceholderStripped(t *testing.T) {
 	c := NewSourceResidualChecker("ja", "en")
 	issues := c.Check(context.Background(), []CheckInput{
