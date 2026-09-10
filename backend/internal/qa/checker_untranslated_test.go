@@ -330,10 +330,10 @@ func TestUntranslatedChecker_RubyStrippedIdentity(t *testing.T) {
 		{
 			name:         "ja→zh 译文为剥离形态（含残留假名）报 error",
 			source:       "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>、隠し通路の情報を炎神皇サイドに流したんだ？",
-			target:       "何故ぜ、隠し通路の情報を炎神皇サイドに流したんだ？",
+			target:       "何故、隠し通路の情報を炎神皇サイドに流したんだ？",
 			wantIssues:   1,
 			wantSeverity: SeverityError,
-			wantMatched:  "何故ぜ、隠し通路の情報を炎神皇サイドに流したんだ？",
+			wantMatched:  "何故、隠し通路の情報を炎神皇サイドに流したんだ？",
 			noRubyTags:   true,
 		},
 		{
@@ -407,7 +407,7 @@ func TestUntranslatedChecker_EngineRun_RubyStrippedIdentity(t *testing.T) {
 		{
 			Index:      0,
 			SourceText: "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>、隠し通路の情報を炎神皇サイドに流したんだ？",
-			TargetText: "何故ぜ、隠し通路の情報を炎神皇サイドに流したんだ？",
+			TargetText: "何故、隠し通路の情報を炎神皇サイドに流したんだ？",
 		},
 	})
 	if len(issues) != 1 {

@@ -208,12 +208,12 @@ func TestSourceResidual_RubyStrippedIdentityDedup(t *testing.T) {
 		{
 			Index:      0,
 			SourceText: "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>、隠し通路の情報を炎神皇サイドに流したんだ？",
-			TargetText: "何故ぜ、隠し通路の情報を炎神皇サイドに流したんだ？",
+			TargetText: "何故、隠し通路の情報を炎神皇サイドに流したんだ？",
 		},
 		{
 			Index:      1,
 			SourceText: "<ruby>右<rt>みぎ</rt>掌<rt>て</rt></ruby>を突き出してクラークの言葉を制し、僕は言葉を続ける。",
-			TargetText: "右掌てを突き出してクラークの言葉を制し、僕は言葉を続ける。",
+			TargetText: "右掌を突き出してクラークの言葉を制し、僕は言葉を続ける。",
 		},
 	})
 	if len(issues) != 0 {
