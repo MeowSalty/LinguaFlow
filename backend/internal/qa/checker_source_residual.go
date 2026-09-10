@@ -278,8 +278,15 @@ var placeholderRe = regexp.MustCompile(`__LF_[A-Za-z0-9_]+`)
 
 // stripPlaceholders 移除 __LF_* 占位符并转小写。
 func stripPlaceholders(s string) string {
-	if strings.Contains(s, "__LF_") {
-		s = placeholderRe.ReplaceAllString(s, "")
+	return strings.ToLower(stripPlaceholderTokens(s))
+}
+
+// stripPlaceholderTokens 移除 __LF_* 占位符，保留原大小写。
+// 剥离与降写拆开：残留判定需要小写归一，而豁免类判定（如 untranslated）关心
+// 剩余文本本身是否含字母，小写化会引入干扰，各自按需组合。
+func stripPlaceholderTokens(s string) string {
+	if !strings.Contains(s, "__LF_") {
+		return s
 	}
-	return strings.ToLower(s)
+	return placeholderRe.ReplaceAllString(s, "")
 }
