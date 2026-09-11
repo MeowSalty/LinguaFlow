@@ -387,12 +387,16 @@ const messages = {
   workspace: {
     loadingProject: '正在加载项目',
     updatedAt: '更新于 {time}',
+    editor: {
+      backToBrowse: '返回工作台',
+      progressLabel: '已翻译 {percent}%',
+      collapsePanel: '收起（文档区宽度不受影响）',
+    },
     actions: {
       clear: '清除',
     },
     tabs: {
       resources: '资源文件',
-      segments: '段落编辑',
       jobs: '任务',
       glossary: '术语表',
     },
@@ -588,8 +592,6 @@ const messages = {
         loadMoreHint: '滚动加载更多结果',
         replaceMode: '替换',
       },
-      anchorLocated: '已定位 #{index}',
-      anchorContextHint: '含 {count} 段上文',
       noResource: '请先选择一个资源文件查看段落',
       empty: '当前资源没有符合条件的段落',
       emptyTarget: '暂无译文',

@@ -86,7 +86,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segments,
     segmentsCursor,
     segmentsPrevCursor,
-    anchorContextIds,
     loadingSegmentsUp,
     segmentsTotal,
     loadingSegments,
@@ -108,6 +107,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingSearchResults,
     searchResultsError,
     searchActiveResultId,
+    searchJumpSeq,
+    jumpingToSegmentCount,
     // EPUB 章节导航状态
     segmentGroups,
     loadingSegmentGroups,
@@ -286,7 +287,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     resourcesCursor,
     segmentsCursor,
     segmentsPrevCursor,
-    anchorContextIds,
     loadingSegmentsUp,
     segmentsTotal,
     jobsCursor,
@@ -336,6 +336,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingSearchResults,
     searchResultsError,
     searchActiveResultId,
+    searchJumpSeq,
+    jumpingToSegmentCount,
     // EPUB 章节导航
     segmentGroups,
     loadingSegmentGroups,

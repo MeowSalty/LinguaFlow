@@ -432,11 +432,6 @@ body {
   background: var(--lf-danger-soft);
 }
 
-/* 锚点跳转带上来的上文行：整行淡化（定位行聚焦不受影响） */
-.segment-row--context td {
-  opacity: 0.6;
-}
-
 /* 锚点定位闪烁：从 info 强调渐隐（B3 跳转定位时配合 .segment-row--focused 使用） */
 @keyframes segment-anchor-flash {
   0% {
@@ -475,6 +470,56 @@ html[data-theme='dark'] .segment-row--anchor-flash {
 
 .segment-row--anchor-flash {
   animation: segment-anchor-flash 1.8s ease-out 1;
+}
+
+/* ── 编辑视图手写抽屉（席位常驻面板的窄屏形态）──
+   面板以 Teleport 单实例在席位与抽屉间搬移，抽屉不用 NDrawer
+   （其内容惰性渲染会导致重挂载、丢焦点）。 */
+.lf-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--lf-surface);
+  box-shadow: var(--lf-shadow-3);
+}
+
+.lf-drawer--left {
+  left: 0;
+  border-right: 1px solid var(--lf-border-soft);
+}
+
+.lf-drawer--right {
+  right: 0;
+  border-left: 1px solid var(--lf-border-soft);
+}
+
+@keyframes lf-drawer-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes lf-drawer-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-drawer-left {
+  animation: lf-drawer-slide-in-left 0.25s ease;
+}
+
+.animate-drawer-right {
+  animation: lf-drawer-slide-in-right 0.25s ease;
 }
 
 /* ── Search hit highlight（搜索命中，与 quality-span 同结构）── */

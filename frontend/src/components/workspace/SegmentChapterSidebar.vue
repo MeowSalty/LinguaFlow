@@ -8,6 +8,10 @@ const props = defineProps<{
   projectId: number | null
 }>()
 
+const emit = defineEmits<{
+  close: []
+}>()
+
 const workspace = useProjectWorkspaceStore()
 
 const chapters = computed(() => workspace.segmentGroups)
@@ -34,14 +38,22 @@ const selectChapter = (groupKey: string, title: string): void => {
   <div
     class="flex h-full min-h-0 flex-col overflow-hidden rounded-lf-card border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow"
   >
-    <!-- 头部：标题 + 章节计数 -->
+    <!-- 头部：标题 + 章节计数 + 收起 -->
     <div class="flex shrink-0 items-center gap-2 border-b border-lf-border-soft px-3 py-2">
       <span class="text-[13px] font-semibold text-lf-text-strong">
         {{ t('workspace.segment.chapterSidebarTitle') }}
       </span>
-      <span class="ml-auto text-[11px] tabular-nums text-lf-text-subtle">
+      <span class="text-[11px] tabular-nums text-lf-text-subtle">
         {{ chapters.length }}
       </span>
+      <button
+        type="button"
+        class="ml-auto flex h-5 w-5 items-center justify-center rounded text-[13px] text-lf-text-subtle transition-colors hover:bg-lf-surface-muted hover:text-lf-text-strong"
+        :title="t('workspace.editor.collapsePanel')"
+        @click="emit('close')"
+      >
+        ✕
+      </button>
     </div>
 
     <!-- 章节列表 -->

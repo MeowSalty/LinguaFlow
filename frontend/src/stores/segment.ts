@@ -45,8 +45,6 @@ export const useSegmentStore = defineStore('segment', () => {
   const segmentsCursor = ref<string | null>(null)
   /** 向上翻页游标（direction=desc 语义：取该 segment_index 之前的一页）；null = 窗口顶无更早内容 */
   const segmentsPrevCursor = ref<string | null>(null)
-  /** 锚点跳转带上来的"上文"段 id 集合（视图据此淡化显示） */
-  const anchorContextIds = ref<Set<number>>(new Set())
   const loadingSegmentsUp = ref(false)
   const segmentsTotal = ref<number | null>(null)
   const loadingSegments = ref(false)
@@ -96,6 +94,12 @@ export const useSegmentStore = defineStore('segment', () => {
   const searchResultsError = ref<string | null>(null)
   /** 当前定位目标的段落 id */
   const searchActiveResultId = ref<number | null>(null)
+  /** 跳转完成序号：每次 jumpToSegment 开窗成功后自增（重复跳同一条也触发），驱动主列表滚动到锚点 */
+  const searchJumpSeq = ref(0)
+  /** 进行中的跳转计数：>0 时筛选/章节切换 watcher 让路，由 jumpToSegment 的锚点开窗接管加载与定位 */
+  const jumpingToSegmentCount = ref(0)
+  /** 开窗请求序号守卫：过期的锚点开窗 / 向上翻页响应直接丢弃（连续跳转、跳转与上翻并发时防旧覆新） */
+  let segmentsWindowRequestId = 0
   /** 请求序号守卫：过期响应直接丢弃（防抖后连续请求的竞态防护） */
   let searchResultsRequestId = 0
 
@@ -176,9 +180,8 @@ export const useSegmentStore = defineStore('segment', () => {
       segmentsCursor.value = response.next_cursor ?? null
       if (!append) {
         segmentsTotal.value = response.total ?? null
-        // 向上翻页游标与上文行仅在锚点/向上加载窗口中有意义，普通重载时复位
+        // 向上翻页游标仅在锚点/向上加载窗口中有意义，普通重载时复位
         segmentsPrevCursor.value = null
-        anchorContextIds.value = new Set()
       }
 
       // 仅在无筛选条件的全量加载时更新进度缓存
@@ -195,15 +198,19 @@ export const useSegmentStore = defineStore('segment', () => {
   /**
    * 以锚点段落为窗口起点加载一页（Track C：anchor_segment_id 就绪后的精确定位）。
    * beforeContext > 0 且窗口顶还有更早内容时，用 cursor=prev_cursor&direction=desc
-   * 组合拉取紧邻上文行并前置；这些行的 id 记入 anchorContextIds 供视图淡化。
+   * 组合拉取紧邻上文行并前置，避免定位行顶在窗口最上缘、缺少前文参照。
+   * 返回 false 表示已被更新的开窗请求取代（响应已丢弃），调用方不应再据此推进状态。
    */
   const loadSegmentsAround = async (
     projectId: number,
     resourceId: number,
     options: { groupKey?: string; anchorSegmentId: number; beforeContext?: number },
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const { groupKey, anchorSegmentId, beforeContext = 2 } = options
+    const requestId = ++segmentsWindowRequestId
     loadingSegments.value = true
+    // 新开窗使在途的向上翻页整体失效，解除其 loading 标记
+    loadingSegmentsUp.value = false
     segmentsError.value = null
 
     try {
@@ -230,11 +237,11 @@ export const useSegmentStore = defineStore('segment', () => {
         limit: 50,
         ...(groupKey ? { group_key: groupKey } : {}),
       })
+      if (requestId !== segmentsWindowRequestId) return false
       segments.value = anchored.items
       segmentsCursor.value = anchored.next_cursor ?? null
       segmentsTotal.value = anchored.total ?? null
       segmentsPrevCursor.value = anchored.prev_cursor ?? null
-      anchorContextIds.value = new Set()
 
       if (beforeContext > 0 && segmentsPrevCursor.value) {
         const context = await fetchResourceSegments(projectId, resourceId, {
@@ -244,25 +251,31 @@ export const useSegmentStore = defineStore('segment', () => {
           limit: beforeContext,
           ...(groupKey ? { group_key: groupKey } : {}),
         })
+        if (requestId !== segmentsWindowRequestId) return false
         // desc 响应升序返回紧邻窗口顶的 beforeContext 行；新窗口顶游标取其 prev_cursor
         segments.value = [...context.items, ...segments.value]
         segmentsPrevCursor.value = context.prev_cursor ?? null
-        anchorContextIds.value = new Set(context.items.map((item) => item.id))
       }
 
       if (segmentStatusFilter.value === 'all' && !hasQualityFilter) {
         updateSegmentProgressCache(resourceId, segments.value)
       }
+      return true
     } catch (error) {
+      if (requestId !== segmentsWindowRequestId) return false
       segmentsError.value = extractErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
+      return false
     } finally {
-      loadingSegments.value = false
+      if (requestId === segmentsWindowRequestId) {
+        loadingSegments.value = false
+      }
     }
   }
 
   /**
    * 向上加载一页（direction=desc + prev_cursor），前置到当前窗口顶。
    * 滚动位置补偿由调用方（SegmentPanel）在 await 后执行。
+   * 若加载期间发生了新的锚点开窗（跳转），响应整体丢弃——旧游标对新窗口无意义。
    */
   const loadMoreSegmentsUp = async (
     projectId: number,
@@ -271,6 +284,7 @@ export const useSegmentStore = defineStore('segment', () => {
   ): Promise<void> => {
     const cursor = segmentsPrevCursor.value
     if (!cursor || loadingSegmentsUp.value) return
+    const requestId = segmentsWindowRequestId
 
     loadingSegmentsUp.value = true
     segmentsError.value = null
@@ -291,6 +305,7 @@ export const useSegmentStore = defineStore('segment', () => {
         limit: 50,
         ...(groupKey ? { group_key: groupKey } : {}),
       })
+      if (requestId !== segmentsWindowRequestId) return
       const existing = new Set(segments.value.map((s) => s.id))
       const fresh = response.items.filter((item) => !existing.has(item.id))
       if (fresh.length) {
@@ -298,9 +313,12 @@ export const useSegmentStore = defineStore('segment', () => {
       }
       segmentsPrevCursor.value = response.prev_cursor ?? null
     } catch (error) {
+      if (requestId !== segmentsWindowRequestId) return
       segmentsError.value = extractErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
     } finally {
-      loadingSegmentsUp.value = false
+      if (requestId === segmentsWindowRequestId) {
+        loadingSegmentsUp.value = false
+      }
     }
   }
 
@@ -353,6 +371,8 @@ export const useSegmentStore = defineStore('segment', () => {
    * 定位到某个段落（Track C 精确版）：
    * 按命中段落的 group_key 切换章节（非 EPUB 无分组则退回全资源视图），
    * 以 anchor_segment_id 精确开窗并带上紧邻上文行。
+   * 跳转期间置 jumpingToSegmentCount：筛选/章节切换 watcher 据此让路，
+   * 否则 enterChapter 触发的章首重载会与锚点开窗竞态、覆盖定位窗口。
    */
   const jumpToSegment = async (
     projectId: number,
@@ -360,19 +380,26 @@ export const useSegmentStore = defineStore('segment', () => {
     segment: Segment,
   ): Promise<void> => {
     const groupKey = segment.group_key ?? undefined
-    if (groupKey) {
-      const groupTitle =
-        segmentGroups.value.find((g) => g.group_key === groupKey)?.group_title ?? groupKey
-      enterChapter(groupKey, groupTitle)
-    } else {
-      exitChapter()
+    jumpingToSegmentCount.value++
+    try {
+      if (groupKey) {
+        const groupTitle =
+          segmentGroups.value.find((g) => g.group_key === groupKey)?.group_title ?? groupKey
+        enterChapter(groupKey, groupTitle)
+      } else {
+        exitChapter()
+      }
+      const completed = await loadSegmentsAround(projectId, resourceId, {
+        groupKey,
+        anchorSegmentId: segment.id,
+        beforeContext: 2,
+      })
+      if (!completed) return
+      searchActiveResultId.value = segment.id
+      searchJumpSeq.value++
+    } finally {
+      jumpingToSegmentCount.value--
     }
-    await loadSegmentsAround(projectId, resourceId, {
-      groupKey,
-      anchorSegmentId: segment.id,
-      beforeContext: 2,
-    })
-    searchActiveResultId.value = segment.id
   }
 
   const updateSegment = async (
@@ -498,7 +525,6 @@ export const useSegmentStore = defineStore('segment', () => {
     segments.value = []
     segmentsCursor.value = null
     segmentsPrevCursor.value = null
-    anchorContextIds.value = new Set()
     segmentsTotal.value = null
     lastSearchReplaceOperationId.value = null
     resetSearchResults()
@@ -520,7 +546,6 @@ export const useSegmentStore = defineStore('segment', () => {
     segments.value = []
     segmentsCursor.value = null
     segmentsPrevCursor.value = null
-    anchorContextIds.value = new Set()
     segmentsTotal.value = null
     segmentsError.value = null
     segmentSearch.value = ''
@@ -562,7 +587,6 @@ export const useSegmentStore = defineStore('segment', () => {
     reset,
     // ── 窗口化加载（锚点 / 向上翻页）──
     segmentsPrevCursor,
-    anchorContextIds,
     loadingSegmentsUp,
     loadSegmentsAround,
     loadMoreSegmentsUp,
@@ -573,6 +597,8 @@ export const useSegmentStore = defineStore('segment', () => {
     loadingSearchResults,
     searchResultsError,
     searchActiveResultId,
+    searchJumpSeq,
+    jumpingToSegmentCount,
     loadSearchResults,
     jumpToSegment,
     resetSearchResults,

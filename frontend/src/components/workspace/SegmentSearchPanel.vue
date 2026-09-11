@@ -13,13 +13,17 @@ type Segment = ApiSchemas['Segment']
 const props = defineProps<{
   projectId: number | null
   textRenderMode: 'plaintext' | 'html'
+  /** 面板当前可见（席位展开或抽屉拉出）；不可见挂起时暂停结果分页自动加载 */
+  active: boolean
 }>()
 
 const emit = defineEmits<{
-  /** 已发起定位（主列表窗口将切换）；父级可据此收起移动端容器等 */
+  /** 已发起定位（jumpToSegment 已启动）；父级据此隐藏抽屉，主列表滚动由父级在开窗数据落地后执行 */
   jumped: [segment: Segment]
   /** 打开搜索替换（过渡期复用既有抽屉；后端就绪后的完整模式迁移见 Track C） */
   openReplace: []
+  /** 收起面板（席位常驻模式下不影响文档流宽度） */
+  close: []
 }>()
 
 const workspace = useProjectWorkspaceStore()
@@ -61,6 +65,8 @@ const runSearch = (): void => {
     searchTimer = null
   }
   if (!props.projectId || !workspace.activeResourceId) return
+  // 新一轮搜索：旧的选中索引对新结果集无意义（避免错标到别的条目上）
+  selectedResultIndex.value = -1
   if (!hasQuery.value) {
     workspace.resetSearchResults()
     return
@@ -175,6 +181,8 @@ const setupResultsObserver = (): void => {
   resultsObserver = new IntersectionObserver(
     (entries) => {
       if (
+        // 挂起（不可见）期间哨兵仍有几何、观察器仍会回调，须暂停自动加载
+        props.active &&
         entries[0]?.isIntersecting &&
         workspace.searchResultsCursor &&
         !workspace.loadingSearchResults &&
@@ -205,14 +213,34 @@ watch(
   },
 )
 
-// ── 键盘：Ctrl+F 聚焦输入；输入框内 ↑↓ 选择 / Enter 跳转 / Esc 清空 ──
-const handleGlobalKeyDown = (e: KeyboardEvent): void => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-    e.preventDefault()
-    focusInput()
+// ── 结果列表滚动位置留存：挂起期间若发生 DOM 搬移（停靠↔抽屉断点切换）或浏览器
+//    重排，scrollTop 会被重置；用 scroll 监听持续留存，形态变化后由父级驱动回填 ──
+let savedResultsScrollTop = 0
+const handleResultsScroll = (): void => {
+  savedResultsScrollTop = resultsListRef.value?.scrollTop ?? 0
+}
+
+/** 回填留存的结果列表滚动位置（父级在面板形态变化后调用） */
+const restoreResultsScroll = async (): Promise<void> => {
+  await nextTick()
+  if (resultsListRef.value) {
+    resultsListRef.value.scrollTop = savedResultsScrollTop
   }
 }
 
+// 可见性切换后重建分页观察器：挂起期间哨兵几何未变不会再回调，
+// 重新 observe 才能在面板恢复可见且哨兵仍于视口内时续上自动加载
+watch(
+  () => props.active,
+  async () => {
+    await nextTick()
+    setupResultsObserver()
+  },
+)
+
+// ── 键盘：输入框内 ↑↓ 选择 / Enter 跳转 / Esc 清空 ──
+// Ctrl+F 由父级 SegmentPanel 统一分发：本面板跳转后仅隐藏不卸载，
+// 自行监听会在隐藏态聚焦不可见的输入框
 const focusInput = (): void => {
   searchInputRef.value?.focus()
 }
@@ -240,14 +268,23 @@ const handleInputKeyUp = (e: KeyboardEvent): void => {
   }
 }
 
+// ── 暴露给父组件：面板常驻挂载（收起/隐藏仅转不可见），聚焦与滚动回填由父级驱动 ──
+defineExpose({
+  focusInput,
+  restoreResultsScroll,
+})
+
 onMounted(() => {
-  document.addEventListener('keydown', handleGlobalKeyDown)
+  resultsListRef.value?.addEventListener('scroll', handleResultsScroll, { passive: true })
+  // 从「完全收起」重新挂载且 store 已有结果时，分页观察器需要主动重建
+  //（相关 watch 只在值变化时触发，重挂载前后值不变不会fire）
+  void nextTick(() => setupResultsObserver())
   // 面板打开即聚焦输入
   focusInput()
 })
 
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleGlobalKeyDown)
+  resultsListRef.value?.removeEventListener('scroll', handleResultsScroll)
   resultsObserver?.disconnect()
   if (searchTimer) clearTimeout(searchTimer)
 })
@@ -266,12 +303,19 @@ onUnmounted(() => {
         <NButton
           size="tiny"
           quaternary
-          class="ml-auto"
           :title="t('workspace.segment.searchReplace.title')"
           @click="emit('openReplace')"
         >
           {{ t('workspace.segment.searchLocate.replaceMode') }}
         </NButton>
+        <button
+          type="button"
+          class="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-[13px] text-lf-text-subtle transition-colors hover:bg-lf-surface-muted hover:text-lf-text-strong"
+          :title="t('workspace.editor.collapsePanel')"
+          @click="emit('close')"
+        >
+          ✕
+        </button>
       </div>
       <NInput
         ref="searchInputRef"

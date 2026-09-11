@@ -34,8 +34,6 @@ const props = defineProps<{
   inlineCommentText: string
   /** 定位高亮的段落 id（锚点定位闪烁） */
   anchorFlashSegmentId?: number | null
-  /** 锚点跳转带上来的"上文"段 id 集合（整行淡化显示） */
-  anchorContextIds?: Set<number> | null
   /** 搜索定位面板关键词（激活时源文/译文列以搜索高亮渲染） */
   searchQuery?: string
   searchCaseSensitive?: boolean
@@ -180,14 +178,6 @@ const rowClassName = (row: Segment): string => {
     classes.push('segment-row--editing')
   } else if (row.status === 'rejected') {
     classes.push('segment-row--rejected')
-  }
-  // 锚点跳转带上来的上文行：整行淡化（仅视觉提示，不与编辑/驳回态叠加）
-  if (
-    props.anchorContextIds &&
-    props.anchorContextIds.has(row.id) &&
-    row.id !== props.inlineEditingSegmentId
-  ) {
-    classes.push('segment-row--context')
   }
   if (props.segments.indexOf(row) === focusedRowIndex.value) {
     classes.push('segment-row--focused')
@@ -381,6 +371,11 @@ defineExpose({
           :is-saving="editingSegmentIds.includes(segment.id)"
           :is-comment-visible="inlineCommentVisible === segment.id"
           :comment-text="inlineCommentText"
+          :class="
+            segment.id === anchorFlashSegmentId
+              ? 'segment-row--anchor-flash segment-row--focused'
+              : undefined
+          "
           @start-edit="emit('startInlineEdit', segment)"
           @cancel-edit="emit('cancelInlineEdit')"
           @save-edit="emit('saveInlineEdit', segment)"
