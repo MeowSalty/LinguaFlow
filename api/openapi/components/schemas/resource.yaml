@@ -109,6 +109,10 @@ ResourceSegmentListResponse:
         $ref: '../schemas/job.yaml#/Segment'
     next_cursor:
       type: string
+    prev_cursor:
+      type: string
+      nullable: true
+      description: 当前窗口之前仍有内容时为窗口首条的 segment_index；使用 cursor=<prev_cursor>&direction=desc 取得上一页
     total:
       type: integer
       description: 满足过滤条件的段落总数；仅当请求 include_total=true 时返回

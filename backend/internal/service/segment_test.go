@@ -1162,3 +1162,239 @@ func TestUpdateResourceSegmentMarkupGuard(t *testing.T) {
 		}
 	})
 }
+
+// assertSegmentPage 断言分页结果的 indexes、prev/next cursor 与可选 total。
+// wantTotal 为 nil 表示本次请求未携带 IncludeTotal，不校验 Total 字段。
+func assertSegmentPage(t *testing.T, page *ResourceSegmentPage, wantIndexes []int, wantPrev, wantNext int, wantTotal *int) {
+	t.Helper()
+	got := make([]int, 0, len(page.Items))
+	for _, row := range page.Items {
+		got = append(got, row.SegmentIndex)
+	}
+	if len(got) != len(wantIndexes) {
+		t.Fatalf("indexes=%v want %v", got, wantIndexes)
+	}
+	for i := range wantIndexes {
+		if got[i] != wantIndexes[i] {
+			t.Fatalf("indexes=%v want %v", got, wantIndexes)
+		}
+	}
+	if page.PrevCursor != wantPrev {
+		t.Fatalf("prev_cursor=%d want %d", page.PrevCursor, wantPrev)
+	}
+	if page.NextCursor != wantNext {
+		t.Fatalf("next_cursor=%d want %d", page.NextCursor, wantNext)
+	}
+	if page.HasPrevCursor != (wantPrev > 0) {
+		t.Fatalf("has_prev_cursor=%v want %v", page.HasPrevCursor, wantPrev > 0)
+	}
+	if page.HasNextCursor != (wantNext > 0) {
+		t.Fatalf("has_next_cursor=%v want %v", page.HasNextCursor, wantNext > 0)
+	}
+	if wantTotal != nil && (page.Total == nil || *page.Total != *wantTotal) {
+		t.Fatalf("total=%v want %d", page.Total, *wantTotal)
+	}
+}
+
+// TestListResourceSegmentsPagination 覆盖无 group_key 的数据库分页路径：
+// 首页、asc/desc 游标窗口、cursor 越界回退与 IncludeTotal 计数（不受游标影响）。
+func TestListResourceSegmentsPagination(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-page-user")
+	project := createTestProject(t, client, "seg-page-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/page.txt")
+
+	for i := 1; i <= 12; i++ {
+		createTestSegment(t, client, res.ID, i, fmt.Sprintf("src%d", i), nil)
+	}
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+
+	fetch := func(t *testing.T, opts ResourceSegmentListOptions, want []int, wantPrev, wantNext int, wantTotal *int) *ResourceSegmentPage {
+		t.Helper()
+		page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, opts)
+		if err != nil {
+			t.Fatalf("ListResourceSegments(%+v): %v", opts, err)
+		}
+		assertSegmentPage(t, page, want, wantPrev, wantNext, wantTotal)
+		return page
+	}
+	total12 := 12
+
+	t.Run("first_page", func(t *testing.T) {
+		fetch(t, ResourceSegmentListOptions{Limit: 5, IncludeTotal: true},
+			[]int{1, 2, 3, 4, 5}, 0, 5, &total12)
+	})
+
+	t.Run("asc_cursor_5", func(t *testing.T) {
+		page := fetch(t, ResourceSegmentListOptions{AfterID: 5, HasCursor: true, Limit: 5, IncludeTotal: true},
+			[]int{6, 7, 8, 9, 10}, 6, 10, &total12)
+		// prev_cursor 必须与 direction=desc 配合，取得紧贴当前窗口之前的一页。
+		fetch(t, ResourceSegmentListOptions{Direction: "desc", AfterID: page.PrevCursor, HasCursor: true, Limit: 5},
+			[]int{1, 2, 3, 4, 5}, 0, 5, nil)
+	})
+
+	t.Run("desc_cursor_10", func(t *testing.T) {
+		// desc 窗口：取 index<10 的尾端 5 条，响应仍按升序返回。
+		fetch(t, ResourceSegmentListOptions{Direction: "desc", AfterID: 10, HasCursor: true, Limit: 5},
+			[]int{5, 6, 7, 8, 9}, 5, 9, nil)
+	})
+
+	t.Run("desc_cursor_4", func(t *testing.T) {
+		// index<4 只剩 3 条，窗口不满 limit；起点之前无数据 → prev=0。
+		fetch(t, ResourceSegmentListOptions{Direction: "desc", AfterID: 4, HasCursor: true, Limit: 5},
+			[]int{1, 2, 3}, 0, 3, nil)
+	})
+}
+
+// TestListResourceSegmentsAnchor 覆盖数据库 ID 锚点窗口：
+// 锚点本身不满足筛选条件时窗口仍从其 segment_index 起；锚点不存在于资源时报 ErrSegmentNotFound。
+func TestListResourceSegmentsAnchor(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-anchor-user")
+	project := createTestProject(t, client, "seg-anchor-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/anchor.txt")
+	resB := createTestResource(t, client, project.ID, "chapters/anchor-other.txt")
+
+	idsByIndex := make(map[int]int)
+	for i := 1; i <= 12; i++ {
+		row := createTestSegment(t, client, res.ID, i, fmt.Sprintf("src%d", i), nil)
+		idsByIndex[i] = row.ID
+	}
+	// 8/10/12 已审核通过，供 status=approved 过滤下的锚点窗口使用。
+	for _, i := range []int{8, 10, 12} {
+		if err := client.Segment.UpdateOneID(idsByIndex[i]).SetStatus(segment.StatusApproved).Exec(ctx); err != nil {
+			t.Fatalf("approve segment %d: %v", idsByIndex[i], err)
+		}
+	}
+	// 其他资源里的段落：其数据库 ID 不属于 res，必须被锚点查询拒绝。
+	foreign := createTestSegment(t, client, resB.ID, 0, "foreign", nil)
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+
+	fetch := func(t *testing.T, opts ResourceSegmentListOptions, want []int, wantPrev, wantNext int, wantTotal *int) {
+		t.Helper()
+		page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, opts)
+		if err != nil {
+			t.Fatalf("ListResourceSegments(%+v): %v", opts, err)
+		}
+		assertSegmentPage(t, page, want, wantPrev, wantNext, wantTotal)
+	}
+	anchorID := idsByIndex[7]
+	total12, totalApproved := 12, 3
+
+	t.Run("anchor_window", func(t *testing.T) {
+		fetch(t, ResourceSegmentListOptions{AnchorSegmentID: &anchorID, Limit: 5, IncludeTotal: true},
+			[]int{7, 8, 9, 10, 11}, 7, 11, &total12)
+	})
+
+	t.Run("anchor_pending_with_approved_filter", func(t *testing.T) {
+		// 锚点 index 7 本身是 pending，不满足 status=approved；
+		// 窗口仍从其 index 起，返回首个满足条件的 8 及之后的 approved 段。
+		// approved 计数不含窗口，为全量 3 条。
+		fetch(t, ResourceSegmentListOptions{AnchorSegmentID: &anchorID, Status: "approved", Limit: 5, IncludeTotal: true},
+			[]int{8, 10, 12}, 0, 0, &totalApproved)
+	})
+
+	t.Run("anchor_not_in_resource", func(t *testing.T) {
+		_, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, ResourceSegmentListOptions{
+			AnchorSegmentID: &foreign.ID,
+			Limit:           5,
+		})
+		if !errors.Is(err, ErrSegmentNotFound) {
+			t.Fatalf("err=%v want ErrSegmentNotFound", err)
+		}
+	})
+}
+
+// TestListResourceSegmentsGroupPagination 覆盖 group_key 过滤的应用层分页路径：
+// 两章节 index 交错，验证窗口取自同章节序列、desc 窗口算法、锚点同章节校验与 cursor 越界。
+func TestListResourceSegmentsGroupPagination(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-group-user")
+	project := createTestProject(t, client, "seg-group-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "book-group.epub")
+
+	metaA := `{"epub_file":"ch1.xhtml"}`
+	metaB := `{"epub_file":"ch2.xhtml"}`
+	idsByIndex := make(map[int]int)
+	for i := 1; i <= 12; i++ {
+		meta := metaA
+		if i%2 == 0 {
+			meta = metaB
+		}
+		row := createTestSegmentWithMeta(t, client, res.ID, i, fmt.Sprintf("src%d", i), meta, nil)
+		idsByIndex[i] = row.ID
+	}
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+
+	// ch1 序列：[1,3,5,7,9,11]；ch2 序列：[2,4,6,8,10,12]
+	fetch := func(t *testing.T, opts ResourceSegmentListOptions, want []int, wantPrev, wantNext int, wantTotal *int) {
+		t.Helper()
+		page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, opts)
+		if err != nil {
+			t.Fatalf("ListResourceSegments(%+v): %v", opts, err)
+		}
+		assertSegmentPage(t, page, want, wantPrev, wantNext, wantTotal)
+	}
+	anchor5 := idsByIndex[5]
+	anchor2 := idsByIndex[2]
+	totalCh1 := 6
+
+	t.Run("first_page", func(t *testing.T) {
+		fetch(t, ResourceSegmentListOptions{GroupKey: "ch1.xhtml", Limit: 4, IncludeTotal: true},
+			[]int{1, 3, 5, 7}, 0, 7, &totalCh1)
+	})
+
+	t.Run("asc_cursor_5", func(t *testing.T) {
+		// 窗口从 ch1 序列中 index>5 的行起，不混入 ch2 的偶数 index。
+		fetch(t, ResourceSegmentListOptions{GroupKey: "ch1.xhtml", AfterID: 5, HasCursor: true, Limit: 3},
+			[]int{7, 9, 11}, 7, 0, nil)
+	})
+
+	t.Run("desc_cursor_within_group", func(t *testing.T) {
+		// desc 窗口在章内取 index<9 的尾端 2 条；再用 prev_cursor=5
+		// 链式回退到 [1,3]，窗口无重叠且全程不跨组。
+		page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, ResourceSegmentListOptions{
+			GroupKey: "ch1.xhtml", Direction: "desc", AfterID: 9, HasCursor: true, Limit: 2,
+		})
+		if err != nil {
+			t.Fatalf("ListResourceSegments: %v", err)
+		}
+		assertSegmentPage(t, page, []int{5, 7}, 5, 7, nil)
+		fetch(t, ResourceSegmentListOptions{GroupKey: "ch1.xhtml", Direction: "desc", AfterID: page.PrevCursor, HasCursor: true, Limit: 2},
+			[]int{1, 3}, 0, 3, nil)
+	})
+
+	t.Run("desc_cursor_near_chapter_start", func(t *testing.T) {
+		// ch1 序列中 index<3 的只有 1 条，窗口不满 limit 且起点前无数据。
+		fetch(t, ResourceSegmentListOptions{GroupKey: "ch1.xhtml", Direction: "desc", AfterID: 3, HasCursor: true, Limit: 2},
+			[]int{1}, 0, 1, nil)
+	})
+
+	t.Run("anchor_within_group", func(t *testing.T) {
+		// 锚点 index 5 属于 ch1，窗口从 ch1 序列中首个 >=5 的行起。
+		fetch(t, ResourceSegmentListOptions{GroupKey: "ch1.xhtml", AnchorSegmentID: &anchor5, Limit: 3, IncludeTotal: true},
+			[]int{5, 7, 9}, 5, 9, &totalCh1)
+	})
+
+	t.Run("anchor_group_mismatch", func(t *testing.T) {
+		// 锚点 index 2 属于 ch2，请求 ch1 章节必须报 ErrSegmentGroupMismatch。
+		_, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, ResourceSegmentListOptions{
+			GroupKey:        "ch1.xhtml",
+			AnchorSegmentID: &anchor2,
+			Limit:           3,
+		})
+		if !errors.Is(err, ErrSegmentGroupMismatch) {
+			t.Fatalf("err=%v want ErrSegmentGroupMismatch", err)
+		}
+	})
+
+	t.Run("cursor_past_end_returns_empty", func(t *testing.T) {
+		// 游标越过章内末尾：返回空页而非回到首页，prev/next 均无。
+		fetch(t, ResourceSegmentListOptions{GroupKey: "ch1.xhtml", AfterID: 100, HasCursor: true, Limit: 4},
+			[]int{}, 0, 0, nil)
+	})
+}
