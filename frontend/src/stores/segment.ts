@@ -87,6 +87,12 @@ export const useSegmentStore = defineStore('segment', () => {
    */
   const chapterMultiSelect = ref(false)
 
+  /** 章节分组请求序号：切换资源时丢弃旧资源的迟到响应 */
+  let segmentGroupsRequestId = 0
+
+  /** 段落主列表请求序号：切换资源/章节/筛选时丢弃迟到响应 */
+  let segmentsRequestId = 0
+
   // ── 段落进度缓存 ──
 
   /** 资源级段落状态缓存：resourceId → 状态分布 */
@@ -156,6 +162,9 @@ export const useSegmentStore = defineStore('segment', () => {
     append = false,
     groupKey?: string,
   ): Promise<void> => {
+    if (append && loadingSegments.value) return
+    const requestId = ++segmentsRequestId
+    segmentsWindowRequestId++
     loadingSegments.value = true
     segmentsError.value = null
 
@@ -182,6 +191,7 @@ export const useSegmentStore = defineStore('segment', () => {
         limit: 50,
         ...(groupKey ? { group_key: groupKey } : {}),
       })
+      if (requestId !== segmentsRequestId) return
       segments.value = append ? [...segments.value, ...response.items] : response.items
       segmentsCursor.value = response.next_cursor ?? null
       if (!append) {
@@ -195,9 +205,12 @@ export const useSegmentStore = defineStore('segment', () => {
         updateSegmentProgressCache(resourceId, segments.value)
       }
     } catch (error) {
+      if (requestId !== segmentsRequestId) return
       segmentsError.value = extractErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
     } finally {
-      loadingSegments.value = false
+      if (requestId === segmentsRequestId) {
+        loadingSegments.value = false
+      }
     }
   }
 
@@ -213,6 +226,7 @@ export const useSegmentStore = defineStore('segment', () => {
     options: { groupKey?: string; anchorSegmentId: number; beforeContext?: number },
   ): Promise<boolean> => {
     const { groupKey, anchorSegmentId, beforeContext = 2 } = options
+    segmentsRequestId++
     const requestId = ++segmentsWindowRequestId
     loadingSegments.value = true
     // 新开窗使在途的向上翻页整体失效，解除其 loading 标记
@@ -462,19 +476,24 @@ export const useSegmentStore = defineStore('segment', () => {
    * 加载章节分组列表
    */
   const loadSegmentGroups = async (projectId: number, resourceId: number): Promise<void> => {
+    const requestId = ++segmentGroupsRequestId
     loadingSegmentGroups.value = true
     segmentGroupsError.value = null
 
     try {
       const response = await fetchSegmentGroups(projectId, resourceId)
+      if (requestId !== segmentGroupsRequestId) return
       segmentGroups.value = response.items
     } catch (error) {
+      if (requestId !== segmentGroupsRequestId) return
       segmentGroupsError.value = extractErrorMessage(
         error,
         t('api.errors.fetchSegmentGroupsFailed'),
       )
     } finally {
-      loadingSegmentGroups.value = false
+      if (requestId === segmentGroupsRequestId) {
+        loadingSegmentGroups.value = false
+      }
     }
   }
 
@@ -526,8 +545,10 @@ export const useSegmentStore = defineStore('segment', () => {
    * 刷新章节分组进度
    */
   const refreshChapterGroups = async (projectId: number, resourceId: number): Promise<void> => {
+    const requestId = ++segmentGroupsRequestId
     try {
       const response = await fetchSegmentGroups(projectId, resourceId)
+      if (requestId !== segmentGroupsRequestId) return
       segmentGroups.value = response.items
     } catch {
       // 静默失败，不影响用户操作
@@ -549,6 +570,10 @@ export const useSegmentStore = defineStore('segment', () => {
 
   /** 清空段落列表和游标（供跨域协调调用） */
   const resetSegments = (): void => {
+    segmentsRequestId++
+    segmentsWindowRequestId++
+    loadingSegments.value = false
+    loadingSegmentsUp.value = false
     segments.value = []
     segmentsCursor.value = null
     segmentsPrevCursor.value = null
@@ -561,6 +586,7 @@ export const useSegmentStore = defineStore('segment', () => {
    * 重置 EPUB 章节状态
    */
   const resetEpubState = (): void => {
+    segmentGroupsRequestId++
     segmentGroups.value = []
     loadingSegmentGroups.value = false
     segmentGroupsError.value = null
