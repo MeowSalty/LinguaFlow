@@ -90,7 +90,7 @@ useStoreErrorToast(
 </script>
 
 <template>
-  <div class="lf-page">
+  <div class="lf-page lf-content-narrow">
     <PageHeader :title="t('admin.auditLogs.title')" :subtitle="t('admin.auditLogs.description')">
       <NButton secondary :loading="admin.auditLogsLoading" @click="admin.loadAuditLogs(true)">
         {{ t('admin.auditLogs.refresh') }}

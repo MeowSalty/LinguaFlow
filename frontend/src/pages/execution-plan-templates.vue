@@ -475,6 +475,7 @@ useStoreErrorToast(
 
 <template>
   <EntityListPage
+    class="lf-content-narrow"
     :title="t('executionPlanTemplates.title')"
     :subtitle="t('executionPlanTemplates.subtitle')"
     :loading="store.loading"

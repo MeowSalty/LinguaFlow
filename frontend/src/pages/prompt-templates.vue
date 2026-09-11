@@ -22,6 +22,7 @@ const save = (payload: TemplateFormPayload, id?: number): Promise<unknown> => {
 
 <template>
   <PromptTemplateListPage
+    class="lf-content-narrow"
     :store="store"
     i18n-prefix="promptTemplates"
     content-field="system_prompt_content"

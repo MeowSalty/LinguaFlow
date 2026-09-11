@@ -223,6 +223,11 @@ body {
 
 /* ── Design system primitives ── */
 
+/* 普通页面内容容器：居中窄栏（原 AppLayout 全局帽子下放页面后由页面自挂） */
+.lf-content-narrow {
+  @apply mx-auto w-full max-w-275;
+}
+
 .lf-page {
   @apply space-y-6;
 }

@@ -86,7 +86,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="lf-page">
+  <div class="lf-page lf-content-narrow">
     <PageHeader :title="t('changelog.title')" :subtitle="t('changelog.description')" />
 
     <div v-if="loading" class="space-y-4">

@@ -623,6 +623,7 @@ useStoreErrorToast(
 
 <template>
   <EntityListPage
+    class="lf-content-narrow"
     :title="t('backends.title')"
     :subtitle="t('backends.subtitle')"
     :loading="backends.loading"
