@@ -330,6 +330,21 @@ projectResourceSegments:
           type: boolean
           default: false
         description: 是否在响应中附带满足过滤条件的段落总数（total）；为 true 时额外执行一次计数查询
+      - name: anchor_segment_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: 以指定段落 ID 在当前筛选序列中的位置为窗口起点；与 cursor 及 direction=desc 互斥，锚点本身不满足筛选条件时从其后首个匹配段落开始
+      - name: direction
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [asc, desc]
+          default: asc
+        description: 分页方向；asc 取 cursor 对应 segment_index 之后的一页，desc 取其之前紧邻的一页，响应 items 始终按 segment_index 升序
       - $ref: '../base.yaml#/components/parameters/Cursor'
       - $ref: '../base.yaml#/components/parameters/Limit'
     responses:

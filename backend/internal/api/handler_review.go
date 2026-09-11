@@ -23,6 +23,7 @@ type segmentResponse struct {
 	ReviewComment *string           `json:"review_comment,omitempty"`
 	ReviewedBy    *userResponse     `json:"reviewed_by,omitempty"`
 	QualityIssues []qa.QualityIssue `json:"quality_issues,omitempty"`
+	GroupKey      string            `json:"group_key,omitempty"`
 	Meta          map[string]any    `json:"meta,omitempty"`
 	CreatedAt     string            `json:"created_at"`
 	UpdatedAt     string            `json:"updated_at"`
@@ -31,6 +32,7 @@ type segmentResponse struct {
 type segmentListResponse struct {
 	Items      []segmentResponse `json:"items"`
 	NextCursor string            `json:"next_cursor,omitempty"`
+	PrevCursor string            `json:"prev_cursor,omitempty"`
 	Total      *int              `json:"total,omitempty"`
 }
 
@@ -113,6 +115,9 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 		var meta map[string]any
 		if err := json.Unmarshal([]byte(*row.Meta), &meta); err == nil {
 			resp.Meta = meta
+			if groupKey, ok := meta["epub_file"].(string); ok {
+				resp.GroupKey = groupKey
+			}
 		}
 	}
 	return resp
