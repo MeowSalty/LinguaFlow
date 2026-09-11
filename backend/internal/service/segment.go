@@ -30,13 +30,19 @@ type SegmentService struct {
 }
 
 type ResourceSegmentPage struct {
-	Items      []*ent.Segment
-	NextCursor int
-	Total      *int // 仅 IncludeTotal=true 时填充；nil 表示未请求总数
+	Items         []*ent.Segment
+	PrevCursor    int
+	HasPrevCursor bool
+	NextCursor    int
+	HasNextCursor bool
+	Total         *int // 仅 IncludeTotal=true 时填充；nil 表示未请求总数
 }
 
 type ResourceSegmentListOptions struct {
 	AfterID         int
+	HasCursor       bool   // 请求是否显式携带 cursor（区分 cursor=0 与未传游标）
+	AnchorSegmentID *int   // 数据库 segment ID 锚点：窗口从其 segment_index 开始
+	Direction       string // ""/asc（默认升序）/desc
 	Limit           int
 	Status          string
 	Search          string
@@ -106,6 +112,27 @@ func applySegmentFilters(q *ent.SegmentQuery, resourceID int, opts ResourceSegme
 	return q
 }
 
+// ErrSegmentGroupMismatch 表示锚点段落不属于请求的 group_key 章节，
+// 无法以其在筛选序列中的位置作为窗口起点。
+var ErrSegmentGroupMismatch = errors.New("segment group mismatch")
+
+// segmentGroupKey 解析 segment meta JSON 中的 epub_file 章节键。
+// meta 缺失、非法 JSON 或无有效 epub_file 时返回 ("", false)。
+func segmentGroupKey(meta *string) (string, bool) {
+	if meta == nil {
+		return "", false
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(*meta), &m); err != nil {
+		return "", false
+	}
+	key, ok := m["epub_file"].(string)
+	if !ok || key == "" {
+		return "", false
+	}
+	return key, true
+}
+
 func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, projectID, resourceID int, opts ResourceSegmentListOptions) (*ResourceSegmentPage, error) {
 	if _, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, false); err != nil {
 		return nil, err
@@ -114,11 +141,36 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		opts.Limit = 50
 	}
 
+	// 锚点窗口：以数据库 segment ID 定位起点，只要求存在于该资源下，
+	// 不要求锚点本身满足筛选条件 F；group_key 过滤时还要求锚点同属该章节。
+	anchorIndex := 0
+	if opts.AnchorSegmentID != nil {
+		anchor, err := s.client.Segment.Query().Where(segment.IDEQ(*opts.AnchorSegmentID), segment.ResourceIDEQ(resourceID)).Only(ctx)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return nil, ErrSegmentNotFound
+			}
+			return nil, err
+		}
+		if opts.GroupKey != "" {
+			if key, ok := segmentGroupKey(anchor.Meta); !ok || key != opts.GroupKey {
+				return nil, ErrSegmentGroupMismatch
+			}
+		}
+		anchorIndex = anchor.SegmentIndex
+	}
+
+	// 有游标：handler 显式带 cursor，或旧调用直接传 AfterID>0 也视为有游标；
+	// desc 无游标仍按升序首页返回。
+	cursorRequested := opts.HasCursor || opts.AfterID > 0
+	descWindow := opts.Direction == "desc" && cursorRequested && opts.AnchorSegmentID == nil
+
 	q := applySegmentFilters(s.client.Segment.Query(), resourceID, opts, s.dialect)
 
 	if opts.GroupKey != "" {
-		// group_key 过滤需要在应用层解析 JSON meta 字段
-		// 先加载所有匹配基础条件的 segments，再按 meta.epub_file 过滤后分页
+		// group_key 过滤需要在应用层解析 JSON meta 字段：
+		// 先加载所有满足 F 的 segments（按 segment_index 升序），
+		// 再按 meta.epub_file 过滤，在内存中对过滤结果分页。
 		allRows, err := q.Order(ent.Asc(segment.FieldSegmentIndex)).WithReviewedBy().WithResource().All(ctx)
 		if err != nil {
 			return nil, err
@@ -126,61 +178,69 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 
 		var filtered []*ent.Segment
 		for _, row := range allRows {
-			if row.Meta != nil {
-				var meta map[string]any
-				if err := json.Unmarshal([]byte(*row.Meta), &meta); err == nil {
-					if epubFile, ok := meta["epub_file"].(string); ok && epubFile == opts.GroupKey {
-						filtered = append(filtered, row)
-					}
-				}
+			if key, ok := segmentGroupKey(row.Meta); ok && key == opts.GroupKey {
+				filtered = append(filtered, row)
 			}
 		}
-
-		// 在过滤后的结果中应用游标分页
-		start := 0
-		if opts.AfterID > 0 {
-			for i, row := range filtered {
-				if row.SegmentIndex > opts.AfterID {
-					start = i
-					break
-				}
-			}
-		}
-
-		page := &ResourceSegmentPage{}
-		end := start + opts.Limit
-		if end > len(filtered) {
-			end = len(filtered)
-		}
-		page.Items = filtered[start:end]
-
-		if end < len(filtered) {
-			page.NextCursor = page.Items[len(page.Items)-1].SegmentIndex
-		}
-		if opts.IncludeTotal {
-			total := len(filtered)
-			page.Total = &total
-		}
-		return page, nil
+		return paginateFilteredSegments(filtered, opts, cursorRequested, descWindow, anchorIndex), nil
 	}
 
 	// 默认路径：无 group_key 过滤，使用数据库分页
-	if opts.AfterID > 0 {
+	switch {
+	case descWindow:
+		q = q.Where(segment.SegmentIndexLT(opts.AfterID))
+	case opts.AnchorSegmentID != nil:
+		q = q.Where(segment.SegmentIndexGTE(anchorIndex))
+	case cursorRequested:
 		q = q.Where(segment.SegmentIndexGT(opts.AfterID))
 	}
-	rows, err := q.Order(ent.Asc(segment.FieldSegmentIndex)).Limit(opts.Limit + 1).WithReviewedBy().WithResource().All(ctx)
-	if err != nil {
-		return nil, err
+
+	var rows []*ent.Segment
+	if descWindow {
+		fetched, err := q.Order(ent.Desc(segment.FieldSegmentIndex)).Limit(opts.Limit + 1).WithReviewedBy().WithResource().All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if len(fetched) > opts.Limit {
+			fetched = fetched[:opts.Limit]
+		}
+		// 响应 items 始终按 segment_index 升序返回
+		for i, j := 0, len(fetched)-1; i < j; i, j = i+1, j-1 {
+			fetched[i], fetched[j] = fetched[j], fetched[i]
+		}
+		rows = fetched
+	} else {
+		var err error
+		rows, err = q.Order(ent.Asc(segment.FieldSegmentIndex)).Limit(opts.Limit).WithReviewedBy().WithResource().All(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	page := &ResourceSegmentPage{Items: rows}
-	if len(rows) > opts.Limit {
-		page.NextCursor = rows[opts.Limit-1].SegmentIndex
-		page.Items = rows[:opts.Limit]
+	if len(rows) > 0 {
+		// 窗口两侧邻接性按完整过滤条件 F 以存在性查询判断，
+		// 计数查询独立构造，不能复用已叠加窗口与 Limit 的 q。
+		hasBefore, berr := applySegmentFilters(s.client.Segment.Query(), resourceID, opts, s.dialect).
+			Where(segment.SegmentIndexLT(rows[0].SegmentIndex)).Exist(ctx)
+		if berr != nil {
+			return nil, berr
+		}
+		hasAfter, aerr := applySegmentFilters(s.client.Segment.Query(), resourceID, opts, s.dialect).
+			Where(segment.SegmentIndexGT(rows[len(rows)-1].SegmentIndex)).Exist(ctx)
+		if aerr != nil {
+			return nil, aerr
+		}
+		if hasBefore {
+			page.PrevCursor = rows[0].SegmentIndex
+			page.HasPrevCursor = true
+		}
+		if hasAfter {
+			page.NextCursor = rows[len(rows)-1].SegmentIndex
+			page.HasNextCursor = true
+		}
 	}
 	if opts.IncludeTotal {
-		// 计数需复用列表的 status/search/quality 过滤，但不能复用 q：默认路径的
-		// q 可能已叠加游标分页（SegmentIndexGT）与 Limit，会影响计数结果，
-		// 因此基于 applySegmentFilters 重新构造计数查询。group_key 已在上面分支处理。
 		countQ := applySegmentFilters(s.client.Segment.Query(), resourceID, opts, s.dialect)
 		total, cerr := countQ.Count(ctx)
 		if cerr != nil {
@@ -189,6 +249,52 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		page.Total = &total
 	}
 	return page, nil
+}
+
+// paginateFilteredSegments 在 group 过滤后的升序全量结果上计算窗口。
+// 窗口语义与数据库路径一致：锚点从首个 segment_index>=anchorIndex 的行开始；
+// desc 游标取 index<AfterID 的尾端 limit 条；asc 游标取 index>AfterID 起的 limit 条；
+// 无游标为首页。空页时 prev/next cursor 均为 0。
+func paginateFilteredSegments(filtered []*ent.Segment, opts ResourceSegmentListOptions, cursorRequested, descWindow bool, anchorIndex int) *ResourceSegmentPage {
+	start := 0
+	switch {
+	case opts.AnchorSegmentID != nil:
+		start = sort.Search(len(filtered), func(i int) bool { return filtered[i].SegmentIndex >= anchorIndex })
+	case descWindow:
+		endIdx := sort.Search(len(filtered), func(i int) bool { return filtered[i].SegmentIndex >= opts.AfterID })
+		if start = endIdx - opts.Limit; start < 0 {
+			start = 0
+		}
+	case cursorRequested:
+		start = sort.Search(len(filtered), func(i int) bool { return filtered[i].SegmentIndex > opts.AfterID })
+	}
+	if start > len(filtered) {
+		start = len(filtered)
+	}
+	end := start + opts.Limit
+	if descWindow {
+		end = sort.Search(len(filtered), func(i int) bool { return filtered[i].SegmentIndex >= opts.AfterID })
+	}
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
+	page := &ResourceSegmentPage{Items: filtered[start:end]}
+	if len(page.Items) > 0 {
+		if start > 0 {
+			page.PrevCursor = page.Items[0].SegmentIndex
+			page.HasPrevCursor = true
+		}
+		if end < len(filtered) {
+			page.NextCursor = page.Items[len(page.Items)-1].SegmentIndex
+			page.HasNextCursor = true
+		}
+	}
+	if opts.IncludeTotal {
+		total := len(filtered)
+		page.Total = &total
+	}
+	return page
 }
 
 // rawPred 把原始 SQL 表达式包装为整体括号化的谓词。ent 以 And 组合多个

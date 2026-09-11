@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -281,6 +282,14 @@ func toOpenAPISegment(row *ent.Segment) Segment {
 			issues = append(issues, toOpenAPIQualityIssue(issue))
 		}
 		result.QualityIssues = &issues
+	}
+	if row.Meta != nil {
+		var meta map[string]any
+		if err := json.Unmarshal([]byte(*row.Meta), &meta); err == nil {
+			if groupKey, ok := meta["epub_file"].(string); ok && groupKey != "" {
+				result.GroupKey = &groupKey
+			}
+		}
 	}
 	return result
 }
