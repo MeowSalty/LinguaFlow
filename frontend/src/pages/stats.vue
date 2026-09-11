@@ -15,7 +15,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="lf-page">
+  <div class="lf-page lf-content-narrow">
     <PageHeader :title="t('stats.title')" :subtitle="t('stats.subtitle')">
       <NButton
         secondary

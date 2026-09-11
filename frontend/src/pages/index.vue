@@ -8,7 +8,7 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <div class="lf-page">
+  <div class="lf-page lf-content-narrow">
     <PageHeader :title="t('dashboard.title')" :subtitle="t('dashboard.subtitle')">
       <NButton type="primary" @click="router.push({ path: '/projects', query: { create: '1' } })">
         <IconCarbonAddAlt />

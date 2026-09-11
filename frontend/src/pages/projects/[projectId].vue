@@ -32,7 +32,7 @@ import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
 
-type WorkspaceTab = 'resources' | 'segments' | 'jobs' | 'glossary'
+type WorkspaceTab = 'resources' | 'jobs' | 'glossary'
 
 const route = useRoute()
 const router = useRouter()
@@ -42,6 +42,21 @@ const glossary = useGlossaryStore()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
+
+// ── 编辑视图态（query: edit=<resourceId>&chapter=<groupKey>）──
+/** 编辑视图激活：query.edit 存在即进入（resourceId 解析由下方 watcher 负责） */
+const editorActive = computed(() => route.query.edit !== undefined)
+
+/** 进入编辑视图（资源 + 可选 EPUB 章节直达） */
+const enterEditor = (resourceId: number, chapterKey?: string): void => {
+  const query: Record<string, string> = { ...route.query, edit: String(resourceId) }
+  if (chapterKey) {
+    query.chapter = chapterKey
+  } else {
+    delete query.chapter
+  }
+  void router.replace({ query })
+}
 const segmentPanelRef = ref<InstanceType<typeof SegmentPanel> | null>(null)
 const segmentTranslationPreviewDrawerRef = ref<InstanceType<
   typeof SegmentTranslationPreviewDrawer
@@ -61,9 +76,6 @@ const loadTabData = async (tab: WorkspaceTab): Promise<void> => {
   switch (tab) {
     case 'resources':
       // 资源数据已随资源树加载同步
-      break
-    case 'segments':
-      // 段落数据在用户选择资源时按需加载
       break
     case 'jobs':
       await workspace.loadJobs(projectId.value)
@@ -165,6 +177,8 @@ const reloadWorkspace = async (): Promise<void> => {
 }
 
 // ── ResourceExplorer 事件处理 ──
+// 进入编辑视图只做状态对齐（query 写入 → 深链 watcher 设 store），
+// 段落/章节数据由 SegmentPanel 的筛选 watcher 统一加载。
 const handleExplorerOpenSegments = (resource: Resource): void => {
   workspace.setActiveResource(resource.id)
 
@@ -174,18 +188,16 @@ const handleExplorerOpenSegments = (resource: Resource): void => {
     return
   }
 
-  // 非 EPUB 资源：跳转到段落编辑
-  void workspace.loadSegments(projectId.value!, resource.id)
-  activeTab.value = 'segments'
+  // 非 EPUB 资源：进入编辑视图
+  enterEditor(resource.id)
 }
 
-/** 处理 EPUB 章节点击：进入章节段落编辑视图 */
+/** 处理 EPUB 章节点击：进入章节编辑视图 */
 const handleOpenEpubSegments = (resourceId: number, groupKey: string): void => {
   const groupTitle =
     workspace.epubDirectoryChapters.find((g) => g.group_key === groupKey)?.group_title ?? groupKey
   workspace.enterChapter(groupKey, groupTitle)
-  void workspace.loadSegments(projectId.value!, resourceId, false, groupKey)
-  activeTab.value = 'segments'
+  enterEditor(resourceId, groupKey)
 }
 
 /** EPUB 章节选中数量 */
@@ -352,43 +364,74 @@ const handlePreviewApplied = async (payload: {
 watch(
   () => route.query.tab,
   (tab) => {
-    if (tab === 'segments' || tab === 'jobs' || tab === 'resources' || tab === 'glossary') {
+    if (tab === 'jobs' || tab === 'resources' || tab === 'glossary') {
       activeTab.value = tab
+    } else if (tab === 'segments') {
+      // 旧链接兼容：段落编辑已从 Tab 拆出为独立编辑视图
+      activeTab.value = 'resources'
     }
   },
   { immediate: true },
 )
 
+// ── 编辑视图深链恢复：query.edit / query.chapter → store 状态对齐 ──
+// 职责收敛：这里只把 activeResourceId / epubActiveGroupKey 对齐到路由（含资源树、
+// 章节数据异步就位后的二次校准），段落数据统一由 SegmentPanel 的筛选 watcher 加载，
+// 避免两处 watcher 各自 loadSegments 造成重复请求。
 watch(
-  () => [
-    workspace.segmentSearch,
-    workspace.segmentStatusFilter,
-    workspace.segmentQualityIssuesFilter,
-    workspace.segmentQualitySeverityFilter,
-    workspace.segmentQualityCodeFilter,
-    workspace.segmentSearchFieldFilter,
-    workspace.segmentSearchCaseSensitive,
-    workspace.activeResourceId,
-  ],
-  (newVal, oldVal) => {
-    if (!projectId.value || !workspace.activeResourceId) return
+  () =>
+    [
+      route.query.edit,
+      route.query.chapter,
+      workspace.resources.length,
+      workspace.segmentGroups.length,
+    ] as const,
+  ([editRaw, chapterRaw]) => {
+    if (!projectId.value) return
+    const editId = Number(editRaw)
+    if (!Number.isFinite(editId)) return
 
-    const resourceIdChanged = newVal[7] !== oldVal?.[7]
+    const resource = workspace.resources.find((r) => r.id === editId)
+    if (!resource) return
 
-    // EPUB 资源切换时加载章节数据
-    if (resourceIdChanged && workspace.isEpubResource) {
-      void workspace.loadEpubData(projectId.value, workspace.activeResourceId)
+    if (workspace.activeResourceId !== editId) {
+      workspace.setActiveResource(editId)
     }
 
-    // 加载段落数据（EPUB "全部章节"视图加载全部段落，章节视图加载对应章节段落）
-    void workspace.loadSegments(
-      projectId.value,
-      workspace.activeResourceId,
-      false,
-      workspace.epubActiveGroupKey ?? undefined,
-    )
+    // EPUB 资源需要章节数据；非 EPUB 直接忽略 chapter 参数
+    if (resource.format === 'epub') {
+      // 仅当章节数据尚未加载时拉取（此 watcher 依赖 segmentGroups.length，
+      // 无条件拉取会与依赖变化形成循环）
+      if (workspace.segmentGroups.length === 0) {
+        void workspace.loadEpubData(projectId.value, editId)
+        return // 章节数据就位后本 watcher 重跑，再对齐章节
+      }
+      if (typeof chapterRaw === 'string' && chapterRaw) {
+        const title =
+          workspace.segmentGroups.find((g) => g.group_key === chapterRaw)?.group_title ?? chapterRaw
+        // key 或标题未对齐时进入章节（含 fallback 标题 → 真实标题的二次校准）。
+        // 注意：同 key 同标题时不再调 enterChapter，否则会触发
+        // SegmentPanel 的章节路由同步 watcher → router.replace → 本 watcher 无限循环。
+        if (
+          workspace.epubActiveGroupKey !== chapterRaw ||
+          workspace.epubActiveGroupTitle !== title
+        ) {
+          workspace.enterChapter(chapterRaw, title)
+        }
+        return
+      }
+      workspace.exitChapter()
+    }
   },
+  { immediate: true },
 )
+
+// 退出编辑视图时清空段落下拉/选择，避免浏览态残留编辑上下文
+watch(editorActive, (active) => {
+  if (!active && workspace.activeResourceId) {
+    workspace.setActiveResource(null)
+  }
+})
 
 watch(
   () => workspace.jobStatusFilter,
@@ -460,148 +503,161 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="lf-page">
-    <section class="lf-page-header">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <NButton quaternary size="small" @click="router.push('/projects')">
-            <template #icon>
-              <NIcon><IconCarbonArrowLeft /></NIcon>
-            </template>
-          </NButton>
+  <div class="flex h-[calc(100vh-7rem)] min-h-0 flex-col gap-4">
+    <!-- ── 编辑视图：沉浸式三栏（席位常驻），独立于浏览态 Tab ── -->
+    <template v-if="editorActive">
+      <SegmentPanel
+        ref="segmentPanelRef"
+        :project-id="projectId"
+        @preview-translation="handlePreviewTranslation"
+        @preview-revision="handlePreviewRevision"
+        @refresh="reloadSegments"
+        @qa-recheck="handleQaRecheckProject"
+      />
+    </template>
 
-          <h1 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
-            {{ workspace.project?.name || t('workspace.loadingProject') }}
-          </h1>
+    <!-- ── 浏览态：页头 + 指标 + Tab（恢复 8b6445a7 之前的全局 1100px 居中帽）── -->
+    <template v-else>
+      <div class="mx-auto flex w-full max-w-275 flex-1 min-h-0 flex-col gap-4">
+        <section class="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
+              <NButton quaternary size="small" @click="router.push('/projects')">
+                <template #icon>
+                  <NIcon><IconCarbonArrowLeft /></NIcon>
+                </template>
+              </NButton>
 
-          <NButton
-            v-if="workspace.project"
-            quaternary
-            circle
-            size="tiny"
-            :title="t('common.actions.edit')"
-            @click="openEditDrawer"
+              <h1 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
+                {{ workspace.project?.name || t('workspace.loadingProject') }}
+              </h1>
+
+              <NButton
+                v-if="workspace.project"
+                quaternary
+                circle
+                size="tiny"
+                :title="t('common.actions.edit')"
+                @click="openEditDrawer"
+              >
+                <template #icon>
+                  <NIcon size="14"><IconCarbonEdit /></NIcon>
+                </template>
+              </NButton>
+
+              <span class="hidden h-4 w-px bg-lf-border-soft sm:inline-block" />
+              <span
+                class="hidden items-center gap-1.5 rounded-md bg-lf-surface-muted px-2 py-0.5 text-xs text-lf-text-muted sm:inline-flex"
+              >
+                <IconCarbonLanguage class="h-3.5 w-3.5 text-brand-500" />
+                <span class="font-medium text-lf-text-strong">{{
+                  workspace.project?.source_lang || '-'
+                }}</span>
+                <span class="text-lf-text-subtle">→</span>
+                <span class="font-medium text-lf-text-strong">{{
+                  workspace.project?.target_lang || '-'
+                }}</span>
+              </span>
+              <span class="hidden h-4 w-px bg-lf-border-soft md:inline-block" />
+              <span class="hidden items-center gap-1.5 text-xs text-lf-text-muted md:inline-flex">
+                <IconCarbonTime class="h-3.5 w-3.5 text-lf-text-subtle" />
+                {{
+                  t('workspace.updatedAt', {
+                    time: formatDate(
+                      workspace.project?.updated_at ?? workspace.project?.created_at,
+                    ),
+                  })
+                }}
+              </span>
+            </div>
+
+            <div class="flex shrink-0 items-center gap-2">
+              <NButton
+                secondary
+                size="small"
+                :loading="
+                  workspace.loadingProject || workspace.loadingResourceTree || workspace.loadingJobs
+                "
+                @click="reloadWorkspace"
+              >
+                <template #icon>
+                  <NIcon><IconCarbonRenew /></NIcon>
+                </template>
+                {{ t('common.actions.refresh') }}
+              </NButton>
+            </div>
+          </div>
+        </section>
+
+        <NAlert v-if="workspace.projectError" class="shrink-0" type="error" :bordered="false">
+          {{ workspace.projectError }}
+        </NAlert>
+
+        <NAlert v-if="workspace.resourceTreeError" class="shrink-0" type="error" :bordered="false">
+          {{ workspace.resourceTreeError }}
+        </NAlert>
+
+        <NAlert v-if="workspace.segmentsError" class="shrink-0" type="error" :bordered="false">
+          {{ workspace.segmentsError }}
+        </NAlert>
+
+        <WorkspaceMetricsBar
+          class="shrink-0"
+          :total-resources="workspace.resources.length"
+          :total-segments="workspace.totalSegmentCount"
+          :translated-segments="workspace.totalTranslatedSegments"
+          :approved-segments="workspace.totalApprovedSegments"
+          :running-jobs="workspace.runningJobCount"
+        />
+
+        <!-- 定高工作台：Tab 条常驻，Section 区内部滚动 -->
+        <div class="lf-panel flex min-h-0 flex-1 flex-col overflow-hidden">
+          <NTabs
+            v-model:value="activeTab"
+            type="line"
+            animated
+            class="workspace-tabs flex h-full min-h-0 flex-col px-3 pt-1 sm:px-4"
           >
-            <template #icon>
-              <NIcon size="14"><IconCarbonEdit /></NIcon>
-            </template>
-          </NButton>
+            <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
+              <div
+                :class="[
+                  'h-full w-full overflow-y-auto pb-3 pt-2',
+                  workspace.uploadTasks.length > 0 ? 'pb-20 sm:pb-0' : '',
+                ]"
+              >
+                <ResourceExplorer
+                  v-if="projectId"
+                  :project-id="projectId"
+                  @open-segments="handleExplorerOpenSegments"
+                  @open-epub-segments="handleOpenEpubSegments"
+                  @conflict="conflictMgmt.handleExplorerConflict"
+                  @incremental-result="conflictMgmt.handleExplorerIncrementalResult"
+                />
+              </div>
+            </NTabPane>
 
-          <span class="hidden h-4 w-px bg-lf-border-soft sm:inline-block" />
-          <span
-            class="hidden items-center gap-1.5 rounded-md bg-lf-surface-muted px-2 py-0.5 text-xs text-lf-text-muted sm:inline-flex"
-          >
-            <IconCarbonLanguage class="h-3.5 w-3.5 text-brand-500" />
-            <span class="font-medium text-lf-text-strong">{{
-              workspace.project?.source_lang || '-'
-            }}</span>
-            <span class="text-lf-text-subtle">→</span>
-            <span class="font-medium text-lf-text-strong">{{
-              workspace.project?.target_lang || '-'
-            }}</span>
-          </span>
-          <span class="hidden h-4 w-px bg-lf-border-soft md:inline-block" />
-          <span class="hidden items-center gap-1.5 text-xs text-lf-text-muted md:inline-flex">
-            <IconCarbonTime class="h-3.5 w-3.5 text-lf-text-subtle" />
-            {{
-              t('workspace.updatedAt', {
-                time: formatDate(workspace.project?.updated_at ?? workspace.project?.created_at),
-              })
-            }}
-          </span>
-        </div>
+            <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
+              <div class="h-full w-full overflow-y-auto pb-3 pt-2">
+                <JobPanel
+                  :project-id="projectId"
+                  @detail="(job) => jobMgmt.openJobDetail(job)"
+                  @cancel="(job) => jobMgmt.cancelJob(job)"
+                  @retry="(job) => jobMgmt.retryJob(job)"
+                  @pause="(job) => jobMgmt.pauseJob(job)"
+                  @resume="(job) => jobMgmt.resumeJob(job)"
+                />
+              </div>
+            </NTabPane>
 
-        <div class="flex shrink-0 items-center gap-2">
-          <NButton
-            secondary
-            size="small"
-            :loading="
-              workspace.loadingProject || workspace.loadingResourceTree || workspace.loadingJobs
-            "
-            @click="reloadWorkspace"
-          >
-            <template #icon>
-              <NIcon><IconCarbonRenew /></NIcon>
-            </template>
-            {{ t('common.actions.refresh') }}
-          </NButton>
+            <NTabPane name="glossary" :tab="t('workspace.tabs.glossary')">
+              <div class="h-full w-full overflow-y-auto pb-3 pt-2">
+                <GlossaryPanel :project-id="projectId" />
+              </div>
+            </NTabPane>
+          </NTabs>
         </div>
       </div>
-    </section>
-
-    <NAlert v-if="workspace.projectError" type="error" :bordered="false">
-      {{ workspace.projectError }}
-    </NAlert>
-
-    <NAlert v-if="workspace.resourceTreeError" type="error" :bordered="false">
-      {{ workspace.resourceTreeError }}
-    </NAlert>
-
-    <NAlert v-if="workspace.segmentsError" type="error" :bordered="false">
-      {{ workspace.segmentsError }}
-    </NAlert>
-
-    <WorkspaceMetricsBar
-      :total-resources="workspace.resources.length"
-      :total-segments="workspace.totalSegmentCount"
-      :translated-segments="workspace.totalTranslatedSegments"
-      :approved-segments="workspace.totalApprovedSegments"
-      :running-jobs="workspace.runningJobCount"
-    />
-
-    <div class="lf-panel overflow-hidden">
-      <NTabs
-        v-model:value="activeTab"
-        type="line"
-        animated
-        class="workspace-tabs px-3 pt-1 sm:px-4"
-      >
-        <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
-          <div :class="['pb-3 pt-2', workspace.uploadTasks.length > 0 ? 'pb-20 sm:pb-0' : '']">
-            <ResourceExplorer
-              v-if="projectId"
-              :project-id="projectId"
-              @open-segments="handleExplorerOpenSegments"
-              @open-epub-segments="handleOpenEpubSegments"
-              @conflict="conflictMgmt.handleExplorerConflict"
-              @incremental-result="conflictMgmt.handleExplorerIncrementalResult"
-            />
-          </div>
-        </NTabPane>
-
-        <NTabPane name="segments" :tab="t('workspace.tabs.segments')">
-          <div :class="['pb-3 pt-2', workspace.uploadTasks.length > 0 ? 'pb-20 sm:pb-0' : '']">
-            <SegmentPanel
-              ref="segmentPanelRef"
-              :project-id="projectId"
-              @preview-translation="handlePreviewTranslation"
-              @preview-revision="handlePreviewRevision"
-              @refresh="reloadSegments"
-              @qa-recheck="handleQaRecheckProject"
-            />
-          </div>
-        </NTabPane>
-
-        <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
-          <div class="pb-3 pt-2">
-            <JobPanel
-              :project-id="projectId"
-              @detail="(job) => jobMgmt.openJobDetail(job)"
-              @cancel="(job) => jobMgmt.cancelJob(job)"
-              @retry="(job) => jobMgmt.retryJob(job)"
-              @pause="(job) => jobMgmt.pauseJob(job)"
-              @resume="(job) => jobMgmt.resumeJob(job)"
-            />
-          </div>
-        </NTabPane>
-
-        <NTabPane name="glossary" :tab="t('workspace.tabs.glossary')">
-          <div class="pb-3 pt-2">
-            <GlossaryPanel :project-id="projectId" />
-          </div>
-        </NTabPane>
-      </NTabs>
-    </div>
+    </template>
 
     <!-- 创建任务抽屉 -->
     <JobCreateDrawer
@@ -752,9 +808,9 @@ onMounted(() => {
       @clear="handleClearEpubChapterSelection"
     />
 
-    <!-- 浮动操作岛 - 段落选择 -->
+    <!-- 浮动操作岛 - 段落选择（编辑视图） -->
     <SelectionActionBar
-      v-show="activeTab === 'segments'"
+      v-show="editorActive"
       :count="selectedSegmentCount"
       :can-translate="selectedSegmentCount > 0"
       :show-review="true"

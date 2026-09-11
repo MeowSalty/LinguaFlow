@@ -25,6 +25,10 @@ import {
   isIssueDismissed,
   resolveActiveIssueIndex,
 } from '@/composables/useQualityIssues'
+import {
+  renderSearchHighlightedHtml,
+  renderSearchHighlightedText,
+} from '@/composables/useSearchHighlight'
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 import { t } from '@/i18n'
@@ -79,6 +83,11 @@ export interface SegmentColumnDeps {
   updateCommentText: (value: string) => void
   updateEditFormField: (field: 'target_text' | 'comment', value: string) => void
 
+  // ── 搜索定位联动 ──
+  /** 搜索定位面板当前关键词（激活时源文/译文列以搜索高亮渲染，替代质量标记） */
+  searchQuery: Ref<string>
+  searchCaseSensitive: Ref<boolean>
+
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>
   onPreviewTranslation: (segment: Segment) => void
@@ -121,7 +130,8 @@ export function useSegmentColumns(
     columns.push({
       title: '#',
       key: 'segment_index',
-      width: 50,
+      // 内边距后需容纳三位数编号不折行（曾出现 124 折成 12/4）
+      width: 64,
       align: 'center',
     })
 
@@ -129,7 +139,7 @@ export function useSegmentColumns(
     columns.push({
       title: t('workspace.segment.columns.source'),
       key: 'source_text',
-      minWidth: 280,
+      minWidth: 260,
       render: (row) => {
         const isEditing = deps.inlineEditingSegmentId.value === row.id
         const hasHtmlTags =
@@ -137,12 +147,22 @@ export function useSegmentColumns(
 
         const elements: VNode[] = []
 
-        elements.push(
-          h(SegmentTextDisplay, {
-            text: row.source_text,
-            mode: config.value.textRenderMode,
-          }),
-        )
+        const query = deps.searchQuery.value.trim()
+        if (query) {
+          // 搜索激活：以搜索命中高亮渲染（搜索期间替代质量标记，避免双重 mark 噪声）
+          elements.push(
+            config.value.textRenderMode === 'html'
+              ? renderSearchHighlightedHtml(row.source_text, query, deps.searchCaseSensitive.value)
+              : renderSearchHighlightedText(row.source_text, query, deps.searchCaseSensitive.value),
+          )
+        } else {
+          elements.push(
+            h(SegmentTextDisplay, {
+              text: row.source_text,
+              mode: config.value.textRenderMode,
+            }),
+          )
+        }
 
         if (isEditing && hasHtmlTags) {
           elements.push(
@@ -194,7 +214,7 @@ export function useSegmentColumns(
     columns.push({
       title: t('workspace.segment.columns.target'),
       key: 'target_text',
-      minWidth: 280,
+      minWidth: 260,
       render: (row) => {
         const elements: VNode[] = []
 
@@ -222,15 +242,33 @@ export function useSegmentColumns(
               ),
             )
           } else {
-            const activeIssueIndex = resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id)
-            elements.push(
-              h(SegmentTextDisplay, {
-                text: row.target_text,
-                issues: row.quality_issues,
-                mode: config.value.textRenderMode,
-                activeIssueIndex,
-              }),
-            )
+            const query = deps.searchQuery.value.trim()
+            if (query) {
+              // 搜索激活：以搜索命中高亮渲染（同源文列，替代质量标记）
+              elements.push(
+                config.value.textRenderMode === 'html'
+                  ? renderSearchHighlightedHtml(
+                      row.target_text,
+                      query,
+                      deps.searchCaseSensitive.value,
+                    )
+                  : renderSearchHighlightedText(
+                      row.target_text,
+                      query,
+                      deps.searchCaseSensitive.value,
+                    ),
+              )
+            } else {
+              const activeIssueIndex = resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id)
+              elements.push(
+                h(SegmentTextDisplay, {
+                  text: row.target_text,
+                  issues: row.quality_issues,
+                  mode: config.value.textRenderMode,
+                  activeIssueIndex,
+                }),
+              )
+            }
           }
         }
 
@@ -395,7 +433,7 @@ export function useSegmentColumns(
     columns.push({
       title: t('workspace.segment.columns.status'),
       key: 'status',
-      width: 110,
+      width: 100,
       render: (row) => {
         const iconMap: Record<string, typeof IconCarbonCircleDash> = {
           pending: IconCarbonCircleDash,
@@ -448,7 +486,7 @@ export function useSegmentColumns(
     columns.push({
       title: t('common.actionsColumn'),
       key: 'actions',
-      width: 160,
+      width: 144,
       fixed: 'right',
       render: (row) => {
         if (deps.inlineEditingSegmentId.value === row.id) {

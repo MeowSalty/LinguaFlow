@@ -118,6 +118,7 @@ useStoreErrorToast(
   <RouterView v-if="!isProjectListRoute" />
   <EntityListPage
     v-else
+    class="lf-content-narrow"
     :title="t('projects.title')"
     :subtitle="t('projects.subtitle')"
     :loading="projects.loading"

@@ -32,7 +32,7 @@ withDefaults(
 </script>
 
 <template>
-  <div class="lf-page">
+  <div class="lf-page lf-content-narrow">
     <PageHeader :title="title" :subtitle="subtitle || undefined">
       <template v-if="$slots.actions" #actions>
         <slot name="actions" />

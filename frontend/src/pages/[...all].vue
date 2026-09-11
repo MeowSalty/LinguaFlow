@@ -6,7 +6,9 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <div class="lf-page flex min-h-[60vh] flex-col items-center justify-center text-center">
+  <div
+    class="lf-page lf-content-narrow flex min-h-[60vh] flex-col items-center justify-center text-center"
+  >
     <p class="lf-metric-value text-6xl text-lf-text-subtle">{{ t('notFound.code') }}</p>
     <h1 class="mt-4 text-xl font-semibold text-lf-text-strong">{{ t('notFound.title') }}</h1>
     <p class="mt-2 max-w-md text-sm text-lf-text-muted">{{ t('notFound.description') }}</p>
