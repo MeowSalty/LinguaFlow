@@ -28,8 +28,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  /** 进入资源（EPUB 虚拟目录） */
-  open: [resource: Resource]
+  /** 打开资源段落编辑（整行单击） */
   openSegments: [resource: Resource]
   replace: [resource: Resource]
   incrementalUpdate: [resource: Resource]
@@ -149,9 +148,6 @@ const confirmDelete = (): void => {
   })
 }
 
-/** EPUB 资源可点击进入虚拟目录 */
-const isEpub = computed(() => props.resource.format === 'epub')
-
 const translatedPercent = computed(() => {
   if (props.resource.total_segments === 0) return 0
   return Math.round((props.resource.translated_segments / props.resource.total_segments) * 100)
@@ -163,9 +159,13 @@ const approvedPercent = computed(() => {
 })
 
 const handleRowClick = (): void => {
-  if (isEpub.value) {
-    emit('open', props.resource)
-  }
+  emit('openSegments', props.resource)
+}
+
+const handleRowKeydown = (event: KeyboardEvent): void => {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  handleRowClick()
 }
 
 const handleDropdownSelect = (key: string) => {
@@ -197,7 +197,11 @@ const handleDropdownSelect = (key: string) => {
     :class="[
       'group relative overflow-hidden rounded-lf-card border border-transparent bg-lf-surface/80 px-3 py-2 transition-colors hover:bg-lf-surface-muted/60',
     ]"
+    role="button"
+    tabindex="0"
+    :aria-label="`${t('workspace.resource.actions.segments')}：${props.resource.name}`"
     @click="handleRowClick"
+    @keydown="handleRowKeydown"
   >
     <div
       class="pointer-events-none absolute inset-y-0 left-0 bg-lf-info/10 transition-all duration-500"
@@ -211,7 +215,9 @@ const handleDropdownSelect = (key: string) => {
       <NCheckbox
         :checked="props.selected"
         class="shrink-0"
+        :aria-label="`${t(props.selected ? 'workspace.explorer.deselectResource' : 'workspace.explorer.selectResource')}：${props.resource.name}`"
         @click.stop
+        @keydown.stop
         @update:checked="emit('toggleSelect', props.resource)"
       />
       <div
@@ -278,24 +284,13 @@ const handleDropdownSelect = (key: string) => {
 
         <!-- 操作按钮：始终可见 -->
         <div class="flex shrink-0 items-center gap-1">
-          <!-- 非 EPUB 资源的查看按钮 -->
-          <NButton
-            v-if="!isEpub"
-            size="tiny"
-            quaternary
-            type="primary"
-            @click.stop="emit('openSegments', props.resource)"
-          >
-            <template #icon>
-              <NIcon size="14"><IconCarbonView /></NIcon>
-            </template>
-          </NButton>
           <!-- 操作菜单（始终显示） -->
           <NDropdown :options="dropdownOptions" trigger="click" @select="handleDropdownSelect">
             <NButton
               size="tiny"
               quaternary
               @click.stop
+              @keydown.stop
               :loading="
                 props.replacing ||
                 props.incrementalUpdating ||
@@ -309,14 +304,6 @@ const handleDropdownSelect = (key: string) => {
               </template>
             </NButton>
           </NDropdown>
-          <!-- EPUB 箭头指示器（最右侧，与文件夹一致） -->
-          <NIcon
-            v-if="isEpub"
-            size="16"
-            class="shrink-0 text-lf-text-muted opacity-60 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
-          >
-            <IconCarbonChevronRight />
-          </NIcon>
         </div>
       </div>
     </div>

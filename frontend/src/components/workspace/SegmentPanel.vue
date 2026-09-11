@@ -39,6 +39,8 @@ const emit = defineEmits<{
   refresh: []
   selectionChange: [segmentIds: number[]]
   qaRecheck: []
+  batchTranslate: []
+  batchQaRecheck: []
 }>()
 
 const projectIdRef = toRef(props, 'projectId')
@@ -583,8 +585,26 @@ const handleCloseInlineComment = (): void => {
         {{ segmentsCountLabel }}
       </span>
 
-      <!-- 搜索定位：停靠态显示席位开关；抽屉态显示抽屉入口（断点由 JS 状态驱动，
-           与 useResponsiveDock 一致，排除全局侧边栏宽度） -->
+      <!-- 章节目录：按钮顺序与左侧面板方向一致；停靠态切换席位，窄屏打开抽屉 -->
+      <NButton
+        v-if="workspace.isEpubResource && chaptersDocked"
+        size="small"
+        :secondary="chaptersOpen"
+        :type="chaptersOpen ? 'primary' : 'default'"
+        @click="toggleChapters()"
+      >
+        {{ t('workspace.segment.openChapters') }}
+      </NButton>
+      <NButton
+        v-else-if="workspace.isEpubResource"
+        size="small"
+        :disabled="!workspace.activeResourceId"
+        @click="openChaptersDrawer()"
+      >
+        {{ t('workspace.segment.openChapters') }}
+      </NButton>
+
+      <!-- 搜索：按钮靠右对应右侧面板，快捷键作为辅助入口 -->
       <NButton
         v-if="searchDocked"
         size="small"
@@ -603,26 +623,6 @@ const handleCloseInlineComment = (): void => {
         @click="openSearchDrawer()"
       >
         {{ t('workspace.segment.searchLocateToggle') }}
-      </NButton>
-
-      <!-- 章节目录：≥lg 席位开关；更窄视口走抽屉 -->
-      <!-- 章节目录：停靠态显示席位开关；抽屉态显示抽屉入口 -->
-      <NButton
-        v-if="workspace.isEpubResource && chaptersDocked"
-        size="small"
-        :secondary="chaptersOpen"
-        :type="chaptersOpen ? 'primary' : 'default'"
-        @click="toggleChapters()"
-      >
-        {{ t('workspace.segment.openChapters') }}
-      </NButton>
-      <NButton
-        v-else-if="workspace.isEpubResource"
-        size="small"
-        :disabled="!workspace.activeResourceId"
-        @click="openChaptersDrawer()"
-      >
-        {{ t('workspace.segment.openChapters') }}
       </NButton>
 
       <NButton secondary size="small" @click="emit('qaRecheck')">
@@ -740,6 +740,8 @@ const handleCloseInlineComment = (): void => {
             class="h-full w-full"
             :project-id="projectId"
             @close="handleCloseChapters"
+            @batch-translate="emit('batchTranslate')"
+            @batch-qa-recheck="emit('batchQaRecheck')"
           />
         </div>
       </Teleport>

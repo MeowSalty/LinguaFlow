@@ -81,6 +81,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetMode.value = 'resources'
     jobTargetResourceIds.value = [...workspace.selectedResourceIds]
     jobTargetSegmentIds.value = []
+    jobTargetGroupKeys.value = []
     jobForm.execution_plan_id = null
     jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
@@ -116,6 +117,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetMode.value = 'segments'
     jobTargetResourceIds.value = [workspace.activeResourceId]
     jobTargetSegmentIds.value = segmentIds
+    jobTargetGroupKeys.value = []
     jobForm.execution_plan_id = null
     jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
@@ -131,9 +133,9 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobForm.segment_filter = undefined
   }
 
-  const submitJob = async (): Promise<void> => {
+  const submitJob = async (): Promise<boolean> => {
     if (!projectId.value || !jobForm.execution_plan_id) {
-      return
+      return false
     }
 
     const payload: CreateJobRequest = {
@@ -165,9 +167,11 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       if (onJobCreated) {
         await onJobCreated()
       }
+      return true
     } catch (error) {
       console.error(error)
       message.error(workspace.actionError || t('workspace.messages.jobCreateFailed'))
+      return false
     }
   }
 

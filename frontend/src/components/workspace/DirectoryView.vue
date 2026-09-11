@@ -30,10 +30,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** 进入子目录 */
   navigate: [path: string]
-  /** 打开资源段落（非 EPUB 资源直接跳转段落编辑） */
+  /** 打开资源段落（跳转段落编辑） */
   openSegments: [resource: Resource]
-  /** 进入 EPUB 虚拟目录 */
-  openEpubDirectory: [resource: Resource]
   /** 替换资源 */
   replace: [resource: Resource]
   /** 增量更新资源 */
@@ -152,7 +150,6 @@ const currentDirectorySelectionAriaLabel = computed(() =>
       :downloading-translated="downloadingKeys.includes(`resource:${item.resource!.id}:translated`)"
       :deleting="deletingResourceIds.includes(item.resource!.id)"
       :selected="selectedIdSet.has(item.resource!.id)"
-      @open="(r) => emit('openEpubDirectory', r)"
       @open-segments="(r) => emit('openSegments', r)"
       @replace="(r) => emit('replace', r)"
       @incremental-update="(r) => emit('incrementalUpdate', r)"

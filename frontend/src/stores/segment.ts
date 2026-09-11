@@ -81,6 +81,12 @@ export const useSegmentStore = defineStore('segment', () => {
   /** 章节级选中的 group_key 集合（用于批量翻译） */
   const epubSelectedGroupKeys = ref<Set<string>>(new Set())
 
+  /**
+   * 章节侧栏多选（批量处理）模式：
+   * 开启后章节行仅切换选中态，不再触发章节导航与正文加载
+   */
+  const chapterMultiSelect = ref(false)
+
   // ── 段落进度缓存 ──
 
   /** 资源级段落状态缓存：resourceId → 状态分布 */
@@ -495,6 +501,27 @@ export const useSegmentStore = defineStore('segment', () => {
     epubSelectedGroupKeys.value = newSet
   }
 
+  /** 进入章节多选（批量处理）模式 */
+  const enterChapterMultiSelect = (): void => {
+    chapterMultiSelect.value = true
+  }
+
+  /** 退出章节多选模式并清空选择 */
+  const exitChapterMultiSelect = (): void => {
+    chapterMultiSelect.value = false
+    epubSelectedGroupKeys.value = new Set()
+  }
+
+  /** 全选章节分组（取当前 segmentGroups 的全部 group_key） */
+  const selectAllEpubGroups = (): void => {
+    epubSelectedGroupKeys.value = new Set(segmentGroups.value.map((g) => g.group_key))
+  }
+
+  /** 清空章节分组选择 */
+  const clearEpubGroupSelection = (): void => {
+    epubSelectedGroupKeys.value = new Set()
+  }
+
   /**
    * 刷新章节分组进度
    */
@@ -540,6 +567,7 @@ export const useSegmentStore = defineStore('segment', () => {
     epubActiveGroupKey.value = null
     epubActiveGroupTitle.value = ''
     epubSelectedGroupKeys.value = new Set()
+    chapterMultiSelect.value = false
   }
 
   const reset = (): void => {
@@ -609,6 +637,7 @@ export const useSegmentStore = defineStore('segment', () => {
     epubActiveGroupKey,
     epubActiveGroupTitle,
     epubSelectedGroupKeys,
+    chapterMultiSelect,
     isEpubResource,
     epubChapterCount,
     isInChapterView,
@@ -616,6 +645,10 @@ export const useSegmentStore = defineStore('segment', () => {
     enterChapter,
     exitChapter,
     toggleEpubGroupSelection,
+    enterChapterMultiSelect,
+    exitChapterMultiSelect,
+    selectAllEpubGroups,
+    clearEpubGroupSelection,
     refreshChapterGroups,
     resetEpubState,
   }
