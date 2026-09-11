@@ -1778,6 +1778,8 @@ export interface components {
             reviewed_by?: components["schemas"]["User"];
             /** @description QA 检测到的质量问题列表 */
             quality_issues?: components["schemas"]["QualityIssue"][];
+            /** @description 段落分组键；EPUB 段落由 meta.epub_file 派生，非 EPUB 或无有效 meta 时缺省 */
+            group_key?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1858,6 +1860,8 @@ export interface components {
         ResourceSegmentListResponse: {
             items: components["schemas"]["Segment"][];
             next_cursor?: string;
+            /** @description 当前窗口之前仍有内容时为窗口首条的 segment_index；使用 cursor=<prev_cursor>&direction=desc 取得上一页 */
+            prev_cursor?: string | null;
             /** @description 满足过滤条件的段落总数；仅当请求 include_total=true 时返回 */
             total?: number;
         };
@@ -4648,6 +4652,10 @@ export interface operations {
                 case_sensitive?: boolean;
                 /** @description 是否在响应中附带满足过滤条件的段落总数（total）；为 true 时额外执行一次计数查询 */
                 include_total?: boolean;
+                /** @description 以指定段落 ID 在当前筛选序列中的位置为窗口起点；与 cursor 及 direction=desc 互斥，锚点本身不满足筛选条件时从其后首个匹配段落开始 */
+                anchor_segment_id?: number;
+                /** @description 分页方向；asc 取 cursor 对应 segment_index 之后的一页，desc 取其之前紧邻的一页，响应 items 始终按 segment_index 升序 */
+                direction?: "asc" | "desc";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };

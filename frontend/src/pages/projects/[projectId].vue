@@ -361,19 +361,16 @@ watch(
 
 watch(
   () => [
-    workspace.segmentSearch,
     workspace.segmentStatusFilter,
     workspace.segmentQualityIssuesFilter,
     workspace.segmentQualitySeverityFilter,
     workspace.segmentQualityCodeFilter,
-    workspace.segmentSearchFieldFilter,
-    workspace.segmentSearchCaseSensitive,
     workspace.activeResourceId,
   ],
   (newVal, oldVal) => {
     if (!projectId.value || !workspace.activeResourceId) return
 
-    const resourceIdChanged = newVal[7] !== oldVal?.[7]
+    const resourceIdChanged = newVal[4] !== oldVal?.[4]
 
     // EPUB 资源切换时加载章节数据
     if (resourceIdChanged && workspace.isEpubResource) {
@@ -460,8 +457,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="lf-page">
-    <section class="lf-page-header">
+  <div class="flex h-[calc(100vh-7rem)] min-h-0 flex-col gap-4">
+    <section class="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <NButton quaternary size="small" @click="router.push('/projects')">
@@ -529,19 +526,20 @@ onMounted(() => {
       </div>
     </section>
 
-    <NAlert v-if="workspace.projectError" type="error" :bordered="false">
+    <NAlert v-if="workspace.projectError" class="shrink-0" type="error" :bordered="false">
       {{ workspace.projectError }}
     </NAlert>
 
-    <NAlert v-if="workspace.resourceTreeError" type="error" :bordered="false">
+    <NAlert v-if="workspace.resourceTreeError" class="shrink-0" type="error" :bordered="false">
       {{ workspace.resourceTreeError }}
     </NAlert>
 
-    <NAlert v-if="workspace.segmentsError" type="error" :bordered="false">
+    <NAlert v-if="workspace.segmentsError" class="shrink-0" type="error" :bordered="false">
       {{ workspace.segmentsError }}
     </NAlert>
 
     <WorkspaceMetricsBar
+      class="shrink-0"
       :total-resources="workspace.resources.length"
       :total-segments="workspace.totalSegmentCount"
       :translated-segments="workspace.totalTranslatedSegments"
@@ -549,15 +547,21 @@ onMounted(() => {
       :running-jobs="workspace.runningJobCount"
     />
 
-    <div class="lf-panel overflow-hidden">
+    <!-- 定高工作台：Tab 条常驻，Section 区内部滚动 -->
+    <div class="lf-panel flex min-h-0 flex-1 flex-col overflow-hidden">
       <NTabs
         v-model:value="activeTab"
         type="line"
         animated
-        class="workspace-tabs px-3 pt-1 sm:px-4"
+        class="workspace-tabs flex h-full min-h-0 flex-col px-3 pt-1 sm:px-4"
       >
         <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
-          <div :class="['pb-3 pt-2', workspace.uploadTasks.length > 0 ? 'pb-20 sm:pb-0' : '']">
+          <div
+            :class="[
+              'mx-auto h-full w-full max-w-275 overflow-y-auto pb-3 pt-2',
+              workspace.uploadTasks.length > 0 ? 'pb-20 sm:pb-0' : '',
+            ]"
+          >
             <ResourceExplorer
               v-if="projectId"
               :project-id="projectId"
@@ -569,8 +573,14 @@ onMounted(() => {
           </div>
         </NTabPane>
 
-        <NTabPane name="segments" :tab="t('workspace.tabs.segments')">
-          <div :class="['pb-3 pt-2', workspace.uploadTasks.length > 0 ? 'pb-20 sm:pb-0' : '']">
+        <!-- B3: 三栏工作区（章节栏 | 文档流 | 搜索面板）将在此容器内实现 -->
+        <NTabPane name="segments" :tab="t('workspace.tabs.segments')" display-directive="show">
+          <div
+            :class="[
+              'flex h-full min-h-0 flex-col overflow-hidden pb-3 pt-2',
+              workspace.uploadTasks.length > 0 ? 'pb-20 sm:pb-0' : '',
+            ]"
+          >
             <SegmentPanel
               ref="segmentPanelRef"
               :project-id="projectId"
@@ -583,7 +593,7 @@ onMounted(() => {
         </NTabPane>
 
         <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
-          <div class="pb-3 pt-2">
+          <div class="mx-auto h-full w-full max-w-275 overflow-y-auto pb-3 pt-2">
             <JobPanel
               :project-id="projectId"
               @detail="(job) => jobMgmt.openJobDetail(job)"
@@ -596,7 +606,7 @@ onMounted(() => {
         </NTabPane>
 
         <NTabPane name="glossary" :tab="t('workspace.tabs.glossary')">
-          <div class="pb-3 pt-2">
+          <div class="mx-auto h-full w-full max-w-275 overflow-y-auto pb-3 pt-2">
             <GlossaryPanel :project-id="projectId" />
           </div>
         </NTabPane>

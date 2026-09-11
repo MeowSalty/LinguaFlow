@@ -85,6 +85,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const {
     segments,
     segmentsCursor,
+    segmentsPrevCursor,
+    anchorContextIds,
+    loadingSegmentsUp,
     segmentsTotal,
     loadingSegments,
     segmentsError,
@@ -98,6 +101,13 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentSearchCaseSensitive,
     lastSearchReplaceOperationId,
     segmentProgressCache,
+    // 搜索定位（独立面板）状态
+    searchResults,
+    searchResultsCursor,
+    searchResultsTotal,
+    loadingSearchResults,
+    searchResultsError,
+    searchActiveResultId,
     // EPUB 章节导航状态
     segmentGroups,
     loadingSegmentGroups,
@@ -178,7 +188,16 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   } = resourceStore
 
   // ── 直接委托的段落方法 ──
-  const { loadSegments, updateSegment, setIssueDisposition } = segmentStore
+  const {
+    loadSegments,
+    loadSegmentsAround,
+    loadMoreSegmentsUp,
+    updateSegment,
+    setIssueDisposition,
+    loadSearchResults,
+    jumpToSegment,
+    resetSearchResults,
+  } = segmentStore
 
   // ── 直接委托的 EPUB 方法 ──
   const {
@@ -266,6 +285,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     // 游标
     resourcesCursor,
     segmentsCursor,
+    segmentsPrevCursor,
+    anchorContextIds,
+    loadingSegmentsUp,
     segmentsTotal,
     jobsCursor,
     // 加载状态
@@ -307,6 +329,13 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     jobStatusFilter,
     // 段落进度缓存
     segmentProgressCache,
+    // 搜索定位（独立面板）
+    searchResults,
+    searchResultsCursor,
+    searchResultsTotal,
+    loadingSearchResults,
+    searchResultsError,
+    searchActiveResultId,
     // EPUB 章节导航
     segmentGroups,
     loadingSegmentGroups,
@@ -338,7 +367,12 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     syncResourcesFromTree,
     loadResources,
     loadSegments,
+    loadSegmentsAround,
+    loadMoreSegmentsUp,
     loadJobs,
+    loadSearchResults,
+    jumpToSegment,
+    resetSearchResults,
     addUploadTask,
     updateUploadTaskProgress,
     updateUploadTaskStage,

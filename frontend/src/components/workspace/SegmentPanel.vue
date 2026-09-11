@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
-import { NAlert, NButton, NEmpty, NInput, NSelect } from 'naive-ui'
-import { computed, ref, toRef } from 'vue'
+import { NAlert, NButton, NDrawer, NDrawerContent, NEmpty, NSelect } from 'naive-ui'
+import { computed, nextTick, ref, toRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
@@ -16,7 +16,10 @@ import {
   type SegmentQualitySeverityFilter,
   useProjectWorkspaceStore,
 } from '@/stores/projectWorkspace'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
+import SegmentChapterSidebar from '@/components/workspace/SegmentChapterSidebar.vue'
 import SegmentDataTable from '@/components/workspace/SegmentDataTable.vue'
+import SegmentSearchPanel from '@/components/workspace/SegmentSearchPanel.vue'
 import SegmentSearchReplaceDrawer from '@/components/workspace/SegmentSearchReplaceDrawer.vue'
 
 type Segment = ApiSchemas['Segment']
@@ -78,30 +81,63 @@ defineExpose({
   clearSelectedSegments,
 })
 
-// ── 章节选择器 ──
-// 使用 computed 从 epubActiveGroupKey 派生，避免 watcher 竞争导致值同步 bug
-const chapterSelectValue = computed<string | null>(() => workspace.epubActiveGroupKey ?? '__all__')
+// ── 搜索定位面板与移动端抽屉 ──
+const searchPanelVisible = ref(true)
+const chaptersDrawerVisible = ref(false)
+const searchDrawerVisible = ref(false)
 
-const chapterOptions = computed(() => {
-  const allOption = {
-    label: t('workspace.segment.chapterAll'),
-    value: '__all__',
+// 主文档流滚动容器：跳转/章节切换后需要主动定位
+const mainScrollRef = ref<HTMLElement | null>(null)
+
+/** 滚动到定位行并尽量居中（锚点行 + 上文行都在窗口内，视觉焦点在锚点） */
+const scrollMainToAnchor = async (): Promise<void> => {
+  await nextTick()
+  const host = mainScrollRef.value
+  if (!host) return
+  const anchor = host.querySelector('.segment-row--focused')
+  if (anchor instanceof HTMLElement) {
+    const hostRect = host.getBoundingClientRect()
+    const rect = anchor.getBoundingClientRect()
+    const target =
+      host.scrollTop + (rect.top - hostRect.top) - host.clientHeight / 2 + rect.height / 2
+    host.scrollTo({ top: Math.max(0, target) })
+  } else {
+    host.scrollTop = 0
   }
-  const groupOptions = workspace.segmentGroups.map((group) => ({
-    label: group.group_title,
-    value: group.group_key,
-  }))
-  return [allOption, ...groupOptions]
-})
+}
 
-// ── 搜索字段与大小写 ──
-const searchFieldOptions = computed(() => [
-  { label: t('workspace.segment.searchFieldBoth'), value: 'both' },
-  { label: t('workspace.segment.searchFieldSource'), value: 'source' },
-  { label: t('workspace.segment.searchFieldTarget'), value: 'target' },
-])
+const handleSearchJumped = (): void => {
+  // 移动端跳转后收起搜索抽屉；桌面端抽屉本就未打开，无需区分视口
+  searchDrawerVisible.value = false
+  void scrollMainToAnchor()
+}
 
-const hasSearchText = computed(() => Boolean(workspace.segmentSearch.trim()))
+// 章节切换（含"全部章节"）后回顶：列表从章首重新加载
+watch(
+  () => workspace.epubActiveGroupKey,
+  () => {
+    void nextTick().then(() => {
+      if (mainScrollRef.value) mainScrollRef.value.scrollTop = 0
+    })
+  },
+)
+
+// ── 向上加载（锚点窗口 / 滚到窗口顶）：前置更早段落并补偿滚动位置 ──
+const handleLoadMoreUp = async (): Promise<void> => {
+  if (!props.projectId || !workspace.activeResourceId) return
+  const host = mainScrollRef.value
+  const prevHeight = host?.scrollHeight ?? 0
+  const prevTop = host?.scrollTop ?? 0
+  await workspace.loadMoreSegmentsUp(
+    props.projectId,
+    workspace.activeResourceId,
+    workspace.epubActiveGroupKey ?? undefined,
+  )
+  await nextTick()
+  if (host) {
+    host.scrollTop = host.scrollHeight - prevHeight + prevTop
+  }
+}
 
 // ── 结果计数（include_total 返回）──
 const segmentsCountLabel = computed(() => {
@@ -223,20 +259,6 @@ const chipClass = (active: boolean, tone: 'default' | 'danger' | 'warning' = 'de
   return CHIP_CLASSES.inactive
 }
 
-// ── 章节切换处理 ──
-const handleChapterChange = (value: string): void => {
-  if (!props.projectId || !workspace.activeResourceId) return
-
-  if (value === '__all__') {
-    workspace.exitChapter()
-    void workspace.loadSegments(props.projectId, workspace.activeResourceId)
-  } else {
-    const group = workspace.segmentGroups.find((g) => g.group_key === value)
-    workspace.enterChapter(value, group?.group_title ?? value)
-    void workspace.loadSegments(props.projectId, workspace.activeResourceId, false, value)
-  }
-}
-
 // ── 资源切换联动 ──
 const handleResourceChange = (value: number | null): void => {
   workspace.setActiveResource(value)
@@ -275,6 +297,13 @@ const handleLoadMore = (): void => {
   )
 }
 
+// reachEnd：编辑到窗口末尾且还有更多时触发。此处仅追加加载、不强制保存：
+// saveInlineEdit / saveAndEditNext 保存后都会取消编辑态，导致连续编辑中断；
+// append 后保持编辑态，用户再次 Ctrl+Enter 即可走 saveAndEditNext 继续下一条。
+const handleReachEnd = (): void => {
+  handleLoadMore()
+}
+
 // ── 事件转发处理 ──
 const handleSelectionChange = (ids: number[]): void => {
   selectedSegmentIds.value = ids
@@ -307,12 +336,12 @@ const handleCloseInlineComment = (): void => {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="flex h-full min-h-0 flex-col gap-3">
+    <!-- 工具栏（瘦身：搜索/章节入口移至搜索面板与章节侧栏） -->
     <div
-      class="flex flex-col gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5"
+      class="flex shrink-0 flex-col gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5"
     >
       <div class="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
-        <!-- md:flex-wrap：空间不足时控件换行而非挤压；各控件设宽度下限/防收缩，避免条件渲染的元素挤塌搜索框 -->
         <div class="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
           <NSelect
             v-model:value="workspace.activeResourceId"
@@ -329,44 +358,6 @@ const handleCloseInlineComment = (): void => {
             @update:value="handleResourceChange"
           />
           <NSelect
-            v-if="workspace.isEpubResource"
-            :value="chapterSelectValue"
-            size="small"
-            class="md:min-w-32 md:max-w-xs"
-            :options="chapterOptions"
-            :loading="workspace.loadingSegmentGroups"
-            :placeholder="t('workspace.segment.chapterPlaceholder')"
-            @update:value="handleChapterChange"
-          />
-          <NInput
-            v-model:value="workspace.segmentSearch"
-            clearable
-            size="small"
-            class="md:min-w-44 md:max-w-xs!"
-            :disabled="!workspace.activeResourceId"
-            :placeholder="t('workspace.segment.searchPlaceholder')"
-          />
-          <NSelect
-            v-if="hasSearchText"
-            v-model:value="workspace.segmentSearchFieldFilter"
-            size="small"
-            class="w-32! shrink-0"
-            :disabled="!workspace.activeResourceId"
-            :options="searchFieldOptions"
-          />
-          <NButton
-            v-if="hasSearchText"
-            size="small"
-            class="shrink-0 px-2.5 font-semibold"
-            :type="workspace.segmentSearchCaseSensitive ? 'primary' : 'default'"
-            :secondary="!workspace.segmentSearchCaseSensitive"
-            :disabled="!workspace.activeResourceId"
-            :title="t('workspace.segment.searchCaseSensitive')"
-            @click="workspace.segmentSearchCaseSensitive = !workspace.segmentSearchCaseSensitive"
-          >
-            Aa
-          </NButton>
-          <NSelect
             v-model:value="workspace.segmentStatusFilter"
             size="small"
             class="w-36! shrink-0"
@@ -374,7 +365,7 @@ const handleCloseInlineComment = (): void => {
             :options="segmentStatusOptions"
           />
         </div>
-        <div class="flex shrink-0 items-center gap-2">
+        <div class="flex shrink-0 flex-wrap items-center gap-2">
           <span
             v-if="segmentsCountLabel"
             class="hidden text-xs whitespace-nowrap text-lf-text-muted sm:inline"
@@ -382,12 +373,33 @@ const handleCloseInlineComment = (): void => {
             {{ segmentsCountLabel }}
           </span>
           <NButton
-            secondary
             size="small"
-            :disabled="!workspace.activeResourceId"
-            @click="openSearchReplace"
+            class="hidden! xl:inline-flex!"
+            :secondary="searchPanelVisible"
+            :type="searchPanelVisible ? 'primary' : 'default'"
+            :title="t('workspace.segment.searchLocateToggleHint')"
+            @click="searchPanelVisible = !searchPanelVisible"
           >
-            {{ t('workspace.segment.searchReplace.title') }}
+            {{ t('workspace.segment.searchLocateToggle') }}
+          </NButton>
+          <NButton
+            size="small"
+            class="xl:hidden!"
+            :disabled="!workspace.activeResourceId"
+            :title="t('workspace.segment.searchLocateToggleHint')"
+            @click="searchDrawerVisible = true"
+          >
+            {{ t('workspace.segment.searchLocateToggle') }}
+          </NButton>
+          <!-- 三栏全开（章节栏常驻）需要约 1620px 以上；更窄视口章节导航走此按钮 + 抽屉 -->
+          <NButton
+            v-if="workspace.isEpubResource"
+            size="small"
+            class="min-[1620px]:hidden!"
+            :disabled="!workspace.activeResourceId"
+            @click="chaptersDrawerVisible = true"
+          >
+            {{ t('workspace.segment.openChapters') }}
           </NButton>
           <NButton secondary size="small" @click="emit('qaRecheck')">
             {{ t('workspace.qaRecheck.action') }}
@@ -474,39 +486,92 @@ const handleCloseInlineComment = (): void => {
       :description="t('workspace.segment.noResource')"
     />
 
-    <div v-else class="lf-table overflow-hidden rounded-lf-card border border-lf-border-soft">
-      <SegmentDataTable
-        ref="segmentDataTableRef"
-        :segments="workspace.segments"
-        :loading="workspace.loadingSegments"
-        :has-more="workspace.segmentsCursor !== null"
+    <!-- 三栏：章节侧栏 | 文档流（唯一滚动区） | 搜索定位面板 -->
+    <div v-else class="flex min-h-0 flex-1 gap-3">
+      <SegmentChapterSidebar
+        v-if="workspace.isEpubResource && workspace.segmentGroups.length > 0"
+        class="hidden w-60 shrink-0 min-[1620px]:flex"
+        :project-id="projectId"
+      />
+
+      <div ref="mainScrollRef" class="lf-scroll min-w-0 flex-1 space-y-3 overflow-y-auto">
+        <div class="lf-table overflow-hidden rounded-lf-card border border-lf-border-soft">
+          <SegmentDataTable
+            ref="segmentDataTableRef"
+            :segments="workspace.segments"
+            :loading="workspace.loadingSegments"
+            :has-more="workspace.segmentsCursor !== null"
+            :text-render-mode="textRenderMode"
+            :show-updated-at="false"
+            :show-mobile-cards="true"
+            :show-selection="true"
+            :show-comment="true"
+            :editing-segment-ids="workspace.editingSegmentIds"
+            :inline-editing-segment-id="inlineEditingSegmentId"
+            :inline-edit-form="inlineEditForm"
+            :inline-comment-visible="inlineCommentVisible"
+            :inline-comment-text="inlineCommentText"
+            :anchor-flash-segment-id="workspace.searchActiveResultId"
+            :anchor-context-ids="workspace.anchorContextIds"
+            :has-prev="workspace.segmentsPrevCursor !== null"
+            :loading-up="workspace.loadingSegmentsUp"
+            :search-query="workspace.segmentSearch"
+            :search-case-sensitive="workspace.segmentSearchCaseSensitive"
+            @selection-change="handleSelectionChange"
+            @preview-translation="handlePreviewTranslation"
+            @preview-revision="handlePreviewRevision"
+            @load-more="handleLoadMore"
+            @load-more-up="handleLoadMoreUp"
+            @reach-end="handleReachEnd"
+            @start-inline-edit="startInlineEdit"
+            @cancel-inline-edit="cancelInlineEdit"
+            @save-inline-edit="saveInlineEdit"
+            @save-and-edit-next="handleSaveAndEditNext"
+            @open-inline-comment="openInlineComment"
+            @save-inline-comment="saveInlineComment"
+            @close-inline-comment="handleCloseInlineComment"
+            @update:inline-comment-text="handleUpdateInlineCommentText"
+            @update:inline-edit-form="handleUpdateInlineEditForm"
+            @dismiss-issue="dismissIssue"
+            @reinstate-issue="reinstateIssue"
+          />
+        </div>
+      </div>
+
+      <SegmentSearchPanel
+        v-if="searchPanelVisible"
+        class="hidden w-86 shrink-0 xl:flex"
+        :project-id="projectId"
         :text-render-mode="textRenderMode"
-        :show-updated-at="true"
-        :show-mobile-cards="true"
-        :show-selection="true"
-        :show-comment="true"
-        :editing-segment-ids="workspace.editingSegmentIds"
-        :inline-editing-segment-id="inlineEditingSegmentId"
-        :inline-edit-form="inlineEditForm"
-        :inline-comment-visible="inlineCommentVisible"
-        :inline-comment-text="inlineCommentText"
-        @selection-change="handleSelectionChange"
-        @preview-translation="handlePreviewTranslation"
-        @preview-revision="handlePreviewRevision"
-        @load-more="handleLoadMore"
-        @start-inline-edit="startInlineEdit"
-        @cancel-inline-edit="cancelInlineEdit"
-        @save-inline-edit="saveInlineEdit"
-        @save-and-edit-next="handleSaveAndEditNext"
-        @open-inline-comment="openInlineComment"
-        @save-inline-comment="saveInlineComment"
-        @close-inline-comment="handleCloseInlineComment"
-        @update:inline-comment-text="handleUpdateInlineCommentText"
-        @update:inline-edit-form="handleUpdateInlineEditForm"
-        @dismiss-issue="dismissIssue"
-        @reinstate-issue="reinstateIssue"
+        @jumped="handleSearchJumped"
+        @open-replace="openSearchReplace"
       />
     </div>
+
+    <!-- 移动端：章节抽屉 -->
+    <NDrawer v-model:show="chaptersDrawerVisible" placement="left" :width="280">
+      <NDrawerContent closable :title="t('workspace.segment.openChapters')">
+        <SegmentChapterSidebar
+          v-if="workspace.isEpubResource && workspace.segmentGroups.length > 0"
+          class="h-full"
+          :project-id="projectId"
+        />
+      </NDrawerContent>
+    </NDrawer>
+
+    <!-- 移动端：搜索定位抽屉 -->
+    <NDrawer v-model:show="searchDrawerVisible" placement="right" :width="DRAWER_WIDTH.s">
+      <NDrawerContent closable :title="t('workspace.segment.searchLocate.title')">
+        <SegmentSearchPanel
+          v-if="searchDrawerVisible"
+          class="h-full"
+          :project-id="projectId"
+          :text-render-mode="textRenderMode"
+          @jumped="handleSearchJumped"
+          @open-replace="openSearchReplace"
+        />
+      </NDrawerContent>
+    </NDrawer>
 
     <SegmentSearchReplaceDrawer
       ref="searchReplaceDrawerRef"

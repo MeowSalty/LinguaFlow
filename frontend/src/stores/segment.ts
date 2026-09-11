@@ -43,6 +43,11 @@ export const useSegmentStore = defineStore('segment', () => {
   // ── 段落状态 ──
   const segments = ref<Segment[]>([])
   const segmentsCursor = ref<string | null>(null)
+  /** 向上翻页游标（direction=desc 语义：取该 segment_index 之前的一页）；null = 窗口顶无更早内容 */
+  const segmentsPrevCursor = ref<string | null>(null)
+  /** 锚点跳转带上来的"上文"段 id 集合（视图据此淡化显示） */
+  const anchorContextIds = ref<Set<number>>(new Set())
+  const loadingSegmentsUp = ref(false)
   const segmentsTotal = ref<number | null>(null)
   const loadingSegments = ref(false)
   const segmentsError = ref<string | null>(null)
@@ -82,6 +87,17 @@ export const useSegmentStore = defineStore('segment', () => {
 
   /** 资源级段落状态缓存：resourceId → 状态分布 */
   const segmentProgressCache = ref<Map<number, SegmentProgress>>(new Map())
+
+  // ── 搜索定位（独立面板）状态 ──
+  const searchResults = ref<Segment[]>([])
+  const searchResultsCursor = ref<string | null>(null)
+  const searchResultsTotal = ref<number | null>(null)
+  const loadingSearchResults = ref(false)
+  const searchResultsError = ref<string | null>(null)
+  /** 当前定位目标的段落 id */
+  const searchActiveResultId = ref<number | null>(null)
+  /** 请求序号守卫：过期响应直接丢弃（防抖后连续请求的竞态防护） */
+  let searchResultsRequestId = 0
 
   /** 最近一次搜索替换的 operation_id（按资源隔离，用于撤销/重做） */
   const lastSearchReplaceOperationId = ref<string | null>(null)
@@ -139,13 +155,10 @@ export const useSegmentStore = defineStore('segment', () => {
         segmentQualitySeverityFilter.value !== 'all' ||
         segmentQualityCodeFilter.value !== 'all'
 
-      const hasSearch = Boolean(segmentSearch.value.trim())
-
+      // 主列表不携带搜索条件：搜索职责完全属于搜索定位面板（loadSearchResults），
+      // 保证「搜索不改变主列表」——包括锚点跳转与章节切换路径。
       const response = await fetchResourceSegments(projectId, resourceId, {
         status: segmentStatusFilter.value === 'all' ? undefined : segmentStatusFilter.value,
-        search: segmentSearch.value.trim() || undefined,
-        search_field: hasSearch ? segmentSearchFieldFilter.value : undefined,
-        case_sensitive: hasSearch ? segmentSearchCaseSensitive.value : undefined,
         include_total: !append,
         quality_issues:
           segmentQualityIssuesFilter.value === 'all' ? undefined : segmentQualityIssuesFilter.value,
@@ -163,15 +176,13 @@ export const useSegmentStore = defineStore('segment', () => {
       segmentsCursor.value = response.next_cursor ?? null
       if (!append) {
         segmentsTotal.value = response.total ?? null
+        // 向上翻页游标与上文行仅在锚点/向上加载窗口中有意义，普通重载时复位
+        segmentsPrevCursor.value = null
+        anchorContextIds.value = new Set()
       }
 
       // 仅在无筛选条件的全量加载时更新进度缓存
-      if (
-        !append &&
-        segmentStatusFilter.value === 'all' &&
-        !segmentSearch.value.trim() &&
-        !hasQualityFilter
-      ) {
+      if (!append && segmentStatusFilter.value === 'all' && !hasQualityFilter) {
         updateSegmentProgressCache(resourceId, segments.value)
       }
     } catch (error) {
@@ -179,6 +190,189 @@ export const useSegmentStore = defineStore('segment', () => {
     } finally {
       loadingSegments.value = false
     }
+  }
+
+  /**
+   * 以锚点段落为窗口起点加载一页（Track C：anchor_segment_id 就绪后的精确定位）。
+   * beforeContext > 0 且窗口顶还有更早内容时，用 cursor=prev_cursor&direction=desc
+   * 组合拉取紧邻上文行并前置；这些行的 id 记入 anchorContextIds 供视图淡化。
+   */
+  const loadSegmentsAround = async (
+    projectId: number,
+    resourceId: number,
+    options: { groupKey?: string; anchorSegmentId: number; beforeContext?: number },
+  ): Promise<void> => {
+    const { groupKey, anchorSegmentId, beforeContext = 2 } = options
+    loadingSegments.value = true
+    segmentsError.value = null
+
+    try {
+      const hasQualityFilter =
+        segmentQualityIssuesFilter.value !== 'all' ||
+        segmentQualitySeverityFilter.value !== 'all' ||
+        segmentQualityCodeFilter.value !== 'all'
+      const filterParams = {
+        status: segmentStatusFilter.value === 'all' ? undefined : segmentStatusFilter.value,
+        quality_issues:
+          segmentQualityIssuesFilter.value === 'all' ? undefined : segmentQualityIssuesFilter.value,
+        quality_severity:
+          segmentQualitySeverityFilter.value === 'all'
+            ? undefined
+            : segmentQualitySeverityFilter.value,
+        quality_code:
+          segmentQualityCodeFilter.value === 'all' ? undefined : segmentQualityCodeFilter.value,
+      }
+
+      const anchored = await fetchResourceSegments(projectId, resourceId, {
+        ...filterParams,
+        anchor_segment_id: anchorSegmentId,
+        include_total: true,
+        limit: 50,
+        ...(groupKey ? { group_key: groupKey } : {}),
+      })
+      segments.value = anchored.items
+      segmentsCursor.value = anchored.next_cursor ?? null
+      segmentsTotal.value = anchored.total ?? null
+      segmentsPrevCursor.value = anchored.prev_cursor ?? null
+      anchorContextIds.value = new Set()
+
+      if (beforeContext > 0 && segmentsPrevCursor.value) {
+        const context = await fetchResourceSegments(projectId, resourceId, {
+          ...filterParams,
+          cursor: segmentsPrevCursor.value,
+          direction: 'desc',
+          limit: beforeContext,
+          ...(groupKey ? { group_key: groupKey } : {}),
+        })
+        // desc 响应升序返回紧邻窗口顶的 beforeContext 行；新窗口顶游标取其 prev_cursor
+        segments.value = [...context.items, ...segments.value]
+        segmentsPrevCursor.value = context.prev_cursor ?? null
+        anchorContextIds.value = new Set(context.items.map((item) => item.id))
+      }
+
+      if (segmentStatusFilter.value === 'all' && !hasQualityFilter) {
+        updateSegmentProgressCache(resourceId, segments.value)
+      }
+    } catch (error) {
+      segmentsError.value = extractErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
+    } finally {
+      loadingSegments.value = false
+    }
+  }
+
+  /**
+   * 向上加载一页（direction=desc + prev_cursor），前置到当前窗口顶。
+   * 滚动位置补偿由调用方（SegmentPanel）在 await 后执行。
+   */
+  const loadMoreSegmentsUp = async (
+    projectId: number,
+    resourceId: number,
+    groupKey?: string,
+  ): Promise<void> => {
+    const cursor = segmentsPrevCursor.value
+    if (!cursor || loadingSegmentsUp.value) return
+
+    loadingSegmentsUp.value = true
+    segmentsError.value = null
+
+    try {
+      const response = await fetchResourceSegments(projectId, resourceId, {
+        status: segmentStatusFilter.value === 'all' ? undefined : segmentStatusFilter.value,
+        quality_issues:
+          segmentQualityIssuesFilter.value === 'all' ? undefined : segmentQualityIssuesFilter.value,
+        quality_severity:
+          segmentQualitySeverityFilter.value === 'all'
+            ? undefined
+            : segmentQualitySeverityFilter.value,
+        quality_code:
+          segmentQualityCodeFilter.value === 'all' ? undefined : segmentQualityCodeFilter.value,
+        cursor,
+        direction: 'desc',
+        limit: 50,
+        ...(groupKey ? { group_key: groupKey } : {}),
+      })
+      const existing = new Set(segments.value.map((s) => s.id))
+      const fresh = response.items.filter((item) => !existing.has(item.id))
+      if (fresh.length) {
+        segments.value = [...fresh, ...segments.value]
+      }
+      segmentsPrevCursor.value = response.prev_cursor ?? null
+    } catch (error) {
+      segmentsError.value = extractErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
+    } finally {
+      loadingSegmentsUp.value = false
+    }
+  }
+
+  /**
+   * 跨全资源搜索段落（不传 group_key），供独立搜索定位面板使用。
+   * 搜索词/字段/大小写复用 segmentSearch / segmentSearchFieldFilter / segmentSearchCaseSensitive。
+   * append 为结果分页追加。
+   */
+  const loadSearchResults = async (
+    projectId: number,
+    resourceId: number,
+    append = false,
+  ): Promise<void> => {
+    const requestId = ++searchResultsRequestId
+    loadingSearchResults.value = true
+    searchResultsError.value = null
+    if (!append) {
+      searchActiveResultId.value = null
+    }
+
+    try {
+      const searchTerm = segmentSearch.value.trim()
+      const hasSearch = Boolean(searchTerm)
+
+      const response = await fetchResourceSegments(projectId, resourceId, {
+        search: searchTerm || undefined,
+        search_field: hasSearch ? segmentSearchFieldFilter.value : undefined,
+        case_sensitive: hasSearch ? segmentSearchCaseSensitive.value : undefined,
+        include_total: !append,
+        cursor: append ? (searchResultsCursor.value ?? undefined) : undefined,
+        limit: 50,
+      })
+      if (requestId !== searchResultsRequestId) return
+      searchResults.value = append ? [...searchResults.value, ...response.items] : response.items
+      searchResultsCursor.value = response.next_cursor ?? null
+      if (!append) {
+        searchResultsTotal.value = response.total ?? null
+      }
+    } catch (error) {
+      if (requestId !== searchResultsRequestId) return
+      searchResultsError.value = extractErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
+    } finally {
+      if (requestId === searchResultsRequestId) {
+        loadingSearchResults.value = false
+      }
+    }
+  }
+
+  /**
+   * 定位到某个段落（Track C 精确版）：
+   * 按命中段落的 group_key 切换章节（非 EPUB 无分组则退回全资源视图），
+   * 以 anchor_segment_id 精确开窗并带上紧邻上文行。
+   */
+  const jumpToSegment = async (
+    projectId: number,
+    resourceId: number,
+    segment: Segment,
+  ): Promise<void> => {
+    const groupKey = segment.group_key ?? undefined
+    if (groupKey) {
+      const groupTitle =
+        segmentGroups.value.find((g) => g.group_key === groupKey)?.group_title ?? groupKey
+      enterChapter(groupKey, groupTitle)
+    } else {
+      exitChapter()
+    }
+    await loadSegmentsAround(projectId, resourceId, {
+      groupKey,
+      anchorSegmentId: segment.id,
+      beforeContext: 2,
+    })
+    searchActiveResultId.value = segment.id
   }
 
   const updateSegment = async (
@@ -288,12 +482,26 @@ export const useSegmentStore = defineStore('segment', () => {
 
   // ── 工具方法 ──
 
+  /** 清空搜索定位状态（供 reset 调用，同时作废在途请求） */
+  const resetSearchResults = (): void => {
+    searchResultsRequestId++
+    searchResults.value = []
+    searchResultsCursor.value = null
+    searchResultsTotal.value = null
+    loadingSearchResults.value = false
+    searchResultsError.value = null
+    searchActiveResultId.value = null
+  }
+
   /** 清空段落列表和游标（供跨域协调调用） */
   const resetSegments = (): void => {
     segments.value = []
     segmentsCursor.value = null
+    segmentsPrevCursor.value = null
+    anchorContextIds.value = new Set()
     segmentsTotal.value = null
     lastSearchReplaceOperationId.value = null
+    resetSearchResults()
   }
 
   /**
@@ -311,6 +519,8 @@ export const useSegmentStore = defineStore('segment', () => {
   const reset = (): void => {
     segments.value = []
     segmentsCursor.value = null
+    segmentsPrevCursor.value = null
+    anchorContextIds.value = new Set()
     segmentsTotal.value = null
     segmentsError.value = null
     segmentSearch.value = ''
@@ -323,6 +533,7 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentProgressCache.value = new Map()
     lastSearchReplaceOperationId.value = null
     actionError.value = null
+    resetSearchResults()
     resetEpubState()
   }
 
@@ -349,6 +560,22 @@ export const useSegmentStore = defineStore('segment', () => {
     setIssueDisposition,
     resetSegments,
     reset,
+    // ── 窗口化加载（锚点 / 向上翻页）──
+    segmentsPrevCursor,
+    anchorContextIds,
+    loadingSegmentsUp,
+    loadSegmentsAround,
+    loadMoreSegmentsUp,
+    // ── 搜索定位（独立面板）导出 ──
+    searchResults,
+    searchResultsCursor,
+    searchResultsTotal,
+    loadingSearchResults,
+    searchResultsError,
+    searchActiveResultId,
+    loadSearchResults,
+    jumpToSegment,
+    resetSearchResults,
     // ── EPUB 新增导出 ──
     segmentGroups,
     loadingSegmentGroups,

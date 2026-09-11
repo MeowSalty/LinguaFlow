@@ -360,7 +360,7 @@ body {
   border-bottom: none;
 }
 
-/* Workspace tabs: denser chrome */
+/* Workspace tabs: denser chrome + 定高工作台布局（pane 区域撑满并内部滚动） */
 .workspace-tabs .n-tabs-nav {
   padding-top: 2px;
 }
@@ -375,12 +375,43 @@ body {
   padding-top: 0;
 }
 
+/* pane 外层容器与 pane 本身高度打通，让 pane 内容能拿到完整高度（h-full 内滚） */
+.workspace-tabs .n-tabs-pane-wrapper,
+.workspace-tabs .n-tab-pane {
+  height: 100%;
+  min-height: 0;
+}
+
+/* 工作区滚动容器：自绘细滚动条，亮暗主题一致（避免 Windows 原生滚动条的亮色残留） */
+.lf-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--lf-border-strong) transparent;
+}
+
+.lf-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.lf-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lf-scroll::-webkit-scrollbar-thumb {
+  background: var(--lf-border-strong);
+  border-radius: 6px;
+  border: 2.5px solid var(--lf-surface);
+  background-clip: padding-box;
+}
+
 /* 登录/注册壳：纯色底、居中布局 */
 .lf-auth-shell {
   @apply flex min-h-screen w-full flex-col items-center justify-center bg-lf-bg px-4 py-10;
 }
 
-/* 段落表格行视觉区分 */
+/* 段落表格行视觉区分：
+   状态色由状态标签列表达（不整行染色，避免干扰搜索定位焦点），
+   仅保留编辑中 / 定位 / 驳回三种行级底色 */
 .segment-row--editing td:first-child {
   border-left: 3px solid var(--color-brand-500);
 }
@@ -397,16 +428,70 @@ body {
   background: var(--lf-info-soft);
 }
 
-.segment-row--translated td:not(.n-data-table-td--fixed-right) {
-  background: var(--lf-success-soft);
-}
-
-.segment-row--approved td:not(.n-data-table-td--fixed-right) {
-  background: var(--lf-success-soft);
-}
-
 .segment-row--rejected td:not(.n-data-table-td--fixed-right) {
   background: var(--lf-danger-soft);
+}
+
+/* 锚点跳转带上来的上文行：整行淡化（定位行聚焦不受影响） */
+.segment-row--context td {
+  opacity: 0.6;
+}
+
+/* 锚点定位闪烁：从 info 强调渐隐（B3 跳转定位时配合 .segment-row--focused 使用） */
+@keyframes segment-anchor-flash {
+  0% {
+    box-shadow:
+      inset 3px 0 0 0 var(--lf-info),
+      inset 0 0 0 999px rgb(37 99 235 / 22%);
+  }
+  60% {
+    box-shadow:
+      inset 3px 0 0 0 var(--lf-info),
+      inset 0 0 0 999px rgb(37 99 235 / 10%);
+  }
+  100% {
+    box-shadow:
+      inset 3px 0 0 0 var(--lf-info),
+      inset 0 0 0 999px transparent;
+  }
+}
+
+html[data-theme='dark'] .segment-row--anchor-flash {
+  animation-name: segment-anchor-flash-dark;
+}
+
+@keyframes segment-anchor-flash-dark {
+  0% {
+    box-shadow:
+      inset 3px 0 0 0 var(--lf-info),
+      inset 0 0 0 999px rgb(59 130 246 / 26%);
+  }
+  100% {
+    box-shadow:
+      inset 3px 0 0 0 var(--lf-info),
+      inset 0 0 0 999px transparent;
+  }
+}
+
+.segment-row--anchor-flash {
+  animation: segment-anchor-flash 1.8s ease-out 1;
+}
+
+/* ── Search hit highlight（搜索命中，与 quality-span 同结构）── */
+
+.search-hit {
+  border-radius: 0.2em;
+  padding: 0 0.12em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  background: rgb(37 99 235 / 0.16);
+  color: inherit;
+  box-shadow: inset 0 -1px 0 0 rgb(37 99 235 / 0.45);
+}
+
+html[data-theme='dark'] .search-hit {
+  background: rgb(96 165 250 / 0.26);
+  box-shadow: inset 0 -1px 0 0 rgb(96 165 250 / 0.55);
 }
 
 /* ── Quality issue span highlights ── */
