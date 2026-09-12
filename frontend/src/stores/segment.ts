@@ -110,14 +110,27 @@ export const useSegmentStore = defineStore('segment', () => {
   const searchResultsError = ref<string | null>(null)
   /** 当前定位目标的段落 id */
   const searchActiveResultId = ref<number | null>(null)
+  /**
+   * 当前定位命中字段：主列表据此滚动到该字段正文内的命中 mark；
+   * null = 展示级未定位命中（generic）或未跳转，滚动回退整行
+   */
+  const searchActiveResultField = ref<'source' | 'target' | null>(null)
   /** 跳转完成序号：每次 jumpToSegment 开窗成功后自增（重复跳同一条也触发），驱动主列表滚动到锚点 */
   const searchJumpSeq = ref(0)
   /** 进行中的跳转计数：>0 时筛选/章节切换 watcher 让路，由 jumpToSegment 的锚点开窗接管加载与定位 */
   const jumpingToSegmentCount = ref(0)
-  /** 开窗请求序号守卫：过期的锚点开窗 / 向上翻页响应直接丢弃（连续跳转、跳转与上翻并发时防旧覆新） */
+  /**
+   * 开窗请求序号守卫：过期的锚点开窗 / 向上翻页响应直接丢弃
+   * （连续跳转、跳转与上翻并发时防旧覆新；resetSearchResults 亦自增以作废旧跳转的在途开窗）
+   */
   let segmentsWindowRequestId = 0
   /** 请求序号守卫：过期响应直接丢弃（防抖后连续请求的竞态防护） */
   let searchResultsRequestId = 0
+  /**
+   * 跳转请求序号守卫：每次 jumpToSegment 自增，resetSearchResults 亦自增；
+   * 在途跳转的锚点开窗完成后序号不再匹配即放弃写回，避免旧跳转复活已清空的定位态
+   */
+  let searchJumpRequestId = 0
 
   /** 最近一次搜索替换的 operation_id（按资源隔离，用于撤销/重做） */
   const lastSearchReplaceOperationId = ref<string | null>(null)
@@ -363,6 +376,7 @@ export const useSegmentStore = defineStore('segment', () => {
     searchResultsError.value = null
     if (!append) {
       searchActiveResultId.value = null
+      searchActiveResultField.value = null
       searchResults.value = []
       searchResultsCursor.value = null
       searchResultsTotal.value = null
@@ -402,6 +416,9 @@ export const useSegmentStore = defineStore('segment', () => {
    * 定位到某个段落（Track C 精确版）：
    * 按命中段落的 group_key 切换章节（非 EPUB 无分组则退回全资源视图），
    * 以 anchor_segment_id 精确开窗并带上紧邻上文行。
+   * field 为展示级命中字段（source / target），开窗成功与否决定它是否写入：
+   * 被更新的开窗请求取代（completed=false）时直接返回，不留下与新窗口不符的字段；
+   * generic 命中传 null，滚动回退整行。
    * 跳转期间置 jumpingToSegmentCount：筛选/章节切换 watcher 据此让路，
    * 否则 enterChapter 触发的章首重载会与锚点开窗竞态、覆盖定位窗口。
    */
@@ -409,8 +426,10 @@ export const useSegmentStore = defineStore('segment', () => {
     projectId: number,
     resourceId: number,
     segment: Segment,
+    field: 'source' | 'target' | null = null,
   ): Promise<void> => {
     const groupKey = segment.group_key ?? undefined
+    const requestId = ++searchJumpRequestId
     jumpingToSegmentCount.value++
     try {
       if (groupKey) {
@@ -425,8 +444,10 @@ export const useSegmentStore = defineStore('segment', () => {
         anchorSegmentId: segment.id,
         beforeContext: 2,
       })
-      if (!completed) return
+      // 更新的跳转或 resetSearchResults 已作废本次跳转：不得回写定位态与完成序号
+      if (!completed || requestId !== searchJumpRequestId) return
       searchActiveResultId.value = segment.id
+      searchActiveResultField.value = field
       searchJumpSeq.value++
     } finally {
       jumpingToSegmentCount.value--
@@ -568,15 +589,25 @@ export const useSegmentStore = defineStore('segment', () => {
 
   // ── 工具方法 ──
 
-  /** 清空搜索定位状态（供 reset 调用，同时作废在途请求） */
+  /**
+   * 清空搜索定位状态（供 reset 调用），并作废在途的搜索结果与跳转请求。
+   * 同时自增 segmentsWindowRequestId 作废在途的锚点开窗/向上翻页：否则旧跳转的开窗响应
+   * 会在跳转守卫（searchJumpRequestId）生效前先写回主列表，覆盖用户改搜索后的 segments/游标。
+   * 被作废请求的 finally 守卫随之失配、不再复位 loading，故在此显式清理两个窗口 loading。
+   */
   const resetSearchResults = (): void => {
     searchResultsRequestId++
+    searchJumpRequestId++
+    segmentsWindowRequestId++
+    loadingSegments.value = false
+    loadingSegmentsUp.value = false
     searchResults.value = []
     searchResultsCursor.value = null
     searchResultsTotal.value = null
     loadingSearchResults.value = false
     searchResultsError.value = null
     searchActiveResultId.value = null
+    searchActiveResultField.value = null
   }
 
   /** 清空段落列表和游标（供跨域协调调用） */
@@ -666,6 +697,7 @@ export const useSegmentStore = defineStore('segment', () => {
     loadingSearchResults,
     searchResultsError,
     searchActiveResultId,
+    searchActiveResultField,
     searchJumpSeq,
     jumpingToSegmentCount,
     loadSearchResults,

@@ -6,6 +6,7 @@ import type { ApiSchemas } from '@/api/client'
 import {
   buildSearchMatch,
   makeSearchSnippet,
+  resolveSearchableText,
   type SearchMatchOptions,
   type SearchSnippet,
 } from '@/composables/useSearchHighlight'
@@ -155,6 +156,11 @@ interface ResultCard {
    * generic = 后端判定命中但展示级未定位（regex 模式浏览器侧不做匹配，后端结果权威）
    */
   hitField: 'source' | 'target' | 'both' | 'generic'
+  /**
+   * 跳转后主列表的滚动字段：both 与展示文本一致取源文；
+   * generic 时展示级无 mark 可定位，为 null 由主列表回退整行
+   */
+  displayField: 'source' | 'target' | null
   /** 章节标题（后端 group_key 就绪前为空） */
   chapterTitle: string
 }
@@ -163,8 +169,10 @@ const resultCards = computed<ResultCard[]>(() =>
   workspace.searchResults.map((segment) => {
     const options = searchMatchOptions.value
     const query = workspace.segmentSearch.trim()
-    const sourceText = segment.source_text
-    const targetText = segment.target_text ?? ''
+    // 字段判定与片段展示同用正文高亮的可见文本：HTML 模式下剔除标签/属性，
+    // 避免原始标记本身命中查询而误判命中字段
+    const sourceText = resolveSearchableText(segment.source_text, props.textRenderMode)
+    const targetText = resolveSearchableText(segment.target_text ?? '', props.textRenderMode)
     const inSource =
       workspace.segmentSearchFieldFilter !== 'target' &&
       buildSearchMatch(sourceText, query, options).ranges.length > 0
@@ -173,6 +181,12 @@ const resultCards = computed<ResultCard[]>(() =>
       buildSearchMatch(targetText, query, options).ranges.length > 0
     const hitField =
       inSource && inTarget ? 'both' : inSource ? 'source' : inTarget ? 'target' : 'generic'
+    // 滚动字段随展示文本同源：both 取源文；两字段均未定位（generic）时为 null，主列表回退整行
+    const displayField: 'source' | 'target' | null = inSource
+      ? 'source'
+      : inTarget
+        ? 'target'
+        : null
     // generic 命中（展示级未定位）按搜索字段回退展示，保证展示文本来自用户搜索的字段
     const displayText = inSource
       ? sourceText
@@ -192,6 +206,7 @@ const resultCards = computed<ResultCard[]>(() =>
           ? { before: displayText, hit: '', after: '' }
           : makeSearchSnippet(displayText, query, options),
       hitField,
+      displayField,
       chapterTitle,
     }
   }),
@@ -246,7 +261,13 @@ const selectResult = (index: number, jump: boolean): void => {
 
 const jumpTo = (card: ResultCard): void => {
   if (!props.projectId || !workspace.activeResourceId) return
-  void workspace.jumpToSegment(props.projectId, workspace.activeResourceId, card.segment)
+  // 携带展示级命中字段：主列表滚动时定位到该字段正文内的 mark（generic 为 null，回退整行）
+  void workspace.jumpToSegment(
+    props.projectId,
+    workspace.activeResourceId,
+    card.segment,
+    card.displayField,
+  )
   emit('jumped', card.segment)
 }
 

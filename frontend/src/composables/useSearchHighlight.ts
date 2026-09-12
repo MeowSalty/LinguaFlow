@@ -304,6 +304,24 @@ export const renderSearchHighlightedText = (
 
 // ── HTML 模式（复用质量问题的可见文本坐标体系）──
 
+/** 展示/匹配文本的渲染形态，须与正文渲染器（renderSearchHighlightedHtml）保持同源 */
+export type SearchTextRenderMode = 'plaintext' | 'html'
+
+/**
+ * 按渲染模式取用于字段判定与片段展示的文本。
+ * plaintext 原样返回；html 走 parseHtmlBody + buildVisibleTextMap 管线取可见文本，
+ * 与 renderSearchHighlightedHtml 的命中坐标同源，避免在原始标签/属性上误判命中字段。
+ * 解析异常时安全回退原文。
+ */
+export const resolveSearchableText = (text: string, mode: SearchTextRenderMode): string => {
+  if (mode !== 'html' || !text) return text
+  try {
+    return buildVisibleTextMap(parseHtmlBody(text)).runes.join('')
+  } catch {
+    return text
+  }
+}
+
 interface SearchDomContext {
   nodeStarts: Map<Text, number>
   ranges: SearchHighlightRange[]
@@ -391,17 +409,28 @@ export const renderSearchHighlightedHtml = (
   return h('div', { class: 'quality-html-content', style }, children)
 }
 
+/** 片段默认前置预算：命中前保留的 rune 数（窗口严格有界，不再向空白无上限扩张） */
+const SNIPPET_BEFORE_BUDGET = 5
+
+/** 后置预算在前置预算之上的额外 rune 数：命中后常跟搭配词 / 标点，留得略长 */
+const SNIPPET_AFTER_EXTRA = 10
+
+/** 词边界优化的外扩上限（每侧 rune 数）：只在切点仍位于词内字符上时外扩，遇到空白即停 */
+const SNIPPET_WORD_BOUNDARY_EXTRA = 5
+
 /**
  * 从文本中截取关键词居中的片段（搜索结果卡片用）。
- * 半径 radius 为命中前后各保留的 rune 数；避免在词中间切断。
- * 以首个非零宽命中为准；无可用命中（regex 非法或降级）时整段作为 before 返回，
+ * 窗口严格有界：命中前保留 radius 个 rune，命中后保留 radius + SNIPPET_AFTER_EXTRA 个 rune；
+ * 词边界优化最多再向两侧各外扩 SNIPPET_WORD_BOUNDARY_EXTRA 个 rune——额外窗口内碰不到空白
+ * 就硬截断，避免无空白文本（CJK、压缩 HTML）把命中前正文一路吞回整段。
+ * 以首个非零宽命中为准；无可用命中（regex 非法/降级、零宽命中）时整段作为 before 返回，
  * 由调用方决定呈现。
  */
 export const makeSearchSnippet = (
   text: string,
   query: string,
   options: SearchMatchArgument = false,
-  radius = 46,
+  radius = SNIPPET_BEFORE_BUDGET,
 ): SearchSnippet => {
   const empty: SearchSnippet = { before: text, hit: '', after: '' }
   if (!text || !query) return empty
@@ -411,11 +440,21 @@ export const makeSearchSnippet = (
   const first = ranges.find((range) => range.end > range.start)
   if (!first) return empty
 
-  let start = Math.max(0, first.start - radius)
-  let end = Math.min(runes.length, first.end + radius + 14)
-  // 收缩边界避免切断词中间（向词边界推进）
-  while (start > 0 && /\S/.test(runes[start] ?? '')) start--
-  while (end < runes.length && /\S/.test(runes[end - 1] ?? '')) end++
+  const beforeBudget = Math.max(0, radius)
+  let start = Math.max(0, first.start - beforeBudget)
+  let end = Math.min(runes.length, first.end + beforeBudget + SNIPPET_AFTER_EXTRA)
+
+  // 收缩边界避免切断词中间（向词边界推进）；外扩额度用尽即硬截断，保证窗口有界
+  let startExtra = SNIPPET_WORD_BOUNDARY_EXTRA
+  while (startExtra > 0 && start > 0 && /\S/.test(runes[start] ?? '')) {
+    start--
+    startExtra--
+  }
+  let endExtra = SNIPPET_WORD_BOUNDARY_EXTRA
+  while (endExtra > 0 && end < runes.length && /\S/.test(runes[end - 1] ?? '')) {
+    end++
+    endExtra--
+  }
 
   return {
     before: (start > 0 ? '…' : '') + runes.slice(start, first.start).join(''),

@@ -266,15 +266,24 @@ const scrollMainToAnchor = async (): Promise<void> => {
   const anchor = Array.from(host.querySelectorAll<HTMLElement>('.segment-row--anchor-flash')).find(
     (el) => el.offsetParent !== null,
   )
-  if (anchor) {
-    const hostRect = host.getBoundingClientRect()
-    const rect = anchor.getBoundingClientRect()
-    const target =
-      host.scrollTop + (rect.top - hostRect.top) - host.clientHeight / 2 + rect.height / 2
-    host.scrollTo({ top: Math.max(0, target) })
-  } else {
+  if (!anchor) {
     host.scrollTop = 0
+    return
   }
+  const hostRect = host.getBoundingClientRect()
+  // 命中可能在超长行的中段，整行矩形不足以让命中可见：按跳转携带的命中字段，取该字段正文内
+  // 首个 mark 的矩形；字段为 null（generic 未定位）、mark 缺失或矩形零尺寸（隐藏 / 行已更新）
+  // 时回退整行矩形
+  const field = workspace.searchActiveResultField
+  const hit = field
+    ? anchor.querySelector<HTMLElement>(`[data-search-field="${field}"] mark.search-hit`)
+    : null
+  const hitRect = hit?.getClientRects()[0]
+  const visibleHitRect = hitRect && (hitRect.width > 0 || hitRect.height > 0) ? hitRect : null
+  const rect = visibleHitRect ?? anchor.getBoundingClientRect()
+  const target =
+    host.scrollTop + (rect.top - hostRect.top) - host.clientHeight / 2 + rect.height / 2
+  host.scrollTo({ top: Math.max(0, target) })
 }
 
 const handleSearchJumped = (): void => {

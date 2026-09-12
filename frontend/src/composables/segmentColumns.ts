@@ -152,22 +152,21 @@ export function useSegmentColumns(
         const elements: VNode[] = []
 
         const query = deps.searchQuery.value.trim()
+        // 搜索激活：以搜索命中高亮渲染（搜索期间替代质量标记，避免双重 mark 噪声）；
         // 搜索字段排除源文时不做搜索高亮，避免「无命中」的源文列仍按搜索路径渲染
-        if (query && deps.searchField.value !== 'target') {
-          // 搜索激活：以搜索命中高亮渲染（搜索期间替代质量标记，避免双重 mark 噪声）
-          elements.push(
-            config.value.textRenderMode === 'html'
+        const body =
+          query && deps.searchField.value !== 'target'
+            ? config.value.textRenderMode === 'html'
               ? renderSearchHighlightedHtml(row.source_text, query, deps.searchMatchOptions.value)
-              : renderSearchHighlightedText(row.source_text, query, deps.searchMatchOptions.value),
-          )
-        } else {
-          elements.push(
-            h(SegmentTextDisplay, {
-              text: row.source_text,
-              mode: config.value.textRenderMode,
-            }),
-          )
-        }
+              : renderSearchHighlightedText(row.source_text, query, deps.searchMatchOptions.value)
+            : h(SegmentTextDisplay, {
+                text: row.source_text,
+                mode: config.value.textRenderMode,
+              })
+
+        // data-search-field：锚点跳转据此在命中字段的正文内定位 mark（命中可能在超长行中段）。
+        // 包装只含正文，不含下方编辑态的 HTML 切换按钮与源码，选择器不会误命中它们
+        elements.push(h('div', { 'data-search-field': 'source' }, [body]))
 
         if (isEditing && hasHtmlTags) {
           elements.push(
@@ -223,59 +222,56 @@ export function useSegmentColumns(
       render: (row) => {
         const elements: VNode[] = []
 
-        // 编辑态：译文输入框
+        // 编辑态：译文输入框（同样带字段容器，供锚点定位在其中查无 mark 时回退整行）
         if (deps.inlineEditingSegmentId.value === row.id) {
           elements.push(
-            h(NInput, {
-              value: deps.inlineEditForm.target_text,
-              type: 'textarea',
-              autosize: { minRows: 2, maxRows: 6 },
-              placeholder: t('workspace.segment.form.target'),
-              'onUpdate:value': (val: string) => deps.updateEditFormField('target_text', val),
-            }),
+            h('div', { 'data-search-field': 'target' }, [
+              h(NInput, {
+                value: deps.inlineEditForm.target_text,
+                type: 'textarea',
+                autosize: { minRows: 2, maxRows: 6 },
+                placeholder: t('workspace.segment.form.target'),
+                'onUpdate:value': (val: string) => deps.updateEditFormField('target_text', val),
+              }),
+            ]),
+          )
+        } else if (!row.target_text) {
+          elements.push(
+            h(
+              'div',
+              {
+                class:
+                  'flex min-h-10 items-center justify-center rounded-lf-ctl border border-dashed border-lf-border-soft bg-lf-info-soft px-3 py-2',
+              },
+              [h('span', { class: 'text-lf-text-subtle' }, t('workspace.segment.emptyTarget'))],
+            ),
           )
         } else {
-          if (!row.target_text) {
-            elements.push(
-              h(
-                'div',
-                {
-                  class:
-                    'flex min-h-10 items-center justify-center rounded-lf-ctl border border-dashed border-lf-border-soft bg-lf-info-soft px-3 py-2',
-                },
-                [h('span', { class: 'text-lf-text-subtle' }, t('workspace.segment.emptyTarget'))],
-              ),
-            )
-          } else {
-            const query = deps.searchQuery.value.trim()
-            // 搜索字段排除译文时不做搜索高亮，保持质量问题标记路径
-            if (query && deps.searchField.value !== 'source') {
-              // 搜索激活：以搜索命中高亮渲染（同源文列，替代质量标记）
-              elements.push(
-                config.value.textRenderMode === 'html'
-                  ? renderSearchHighlightedHtml(
-                      row.target_text,
-                      query,
-                      deps.searchMatchOptions.value,
-                    )
-                  : renderSearchHighlightedText(
-                      row.target_text,
-                      query,
-                      deps.searchMatchOptions.value,
-                    ),
-              )
-            } else {
-              const activeIssueIndex = resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id)
-              elements.push(
-                h(SegmentTextDisplay, {
+          const query = deps.searchQuery.value.trim()
+          // 搜索激活：以搜索命中高亮渲染（同源文列，替代质量标记）；
+          // 搜索字段排除译文时不做搜索高亮，保持质量问题标记路径
+          const body =
+            query && deps.searchField.value !== 'source'
+              ? config.value.textRenderMode === 'html'
+                ? renderSearchHighlightedHtml(
+                    row.target_text,
+                    query,
+                    deps.searchMatchOptions.value,
+                  )
+                : renderSearchHighlightedText(
+                    row.target_text,
+                    query,
+                    deps.searchMatchOptions.value,
+                  )
+              : h(SegmentTextDisplay, {
                   text: row.target_text,
                   issues: row.quality_issues,
                   mode: config.value.textRenderMode,
-                  activeIssueIndex,
-                }),
-              )
-            }
-          }
+                  activeIssueIndex: resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id),
+                })
+
+          // data-search-field：同源文列，锚点跳转在命中字段正文内定位 mark
+          elements.push(h('div', { 'data-search-field': 'target' }, [body]))
         }
 
         // 质量问题图标 + 评论摘要（同一行显示）

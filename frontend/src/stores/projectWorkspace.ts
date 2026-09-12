@@ -101,6 +101,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingSearchResults,
     searchResultsError,
     searchActiveResultId,
+    searchActiveResultField,
     searchJumpSeq,
     jumpingToSegmentCount,
     // EPUB 章节导航状态
@@ -334,6 +335,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingSearchResults,
     searchResultsError,
     searchActiveResultId,
+    searchActiveResultField,
     searchJumpSeq,
     jumpingToSegmentCount,
     // EPUB 章节导航

@@ -384,6 +384,11 @@ defineExpose({
           :is-saving="editingSegmentIds.includes(segment.id)"
           :is-comment-visible="inlineCommentVisible === segment.id"
           :comment-text="inlineCommentText"
+          :search-query="searchQuery"
+          :search-field="searchField"
+          :search-case-sensitive="searchCaseSensitive"
+          :search-match-mode="searchMatchMode"
+          :search-whole-word="searchWholeWord"
           :class="
             segment.id === anchorFlashSegmentId
               ? 'segment-row--anchor-flash segment-row--focused'
