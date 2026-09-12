@@ -130,12 +130,12 @@ const drawerSegmentCount = computed(() => {
     return jobMgmt.jobTargetSegmentIds.value.length
   }
 
-  // EPUB 章节翻译模式：从 epubDirectoryChapters 按 groupKey 筛选段落数
+  // EPUB 章节翻译模式：从编辑态章节元数据按 groupKey 汇总段落数
   if (jobMgmt.jobTargetGroupKeys.value.length > 0) {
     const selectedKeys = new Set(jobMgmt.jobTargetGroupKeys.value)
-    return workspace.epubDirectoryChapters
-      .filter((ch) => selectedKeys.has(ch.group_key))
-      .reduce((sum, ch) => sum + ch.segment_count, 0)
+    return workspace.segmentGroups
+      .filter((chapter) => selectedKeys.has(chapter.group_key))
+      .reduce((sum, chapter) => sum + chapter.segment_count, 0)
   }
 
   // 普通资源模式：使用任务目标资源 ID 列表查找总段落数
@@ -181,40 +181,16 @@ const reloadWorkspace = async (): Promise<void> => {
 // 段落/章节数据由 SegmentPanel 的筛选 watcher 统一加载。
 const handleExplorerOpenSegments = (resource: Resource): void => {
   workspace.setActiveResource(resource.id)
-
-  // EPUB 资源：进入 EPUB 虚拟目录（章节列表模式）
-  if (resource.format === 'epub') {
-    void workspace.enterEpub(projectId.value!, { id: resource.id, name: resource.name })
-    return
-  }
-
-  // 非 EPUB 资源：进入编辑视图
   enterEditor(resource.id)
 }
 
-/** 处理 EPUB 章节点击：进入章节编辑视图 */
-const handleOpenEpubSegments = (resourceId: number, groupKey: string): void => {
-  const groupTitle =
-    workspace.epubDirectoryChapters.find((g) => g.group_key === groupKey)?.group_title ?? groupKey
-  workspace.enterChapter(groupKey, groupTitle)
-  enterEditor(resourceId, groupKey)
-}
-
-/** EPUB 章节选中数量 */
-const epubSelectedChapterCount = computed(() => workspace.epubSelectedGroupKeys.size)
-
-/** 翻译选中的 EPUB 章节：使用 EPUB 资源 ID 打开任务创建抽屉 */
-const handleTranslateEpubChapters = (): void => {
-  const epubResourceId = workspace.epubDirectoryResourceId
-  if (!epubResourceId) return
-  const groupKeys = [...workspace.epubSelectedGroupKeys]
-  jobMgmt.openResourceJobDrawerWithIds([epubResourceId], groupKeys)
-  workspace.epubSelectedGroupKeys = new Set()
-}
-
-/** 清除 EPUB 章节选中 */
-const handleClearEpubChapterSelection = (): void => {
-  workspace.epubSelectedGroupKeys = new Set()
+/** 打开所选章节的翻译任务抽屉；任务提交前保留选择，便于取消后继续调整 */
+const handleTranslateSelectedChapters = (): void => {
+  if (!workspace.activeResourceId || workspace.epubSelectedGroupKeys.size === 0) return
+  jobMgmt.openResourceJobDrawerWithIds(
+    [workspace.activeResourceId],
+    [...workspace.epubSelectedGroupKeys],
+  )
 }
 
 // ── 段落选择操作 ──
@@ -261,18 +237,15 @@ const handleQaRecheckSelectedResources = (): void => {
   openQaRecheckDrawer({ mode: 'resources', resourceIds, groupKeys: [], segmentIds: [] })
 }
 
-/** EPUB 章节胶囊入口：重检选中的章节（与任务创建一致，同时上送资源 ID 与分组键） */
+/** 章节侧栏入口：重检所选章节，提交完成前保留当前选择 */
 const handleQaRecheckSelectedChapters = (): void => {
-  const epubResourceId = workspace.epubDirectoryResourceId
-  if (!epubResourceId) return
-  const groupKeys = [...workspace.epubSelectedGroupKeys]
+  if (!workspace.activeResourceId || workspace.epubSelectedGroupKeys.size === 0) return
   openQaRecheckDrawer({
     mode: 'chapters',
-    resourceIds: [epubResourceId],
-    groupKeys,
+    resourceIds: [workspace.activeResourceId],
+    groupKeys: [...workspace.epubSelectedGroupKeys],
     segmentIds: [],
   })
-  workspace.epubSelectedGroupKeys = new Set()
 }
 
 /** 段落胶囊入口：重检选中的段落 */
@@ -288,15 +261,33 @@ const handleQaRecheckSelectedSegments = (): void => {
   segmentPanelRef.value?.clearSelectedSegments()
 }
 
-/** 重检仅更新 quality_issues，重载当前视图的段落以刷新高亮与筛选 */
+/** 重检仅更新 quality_issues；成功后刷新正文与章节进度，并结束章节多选 */
 const handleQaRecheckCompleted = (): void => {
   if (!projectId.value || !workspace.activeResourceId) return
-  void workspace.loadSegments(
-    projectId.value,
-    workspace.activeResourceId,
-    false,
-    workspace.epubActiveGroupKey ?? undefined,
-  )
+  const resourceId = workspace.activeResourceId
+  void Promise.all([
+    workspace.loadSegments(
+      projectId.value,
+      resourceId,
+      false,
+      workspace.epubActiveGroupKey ?? undefined,
+    ),
+    ...(workspace.isEpubResource
+      ? [workspace.refreshChapterGroups(projectId.value, resourceId)]
+      : []),
+  ])
+  if (qaRecheckTarget.value.mode === 'chapters') {
+    workspace.exitChapterMultiSelect()
+  }
+}
+
+/** 提交任务；只有章节任务实际创建成功后才退出多选 */
+const handleSubmitJob = async (): Promise<void> => {
+  const isChapterJob = jobMgmt.jobTargetGroupKeys.value.length > 0
+  const created = await jobMgmt.submitJob()
+  if (created && isChapterJob) {
+    workspace.exitChapterMultiSelect()
+  }
 }
 
 const handleTranslateSelectedSegments = (): void => {
@@ -348,13 +339,6 @@ const handlePreviewApplied = async (payload: {
 
   if (workspace.isEpubResource) {
     refreshes.push(workspace.refreshChapterGroups(projectId.value, payload.resourceId))
-    if (workspace.isInEpubDirectory) {
-      refreshes.push(
-        workspace.refreshEpubChapters(projectId.value).catch((error) => {
-          console.error(error)
-        }),
-      )
-    }
   }
 
   await Promise.all(refreshes)
@@ -398,14 +382,9 @@ watch(
       workspace.setActiveResource(editId)
     }
 
-    // EPUB 资源需要章节数据；非 EPUB 直接忽略 chapter 参数
+    // EPUB 章节数据由 SegmentPanel 的资源 watcher 统一加载；这里仅在数据就绪后恢复章节深链
     if (resource.format === 'epub') {
-      // 仅当章节数据尚未加载时拉取（此 watcher 依赖 segmentGroups.length，
-      // 无条件拉取会与依赖变化形成循环）
-      if (workspace.segmentGroups.length === 0) {
-        void workspace.loadEpubData(projectId.value, editId)
-        return // 章节数据就位后本 watcher 重跑，再对齐章节
-      }
+      if (workspace.segmentGroups.length === 0) return
       if (typeof chapterRaw === 'string' && chapterRaw) {
         const title =
           workspace.segmentGroups.find((g) => g.group_key === chapterRaw)?.group_title ?? chapterRaw
@@ -513,6 +492,8 @@ onMounted(() => {
         @preview-revision="handlePreviewRevision"
         @refresh="reloadSegments"
         @qa-recheck="handleQaRecheckProject"
+        @batch-translate="handleTranslateSelectedChapters"
+        @batch-qa-recheck="handleQaRecheckSelectedChapters"
       />
     </template>
 
@@ -629,7 +610,6 @@ onMounted(() => {
                   v-if="projectId"
                   :project-id="projectId"
                   @open-segments="handleExplorerOpenSegments"
-                  @open-epub-segments="handleOpenEpubSegments"
                   @conflict="conflictMgmt.handleExplorerConflict"
                   @incremental-result="conflictMgmt.handleExplorerIncrementalResult"
                 />
@@ -678,7 +658,7 @@ onMounted(() => {
       @update:execution-plan-id="(val) => (jobMgmt.jobForm.execution_plan_id = val)"
       @update:auto-approve="(val) => (jobMgmt.jobForm.auto_approve = val)"
       @update:segment-filter="(val) => (jobMgmt.jobForm.segment_filter = val)"
-      @submit="jobMgmt.submitJob()"
+      @submit="handleSubmitJob"
       @close="jobMgmt.closeJobDrawer()"
     />
 
@@ -786,26 +766,15 @@ onMounted(() => {
       @refresh="() => workspace.loadResourceTree(projectId!)"
     />
 
-    <!-- 浮动操作岛 - 资源选择（非 EPUB 目录时显示） -->
+    <!-- 浮动操作岛 - 资源选择 -->
     <SelectionActionBar
-      v-show="activeTab === 'resources' && !workspace.isInEpubDirectory"
+      v-show="activeTab === 'resources' && !editorActive"
       :count="jobMgmt.selectedResourceIds.value.length"
       :can-translate="jobMgmt.canCreateResourceJob.value"
       show-qa-recheck
       @translate="jobMgmt.openResourceJobDrawer()"
       @qa-recheck="handleQaRecheckSelectedResources"
       @clear="jobMgmt.clearResourceSelection()"
-    />
-
-    <!-- 浮动操作岛 - EPUB 章节选择 -->
-    <SelectionActionBar
-      v-show="activeTab === 'resources' && workspace.isInEpubDirectory"
-      :count="epubSelectedChapterCount"
-      :can-translate="epubSelectedChapterCount > 0"
-      show-qa-recheck
-      @translate="handleTranslateEpubChapters"
-      @qa-recheck="handleQaRecheckSelectedChapters"
-      @clear="handleClearEpubChapterSelection"
     />
 
     <!-- 浮动操作岛 - 段落选择（编辑视图） -->

@@ -8,6 +8,7 @@ import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
 import type { SegmentTableConfig, SegmentColumnDeps } from '@/composables/segmentColumns'
 import { useSegmentColumns } from '@/composables/segmentColumns'
+import type { SearchMatchMode, SearchMatchOptions } from '@/composables/useSearchHighlight'
 import SegmentMobileCard from '@/components/workspace/SegmentMobileCard.vue'
 
 type Segment = ApiSchemas['Segment']
@@ -36,7 +37,13 @@ const props = defineProps<{
   anchorFlashSegmentId?: number | null
   /** 搜索定位面板关键词（激活时源文/译文列以搜索高亮渲染） */
   searchQuery?: string
+  /** 搜索字段范围：被排除的列不做搜索高亮 */
+  searchField?: 'source' | 'target' | 'both'
   searchCaseSensitive?: boolean
+  /** 搜索定位匹配模式（substring / regex），与面板同源 */
+  searchMatchMode?: SearchMatchMode
+  /** 搜索定位全字匹配，与面板同源 */
+  searchWholeWord?: boolean
 }>()
 
 // ── Emits ──
@@ -102,7 +109,12 @@ watch(
 
 // ── 依赖注入（委托 emit） ──
 const searchQueryRef = computed(() => props.searchQuery ?? '')
-const searchCaseSensitiveRef = computed(() => props.searchCaseSensitive ?? true)
+const searchFieldRef = computed<'source' | 'target' | 'both'>(() => props.searchField ?? 'both')
+const searchMatchOptionsRef = computed<SearchMatchOptions>(() => ({
+  caseSensitive: props.searchCaseSensitive ?? true,
+  wholeWord: props.searchWholeWord ?? false,
+  matchMode: props.searchMatchMode ?? 'substring',
+}))
 const deps: SegmentColumnDeps = {
   inlineEditingSegmentId: toRef(props, 'inlineEditingSegmentId'),
   inlineEditForm: props.inlineEditForm,
@@ -116,7 +128,8 @@ const deps: SegmentColumnDeps = {
   hoveredIssueKey,
 
   searchQuery: searchQueryRef,
-  searchCaseSensitive: searchCaseSensitiveRef,
+  searchField: searchFieldRef,
+  searchMatchOptions: searchMatchOptionsRef,
 
   startInlineEdit: (segment) => emit('startInlineEdit', segment),
   cancelInlineEdit: () => emit('cancelInlineEdit'),
@@ -371,6 +384,11 @@ defineExpose({
           :is-saving="editingSegmentIds.includes(segment.id)"
           :is-comment-visible="inlineCommentVisible === segment.id"
           :comment-text="inlineCommentText"
+          :search-query="searchQuery"
+          :search-field="searchField"
+          :search-case-sensitive="searchCaseSensitive"
+          :search-match-mode="searchMatchMode"
+          :search-whole-word="searchWholeWord"
           :class="
             segment.id === anchorFlashSegmentId
               ? 'segment-row--anchor-flash segment-row--focused'

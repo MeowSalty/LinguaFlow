@@ -813,7 +813,8 @@ export interface paths {
          *     只对 target_text 执行匹配与替换（source_text 不参与）。
          *     - substring 模式按字面子串匹配，find 中的 SQL LIKE 通配符（%、_）按普通字符处理
          *     - regex 模式使用 Go RE2 语法（线性时间，无回溯），replace_with 支持 $1 捕获引用
-         *     - whole_word 仅 substring 模式生效，regex 模式忽略（可用 \b 边界）
+         *     - whole_word 对 substring 与 regex 模式均生效：命中前后不得紧邻字母或数字
+         *       （按 Unicode 字母/数字判定的词边界）；regex 模式下也可直接在 find 中使用 \b
          *     预览仅返回受影响的统计与最多 max_results 条样本；应用由独立的 apply 接口完成。
          */
         post: operations["PreviewResourceSegmentsSearchReplace"];
@@ -2132,18 +2133,17 @@ export interface components {
             note?: string;
         };
         SearchReplacePreviewRequest: {
-            /** @description 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法 */
+            /** @description 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法；长度上限按 Unicode code point 计 */
             find: string;
             /** @description 替换文本；允许空串表示删除 */
             replace_with: string;
-            /**
-             * @default substring
-             * @enum {string}
-             */
-            match_mode: "substring" | "regex";
+            match_mode?: components["schemas"]["SegmentMatchMode"];
             /** @default true */
             case_sensitive: boolean;
-            /** @default false */
+            /**
+             * @description 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查
+             * @default false
+             */
             whole_word: boolean;
             /**
              * @description 返回样本上限
@@ -2168,18 +2168,17 @@ export interface components {
             items: components["schemas"]["SearchReplacePreviewItem"][];
         };
         SearchReplaceApplyRequest: {
-            /** @description 查找文本；须与预览一致才能命中相同段落 */
+            /** @description 查找文本；须与预览一致才能命中相同段落；长度上限按 Unicode code point 计 */
             find: string;
             /** @description 替换文本；允许空串表示删除 */
             replace_with: string;
-            /**
-             * @default substring
-             * @enum {string}
-             */
-            match_mode: "substring" | "regex";
+            match_mode?: components["schemas"]["SegmentMatchMode"];
             /** @default true */
             case_sensitive: boolean;
-            /** @default false */
+            /**
+             * @description 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查；须与预览请求一致才能命中相同段落
+             * @default false
+             */
             whole_word: boolean;
             /** @description 可选，仅应用这些段落；省略=对该资源所有当前命中段落应用 */
             segment_ids?: number[];
@@ -3189,6 +3188,14 @@ export interface components {
             /** @description 删除的段落数 */
             deleted: number;
         };
+        /**
+         * @description 文本匹配模式（段落搜索与查找替换共用）：
+         *     - substring: 按字面子串匹配；SQL LIKE 通配符（%、_）与正则元字符均按普通字符处理
+         *     - regex: 按 Go RE2 语法解释的正则匹配（线性时间、无回溯；不支持反向引用与前瞻/后顾断言）
+         * @default substring
+         * @enum {string}
+         */
+        SegmentMatchMode: "substring" | "regex";
         QualityIssueSpan: {
             /** @description 触发问题的精确文本片段 */
             matched_text: string;
@@ -4637,7 +4644,12 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "pending" | "translated" | "edited" | "approved" | "rejected";
+                /** @description 搜索文本，按 match_mode 匹配 source_text/target_text；search_field、case_sensitive、match_mode、whole_word 等匹配选项仅在提供 search 时生效，否则一律忽略；长度上限按 Unicode code point 计 */
                 search?: string;
+                /** @description search 的匹配模式；regex 模式按 Go RE2 语法解释（线性时间、无回溯），SQL LIKE 通配符与正则元字符在 substring 模式下均按普通字符处理 */
+                match_mode?: components["schemas"]["SegmentMatchMode"];
+                /** @description 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效；未提供 search 时忽略 */
+                whole_word?: boolean;
                 /** @description 按分组键过滤 segments（如 epub_file 路径），仅返回属于指定分组的 segments */
                 group_key?: string;
                 /** @description 按 quality_issues 过滤；has=仅有质量问题的段落，none=无质量问题的段落（NULL 或空数组均视为无问题） */
@@ -4646,11 +4658,16 @@ export interface operations {
                 quality_severity?: "warning" | "error";
                 /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
                 quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "punctuation_pairing" | "punctuation_missing" | "punctuation_surplus" | "punctuation_wrap_loss" | "whitespace_irregular" | "repeated_space" | "width_mix" | "script_mismatch" | "number_mismatch" | "url_email_mismatch" | "subtitle_line_count" | "forbidden_term" | "term_inconsistency" | "leftover_placeholder" | "xml_tag_mismatch" | "duplicate_source_divergence" | "calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register" | "ruby_restore_incomplete" | "ruby_tag_loss";
-                /** @description 搜索字段范围；both 时同时匹配原文与译文（默认语义） */
+                /** @description 搜索字段范围：source=仅原文，target=仅译文，both=同时匹配原文与译文（默认语义）；未提供 search 时忽略 */
                 search_field?: "source" | "target" | "both";
-                /** @description 搜索是否区分大小写；默认 true 保持子串精确匹配语义 */
+                /** @description 搜索匹配是否区分大小写；默认 true 保持子串精确匹配语义，false 时按 Unicode 大小写折叠匹配；未提供 search 时忽略 */
                 case_sensitive?: boolean;
-                /** @description 是否在响应中附带满足过滤条件的段落总数（total）；为 true 时额外执行一次计数查询 */
+                /**
+                 * @description 是否在响应中附带满足全部过滤条件的段落总数（total）；为 true 时额外执行一次计数查询。
+                 *     启用精筛条件（如 search 的 whole_word 边界检查、regex 匹配或质量问题过滤）时，计数可能需要
+                 *     在资源全部候选段落上逐条求值过滤器，资源较大且命中稀疏时开销相应增加；
+                 *     未启用精筛条件时为普通数据库计数，不受影响
+                 */
                 include_total?: boolean;
                 /** @description 以指定段落 ID 在当前筛选序列中的位置为窗口起点；与 cursor 及 direction=desc 互斥，锚点本身不满足筛选条件时从其后首个匹配段落开始 */
                 anchor_segment_id?: number;

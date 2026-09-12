@@ -15,6 +15,7 @@ import {
   isIssueDismissed,
   type QualityIssue,
 } from '@/composables/useQualityIssues'
+import { type SearchMatchMode, type SearchMatchOptions } from '@/composables/useSearchHighlight'
 import { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 
@@ -22,17 +23,35 @@ type Segment = ApiSchemas['Segment']
 
 const { t } = useI18n()
 
-const props = defineProps<{
-  segment: Segment
-  textRenderMode: 'plaintext' | 'html'
-  showUpdatedAt: boolean
-  showComment: boolean
-  isEditing: boolean
-  editForm: SegmentFormModel
-  isSaving: boolean
-  isCommentVisible: boolean
-  commentText: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    segment: Segment
+    textRenderMode: 'plaintext' | 'html'
+    showUpdatedAt: boolean
+    showComment: boolean
+    isEditing: boolean
+    editForm: SegmentFormModel
+    isSaving: boolean
+    isCommentVisible: boolean
+    commentText: string
+    /** 搜索定位面板关键词（激活时在源文/译文正文上叠加搜索命中高亮，质量标记保留） */
+    searchQuery?: string
+    /** 搜索字段范围：被排除的字段不做搜索高亮，走普通文本 / 质量标记路径 */
+    searchField?: 'source' | 'target' | 'both'
+    searchCaseSensitive?: boolean
+    /** 搜索定位匹配模式（substring / regex），与桌面表格同源 */
+    searchMatchMode?: SearchMatchMode
+    /** 搜索定位全字匹配，与桌面表格同源 */
+    searchWholeWord?: boolean
+  }>(),
+  {
+    searchQuery: '',
+    searchField: 'both',
+    searchCaseSensitive: true,
+    searchMatchMode: 'substring',
+    searchWholeWord: false,
+  },
+)
 
 const activeIssueIndex = ref<number | null>(null)
 
@@ -40,6 +59,43 @@ const toggleIssueHighlight = (issueIndex: number): void => {
   if (props.textRenderMode !== 'html') return
   activeIssueIndex.value = activeIssueIndex.value === issueIndex ? null : issueIndex
 }
+
+// ── 搜索高亮（与桌面表格同一套 options 与渲染函数）──
+const searchMatchOptions = computed<SearchMatchOptions>(() => ({
+  caseSensitive: props.searchCaseSensitive,
+  wholeWord: props.searchWholeWord,
+  matchMode: props.searchMatchMode,
+}))
+
+const activeSearchQuery = computed(() => props.searchQuery.trim())
+const sourceSearched = computed(
+  () => Boolean(activeSearchQuery.value) && props.searchField !== 'target',
+)
+const targetSearched = computed(
+  () => Boolean(activeSearchQuery.value) && props.searchField !== 'source',
+)
+
+/** 源文正文：搜索字段命中时附带搜索高亮；源文无质量问题标记 */
+const sourceBody = computed(() =>
+  h(SegmentTextDisplay, {
+    text: props.segment.source_text,
+    mode: props.textRenderMode,
+    searchQuery: sourceSearched.value ? activeSearchQuery.value : '',
+    searchMatchOptions: searchMatchOptions.value,
+  }),
+)
+
+/** 译文正文：始终保留质量问题标记，搜索字段命中时叠加搜索高亮 */
+const targetBody = computed(() =>
+  h(SegmentTextDisplay, {
+    text: props.segment.target_text ?? '',
+    issues: props.segment.quality_issues,
+    mode: props.textRenderMode,
+    activeIssueIndex: activeIssueIndex.value,
+    searchQuery: targetSearched.value ? activeSearchQuery.value : '',
+    searchMatchOptions: searchMatchOptions.value,
+  }),
+)
 
 const emit = defineEmits<{
   startEdit: [segment: Segment]
@@ -130,7 +186,10 @@ const emit = defineEmits<{
     <!-- 源文本 -->
     <div>
       <p class="mb-1 text-xs text-lf-text-muted">{{ t('workspace.segment.columns.source') }}</p>
-      <SegmentTextDisplay :text="segment.source_text" :mode="textRenderMode" />
+      <!-- data-search-field：与桌面列同名容器，锚点跳转据此在命中字段正文内定位 mark -->
+      <div data-search-field="source">
+        <component :is="sourceBody" />
+      </div>
     </div>
 
     <!-- 译文 -->
@@ -146,13 +205,10 @@ const emit = defineEmits<{
         />
       </div>
       <template v-else>
-        <SegmentTextDisplay
-          v-if="segment.target_text"
-          :text="segment.target_text"
-          :issues="segment.quality_issues"
-          :mode="textRenderMode"
-          :active-issue-index="activeIssueIndex"
-        />
+        <!-- data-search-field：与桌面列同名容器；命中高亮 / 质量标记两条路径共用 -->
+        <div v-if="segment.target_text" data-search-field="target">
+          <component :is="targetBody" />
+        </div>
         <div
           v-else
           class="flex min-h-10 items-center justify-center rounded-lf-ctl border border-dashed border-lf-border-soft bg-lf-info-soft px-3 py-2"

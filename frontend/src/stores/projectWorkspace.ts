@@ -18,7 +18,6 @@ export type {
   ReplaceUploadResult,
   UploadResultSummary,
   UploadExecutionResult,
-  SegmentGroup,
 } from './resource'
 
 export type {
@@ -72,13 +71,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     totalSegmentCount,
     totalTranslatedSegments,
     totalApprovedSegments,
-    // EPUB 虚拟目录
-    epubDirectoryResourceId,
-    epubDirectoryResourceName,
-    epubDirectoryChapters,
-    epubDirectoryLoading,
-    isInEpubDirectory,
-    epubDirectoryBreadcrumbSuffix,
   } = storeToRefs(resourceStore)
 
   // ── 重新导出段落 Store 的响应式状态 ──
@@ -98,6 +90,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentQualityCodeFilter,
     segmentSearchFieldFilter,
     segmentSearchCaseSensitive,
+    segmentSearchMatchMode,
+    segmentSearchWholeWord,
     lastSearchReplaceOperationId,
     segmentProgressCache,
     // 搜索定位（独立面板）状态
@@ -107,6 +101,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingSearchResults,
     searchResultsError,
     searchActiveResultId,
+    searchActiveResultField,
     searchJumpSeq,
     jumpingToSegmentCount,
     // EPUB 章节导航状态
@@ -116,6 +111,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     epubActiveGroupKey,
     epubActiveGroupTitle,
     epubSelectedGroupKeys,
+    chapterMultiSelect,
     // isEpubResource 由下方跨域计算属性覆盖，不再从 segmentStore 导出
     epubChapterCount,
     isInChapterView,
@@ -183,9 +179,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     setSelectedResourceIds,
     setResourceSelection,
     clearSelectedResources,
-    enterEpub,
-    exitEpub,
-    refreshEpubChapters,
   } = resourceStore
 
   // ── 直接委托的段落方法 ──
@@ -206,6 +199,10 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     enterChapter,
     exitChapter,
     toggleEpubGroupSelection,
+    enterChapterMultiSelect,
+    exitChapterMultiSelect,
+    selectAllEpubGroups,
+    clearEpubGroupSelection,
     refreshChapterGroups,
     resetEpubState,
   } = segmentStore
@@ -325,6 +322,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentQualityCodeFilter,
     segmentSearchFieldFilter,
     segmentSearchCaseSensitive,
+    segmentSearchMatchMode,
+    segmentSearchWholeWord,
     lastSearchReplaceOperationId,
     jobStatusFilter,
     // 段落进度缓存
@@ -336,6 +335,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingSearchResults,
     searchResultsError,
     searchActiveResultId,
+    searchActiveResultField,
     searchJumpSeq,
     jumpingToSegmentCount,
     // EPUB 章节导航
@@ -345,16 +345,10 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     epubActiveGroupKey,
     epubActiveGroupTitle,
     epubSelectedGroupKeys,
+    chapterMultiSelect,
     isEpubResource,
     epubChapterCount,
     isInChapterView,
-    // EPUB 虚拟目录
-    epubDirectoryResourceId,
-    epubDirectoryResourceName,
-    epubDirectoryChapters,
-    epubDirectoryLoading,
-    isInEpubDirectory,
-    epubDirectoryBreadcrumbSuffix,
     // 计算属性
     availableFormats,
     totalSegmentCount,
@@ -408,12 +402,12 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     enterChapter,
     exitChapter,
     toggleEpubGroupSelection,
+    enterChapterMultiSelect,
+    exitChapterMultiSelect,
+    selectAllEpubGroups,
+    clearEpubGroupSelection,
     refreshChapterGroups,
     resetEpubState,
-    // EPUB 虚拟目录
-    enterEpub,
-    exitEpub,
-    refreshEpubChapters,
     toggleResourceSelection,
     setSelectedResourceIds,
     setResourceSelection,

@@ -25,10 +25,7 @@ import {
   isIssueDismissed,
   resolveActiveIssueIndex,
 } from '@/composables/useQualityIssues'
-import {
-  renderSearchHighlightedHtml,
-  renderSearchHighlightedText,
-} from '@/composables/useSearchHighlight'
+import { type SearchMatchOptions } from '@/composables/useSearchHighlight'
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 import { t } from '@/i18n'
@@ -86,7 +83,10 @@ export interface SegmentColumnDeps {
   // ── 搜索定位联动 ──
   /** 搜索定位面板当前关键词（激活时源文/译文列以搜索高亮渲染，替代质量标记） */
   searchQuery: Ref<string>
-  searchCaseSensitive: Ref<boolean>
+  /** 搜索字段范围：被排除的列不做搜索高亮，走普通文本 / 质量高亮路径 */
+  searchField: Ref<'source' | 'target' | 'both'>
+  /** 展示级匹配选项（模式 / 全字 / 大小写），与搜索定位面板同源 */
+  searchMatchOptions: Ref<SearchMatchOptions>
 
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>
@@ -148,21 +148,17 @@ export function useSegmentColumns(
         const elements: VNode[] = []
 
         const query = deps.searchQuery.value.trim()
-        if (query) {
-          // 搜索激活：以搜索命中高亮渲染（搜索期间替代质量标记，避免双重 mark 噪声）
-          elements.push(
-            config.value.textRenderMode === 'html'
-              ? renderSearchHighlightedHtml(row.source_text, query, deps.searchCaseSensitive.value)
-              : renderSearchHighlightedText(row.source_text, query, deps.searchCaseSensitive.value),
-          )
-        } else {
-          elements.push(
-            h(SegmentTextDisplay, {
-              text: row.source_text,
-              mode: config.value.textRenderMode,
-            }),
-          )
-        }
+        // 搜索字段排除源文时不传 query，源文走普通文本路径（源文无质量问题标记）
+        const body = h(SegmentTextDisplay, {
+          text: row.source_text,
+          mode: config.value.textRenderMode,
+          searchQuery: deps.searchField.value !== 'target' ? query : '',
+          searchMatchOptions: deps.searchMatchOptions.value,
+        })
+
+        // data-search-field：锚点跳转据此在命中字段的正文内定位 mark（命中可能在超长行中段）。
+        // 包装只含正文，不含下方编辑态的 HTML 切换按钮与源码，选择器不会误命中它们
+        elements.push(h('div', { 'data-search-field': 'source' }, [body]))
 
         if (isEditing && hasHtmlTags) {
           elements.push(
@@ -218,58 +214,44 @@ export function useSegmentColumns(
       render: (row) => {
         const elements: VNode[] = []
 
-        // 编辑态：译文输入框
+        // 编辑态：译文输入框（同样带字段容器，供锚点定位在其中查无 mark 时回退整行）
         if (deps.inlineEditingSegmentId.value === row.id) {
           elements.push(
-            h(NInput, {
-              value: deps.inlineEditForm.target_text,
-              type: 'textarea',
-              autosize: { minRows: 2, maxRows: 6 },
-              placeholder: t('workspace.segment.form.target'),
-              'onUpdate:value': (val: string) => deps.updateEditFormField('target_text', val),
-            }),
+            h('div', { 'data-search-field': 'target' }, [
+              h(NInput, {
+                value: deps.inlineEditForm.target_text,
+                type: 'textarea',
+                autosize: { minRows: 2, maxRows: 6 },
+                placeholder: t('workspace.segment.form.target'),
+                'onUpdate:value': (val: string) => deps.updateEditFormField('target_text', val),
+              }),
+            ]),
+          )
+        } else if (!row.target_text) {
+          elements.push(
+            h(
+              'div',
+              {
+                class:
+                  'flex min-h-10 items-center justify-center rounded-lf-ctl border border-dashed border-lf-border-soft bg-lf-info-soft px-3 py-2',
+              },
+              [h('span', { class: 'text-lf-text-subtle' }, t('workspace.segment.emptyTarget'))],
+            ),
           )
         } else {
-          if (!row.target_text) {
-            elements.push(
-              h(
-                'div',
-                {
-                  class:
-                    'flex min-h-10 items-center justify-center rounded-lf-ctl border border-dashed border-lf-border-soft bg-lf-info-soft px-3 py-2',
-                },
-                [h('span', { class: 'text-lf-text-subtle' }, t('workspace.segment.emptyTarget'))],
-              ),
-            )
-          } else {
-            const query = deps.searchQuery.value.trim()
-            if (query) {
-              // 搜索激活：以搜索命中高亮渲染（同源文列，替代质量标记）
-              elements.push(
-                config.value.textRenderMode === 'html'
-                  ? renderSearchHighlightedHtml(
-                      row.target_text,
-                      query,
-                      deps.searchCaseSensitive.value,
-                    )
-                  : renderSearchHighlightedText(
-                      row.target_text,
-                      query,
-                      deps.searchCaseSensitive.value,
-                    ),
-              )
-            } else {
-              const activeIssueIndex = resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id)
-              elements.push(
-                h(SegmentTextDisplay, {
-                  text: row.target_text,
-                  issues: row.quality_issues,
-                  mode: config.value.textRenderMode,
-                  activeIssueIndex,
-                }),
-              )
-            }
-          }
+          const query = deps.searchQuery.value.trim()
+          // 搜索字段排除译文时不传 query，保持质量问题标记路径
+          const body = h(SegmentTextDisplay, {
+            text: row.target_text,
+            issues: row.quality_issues,
+            mode: config.value.textRenderMode,
+            activeIssueIndex: resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id),
+            searchQuery: deps.searchField.value !== 'source' ? query : '',
+            searchMatchOptions: deps.searchMatchOptions.value,
+          })
+
+          // data-search-field：同源文列，锚点跳转在命中字段正文内定位 mark
+          elements.push(h('div', { 'data-search-field': 'target' }, [body]))
         }
 
         // 质量问题图标 + 评论摘要（同一行显示）

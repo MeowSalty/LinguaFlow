@@ -26,6 +26,7 @@ import {
   type SearchReplaceMatchMode,
 } from '@/api/projects'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import { countUnicodeCodePoints, SEGMENT_SEARCH_MAX_LENGTH } from '@/utils/unicode'
 
 import SegmentTextDisplay from './SegmentTextDisplay.vue'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
@@ -68,8 +69,15 @@ const lastApplyResult = ref<ApiSchemas['SearchReplaceApplyResponse'] | null>(nul
 
 const resourceId = computed(() => workspace.activeResourceId)
 const busy = computed(() => previewing.value || applying.value || undoing.value)
+/** find 上限与 API 一致（按 Unicode code point 计）；程序赋值绕过输入框时也不放行请求 */
+const findWithinLengthLimit = computed(
+  () => countUnicodeCodePoints(findText.value) <= SEGMENT_SEARCH_MAX_LENGTH,
+)
 const canSearch = computed(
-  () => Boolean(props.projectId && resourceId.value && findText.value.trim()) && !busy.value,
+  () =>
+    Boolean(props.projectId && resourceId.value && findText.value.trim()) &&
+    findWithinLengthLimit.value &&
+    !busy.value,
 )
 const hasPendingChange = computed(() => preview.value !== null || lastApplyResult.value !== null)
 const canApply = computed(
@@ -77,6 +85,7 @@ const canApply = computed(
     preview.value !== null &&
     !previewStale.value &&
     preview.value.matched_segment_count > 0 &&
+    findWithinLengthLimit.value &&
     !busy.value,
 )
 
@@ -136,6 +145,25 @@ const resetResults = (): void => {
   errorStatus.value = null
 }
 
+/**
+ * 资源切换代数：异步响应/错误只在发起资源未被切换时写入状态，
+ * 避免 A 资源的预览结果、错误或 operation_id 串到 B 资源上
+ *（请求本身可能已落后端，这里只防前端状态串台）。
+ */
+let resourceEpoch = 0
+
+// 切换资源：立即清空预览/应用结果/错误并复位忙碌标记；选中范围复位为全部，
+// 避免父组件尚未刷新的旧资源 segment_ids 被带入新资源的 preview/apply
+//（表单关键字保留，结果只属于资源维度）
+watch(resourceId, () => {
+  resourceEpoch++
+  previewing.value = false
+  applying.value = false
+  undoing.value = false
+  scope.value = 'all'
+  resetResults()
+})
+
 const buildRequest = () => ({
   find: findText.value,
   replace_with: replaceText.value,
@@ -147,21 +175,32 @@ const buildRequest = () => ({
 const handlePreview = async (): Promise<void> => {
   if (!canSearch.value || !props.projectId || !resourceId.value) return
 
+  const epoch = resourceEpoch
+  const requestResourceId = resourceId.value
   previewing.value = true
   resetResults()
 
   try {
-    preview.value = await previewResourceSegmentsSearchReplace(props.projectId, resourceId.value, {
-      ...buildRequest(),
-      ...(scopedSegmentIds.value ? { segment_ids: scopedSegmentIds.value } : {}),
-    })
+    const response = await previewResourceSegmentsSearchReplace(
+      props.projectId,
+      requestResourceId,
+      {
+        ...buildRequest(),
+        ...(scopedSegmentIds.value ? { segment_ids: scopedSegmentIds.value } : {}),
+      },
+    )
+    if (epoch !== resourceEpoch) return
+    preview.value = response
   } catch (error) {
+    if (epoch !== resourceEpoch) return
     const knownError = isSearchReplaceApplyError(error) ? error : null
     errorStatus.value = knownError?.status ?? null
     errorMessage.value =
       error instanceof Error ? error.message : t('api.errors.previewSearchReplaceFailed')
   } finally {
-    previewing.value = false
+    if (epoch === resourceEpoch) {
+      previewing.value = false
+    }
   }
 }
 
@@ -169,6 +208,8 @@ const handleApply = (): void => {
   if (!canApply.value || !props.projectId || !resourceId.value || !preview.value) return
 
   const { matched_segment_count: matchedCount, total_replacements: replacements } = preview.value
+  // 对话框打开期间若切换资源：确认时当前资源已非预览所属资源，直接放弃应用
+  const previewResourceId = resourceId.value
 
   dialog.warning({
     title: t('workspace.segment.searchReplace.applyConfirmTitle'),
@@ -179,6 +220,7 @@ const handleApply = (): void => {
     positiveText: t('common.confirm'),
     negativeText: t('common.cancel'),
     onPositiveClick: () => {
+      if (resourceId.value !== previewResourceId) return
       void doApply()
     },
   })
@@ -187,15 +229,18 @@ const handleApply = (): void => {
 const doApply = async (): Promise<void> => {
   if (!props.projectId || !resourceId.value) return
 
+  const epoch = resourceEpoch
+  const requestResourceId = resourceId.value
   applying.value = true
   errorMessage.value = null
   errorStatus.value = null
 
   try {
-    const result = await applyResourceSegmentsSearchReplace(props.projectId, resourceId.value, {
+    const result = await applyResourceSegmentsSearchReplace(props.projectId, requestResourceId, {
       ...buildRequest(),
       segment_ids: scopedSegmentIds.value,
     })
+    if (epoch !== resourceEpoch) return
     // 应用成功后旧预览样本已过期，清空避免误导再次应用
     preview.value = null
     previewStale.value = false
@@ -207,19 +252,25 @@ const doApply = async (): Promise<void> => {
         skipped: result.skipped_count,
       }),
     )
-    emit('applied', { resourceId: resourceId.value })
+    emit('applied', { resourceId: requestResourceId })
   } catch (error) {
+    if (epoch !== resourceEpoch) return
     const knownError = isSearchReplaceApplyError(error) ? error : null
     errorStatus.value = knownError?.status ?? null
     errorMessage.value =
       error instanceof Error ? error.message : t('api.errors.applySearchReplaceFailed')
   } finally {
-    applying.value = false
+    if (epoch === resourceEpoch) {
+      applying.value = false
+    }
   }
 }
 
 const handleUndo = (): void => {
   if (!props.projectId || !resourceId.value || !undoableOperationId.value) return
+
+  // 对话框打开期间若切换资源：确认时当前资源已非撤销目标资源，直接放弃
+  const undoResourceId = resourceId.value
 
   dialog.warning({
     title: t('workspace.segment.searchReplace.undoConfirmTitle'),
@@ -227,6 +278,7 @@ const handleUndo = (): void => {
     positiveText: t('common.confirm'),
     negativeText: t('common.cancel'),
     onPositiveClick: () => {
+      if (resourceId.value !== undoResourceId) return
       void doUndo()
     },
   })
@@ -235,6 +287,9 @@ const handleUndo = (): void => {
 const doUndo = async (): Promise<void> => {
   if (!props.projectId || !resourceId.value || !undoableOperationId.value) return
 
+  const epoch = resourceEpoch
+  const requestResourceId = resourceId.value
+  const requestOperationId = undoableOperationId.value
   undoing.value = true
   errorMessage.value = null
   errorStatus.value = null
@@ -242,9 +297,10 @@ const doUndo = async (): Promise<void> => {
   try {
     const result = await undoResourceSegmentsSearchReplace(
       props.projectId,
-      resourceId.value,
-      undoableOperationId.value,
+      requestResourceId,
+      requestOperationId,
     )
+    if (epoch !== resourceEpoch) return
     // 撤销本身写入新的历史（可再撤销 = 重做）
     workspace.lastSearchReplaceOperationId = result.undo_operation_id
     message.success(
@@ -253,8 +309,9 @@ const doUndo = async (): Promise<void> => {
         skipped: result.skipped_count,
       }),
     )
-    emit('applied', { resourceId: resourceId.value })
+    emit('applied', { resourceId: requestResourceId })
   } catch (error) {
+    if (epoch !== resourceEpoch) return
     const knownError = isSearchReplaceApplyError(error) ? error : null
     errorStatus.value = knownError?.status ?? null
     if (knownError?.status === 404 || knownError?.status === 409) {
@@ -264,7 +321,9 @@ const doUndo = async (): Promise<void> => {
     errorMessage.value =
       error instanceof Error ? error.message : t('api.errors.undoSearchReplaceFailed')
   } finally {
-    undoing.value = false
+    if (epoch === resourceEpoch) {
+      undoing.value = false
+    }
   }
 }
 
@@ -297,6 +356,9 @@ defineExpose({ open })
               v-model:value="findText"
               :placeholder="t('workspace.segment.searchReplace.findPlaceholder')"
               :disabled="busy"
+              :maxlength="SEGMENT_SEARCH_MAX_LENGTH"
+              :count-graphemes="countUnicodeCodePoints"
+              show-count
               @keydown.enter.prevent="handlePreview"
             />
           </NFormItem>
@@ -325,18 +387,14 @@ defineExpose({ open })
             <NCheckbox v-model:checked="caseSensitive" size="small" :disabled="busy">
               {{ t('workspace.segment.searchReplace.caseSensitive') }}
             </NCheckbox>
-            <NCheckbox
-              v-model:checked="wholeWord"
-              size="small"
-              :disabled="busy || matchMode === 'regex'"
-            >
+            <NCheckbox v-model:checked="wholeWord" size="small" :disabled="busy">
               {{ t('workspace.segment.searchReplace.wholeWord') }}
             </NCheckbox>
           </div>
           <p v-if="matchMode === 'regex'" class="text-xs text-lf-text-subtle">
             {{ t('workspace.segment.searchReplace.regexHint') }}
           </p>
-          <p v-else-if="wholeWord" class="text-xs text-lf-text-subtle">
+          <p v-if="wholeWord" class="text-xs text-lf-text-subtle">
             {{ t('workspace.segment.searchReplace.wholeWordHint') }}
           </p>
 

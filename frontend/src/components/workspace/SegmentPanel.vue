@@ -39,6 +39,8 @@ const emit = defineEmits<{
   refresh: []
   selectionChange: [segmentIds: number[]]
   qaRecheck: []
+  batchTranslate: []
+  batchQaRecheck: []
 }>()
 
 const projectIdRef = toRef(props, 'projectId')
@@ -74,6 +76,15 @@ const clearSelectedSegments = (): void => {
   segmentDataTableRef.value?.clearSelection()
   selectedSegmentIds.value = []
 }
+
+// 段落 ID 仅在所属资源内有效；路由深链或资源选择器切换时同步清空父子选择状态，
+// 避免搜索替换抽屉重新选择「仅选中段落」后携带上一资源的 ID。
+watch(
+  () => workspace.activeResourceId,
+  (resourceId, previousResourceId) => {
+    if (resourceId !== previousResourceId) clearSelectedSegments()
+  },
+)
 
 // ── 暴露给父组件，供浮动操作岛使用 ──
 defineExpose({
@@ -255,15 +266,24 @@ const scrollMainToAnchor = async (): Promise<void> => {
   const anchor = Array.from(host.querySelectorAll<HTMLElement>('.segment-row--anchor-flash')).find(
     (el) => el.offsetParent !== null,
   )
-  if (anchor) {
-    const hostRect = host.getBoundingClientRect()
-    const rect = anchor.getBoundingClientRect()
-    const target =
-      host.scrollTop + (rect.top - hostRect.top) - host.clientHeight / 2 + rect.height / 2
-    host.scrollTo({ top: Math.max(0, target) })
-  } else {
+  if (!anchor) {
     host.scrollTop = 0
+    return
   }
+  const hostRect = host.getBoundingClientRect()
+  // 命中可能在超长行的中段，整行矩形不足以让命中可见：按跳转携带的命中字段，取该字段正文内
+  // 首个 mark 的矩形；字段为 null（generic 未定位）、mark 缺失或矩形零尺寸（隐藏 / 行已更新）
+  // 时回退整行矩形
+  const field = workspace.searchActiveResultField
+  const hit = field
+    ? anchor.querySelector<HTMLElement>(`[data-search-field="${field}"] mark.search-hit`)
+    : null
+  const hitRect = hit?.getClientRects()[0]
+  const visibleHitRect = hitRect && (hitRect.width > 0 || hitRect.height > 0) ? hitRect : null
+  const rect = visibleHitRect ?? anchor.getBoundingClientRect()
+  const target =
+    host.scrollTop + (rect.top - hostRect.top) - host.clientHeight / 2 + rect.height / 2
+  host.scrollTo({ top: Math.max(0, target) })
 }
 
 const handleSearchJumped = (): void => {
@@ -583,8 +603,26 @@ const handleCloseInlineComment = (): void => {
         {{ segmentsCountLabel }}
       </span>
 
-      <!-- 搜索定位：停靠态显示席位开关；抽屉态显示抽屉入口（断点由 JS 状态驱动，
-           与 useResponsiveDock 一致，排除全局侧边栏宽度） -->
+      <!-- 章节目录：按钮顺序与左侧面板方向一致；停靠态切换席位，窄屏打开抽屉 -->
+      <NButton
+        v-if="workspace.isEpubResource && chaptersDocked"
+        size="small"
+        :secondary="chaptersOpen"
+        :type="chaptersOpen ? 'primary' : 'default'"
+        @click="toggleChapters()"
+      >
+        {{ t('workspace.segment.openChapters') }}
+      </NButton>
+      <NButton
+        v-else-if="workspace.isEpubResource"
+        size="small"
+        :disabled="!workspace.activeResourceId"
+        @click="openChaptersDrawer()"
+      >
+        {{ t('workspace.segment.openChapters') }}
+      </NButton>
+
+      <!-- 搜索：按钮靠右对应右侧面板，快捷键作为辅助入口 -->
       <NButton
         v-if="searchDocked"
         size="small"
@@ -603,26 +641,6 @@ const handleCloseInlineComment = (): void => {
         @click="openSearchDrawer()"
       >
         {{ t('workspace.segment.searchLocateToggle') }}
-      </NButton>
-
-      <!-- 章节目录：≥lg 席位开关；更窄视口走抽屉 -->
-      <!-- 章节目录：停靠态显示席位开关；抽屉态显示抽屉入口 -->
-      <NButton
-        v-if="workspace.isEpubResource && chaptersDocked"
-        size="small"
-        :secondary="chaptersOpen"
-        :type="chaptersOpen ? 'primary' : 'default'"
-        @click="toggleChapters()"
-      >
-        {{ t('workspace.segment.openChapters') }}
-      </NButton>
-      <NButton
-        v-else-if="workspace.isEpubResource"
-        size="small"
-        :disabled="!workspace.activeResourceId"
-        @click="openChaptersDrawer()"
-      >
-        {{ t('workspace.segment.openChapters') }}
       </NButton>
 
       <NButton secondary size="small" @click="emit('qaRecheck')">
@@ -740,6 +758,8 @@ const handleCloseInlineComment = (): void => {
             class="h-full w-full"
             :project-id="projectId"
             @close="handleCloseChapters"
+            @batch-translate="emit('batchTranslate')"
+            @batch-qa-recheck="emit('batchQaRecheck')"
           />
         </div>
       </Teleport>
@@ -767,7 +787,10 @@ const handleCloseInlineComment = (): void => {
               :has-prev="workspace.segmentsPrevCursor !== null"
               :loading-up="workspace.loadingSegmentsUp"
               :search-query="workspace.segmentSearch"
+              :search-field="workspace.segmentSearchFieldFilter"
               :search-case-sensitive="workspace.segmentSearchCaseSensitive"
+              :search-match-mode="workspace.segmentSearchMatchMode"
+              :search-whole-word="workspace.segmentSearchWholeWord"
               @selection-change="handleSelectionChange"
               @preview-translation="handlePreviewTranslation"
               @preview-revision="handlePreviewRevision"

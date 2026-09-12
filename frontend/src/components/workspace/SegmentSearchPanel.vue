@@ -3,10 +3,17 @@ import { NButton, NInput, NSelect, NSpin, NTag } from 'naive-ui'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
-import { buildSearchHighlightRanges, makeSearchSnippet } from '@/composables/useSearchHighlight'
+import {
+  buildSearchMatch,
+  makeSearchSnippet,
+  resolveSearchableText,
+  type SearchMatchOptions,
+  type SearchSnippet,
+} from '@/composables/useSearchHighlight'
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
+import { countUnicodeCodePoints, SEGMENT_SEARCH_MAX_LENGTH } from '@/utils/unicode'
 
 type Segment = ApiSchemas['Segment']
 
@@ -50,20 +57,66 @@ const searchFieldOptions = computed(() => [
   { label: t('workspace.segment.searchLocate.searchFieldTarget'), value: 'target' },
 ])
 
+// ── 匹配模式与全字匹配（复用 store 字段与 300ms 防抖）──
+const toggleMatchMode = (): void => {
+  workspace.segmentSearchMatchMode =
+    workspace.segmentSearchMatchMode === 'substring' ? 'regex' : 'substring'
+  scheduleSearch()
+}
+
+const matchModeTitle = computed(() =>
+  workspace.segmentSearchMatchMode === 'regex'
+    ? t('workspace.segment.searchLocate.matchModeRegexHint')
+    : t('workspace.segment.searchLocate.matchModeSubstringHint'),
+)
+
+const wholeWordOn = computed(() => workspace.segmentSearchWholeWord)
+const toggleWholeWord = (): void => {
+  workspace.segmentSearchWholeWord = !workspace.segmentSearchWholeWord
+  scheduleSearch()
+}
+const wholeWordTitle = computed(() => {
+  const label = t('workspace.segment.searchLocate.wholeWord')
+  return `${label} · ${t('workspace.segment.searchLocate.wholeWordHint')}`
+})
+
+/** 面板与主表共用的展示级匹配选项（后端结果权威，本地仅用于高亮与片段） */
+const searchMatchOptions = computed<SearchMatchOptions>(() => ({
+  caseSensitive: workspace.segmentSearchCaseSensitive,
+  wholeWord: workspace.segmentSearchWholeWord,
+  matchMode: workspace.segmentSearchMatchMode,
+}))
+
 const hasQuery = computed(() => workspace.segmentSearch.trim().length > 0)
 
 // ── 防抖搜索 ──
 let searchTimer: ReturnType<typeof setTimeout> | null = null
-const scheduleSearch = (): void => {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => void runSearch(), 300)
-}
+/** 防抖窗口内：旧结果已作废、新请求尚未发出（模板据此先显示搜索中） */
+const searchPending = ref(false)
 
-const runSearch = (): void => {
+/** 停止防抖等待（不触碰结果），供 runSearch 与资源切换复用 */
+const cancelScheduledSearch = (): void => {
   if (searchTimer) {
     clearTimeout(searchTimer)
     searchTimer = null
   }
+  searchPending.value = false
+}
+
+/**
+ * 关键词/字段/大小写/模式/全字变化：立即作废在途请求并清空旧结果与选中，
+ * 300ms 防抖后再发新请求，避免旧结果以新选项渲染。
+ */
+const scheduleSearch = (): void => {
+  cancelScheduledSearch()
+  workspace.resetSearchResults()
+  selectedResultIndex.value = -1
+  searchPending.value = true
+  searchTimer = setTimeout(() => void runSearch(), 300)
+}
+
+const runSearch = (): void => {
+  cancelScheduledSearch()
   if (!props.projectId || !workspace.activeResourceId) return
   // 新一轮搜索：旧的选中索引对新结果集无意义（避免错标到别的条目上）
   selectedResultIndex.value = -1
@@ -79,10 +132,16 @@ watch(
   () => scheduleSearch(),
 )
 
-// 切换资源时清空结果（新资源的结果无意义）
+// 资源切换：旧资源结果一律作废。新资源有效且有关键词时走同一防抖入口重搜，
+// 否则停止悬挂的 pending 并清空——避免停留在旧结果或假的「无结果」。
 watch(
   () => workspace.activeResourceId,
-  () => {
+  (resourceId) => {
+    if (resourceId && hasQuery.value) {
+      scheduleSearch()
+      return
+    }
+    cancelScheduledSearch()
     selectedResultIndex.value = -1
     workspace.resetSearchResults()
   },
@@ -92,32 +151,63 @@ watch(
 interface ResultCard {
   segment: Segment
   /** 命中展示文本（源文命中展示源文，仅译文命中展示译文，双命中优先源文） */
-  snippet: { before: string; hit: string; after: string }
-  /** 命中字段：source / target / both */
-  hitField: 'source' | 'target' | 'both'
+  snippet: SearchSnippet
+  /**
+   * 命中字段：source / target / both；
+   * generic = 后端判定命中但展示级未定位（regex 模式浏览器侧不做匹配，后端结果权威）
+   */
+  hitField: 'source' | 'target' | 'both' | 'generic'
+  /**
+   * 跳转后主列表的滚动字段：both 与展示文本一致取源文；
+   * generic 时展示级无 mark 可定位，为 null 由主列表回退整行
+   */
+  displayField: 'source' | 'target' | null
   /** 章节标题（后端 group_key 就绪前为空） */
   chapterTitle: string
 }
 
 const resultCards = computed<ResultCard[]>(() =>
   workspace.searchResults.map((segment) => {
-    const caseSensitive = workspace.segmentSearchCaseSensitive
+    const options = searchMatchOptions.value
     const query = workspace.segmentSearch.trim()
+    // 字段判定与片段展示同用正文高亮的可见文本：HTML 模式下剔除标签/属性，
+    // 避免原始标记本身命中查询而误判命中字段
+    const sourceText = resolveSearchableText(segment.source_text, props.textRenderMode)
+    const targetText = resolveSearchableText(segment.target_text ?? '', props.textRenderMode)
     const inSource =
       workspace.segmentSearchFieldFilter !== 'target' &&
-      buildSearchHighlightRanges(segment.source_text, query, caseSensitive).length > 0
+      buildSearchMatch(sourceText, query, options).ranges.length > 0
     const inTarget =
       workspace.segmentSearchFieldFilter !== 'source' &&
-      buildSearchHighlightRanges(segment.target_text ?? '', query, caseSensitive).length > 0
-    const hitField = inSource && inTarget ? 'both' : inSource ? 'source' : 'target'
-    const displayText = inSource ? segment.source_text : (segment.target_text ?? '')
+      buildSearchMatch(targetText, query, options).ranges.length > 0
+    const hitField =
+      inSource && inTarget ? 'both' : inSource ? 'source' : inTarget ? 'target' : 'generic'
+    // 滚动字段随展示文本同源：both 取源文；两字段均未定位（generic）时为 null，主列表回退整行
+    const displayField: 'source' | 'target' | null = inSource
+      ? 'source'
+      : inTarget
+        ? 'target'
+        : null
+    // generic 命中（展示级未定位）按搜索字段回退展示，保证展示文本来自用户搜索的字段
+    const displayText = inSource
+      ? sourceText
+      : inTarget
+        ? targetText
+        : workspace.segmentSearchFieldFilter === 'target'
+          ? targetText
+          : sourceText
     const chapterTitle = segment.group_key
       ? (workspace.segmentGroups.find((g) => g.group_key === segment.group_key)?.group_title ?? '')
       : ''
     return {
       segment,
-      snippet: makeSearchSnippet(displayText, query, caseSensitive),
+      // 展示级匹配未定位命中时不做局部高亮，整段作为片段文本呈现
+      snippet:
+        hitField === 'generic'
+          ? { before: displayText, hit: '', after: '' }
+          : makeSearchSnippet(displayText, query, options),
       hitField,
+      displayField,
       chapterTitle,
     }
   }),
@@ -129,10 +219,16 @@ const hitFieldLabel = (field: ResultCard['hitField']): string => {
       return t('workspace.segment.searchLocate.hitSource')
     case 'target':
       return t('workspace.segment.searchLocate.hitTarget')
-    default:
+    case 'both':
       return t('workspace.segment.searchLocate.hitBoth')
+    default:
+      return t('workspace.segment.searchLocate.hitGeneric')
   }
 }
+
+/** 仅原文命中或 generic 命中时，片段以弱化色展示（提醒展示文本未必含高亮命中） */
+const isMutedSnippet = (card: ResultCard): boolean =>
+  card.hitField === 'source' || card.hitField === 'generic'
 
 const chapterCount = computed(
   () => new Set(resultCards.value.map((c) => c.chapterTitle).filter(Boolean)).size,
@@ -141,7 +237,7 @@ const chapterCount = computed(
 const statsLabel = computed(() => {
   const total = workspace.searchResultsTotal
   if (!hasQuery.value) return null
-  if (workspace.loadingSearchResults && resultCards.value.length === 0) {
+  if ((searchPending.value || workspace.loadingSearchResults) && resultCards.value.length === 0) {
     return t('workspace.segment.searchLocate.loading')
   }
   if (total === null) return null
@@ -166,7 +262,13 @@ const selectResult = (index: number, jump: boolean): void => {
 
 const jumpTo = (card: ResultCard): void => {
   if (!props.projectId || !workspace.activeResourceId) return
-  void workspace.jumpToSegment(props.projectId, workspace.activeResourceId, card.segment)
+  // 携带展示级命中字段：主列表滚动时定位到该字段正文内的 mark（generic 为 null，回退整行）
+  void workspace.jumpToSegment(
+    props.projectId,
+    workspace.activeResourceId,
+    card.segment,
+    card.displayField,
+  )
   emit('jumped', card.segment)
 }
 
@@ -186,6 +288,8 @@ const setupResultsObserver = (): void => {
         entries[0]?.isIntersecting &&
         workspace.searchResultsCursor &&
         !workspace.loadingSearchResults &&
+        // 出错后停用自动加载（错误未清时重试只会立刻再失败），改由哨兵上的重试按钮手动触发
+        !workspace.searchResultsError &&
         props.projectId &&
         workspace.activeResourceId
       ) {
@@ -195,6 +299,12 @@ const setupResultsObserver = (): void => {
     { root: resultsListRef.value, rootMargin: '300px' },
   )
   resultsObserver.observe(resultsSentinelRef.value)
+}
+
+/** 分页失败后的手动重试（loadSearchResults 会先清空错误再发起 append） */
+const retryLoadMore = (): void => {
+  if (!props.projectId || !workspace.activeResourceId || workspace.loadingSearchResults) return
+  void workspace.loadSearchResults(props.projectId, workspace.activeResourceId, true)
 }
 
 watch(
@@ -322,6 +432,9 @@ onUnmounted(() => {
         v-model:value="workspace.segmentSearch"
         size="small"
         clearable
+        :maxlength="SEGMENT_SEARCH_MAX_LENGTH"
+        :count-graphemes="countUnicodeCodePoints"
+        show-count
         :placeholder="t('workspace.segment.searchLocate.placeholder')"
         :disabled="!workspace.activeResourceId"
         @keydown="handleInputKeyDown"
@@ -337,14 +450,42 @@ onUnmounted(() => {
         />
         <NButton
           size="tiny"
+          class="shrink-0 font-mono font-semibold"
+          :type="workspace.segmentSearchMatchMode === 'regex' ? 'primary' : 'default'"
+          :secondary="workspace.segmentSearchMatchMode !== 'regex'"
+          :disabled="!workspace.activeResourceId"
+          :title="matchModeTitle"
+          :aria-label="matchModeTitle"
+          @mousedown.prevent
+          @click="toggleMatchMode"
+        >
+          .*
+        </NButton>
+        <NButton
+          size="tiny"
           class="shrink-0 font-semibold"
           :type="caseSensitiveOn ? 'primary' : 'default'"
           :secondary="!caseSensitiveOn"
           :disabled="!workspace.activeResourceId"
           :title="t('workspace.segment.searchLocate.caseSensitive')"
+          :aria-label="t('workspace.segment.searchLocate.caseSensitive')"
+          @mousedown.prevent
           @click="toggleCaseSensitive"
         >
           Aa
+        </NButton>
+        <NButton
+          size="tiny"
+          class="shrink-0 font-semibold"
+          :type="wholeWordOn ? 'primary' : 'default'"
+          :secondary="!wholeWordOn"
+          :disabled="!workspace.activeResourceId"
+          :title="wholeWordTitle"
+          :aria-label="wholeWordTitle"
+          @mousedown.prevent
+          @click="toggleWholeWord"
+        >
+          <span class="underline decoration-[1.5px] underline-offset-2">ab</span>
         </NButton>
       </div>
       <div class="mt-2 min-h-4 text-xs text-lf-text-subtle">
@@ -365,7 +506,12 @@ onUnmounted(() => {
         {{ t('workspace.segment.searchLocate.emptyHint') }}
       </div>
       <div
-        v-else-if="!workspace.loadingSearchResults && resultCards.length === 0"
+        v-else-if="
+          !searchPending &&
+          !workspace.loadingSearchResults &&
+          !workspace.searchResultsError &&
+          resultCards.length === 0
+        "
         class="px-3 py-10 text-center text-xs text-lf-text-subtle"
       >
         {{
@@ -373,8 +519,11 @@ onUnmounted(() => {
         }}
       </div>
 
-      <!-- 搜索中骨架 -->
-      <div v-else-if="workspace.loadingSearchResults && resultCards.length === 0" class="py-10">
+      <!-- 搜索中骨架（防抖等待期同样视为搜索中） -->
+      <div
+        v-else-if="(searchPending || workspace.loadingSearchResults) && resultCards.length === 0"
+        class="py-10"
+      >
         <NSpin :show="true" class="w-full" />
       </div>
 
@@ -408,10 +557,13 @@ onUnmounted(() => {
           </div>
           <div
             class="line-clamp-2 text-xs leading-relaxed break-words text-lf-text"
-            :class="card.hitField === 'source' ? 'text-lf-text-muted' : ''"
+            :class="isMutedSnippet(card) ? 'text-lf-text-muted' : ''"
           >
-            {{ card.snippet.before }}<mark class="search-hit">{{ card.snippet.hit }}</mark
-            >{{ card.snippet.after }}
+            <template v-if="card.snippet.hit">
+              {{ card.snippet.before }}<mark class="search-hit">{{ card.snippet.hit }}</mark
+              >{{ card.snippet.after }}
+            </template>
+            <template v-else>{{ card.snippet.before }}</template>
           </div>
           <div class="mt-1 text-[10.5px] text-lf-text-subtle">
             <span class="rounded border border-lf-border-soft px-1">
@@ -427,6 +579,15 @@ onUnmounted(() => {
           class="flex h-8 items-center justify-center py-2"
         >
           <NSpin v-if="workspace.loadingSearchResults" :show="true" :size="14" />
+          <NButton
+            v-else-if="workspace.searchResultsError"
+            size="tiny"
+            quaternary
+            :disabled="!props.projectId || !workspace.activeResourceId"
+            @click="retryLoadMore"
+          >
+            {{ t('workspace.segment.searchLocate.retryLoad') }}
+          </NButton>
           <span v-else class="text-[10.5px] text-lf-text-subtle">
             {{ t('workspace.segment.searchLocate.loadMoreHint') }}
           </span>
