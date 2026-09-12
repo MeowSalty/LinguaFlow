@@ -90,6 +90,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentQualityCodeFilter,
     segmentSearchFieldFilter,
     segmentSearchCaseSensitive,
+    segmentSearchMatchMode,
+    segmentSearchWholeWord,
     lastSearchReplaceOperationId,
     segmentProgressCache,
     // 搜索定位（独立面板）状态
@@ -319,6 +321,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentQualityCodeFilter,
     segmentSearchFieldFilter,
     segmentSearchCaseSensitive,
+    segmentSearchMatchMode,
+    segmentSearchWholeWord,
     lastSearchReplaceOperationId,
     jobStatusFilter,
     // 段落进度缓存

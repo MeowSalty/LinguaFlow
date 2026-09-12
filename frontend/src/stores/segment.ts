@@ -8,7 +8,7 @@ import {
   updateResourceSegment as updateResourceSegmentRequest,
 } from '@/api/client'
 import { fetchSegmentGroups, type ResourceSegmentGroup } from '@/api/epub'
-import type { ResourceSegmentQualityCode } from '@/api/projects'
+import type { ResourceSegmentQualityCode, SegmentMatchMode } from '@/api/projects'
 import { t } from '@/i18n'
 import { extractErrorMessage } from '@/utils/errors'
 
@@ -60,6 +60,10 @@ export const useSegmentStore = defineStore('segment', () => {
   const segmentQualityCodeFilter = ref<SegmentQualityCodeFilter>('all')
   const segmentSearchFieldFilter = ref<SegmentSearchFieldFilter>('both')
   const segmentSearchCaseSensitive = ref(true)
+  /** 搜索定位匹配模式：substring 字面子串（默认）/ regex 正则（后端 RE2 语义） */
+  const segmentSearchMatchMode = ref<SegmentMatchMode>('substring')
+  /** 搜索定位全字匹配：命中前后不得紧邻字母或数字，对 substring 与 regex 均生效 */
+  const segmentSearchWholeWord = ref(false)
 
   // ── EPUB 章节导航状态 ──
 
@@ -344,8 +348,10 @@ export const useSegmentStore = defineStore('segment', () => {
 
   /**
    * 跨全资源搜索段落（不传 group_key），供独立搜索定位面板使用。
-   * 搜索词/字段/大小写复用 segmentSearch / segmentSearchFieldFilter / segmentSearchCaseSensitive。
-   * append 为结果分页追加。
+   * 搜索词/字段/大小写/匹配模式/全字复用 segmentSearch / segmentSearchFieldFilter /
+   * segmentSearchCaseSensitive / segmentSearchMatchMode / segmentSearchWholeWord。
+   * append 为结果分页追加；新一轮搜索（append=false）立即清空旧结果与旧错误，
+   * 失败时只留错误提示，不与过期结果并存。
    */
   const loadSearchResults = async (
     projectId: number,
@@ -357,6 +363,9 @@ export const useSegmentStore = defineStore('segment', () => {
     searchResultsError.value = null
     if (!append) {
       searchActiveResultId.value = null
+      searchResults.value = []
+      searchResultsCursor.value = null
+      searchResultsTotal.value = null
     }
 
     try {
@@ -367,6 +376,8 @@ export const useSegmentStore = defineStore('segment', () => {
         search: searchTerm || undefined,
         search_field: hasSearch ? segmentSearchFieldFilter.value : undefined,
         case_sensitive: hasSearch ? segmentSearchCaseSensitive.value : undefined,
+        match_mode: hasSearch ? segmentSearchMatchMode.value : undefined,
+        whole_word: hasSearch ? segmentSearchWholeWord.value : undefined,
         include_total: !append,
         cursor: append ? (searchResultsCursor.value ?? undefined) : undefined,
         limit: 50,
@@ -609,6 +620,8 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentQualityCodeFilter.value = 'all'
     segmentSearchFieldFilter.value = 'both'
     segmentSearchCaseSensitive.value = true
+    segmentSearchMatchMode.value = 'substring'
+    segmentSearchWholeWord.value = false
     segmentProgressCache.value = new Map()
     lastSearchReplaceOperationId.value = null
     actionError.value = null
@@ -631,6 +644,8 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentQualityCodeFilter,
     segmentSearchFieldFilter,
     segmentSearchCaseSensitive,
+    segmentSearchMatchMode,
+    segmentSearchWholeWord,
     lastSearchReplaceOperationId,
     segmentProgressCache,
     updateSegmentProgressCache,

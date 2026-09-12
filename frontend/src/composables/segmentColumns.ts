@@ -28,6 +28,7 @@ import {
 import {
   renderSearchHighlightedHtml,
   renderSearchHighlightedText,
+  type SearchMatchOptions,
 } from '@/composables/useSearchHighlight'
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
@@ -86,7 +87,10 @@ export interface SegmentColumnDeps {
   // ── 搜索定位联动 ──
   /** 搜索定位面板当前关键词（激活时源文/译文列以搜索高亮渲染，替代质量标记） */
   searchQuery: Ref<string>
-  searchCaseSensitive: Ref<boolean>
+  /** 搜索字段范围：被排除的列不做搜索高亮，走普通文本 / 质量高亮路径 */
+  searchField: Ref<'source' | 'target' | 'both'>
+  /** 展示级匹配选项（模式 / 全字 / 大小写），与搜索定位面板同源 */
+  searchMatchOptions: Ref<SearchMatchOptions>
 
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>
@@ -148,12 +152,13 @@ export function useSegmentColumns(
         const elements: VNode[] = []
 
         const query = deps.searchQuery.value.trim()
-        if (query) {
+        // 搜索字段排除源文时不做搜索高亮，避免「无命中」的源文列仍按搜索路径渲染
+        if (query && deps.searchField.value !== 'target') {
           // 搜索激活：以搜索命中高亮渲染（搜索期间替代质量标记，避免双重 mark 噪声）
           elements.push(
             config.value.textRenderMode === 'html'
-              ? renderSearchHighlightedHtml(row.source_text, query, deps.searchCaseSensitive.value)
-              : renderSearchHighlightedText(row.source_text, query, deps.searchCaseSensitive.value),
+              ? renderSearchHighlightedHtml(row.source_text, query, deps.searchMatchOptions.value)
+              : renderSearchHighlightedText(row.source_text, query, deps.searchMatchOptions.value),
           )
         } else {
           elements.push(
@@ -243,19 +248,20 @@ export function useSegmentColumns(
             )
           } else {
             const query = deps.searchQuery.value.trim()
-            if (query) {
+            // 搜索字段排除译文时不做搜索高亮，保持质量问题标记路径
+            if (query && deps.searchField.value !== 'source') {
               // 搜索激活：以搜索命中高亮渲染（同源文列，替代质量标记）
               elements.push(
                 config.value.textRenderMode === 'html'
                   ? renderSearchHighlightedHtml(
                       row.target_text,
                       query,
-                      deps.searchCaseSensitive.value,
+                      deps.searchMatchOptions.value,
                     )
                   : renderSearchHighlightedText(
                       row.target_text,
                       query,
-                      deps.searchCaseSensitive.value,
+                      deps.searchMatchOptions.value,
                     ),
               )
             } else {
