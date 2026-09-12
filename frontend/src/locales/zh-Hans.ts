@@ -721,8 +721,9 @@ const messages = {
         modeRegex: '正则',
         caseSensitive: '区分大小写',
         wholeWord: '全字匹配',
-        regexHint: '正则使用 RE2 语法（线性时间）；全字匹配在正则模式下忽略，可用 \\b 边界替代',
-        wholeWordHint: '仅匹配完整词汇，不含子串命中',
+        regexHint:
+          '正则使用 RE2 语法（线性时间）；全字匹配对正则同样生效，按命中前后是否紧邻字母或数字判定',
+        wholeWordHint: '仅匹配完整词汇：命中前后不紧邻字母或数字，对子串与正则模式均生效',
         scopeLabel: '作用范围',
         scopeAll: '全部命中段落',
         scopeSelected: '仅选中段落（{count}）',

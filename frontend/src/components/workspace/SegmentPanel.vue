@@ -77,6 +77,15 @@ const clearSelectedSegments = (): void => {
   selectedSegmentIds.value = []
 }
 
+// 段落 ID 仅在所属资源内有效；路由深链或资源选择器切换时同步清空父子选择状态，
+// 避免搜索替换抽屉重新选择「仅选中段落」后携带上一资源的 ID。
+watch(
+  () => workspace.activeResourceId,
+  (resourceId, previousResourceId) => {
+    if (resourceId !== previousResourceId) clearSelectedSegments()
+  },
+)
+
 // ── 暴露给父组件，供浮动操作岛使用 ──
 defineExpose({
   selectedSegmentIds,
