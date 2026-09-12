@@ -2352,3 +2352,195 @@ func TestListResourceSegmentsSQLPathBoundaryDuplicate(t *testing.T) {
 		}
 	})
 }
+
+// TestListResourceSegmentsScanHydration 覆盖搜索/group_key 扫描路径的瘦行回填：
+// 扫描阶段只取 (id, segment_index, source_text, target_text, meta)，窗口与
+// prev/next 确定后应按最终 ID 集合一次性补齐完整行与 reviewed_by 边。插入序
+// 与 segment_index 相反，锁定回填后仍按原 items ID 顺序排列，而非数据库按主键
+// 返回的顺序；同时验证 resource_id、时间戳、status、target_text、
+// quality_issues 与 reviewed_by 均已回填，且没有预加载 resource 边。
+func TestListResourceSegmentsScanHydration(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-hydrate-user")
+	project := createTestProject(t, client, "seg-hydrate-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/hydrate.txt")
+
+	// 插入序 index 5,3,1 → 主键序与 index 序相反，用于验证回填重排。
+	createTestSegmentWithMeta(t, client, res.ID, 5, "match five", `{"epub_file":"ch5.xhtml"}`, nil)
+	mid := createTestSegmentWithMeta(t, client, res.ID, 3, "match three", `{"epub_file":"ch3.xhtml"}`, []qa.QualityIssue{
+		{SegmentIndex: 3, Severity: qa.SeverityWarning, Code: "duplicate", Message: "dup"},
+	})
+	createTestSegmentWithMeta(t, client, res.ID, 1, "match one", `{"epub_file":"ch1.xhtml"}`, nil)
+	if _, err := client.Segment.UpdateOneID(mid.ID).
+		SetReviewedByID(user.ID).
+		SetStatus(segment.StatusApproved).
+		SetTargetText("译文三").
+		Save(ctx); err != nil {
+		t.Fatalf("decorate segment: %v", err)
+	}
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+	page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, ResourceSegmentListOptions{
+		Search: "match", Limit: 50,
+	})
+	if err != nil {
+		t.Fatalf("ListResourceSegments: %v", err)
+	}
+	wantIndex := []int{1, 3, 5}
+	wantID := []int{3, 2, 1}
+	if len(page.Items) != 3 {
+		t.Fatalf("items=%d want 3", len(page.Items))
+	}
+	for i, row := range page.Items {
+		if row.SegmentIndex != wantIndex[i] || row.ID != wantID[i] {
+			t.Fatalf("items[%d] id/index=%d/%d want %d/%d (回填必须保持 items ID 顺序)",
+				i, row.ID, row.SegmentIndex, wantID[i], wantIndex[i])
+		}
+		if row.ResourceID == nil || *row.ResourceID != res.ID {
+			t.Fatalf("items[%d] resource_id=%v want %d", i, row.ResourceID, res.ID)
+		}
+		if row.CreatedAt.IsZero() || row.UpdatedAt.IsZero() {
+			t.Fatalf("items[%d] timestamps not hydrated: created=%v updated=%v", i, row.CreatedAt, row.UpdatedAt)
+		}
+	}
+	midItem := page.Items[1]
+	if midItem.Meta == nil {
+		t.Fatalf("meta not hydrated for index 3")
+	}
+	if midItem.Status != segment.StatusApproved {
+		t.Fatalf("status=%q want %q", midItem.Status, segment.StatusApproved)
+	}
+	if midItem.TargetText == nil || *midItem.TargetText != "译文三" {
+		t.Fatalf("target_text=%v want 译文三", midItem.TargetText)
+	}
+	if len(midItem.QualityIssues) != 1 || midItem.QualityIssues[0].Code != "duplicate" {
+		t.Fatalf("quality_issues=%v want one duplicate", midItem.QualityIssues)
+	}
+	if midItem.Edges.ReviewedBy == nil || midItem.Edges.ReviewedBy.ID != user.ID {
+		t.Fatalf("reviewed_by=%v want user %d", midItem.Edges.ReviewedBy, user.ID)
+	}
+	if page.Items[0].Edges.ReviewedBy != nil || page.Items[2].Edges.ReviewedBy != nil {
+		t.Fatalf("only index 3 must carry reviewed_by")
+	}
+}
+
+// TestListResourceSegmentsSQLPageReviewedBy SQL 直分页路径已移除 WithResource，
+// 但必须保留 WithReviewedBy：resource_id 由默认列提供，reviewed_by 边仍需预加载。
+func TestListResourceSegmentsSQLPageReviewedBy(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-sqlhydr-user")
+	project := createTestProject(t, client, "seg-sqlhydr-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/sqlhydr.txt")
+
+	ids := make([]int, 0, 3)
+	for i := 1; i <= 3; i++ {
+		row := createTestSegment(t, client, res.ID, i, fmt.Sprintf("src%d", i), nil)
+		ids = append(ids, row.ID)
+	}
+	if _, err := client.Segment.UpdateOneID(ids[1]).SetReviewedByID(user.ID).Save(ctx); err != nil {
+		t.Fatalf("set reviewer: %v", err)
+	}
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+	page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, ResourceSegmentListOptions{Limit: 50})
+	if err != nil {
+		t.Fatalf("ListResourceSegments: %v", err)
+	}
+	if len(page.Items) != 3 {
+		t.Fatalf("items=%d want 3", len(page.Items))
+	}
+	for i, row := range page.Items {
+		if row.ResourceID == nil || *row.ResourceID != res.ID {
+			t.Fatalf("items[%d] resource_id=%v want %d", i, row.ResourceID, res.ID)
+		}
+		if row.Edges.Resource != nil {
+			t.Fatalf("items[%d] resource edge must not be eager-loaded", i)
+		}
+	}
+	if page.Items[1].Edges.ReviewedBy == nil || page.Items[1].Edges.ReviewedBy.ID != user.ID {
+		t.Fatalf("reviewed_by=%v want user %d", page.Items[1].Edges.ReviewedBy, user.ID)
+	}
+	if page.Items[0].Edges.ReviewedBy != nil || page.Items[2].Edges.ReviewedBy != nil {
+		t.Fatalf("only index 2 must carry reviewed_by")
+	}
+}
+
+// TestHydrateSegmentsMissingID 锁定回填的不变量：空瘦行切片短路为 nil，
+// 缺失 ID 必须返回可 errors.Is 识别的 ErrSegmentHydrationIncomplete，
+// 而不是返回长度不匹配或字段残缺的行。
+func TestHydrateSegmentsMissingID(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-hydr-miss-user")
+	project := createTestProject(t, client, "seg-hydr-miss-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/hydr-miss.txt")
+	seg := createTestSegment(t, client, res.ID, 0, "src", nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+	baseQ := func() *ent.SegmentQuery {
+		return applySegmentFilters(svc.client.Segment.Query(), res.ID, ResourceSegmentListOptions{}, dialect.SQLite)
+	}
+	filter := segmentMatchFilter(nil, "", "")
+
+	items, err := svc.hydrateSegments(ctx, nil, baseQ, filter)
+	if err != nil || items != nil {
+		t.Fatalf("empty rows: items=%v err=%v want nil/nil", items, err)
+	}
+	thin := []*ent.Segment{{ID: seg.ID, SegmentIndex: seg.SegmentIndex}}
+	items, err = svc.hydrateSegments(ctx, thin, baseQ, filter)
+	if err != nil || len(items) != 1 || items[0].ID != seg.ID {
+		t.Fatalf("single id: items=%v err=%v", items, err)
+	}
+	missing := []*ent.Segment{
+		{ID: seg.ID, SegmentIndex: seg.SegmentIndex},
+		{ID: 999999, SegmentIndex: 0},
+	}
+	if _, err := svc.hydrateSegments(ctx, missing, baseQ, filter); !errors.Is(err, ErrSegmentHydrationIncomplete) {
+		t.Fatalf("missing id err=%v want ErrSegmentHydrationIncomplete", err)
+	}
+}
+
+// TestHydrateSegmentsRejectsForeignResourceID 锁定回填的资源范围：thin 行即使
+// 携带真实存在的 segment ID，只要它不属于 baseQ 限定的资源，就不得被回填，且
+// 必须判为 ErrSegmentHydrationIncomplete，而不是把外资源行塞进页面。
+func TestHydrateSegmentsRejectsForeignResourceID(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-hydr-foreign-user")
+	project := createTestProject(t, client, "seg-hydr-foreign-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/hydr-foreign.txt")
+	other := createTestResource(t, client, project.ID, "chapters/hydr-foreign-other.txt")
+	createTestSegment(t, client, res.ID, 0, "src", nil)
+	foreign := createTestSegment(t, client, other.ID, 0, "foreign", nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+	baseQ := func() *ent.SegmentQuery {
+		return applySegmentFilters(svc.client.Segment.Query(), res.ID, ResourceSegmentListOptions{}, dialect.SQLite)
+	}
+	filter := segmentMatchFilter(nil, "", "")
+	thin := []*ent.Segment{{ID: foreign.ID, SegmentIndex: foreign.SegmentIndex}}
+	if _, err := svc.hydrateSegments(ctx, thin, baseQ, filter); !errors.Is(err, ErrSegmentHydrationIncomplete) {
+		t.Fatalf("foreign resource id err=%v want ErrSegmentHydrationIncomplete", err)
+	}
+}
+
+// TestHydrateSegmentsRejectsIndexDrift 锁定回填的行身份：完整行的 segment_index
+// 与扫描瘦行不一致（并发改写等内部不变量破坏）时必须报 ErrSegmentHydrationIncomplete，
+// 不得把漂移行按 ID 顺序塞回页面。
+func TestHydrateSegmentsRejectsIndexDrift(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-hydr-drift-user")
+	project := createTestProject(t, client, "seg-hydr-drift-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/hydr-drift.txt")
+	seg := createTestSegment(t, client, res.ID, 3, "src", nil)
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite, 90*24*time.Hour, nil)
+	baseQ := func() *ent.SegmentQuery {
+		return applySegmentFilters(svc.client.Segment.Query(), res.ID, ResourceSegmentListOptions{}, dialect.SQLite)
+	}
+	filter := segmentMatchFilter(nil, "", "")
+	thin := []*ent.Segment{{ID: seg.ID, SegmentIndex: seg.SegmentIndex + 1}}
+	if _, err := svc.hydrateSegments(ctx, thin, baseQ, filter); !errors.Is(err, ErrSegmentHydrationIncomplete) {
+		t.Fatalf("index drift err=%v want ErrSegmentHydrationIncomplete", err)
+	}
+}

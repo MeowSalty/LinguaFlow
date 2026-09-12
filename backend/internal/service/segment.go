@@ -108,6 +108,13 @@ var ErrSegmentGroupMismatch = errors.New("segment group mismatch")
 // （Limit+1 截断行 / 扫描窗口越过边界），正常唯一索引数据零额外开销。
 var ErrDuplicateSegmentIndex = errors.New("duplicate segment_index in resource")
 
+// ErrSegmentHydrationIncomplete 表示瘦行扫描选出的页面行在完整行回填时无法
+// 原样恢复：同一查询序列内这些行不应消失或改变身份，出现即内部不变量破坏
+// （如并发删除/改写），必须明确报错，而不是返回字段残缺或漂移的响应。
+// 判定覆盖三种漂移：完整行查不到（含被回填查询的资源/筛选限定挡掉的外资源行）、
+// segment_index 与扫描时不一致、以及再次经同一精确过滤器后不再命中。
+var ErrSegmentHydrationIncomplete = errors.New("segment hydration incomplete")
+
 // segmentGroupKey 解析 segment meta JSON 中的 epub_file 章节键。
 // meta 缺失、非法 JSON 或无有效 epub_file 时返回 ("", false)。
 func segmentGroupKey(meta *string) (string, bool) {
@@ -265,8 +272,21 @@ type scanWindow struct {
 	asc0   bool // 无游标无锚点：从最小 index 起
 }
 
+// segmentScanFields 是扫描/探测/计数阶段所需的最小列集合。keyset 推进只读
+// (segment_index, id)，后过滤只读 source_text / target_text / meta，因此取批
+// 不搬运 status、quality_issues、时间戳等大列，也不预加载任何边；完整的行与
+// reviewed_by 由 hydrateSegments 在窗口确定后按最终 ID 一次性回填。
+var segmentScanFields = []string{
+	segment.FieldID,
+	segment.FieldSegmentIndex,
+	segment.FieldSourceText,
+	segment.FieldTargetText,
+	segment.FieldMeta,
+}
+
 // segmentScanner 以自适应批次沿 (segment_index, id) keyset 扫描候选，按
-// segmentMatchFilter 精确过滤。所有取批都不能持有事务。
+// segmentMatchFilter 精确过滤。所有取批都不能持有事务。取批仅返回瘦行
+// （segmentScanFields），调用方在窗口与 prev/next 确定后统一回填完整行。
 type segmentScanner struct {
 	baseQ  func() *ent.SegmentQuery // 基础过滤 + 候选粗筛，不含窗口与 Limit
 	filter func(*ent.Segment) bool  // 行级精确后过滤（搜索 + group_key）
@@ -288,7 +308,7 @@ func (sc *segmentScanner) fetchAsc(ctx context.Context, w scanWindow, size int) 
 		q = q.Where(segment.SegmentIndexGT(w.from))
 	}
 	return q.Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
-		Limit(size).WithReviewedBy().WithResource().All(ctx)
+		Limit(size).Select(segmentScanFields...).All(ctx)
 }
 
 // fetchDesc 降序取一批候选（不含后过滤），按 (segment_index, id) 降序返回。
@@ -304,7 +324,7 @@ func (sc *segmentScanner) fetchDesc(ctx context.Context, w scanWindow, size int)
 		q = q.Where(segment.SegmentIndexLT(w.from))
 	}
 	return q.Order(ent.Desc(segment.FieldSegmentIndex), ent.Desc(segment.FieldID)).
-		Limit(size).WithReviewedBy().WithResource().All(ctx)
+		Limit(size).Select(segmentScanFields...).All(ctx)
 }
 
 // ascScanResult 是一次升序窗口收集的结果。
@@ -510,6 +530,49 @@ func (sc *segmentScanner) countAll(ctx context.Context) (int, error) {
 	}
 }
 
+// hydrateSegments 以扫描阶段选出的瘦行一次性回填完整 Segment 行与 reviewed_by 边。
+// 回填查询复用 baseQ() 新建的完整过滤查询（resource/status/quality 限定 + 安全
+// 候选粗筛），叠加 IDIn 与 WithReviewedBy；不 WithResource（resource_id 为默认列）。
+// 扫描阶段 fetch 各自调用的 baseQ() 与 Select 只作用于其查询对象，不会污染此处
+// 新建的查询。结果按 thin 的 ID 顺序重排。任一 thin 行查不到、segment_index 与
+// 扫描时不一致，或再次经同一 filter 后不再命中，均返回 ErrSegmentHydrationIncomplete
+// 并附带上下文，不静默返回残缺/漂移行。空切片短路。
+func (s *SegmentService) hydrateSegments(ctx context.Context, thin []*ent.Segment, baseQ func() *ent.SegmentQuery, filter func(*ent.Segment) bool) ([]*ent.Segment, error) {
+	if len(thin) == 0 {
+		return nil, nil
+	}
+	ids := make([]int, len(thin))
+	for i, row := range thin {
+		ids[i] = row.ID
+	}
+	rows, err := baseQ().
+		Where(segment.IDIn(ids...)).
+		WithReviewedBy().
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int]*ent.Segment, len(rows))
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+	items := make([]*ent.Segment, len(thin))
+	for i, want := range thin {
+		row, ok := byID[want.ID]
+		if !ok {
+			return nil, fmt.Errorf("%w: segment %d not found by resource page query", ErrSegmentHydrationIncomplete, want.ID)
+		}
+		if row.SegmentIndex != want.SegmentIndex {
+			return nil, fmt.Errorf("%w: segment %d index drifted: scan=%d hydrate=%d", ErrSegmentHydrationIncomplete, want.ID, want.SegmentIndex, row.SegmentIndex)
+		}
+		if filter != nil && !filter(row) {
+			return nil, fmt.Errorf("%w: segment %d no longer matches page filters", ErrSegmentHydrationIncomplete, want.ID)
+		}
+		items[i] = row
+	}
+	return items, nil
+}
+
 // listSegmentsScan 走 keyset 分批扫描的搜索/group_key 列表路径。
 // 窗口语义与数据库路径一致：锚点从首个 segment_index>=anchorIndex 的行开始
 // （锚点本身不要求匹配）；desc 游标窗口取 index<AfterID 的尾端 limit 条匹配；
@@ -607,6 +670,15 @@ func (s *SegmentService) listSegmentsScan(ctx context.Context, resourceID int, o
 		}
 		page.Total = &total
 	}
+
+	// prev/next 只依赖 SegmentIndex，均已就绪；此时按扫描得到的瘦行一次性回填完整
+	// 行与审核人，避免每批搬运完整字段、也避免逐行查询。回填复用同一 baseQ/filter
+	// 复核资源范围与精确命中；空页由 hydrateSegments 短路。
+	items, err := s.hydrateSegments(ctx, page.Items, sc.baseQ, sc.filter)
+	if err != nil {
+		return nil, err
+	}
+	page.Items = items
 	return page, nil
 }
 
@@ -699,7 +771,7 @@ func (s *SegmentService) listSegmentsSQLPage(ctx context.Context, resourceID int
 	var rows []*ent.Segment
 	if descWindow {
 		fetched, err := q.Order(ent.Desc(segment.FieldSegmentIndex), ent.Desc(segment.FieldID)).
-			Limit(opts.Limit + 1).WithReviewedBy().WithResource().All(ctx)
+			Limit(opts.Limit + 1).WithReviewedBy().All(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -718,7 +790,7 @@ func (s *SegmentService) listSegmentsSQLPage(ctx context.Context, resourceID int
 		// 升序取 Limit+1：页尾之后的第一行（按 id 决断的最低同 index 行）用于
 		// 判定 next 游标边界是否被重复 index 跨越，正常页返回前再截断。
 		fetched, err := q.Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
-			Limit(opts.Limit + 1).WithReviewedBy().WithResource().All(ctx)
+			Limit(opts.Limit + 1).WithReviewedBy().All(ctx)
 		if err != nil {
 			return nil, err
 		}
