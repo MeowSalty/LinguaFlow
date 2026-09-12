@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/service/segmatch"
 )
 
 type resourceSegmentUpdateRequest struct {
@@ -46,6 +47,12 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	matchMode := strings.TrimSpace(query.Get("match_mode"))
+	if matchMode != "" && matchMode != "substring" && matchMode != "regex" {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "match_mode 只支持 substring 或 regex")
+		return
+	}
+
 	_, cursorProvided := query["cursor"]
 
 	var anchorSegmentID *int
@@ -77,9 +84,13 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 		Direction:       direction,
 		Limit:           pageReq.Limit,
 		Status:          strings.TrimSpace(query.Get("status")),
-		Search:          strings.TrimSpace(query.Get("search")),
+		// search 保留原值：前后空白对 substring/regex 都有语义（" foo" ≠ "foo"），
+		// 仅空字符串表示未搜索；其余参数仍统一 trim。
+		Search:          query.Get("search"),
 		SearchField:     strings.TrimSpace(query.Get("search_field")),
+		MatchMode:       matchMode,
 		CaseSensitive:   parseBoolQuery(r, "case_sensitive"),
+		WholeWord:       parseBoolQuery(r, "whole_word"),
 		IncludeTotal:    query.Get("include_total") == "true",
 		GroupKey:        strings.TrimSpace(query.Get("group_key")),
 		QualityIssues:   strings.TrimSpace(query.Get("quality_issues")),
@@ -87,8 +98,17 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 		QualityCode:     strings.TrimSpace(query.Get("quality_code")),
 	})
 	if err != nil {
+		if errors.Is(err, segmatch.ErrInvalidPattern) || errors.Is(err, segmatch.ErrUnsupportedMatchMode) {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", err.Error())
+			return
+		}
 		if errors.Is(err, service.ErrSegmentGroupMismatch) {
 			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "锚点段落不属于指定的 group_key 章节")
+			return
+		}
+		if errors.Is(err, service.ErrDuplicateSegmentIndex) {
+			s.writeProblem(w, r, http.StatusConflict, "duplicate_segment_index",
+				"资源段落索引损坏：segment_index 存在重复，分页游标无法跨越该边界表达遍历位置，其后的数据不可达。请重新导入或修复该资源的段落后再试")
 			return
 		}
 		s.writeReviewServiceError(w, r, err)

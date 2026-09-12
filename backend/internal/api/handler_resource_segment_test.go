@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -77,6 +78,36 @@ func TestHandler_ListResourceSegmentsOpenAPIParameterError(t *testing.T) {
 		if contentType := rec.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "application/problem+json") {
 			t.Fatalf("query=%q content-type=%q want application/problem+json", rawQuery, contentType)
 		}
+	}
+}
+
+func TestHandler_ListResourceSegmentsInvalidMatchMode400(t *testing.T) {
+	s, client, u := srTestServer(t)
+	projectID, resID := srSeedResource(t, client, u.ID, "a", "b")
+
+	rec := srListRequest(s, "search=a&match_mode=glob", u,
+		s.handleListResourceSegments,
+		map[string]string{"projectId": itoa(projectID), "resourceId": itoa(resID)})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want 400, body=%s", rec.Code, rec.Body.String())
+	}
+	if title := srProblemTitle(t, rec); title != "invalid_query_parameter" {
+		t.Fatalf("problem title=%q want invalid_query_parameter", title)
+	}
+}
+
+func TestHandler_ListResourceSegmentsInvalidRegex400(t *testing.T) {
+	s, client, u := srTestServer(t)
+	projectID, resID := srSeedResource(t, client, u.ID, "a", "b")
+
+	rec := srListRequest(s, "search=%5B&match_mode=regex", u,
+		s.handleListResourceSegments,
+		map[string]string{"projectId": itoa(projectID), "resourceId": itoa(resID)})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want 400, body=%s", rec.Code, rec.Body.String())
+	}
+	if title := srProblemTitle(t, rec); title != "invalid_query_parameter" {
+		t.Fatalf("problem title=%q want invalid_query_parameter", title)
 	}
 }
 
@@ -346,6 +377,60 @@ func TestHandler_ListResourceSegmentsZeroCursorRoundTrip(t *testing.T) {
 	}
 }
 
+// TestHandler_ListResourceSegmentsSearchKeepsWhitespace 防回归：search 保留
+// query 原值不 trim，前后空白对 substring/regex 都有语义（" foo" ≠ "foo"），
+// 仅空字符串表示未搜索；其它参数（如 status）仍统一 trim。
+func TestHandler_ListResourceSegmentsSearchKeepsWhitespace(t *testing.T) {
+	s, client, u := srTestServer(t)
+	projectID, resID := srSeedResource(t, client, u.ID, "foo", " foo bar", "foo ")
+	params := map[string]string{"projectId": itoa(projectID), "resourceId": itoa(resID)}
+
+	fetch := func(t *testing.T, rawQuery string) []int {
+		t.Helper()
+		rec := srListRequest(s, rawQuery, u, s.handleListResourceSegments, params)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("query=%q status=%d want 200, body=%s", rawQuery, rec.Code, rec.Body.String())
+		}
+		var resp segmentListResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode list response: %v", err)
+		}
+		indexes := make([]int, 0, len(resp.Items))
+		for _, item := range resp.Items {
+			indexes = append(indexes, item.SegmentIndex)
+		}
+		return indexes
+	}
+
+	// 前导空格：substring 只命中 " foo bar"；若被 trim 则与 search=foo 等同。
+	if got := fetch(t, "search=%20foo"); !reflect.DeepEqual(got, []int{1}) {
+		t.Fatalf("search=%%20foo items=%v, want [1]（不得等同于 search=foo）", got)
+	}
+	if got := fetch(t, "search=foo"); !reflect.DeepEqual(got, []int{0, 1, 2}) {
+		t.Fatalf("search=foo items=%v, want [0 1 2]", got)
+	}
+	// 尾空格 substring：" foo bar" 与 "foo " 都含 "foo "（前者 f-o-o-空格）。
+	if got := fetch(t, "search=foo%20"); !reflect.DeepEqual(got, []int{1, 2}) {
+		t.Fatalf("search=foo%%20 items=%v, want [1 2]", got)
+	}
+	// regex 尾空格 + 锚点：`foo $` 只命中以 "foo " 结尾的段落，尾空格有语义。
+	if got := fetch(t, "search=foo%20%24&match_mode=regex"); !reflect.DeepEqual(got, []int{2}) {
+		t.Fatalf("regex search=foo $ items=%v, want [2]", got)
+	}
+	// regex 锚点：^foo$ 只命中无空白的 "foo"。
+	if got := fetch(t, "search=%5Efoo%24&match_mode=regex"); !reflect.DeepEqual(got, []int{0}) {
+		t.Fatalf("regex search=^foo$ items=%v, want [0]", got)
+	}
+	// 空字符串表示未搜索：返回全部段落。
+	if got := fetch(t, "search="); !reflect.DeepEqual(got, []int{0, 1, 2}) {
+		t.Fatalf("empty search items=%v, want [0 1 2]", got)
+	}
+	// 其它参数仍 trim：带空白的 status 正常解析（不 trim 则过滤不到任何状态）。
+	if got := fetch(t, "status=%20translated%20&search=foo"); !reflect.DeepEqual(got, []int{0, 1, 2}) {
+		t.Fatalf("padded status items=%v, want [0 1 2]（status 应仍被 trim）", got)
+	}
+}
+
 func TestToSegmentResponseGroupKey(t *testing.T) {
 	now := time.Now()
 
@@ -419,4 +504,29 @@ func TestToOpenAPISegmentGroupKey(t *testing.T) {
 // itoa 是测试内常用的 int 转字符串捷径。
 func itoa(v int) string {
 	return strconv.Itoa(v)
+}
+
+func TestHandler_ListResourceSegmentsDuplicateIndex409(t *testing.T) {
+	s, client, u := srTestServer(t)
+	ctx := context.Background()
+	projectID, resID := srSeedResource(t, client, u.ID, "t0")
+
+	// 数据损坏：再建 10 行与首行共享 segment_index=0。limit=10 的页面恰好
+	// 在该重复 index 上截断，next_cursor 无法表达其后的行。
+	for i := 0; i < 10; i++ {
+		if _, err := client.Segment.Create().
+			SetResourceID(resID).SetSegmentIndex(0).SetSourceText("source").
+			SetTargetText("dup").SetStatus(segment.StatusTranslated).Save(ctx); err != nil {
+			t.Fatalf("create duplicate segment: %v", err)
+		}
+	}
+	params := map[string]string{"projectId": itoa(projectID), "resourceId": itoa(resID)}
+
+	rec := srListRequest(s, "limit=10", u, s.handleListResourceSegments, params)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status=%d want 409, body=%s", rec.Code, rec.Body.String())
+	}
+	if title := srProblemTitle(t, rec); title != "duplicate_segment_index" {
+		t.Fatalf("problem title=%q want duplicate_segment_index", title)
+	}
 }
