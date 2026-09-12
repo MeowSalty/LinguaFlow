@@ -40,8 +40,14 @@ type Options struct {
 	WholeWord     *bool  // nil 默认 false
 }
 
+// MaxPatternRunes 是 pattern 允许的最大 rune 数，按 rune 而非字节计数。
+const MaxPatternRunes = 256
+
 // ErrInvalidPattern 表示正则表达式无法编译。
 var ErrInvalidPattern = errors.New("invalid regex pattern")
+
+// ErrPatternTooLong 表示 pattern 的 rune 数超过 MaxPatternRunes。
+var ErrPatternTooLong = errors.New("pattern too long")
 
 // ErrUnsupportedMatchMode 表示传入的匹配模式不被支持。
 var ErrUnsupportedMatchMode = errors.New("unsupported match mode")
@@ -50,6 +56,12 @@ type substringMatcher struct {
 	find          string
 	caseSensitive bool
 	wholeWord     bool
+
+	// 大小写不敏感匹配的预处理：把 find 逐 rune 归一为 SimpleFold 折叠环的
+	// 最小代表元（两个 rune 折叠等价当且仅当代表元相同），并在该 rune 序列上
+	// 预计算 KMP 失配函数，使匹配严格 O(n+m)。folded 为空表示无需预处理。
+	folded []rune
+	fail   []int
 }
 
 type regexMatcher struct {
@@ -69,6 +81,9 @@ type regexMatcher struct {
 // NewMatcher 按 opts 构造匹配器。
 // 未知的匹配模式返回错误，以便调用方及时发现配置拼写错误。
 func NewMatcher(opts Options) (Matcher, error) {
+	if n := utf8.RuneCountInString(opts.Find); n > MaxPatternRunes {
+		return nil, fmt.Errorf("%w: pattern is %d runes, max %d", ErrPatternTooLong, n, MaxPatternRunes)
+	}
 	caseSensitive := true
 	if opts.CaseSensitive != nil {
 		caseSensitive = *opts.CaseSensitive
@@ -80,11 +95,16 @@ func NewMatcher(opts Options) (Matcher, error) {
 
 	switch opts.MatchMode {
 	case "", "substring":
-		return &substringMatcher{
+		m := &substringMatcher{
 			find:          opts.Find,
 			caseSensitive: caseSensitive,
 			wholeWord:     wholeWord,
-		}, nil
+		}
+		if !caseSensitive && opts.Find != "" {
+			m.folded = foldRunes(opts.Find)
+			m.fail = kmpFailure(m.folded)
+		}
+		return m, nil
 	case "regex":
 		re, err := regexp.Compile(opts.Find)
 		if err != nil {
@@ -105,9 +125,12 @@ func NewMatcher(opts Options) (Matcher, error) {
 		}
 		m := &regexMatcher{re: re, wholeWord: wholeWord, candidate: candidate}
 		if wholeWord {
-			// 大小写不敏感的折叠只影响 pattern 字面量，[^\pL\pN] 边界在 (?i)
-			// 下仍恰好排除字母与数字，因此在编译前统一加前缀标志即可。
-			wrapped := wrapFlags + `(?:\A|[^\pL\pN])(?:` + opts.Find + `)(?:\z|[^\pL\pN])`
+			// 大小写不敏感的折叠只影响 pattern 字面量，[^\pL\p{Nd}] 边界在 (?i)
+			// 下仍恰好排除字母与十进制数字，与 isWordRune（unicode.IsLetter ||
+			// unicode.IsDigit，即 \pL \p{Nd}）保持一致；因此编译前统一加前缀
+			// 标志即可。注意不能用 \pN：它还会排除 Nl/No（如 Ⅻ、½），导致
+			// boundary 预筛在 Find 实际有命中时误判为无命中。
+			wrapped := wrapFlags + `(?:\A|[^\pL\p{Nd}])(?:` + opts.Find + `)(?:\z|[^\pL\p{Nd}])`
 			if b, berr := regexp.Compile(wrapped); berr == nil {
 				m.boundary = b
 			}
@@ -123,46 +146,19 @@ func (m *substringMatcher) Find(text string) []Match {
 	if m.find == "" {
 		return nil
 	}
-	if m.caseSensitive {
-		return m.findCaseSensitive(text)
+	// 大小写不敏感时 folded 非空；text 的字节数小于 pattern 的 rune 数时
+	// 必然无法容纳一次命中，O(1) 快速失败（每个 rune 至少占一个字节）。
+	if len(text) < len(m.folded) {
+		return nil
 	}
-	return m.findCaseInsensitive(text)
-}
-
-func (m *substringMatcher) findCaseSensitive(text string) []Match {
 	var matches []Match
-	searchStart := 0
-	for searchStart <= len(text) {
-		relativeStart := strings.Index(text[searchStart:], m.find)
-		if relativeStart < 0 {
+	cursor := substringCursor{m: m, text: text}
+	for {
+		start, end, ok := cursor.next()
+		if !ok {
 			break
 		}
-		start := searchStart + relativeStart
-		end := start + len(m.find)
-		if !m.wholeWord || isWholeWord(text, start, end) {
-			matches = append(matches, Match{Start: start, End: end})
-			searchStart = end
-		} else {
-			// A rejected candidate can overlap a later valid candidate.
-			searchStart = start + 1
-		}
-	}
-	return matches
-}
-
-func (m *substringMatcher) findCaseInsensitive(text string) []Match {
-	findRuneCount := utf8.RuneCountInString(m.find)
-	var matches []Match
-	for start := 0; start < len(text); {
-		end, ok := advanceRunes(text, start, findRuneCount)
-		if ok && strings.EqualFold(text[start:end], m.find) &&
-			(!m.wholeWord || isWholeWord(text, start, end)) {
-			matches = append(matches, Match{Start: start, End: end})
-			start = end
-			continue
-		}
-		_, size := utf8.DecodeRuneInString(text[start:])
-		start += size
+		matches = append(matches, Match{Start: start, End: end})
 	}
 	return matches
 }
@@ -173,34 +169,102 @@ func (m *substringMatcher) HasMatch(text string) bool {
 	if m.find == "" {
 		return false
 	}
-	if m.caseSensitive {
-		searchStart := 0
-		for searchStart <= len(text) {
-			relativeStart := strings.Index(text[searchStart:], m.find)
-			if relativeStart < 0 {
-				return false
-			}
-			start := searchStart + relativeStart
-			end := start + len(m.find)
-			if !m.wholeWord || isWholeWord(text, start, end) {
-				return true
-			}
-			// A rejected candidate can overlap a later valid candidate.
-			searchStart = start + 1
-		}
+	if len(text) < len(m.folded) {
 		return false
 	}
-	findRuneCount := utf8.RuneCountInString(m.find)
-	for start := 0; start < len(text); {
-		end, ok := advanceRunes(text, start, findRuneCount)
-		if ok && strings.EqualFold(text[start:end], m.find) &&
-			(!m.wholeWord || isWholeWord(text, start, end)) {
-			return true
-		}
-		_, size := utf8.DecodeRuneInString(text[start:])
-		start += size
+	cursor := substringCursor{m: m, text: text}
+	_, _, ok := cursor.next()
+	return ok
+}
+
+// substringCursor 按起点升序产出通过 whole-word 过滤的 substring 命中。
+// Find 收集全部命中，HasMatch 只取首个即停止，二者共用这一遍历核心。
+// 每个 cursor 只服务于一次遍历，可安全跨 goroutine 复用同一个 Matcher。
+type substringCursor struct {
+	m    *substringMatcher
+	text string
+
+	// 大小写敏感：下一次 strings.Index 的起始字节偏移。
+	searchStart int
+
+	// 大小写不敏感：在折叠归一的 rune 序列上跑 KMP。
+	q       int   // 已匹配的折叠 pattern 前缀长度，恒 < patternLen
+	pos     int   // 下一个待消费 rune 的字节偏移
+	seq     int   // 已消费 rune 的全局序号（0 起）
+	rdStart []int // 环形缓冲：rdStart[runeIndex%patternLen] = 该 rune 起始字节
+}
+
+func (c *substringCursor) next() (start, end int, ok bool) {
+	if c.m.caseSensitive {
+		return c.nextCaseSensitive()
 	}
-	return false
+	return c.nextCaseInsensitive()
+}
+
+// nextCaseSensitive 沿用 strings.Index 的字节语义：命中按左最先升序且互不
+// 重叠；整词被拒时起点只前进一个字节，使跨过被拒起点的重叠候选仍可命中。
+func (c *substringCursor) nextCaseSensitive() (int, int, bool) {
+	text := c.text
+	find := c.m.find
+	for c.searchStart <= len(text) {
+		relativeStart := strings.Index(text[c.searchStart:], find)
+		if relativeStart < 0 {
+			c.searchStart = len(text) + 1
+			return 0, 0, false
+		}
+		start := c.searchStart + relativeStart
+		end := start + len(find)
+		if !c.m.wholeWord || isWholeWord(text, start, end) {
+			c.searchStart = end
+			return start, end, true
+		}
+		// A rejected candidate can overlap a later valid candidate.
+		c.searchStart = start + 1
+	}
+	return 0, 0, false
+}
+
+// nextCaseInsensitive 在 text 上以 KMP 单趟匹配折叠归一的 pattern，命中按
+// 起点升序且互不重叠；整词被拒时保留 KMP 失配回退，等价于起点前进一个
+// rune，使重叠候选仍可命中。命中起点的字节偏移取自每个已消费 rune 的全局
+// 序号对 patternLen 取模的环形缓冲，而不是当前 KMP 状态（状态会因失配回退
+// 与命中重置而不再对应起点）。
+func (c *substringCursor) nextCaseInsensitive() (int, int, bool) {
+	text := c.text
+	pat := c.m.folded
+	fail := c.m.fail
+	patternLen := len(pat)
+	for c.pos < len(text) {
+		globalIndex := c.seq
+		r, size := utf8.DecodeRuneInString(text[c.pos:])
+		start := c.pos
+		folded := foldRune(r)
+		c.seq = globalIndex + 1
+		c.pos = start + size
+
+		for c.q > 0 && pat[c.q] != folded {
+			c.q = fail[c.q-1]
+		}
+		if pat[c.q] != folded {
+			continue
+		}
+		if c.q == 0 && c.rdStart == nil {
+			c.rdStart = make([]int, patternLen)
+		}
+		c.rdStart[globalIndex%patternLen] = start
+		c.q++
+		if c.q < patternLen {
+			continue
+		}
+		matchStart := c.rdStart[(globalIndex-patternLen+1)%patternLen]
+		if !c.m.wholeWord || isWholeWord(text, matchStart, c.pos) {
+			c.q = 0
+			return matchStart, c.pos, true
+		}
+		// 整词拒绝：按标准 KMP 回退继续寻找重叠候选。
+		c.q = fail[patternLen-1]
+	}
+	return 0, 0, false
 }
 
 func (m *substringMatcher) ReplaceAll(text, replaceWith string) (string, int) {
@@ -251,6 +315,7 @@ func (m *regexMatcher) Find(text string) []Match {
 // HasMatch 判定 text 中是否存在命中。非整词时 MatchString 与 FindAll 非空等价，
 // 且不生成匹配切片；整词时先用 boundary 包裹正则做必要条件预筛（Find 有命中则
 // boundary 必命中），预筛未命中即安全早停，命中再以 Find 的全局左最先语义为准。
+// 整词命中只检查 submatchIndices 是否非空，不构造 []Match。
 func (m *regexMatcher) HasMatch(text string) bool {
 	if !m.wholeWord {
 		return m.re.MatchString(text)
@@ -258,7 +323,7 @@ func (m *regexMatcher) HasMatch(text string) bool {
 	if m.boundary != nil && !m.boundary.MatchString(text) {
 		return false
 	}
-	return len(m.Find(text)) > 0
+	return len(m.submatchIndices(text)) > 0
 }
 
 func (m *regexMatcher) ReplaceAll(text, replaceWith string) (string, int) {
@@ -316,14 +381,42 @@ func isWordRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
-func advanceRunes(text string, start, count int) (int, bool) {
-	end := start
-	for i := 0; i < count; i++ {
-		if end >= len(text) {
-			return 0, false
+// foldRune 返回 r 在 unicode.SimpleFold 折叠环上的最小代表元。两个 rune 在
+// simple case folding 下等价当且仅当它们落在同一折叠环，因此代表元相等
+// 精确对应 strings.EqualFold 的单 rune 语义。非法 UTF-8 解码出的 RuneError
+// 自成环，也按 strings.EqualFold 的行为与 U+FFFD 视为等价。
+func foldRune(r rune) rune {
+	minRune := r
+	for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
+		if f < minRune {
+			minRune = f
 		}
-		_, size := utf8.DecodeRuneInString(text[end:])
-		end += size
 	}
-	return end, true
+	return minRune
+}
+
+// foldRunes 把 s 逐 rune 折叠归一；range 对非法字节按 RuneError 单位处理，
+// 与匹配时逐 rune 解码的切分方式一致。
+func foldRunes(s string) []rune {
+	folded := make([]rune, 0, utf8.RuneCountInString(s))
+	for _, r := range s {
+		folded = append(folded, foldRune(r))
+	}
+	return folded
+}
+
+// kmpFailure 计算 pat 的标准 KMP 失配函数：fail[i] 是 pat[:i+1] 的最长
+// 真前缀且同时为后缀的长度。
+func kmpFailure(pat []rune) []int {
+	fail := make([]int, len(pat))
+	for i, k := 1, 0; i < len(pat); i++ {
+		for k > 0 && pat[k] != pat[i] {
+			k = fail[k-1]
+		}
+		if pat[k] == pat[i] {
+			k++
+		}
+		fail[i] = k
+	}
+	return fail
 }
