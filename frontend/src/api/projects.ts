@@ -48,9 +48,11 @@ export type FetchResourceSegmentsParams = NonNullable<
 
 export type ResourceSegmentQualityCode = NonNullable<FetchResourceSegmentsParams['quality_code']>
 
-export type SearchReplaceMatchMode = NonNullable<
-  ApiSchemas['SearchReplacePreviewRequest']['match_mode']
->
+/** 搜索/搜索替换的匹配模式（由后端 schema 导出） */
+export type SegmentMatchMode = ApiSchemas['SegmentMatchMode']
+
+/** @deprecated 兼容别名，改用 SegmentMatchMode */
+export type SearchReplaceMatchMode = SegmentMatchMode
 
 export const isResourceConflictError = (error: unknown): error is ResourceConflictError =>
   error instanceof Error &&
