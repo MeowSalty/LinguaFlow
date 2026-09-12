@@ -48,8 +48,8 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 	}
 
 	matchMode := strings.TrimSpace(query.Get("match_mode"))
-	if matchMode != "" && matchMode != "substring" && matchMode != "regex" {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "match_mode 只支持 substring 或 regex")
+	if matchMode != "" && !SegmentMatchMode(matchMode).Valid() {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "不支持的 match_mode")
 		return
 	}
 
@@ -98,7 +98,7 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 		QualityCode:     strings.TrimSpace(query.Get("quality_code")),
 	})
 	if err != nil {
-		if errors.Is(err, segmatch.ErrInvalidPattern) || errors.Is(err, segmatch.ErrUnsupportedMatchMode) {
+		if errors.Is(err, segmatch.ErrInvalidPattern) || errors.Is(err, segmatch.ErrUnsupportedMatchMode) || errors.Is(err, segmatch.ErrPatternTooLong) {
 			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", err.Error())
 			return
 		}

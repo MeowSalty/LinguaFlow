@@ -281,7 +281,8 @@ projectResourceSegments:
         required: false
         schema:
           type: string
-        description: 搜索文本，按 match_mode 匹配 source_text/target_text；search_field、case_sensitive、match_mode、whole_word 等匹配选项仅在提供 search 时生效，否则一律忽略
+          maxLength: 256
+        description: 搜索文本，按 match_mode 匹配 source_text/target_text；search_field、case_sensitive、match_mode、whole_word 等匹配选项仅在提供 search 时生效，否则一律忽略；长度上限按 Unicode code point 计
       - name: match_mode
         in: query
         required: false

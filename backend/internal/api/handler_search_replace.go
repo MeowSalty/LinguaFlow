@@ -73,7 +73,8 @@ func (s *Server) writeSearchReplaceServiceError(w http.ResponseWriter, r *http.R
 		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrInvalidInput),
 		errors.Is(err, segmatch.ErrInvalidPattern),
-		errors.Is(err, segmatch.ErrUnsupportedMatchMode):
+		errors.Is(err, segmatch.ErrUnsupportedMatchMode),
+		errors.Is(err, segmatch.ErrPatternTooLong):
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", err.Error())
 	default:
 		s.writeProjectServiceError(w, r, err)

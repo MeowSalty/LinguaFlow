@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -85,14 +86,16 @@ func TestHandler_ListResourceSegmentsInvalidMatchMode400(t *testing.T) {
 	s, client, u := srTestServer(t)
 	projectID, resID := srSeedResource(t, client, u.ID, "a", "b")
 
-	rec := srListRequest(s, "search=a&match_mode=glob", u,
-		s.handleListResourceSegments,
-		map[string]string{"projectId": itoa(projectID), "resourceId": itoa(resID)})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status=%d want 400, body=%s", rec.Code, rec.Body.String())
-	}
-	if title := srProblemTitle(t, rec); title != "invalid_query_parameter" {
-		t.Fatalf("problem title=%q want invalid_query_parameter", title)
+	params := map[string]string{"projectId": itoa(projectID), "resourceId": itoa(resID)}
+	// glob 是未知模式；SUBSTRING 大小写不匹配枚举值，两者都在枚举校验收敛后被拒。
+	for _, query := range []string{"search=a&match_mode=glob", "search=a&match_mode=SUBSTRING"} {
+		rec := srListRequest(s, query, u, s.handleListResourceSegments, params)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("query=%q status=%d want 400, body=%s", query, rec.Code, rec.Body.String())
+		}
+		if title := srProblemTitle(t, rec); title != "invalid_query_parameter" {
+			t.Fatalf("query=%q problem title=%q want invalid_query_parameter", query, title)
+		}
 	}
 }
 
@@ -428,6 +431,33 @@ func TestHandler_ListResourceSegmentsSearchKeepsWhitespace(t *testing.T) {
 	// 其它参数仍 trim：带空白的 status 正常解析（不 trim 则过滤不到任何状态）。
 	if got := fetch(t, "status=%20translated%20&search=foo"); !reflect.DeepEqual(got, []int{0, 1, 2}) {
 		t.Fatalf("padded status items=%v, want [0 1 2]（status 应仍被 trim）", got)
+	}
+}
+
+// TestHandler_ListResourceSegmentsSearchLengthLimit 校验 search 长度上限按
+// Unicode code point 计（OpenAPI maxLength 语义）。用多字节字符构造 257 个
+// code point：其字节长度远超 256，若误按字节判断会错误地拒绝 256 个 code point
+// 的合法请求；按 rune 判断时 256 恰好通过、257 超限返回 400。
+func TestHandler_ListResourceSegmentsSearchLengthLimit(t *testing.T) {
+	s, client, u := srTestServer(t)
+	projectID, resID := srSeedResource(t, client, u.ID, "界")
+	params := map[string]string{"projectId": itoa(projectID), "resourceId": itoa(resID)}
+
+	// 256 个多字节 code point（768 字节）：按 rune 合法，应正常返回 200。
+	atLimit := strings.Repeat("界", 256)
+	rec := srListRequest(s, "search="+url.QueryEscape(atLimit), u, s.handleListResourceSegments, params)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("256-rune search status=%d want 200, body=%s", rec.Code, rec.Body.String())
+	}
+
+	// 257 个多字节 code point：超限一位，返回 400 invalid_query_parameter。
+	overLimit := strings.Repeat("界", 257)
+	rec = srListRequest(s, "search="+url.QueryEscape(overLimit), u, s.handleListResourceSegments, params)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("257-rune search status=%d want 400, body=%s", rec.Code, rec.Body.String())
+	}
+	if title := srProblemTitle(t, rec); title != "invalid_query_parameter" {
+		t.Fatalf("problem title=%q want invalid_query_parameter", title)
 	}
 }
 

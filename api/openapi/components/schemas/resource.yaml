@@ -631,7 +631,8 @@ SearchReplacePreviewRequest:
   properties:
     find:
       type: string
-      description: 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法
+      maxLength: 256
+      description: 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法；长度上限按 Unicode code point 计
     replace_with:
       type: string
       description: 替换文本；允许空串表示删除
@@ -691,7 +692,8 @@ SearchReplaceApplyRequest:
   properties:
     find:
       type: string
-      description: 查找文本；须与预览一致才能命中相同段落
+      maxLength: 256
+      description: 查找文本；须与预览一致才能命中相同段落；长度上限按 Unicode code point 计
     replace_with:
       type: string
       description: 替换文本；允许空串表示删除
