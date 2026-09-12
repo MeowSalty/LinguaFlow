@@ -13,6 +13,7 @@ import {
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
+import { countUnicodeCodePoints, SEGMENT_SEARCH_MAX_LENGTH } from '@/utils/unicode'
 
 type Segment = ApiSchemas['Segment']
 
@@ -431,6 +432,9 @@ onUnmounted(() => {
         v-model:value="workspace.segmentSearch"
         size="small"
         clearable
+        :maxlength="SEGMENT_SEARCH_MAX_LENGTH"
+        :count-graphemes="countUnicodeCodePoints"
+        show-count
         :placeholder="t('workspace.segment.searchLocate.placeholder')"
         :disabled="!workspace.activeResourceId"
         @keydown="handleInputKeyDown"

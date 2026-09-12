@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { countUnicodeCodePoints, SEGMENT_SEARCH_MAX_LENGTH } from '@/utils/unicode'
 
 import type { ApiClient, ApiPaths, ApiSchemas } from './client'
 import { apiClient } from './client'
@@ -490,12 +491,29 @@ export const fetchProjectResourceTree = async (
   return data
 }
 
+/**
+ * 搜索/查找文本超限时本地失败：不发网络请求，避免后端 400 与未知副作用。
+ * 仅检查长度，不 trim/截断；按 Unicode code point 计与 API 一致。
+ */
+const assertSegmentSearchLength = (value: string, tooLongMessage: string): void => {
+  if (countUnicodeCodePoints(value) > SEGMENT_SEARCH_MAX_LENGTH) {
+    throw new RangeError(tooLongMessage)
+  }
+}
+
 export const fetchResourceSegments = async (
   projectId: number,
   resourceId: number,
   params?: FetchResourceSegmentsParams,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['ResourceSegmentListResponse']> => {
+  if (params?.search) {
+    assertSegmentSearchLength(
+      params.search,
+      t('api.errors.segmentSearchTooLong', { max: SEGMENT_SEARCH_MAX_LENGTH }),
+    )
+  }
+
   const { data, error, response } = await client.GET(
     '/projects/{projectId}/resources/{resourceId}/segments',
     {
@@ -750,6 +768,10 @@ export const previewResourceSegmentsSearchReplace = async (
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['SearchReplacePreviewResponse']> => {
   const { find, replace_with, match_mode, case_sensitive, whole_word, ...filters } = payload
+  assertSegmentSearchLength(
+    find,
+    t('api.errors.searchReplaceFindTooLong', { max: SEGMENT_SEARCH_MAX_LENGTH }),
+  )
   const { data, error, response } = await client.POST(
     '/projects/{projectId}/resources/{resourceId}/segments/search-replace/preview',
     {
@@ -784,6 +806,10 @@ export const applyResourceSegmentsSearchReplace = async (
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['SearchReplaceApplyResponse']> => {
   const { find, replace_with, match_mode, case_sensitive, whole_word, ...rest } = payload
+  assertSegmentSearchLength(
+    find,
+    t('api.errors.searchReplaceFindTooLong', { max: SEGMENT_SEARCH_MAX_LENGTH }),
+  )
   const { data, error, response } = await client.POST(
     '/projects/{projectId}/resources/{resourceId}/segments/search-replace/apply',
     {

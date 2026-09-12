@@ -2133,7 +2133,7 @@ export interface components {
             note?: string;
         };
         SearchReplacePreviewRequest: {
-            /** @description 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法 */
+            /** @description 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法；长度上限按 Unicode code point 计 */
             find: string;
             /** @description 替换文本；允许空串表示删除 */
             replace_with: string;
@@ -2168,7 +2168,7 @@ export interface components {
             items: components["schemas"]["SearchReplacePreviewItem"][];
         };
         SearchReplaceApplyRequest: {
-            /** @description 查找文本；须与预览一致才能命中相同段落 */
+            /** @description 查找文本；须与预览一致才能命中相同段落；长度上限按 Unicode code point 计 */
             find: string;
             /** @description 替换文本；允许空串表示删除 */
             replace_with: string;
@@ -4644,7 +4644,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "pending" | "translated" | "edited" | "approved" | "rejected";
-                /** @description 搜索文本，按 match_mode 匹配 source_text/target_text；search_field、case_sensitive、match_mode、whole_word 等匹配选项仅在提供 search 时生效，否则一律忽略 */
+                /** @description 搜索文本，按 match_mode 匹配 source_text/target_text；search_field、case_sensitive、match_mode、whole_word 等匹配选项仅在提供 search 时生效，否则一律忽略；长度上限按 Unicode code point 计 */
                 search?: string;
                 /** @description search 的匹配模式；regex 模式按 Go RE2 语法解释（线性时间、无回溯），SQL LIKE 通配符与正则元字符在 substring 模式下均按普通字符处理 */
                 match_mode?: components["schemas"]["SegmentMatchMode"];

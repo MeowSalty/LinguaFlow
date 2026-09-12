@@ -2313,6 +2313,8 @@ const messages = {
       deleteResourceFailed: '删除资源失败',
       downloadResourceFailed: '下载资源失败',
       fetchSegmentsFailed: '获取段落列表失败',
+      segmentSearchTooLong: '搜索关键词超出长度上限（max={max}，按 Unicode 码点计）',
+      searchReplaceFindTooLong: '查找内容超出长度上限（max={max}，按 Unicode 码点计）',
       updateSegmentFailed: '更新段落失败',
       batchReviewSegmentsFailed: '批量审核段落失败',
       approveAllSegmentsFailed: '全部批准段落失败',

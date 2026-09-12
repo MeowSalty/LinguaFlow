@@ -26,6 +26,7 @@ import {
   type SearchReplaceMatchMode,
 } from '@/api/projects'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import { countUnicodeCodePoints, SEGMENT_SEARCH_MAX_LENGTH } from '@/utils/unicode'
 
 import SegmentTextDisplay from './SegmentTextDisplay.vue'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
@@ -68,8 +69,15 @@ const lastApplyResult = ref<ApiSchemas['SearchReplaceApplyResponse'] | null>(nul
 
 const resourceId = computed(() => workspace.activeResourceId)
 const busy = computed(() => previewing.value || applying.value || undoing.value)
+/** find 上限与 API 一致（按 Unicode code point 计）；程序赋值绕过输入框时也不放行请求 */
+const findWithinLengthLimit = computed(
+  () => countUnicodeCodePoints(findText.value) <= SEGMENT_SEARCH_MAX_LENGTH,
+)
 const canSearch = computed(
-  () => Boolean(props.projectId && resourceId.value && findText.value.trim()) && !busy.value,
+  () =>
+    Boolean(props.projectId && resourceId.value && findText.value.trim()) &&
+    findWithinLengthLimit.value &&
+    !busy.value,
 )
 const hasPendingChange = computed(() => preview.value !== null || lastApplyResult.value !== null)
 const canApply = computed(
@@ -77,6 +85,7 @@ const canApply = computed(
     preview.value !== null &&
     !previewStale.value &&
     preview.value.matched_segment_count > 0 &&
+    findWithinLengthLimit.value &&
     !busy.value,
 )
 
@@ -347,6 +356,9 @@ defineExpose({ open })
               v-model:value="findText"
               :placeholder="t('workspace.segment.searchReplace.findPlaceholder')"
               :disabled="busy"
+              :maxlength="SEGMENT_SEARCH_MAX_LENGTH"
+              :count-graphemes="countUnicodeCodePoints"
+              show-count
               @keydown.enter.prevent="handlePreview"
             />
           </NFormItem>
