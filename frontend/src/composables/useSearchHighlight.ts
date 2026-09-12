@@ -3,11 +3,15 @@ import type { VNode } from 'vue'
 import { h } from 'vue'
 
 import {
+  buildHtmlHighlightLayout,
   buildVisibleTextMap,
+  collectQualityHighlightRanges,
   HTML_BLOCKED_TAGS,
   type HtmlTextMap,
   parseHtmlBody,
   sanitizeElementProps,
+  type QualityHighlightRange,
+  type QualityIssue,
 } from '@/composables/useQualityIssues'
 
 /** 搜索命中区间（rune 偏移，与质量问题高亮管线同一坐标系） */
@@ -461,4 +465,286 @@ export const makeSearchSnippet = (
     hit: runes.slice(first.start, first.end).join(''),
     after: runes.slice(first.end, end).join('') + (end < runes.length ? '…' : ''),
   }
+}
+
+// ── 质量 issue 与搜索命中的组合高亮（同一 mark 同时表达两种语义）──
+
+/** 组合渲染的原子段：在质量与搜索的全部边界处切分，每个原子只表达一种状态组合 */
+export interface CombinedHighlightAtom {
+  start: number
+  end: number
+  /** 该段是否为搜索命中 */
+  searchHit: boolean
+  /** 该段覆盖的质量问题严重度；无质量问题为 null */
+  severity: 'warning' | 'error' | null
+  dismissed: boolean
+  /** 覆盖该段的质量 issue 索引（HTML 模式用于 activeIssueIndex 联动） */
+  issueIds: number[]
+}
+
+type CombinedQualityAtom = QualityHighlightRange & { issueIds?: number[] }
+
+/**
+ * 收集区间端点。输入已按 start 升序且互不重叠，故端点序列天然有序；
+ * 零宽区间不参与切分（不产生端点，也不会覆盖任何非空段）。
+ */
+const collectIntervalEndpoints = (ranges: { start: number; end: number }[]): number[] => {
+  const endpoints: number[] = []
+  for (const range of ranges) {
+    if (range.end > range.start) endpoints.push(range.start, range.end)
+  }
+  return endpoints
+}
+
+/** 归并两个有序端点序列并去重（避免对端点做整体排序，保持线性） */
+const mergeSortedEndpoints = (left: number[], right: number[]): number[] => {
+  const merged: number[] = []
+  let li = 0
+  let ri = 0
+  while (li < left.length || ri < right.length) {
+    const takeLeft = li < left.length && (ri >= right.length || left[li]! <= right[ri]!)
+    const next = takeLeft ? left[li++]! : right[ri++]!
+    if (!merged.length || merged[merged.length - 1] !== next) merged.push(next)
+  }
+  return merged
+}
+
+/**
+ * 把游标推进到首个可能覆盖 [start, end) 的区间（跳过 end <= start 的区间）。
+ * 区间已按 start 升序且互不重叠，游标全程只前进，多次调用合计为线性扫描。
+ */
+const advanceToCovering = <T extends { start: number; end: number }>(
+  ranges: T[],
+  from: number,
+  start: number,
+): number => {
+  let index = from
+  while (index < ranges.length && ranges[index]!.end <= start) index++
+  return index
+}
+
+/**
+ * 按质量原子与搜索命中的全部 endpoints 做原子切分（相邻同状态段合并）。
+ * 入参须按 start 升序且互不重叠（两条高亮管线均已保证）：端点归并 + 双指针扫描，
+ * 整体 O(E+Q+S)，替代逐段 find/some 的 O(E×(Q+S))。
+ */
+const buildCombinedAtoms = (
+  qualityAtoms: CombinedQualityAtom[],
+  searchRanges: SearchHighlightRange[],
+): CombinedHighlightAtom[] => {
+  const sorted = mergeSortedEndpoints(
+    collectIntervalEndpoints(qualityAtoms),
+    collectIntervalEndpoints(searchRanges),
+  )
+  const atoms: CombinedHighlightAtom[] = []
+  let qualityCursor = 0
+  let searchCursor = 0
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const start = sorted[i]!
+    const end = sorted[i + 1]!
+    if (end <= start) continue
+
+    qualityCursor = advanceToCovering(qualityAtoms, qualityCursor, start)
+    const quality =
+      qualityCursor < qualityAtoms.length &&
+      qualityAtoms[qualityCursor]!.start <= start &&
+      qualityAtoms[qualityCursor]!.end >= end
+        ? qualityAtoms[qualityCursor]
+        : undefined
+
+    searchCursor = advanceToCovering(searchRanges, searchCursor, start)
+    const searchHit =
+      searchCursor < searchRanges.length &&
+      searchRanges[searchCursor]!.start <= start &&
+      searchRanges[searchCursor]!.end >= end
+
+    if (!quality && !searchHit) continue
+
+    const atom: CombinedHighlightAtom = {
+      start,
+      end,
+      searchHit,
+      severity: quality?.severity ?? null,
+      dismissed: quality?.dismissed ?? false,
+      issueIds: quality?.issueIds ?? [],
+    }
+
+    const last = atoms[atoms.length - 1]
+    if (
+      last &&
+      last.end === start &&
+      last.searchHit === atom.searchHit &&
+      last.severity === atom.severity &&
+      last.dismissed === atom.dismissed &&
+      last.issueIds.length === atom.issueIds.length &&
+      last.issueIds.every((id, idx) => id === atom.issueIds[idx])
+    ) {
+      last.end = end
+    } else {
+      atoms.push(atom)
+    }
+  }
+
+  return atoms
+}
+
+/** 组合状态下单个 mark 的 class：质量状态类与 search-hit 可同时存在 */
+const combinedAtomClass = (atom: CombinedHighlightAtom, isActive: boolean): string[] => {
+  const classes: string[] = []
+  if (atom.severity) {
+    classes.push('quality-span')
+    classes.push(
+      atom.dismissed
+        ? 'quality-span--dismissed'
+        : atom.severity === 'error'
+          ? 'quality-span--error'
+          : 'quality-span--warning',
+    )
+    if (isActive) classes.push('quality-span--active')
+  }
+  if (atom.searchHit) classes.push('search-hit')
+  return classes
+}
+
+/**
+ * 将文本渲染为质量问题与搜索命中组合高亮的 VNode（纯文本模式）。
+ * 搜索命中区间独立计算；纯文本无 active 联动，质量问题区间沿用已合并区间。
+ */
+export const renderCombinedHighlightedText = (
+  text: string,
+  query: string,
+  options: SearchMatchArgument = false,
+  issues?: QualityIssue[],
+): VNode => {
+  const qualityAtoms = collectQualityHighlightRanges(text, issues)
+  const { ranges } = buildSearchMatch(text, query, options)
+  const atoms = buildCombinedAtoms(qualityAtoms, ranges)
+  if (!atoms.length) return h('span', null, text)
+
+  const runes = Array.from(text)
+  const children: (string | VNode)[] = []
+  let cursor = 0
+  for (const atom of atoms) {
+    if (atom.start > cursor) children.push(runes.slice(cursor, atom.start).join(''))
+    children.push(
+      h(
+        'mark',
+        { class: combinedAtomClass(atom, false) },
+        runes.slice(atom.start, atom.end).join(''),
+      ),
+    )
+    cursor = atom.end
+  }
+  if (cursor < runes.length) children.push(runes.slice(cursor).join(''))
+
+  return h('span', { class: 'quality-highlighted-text' }, children)
+}
+
+interface CombinedDomContext {
+  nodeStarts: Map<Text, number>
+  atoms: CombinedHighlightAtom[]
+  activeIssueIndex: number | null
+}
+
+/** 文本节点按组合原子切分：命中搜索或质量问题的片段包裹单个 mark（同带两类状态类） */
+const renderCombinedTextNode = (
+  node: Text,
+  nodeStart: number,
+  atoms: CombinedHighlightAtom[],
+  activeIssueIndex: number | null,
+): string | (string | VNode)[] => {
+  const nodeRunes = Array.from(node.data)
+  const nodeEnd = nodeStart + nodeRunes.length
+  const overlapping = atoms.filter((a) => a.start < nodeEnd && a.end > nodeStart)
+  if (!overlapping.length) return node.data
+
+  const parts: (string | VNode)[] = []
+  let cursor = 0
+  for (const atom of overlapping) {
+    const s = Math.max(atom.start, nodeStart) - nodeStart
+    const e = Math.min(atom.end, nodeEnd) - nodeStart
+    if (e <= s) continue
+    if (s > cursor) parts.push(nodeRunes.slice(cursor, s).join(''))
+    const isActive = activeIssueIndex != null && atom.issueIds.includes(activeIssueIndex)
+    parts.push(
+      h(
+        'mark',
+        {
+          class: combinedAtomClass(atom, isActive),
+          ...(atom.issueIds.length ? { 'data-issue-ids': atom.issueIds.join(',') } : {}),
+        },
+        nodeRunes.slice(s, e).join(''),
+      ),
+    )
+    cursor = e
+  }
+  if (cursor < nodeRunes.length) parts.push(nodeRunes.slice(cursor).join(''))
+  return parts
+}
+
+/** 递归将 DOM 节点转换为组合高亮 VNode；危险标签整体剔除 */
+const combinedDomNodeToVNode = (node: Node, ctx: CombinedDomContext): string | VNode | null => {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const textNode = node as Text
+    const start = ctx.nodeStarts.get(textNode)
+    if (start == null) return textNode.data || null
+    const rendered = renderCombinedTextNode(textNode, start, ctx.atoms, ctx.activeIssueIndex)
+    if (typeof rendered === 'string') return rendered || null
+    return h('span', null, rendered)
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return null
+  const el = node as Element
+  const tag = el.tagName.toLowerCase()
+  if (HTML_BLOCKED_TAGS.has(tag)) return null
+
+  const children: (string | VNode)[] = []
+  for (const child of Array.from(el.childNodes)) {
+    const rendered = combinedDomNodeToVNode(child, ctx)
+    if (rendered != null) children.push(rendered)
+  }
+  return h(tag, sanitizeElementProps(el), children)
+}
+
+/**
+ * 将含 HTML 的文本渲染为质量问题与搜索命中组合高亮的 VNode 树（HTML 模式）。
+ * 两者坐标均基于可见文本 rune 偏移；质量区间复用首次 parse/buildVisibleTextMap
+ * 得到的 runes（buildHtmlHighlightLayout），同一份 HTML 只解析一次；
+ * activeIssueIndex 用于 hover/tap 联动强调。
+ */
+export const renderCombinedHighlightedHtml = (
+  html: string,
+  query: string,
+  options: SearchMatchArgument = false,
+  issues?: QualityIssue[],
+  activeIssueIndex: number | null = null,
+  maxLines?: number,
+): VNode => {
+  const body = parseHtmlBody(html)
+  const textMap: HtmlTextMap = buildVisibleTextMap(body)
+  const { ranges } = buildSearchMatch(textMap.runes.join(''), query, options)
+  const { merged } = buildHtmlHighlightLayout(textMap.runes, issues)
+  const atoms = buildCombinedAtoms(merged, ranges)
+
+  const ctx: CombinedDomContext = {
+    nodeStarts: textMap.nodeStarts,
+    atoms,
+    activeIssueIndex,
+  }
+  const children: (string | VNode)[] = []
+  for (const child of Array.from(body.childNodes)) {
+    const rendered = combinedDomNodeToVNode(child, ctx)
+    if (rendered != null) children.push(rendered)
+  }
+
+  const style = maxLines
+    ? {
+        WebkitLineClamp: String(maxLines),
+        display: '-webkit-box',
+        WebkitBoxOrient: 'vertical' as const,
+        overflow: 'hidden',
+      }
+    : undefined
+
+  return h('div', { class: 'quality-html-content', style }, children)
 }

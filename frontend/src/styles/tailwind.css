@@ -522,11 +522,12 @@ html[data-theme='dark'] .segment-row--anchor-flash {
   animation: lf-drawer-slide-in-right 0.25s ease;
 }
 
-/* ── Search hit highlight（搜索命中，与 quality-span 同结构）── */
+/* ── Search hit highlight（搜索命中，与 quality-span 同结构）──
+   不给 mark 加水平 padding：highlight 必须不改变正文排版，否则相邻原子 mark
+   各自撑开 padding，会在正文中间凭空插入视觉间距。 */
 
 .search-hit {
   border-radius: 0.2em;
-  padding: 0 0.12em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   background: rgb(37 99 235 / 0.16);
@@ -546,9 +547,9 @@ html[data-theme='dark'] .search-hit {
   word-break: break-word;
 }
 
+/* 质量问题 mark 同样不加水平 padding（见 .search-hit 注释），仅保留圆角与颜色 */
 .quality-span {
   border-radius: 0.2em;
-  padding: 0 0.12em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
@@ -588,6 +589,96 @@ html[data-theme='dark'] .search-hit {
 .quality-span--dismissed.quality-span--active {
   background: rgb(113 113 122 / 0.22);
   box-shadow: inset 0 -2px 0 0 rgb(113 113 122 / 0.6);
+}
+
+/* 质量问题与搜索命中重叠（同一 mark 同时带 quality-span 与 search-hit）：
+   底色与底部线保留 issue 语义（warning 橙 / error 红 / dismissed 灰），搜索命中以
+   蓝色顶线表达，两条线在同一 box-shadow 图层里叠加。每种严重度在 light / dark 下
+   都显式给出 background + box-shadow：否则暗色下 generic 的
+   html[data-theme='dark'] .search-hit（0,2,1）会压过单类名的 .quality-span--*
+   （0,1,0），把 issue 底色盖成蓝色。active 沿用各自加深的底色。 */
+.quality-span--warning.search-hit {
+  background: rgb(245 158 11 / 0.2);
+  box-shadow:
+    inset 0 2px 0 0 rgb(37 99 235 / 0.72),
+    inset 0 -1px 0 0 rgb(245 158 11 / 0.45);
+}
+
+.quality-span--active.quality-span--warning.search-hit {
+  background: rgb(245 158 11 / 0.42);
+  box-shadow:
+    inset 0 3px 0 0 rgb(37 99 235 / 0.95),
+    inset 0 -2px 0 0 rgb(217 119 6 / 0.9);
+}
+
+.quality-span--error.search-hit {
+  background: rgb(239 68 68 / 0.16);
+  box-shadow:
+    inset 0 2px 0 0 rgb(37 99 235 / 0.72),
+    inset 0 -1px 0 0 rgb(239 68 68 / 0.5);
+}
+
+.quality-span--active.quality-span--error.search-hit {
+  background: rgb(239 68 68 / 0.36);
+  box-shadow:
+    inset 0 3px 0 0 rgb(37 99 235 / 0.95),
+    inset 0 -2px 0 0 rgb(220 38 38 / 0.9);
+}
+
+.quality-span--dismissed.search-hit {
+  background: rgb(113 113 122 / 0.14);
+  box-shadow:
+    inset 0 2px 0 0 rgb(37 99 235 / 0.72),
+    inset 0 -1px 0 0 rgb(113 113 122 / 0.35);
+}
+
+.quality-span--active.quality-span--dismissed.search-hit {
+  background: rgb(113 113 122 / 0.22);
+  box-shadow:
+    inset 0 3px 0 0 rgb(37 99 235 / 0.95),
+    inset 0 -2px 0 0 rgb(113 113 122 / 0.6);
+}
+
+html[data-theme='dark'] .quality-span--warning.search-hit {
+  background: rgb(245 158 11 / 0.2);
+  box-shadow:
+    inset 0 2px 0 0 rgb(96 165 250 / 0.85),
+    inset 0 -1px 0 0 rgb(245 158 11 / 0.45);
+}
+
+html[data-theme='dark'] .quality-span--active.quality-span--warning.search-hit {
+  background: rgb(245 158 11 / 0.42);
+  box-shadow:
+    inset 0 3px 0 0 rgb(147 197 253 / 0.95),
+    inset 0 -2px 0 0 rgb(217 119 6 / 0.9);
+}
+
+html[data-theme='dark'] .quality-span--error.search-hit {
+  background: rgb(239 68 68 / 0.16);
+  box-shadow:
+    inset 0 2px 0 0 rgb(96 165 250 / 0.85),
+    inset 0 -1px 0 0 rgb(239 68 68 / 0.5);
+}
+
+html[data-theme='dark'] .quality-span--active.quality-span--error.search-hit {
+  background: rgb(239 68 68 / 0.36);
+  box-shadow:
+    inset 0 3px 0 0 rgb(147 197 253 / 0.95),
+    inset 0 -2px 0 0 rgb(220 38 38 / 0.9);
+}
+
+html[data-theme='dark'] .quality-span--dismissed.search-hit {
+  background: rgb(113 113 122 / 0.14);
+  box-shadow:
+    inset 0 2px 0 0 rgb(96 165 250 / 0.85),
+    inset 0 -1px 0 0 rgb(113 113 122 / 0.35);
+}
+
+html[data-theme='dark'] .quality-span--active.quality-span--dismissed.search-hit {
+  background: rgb(113 113 122 / 0.22);
+  box-shadow:
+    inset 0 3px 0 0 rgb(147 197 253 / 0.95),
+    inset 0 -2px 0 0 rgb(113 113 122 / 0.6);
 }
 
 /* HTML 模式高亮容器：HTML 内联标签样式的唯一来源（全局，因 VNode 渲染无 scoped 属性） */

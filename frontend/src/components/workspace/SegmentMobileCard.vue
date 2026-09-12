@@ -15,12 +15,7 @@ import {
   isIssueDismissed,
   type QualityIssue,
 } from '@/composables/useQualityIssues'
-import {
-  renderSearchHighlightedHtml,
-  renderSearchHighlightedText,
-  type SearchMatchMode,
-  type SearchMatchOptions,
-} from '@/composables/useSearchHighlight'
+import { type SearchMatchMode, type SearchMatchOptions } from '@/composables/useSearchHighlight'
 import { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 
@@ -39,7 +34,7 @@ const props = withDefaults(
     isSaving: boolean
     isCommentVisible: boolean
     commentText: string
-    /** 搜索定位面板关键词（激活时源文/译文正文以搜索高亮渲染，替代质量标记） */
+    /** 搜索定位面板关键词（激活时在源文/译文正文上叠加搜索命中高亮，质量标记保留） */
     searchQuery?: string
     /** 搜索字段范围：被排除的字段不做搜索高亮，走普通文本 / 质量标记路径 */
     searchField?: 'source' | 'target' | 'both'
@@ -80,38 +75,27 @@ const targetSearched = computed(
   () => Boolean(activeSearchQuery.value) && props.searchField !== 'source',
 )
 
-/** 源文正文：搜索激活时走命中高亮，否则保持普通文本 / 质量标记路径 */
+/** 源文正文：搜索字段命中时附带搜索高亮；源文无质量问题标记 */
 const sourceBody = computed(() =>
-  sourceSearched.value
-    ? props.textRenderMode === 'html'
-      ? renderSearchHighlightedHtml(
-          props.segment.source_text,
-          activeSearchQuery.value,
-          searchMatchOptions.value,
-        )
-      : renderSearchHighlightedText(
-          props.segment.source_text,
-          activeSearchQuery.value,
-          searchMatchOptions.value,
-        )
-    : h(SegmentTextDisplay, { text: props.segment.source_text, mode: props.textRenderMode }),
+  h(SegmentTextDisplay, {
+    text: props.segment.source_text,
+    mode: props.textRenderMode,
+    searchQuery: sourceSearched.value ? activeSearchQuery.value : '',
+    searchMatchOptions: searchMatchOptions.value,
+  }),
 )
 
-/** 译文正文：搜索激活时走命中高亮，否则保留质量问题标记 */
-const targetBody = computed(() => {
-  const targetText = props.segment.target_text ?? ''
-  if (!targetSearched.value) {
-    return h(SegmentTextDisplay, {
-      text: targetText,
-      issues: props.segment.quality_issues,
-      mode: props.textRenderMode,
-      activeIssueIndex: activeIssueIndex.value,
-    })
-  }
-  return props.textRenderMode === 'html'
-    ? renderSearchHighlightedHtml(targetText, activeSearchQuery.value, searchMatchOptions.value)
-    : renderSearchHighlightedText(targetText, activeSearchQuery.value, searchMatchOptions.value)
-})
+/** 译文正文：始终保留质量问题标记，搜索字段命中时叠加搜索高亮 */
+const targetBody = computed(() =>
+  h(SegmentTextDisplay, {
+    text: props.segment.target_text ?? '',
+    issues: props.segment.quality_issues,
+    mode: props.textRenderMode,
+    activeIssueIndex: activeIssueIndex.value,
+    searchQuery: targetSearched.value ? activeSearchQuery.value : '',
+    searchMatchOptions: searchMatchOptions.value,
+  }),
+)
 
 const emit = defineEmits<{
   startEdit: [segment: Segment]

@@ -25,11 +25,7 @@ import {
   isIssueDismissed,
   resolveActiveIssueIndex,
 } from '@/composables/useQualityIssues'
-import {
-  renderSearchHighlightedHtml,
-  renderSearchHighlightedText,
-  type SearchMatchOptions,
-} from '@/composables/useSearchHighlight'
+import { type SearchMatchOptions } from '@/composables/useSearchHighlight'
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 import { t } from '@/i18n'
@@ -152,17 +148,13 @@ export function useSegmentColumns(
         const elements: VNode[] = []
 
         const query = deps.searchQuery.value.trim()
-        // 搜索激活：以搜索命中高亮渲染（搜索期间替代质量标记，避免双重 mark 噪声）；
-        // 搜索字段排除源文时不做搜索高亮，避免「无命中」的源文列仍按搜索路径渲染
-        const body =
-          query && deps.searchField.value !== 'target'
-            ? config.value.textRenderMode === 'html'
-              ? renderSearchHighlightedHtml(row.source_text, query, deps.searchMatchOptions.value)
-              : renderSearchHighlightedText(row.source_text, query, deps.searchMatchOptions.value)
-            : h(SegmentTextDisplay, {
-                text: row.source_text,
-                mode: config.value.textRenderMode,
-              })
+        // 搜索字段排除源文时不传 query，源文走普通文本路径（源文无质量问题标记）
+        const body = h(SegmentTextDisplay, {
+          text: row.source_text,
+          mode: config.value.textRenderMode,
+          searchQuery: deps.searchField.value !== 'target' ? query : '',
+          searchMatchOptions: deps.searchMatchOptions.value,
+        })
 
         // data-search-field：锚点跳转据此在命中字段的正文内定位 mark（命中可能在超长行中段）。
         // 包装只含正文，不含下方编辑态的 HTML 切换按钮与源码，选择器不会误命中它们
@@ -248,27 +240,15 @@ export function useSegmentColumns(
           )
         } else {
           const query = deps.searchQuery.value.trim()
-          // 搜索激活：以搜索命中高亮渲染（同源文列，替代质量标记）；
-          // 搜索字段排除译文时不做搜索高亮，保持质量问题标记路径
-          const body =
-            query && deps.searchField.value !== 'source'
-              ? config.value.textRenderMode === 'html'
-                ? renderSearchHighlightedHtml(
-                    row.target_text,
-                    query,
-                    deps.searchMatchOptions.value,
-                  )
-                : renderSearchHighlightedText(
-                    row.target_text,
-                    query,
-                    deps.searchMatchOptions.value,
-                  )
-              : h(SegmentTextDisplay, {
-                  text: row.target_text,
-                  issues: row.quality_issues,
-                  mode: config.value.textRenderMode,
-                  activeIssueIndex: resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id),
-                })
+          // 搜索字段排除译文时不传 query，保持质量问题标记路径
+          const body = h(SegmentTextDisplay, {
+            text: row.target_text,
+            issues: row.quality_issues,
+            mode: config.value.textRenderMode,
+            activeIssueIndex: resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id),
+            searchQuery: deps.searchField.value !== 'source' ? query : '',
+            searchMatchOptions: deps.searchMatchOptions.value,
+          })
 
           // data-search-field：同源文列，锚点跳转在命中字段正文内定位 mark
           elements.push(h('div', { 'data-search-field': 'target' }, [body]))

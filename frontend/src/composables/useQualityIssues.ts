@@ -437,8 +437,12 @@ const locateSpanInVisibleRunes = (
   return { start: found, end: found + matchedRunes.length }
 }
 
-/** 由 per-issue 区间构建边界切分的原子段（相邻同 severity 且同覆盖集合并） */
-const buildHtmlHighlightLayout = (
+/**
+ * 由可见文本 runes 与 issues 构建边界切分的原子段（相邻同 severity 且同覆盖集合并）。
+ * 已持有 buildVisibleTextMap 结果的调用方（如组合高亮）应直接调用本函数，
+ * 避免再次 parseHtmlBody 让同一份 HTML 被解析两次。
+ */
+export const buildHtmlHighlightLayout = (
   runes: string[],
   issues?: QualityIssue[],
 ): HtmlHighlightLayout => {
