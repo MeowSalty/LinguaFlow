@@ -95,7 +95,7 @@ const quickActions = computed<
 </script>
 
 <template>
-  <div class="lf-page">
+  <div class="lf-page lf-content-narrow">
     <PageHeader :title="t('admin.dashboard.title')" :subtitle="t('admin.dashboard.description')">
       <NButton secondary :loading="admin.statsLoading" @click="admin.loadStats">
         {{ t('common.actions.refresh') }}

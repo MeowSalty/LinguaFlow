@@ -96,7 +96,11 @@ const onSubmit = async () => {
 </script>
 
 <template>
-  <BlankLayout :title="t('service.title')" :subtitle="t('service.subtitle')">
+  <BlankLayout
+    class="lf-content-narrow"
+    :title="t('service.title')"
+    :subtitle="t('service.subtitle')"
+  >
     <div class="lf-panel p-6">
       <NForm
         ref="formRef"

@@ -284,7 +284,7 @@ useStoreErrorToast(
 </script>
 
 <template>
-  <div>
+  <div class="lf-content-narrow">
     <EntityListPage
       :title="t('admin.users.title')"
       :subtitle="t('admin.users.description')"

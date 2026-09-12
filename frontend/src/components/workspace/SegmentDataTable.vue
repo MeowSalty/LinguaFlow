@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DataTableRowKey } from 'naive-ui'
-import { NButton, NDataTable, NEmpty, NSpin } from 'naive-ui'
+import { NDataTable, NEmpty, NSpin } from 'naive-ui'
 import { ref, toRef, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -8,6 +8,7 @@ import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
 import type { SegmentTableConfig, SegmentColumnDeps } from '@/composables/segmentColumns'
 import { useSegmentColumns } from '@/composables/segmentColumns'
+import type { SearchMatchMode, SearchMatchOptions } from '@/composables/useSearchHighlight'
 import SegmentMobileCard from '@/components/workspace/SegmentMobileCard.vue'
 
 type Segment = ApiSchemas['Segment']
@@ -19,6 +20,9 @@ const props = defineProps<{
   segments: Segment[]
   loading: boolean
   hasMore: boolean
+  /** 窗口顶还有更早内容（prev_cursor 非空） */
+  hasPrev?: boolean
+  loadingUp?: boolean
   textRenderMode: 'plaintext' | 'html'
   showUpdatedAt: boolean
   showMobileCards: boolean
@@ -29,6 +33,17 @@ const props = defineProps<{
   inlineEditForm: SegmentFormModel
   inlineCommentVisible: number | null
   inlineCommentText: string
+  /** 定位高亮的段落 id（锚点定位闪烁） */
+  anchorFlashSegmentId?: number | null
+  /** 搜索定位面板关键词（激活时源文/译文列以搜索高亮渲染） */
+  searchQuery?: string
+  /** 搜索字段范围：被排除的列不做搜索高亮 */
+  searchField?: 'source' | 'target' | 'both'
+  searchCaseSensitive?: boolean
+  /** 搜索定位匹配模式（substring / regex），与面板同源 */
+  searchMatchMode?: SearchMatchMode
+  /** 搜索定位全字匹配，与面板同源 */
+  searchWholeWord?: boolean
 }>()
 
 // ── Emits ──
@@ -37,6 +52,10 @@ const emit = defineEmits<{
   previewTranslation: [segment: Segment]
   previewRevision: [segment: Segment]
   loadMore: []
+  /** 到达窗口顶部且还有更早内容：向上加载一页（父级负责滚动位置补偿） */
+  loadMoreUp: []
+  /** 编辑窗口底部：已保存并到达当前列表末尾，请加载更多（保留当前编辑态） */
+  reachEnd: [segment: Segment]
   startInlineEdit: [segment: Segment]
   cancelInlineEdit: []
   saveInlineEdit: [segment: Segment]
@@ -89,6 +108,13 @@ watch(
 )
 
 // ── 依赖注入（委托 emit） ──
+const searchQueryRef = computed(() => props.searchQuery ?? '')
+const searchFieldRef = computed<'source' | 'target' | 'both'>(() => props.searchField ?? 'both')
+const searchMatchOptionsRef = computed<SearchMatchOptions>(() => ({
+  caseSensitive: props.searchCaseSensitive ?? true,
+  wholeWord: props.searchWholeWord ?? false,
+  matchMode: props.searchMatchMode ?? 'substring',
+}))
 const deps: SegmentColumnDeps = {
   inlineEditingSegmentId: toRef(props, 'inlineEditingSegmentId'),
   inlineEditForm: props.inlineEditForm,
@@ -100,6 +126,10 @@ const deps: SegmentColumnDeps = {
   toggleSourceHtml,
 
   hoveredIssueKey,
+
+  searchQuery: searchQueryRef,
+  searchField: searchFieldRef,
+  searchMatchOptions: searchMatchOptionsRef,
 
   startInlineEdit: (segment) => emit('startInlineEdit', segment),
   cancelInlineEdit: () => emit('cancelInlineEdit'),
@@ -128,9 +158,10 @@ const deps: SegmentColumnDeps = {
 const columns = useSegmentColumns(configRef, deps)
 
 const scrollX = computed(() => {
-  const base = 50 + 280 + 280 + 110 + 160 // index + source + target + status + actions
+  // 三栏工作区下主栏较窄，列宽预算收紧：1920 屏（面板开）完整放下，更窄视口横向滚动
+  const base = 64 + 260 + 260 + 100 + 144 // index + source + target + status + actions
   const selection = props.showSelection ? 48 : 0
-  const updatedAt = props.showUpdatedAt ? 95 : 0
+  const updatedAt = props.showUpdatedAt ? 80 : 0
   return selection + base + updatedAt
 })
 
@@ -145,18 +176,12 @@ const handleSelectionChange = (keys: DataTableRowKey[]): void => {
 // ── 键盘导航 ──
 const focusedRowIndex = ref<number>(-1)
 
-const HEADER_HEIGHT = 64
-
 const scrollFocusedRowIntoView = (): void => {
   setTimeout(() => {
     const rowEl = document.querySelector('.segment-row--focused') as HTMLElement | null
     if (!rowEl) return
-    const rect = rowEl.getBoundingClientRect()
-    if (rect.top < HEADER_HEIGHT) {
-      window.scrollBy({ top: rect.top - HEADER_HEIGHT - 8, behavior: 'smooth' })
-    } else if (rect.bottom > window.innerHeight) {
-      window.scrollBy({ top: rect.bottom - window.innerHeight + 20, behavior: 'smooth' })
-    }
+    // block: 'nearest' 仅在该行不可见时滚动，适配内嵌滚动容器（不再依赖 window 滚动）
+    rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, 50)
 }
 
@@ -164,15 +189,18 @@ const rowClassName = (row: Segment): string => {
   const classes: string[] = []
   if (row.id === props.inlineEditingSegmentId) {
     classes.push('segment-row--editing')
-  } else if (row.status === 'approved') {
-    classes.push('segment-row--approved')
-  } else if (row.status === 'translated' || row.status === 'edited') {
-    classes.push('segment-row--translated')
   } else if (row.status === 'rejected') {
     classes.push('segment-row--rejected')
   }
   if (props.segments.indexOf(row) === focusedRowIndex.value) {
     classes.push('segment-row--focused')
+  }
+  if (
+    props.anchorFlashSegmentId !== null &&
+    props.anchorFlashSegmentId !== undefined &&
+    row.id === props.anchorFlashSegmentId
+  ) {
+    classes.push('segment-row--anchor-flash', 'segment-row--focused')
   }
   return classes.join(' ')
 }
@@ -194,7 +222,14 @@ const handleKeyDown = (e: KeyboardEvent): void => {
       e.preventDefault()
       const editingSegment = props.segments.find((s) => s.id === props.inlineEditingSegmentId)
       if (editingSegment) {
-        emit('saveAndEditNext', editingSegment)
+        const idx = props.segments.indexOf(editingSegment)
+        const isLastInWindow = idx >= 0 && idx === props.segments.length - 1
+        if (isLastInWindow && props.hasMore) {
+          // 已到窗口底部且还有更多：不取消编辑，通知父级保存并追加加载
+          emit('reachEnd', editingSegment)
+        } else {
+          emit('saveAndEditNext', editingSegment)
+        }
       }
     }
     return
@@ -223,15 +258,78 @@ const handleKeyDown = (e: KeyboardEvent): void => {
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown)
+  setupLoadMoreObserver()
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown)
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
+  loadMoreUpObserver?.disconnect()
+  loadMoreUpObserver = null
 })
 
 const handleRowClick = (_event: MouseEvent, row: Segment): void => {
   focusedRowIndex.value = props.segments.indexOf(row)
 }
+
+// ── 底部哨兵自动加载 ──
+// 滚动由外层 pane 承担，此处仅做视口级（root: null）哨兵观察，
+// rootMargin 提前 600px 预加载；loading 中不重复 emit。
+const loadMoreSentinel = ref<HTMLElement | null>(null)
+let loadMoreObserver: IntersectionObserver | null = null
+
+const setupLoadMoreObserver = (): void => {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
+  if (!loadMoreSentinel.value) return
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0]
+      if (entry?.isIntersecting && props.hasMore && !props.loading) {
+        emit('loadMore')
+      }
+    },
+    { root: null, rootMargin: '600px' },
+  )
+  loadMoreObserver.observe(loadMoreSentinel.value)
+}
+
+// hasMore 变化时哨兵随 v-if 挂载/卸载；loading 结束后重新 observe，
+// 使哨兵仍在视口内时能触发下一次 IntersectionObserver 初始回调。
+watch([() => props.hasMore, () => props.loading], async () => {
+  await nextTick()
+  setupLoadMoreObserver()
+})
+
+// ── 顶部哨兵：向上加载（锚点窗口 / 章节中部滚动到顶时前置更早段落） ──
+const loadMoreUpSentinel = ref<HTMLElement | null>(null)
+let loadMoreUpObserver: IntersectionObserver | null = null
+
+const setupLoadMoreUpObserver = (): void => {
+  loadMoreUpObserver?.disconnect()
+  loadMoreUpObserver = null
+  if (!loadMoreUpSentinel.value || !props.hasPrev) return
+  loadMoreUpObserver = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0]
+      if (entry?.isIntersecting && props.hasPrev && !props.loading && !props.loadingUp) {
+        emit('loadMoreUp')
+      }
+    },
+    { root: null, rootMargin: '300px' },
+  )
+  loadMoreUpObserver.observe(loadMoreUpSentinel.value)
+}
+
+watch(
+  [() => props.hasPrev, () => props.loading, () => props.loadingUp],
+  async () => {
+    await nextTick()
+    setupLoadMoreUpObserver()
+  },
+  { immediate: true },
+)
 
 // ── 暴露给父组件 ──
 defineExpose({
@@ -244,6 +342,11 @@ defineExpose({
 
 <template>
   <div class="space-y-3">
+    <!-- 顶部哨兵：窗口顶还有更早内容时进入视口即向上加载 -->
+    <div v-if="hasPrev" ref="loadMoreUpSentinel" class="flex h-8 items-center justify-center pb-1">
+      <NSpin v-if="loadingUp" :show="true" :size="14" />
+    </div>
+
     <!-- 桌面端表格 -->
     <div :class="{ 'hidden md:block': showMobileCards }">
       <NDataTable
@@ -281,6 +384,16 @@ defineExpose({
           :is-saving="editingSegmentIds.includes(segment.id)"
           :is-comment-visible="inlineCommentVisible === segment.id"
           :comment-text="inlineCommentText"
+          :search-query="searchQuery"
+          :search-field="searchField"
+          :search-case-sensitive="searchCaseSensitive"
+          :search-match-mode="searchMatchMode"
+          :search-whole-word="searchWholeWord"
+          :class="
+            segment.id === anchorFlashSegmentId
+              ? 'segment-row--anchor-flash segment-row--focused'
+              : undefined
+          "
           @start-edit="emit('startInlineEdit', segment)"
           @cancel-edit="emit('cancelInlineEdit')"
           @save-edit="emit('saveInlineEdit', segment)"
@@ -298,11 +411,9 @@ defineExpose({
       </template>
     </div>
 
-    <!-- 加载更多按钮 -->
-    <div v-if="hasMore" class="flex justify-center pt-3">
-      <NButton :loading="loading" @click="emit('loadMore')">
-        {{ t('common.loadMore') }}
-      </NButton>
+    <!-- 底部哨兵：进入视口即自动加载下一页（rootMargin 提前预载） -->
+    <div v-if="hasMore" ref="loadMoreSentinel" class="flex h-10 items-center justify-center pt-3">
+      <NSpin v-if="loading" :show="true" :size="16" />
     </div>
 
     <!-- 桌面端空状态 -->

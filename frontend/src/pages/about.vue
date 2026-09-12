@@ -67,7 +67,7 @@ const techStack = [
 </script>
 
 <template>
-  <div class="lf-page">
+  <div class="lf-page lf-content-narrow">
     <PageHeader :title="t('about.title')" :subtitle="t('about.description')" />
 
     <section class="lf-panel p-5">

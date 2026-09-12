@@ -96,7 +96,7 @@ const onSelectNew = (): void => {
 </script>
 
 <template>
-  <div class="lf-page">
+  <div class="lf-page lf-content-narrow">
     <PageHeader :title="t('epubRotate.title')" :subtitle="t('epubRotate.description')" />
 
     <section class="lf-panel space-y-5 p-5">

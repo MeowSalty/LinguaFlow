@@ -205,6 +205,37 @@ func TestHandler_SearchReplacePreviewInvalidRegex400(t *testing.T) {
 	}
 }
 
+// TestHandler_SearchReplaceFindTooLong400 校验 find 长度上限：preview 与 apply
+// 均须在超过 256 个 Unicode code point 时返回 400 invalid_input。用多字节字符
+// 构造 257 个 code point，确保判断按 rune 而非字节。
+func TestHandler_SearchReplaceFindTooLong400(t *testing.T) {
+	s, client, u := srTestServer(t)
+	projectID, resID := srSeedResource(t, client, u.ID, "界")
+	params := map[string]string{"projectId": strconv.Itoa(projectID), "resourceId": strconv.Itoa(resID)}
+	tooLong := strings.Repeat("界", 257)
+
+	cases := []struct {
+		name    string
+		handler http.HandlerFunc
+	}{
+		{"preview", s.handlePreviewResourceSegmentsSearchReplace},
+		{"apply", s.handleApplyResourceSegmentsSearchReplace},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := srRequest(s, http.MethodPost,
+				map[string]any{"find": tooLong, "replace_with": "x"}, u,
+				tc.handler, params)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d want 400, body=%s", rec.Code, rec.Body.String())
+			}
+			if title := srProblemTitle(t, rec); title != "invalid_input" {
+				t.Fatalf("problem title=%q want invalid_input", title)
+			}
+		})
+	}
+}
+
 func TestHandler_SearchReplaceUndoNotFound404(t *testing.T) {
 	s, client, u := srTestServer(t)
 	projectID, resID := srSeedResource(t, client, u.ID, "x")

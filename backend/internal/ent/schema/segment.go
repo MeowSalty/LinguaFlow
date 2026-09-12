@@ -4,6 +4,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
@@ -47,5 +48,13 @@ func (Segment) Edges() []ent.Edge {
 		//（through job_round_segments，见 job_round_segment.go）。
 		edge.From("resolved_in_rounds", JobRound.Type).
 			Ref("resolved_segments"),
+	}
+}
+
+func (Segment) Indexes() []ent.Index {
+	return []ent.Index{
+		// 段落列表按资源内 segment_index 范围取窗口（游标翻页与双向
+		// 邻接探测），无此复合索引时范围条件会退化为全表扫描。
+		index.Fields("resource_id", "segment_index"),
 	}
 }

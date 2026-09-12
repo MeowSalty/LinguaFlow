@@ -109,6 +109,10 @@ ResourceSegmentListResponse:
         $ref: '../schemas/job.yaml#/Segment'
     next_cursor:
       type: string
+    prev_cursor:
+      type: string
+      nullable: true
+      description: 当前窗口之前仍有内容时为窗口首条的 segment_index；使用 cursor=<prev_cursor>&direction=desc 取得上一页
     total:
       type: integer
       description: 满足过滤条件的段落总数；仅当请求 include_total=true 时返回
@@ -581,6 +585,15 @@ IssueDispositionRequest:
       type: string
       description: 裁决说明（可选）
 
+SegmentMatchMode:
+  type: string
+  enum: [substring, regex]
+  default: substring
+  description: |
+    文本匹配模式（段落搜索与查找替换共用）：
+    - substring: 按字面子串匹配；SQL LIKE 通配符（%、_）与正则元字符均按普通字符处理
+    - regex: 按 Go RE2 语法解释的正则匹配（线性时间、无回溯；不支持反向引用与前瞻/后顾断言）
+
 SearchReplacePreviewItem:
   type: object
   required: [segment_id, segment_index, source_text, before, after, match_count]
@@ -618,20 +631,20 @@ SearchReplacePreviewRequest:
   properties:
     find:
       type: string
-      description: 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法
+      maxLength: 256
+      description: 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法；长度上限按 Unicode code point 计
     replace_with:
       type: string
       description: 替换文本；允许空串表示删除
     match_mode:
-      type: string
-      enum: [substring, regex]
-      default: substring
+      $ref: '#/SegmentMatchMode'
     case_sensitive:
       type: boolean
       default: true
     whole_word:
       type: boolean
       default: false
+      description: 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查
     max_results:
       type: integer
       minimum: 1
@@ -679,20 +692,20 @@ SearchReplaceApplyRequest:
   properties:
     find:
       type: string
-      description: 查找文本；须与预览一致才能命中相同段落
+      maxLength: 256
+      description: 查找文本；须与预览一致才能命中相同段落；长度上限按 Unicode code point 计
     replace_with:
       type: string
       description: 替换文本；允许空串表示删除
     match_mode:
-      type: string
-      enum: [substring, regex]
-      default: substring
+      $ref: '#/SegmentMatchMode'
     case_sensitive:
       type: boolean
       default: true
     whole_word:
       type: boolean
       default: false
+      description: 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查；须与预览请求一致才能命中相同段落
     segment_ids:
       type: array
       items:

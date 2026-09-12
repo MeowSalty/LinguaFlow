@@ -55,6 +55,20 @@ const emit = defineEmits<{
   close: []
 }>()
 
+const requestClose = (): void => {
+  if (props.submitting || !show.value) return
+  show.value = false
+  emit('close')
+}
+
+const handleShowChange = (visible: boolean): void => {
+  if (visible) {
+    show.value = true
+  } else {
+    requestClose()
+  }
+}
+
 const segmentFilterOptions = [
   { value: 'pending_only', labelKey: 'workspace.job.segmentFilter.pendingOnly' },
   { value: 'skip_approved', labelKey: 'workspace.job.segmentFilter.skipApproved' },
@@ -131,8 +145,15 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
 </script>
 
 <template>
-  <NDrawer v-model:show="show" :width="DRAWER_WIDTH.m" placement="right">
-    <NDrawerContent closable>
+  <NDrawer
+    :show="show"
+    :width="DRAWER_WIDTH.m"
+    placement="right"
+    :mask-closable="!submitting"
+    :close-on-esc="!submitting"
+    @update:show="handleShowChange"
+  >
+    <NDrawerContent :closable="!submitting" @close="requestClose">
       <template #header>
         <DrawerHeader
           :title="t('workspace.job.createTitle')"
@@ -279,7 +300,7 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
 
       <template #footer>
         <div class="flex justify-end gap-3">
-          <NButton :disabled="submitting" @click="emit('close')">
+          <NButton :disabled="submitting" @click="requestClose">
             {{ t('common.cancel') }}
           </NButton>
           <NButton
