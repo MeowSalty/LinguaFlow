@@ -122,11 +122,15 @@ jobs:
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ vars.AI_MODEL }}
+          # 可选调优，仓库 Variables 留空则用脚本默认/上游默认
+          AI_MAX_TOKENS: ${{ vars.AI_MAX_TOKENS }}
+          AI_REASONING_EFFORT: ${{ vars.AI_REASONING_EFFORT }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: node .github/scripts/generate-release-notes.mjs
 
       - name: 创建 GitHub Release
+        id: release
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
@@ -135,3 +139,51 @@ jobs:
           draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # SC3_SEND_URL = Server酱³后台复制的完整发送地址（https://<uid>.push.ft07.com/send/<sendkey>.send），
+      # 未配置时脚本静默跳过；AI 生成失败的标记由 generate-release-notes.mjs 写入 GITHUB_ENV
+      - name: 推送发布草稿通知
+        env:
+          SC3_SEND_URL: ${{ secrets.SC3_SEND_URL }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+        run: |
+          if [ "${AI_NOTES_FALLBACK}" = "true" ]; then
+            export SC3_TITLE="⚠️ LinguaFlow ${GITHUB_REF_NAME} 发布草稿已创建，AI 生成失败"
+            export SC3_SHORT="草稿正文回退为提交列表，请审阅后再发布"
+            export SC3_DESP="$(printf '%s\n' \
+              'AI 生成 Release 说明失败，草稿正文已回退为自动汇总的提交列表。' \
+              '' \
+              "失败原因：\`${AI_NOTES_ERROR}\`" \
+              '' \
+              '可编辑草稿正文重新生成内容，或直接发布（发布后会触发 Docker 镜像构建）。' \
+              '' \
+              "[打开 Release 草稿](${RELEASE_URL})")"
+          else
+            export SC3_TITLE="✅ LinguaFlow ${GITHUB_REF_NAME} 发布草稿已创建"
+            export SC3_SHORT="请审阅并发布，发布后触发镜像构建"
+            export SC3_DESP="$(printf '%s\n' \
+              'AI 生成的 Release 说明已就绪，请审阅后发布；发布后会触发 Docker 镜像构建。' \
+              '' \
+              "[打开 Release 草稿](${RELEASE_URL})")"
+          fi
+          node .github/scripts/notify-sc3.mjs
+
+  notify-failure:
+    name: 推送发布失败通知
+    needs: [test, build, release]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 推送发布失败通知
+        env:
+          SC3_SEND_URL: ${{ secrets.SC3_SEND_URL }}
+        run: |
+          export SC3_TITLE="❌ LinguaFlow ${GITHUB_REF_NAME} 发布工作流失败"
+          export SC3_SHORT="发布流程中断，草稿可能未创建"
+          export SC3_DESP="$(printf '%s\n' \
+            '发布工作流中有步骤失败，草稿可能未创建，请检查运行日志后重试。' \
+            '' \
+            "[查看运行日志](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})")"
+          node .github/scripts/notify-sc3.mjs

@@ -281,6 +281,21 @@ projectResourceSegments:
         required: false
         schema:
           type: string
+          maxLength: 256
+        description: 搜索文本，按 match_mode 匹配 source_text/target_text；search_field、case_sensitive、match_mode、whole_word 等匹配选项仅在提供 search 时生效，否则一律忽略；长度上限按 Unicode code point 计
+      - name: match_mode
+        in: query
+        required: false
+        schema:
+          $ref: '../components/schemas/resource.yaml#/SegmentMatchMode'
+        description: search 的匹配模式；regex 模式按 Go RE2 语法解释（线性时间、无回溯），SQL LIKE 通配符与正则元字符在 substring 模式下均按普通字符处理
+      - name: whole_word
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+        description: 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效；未提供 search 时忽略
       - name: group_key
         in: query
         required: false
@@ -315,21 +330,25 @@ projectResourceSegments:
           type: string
           enum: [source, target, both]
           default: both
-        description: 搜索字段范围；both 时同时匹配原文与译文（默认语义）
+        description: 搜索字段范围：source=仅原文，target=仅译文，both=同时匹配原文与译文（默认语义）；未提供 search 时忽略
       - name: case_sensitive
         in: query
         required: false
         schema:
           type: boolean
           default: true
-        description: 搜索是否区分大小写；默认 true 保持子串精确匹配语义
+        description: 搜索匹配是否区分大小写；默认 true 保持子串精确匹配语义，false 时按 Unicode 大小写折叠匹配；未提供 search 时忽略
       - name: include_total
         in: query
         required: false
         schema:
           type: boolean
           default: false
-        description: 是否在响应中附带满足过滤条件的段落总数（total）；为 true 时额外执行一次计数查询
+        description: |
+          是否在响应中附带满足全部过滤条件的段落总数（total）；为 true 时额外执行一次计数查询。
+          启用精筛条件（如 search 的 whole_word 边界检查、regex 匹配或质量问题过滤）时，计数可能需要
+          在资源全部候选段落上逐条求值过滤器，资源较大且命中稀疏时开销相应增加；
+          未启用精筛条件时为普通数据库计数，不受影响
       - name: anchor_segment_id
         in: query
         required: false
@@ -665,7 +684,8 @@ projectResourceSegmentsSearchReplacePreview:
       只对 target_text 执行匹配与替换（source_text 不参与）。
       - substring 模式按字面子串匹配，find 中的 SQL LIKE 通配符（%、_）按普通字符处理
       - regex 模式使用 Go RE2 语法（线性时间，无回溯），replace_with 支持 $1 捕获引用
-      - whole_word 仅 substring 模式生效，regex 模式忽略（可用 \b 边界）
+      - whole_word 对 substring 与 regex 模式均生效：命中前后不得紧邻字母或数字
+        （按 Unicode 字母/数字判定的词边界）；regex 模式下也可直接在 find 中使用 \b
       预览仅返回受影响的统计与最多 max_results 条样本；应用由独立的 apply 接口完成。
     security:
       - bearerAuth: []
