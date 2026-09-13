@@ -58,20 +58,45 @@ func TestBuildParams_ThinkingSkipsSampling(t *testing.T) {
 		TopP:        &topP,
 	}
 
-	t.Run("off keeps temperature/top_p", func(t *testing.T) {
+	t.Run("unset omits thinking and keeps temperature/top_p", func(t *testing.T) {
 		b := &Backend{
 			model:       "claude-sonnet-4-20250514",
 			maxTokens:   8192,
 			temperature: &temp,
 			topP:        &topP,
-			thinking:    backend.ThinkingOff,
 		}
 		params, _, err := b.buildParams(req)
 		if err != nil {
 			t.Fatal(err)
 		}
+		if params.Thinking.OfEnabled != nil || params.Thinking.OfDisabled != nil {
+			t.Fatal("want Thinking omitted when thinking_level unset")
+		}
+		if !params.Temperature.Valid() || params.Temperature.Value != temp {
+			t.Fatalf("Temperature: valid=%v value=%v want %v", params.Temperature.Valid(), params.Temperature.Value, temp)
+		}
+		if !params.TopP.Valid() || params.TopP.Value != topP {
+			t.Fatalf("TopP: valid=%v value=%v want %v", params.TopP.Valid(), params.TopP.Value, topP)
+		}
+	})
+
+	t.Run("explicit off disables thinking and keeps temperature/top_p", func(t *testing.T) {
+		b := &Backend{
+			model:       "claude-sonnet-4-20250514",
+			maxTokens:   8192,
+			temperature: &temp,
+			topP:        &topP,
+			thinking:    backend.Thinking{Level: backend.ThinkingOff, Set: true},
+		}
+		params, _, err := b.buildParams(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if params.Thinking.OfDisabled == nil {
+			t.Fatal("want Thinking disabled when off")
+		}
 		if params.Thinking.OfEnabled != nil {
-			t.Fatal("want Thinking omitted when off")
+			t.Fatal("want Thinking enabled unset when off")
 		}
 		if !params.Temperature.Valid() || params.Temperature.Value != temp {
 			t.Fatalf("Temperature: valid=%v value=%v want %v", params.Temperature.Valid(), params.Temperature.Value, temp)
@@ -87,7 +112,7 @@ func TestBuildParams_ThinkingSkipsSampling(t *testing.T) {
 			maxTokens:   8192,
 			temperature: &temp,
 			topP:        &topP,
-			thinking:    backend.ThinkingMedium,
+			thinking:    backend.Thinking{Level: backend.ThinkingMedium, Set: true},
 		}
 		params, _, err := b.buildParams(req)
 		if err != nil {
@@ -111,7 +136,7 @@ func TestBuildParams_ThinkingSkipsSampling(t *testing.T) {
 		b := &Backend{
 			model:     "claude-sonnet-4-20250514",
 			maxTokens: 1024,
-			thinking:  backend.ThinkingLow,
+			thinking:  backend.Thinking{Level: backend.ThinkingLow, Set: true},
 		}
 		small := backend.Request{System: "s", User: "u", MaxTokens: 1024}
 		_, _, err := b.buildParams(small)
@@ -121,7 +146,7 @@ func TestBuildParams_ThinkingSkipsSampling(t *testing.T) {
 	})
 }
 
-func TestFactory_ParseThinkingLevel(t *testing.T) {
+func TestFactory_InvalidThinkingLevel(t *testing.T) {
 	_, err := factory(backend.Config{
 		Options: map[string]any{
 			"api_key":        "k",
@@ -139,7 +164,7 @@ func TestFactory_ParseThinkingLevel(t *testing.T) {
 // 空内容 → EmptyResponseError（不可重试，携带 stop reason）。
 // thinking 是否开启不再影响截断行为（调参提示由 pipeline 层统一承担）。
 func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
-	b := &Backend{name: "claude", model: "claude-sonnet-4", thinking: backend.ThinkingHigh}
+	b := &Backend{name: "claude", model: "claude-sonnet-4", thinking: backend.Thinking{Level: backend.ThinkingHigh, Set: true}}
 
 	t.Run("non_empty_text_returns_truncated", func(t *testing.T) {
 		msg := &sdk.Message{

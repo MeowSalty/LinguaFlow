@@ -12,11 +12,13 @@ ResponseFormat:
 ThinkingLevel:
   type: string
   enum: [off, low, medium, high]
-  default: off
   description: |
-    统一思考强度档位。off = LinguaFlow 不参与思考控制、不传任何 thinking 字段，
-    沿用模型/网关默认（默认值，零回归；注意：默认开思考的推理模型在 off 下仍会思考，此为 by design）。
-    low/medium/high 由各适配层映射为厂商原生参数。仅对支持推理的模型生效。
+    统一思考强度档位（手动开关式）。不设置该键 = 开关关闭，不传任何 thinking 字段，
+    沿用模型/网关默认（注意：默认开思考的推理模型在不设置该键时仍会思考，此为 by design）。
+    off = 开关开启且显式关闭思考，映射为各协议原生关闭参数
+    （OpenAI reasoning_effort "none" / Anthropic thinking disabled / Gemini thinkingBudget 0），
+    该参数的模型兼容性由用户自行保证，LinguaFlow 不做模型能力校验。
+    low/medium/high = 开关开启并选择档位，由各适配层映射为厂商原生参数。仅对支持推理的模型生效。
 
 OpenAIBackendOptions:
   type: object
@@ -78,7 +80,9 @@ OpenAIBackendOptions:
         适用于只接受 stream:true 的兼容网关。默认 false。
     thinking_level:
       $ref: '#/ThinkingLevel'
-      description: 思考强度档位（统一语义）；off=不参与思考控制。
+      description: |
+        思考强度档位（统一语义）。不设置=开关关闭，不传 reasoning_effort（沿用模型/网关默认）；
+        off=显式关闭（reasoning_effort "none"）；low/medium/high 映射为对应档位。
 
 AnthropicBackendOptions:
   type: object
@@ -146,8 +150,11 @@ AnthropicBackendOptions:
     thinking_level:
       $ref: '#/ThinkingLevel'
       description: |
-        思考强度档位（统一语义）；off=不参与思考控制。Anthropic 开启时会忽略 temperature/top_p，
-        且 budget_tokens 与最终输出共用同一个 max_tokens 池（按 low/medium/high ≈ 25%/50%/75% 切分给思考），
+        思考强度档位（统一语义）。不设置=开关关闭，不传 thinking。
+        仅 low/medium/high 时跳过 temperature/top_p（API 拒绝非默认采样参数）；
+        显式 off 时 thinking 已禁用，temperature/top_p 正常传递。
+        Anthropic 开启档位时 budget_tokens 与最终输出共用同一个 max_tokens 池
+        （按 low/medium/high ≈ 25%/50%/75% 切分给思考），
         请按需抬高 max_tokens 以同时容纳思考与批量翻译输出。
 
 GoogleBackendOptions:
@@ -208,7 +215,10 @@ GoogleBackendOptions:
         适用于只接受 stream:true 的兼容网关。默认 false。
     thinking_level:
       $ref: '#/ThinkingLevel'
-      description: 思考强度档位（统一语义）；off=不参与思考控制。
+      description: |
+        思考强度档位（统一语义）。不设置=开关关闭，不传 ThinkingConfig（沿用模型默认）；
+        off=显式关闭（协议无 ThinkingLevel 关闭档，映射为 thinkingBudget 0）；
+        low/medium/high 映射为对应档位。
 
 BackendOptions:
   oneOf:

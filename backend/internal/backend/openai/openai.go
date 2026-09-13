@@ -41,7 +41,7 @@ type Backend struct {
 	temperature    *float64
 	topP           *float64
 	stream         bool
-	thinking       backend.ThinkingLevel
+	thinking       backend.Thinking
 }
 
 // Name 由 BackendConfig.Name 注入；这里使用 type/model 作 fallback。
@@ -193,9 +193,14 @@ func (b *Backend) buildParams(req backend.Request) (openaigo.ChatCompletionNewPa
 	default:
 		return params, fmt.Errorf("openai: unknown response_format %q", rf)
 	}
-	if b.thinking.Enabled() {
-		// low/medium/high 与 shared.ReasoningEffort 字面一致；off 不传字段（零回归）。
-		params.ReasoningEffort = shared.ReasoningEffort(b.thinking)
+	if b.thinking.Set {
+		if b.thinking.Level == backend.ThinkingOff {
+			// off：开关开启 + 显式关闭，映射为协议原生 reasoning_effort=none。
+			params.ReasoningEffort = shared.ReasoningEffortNone
+		} else {
+			// low/medium/high 与 shared.ReasoningEffort 字面一致。
+			params.ReasoningEffort = shared.ReasoningEffort(b.thinking.Level)
+		}
 	}
 	return params, nil
 }
@@ -222,7 +227,8 @@ func wrapOpenAIError(err error) error {
 // Options 期望的键：api_key, base_url, model（必填）, max_tokens, timeout（duration 字符串）,
 // response_format（json_schema | json_object | none，默认 json_schema）,
 // stream（bool，默认 false；true 时以流式发起并在内部累积）,
-// thinking_level（off|low|medium|high，默认 off；off=不传 reasoning_effort）。
+// thinking_level（off|low|medium|high；不设置=开关关闭不传 reasoning_effort，
+// off=显式关闭 -> reasoning_effort "none"）。
 func factory(cfg backend.Config) (backend.Backend, error) {
 	opts := cfg.Options
 	apiKey, _ := opts["api_key"].(string)
@@ -248,7 +254,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	default:
 		return nil, fmt.Errorf("openai: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
-	thinking, err := backend.ParseThinkingLevel(opts)
+	thinking, err := backend.ParseThinking(opts)
 	if err != nil {
 		return nil, fmt.Errorf("openai: %w", err)
 	}

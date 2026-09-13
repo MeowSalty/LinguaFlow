@@ -14,7 +14,7 @@ import (
 func logTruncatedResponse(logger *slog.Logger, backendName string) {
 	logger.Warn("backend response truncated by output token limit",
 		"backend", backendName,
-		"advice", "raise max_tokens / shrink batch_size / lower thinking_level (anthropic)")
+		"advice", "raise max_tokens / shrink batch_size / lower thinking_level or set it off (anthropic)")
 }
 
 // rawSource 返回段落的原始文本：优先 protect 之前的原文快照，未保护过时回退 Source。

@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// ThinkingLevel 统一思考强度档位。off = 不参与思考控制，沿用模型/网关默认。
+// ThinkingLevel 统一思考强度档位。off = 开关开启且显式关闭思考。
 type ThinkingLevel string
 
 const (
@@ -14,26 +14,36 @@ const (
 	ThinkingHigh   ThinkingLevel = "high"
 )
 
-// Enabled 表示需要向厂商发送思考相关参数（非 off / 空）。
+// Enabled 表示需要向厂商发送档位参数（low/medium/high）。
 func (l ThinkingLevel) Enabled() bool { return l != "" && l != ThinkingOff }
 
-// ParseThinkingLevel 校验 options["thinking_level"]，缺失或空串 → off。非法值返回 error。
-func ParseThinkingLevel(m map[string]any) (ThinkingLevel, error) {
+// Thinking 思考控制解析结果。Set 表示 options 提供了 thinking_level（开关开启）。
+type Thinking struct {
+	Level ThinkingLevel
+	Set   bool
+}
+
+// Active 表示需要发送档位参数（开关开启且为 low/medium/high）。
+func (t Thinking) Active() bool { return t.Set && t.Level.Enabled() }
+
+// ParseThinking 解析 options["thinking_level"]：缺失/nil/空串 → Set=false（开关关闭）；
+// off/low/medium/high → Set=true；非法值返回 error。
+func ParseThinking(m map[string]any) (Thinking, error) {
 	raw, ok := m["thinking_level"]
 	if !ok || raw == nil {
-		return ThinkingOff, nil
+		return Thinking{}, nil
 	}
 	s, ok := raw.(string)
 	if !ok {
-		return "", fmt.Errorf("invalid thinking_level: want string, got %T", raw)
+		return Thinking{}, fmt.Errorf("invalid thinking_level: want string, got %T", raw)
 	}
 	if s == "" {
-		return ThinkingOff, nil
+		return Thinking{}, nil
 	}
 	switch ThinkingLevel(s) {
 	case ThinkingOff, ThinkingLow, ThinkingMedium, ThinkingHigh:
-		return ThinkingLevel(s), nil
+		return Thinking{Level: ThinkingLevel(s), Set: true}, nil
 	default:
-		return "", fmt.Errorf("invalid thinking_level %q (want off|low|medium|high)", s)
+		return Thinking{}, fmt.Errorf("invalid thinking_level %q (want off|low|medium|high)", s)
 	}
 }
