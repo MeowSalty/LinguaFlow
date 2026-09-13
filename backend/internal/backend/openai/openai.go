@@ -198,7 +198,7 @@ func (b *Backend) buildParams(req backend.Request) (openaigo.ChatCompletionNewPa
 			// off：开关开启 + 显式关闭，映射为协议原生 reasoning_effort=none。
 			params.ReasoningEffort = shared.ReasoningEffortNone
 		} else {
-			// low/medium/high 与 shared.ReasoningEffort 字面一致。
+			// minimal/low/medium/high 与 shared.ReasoningEffort 字面一致。
 			params.ReasoningEffort = shared.ReasoningEffort(b.thinking.Level)
 		}
 	}
@@ -227,7 +227,7 @@ func wrapOpenAIError(err error) error {
 // Options 期望的键：api_key, base_url, model（必填）, max_tokens, timeout（duration 字符串）,
 // response_format（json_schema | json_object | none，默认 json_schema）,
 // stream（bool，默认 false；true 时以流式发起并在内部累积）,
-// thinking_level（off|low|medium|high；不设置=开关关闭不传 reasoning_effort，
+// thinking_level（off|minimal|low|medium|high；不设置=开关关闭不传 reasoning_effort，
 // off=显式关闭 -> reasoning_effort "none"）。
 func factory(cfg backend.Config) (backend.Backend, error) {
 	opts := cfg.Options

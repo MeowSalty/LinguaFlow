@@ -18,6 +18,9 @@ func TestAnthropicThinkingBudget(t *testing.T) {
 		wantErr bool
 	}{
 		// 纯比例计算，透明遵从用户配置（不引入输出预留 magic）
+		{backend.ThinkingMinimal, 8192, 1024, false},  // 0.125*8192=1024，恰在预算下限
+		{backend.ThinkingMinimal, 16384, 2048, false}, // 正常 12.5%
+		{backend.ThinkingMinimal, 4096, 1024, false},  // 0.125*4096=512 → clamp 到下限 1024，与 low 同值
 		{backend.ThinkingLow, 8192, 2048, false},
 		{backend.ThinkingMedium, 8192, 4096, false},
 		{backend.ThinkingHigh, 8192, 6144, false}, // 0.75*8192，输出只剩 2048，由用户对 max_tokens 负责
@@ -25,6 +28,7 @@ func TestAnthropicThinkingBudget(t *testing.T) {
 		{backend.ThinkingLow, 2000, 1024, false}, // 0.25*2000=500 → clamp 到下限 1024
 		{backend.ThinkingHigh, 1500, 1125, false},
 		// max_tokens 过小：报错（思考预算下限）
+		{backend.ThinkingMinimal, 1024, 0, true},
 		{backend.ThinkingLow, 1024, 0, true},
 		{backend.ThinkingMedium, 500, 0, true},
 		{backend.ThinkingOff, 8192, 0, true},

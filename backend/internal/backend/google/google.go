@@ -219,6 +219,8 @@ func (b *Backend) buildCfg(req backend.Request) (string, []*genai.Content, *gena
 
 func toGoogleThinkingLevel(level backend.ThinkingLevel) genai.ThinkingLevel {
 	switch level {
+	case backend.ThinkingMinimal:
+		return genai.ThinkingLevelMinimal
 	case backend.ThinkingLow:
 		return genai.ThinkingLevelLow
 	case backend.ThinkingMedium:
@@ -262,7 +264,7 @@ func emptyResponseError(b *Backend, finishReason string, promptTokens int64) err
 //   - timeout (默认 60s, duration 字符串)
 //   - response_format (json_schema|json_object|none, 默认 json_schema)
 //   - stream (bool，默认 false；true 时以流式发起并在内部累积)
-//   - thinking_level (off|low|medium|high；不设置=开关关闭不传 ThinkingConfig，
+//   - thinking_level (off|minimal|low|medium|high；不设置=开关关闭不传 ThinkingConfig，
 //     off=显式关闭 -> thinkingBudget 0)
 func factory(cfg backend.Config) (backend.Backend, error) {
 	opts := cfg.Options

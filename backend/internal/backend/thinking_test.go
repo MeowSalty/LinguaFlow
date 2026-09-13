@@ -14,6 +14,7 @@ func TestParseThinking(t *testing.T) {
 		{"nil value", map[string]any{"thinking_level": nil}, Thinking{}, false},
 		{"empty string", map[string]any{"thinking_level": ""}, Thinking{}, false},
 		{"off", map[string]any{"thinking_level": "off"}, Thinking{Level: ThinkingOff, Set: true}, false},
+		{"minimal", map[string]any{"thinking_level": "minimal"}, Thinking{Level: ThinkingMinimal, Set: true}, false},
 		{"low", map[string]any{"thinking_level": "low"}, Thinking{Level: ThinkingLow, Set: true}, false},
 		{"medium", map[string]any{"thinking_level": "medium"}, Thinking{Level: ThinkingMedium, Set: true}, false},
 		{"high", map[string]any{"thinking_level": "high"}, Thinking{Level: ThinkingHigh, Set: true}, false},

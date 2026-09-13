@@ -45,6 +45,7 @@ func TestBuildParams_ThinkingLevel(t *testing.T) {
 	})
 
 	for _, level := range []backend.ThinkingLevel{
+		backend.ThinkingMinimal,
 		backend.ThinkingLow,
 		backend.ThinkingMedium,
 		backend.ThinkingHigh,

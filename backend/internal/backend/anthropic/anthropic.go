@@ -144,7 +144,7 @@ func (b *Backend) buildParams(req backend.Request) (sdk.MessageNewParams, bool, 
 			sdk.NewUserMessage(sdk.NewTextBlock(req.User)),
 		},
 	}
-	// 开启档位（low/medium/high）时 API 拒绝非默认 temperature/top_p，整段跳过采样参数；
+	// 开启档位（minimal/low/medium/high）时 API 拒绝非默认 temperature/top_p，整段跳过采样参数；
 	// 显式 off 时 thinking 已禁用，API 不再拒绝采样参数，temperature/top_p 正常传递。
 	switch {
 	case b.thinking.Active():
@@ -204,6 +204,8 @@ func anthropicThinkingBudget(level backend.ThinkingLevel, maxTokens int64) (int6
 	}
 	var ratio float64
 	switch level {
+	case backend.ThinkingMinimal:
+		ratio = 0.125
 	case backend.ThinkingLow:
 		ratio = 0.25
 	case backend.ThinkingMedium:
@@ -323,8 +325,8 @@ func buildToolInputSchema(schema map[string]any) sdk.ToolInputSchemaParam {
 //   - response_format (json_schema|json_object|none，默认 json_schema)
 //   - enable_prompt_cache (bool，默认 true，启用后给 system block 加 ephemeral 缓存)
 //   - stream (bool，默认 false；true 时以流式发起并在内部累积)
-//   - thinking_level (off|low|medium|high；不设置=开关关闭不传 thinking，
-//     off=显式关闭 thinking，low/medium/high 开启档位并忽略 temperature/top_p)
+//   - thinking_level (off|minimal|low|medium|high；不设置=开关关闭不传 thinking，
+//     off=显式关闭 thinking，minimal/low/medium/high 开启档位并忽略 temperature/top_p)
 func factory(cfg backend.Config) (backend.Backend, error) {
 	opts := cfg.Options
 	apiKey := backend.StringOpt(opts, "api_key", "")

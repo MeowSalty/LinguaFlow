@@ -58,6 +58,7 @@ func TestBuildCfg_ThinkingLevel(t *testing.T) {
 		level backend.ThinkingLevel
 		want  genai.ThinkingLevel
 	}{
+		{backend.ThinkingMinimal, genai.ThinkingLevelMinimal},
 		{backend.ThinkingLow, genai.ThinkingLevelLow},
 		{backend.ThinkingMedium, genai.ThinkingLevelMedium},
 		{backend.ThinkingHigh, genai.ThinkingLevelHigh},
@@ -86,6 +87,9 @@ func TestBuildCfg_ThinkingLevel(t *testing.T) {
 }
 
 func TestToGoogleThinkingLevel(t *testing.T) {
+	if got := toGoogleThinkingLevel(backend.ThinkingMinimal); got != genai.ThinkingLevelMinimal {
+		t.Fatalf("minimal: %q", got)
+	}
 	if got := toGoogleThinkingLevel(backend.ThinkingLow); got != genai.ThinkingLevelLow {
 		t.Fatalf("low: %q", got)
 	}
