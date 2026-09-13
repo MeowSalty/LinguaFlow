@@ -106,10 +106,11 @@ AdjudicateRoundConfig:
       type: array
       items:
         type: string
-        enum: [source_residual, length_ratio, punctuation_surplus]
+        enum: [source_residual, length_ratio, punctuation_surplus, untranslated]
       description: |
         可裁决的质量问题 code 子集。空或不传时默认 ["source_residual", "punctuation_surplus"]。
-        untranslated 与 duplicate 为硬规则，不可裁决。
+        duplicate 为硬规则，不可裁决（需同批多段输入，无单段裁决语义）。
+        untranslated 可裁决：源语与目标语共用文字系统时，同形译文（专有名词、纯汉字标题、原样保留的英文片段）在确定性层面与真正的原文回传不可区分，需 LLM 判断是否为有意保留。
     # fallback_shrink: 当前仅 translate 轮实现缩批，adjudicate 失败模式与批次大小无关，
     # 不需要缩批，故暂不暴露。若未来需要，在此加 type:number / minimum:0 / maximum:1。
     retry:

@@ -116,7 +116,7 @@ ProfileQAConfig:
     auto_reject:
       type: boolean
       default: false
-      description: error 级别问题自动 reject
+      description: error 级别问题自动 reject；untranslated 例外——源语与目标语共用文字系统时降为 warning，该类"译文与原文相同"的段落不会被自动 reject
     checks:
       type: array
       items:

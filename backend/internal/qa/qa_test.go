@@ -5,54 +5,6 @@ import (
 	"testing"
 )
 
-func TestUntranslatedChecker(t *testing.T) {
-	checker := NewUntranslatedChecker()
-
-	tests := []struct {
-		name     string
-		segments []CheckInput
-		want     int
-	}{
-		{
-			name: "untranslated detected",
-			segments: []CheckInput{
-				{Index: 0, SourceText: "Hello World", TargetText: "Hello World"},
-			},
-			want: 1,
-		},
-		{
-			name: "translated passes",
-			segments: []CheckInput{
-				{Index: 0, SourceText: "Hello", TargetText: "你好"},
-			},
-			want: 0,
-		},
-		{
-			name: "pure numbers exempt",
-			segments: []CheckInput{
-				{Index: 0, SourceText: "123", TargetText: "123"},
-			},
-			want: 0,
-		},
-		{
-			name: "pure punctuation exempt",
-			segments: []CheckInput{
-				{Index: 0, SourceText: "...", TargetText: "..."},
-			},
-			want: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			issues := checker.Check(context.Background(), tt.segments)
-			if len(issues) != tt.want {
-				t.Errorf("got %d issues, want %d", len(issues), tt.want)
-			}
-		})
-	}
-}
-
 func TestLengthRatioChecker(t *testing.T) {
 	checker := NewLengthRatioChecker(0.2, 3.0, LengthMethodCharWeight)
 

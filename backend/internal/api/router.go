@@ -27,7 +27,12 @@ func (s *Server) newRouter() http.Handler {
 	r.Get("/api/openapi.json", s.handleOpenAPISpec)
 
 	apiV1 := chi.NewRouter()
-	r.Mount("/api/v1", HandlerFromMux(s, apiV1))
+	r.Mount("/api/v1", HandlerWithOptions(s, ChiServerOptions{
+		BaseRouter: apiV1,
+		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", err.Error())
+		},
+	}))
 
 	// SSE 流式端点已录入 OpenAPI 规范（StreamJobEvents），
 	// 由 HandlerFromMux 自动挂载，无需手动注册。

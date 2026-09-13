@@ -7,6 +7,7 @@ import { useBatchEventMeta } from '@/composables/useBatchEventMeta'
 
 import BatchContentViewer from './BatchContentViewer.vue'
 import GlossaryDiffTable from './GlossaryDiffTable.vue'
+import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 const { t } = useI18n()
 
@@ -29,15 +30,17 @@ const { meta, tokenLine, glossaryUsedCount, glossaryAddedCount, statusTagType, h
 <template>
   <NDrawer
     :show="show"
-    :width="'min(560px, 100vw)'"
+    :width="DRAWER_WIDTH.l"
     placement="right"
     @update:show="emit('update:show', $event)"
   >
-    <NDrawerContent
-      :title="t('workspace.job.events.batch.detailTitle')"
-      closable
-      :native-scrollbar="false"
-    >
+    <NDrawerContent closable :native-scrollbar="false">
+      <template #header>
+        <DrawerHeader
+          :title="t('workspace.job.events.batch.detailTitle')"
+          :subtitle="t('workspace.job.events.batch.detailSubtitle')"
+        />
+      </template>
       <div v-if="meta" class="space-y-4">
         <!-- Tags summary -->
         <div class="flex flex-wrap items-center gap-1">

@@ -649,6 +649,13 @@ var (
 				OnDelete:   schema.SetNull,
 			},
 		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "segment_resource_id_segment_index",
+				Unique:  false,
+				Columns: []*schema.Column{SegmentsColumns[10], SegmentsColumns[3]},
+			},
+		},
 	}
 	// SegmentRevisionsColumns holds the columns for the "segment_revisions" table.
 	SegmentRevisionsColumns = []*schema.Column{

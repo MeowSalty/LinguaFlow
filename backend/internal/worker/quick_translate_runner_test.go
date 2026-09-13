@@ -341,8 +341,8 @@ func TestBuildReviseBatchHandlerCommon_QARunRecomputesDeterministic(t *testing.T
 		Segments: []pipeline.Segment{
 			{ID: "0", Source: "hello", Target: "你好", Status: "translated", Translate: true,
 				Issues: []qa.QualityIssue{
-					// 确定性 dismissed（无 Span，指纹 "untranslated:" 与 fresh 相同）→ 裁决被继承。
-					{Code: qa.CheckUntranslated, Disposition: qa.DispositionDismissed, DecidedBy: &decidedBy, Note: "人工确认"},
+					// 确定性 dismissed（带 Span，指纹 "untranslated:hello" 与 fresh 相同）→ 裁决被继承。
+					{Code: qa.CheckUntranslated, Span: &qa.Span{MatchedText: "hello"}, Disposition: qa.DispositionDismissed, DecidedBy: &decidedBy, Note: "人工确认"},
 					// 范围外语义 pending → 保留。
 					{Code: qa.IssueCodeGrammar, Message: "语法", Span: &qa.Span{MatchedText: "语法"}, Disposition: qa.DispositionPending},
 					// targeted 语义 pending → 移除。

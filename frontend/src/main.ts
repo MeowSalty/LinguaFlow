@@ -14,7 +14,8 @@ import { useThemeStore } from './stores/theme'
 
 const router = createRouter({
   history: createWebHistory(),
-  routes,
+  // 旧即时翻译页已并入首页，保留重定向以兼容历史链接与书签
+  routes: [...routes, { path: '/tools/quick-translate', redirect: '/' }],
 })
 
 const app = createApp(App)

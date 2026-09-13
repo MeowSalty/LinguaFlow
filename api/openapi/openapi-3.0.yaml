@@ -834,6 +834,9 @@ paths:
         基于资源当前所有已翻译/已编辑的 segments，渲染并下载翻译后的文件。
         不依赖翻译任务状态，直接读取资源级别的最新翻译数据。
         如果没有任何已翻译的段落，返回 409 Conflict。
+        渲染前会预检译文标签结构：存在无法原样嵌入导出文档的译文时（如标签未闭合）
+        返回 409 Conflict，detail 给出缺陷段落编号与原因。此时不写出任何文件内容，
+        避免把「该章整章回退为原文」的残缺结果静默交付给用户。
       security:
         - bearerAuth: []
       responses:
@@ -872,6 +875,21 @@ paths:
           required: false
           schema:
             type: string
+            maxLength: 256
+          description: 搜索文本，按 match_mode 匹配 source_text/target_text；search_field、case_sensitive、match_mode、whole_word 等匹配选项仅在提供 search 时生效，否则一律忽略；长度上限按 Unicode code point 计
+        - name: match_mode
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SegmentMatchMode'
+          description: search 的匹配模式；regex 模式按 Go RE2 语法解释（线性时间、无回溯），SQL LIKE 通配符与正则元字符在 substring 模式下均按普通字符处理
+        - name: whole_word
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效；未提供 search 时忽略
         - name: group_key
           in: query
           required: false
@@ -943,21 +961,42 @@ paths:
               - target
               - both
             default: both
-          description: 搜索字段范围；both 时同时匹配原文与译文（默认语义）
+          description: 搜索字段范围：source=仅原文，target=仅译文，both=同时匹配原文与译文（默认语义）；未提供 search 时忽略
         - name: case_sensitive
           in: query
           required: false
           schema:
             type: boolean
             default: true
-          description: 搜索是否区分大小写；默认 true 保持子串精确匹配语义
+          description: 搜索匹配是否区分大小写；默认 true 保持子串精确匹配语义，false 时按 Unicode 大小写折叠匹配；未提供 search 时忽略
         - name: include_total
           in: query
           required: false
           schema:
             type: boolean
             default: false
-          description: 是否在响应中附带满足过滤条件的段落总数（total）；为 true 时额外执行一次计数查询
+          description: |
+            是否在响应中附带满足全部过滤条件的段落总数（total）；为 true 时额外执行一次计数查询。
+            启用精筛条件（如 search 的 whole_word 边界检查、regex 匹配或质量问题过滤）时，计数可能需要
+            在资源全部候选段落上逐条求值过滤器，资源较大且命中稀疏时开销相应增加；
+            未启用精筛条件时为普通数据库计数，不受影响
+        - name: anchor_segment_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: 以指定段落 ID 在当前筛选序列中的位置为窗口起点；与 cursor 及 direction=desc 互斥，锚点本身不满足筛选条件时从其后首个匹配段落开始
+        - name: direction
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
+          description: 分页方向；asc 取 cursor 对应 segment_index 之后的一页，desc 取其之前紧邻的一页，响应 items 始终按 segment_index 升序
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -1267,7 +1306,8 @@ paths:
         只对 target_text 执行匹配与替换（source_text 不参与）。
         - substring 模式按字面子串匹配，find 中的 SQL LIKE 通配符（%、_）按普通字符处理
         - regex 模式使用 Go RE2 语法（线性时间，无回溯），replace_with 支持 $1 捕获引用
-        - whole_word 仅 substring 模式生效，regex 模式忽略（可用 \b 边界）
+        - whole_word 对 substring 与 regex 模式均生效：命中前后不得紧邻字母或数字
+          （按 Unicode 字母/数字判定的词边界）；regex 模式下也可直接在 find 中使用 \b
         预览仅返回受影响的统计与最多 max_results 条样本；应用由独立的 apply 接口完成。
       security:
         - bearerAuth: []
@@ -2960,6 +3000,9 @@ components:
           description: QA 检测到的质量问题列表
           items:
             $ref: '#/components/schemas/QualityIssue'
+        group_key:
+          type: string
+          description: 段落分组键；EPUB 段落由 meta.epub_file 派生，非 EPUB 或无有效 meta 时缺省
         created_at:
           type: string
           format: date-time
@@ -3134,6 +3177,10 @@ components:
             $ref: '#/components/schemas/Segment'
         next_cursor:
           type: string
+        prev_cursor:
+          type: string
+          nullable: true
+          description: 当前窗口之前仍有内容时为窗口首条的 segment_index；使用 cursor=<prev_cursor>&direction=desc 取得上一页
         total:
           type: integer
           description: 满足过滤条件的段落总数；仅当请求 include_total=true 时返回
@@ -3690,22 +3737,20 @@ components:
       properties:
         find:
           type: string
-          description: 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法
+          maxLength: 256
+          description: 查找文本；substring 模式按字面子串，regex 模式为 RE2 语法；长度上限按 Unicode code point 计
         replace_with:
           type: string
           description: 替换文本；允许空串表示删除
         match_mode:
-          type: string
-          enum:
-            - substring
-            - regex
-          default: substring
+          $ref: '#/components/schemas/SegmentMatchMode'
         case_sensitive:
           type: boolean
           default: true
         whole_word:
           type: boolean
           default: false
+          description: 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查
         max_results:
           type: integer
           minimum: 1
@@ -3765,22 +3810,20 @@ components:
       properties:
         find:
           type: string
-          description: 查找文本；须与预览一致才能命中相同段落
+          maxLength: 256
+          description: 查找文本；须与预览一致才能命中相同段落；长度上限按 Unicode code point 计
         replace_with:
           type: string
           description: 替换文本；允许空串表示删除
         match_mode:
-          type: string
-          enum:
-            - substring
-            - regex
-          default: substring
+          $ref: '#/components/schemas/SegmentMatchMode'
         case_sensitive:
           type: boolean
           default: true
         whole_word:
           type: boolean
           default: false
+          description: 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查；须与预览请求一致才能命中相同段落
         segment_ids:
           type: array
           items:
@@ -5750,6 +5793,16 @@ components:
         deleted:
           type: integer
           description: 删除的段落数
+    SegmentMatchMode:
+      type: string
+      enum:
+        - substring
+        - regex
+      default: substring
+      description: |
+        文本匹配模式（段落搜索与查找替换共用）：
+        - substring: 按字面子串匹配；SQL LIKE 通配符（%、_）与正则元字符均按普通字符处理
+        - regex: 按 Go RE2 语法解释的正则匹配（线性时间、无回溯；不支持反向引用与前瞻/后顾断言）
     QualityIssueSpan:
       type: object
       required:
@@ -5803,7 +5856,8 @@ components:
             - no_longer_matches
             - empty_result
             - target_diverged
-          description: 跳过原因；no_longer_matches=apply 时当前译文已不含匹配，empty_result=替换后译文为空，target_diverged=undo 时该段已被后续编辑
+            - invalid_markup
+          description: 跳过原因；no_longer_matches=apply 时当前译文已不含匹配，empty_result=替换后译文为空，target_diverged=undo 时该段已被后续编辑，invalid_markup=替换后译文标签结构非法（会导致导出时整章降级为原文）
     GlossarySyncImpactResource:
       type: object
       required:
@@ -5966,9 +6020,11 @@ components:
               - source_residual
               - length_ratio
               - punctuation_surplus
+              - untranslated
           description: |
             可裁决的质量问题 code 子集。空或不传时默认 ["source_residual", "punctuation_surplus"]。
-            untranslated 与 duplicate 为硬规则，不可裁决。
+            duplicate 为硬规则，不可裁决（需同批多段输入，无单段裁决语义）。
+            untranslated 可裁决：源语与目标语共用文字系统时，同形译文（专有名词、纯汉字标题、原样保留的英文片段）在确定性层面与真正的原文回传不可区分，需 LLM 判断是否为有意保留。
         retry:
           $ref: '#/components/schemas/RetryConfig'
     SemanticQARoundConfig:
@@ -6322,7 +6378,7 @@ components:
         auto_reject:
           type: boolean
           default: false
-          description: error 级别问题自动 reject
+          description: error 级别问题自动 reject；untranslated 例外——源语与目标语共用文字系统时降为 warning，该类"译文与原文相同"的段落不会被自动 reject
         checks:
           type: array
           items:

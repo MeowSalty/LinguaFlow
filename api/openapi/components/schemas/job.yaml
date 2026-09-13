@@ -233,6 +233,9 @@ Segment:
       description: QA 检测到的质量问题列表
       items:
         $ref: '#/QualityIssue'
+    group_key:
+      type: string
+      description: 段落分组键；EPUB 段落由 meta.epub_file 派生，非 EPUB 或无有效 meta 时缺省
     created_at:
       type: string
       format: date-time

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -22,6 +23,7 @@ type segmentResponse struct {
 	ReviewComment *string           `json:"review_comment,omitempty"`
 	ReviewedBy    *userResponse     `json:"reviewed_by,omitempty"`
 	QualityIssues []qa.QualityIssue `json:"quality_issues,omitempty"`
+	GroupKey      string            `json:"group_key,omitempty"`
 	Meta          map[string]any    `json:"meta,omitempty"`
 	CreatedAt     string            `json:"created_at"`
 	UpdatedAt     string            `json:"updated_at"`
@@ -30,6 +32,7 @@ type segmentResponse struct {
 type segmentListResponse struct {
 	Items      []segmentResponse `json:"items"`
 	NextCursor string            `json:"next_cursor,omitempty"`
+	PrevCursor string            `json:"prev_cursor,omitempty"`
 	Total      *int              `json:"total,omitempty"`
 }
 
@@ -56,8 +59,21 @@ type retranslateResponse struct {
 	ResetCount int `json:"reset_count"`
 }
 
+// segmentMarkupProblemDetail 组装译文结构守卫的 problem detail。手动编辑与预览
+// 应用等所有映射 ErrSegmentMarkupInvalid 的入口共用一份文案，避免各处拼装漂移。
+func segmentMarkupProblemDetail(err error) string {
+	detail := "译文标签结构损坏，无法保存。请检查标签是否成对闭合。"
+	var markupErr *service.SegmentMarkupError
+	if errors.As(err, &markupErr) && markupErr.Err != nil {
+		detail = fmt.Sprintf("译文标签结构损坏，无法保存：%s。请检查标签是否成对闭合。", markupErr.Err)
+	}
+	return detail
+}
+
 func (s *Server) writeReviewServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, service.ErrSegmentMarkupInvalid):
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_target_markup", segmentMarkupProblemDetail(err))
 	case errors.Is(err, service.ErrSegmentNotFound), errors.Is(err, service.ErrResourceNotFound), errors.Is(err, service.ErrJobNotFound):
 		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
 	case errors.Is(err, service.ErrForbidden):
@@ -99,6 +115,9 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 		var meta map[string]any
 		if err := json.Unmarshal([]byte(*row.Meta), &meta); err == nil {
 			resp.Meta = meta
+			if groupKey, ok := meta["epub_file"].(string); ok {
+				resp.GroupKey = groupKey
+			}
 		}
 	}
 	return resp

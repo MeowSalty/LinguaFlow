@@ -1,12 +1,15 @@
 package api
 
 import (
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/service/segmatch"
 )
 
 type resourceSegmentUpdateRequest struct {
@@ -29,25 +32,85 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
+	query := r.URL.Query()
 	pageReq, ok := s.parseCursorPagination(w, r, 50, 200)
 	if !ok {
 		return
 	}
 
+	direction := strings.TrimSpace(query.Get("direction"))
+	if direction == "" {
+		direction = "asc"
+	}
+	if direction != "asc" && direction != "desc" {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "direction 只支持 asc 或 desc")
+		return
+	}
+
+	matchMode := strings.TrimSpace(query.Get("match_mode"))
+	if matchMode != "" && !SegmentMatchMode(matchMode).Valid() {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "不支持的 match_mode")
+		return
+	}
+
+	_, cursorProvided := query["cursor"]
+
+	var anchorSegmentID *int
+	if anchorValues, present := query["anchor_segment_id"]; present {
+		if len(anchorValues) != 1 {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "anchor_segment_id 只能出现一次")
+			return
+		}
+		anchorID, err := strconv.Atoi(strings.TrimSpace(anchorValues[0]))
+		if err != nil || anchorID <= 0 {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "anchor_segment_id 必须是有效正整数")
+			return
+		}
+		anchorSegmentID = &anchorID
+		if cursorProvided {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "anchor_segment_id 不能与 cursor 同时使用")
+			return
+		}
+		if direction == "desc" {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "anchor_segment_id 不能与 direction=desc 同时使用")
+			return
+		}
+	}
+
 	page, err := s.segmentSvc.ListResourceSegments(r.Context(), authUser.User.ID, projectID, resourceID, service.ResourceSegmentListOptions{
 		AfterID:         pageReq.AfterID,
+		HasCursor:       cursorProvided,
+		AnchorSegmentID: anchorSegmentID,
+		Direction:       direction,
 		Limit:           pageReq.Limit,
-		Status:          strings.TrimSpace(r.URL.Query().Get("status")),
-		Search:          strings.TrimSpace(r.URL.Query().Get("search")),
-		SearchField:     strings.TrimSpace(r.URL.Query().Get("search_field")),
+		Status:          strings.TrimSpace(query.Get("status")),
+		// search 保留原值：前后空白对 substring/regex 都有语义（" foo" ≠ "foo"），
+		// 仅空字符串表示未搜索；其余参数仍统一 trim。
+		Search:          query.Get("search"),
+		SearchField:     strings.TrimSpace(query.Get("search_field")),
+		MatchMode:       matchMode,
 		CaseSensitive:   parseBoolQuery(r, "case_sensitive"),
-		IncludeTotal:    r.URL.Query().Get("include_total") == "true",
-		GroupKey:        strings.TrimSpace(r.URL.Query().Get("group_key")),
-		QualityIssues:   strings.TrimSpace(r.URL.Query().Get("quality_issues")),
-		QualitySeverity: strings.TrimSpace(r.URL.Query().Get("quality_severity")),
-		QualityCode:     strings.TrimSpace(r.URL.Query().Get("quality_code")),
+		WholeWord:       parseBoolQuery(r, "whole_word"),
+		IncludeTotal:    query.Get("include_total") == "true",
+		GroupKey:        strings.TrimSpace(query.Get("group_key")),
+		QualityIssues:   strings.TrimSpace(query.Get("quality_issues")),
+		QualitySeverity: strings.TrimSpace(query.Get("quality_severity")),
+		QualityCode:     strings.TrimSpace(query.Get("quality_code")),
 	})
 	if err != nil {
+		if errors.Is(err, segmatch.ErrInvalidPattern) || errors.Is(err, segmatch.ErrUnsupportedMatchMode) || errors.Is(err, segmatch.ErrPatternTooLong) {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrSegmentGroupMismatch) {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "锚点段落不属于指定的 group_key 章节")
+			return
+		}
+		if errors.Is(err, service.ErrDuplicateSegmentIndex) {
+			s.writeProblem(w, r, http.StatusConflict, "duplicate_segment_index",
+				"资源段落索引损坏：segment_index 存在重复，分页游标无法跨越该边界表达遍历位置，其后的数据不可达。请重新导入或修复该资源的段落后再试")
+			return
+		}
 		s.writeReviewServiceError(w, r, err)
 		return
 	}
@@ -56,7 +119,19 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 	for _, row := range page.Items {
 		items = append(items, toSegmentResponse(row))
 	}
-	writeJSON(w, http.StatusOK, segmentListResponse{Items: items, NextCursor: formatCursor(page.NextCursor), Total: page.Total})
+	writeJSON(w, http.StatusOK, segmentListResponse{
+		Items:      items,
+		NextCursor: formatOptionalCursor(page.NextCursor, page.HasNextCursor),
+		PrevCursor: formatOptionalCursor(page.PrevCursor, page.HasPrevCursor),
+		Total:      page.Total,
+	})
+}
+
+func formatOptionalCursor(cursor int, present bool) string {
+	if !present {
+		return ""
+	}
+	return strconv.Itoa(cursor)
 }
 
 func (s *Server) handleUpdateResourceSegment(w http.ResponseWriter, r *http.Request) {

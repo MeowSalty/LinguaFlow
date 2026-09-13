@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // 可调常量：强档独立脚本默认最小连续长度；kana/hangul 为 1。
@@ -75,7 +77,10 @@ func (c *SourceResidualChecker) Check(_ context.Context, segments []CheckInput) 
 		if src == "" || tgt == "" {
 			continue
 		}
-		if src == tgt {
+		// 交接守卫与 untranslated 同口径：比较在 ruby 剥离形态上进行，
+		// 否则 LLM 回传剥离形态原文时译文含残留假名，本检测器会在
+		// untranslated 的 error 之外再刷冗余 warning，破坏二者分工。
+		if strings.TrimSpace(ruby.StripRubyTags(src)) == strings.TrimSpace(ruby.StripRubyTags(tgt)) {
 			continue // 整段未译由 untranslated 负责
 		}
 		cleanedTgt := stripPlaceholders(tgt)
@@ -278,8 +283,15 @@ var placeholderRe = regexp.MustCompile(`__LF_[A-Za-z0-9_]+`)
 
 // stripPlaceholders 移除 __LF_* 占位符并转小写。
 func stripPlaceholders(s string) string {
-	if strings.Contains(s, "__LF_") {
-		s = placeholderRe.ReplaceAllString(s, "")
+	return strings.ToLower(stripPlaceholderTokens(s))
+}
+
+// stripPlaceholderTokens 移除 __LF_* 占位符，保留原大小写。
+// 剥离与降写拆开：残留判定需要小写归一，而豁免类判定（如 untranslated）关心
+// 剩余文本本身是否含字母，小写化会引入干扰，各自按需组合。
+func stripPlaceholderTokens(s string) string {
+	if !strings.Contains(s, "__LF_") {
+		return s
 	}
-	return strings.ToLower(s)
+	return placeholderRe.ReplaceAllString(s, "")
 }

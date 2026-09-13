@@ -5,6 +5,7 @@ import BootstrapNoticeHost from '@/components/BootstrapNoticeHost.vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useThemeStore } from '@/stores/theme'
+import { readLfTokens, type LfTokenName, type LfTokenState } from '@/utils/themeTokens'
 
 const route = useRoute()
 const locale = useLocaleStore()
@@ -12,95 +13,109 @@ const theme = useThemeStore()
 const isBlank = computed(() => route.meta.layout === 'blank')
 const naiveTheme = computed(() => (theme.isDark ? darkTheme : null))
 
-const themeOverrides = computed<GlobalThemeOverrides>(() => {
-  const isDark = theme.isDark
+// naive-ui 主题色的唯一来源是 tailwind.css 中的 --lf-* CSS 变量。
+// 主题切换时 theme store 先写入 html[data-theme]，post 时序确保此处重读到新主题的值。
+const lfTokens = reactive<LfTokenState>({})
 
-  return {
-    common: {
-      primaryColor: '#10b981',
-      primaryColorHover: '#34d399',
-      primaryColorPressed: '#059669',
-      primaryColorSuppl: '#34d399',
-      infoColor: isDark ? '#60a5fa' : '#3b82f6',
-      successColor: '#10b981',
-      warningColor: '#f59e0b',
-      errorColor: '#ef4444',
-      borderRadius: '10px',
-      borderRadiusSmall: '8px',
-      fontFamily:
-        "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans SC', sans-serif",
-      fontFamilyMono:
-        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-      bodyColor: isDark ? '#0b1118' : '#f4f7fb',
-      cardColor: isDark ? '#121a24' : '#ffffff',
-      modalColor: isDark ? '#121a24' : '#ffffff',
-      popoverColor: isDark ? '#172131' : '#ffffff',
-      tableColor: isDark ? '#121a24' : '#ffffff',
-      inputColor: isDark ? '#0e151e' : '#ffffff',
-      borderColor: isDark ? '#243041' : '#e2e8f0',
-      dividerColor: isDark ? '#1a2433' : '#edf2f7',
-      textColorBase: isDark ? '#e2e8f0' : '#0f172a',
-      textColor1: isDark ? '#f8fafc' : '#020617',
-      textColor2: isDark ? '#94a3b8' : '#64748b',
-      textColor3: isDark ? '#64748b' : '#94a3b8',
-      hoverColor: isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.06)',
-      boxShadow1: isDark ? '0 1px 2px rgba(0,0,0,0.32)' : '0 1px 2px rgba(15,23,42,0.06)',
-      boxShadow2: isDark ? '0 8px 24px rgba(0,0,0,0.4)' : '0 8px 24px rgba(15,23,42,0.08)',
-      boxShadow3: isDark ? '0 16px 40px rgba(0,0,0,0.48)' : '0 16px 40px rgba(15,23,42,0.12)',
-    },
-    Button: {
-      fontWeight: '500',
-      heightMedium: '36px',
-      paddingMedium: '0 16px',
-      borderRadiusMedium: '10px',
-    },
-    Card: {
-      borderRadius: '16px',
-      paddingMedium: '20px',
-      color: isDark ? '#121a24' : '#ffffff',
-      colorModal: isDark ? '#121a24' : '#ffffff',
-    },
-    Input: {
-      borderRadius: '10px',
-      heightMedium: '36px',
-    },
-    Select: {
-      peers: {
-        InternalSelection: {
-          borderRadius: '10px',
-          heightMedium: '36px',
-        },
+watch(
+  () => theme.resolvedTheme,
+  () => {
+    Object.assign(lfTokens, readLfTokens())
+  },
+  { immediate: true, flush: 'post' },
+)
+
+const tok = (name: LfTokenName): string | undefined => lfTokens[name]
+
+const themeOverrides = computed<GlobalThemeOverrides>(() => ({
+  common: {
+    primaryColor: tok('--lf-brand-500'),
+    primaryColorHover: tok('--lf-brand-400'),
+    primaryColorPressed: tok('--lf-brand-700'),
+    primaryColorSuppl: tok('--lf-brand-400'),
+    infoColor: tok('--lf-info'),
+    successColor: tok('--lf-success'),
+    warningColor: tok('--lf-warning'),
+    errorColor: tok('--lf-danger'),
+    borderRadius: '8px',
+    borderRadiusSmall: '6px',
+    fontFamily:
+      "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans SC', sans-serif",
+    fontFamilyMono:
+      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    bodyColor: tok('--lf-bg'),
+    cardColor: tok('--lf-surface'),
+    modalColor: tok('--lf-surface'),
+    popoverColor: tok('--lf-surface-elevated'),
+    tableColor: tok('--lf-surface'),
+    inputColor: tok('--lf-surface'),
+    borderColor: tok('--lf-border'),
+    dividerColor: tok('--lf-border-soft'),
+    textColorBase: tok('--lf-text'),
+    textColor1: tok('--lf-text-strong'),
+    textColor2: tok('--lf-text-muted'),
+    textColor3: tok('--lf-text-subtle'),
+    hoverColor: tok('--lf-hover'),
+    boxShadow1: tok('--lf-shadow-1'),
+    boxShadow2: tok('--lf-shadow-2'),
+    boxShadow3: tok('--lf-shadow-3'),
+  },
+  Button: {
+    fontWeight: '500',
+    heightMedium: '34px',
+    paddingMedium: '0 14px',
+    borderRadiusMedium: '8px',
+  },
+  Card: {
+    borderRadius: '10px',
+    paddingMedium: '20px',
+  },
+  Input: {
+    borderRadius: '8px',
+    heightMedium: '34px',
+    // naive 暗色主题将输入框静止边框硬编码为透明（border: 1px solid #0000），
+    // 与亮色的 borderColor 派生值不对称；此处显式取 token 保证明暗一致
+    border: `1px solid ${tok('--lf-border')}`,
+    borderDisabled: `1px solid ${tok('--lf-border')}`,
+  },
+  Select: {
+    peers: {
+      InternalSelection: {
+        borderRadius: '8px',
+        heightMedium: '34px',
+        border: `1px solid ${tok('--lf-border')}`,
+        borderDisabled: `1px solid ${tok('--lf-border')}`,
       },
     },
-    Tag: {
-      borderRadius: '999px',
-      heightSmall: '22px',
-      fontSizeSmall: '12px',
-    },
-    Drawer: {
-      borderRadius: '16px',
-    },
-    DataTable: {
-      borderRadius: '12px',
-      thColor: isDark ? '#0e151e' : '#f7f9fc',
-      thColorModal: isDark ? '#0e151e' : '#f7f9fc',
-      thTextColor: isDark ? '#64748b' : '#94a3b8',
-      thFontWeight: '500',
-      tdColor: isDark ? '#121a24' : '#ffffff',
-      tdColorHover: isDark ? 'rgba(16, 185, 129, 0.06)' : 'rgba(16, 185, 129, 0.04)',
-      tdTextColor: isDark ? '#e2e8f0' : '#0f172a',
-      borderColor: isDark ? '#1a2433' : '#edf2f7',
-      thPaddingMedium: '10px 14px',
-      tdPaddingMedium: '14px',
-      thPaddingSmall: '10px 12px',
-      tdPaddingSmall: '12px',
-    },
-    Tabs: {
-      tabBorderRadius: '10px',
-      tabFontWeightActive: '600',
-    },
-  }
-})
+  },
+  Tag: {
+    borderRadius: '999px',
+    heightSmall: '22px',
+    fontSizeSmall: '12px',
+  },
+  Drawer: {
+    borderRadius: '10px',
+  },
+  DataTable: {
+    borderRadius: '10px',
+    thColor: tok('--lf-surface-muted'),
+    thColorModal: tok('--lf-surface-muted'),
+    thTextColor: tok('--lf-text-subtle'),
+    thFontWeight: '600',
+    tdColor: tok('--lf-surface'),
+    tdColorHover: tok('--lf-hover'),
+    tdTextColor: tok('--lf-text'),
+    borderColor: tok('--lf-border-soft'),
+    thPaddingMedium: '10px 14px',
+    tdPaddingMedium: '12px 14px',
+    thPaddingSmall: '10px 12px',
+    tdPaddingSmall: '12px',
+  },
+  Tabs: {
+    tabBorderRadius: '8px',
+    tabFontWeightActive: '600',
+  },
+}))
 
 const naiveLocale = computed(() => {
   switch (locale.currentLocale) {

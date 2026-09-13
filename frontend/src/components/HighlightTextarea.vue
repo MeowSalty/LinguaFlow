@@ -256,7 +256,7 @@ defineExpose({ insertAtCursor })
 
 <template>
   <div
-    class="prompt-editor relative overflow-hidden rounded-lg border border-lf-border bg-lf-surface"
+    class="prompt-editor relative overflow-hidden rounded-lf-ctl border border-lf-border bg-lf-surface"
   >
     <!-- 背景高亮容器：通过 CSS left/right 与 textarea 完全对齐，无需 JS 计算宽度 -->
     <div
@@ -286,50 +286,51 @@ defineExpose({ insertAtCursor })
   Go template 高亮样式：非 scoped，通过 .prompt-editor 选择器限定作用域。
   v-html 动态插入的 <mark> 元素不带 Vue scoped 标记，scoped 样式无法匹配。
 -->
-<style>
-/* 重置浏览器默认的 <mark> 黄色背景，只允许 .tmpl-action 设置背景色 */
-.prompt-editor mark {
+<style scoped>
+/*
+  Go template 高亮样式：v-html 动态插入的 <mark> 元素不带 Vue scoped 标记，
+  需通过 :deep() 从组件根节点向下匹配，避免使用非 scoped 全局样式。
+*/
+.prompt-editor :deep(mark) {
   background-color: transparent;
   padding: 0;
 }
 
-.prompt-editor .tmpl-action {
+.prompt-editor :deep(.tmpl-action) {
   background-color: var(--lf-tmpl-bg);
   border-radius: 2px;
   padding: 1px 0;
 }
 
-.prompt-editor .tmpl-delim {
+.prompt-editor :deep(.tmpl-delim) {
   color: var(--lf-tmpl-delim);
 }
 
-.prompt-editor .tmpl-keyword {
+.prompt-editor :deep(.tmpl-keyword) {
   color: var(--lf-tmpl-keyword);
   font-weight: 500;
 }
 
-.prompt-editor .tmpl-field {
+.prompt-editor :deep(.tmpl-field) {
   color: var(--lf-tmpl-field);
 }
 
-.prompt-editor .tmpl-func {
+.prompt-editor :deep(.tmpl-func) {
   color: var(--lf-tmpl-func);
 }
 
-.prompt-editor .tmpl-string {
+.prompt-editor :deep(.tmpl-string) {
   color: var(--lf-tmpl-string);
 }
 
-.prompt-editor .tmpl-pipe {
+.prompt-editor :deep(.tmpl-pipe) {
   color: var(--lf-tmpl-pipe);
   font-weight: 600;
 }
-</style>
 
-<style scoped>
 .prompt-editor:focus-within {
-  border-color: var(--n-border-hover);
-  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.15);
+  border-color: var(--lf-brand-500);
+  box-shadow: 0 0 0 2px var(--lf-brand-soft);
 }
 
 .prompt-editor-backdrop,
@@ -372,6 +373,6 @@ defineExpose({ insertAtCursor })
 }
 
 .prompt-editor-textarea::placeholder {
-  color: var(--lf-text-subtle, #9ca3af);
+  color: var(--lf-text-subtle);
 }
 </style>

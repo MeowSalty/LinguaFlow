@@ -90,6 +90,63 @@ func tableIn(tables []*unicode.RangeTable, t *unicode.RangeTable) bool {
 	return false
 }
 
+// sourceOnlyScripts 返回源语主脚本中目标语不使用的部分，即"出现即证明是源语文本"的脚本集。
+// 与 source_residual 的 resolveRules 不同：不排除 Han，也不分档——判定的是整段回传，
+// Han 本身就是有效证据（zh→en 的 identity 文本含汉字即铁证），无需 minRun 降噪。
+// 任一语言为空/auto/无法解析时返回 ok=false，调用方据此退回保守判定。
+func sourceOnlyScripts(srcLang, tgtLang string) ([]*unicode.RangeTable, bool) {
+	src := normalizeLang(srcLang)
+	tgt := normalizeLang(tgtLang)
+	if src == "" || src == "auto" || tgt == "" || tgt == "auto" {
+		return nil, false
+	}
+	srcS := primaryScripts(src)
+	tgtS := targetWritingScripts(tgt)
+	if srcS == nil || tgtS == nil {
+		return nil, false
+	}
+	var only []*unicode.RangeTable
+	for _, t := range srcS {
+		if !tableIn(tgtS, t) {
+			only = append(only, t)
+		}
+	}
+	return only, true
+}
+
+// targetWritingScripts 返回目标语现代规范正文实际使用的脚本集，即"出现在 identity
+// 文本里也不足以证明是源语回传"的那些脚本。
+//
+// 仅 ko 与 primaryScripts 不同。primaryScripts 把 Han 纳入 ko 是为 source_residual
+// 的档位解析服务（让 zh→ko 落弱档而非准强档，见该函数内注释），但现代韩文正文以
+// 谚文书写，汉字只见于古文与少量括注。沿用它会让 zh→ko 的差集为空，整段中文原文
+// 回传降为 warning——而 ko 既不在 script.languageScripts 注册表内（script_mismatch
+// 静默不活跃），zh→ko 的 source_residual 弱档也默认关闭，等于完全没有兜底。
+func targetWritingScripts(lang string) []*unicode.RangeTable {
+	scripts := primaryScripts(lang)
+	if normalizeLang(lang) != "ko" {
+		return scripts
+	}
+	out := make([]*unicode.RangeTable, 0, len(scripts))
+	for _, t := range scripts {
+		if isHanTable(t) {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// containsAnyScript 报告 text 中是否出现属于 tables 任一脚本的字符。
+func containsAnyScript(text string, tables []*unicode.RangeTable) bool {
+	for _, r := range text {
+		if ruleBelongs(r, tables) {
+			return true
+		}
+	}
+	return false
+}
+
 func isHanTable(t *unicode.RangeTable) bool {
 	return t == unicode.Han
 }

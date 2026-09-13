@@ -264,9 +264,11 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/se
 | ---------------- | ------ | ----------- | ------------------------------------------------------------ |
 | `find`           | string | 必填        | 查找内容                                                     |
 | `replace_with`   | string | 必填        | 替换文本；空串表示删除匹配内容                               |
-| `match_mode`     | string | `substring` | `substring` 或 `regex`（RE2 语法，`replace_with` 支持 `$1` 捕获引用） |
-| `case_sensitive` | bool   | `true`      | 是否区分大小写                                               |
-| `whole_word`     | bool   | `false`     | 全字匹配，仅 `substring` 模式生效                            |
+| `match_mode`     | string | `substring` | `substring` 或 `regex`（RE2 语法，线性时间、不支持反向引用与前后顾断言；`replace_with` 支持 `$1` 捕获引用） |
+| `case_sensitive` | bool   | `true`      | 是否区分大小写；关闭后按 Unicode 大小写折叠匹配               |
+| `whole_word`     | bool   | `false`     | 全字匹配（命中前后不得紧邻 Unicode 字母或数字），`substring` 与 `regex` 模式均生效 |
+
+`find` 长度上限 256 个 Unicode 码点，超出返回 400 `invalid_input`；`substring` 模式始终按字面量处理 `%`、`_` 与正则元字符。
 
 预览额外支持 `status` / `quality_issues` 等段落过滤参数与 `max_results`（`1`–`100`，默认 `20`）样本数上限；响应含 `matched_segment_count`（受影响段落数）、`total_replacements`（命中总次数）与样本数组（每项含 `before` / `after` 替换前后对照）。应用响应含 `operation_id`、`applied_count`、`skipped_count` 与跳过明细（如译文已不含匹配内容、替换后译文为空）。
 
@@ -275,8 +277,9 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/resources/1/segments/se
 - 被替换的段落状态置为 `edited`，并重新执行规则质检
 - 撤销按 `operation_id` 回滚；替换后又被人工编辑过的段落会跳过（`target_diverged`）
 - 替换历史超过保留期返回 404，全部段落均已变更、无可撤销内容返回 409；保留时长由 `server.revision_retention` 控制（默认 90 天）
+- EPUB 资源中，替换后将产生非法 XML 结构的段落在预览中即被排除；应用时不会修改这些段落，而是在跳过明细中以原因 `invalid_markup` 返回
 
-另：段落列表端点 `GET /projects/{projectId}/resources/{resourceId}/segments` 的搜索还支持 `search_field`（`source` / `target` / `both`，默认 `both`）、`case_sensitive`（默认 `true`）与 `include_total`（默认 `false`，为 `true` 时响应附带满足过滤条件的 `total` 总数）查询参数。
+另：段落列表端点 `GET /projects/{projectId}/resources/{resourceId}/segments` 的搜索还支持 `search_field`（`source` / `target` / `both`，默认 `both`）、`case_sensitive`（默认 `true`）、`match_mode`（`substring` / `regex`，默认 `substring`）与 `whole_word`（默认 `false`，对两种匹配模式均生效）查询参数；这些选项仅在提供 `search` 时生效，`search` 同样受 256 码点上限约束。分页为双向游标：响应含 `next_cursor` / `prev_cursor`，除默认的向后翻页外，还可用 `anchor_segment_id` + `direction`（`asc` / `desc`）围绕指定段落开窗——跳转到中间位置后，用 `prev_cursor` 向前、`next_cursor` 向后补齐上下文（响应条目始终按 `segment_index` 升序）。注意：启用正则、全字或质量问题等精筛并请求 `include_total=true`（默认 `false`，附带 `total` 总数）时，服务可能扫描资源全部候选段落，成本高于普通计数。
 
 ### 14. QA 重检（qa-recheck）
 
@@ -328,6 +331,16 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/qa-recheck \
 | 账号禁用         | `urn:linguaflow:user-inactive`              |
 | 登录密码错误     | `urn:linguaflow:invalid-credentials`        |
 | 取消/重试状态不符 | `urn:linguaflow:conflict`                  |
+| 译文结构非法（EPUB） | `urn:linguaflow:invalid-target-markup`   |
+
+::: tip EPUB 译文结构守卫
+EPUB 资源的译文必须是能嵌入 XHTML 的合法 XML 片段。两类接口会返回 409 Conflict（`type: urn:linguaflow:invalid-target-markup`）之外的细分行为：
+
+- **写入类接口**（段落编辑、单段试译/修订预览应用）遇到结构非法译文：返回 **400**，不落库，`detail` 说明具体语法错误
+- **下载翻译结果**（`DownloadTranslatedResourceFile`）：渲染前对全部译文预检，存在缺陷时返回 **409**、不输出文件，`detail` 给出缺陷段落总数、最多 5 个段落编号及首个错误的位置与原因
+
+产品侧行为见 [翻译审校 · 结构预检](/zh/guide/review#结构预检)。
+:::
 
 ::: tip 任务取消 / 重试的前置校验
 `CancelJob` / `RetryJob` 增加了状态前置校验，不满足时返回 409 Conflict（`type: urn:linguaflow:conflict`）：取消非可取消状态的任务（「任务当前状态不可取消」）、重试未失败的任务（「任务未失败，无法重试」）、无可重试失败资源（「没有可重试的失败资源」）。

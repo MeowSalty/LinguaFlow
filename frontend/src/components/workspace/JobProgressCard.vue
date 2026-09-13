@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NIcon, NTag, NTooltip } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import {
@@ -8,6 +9,7 @@ import {
   calculateJobETA,
   calculateJobSpeed,
   formatETA,
+  formatEtaCompletionTime,
   formatJobSpeed,
   getJobProgress,
   getJobProgressNumbers,
@@ -18,7 +20,9 @@ import {
   roundCellView,
   statusTagType,
 } from '@/composables/useWorkspaceUtils'
-import { t } from '@/i18n'
+import StackedProgressBar from '@/components/common/StackedProgressBar.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   job: ApiSchemas['Job']
@@ -85,19 +89,17 @@ const showRoundStrip = computed(
   () => props.job.status !== 'completed' && roundStrip.value.length > 0,
 )
 
-const barColor = computed(() => {
-  if (props.job.status === 'completed' && !hasFailures.value && !hasWarnings.value)
-    return 'bg-green-500'
-  if (props.job.status === 'completed' && hasWarnings.value && !hasFailures.value)
-    return 'bg-amber-500'
-  if (props.job.status === 'failed') return 'bg-red-500'
-  return 'bg-brand-500'
+const barTone = computed<'brand' | 'success' | 'warning'>(() => {
+  if (props.job.status === 'completed' && !hasFailures.value && !hasWarnings.value) return 'success'
+  if (props.job.status === 'completed' && hasWarnings.value && !hasFailures.value) return 'warning'
+  return 'brand'
 })
 
-const etaText = computed(() => {
-  const seconds = calculateJobETA(props.job)
-  return formatETA(seconds)
-})
+const etaSeconds = computed(() => calculateJobETA(props.job))
+
+const etaText = computed(() => formatETA(etaSeconds.value))
+
+const etaCompletionText = computed(() => formatEtaCompletionTime(etaSeconds.value))
 
 const speedText = computed(() => {
   const speed = calculateJobSpeed(props.job)
@@ -107,13 +109,15 @@ const speedText = computed(() => {
 
 <template>
   <div
-    class="rounded-xl border border-lf-border-soft bg-linear-to-br from-lf-surface to-lf-surface-muted p-4 space-y-3"
+    class="rounded-lf-card border border-lf-border-soft bg-lf-surface p-4 space-y-3"
     :class="{
       'border-l-3 border-brand-500': job.status === 'running',
-      'border-l-3 border-green-500': job.status === 'completed' && !hasFailures && !hasWarnings,
-      'border-l-3 border-amber-500':
-        job.status === 'paused' || (job.status === 'completed' && (hasFailures || hasWarnings)),
-      'border-l-3 border-red-500': job.status === 'failed',
+      'border-l-3 border-lf-success': job.status === 'completed' && !hasFailures && !hasWarnings,
+      'border-l-3 border-lf-warning':
+        job.status === 'paused' ||
+        job.status === 'cancelled' ||
+        (job.status === 'completed' && (hasFailures || hasWarnings)),
+      'border-l-3 border-lf-danger': job.status === 'failed',
     }"
   >
     <!-- 顶部信息行：左侧标签 + 右侧大号百分比 -->
@@ -156,34 +160,33 @@ const speedText = computed(() => {
       </NTooltip>
     </div>
 
-    <!-- 主进度条（自定义堆叠条） -->
+    <!-- 主进度条（StackedProgressBar：主段 + 失败段 + 跳过段） -->
     <div class="space-y-1">
-      <div class="text-xs text-lf-text-muted">{{ getJobProgressText(job) }}</div>
-      <div class="relative h-1.5 w-full overflow-hidden rounded-full bg-lf-border/60">
-        <!-- 已完成工作量 -->
-        <div
-          class="absolute inset-y-0 left-0 transition-all duration-300"
-          :class="[
-            barColor,
-            job.status === 'running' ? 'animate-pulse' : '',
-            failedBarPct > 0 || skippedBarPct > 0 ? 'rounded-l-full' : 'rounded-full',
-          ]"
-          :style="{ width: `${completedPct}%` }"
-        />
-        <!-- 失败工作量（紧接已完成段右侧） -->
-        <div
-          v-if="failedBarPct > 0"
-          class="absolute inset-y-0 bg-red-400 transition-all duration-300"
-          :class="skippedBarPct > 0 ? '' : 'rounded-r-full'"
-          :style="{ left: `${completedPct}%`, width: `${failedBarPct}%` }"
-        />
-        <!-- 跳过段（最后） -->
-        <div
-          v-if="skippedBarPct > 0"
-          class="absolute inset-y-0 rounded-r-full bg-lf-text-muted/40 transition-all duration-300"
-          :style="{ left: `${completedPct + failedBarPct}%`, width: `${skippedBarPct}%` }"
-        />
+      <!-- 终态显示工作量计数（状态语义交给 NTag）；运行/排队沿用进度文案 -->
+      <div class="text-xs text-lf-text-muted">
+        <template v-if="isTerminal">
+          {{
+            t('workspace.job.progress.workload', {
+              completed: completedCount,
+              total: job.progress.progress_total,
+            })
+          }}
+          <span class="ml-1 text-[10px] text-lf-text-subtle">
+            {{ t('workspace.job.stats.unitWorkload') }}
+          </span>
+        </template>
+        <template v-else>
+          {{ getJobProgressText(job) }}
+        </template>
       </div>
+      <StackedProgressBar
+        :value="completedPct"
+        :error-value="failedBarPct"
+        :skipped-value="skippedBarPct"
+        :error="job.status === 'failed'"
+        :tone="barTone"
+        :class="job.status === 'running' ? 'animate-pulse' : ''"
+      />
     </div>
 
     <!-- 轮次管线条：各轮跨资源聚合进度 -->
@@ -214,7 +217,7 @@ const speedText = computed(() => {
         </span>
       </span>
       <span v-if="hasFailures" class="flex items-center gap-1 text-lf-text-muted">
-        <span class="inline-block h-2 w-2 rounded-full bg-red-400" />
+        <span class="inline-block h-2 w-2 rounded-full bg-lf-danger" />
         {{ t('workspace.job.stats.failed') }}
         <span class="font-mono tabular-nums font-medium text-lf-text-strong">
           {{ job.progress.failed_resources }}
@@ -224,7 +227,7 @@ const speedText = computed(() => {
         </span>
       </span>
       <span v-if="hasWarnings" class="flex items-center gap-1 text-lf-text-muted">
-        <span class="inline-block h-2 w-2 rounded-full bg-amber-400" />
+        <span class="inline-block h-2 w-2 rounded-full bg-lf-warning" />
         {{ t('workspace.job.stats.warned') }}
         <span class="font-mono tabular-nums font-medium text-lf-text-strong">
           {{ warnedResourceCount }}
@@ -254,26 +257,45 @@ const speedText = computed(() => {
       </span>
     </div>
 
-    <!-- ETA 与速度行：网格卡片布局 -->
-    <div v-if="job.status === 'running' && (etaText || speedText)" class="grid grid-cols-2 gap-2">
+    <!-- ETA / 预计完成 / 速度行：网格卡片布局（仅运行中） -->
+    <div
+      v-if="job.status === 'running' && (etaText || speedText)"
+      class="grid grid-cols-2 gap-2 sm:grid-cols-3"
+    >
       <div
         v-if="etaText"
-        class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
+        class="flex items-center gap-1.5 rounded-lf-ctl bg-lf-surface/60 px-2.5 py-1.5"
       >
         <NIcon size="14" class="text-lf-text-muted">
           <IconCarbonTime />
         </NIcon>
         <div class="flex flex-col">
-          <span class="text-[10px] text-lf-text-muted">ETA</span>
+          <span class="text-[10px] text-lf-text-muted">{{ t('workspace.job.eta.label') }}</span>
           <span class="font-mono tabular-nums text-sm text-lf-text-strong">{{ etaText }}</span>
         </div>
       </div>
       <div
+        v-if="etaCompletionText"
+        class="flex items-center gap-1.5 rounded-lf-ctl bg-lf-surface/60 px-2.5 py-1.5"
+      >
+        <NIcon size="14" class="text-lf-text-muted">
+          <IconCarbonCalendar />
+        </NIcon>
+        <div class="flex flex-col">
+          <span class="text-[10px] text-lf-text-muted">
+            {{ t('workspace.job.eta.expectedLabel') }}
+          </span>
+          <span class="font-mono tabular-nums text-sm text-lf-text-strong">
+            {{ etaCompletionText }}
+          </span>
+        </div>
+      </div>
+      <div
         v-if="speedText"
-        class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
+        class="flex items-center gap-1.5 rounded-lf-ctl bg-lf-surface/60 px-2.5 py-1.5"
       >
         <div class="flex flex-col">
-          <span class="text-[10px] text-lf-text-muted">速度</span>
+          <span class="text-[10px] text-lf-text-muted">{{ t('workspace.job.speed.label') }}</span>
           <span class="font-mono tabular-nums text-sm text-lf-text-strong">{{ speedText }}</span>
         </div>
       </div>

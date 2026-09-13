@@ -3,9 +3,10 @@ import { computed } from 'vue'
 
 import type { QualityIssue } from '@/composables/useQualityIssues'
 import {
-  renderQualityHighlightedHtml,
-  renderQualityHighlightedText,
-} from '@/composables/useQualityIssues'
+  renderCombinedHighlightedHtml,
+  renderCombinedHighlightedText,
+  type SearchMatchOptions,
+} from '@/composables/useSearchHighlight'
 
 const props = withDefaults(
   defineProps<{
@@ -14,11 +15,15 @@ const props = withDefaults(
     mode: 'plaintext' | 'html'
     activeIssueIndex?: number | null
     maxLines?: number
+    searchQuery?: string
+    searchMatchOptions?: SearchMatchOptions
   }>(),
   {
     issues: undefined,
     activeIssueIndex: null,
     maxLines: undefined,
+    searchQuery: '',
+    searchMatchOptions: undefined,
   },
 )
 
@@ -27,15 +32,18 @@ const useHtmlRenderer = computed(
 )
 
 const vnode = computed(() => {
+  const query = props.searchQuery.trim()
   if (useHtmlRenderer.value) {
-    return renderQualityHighlightedHtml(
+    return renderCombinedHighlightedHtml(
       props.text,
+      query,
+      props.searchMatchOptions,
       props.issues,
       props.activeIssueIndex ?? null,
       props.maxLines,
     )
   }
-  return renderQualityHighlightedText(props.text, props.issues)
+  return renderCombinedHighlightedText(props.text, query, props.searchMatchOptions, props.issues)
 })
 </script>
 

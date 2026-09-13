@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -97,6 +98,9 @@ func (s *Server) writePreviewServiceError(w http.ResponseWriter, r *http.Request
 	case errors.Is(err, service.ErrPreviewBusy):
 		w.Header().Set("Retry-After", "1")
 		s.writeProblem(w, r, http.StatusTooManyRequests, "preview_busy", "预览并发已满，请稍后重试")
+	case errors.Is(err, service.ErrSegmentMarkupInvalid):
+		// ApplyPreview 与手动编辑同为交互式写入，结构守卫的报错语义与文案一致。
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_target_markup", segmentMarkupProblemDetail(err))
 	case errors.Is(err, service.ErrPreviewConflict):
 		s.writeProblem(w, r, http.StatusConflict, "preview_conflict", "段落基线已变化，请重新预览")
 	case errors.Is(err, service.ErrPreviewTokenExpired):
@@ -278,6 +282,14 @@ func toOpenAPISegment(row *ent.Segment) Segment {
 			issues = append(issues, toOpenAPIQualityIssue(issue))
 		}
 		result.QualityIssues = &issues
+	}
+	if row.Meta != nil {
+		var meta map[string]any
+		if err := json.Unmarshal([]byte(*row.Meta), &meta); err == nil {
+			if groupKey, ok := meta["epub_file"].(string); ok && groupKey != "" {
+				result.GroupKey = &groupKey
+			}
+		}
 	}
 	return result
 }

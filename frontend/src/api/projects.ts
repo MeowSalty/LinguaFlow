@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { countUnicodeCodePoints, SEGMENT_SEARCH_MAX_LENGTH } from '@/utils/unicode'
 
 import type { ApiClient, ApiPaths, ApiSchemas } from './client'
 import { apiClient } from './client'
@@ -36,15 +37,23 @@ export interface SearchReplaceApplyError extends Error {
   readonly problem?: ApiSchemas['Problem']
 }
 
+export interface DownloadTranslatedError extends Error {
+  readonly isDownloadTranslatedError: true
+  readonly status: number
+  readonly problem?: ApiSchemas['Problem']
+}
+
 export type FetchResourceSegmentsParams = NonNullable<
   ApiPaths['/projects/{projectId}/resources/{resourceId}/segments']['get']['parameters']['query']
 >
 
 export type ResourceSegmentQualityCode = NonNullable<FetchResourceSegmentsParams['quality_code']>
 
-export type SearchReplaceMatchMode = NonNullable<
-  ApiSchemas['SearchReplacePreviewRequest']['match_mode']
->
+/** 搜索/搜索替换的匹配模式（由后端 schema 导出） */
+export type SegmentMatchMode = ApiSchemas['SegmentMatchMode']
+
+/** @deprecated 兼容别名，改用 SegmentMatchMode */
+export type SearchReplaceMatchMode = SegmentMatchMode
 
 export const isResourceConflictError = (error: unknown): error is ResourceConflictError =>
   error instanceof Error &&
@@ -62,6 +71,11 @@ export const isSearchReplaceApplyError = (error: unknown): error is SearchReplac
   error instanceof Error &&
   'isSearchReplaceApplyError' in error &&
   (error as SearchReplaceApplyError).isSearchReplaceApplyError === true
+
+export const isDownloadTranslatedError = (error: unknown): error is DownloadTranslatedError =>
+  error instanceof Error &&
+  'isDownloadTranslatedError' in error &&
+  (error as DownloadTranslatedError).isDownloadTranslatedError === true
 
 export const fetchCurrentUser = async (
   client: ApiClient = apiClient,
@@ -414,6 +428,27 @@ export const downloadProjectResource = async (
   }
 }
 
+const buildDownloadTranslatedError = (
+  fallbackMessage: string,
+  error: unknown,
+  response?: Response,
+): DownloadTranslatedError => {
+  const failure = buildRequestFailureError(fallbackMessage, error, response)
+  const translatedError = failure as DownloadTranslatedError
+  const problem =
+    error && typeof error === 'object' && 'title' in error
+      ? (error as ApiSchemas['Problem'])
+      : undefined
+
+  Object.defineProperties(translatedError, {
+    isDownloadTranslatedError: { value: true, enumerable: false },
+    status: { value: response?.status ?? problem?.status ?? 0, enumerable: false },
+    problem: { value: problem, enumerable: false },
+  })
+
+  return translatedError
+}
+
 export const downloadResourceResult = async (
   projectId: number,
   resourceId: number,
@@ -428,7 +463,11 @@ export const downloadResourceResult = async (
   )
 
   if (!data) {
-    throw buildRequestFailureError(t('api.errors.downloadResourceResultFailed'), error, response)
+    throw buildDownloadTranslatedError(
+      t('api.errors.downloadResourceResultFailed'),
+      error,
+      response,
+    )
   }
 
   return {
@@ -452,12 +491,29 @@ export const fetchProjectResourceTree = async (
   return data
 }
 
+/**
+ * 搜索/查找文本超限时本地失败：不发网络请求，避免后端 400 与未知副作用。
+ * 仅检查长度，不 trim/截断；按 Unicode code point 计与 API 一致。
+ */
+const assertSegmentSearchLength = (value: string, tooLongMessage: string): void => {
+  if (countUnicodeCodePoints(value) > SEGMENT_SEARCH_MAX_LENGTH) {
+    throw new RangeError(tooLongMessage)
+  }
+}
+
 export const fetchResourceSegments = async (
   projectId: number,
   resourceId: number,
   params?: FetchResourceSegmentsParams,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['ResourceSegmentListResponse']> => {
+  if (params?.search) {
+    assertSegmentSearchLength(
+      params.search,
+      t('api.errors.segmentSearchTooLong', { max: SEGMENT_SEARCH_MAX_LENGTH }),
+    )
+  }
+
   const { data, error, response } = await client.GET(
     '/projects/{projectId}/resources/{resourceId}/segments',
     {
@@ -712,6 +768,10 @@ export const previewResourceSegmentsSearchReplace = async (
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['SearchReplacePreviewResponse']> => {
   const { find, replace_with, match_mode, case_sensitive, whole_word, ...filters } = payload
+  assertSegmentSearchLength(
+    find,
+    t('api.errors.searchReplaceFindTooLong', { max: SEGMENT_SEARCH_MAX_LENGTH }),
+  )
   const { data, error, response } = await client.POST(
     '/projects/{projectId}/resources/{resourceId}/segments/search-replace/preview',
     {
@@ -746,6 +806,10 @@ export const applyResourceSegmentsSearchReplace = async (
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['SearchReplaceApplyResponse']> => {
   const { find, replace_with, match_mode, case_sensitive, whole_word, ...rest } = payload
+  assertSegmentSearchLength(
+    find,
+    t('api.errors.searchReplaceFindTooLong', { max: SEGMENT_SEARCH_MAX_LENGTH }),
+  )
   const { data, error, response } = await client.POST(
     '/projects/{projectId}/resources/{resourceId}/segments/search-replace/apply',
     {

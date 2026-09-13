@@ -81,6 +81,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetMode.value = 'resources'
     jobTargetResourceIds.value = [...workspace.selectedResourceIds]
     jobTargetSegmentIds.value = []
+    jobTargetGroupKeys.value = []
     jobForm.execution_plan_id = null
     jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
@@ -97,11 +98,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = [...resourceIds]
     jobTargetSegmentIds.value = []
     jobTargetGroupKeys.value = groupKeys ? [...groupKeys] : []
-    console.debug('[useJobActions] openResourceJobDrawerWithIds:', {
-      resourceIds: [...resourceIds],
-      groupKeys: groupKeys ? [...groupKeys] : [],
-      jobTargetGroupKeys: [...jobTargetGroupKeys.value],
-    })
     jobForm.execution_plan_id = null
     jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
@@ -121,6 +117,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetMode.value = 'segments'
     jobTargetResourceIds.value = [workspace.activeResourceId]
     jobTargetSegmentIds.value = segmentIds
+    jobTargetGroupKeys.value = []
     jobForm.execution_plan_id = null
     jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
@@ -136,9 +133,9 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobForm.segment_filter = undefined
   }
 
-  const submitJob = async (): Promise<void> => {
+  const submitJob = async (): Promise<boolean> => {
     if (!projectId.value || !jobForm.execution_plan_id) {
-      return
+      return false
     }
 
     const payload: CreateJobRequest = {
@@ -159,15 +156,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       payload.segment_ids = jobTargetSegmentIds.value
     }
 
-    console.debug('[useJobActions] submitJob payload:', {
-      targetMode: jobTargetMode.value,
-      resourceIds: [...jobTargetResourceIds.value],
-      groupKeys: [...jobTargetGroupKeys.value],
-      segmentIds: [...jobTargetSegmentIds.value],
-      payloadGroupKeys: payload.segment_group_keys ? [...payload.segment_group_keys] : undefined,
-      payloadSegmentIds: payload.segment_ids ? [...payload.segment_ids] : undefined,
-    })
-
     try {
       const job = await workspace.createJob(projectId.value, payload)
       message.success(t('workspace.messages.jobCreated'))
@@ -179,9 +167,11 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       if (onJobCreated) {
         await onJobCreated()
       }
+      return true
     } catch (error) {
       console.error(error)
       message.error(workspace.actionError || t('workspace.messages.jobCreateFailed'))
+      return false
     }
   }
 

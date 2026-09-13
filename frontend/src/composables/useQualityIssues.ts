@@ -210,7 +210,8 @@ export const collectQualityHighlightRanges = (
   return mergeHighlightRanges(ranges)
 }
 
-const findRuneIndex = (haystack: string[], needle: string[]): number => {
+/** 在 rune 数组中查找子串的起始偏移（未找到返回 -1） */
+export const findRuneIndex = (haystack: string[], needle: string[]): number => {
   if (!needle.length || needle.length > haystack.length) return -1
   outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
     for (let j = 0; j < needle.length; j++) {
@@ -288,7 +289,7 @@ export const renderQualityHighlightedText = (text: string, issues?: QualityIssue
 // ── HTML 模式高亮 ──
 
 /** 危险标签黑名单：解析时整体剔除对应标签子树（含内容），防止 XSS */
-const HTML_BLOCKED_TAGS = new Set([
+export const HTML_BLOCKED_TAGS = new Set([
   'script',
   'style',
   'iframe',
@@ -354,18 +355,19 @@ export interface HtmlHighlightLayout {
   perIssue: (QualityHighlightRange | null)[]
 }
 
-interface HtmlTextMap {
+export interface HtmlTextMap {
   /** 可见文本 rune 数组（块级边界含 \n 占位） */
   runes: string[]
   /** Text 节点 → 其文本在可见文本中的 rune 起始偏移 */
   nodeStarts: Map<Text, number>
 }
 
-const parseHtmlBody = (html: string): HTMLElement =>
+/** 解析 HTML 字符串为 body 元素（DOMParser，非 v-html） */
+export const parseHtmlBody = (html: string): HTMLElement =>
   new DOMParser().parseFromString(html, 'text/html').body
 
 /** 遍历 body 构建可见文本（rune 数组）与文本节点映射；剔除危险标签，块级边界插入 \n */
-const buildVisibleTextMap = (root: HTMLElement): HtmlTextMap => {
+export const buildVisibleTextMap = (root: HTMLElement): HtmlTextMap => {
   let text = ''
   let runeCount = 0
   const nodeStarts = new Map<Text, number>()
@@ -435,8 +437,12 @@ const locateSpanInVisibleRunes = (
   return { start: found, end: found + matchedRunes.length }
 }
 
-/** 由 per-issue 区间构建边界切分的原子段（相邻同 severity 且同覆盖集合并） */
-const buildHtmlHighlightLayout = (
+/**
+ * 由可见文本 runes 与 issues 构建边界切分的原子段（相邻同 severity 且同覆盖集合并）。
+ * 已持有 buildVisibleTextMap 结果的调用方（如组合高亮）应直接调用本函数，
+ * 避免再次 parseHtmlBody 让同一份 HTML 被解析两次。
+ */
+export const buildHtmlHighlightLayout = (
   runes: string[],
   issues?: QualityIssue[],
 ): HtmlHighlightLayout => {
@@ -511,7 +517,7 @@ export const collectHtmlHighlightRanges = (
 }
 
 /** 属性过滤：剔除 on* 事件属性与 javascript: 协议（DOM→VNode 不经过 v-html 消毒） */
-const sanitizeElementProps = (el: Element): Record<string, string> => {
+export const sanitizeElementProps = (el: Element): Record<string, string> => {
   const props: Record<string, string> = {}
   for (const attr of Array.from(el.attributes)) {
     const name = attr.name.toLowerCase()

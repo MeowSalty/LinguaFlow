@@ -57,22 +57,6 @@ export const useExecutionPlanTemplatesStore = defineStore('executionPlanTemplate
   const totalCount = computed(() => items.value.length)
   const systemCount = computed(() => items.value.filter((i) => i.scope === 'system').length)
   const userCount = computed(() => items.value.filter((i) => i.scope === 'user').length)
-  const orgCount = computed(() => items.value.filter((i) => i.scope === 'org').length)
-
-  // ── 轮次统计 ──
-  const avgRoundsPerPlan = computed(() => {
-    if (items.value.length === 0) return 0
-    const totalRounds = items.value.reduce((sum, i) => sum + (i.rounds?.length ?? 0), 0)
-    return Math.round((totalRounds / items.value.length) * 10) / 10
-  })
-
-  const maxRoundsPlan = computed(() => {
-    if (items.value.length === 0) return null
-    return items.value.reduce(
-      (max, i) => ((i.rounds?.length ?? 0) > (max.rounds?.length ?? 0) ? i : max),
-      items.value[0]!,
-    )
-  })
 
   const loadTemplatesPromise = ref<Promise<void> | null>(null)
 
@@ -162,6 +146,11 @@ export const useExecutionPlanTemplatesStore = defineStore('executionPlanTemplate
     }
   }
 
+  const resetFilters = (): void => {
+    searchQuery.value = ''
+    scopeFilter.value = 'all'
+  }
+
   return {
     items,
     loading,
@@ -171,14 +160,12 @@ export const useExecutionPlanTemplatesStore = defineStore('executionPlanTemplate
     error,
     searchQuery,
     scopeFilter,
+    resetFilters,
     sortedItems,
     filteredItems,
     totalCount,
     systemCount,
     userCount,
-    orgCount,
-    avgRoundsPerPlan,
-    maxRoundsPlan,
     loadTemplates,
     createTemplate,
     updateTemplate,

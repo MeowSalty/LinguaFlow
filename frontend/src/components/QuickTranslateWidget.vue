@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
-import { Icon as IconifyIcon } from '@iconify/vue'
 
 import { quickTranslate } from '@/api/client'
 import type { ApiSchemas } from '@/api/client'
@@ -11,8 +10,6 @@ import { useLanguageOptions } from '@/composables/useLanguageOptions'
 import { renderQualityHighlightedText, getQualityCodeLabel } from '@/composables/useQualityIssues'
 import { formatTokens, batchStatusTimelineType } from '@/composables/useWorkspaceUtils'
 import SegmentTranslationPreviewDiagnostic from '@/components/workspace/SegmentTranslationPreviewDiagnostic.vue'
-
-const props = withDefaults(defineProps<{ variant?: 'hero' | 'full' }>(), { variant: 'hero' })
 
 const { t } = useI18n()
 const message = useMessage()
@@ -28,20 +25,39 @@ const executionPlanId = ref<number | null>(null)
 const projectId = ref<number | null>(null)
 const glossary = ref<Array<{ id: number; source: string; target: string; notes: string }>>([])
 const glossarySeq = ref(0)
-const advancedOpen = ref(props.variant === 'full')
+const advancedOpen = ref(false)
 const submitting = ref(false)
 const result = ref<ApiSchemas['QuickTranslateResponse'] | null>(null)
 
+const hasTranslateRound = (plan: ApiSchemas['ExecutionPlanTemplate']): boolean =>
+  plan.rounds.some((round) => round.mode === 'translate')
+
+const translatablePlans = computed(() => planTemplates.items.filter(hasTranslateRound))
+
 const executionPlanOptions = computed(() =>
-  planTemplates.items.map((item) => ({ label: item.name, value: item.id })),
+  planTemplates.items.map((item) => ({
+    label: hasTranslateRound(item)
+      ? item.name
+      : `${item.name}${t('quickTranslate.planNoTranslateRound')}`,
+    value: item.id,
+    disabled: !hasTranslateRound(item),
+  })),
 )
 
 const projectOptions = computed(() =>
   projects.items.map((item) => ({ label: item.name, value: item.id })),
 )
 
+const selectedPlanTranslatable = computed(
+  () =>
+    executionPlanId.value != null &&
+    planTemplates.items.some(
+      (item) => item.id === executionPlanId.value && hasTranslateRound(item),
+    ),
+)
+
 const canSubmit = computed(
-  () => sourceText.value.trim().length > 0 && executionPlanId.value != null && !submitting.value,
+  () => sourceText.value.trim().length > 0 && selectedPlanTranslatable.value && !submitting.value,
 )
 
 const qualityIssues = computed(() => result.value?.quality_issues ?? [])
@@ -72,19 +88,24 @@ const HighlightedTarget = computed(() => {
 
 const applyExecutionPlanDefault = (): void => {
   const storedId = Number(localStorage.getItem('linguaflow.quick_translate.plan_id'))
-  if (Number.isFinite(storedId) && planTemplates.items.some((item) => item.id === storedId)) {
-    executionPlanId.value = storedId
+  const storedPlan = translatablePlans.value.find((item) => item.id === storedId)
+  if (Number.isFinite(storedId) && storedPlan) {
+    executionPlanId.value = storedPlan.id
     return
   }
-  if (planTemplates.items.length > 0 && executionPlanId.value == null) {
-    const firstPlan = planTemplates.items[0]
-    if (firstPlan) executionPlanId.value = firstPlan.id
+  if (executionPlanId.value == null && translatablePlans.value.length > 0) {
+    executionPlanId.value = translatablePlans.value[0]!.id
   }
 }
 
 const onExecutionPlanChange = (id: number | null): void => {
   executionPlanId.value = id
   if (id != null) localStorage.setItem('linguaflow.quick_translate.plan_id', String(id))
+}
+
+const onSwapLanguages = (): void => {
+  if (sourceLang.value === 'auto') return
+  ;[sourceLang.value, targetLang.value] = [targetLang.value, sourceLang.value]
 }
 
 const onSubmit = async (): Promise<void> => {
@@ -146,74 +167,86 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="lf-panel space-y-6 p-5">
-    <!-- 原文输入 -->
-    <div class="space-y-2">
-      <p class="text-sm font-medium text-lf-text-strong">{{ t('quickTranslate.sourceLabel') }}</p>
-      <NInput
-        v-model:value="sourceText"
-        type="textarea"
-        :autosize="{ minRows: 4, maxRows: 12 }"
-        :placeholder="t('quickTranslate.sourcePlaceholder')"
-      />
-    </div>
-
-    <!-- 语言与执行计划 -->
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div class="space-y-2">
-        <p class="text-sm font-medium text-lf-text-strong">
-          {{ t('quickTranslate.sourceLangLabel') }}
-        </p>
-        <NSelect v-model:value="sourceLang" :options="sourceLanguageOptions" />
-      </div>
-      <div class="space-y-2">
-        <p class="text-sm font-medium text-lf-text-strong">
-          {{ t('quickTranslate.targetLangLabel') }}
-        </p>
-        <NSelect v-model:value="targetLang" :options="targetLanguageOptions" />
-      </div>
-      <div class="space-y-2">
-        <p class="text-sm font-medium text-lf-text-strong">
-          {{ t('quickTranslate.executionPlanLabel') }}
-        </p>
+  <div class="space-y-6">
+    <!-- 输入面板：翻译控制台 -->
+    <section class="lf-panel overflow-hidden">
+      <!-- 语言与执行计划工具条 -->
+      <div class="flex flex-wrap items-center gap-2 border-b border-lf-border-soft px-5 py-3.5">
         <NSelect
-          :value="executionPlanId"
-          filterable
-          :options="executionPlanOptions"
-          :placeholder="t('quickTranslate.executionPlanPlaceholder')"
-          :loading="planTemplates.loading"
-          @update:value="onExecutionPlanChange"
+          v-model:value="sourceLang"
+          class="w-full! sm:w-44!"
+          :options="sourceLanguageOptions"
+          :aria-label="t('quickTranslate.sourceLangLabel')"
         />
-        <p v-if="executionPlanOptions.length === 0" class="text-xs text-lf-text-muted">
+        <span class="hidden shrink-0 sm:inline-flex">
+          <NButton
+            quaternary
+            circle
+            size="small"
+            :disabled="sourceLang === 'auto'"
+            :aria-label="t('quickTranslate.swapLangs')"
+            @click="onSwapLanguages"
+          >
+            <IconCarbonArrowsHorizontal class="text-base" />
+          </NButton>
+        </span>
+        <NSelect
+          v-model:value="targetLang"
+          class="w-full! sm:w-44!"
+          :options="targetLanguageOptions"
+          :aria-label="t('quickTranslate.targetLangLabel')"
+        />
+        <div class="ml-auto flex w-full min-w-0 items-center gap-2.5 sm:w-auto">
+          <span class="shrink-0 text-xs font-medium text-lf-text-subtle">
+            {{ t('quickTranslate.executionPlanLabel') }}
+          </span>
+          <NSelect
+            class="w-full! sm:w-52!"
+            :value="executionPlanId"
+            filterable
+            :options="executionPlanOptions"
+            :placeholder="t('quickTranslate.executionPlanPlaceholder')"
+            :loading="planTemplates.loading"
+            @update:value="onExecutionPlanChange"
+          />
+        </div>
+        <p
+          v-if="!planTemplates.loading && executionPlanOptions.length === 0"
+          class="w-full text-xs text-lf-text-muted"
+        >
           {{ t('quickTranslate.executionPlanEmpty') }}
         </p>
+        <p
+          v-else-if="!planTemplates.loading && translatablePlans.length === 0"
+          class="w-full text-xs text-lf-text-muted"
+        >
+          {{ t('quickTranslate.noTranslatablePlan') }}
+        </p>
       </div>
-    </div>
 
-    <!-- 高级选项 -->
-    <div class="space-y-3 border-t border-lf-border-soft pt-5">
-      <button
-        type="button"
-        class="flex items-center gap-1.5 text-sm font-medium text-lf-text-muted transition-colors hover:text-lf-text-strong"
-        @click="advancedOpen = !advancedOpen"
-      >
-        <IconifyIcon
-          :icon="advancedOpen ? 'carbon:chevron-up' : 'carbon:chevron-down'"
-          class="text-base"
+      <!-- 原文输入 -->
+      <div class="px-5 py-4">
+        <NInput
+          v-model:value="sourceText"
+          type="textarea"
+          :autosize="{ minRows: 6, maxRows: 14 }"
+          :placeholder="t('quickTranslate.sourcePlaceholder')"
+          :aria-label="t('quickTranslate.sourceLabel')"
         />
-        {{ t('quickTranslate.advancedToggle') }}
-      </button>
+      </div>
 
+      <!-- 高级选项展开区 -->
       <div
         v-if="advancedOpen"
-        class="space-y-5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/40 p-4"
+        class="space-y-5 border-t border-lf-border-soft bg-lf-surface-muted/40 px-5 py-4"
       >
         <div class="space-y-2">
-          <p class="text-sm font-medium text-lf-text-strong">
+          <p class="text-xs font-medium text-lf-text-muted">
             {{ t('quickTranslate.projectLabel') }}
           </p>
           <NSelect
             v-model:value="projectId"
+            class="max-w-sm!"
             clearable
             :options="projectOptions"
             :placeholder="t('quickTranslate.projectPlaceholder')"
@@ -223,10 +256,10 @@ onMounted(() => {
 
         <div class="space-y-2.5">
           <div class="space-y-0.5">
-            <p class="text-sm font-medium text-lf-text-strong">
+            <p class="text-xs font-medium text-lf-text-muted">
               {{ t('quickTranslate.glossaryTitle') }}
             </p>
-            <p class="text-xs text-lf-text-muted">{{ t('quickTranslate.glossaryHint') }}</p>
+            <p class="text-xs text-lf-text-subtle">{{ t('quickTranslate.glossaryHint') }}</p>
           </div>
           <div
             v-for="row in glossary"
@@ -247,44 +280,58 @@ onMounted(() => {
             />
             <NButton
               quaternary
+              circle
               size="small"
               class="justify-self-end"
               :aria-label="t('quickTranslate.glossaryRemove')"
               @click="removeGlossaryRow(row.id)"
             >
-              <IconifyIcon icon="carbon:close" />
+              <IconCarbonClose />
             </NButton>
           </div>
           <NButton dashed size="small" @click="addGlossaryRow">
-            <IconifyIcon icon="carbon:add" />
+            <IconCarbonAdd />
             {{ t('quickTranslate.glossaryAdd') }}
           </NButton>
         </div>
       </div>
-    </div>
 
-    <!-- 提交 -->
-    <div class="flex justify-end border-t border-lf-border-soft pt-5">
-      <NButton
-        type="primary"
-        size="large"
-        :loading="submitting"
-        :disabled="!canSubmit"
-        @click="onSubmit"
-      >
-        <IconifyIcon icon="carbon:translate" />
-        {{ submitting ? t('quickTranslate.submitting') : t('quickTranslate.submit') }}
-      </NButton>
-    </div>
-
-    <!-- 结果 -->
-    <div
-      v-if="result"
-      class="overflow-hidden rounded-xl border border-lf-border-soft bg-lf-surface-muted/30"
-    >
-      <!-- 结果头部 -->
+      <!-- 底部操作条 -->
       <div
-        class="flex flex-wrap items-center justify-between gap-3 border-b border-lf-border-soft bg-lf-surface px-4 py-3"
+        class="flex flex-wrap items-center justify-between gap-3 border-t border-lf-border-soft px-5 py-3.5"
+      >
+        <button
+          type="button"
+          class="flex items-center gap-1.5 text-sm font-medium text-lf-text-muted transition-colors hover:text-lf-text-strong"
+          @click="advancedOpen = !advancedOpen"
+        >
+          <IconCarbonChevronUp v-if="advancedOpen" class="text-base" />
+          <IconCarbonChevronDown v-else class="text-base" />
+          {{ t('quickTranslate.advancedToggle') }}
+        </button>
+        <div class="flex items-center gap-4">
+          <span class="text-xs text-lf-text-subtle tabular-nums">
+            {{ t('quickTranslate.charCount', { count: sourceText.length }) }}
+          </span>
+          <NButton
+            type="primary"
+            size="large"
+            :loading="submitting"
+            :disabled="!canSubmit"
+            @click="onSubmit"
+          >
+            <IconCarbonTranslate />
+            {{ submitting ? t('quickTranslate.submitting') : t('quickTranslate.submit') }}
+          </NButton>
+        </div>
+      </div>
+    </section>
+
+    <!-- 结果面板：独立卡片 -->
+    <section v-if="result" class="lf-panel overflow-hidden">
+      <!-- 头部：状态 + 语言对 + 复制 -->
+      <div
+        class="flex flex-wrap items-center justify-between gap-3 border-b border-lf-border-soft px-5 py-3.5"
       >
         <div class="flex flex-wrap items-center gap-2">
           <NTag
@@ -304,20 +351,20 @@ onMounted(() => {
           </span>
         </div>
         <NButton v-if="result.target_text" quaternary size="small" @click="onCopy">
-          <IconifyIcon icon="carbon:copy" />
+          <IconCarbonCopy />
           {{ t('quickTranslate.copy') }}
         </NButton>
       </div>
 
-      <!-- 译文正文（核心，左色条强调） -->
-      <div class="border-l-2 border-brand-500/50 bg-lf-brand-soft/20 px-4 py-4">
+      <!-- 译文正文（品牌色左条强调） -->
+      <div class="border-l-2 border-brand-500/50 bg-lf-brand-soft/20 px-5 py-4">
         <div class="text-lg leading-8 whitespace-pre-wrap text-lf-text-strong">
           <component :is="HighlightedTarget" />
         </div>
       </div>
 
       <!-- 质量问题 -->
-      <div v-if="qualityIssues.length" class="space-y-2 border-t border-lf-border-soft px-4 py-3">
+      <div v-if="qualityIssues.length" class="space-y-2 border-t border-lf-border-soft px-5 py-3.5">
         <p class="text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase">
           {{ t('quickTranslate.qualityIssuesTitle') }}
         </p>
@@ -339,8 +386,8 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 轮次概览（每轮一行，对齐整齐） -->
-      <div v-if="hasRoundSummary" class="space-y-2 border-t border-lf-border-soft px-4 py-3">
+      <!-- 轮次概览 -->
+      <div v-if="hasRoundSummary" class="space-y-2 border-t border-lf-border-soft px-5 py-3.5">
         <p class="text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase">
           {{ t('quickTranslate.roundSummaryTitle') }}
         </p>
@@ -367,8 +414,8 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 用量（轻量内联指标条） -->
-      <div v-if="result.usage" class="border-t border-lf-border-soft px-4 py-3">
+      <!-- 用量 -->
+      <div v-if="result.usage" class="border-t border-lf-border-soft px-5 py-3.5">
         <div class="flex flex-wrap items-baseline gap-x-6 gap-y-1">
           <div class="flex items-baseline gap-1.5">
             <span class="text-xs text-lf-text-muted">{{ t('quickTranslate.usageApiCalls') }}</span>
@@ -377,17 +424,17 @@ onMounted(() => {
             </span>
           </div>
           <div class="flex items-baseline gap-1.5">
-            <span class="text-xs text-lf-text-muted">{{
-              t('quickTranslate.usageInputTokens')
-            }}</span>
+            <span class="text-xs text-lf-text-muted">
+              {{ t('quickTranslate.usageInputTokens') }}
+            </span>
             <span class="font-mono text-sm font-semibold tabular-nums text-lf-text-strong">
               {{ formatTokens(result.usage.input_tokens) }}
             </span>
           </div>
           <div class="flex items-baseline gap-1.5">
-            <span class="text-xs text-lf-text-muted">{{
-              t('quickTranslate.usageOutputTokens')
-            }}</span>
+            <span class="text-xs text-lf-text-muted">
+              {{ t('quickTranslate.usageOutputTokens') }}
+            </span>
             <span class="font-mono text-sm font-semibold tabular-nums text-lf-text-strong">
               {{ formatTokens(result.usage.output_tokens) }}
             </span>
@@ -396,7 +443,7 @@ onMounted(() => {
       </div>
 
       <!-- 警告 -->
-      <div v-if="hasWarnings" class="space-y-2 border-t border-lf-border-soft px-4 py-3">
+      <div v-if="hasWarnings" class="space-y-2 border-t border-lf-border-soft px-5 py-3.5">
         <NAlert
           v-for="(warning, idx) in result.warnings"
           :key="idx"
@@ -408,8 +455,8 @@ onMounted(() => {
       </div>
 
       <!-- 诊断批次（默认收起） -->
-      <div v-if="result.batches?.length" class="border-t border-lf-border-soft px-4 py-3">
-        <NCollapse :default-expanded-names="props.variant === 'full' ? ['batches'] : []">
+      <div v-if="result.batches?.length" class="border-t border-lf-border-soft px-5 py-3.5">
+        <NCollapse>
           <NCollapseItem name="batches" :title="t('quickTranslate.batchesTitle')">
             <div class="space-y-3">
               <SegmentTranslationPreviewDiagnostic
@@ -422,6 +469,6 @@ onMounted(() => {
           </NCollapseItem>
         </NCollapse>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 </template>

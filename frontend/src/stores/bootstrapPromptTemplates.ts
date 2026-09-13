@@ -19,6 +19,9 @@ const includesNormalized = (source: string | undefined, query: string): boolean 
   return source?.toLowerCase().includes(query) ?? false
 }
 
+const sortTimestamp = (item: BootstrapPromptTemplate): number =>
+  new Date(item.updated_at ?? item.created_at ?? '').getTime()
+
 export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemplates', () => {
   // ── 状态 ──
   const items = ref<BootstrapPromptTemplate[]>([])
@@ -35,9 +38,7 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
 
   // ── 计算属性 ──
   const sortedItems = computed(() =>
-    [...items.value].sort(
-      (a, b) => new Date(b.updated_at ?? '').getTime() - new Date(a.updated_at ?? '').getTime(),
-    ),
+    [...items.value].sort((a, b) => sortTimestamp(b) - sortTimestamp(a)),
   )
 
   const filteredItems = computed(() => {
@@ -57,7 +58,6 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
   const totalCount = computed(() => items.value.length)
   const systemCount = computed(() => items.value.filter((i) => i.scope === 'system').length)
   const userCount = computed(() => items.value.filter((i) => i.scope === 'user').length)
-  const orgCount = computed(() => items.value.filter((i) => i.scope === 'org').length)
 
   // ── 方法 ──
   const loadTemplates = async (): Promise<void> => {
@@ -136,6 +136,23 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
     }
   }
 
+  const resetFilters = (): void => {
+    searchQuery.value = ''
+    scopeFilter.value = 'all'
+  }
+
+  const setSearchQuery = (query: string): void => {
+    searchQuery.value = query
+  }
+
+  const setScopeFilter = (scope: Scope | 'all'): void => {
+    scopeFilter.value = scope
+  }
+
+  const clearError = (): void => {
+    error.value = null
+  }
+
   return {
     items,
     loading,
@@ -145,12 +162,15 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
     error,
     searchQuery,
     scopeFilter,
+    resetFilters,
+    setSearchQuery,
+    setScopeFilter,
+    clearError,
     sortedItems,
     filteredItems,
     totalCount,
     systemCount,
     userCount,
-    orgCount,
     loadTemplates,
     createTemplate,
     updateTemplate,

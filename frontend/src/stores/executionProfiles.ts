@@ -57,12 +57,6 @@ export const useExecutionProfilesStore = defineStore('executionProfiles', () => 
   const totalCount = computed(() => items.value.length)
   const systemCount = computed(() => items.value.filter((i) => i.scope === 'system').length)
   const userCount = computed(() => items.value.filter((i) => i.scope === 'user').length)
-  const orgCount = computed(() => items.value.filter((i) => i.scope === 'org').length)
-
-  // ── 配置特征统计 ──
-  const withGlossaryCount = computed(
-    () => items.value.filter((i) => i.config?.glossary?.bootstrap?.max_terms_per_1000_chars).length,
-  )
 
   // ── 方法 ──
   const loadProfiles = async (): Promise<void> => {
@@ -141,6 +135,11 @@ export const useExecutionProfilesStore = defineStore('executionProfiles', () => 
     }
   }
 
+  const resetFilters = (): void => {
+    searchQuery.value = ''
+    scopeFilter.value = 'all'
+  }
+
   return {
     items,
     loading,
@@ -150,13 +149,12 @@ export const useExecutionProfilesStore = defineStore('executionProfiles', () => 
     error,
     searchQuery,
     scopeFilter,
+    resetFilters,
     sortedItems,
     filteredItems,
     totalCount,
     systemCount,
     userCount,
-    orgCount,
-    withGlossaryCount,
     loadProfiles,
     createProfile,
     updateProfile,

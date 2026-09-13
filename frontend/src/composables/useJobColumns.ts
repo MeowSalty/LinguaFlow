@@ -135,13 +135,13 @@ export function useJobColumns(actions: JobColumnActions) {
       render: (row) => row.error_message || '-',
     },
     {
-      title: t('workspace.common.updatedAt'),
+      title: t('common.updatedAt'),
       key: 'updated_at',
       width: 170,
       render: (row) => formatDate(row.updated_at),
     },
     {
-      title: t('workspace.common.actions'),
+      title: t('common.actionsColumn'),
       key: 'actions',
       width: 220,
       fixed: 'right',

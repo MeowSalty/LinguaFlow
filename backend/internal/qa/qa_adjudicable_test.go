@@ -45,7 +45,8 @@ func TestAdjudicableCodes_SubsetOfAllCheckerNames(t *testing.T) {
 }
 
 // TestIsAdjudicableCode 覆盖判定函数的正反用例：
-// 硬规则 untranslated / duplicate、空串与未知值均不可裁决。
+// 硬规则 duplicate 不可裁决（需同批多段输入，无单段裁决语义），untranslated 已
+// 开放裁决（共用文字系统的同形译文需 LLM 判断是否有意保留）；空串与未知值不可裁决。
 func TestIsAdjudicableCode(t *testing.T) {
 	tests := []struct {
 		code string
@@ -54,7 +55,7 @@ func TestIsAdjudicableCode(t *testing.T) {
 		{CheckSourceResidual, true},
 		{CheckPunctuationSurplus, true},
 		{CheckLengthRatio, true},
-		{CheckUntranslated, false},
+		{CheckUntranslated, true},
 		{CheckDuplicate, false},
 		{"", false},
 		{"nonsense", false},

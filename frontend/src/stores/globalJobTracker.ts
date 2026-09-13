@@ -13,6 +13,8 @@ export interface TrackedJob extends Job {
 
 const STORAGE_KEY = 'linguaflow:globalTracker:jobIds'
 const MAX_TRACKED_JOBS = 20
+// 日志流滚动窗口上限：drawerEvents 内存中只保留最近 N 条，更早事件按需通过 loadOlder 回溯
+const MAX_DRAWER_EVENTS = 1000
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 
 // 全局跟踪轮询比工作区列表轮询更保守（跟踪任务可跨页面长期存在）
@@ -122,6 +124,17 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     if (evt.seq > 0) {
       minSeqLoaded.value =
         minSeqLoaded.value === 0 ? evt.seq : Math.min(minSeqLoaded.value, evt.seq)
+    }
+    // 滚动窗口裁剪：超出上限时从头部移除最旧事件。
+    // 已知边角：SSE 断线重连重放全量历史时，数组会先膨胀再被裁回上限（一次性 churn，可接受）。
+    const overflow = list.length - MAX_DRAWER_EVENTS
+    if (overflow > 0) {
+      // 同步清除被裁事件的去重标记，否则之后 loadOlder 回拉这些事件会被 seenSeqs 静默丢弃
+      for (const removed of list.splice(0, overflow)) {
+        if (removed.seq > 0) seenSeqs.delete(removed.seq)
+      }
+      minSeqLoaded.value = list[0]!.seq
+      hasOlder.value = true
     }
   }
 

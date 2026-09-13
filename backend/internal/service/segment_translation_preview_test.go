@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -236,5 +237,70 @@ func TestApplyPreview_LegacyRevisionToken_EmptyResolvedCodes_FallsBackToOldBehav
 	}
 	if len(applied.QualityIssues) != 0 {
 		t.Fatalf("legacy revision token must fall back to clearing issues, got %+v", applied.QualityIssues)
+	}
+}
+
+// createTestResourceWithFormat 创建指定格式的测试资源（createTestResource 固定 txt）。
+func createTestResourceWithFormat(t *testing.T, client *ent.Client, projectID int, path, format string) *ent.Resource {
+	t.Helper()
+	r, err := client.Resource.Create().
+		SetProjectID(projectID).
+		SetPath(path).
+		SetFormat(format).
+		SetStoragePath("storage/" + path).
+		Save(context.Background())
+	if err != nil {
+		t.Fatalf("create resource: %v", err)
+	}
+	return r
+}
+
+// epub 资源上应用结构非法的预览译文：必须以 ErrSegmentMarkupInvalid 硬拒绝，
+// 且数据库译文/状态保持基线不变——与手动编辑同一硬口径。
+func TestApplyPreview_EpubInvalidTargetMarkupRejected(t *testing.T) {
+	applySvc, client, userID, projectID := newApplyFixture(t)
+	res := createTestResourceWithFormat(t, client, projectID, "book.epub", "epub")
+	seg := seedRevisionSegment(t, client, res.ID, 0, "src", "旧译文", segment.StatusTranslated, nil)
+
+	token := encodeApplyClaims(t, revisionApplyClaims(seg, res.ID, projectID, userID, nil, previewtoken.QAConfigClaims{Enabled: false}))
+
+	_, err := applySvc.ApplyPreview(context.Background(), userID, projectID, res.ID, seg.ID, token, "等级<ruby>雷")
+	if !errors.Is(err, ErrSegmentMarkupInvalid) {
+		t.Fatalf("ApplyPreview err = %v, want ErrSegmentMarkupInvalid", err)
+	}
+	var markupErr *SegmentMarkupError
+	if !errors.As(err, &markupErr) || markupErr.Err == nil {
+		t.Fatalf("err = %v, want *SegmentMarkupError with detail", err)
+	}
+
+	row, rerr := client.Segment.Get(context.Background(), seg.ID)
+	if rerr != nil {
+		t.Fatalf("get segment: %v", rerr)
+	}
+	if row.TargetText == nil || *row.TargetText != "旧译文" {
+		t.Fatalf("target = %v, want unchanged baseline", row.TargetText)
+	}
+	if row.Status != segment.StatusTranslated {
+		t.Errorf("status = %q, want translated（被拒后不得改状态）", row.Status)
+	}
+}
+
+// 非 epub 格式不做结构校验：同样文本照常通过（格式门禁不误伤直通格式）。
+func TestApplyPreview_NonEpubInvalidMarkupPasses(t *testing.T) {
+	applySvc, client, userID, projectID := newApplyFixture(t)
+	res := createTestResourceWithFormat(t, client, projectID, "a.txt", "txt")
+	seg := seedRevisionSegment(t, client, res.ID, 0, "src", "旧译文", segment.StatusTranslated, nil)
+
+	token := encodeApplyClaims(t, revisionApplyClaims(seg, res.ID, projectID, userID, nil, previewtoken.QAConfigClaims{Enabled: false}))
+
+	applied, err := applySvc.ApplyPreview(context.Background(), userID, projectID, res.ID, seg.ID, token, "等级<ruby>雷")
+	if err != nil {
+		t.Fatalf("ApplyPreview: %v", err)
+	}
+	if applied.TargetText == nil || *applied.TargetText != "等级<ruby>雷" {
+		t.Fatalf("target = %v, want applied text", applied.TargetText)
+	}
+	if string(applied.Status) != string(SegmentStatusEdited) {
+		t.Errorf("status = %q, want edited", applied.Status)
 	}
 }

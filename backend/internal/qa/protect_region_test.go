@@ -294,6 +294,19 @@ func TestInlineMarkupRegions_PureRuby(t *testing.T) {
 	}
 }
 
+// 多段 <rt> 的 ruby 元素同样整体屏蔽为单区域（区域定位走 ruby.ElementSpans，
+// 与包内提取/剥离同一扫描口径）。
+func TestInlineMarkupRegions_MultipleRTRuby(t *testing.T) {
+	target := "<ruby>何<rt>な</rt>故<rt>ぜ</rt></ruby>"
+	got := InlineMarkupRegions(target, nil)
+	if len(got) != 1 {
+		t.Fatalf("want 1 region (whole element), got %d: %v", len(got), got)
+	}
+	if stripped := StripRegions(target, got); stripped != "" {
+		t.Fatalf("strip ruby want empty, got %q (regions=%v)", stripped, got)
+	}
+}
+
 // ruby 与 protected 相邻：两段都被屏蔽。
 func TestInlineMarkupRegions_RubyAndProtected(t *testing.T) {
 	span := `a<b>x</b>`

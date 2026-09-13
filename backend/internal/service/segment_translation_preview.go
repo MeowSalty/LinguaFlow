@@ -13,6 +13,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/preview"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/previewtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -406,6 +407,24 @@ func (s *PreviewService) ApplyPreview(
 
 	if !sourceMatch || !targetMatch || !statusMatch {
 		return nil, ErrPreviewConflict
+	}
+
+	// 结构守卫：与手动编辑同一硬口径（见 UpdateResourceSegment）。ApplyPreview 是
+	// 交互式单段写入，语义与手动编辑一致——应当场报错，而不是等导出预检才发现
+	// 段落无法交付。校验必须在 CAS update 之前，否则要么破坏 CAS 语义、要么引入
+	// 先写库再回滚的复杂度。格式必须查库取：令牌里冻结的 QAConfig.Format 是 QA
+	// 配置的载体而非资源格式的事实来源（历史令牌可能为空），结构门禁不应依赖它。
+	resRow, err := s.client.Resource.Get(ctx, resourceID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrResourceNotFound
+		}
+		return nil, fmt.Errorf("apply: load resource: %w", err)
+	}
+	if markup.RequiresWellFormedTargets(resRow.Format) {
+		if verr := markup.ValidateFragment(targetText); verr != nil {
+			return nil, &SegmentMarkupError{Err: verr}
+		}
 	}
 
 	// 5. Determine final issues.

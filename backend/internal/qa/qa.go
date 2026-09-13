@@ -155,10 +155,12 @@ func IsSemanticQACode(code string) bool {
 // 白名单与 prompt 模板说明的单一来源。新增可裁决 code 时只需在此处追加，下游所有枚举点
 // 自动同步，避免多点硬编码漂移。
 //
-// 不可裁决的硬规则（untranslated / duplicate）永不列入：前者为空译文硬规则，后者需同
-// 批多段输入，二者均无 LLM 降噪价值。
+// 不可裁决的硬规则 duplicate 永不列入：它需同批多段输入，无单段裁决语义。
+// untranslated 开放裁决的原因：源语与目标语共用文字系统时的同形译文，在确定性层面
+// 与真回传不可区分（见 untranslatedVerdict），是否有意保留只能由 LLM 结合上下文判断。
 func AdjudicableCodes() []string {
 	return []string{
+		CheckUntranslated,
 		CheckSourceResidual,
 		CheckLengthRatio,
 		CheckPunctuationSurplus,
@@ -177,7 +179,7 @@ func DefaultAdjudicateCodes() []string {
 
 // adjudicableCodeSet 是 AdjudicableCodes 的 set 视图，供高频判定复用。
 var adjudicableCodeSet = func() map[string]struct{} {
-	set := make(map[string]struct{}, 3)
+	set := make(map[string]struct{}, 4)
 	for _, c := range AdjudicableCodes() {
 		set[c] = struct{}{}
 	}
@@ -656,7 +658,7 @@ func NewEngine(cfg Config, logger *slog.Logger) *Engine {
 
 func buildAllCheckers(cfg Config) []Checker {
 	return []Checker{
-		NewUntranslatedChecker(),
+		NewUntranslatedChecker(cfg.SourceLang, cfg.TargetLang),
 		NewLengthRatioChecker(cfg.LengthRatioMin, cfg.LengthRatioMax, cfg.LengthMethod),
 		NewDuplicateTranslationChecker(),
 		NewSourceResidualChecker(cfg.SourceLang, cfg.TargetLang),

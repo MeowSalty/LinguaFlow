@@ -3,11 +3,9 @@ import { ref } from 'vue'
 
 import { type ApiSchemas, fetchProject } from '@/api/client'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 
 type Project = ApiSchemas['Project']
-
-const getErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error ? error.message : fallback
 
 export const useProjectStore = defineStore('project', () => {
   const project = ref<Project | null>(null)
@@ -30,7 +28,7 @@ export const useProjectStore = defineStore('project', () => {
     try {
       project.value = await fetchProject(projectId)
     } catch (error) {
-      projectError.value = getErrorMessage(error, t('api.errors.fetchProjectFailed'))
+      projectError.value = extractErrorMessage(error, t('api.errors.fetchProjectFailed'))
     } finally {
       loadingProject.value = false
     }

@@ -45,7 +45,8 @@ export const useBackendsStore = defineStore('backends', () => {
       const matchesQuery =
         query.length === 0 ||
         includesNormalized(backend.name, query) ||
-        includesNormalized(backend.type, query)
+        includesNormalized(backend.type, query) ||
+        includesNormalized(backend.options?.model, query)
 
       return matchesType && matchesQuery
     })
@@ -124,6 +125,11 @@ export const useBackendsStore = defineStore('backends', () => {
     }
   }
 
+  const resetFilters = (): void => {
+    searchQuery.value = ''
+    typeFilter.value = 'all'
+  }
+
   return {
     items,
     loading,
@@ -136,6 +142,7 @@ export const useBackendsStore = defineStore('backends', () => {
     deleteError,
     searchQuery,
     typeFilter,
+    resetFilters,
     sortedItems,
     filteredItems,
     backendCount,
