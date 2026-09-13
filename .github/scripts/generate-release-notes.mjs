@@ -407,6 +407,12 @@ async function main() {
   } catch (err) {
     console.warn(`AI 生成失败: ${err.message}，回退到简单 changelog`);
     finalContent = buildFallbackContent(version, prevVersion, commits, commitCount, stats);
+    // 回退不阻断发布，但要把失败暴露给后续步骤：release.yml 据此推送「AI 生成失败」通知，
+    // 提醒人工重新生成。写入值必须单行，多行会破坏 GITHUB_ENV 文件格式
+    if (process.env.GITHUB_ENV) {
+      const reason = err.message.replace(/\r?\n/g, ' ').trim();
+      fs.appendFileSync(process.env.GITHUB_ENV, `AI_NOTES_FALLBACK=true\nAI_NOTES_ERROR=${reason}\n`);
+    }
   }
 
   fs.writeFileSync(OUTPUT, finalContent, 'utf8');
