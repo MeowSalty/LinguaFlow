@@ -117,3 +117,38 @@ jobs:
             COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # SC3_SEND_URL = Server酱³后台复制的完整发送地址，未配置时脚本静默跳过
+      - name: 推送镜像构建完成通知
+        env:
+          SC3_SEND_URL: ${{ secrets.SC3_SEND_URL }}
+          TAG: ${{ github.event.release.tag_name }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          repo="${GITHUB_REPOSITORY,,}" # ghcr 包名取仓库全名小写
+          export SC3_TITLE="🐳 LinguaFlow ${TAG} Docker 镜像构建完成"
+          export SC3_SHORT="多架构镜像已推送，可更新服务器镜像版本"
+          export SC3_DESP="$(printf '%s\n' \
+            '多架构镜像（amd64 / arm64 / arm/v7）已推送到 GHCR，可以更新服务器上的镜像版本了。' \
+            '' \
+            '镜像标签：' \
+            '```' \
+            "${IMAGE_TAGS}" \
+            '```' \
+            '' \
+            "[查看镜像包](https://github.com/${GITHUB_REPOSITORY}/pkgs/container/${repo#*/})")"
+          node .github/scripts/notify-sc3.mjs
+
+      - name: 推送镜像构建失败通知
+        if: failure()
+        env:
+          SC3_SEND_URL: ${{ secrets.SC3_SEND_URL }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          export SC3_TITLE="❌ LinguaFlow ${TAG} Docker 镜像构建失败"
+          export SC3_SHORT="镜像未推送，服务器暂无法更新版本"
+          export SC3_DESP="$(printf '%s\n' \
+            'Docker 镜像构建或推送失败，请检查运行日志后重跑。' \
+            '' \
+            "[查看运行日志](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})")"
+          node .github/scripts/notify-sc3.mjs
