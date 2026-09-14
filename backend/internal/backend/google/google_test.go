@@ -20,25 +20,37 @@ func TestBuildCfg_ThinkingLevel(t *testing.T) {
 		Model:  "gemini-2.5-flash",
 	}
 
-	t.Run("off omits ThinkingConfig", func(t *testing.T) {
-		b := &Backend{model: "gemini-2.5-flash", thinking: backend.ThinkingOff}
-		_, _, cfg, err := b.buildCfg(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if cfg.ThinkingConfig != nil {
-			t.Fatal("want ThinkingConfig nil when off")
-		}
-	})
-
-	t.Run("zero value omits ThinkingConfig", func(t *testing.T) {
+	t.Run("unset omits ThinkingConfig", func(t *testing.T) {
 		b := &Backend{model: "gemini-2.5-flash"}
 		_, _, cfg, err := b.buildCfg(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if cfg.ThinkingConfig != nil {
-			t.Fatal("want ThinkingConfig nil when unset")
+			t.Fatal("want ThinkingConfig nil when thinking_level unset")
+		}
+	})
+
+	t.Run("explicit off sets zero thinking budget", func(t *testing.T) {
+		b := &Backend{
+			model:    "gemini-2.5-flash",
+			thinking: backend.Thinking{Level: backend.ThinkingOff, Set: true},
+		}
+		_, _, cfg, err := b.buildCfg(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.ThinkingConfig == nil {
+			t.Fatal("want ThinkingConfig set when off")
+		}
+		if cfg.ThinkingConfig.ThinkingBudget == nil {
+			t.Fatal("want ThinkingBudget set when off")
+		}
+		if *cfg.ThinkingConfig.ThinkingBudget != 0 {
+			t.Fatalf("ThinkingBudget: got %d want 0", *cfg.ThinkingConfig.ThinkingBudget)
+		}
+		if cfg.ThinkingConfig.ThinkingLevel != "" {
+			t.Fatalf("ThinkingLevel: got %q want empty", cfg.ThinkingConfig.ThinkingLevel)
 		}
 	})
 
@@ -46,13 +58,14 @@ func TestBuildCfg_ThinkingLevel(t *testing.T) {
 		level backend.ThinkingLevel
 		want  genai.ThinkingLevel
 	}{
+		{backend.ThinkingMinimal, genai.ThinkingLevelMinimal},
 		{backend.ThinkingLow, genai.ThinkingLevelLow},
 		{backend.ThinkingMedium, genai.ThinkingLevelMedium},
 		{backend.ThinkingHigh, genai.ThinkingLevelHigh},
 	}
 	for _, tt := range cases {
 		t.Run(string(tt.level), func(t *testing.T) {
-			b := &Backend{model: "gemini-2.5-flash", thinking: tt.level}
+			b := &Backend{model: "gemini-2.5-flash", thinking: backend.Thinking{Level: tt.level, Set: true}}
 			_, _, cfg, err := b.buildCfg(req)
 			if err != nil {
 				t.Fatal(err)
@@ -74,6 +87,9 @@ func TestBuildCfg_ThinkingLevel(t *testing.T) {
 }
 
 func TestToGoogleThinkingLevel(t *testing.T) {
+	if got := toGoogleThinkingLevel(backend.ThinkingMinimal); got != genai.ThinkingLevelMinimal {
+		t.Fatalf("minimal: %q", got)
+	}
 	if got := toGoogleThinkingLevel(backend.ThinkingLow); got != genai.ThinkingLevelLow {
 		t.Fatalf("low: %q", got)
 	}

@@ -18,6 +18,9 @@ func TestAnthropicThinkingBudget(t *testing.T) {
 		wantErr bool
 	}{
 		// 纯比例计算，透明遵从用户配置（不引入输出预留 magic）
+		{backend.ThinkingMinimal, 8192, 1024, false},  // 0.125*8192=1024，恰在预算下限
+		{backend.ThinkingMinimal, 16384, 2048, false}, // 正常 12.5%
+		{backend.ThinkingMinimal, 4096, 1024, false},  // 0.125*4096=512 → clamp 到下限 1024，与 low 同值
 		{backend.ThinkingLow, 8192, 2048, false},
 		{backend.ThinkingMedium, 8192, 4096, false},
 		{backend.ThinkingHigh, 8192, 6144, false}, // 0.75*8192，输出只剩 2048，由用户对 max_tokens 负责
@@ -25,6 +28,7 @@ func TestAnthropicThinkingBudget(t *testing.T) {
 		{backend.ThinkingLow, 2000, 1024, false}, // 0.25*2000=500 → clamp 到下限 1024
 		{backend.ThinkingHigh, 1500, 1125, false},
 		// max_tokens 过小：报错（思考预算下限）
+		{backend.ThinkingMinimal, 1024, 0, true},
 		{backend.ThinkingLow, 1024, 0, true},
 		{backend.ThinkingMedium, 500, 0, true},
 		{backend.ThinkingOff, 8192, 0, true},
@@ -58,20 +62,45 @@ func TestBuildParams_ThinkingSkipsSampling(t *testing.T) {
 		TopP:        &topP,
 	}
 
-	t.Run("off keeps temperature/top_p", func(t *testing.T) {
+	t.Run("unset omits thinking and keeps temperature/top_p", func(t *testing.T) {
 		b := &Backend{
 			model:       "claude-sonnet-4-20250514",
 			maxTokens:   8192,
 			temperature: &temp,
 			topP:        &topP,
-			thinking:    backend.ThinkingOff,
 		}
 		params, _, err := b.buildParams(req)
 		if err != nil {
 			t.Fatal(err)
 		}
+		if params.Thinking.OfEnabled != nil || params.Thinking.OfDisabled != nil {
+			t.Fatal("want Thinking omitted when thinking_level unset")
+		}
+		if !params.Temperature.Valid() || params.Temperature.Value != temp {
+			t.Fatalf("Temperature: valid=%v value=%v want %v", params.Temperature.Valid(), params.Temperature.Value, temp)
+		}
+		if !params.TopP.Valid() || params.TopP.Value != topP {
+			t.Fatalf("TopP: valid=%v value=%v want %v", params.TopP.Valid(), params.TopP.Value, topP)
+		}
+	})
+
+	t.Run("explicit off disables thinking and keeps temperature/top_p", func(t *testing.T) {
+		b := &Backend{
+			model:       "claude-sonnet-4-20250514",
+			maxTokens:   8192,
+			temperature: &temp,
+			topP:        &topP,
+			thinking:    backend.Thinking{Level: backend.ThinkingOff, Set: true},
+		}
+		params, _, err := b.buildParams(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if params.Thinking.OfDisabled == nil {
+			t.Fatal("want Thinking disabled when off")
+		}
 		if params.Thinking.OfEnabled != nil {
-			t.Fatal("want Thinking omitted when off")
+			t.Fatal("want Thinking enabled unset when off")
 		}
 		if !params.Temperature.Valid() || params.Temperature.Value != temp {
 			t.Fatalf("Temperature: valid=%v value=%v want %v", params.Temperature.Valid(), params.Temperature.Value, temp)
@@ -87,7 +116,7 @@ func TestBuildParams_ThinkingSkipsSampling(t *testing.T) {
 			maxTokens:   8192,
 			temperature: &temp,
 			topP:        &topP,
-			thinking:    backend.ThinkingMedium,
+			thinking:    backend.Thinking{Level: backend.ThinkingMedium, Set: true},
 		}
 		params, _, err := b.buildParams(req)
 		if err != nil {
@@ -111,7 +140,7 @@ func TestBuildParams_ThinkingSkipsSampling(t *testing.T) {
 		b := &Backend{
 			model:     "claude-sonnet-4-20250514",
 			maxTokens: 1024,
-			thinking:  backend.ThinkingLow,
+			thinking:  backend.Thinking{Level: backend.ThinkingLow, Set: true},
 		}
 		small := backend.Request{System: "s", User: "u", MaxTokens: 1024}
 		_, _, err := b.buildParams(small)
@@ -121,7 +150,7 @@ func TestBuildParams_ThinkingSkipsSampling(t *testing.T) {
 	})
 }
 
-func TestFactory_ParseThinkingLevel(t *testing.T) {
+func TestFactory_InvalidThinkingLevel(t *testing.T) {
 	_, err := factory(backend.Config{
 		Options: map[string]any{
 			"api_key":        "k",
@@ -139,7 +168,7 @@ func TestFactory_ParseThinkingLevel(t *testing.T) {
 // 空内容 → EmptyResponseError（不可重试，携带 stop reason）。
 // thinking 是否开启不再影响截断行为（调参提示由 pipeline 层统一承担）。
 func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
-	b := &Backend{name: "claude", model: "claude-sonnet-4", thinking: backend.ThinkingHigh}
+	b := &Backend{name: "claude", model: "claude-sonnet-4", thinking: backend.Thinking{Level: backend.ThinkingHigh, Set: true}}
 
 	t.Run("non_empty_text_returns_truncated", func(t *testing.T) {
 		msg := &sdk.Message{

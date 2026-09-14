@@ -22,14 +22,14 @@ func TestBuildParams_ThinkingLevel(t *testing.T) {
 		Model:  "gpt-4o",
 	}
 
-	t.Run("off omits ReasoningEffort", func(t *testing.T) {
-		b := &Backend{model: "gpt-4o", thinking: backend.ThinkingOff}
+	t.Run("explicit off disables reasoning", func(t *testing.T) {
+		b := &Backend{model: "gpt-4o", thinking: backend.Thinking{Level: backend.ThinkingOff, Set: true}}
 		params, err := b.buildParams(req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if params.ReasoningEffort != "" {
-			t.Fatalf("want empty ReasoningEffort, got %q", params.ReasoningEffort)
+		if params.ReasoningEffort != shared.ReasoningEffortNone {
+			t.Fatalf("want %q, got %q", shared.ReasoningEffortNone, params.ReasoningEffort)
 		}
 	})
 
@@ -45,12 +45,13 @@ func TestBuildParams_ThinkingLevel(t *testing.T) {
 	})
 
 	for _, level := range []backend.ThinkingLevel{
+		backend.ThinkingMinimal,
 		backend.ThinkingLow,
 		backend.ThinkingMedium,
 		backend.ThinkingHigh,
 	} {
 		t.Run(string(level), func(t *testing.T) {
-			b := &Backend{model: "gpt-4o", thinking: level}
+			b := &Backend{model: "gpt-4o", thinking: backend.Thinking{Level: level, Set: true}}
 			params, err := b.buildParams(req)
 			if err != nil {
 				t.Fatal(err)
@@ -63,7 +64,7 @@ func TestBuildParams_ThinkingLevel(t *testing.T) {
 	}
 }
 
-func TestFactory_ParseThinkingLevel(t *testing.T) {
+func TestFactory_InvalidThinkingLevel(t *testing.T) {
 	_, err := factory(backend.Config{
 		Options: map[string]any{
 			"api_key":        "k",

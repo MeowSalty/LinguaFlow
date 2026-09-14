@@ -46,9 +46,12 @@ func (c *UntranslatedChecker) Check(_ context.Context, segments []CheckInput) []
 		if src != tgt {
 			continue
 		}
-		// 豁免判定剥离占位符 token：整段只有一个被保护的 URL/标签时，剩余文本
-		// 无字母即无需翻译。相等判定仍用完整文本（相同则占位符必然也相同）。
-		if isExempt(stripPlaceholderTokens(src)) {
+		// 豁免判定剥离全部内联标记（Protected 区 ∪ ruby 元素 ∪ 裸标签 ∪ __LF_ 占位符），
+		// 与标点/空白类 checker 同一口径（StripProtectedRegions 单一来源）：重检/手动编辑
+		// 路径的文本是 DB 原始形态（占位符已还原、标签属性含字母），只剥 __LF_ token
+		// 会令「无字母即豁免」被 class="..." 这类属性击穿。相等判定仍用完整文本
+		// （相同则内联标记必然也相同）。
+		if isExempt(StripProtectedRegions(src, seg.Protected)) {
 			continue
 		}
 		severity, message := untranslatedVerdict(c, tgt)
@@ -82,9 +85,9 @@ func untranslatedVerdict(c *UntranslatedChecker, tgt string) (IssueSeverity, str
 	return SeverityWarning, "译文与原文相同（源语与目标语共用文字系统，可能为有意保留的专有名词或原文片段）"
 }
 
-// isExempt 检查文本是否属于豁免类型（纯数字、纯标点、纯占位符）。
-// 调用方应先剥离占位符 token：__LF_ 本身含字母，不剥离会令"占位符+纯数字"
-// 这类无需翻译的内容漏判。
+// isExempt 检查文本是否属于豁免类型（纯数字、纯标点、纯符号、纯占位符）。
+// 调用方应先剥离内联标记（StripProtectedRegions）：保护区值与裸标签本身
+// 含字母，不剥离会令「无意义符号 + HTML 标签」这类无需翻译的内容漏判。
 func isExempt(text string) bool {
 	if text == "" {
 		return true

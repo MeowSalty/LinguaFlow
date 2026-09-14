@@ -40,7 +40,7 @@ type Backend struct {
 	temperature    *float64
 	topP           *float64
 	stream         bool
-	thinking       backend.ThinkingLevel
+	thinking       backend.Thinking
 }
 
 func (b *Backend) Name() string {
@@ -201,10 +201,15 @@ func (b *Backend) buildCfg(req backend.Request) (string, []*genai.Content, *gena
 		// 不约束，沿用 Gemini 默认 text/plain
 	}
 
-	if b.thinking.Enabled() {
-		// 仅设 ThinkingLevel；不设 ThinkingBudget / IncludeThoughts（默认不返回 thoughts）。
-		cfg.ThinkingConfig = &genai.ThinkingConfig{
-			ThinkingLevel: toGoogleThinkingLevel(b.thinking),
+	if b.thinking.Set {
+		if b.thinking.Level == backend.ThinkingOff {
+			// 协议无 ThinkingLevel 关闭档，显式关闭 = thinkingBudget 0。
+			cfg.ThinkingConfig = &genai.ThinkingConfig{ThinkingBudget: genai.Ptr(int32(0))}
+		} else {
+			// 仅设 ThinkingLevel；不设 ThinkingBudget / IncludeThoughts（默认不返回 thoughts）。
+			cfg.ThinkingConfig = &genai.ThinkingConfig{
+				ThinkingLevel: toGoogleThinkingLevel(b.thinking.Level),
+			}
 		}
 	}
 
@@ -214,6 +219,8 @@ func (b *Backend) buildCfg(req backend.Request) (string, []*genai.Content, *gena
 
 func toGoogleThinkingLevel(level backend.ThinkingLevel) genai.ThinkingLevel {
 	switch level {
+	case backend.ThinkingMinimal:
+		return genai.ThinkingLevelMinimal
 	case backend.ThinkingLow:
 		return genai.ThinkingLevelLow
 	case backend.ThinkingMedium:
@@ -257,7 +264,8 @@ func emptyResponseError(b *Backend, finishReason string, promptTokens int64) err
 //   - timeout (默认 60s, duration 字符串)
 //   - response_format (json_schema|json_object|none, 默认 json_schema)
 //   - stream (bool，默认 false；true 时以流式发起并在内部累积)
-//   - thinking_level (off|low|medium|high，默认 off；off=不传 ThinkingConfig)
+//   - thinking_level (off|minimal|low|medium|high；不设置=开关关闭不传 ThinkingConfig，
+//     off=显式关闭 -> thinkingBudget 0)
 func factory(cfg backend.Config) (backend.Backend, error) {
 	opts := cfg.Options
 	apiKey := backend.StringOpt(opts, "api_key", "")
@@ -274,7 +282,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	default:
 		return nil, fmt.Errorf("google: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
-	thinking, err := backend.ParseThinkingLevel(opts)
+	thinking, err := backend.ParseThinking(opts)
 	if err != nil {
 		return nil, fmt.Errorf("google: %w", err)
 	}

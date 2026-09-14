@@ -420,3 +420,64 @@ func TestUntranslatedChecker_EngineRun_RubyStrippedIdentity(t *testing.T) {
 		t.Errorf("severity=%s, want error（译文含假名，真回传强证据）", issues[0].Severity)
 	}
 }
+
+// TestUntranslatedChecker_MarkupOnlyExemption 回归内联标记豁免：重检/手动编辑
+// 路径的输入是 DB 原始形态（占位符已还原），标签属性含字母，只剥 __LF_ token
+// 会令「无意义符号 + HTML 标签」击穿「无字母即豁免」。豁免判定须与标点/空白类
+// checker 同口径：剥内联标记区域（Protected 值命中 ∪ ruby ∪ 裸标签兜底）后再判。
+func TestUntranslatedChecker_MarkupOnlyExemption(t *testing.T) {
+	const starSpan = `<span class="line-break-loose word-break-break-all">☆★☆★☆★</span>`
+	// 模拟 qa_recheck 路径 ProtectText 对原文重跑保护链的重建产物：
+	// XMLProtector 把标签整体（含属性）作为映射的值。
+	spanProtected := map[string]string{
+		"__LF_000001__": `<span class="line-break-loose word-break-break-all">`,
+		"__LF_000002__": `</span>`,
+	}
+	cases := []struct {
+		name         string
+		text         string
+		protected    map[string]string
+		wantIssues   int
+		wantSeverity IssueSeverity // wantIssues 为 0 时不校验
+	}{
+		{
+			name:       "重检路径：Protected 重建 + 纯符号 span 恒等不报",
+			text:       starSpan,
+			protected:  spanProtected,
+			wantIssues: 0,
+		},
+		{
+			name:       "手动编辑路径：Protected 缺失靠裸标签兜底不报",
+			text:       starSpan,
+			wantIssues: 0,
+		},
+		{
+			name:       "纯标签段恒等不报",
+			text:       "<br/>",
+			wantIssues: 0,
+		},
+		{
+			name:         "反例守卫：剥标签后剩实义文本仍检出",
+			text:         "<b>Hello</b>",
+			wantIssues:   1,
+			wantSeverity: SeverityWarning,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := NewUntranslatedChecker("ja", "zh")
+			issues := c.Check(context.Background(), []CheckInput{
+				{Index: 0, SourceText: tc.text, TargetText: tc.text, Protected: tc.protected},
+			})
+			if len(issues) != tc.wantIssues {
+				t.Fatalf("text=%q want %d issues, got %d: %+v", tc.text, tc.wantIssues, len(issues), issues)
+			}
+			if tc.wantIssues == 0 {
+				return
+			}
+			if issues[0].Severity != tc.wantSeverity {
+				t.Errorf("severity=%s, want %s", issues[0].Severity, tc.wantSeverity)
+			}
+		})
+	}
+}
