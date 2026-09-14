@@ -118,7 +118,7 @@ backends:
       timeout: 60s
       response_format: json_schema
       # stream: false  # 兼容网关仅接受 stream:true 时开启
-      # thinking_level: off  # off | low | medium | high
+      # thinking_level: low  # 可选：off | minimal | low | medium | high；不设置 = 不传思考参数
 
 # 翻译提示词模板（map 结构，key 为模板名称）
 translation_prompt_templates:
@@ -298,7 +298,7 @@ server:
 | `max_tokens`     | int    | 最大 token 数，`0` 表示自动（Anthropic 默认常为 `8192`）                                             |
 | `timeout`        | string | 请求超时时间，如 `60s`                                                                               |
 | `stream`         | bool   | 是否以流式发起请求（内部累积为完整响应），默认 `false`。`true` 适用于只接受 `stream:true` 的兼容网关 |
-| `thinking_level` | string | 思考强度：`off`（默认）/ `low` / `medium` / `high`，见下表                                           |
+| `thinking_level` | string | 思考强度：不设置（默认，不传思考参数）/ `off`（显式关闭）/ `minimal` / `low` / `medium` / `high`，见下表 |
 
 **示例模型名：**
 
@@ -312,8 +312,9 @@ server:
 
 | 值                        | 行为                                                                                                                                                                 |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `off`                     | 不向厂商传思考相关字段，沿用模型/网关默认                                                                                                                            |
-| `low` / `medium` / `high` | 开启思考；OpenAI → `reasoning_effort`；Anthropic → thinking budget（与输出共用 `max_tokens`，开启后忽略 temperature/top_p）；Google → `ThinkingConfig.ThinkingLevel` |
+| 不设置（默认）            | 不向厂商传思考相关字段，沿用模型/网关默认                                                                                                                            |
+| `off`                     | 显式关闭思考（OpenAI → `reasoning_effort: "none"`；Anthropic → thinking disabled；Google → `thinkingBudget: 0`）                                                     |
+| `minimal` / `low` / `medium` / `high` | 开启思考并按档位映射；OpenAI → `reasoning_effort`；Anthropic → thinking budget（与输出共用 `max_tokens`，选档位时忽略 temperature/top_p）；Google → `ThinkingConfig.ThinkingLevel` |
 
 Web 端还可使用「探测模型」接口按凭据拉取列表；字段细节见 [翻译配置 · 参考 · AI 后端](/zh/guide/translation-config-reference#ai-后端)。
 

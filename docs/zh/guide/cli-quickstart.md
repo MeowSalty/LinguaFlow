@@ -52,7 +52,7 @@ backends:
     options:
       api_key: ${OPENAI_API_KEY}
       model: gpt-4o-mini # 按账号实际可用模型修改
-      # thinking_level: off  # 可选：off | low | medium | high
+      # thinking_level: low  # 可选：off | minimal | low | medium | high；不设置 = 不传思考参数
 ```
 
 `linguaflow init` 生成的模板已包含类似结构，按注释改模型与密钥即可。
