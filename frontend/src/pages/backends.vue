@@ -35,7 +35,8 @@ type BackendType = Backend['type']
 type BackendOptions = ApiSchemas['BackendOptions']
 type ThinkingLevel = ApiSchemas['ThinkingLevel']
 
-const THINKING_LEVELS: ThinkingLevel[] = ['off', 'low', 'medium', 'high']
+const THINKING_LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high']
+const DEFAULT_THINKING_LEVEL: ThinkingLevel = 'low'
 
 interface BackendFormModel {
   name: string
@@ -54,6 +55,7 @@ interface BackendFormModel {
   response_format: string
   enable_prompt_cache: boolean
   stream: boolean
+  thinkingEnabled: boolean
   thinking_level: ThinkingLevel
   rate_limit_per_minute: number
 }
@@ -87,7 +89,8 @@ const formModel = reactive<BackendFormModel>({
   response_format: 'json_schema',
   enable_prompt_cache: true,
   stream: false,
-  thinking_level: 'off',
+  thinkingEnabled: false,
+  thinking_level: DEFAULT_THINKING_LEVEL,
   rate_limit_per_minute: 0,
 })
 
@@ -121,12 +124,10 @@ const responseFormatOptions = computed<SelectOption[]>(() => [
   { label: t('backends.form.responseFormatOptions.none'), value: 'none' },
 ])
 
-const thinkingLevelOptions = computed<SelectOption[]>(() =>
-  THINKING_LEVELS.map((level) => ({
-    label: t(`backends.form.thinkingLevels.${level}`),
-    value: level,
-  })),
-)
+const formatThinkingTooltip = (value: number): string => {
+  const level = THINKING_LEVELS[value]
+  return level ? t(`backends.form.thinkingLevels.${level}`) : String(value)
+}
 
 const hasActiveFilters = computed(
   () => backends.searchQuery.trim().length > 0 || backends.typeFilter !== 'all',
@@ -143,7 +144,18 @@ const submitting = computed(() => backends.creating || backends.updating)
 
 const requiresApiKey = computed(() => Boolean(formModel.type))
 const isAnthropic = computed(() => formModel.type === 'anthropic')
-const isThinkingEnabled = computed(() => formModel.thinking_level !== 'off')
+const isThinkingEnabled = computed(
+  () => formModel.thinkingEnabled && formModel.thinking_level !== 'off',
+)
+const thinkingLevelIndex = computed<number>({
+  get: () => THINKING_LEVELS.indexOf(formModel.thinking_level),
+  set: (value) => {
+    const level = THINKING_LEVELS[value]
+    if (level) {
+      formModel.thinking_level = level
+    }
+  },
+})
 const samplingControlsDisabled = computed(() => isAnthropic.value && isThinkingEnabled.value)
 const canFetchModels = computed(
   () => Boolean(formModel.type) && formModel.api_key.trim().length > 0,
@@ -154,10 +166,10 @@ const temperatureMax = computed(() => (formModel.type === 'anthropic' ? 1 : 2))
 const maxTokensMin = computed(() => (formModel.type === 'openai' ? 0 : 1))
 const maxTokensDefault = computed(() => (formModel.type === 'openai' ? 0 : 8192))
 
-const parseThinkingLevel = (value: unknown): ThinkingLevel =>
+const parseThinkingLevel = (value: unknown): ThinkingLevel | undefined =>
   typeof value === 'string' && (THINKING_LEVELS as string[]).includes(value)
     ? (value as ThinkingLevel)
-    : 'off'
+    : undefined
 
 const invalidateModelProbe = (): void => {
   modelFetchGeneration += 1
@@ -342,7 +354,8 @@ const resetForm = (): void => {
   formModel.response_format = 'json_schema'
   formModel.enable_prompt_cache = true
   formModel.stream = false
-  formModel.thinking_level = 'off'
+  formModel.thinkingEnabled = false
+  formModel.thinking_level = DEFAULT_THINKING_LEVEL
   formModel.rate_limit_per_minute = 0
   editingBackend.value = null
   invalidateModelProbe()
@@ -440,7 +453,9 @@ const fillFormFromBackend = (backend: Backend): void => {
   formModel.enable_prompt_cache =
     typeof opts?.enable_prompt_cache === 'boolean' ? opts.enable_prompt_cache : true
   formModel.stream = typeof opts?.stream === 'boolean' ? opts.stream : false
-  formModel.thinking_level = parseThinkingLevel(opts?.thinking_level)
+  const thinkingLevel = parseThinkingLevel(opts?.thinking_level)
+  formModel.thinkingEnabled = thinkingLevel !== undefined
+  formModel.thinking_level = thinkingLevel ?? DEFAULT_THINKING_LEVEL
   formModel.rate_limit_per_minute = backend.rate_limit_per_minute ?? 0
 }
 
@@ -489,7 +504,7 @@ const buildOptions = (): BackendOptions => {
   if (formModel.stream) {
     options.stream = true
   }
-  if (formModel.thinking_level !== 'off') {
+  if (formModel.thinkingEnabled) {
     options.thinking_level = formModel.thinking_level
   }
 
@@ -586,7 +601,7 @@ const getBaseUrlHost = (backend: Backend): string => {
   }
 }
 
-const getThinkingLevelDisplay = (backend: Backend): ThinkingLevel => {
+const getThinkingLevelDisplay = (backend: Backend): ThinkingLevel | undefined => {
   const opts = backend.options as Record<string, unknown> | undefined
   return parseThinkingLevel(opts?.thinking_level)
 }
@@ -710,10 +725,7 @@ useStoreErrorToast(
                 {{ getModelDisplay(backend) }}
               </span>
             </div>
-            <div
-              v-if="getThinkingLevelDisplay(backend) !== 'off'"
-              class="flex items-baseline gap-3"
-            >
+            <div v-if="getThinkingLevelDisplay(backend)" class="flex items-baseline gap-3">
               <span class="w-14 shrink-0 text-xs text-lf-text-subtle">
                 {{ t('backends.card.thinking') }}
               </span>
@@ -848,17 +860,27 @@ useStoreErrorToast(
 
         <NFormItem :label="t('backends.form.thinkingLevel')" path="thinking_level">
           <div class="flex w-full flex-col gap-2">
-            <NSelect
-              v-model:value="formModel.thinking_level"
-              :options="thinkingLevelOptions"
-              :placeholder="t('backends.form.thinkingLevelPlaceholder')"
-            />
-            <p class="text-xs leading-5 text-lf-text-muted">
-              {{
-                isAnthropic && isThinkingEnabled
-                  ? t('backends.form.thinkingLevelAnthropicHint')
-                  : t('backends.form.thinkingLevelHint')
-              }}
+            <div class="flex w-full items-center gap-3">
+              <NSwitch
+                v-model:value="formModel.thinkingEnabled"
+                :aria-label="t('backends.form.thinkingEnabled')"
+              />
+              <template v-if="formModel.thinkingEnabled">
+                <NSlider
+                  v-model:value="thinkingLevelIndex"
+                  :min="0"
+                  :max="THINKING_LEVELS.length - 1"
+                  :step="1"
+                  :format-tooltip="formatThinkingTooltip"
+                  class="min-w-0 flex-1"
+                />
+              </template>
+              <span v-else class="text-xs text-lf-text-muted">
+                {{ t('backends.form.useApiDefault') }}
+              </span>
+            </div>
+            <p v-if="isAnthropic && isThinkingEnabled" class="text-xs leading-5 text-lf-text-muted">
+              {{ t('backends.form.thinkingLevelAnthropicHint') }}
             </p>
           </div>
         </NFormItem>

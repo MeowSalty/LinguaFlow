@@ -1477,22 +1477,21 @@ const messages = {
       topP: 'Top P',
       useApiDefault: '使用 API 默认值',
       thinkingLevel: '思考强度',
-      thinkingLevelPlaceholder: '选择思考强度',
-      thinkingLevelHint:
-        'off 表示不参与思考控制，沿用模型/网关默认；low/medium/high 仅对支持推理的模型生效',
+      thinkingEnabled: '启用思考控制',
       thinkingLevelAnthropicHint:
-        'Anthropic 开启思考后会忽略 Temperature / Top P，且思考预算与输出共用 Max Tokens',
+        'Anthropic 开启思考档位后会忽略 Temperature / Top P，且思考预算与输出共用 Max Tokens',
       thinkingLevels: {
-        off: '关闭（默认）',
+        off: '关闭',
+        minimal: '最低',
         low: '低',
         medium: '中',
         high: '高',
       },
-      samplingIgnoredByThinking: '开启思考后由服务端忽略',
+      samplingIgnoredByThinking: '思考档位开启时由服务端忽略',
       maxTokens: 'Max Tokens',
       maxTokensPlaceholder: '0 表示不限制',
       maxTokensThinkingHint:
-        '思考与最终输出共用同一 Max Tokens 池（约 low 25% / medium 50% / high 75% 给思考），建议适当提高上限',
+        '思考与最终输出共用同一 Max Tokens 池（约最低 12.5% / 低 25% / 中 50% / 高 75% 给思考），建议适当提高上限',
       timeout: '超时时间（秒）',
       timeoutPlaceholder: '例如：60',
       timeoutUnlimited: '不限制',
