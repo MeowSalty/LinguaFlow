@@ -33,23 +33,24 @@ Web 可用「探测模型」拉取列表后选择。
 | `temperature`           | float      | API 默认                              | 采样温度                                              |
 | `top_p`                 | float      | API 默认                              | 核采样                                                |
 | `stream`                | bool       | `false`                               | 上游流式请求，内部累积为完整响应                      |
-| `thinking_level`        | string     | `off`                                 | 统一思考强度：`off` \| `low` \| `medium` \| `high`    |
+| `thinking_level`        | string     | 不设置                               | 统一思考强度：`off` \| `minimal` \| `low` \| `medium` \| `high` |
 | `rate_limit_per_minute` | int        | `0`                                   | 每分钟请求上限；`0` 不限（后端级字段，非 options 内） |
 
 ### 思考强度（`thinking_level`）
 
-统一语义，由各适配层映射为厂商原生参数；仅对支持推理/思考的模型生效。
+手动开关式语义：**不设置该键 = 开关关闭**，LinguaFlow 不传任何 thinking 相关字段；设置任意值 = 开启开关。统一档位由各适配层映射为厂商原生参数，仅对支持推理/思考的模型生效。
 
-| 档位                      | 含义                                                                                                                 |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `off`（默认）             | LinguaFlow **不传**任何 thinking 相关字段，沿用模型/网关默认。默认会思考的推理模型在 `off` 下仍可能思考（by design） |
-| `low` / `medium` / `high` | 显式开启并按档位映射                                                                                                 |
+| 档位                                | 含义                                                                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 不设置（默认）                      | 不传任何 thinking 字段，沿用模型/网关默认。默认会思考的推理模型此时仍可能思考（by design）                               |
+| `off`                               | 显式关闭思考，映射为各协议的原生关闭参数；模型是否支持由用户自行保证，LinguaFlow 不做校验                                |
+| `minimal` / `low` / `medium` / `high` | 开启思考并按档位映射                                                                                                    |
 
-| 后端          | 开启时映射                                       | 注意                                                                                                                                                |
-| ------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OpenAI 兼容   | `reasoning_effort`（字面 `low`/`medium`/`high`） | 不支持的模型可能忽略或报错                                                                                                                          |
-| Anthropic     | `thinking` + `budget_tokens`                     | 开启后 **忽略** temperature / top_p；budget 与最终输出 **共用** `max_tokens`（约 low 25% / medium 50% / high 75% 给思考）；要求 `max_tokens > 1024` |
-| Google Gemini | `ThinkingConfig.ThinkingLevel`                   | 不设 budget / include thoughts                                                                                                                      |
+| 后端          | 映射                                                       | 注意                                                                                                                                                     |
+| ------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OpenAI 兼容   | `reasoning_effort`（`off` → `none`，其余档位字面映射）     | 不支持的模型可能忽略或报错                                                                                                                               |
+| Anthropic     | `thinking` + `budget_tokens`                               | 仅 `minimal`~`high` 时**忽略** temperature / top_p（API 拒绝非默认采样参数）；显式 `off` 时正常传递。budget 与最终输出**共用** `max_tokens`（minimal/low/medium/high ≈ 12.5% / 25% / 50% / 75% 给思考）；budget 下限 1024，`max_tokens` 偏小时会被钳到下限（此时与 low 同值） |
+| Google Gemini | `ThinkingConfig`（`off` → `thinkingBudget: 0`，其余映射 `ThinkingLevel`） | 协议无原生关闭档，`off` 用 budget 0 实现                                                                                                                 |
 
 截断（如 Anthropic `stop_reason=max_tokens`）且已开思考时，可从 **提高 `max_tokens`、降低 `thinking_level`、减小批次** 三处排查。
 

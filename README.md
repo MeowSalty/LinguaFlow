@@ -53,7 +53,7 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 
 - 支持 OpenAI、Anthropic、Google Gemini
 - 兼容 Azure OpenAI、Ollama、LM Studio 等 OpenAI API 兼容服务
-- 统一思考强度（`thinking_level`）：关闭 / 低 / 中 / 高，由适配层映射为各厂商原生参数
+- 统一思考强度（`thinking_level`）：最低 / 低 / 中 / 高档位与显式关闭，由适配层映射为各厂商原生参数
 - 超时可关闭：适配本地大模型或慢响应网关
 - 流式请求模式（`stream`），适配只接受 `stream:true` 的兼容网关，内部累积为完整响应后返回
 - 自动检测源语言
