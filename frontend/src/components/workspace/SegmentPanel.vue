@@ -100,8 +100,17 @@ const exitEditor = (): void => {
   void router.replace({ query })
 }
 
+// 资源切换在途时抑制章节路由回写：handleResourceChange 中 setActiveResource 的
+// resetEpubState 已触发本 watcher，而此刻 router.replace 尚未提交，route.query 还是
+// 旧资源快照——基于它回写会覆盖切换导航（URL 弹回旧 edit）。切换自身的 replace 已
+// 负责删除 query.chapter，无需 watcher 重复同步。
+let suppressChapterRouteSync = false
+
 // 编辑视图内切换资源：数据加载交给下方筛选/资源 watcher，这里只换状态 + 同步路由
 const handleResourceChange = (value: number | null): void => {
+  // 标志须在 setActiveResource 之前置位：其回调 resetEpubState 清 epubActiveGroupKey
+  // 时就会触发章节同步 watcher
+  suppressChapterRouteSync = true
   workspace.setActiveResource(value)
   workspace.exitChapter()
 
@@ -112,14 +121,16 @@ const handleResourceChange = (value: number | null): void => {
     delete query.edit
   }
   delete query.chapter
-  void router.replace({ query })
+  void router.replace({ query }).finally(() => {
+    suppressChapterRouteSync = false
+  })
 }
 
 // 章节切换同步到路由（分享链接 / 前进后退）
 watch(
   () => workspace.epubActiveGroupKey,
   (groupKey) => {
-    if (route.query.edit === undefined) return
+    if (route.query.edit === undefined || suppressChapterRouteSync) return
     const query = { ...route.query }
     if (groupKey) {
       query.chapter = groupKey
