@@ -40,7 +40,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  applied: [payload: { resourceId: number }]
+  applied: [payload: { resourceId: number; items: ApiSchemas['Segment'][] }]
 }>()
 
 const show = defineModel<boolean>('show', { default: false })
@@ -252,7 +252,7 @@ const doApply = async (): Promise<void> => {
         skipped: result.skipped_count,
       }),
     )
-    emit('applied', { resourceId: requestResourceId })
+    emit('applied', { resourceId: requestResourceId, items: result.items })
   } catch (error) {
     if (epoch !== resourceEpoch) return
     const knownError = isSearchReplaceApplyError(error) ? error : null
@@ -309,7 +309,7 @@ const doUndo = async (): Promise<void> => {
         skipped: result.skipped_count,
       }),
     )
-    emit('applied', { resourceId: requestResourceId })
+    emit('applied', { resourceId: requestResourceId, items: result.items })
   } catch (error) {
     if (epoch !== resourceEpoch) return
     const knownError = isSearchReplaceApplyError(error) ? error : null

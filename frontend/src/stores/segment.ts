@@ -587,6 +587,45 @@ export const useSegmentStore = defineStore('segment', () => {
     }
   }
 
+  /**
+   * 将搜索替换/撤销接口返回的段落合并到当前内存窗口。
+   *
+   * 搜索替换可能作用于当前窗口之外的段落，因此只更新已加载的条目，
+   * 保留主列表的游标与滚动窗口；之后翻页时仍会从服务端取得最新数据。
+   */
+  const mergeSearchReplaceItems = (items: Segment[]): void => {
+    if (items.length === 0) return
+
+    const updates = new Map(items.map((item) => [item.id, item]))
+    const matchesCurrentFilter = (segment: Segment): boolean => {
+      if (segmentStatusFilter.value !== 'all' && segment.status !== segmentStatusFilter.value) {
+        return false
+      }
+
+      const issues = segment.quality_issues ?? []
+      if (segmentQualityIssuesFilter.value === 'has' && issues.length === 0) return false
+      if (segmentQualityIssuesFilter.value === 'none' && issues.length > 0) return false
+      if (
+        segmentQualitySeverityFilter.value !== 'all' &&
+        !issues.some((issue) => issue.severity === segmentQualitySeverityFilter.value)
+      ) {
+        return false
+      }
+      if (
+        segmentQualityCodeFilter.value !== 'all' &&
+        !issues.some((issue) => issue.code === segmentQualityCodeFilter.value)
+      ) {
+        return false
+      }
+      return true
+    }
+
+    segments.value = segments.value
+      .map((segment) => updates.get(segment.id) ?? segment)
+      .filter(matchesCurrentFilter)
+    searchResults.value = searchResults.value.map((segment) => updates.get(segment.id) ?? segment)
+  }
+
   // ── 工具方法 ──
 
   /**
@@ -723,6 +762,7 @@ export const useSegmentStore = defineStore('segment', () => {
     selectAllEpubGroups,
     clearEpubGroupSelection,
     refreshChapterGroups,
+    mergeSearchReplaceItems,
     resetEpubState,
   }
 })

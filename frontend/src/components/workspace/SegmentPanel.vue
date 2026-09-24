@@ -392,16 +392,41 @@ const openSearchReplace = (): void => {
   searchReplaceDrawerRef.value?.open()
 }
 
-const handleSearchReplaceApplied = (payload: { resourceId: number }): void => {
-  if (!props.projectId) return
-  void workspace.loadSegments(
-    props.projectId,
-    payload.resourceId,
-    false,
-    workspace.epubActiveGroupKey ?? undefined,
-  )
+const handleSearchReplaceApplied = (payload: { resourceId: number; items: Segment[] }): void => {
+  if (payload.resourceId !== workspace.activeResourceId) return
+
+  // 直接合并接口返回的已更新段落，保留当前窗口、游标与滚动位置。
+  const host = mainScrollRef.value
+  const previousScrollTop = host?.scrollTop ?? 0
+  const hostTop = host?.getBoundingClientRect().top ?? 0
+  const anchor = host
+    ? Array.from(host.querySelectorAll<HTMLElement>('[data-segment-id]')).find((element) => {
+        if (element.offsetParent === null) return false
+        const rect = element.getBoundingClientRect()
+        return rect.bottom > hostTop && rect.top < hostTop + (host.clientHeight || 0)
+      })
+    : undefined
+  const anchorId = anchor?.dataset.segmentId
+  const anchorOffset = anchor ? anchor.getBoundingClientRect().top - hostTop : 0
+  workspace.mergeSearchReplaceItems(payload.items)
+  void nextTick().then(() => {
+    if (!host) return
+    if (anchorId) {
+      const updatedAnchor = Array.from(
+        host.querySelectorAll<HTMLElement>(`[data-segment-id="${anchorId}"]`),
+      ).find((element) => element.offsetParent !== null)
+      if (updatedAnchor) {
+        host.scrollTop += updatedAnchor.getBoundingClientRect().top - hostTop - anchorOffset
+        return
+      }
+    }
+    host.scrollTop = previousScrollTop
+  })
+
   if (workspace.isEpubResource) {
-    void workspace.refreshChapterGroups(props.projectId, payload.resourceId)
+    if (props.projectId) {
+      void workspace.refreshChapterGroups(props.projectId, payload.resourceId)
+    }
   }
 }
 
