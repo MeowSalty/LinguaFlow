@@ -11,6 +11,12 @@ import { fetchSegmentGroups, type ResourceSegmentGroup } from '@/api/epub'
 import type { ResourceSegmentQualityCode, SegmentMatchMode } from '@/api/projects'
 import { t } from '@/i18n'
 import { extractErrorMessage } from '@/utils/errors'
+import {
+  collectSegmentSearchMatches,
+  MAX_SEGMENT_SEARCH_MATCHES,
+  SegmentSearchCollectionError,
+  type SegmentSearchScope,
+} from '@/utils/segmentSearchScope'
 
 export type { ResourceSegmentGroup }
 
@@ -360,7 +366,7 @@ export const useSegmentStore = defineStore('segment', () => {
   }
 
   /**
-   * 跨全资源搜索段落（不传 group_key），供独立搜索定位面板使用。
+   * 默认跨全资源搜索段落；仅使用调用方显式传入的章节/筛选/选择范围。
    * 搜索词/字段/大小写/匹配模式/全字复用 segmentSearch / segmentSearchFieldFilter /
    * segmentSearchCaseSensitive / segmentSearchMatchMode / segmentSearchWholeWord。
    * append 为结果分页追加；新一轮搜索（append=false）立即清空旧结果与旧错误，
@@ -370,6 +376,7 @@ export const useSegmentStore = defineStore('segment', () => {
     projectId: number,
     resourceId: number,
     append = false,
+    scope?: SegmentSearchScope,
   ): Promise<void> => {
     const requestId = ++searchResultsRequestId
     loadingSearchResults.value = true
@@ -386,7 +393,8 @@ export const useSegmentStore = defineStore('segment', () => {
       const searchTerm = segmentSearch.value.trim()
       const hasSearch = Boolean(searchTerm)
 
-      const response = await fetchResourceSegments(projectId, resourceId, {
+      const params = {
+        ...scope?.filters,
         search: searchTerm || undefined,
         search_field: hasSearch ? segmentSearchFieldFilter.value : undefined,
         case_sensitive: hasSearch ? segmentSearchCaseSensitive.value : undefined,
@@ -395,21 +403,67 @@ export const useSegmentStore = defineStore('segment', () => {
         include_total: !append,
         cursor: append ? (searchResultsCursor.value ?? undefined) : undefined,
         limit: 50,
-      })
+      }
+      const response = scope?.segmentIds
+        ? await collectSegmentSearchMatches(projectId, resourceId, params, {
+            segmentIds: scope.segmentIds,
+            isCurrent: () => requestId === searchResultsRequestId,
+          }).then((items) => ({ items, total: items.length, next_cursor: undefined }))
+        : await fetchResourceSegments(projectId, resourceId, params)
       if (requestId !== searchResultsRequestId) return
-      searchResults.value = append ? [...searchResults.value, ...response.items] : response.items
+      searchResults.value = [
+        ...new Map(
+          [...(append ? searchResults.value : []), ...response.items].map((item) => [
+            item.id,
+            item,
+          ]),
+        ).values(),
+      ]
       searchResultsCursor.value = response.next_cursor ?? null
       if (!append) {
         searchResultsTotal.value = response.total ?? null
       }
     } catch (error) {
       if (requestId !== searchResultsRequestId) return
+      if (error instanceof SegmentSearchCollectionError) {
+        if (error.code === 'cancelled') return
+        searchResultsError.value =
+          error.code === 'limit_exceeded'
+            ? t('api.errors.segmentSearchCollectionLimitExceeded', {
+                max: MAX_SEGMENT_SEARCH_MATCHES,
+              })
+            : t('api.errors.segmentSearchCollectionPaginationStalled')
+        return
+      }
       searchResultsError.value = extractErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
     } finally {
       if (requestId === searchResultsRequestId) {
         loadingSearchResults.value = false
       }
     }
+  }
+
+  const matchesCurrentFilter = (segment: Segment): boolean => {
+    if (segmentStatusFilter.value !== 'all' && segment.status !== segmentStatusFilter.value) {
+      return false
+    }
+
+    const issues = segment.quality_issues ?? []
+    if (segmentQualityIssuesFilter.value === 'has' && issues.length === 0) return false
+    if (segmentQualityIssuesFilter.value === 'none' && issues.length > 0) return false
+    if (
+      segmentQualitySeverityFilter.value !== 'all' &&
+      !issues.some((issue) => issue.severity === segmentQualitySeverityFilter.value)
+    ) {
+      return false
+    }
+    if (
+      segmentQualityCodeFilter.value !== 'all' &&
+      !issues.some((issue) => issue.code === segmentQualityCodeFilter.value)
+    ) {
+      return false
+    }
+    return true
   }
 
   /**
@@ -432,6 +486,14 @@ export const useSegmentStore = defineStore('segment', () => {
     const requestId = ++searchJumpRequestId
     jumpingToSegmentCount.value++
     try {
+      // 搜索范围独立于主表筛选。仅在筛选会挡住定位目标时清除，且让所有后续
+      // 窗口分页沿用同一组筛选，避免锚点接口跳过目标或下一页突然恢复旧范围。
+      if (!matchesCurrentFilter(segment)) {
+        segmentStatusFilter.value = 'all'
+        segmentQualityIssuesFilter.value = 'all'
+        segmentQualitySeverityFilter.value = 'all'
+        segmentQualityCodeFilter.value = 'all'
+      }
       if (groupKey) {
         const groupTitle =
           segmentGroups.value.find((g) => g.group_key === groupKey)?.group_title ?? groupKey
@@ -587,6 +649,22 @@ export const useSegmentStore = defineStore('segment', () => {
     }
   }
 
+  /**
+   * 将搜索替换/撤销接口返回的段落合并到当前内存窗口。
+   *
+   * 搜索替换可能作用于当前窗口之外的段落，因此只更新已加载的条目，
+   * 保留主列表的游标与滚动窗口；之后翻页时仍会从服务端取得最新数据。
+   */
+  const mergeSearchReplaceItems = (items: Segment[]): void => {
+    if (items.length === 0) return
+
+    const updates = new Map(items.map((item) => [item.id, item]))
+    segments.value = segments.value
+      .map((segment) => updates.get(segment.id) ?? segment)
+      .filter(matchesCurrentFilter)
+    searchResults.value = searchResults.value.map((segment) => updates.get(segment.id) ?? segment)
+  }
+
   // ── 工具方法 ──
 
   /**
@@ -723,6 +801,7 @@ export const useSegmentStore = defineStore('segment', () => {
     selectAllEpubGroups,
     clearEpubGroupSelection,
     refreshChapterGroups,
+    mergeSearchReplaceItems,
     resetEpubState,
   }
 })
