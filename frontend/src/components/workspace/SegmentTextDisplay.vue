@@ -5,6 +5,9 @@ import type { QualityIssue } from '@/composables/useQualityIssues'
 import {
   renderCombinedHighlightedHtml,
   renderCombinedHighlightedText,
+  renderHighlightedHtmlRanges,
+  renderHighlightedTextRanges,
+  type SearchHighlightRange,
   type SearchMatchOptions,
 } from '@/composables/useSearchHighlight'
 
@@ -17,6 +20,7 @@ const props = withDefaults(
     maxLines?: number
     searchQuery?: string
     searchMatchOptions?: SearchMatchOptions
+    highlightRanges?: SearchHighlightRange[]
   }>(),
   {
     issues: undefined,
@@ -32,6 +36,11 @@ const useHtmlRenderer = computed(
 )
 
 const vnode = computed(() => {
+  if (props.highlightRanges) {
+    if (useHtmlRenderer.value) return renderHighlightedHtmlRanges(props.text, props.highlightRanges)
+    return renderHighlightedTextRanges(props.text, props.highlightRanges)
+  }
+
   const query = props.searchQuery.trim()
   if (useHtmlRenderer.value) {
     return renderCombinedHighlightedHtml(

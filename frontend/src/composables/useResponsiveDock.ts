@@ -48,10 +48,10 @@ export interface ResponsiveDockState {
 
 // 停靠断点按几何推算：中央内容列恢复全站限宽 max-w-275(1100px) 居中，
 // 面板吸附在内容列两侧的空白区——两侧空白各需容纳面板宽 + 间隙才停靠。
-// 章节 232px+12 间隙：1100 + 2×244 = 1588；搜索 344px+12：1100 + 2×356 = 1812。
+// 章节 232px+12 间隙：1100 + 2×244 = 1588；搜索替换 384px+12：1100 + 2×396 = 1892。
 // 注意：这是「内容区宽度」（不含全局侧边栏），不是视口宽度。
 const LG_BREAKPOINT = 1588
-const XL_BREAKPOINT = 1812
+const XL_BREAKPOINT = 1892
 
 export const useResponsiveDock = (): ResponsiveDockState => {
   const chaptersOpen = ref(true)

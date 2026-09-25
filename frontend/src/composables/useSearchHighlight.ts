@@ -13,6 +13,7 @@ import {
   type QualityHighlightRange,
   type QualityIssue,
 } from '@/composables/useQualityIssues'
+import { makeTextContextSnippet } from '@/utils/textContext'
 
 /** 搜索命中区间（rune 偏移，与质量问题高亮管线同一坐标系） */
 export interface SearchHighlightRange {
@@ -20,13 +21,17 @@ export interface SearchHighlightRange {
   end: number
 }
 
+export interface SearchSnippetPart {
+  type: 'text' | 'hit' | 'ellipsis'
+  text: string
+}
+
 export interface SearchSnippet {
-  /** 命中前的文本（超出截断半径时以省略号开头） */
-  before: string
-  /** 命中的关键词原文（保持原文大小写形态） */
-  hit: string
-  /** 命中后的文本（超出截断半径时以省略号结尾） */
-  after: string
+  parts: SearchSnippetPart[]
+  matchCount: number
+  visibleMatchCount: number
+  omittedMatchCount: number
+  truncated: boolean
 }
 
 /** 展示级匹配模式，语义与后端 SegmentMatchMode 一致 */
@@ -413,57 +418,24 @@ export const renderSearchHighlightedHtml = (
   return h('div', { class: 'quality-html-content', style }, children)
 }
 
-/** 片段默认前置预算：命中前保留的 rune 数（窗口严格有界，不再向空白无上限扩张） */
-const SNIPPET_BEFORE_BUDGET = 5
-
-/** 后置预算在前置预算之上的额外 rune 数：命中后常跟搭配词 / 标点，留得略长 */
-const SNIPPET_AFTER_EXTRA = 10
-
-/** 词边界优化的外扩上限（每侧 rune 数）：只在切点仍位于词内字符上时外扩，遇到空白即停 */
-const SNIPPET_WORD_BOUNDARY_EXTRA = 5
-
-/**
- * 从文本中截取关键词居中的片段（搜索结果卡片用）。
- * 窗口严格有界：命中前保留 radius 个 rune，命中后保留 radius + SNIPPET_AFTER_EXTRA 个 rune；
- * 词边界优化最多再向两侧各外扩 SNIPPET_WORD_BOUNDARY_EXTRA 个 rune——额外窗口内碰不到空白
- * 就硬截断，避免无空白文本（CJK、压缩 HTML）把命中前正文一路吞回整段。
- * 以首个非零宽命中为准；无可用命中（regex 非法/降级、零宽命中）时整段作为 before 返回，
- * 由调用方决定呈现。
- */
+/** Creates context around every hit, joining nearby matches and clipping unchanged text only. */
 export const makeSearchSnippet = (
   text: string,
   query: string,
   options: SearchMatchArgument = false,
-  radius = SNIPPET_BEFORE_BUDGET,
+  expanded = false,
 ): SearchSnippet => {
-  const empty: SearchSnippet = { before: text, hit: '', after: '' }
-  if (!text || !query) return empty
-
-  const runes = Array.from(text)
-  const { ranges } = buildSearchMatch(text, query, options)
-  const first = ranges.find((range) => range.end > range.start)
-  if (!first) return empty
-
-  const beforeBudget = Math.max(0, radius)
-  let start = Math.max(0, first.start - beforeBudget)
-  let end = Math.min(runes.length, first.end + beforeBudget + SNIPPET_AFTER_EXTRA)
-
-  // 收缩边界避免切断词中间（向词边界推进）；外扩额度用尽即硬截断，保证窗口有界
-  let startExtra = SNIPPET_WORD_BOUNDARY_EXTRA
-  while (startExtra > 0 && start > 0 && /\S/.test(runes[start] ?? '')) {
-    start--
-    startExtra--
-  }
-  let endExtra = SNIPPET_WORD_BOUNDARY_EXTRA
-  while (endExtra > 0 && end < runes.length && /\S/.test(runes[end - 1] ?? '')) {
-    end++
-    endExtra--
-  }
-
+  const ranges =
+    text && query
+      ? buildSearchMatch(text, query, options).ranges.filter((range) => range.end > range.start)
+      : []
+  const snippet = makeTextContextSnippet(text, ranges, expanded)
   return {
-    before: (start > 0 ? '…' : '') + runes.slice(start, first.start).join(''),
-    hit: runes.slice(first.start, first.end).join(''),
-    after: runes.slice(first.end, end).join('') + (end < runes.length ? '…' : ''),
+    parts: snippet.parts,
+    matchCount: ranges.length,
+    visibleMatchCount: snippet.visibleAnchorCount,
+    omittedMatchCount: ranges.length - snippet.visibleAnchorCount,
+    truncated: snippet.truncated,
   }
 }
 
@@ -641,6 +613,32 @@ export const renderCombinedHighlightedText = (
   return h('span', { class: 'quality-highlighted-text' }, children)
 }
 
+/** 将任意 rune 区间渲染为搜索式高亮，供替换前后 diff 复用正文样式。 */
+export const renderHighlightedTextRanges = (
+  text: string,
+  ranges: SearchHighlightRange[],
+): VNode => {
+  const atoms = buildCombinedAtoms([], ranges)
+  if (!atoms.length) return h('span', null, text)
+
+  const runes = Array.from(text)
+  const children: (string | VNode)[] = []
+  let cursor = 0
+  for (const atom of atoms) {
+    if (atom.start > cursor) children.push(runes.slice(cursor, atom.start).join(''))
+    children.push(
+      h(
+        'mark',
+        { class: combinedAtomClass(atom, false) },
+        runes.slice(atom.start, atom.end).join(''),
+      ),
+    )
+    cursor = atom.end
+  }
+  if (cursor < runes.length) children.push(runes.slice(cursor).join(''))
+  return h('span', { class: 'quality-highlighted-text' }, children)
+}
+
 interface CombinedDomContext {
   nodeStarts: Map<Text, number>
   atoms: CombinedHighlightAtom[]
@@ -747,4 +745,25 @@ export const renderCombinedHighlightedHtml = (
     : undefined
 
   return h('div', { class: 'quality-html-content', style }, children)
+}
+
+/** 将基于可见文本 rune 的任意区间映射回安全渲染的 HTML 文本节点。 */
+export const renderHighlightedHtmlRanges = (
+  html: string,
+  ranges: SearchHighlightRange[],
+): VNode => {
+  const body = parseHtmlBody(html)
+  const textMap = buildVisibleTextMap(body)
+  const atoms = buildCombinedAtoms([], ranges)
+  const ctx: CombinedDomContext = {
+    nodeStarts: textMap.nodeStarts,
+    atoms,
+    activeIssueIndex: null,
+  }
+  const children: (string | VNode)[] = []
+  for (const child of Array.from(body.childNodes)) {
+    const rendered = combinedDomNodeToVNode(child, ctx)
+    if (rendered != null) children.push(rendered)
+  }
+  return h('div', { class: 'quality-html-content' }, children)
 }

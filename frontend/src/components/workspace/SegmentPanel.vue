@@ -19,8 +19,7 @@ import {
 } from '@/stores/projectWorkspace'
 import SegmentChapterSidebar from '@/components/workspace/SegmentChapterSidebar.vue'
 import SegmentDataTable from '@/components/workspace/SegmentDataTable.vue'
-import SegmentSearchPanel from '@/components/workspace/SegmentSearchPanel.vue'
-import SegmentSearchReplaceDrawer from '@/components/workspace/SegmentSearchReplaceDrawer.vue'
+import SegmentFindReplacePanel from '@/components/workspace/SegmentFindReplacePanel.vue'
 
 type Segment = ApiSchemas['Segment']
 
@@ -172,21 +171,23 @@ const handleCloseChapters = (): void => {
   }
 }
 
+let searchReturnFocus: HTMLElement | null = null
 const handleCloseSearch = (): void => {
   if (searchInDrawer.value) {
     closeSearchDrawer()
   } else {
     toggleSearch()
   }
+  void nextTick(() => { if (searchReturnFocus?.isConnected) searchReturnFocus.focus() })
 }
 
 const closeAllDrawers = (): void => {
   if (chaptersDrawerVisible.value) closeChaptersDrawer()
-  if (searchDrawerVisible.value) closeSearchDrawer()
+  if (searchDrawerVisible.value) handleCloseSearch()
 }
 
 // ── 搜索面板实例：面板常驻挂载（收起/隐藏仅转不可见），聚焦需父级主动驱动 ──
-const searchPanelRef = ref<InstanceType<typeof SegmentSearchPanel> | null>(null)
+const searchPanelRef = ref<InstanceType<typeof SegmentFindReplacePanel> | null>(null)
 
 // 挂载门：面板打开过一次就保持挂载——之后「收起/隐藏」只转不可见（见 searchPanelClass），
 // 输入、结果列表滚动与选中态在整个编辑视图生命周期内不丢
@@ -199,13 +200,13 @@ watch(searchOpen, (open) => {
 // display:none——后者会丢内部滚动位置；挂起沿用当前几何（席位/抽屉），恢复可见时零位移
 const searchPanelClass = computed(() => {
   if (searchInDrawer.value) {
-    return 'lf-drawer lf-drawer--right w-86 max-w-[90vw] animate-drawer-right'
+    return 'lf-drawer lf-drawer--right w-96 max-w-full animate-drawer-right'
   }
   if (searchDocked.value) {
-    const seat = 'absolute top-0 bottom-0 left-[calc(100%+12px)] w-86'
+    const seat = 'absolute top-0 bottom-0 left-[calc(100%+12px)] w-96'
     return searchOpen.value ? `${seat} flex` : `${seat} invisible pointer-events-none`
   }
-  return 'lf-drawer lf-drawer--right w-86 max-w-[90vw] invisible pointer-events-none'
+  return 'lf-drawer lf-drawer--right w-96 max-w-full invisible pointer-events-none'
 })
 
 // 形态变化（可见性切换或抽屉↔席位断点跨越）后回填结果列表滚动位置：
@@ -216,6 +217,9 @@ watch(searchPanelClass, () => {
 
 /** Ctrl+F：面板未展开时先展开（席位或抽屉形态），聚焦随后统一处理 */
 const handleSearchActivate = (): void => {
+  if (!searchOpen.value && document.activeElement instanceof HTMLElement) {
+    searchReturnFocus = document.activeElement
+  }
   if (searchInDrawer.value) return
   if (searchDocked.value) {
     if (!searchOpen.value) toggleSearch()
@@ -236,11 +240,14 @@ watch(searchOpen, (open) => {
 
 // 全局快捷键：Ctrl+F 打开搜索定位；ESC 关闭抽屉（输入框内的 Esc 交给输入框自身处理）
 const handleGlobalKeyDown = (e: KeyboardEvent): void => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+  if (e.isComposing || e.defaultPrevented) return
+  const key = e.key.toLowerCase()
+  const replaceShortcut = (e.ctrlKey && !e.metaKey && key === 'h') || (e.metaKey && e.altKey && key === 'f')
+  if (replaceShortcut || ((e.ctrlKey || e.metaKey) && !e.altKey && key === 'f')) {
     if (!workspace.activeResourceId) return
     e.preventDefault()
     handleSearchActivate()
-    void nextTick(() => searchPanelRef.value?.focusInput())
+    void nextTick(() => replaceShortcut ? searchPanelRef.value?.openReplace() : searchPanelRef.value?.focusInput())
     return
   }
   if (e.key !== 'Escape' || !anyDrawerVisible.value) return
@@ -385,15 +392,9 @@ const segmentsCountLabel = computed(() => {
   })
 })
 
-// ── 搜索替换抽屉 ──
-const searchReplaceDrawerRef = ref<InstanceType<typeof SegmentSearchReplaceDrawer> | null>(null)
-
-const openSearchReplace = (): void => {
-  searchReplaceDrawerRef.value?.open()
-}
-
-const handleSearchReplaceApplied = (payload: { resourceId: number; items: Segment[] }): void => {
-  if (payload.resourceId !== workspace.activeResourceId) return
+// ── 统一搜索替换面板的写入结果 ──
+const handleSearchReplaceApplied = (payload: { projectId: number; resourceId: number; items: Segment[] }): void => {
+  if (payload.projectId !== props.projectId || payload.resourceId !== workspace.activeResourceId) return
 
   // 直接合并接口返回的已更新段落，保留当前窗口、游标与滚动位置。
   const host = mainScrollRef.value
@@ -665,7 +666,7 @@ const handleCloseInlineComment = (): void => {
         :secondary="searchOpen"
         :type="searchOpen ? 'primary' : 'default'"
         :title="t('workspace.segment.searchLocateToggleHint')"
-        @click="toggleSearch()"
+        @click="searchOpen ? handleCloseSearch() : handleSearchActivate()"
       >
         {{ t('workspace.segment.searchLocateToggle') }}
       </NButton>
@@ -674,7 +675,7 @@ const handleCloseInlineComment = (): void => {
         size="small"
         :disabled="!workspace.activeResourceId"
         :title="t('workspace.segment.searchLocateToggleHint')"
-        @click="openSearchDrawer()"
+        @click="handleSearchActivate()"
       >
         {{ t('workspace.segment.searchLocateToggle') }}
       </NButton>
@@ -855,14 +856,15 @@ const handleCloseInlineComment = (): void => {
            常驻 body——开关抽屉零 DOM 搬移，搬移会重置列表滚动位置 -->
       <Teleport to="body" :disabled="searchDocked">
         <div v-if="searchPanelMounted" :class="searchPanelClass">
-          <SegmentSearchPanel
+          <SegmentFindReplacePanel
             ref="searchPanelRef"
             class="h-full w-full"
             :project-id="projectId"
             :text-render-mode="textRenderMode"
             :active="searchInDrawer || (searchOpen && searchDocked)"
+            :selected-segment-ids="selectedSegmentIds"
             @jumped="handleSearchJumped"
-            @open-replace="openSearchReplace"
+            @applied="handleSearchReplaceApplied"
             @close="handleCloseSearch"
           />
         </div>
@@ -884,12 +886,5 @@ const handleCloseInlineComment = (): void => {
       />
     </Teleport>
 
-    <SegmentSearchReplaceDrawer
-      ref="searchReplaceDrawerRef"
-      :project-id="projectId"
-      :text-render-mode="textRenderMode"
-      :selected-segment-ids="selectedSegmentIds"
-      @applied="handleSearchReplaceApplied"
-    />
   </div>
 </template>
