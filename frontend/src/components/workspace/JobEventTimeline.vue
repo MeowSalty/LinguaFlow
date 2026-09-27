@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NButton, NEmpty } from 'naive-ui'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { NButton, NButtonGroup, NEmpty } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import ChevronRight from '~icons/carbon/chevron-right'
 
 import type { BatchEventMetadata, PoolEventMetadata, SSEEvent } from '@/composables/sseShared'
+import { normalizeSSELevel } from '@/composables/sseShared'
 import {
   eventLevelType,
   formatDuration,
@@ -11,76 +13,53 @@ import {
   getStageLabel,
   isBatchEvent,
   isPoolEvent,
-  poolTimelineType,
 } from '@/composables/useWorkspaceUtils'
 import { formatDateTime } from '@/utils/datetime'
+import { isJobEventAnomaly, type JobEventFilter } from '@/utils/jobPresentation'
 
 import BatchDetailDrawer from './BatchDetailDrawer.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
-const props = defineProps<{
-  events: SSEEvent[]
-  connected?: boolean
-  hasOlder?: boolean
-  loadingOlder?: boolean
-  jobEnded?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    events: SSEEvent[]
+    connected?: boolean
+    hasOlder?: boolean
+    loadingOlder?: boolean
+    jobEnded?: boolean
+    active?: boolean
+    filter?: JobEventFilter
+  }>(),
+  {
+    active: true,
+    filter: 'all',
+  },
+)
 
 const emit = defineEmits<{
   clear: []
   'load-older': []
+  'update:filter': [value: JobEventFilter]
 }>()
 
 const scrollContainerRef = ref<HTMLElement | null>(null)
-const isNearTop = ref(false)
-const isNearBottom = ref(true)
-const hasNewEvents = ref(false)
-const prevEventsLength = ref(0)
-const tailSeq = ref(0)
-const headSeq = ref(0)
-// 头部前插更早事件时，记录滚动位置，前插后恢复，防止视觉跳动
-const pendingScrollRestore = ref<number | null>(null)
-const prevScrollHeight = ref(0)
-// pull-to-load：下拉拉拽距离（px），超过阈值触发加载
-const PULL_THRESHOLD = 60
-const pullDistance = ref(0)
-let wheelAccum = 0
-let wheelActive = false
-let wheelTimer: ReturnType<typeof setTimeout> | null = null
-// 批次详情抽屉
 const detailDrawerShow = ref(false)
 const detailDrawerEvent = ref<SSEEvent | null>(null)
+const canLoadOlder = computed(
+  () => props.hasOlder && !props.loadingOlder && props.events.length > 0,
+)
 
-const canLoadOlder = computed(() => props.hasOlder && !props.loadingOlder)
-
-const pullIndicatorLabel = computed(() => {
-  if (props.loadingOlder) return t('workspace.job.events.loadingOlder')
-  if (pullDistance.value >= PULL_THRESHOLD) return t('workspace.job.events.releaseToLoad')
-  return t('workspace.job.events.pullToLoad')
-})
-
-const openBatchDetail = (event: SSEEvent): void => {
-  detailDrawerEvent.value = event
-  detailDrawerShow.value = true
-}
-
-// ── 日志行视图：每事件一行（时间 + 状态点 + 消息 + 行内元数据）──
-
-/** 行级别：状态点颜色与消息着色的依据 */
 type LogLevel = 'info' | 'success' | 'warning' | 'error' | 'dim'
 
 interface LogRow {
   key: string
   time: string
   level: LogLevel
+  status: string
   message: string
-  /** 右对齐淡显元数据（后端名 · Token 用量），仅批次事件有 */
   meta: string
-  /** 批次事件：整行可点击打开批次详情 */
   clickable: boolean
-  /** 池事件：弱化显示（小号灰字、空心点） */
-  dim: boolean
   event: SSEEvent
 }
 
@@ -92,15 +71,6 @@ const DOT_CLASS: Record<LogLevel, string> = {
   dim: 'border border-lf-text-subtle bg-transparent',
 }
 
-const formatEventTime = (value: string): string => {
-  return formatDateTime(value, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-}
-
-/** 批次事件摘要：「翻译 · 66 段 · 1.7s」 */
 const getBatchSummary = (event: SSEEvent): string => {
   const meta = event.metadata as unknown as BatchEventMetadata | undefined
   if (!meta) return event.message
@@ -111,7 +81,6 @@ const getBatchSummary = (event: SSEEvent): string => {
   return parts.join(' · ')
 }
 
-/** 批次事件行右端元数据：「线衣 | DS V4F · 1.2k↑ 3.4k↓ Token · 2.0k tok/s」 */
 const getBatchMeta = (event: SSEEvent): string => {
   const meta = event.metadata as unknown as BatchEventMetadata | undefined
   if (!meta) return ''
@@ -124,7 +93,6 @@ const getBatchMeta = (event: SSEEvent): string => {
       }),
     )
   }
-  // 输出速度：输出 Token ÷ 耗时（失败批次通常无输出，自然不显示）
   if (meta.output_tokens > 0 && meta.duration_ms > 0) {
     const rate = Math.round((meta.output_tokens / meta.duration_ms) * 1000)
     parts.push(t('workspace.job.events.batch.tokenSpeed', { rate: formatTokens(rate) }))
@@ -132,7 +100,6 @@ const getBatchMeta = (event: SSEEvent): string => {
   return parts.filter(Boolean).join(' · ')
 }
 
-/** 池事件单行：「质量裁决 · 池开始 · 池 1/4 · 1 批 · 1 段待处理 · 缩放 1.00」 */
 const getPoolLine = (event: SSEEvent): string => {
   const meta = event.metadata as unknown as PoolEventMetadata | undefined
   const parts: string[] = []
@@ -158,7 +125,6 @@ const getPoolLine = (event: SSEEvent): string => {
   return parts.join(' · ')
 }
 
-/** 轮次开始/完成消息内联阶段名：「轮次开始: adjudicate (1 段)」→「轮次开始 · 质量裁决 · 1 段」 */
 const formatRoundMessage = (event: SSEEvent): string => {
   if ((event.type === 'stage_start' || event.type === 'stage_done') && event.stage) {
     const match = event.message.match(/^(.*?):\s*\w+\s*\((.*)\)$/)
@@ -168,371 +134,379 @@ const formatRoundMessage = (event: SSEEvent): string => {
 }
 
 const getRowLevel = (event: SSEEvent): LogLevel => {
-  if (isPoolEvent(event.type)) {
-    const meta = event.metadata as unknown as PoolEventMetadata | undefined
-    return poolTimelineType(meta?.phase, event.level) === 'error' ? 'error' : 'dim'
-  }
-  if (isBatchEvent(event.type)) {
-    const meta = event.metadata as unknown as BatchEventMetadata | undefined
-    if (meta?.status === 'failed') return 'error'
-    if (meta?.status === 'partial') return 'warning'
-    if (meta?.status === 'success') return 'success'
-    return eventLevelType(event.level)
-  }
-  // 完成类事件用成功色，其余按事件级别
+  const level = eventLevelType(normalizeSSELevel(event.level.toLowerCase()))
+  const meta = isBatchEvent(event.type)
+    ? (event.metadata as unknown as BatchEventMetadata | undefined)
+    : undefined
+  if (meta?.status === 'failed' || level === 'error') return 'error'
+  if (meta?.status === 'partial' || level === 'warning') return 'warning'
+  if (isPoolEvent(event.type)) return 'dim'
   if (
-    event.type === 'job_completed' ||
-    event.type === 'resource_completed' ||
-    event.type === 'stage_done'
+    meta?.status === 'success' ||
+    ['job_completed', 'resource_completed', 'stage_done'].includes(event.type)
   ) {
     return 'success'
   }
-  return eventLevelType(event.level)
+  return level
 }
 
-const buildLogRow = (event: SSEEvent): LogRow => {
-  const batch = isBatchEvent(event.type)
-  const pool = isPoolEvent(event.type)
-  return {
-    key: String(event.seq),
-    time: formatEventTime(event.created_at),
-    level: getRowLevel(event),
-    message: batch ? getBatchSummary(event) : pool ? getPoolLine(event) : formatRoundMessage(event),
-    meta: batch ? getBatchMeta(event) : '',
-    clickable: batch,
-    dim: pool,
-    event,
+const getRowStatus = (event: SSEEvent, level: LogLevel): string => {
+  if (isBatchEvent(event.type) && event.metadata?.status === 'partial') {
+    return t('workspace.job.detail.logPartial')
   }
+  if (level === 'error') return t('workspace.job.detail.logFailed')
+  if (level === 'warning') return t('workspace.job.detail.logWarning')
+  return ''
 }
 
-const rowCache = new WeakMap<SSEEvent, LogRow>()
+const anomalyCount = computed(() => props.events.filter(isJobEventAnomaly).length)
+let rowCache = new WeakMap<SSEEvent, LogRow>()
+let cacheLocale = locale.value
+const logRows = computed<LogRow[]>(() => {
+  if (cacheLocale !== locale.value) {
+    rowCache = new WeakMap<SSEEvent, LogRow>()
+    cacheLocale = locale.value
+  }
+  return props.events
+    .filter((event) => props.filter === 'all' || isJobEventAnomaly(event))
+    .map((event) => {
+      const cached = rowCache.get(event)
+      if (cached) return cached
+      const level = getRowLevel(event)
+      const batch = isBatchEvent(event.type)
+      const row = {
+        key: String(event.seq),
+        time: formatDateTime(event.created_at, {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+        level,
+        status: getRowStatus(event, level),
+        message: batch
+          ? getBatchSummary(event)
+          : isPoolEvent(event.type)
+            ? getPoolLine(event)
+            : formatRoundMessage(event),
+        meta: batch ? getBatchMeta(event) : '',
+        clickable: batch,
+        event,
+      }
+      rowCache.set(event, row)
+      return row
+    })
+})
 
-const logRows = computed<LogRow[]>(() =>
-  props.events.map((event) => {
-    let cached = rowCache.get(event)
-    if (!cached) {
-      cached = buildLogRow(event)
-      rowCache.set(event, cached)
-    }
-    return cached
-  }),
-)
+// Each filter keeps its own reading anchor. Sequence IDs remain stable when the
+// store prepends history or trims its event window; array length does not.
+interface ReadingPosition {
+  initialized: boolean
+  followTail: boolean
+  top: number
+  anchor: string | null
+  offset: number
+  unseen: number
+}
 
-let scrollTicking = false
+const newPosition = (): ReadingPosition => ({
+  initialized: false,
+  followTail: true,
+  top: 0,
+  anchor: null,
+  offset: 0,
+  unseen: 0,
+})
+const positions = reactive<Record<JobEventFilter, ReadingPosition>>({
+  all: newPosition(),
+  anomalies: newPosition(),
+})
+const currentPosition = computed(() => positions[props.filter])
+let renderedActive = false
+let scrollFrame = 0
+let restoreRevision = 0
+let resizeObserver: ResizeObserver | undefined
 
-const onScroll = (e: Event): void => {
-  if (scrollTicking) return
-  scrollTicking = true
-  requestAnimationFrame(() => {
-    scrollTicking = false
-    const el = e.target as HTMLElement
-    if (!el) return
-    isNearTop.value = el.scrollTop <= 50
-    isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 50
+const rememberPosition = (position = currentPosition.value): void => {
+  if (!props.active || !renderedActive) return
+  const el = scrollContainerRef.value
+  if (!el) return
+  position.top = el.scrollTop
+  position.followTail = el.scrollTop + el.clientHeight >= el.scrollHeight - 40
+  if (position.followTail) position.unseen = 0
+  const rows = el.querySelectorAll<HTMLElement>('[data-event-seq]')
+  const anchor = Array.from(rows).find((row) => row.offsetTop + row.offsetHeight > el.scrollTop)
+  position.anchor = anchor?.dataset.eventSeq ?? null
+  position.offset = anchor ? anchor.offsetTop - el.scrollTop : 0
+}
+
+const restorePosition = (preserveAnchor = false): void => {
+  if (!props.active || !renderedActive) return
+  const el = scrollContainerRef.value
+  if (!el) return
+  const position = currentPosition.value
+  if (!position.initialized || (position.followTail && !preserveAnchor)) {
+    el.scrollTop = el.scrollHeight
+    position.unseen = 0
+  } else {
+    const anchor = position.anchor
+      ? el.querySelector<HTMLElement>(`[data-event-seq="${position.anchor}"]`)
+      : null
+    // A trimmed reading anchor no longer exists: show the earliest retained row.
+    el.scrollTop = anchor ? anchor.offsetTop - position.offset : position.anchor ? 0 : position.top
+  }
+  position.initialized = true
+  rememberPosition(position)
+}
+
+const scheduleRestore = (preserveAnchor = false): void => {
+  const revision = ++restoreRevision
+  void nextTick(() => {
+    if (revision === restoreRevision) restorePosition(preserveAnchor)
   })
 }
 
-const triggerLoad = (): void => {
-  if (!canLoadOlder.value) return
-  hasNewEvents.value = false
-  emit('load-older')
-}
-
-// 桌面端：wheel 在顶部继续上滚 → 累积拉拽距离，松手（停止滚动）后判定
-const onWheel = (e: WheelEvent): void => {
-  if (e.deltaY > 0) {
-    wheelAccum = 0
-    wheelActive = false
-    pullDistance.value = 0
-    if (wheelTimer) {
-      clearTimeout(wheelTimer)
-      wheelTimer = null
-    }
-    return
-  }
-  const el = scrollContainerRef.value
-  if (!el || el.scrollTop > 0) {
-    wheelAccum = 0
-    wheelActive = false
-    pullDistance.value = 0
-    if (wheelTimer) {
-      clearTimeout(wheelTimer)
-      wheelTimer = null
-    }
-    return
-  }
-  // 已在顶部 + 向上滚动
-  e.preventDefault()
-  wheelActive = true
-  wheelAccum += Math.abs(e.deltaY)
-  pullDistance.value = Math.min(wheelAccum * 0.5, PULL_THRESHOLD * 1.4)
-  // 停止滚动一段时间（视为松手）→ 达到阈值则触发
-  if (wheelTimer) clearTimeout(wheelTimer)
-  wheelTimer = setTimeout(() => {
-    if (pullDistance.value >= PULL_THRESHOLD) {
-      triggerLoad()
-    }
-    wheelAccum = 0
-    wheelActive = false
-    pullDistance.value = 0
-    wheelTimer = null
-  }, 140)
-}
-
-const endWheel = (): void => {
-  if (wheelActive) {
-    wheelActive = false
-    wheelAccum = 0
-    pullDistance.value = 0
-  }
-  if (wheelTimer) {
-    clearTimeout(wheelTimer)
-    wheelTimer = null
-  }
-}
-
-// 移动端：touch 在顶部继续下拉，松手后判定是否触发
-let touchStartY = 0
-const onTouchStart = (e: TouchEvent): void => {
-  touchStartY = e.touches[0]?.clientY ?? 0
-}
-const onTouchMove = (e: TouchEvent): void => {
-  const el = scrollContainerRef.value
-  if (!el || el.scrollTop > 0) {
-    pullDistance.value = 0
-    return
-  }
-  const currentY = e.touches[0]?.clientY
-  if (currentY == null) return
-  const dy = currentY - touchStartY
-  if (dy <= 0) {
-    pullDistance.value = 0
-    return
-  }
-  e.preventDefault()
-  pullDistance.value = Math.min(dy * 0.5, PULL_THRESHOLD * 1.4)
-}
-const onTouchEnd = (): void => {
-  if (pullDistance.value >= PULL_THRESHOLD) {
-    triggerLoad()
-  }
-  pullDistance.value = 0
+const onScroll = (): void => {
+  if (!props.active || scrollFrame) return
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0
+    rememberPosition()
+  })
 }
 
 const scrollToBottom = (): void => {
-  prevEventsLength.value = props.events.length
-  const el = scrollContainerRef.value
-  if (el) el.scrollTop = el.scrollHeight
-  hasNewEvents.value = false
+  currentPosition.value.followTail = true
+  scheduleRestore()
 }
 
-// 触发源用首/尾 seq 而非数组长度：store 窗口化裁剪后「尾部 +1 / 头部 -1」时 length 不变，
-// 只有 seq 对能可靠感知前插与推进
+const openBatchDetail = (event: SSEEvent): void => {
+  detailDrawerEvent.value = event
+  detailDrawerShow.value = true
+}
+
 watch(
-  () => [props.events[0]?.seq ?? 0, props.events.at(-1)?.seq ?? 0] as const,
-  ([newHead, newTail]) => {
-    // 头部前插（loadOlder）：头部 seq 变小 → 记录滚动位置和内容高度，前插后恢复
-    if (newHead < headSeq.value) {
-      const el = scrollContainerRef.value
-      if (el) {
-        prevScrollHeight.value = el.scrollHeight
-        pendingScrollRestore.value = el.scrollTop
-      }
-      // 恢复原滚动位置（补偿新增内容高度），消除跳动
-      nextTick(() => {
-        const saved = pendingScrollRestore.value
-        if (saved == null) return
-        const target = scrollContainerRef.value
-        if (target) target.scrollTop = saved + (target.scrollHeight - prevScrollHeight.value)
-        pendingScrollRestore.value = null
-      })
-    } else if (newTail > tailSeq.value) {
-      // 尾部推进（新事件）：自动滚底或提示
-      if (isNearBottom.value) {
-        prevEventsLength.value = props.events.length
-        nextTick(() => {
-          scrollToBottom()
-        })
-      } else {
-        hasNewEvents.value = true
-      }
-    }
-    // 头部 seq 变大（超出窗口被裁剪）不做补偿，仅更新游标
-    headSeq.value = newHead
-    if (newTail > tailSeq.value) tailSeq.value = newTail
+  () => props.filter,
+  (_, previous) => {
+    rememberPosition(positions[previous])
+    scheduleRestore()
   },
 )
 
-const attachScrollListeners = (el: HTMLElement): void => {
-  el.addEventListener('wheel', onWheel, { passive: false })
-  el.addEventListener('touchstart', onTouchStart, { passive: true })
-  el.addEventListener('touchmove', onTouchMove, { passive: false })
-  el.addEventListener('touchend', onTouchEnd, { passive: true })
-}
+watch(
+  () => props.active,
+  (active) => {
+    renderedActive = false
+    ++restoreRevision
+    if (active) {
+      void nextTick(() => {
+        renderedActive = props.active
+        restorePosition()
+      })
+    }
+  },
+  { flush: 'sync' },
+)
 
-const detachScrollListeners = (el: HTMLElement): void => {
-  el.removeEventListener('wheel', onWheel)
-  el.removeEventListener('touchstart', onTouchStart)
-  el.removeEventListener('touchmove', onTouchMove)
-  el.removeEventListener('touchend', onTouchEnd)
-}
-
-let currentScrollEl: HTMLElement | null = null
-
-// 滚动容器可能在 onMounted 之后才渲染（事件到达后 v-if 才为 true），
-// 用 watch 确保监听器在容器出现时挂载、消失时卸载
-watch(scrollContainerRef, (el, oldEl) => {
-  if (oldEl) detachScrollListeners(oldEl)
-  if (el) {
-    attachScrollListeners(el)
-    currentScrollEl = el
-  } else {
-    currentScrollEl = null
-  }
-})
+watch(
+  () => [props.events[0]?.seq, props.events.at(-1)?.seq, props.events.length] as const,
+  ([head, tail, length], [previousHead, previousTail]) => {
+    rememberPosition()
+    if (!length) {
+      Object.assign(positions.all, newPosition())
+      Object.assign(positions.anomalies, newPosition())
+      detailDrawerShow.value = false
+      detailDrawerEvent.value = null
+      scheduleRestore()
+      return
+    }
+    if (previousTail !== undefined && tail !== undefined && tail > previousTail) {
+      const appended = props.events.filter((event) => event.seq > previousTail)
+      for (const filter of ['all', 'anomalies'] as const) {
+        const position = positions[filter]
+        if (position.initialized && !position.followTail) {
+          position.unseen +=
+            filter === 'all' ? appended.length : appended.filter(isJobEventAnomaly).length
+        }
+      }
+    }
+    const onlyPrepending =
+      head !== undefined &&
+      previousHead !== undefined &&
+      head < previousHead &&
+      tail === previousTail
+    scheduleRestore(onlyPrepending)
+  },
+)
 
 onMounted(() => {
-  prevEventsLength.value = props.events.length
-  tailSeq.value = props.events.at(-1)?.seq ?? 0
-  headSeq.value = props.events.at(0)?.seq ?? 0
-  nextTick(() => scrollToBottom())
+  void nextTick(() => {
+    renderedActive = props.active
+    restorePosition()
+    const el = scrollContainerRef.value
+    if (el) {
+      resizeObserver = new ResizeObserver(() => {
+        if (props.active) scheduleRestore()
+      })
+      resizeObserver.observe(el)
+    }
+  })
 })
 
 onUnmounted(() => {
-  if (currentScrollEl) detachScrollListeners(currentScrollEl)
-  if (wheelTimer) {
-    clearTimeout(wheelTimer)
-    wheelTimer = null
-  }
+  ++restoreRevision
+  if (scrollFrame) cancelAnimationFrame(scrollFrame)
+  resizeObserver?.disconnect()
 })
 </script>
 
 <template>
-  <div class="space-y-2">
-    <div class="flex items-center justify-between">
-      <h4 class="text-[11px] font-medium tracking-wide uppercase text-lf-text-subtle">
-        {{ t('workspace.job.events.title') }}
-      </h4>
-      <div class="flex items-center gap-2">
-        <span
-          v-if="jobEnded"
-          class="inline-flex items-center gap-1 rounded-full bg-lf-text-subtle/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
-        >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-lf-text-subtle" />
-          {{ t('workspace.job.events.jobEnded') }}
-        </span>
-        <span
-          v-else-if="connected"
-          class="inline-flex items-center gap-1 rounded-full bg-lf-success-soft px-1.5 py-0.5 text-[10px] text-lf-success"
-        >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-lf-success" />
-          {{ t('workspace.job.events.live') }}
-        </span>
-        <span
-          v-else
-          class="inline-flex items-center gap-1 rounded-full bg-lf-text-subtle/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
-        >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-lf-text-subtle" />
-          {{ t('workspace.job.events.offline') }}
-        </span>
-        <NButton quaternary size="tiny" @click="emit('clear')">
-          {{ t('workspace.actions.clear') }}
-        </NButton>
+  <div class="flex h-full min-h-0 flex-col">
+    <div class="shrink-0 space-y-2 border-b border-lf-border-soft pb-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <NButtonGroup>
+          <NButton
+            size="small"
+            :type="filter === 'all' ? 'primary' : 'default'"
+            :secondary="filter === 'all'"
+            :aria-pressed="filter === 'all'"
+            @click="emit('update:filter', 'all')"
+          >
+            {{ t('workspace.job.detail.logAll') }}
+          </NButton>
+          <NButton
+            size="small"
+            :type="filter === 'anomalies' ? 'primary' : 'default'"
+            :secondary="filter === 'anomalies'"
+            :aria-pressed="filter === 'anomalies'"
+            @click="emit('update:filter', 'anomalies')"
+          >
+            {{ t('workspace.job.detail.logAnomalies') }}
+          </NButton>
+        </NButtonGroup>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="inline-flex items-center gap-1.5 text-xs text-lf-text-muted">
+            <span
+              class="h-1.5 w-1.5 rounded-full"
+              :class="!jobEnded && connected ? 'bg-lf-success' : 'bg-lf-text-subtle'"
+            />
+            {{
+              t(
+                jobEnded
+                  ? 'workspace.job.detail.logHistory'
+                  : connected
+                    ? 'workspace.job.detail.logLive'
+                    : 'workspace.job.detail.logDisconnected',
+              )
+            }}
+          </span>
+          <NButton quaternary size="tiny" :disabled="events.length === 0" @click="emit('clear')">
+            {{ t('workspace.job.detail.logClear') }}
+          </NButton>
+        </div>
       </div>
+      <p class="text-xs text-lf-text-muted" aria-live="polite">
+        {{
+          filter === 'anomalies'
+            ? t('workspace.job.detail.logAnomalyScope', { count: anomalyCount })
+            : t('workspace.job.detail.logLoadedCount', { count: events.length })
+        }}
+      </p>
     </div>
 
-    <div class="relative min-h-50">
-      <div class="rounded-lf-card border border-lf-border-soft bg-lf-surface/40 p-3">
-        <div
-          v-if="logRows.length > 0"
-          ref="scrollContainerRef"
-          class="max-h-[60vh] overflow-y-auto"
-          style="overflow-anchor: none"
-          @scroll="onScroll"
-          @mouseleave="endWheel"
-        >
-          <!-- Top: reached oldest or pull-to-load indicator -->
-          <div
-            v-if="!hasOlder && !loadingOlder"
-            class="py-2 text-center text-xs text-lf-text-muted"
+    <div class="relative min-h-0 flex-1">
+      <div
+        ref="scrollContainerRef"
+        class="relative h-full overflow-y-auto overscroll-contain py-2"
+        style="overflow-anchor: none"
+        @scroll="onScroll"
+      >
+        <div class="flex justify-center py-2">
+          <NButton
+            v-if="hasOlder || loadingOlder"
+            size="tiny"
+            quaternary
+            :loading="loadingOlder"
+            :disabled="!canLoadOlder"
+            @click="emit('load-older')"
           >
+            {{ t('workspace.job.detail.logLoadOlder') }}
+          </NButton>
+          <span v-else-if="events.length" class="text-xs text-lf-text-subtle">
             {{ t('workspace.job.events.reachedOldest') }}
-          </div>
-          <div
-            v-else
-            class="flex items-center justify-center overflow-hidden text-xs text-lf-text-muted transition-[height] duration-150"
-            :style="{ height: pullDistance + 'px' }"
+          </span>
+        </div>
+
+        <NEmpty
+          v-if="!logRows.length"
+          size="small"
+          class="py-10"
+          :description="
+            t(
+              filter === 'anomalies'
+                ? 'workspace.job.detail.logNoAnomalies'
+                : 'workspace.job.events.empty',
+            )
+          "
+        />
+        <component
+          :is="row.clickable ? 'button' : 'div'"
+          v-for="row in logRows"
+          :key="row.key"
+          :type="row.clickable ? 'button' : undefined"
+          :data-event-seq="row.key"
+          :title="row.clickable ? t('workspace.job.detail.logBatchDetail') : undefined"
+          class="group flex w-full items-start gap-2 rounded-lf-ctl px-1.5 py-1.5 text-left text-xs sm:gap-2.5"
+          :class="
+            row.clickable
+              ? 'cursor-pointer hover:bg-lf-hover focus-visible:outline-2 focus-visible:outline-brand-500'
+              : ''
+          "
+          @click="row.clickable && openBatchDetail(row.event)"
+        >
+          <span
+            class="w-14 shrink-0 font-mono text-[11px] leading-5 tabular-nums text-lf-text-subtle"
+            >{{ row.time }}</span
           >
-            <span v-if="pullDistance > 0 || isNearTop">{{ pullIndicatorLabel }}</span>
-          </div>
-          <!-- 控制台式日志流：时间 + 状态点 + 消息 + 行内元数据 -->
-          <div>
-            <div
-              v-for="row in logRows"
-              :key="row.key"
-              class="group flex items-start gap-2.5 rounded-lf-ctl px-2 [content-visibility:auto] [contain-intrinsic-size:auto_24px]"
-              :class="[
-                row.clickable ? 'cursor-pointer hover:bg-lf-hover' : '',
-                row.dim ? 'py-px text-[11.5px]' : 'py-0.5 text-[12.5px]',
-              ]"
-              @click="row.clickable && openBatchDetail(row.event)"
+          <span
+            class="mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full"
+            :class="DOT_CLASS[row.level]"
+          />
+          <span class="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-0.5 leading-5">
+            <span
+              class="min-w-0 flex-1 basis-36 [overflow-wrap:anywhere]"
+              :class="row.level === 'dim' ? 'text-lf-text-subtle' : 'text-lf-text'"
             >
               <span
-                class="w-14 shrink-0 pt-px font-mono text-[11px] leading-5 tabular-nums text-lf-text-subtle"
+                v-if="row.status"
+                class="mr-1.5 font-medium"
+                :class="row.level === 'error' ? 'text-lf-danger' : 'text-lf-warning'"
+                >{{ row.status }}</span
               >
-                {{ row.time }}
-              </span>
-              <span
-                class="mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full"
-                :class="DOT_CLASS[row.level]"
-              />
-              <span
-                class="min-w-0 flex-1 break-words leading-5"
-                :class="
-                  row.level === 'error'
-                    ? 'text-lf-danger'
-                    : row.dim
-                      ? 'text-lf-text-subtle'
-                      : 'text-lf-text'
-                "
-              >
-                {{ row.message }}
-              </span>
-              <span
-                v-if="row.meta"
-                class="hidden shrink-0 pl-3 pt-px font-mono text-[11px] leading-5 tabular-nums text-lf-text-subtle sm:inline"
-              >
-                {{ row.meta }}
-              </span>
-              <span
-                v-if="row.clickable"
-                class="shrink-0 pt-px text-[11px] leading-5 text-lf-text-subtle opacity-0 transition-opacity group-hover:opacity-100"
-              >
-                ›
-              </span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="py-6 text-center">
-          <NEmpty size="small" :description="t('workspace.job.events.empty')" />
-        </div>
+              {{ row.message }}
+            </span>
+            <span
+              v-if="row.meta"
+              class="w-full min-w-0 font-mono text-[11px] tabular-nums text-lf-text-subtle [overflow-wrap:anywhere] sm:w-auto sm:max-w-[45%]"
+              >{{ row.meta }}</span
+            >
+          </span>
+          <ChevronRight
+            v-if="row.clickable"
+            class="mt-1 h-3 w-3 shrink-0 text-lf-text-subtle"
+            aria-hidden="true"
+          />
+        </component>
       </div>
 
-      <!-- Floating "new events" button -->
-      <Transition
-        enter-active-class="transition-opacity duration-200"
-        leave-active-class="transition-opacity duration-200"
-        enter-from-class="opacity-0"
-        leave-to-class="opacity-0"
+      <NButton
+        v-if="currentPosition.unseen > 0 && !currentPosition.followTail"
+        type="primary"
+        size="small"
+        round
+        class="!absolute bottom-4 left-1/2 -translate-x-1/2 shadow-lg"
+        @click="scrollToBottom"
       >
-        <button
-          v-if="hasNewEvents && !isNearBottom"
-          class="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-brand-500 px-4 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-brand-600"
-          @click="scrollToBottom"
-        >
-          {{ t('workspace.job.events.newEvents', { count: events.length - prevEventsLength + 1 }) }}
-        </button>
-      </Transition>
+        {{ t('workspace.job.detail.logNewEvents', { count: currentPosition.unseen }) }}
+      </NButton>
     </div>
 
     <BatchDetailDrawer v-model:show="detailDrawerShow" :event="detailDrawerEvent" />

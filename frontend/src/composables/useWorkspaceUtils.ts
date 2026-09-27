@@ -305,6 +305,9 @@ export const getRoundColumns = (job: Job): RoundColumn[] => {
 export const getResourceRound = (resource: JobResource, roundIndex: number): JobRound | undefined =>
   (resource.rounds ?? []).find((r) => r.round_index === roundIndex)
 
+// Resource detail selection lives in the pure presentation module.
+export { selectResourceRound as getResourceCurrentRound } from '@/utils/jobPresentation'
+
 /** 某轮跨资源聚合（进度卡管线条用） */
 export interface RoundAggregate {
   status: JobRound['status']
