@@ -19,7 +19,7 @@ const props = withDefaults(
     /** 失败态：主段使用危险色 */
     error?: boolean
     /** 主段色调（error 为 true 时强制危险色） */
-    tone?: 'brand' | 'success' | 'warning'
+    tone?: 'brand' | 'success' | 'warning' | 'neutral'
     /** 轨道高度 */
     height?: string
   }>(),
@@ -40,10 +40,11 @@ const subPct = computed(() => clamp(props.subValue))
 const errorPct = computed(() => clamp(props.errorValue))
 const skippedPct = computed(() => clamp(props.skippedValue))
 
-const TONE_CLASS: Record<'brand' | 'success' | 'warning', string> = {
+const TONE_CLASS: Record<'brand' | 'success' | 'warning' | 'neutral', string> = {
   brand: 'bg-brand-500',
   success: 'bg-lf-success',
   warning: 'bg-lf-warning',
+  neutral: 'bg-lf-text-subtle',
 }
 
 const mainFillClass = computed(() => (props.error ? 'bg-lf-danger' : TONE_CLASS[props.tone]))
