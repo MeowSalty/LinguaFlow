@@ -91,7 +91,7 @@ jobs:
         working-directory: backend
 
       - name: 上传构建产物
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: linguaflow-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
@@ -108,7 +108,7 @@ jobs:
           fetch-depth: 0
 
       - name: 下载所有构建产物
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -131,7 +131,7 @@ jobs:
 
       - name: 创建 GitHub Release
         id: release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: release-notes.md
           files: release/*
