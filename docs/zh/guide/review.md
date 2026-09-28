@@ -123,7 +123,7 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 | `duplicate`                | **相邻**段落译文完全相同                                             | error    | ❌ 硬规则 |        |
 | `duplicate_source_divergence` | **文档级**：规范化相同源文段却出现不同译文（跨段同源异译）       | warning  | ❌      | ✅      |
 | `untranslated`             | 译文与原文一致，疑似未译；按语言对分级（见下方说明），比较前剥离注音标签并豁免纯符号/占位符/标签内容 | error/warning | ✅ 软规则 |        |
-| `source_residual`          | 译文夹带源语脚本片段（假名、谚文、西里尔文、汉字残留等），按语言对分档 | warning  | ✅ 软规则 |        |
+| `source_residual`          | 译文夹带源语脚本片段（假名、谚文、西里尔文、汉字残留等），按语言对分档；内联标签、注音与占位符等保护区内容不参与判定 | warning  | ✅ 软规则 |        |
 | `punctuation_pairing`      | 目标语引号/括号/书名号等配对不平衡                                   | warning  | ❌ 硬规则 |        |
 | `punctuation_missing`      | 源文整类包裹标点（引号、括号等）在译文中完全缺失                     | warning  | ❌ 硬规则 |        |
 | `punctuation_surplus`      | 译文多出源文所无的成对包裹标点（引号、括号等）                       | warning  | ✅ 软规则 |        |
@@ -154,10 +154,10 @@ LinguaFlow 在翻译完成后自动检测译文中可能存在的问题，涉及
 比较前会先剥离 Ruby 注音标签（模型去掉注音后原样回传基底文字也能检出），并先移除 `__LF_*` 占位符、保护区与 HTML 标签等内联标记再判断剩余内容——仅占位符或「占位符＋数字/标点」这类无需翻译的纯符号装饰段不会误报。由于「合理原样保留」的场景真实存在，`untranslated` 可加入 [裁决](#质量问题裁决) 复核，裁决提示词明确允许把共用文字系统中的专名、标题、机构名、品牌或型号判为误报。
 :::
 
-`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss` 与 `punctuation_pairing` 四者互补不重复：源文某类包裹标点在译文中**完全缺失**时报 `punctuation_missing`；译文多出源文所无的**成对**包裹标点（疑似多译出）时报 `punctuation_surplus`；译文仍有该类标点但**配对不平衡**时才报 `punctuation_pairing`；源文**整段被成对引号包裹**、译文首尾完全丢失外层引号时报 `punctuation_wrap_loss`（补 `punctuation_missing` 对「内层新增引号致计数非零」的盲区）。`punctuation_missing` 与 `punctuation_wrap_loss` 报出的安全子集可由执行计划的 [本地改写轮次](/zh/guide/translation-config#执行计划) 自动修复（另有 `width_mix_normalize` 规则修复全/半角混用），详见 [流水线与原理 · 本地改写](/zh/guide/pipeline#本地改写-correct)。
+`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss` 与 `punctuation_pairing` 四者互补不重复：源文某类包裹标点在译文中**完全缺失**时报 `punctuation_missing`（引号类按**真实配对**判定——源文需存在一对方向性引号（`“…”`、`「…」` 等）或对称的 `"…"` 才会触发；撇号夹在字母中间（如 don't）不算引号，孤立的未配对引号也不会报缺失）；译文多出源文所无的**成对**包裹标点（疑似多译出）时报 `punctuation_surplus`；译文仍有该类标点但**配对不平衡**时才报 `punctuation_pairing`；源文**整段被成对引号包裹**、译文首尾完全丢失外层引号时报 `punctuation_wrap_loss`（补 `punctuation_missing` 对「内层新增引号致计数非零」的盲区）。`punctuation_missing` 与 `punctuation_wrap_loss` 报出的安全子集可由执行计划的 [本地改写轮次](/zh/guide/translation-config#执行计划) 自动修复（另有 `width_mix_normalize` 规则修复全/半角混用），详见 [流水线与原理 · 本地改写](/zh/guide/pipeline#本地改写-correct)。
 
 ::: tip 原文结构不会被误报为质量问题
-HTML 标签、链接等原文结构在译文中会被还原回来，但 QA 引擎会把这些区段标为**保护区**，标点配对、空白、全/半角混用等 checker 在保护区上**自动跳过**——只检查译文真正写出来的文字。所以一份满是 HTML 标签的译文不会再因为标签里的英文符号被报一堆 `punctuation_pairing` / `width_mix`。`xml_tag_mismatch` 比对标签时还会**排除 `<ruby>` 注音标签族**，避免与 Ruby 还原策略冲突；但排除只针对标签集合比对，这些标签的**未闭合或嵌套错误**仍会被结构检查发现。详见 [流水线与原理 · 保护区](/zh/guide/pipeline#保护区-不被原文结构干扰)。
+HTML 标签、链接等原文结构在译文中会被还原回来，但 QA 引擎会把这些区段标为**保护区**，标点配对、空白、全/半角混用、源语残留等 checker 在保护区上**自动跳过**——只检查译文真正写出来的文字。所以一份满是 HTML 标签的译文不会再因为标签里的英文符号被报一堆 `punctuation_pairing` / `width_mix`，标签属性里恰好与源文相同的片段也不会被误报 `source_residual`。`xml_tag_mismatch` 比对标签时还会**排除 `<ruby>` 注音标签族**，避免与 Ruby 还原策略冲突；但排除只针对标签集合比对，这些标签的**未闭合或嵌套错误**仍会被结构检查发现。详见 [流水线与原理 · 保护区](/zh/guide/pipeline#保护区-不被原文结构干扰)。
 :::
 
 ::: tip 词表上的禁译 / 强制
