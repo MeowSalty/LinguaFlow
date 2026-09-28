@@ -234,6 +234,65 @@ func TestSourceResidual_PlaceholderStripped(t *testing.T) {
 	}
 }
 
+func TestSourceResidual_InlineXMLTagsIgnored(t *testing.T) {
+	c := NewSourceResidualChecker("fr", "zh")
+	issues := c.Check(context.Background(), []CheckInput{
+		{
+			Index:      0,
+			SourceText: `<a id="_idTextAnchor008"></a>« À nous deux Paris ! »`,
+			TargetText: `<a id="_idTextAnchor008"></a>「巴黎，我来了！」`,
+			// 模拟从 DB 重检/手动编辑路径：不依赖 Protected 映射。
+			Protected: nil,
+		},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("XML tag attributes should not trigger source_residual: %+v", issues)
+	}
+}
+
+func TestSourceResidual_ResidualOutsideInlineXMLTag(t *testing.T) {
+	c := NewSourceResidualChecker("fr", "zh")
+	issues := c.Check(context.Background(), []CheckInput{
+		{
+			Index:      0,
+			SourceText: `« À nous deux Paris ! »`,
+			TargetText: `<a id="x"></a>「巴黎」 Bonjour`,
+		},
+	})
+	if len(issues) != 1 {
+		t.Fatalf("want one real residual outside XML tag, got %d: %+v", len(issues), issues)
+	}
+	if got := issues[0].Span.MatchedText; got != "Bonjour" {
+		t.Fatalf("matched text = %q, want %q", got, "Bonjour")
+	}
+}
+
+func TestSourceResidual_SpanSkipsInlineXMLAttribute(t *testing.T) {
+	c := NewSourceResidualChecker("fr", "zh")
+	target := `<a id="bonjour"></a>「巴黎」 bonjour`
+	issues := c.Check(context.Background(), []CheckInput{
+		{
+			Index:      0,
+			SourceText: `« À nous deux Paris ! »`,
+			TargetText: target,
+		},
+	})
+	if len(issues) != 1 {
+		t.Fatalf("want one residual, got %d: %+v", len(issues), issues)
+	}
+	span := issues[0].Span
+	if span == nil || span.TargetStart == nil || span.TargetEnd == nil {
+		t.Fatalf("expected located span, got %#v", span)
+	}
+	got := string([]rune(target)[*span.TargetStart:*span.TargetEnd])
+	if got != "bonjour" {
+		t.Fatalf("span points to %q, want body residual %q", got, "bonjour")
+	}
+	if *span.TargetStart <= 0 {
+		t.Fatalf("span should be after XML tag, start=%d", *span.TargetStart)
+	}
+}
+
 func TestSourceResidual_MinRunCyrillicSingleSkip(t *testing.T) {
 	c := NewSourceResidualChecker("ru", "en")
 	issues := c.Check(context.Background(), []CheckInput{

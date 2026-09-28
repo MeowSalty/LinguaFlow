@@ -72,8 +72,10 @@ func (c *SourceResidualChecker) Check(_ context.Context, segments []CheckInput) 
 	}
 	var issues []QualityIssue
 	for _, seg := range segments {
-		src := strings.TrimSpace(seg.SourceText)
-		tgt := strings.TrimSpace(seg.TargetText)
+		rawSrc := seg.SourceText
+		rawTgt := seg.TargetText
+		src := strings.TrimSpace(rawSrc)
+		tgt := strings.TrimSpace(rawTgt)
 		if src == "" || tgt == "" {
 			continue
 		}
@@ -83,10 +85,14 @@ func (c *SourceResidualChecker) Check(_ context.Context, segments []CheckInput) 
 		if strings.TrimSpace(ruby.StripRubyTags(src)) == strings.TrimSpace(ruby.StripRubyTags(tgt)) {
 			continue // 整段未译由 untranslated 负责
 		}
-		cleanedTgt := stripPlaceholders(tgt)
-		cleanedSrc := stripPlaceholders(src)
-		// 在原始目标文本上定位偏移（占位符剥离仅用于命中判定）
-		rawTgt := seg.TargetText
+		// 与其他文本类 checker 保持同一口径：内联标签、ruby 元素和占位符
+		// 均不参与残留判定。Protected 可能为空（例如从 DB 重检），
+		// InlineMarkupRegions 仍会通过裸标签通道兜底屏蔽 XML/HTML 标签。
+		regions := InlineMarkupRegions(rawTgt, seg.Protected)
+		cleanedTgt := strings.TrimSpace(StripProtectedRegions(rawTgt, seg.Protected))
+		cleanedSrc := strings.TrimSpace(StripProtectedRegions(rawSrc, seg.Protected))
+		// 在原始目标文本上定位偏移，并跳过保护区内同名文本，避免高亮到
+		// XML 属性而不是正文残留。
 		seen := make(map[string]struct{})
 		for _, rule := range c.rules {
 			hits := collectResidualHits(cleanedSrc, cleanedTgt, rule)
@@ -95,7 +101,7 @@ func (c *SourceResidualChecker) Check(_ context.Context, segments []CheckInput) 
 					continue
 				}
 				seen[hit] = struct{}{}
-				span := LocateSpan(rawTgt, hit)
+				span := LocateSpanExcludingRegions(rawTgt, hit, regions)
 				if span == nil {
 					span = &Span{MatchedText: hit}
 				}
