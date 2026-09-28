@@ -357,7 +357,12 @@ defineExpose({
         :row-key="(row: Segment) => row.id"
         :scroll-x="scrollX"
         :row-class-name="rowClassName"
-        :row-props="(row: Segment) => ({ onClick: (e: MouseEvent) => handleRowClick(e, row) })"
+        :row-props="
+          (row: Segment) => ({
+            'data-segment-id': String(row.id),
+            onClick: (e: MouseEvent) => handleRowClick(e, row),
+          })
+        "
         :checked-row-keys="selectedSegmentIds"
         @update:checked-row-keys="handleSelectionChange"
       />
@@ -394,6 +399,7 @@ defineExpose({
               ? 'segment-row--anchor-flash segment-row--focused'
               : undefined
           "
+          :data-segment-id="segment.id"
           @start-edit="emit('startInlineEdit', segment)"
           @cancel-edit="emit('cancelInlineEdit')"
           @save-edit="emit('saveInlineEdit', segment)"

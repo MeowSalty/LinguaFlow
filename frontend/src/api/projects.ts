@@ -806,6 +806,10 @@ export const applyResourceSegmentsSearchReplace = async (
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['SearchReplaceApplyResponse']> => {
   const { find, replace_with, match_mode, case_sensitive, whole_word, ...rest } = payload
+  // 空选择不能因省略 segment_ids 而扩大成整个资源。
+  if (rest.segment_ids?.length === 0) {
+    throw new Error(t('api.errors.searchReplaceEmptyScope'))
+  }
   assertSegmentSearchLength(
     find,
     t('api.errors.searchReplaceFindTooLong', { max: SEGMENT_SEARCH_MAX_LENGTH }),

@@ -204,6 +204,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     selectAllEpubGroups,
     clearEpubGroupSelection,
     refreshChapterGroups,
+    mergeSearchReplaceItems,
     resetEpubState,
   } = segmentStore
 
@@ -407,6 +408,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     selectAllEpubGroups,
     clearEpubGroupSelection,
     refreshChapterGroups,
+    mergeSearchReplaceItems,
     resetEpubState,
     toggleResourceSelection,
     setSelectedResourceIds,

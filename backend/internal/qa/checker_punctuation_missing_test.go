@@ -26,6 +26,47 @@ func TestPunctuationMissing_QuoteAbsent(t *testing.T) {
 	}
 }
 
+func TestPunctuationMissing_FrenchApostrophesNotReported(t *testing.T) {
+	c := NewPunctuationMissingChecker()
+	issues := c.Check(context.Background(), []CheckInput{
+		{
+			Index: 0,
+			SourceText: "Gambetta découvre un Paris froid et brumeux et s’inscrit rapidement à la faculté de droit. " +
+				"Il songe depuis longtemps à ces études juridiques, sachant confusément qu’elles vont lui permettre de sortir d’un milieu certes aimant, mais étriqué. " +
+				"Pour les jeunes gens peu fortunés, le droit est la meilleure porte d’accès à des postes en vue. " +
+				"Vingt-cinq ans après Gambetta, Aristide Briand, par exemple, fils d’un tenancier de café-concert nantais, suivra la même voie.",
+			TargetText: "甘必大抵达巴黎后，很快进入法学院就读。他期盼攻读法学已久，隐约知道这能让他脱离那个虽充满关爱却狭隘闭塞的成长环境。" +
+				"对于家境清贫的年轻人来说，法学是跻身显赫职位的最佳通道。比如比甘必大晚二十五年的阿里斯蒂德·白里安，也走了相同的道路。",
+		},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("French apostrophes should not trigger punctuation_missing: %+v", issues)
+	}
+}
+
+func TestPunctuationMissing_ReportsMatchedQuotePair(t *testing.T) {
+	c := NewPunctuationMissingChecker()
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{name: "French guillemets", source: "Il dit « bonjour ». ", want: "«»"},
+		{name: "ASCII double quote", source: `He said "hello".`, want: `""`},
+		{name: "apostrophe inside single quotes", source: "Il cite ‘l’homme’. ", want: "‘’"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			issues := c.Check(context.Background(), []CheckInput{{Index: 0, SourceText: tc.source, TargetText: "他说了这句话。"}})
+			if len(issues) != 1 {
+				t.Fatalf("want one missing quote issue, got %d: %+v", len(issues), issues)
+			}
+			if got := issues[0].Span.MatchedText; got != tc.want {
+				t.Fatalf("matched text = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPunctuationMissing_ParenAbsent(t *testing.T) {
 	c := NewPunctuationMissingChecker()
 	issues := c.Check(context.Background(), []CheckInput{
