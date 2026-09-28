@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 // quoteRunes 引号类包裹标点 rune 超集（含 ASCII "）。类别内替换不报，故取各类引号并集。
@@ -22,13 +23,14 @@ var parenRunes = map[rune]struct{}{
 }
 
 type punctMissingCategory struct {
-	name string
-	set  map[rune]struct{}
+	name       string
+	set        map[rune]struct{}
+	sourcePair func(string) (string, bool)
 }
 
 var punctMissingCategories = []punctMissingCategory{
-	{name: "引号", set: quoteRunes},
-	{name: "括号", set: parenRunes},
+	{name: "引号", set: quoteRunes, sourcePair: firstQuotePair},
+	{name: "括号", set: parenRunes, sourcePair: firstParenPair},
 }
 
 // PunctuationMissingChecker 检测译文整类缺失源文存在的包裹标点（引号类/括号类）。
@@ -55,10 +57,10 @@ func (c *PunctuationMissingChecker) Check(_ context.Context, segments []CheckInp
 		regions := InlineMarkupRegions(tgt, seg.Protected)
 		cleanTgt := StripProtectedRegionsWithRegions(tgt, regions)
 		for _, cat := range punctMissingCategories {
-			if countCategory(cleanSrc, cat.set) < 2 || countCategory(cleanTgt, cat.set) != 0 {
+			matched, hasSourcePair := cat.sourcePair(cleanSrc)
+			if !hasSourcePair || countCategory(cleanTgt, cat.set) != 0 {
 				continue
 			}
-			matched := firstCategoryRune(cleanSrc, cat.set, 0) + firstCategoryRune(cleanSrc, cat.set, 1)
 			span := LocateSpanExcludingRegions(tgt, matched, regions)
 			if span == nil {
 				span = &Span{MatchedText: matched}
@@ -73,6 +75,50 @@ func (c *PunctuationMissingChecker) Check(_ context.Context, segments []CheckInp
 		}
 	}
 	return issues
+}
+
+func firstQuotePair(text string) (string, bool) {
+	type quoteFrame struct {
+		open      rune
+		close     rune
+		symmetric bool
+	}
+
+	runes := []rune(text)
+	stack := make([]quoteFrame, 0, 4)
+	for i, r := range runes {
+		if r == '’' && i > 0 && i+1 < len(runes) && unicode.IsLetter(runes[i-1]) && unicode.IsLetter(runes[i+1]) {
+			continue
+		}
+
+		if r == '"' {
+			if len(stack) > 0 && stack[len(stack)-1].symmetric {
+				stack = stack[:len(stack)-1]
+				return `""`, true
+			}
+			stack = append(stack, quoteFrame{open: r, close: r, symmetric: true})
+			continue
+		}
+
+		if close, isOpen := directionalQuotePairs[r]; isOpen {
+			stack = append(stack, quoteFrame{open: r, close: close})
+			continue
+		}
+		if len(stack) == 0 || stack[len(stack)-1].close != r {
+			continue
+		}
+		open := stack[len(stack)-1].open
+		stack = stack[:len(stack)-1]
+		return string(open) + string(r), true
+	}
+	return "", false
+}
+
+func firstParenPair(text string) (string, bool) {
+	if countCategory(text, parenRunes) < 2 {
+		return "", false
+	}
+	return firstCategoryRune(text, parenRunes, 0) + firstCategoryRune(text, parenRunes, 1), true
 }
 
 // countCategory 统计 text 中属于 set 的 rune 出现次数。
