@@ -143,6 +143,8 @@ const messages = {
       expand: '展开侧栏',
     },
     userMenu: {
+      profile: '个人资料',
+      security: '安全设置',
       switchService: '切换服务器',
       connectRemoteService: '连接远程服务',
       logout: '退出登录',
@@ -150,6 +152,53 @@ const messages = {
     messages: {
       logoutSuccess: '已退出登录',
       logoutFailed: '退出登录失败，请重试',
+    },
+  },
+  account: {
+    profile: {
+      title: '个人资料',
+      description: '管理你的显示名和邮箱地址',
+      form: {
+        username: '用户名',
+        email: '邮箱',
+        emailPlaceholder: "you{'@'}example.com",
+        displayName: '显示名（可选）',
+        displayNamePlaceholder: '留空则使用用户名',
+        submit: '保存资料',
+      },
+      validation: {
+        emailRequired: '请输入邮箱',
+        emailInvalid: '请输入合法的邮箱地址',
+      },
+      messages: {
+        updateSuccess: '个人资料已更新',
+        updateFailed: '更新个人资料失败',
+      },
+    },
+    security: {
+      title: '安全设置',
+      description: '修改登录密码，保护账号安全',
+      form: {
+        currentPassword: '当前密码',
+        currentPasswordPlaceholder: '请输入当前密码',
+        newPassword: '新密码',
+        newPasswordPlaceholder: '至少 8 位',
+        confirmPassword: '确认新密码',
+        confirmPasswordPlaceholder: '再次输入新密码',
+        submit: '修改密码',
+      },
+      validation: {
+        currentPasswordRequired: '请输入当前密码',
+        newPasswordRequired: '请输入新密码',
+        passwordMinLength: '密码至少 8 位',
+        confirmPasswordRequired: '请再次输入新密码',
+        passwordMismatch: '两次输入的密码不一致',
+      },
+      messages: {
+        changeSuccess: '密码已修改',
+        changeFailed: '修改密码失败',
+        localModeUnavailable: '本地模式不支持修改密码',
+      },
     },
   },
   appBootstrap: {
@@ -2398,6 +2447,8 @@ const messages = {
       registerFailed: '注册失败',
       refreshSessionFailed: '刷新会话失败',
       fetchCurrentUserFailed: '获取当前用户失败',
+      updateCurrentUserFailed: '更新个人资料失败',
+      changeCurrentUserPasswordFailed: '修改密码失败',
       fetchStatsFailed: '获取用量统计失败',
       fetchActivityFailed: '获取活动日志失败',
       fetchProjectsFailed: '获取项目列表失败',
