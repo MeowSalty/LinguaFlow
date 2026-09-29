@@ -288,6 +288,16 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{JobsColumns[14], JobsColumns[0]},
 			},
+			{
+				Name:    "job_updated_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{JobsColumns[2], JobsColumns[0]},
+			},
+			{
+				Name:    "job_status_updated_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{JobsColumns[3], JobsColumns[2], JobsColumns[0]},
+			},
 		},
 	}
 	// JobResourcesColumns holds the columns for the "job_resources" table.

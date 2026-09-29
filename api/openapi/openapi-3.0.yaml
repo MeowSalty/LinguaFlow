@@ -2,6 +2,11 @@ openapi: 3.0.3
 info:
   title: LinguaFlow Web Service API
   version: 0.1.0
+  description: |
+    平台时间点使用 UTC。所有 date-time 响应（包括 SSE 事件）使用 RFC3339 的 Z 后缀，
+    保留有效小数秒；输入接受带时区偏移的 RFC3339，并按实际时间点解释。
+    SQLite 保留纳秒精度，PostgreSQL 保留微秒精度。空值和字段省略规则由各字段定义。
+    时间区间默认按接口声明解释；任务更新时间筛选使用左闭右开区间。
 servers:
   - url: /api/v1
 paths:
@@ -1784,6 +1789,95 @@ paths:
                 $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
+  /jobs:
+    get:
+      operationId: ListAccessibleJobs
+      summary: 列出当前用户可访问的跨项目翻译任务
+      description: |
+        按项目读取权限查询，包含组织项目内其他成员创建的任务。
+        未指定 state 或 status 时默认查询 pending、running、paused。
+        state 与 status 互斥。project_id 不存在或无读取权限时返回空列表。
+        按 updated_at DESC、id DESC 排序；cursor 是不透明游标，仅用于原筛选条件的续页。
+        任务更新会改变排序，本接口不提供跨请求快照；轮询应从首页重新查询并按 ID 去重，
+        不能将单页中缺少某任务解释为任务已结束。
+        limit 缺省为 50，最大为 100；未知、重复或空查询参数返回 400。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum:
+              - active
+              - terminal
+              - all
+          description: active 包含 pending/running/paused；terminal 包含 completed/failed/cancelled；与 status 互斥
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - pending
+              - running
+              - paused
+              - completed
+              - failed
+              - cancelled
+          description: 精确单状态筛选，与 state 互斥
+        - $ref: '#/components/parameters/jobProjectFilter'
+        - $ref: '#/components/parameters/jobTriggerFilter'
+        - name: updated_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: 更新时间下界（包含），RFC3339；与 updated_before 同传时必须更早
+        - name: updated_before
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: 更新时间上界（不包含），RFC3339
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: 上一页返回的不透明 next_cursor，不兼容项目任务列表的数字游标
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 轻量任务列表；队列位置与队列总数在本阶段固定为 null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobSummaryListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/summary:
+    get:
+      operationId: GetJobsSummary
+      summary: 获取当前用户可访问任务的数量摘要
+      description: |
+        只支持 project_id 和 trigger_type 筛选，不接受状态、时间或分页参数。
+        未知、重复或空查询参数返回 400。
+        活动状态数量不受时间限制。recent_failed 统计当前为 failed 且 updated_at 位于
+        [recent_failed_since, as_of) 内的任务，窗口为连续 7×24 小时，不是失败事件次数。
+        项目读取权限与 GET /jobs 一致；无权或不存在的项目返回全部为零的计数。
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/jobProjectFilter'
+        - $ref: '#/components/parameters/jobTriggerFilter'
+      responses:
+        '200':
+          description: 独立于分页的任务数量摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobsSummaryResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /jobs/{jobId}:
     parameters:
       - $ref: '#/components/parameters/JobId'
@@ -2722,6 +2816,22 @@ components:
       schema:
         type: integer
         minimum: 1
+    jobProjectFilter:
+      name: project_id
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+    jobTriggerFilter:
+      name: trigger_type
+      in: query
+      schema:
+        type: string
+        enum:
+          - manual
+          - file_update
+          - glossary_change
+          - web_edit
   responses:
     Problem:
       description: 错误响应
@@ -4143,6 +4253,108 @@ components:
             $ref: '#/components/schemas/Job'
         next_cursor:
           type: string
+    JobSummary:
+      type: object
+      required:
+        - id
+        - project_id
+        - project_name
+        - status
+        - trigger_type
+        - progress
+        - created_at
+        - updated_at
+        - started_at
+      properties:
+        id:
+          type: integer
+        project_id:
+          type: integer
+        project_name:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - paused
+            - completed
+            - failed
+            - cancelled
+        trigger_type:
+          type: string
+          enum:
+            - manual
+            - file_update
+            - glossary_change
+            - web_edit
+        progress:
+          $ref: '#/components/schemas/JobSummaryProgress'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+    JobSummaryProgress:
+      description: 与 JobProgress 使用相同的计数口径；本阶段队列位置和队列总数固定为 null，不暴露实例级队列负载
+      allOf:
+        - $ref: '#/components/schemas/JobProgress'
+        - type: object
+          required:
+            - queue_position
+            - queue_size
+          properties:
+            queue_position:
+              type: integer
+              nullable: true
+            queue_size:
+              type: integer
+              nullable: true
+    JobSummaryListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobSummary'
+        next_cursor:
+          type: string
+    JobsSummaryResponse:
+      type: object
+      required:
+        - pending
+        - running
+        - paused
+        - recent_failed
+        - recent_failed_since
+        - as_of
+      properties:
+        pending:
+          type: integer
+          minimum: 0
+        running:
+          type: integer
+          minimum: 0
+        paused:
+          type: integer
+          minimum: 0
+        recent_failed:
+          type: integer
+          minimum: 0
+          description: 当前失败且最近 7 天内更新的任务数；重试后不再计入
+        recent_failed_since:
+          type: string
+          format: date-time
+        as_of:
+          type: string
+          format: date-time
     JobEvent:
       type: object
       required:
