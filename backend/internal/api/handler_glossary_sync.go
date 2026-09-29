@@ -50,12 +50,10 @@ func (s *Server) handleExecuteGlossarySyncUpdate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// 将任务入队，通知 SyncTaskRunner 处理
+	// Persistence is acceptance. The dispatcher discovers pending work and retries
+	// delivery independently of the request context and in-memory queue capacity.
 	if s.dispatcher != nil {
-		if err := s.dispatcher.Enqueue(r.Context(), "sync", taskInfo.TaskID); err != nil {
-			s.writeServiceError(w, r, err)
-			return
-		}
+		s.dispatcher.Notify("sync")
 	}
 
 	writeJSON(w, http.StatusAccepted, convertSyncTaskInfoToExecuteResponse(taskInfo))
@@ -69,7 +67,7 @@ func (s *Server) handleGetGlossarySyncTaskStatus(w http.ResponseWriter, r *http.
 	}
 
 	taskID, err := strconv.Atoi(taskId)
-	if err != nil {
+	if err != nil || taskID <= 0 {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_task_id", "任务 ID 格式不正确")
 		return
 	}
@@ -91,7 +89,7 @@ func (s *Server) handleCancelGlossarySyncTask(w http.ResponseWriter, r *http.Req
 	}
 
 	taskID, err := strconv.Atoi(taskId)
-	if err != nil {
+	if err != nil || taskID <= 0 {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_task_id", "任务 ID 格式不正确")
 		return
 	}
@@ -101,12 +99,19 @@ func (s *Server) handleCancelGlossarySyncTask(w http.ResponseWriter, r *http.Req
 		s.writeGlossarySyncServiceError(w, r, err)
 		return
 	}
+	if s.dispatcher != nil {
+		s.dispatcher.CancelTask("sync", taskID)
+	}
 
 	writeJSON(w, http.StatusOK, convertSyncTaskToCancelResponse(task))
 }
 
 func (s *Server) writeGlossarySyncServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, service.ErrSyncTaskStateConflict):
+		s.writeProblem(w, r, http.StatusConflict, "sync_task_state_conflict", "已完成或失败的任务不能取消")
+	case errors.Is(err, service.ErrSyncTaskNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "同步任务不存在")
 	case errors.Is(err, service.ErrForbidden):
 		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrProjectNotFound):
@@ -135,7 +140,7 @@ func convertSyncTaskToStatusResponse(task *ent.SyncTask) GlossarySyncTaskStatusR
 		Error:       nilIfEmpty(task.Error),
 	}
 
-	if task.Result != "" && task.Status == service.SyncTaskStatusCompleted {
+	if task.Result != "" {
 		var result struct {
 			Resources    *[]GlossarySyncExecuteResourceResult `json:"resources,omitempty"`
 			TotalSkipped *int                                 `json:"total_skipped,omitempty"`
@@ -153,7 +158,7 @@ func convertSyncTaskToStatusResponse(task *ent.SyncTask) GlossarySyncTaskStatusR
 func convertSyncTaskToCancelResponse(task *ent.SyncTask) GlossarySyncTaskCancelResponse {
 	return GlossarySyncTaskCancelResponse{
 		TaskId: strconv.Itoa(task.ID),
-		Status: GlossarySyncTaskCancelResponseStatusCancelled,
+		Status: GlossarySyncTaskCancelResponseStatus(task.Status),
 	}
 }
 
