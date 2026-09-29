@@ -19814,6 +19814,11 @@ type SyncTaskMutation struct {
 	addtotal_segments     *int
 	processed_segments    *int
 	addprocessed_segments *int
+	checkpoint_version    *int
+	addcheckpoint_version *int
+	next_segment_index    *int
+	addnext_segment_index *int
+	started_at            *time.Time
 	status                *string
 	segment_ids           *string
 	resource_ids          *string
@@ -20294,6 +20299,167 @@ func (m *SyncTaskMutation) ResetProcessedSegments() {
 	m.addprocessed_segments = nil
 }
 
+// SetCheckpointVersion sets the "checkpoint_version" field.
+func (m *SyncTaskMutation) SetCheckpointVersion(i int) {
+	m.checkpoint_version = &i
+	m.addcheckpoint_version = nil
+}
+
+// CheckpointVersion returns the value of the "checkpoint_version" field in the mutation.
+func (m *SyncTaskMutation) CheckpointVersion() (r int, exists bool) {
+	v := m.checkpoint_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCheckpointVersion returns the old "checkpoint_version" field's value of the SyncTask entity.
+// If the SyncTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskMutation) OldCheckpointVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCheckpointVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCheckpointVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCheckpointVersion: %w", err)
+	}
+	return oldValue.CheckpointVersion, nil
+}
+
+// AddCheckpointVersion adds i to the "checkpoint_version" field.
+func (m *SyncTaskMutation) AddCheckpointVersion(i int) {
+	if m.addcheckpoint_version != nil {
+		*m.addcheckpoint_version += i
+	} else {
+		m.addcheckpoint_version = &i
+	}
+}
+
+// AddedCheckpointVersion returns the value that was added to the "checkpoint_version" field in this mutation.
+func (m *SyncTaskMutation) AddedCheckpointVersion() (r int, exists bool) {
+	v := m.addcheckpoint_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCheckpointVersion resets all changes to the "checkpoint_version" field.
+func (m *SyncTaskMutation) ResetCheckpointVersion() {
+	m.checkpoint_version = nil
+	m.addcheckpoint_version = nil
+}
+
+// SetNextSegmentIndex sets the "next_segment_index" field.
+func (m *SyncTaskMutation) SetNextSegmentIndex(i int) {
+	m.next_segment_index = &i
+	m.addnext_segment_index = nil
+}
+
+// NextSegmentIndex returns the value of the "next_segment_index" field in the mutation.
+func (m *SyncTaskMutation) NextSegmentIndex() (r int, exists bool) {
+	v := m.next_segment_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNextSegmentIndex returns the old "next_segment_index" field's value of the SyncTask entity.
+// If the SyncTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskMutation) OldNextSegmentIndex(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNextSegmentIndex is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNextSegmentIndex requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNextSegmentIndex: %w", err)
+	}
+	return oldValue.NextSegmentIndex, nil
+}
+
+// AddNextSegmentIndex adds i to the "next_segment_index" field.
+func (m *SyncTaskMutation) AddNextSegmentIndex(i int) {
+	if m.addnext_segment_index != nil {
+		*m.addnext_segment_index += i
+	} else {
+		m.addnext_segment_index = &i
+	}
+}
+
+// AddedNextSegmentIndex returns the value that was added to the "next_segment_index" field in this mutation.
+func (m *SyncTaskMutation) AddedNextSegmentIndex() (r int, exists bool) {
+	v := m.addnext_segment_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetNextSegmentIndex resets all changes to the "next_segment_index" field.
+func (m *SyncTaskMutation) ResetNextSegmentIndex() {
+	m.next_segment_index = nil
+	m.addnext_segment_index = nil
+}
+
+// SetStartedAt sets the "started_at" field.
+func (m *SyncTaskMutation) SetStartedAt(t time.Time) {
+	m.started_at = &t
+}
+
+// StartedAt returns the value of the "started_at" field in the mutation.
+func (m *SyncTaskMutation) StartedAt() (r time.Time, exists bool) {
+	v := m.started_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStartedAt returns the old "started_at" field's value of the SyncTask entity.
+// If the SyncTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskMutation) OldStartedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStartedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStartedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStartedAt: %w", err)
+	}
+	return oldValue.StartedAt, nil
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (m *SyncTaskMutation) ClearStartedAt() {
+	m.started_at = nil
+	m.clearedFields[synctask.FieldStartedAt] = struct{}{}
+}
+
+// StartedAtCleared returns if the "started_at" field was cleared in this mutation.
+func (m *SyncTaskMutation) StartedAtCleared() bool {
+	_, ok := m.clearedFields[synctask.FieldStartedAt]
+	return ok
+}
+
+// ResetStartedAt resets all changes to the "started_at" field.
+func (m *SyncTaskMutation) ResetStartedAt() {
+	m.started_at = nil
+	delete(m.clearedFields, synctask.FieldStartedAt)
+}
+
 // SetStatus sets the "status" field.
 func (m *SyncTaskMutation) SetStatus(s string) {
 	m.status = &s
@@ -20677,7 +20843,7 @@ func (m *SyncTaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SyncTaskMutation) Fields() []string {
-	fields := make([]string, 0, 15)
+	fields := make([]string, 0, 18)
 	if m.created_at != nil {
 		fields = append(fields, synctask.FieldCreatedAt)
 	}
@@ -20704,6 +20870,15 @@ func (m *SyncTaskMutation) Fields() []string {
 	}
 	if m.processed_segments != nil {
 		fields = append(fields, synctask.FieldProcessedSegments)
+	}
+	if m.checkpoint_version != nil {
+		fields = append(fields, synctask.FieldCheckpointVersion)
+	}
+	if m.next_segment_index != nil {
+		fields = append(fields, synctask.FieldNextSegmentIndex)
+	}
+	if m.started_at != nil {
+		fields = append(fields, synctask.FieldStartedAt)
 	}
 	if m.status != nil {
 		fields = append(fields, synctask.FieldStatus)
@@ -20749,6 +20924,12 @@ func (m *SyncTaskMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalSegments()
 	case synctask.FieldProcessedSegments:
 		return m.ProcessedSegments()
+	case synctask.FieldCheckpointVersion:
+		return m.CheckpointVersion()
+	case synctask.FieldNextSegmentIndex:
+		return m.NextSegmentIndex()
+	case synctask.FieldStartedAt:
+		return m.StartedAt()
 	case synctask.FieldStatus:
 		return m.Status()
 	case synctask.FieldSegmentIds:
@@ -20788,6 +20969,12 @@ func (m *SyncTaskMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldTotalSegments(ctx)
 	case synctask.FieldProcessedSegments:
 		return m.OldProcessedSegments(ctx)
+	case synctask.FieldCheckpointVersion:
+		return m.OldCheckpointVersion(ctx)
+	case synctask.FieldNextSegmentIndex:
+		return m.OldNextSegmentIndex(ctx)
+	case synctask.FieldStartedAt:
+		return m.OldStartedAt(ctx)
 	case synctask.FieldStatus:
 		return m.OldStatus(ctx)
 	case synctask.FieldSegmentIds:
@@ -20872,6 +21059,27 @@ func (m *SyncTaskMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetProcessedSegments(v)
 		return nil
+	case synctask.FieldCheckpointVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCheckpointVersion(v)
+		return nil
+	case synctask.FieldNextSegmentIndex:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNextSegmentIndex(v)
+		return nil
+	case synctask.FieldStartedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStartedAt(v)
+		return nil
 	case synctask.FieldStatus:
 		v, ok := value.(string)
 		if !ok {
@@ -20928,6 +21136,12 @@ func (m *SyncTaskMutation) AddedFields() []string {
 	if m.addprocessed_segments != nil {
 		fields = append(fields, synctask.FieldProcessedSegments)
 	}
+	if m.addcheckpoint_version != nil {
+		fields = append(fields, synctask.FieldCheckpointVersion)
+	}
+	if m.addnext_segment_index != nil {
+		fields = append(fields, synctask.FieldNextSegmentIndex)
+	}
 	return fields
 }
 
@@ -20940,6 +21154,10 @@ func (m *SyncTaskMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotalSegments()
 	case synctask.FieldProcessedSegments:
 		return m.AddedProcessedSegments()
+	case synctask.FieldCheckpointVersion:
+		return m.AddedCheckpointVersion()
+	case synctask.FieldNextSegmentIndex:
+		return m.AddedNextSegmentIndex()
 	}
 	return nil, false
 }
@@ -20963,6 +21181,20 @@ func (m *SyncTaskMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddProcessedSegments(v)
 		return nil
+	case synctask.FieldCheckpointVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCheckpointVersion(v)
+		return nil
+	case synctask.FieldNextSegmentIndex:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddNextSegmentIndex(v)
+		return nil
 	}
 	return fmt.Errorf("unknown SyncTask numeric field %s", name)
 }
@@ -20971,6 +21203,9 @@ func (m *SyncTaskMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *SyncTaskMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(synctask.FieldStartedAt) {
+		fields = append(fields, synctask.FieldStartedAt)
+	}
 	if m.FieldCleared(synctask.FieldResult) {
 		fields = append(fields, synctask.FieldResult)
 	}
@@ -20994,6 +21229,9 @@ func (m *SyncTaskMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *SyncTaskMutation) ClearField(name string) error {
 	switch name {
+	case synctask.FieldStartedAt:
+		m.ClearStartedAt()
+		return nil
 	case synctask.FieldResult:
 		m.ClearResult()
 		return nil
@@ -21037,6 +21275,15 @@ func (m *SyncTaskMutation) ResetField(name string) error {
 		return nil
 	case synctask.FieldProcessedSegments:
 		m.ResetProcessedSegments()
+		return nil
+	case synctask.FieldCheckpointVersion:
+		m.ResetCheckpointVersion()
+		return nil
+	case synctask.FieldNextSegmentIndex:
+		m.ResetNextSegmentIndex()
+		return nil
+	case synctask.FieldStartedAt:
+		m.ResetStartedAt()
 		return nil
 	case synctask.FieldStatus:
 		m.ResetStatus()
