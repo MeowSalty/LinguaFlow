@@ -2,6 +2,7 @@ register:
   post:
     operationId: RegisterAuth
     summary: 注册用户并签发会话
+    description: 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。
     security: []
     requestBody:
       required: true
@@ -16,6 +17,12 @@ register:
           application/json:
             schema:
               $ref: '../base.yaml#/components/schemas/AuthSession'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
@@ -65,6 +72,12 @@ logout:
   post:
     operationId: LogoutAuth
     summary: 登出并撤销刷新令牌
+    description: |
+      只撤销当前认证用户提交的 refresh token，不影响其他会话。本人已撤销的 token 再次提交返回 204；
+      他人的 token（包括已撤销的 token）返回 403 且不修改。未知 token 保持 401 token-invalid 错误，
+      响应不包含 token 所属信息。数据库中仍存在的本人过期 refresh token 也可撤销。
+      已签发的 access token 在到期前仍可能有效，不承诺全设备退出或即时撤销 access token。
+      调用方在协调刷新后必须使用最新的 access 和 refresh token 重新构建登出请求。
     security:
       - bearerAuth: []
     requestBody:
@@ -75,6 +88,12 @@ logout:
             $ref: '../base.yaml#/components/schemas/LogoutRequest'
     responses:
       '204':
-        description: 已登出
+        description: 提交的本人 refresh token 已撤销，或此前已撤销。
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
