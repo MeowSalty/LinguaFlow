@@ -230,6 +230,7 @@ paths:
           $ref: '#/components/responses/Problem'
     post:
       operationId: CreateOrganization
+      description: 创建组织及首位 owner 原子提交。name 与 slug 分别全局唯一，冲突为 409 organization_name_exists 或 organization_slug_exists。
       summary: 创建组织
       security:
         - bearerAuth: []
@@ -267,6 +268,7 @@ paths:
           $ref: '#/components/responses/Problem'
     put:
       operationId: UpdateOrganization
+      description: 仅 owner/admin 可更新；name 与 slug 必填且各自唯一。可选资料省略保留、空串清空、null 拒绝。名称及 slug 冲突与创建采用相同的专用 409 Problem。
       summary: 更新组织信息
       security:
         - bearerAuth: []
@@ -304,6 +306,7 @@ paths:
           $ref: '#/components/responses/Problem'
     post:
       operationId: AddOrganizationMember
+      description: 精确用户名添加已有账号并立即生效。admin 仅能添加 member，owner 可添加任意角色；重复成员返回 409 membership_exists。
       summary: 添加组织成员
       security:
         - bearerAuth: []
@@ -328,6 +331,7 @@ paths:
       - $ref: '#/components/parameters/UserId'
     put:
       operationId: UpdateOrganizationMember
+      description: 仅 owner 可修改，非法或缺失角色返回 400；最后 owner 不得降级，返回 409 owner_required。校验与修改在数据库锁保护的同一事务中执行。
       summary: 修改组织成员角色
       security:
         - bearerAuth: []
@@ -348,7 +352,8 @@ paths:
           $ref: '#/components/responses/Problem'
     delete:
       operationId: DeleteOrganizationMember
-      summary: 移除组织成员
+      summary: 移除成员或主动退出组织
+      description: 本人可退出，必须保留至少一位 owner；owner 可移除他人，admin 仅能移除 member。最后 owner 冲突为 409 owner_required；不存在目标成员为 404，非成员再次退出为 403。成功返回 204，不删除账号或组织项目。
       security:
         - bearerAuth: []
       responses:
@@ -2084,6 +2089,15 @@ paths:
           $ref: '#/components/responses/Problem'
   /execution-plan-templates:
     get:
+      description: 不传 org_id 时返回个人及当前所属组织的计划；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+      parameters:
+        - name: org_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: 组织不存在返回 404，非成员返回 403。
       operationId: ListExecutionPlanTemplates
       summary: 列出当前用户的执行计划模板
       security:
@@ -2166,6 +2180,15 @@ paths:
           $ref: '#/components/responses/Problem'
   /translation-prompt-templates:
     get:
+      description: 不传 org_id 时返回个人和系统模板；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+      parameters:
+        - name: org_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: 组织不存在返回 404，非成员返回 403。
       operationId: ListPromptTemplates
       summary: 列出当前用户的翻译提示词模板
       security:
@@ -2248,6 +2271,15 @@ paths:
           $ref: '#/components/responses/Problem'
   /bootstrap-prompt-templates:
     get:
+      description: 不传 org_id 时返回个人和系统模板；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+      parameters:
+        - name: org_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: 组织不存在返回 404，非成员返回 403。
       operationId: ListBootstrapPromptTemplates
       summary: 列出当前用户的术语抽取提示词模板
       security:
@@ -2330,6 +2362,15 @@ paths:
           $ref: '#/components/responses/Problem'
   /prune-prompt-templates:
     get:
+      description: 不传 org_id 时返回个人和系统模板；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+      parameters:
+        - name: org_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: 组织不存在返回 404，非成员返回 403。
       operationId: ListPrunePromptTemplates
       summary: 列出当前用户的术语精简提示词模板
       security:
@@ -2412,6 +2453,15 @@ paths:
           $ref: '#/components/responses/Problem'
   /execution-profiles:
     get:
+      description: 不传 org_id 时返回个人和系统配置；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+      parameters:
+        - name: org_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: 组织不存在返回 404，非成员返回 403。
       operationId: ListExecutionProfiles
       summary: 列出当前用户的执行策略配置
       security:
@@ -2700,6 +2750,13 @@ paths:
           $ref: '#/components/responses/Problem'
   /activity:
     parameters:
+      - name: org_id
+        in: query
+        required: false
+        description: 仅查询指定组织的活动；正整数，不存在返回 404，非成员返回 403。拒绝未知、重复或空查询参数。
+        schema:
+          type: integer
+          minimum: 1
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/Limit'
     get:
@@ -3052,7 +3109,16 @@ components:
         - id
         - name
         - slug
+        - current_user_role
       properties:
+        current_user_role:
+          type: string
+          enum:
+            - owner
+            - admin
+            - member
+          readOnly: true
+          description: 当前请求者在此组织的角色，与系统角色无关。
         id:
           type: integer
         name:
@@ -3065,14 +3131,18 @@ components:
           type: string
     OrganizationRequest:
       type: object
+      additionalProperties: false
+      description: name 去除首尾空白，slug 按身份规则规范化，两者必填且各自全局唯一。可选字段省略时更新保留、创建使用空值，空串清空，不接受 null。
       required:
         - name
         - slug
       properties:
         name:
           type: string
+          minLength: 1
         slug:
           type: string
+          minLength: 1
         display_name:
           type: string
         description:
@@ -3114,19 +3184,26 @@ components:
             $ref: '#/components/schemas/OrganizationMember'
     AddOrganizationMemberRequest:
       type: object
+      additionalProperties: false
       required:
         - username
       properties:
         username:
           type: string
+          minLength: 1
+          description: 精确匹配已有账号用户名；不发送邀请。
         role:
           type: string
           enum:
             - owner
             - admin
             - member
+          default: member
+          description: 省略时为 member；admin 仅能添加 member，owner 可授予任意合法角色，显式空值或 null 无效。
     UpdateOrganizationMemberRequest:
       type: object
+      additionalProperties: false
+      description: 仅 owner 可修改角色，必须至少保留一位 owner；省略、空值及 null 均无效。
       required:
         - role
       properties:
@@ -4474,6 +4551,14 @@ components:
         - created_at
         - updated_at
       properties:
+        organization_id:
+          type: integer
+          minimum: 1
+          description: 当前有效的组织归属，不从操作者身份推导。
+        project_id:
+          type: integer
+          minimum: 1
+          description: 活动所属的仍存在的项目。
         id:
           type: integer
         action:
@@ -5146,9 +5231,13 @@ components:
             $ref: '#/components/schemas/TranslationPromptTemplate'
     CreateTranslationPromptTemplateRequest:
       type: object
+      description: 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。
       required:
         - name
       properties:
+        org_id:
+          type: integer
+          minimum: 1
         name:
           type: string
         description:
@@ -5208,9 +5297,13 @@ components:
             $ref: '#/components/schemas/BootstrapPromptTemplate'
     CreateBootstrapPromptTemplateRequest:
       type: object
+      description: 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。
       required:
         - name
       properties:
+        org_id:
+          type: integer
+          minimum: 1
         name:
           type: string
         description:
@@ -5270,9 +5363,13 @@ components:
             $ref: '#/components/schemas/PrunePromptTemplate'
     CreatePrunePromptTemplateRequest:
       type: object
+      description: 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。
       required:
         - name
       properties:
+        org_id:
+          type: integer
+          minimum: 1
         name:
           type: string
         description:
@@ -5332,9 +5429,13 @@ components:
             $ref: '#/components/schemas/ExecutionProfile'
     CreateExecutionProfileRequest:
       type: object
+      description: 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。
       required:
         - name
       properties:
+        org_id:
+          type: integer
+          minimum: 1
         name:
           type: string
         description:
@@ -5510,11 +5611,15 @@ components:
             $ref: '#/components/schemas/ExecutionPlanTemplate'
     CreateExecutionPlanTemplateRequest:
       type: object
+      description: 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。
       required:
         - name
         - profile_id
         - rounds
       properties:
+        org_id:
+          type: integer
+          minimum: 1
         name:
           type: string
         description:
