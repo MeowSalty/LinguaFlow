@@ -14,6 +14,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "visibility_scope", Type: field.TypeEnum, Enums: []string{"legacy", "unknown", "personal", "organization", "project"}, Default: "legacy"},
 		{Name: "action", Type: field.TypeString},
 		{Name: "resource_type", Type: field.TypeString},
 		{Name: "resource_id", Type: field.TypeInt, Nullable: true},
@@ -31,19 +32,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "activity_logs_organizations_activity_logs",
-				Columns:    []*schema.Column{ActivityLogsColumns[8]},
+				Columns:    []*schema.Column{ActivityLogsColumns[9]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "activity_logs_projects_activity_logs",
-				Columns:    []*schema.Column{ActivityLogsColumns[9]},
+				Columns:    []*schema.Column{ActivityLogsColumns[10]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "activity_logs_users_activity_logs",
-				Columns:    []*schema.Column{ActivityLogsColumns[10]},
+				Columns:    []*schema.Column{ActivityLogsColumns[11]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -860,6 +861,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "visibility_scope", Type: field.TypeEnum, Enums: []string{"legacy", "unknown", "personal", "organization", "project"}, Default: "legacy"},
 		{Name: "source", Type: field.TypeString, Default: "job"},
 		{Name: "api_calls", Type: field.TypeInt, Default: 0},
 		{Name: "input_tokens", Type: field.TypeInt, Default: 0},
@@ -878,19 +880,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "usage_records_organizations_usage_records",
-				Columns:    []*schema.Column{UsageRecordsColumns[9]},
+				Columns:    []*schema.Column{UsageRecordsColumns[10]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "usage_records_projects_usage_records",
-				Columns:    []*schema.Column{UsageRecordsColumns[10]},
+				Columns:    []*schema.Column{UsageRecordsColumns[11]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "usage_records_users_usage_records",
-				Columns:    []*schema.Column{UsageRecordsColumns[11]},
+				Columns:    []*schema.Column{UsageRecordsColumns[12]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},

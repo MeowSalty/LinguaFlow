@@ -51,6 +51,20 @@ func (_c *ActivityLogCreate) SetNillableUpdatedAt(v *time.Time) *ActivityLogCrea
 	return _c
 }
 
+// SetVisibilityScope sets the "visibility_scope" field.
+func (_c *ActivityLogCreate) SetVisibilityScope(v activitylog.VisibilityScope) *ActivityLogCreate {
+	_c.mutation.SetVisibilityScope(v)
+	return _c
+}
+
+// SetNillableVisibilityScope sets the "visibility_scope" field if the given value is not nil.
+func (_c *ActivityLogCreate) SetNillableVisibilityScope(v *activitylog.VisibilityScope) *ActivityLogCreate {
+	if v != nil {
+		_c.SetVisibilityScope(*v)
+	}
+	return _c
+}
+
 // SetAction sets the "action" field.
 func (_c *ActivityLogCreate) SetAction(v string) *ActivityLogCreate {
 	_c.mutation.SetAction(v)
@@ -197,6 +211,10 @@ func (_c *ActivityLogCreate) defaults() {
 		v := activitylog.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.VisibilityScope(); !ok {
+		v := activitylog.DefaultVisibilityScope
+		_c.mutation.SetVisibilityScope(v)
+	}
 	if _, ok := _c.mutation.Metadata(); !ok {
 		v := activitylog.DefaultMetadata()
 		_c.mutation.SetMetadata(v)
@@ -210,6 +228,14 @@ func (_c *ActivityLogCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "ActivityLog.updated_at"`)}
+	}
+	if _, ok := _c.mutation.VisibilityScope(); !ok {
+		return &ValidationError{Name: "visibility_scope", err: errors.New(`ent: missing required field "ActivityLog.visibility_scope"`)}
+	}
+	if v, ok := _c.mutation.VisibilityScope(); ok {
+		if err := activitylog.VisibilityScopeValidator(v); err != nil {
+			return &ValidationError{Name: "visibility_scope", err: fmt.Errorf(`ent: validator failed for field "ActivityLog.visibility_scope": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Action(); !ok {
 		return &ValidationError{Name: "action", err: errors.New(`ent: missing required field "ActivityLog.action"`)}
@@ -268,6 +294,10 @@ func (_c *ActivityLogCreate) createSpec() (*ActivityLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(activitylog.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.VisibilityScope(); ok {
+		_spec.SetField(activitylog.FieldVisibilityScope, field.TypeEnum, value)
+		_node.VisibilityScope = value
 	}
 	if value, ok := _c.mutation.Action(); ok {
 		_spec.SetField(activitylog.FieldAction, field.TypeString, value)

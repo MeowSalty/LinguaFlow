@@ -165,6 +165,26 @@ func UpdatedAtLTE(v time.Time) predicate.ActivityLog {
 	return predicate.ActivityLog(sql.FieldLTE(FieldUpdatedAt, v))
 }
 
+// VisibilityScopeEQ applies the EQ predicate on the "visibility_scope" field.
+func VisibilityScopeEQ(v VisibilityScope) predicate.ActivityLog {
+	return predicate.ActivityLog(sql.FieldEQ(FieldVisibilityScope, v))
+}
+
+// VisibilityScopeNEQ applies the NEQ predicate on the "visibility_scope" field.
+func VisibilityScopeNEQ(v VisibilityScope) predicate.ActivityLog {
+	return predicate.ActivityLog(sql.FieldNEQ(FieldVisibilityScope, v))
+}
+
+// VisibilityScopeIn applies the In predicate on the "visibility_scope" field.
+func VisibilityScopeIn(vs ...VisibilityScope) predicate.ActivityLog {
+	return predicate.ActivityLog(sql.FieldIn(FieldVisibilityScope, vs...))
+}
+
+// VisibilityScopeNotIn applies the NotIn predicate on the "visibility_scope" field.
+func VisibilityScopeNotIn(vs ...VisibilityScope) predicate.ActivityLog {
+	return predicate.ActivityLog(sql.FieldNotIn(FieldVisibilityScope, vs...))
+}
+
 // ActionEQ applies the EQ predicate on the "action" field.
 func ActionEQ(v string) predicate.ActivityLog {
 	return predicate.ActivityLog(sql.FieldEQ(FieldAction, v))

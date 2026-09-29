@@ -37,6 +37,20 @@ func (_u *ActivityLogUpdate) SetUpdatedAt(v time.Time) *ActivityLogUpdate {
 	return _u
 }
 
+// SetVisibilityScope sets the "visibility_scope" field.
+func (_u *ActivityLogUpdate) SetVisibilityScope(v activitylog.VisibilityScope) *ActivityLogUpdate {
+	_u.mutation.SetVisibilityScope(v)
+	return _u
+}
+
+// SetNillableVisibilityScope sets the "visibility_scope" field if the given value is not nil.
+func (_u *ActivityLogUpdate) SetNillableVisibilityScope(v *activitylog.VisibilityScope) *ActivityLogUpdate {
+	if v != nil {
+		_u.SetVisibilityScope(*v)
+	}
+	return _u
+}
+
 // SetAction sets the "action" field.
 func (_u *ActivityLogUpdate) SetAction(v string) *ActivityLogUpdate {
 	_u.mutation.SetAction(v)
@@ -236,6 +250,11 @@ func (_u *ActivityLogUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *ActivityLogUpdate) check() error {
+	if v, ok := _u.mutation.VisibilityScope(); ok {
+		if err := activitylog.VisibilityScopeValidator(v); err != nil {
+			return &ValidationError{Name: "visibility_scope", err: fmt.Errorf(`ent: validator failed for field "ActivityLog.visibility_scope": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Action(); ok {
 		if err := activitylog.ActionValidator(v); err != nil {
 			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "ActivityLog.action": %w`, err)}
@@ -268,6 +287,9 @@ func (_u *ActivityLogUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(activitylog.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.VisibilityScope(); ok {
+		_spec.SetField(activitylog.FieldVisibilityScope, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(activitylog.FieldAction, field.TypeString, value)
@@ -403,6 +425,20 @@ type ActivityLogUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ActivityLogUpdateOne) SetUpdatedAt(v time.Time) *ActivityLogUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetVisibilityScope sets the "visibility_scope" field.
+func (_u *ActivityLogUpdateOne) SetVisibilityScope(v activitylog.VisibilityScope) *ActivityLogUpdateOne {
+	_u.mutation.SetVisibilityScope(v)
+	return _u
+}
+
+// SetNillableVisibilityScope sets the "visibility_scope" field if the given value is not nil.
+func (_u *ActivityLogUpdateOne) SetNillableVisibilityScope(v *activitylog.VisibilityScope) *ActivityLogUpdateOne {
+	if v != nil {
+		_u.SetVisibilityScope(*v)
+	}
 	return _u
 }
 
@@ -618,6 +654,11 @@ func (_u *ActivityLogUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *ActivityLogUpdateOne) check() error {
+	if v, ok := _u.mutation.VisibilityScope(); ok {
+		if err := activitylog.VisibilityScopeValidator(v); err != nil {
+			return &ValidationError{Name: "visibility_scope", err: fmt.Errorf(`ent: validator failed for field "ActivityLog.visibility_scope": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Action(); ok {
 		if err := activitylog.ActionValidator(v); err != nil {
 			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "ActivityLog.action": %w`, err)}
@@ -667,6 +708,9 @@ func (_u *ActivityLogUpdateOne) sqlSave(ctx context.Context) (_node *ActivityLog
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(activitylog.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.VisibilityScope(); ok {
+		_spec.SetField(activitylog.FieldVisibilityScope, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(activitylog.FieldAction, field.TypeString, value)

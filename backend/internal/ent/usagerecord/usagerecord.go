@@ -3,6 +3,7 @@
 package usagerecord
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -18,6 +19,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldVisibilityScope holds the string denoting the visibility_scope field in the database.
+	FieldVisibilityScope = "visibility_scope"
 	// FieldSource holds the string denoting the source field in the database.
 	FieldSource = "source"
 	// FieldAPICalls holds the string denoting the api_calls field in the database.
@@ -66,6 +69,7 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldVisibilityScope,
 	FieldSource,
 	FieldAPICalls,
 	FieldInputTokens,
@@ -124,6 +128,35 @@ var (
 	SegmentCountValidator func(int) error
 )
 
+// VisibilityScope defines the type for the "visibility_scope" enum field.
+type VisibilityScope string
+
+// VisibilityScopeLegacy is the default value of the VisibilityScope enum.
+const DefaultVisibilityScope = VisibilityScopeLegacy
+
+// VisibilityScope values.
+const (
+	VisibilityScopeLegacy       VisibilityScope = "legacy"
+	VisibilityScopeUnknown      VisibilityScope = "unknown"
+	VisibilityScopePersonal     VisibilityScope = "personal"
+	VisibilityScopeOrganization VisibilityScope = "organization"
+	VisibilityScopeProject      VisibilityScope = "project"
+)
+
+func (vs VisibilityScope) String() string {
+	return string(vs)
+}
+
+// VisibilityScopeValidator is a validator for the "visibility_scope" field enum values. It is called by the builders before save.
+func VisibilityScopeValidator(vs VisibilityScope) error {
+	switch vs {
+	case VisibilityScopeLegacy, VisibilityScopeUnknown, VisibilityScopePersonal, VisibilityScopeOrganization, VisibilityScopeProject:
+		return nil
+	default:
+		return fmt.Errorf("usagerecord: invalid enum value for visibility_scope field: %q", vs)
+	}
+}
+
 // OrderOption defines the ordering options for the UsageRecord queries.
 type OrderOption func(*sql.Selector)
 
@@ -140,6 +173,11 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByVisibilityScope orders the results by the visibility_scope field.
+func ByVisibilityScope(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVisibilityScope, opts...).ToFunc()
 }
 
 // BySource orders the results by the source field.

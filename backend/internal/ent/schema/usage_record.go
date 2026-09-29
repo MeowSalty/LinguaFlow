@@ -16,6 +16,7 @@ func (UsageRecord) Mixin() []ent.Mixin {
 
 func (UsageRecord) Fields() []ent.Field {
 	return []ent.Field{
+		field.Enum("visibility_scope").Values("legacy", "unknown", "personal", "organization", "project").Default("legacy"),
 		field.String("source").Default("job"),
 		field.Int("api_calls").Default(0).NonNegative(),
 		field.Int("input_tokens").Default(0).NonNegative(),
