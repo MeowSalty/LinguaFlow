@@ -7,6 +7,8 @@ info:
     保留有效小数秒；输入接受带时区偏移的 RFC3339，并按实际时间点解释。
     SQLite 保留纳秒精度，PostgreSQL 保留微秒精度。空值和字段省略规则由各字段定义。
     时间区间默认按接口声明解释；任务更新时间筛选使用左闭右开区间。
+    根路径 /metrics 为系统管理员认证的持久化数量兼容入口，保留原文本格式；
+    实时运行监控使用 /api/v1/admin/runtime/summary。外部抓取方须携带管理员认证。
 servers:
   - url: /api/v1
 paths:
@@ -118,6 +120,10 @@ paths:
     $ref: './paths/jobs.yaml#/accessibleJobs'
   /jobs/summary:
     $ref: './paths/jobs.yaml#/jobsSummary'
+  /operations:
+    $ref: './paths/operations.yaml#/operations'
+  /operations/summary:
+    $ref: './paths/operations.yaml#/operationsSummary'
   /jobs/{jobId}:
    $ref: './paths/jobs.yaml#/jobById'
   /jobs/{jobId}/cancel:
@@ -160,6 +166,8 @@ paths:
     $ref: './paths/admin.yaml#/adminUserPassword'
   /admin/stats:
     $ref: './paths/admin.yaml#/adminStats'
+  /admin/runtime/summary:
+    $ref: './paths/admin.yaml#/adminRuntimeSummary'
   /admin/audit-logs:
     $ref: './paths/admin.yaml#/adminAuditLogs'
   /admin/settings:

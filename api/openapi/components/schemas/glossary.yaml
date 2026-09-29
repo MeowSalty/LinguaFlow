@@ -189,7 +189,7 @@ GlossarySyncTaskStatusResponse:
       description: 待处理的段落总数
     result:
       type: object
-      description: 任务完成后的结果摘要（仅 status=completed 时存在）
+      description: 已提交批次的累计结果；运行、取消或失败时也可返回，取消不撤销已提交修改。
       properties:
         total_updated:
           type: integer
