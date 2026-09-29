@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/mail"
 	"strings"
+	"unicode"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
@@ -32,8 +34,8 @@ type UserService struct {
 }
 
 type UpdateProfileInput struct {
-	DisplayName string
-	Email       string
+	DisplayName *string
+	Email       *string
 }
 
 type CreateOrganizationInput struct {
@@ -61,12 +63,24 @@ func (s *UserService) GetMe(ctx context.Context, userID int) (*ent.User, error) 
 }
 
 func (s *UserService) UpdateMe(ctx context.Context, userID int, input UpdateProfileInput) (*ent.User, error) {
-	update := s.client.User.UpdateOneID(userID).
-		SetDisplayName(strings.TrimSpace(input.DisplayName))
-	if email := normalizeIdentity(input.Email); email != "" {
-		if !strings.Contains(email, "@") {
+	if input.DisplayName == nil && input.Email == nil {
+		return s.GetMe(ctx, userID)
+	}
+
+	var email string
+	if input.Email != nil {
+		email = normalizeIdentity(*input.Email)
+		address, err := mail.ParseAddress(email)
+		if err != nil || address.Name != "" || address.Address != email || strings.ContainsFunc(email, unicode.IsSpace) {
 			return nil, ErrInvalidInput
 		}
+	}
+
+	update := s.client.User.UpdateOneID(userID)
+	if input.DisplayName != nil {
+		update.SetDisplayName(strings.TrimSpace(*input.DisplayName))
+	}
+	if input.Email != nil {
 		update.SetEmail(email)
 	}
 	updated, err := update.Save(ctx)
