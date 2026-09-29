@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 )
 
 // QuickTranslateRunner 执行单段即时翻译，不触碰 DB 段落/资源。
@@ -26,14 +27,14 @@ type QuickTranslateRunner struct {
 }
 
 // NewQuickTranslateRunner 创建 QuickTranslateRunner。
-func NewQuickTranslateRunner(logger *slog.Logger, client *ent.Client, limiterPool *backend.LimiterPool) *QuickTranslateRunner {
+func NewQuickTranslateRunner(logger *slog.Logger, client *ent.Client, limiterPool *backend.LimiterPool, httpClients ...telemetry.HTTPClientFactory) *QuickTranslateRunner {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &QuickTranslateRunner{
 		logger:  logger,
 		client:  client,
-		factory: NewEngineFactory(logger, limiterPool),
+		factory: NewEngineFactory(logger, limiterPool, httpClients...),
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/preview"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -31,14 +32,14 @@ type PreviewRunner struct {
 }
 
 // NewPreviewRunner creates a PreviewRunner.
-func NewPreviewRunner(logger *slog.Logger, client *ent.Client, limiterPool *backend.LimiterPool) *PreviewRunner {
+func NewPreviewRunner(logger *slog.Logger, client *ent.Client, limiterPool *backend.LimiterPool, httpClients ...telemetry.HTTPClientFactory) *PreviewRunner {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &PreviewRunner{
 		logger:  logger,
 		client:  client,
-		factory: NewEngineFactory(logger, limiterPool),
+		factory: NewEngineFactory(logger, limiterPool, httpClients...),
 	}
 }
 

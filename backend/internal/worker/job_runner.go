@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
@@ -26,6 +27,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/sysmem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -38,6 +40,7 @@ type JobRunner struct {
 	queue       *Queue
 	eventBroker *event.Broker
 	limiterPool *backend.LimiterPool
+	httpClients []telemetry.HTTPClientFactory
 	resMutex    *ResourceMutex
 	// dbDriver 标识数据库驱动（config.DatabaseDriverPostgres /
 	// DatabaseDriverSQLite），用于 batchHandler 中的写入错误分级。
@@ -83,6 +86,7 @@ func NewJobRunner(
 	dbDriver string,
 	pipeCfg PipelineConfig,
 	rssFuse *sysmem.Gate,
+	httpClients ...telemetry.HTTPClientFactory,
 ) *JobRunner {
 	if logger == nil {
 		logger = slog.Default()
@@ -95,6 +99,7 @@ func NewJobRunner(
 		queue:       queue,
 		eventBroker: eventBroker,
 		limiterPool: limiterPool,
+		httpClients: httpClients,
 		resMutex:    resMutex,
 		dbDriver:    dbDriver,
 		pipeCfg:     pipeCfg,
@@ -121,19 +126,10 @@ func (r *JobRunner) ProcessOne(ctx context.Context, jobID int) error {
 
 // Run 从队列中取任务并执行，直到 ctx 取消。
 func (r *JobRunner) Run(ctx context.Context) error {
-	for {
-		jobID, err := r.queue.Dequeue(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return nil
-			}
-			return err
-		}
-		if err := r.processJob(ctx, jobID); err != nil {
-			r.logger.Error("job worker: process job failed", "job_id", jobID, "err", err)
-		}
-		r.queue.Done(jobID)
-	}
+	pool := NewWorkerPool(1, r.logger)
+	pool.Start(ctx, r.queue, r.ProcessOne)
+	pool.Wait()
+	return nil
 }
 
 // Cancel 通知运行中的翻译任务立即停止。
@@ -154,6 +150,25 @@ func (r *JobRunner) Recover(ctx context.Context) ([]int, error) {
 		return nil, err
 	}
 	return jobIDs, nil
+}
+
+func (r *JobRunner) PrepareRecovery(ctx context.Context) error {
+	return r.jobs.PrepareRecovery(ctx)
+}
+
+func (r *JobRunner) PendingTaskIDs(ctx context.Context, afterID, limit int) ([]int, error) {
+	return r.jobs.PendingTaskIDs(ctx, afterID, limit)
+}
+
+func (r *JobRunner) TaskStatus(ctx context.Context, taskID int) (string, error) {
+	row, err := r.client.Job.Query().Where(job.IDEQ(taskID)).Select(job.FieldStatus).Only(ctx)
+	if ent.IsNotFound(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return row.Status, nil
 }
 
 // processJob 处理单个翻译任务（流水线模式）：所有 pending 资源并发入线，
@@ -251,9 +266,13 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 			}
 		}
 	}
-	// 收尾 reconcile 用独立 ctx：取消路径下 jobCtx 已失效，但终态聚合
-	//（矩阵重算 + 状态推导 + 终态事件）仍须落库；超时防悬挂 worker。
-	reconcileCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// 用户取消后仍协调终态；实例关停则保留恢复事实，并取消已开始的
+	// 收尾操作，不在后台额外耗费独立的 30 秒关闭预算。
+	lifetime := workerLifetime(ctx)
+	if err := lifetime.Err(); err != nil {
+		return err
+	}
+	reconcileCtx, cancel := context.WithTimeout(lifetime, 30*time.Second)
 	defer cancel()
 	reconcileErr := r.jobs.ReconcileJob(reconcileCtx, jobID)
 	r.eventBroker.Purge(jobID)
@@ -530,7 +549,7 @@ func (r *JobRunner) processJobResource(
 		return nil
 	}
 
-	factory := NewEngineFactory(r.logger, r.limiterPool)
+	factory := NewEngineFactory(r.logger, r.limiterPool, r.httpClients...)
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory}
 	eng, err := factory.BuildEngine(ctx, snapshot, resources, reporter)
 	if err != nil {
