@@ -11,6 +11,7 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
@@ -312,7 +313,7 @@ func newSemanticQATestClient(t *testing.T) *ent.Client {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	driver := entsql.OpenDB(dialect.SQLite, db)
+	driver := database.NewDriver(entsql.OpenDB(dialect.SQLite, db))
 	client := ent.NewClient(ent.Driver(driver))
 	if err := client.Schema.Create(context.Background()); err != nil {
 		t.Fatalf("migrate: %v", err)

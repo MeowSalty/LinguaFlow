@@ -9,6 +9,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -92,8 +93,8 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 		SourceText:    row.SourceText,
 		Status:        string(row.Status),
 		ReviewComment: row.ReviewComment,
-		CreatedAt:     row.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:     row.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:     timeutil.Format(row.CreatedAt),
+		UpdatedAt:     timeutil.Format(row.UpdatedAt),
 	}
 	if row.TargetText != nil {
 		resp.TargetText = *row.TargetText

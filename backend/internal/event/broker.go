@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // Event represents a single SSE event published to subscribers.
@@ -88,6 +90,10 @@ func (b *Broker) Unsubscribe(jobID int, ch chan Event) {
 // If persistence fails, the event is still broadcast in degraded mode (memory-only).
 // Non-blocking: if a subscriber's buffer is full, the event is dropped for that subscriber.
 func (b *Broker) Publish(jobID int, evt Event) {
+	evt.CreatedAt = timeutil.Normalize(evt.CreatedAt)
+	if normalizer, ok := b.store.(interface{ NormalizeTime(time.Time) time.Time }); ok {
+		evt.CreatedAt = normalizer.NormalizeTime(evt.CreatedAt)
+	}
 	if b.store != nil {
 		seq, err := b.store.Append(jobID, evt)
 		if err != nil {

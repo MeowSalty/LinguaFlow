@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -104,7 +105,7 @@ func NewCodec(secret string, ttl time.Duration) *Codec {
 
 // Encode creates a signed apply token from the given claims.
 func (c *Codec) Encode(claims ApplyClaims) (string, time.Time, error) {
-	now := time.Now()
+	now := timeutil.NowUTC()
 	exp := now.Add(c.ttl)
 	claims.RegisteredClaims = jwt.RegisteredClaims{
 		Issuer:    tokenIssuer,
@@ -118,7 +119,7 @@ func (c *Codec) Encode(claims ApplyClaims) (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("preview token: sign: %w", err)
 	}
-	return signed, exp, nil
+	return signed, timeutil.Normalize(claims.ExpiresAt.Time), nil
 }
 
 // Decode verifies and parses the token, returning the claims.

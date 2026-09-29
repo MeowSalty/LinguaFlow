@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 func (s *Server) handleListJobEvents(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +89,7 @@ func (s *Server) handleListJobEvents(w http.ResponseWriter, r *http.Request) {
 
 func jobEventFromEvent(evt event.Event) JobEvent {
 	item := JobEvent{
-		CreatedAt: evt.CreatedAt,
+		CreatedAt: timeutil.Normalize(evt.CreatedAt),
 		JobId:     evt.JobID,
 		Level:     evt.Level,
 		Message:   evt.Message,

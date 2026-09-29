@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // contentDisposition 生成符合 RFC 6266/RFC 5987 的 attachment 头部：
@@ -98,8 +99,8 @@ func toResourceResponse(r *ent.Resource, translated, approved int) resourceRespo
 		TotalSegments:      r.TotalSegments,
 		TranslatedSegments: translated,
 		ApprovedSegments:   approved,
-		CreatedAt:          r.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:          r.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:          timeutil.Format(r.CreatedAt),
+		UpdatedAt:          timeutil.Format(r.UpdatedAt),
 	}
 }
 
@@ -115,8 +116,8 @@ func toGeneratedResource(r *ent.Resource, translated, approved int) Resource {
 		TotalSegments:      r.TotalSegments,
 		TranslatedSegments: translated,
 		ApprovedSegments:   approved,
-		CreatedAt:          r.CreatedAt,
-		UpdatedAt:          r.UpdatedAt,
+		CreatedAt:          timeutil.Normalize(r.CreatedAt),
+		UpdatedAt:          timeutil.Normalize(r.UpdatedAt),
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type createProjectRequest struct {
@@ -50,8 +51,8 @@ func toProjectResponse(p *ent.Project) projectResponse {
 		GlossaryEnabled: p.GlossaryEnabled,
 		SourceLang:      p.SourceLang,
 		TargetLang:      p.TargetLang,
-		CreatedAt:       p.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:       p.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:       timeutil.Format(p.CreatedAt),
+		UpdatedAt:       timeutil.Format(p.UpdatedAt),
 	}
 }
 

@@ -1,7 +1,7 @@
 package schema
 
 import (
-	"time"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
@@ -58,7 +58,7 @@ func (SegmentRevision) Fields() []ent.Field {
 		field.JSON("before_issues", []qa.QualityIssue{}).Optional(),
 		field.JSON("after_issues", []qa.QualityIssue{}).Optional(),
 		field.Int("actor_id").Positive(),
-		field.Time("created_at").Default(time.Now).Immutable(),
+		field.Time("created_at").Default(timeutil.NowUTC).Immutable(),
 	}
 }
 

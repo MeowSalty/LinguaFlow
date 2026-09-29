@@ -5,6 +5,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type usageStatsResponse struct {
@@ -90,8 +91,8 @@ func toActivityResponse(row *ent.ActivityLog) activityResponse {
 		ResourceID:   row.ResourceID,
 		Message:      row.Message,
 		Metadata:     row.Metadata,
-		CreatedAt:    row.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:    row.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:    timeutil.Format(row.CreatedAt),
+		UpdatedAt:    timeutil.Format(row.UpdatedAt),
 	}
 	if row.Edges.Actor != nil {
 		actor := toUserResponse(row.Edges.Actor)

@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
@@ -33,7 +36,28 @@ func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, 
 		return nil, nil, err
 	}
 
-	db, err := sql.Open(sqlDriver, cfg.DatabaseDSN())
+	var db *sql.DB
+	if entDialect == dialect.SQLite {
+		if err := validateSQLiteTimeDSN(cfg.DatabaseDSN()); err != nil {
+			return nil, nil, err
+		}
+		db, err = sql.Open(sqlDriver, cfg.DatabaseDSN())
+	} else {
+		var pgConfig *pgx.ConnConfig
+		pgConfig, err = pgx.ParseConfig(cfg.DatabaseDSN())
+		if err == nil {
+			for key := range pgConfig.RuntimeParams {
+				if strings.EqualFold(key, "timezone") {
+					delete(pgConfig.RuntimeParams, key)
+				}
+			}
+			pgConfig.RuntimeParams["timezone"] = "UTC"
+			db = stdlib.OpenDB(*pgConfig, stdlib.OptionAfterConnect(func(_ context.Context, conn *pgx.Conn) error {
+				conn.TypeMap().RegisterType(&pgtype.Type{Name: "timestamptz", OID: pgtype.TimestamptzOID, Codec: &pgtype.TimestamptzCodec{ScanLocation: time.UTC}})
+				return nil
+			}))
+		}
+	}
 	if err != nil {
 		return nil, nil, databaseError(cfg.Database.Driver, "open", err)
 	}
@@ -48,7 +72,13 @@ func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, 
 		return nil, nil, databaseError(cfg.Database.Driver, "ping", err)
 	}
 
-	driver := entsql.OpenDB(entDialect, db)
+	if entDialect == dialect.SQLite {
+		if err := ensureSQLiteTimeFormat(ctx, db, cfg.AutoMigrate); err != nil {
+			_ = db.Close()
+			return nil, nil, databaseError(cfg.Database.Driver, "check timestamp format", err)
+		}
+	}
+	driver := NewDriver(entsql.OpenDB(entDialect, db))
 	client := ent.NewClient(ent.Driver(driver))
 	return db, client, nil
 }

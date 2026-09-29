@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // IssueSeverity 表示质量问题的严重程度。
@@ -357,6 +358,15 @@ type QualityIssue struct {
 	Note        string           `json:"note,omitempty"`
 }
 
+// MarshalJSON normalizes the platform decision instant without mutating the
+// caller's issue or its timestamp. User-authored text is preserved verbatim.
+func (i QualityIssue) MarshalJSON() ([]byte, error) {
+	type rawQualityIssue QualityIssue
+	raw := rawQualityIssue(i)
+	raw.DecidedAt = timeutil.NormalizePtr(i.DecidedAt)
+	return json.Marshal(raw)
+}
+
 // UnmarshalJSON 在默认反序列化后归一化 Disposition：旧数据中 disposition 字段
 // 缺失时 Go 零值 "" 不会触发 IssueDisposition.UnmarshalJSON，这里兜底为 pending。
 // 用别名类型 rawQualityIssue 走默认解码，避免递归调用本方法。
@@ -367,6 +377,7 @@ func (i *QualityIssue) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*i = QualityIssue(raw)
+	i.DecidedAt = timeutil.NormalizePtr(i.DecidedAt)
 	if i.Disposition == "" {
 		i.Disposition = DispositionPending
 	}

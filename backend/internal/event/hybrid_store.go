@@ -53,6 +53,7 @@ func (s *HybridStore) initSeqFromDB() error {
 }
 
 func (s *HybridStore) Append(jobID int, evt Event) (int64, error) {
+	evt.CreatedAt = s.NormalizeTime(evt.CreatedAt)
 	seq := s.nextSeq.Add(1)
 	evt.Seq = seq
 
@@ -65,6 +66,10 @@ func (s *HybridStore) Append(jobID int, evt Event) (int64, error) {
 	s.ringStore.AppendWithSeq(jobID, evt)
 
 	return seq, dbErr
+}
+
+func (s *HybridStore) NormalizeTime(t time.Time) time.Time {
+	return s.entStore.NormalizeTime(t)
 }
 
 func (s *HybridStore) Replay(ctx context.Context, jobID int, afterSeq int64, limit int) []Event {
