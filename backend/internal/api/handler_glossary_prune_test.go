@@ -18,6 +18,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
@@ -29,7 +30,7 @@ func newTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	driver := entsql.OpenDB(dialect.SQLite, db)
+	driver := database.NewDriver(entsql.OpenDB(dialect.SQLite, db))
 	client := ent.NewClient(ent.Driver(driver))
 	if err := client.Schema.Create(context.Background()); err != nil {
 		t.Fatalf("migrate: %v", err)

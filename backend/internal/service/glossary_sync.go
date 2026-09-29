@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // SyncTask 状态常量
@@ -338,7 +339,7 @@ func (s *GlossarySyncService) CancelSyncTask(
 	}
 
 	// 标记为取消
-	now := time.Now()
+	now := timeutil.NowUTC()
 	updated, err := s.client.SyncTask.UpdateOneID(taskID).
 		SetStatus(SyncTaskStatusCancelled).
 		SetCancelledAt(now).
@@ -699,7 +700,7 @@ func (s *GlossarySyncService) ReconcileJob(_ context.Context, _ int) error {
 
 // CleanupExpiredTasks 将超时任务标记为 failed
 func (s *GlossarySyncService) CleanupExpiredTasks(ctx context.Context) error {
-	expired := time.Now().Add(-24 * time.Hour)
+	expired := timeutil.NowUTC().Add(-24 * time.Hour)
 	count, err := s.client.SyncTask.Update().
 		Where(
 			synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning),
@@ -707,7 +708,7 @@ func (s *GlossarySyncService) CleanupExpiredTasks(ctx context.Context) error {
 		).
 		SetStatus(SyncTaskStatusFailed).
 		SetError("任务超时，自动标记为失败").
-		SetUpdatedAt(time.Now()).
+		SetUpdatedAt(timeutil.NowUTC()).
 		Save(ctx)
 	if err != nil {
 		return fmt.Errorf("cleanup expired sync tasks: %w", err)

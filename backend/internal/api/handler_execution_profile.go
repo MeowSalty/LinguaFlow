@@ -10,6 +10,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // ---- 辅助函数 ----
@@ -59,10 +60,10 @@ func entExecutionProfileToResponse(t *ent.ExecutionProfile) ExecutionProfile {
 		resp.OwnerOrgId = t.OwnerOrgID
 	}
 	if !t.CreatedAt.IsZero() {
-		resp.CreatedAt = &t.CreatedAt
+		resp.CreatedAt = timeutil.NormalizePtr(&t.CreatedAt)
 	}
 	if !t.UpdatedAt.IsZero() {
-		resp.UpdatedAt = &t.UpdatedAt
+		resp.UpdatedAt = timeutil.NormalizePtr(&t.UpdatedAt)
 	}
 	return resp
 }

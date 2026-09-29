@@ -9,7 +9,6 @@ import (
 	"math"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
@@ -22,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 const (
@@ -1180,7 +1180,7 @@ func (s *JobService) MarkJobRoundRunning(ctx context.Context, jobID, roundRowID 
 			jobround.StatusIn(JobRoundStatusPending, JobRoundStatusSkipped),
 		).
 		SetStatus(JobRoundStatusRunning).
-		SetStartedAt(time.Now()).
+		SetStartedAt(timeutil.NowUTC()).
 		ClearFinishedAt().
 		ClearErrorMessage().
 		Save(ctx)
@@ -1261,7 +1261,7 @@ func (s *JobService) markJobRoundTerminal(ctx context.Context, roundRowID int, f
 			jobround.StatusIn(fromStatuses...),
 		).
 		SetStatus(targetStatus).
-		SetFinishedAt(time.Now())
+		SetFinishedAt(timeutil.NowUTC())
 	n, err := update.Save(ctx)
 	if err != nil {
 		return err
@@ -1298,7 +1298,7 @@ func (s *JobService) MarkJobRoundFailed(ctx context.Context, roundRowID int, fai
 		).
 		SetStatus(JobRoundStatusFailed).
 		SetErrorMessage(message).
-		SetFinishedAt(time.Now()).
+		SetFinishedAt(timeutil.NowUTC()).
 		Save(ctx)
 	return err
 }
@@ -1388,13 +1388,13 @@ func (s *JobService) publishEvent(jobID int, eventType, level, stage, message st
 		Level:     level,
 		Stage:     stage,
 		Message:   message,
-		CreatedAt: time.Now(),
+		CreatedAt: timeutil.NowUTC(),
 	})
 }
 
 // MarkJobStarted 记录任务开始时间。
 func (s *JobService) MarkJobStarted(ctx context.Context, jobID int) error {
-	now := time.Now()
+	now := timeutil.NowUTC()
 	return s.client.Job.UpdateOneID(jobID).
 		SetStartedAt(now).
 		Exec(ctx)
@@ -1402,7 +1402,7 @@ func (s *JobService) MarkJobStarted(ctx context.Context, jobID int) error {
 
 // MarkJobResourceStarted 记录资源开始时间。
 func (s *JobService) MarkJobResourceStarted(ctx context.Context, jobResourceID int) error {
-	now := time.Now()
+	now := timeutil.NowUTC()
 	return s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStartedAt(now).
 		Exec(ctx)
@@ -1494,7 +1494,7 @@ func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobRes
 				jobround.IDEQ(round.ID),
 				jobround.StatusEQ(JobRoundStatusRunning),
 			).
-			SetFinishedAt(time.Now())
+			SetFinishedAt(timeutil.NowUTC())
 		if round.SegmentCompleted >= round.SegmentTotal {
 			updateRound = updateRound.SetStatus(JobRoundStatusCompleted)
 		} else {

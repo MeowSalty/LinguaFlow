@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service/segmatch"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // 搜索替换跳过原因。与 OpenAPI SearchReplaceSkippedItemReason 对齐。
@@ -494,7 +495,7 @@ func (s *SegmentService) pruneResourceRevisions(ctx context.Context, resourceID 
 	if s.revisionRetention <= 0 {
 		return
 	}
-	cutoff := time.Now().Add(-s.revisionRetention)
+	cutoff := timeutil.NowUTC().Add(-s.revisionRetention)
 	if _, err := s.client.SegmentRevision.Delete().
 		Where(segmentrevision.ResourceIDEQ(resourceID), segmentrevision.CreatedAtLT(cutoff)).
 		Exec(ctx); err != nil {
@@ -541,8 +542,8 @@ func ptrIntEq(a, b *int) bool {
 	return *a == *b
 }
 
-// equalIssues 精确比较两批质量问题是否一致。按 qa.Fingerprint 建索引后逐一深度比较全字段
-// （含 disposition/decided_by/decided_at/note/span），因此用户在替换后对某 issue 改了裁决
+// equalIssues 精确比较两批质量问题是否一致。按 qa.Fingerprint 建索引后逐一比较全字段；
+// decided_at 按时间点比较，其余字段深度比较。因此用户在替换后对某 issue 改了裁决
 // 会被识别为发散，撤销会跳过该段而非覆盖裁决。不使用 JSON 字节比较——ent 编码往返可能不稳定。
 // 假设同段同指纹的 issue 唯一（qa 设计如此）；若出现重复指纹则保守判发散。
 func equalIssues(a, b []qa.QualityIssue) bool {
@@ -568,11 +569,24 @@ func equalIssues(a, b []qa.QualityIssue) bool {
 	}
 	for fp, ia := range ma {
 		ib, ok := mb[fp]
-		if !ok || !reflect.DeepEqual(ia, ib) {
+		if !ok || !equalIssueDecisionTime(ia.DecidedAt, ib.DecidedAt) {
+			return false
+		}
+		// A decision is the same instant after a timezone/JSON round trip.
+		// Preserve strict comparison of every other field.
+		ia.DecidedAt, ib.DecidedAt = nil, nil
+		if !reflect.DeepEqual(ia, ib) {
 			return false
 		}
 	}
 	return true
+}
+
+func equalIssueDecisionTime(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
 }
 
 // newOperationID 生成带前缀的 operation 标识（crypto/rand 16 字节 hex）。
@@ -580,7 +594,7 @@ func newOperationID(prefix string) string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		// rand.Read 失败极罕见；退化到时间戳保证唯一性与非空。
-		return prefix + time.Now().UTC().Format("20060102150405.000000")
+		return prefix + timeutil.NowUTC().Format("20060102150405.000000")
 	}
 	return prefix + hex.EncodeToString(b)
 }

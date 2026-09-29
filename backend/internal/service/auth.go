@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 const (
@@ -63,7 +64,7 @@ func NewAuthService(client *ent.Client, cfg AuthConfig, adminSvc *AdminService) 
 	return &AuthService{
 		client:   client,
 		cfg:      cfg,
-		now:      time.Now,
+		now:      timeutil.NowUTC,
 		rand:     crand.Reader,
 		adminSvc: adminSvc,
 	}
@@ -168,7 +169,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ses
 		}
 		return nil, err
 	}
-	now := s.now()
+	now := timeutil.Normalize(s.now())
 	if tokenRecord.RevokedAt != nil {
 		return nil, ErrRefreshTokenRevoked
 	}
@@ -193,7 +194,7 @@ func (s *AuthService) Logout(ctx context.Context, rawRefreshToken string) error 
 	if storedToken.RevokedAt != nil {
 		return nil
 	}
-	return s.client.RefreshToken.UpdateOneID(storedToken.ID).SetRevokedAt(s.now()).Exec(ctx)
+	return s.client.RefreshToken.UpdateOneID(storedToken.ID).SetRevokedAt(timeutil.Normalize(s.now())).Exec(ctx)
 }
 
 func (s *AuthService) ParseAccessToken(rawToken string) (*AccessTokenClaims, error) {
@@ -263,7 +264,7 @@ func (s *AuthService) issueSession(ctx context.Context, account *ent.User, revok
 		}
 	}()
 
-	now := s.now()
+	now := timeutil.Normalize(s.now())
 	if revokeToken != nil && revokeToken.RevokedAt == nil {
 		if err = tx.RefreshToken.UpdateOneID(revokeToken.ID).SetRevokedAt(now).Exec(ctx); err != nil {
 			return nil, err
@@ -274,14 +275,25 @@ func (s *AuthService) issueSession(ctx context.Context, account *ent.User, revok
 		return nil, err
 	}
 	refreshExpiry := now.Add(s.cfg.RefreshTokenTTL)
-	if _, err = tx.RefreshToken.Create().
+	createdRefresh, err := tx.RefreshToken.Create().
 		SetTokenHash(hash.Full(refreshRaw)).
 		SetExpiresAt(refreshExpiry).
 		SetUserID(account.ID).
-		Save(ctx); err != nil {
+		Save(ctx)
+	if err != nil {
 		return nil, err
 	}
-	accessExpiry := now.Add(s.cfg.AccessTokenTTL)
+	// Create retains input timestamps in memory; read the stored value so the
+	// response reflects native database precision (microseconds on PostgreSQL).
+	persistedRefresh, err := tx.RefreshToken.Query().
+		Where(refreshtoken.IDEQ(createdRefresh.ID)).
+		Select(refreshtoken.FieldID, refreshtoken.FieldExpiresAt).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+	refreshExpiry = timeutil.Normalize(persistedRefresh.ExpiresAt)
+	accessExpiry := timeutil.Normalize(jwt.NewNumericDate(now.Add(s.cfg.AccessTokenTTL)).Time)
 	accessToken, err := s.signAccessToken(account, accessExpiry)
 	if err != nil {
 		return nil, err
@@ -299,7 +311,7 @@ func (s *AuthService) issueSession(ctx context.Context, account *ent.User, revok
 }
 
 func (s *AuthService) signAccessToken(account *ent.User, expiresAt time.Time) (string, error) {
-	now := s.now()
+	now := timeutil.Normalize(s.now())
 	claims := AccessTokenClaims{
 		UserID:   account.ID,
 		Username: account.Username,

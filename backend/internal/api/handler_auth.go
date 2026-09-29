@@ -2,9 +2,9 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type authRequestRegister struct {
@@ -113,8 +113,8 @@ func newAuthSessionResponse(session *service.Session) authSessionResponse {
 		AccessToken:      session.AccessToken,
 		RefreshToken:     session.RefreshToken,
 		TokenType:        "Bearer",
-		ExpiresAt:        session.AccessExpiresAt.UTC().Format(time.RFC3339),
-		RefreshExpiresAt: session.RefreshExpiresAt.UTC().Format(time.RFC3339),
+		ExpiresAt:        timeutil.Format(session.AccessExpiresAt),
+		RefreshExpiresAt: timeutil.Format(session.RefreshExpiresAt),
 		User: authUserResponse{
 			ID:          session.User.ID,
 			Username:    session.User.Username,

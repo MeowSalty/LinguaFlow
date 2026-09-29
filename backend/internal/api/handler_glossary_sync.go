@@ -8,6 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 func (s *Server) handleAnalyzeGlossarySyncImpact(w http.ResponseWriter, r *http.Request, projectId int, entryId int) {
@@ -130,7 +131,7 @@ func convertSyncTaskToStatusResponse(task *ent.SyncTask) GlossarySyncTaskStatusR
 		Status:      GlossarySyncTaskStatusResponseStatus(task.Status),
 		Processed:   task.ProcessedSegments,
 		Total:       task.TotalSegments,
-		CancelledAt: task.CancelledAt,
+		CancelledAt: timeutil.NormalizePtr(task.CancelledAt),
 		Error:       nilIfEmpty(task.Error),
 	}
 

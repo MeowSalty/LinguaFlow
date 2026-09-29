@@ -29,7 +29,7 @@ func jobStreamTestServer(t *testing.T, ringCapacity, replayBatch, maxReplay int)
 	users := service.NewUserService(client, nil)
 	projects := service.NewProjectService(client, users)
 	jobSvc := service.NewJobService(client, projects, nil, nil, nil, nil, nil, nil, nil)
-	entStore := event.NewEntEventStore(client)
+	entStore := event.NewEntEventStore(client, config.DatabaseDriverSQLite)
 	hybridStore, err := event.NewHybridStore(
 		event.NewRingBufferStore(event.RingBufferConfig{Capacity: ringCapacity}),
 		entStore,

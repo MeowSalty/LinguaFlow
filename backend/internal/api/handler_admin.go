@@ -7,7 +7,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type adminCreateUserRequest struct {
@@ -236,24 +238,26 @@ func (s *Server) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request
 
 	items := make([]adminAuditLogItem, 0, len(result.Items))
 	for _, log := range result.Items {
-		item := adminAuditLogItem{
-			ID:           log.ID,
-			Action:       log.Action,
-			ResourceType: log.ResourceType,
-			Message:      log.Message,
-			Metadata:     log.Metadata,
-			CreatedAt:    log.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		}
-		if log.ResourceID != nil {
-			item.ResourceID = log.ResourceID
-		}
-		if log.Edges.Actor != nil {
-			actorID := log.Edges.Actor.ID
-			item.ActorID = &actorID
-		}
-		items = append(items, item)
+		items = append(items, toAdminAuditLogItem(log))
 	}
 	writeJSON(w, http.StatusOK, adminAuditLogListResponse{Items: items, Total: result.Total})
+}
+
+func toAdminAuditLogItem(log *ent.ActivityLog) adminAuditLogItem {
+	item := adminAuditLogItem{
+		ID:           log.ID,
+		Action:       log.Action,
+		ResourceType: log.ResourceType,
+		ResourceID:   log.ResourceID,
+		Message:      log.Message,
+		Metadata:     log.Metadata,
+		CreatedAt:    timeutil.Format(log.CreatedAt),
+	}
+	if log.Edges.Actor != nil {
+		actorID := log.Edges.Actor.ID
+		item.ActorID = &actorID
+	}
+	return item
 }
 
 func (s *Server) handleAdminGetSettings(w http.ResponseWriter, r *http.Request) {

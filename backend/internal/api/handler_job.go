@@ -10,6 +10,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
 
@@ -349,8 +350,8 @@ func toJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
 		ExecutionPlanID: row.ExecutionPlanID,
 		ErrorMessage:    row.ErrorMessage,
 		StartedAt:       timePtrToString(row.StartedAt),
-		CreatedAt:       row.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:       row.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:       timeutil.Format(row.CreatedAt),
+		UpdatedAt:       timeutil.Format(row.UpdatedAt),
 	}
 	if row.Edges.CreatedBy != nil {
 		resp.CreatedBy = &userBriefResponse{ID: row.Edges.CreatedBy.ID, Username: row.Edges.CreatedBy.Username}
@@ -400,8 +401,8 @@ func toJobResourceResponse(row *ent.JobResource) jobResourceResponse {
 		ErrorMessage:      row.ErrorMessage,
 		WarningMessage:    row.WarningMessage,
 		StartedAt:         timePtrToString(row.StartedAt),
-		CreatedAt:         row.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:         row.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:         timeutil.Format(row.CreatedAt),
+		UpdatedAt:         timeutil.Format(row.UpdatedAt),
 	}
 	// rounds 数组：未 eager-load 时为空（列表视图）；详情视图由
 	// service 层 WithRounds 预载。

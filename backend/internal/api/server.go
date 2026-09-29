@@ -86,7 +86,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		logger = slog.Default()
 	}
 
-	entEventStore := event.NewEntEventStore(client)
+	entEventStore := event.NewEntEventStore(client, cfg.Database.Driver)
 	hybridStore, err := event.NewHybridStore(
 		event.NewRingBufferStore(event.RingBufferConfig{Capacity: cfg.SSE.RingBufferCapacity}),
 		entEventStore,
