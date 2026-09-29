@@ -44,6 +44,7 @@ paths:
     post:
       operationId: RegisterAuth
       summary: 注册用户并签发会话
+      description: 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。
       security: []
       requestBody:
         required: true
@@ -58,6 +59,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthSession'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
   /auth/login:
@@ -104,6 +111,12 @@ paths:
     post:
       operationId: LogoutAuth
       summary: 登出并撤销刷新令牌
+      description: |
+        只撤销当前认证用户提交的 refresh token，不影响其他会话。本人已撤销的 token 再次提交返回 204；
+        他人的 token（包括已撤销的 token）返回 403 且不修改。未知 token 保持 401 token-invalid 错误，
+        响应不包含 token 所属信息。数据库中仍存在的本人过期 refresh token 也可撤销。
+        已签发的 access token 在到期前仍可能有效，不承诺全设备退出或即时撤销 access token。
+        调用方在协调刷新后必须使用最新的 access 和 refresh token 重新构建登出请求。
       security:
         - bearerAuth: []
       requestBody:
@@ -114,13 +127,20 @@ paths:
               $ref: '#/components/schemas/LogoutRequest'
       responses:
         '204':
-          description: 已登出
+          description: 提交的本人 refresh token 已撤销，或此前已撤销。
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
   /users/me:
     get:
       operationId: GetCurrentUser
       summary: 获取当前用户
+      description: 服务器模式要求 bearer 认证；本地模式沿用免 bearer 的本地用户身份。
       security:
         - bearerAuth: []
       responses:
@@ -130,11 +150,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
     put:
       operationId: UpdateCurrentUser
       summary: 更新当前用户资料
+      description: |
+        省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400，邮箱冲突返回 409；失败不部分更新。
+        服务器模式要求 bearer 认证；本地模式仍允许通过本地身份调用，页面只读不代表后端禁止写入。
       security:
         - bearerAuth: []
       requestBody:
@@ -150,12 +175,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
   /users/me/password:
     put:
       operationId: ChangeCurrentUserPassword
       summary: 修改当前用户密码
+      description: |
+        只更新密码，已有 access/refresh token 继续沿用各自有效期。
+        缺失、空值、非法类型或新密码长度不合法返回 400；非空旧密码错误返回专用
+        urn:linguaflow:current-password-mismatch Problem（400），不会被当作认证失效。
+        401 仅表示请求认证缺失或失效。本地模式沿用现有本地身份授权，页面不提供密码表单。
       security:
         - bearerAuth: []
       requestBody:
@@ -167,6 +203,14 @@ paths:
       responses:
         '204':
           description: 密码已更新
+        '400':
+          description: 参数不合法，或旧密码不匹配（type 为 urn:linguaflow:current-password-mismatch）。
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
   /orgs:
@@ -2911,6 +2955,8 @@ components:
           type: string
         password:
           type: string
+          minLength: 8
+          description: 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。
         email:
           type: string
           format: email
@@ -2926,6 +2972,7 @@ components:
           type: string
         password:
           type: string
+          description: 原样验证密码，不施加注册或改密时的新密码长度规则，以兼容历史密码。
     RefreshRequest:
       type: object
       required:
@@ -2935,11 +2982,13 @@ components:
           type: string
     LogoutRequest:
       type: object
+      additionalProperties: false
       required:
         - refresh_token
       properties:
         refresh_token:
           type: string
+          description: 当前认证用户本人持有的 refresh token；只撤销此 token，不影响其他会话。
     AuthSession:
       type: object
       required:
@@ -2966,22 +3015,37 @@ components:
           $ref: '#/components/schemas/User'
     UpdateCurrentUserRequest:
       type: object
+      additionalProperties: false
+      description: |
+        仅更新提供的字段，省略字段保持原值；空对象返回当前资料且不修改更新时间。
+        字段不可为 null，用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
       properties:
         display_name:
           type: string
+          nullable: false
+          description: 去除首尾空白；空字符串允许清空显示名。
         email:
           type: string
           format: email
+          nullable: false
+          description: 去除首尾空白并转小写后校验单个纯邮箱地址；拒绝空值、内部空白、显示名及地址包装。
     ChangePasswordRequest:
       type: object
+      additionalProperties: false
       required:
         - current_password
         - new_password
       properties:
         current_password:
           type: string
+          nullable: false
+          minLength: 1
+          description: 原样验证当前密码，不去除空白，不施加新密码的长度规则。
         new_password:
           type: string
+          nullable: false
+          minLength: 8
+          description: 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。
     Organization:
       type: object
       required:
