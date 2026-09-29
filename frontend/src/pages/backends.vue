@@ -29,6 +29,7 @@ import { listBackendModels, type ApiSchemas } from '@/api/client'
 import { useBackendsStore } from '@/stores/backends'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
+import { sanitizeProbeErrorDetail } from '@/utils/errors'
 
 type Backend = ApiSchemas['Backend']
 type BackendType = Backend['type']
@@ -175,59 +176,6 @@ const invalidateModelProbe = (): void => {
   modelFetchGeneration += 1
   modelOptions.value = []
   fetchingModels.value = false
-}
-
-const extractJsonPayload = (raw: string): Record<string, unknown> | null => {
-  const match = /\{[\s\S]*\}/u.exec(raw)
-  if (!match?.[0]) {
-    return null
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(match[0])
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
-  } catch {
-    return null
-  }
-}
-
-const sanitizeProbeErrorDetail = (raw: string): string => {
-  const payload = extractJsonPayload(raw)
-  const payloadMessage =
-    payload && typeof payload.message === 'string'
-      ? payload.message
-      : payload && typeof payload.error === 'string'
-        ? payload.error
-        : payload && typeof payload.detail === 'string'
-          ? payload.detail
-          : null
-
-  let detail = (payloadMessage ?? raw)
-    .replace(/https?:\/\/\S+/giu, '')
-    .replace(/\s*\{[\s\S]*\}\s*/gu, ' ')
-    .replace(/\b(?:api[_-]?key|token|authorization)\s*[:=]\s*\S+/giu, '')
-    .replace(/\s+/gu, ' ')
-    .trim()
-
-  detail = detail
-    .replace(/^拉取模型列表失败[（(]?/u, '')
-    .replace(/^listBackendModelsFailed[（(]?/u, '')
-    .replace(/[）)]$/u, '')
-    .replace(/^上游返回\s*/u, '')
-    .replace(/^\d{3}\s*/u, '')
-    .replace(/^GET\s*/iu, '')
-    .replace(/^:\s*/u, '')
-    .trim()
-
-  if (!detail) {
-    return ''
-  }
-
-  if (detail.length > 180) {
-    return `${detail.slice(0, 180)}…`
-  }
-
-  return detail
 }
 
 const resolveModelProbeErrorSummary = (raw: string): string => {
