@@ -89,14 +89,8 @@ type jobResponse struct {
 // queueInfoForJob returns queue position info for a job, or nil if queue is
 // unavailable or the job is not currently queued.
 func (s *Server) queueInfoForJob(jobID int) *worker.QueueInfo {
-	if s.dispatcher == nil {
-		return nil
-	}
-	info := s.dispatcher.QueuePosition("translation", jobID)
-	if info == nil || info.Position < 0 {
-		return nil
-	}
-	return info
+	// Instance queue data belongs only to the protected runtime summary.
+	return nil
 }
 
 func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
@@ -129,10 +123,7 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &created.ProjectID, Action: "job.create", ResourceType: "job", ResourceID: created.ID, Message: "创建任务"})
 	if s.dispatcher != nil {
-		if err := s.dispatcher.Enqueue(r.Context(), "translation", created.ID); err != nil {
-			s.writeServiceError(w, r, err)
-			return
-		}
+		s.dispatcher.Notify("translation")
 	}
 	writeJSON(w, http.StatusAccepted, toJobDetailResponse(created, s.queueInfoForJob(created.ID)))
 }
@@ -226,10 +217,7 @@ func (s *Server) handleRetryJob(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.retry", ResourceType: "job", ResourceID: job.ID, Message: "重试任务"})
 	if s.dispatcher != nil {
-		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
-			s.writeServiceError(w, r, err)
-			return
-		}
+		s.dispatcher.Notify("translation")
 	}
 	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
 }
@@ -295,10 +283,7 @@ func (s *Server) handleResumeJob(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.resume", ResourceType: "job", ResourceID: job.ID, Message: "恢复任务"})
 	if s.dispatcher != nil {
-		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
-			s.writeServiceError(w, r, err)
-			return
-		}
+		s.dispatcher.Notify("translation")
 	}
 	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
 }
@@ -382,10 +367,8 @@ func buildProgressResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobProgres
 		ProgressTotal:      &progressTotal,
 		ProgressCompleted:  &progressCompleted,
 	}
-	if queueInfo != nil {
-		progress.QueuePosition = &queueInfo.Position
-		progress.QueueSize = &queueInfo.Size
-	}
+	// These deprecated fields stay unavailable even for callers holding an
+	// instance queue snapshot; ordinary job responses have project scope.
 	return progress
 }
 
