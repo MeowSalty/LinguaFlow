@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
@@ -19,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -79,27 +82,36 @@ func (s *ProjectService) CreateProject(ctx context.Context, actorUserID int, inp
 }
 
 // CreateOrgProject 创建组织项目。
-// 权限校验由 handler 层负责（handler 必须先验证 actorUserID 是 orgID 的管理员）。
+// Authorization and audit share the organization's serialized mutation transaction.
 func (s *ProjectService) CreateOrgProject(ctx context.Context, actorUserID, orgID int, input CreateProjectInput) (*ent.Project, error) {
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		return nil, ErrInvalidInput
 	}
-	create := s.client.Project.Create().
-		SetName(name).
-		SetOwnerOrgID(orgID).
-		SetConfig(cloneMap(input.Config)).
-		SetGlossaryEnabled(input.GlossaryEnabled != nil && *input.GlossaryEnabled).
-		SetSourceLang(normalizeLangOrDefault(input.SourceLang, "auto")).
-		SetTargetLang(normalizeLangOrDefault(input.TargetLang, "zh"))
-	created, err := create.Save(ctx)
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			return nil, ErrInvalidInput
+	var created *ent.Project
+	err := withOrganizationMutation(ctx, s.client, orgID, func(client *ent.Client) error {
+		if _, err := requireOrganizationMembership(ctx, client, actorUserID, orgID, OrgRoleAdmin); err != nil {
+			return err
 		}
+		create := client.Project.Create().
+			SetName(name).
+			SetOwnerOrgID(orgID).
+			SetConfig(cloneMap(input.Config)).
+			SetGlossaryEnabled(input.GlossaryEnabled != nil && *input.GlossaryEnabled).
+			SetSourceLang(normalizeLangOrDefault(input.SourceLang, "auto")).
+			SetTargetLang(normalizeLangOrDefault(input.TargetLang, "zh"))
+		var err error
+		created, err = create.Save(ctx)
+		if err != nil {
+			return err
+		}
+		return recordAuditEvent(ctx, client, AuditEvent{ActorUserID: actorUserID, ProjectID: &created.ID,
+			Action: "project.create", ResourceType: "project", ResourceID: created.ID})
+	})
+	if err != nil {
 		return nil, err
 	}
-	return created, nil
+	return created.Unwrap(), nil
 }
 
 func (s *ProjectService) ListProjectsForUser(ctx context.Context, actorUserID int) ([]*ent.Project, error) {
@@ -126,10 +138,13 @@ func readableProjectPredicate(actorUserID int) predicate.Project {
 }
 
 // ListOrgProjects 列出指定组织的所有项目。
-// 权限校验由 handler 层负责（handler 必须先验证 actorUserID 是 orgID 的成员）。
+// Personal ownership takes precedence even when a malformed row also carries orgID.
 func (s *ProjectService) ListOrgProjects(ctx context.Context, actorUserID, orgID int) ([]*ent.Project, error) {
+	if _, err := requireOrganizationMembership(ctx, s.client, actorUserID, orgID, OrgRoleMember); err != nil {
+		return nil, err
+	}
 	return s.client.Project.Query().
-		Where(project.OwnerOrgIDEQ(orgID)).
+		Where(project.OwnerUserIDIsNil(), project.OwnerOrgIDEQ(orgID), readableProjectPredicate(actorUserID)).
 		Order(ent.Asc(project.FieldID)).
 		All(ctx)
 }
@@ -139,43 +154,85 @@ func (s *ProjectService) GetProject(ctx context.Context, actorUserID, projectID 
 }
 
 func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, projectID int, input UpdateProjectInput) (*ent.Project, error) {
-	current, err := s.requireProjectAccess(ctx, actorUserID, projectID, true)
-	if err != nil {
-		return nil, err
-	}
-	normalized, err := s.normalizeUpdateInput(current, input)
-	if err != nil {
-		return nil, err
-	}
-	glossaryEnabled := normalized.GlossaryEnabled
-	updated, err := s.client.Project.UpdateOneID(projectID).
-		SetName(normalized.Name).
-		SetConfig(cloneMap(normalized.Config)).
-		SetGlossaryEnabled(glossaryEnabled != nil && *glossaryEnabled).
-		SetSourceLang(normalized.SourceLang).
-		SetTargetLang(normalized.TargetLang).
-		Save(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrProjectNotFound
+	var updated *ent.Project
+	err := s.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, current *ent.Project) error {
+		normalized, err := s.normalizeUpdateInput(current, input)
+		if err != nil {
+			return err
 		}
+		glossaryEnabled := normalized.GlossaryEnabled
+		updated, err = client.Project.UpdateOneID(projectID).
+			SetName(normalized.Name).
+			SetConfig(cloneMap(normalized.Config)).
+			SetGlossaryEnabled(glossaryEnabled != nil && *glossaryEnabled).
+			SetSourceLang(normalized.SourceLang).
+			SetTargetLang(normalized.TargetLang).
+			Save(ctx)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return ErrProjectNotFound
+			}
+			return err
+		}
+		if EffectiveProjectOrgID(current) != nil {
+			return recordAuditEvent(ctx, client, AuditEvent{ActorUserID: actorUserID, ProjectID: &projectID,
+				Action: "project.update", ResourceType: "project", ResourceID: projectID})
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	return updated, nil
+	return updated.Unwrap(), nil
 }
 
 func (s *ProjectService) DeleteProject(ctx context.Context, actorUserID, projectID int) ([]string, error) {
-	if _, err := s.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
-		return nil, err
+	var paths []string
+	err := s.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, current *ent.Project) error {
+		if EffectiveProjectOrgID(current) != nil {
+			if err := recordAuditEvent(ctx, client, AuditEvent{ActorUserID: actorUserID, ProjectID: &projectID,
+				Action: "project.delete", ResourceType: "project", ResourceID: projectID}); err != nil {
+				return err
+			}
+		}
+		var err error
+		paths, err = cascadeDeleteProject(ctx, client, current)
+		return err
+	})
+	return paths, err
+}
+
+func (s *ProjectService) mutateProject(ctx context.Context, actorUserID, projectID int, mutate func(*ent.Client, *ent.Project) error) error {
+	current, err := s.requireProjectAccess(ctx, actorUserID, projectID, true)
+	if err != nil {
+		return err
 	}
-	return s.cascadeDeleteProject(ctx, projectID)
+	apply := func(client *ent.Client) error {
+		transactionService := NewProjectService(client, NewUserService(client, nil))
+		row, err := transactionService.requireProjectAccess(ctx, actorUserID, projectID, true)
+		if err != nil {
+			return err
+		}
+		return mutate(client, row)
+	}
+	if orgID := EffectiveProjectOrgID(current); orgID != nil {
+		return withOrganizationMutation(ctx, s.client, *orgID, apply)
+	}
+	return withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+		// Acquire SQLite's writer lock before the authorization read snapshot.
+		if _, err := client.Project.Update().Where(project.IDEQ(projectID)).SetUpdatedAt(time.Now().UTC()).Save(ctx); err != nil {
+			return err
+		}
+		return apply(client)
+	})
 }
 
 // cascadeDeleteProject 在事务中执行项目级联删除，返回需要清理的物理文件存储路径列表。
 // 删除顺序遵循依赖关系：叶子节点优先，最后删除项目本身。
-func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int) (storagePaths []string, err error) {
+func cascadeDeleteProject(ctx context.Context, tx *ent.Client, current *ent.Project) (storagePaths []string, err error) {
+	projectID := current.ID
 	// 1. 收集需要删除文件的 Resource 存储路径
-	resources, err := s.client.Resource.Query().
+	resources, err := tx.Resource.Query().
 		Where(resource.ProjectIDEQ(projectID)).
 		All(ctx)
 	if err != nil {
@@ -186,17 +243,6 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 			storagePaths = append(storagePaths, r.StoragePath)
 		}
 	}
-
-	// 2. 开启事务执行级联删除
-	tx, err := s.client.Tx(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
 
 	// 收集项目关联的 Job IDs（用于删除 JobResource）
 	tjIDs, err := tx.Job.Query().
@@ -293,17 +339,29 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		return nil, fmt.Errorf("delete tm entries: %w", err)
 	}
 
-	// ActivityLog 保留，SetNull 由 FK 策略自动处理
+	// Preserve valid organization history; deleted personal projects never become personal history.
+	activities := tx.ActivityLog.Update().Where(activitylog.HasProjectWith(project.IDEQ(projectID)),
+		activitylog.VisibilityScopeEQ(activitylog.VisibilityScopeProject))
+	usage := tx.UsageRecord.Update().Where(usagerecord.HasProjectWith(project.IDEQ(projectID)),
+		usagerecord.VisibilityScopeEQ(usagerecord.VisibilityScopeProject))
+	if orgID := EffectiveProjectOrgID(current); orgID != nil {
+		activities.SetOrganizationID(*orgID).SetVisibilityScope(activitylog.VisibilityScopeOrganization)
+		usage.SetOrganizationID(*orgID).SetVisibilityScope(usagerecord.VisibilityScopeOrganization)
+	} else {
+		activities.ClearOrganization()
+		usage.ClearOrganization()
+	}
+	if _, err := activities.Save(ctx); err != nil {
+		return nil, err
+	}
+	if _, err := usage.Save(ctx); err != nil {
+		return nil, err
+	}
 
 	// Step 9: 删除 Project
 	err = tx.Project.DeleteOneID(projectID).Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("delete project: %w", err)
-	}
-
-	// 提交事务
-	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return storagePaths, nil
