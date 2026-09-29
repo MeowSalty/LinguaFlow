@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"net/http"
 )
 
 // ModelInfo 是可用模型的统一描述。
@@ -17,7 +18,7 @@ type ModelLister interface {
 }
 
 // ModelListerFactory 仅凭 options（api_key 必填，base_url 可选）构造 ModelLister。
-type ModelListerFactory func(opts map[string]any) (ModelLister, error)
+type ModelListerFactory func(opts map[string]any, clients ...*http.Client) (ModelLister, error)
 
 // MaxModels 是单次 ListModels 返回条目上限，防止极端服务返回超大列表。
 const MaxModels = 200
@@ -31,10 +32,14 @@ func RegisterModelLister(typ string, f ModelListerFactory) {
 }
 
 // NewModelLister 按 type 与 options 构造 ModelLister。
-func NewModelLister(typ string, opts map[string]any) (ModelLister, error) {
+func NewModelLister(typ string, opts map[string]any, clients ...*http.Client) (ModelLister, error) {
 	f, ok := modelListerFactories[typ]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownBackendType, typ)
 	}
-	return f(opts)
+	var client *http.Client
+	if len(clients) > 0 {
+		client = clients[0]
+	}
+	return f(opts, client)
 }
