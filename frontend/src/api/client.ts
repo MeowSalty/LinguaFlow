@@ -208,6 +208,7 @@ export const apiClient = new Proxy({} as ApiClient, {
 // Re-export 所有子模块以保持向后兼容
 export * from './token-storage'
 export * from './utils'
+export * from './account'
 export * from './auth'
 export * from './backends'
 export * from './projects'
