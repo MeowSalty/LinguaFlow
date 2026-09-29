@@ -340,7 +340,7 @@ func (s *Server) QaRecheck(w http.ResponseWriter, r *http.Request, _ ProjectId) 
 
 // ---- 提示词模板适配器 ----
 
-func (s *Server) ListPromptTemplates(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ListPromptTemplates(w http.ResponseWriter, r *http.Request, _ ListPromptTemplatesParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListPromptTemplates)).ServeHTTP(w, r)
 }
 
@@ -362,7 +362,7 @@ func (s *Server) DeletePromptTemplate(w http.ResponseWriter, r *http.Request, _ 
 
 // ---- 术语抽取提示词模板适配器 ----
 
-func (s *Server) ListBootstrapPromptTemplates(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ListBootstrapPromptTemplates(w http.ResponseWriter, r *http.Request, _ ListBootstrapPromptTemplatesParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListBootstrapPromptTemplates)).ServeHTTP(w, r)
 }
 
@@ -384,7 +384,7 @@ func (s *Server) DeleteBootstrapPromptTemplate(w http.ResponseWriter, r *http.Re
 
 // ---- 术语精简提示词模板适配器 ----
 
-func (s *Server) ListPrunePromptTemplates(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ListPrunePromptTemplates(w http.ResponseWriter, r *http.Request, _ ListPrunePromptTemplatesParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListPrunePromptTemplates)).ServeHTTP(w, r)
 }
 
@@ -420,13 +420,13 @@ func (s *Server) ApplyGlossaryPrune(w http.ResponseWriter, r *http.Request, proj
 
 // ---- 执行策略配置适配器 ----
 
-func (s *Server) ListExecutionProfiles(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ListExecutionProfiles(w http.ResponseWriter, r *http.Request, _ ListExecutionProfilesParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListExecutionProfiles)).ServeHTTP(w, r)
 }
 
 // ---- 执行计划模板适配器 ----
 
-func (s *Server) ListExecutionPlanTemplates(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ListExecutionPlanTemplates(w http.ResponseWriter, r *http.Request, _ ListExecutionPlanTemplatesParams) {
 	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authUser, ok := authUserFromContext(r.Context())
 		if !ok {
