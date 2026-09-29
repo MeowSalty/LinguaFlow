@@ -53,6 +53,20 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	return s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authUser, ok := authUserFromContext(r.Context())
+		// Local authentication uses a bootstrap identity; administrative access
+		// must still observe role revocation and account disabling immediately.
+		if ok && s.isLocal() {
+			current, err := s.entClient.User.Get(r.Context(), authUser.User.ID)
+			if err != nil {
+				s.writeServiceError(w, r, err)
+				return
+			}
+			authUser.User = current
+			if !current.Active {
+				s.writeAuthProblem(w, r, service.ErrUserInactive)
+				return
+			}
+		}
 		if !ok || authUser.User.Role != service.SystemRoleAdmin {
 			s.writeProblem(w, r, http.StatusForbidden, "forbidden", "需要管理员权限")
 			return
