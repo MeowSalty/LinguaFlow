@@ -85,6 +85,7 @@ type ActivityLogMutation struct {
 	id                  *int
 	created_at          *time.Time
 	updated_at          *time.Time
+	visibility_scope    *activitylog.VisibilityScope
 	action              *string
 	resource_type       *string
 	resource_id         *int
@@ -271,6 +272,42 @@ func (m *ActivityLogMutation) OldUpdatedAt(ctx context.Context) (v time.Time, er
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *ActivityLogMutation) ResetUpdatedAt() {
 	m.updated_at = nil
+}
+
+// SetVisibilityScope sets the "visibility_scope" field.
+func (m *ActivityLogMutation) SetVisibilityScope(as activitylog.VisibilityScope) {
+	m.visibility_scope = &as
+}
+
+// VisibilityScope returns the value of the "visibility_scope" field in the mutation.
+func (m *ActivityLogMutation) VisibilityScope() (r activitylog.VisibilityScope, exists bool) {
+	v := m.visibility_scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVisibilityScope returns the old "visibility_scope" field's value of the ActivityLog entity.
+// If the ActivityLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ActivityLogMutation) OldVisibilityScope(ctx context.Context) (v activitylog.VisibilityScope, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVisibilityScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVisibilityScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVisibilityScope: %w", err)
+	}
+	return oldValue.VisibilityScope, nil
+}
+
+// ResetVisibilityScope resets all changes to the "visibility_scope" field.
+func (m *ActivityLogMutation) ResetVisibilityScope() {
+	m.visibility_scope = nil
 }
 
 // SetAction sets the "action" field.
@@ -651,12 +688,15 @@ func (m *ActivityLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ActivityLogMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 8)
 	if m.created_at != nil {
 		fields = append(fields, activitylog.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, activitylog.FieldUpdatedAt)
+	}
+	if m.visibility_scope != nil {
+		fields = append(fields, activitylog.FieldVisibilityScope)
 	}
 	if m.action != nil {
 		fields = append(fields, activitylog.FieldAction)
@@ -685,6 +725,8 @@ func (m *ActivityLogMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case activitylog.FieldUpdatedAt:
 		return m.UpdatedAt()
+	case activitylog.FieldVisibilityScope:
+		return m.VisibilityScope()
 	case activitylog.FieldAction:
 		return m.Action()
 	case activitylog.FieldResourceType:
@@ -708,6 +750,8 @@ func (m *ActivityLogMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldCreatedAt(ctx)
 	case activitylog.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
+	case activitylog.FieldVisibilityScope:
+		return m.OldVisibilityScope(ctx)
 	case activitylog.FieldAction:
 		return m.OldAction(ctx)
 	case activitylog.FieldResourceType:
@@ -740,6 +784,13 @@ func (m *ActivityLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
+		return nil
+	case activitylog.FieldVisibilityScope:
+		v, ok := value.(activitylog.VisibilityScope)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVisibilityScope(v)
 		return nil
 	case activitylog.FieldAction:
 		v, ok := value.(string)
@@ -860,6 +911,9 @@ func (m *ActivityLogMutation) ResetField(name string) error {
 		return nil
 	case activitylog.FieldUpdatedAt:
 		m.ResetUpdatedAt()
+		return nil
+	case activitylog.FieldVisibilityScope:
+		m.ResetVisibilityScope()
 		return nil
 	case activitylog.FieldAction:
 		m.ResetAction()
@@ -23479,6 +23533,7 @@ type UsageRecordMutation struct {
 	id                  *int
 	created_at          *time.Time
 	updated_at          *time.Time
+	visibility_scope    *usagerecord.VisibilityScope
 	source              *string
 	api_calls           *int
 	addapi_calls        *int
@@ -23669,6 +23724,42 @@ func (m *UsageRecordMutation) OldUpdatedAt(ctx context.Context) (v time.Time, er
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *UsageRecordMutation) ResetUpdatedAt() {
 	m.updated_at = nil
+}
+
+// SetVisibilityScope sets the "visibility_scope" field.
+func (m *UsageRecordMutation) SetVisibilityScope(us usagerecord.VisibilityScope) {
+	m.visibility_scope = &us
+}
+
+// VisibilityScope returns the value of the "visibility_scope" field in the mutation.
+func (m *UsageRecordMutation) VisibilityScope() (r usagerecord.VisibilityScope, exists bool) {
+	v := m.visibility_scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVisibilityScope returns the old "visibility_scope" field's value of the UsageRecord entity.
+// If the UsageRecord object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageRecordMutation) OldVisibilityScope(ctx context.Context) (v usagerecord.VisibilityScope, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVisibilityScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVisibilityScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVisibilityScope: %w", err)
+	}
+	return oldValue.VisibilityScope, nil
+}
+
+// ResetVisibilityScope resets all changes to the "visibility_scope" field.
+func (m *UsageRecordMutation) ResetVisibilityScope() {
+	m.visibility_scope = nil
 }
 
 // SetSource sets the "source" field.
@@ -24131,12 +24222,15 @@ func (m *UsageRecordMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageRecordMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.created_at != nil {
 		fields = append(fields, usagerecord.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, usagerecord.FieldUpdatedAt)
+	}
+	if m.visibility_scope != nil {
+		fields = append(fields, usagerecord.FieldVisibilityScope)
 	}
 	if m.source != nil {
 		fields = append(fields, usagerecord.FieldSource)
@@ -24168,6 +24262,8 @@ func (m *UsageRecordMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case usagerecord.FieldUpdatedAt:
 		return m.UpdatedAt()
+	case usagerecord.FieldVisibilityScope:
+		return m.VisibilityScope()
 	case usagerecord.FieldSource:
 		return m.Source()
 	case usagerecord.FieldAPICalls:
@@ -24193,6 +24289,8 @@ func (m *UsageRecordMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldCreatedAt(ctx)
 	case usagerecord.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
+	case usagerecord.FieldVisibilityScope:
+		return m.OldVisibilityScope(ctx)
 	case usagerecord.FieldSource:
 		return m.OldSource(ctx)
 	case usagerecord.FieldAPICalls:
@@ -24227,6 +24325,13 @@ func (m *UsageRecordMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
+		return nil
+	case usagerecord.FieldVisibilityScope:
+		v, ok := value.(usagerecord.VisibilityScope)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVisibilityScope(v)
 		return nil
 	case usagerecord.FieldSource:
 		v, ok := value.(string)
@@ -24384,6 +24489,9 @@ func (m *UsageRecordMutation) ResetField(name string) error {
 		return nil
 	case usagerecord.FieldUpdatedAt:
 		m.ResetUpdatedAt()
+		return nil
+	case usagerecord.FieldVisibilityScope:
+		m.ResetVisibilityScope()
 		return nil
 	case usagerecord.FieldSource:
 		m.ResetSource()

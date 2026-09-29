@@ -25,6 +25,8 @@ type ActivityLog struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// VisibilityScope holds the value of the "visibility_scope" field.
+	VisibilityScope activitylog.VisibilityScope `json:"visibility_scope,omitempty"`
 	// Action holds the value of the "action" field.
 	Action string `json:"action,omitempty"`
 	// ResourceType holds the value of the "resource_type" field.
@@ -99,7 +101,7 @@ func (*ActivityLog) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case activitylog.FieldID, activitylog.FieldResourceID:
 			values[i] = new(sql.NullInt64)
-		case activitylog.FieldAction, activitylog.FieldResourceType, activitylog.FieldMessage:
+		case activitylog.FieldVisibilityScope, activitylog.FieldAction, activitylog.FieldResourceType, activitylog.FieldMessage:
 			values[i] = new(sql.NullString)
 		case activitylog.FieldCreatedAt, activitylog.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -141,6 +143,12 @@ func (_m *ActivityLog) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case activitylog.FieldVisibilityScope:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field visibility_scope", values[i])
+			} else if value.Valid {
+				_m.VisibilityScope = activitylog.VisibilityScope(value.String)
 			}
 		case activitylog.FieldAction:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -252,6 +260,9 @@ func (_m *ActivityLog) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("visibility_scope=")
+	builder.WriteString(fmt.Sprintf("%v", _m.VisibilityScope))
 	builder.WriteString(", ")
 	builder.WriteString("action=")
 	builder.WriteString(_m.Action)
