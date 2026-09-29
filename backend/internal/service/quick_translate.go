@@ -345,15 +345,17 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 			metadata["project_id"] = p
 		}
 		auditEvent := AuditEvent{
-			ActorUserID:  in.ActorUserID,
-			ProjectID:    projectIDPtr,
-			Action:       "quick_translate",
-			ResourceType: "quick_translate",
-			Message:      fmt.Sprintf("Instant translate (plan=%d)", in.ExecutionPlanID),
-			Metadata:     metadata,
+			VisibilityScope: "personal",
+			ActorUserID:     in.ActorUserID,
+			ProjectID:       projectIDPtr,
+			Action:          "quick_translate",
+			ResourceType:    "quick_translate",
+			Message:         fmt.Sprintf("Instant translate (plan=%d)", in.ExecutionPlanID),
+			Metadata:        metadata,
 		}
-		if projectRow != nil && projectRow.OwnerOrgID != nil {
-			auditEvent.OrgID = projectRow.OwnerOrgID
+		if projectRow != nil {
+			auditEvent.VisibilityScope = "project"
+			auditEvent.OrgID = EffectiveProjectOrgID(projectRow)
 		}
 		auditCtx, auditCancel := context.WithTimeout(context.WithoutCancel(runCtx), 5*time.Second)
 		if err := s.audit.Record(auditCtx, auditEvent); err != nil {
@@ -391,6 +393,7 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 // OrganizationID，无项目时均留空。
 func (s *QuickTranslateService) recordQuickUsage(ctx context.Context, in QuickTranslateInput, projectRow *ent.Project, metrics backend.MeterMetrics) error {
 	usage := s.client.UsageRecord.Create().
+		SetVisibilityScope("personal").
 		SetSource("quick_translate").
 		SetSegmentCount(1).
 		SetAPICalls(clampInt64ToInt(metrics.APICalls)).
@@ -401,9 +404,10 @@ func (s *QuickTranslateService) recordQuickUsage(ctx context.Context, in QuickTr
 		usage.SetUserID(in.ActorUserID)
 	}
 	if projectRow != nil {
+		usage.SetVisibilityScope("project")
 		usage.SetProjectID(*in.ProjectID)
-		if projectRow.OwnerOrgID != nil {
-			usage.SetOrganizationID(*projectRow.OwnerOrgID)
+		if orgID := EffectiveProjectOrgID(projectRow); orgID != nil {
+			usage.SetOrganizationID(*orgID)
 		}
 	}
 	return usage.Exec(ctx)

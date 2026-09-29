@@ -16,6 +16,13 @@ statsSummary:
 
 activity:
   parameters:
+    - name: org_id
+      in: query
+      required: false
+      description: 仅查询指定组织的活动；正整数，不存在返回 404，非成员返回 403。拒绝未知、重复或空查询参数。
+      schema:
+        type: integer
+        minimum: 1
     - $ref: '../base.yaml#/components/parameters/Cursor'
     - $ref: '../base.yaml#/components/parameters/Limit'
   get:

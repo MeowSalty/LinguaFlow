@@ -409,6 +409,14 @@ Activity:
   type: object
   required: [id, action, resource_type, created_at, updated_at]
   properties:
+    organization_id:
+      type: integer
+      minimum: 1
+      description: 当前有效的组织归属，不从操作者身份推导。
+    project_id:
+      type: integer
+      minimum: 1
+      description: 活动所属的仍存在的项目。
     id:
       type: integer
     action:
