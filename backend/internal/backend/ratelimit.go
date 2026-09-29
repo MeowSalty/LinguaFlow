@@ -236,9 +236,19 @@ func (r *tokenBucket) Close() {
 }
 
 func (r *tokenBucket) Wait(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case <-r.done:
+		return ErrLimiterClosed
+	default:
+	}
 	select {
 	case <-r.tokens:
 		return nil
+	case <-r.done:
+		return ErrLimiterClosed
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -246,8 +256,8 @@ func (r *tokenBucket) Wait(ctx context.Context) error {
 
 type nopLimiter struct{}
 
-func (nopLimiter) Wait(context.Context) error { return nil }
-func (nopLimiter) Close()                     {}
+func (nopLimiter) Wait(ctx context.Context) error { return ctx.Err() }
+func (nopLimiter) Close()                         {}
 
 // RateLimitedBackend 包装一个 Backend，在每次 Translate 前先通过限流器。
 // 用于按后端实例独立限流，与 Stage 级全局限流器互补。
