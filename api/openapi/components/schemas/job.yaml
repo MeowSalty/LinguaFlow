@@ -196,6 +196,84 @@ Job:
       type: string
       format: date-time
 
+JobSummaryProgress:
+  description: 与 JobProgress 使用相同的计数口径；本阶段队列位置和队列总数固定为 null，不暴露实例级队列负载
+  allOf:
+    - $ref: '#/JobProgress'
+    - type: object
+      required: [queue_position, queue_size]
+      properties:
+        queue_position:
+          type: integer
+          nullable: true
+        queue_size:
+          type: integer
+          nullable: true
+
+JobSummary:
+  type: object
+  required: [id, project_id, project_name, status, trigger_type, progress, created_at, updated_at, started_at]
+  properties:
+    id:
+      type: integer
+    project_id:
+      type: integer
+    project_name:
+      type: string
+    status:
+      type: string
+      enum: [pending, running, paused, completed, failed, cancelled]
+    trigger_type:
+      type: string
+      enum: [manual, file_update, glossary_change, web_edit]
+    progress:
+      $ref: '#/JobSummaryProgress'
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+    started_at:
+      type: string
+      format: date-time
+      nullable: true
+
+JobSummaryListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/JobSummary'
+    next_cursor:
+      type: string
+
+JobsSummaryResponse:
+  type: object
+  required: [pending, running, paused, recent_failed, recent_failed_since, as_of]
+  properties:
+    pending:
+      type: integer
+      minimum: 0
+    running:
+      type: integer
+      minimum: 0
+    paused:
+      type: integer
+      minimum: 0
+    recent_failed:
+      type: integer
+      minimum: 0
+      description: 当前失败且最近 7 天内更新的任务数；重试后不再计入
+    recent_failed_since:
+      type: string
+      format: date-time
+    as_of:
+      type: string
+      format: date-time
+
 JobListResponse:
   type: object
   required: [items]

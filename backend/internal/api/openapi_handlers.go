@@ -242,6 +242,18 @@ func (s *Server) ListJobs(w http.ResponseWriter, r *http.Request, _ ProjectId, _
 	s.requireAuth(http.HandlerFunc(s.handleListJobs)).ServeHTTP(w, r)
 }
 
+func (s *Server) ListAccessibleJobs(w http.ResponseWriter, r *http.Request, params ListAccessibleJobsParams) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleListAccessibleJobs(w, r, params)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) GetJobsSummary(w http.ResponseWriter, r *http.Request, params GetJobsSummaryParams) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleJobsSummary(w, r, params)
+	})).ServeHTTP(w, r)
+}
+
 func (s *Server) CreateJob(w http.ResponseWriter, r *http.Request, _ ProjectId) {
 	s.requireAuth(http.HandlerFunc(s.handleCreateJob)).ServeHTTP(w, r)
 }

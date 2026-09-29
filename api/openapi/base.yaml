@@ -2,6 +2,11 @@ openapi: 3.0.3
 info:
   title: LinguaFlow Web Service API
   version: 0.1.0
+  description: |
+    平台时间点使用 UTC。所有 date-time 响应（包括 SSE 事件）使用 RFC3339 的 Z 后缀，
+    保留有效小数秒；输入接受带时区偏移的 RFC3339，并按实际时间点解释。
+    SQLite 保留纳秒精度，PostgreSQL 保留微秒精度。空值和字段省略规则由各字段定义。
+    时间区间默认按接口声明解释；任务更新时间筛选使用左闭右开区间。
 servers:
   - url: /api/v1
 paths:
@@ -109,6 +114,10 @@ paths:
     $ref: './paths/glossary.yaml#/glossaryPruneApply'
   /projects/{projectId}/jobs:
     $ref: './paths/jobs.yaml#/projectJobs'
+  /jobs:
+    $ref: './paths/jobs.yaml#/accessibleJobs'
+  /jobs/summary:
+    $ref: './paths/jobs.yaml#/jobsSummary'
   /jobs/{jobId}:
    $ref: './paths/jobs.yaml#/jobById'
   /jobs/{jobId}/cancel:
@@ -318,6 +327,14 @@ components:
       $ref: './components/schemas/job.yaml#/JobProgress'
     JobListResponse:
       $ref: './components/schemas/job.yaml#/JobListResponse'
+    JobSummary:
+      $ref: './components/schemas/job.yaml#/JobSummary'
+    JobSummaryProgress:
+      $ref: './components/schemas/job.yaml#/JobSummaryProgress'
+    JobSummaryListResponse:
+      $ref: './components/schemas/job.yaml#/JobSummaryListResponse'
+    JobsSummaryResponse:
+      $ref: './components/schemas/job.yaml#/JobsSummaryResponse'
     JobEvent:
       $ref: './components/schemas/job.yaml#/JobEvent'
     JobEventListResponse:
