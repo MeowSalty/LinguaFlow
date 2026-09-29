@@ -1,0 +1,132 @@
+RuntimeSummary:
+  type: object
+  required: [instance_id, started_at, as_of, uptime_seconds, scope, runners, limiters, external_requests]
+  properties:
+    instance_id:
+      type: string
+    started_at:
+      type: string
+      format: date-time
+    as_of:
+      type: string
+      format: date-time
+    uptime_seconds:
+      type: number
+      minimum: 0
+    scope:
+      type: string
+      enum: [instance]
+    runners:
+      type: array
+      items:
+        $ref: '#/RuntimeRunner'
+    limiters:
+      $ref: '#/RuntimeLimiters'
+    external_requests:
+      type: array
+      items:
+        $ref: '#/RuntimeExternalRequests'
+
+RuntimeRunner:
+  type: object
+  required: [task_type, state, recovered_total, recovery_errors_total, queue_capacity, queue_waiting, enqueue_waiters, worker_capacity, workers_alive, workers_busy]
+  properties:
+    task_type:
+      type: string
+      enum: [translation, glossary_sync]
+    state:
+      type: string
+      enum: [starting, recovering, running, degraded, stopping, stopped]
+    recovered_total:
+      type: integer
+      format: int64
+      minimum: 0
+    recovery_errors_total:
+      type: integer
+      format: int64
+      minimum: 0
+    queue_capacity:
+      $ref: '#/NullableGauge'
+    queue_waiting:
+      $ref: '#/NullableGauge'
+    enqueue_waiters:
+      $ref: '#/NullableGauge'
+    worker_capacity:
+      $ref: '#/NullableGauge'
+    workers_alive:
+      $ref: '#/NullableGauge'
+    workers_busy:
+      $ref: '#/NullableGauge'
+
+NullableGauge:
+  type: integer
+  minimum: 0
+  nullable: true
+
+RuntimeLimiters:
+  type: object
+  nullable: true
+  required: [state, active_limiters, waiters, wait_duration_seconds_sum, wait_duration_seconds_count, wait_cancelled_total]
+  properties:
+    state:
+      type: string
+      enum: [uninitialized, ready, stopped]
+    active_limiters:
+      type: integer
+      minimum: 0
+    waiters:
+      type: integer
+      minimum: 0
+    wait_duration_seconds_sum:
+      type: number
+      minimum: 0
+    wait_duration_seconds_count:
+      type: integer
+      format: int64
+      minimum: 0
+    wait_cancelled_total:
+      type: integer
+      format: int64
+      minimum: 0
+
+RuntimeExternalRequests:
+  type: object
+  required: [provider, operation, http_attempts_inflight, http_attempts_total, outcomes]
+  properties:
+    provider:
+      type: string
+      enum: [openai, anthropic, google, other]
+    operation:
+      type: string
+      enum: [generate, list_models]
+    http_attempts_inflight:
+      type: integer
+      format: int64
+      minimum: 0
+    http_attempts_total:
+      type: integer
+      format: int64
+      minimum: 0
+    outcomes:
+      type: array
+      items:
+        $ref: '#/RuntimeHTTPOutcome'
+
+RuntimeHTTPOutcome:
+  type: object
+  required: [outcome, http_attempts_finished_total, http_attempt_duration_seconds_sum, http_attempt_duration_seconds_count]
+  properties:
+    outcome:
+      type: string
+      enum: [success, http_error, transport_error, timeout, cancelled]
+    http_attempts_finished_total:
+      type: integer
+      format: int64
+      minimum: 0
+    http_attempt_duration_seconds_sum:
+      type: number
+      minimum: 0
+    http_attempt_duration_seconds_count:
+      type: integer
+      format: int64
+      minimum: 0

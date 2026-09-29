@@ -1,0 +1,371 @@
+package service
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"sort"
+	"time"
+
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
+)
+
+const (
+	OperationTranslation  = "translation"
+	OperationGlossarySync = "glossary_sync"
+)
+
+// OperationQueryService projects independent business entities without owning their lifecycle.
+type OperationQueryService struct{ client *ent.Client }
+
+func NewOperationQueryService(client *ent.Client) *OperationQueryService {
+	return &OperationQueryService{client: client}
+}
+
+type OperationListOptions struct {
+	AccessibleJobListOptions
+	TaskType string
+}
+type OperationSummaryOptions struct {
+	TaskType    string
+	ProjectID   int
+	TriggerType string
+}
+type OperationRow struct {
+	TaskType    string
+	Job         *ent.Job
+	SyncTask    *ent.SyncTask
+	ProjectName string
+}
+
+func (r OperationRow) ID() int {
+	if r.Job != nil {
+		return r.Job.ID
+	}
+	return r.SyncTask.ID
+}
+func (r OperationRow) ProjectID() int {
+	if r.Job != nil {
+		return r.Job.ProjectID
+	}
+	return r.SyncTask.ProjectID
+}
+func (r OperationRow) UpdatedAt() time.Time {
+	if r.Job != nil {
+		return r.Job.UpdatedAt
+	}
+	return r.SyncTask.UpdatedAt
+}
+
+type OperationPage struct {
+	Items      []OperationRow
+	NextCursor string
+}
+type OperationCounts struct {
+	Pending      int `json:"pending"`
+	Running      int `json:"running"`
+	Paused       int `json:"paused"`
+	RecentFailed int `json:"recent_failed"`
+}
+type OperationsCountsSummary struct {
+	Total  OperationCounts `json:"total"`
+	ByType struct {
+		Translation  OperationCounts `json:"translation"`
+		GlossarySync OperationCounts `json:"glossary_sync"`
+	} `json:"by_type"`
+	RecentFailedSince time.Time `json:"recent_failed_since"`
+	AsOf              time.Time `json:"as_of"`
+}
+type operationCursor struct {
+	Version   int       `json:"v"`
+	Filter    string    `json:"filter"`
+	UpdatedAt time.Time `json:"updated_at"`
+	TaskType  string    `json:"task_type"`
+	TaskID    int       `json:"task_id"`
+}
+
+func validateOperationScope(kind string, projectID int, trigger string) error {
+	if kind != "" && kind != OperationTranslation && kind != OperationGlossarySync {
+		return fmt.Errorf("%w: invalid task_type", ErrInvalidInput)
+	}
+	if trigger != "" && kind != OperationTranslation {
+		return fmt.Errorf("%w: trigger_type requires task_type=translation", ErrInvalidInput)
+	}
+	return validateJobQueryScope(projectID, trigger)
+}
+func operationFilterKey(opts OperationListOptions) string {
+	opts.Cursor = ""
+	opts.Limit = 0
+	if opts.State == "" && opts.Status == "" {
+		opts.State = "active"
+	}
+	if opts.UpdatedFrom != nil {
+		t := opts.UpdatedFrom.UTC()
+		opts.UpdatedFrom = &t
+	}
+	if opts.UpdatedBefore != nil {
+		t := opts.UpdatedBefore.UTC()
+		opts.UpdatedBefore = &t
+	}
+	raw, _ := json.Marshal(opts) // All fields are JSON primitives or validated time values.
+	hash := sha256.Sum256(raw)
+	return hex.EncodeToString(hash[:])
+}
+func decodeOperationCursor(raw, filter string) (*operationCursor, error) {
+	invalid := fmt.Errorf("%w: invalid operation cursor", ErrInvalidInput)
+	if len(raw) > 2048 {
+		return nil, invalid
+	}
+	data, err := base64.RawURLEncoding.Strict().DecodeString(raw)
+	if err != nil || base64.RawURLEncoding.EncodeToString(data) != raw {
+		return nil, invalid
+	}
+	var c operationCursor
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&c); err != nil {
+		return nil, invalid
+	}
+	if dec.Decode(new(any)) != io.EOF || c.Version != 1 || c.Filter != filter || c.TaskID <= 0 || c.UpdatedAt.IsZero() || (c.TaskType != OperationTranslation && c.TaskType != OperationGlossarySync) {
+		return nil, invalid
+	}
+	c.UpdatedAt = c.UpdatedAt.UTC()
+	return &c, nil
+}
+
+// Bare timestamp columns preserve indexes. Fractional PostgreSQL bounds round up
+// so a half-open interval keeps its meaning at the database's microsecond precision.
+func operationTimePredicate(op sql.Op, instant time.Time) func(*sql.Selector) {
+	return func(s *sql.Selector) {
+		bound := instant.UTC()
+		if s.Dialect() == dialect.Postgres && (op == sql.OpGTE || op == sql.OpLT) {
+			bound = timeutil.CeilMicrosecond(bound)
+		}
+		s.Where(sql.P(func(b *sql.Builder) { b.Ident(s.C("updated_at")).WriteOp(op).Arg(bound) }))
+	}
+}
+func operationQueryFilter(opts OperationListOptions, kind string, c *operationCursor, precisionErr *error) func(*sql.Selector) {
+	return func(s *sql.Selector) {
+		if kind == OperationGlossarySync && opts.Status == "paused" {
+			s.Where(sql.EQ(s.C("id"), 0))
+			return
+		}
+		if opts.Status != "" {
+			s.Where(sql.EQ(s.C("status"), opts.Status))
+		} else {
+			switch opts.State {
+			case "", "active":
+				if kind == OperationGlossarySync {
+					s.Where(sql.In(s.C("status"), "pending", "running"))
+				} else {
+					s.Where(sql.In(s.C("status"), "pending", "running", "paused"))
+				}
+			case "terminal":
+				s.Where(sql.In(s.C("status"), "completed", "failed", "cancelled"))
+			}
+		}
+		if opts.UpdatedFrom != nil {
+			operationTimePredicate(sql.OpGTE, *opts.UpdatedFrom)(s)
+		}
+		if opts.UpdatedBefore != nil {
+			operationTimePredicate(sql.OpLT, *opts.UpdatedBefore)(s)
+		}
+		if c == nil {
+			return
+		}
+		if s.Dialect() == dialect.Postgres && c.UpdatedAt.Nanosecond()%1000 != 0 {
+			*precisionErr = fmt.Errorf("%w: cursor exceeds database timestamp precision", ErrInvalidInput)
+			s.AddError(*precisionErr)
+			return
+		}
+		before := sql.LT(s.C("updated_at"), c.UpdatedAt)
+		switch {
+		case kind < c.TaskType:
+			s.Where(sql.Or(before, sql.EQ(s.C("updated_at"), c.UpdatedAt)))
+		case kind == c.TaskType:
+			s.Where(sql.Or(before, sql.And(sql.EQ(s.C("updated_at"), c.UpdatedAt), sql.LT(s.C("id"), c.TaskID))))
+		default:
+			s.Where(before)
+		}
+	}
+}
+func (s *OperationQueryService) jobs(actor, projectID int, trigger string) *ent.JobQuery {
+	q := s.client.Job.Query().Where(job.HasProjectWith(readableProjectPredicate(actor)))
+	if projectID != 0 {
+		q.Where(job.ProjectIDEQ(projectID))
+	}
+	if trigger != "" {
+		q.Where(job.TriggerTypeEQ(trigger))
+	}
+	return q
+}
+func (s *OperationQueryService) syncTasks(actor, projectID int) *ent.SyncTaskQuery {
+	q := s.client.SyncTask.Query().Where(synctask.HasProjectWith(readableProjectPredicate(actor)))
+	if projectID != 0 {
+		q.Where(synctask.ProjectIDEQ(projectID))
+	}
+	return q
+}
+
+func (s *OperationQueryService) List(ctx context.Context, actor int, opts OperationListOptions) (*OperationPage, error) {
+	if err := validateOperationScope(opts.TaskType, opts.ProjectID, opts.TriggerType); err != nil {
+		return nil, err
+	}
+	if err := validateAccessibleJobOptions(opts.AccessibleJobListOptions); err != nil {
+		return nil, err
+	}
+	if opts.Limit == 0 {
+		opts.Limit = 50
+	}
+	filter := operationFilterKey(opts)
+	var cursor *operationCursor
+	if opts.Cursor != "" {
+		var err error
+		cursor, err = decodeOperationCursor(opts.Cursor, filter)
+		if err != nil {
+			return nil, err
+		}
+	}
+	rows := make([]OperationRow, 0, 2*(opts.Limit+1))
+	var precisionErr error
+	if opts.TaskType != OperationGlossarySync {
+		found, err := s.jobs(actor, opts.ProjectID, opts.TriggerType).
+			Where(operationQueryFilter(opts, OperationTranslation, cursor, &precisionErr)).
+			Select(job.FieldID, job.FieldProjectID, job.FieldStatus, job.FieldTriggerType, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldProgressTotal, job.FieldProgressCompleted, job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt).
+			Order(ent.Desc(job.FieldUpdatedAt), ent.Desc(job.FieldID)).Limit(opts.Limit + 1).All(ctx)
+		if precisionErr != nil {
+			return nil, precisionErr
+		}
+		if err != nil {
+			return nil, fmt.Errorf("query operation jobs: %w", err)
+		}
+		for _, row := range found {
+			rows = append(rows, OperationRow{TaskType: OperationTranslation, Job: row})
+		}
+	}
+	if opts.TaskType != OperationTranslation {
+		found, err := s.syncTasks(actor, opts.ProjectID).
+			Where(operationQueryFilter(opts, OperationGlossarySync, cursor, &precisionErr)).
+			Select(synctask.FieldID, synctask.FieldProjectID, synctask.FieldStatus, synctask.FieldProcessedSegments, synctask.FieldTotalSegments, synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldStartedAt).
+			Order(ent.Desc(synctask.FieldUpdatedAt), ent.Desc(synctask.FieldID)).Limit(opts.Limit + 1).All(ctx)
+		if precisionErr != nil {
+			return nil, precisionErr
+		}
+		if err != nil {
+			return nil, fmt.Errorf("query operation sync tasks: %w", err)
+		}
+		for _, row := range found {
+			rows = append(rows, OperationRow{TaskType: OperationGlossarySync, SyncTask: row})
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if !rows[i].UpdatedAt().Equal(rows[j].UpdatedAt()) {
+			return rows[i].UpdatedAt().After(rows[j].UpdatedAt())
+		}
+		if rows[i].TaskType != rows[j].TaskType {
+			return rows[i].TaskType > rows[j].TaskType
+		}
+		return rows[i].ID() > rows[j].ID()
+	})
+	page := &OperationPage{Items: rows}
+	if len(rows) > opts.Limit {
+		page.Items = rows[:opts.Limit]
+		last := page.Items[len(page.Items)-1]
+		raw, err := json.Marshal(operationCursor{1, filter, last.UpdatedAt().UTC(), last.TaskType, last.ID()})
+		if err != nil {
+			return nil, err
+		}
+		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
+	}
+	if len(page.Items) == 0 {
+		return page, nil
+	}
+	ids := make([]int, 0, len(page.Items))
+	seen := map[int]bool{}
+	for _, row := range page.Items {
+		if !seen[row.ProjectID()] {
+			ids = append(ids, row.ProjectID())
+			seen[row.ProjectID()] = true
+		}
+	}
+	projects, err := s.client.Project.Query().Where(project.IDIn(ids...)).Select(project.FieldID, project.FieldName).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load operation project names: %w", err)
+	}
+	names := map[int]string{}
+	for _, p := range projects {
+		names[p.ID] = p.Name
+	}
+	for i := range page.Items {
+		page.Items[i].ProjectName = names[page.Items[i].ProjectID()]
+	}
+	return page, nil
+}
+
+func (s *OperationQueryService) Summary(ctx context.Context, actor int, opts OperationSummaryOptions) (*OperationsCountsSummary, error) {
+	return s.summaryAt(ctx, actor, opts, timeutil.NowUTC())
+}
+func (s *OperationQueryService) summaryAt(ctx context.Context, actor int, opts OperationSummaryOptions, now time.Time) (*OperationsCountsSummary, error) {
+	if err := validateOperationScope(opts.TaskType, opts.ProjectID, opts.TriggerType); err != nil {
+		return nil, err
+	}
+	result := &OperationsCountsSummary{AsOf: now.UTC(), RecentFailedSince: now.UTC().Add(-7 * 24 * time.Hour)}
+	filter := func(q *sql.Selector) {
+		since, until := result.RecentFailedSince, result.AsOf
+		if q.Dialect() == dialect.Postgres {
+			since = timeutil.CeilMicrosecond(since)
+			until = timeutil.CeilMicrosecond(until)
+		}
+		q.Where(sql.Or(sql.In(q.C("status"), "pending", "running", "paused"), sql.And(sql.EQ(q.C("status"), "failed"), sql.GTE(q.C("updated_at"), since), sql.LT(q.C("updated_at"), until))))
+	}
+	type bucket struct {
+		Status string `json:"status"`
+		Count  int    `json:"count"`
+	}
+	convert := func(rows []bucket, sync bool) OperationCounts {
+		var c OperationCounts
+		for _, r := range rows {
+			switch r.Status {
+			case "pending":
+				c.Pending = r.Count
+			case "running":
+				c.Running = r.Count
+			case "paused":
+				if !sync {
+					c.Paused = r.Count
+				}
+			case "failed":
+				c.RecentFailed = r.Count
+			}
+		}
+		return c
+	}
+	if opts.TaskType != OperationGlossarySync {
+		var buckets []bucket
+		if err := s.jobs(actor, opts.ProjectID, opts.TriggerType).Where(filter).GroupBy(job.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
+			return nil, err
+		}
+		result.ByType.Translation = convert(buckets, false)
+	}
+	if opts.TaskType != OperationTranslation {
+		var buckets []bucket
+		if err := s.syncTasks(actor, opts.ProjectID).Where(filter).GroupBy(synctask.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
+			return nil, err
+		}
+		result.ByType.GlossarySync = convert(buckets, true)
+	}
+	a, b := result.ByType.Translation, result.ByType.GlossarySync
+	result.Total = OperationCounts{a.Pending + b.Pending, a.Running + b.Running, a.Paused + b.Paused, a.RecentFailed + b.RecentFailed}
+	return result, nil
+}

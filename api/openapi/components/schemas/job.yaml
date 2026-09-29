@@ -62,11 +62,11 @@ JobProgress:
     queue_position:
       type: integer
       nullable: true
-      description: 在队列中的位置（1-based），null 表示不在队列中
+      description: 暂不可用，省略或为 null；不暴露全实例队列位置。
     queue_size:
       type: integer
       nullable: true
-      description: 当前队列中的任务总数
+      description: 暂不可用，省略或为 null；不暴露全实例队列人数。
 
 JobResource:
   type: object

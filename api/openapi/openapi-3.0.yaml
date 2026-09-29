@@ -7,6 +7,8 @@ info:
     保留有效小数秒；输入接受带时区偏移的 RFC3339，并按实际时间点解释。
     SQLite 保留纳秒精度，PostgreSQL 保留微秒精度。空值和字段省略规则由各字段定义。
     时间区间默认按接口声明解释；任务更新时间筛选使用左闭右开区间。
+    根路径 /metrics 为系统管理员认证的持久化数量兼容入口，保留原文本格式；
+    实时运行监控使用 /api/v1/admin/runtime/summary。外部抓取方须携带管理员认证。
 servers:
   - url: /api/v1
 paths:
@@ -1622,6 +1624,7 @@ paths:
         仅在 target 发生变更时有意义。
         支持 resource_ids 参数限定分析范围。
         采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+        要求项目读取权限；非法或非正整数 ID、非法资源范围返回 400，未认证 401，无权限 403。
       security:
         - bearerAuth: []
       requestBody:
@@ -1650,6 +1653,9 @@ paths:
         提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
         返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
         替换后的段落状态将被设置为 edited，需要人工复核。
+        要求项目写权限（个人所有者或组织 owner/admin），组织 member 仅可读取。
+        持久化成功即返回 202，内存投递失败由后台有界补投，不改报提交失败。
+        非法 ID 或资源范围 400，未认证 401，无写权限 403；不承诺网络重试幂等创建。
       security:
         - bearerAuth: []
       requestBody:
@@ -1681,7 +1687,9 @@ paths:
       summary: 查询术语同步任务状态
       description: |
         查询同步更新任务的执行进度和结果。
-        前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+        要求项目读取权限，仅打开详情时按需轮询；终态停止轮询。
+        非法或非正整数 ID 返回 400，未认证 401，无项目权限 403；已授权项目中任务不存在或不匹配返回 404。
+        result 为累计已提交结果，取消或失败不撤销已经完成的替换。
       security:
         - bearerAuth: []
       responses:
@@ -1692,7 +1700,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/GlossarySyncTaskStatusResponse'
         '404':
-          description: 任务不存在
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
   /projects/{projectId}/sync-tasks/{taskId}/cancel:
@@ -1709,7 +1717,9 @@ paths:
       summary: 取消术语同步任务
       description: |
         取消正在执行或等待执行的同步任务。
-        pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+        要求项目写权限（个人所有者或组织 owner/admin）；非法或非正整数 ID 400，未认证 401，无权限 403，任务不存在或不匹配 404。
+        取消与批次提交串行协调；成功响应后不再提交新修改，之前提交的结果保留。
+        重复取消幂等返回当前状态；completed/failed 返回 409 Problem。没有暂停、恢复或原任务重试能力。
       security:
         - bearerAuth: []
       responses:
@@ -1720,7 +1730,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/GlossarySyncTaskCancelResponse'
         '409':
-          description: 任务已完成或已失败，无法取消
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
   /projects/{projectId}/glossary/prune:
@@ -1925,6 +1935,98 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobsSummaryResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /operations:
+    get:
+      operationId: ListOperations
+      summary: 按项目权限发现翻译与术语同步任务
+      description: |
+        只读投影，不新增通用任务实体。默认返回两类活动任务，组织成员可看到同项目其他成员的任务。
+        未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限。
+        state 默认 active，与 status 互斥；同步没有 paused。trigger_type 仅允许显式 task_type=translation。
+        updated_at 区间为 [updated_from, updated_before)，按 updated_at DESC, task_type DESC, 整数 task_id DESC 排序。
+        独立版本化游标绑定规范化筛选（不含 limit）；不可使用 Job 游标。每页重新鉴权，不提供跨请求快照。
+        刷新从第一页开始并处理全部续页，客户端以 (task_type,task_id) 去重，单页缺失不代表任务结束。
+        未知、重复、空或非法参数均返回 400。开始时间未知为 null，不返回 ETA、配置、段落或资源 ID 数组、错误正文和全实例队列。
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/taskType'
+        - $ref: '#/components/parameters/jobProjectFilter'
+        - $ref: '#/components/parameters/jobTriggerFilter'
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum:
+              - active
+              - terminal
+              - all
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - pending
+              - running
+              - paused
+              - completed
+              - failed
+              - cancelled
+        - name: updated_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: updated_before
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: 轻量任务分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /operations/summary:
+    get:
+      operationId: GetOperationsSummary
+      summary: 获取两类任务的独立数量摘要
+      description: |
+        只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。
+        未知、重复、空或非法参数返回 400。权限与列表一致，无权项目返回零。
+        by_type 固定返回两类，未选类型计零，同步 paused 恒为零；total 为逐字段求和。
+        recent_failed 只数当前 failed 且 updated_at 位于 [recent_failed_since,as_of) 的记录，窗口为连续七天。
+        活动数不受时间限制；不受分页影响，不代表历史失败事件次数。
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/taskType'
+        - $ref: '#/components/parameters/jobProjectFilter'
+        - $ref: '#/components/parameters/jobTriggerFilter'
+      responses:
+        '200':
+          description: 数量摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsSummaryResponse'
         default:
           $ref: '#/components/responses/Problem'
   /jobs/{jobId}:
@@ -2680,6 +2782,34 @@ paths:
                 $ref: '#/components/schemas/SystemStats'
         default:
           $ref: '#/components/responses/Problem'
+  /admin/runtime/summary:
+    get:
+      operationId: AdminGetRuntimeSummary
+      summary: 当前实例运行容量与负载
+      description: |
+        仅当前系统管理员可读，组织角色不授予访问权；本地模式使用真实管理员身份。
+        不接受任何查询参数（认证使用 Authorization header）。未认证 401、无系统权限 403、非法查询 400。
+        collector 缺失返回 503 Problem，单 runner 恢复失败返回 200 和 degraded。
+        指标来自进程内存，不读写业务数量表。组件内部一致，跨组件近同时采样。
+        instance_id 每次 Server 运行随机生成；重启累计清零，不可拼接不同实例增量。
+        不含租户、任务、backend、模型、URL、凭据、路径或原始错误。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 当前实例快照
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeSummary'
+        default:
+          $ref: '#/components/responses/Problem'
   /admin/audit-logs:
     get:
       operationId: AdminListAuditLogs
@@ -2933,6 +3063,14 @@ components:
           - file_update
           - glossary_change
           - web_edit
+    taskType:
+      name: task_type
+      in: query
+      schema:
+        type: string
+        enum:
+          - translation
+          - glossary_sync
   responses:
     Problem:
       description: 错误响应
@@ -4378,11 +4516,11 @@ components:
         queue_position:
           type: integer
           nullable: true
-          description: 在队列中的位置（1-based），null 表示不在队列中
+          description: 暂不可用，省略或为 null；不暴露全实例队列位置。
         queue_size:
           type: integer
           nullable: true
-          description: 当前队列中的任务总数
+          description: 暂不可用，省略或为 null；不暴露全实例队列人数。
     JobListResponse:
       type: object
       required:
@@ -5005,7 +5143,7 @@ components:
           description: 待处理的段落总数
         result:
           type: object
-          description: 任务完成后的结果摘要（仅 status=completed 时存在）
+          description: 已提交批次的累计结果；运行、取消或失败时也可返回，取消不撤销已提交修改。
           properties:
             total_updated:
               type: integer
@@ -6283,6 +6421,184 @@ components:
           type: integer
         skipped_count:
           type: integer
+    OperationBase:
+      type: object
+      required:
+        - task_id
+        - project_id
+        - project_name
+        - status
+        - created_at
+        - updated_at
+        - started_at
+        - supported_actions
+      properties:
+        task_id:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        project_id:
+          type: integer
+          minimum: 1
+        project_name:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - paused
+            - completed
+            - failed
+            - cancelled
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        supported_actions:
+          type: array
+          description: 类型能力，不是当前状态或用户权限许可；执行时必须再次鉴权。
+          items:
+            type: string
+            enum:
+              - view
+              - pause
+              - resume
+              - cancel
+              - retry
+    TranslationOperation:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required:
+            - task_type
+            - trigger_type
+            - progress
+          properties:
+            task_type:
+              type: string
+              enum:
+                - translation
+            trigger_type:
+              type: string
+              enum:
+                - manual
+                - file_update
+                - glossary_change
+                - web_edit
+            progress:
+              $ref: '#/components/schemas/JobSummaryProgress'
+    GlossarySyncOperation:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required:
+            - task_type
+            - progress
+          properties:
+            task_type:
+              type: string
+              enum:
+                - glossary_sync
+            status:
+              type: string
+              enum:
+                - pending
+                - running
+                - completed
+                - failed
+                - cancelled
+            supported_actions:
+              type: array
+              items:
+                type: string
+                enum:
+                  - view
+                  - cancel
+            progress:
+              type: object
+              required:
+                - processed_segments
+                - total_segments
+              properties:
+                processed_segments:
+                  type: integer
+                  minimum: 0
+                  description: 已检查并提交的段落数，包含安全跳过项。
+                total_segments:
+                  type: integer
+                  minimum: 0
+    OperationSummary:
+      oneOf:
+        - $ref: '#/components/schemas/TranslationOperation'
+        - $ref: '#/components/schemas/GlossarySyncOperation'
+      discriminator:
+        propertyName: task_type
+        mapping:
+          translation: '#/components/schemas/TranslationOperation'
+          glossary_sync: '#/components/schemas/GlossarySyncOperation'
+    OperationListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationSummary'
+        next_cursor:
+          type: string
+    OperationCounts:
+      type: object
+      required:
+        - pending
+        - running
+        - paused
+        - recent_failed
+      properties:
+        pending:
+          type: integer
+          minimum: 0
+        running:
+          type: integer
+          minimum: 0
+        paused:
+          type: integer
+          minimum: 0
+        recent_failed:
+          type: integer
+          minimum: 0
+    OperationsSummaryResponse:
+      type: object
+      required:
+        - total
+        - by_type
+        - recent_failed_since
+        - as_of
+      properties:
+        total:
+          $ref: '#/components/schemas/OperationCounts'
+        by_type:
+          type: object
+          required:
+            - translation
+            - glossary_sync
+          properties:
+            translation:
+              $ref: '#/components/schemas/OperationCounts'
+            glossary_sync:
+              $ref: '#/components/schemas/OperationCounts'
+        recent_failed_since:
+          type: string
+          format: date-time
+        as_of:
+          type: string
+          format: date-time
     ExecutionPlanTemplateScope:
       type: string
       enum:
@@ -6822,3 +7138,186 @@ components:
           $ref: '#/components/schemas/ProfileContextConfig'
         qa:
           $ref: '#/components/schemas/ProfileQAConfig'
+    NullableGauge:
+      type: integer
+      minimum: 0
+      nullable: true
+    RuntimeRunner:
+      type: object
+      required:
+        - task_type
+        - state
+        - recovered_total
+        - recovery_errors_total
+        - queue_capacity
+        - queue_waiting
+        - enqueue_waiters
+        - worker_capacity
+        - workers_alive
+        - workers_busy
+      properties:
+        task_type:
+          type: string
+          enum:
+            - translation
+            - glossary_sync
+        state:
+          type: string
+          enum:
+            - starting
+            - recovering
+            - running
+            - degraded
+            - stopping
+            - stopped
+        recovered_total:
+          type: integer
+          format: int64
+          minimum: 0
+        recovery_errors_total:
+          type: integer
+          format: int64
+          minimum: 0
+        queue_capacity:
+          $ref: '#/components/schemas/NullableGauge'
+        queue_waiting:
+          $ref: '#/components/schemas/NullableGauge'
+        enqueue_waiters:
+          $ref: '#/components/schemas/NullableGauge'
+        worker_capacity:
+          $ref: '#/components/schemas/NullableGauge'
+        workers_alive:
+          $ref: '#/components/schemas/NullableGauge'
+        workers_busy:
+          $ref: '#/components/schemas/NullableGauge'
+    RuntimeLimiters:
+      type: object
+      nullable: true
+      required:
+        - state
+        - active_limiters
+        - waiters
+        - wait_duration_seconds_sum
+        - wait_duration_seconds_count
+        - wait_cancelled_total
+      properties:
+        state:
+          type: string
+          enum:
+            - uninitialized
+            - ready
+            - stopped
+        active_limiters:
+          type: integer
+          minimum: 0
+        waiters:
+          type: integer
+          minimum: 0
+        wait_duration_seconds_sum:
+          type: number
+          minimum: 0
+        wait_duration_seconds_count:
+          type: integer
+          format: int64
+          minimum: 0
+        wait_cancelled_total:
+          type: integer
+          format: int64
+          minimum: 0
+    RuntimeHTTPOutcome:
+      type: object
+      required:
+        - outcome
+        - http_attempts_finished_total
+        - http_attempt_duration_seconds_sum
+        - http_attempt_duration_seconds_count
+      properties:
+        outcome:
+          type: string
+          enum:
+            - success
+            - http_error
+            - transport_error
+            - timeout
+            - cancelled
+        http_attempts_finished_total:
+          type: integer
+          format: int64
+          minimum: 0
+        http_attempt_duration_seconds_sum:
+          type: number
+          minimum: 0
+        http_attempt_duration_seconds_count:
+          type: integer
+          format: int64
+          minimum: 0
+    RuntimeExternalRequests:
+      type: object
+      required:
+        - provider
+        - operation
+        - http_attempts_inflight
+        - http_attempts_total
+        - outcomes
+      properties:
+        provider:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - google
+            - other
+        operation:
+          type: string
+          enum:
+            - generate
+            - list_models
+        http_attempts_inflight:
+          type: integer
+          format: int64
+          minimum: 0
+        http_attempts_total:
+          type: integer
+          format: int64
+          minimum: 0
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeHTTPOutcome'
+    RuntimeSummary:
+      type: object
+      required:
+        - instance_id
+        - started_at
+        - as_of
+        - uptime_seconds
+        - scope
+        - runners
+        - limiters
+        - external_requests
+      properties:
+        instance_id:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        as_of:
+          type: string
+          format: date-time
+        uptime_seconds:
+          type: number
+          minimum: 0
+        scope:
+          type: string
+          enum:
+            - instance
+        runners:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeRunner'
+        limiters:
+          $ref: '#/components/schemas/RuntimeLimiters'
+        external_requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeExternalRequests'
