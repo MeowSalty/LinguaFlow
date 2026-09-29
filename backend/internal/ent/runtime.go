@@ -720,8 +720,20 @@ func init() {
 	synctask.DefaultProcessedSegments = synctaskDescProcessedSegments.Default.(int)
 	// synctask.ProcessedSegmentsValidator is a validator for the "processed_segments" field. It is called by the builders before save.
 	synctask.ProcessedSegmentsValidator = synctaskDescProcessedSegments.Validators[0].(func(int) error)
+	// synctaskDescCheckpointVersion is the schema descriptor for checkpoint_version field.
+	synctaskDescCheckpointVersion := synctaskFields[7].Descriptor()
+	// synctask.DefaultCheckpointVersion holds the default value on creation for the checkpoint_version field.
+	synctask.DefaultCheckpointVersion = synctaskDescCheckpointVersion.Default.(int)
+	// synctask.CheckpointVersionValidator is a validator for the "checkpoint_version" field. It is called by the builders before save.
+	synctask.CheckpointVersionValidator = synctaskDescCheckpointVersion.Validators[0].(func(int) error)
+	// synctaskDescNextSegmentIndex is the schema descriptor for next_segment_index field.
+	synctaskDescNextSegmentIndex := synctaskFields[8].Descriptor()
+	// synctask.DefaultNextSegmentIndex holds the default value on creation for the next_segment_index field.
+	synctask.DefaultNextSegmentIndex = synctaskDescNextSegmentIndex.Default.(int)
+	// synctask.NextSegmentIndexValidator is a validator for the "next_segment_index" field. It is called by the builders before save.
+	synctask.NextSegmentIndexValidator = synctaskDescNextSegmentIndex.Validators[0].(func(int) error)
 	// synctaskDescStatus is the schema descriptor for status field.
-	synctaskDescStatus := synctaskFields[7].Descriptor()
+	synctaskDescStatus := synctaskFields[10].Descriptor()
 	// synctask.DefaultStatus holds the default value on creation for the status field.
 	synctask.DefaultStatus = synctaskDescStatus.Default.(string)
 	// synctask.StatusValidator is a validator for the "status" field. It is called by the builders before save.
