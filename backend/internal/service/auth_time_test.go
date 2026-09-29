@@ -47,7 +47,7 @@ func assertSessionExpiryMatchesCredentials(t *testing.T, client *ent.Client, acc
 	if session.RefreshExpiresAt.Sub(now.Add(cfg.RefreshTokenTTL)) > 0 || now.Add(cfg.RefreshTokenTTL).Sub(session.RefreshExpiresAt) >= time.Microsecond {
 		t.Fatalf("refresh TTL changed beyond database precision: %s", session.RefreshExpiresAt)
 	}
-	if err := svc.Logout(ctx, session.RefreshToken); err != nil {
+	if err := svc.Logout(ctx, account.ID, session.RefreshToken); err != nil {
 		t.Fatal(err)
 	}
 	stored, err = client.RefreshToken.Get(ctx, stored.ID)

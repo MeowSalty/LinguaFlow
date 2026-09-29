@@ -171,6 +171,8 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) boo
 
 func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, service.ErrCurrentPasswordMismatch):
+		s.writeProblemWithType(w, r, http.StatusBadRequest, urnPrefix+"current-password-mismatch", "current_password_mismatch", "当前密码不正确")
 	case errors.Is(err, service.ErrInvalidInput):
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	case errors.Is(err, service.ErrInvalidCredentials):
