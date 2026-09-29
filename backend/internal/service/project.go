@@ -104,12 +104,25 @@ func (s *ProjectService) CreateOrgProject(ctx context.Context, actorUserID, orgI
 
 func (s *ProjectService) ListProjectsForUser(ctx context.Context, actorUserID int) ([]*ent.Project, error) {
 	return s.client.Project.Query().
-		Where(project.Or(
-			project.OwnerUserIDEQ(actorUserID),
-			project.HasOwnerOrgWith(organization.HasMembershipsWith(orgmembership.HasUserWith(user.IDEQ(actorUserID)))),
-		)).
+		Where(readableProjectPredicate(actorUserID)).
 		Order(ent.Asc(project.FieldID)).
 		All(ctx)
+}
+
+// readableProjectPredicate mirrors requireProjectAccess for reads, including
+// its personal-owner precedence when malformed data has both owners set.
+// Keep the permission inside discovery queries so filtering precedes pagination.
+func readableProjectPredicate(actorUserID int) predicate.Project {
+	return project.Or(
+		project.OwnerUserIDEQ(actorUserID),
+		project.And(
+			project.OwnerUserIDIsNil(),
+			project.HasOwnerOrgWith(organization.HasMembershipsWith(
+				orgmembership.HasUserWith(user.IDEQ(actorUserID)),
+				orgmembership.RoleIn(OrgRoleMember, OrgRoleAdmin, OrgRoleOwner),
+			)),
+		),
+	)
 }
 
 // ListOrgProjects 列出指定组织的所有项目。
