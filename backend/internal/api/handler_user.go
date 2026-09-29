@@ -10,16 +10,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
-type updateMeRequest struct {
-	DisplayName string `json:"display_name"`
-	Email       string `json:"email"`
-}
-
-type changePasswordRequest struct {
-	CurrentPassword string `json:"current_password"`
-	NewPassword     string `json:"new_password"`
-}
-
 type organizationRequest struct {
 	Name        string `json:"name"`
 	Slug        string `json:"slug"`
@@ -75,13 +65,13 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	var req updateMeRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "display_name", "email")
+	if !ok {
 		return
 	}
 	updated, err := s.userService.UpdateMe(r.Context(), authUser.User.ID, service.UpdateProfileInput{
-		DisplayName: req.DisplayName,
-		Email:       req.Email,
+		DisplayName: fields["display_name"],
+		Email:       fields["email"],
 	})
 	if err != nil {
 		s.writeServiceError(w, r, err)
@@ -96,11 +86,16 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	var req changePasswordRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "current_password", "new_password")
+	if !ok {
 		return
 	}
-	if err := s.userService.ChangeMyPassword(r.Context(), authUser.User.ID, req.CurrentPassword, req.NewPassword); err != nil {
+	currentPassword, newPassword := fields["current_password"], fields["new_password"]
+	if currentPassword == nil || newPassword == nil || *currentPassword == "" || *newPassword == "" {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
+		return
+	}
+	if err := s.userService.ChangeMyPassword(r.Context(), authUser.User.ID, *currentPassword, *newPassword); err != nil {
 		s.writeServiceError(w, r, err)
 		return
 	}
