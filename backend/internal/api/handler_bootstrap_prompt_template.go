@@ -61,7 +61,17 @@ func (s *Server) handleListBootstrapPromptTemplates(w http.ResponseWriter, r *ht
 		return
 	}
 
-	templates, err := s.bootstrapPromptTemplateSvc.ListByUser(r.Context(), authUser.User.ID)
+	orgID, ok := s.parseSharedOrgQuery(w, r)
+	if !ok {
+		return
+	}
+	var templates []*ent.BootstrapPromptTemplate
+	var err error
+	if orgID == nil {
+		templates, err = s.bootstrapPromptTemplateSvc.ListByUser(r.Context(), authUser.User.ID)
+	} else {
+		templates, err = s.bootstrapPromptTemplateSvc.ListByOrg(r.Context(), authUser.User.ID, *orgID)
+	}
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -84,7 +94,7 @@ func (s *Server) handleCreateBootstrapPromptTemplate(w http.ResponseWriter, r *h
 	}
 
 	var req CreateBootstrapPromptTemplateRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !s.decodeSharedJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
@@ -93,9 +103,8 @@ func (s *Server) handleCreateBootstrapPromptTemplate(w http.ResponseWriter, r *h
 	}
 
 	input := service.CreateBootstrapPromptTemplateInput{
-		Name:        req.Name,
-		Scope:       "user",
-		OwnerUserID: &authUser.User.ID,
+		Name:  req.Name,
+		OrgID: req.OrgId,
 	}
 	if req.Description != nil {
 		input.Description = *req.Description
@@ -104,7 +113,7 @@ func (s *Server) handleCreateBootstrapPromptTemplate(w http.ResponseWriter, r *h
 		input.Content = *req.Content
 	}
 
-	pt, err := s.bootstrapPromptTemplateSvc.Create(r.Context(), input)
+	pt, err := s.bootstrapPromptTemplateSvc.Create(r.Context(), authUser.User.ID, input)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -114,12 +123,18 @@ func (s *Server) handleCreateBootstrapPromptTemplate(w http.ResponseWriter, r *h
 
 // handleGetBootstrapPromptTemplate 获取术语抽取提示词模板详情。
 func (s *Server) handleGetBootstrapPromptTemplate(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parseBootstrapPromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
-	pt, err := s.bootstrapPromptTemplateSvc.GetByID(r.Context(), id)
+	pt, err := s.bootstrapPromptTemplateSvc.GetByID(r.Context(), authUser.User.ID, id)
 	if err != nil {
 		if err == service.ErrBootstrapPromptTemplateNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "术语抽取提示词模板不存在")
@@ -133,13 +148,19 @@ func (s *Server) handleGetBootstrapPromptTemplate(w http.ResponseWriter, r *http
 
 // handleUpdateBootstrapPromptTemplate 更新术语抽取提示词模板。
 func (s *Server) handleUpdateBootstrapPromptTemplate(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parseBootstrapPromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
 	var req UpdateBootstrapPromptTemplateRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !s.decodeSharedJSON(w, r, &req) {
 		return
 	}
 
@@ -149,7 +170,7 @@ func (s *Server) handleUpdateBootstrapPromptTemplate(w http.ResponseWriter, r *h
 		Content:     req.Content,
 	}
 
-	pt, err := s.bootstrapPromptTemplateSvc.Update(r.Context(), id, input)
+	pt, err := s.bootstrapPromptTemplateSvc.Update(r.Context(), authUser.User.ID, id, input)
 	if err != nil {
 		if err == service.ErrBootstrapPromptTemplateNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "术语抽取提示词模板不存在")
@@ -163,19 +184,25 @@ func (s *Server) handleUpdateBootstrapPromptTemplate(w http.ResponseWriter, r *h
 
 // handleDeleteBootstrapPromptTemplate 删除术语抽取提示词模板。
 func (s *Server) handleDeleteBootstrapPromptTemplate(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parseBootstrapPromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
-	err := s.bootstrapPromptTemplateSvc.Delete(r.Context(), id)
+	err := s.bootstrapPromptTemplateSvc.Delete(r.Context(), authUser.User.ID, id)
 	if err != nil {
 		if err == service.ErrBootstrapPromptTemplateNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "术语抽取提示词模板不存在")
 			return
 		}
 		if errors.Is(err, service.ErrBootstrapPromptTemplateInUse) {
-			s.writeProblem(w, r, http.StatusConflict, "conflict", err.Error())
+			s.writeProblem(w, r, http.StatusConflict, "conflict", "该模板正被执行计划引用，无法删除")
 			return
 		}
 		s.writeServiceError(w, r, err)

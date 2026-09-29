@@ -540,7 +540,7 @@ func (s *JobService) validateAndSnapshotWith(
 			t := round.Translate
 
 			// 快照提示词模板
-			promptSnap, err := s.snapshotPromptTemplate(ctx, t.PromptTemplateID)
+			promptSnap, err := s.snapshotPromptTemplate(ctx, actorUserID, t.PromptTemplateID)
 			if err != nil {
 				return nil, fmt.Errorf("rounds[%d] snapshot prompt: %w", i, err)
 			}
@@ -571,7 +571,7 @@ func (s *JobService) validateAndSnapshotWith(
 			e := round.Extract
 
 			// 快照自举提示词模板
-			bootstrapSnap, err := s.snapshotBootstrapTemplate(ctx, e.BootstrapTemplateID)
+			bootstrapSnap, err := s.snapshotBootstrapTemplate(ctx, actorUserID, e.BootstrapTemplateID)
 			if err != nil {
 				return nil, fmt.Errorf("rounds[%d] snapshot bootstrap template: %w", i, err)
 			}
@@ -700,6 +700,9 @@ func (s *JobService) validateAndSnapshot(
 	plan *ent.ExecutionPlanTemplate,
 	overrideSegmentFilter string,
 ) (*JobExecutionSnapshot, error) {
+	if err := s.validateSnapshotReferences(ctx, actorUserID, projectRow, plan); err != nil {
+		return nil, err
+	}
 	return s.validateAndSnapshotWith(ctx, actorUserID, plan, overrideSegmentFilter, func(backendID int) error {
 		return s.validateBackendAccess(ctx, projectRow, backendID)
 	})
@@ -738,6 +741,9 @@ func (s *JobService) prepareExecutionSnapshotForActor(
 	plan, err := s.executionPlans.GetByID(ctx, actorUserID, executionPlanID)
 	if err != nil {
 		return nil, fmt.Errorf("execution plan: %w", err)
+	}
+	if err := s.validateSnapshotReferences(ctx, actorUserID, projectRow, plan); err != nil {
+		return nil, err
 	}
 	var check func(backendID int) error
 	if projectRow != nil {
@@ -833,8 +839,8 @@ func (s *JobService) snapshotBackend(ctx context.Context, backendID int) (*Backe
 }
 
 // snapshotPromptTemplate 快照翻译提示词模板。
-func (s *JobService) snapshotPromptTemplate(ctx context.Context, templateID int) (*PromptSnapshot, error) {
-	pt, err := s.translationPromptTemplates.GetByID(ctx, templateID)
+func (s *JobService) snapshotPromptTemplate(ctx context.Context, actorUserID, templateID int) (*PromptSnapshot, error) {
+	pt, err := s.translationPromptTemplates.GetByID(ctx, actorUserID, templateID)
 	if err != nil {
 		return nil, err
 	}
@@ -847,8 +853,8 @@ func (s *JobService) snapshotPromptTemplate(ctx context.Context, templateID int)
 }
 
 // snapshotBootstrapTemplate 快照术语抽取提示词模板。
-func (s *JobService) snapshotBootstrapTemplate(ctx context.Context, templateID int) (*BootstrapPromptSnapshot, error) {
-	pt, err := s.bootstrapPromptTemplates.GetByID(ctx, templateID)
+func (s *JobService) snapshotBootstrapTemplate(ctx context.Context, actorUserID, templateID int) (*BootstrapPromptSnapshot, error) {
+	pt, err := s.bootstrapPromptTemplates.GetByID(ctx, actorUserID, templateID)
 	if err != nil {
 		return nil, err
 	}
@@ -864,7 +870,7 @@ func (s *JobService) snapshotBootstrapTemplate(ctx context.Context, templateID i
 // CheckAccess 复核访问权（与轮次 backend 的 check 注入对齐——计划创建后属主或
 // 组织资格可能已变更），内置策略（scope=system 虚拟实体）对全体放行。
 func (s *JobService) snapshotProfile(ctx context.Context, userID, profileID int) (*StrategySnapshot, error) {
-	tp, err := s.profiles.GetByID(ctx, profileID)
+	tp, err := s.profiles.GetByID(ctx, userID, profileID)
 	if err != nil {
 		return nil, err
 	}

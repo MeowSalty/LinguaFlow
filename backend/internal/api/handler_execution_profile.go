@@ -277,7 +277,17 @@ func (s *Server) handleListExecutionProfiles(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	profiles, err := s.executionProfileSvc.ListByUser(r.Context(), authUser.User.ID)
+	orgID, ok := s.parseSharedOrgQuery(w, r)
+	if !ok {
+		return
+	}
+	var profiles []*ent.ExecutionProfile
+	var err error
+	if orgID == nil {
+		profiles, err = s.executionProfileSvc.ListByUser(r.Context(), authUser.User.ID)
+	} else {
+		profiles, err = s.executionProfileSvc.ListByOrg(r.Context(), authUser.User.ID, *orgID)
+	}
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -300,7 +310,7 @@ func (s *Server) handleCreateExecutionProfile(w http.ResponseWriter, r *http.Req
 	}
 
 	var req CreateExecutionProfileRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !s.decodeSharedJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
@@ -309,9 +319,8 @@ func (s *Server) handleCreateExecutionProfile(w http.ResponseWriter, r *http.Req
 	}
 
 	input := service.CreateExecutionProfileInput{
-		Name:        req.Name,
-		Scope:       "user",
-		OwnerUserID: &authUser.User.ID,
+		Name:  req.Name,
+		OrgID: req.OrgId,
 	}
 	if req.Description != nil {
 		input.Description = *req.Description
@@ -320,7 +329,7 @@ func (s *Server) handleCreateExecutionProfile(w http.ResponseWriter, r *http.Req
 		input.Config = parseProfileConfig(req.Config)
 	}
 
-	tp, err := s.executionProfileSvc.Create(r.Context(), input)
+	tp, err := s.executionProfileSvc.Create(r.Context(), authUser.User.ID, input)
 	if err != nil {
 		if errors.Is(err, service.ErrExecutionProfileConfigInvalid) {
 			s.writeProblem(w, r, http.StatusBadRequest, "validation_error", err.Error())
@@ -334,12 +343,18 @@ func (s *Server) handleCreateExecutionProfile(w http.ResponseWriter, r *http.Req
 
 // handleGetExecutionProfile 获取执行策略配置详情。
 func (s *Server) handleGetExecutionProfile(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parseExecutionProfileID(w, r)
 	if !ok {
 		return
 	}
 
-	tp, err := s.executionProfileSvc.GetByID(r.Context(), id)
+	tp, err := s.executionProfileSvc.GetByID(r.Context(), authUser.User.ID, id)
 	if err != nil {
 		if err == service.ErrExecutionProfileNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
@@ -353,13 +368,19 @@ func (s *Server) handleGetExecutionProfile(w http.ResponseWriter, r *http.Reques
 
 // handleUpdateExecutionProfile 更新执行策略配置。
 func (s *Server) handleUpdateExecutionProfile(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parseExecutionProfileID(w, r)
 	if !ok {
 		return
 	}
 
 	var req UpdateExecutionProfileRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !s.decodeSharedJSON(w, r, &req) {
 		return
 	}
 
@@ -369,7 +390,7 @@ func (s *Server) handleUpdateExecutionProfile(w http.ResponseWriter, r *http.Req
 	}
 	if req.Config != nil {
 		// 获取现有配置，将请求中的字段合并上去，避免未指定字段被零值覆盖。
-		existing, err := s.executionProfileSvc.GetByID(r.Context(), id)
+		existing, err := s.executionProfileSvc.GetByID(r.Context(), authUser.User.ID, id)
 		if err != nil {
 			if err == service.ErrExecutionProfileNotFound {
 				s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
@@ -381,7 +402,7 @@ func (s *Server) handleUpdateExecutionProfile(w http.ResponseWriter, r *http.Req
 		input.Config = mergeProfileConfig(&existing.Config, req.Config)
 	}
 
-	tp, err := s.executionProfileSvc.Update(r.Context(), id, input)
+	tp, err := s.executionProfileSvc.Update(r.Context(), authUser.User.ID, id, input)
 	if err != nil {
 		if err == service.ErrExecutionProfileNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
