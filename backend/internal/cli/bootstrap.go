@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
 // BootOptions 描述服务器引导的共享参数。
@@ -66,6 +67,9 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 			return nil, nil, nil, err
 		}
 		migrationErr := client.Schema.Create(ctx)
+		if migrationErr == nil {
+			migrationErr = service.MigrateHistoryVisibility(ctx, client)
+		}
 		unlockErr := unlockMigration()
 		if err := errors.Join(migrationErr, unlockErr); err != nil {
 			_ = cleanup()

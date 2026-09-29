@@ -1501,6 +1501,7 @@ func (r *JobRunner) loadSegments(ctx context.Context, resourceID int, selectedID
 // recordUsage 记录任务用量到数据库。
 func (r *JobRunner) recordUsage(ctx context.Context, exec *service.JobExecution, segmentCount int, inputTokens, outputTokens int64) error {
 	usage := r.client.UsageRecord.Create().
+		SetVisibilityScope("project").
 		SetProjectID(exec.Project.ID).
 		SetSource("job").
 		SetSegmentCount(segmentCount).
@@ -1511,8 +1512,8 @@ func (r *JobRunner) recordUsage(ctx context.Context, exec *service.JobExecution,
 	if exec.ActorUserID > 0 {
 		usage.SetUserID(exec.ActorUserID)
 	}
-	if exec.Project.OwnerOrgID != nil {
-		usage.SetOrganizationID(*exec.Project.OwnerOrgID)
+	if orgID := service.EffectiveProjectOrgID(exec.Project); orgID != nil {
+		usage.SetOrganizationID(*orgID)
 	}
 	return usage.Exec(ctx)
 }

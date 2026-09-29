@@ -127,7 +127,7 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.create", ResourceType: "job", ResourceID: created.ID, Message: "创建任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &created.ProjectID, Action: "job.create", ResourceType: "job", ResourceID: created.ID, Message: "创建任务"})
 	if s.dispatcher != nil {
 		if err := s.dispatcher.Enqueue(r.Context(), "translation", created.ID); err != nil {
 			s.writeServiceError(w, r, err)
@@ -205,7 +205,7 @@ func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 	if s.dispatcher != nil {
 		s.dispatcher.CancelTask("translation", jobID)
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.cancel", ResourceType: "job", ResourceID: job.ID, Message: "取消任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.cancel", ResourceType: "job", ResourceID: job.ID, Message: "取消任务"})
 	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
 }
 
@@ -224,7 +224,7 @@ func (s *Server) handleRetryJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.retry", ResourceType: "job", ResourceID: job.ID, Message: "重试任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.retry", ResourceType: "job", ResourceID: job.ID, Message: "重试任务"})
 	if s.dispatcher != nil {
 		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
 			s.writeServiceError(w, r, err)
@@ -272,7 +272,7 @@ func (s *Server) handlePauseJob(w http.ResponseWriter, r *http.Request) {
 			result.Job = latest
 		}
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.pause", ResourceType: "job", ResourceID: result.Job.ID, Message: "暂停任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &result.Job.ProjectID, Action: "job.pause", ResourceType: "job", ResourceID: result.Job.ID, Message: "暂停任务"})
 	writeJSON(w, http.StatusOK, toJobDetailResponse(result.Job, s.queueInfoForJob(result.Job.ID)))
 }
 
@@ -293,7 +293,7 @@ func (s *Server) handleResumeJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.resume", ResourceType: "job", ResourceID: job.ID, Message: "恢复任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.resume", ResourceType: "job", ResourceID: job.ID, Message: "恢复任务"})
 	if s.dispatcher != nil {
 		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
 			s.writeServiceError(w, r, err)
