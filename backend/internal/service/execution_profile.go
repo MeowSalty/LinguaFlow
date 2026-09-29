@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
@@ -19,230 +20,196 @@ var (
 	ErrExecutionProfileInUse         = errors.New("execution profile is referenced by execution plan(s)")
 )
 
-// ExecutionProfileService 提供执行策略配置的 CRUD 操作。
 type ExecutionProfileService struct {
 	client *ent.Client
 	users  *UserService
 }
 
-// NewExecutionProfileService 创建 ExecutionProfileService 实例。
 func NewExecutionProfileService(client *ent.Client, users *UserService) *ExecutionProfileService {
 	return &ExecutionProfileService{client: client, users: users}
 }
 
-// CreateExecutionProfileInput 创建执行策略配置的输入参数。
 type CreateExecutionProfileInput struct {
 	Name        string
 	Description string
-	Scope       string // user / org
-	OwnerUserID *int
-	OwnerOrgID  *int
+	OrgID       *int
 	Config      *schema.ExecutionProfileConfigData
 }
-
-// UpdateExecutionProfileInput 更新执行策略配置的输入参数。
 type UpdateExecutionProfileInput struct {
 	Name        *string
 	Description *string
 	Config      *schema.ExecutionProfileConfigData
 }
 
-// ListByUser 列出指定用户的所有执行策略配置（包含内置策略）。
+// ListByUser preserves the existing personal plus builtin list.
 func (s *ExecutionProfileService) ListByUser(ctx context.Context, userID int) ([]*ent.ExecutionProfile, error) {
-	dbProfiles, err := s.client.ExecutionProfile.Query().
-		Where(
-			executionprofile.ScopeEQ("user"),
-			executionprofile.OwnerUserIDEQ(userID),
-		).
-		Order(ent.Asc(executionprofile.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list execution profiles: %w", err)
+	if userID <= 0 {
+		return nil, ErrInvalidInput
 	}
-	profiles := append(templates.BuiltinExecutionProfiles(), dbProfiles...)
-	for _, p := range profiles {
-		p.Config.NormalizePreserveKinds()
-	}
-	return profiles, nil
-}
-
-// ListByOrg 列出指定组织的所有执行策略配置（包含内置策略）。
-func (s *ExecutionProfileService) ListByOrg(ctx context.Context, orgID int) ([]*ent.ExecutionProfile, error) {
-	dbProfiles, err := s.client.ExecutionProfile.Query().
-		Where(
-			executionprofile.ScopeEQ("org"),
-			executionprofile.OwnerOrgIDEQ(orgID),
-		).
-		Order(ent.Asc(executionprofile.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list execution profiles: %w", err)
-	}
-	profiles := append(templates.BuiltinExecutionProfiles(), dbProfiles...)
-	for _, p := range profiles {
-		p.Config.NormalizePreserveKinds()
-	}
-	return profiles, nil
-}
-
-// GetByID 根据 ID 获取执行策略配置（支持内置策略）。
-func (s *ExecutionProfileService) GetByID(ctx context.Context, id int) (*ent.ExecutionProfile, error) {
-	if templates.IsBuiltinID(id) {
-		tp := templates.BuiltinExecutionProfile(id)
-		if tp == nil {
-			return nil, ErrExecutionProfileNotFound
-		}
-		tp.Config.NormalizePreserveKinds()
-		return tp, nil
-	}
-	tp, err := s.client.ExecutionProfile.Get(ctx, id)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrExecutionProfileNotFound
-		}
-		return nil, fmt.Errorf("query execution profile: %w", err)
-	}
-	tp.Config.NormalizePreserveKinds()
-	return tp, nil
-}
-
-// Create 创建执行策略配置。
-func (s *ExecutionProfileService) Create(ctx context.Context, input CreateExecutionProfileInput) (*ent.ExecutionProfile, error) {
-	if input.Scope == "" {
-		input.Scope = "user"
-	}
-	if input.Scope != "user" && input.Scope != "org" && input.Scope != "system" {
-		return nil, ErrExecutionProfileScopeInvalid
-	}
-
-	// 校验 Config
-	if input.Config != nil {
-		if err := validateProfileConfig(input.Config); err != nil {
-			return nil, err
-		}
-	}
-
-	create := s.client.ExecutionProfile.Create().
-		SetName(input.Name).
-		SetDescription(input.Description).
-		SetScope(input.Scope)
-
-	if input.OwnerUserID != nil {
-		create.SetOwnerUserID(*input.OwnerUserID)
-	}
-	if input.OwnerOrgID != nil {
-		create.SetOwnerOrgID(*input.OwnerOrgID)
-	}
-	if input.Config != nil {
-		create.SetConfig(*input.Config)
-	}
-
-	tp, err := create.Save(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("create execution profile: %w", err)
-	}
-	return tp, nil
-}
-
-// Update 更新执行策略配置（内置策略不可修改）。
-func (s *ExecutionProfileService) Update(ctx context.Context, id int, input UpdateExecutionProfileInput) (*ent.ExecutionProfile, error) {
-	if templates.IsBuiltinID(id) {
-		return nil, ErrExecutionProfileNotFound
-	}
-	tp, err := s.GetByID(ctx, id)
+	rows, err := s.client.ExecutionProfile.Query().Where(
+		executionprofile.ScopeEQ(ScopeUser), executionprofile.OwnerUserIDEQ(userID), executionprofile.OwnerOrgIDIsNil(),
+	).Order(ent.Asc(executionprofile.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if tp.Scope == "system" {
-		return nil, ErrExecutionProfileNotFound // 系统配置不可修改
+	rows = append(templates.BuiltinExecutionProfiles(), rows...)
+	for _, p := range rows {
+		p.Config.NormalizePreserveKinds()
 	}
+	return rows, nil
+}
 
-	// 校验 Config
+func (s *ExecutionProfileService) ListByOrg(ctx context.Context, actorID, orgID int) ([]*ent.ExecutionProfile, error) {
+	if err := requireSharedOrganization(ctx, s.client, actorID, orgID, false); err != nil {
+		return nil, err
+	}
+	rows, err := s.client.ExecutionProfile.Query().Where(
+		executionprofile.ScopeEQ(ScopeOrg), executionprofile.OwnerOrgIDEQ(orgID), executionprofile.OwnerUserIDIsNil(),
+	).Order(ent.Asc(executionprofile.FieldID)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range rows {
+		p.Config.NormalizePreserveKinds()
+	}
+	return rows, nil
+}
+
+func (s *ExecutionProfileService) GetByID(ctx context.Context, actorID, id int) (*ent.ExecutionProfile, error) {
+	var row *ent.ExecutionProfile
+	if templates.IsBuiltinID(id) {
+		row = templates.BuiltinExecutionProfile(id)
+		if row == nil {
+			return nil, ErrExecutionProfileNotFound
+		}
+	} else {
+		var err error
+		row, err = s.client.ExecutionProfile.Get(ctx, id)
+		if err != nil {
+			return nil, sharedAccessError(err, ErrExecutionProfileNotFound)
+		}
+	}
+	if err := s.CheckAccess(ctx, actorID, row); err != nil {
+		return nil, err
+	}
+	row.Config.NormalizePreserveKinds()
+	return row, nil
+}
+
+func (s *ExecutionProfileService) Create(ctx context.Context, actorID int, input CreateExecutionProfileInput) (*ent.ExecutionProfile, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" || actorID <= 0 {
+		return nil, ErrInvalidInput
+	}
 	if input.Config != nil {
 		if err := validateProfileConfig(input.Config); err != nil {
 			return nil, err
 		}
 	}
-
-	update := s.client.ExecutionProfile.UpdateOneID(id)
-
-	if input.Name != nil {
-		update.SetName(*input.Name)
-	}
-	if input.Description != nil {
-		update.SetDescription(*input.Description)
-	}
-	if input.Config != nil {
-		update.SetConfig(*input.Config)
-	}
-
-	updated, err := update.Save(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("update execution profile: %w", err)
-	}
-	return updated, nil
-}
-
-// Delete 删除执行策略配置（内置与系统策略不可删除）。userID 为调用者，
-// 须通过 checkDeleteAccess 的属主校验。
-func (s *ExecutionProfileService) Delete(ctx context.Context, userID, id int) error {
-	if templates.IsBuiltinID(id) {
-		return ErrExecutionProfileNotFound
-	}
-	tp, err := s.GetByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	if tp.Scope == "system" {
-		return ErrExecutionProfileNotFound // 系统配置不可删除
-	}
-	if err := s.CheckAccess(ctx, userID, tp); err != nil {
-		return err
-	}
-
-	// 检查是否有执行计划模板引用了该策略（计划级 profile_id）。
-	// 引用检查保持全局：任一计划引用即拒绝删除，避免其任务创建悬空；
-	// 错误不携带计划名，不向调用者泄露其他用户的计划信息。
-	referenced, err := s.client.ExecutionPlanTemplate.Query().
-		Where(executionplantemplate.ProfileID(id)).
-		Exist(ctx)
-	if err != nil {
-		return fmt.Errorf("check execution plan references: %w", err)
-	}
-	if referenced {
-		return ErrExecutionProfileInUse
-	}
-
-	return s.client.ExecutionProfile.DeleteOneID(id).Exec(ctx)
-}
-
-// CheckAccess 校验调用者对策略的访问权（单一来源，供删除门禁、计划级引用校验
-// 与快照物化复核共同复用）：user 范围须为本人，org 范围须为组织 member 及以上
-// 成员（经 requireMembership），system 范围（含内置策略）对全体放行。不满足时
-// 返回 ErrExecutionProfileNotFound，不泄露他人资源的存在性（与
-// ExecutionPlanService.checkAccess 同一惯例）。
-func (s *ExecutionProfileService) CheckAccess(ctx context.Context, userID int, tp *ent.ExecutionProfile) error {
-	switch tp.Scope {
-	case "user":
-		if tp.OwnerUserID == nil || *tp.OwnerUserID != userID {
-			return ErrExecutionProfileNotFound
-		}
-	case "org":
-		if tp.OwnerOrgID == nil {
-			return ErrExecutionProfileNotFound
-		}
-		if _, err := s.users.requireMembership(ctx, userID, *tp.OwnerOrgID, OrgRoleMember); err != nil {
-			if errors.Is(err, ErrForbidden) || errors.Is(err, ErrOrganizationNotFound) {
-				return ErrExecutionProfileNotFound
-			}
+	var row *ent.ExecutionProfile
+	err := withSharedMutation(ctx, s.client, input.OrgID, func(client *ent.Client) error {
+		scope, err := sharedCreateScope(ctx, client, actorID, input.OrgID)
+		if err != nil {
 			return err
 		}
-	case "system":
-		// 系统级策略对全体调用者可见。
-	default:
-		return ErrExecutionProfileNotFound
+		create := client.ExecutionProfile.Create().SetName(name).SetDescription(input.Description).SetScope(scope)
+		if input.OrgID == nil {
+			create.SetOwnerUserID(actorID)
+		} else {
+			create.SetOwnerOrgID(*input.OrgID)
+		}
+		if input.Config != nil {
+			create.SetConfig(*input.Config)
+		}
+		row, err = create.Save(ctx)
+		if err != nil {
+			return err
+		}
+		return recordSharedAudit(ctx, client, actorID, input.OrgID, "execution_profile", "create", row.ID)
+	})
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return row.Unwrap(), nil
+}
+
+func (s *ExecutionProfileService) Update(ctx context.Context, actorID, id int, input UpdateExecutionProfileInput) (*ent.ExecutionProfile, error) {
+	original, err := s.GetByID(ctx, actorID, id)
+	if err != nil {
+		return nil, err
+	}
+	var row *ent.ExecutionProfile
+	err = withSharedMutation(ctx, s.client, original.OwnerOrgID, func(client *ent.Client) error {
+		bound := &ExecutionProfileService{client: client, users: s.users}
+		current, err := bound.GetByID(ctx, actorID, id)
+		if err != nil {
+			return err
+		}
+		if err := checkSharedAccess(ctx, client, actorID, current.Scope, current.OwnerUserID, current.OwnerOrgID, true); err != nil {
+			return sharedAccessError(err, ErrExecutionProfileNotFound)
+		}
+		if input.Config != nil {
+			if err := validateProfileConfig(input.Config); err != nil {
+				return err
+			}
+		}
+		update := client.ExecutionProfile.UpdateOneID(id)
+		if input.Name != nil {
+			name := strings.TrimSpace(*input.Name)
+			if name == "" {
+				return ErrInvalidInput
+			}
+			update.SetName(name)
+		}
+		if input.Description != nil {
+			update.SetDescription(*input.Description)
+		}
+		if input.Config != nil {
+			update.SetConfig(*input.Config)
+		}
+		row, err = update.Save(ctx)
+		if err != nil {
+			return sharedAccessError(err, ErrExecutionProfileNotFound)
+		}
+		return recordSharedAudit(ctx, client, actorID, current.OwnerOrgID, "execution_profile", "update", id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return row.Unwrap(), nil
+}
+
+func (s *ExecutionProfileService) Delete(ctx context.Context, actorID, id int) error {
+	original, err := s.GetByID(ctx, actorID, id)
+	if err != nil {
+		return err
+	}
+	return withSharedMutation(ctx, s.client, original.OwnerOrgID, func(client *ent.Client) error {
+		bound := &ExecutionProfileService{client: client, users: s.users}
+		current, err := bound.GetByID(ctx, actorID, id)
+		if err != nil {
+			return err
+		}
+		if err := checkSharedAccess(ctx, client, actorID, current.Scope, current.OwnerUserID, current.OwnerOrgID, true); err != nil {
+			return sharedAccessError(err, ErrExecutionProfileNotFound)
+		}
+		referenced, err := client.ExecutionPlanTemplate.Query().Where(executionplantemplate.ProfileID(id)).Exist(ctx)
+		if err != nil {
+			return err
+		}
+		if referenced {
+			return ErrExecutionProfileInUse
+		}
+		if err := client.ExecutionProfile.DeleteOneID(id).Exec(ctx); err != nil {
+			return sharedAccessError(err, ErrExecutionProfileNotFound)
+		}
+		return recordSharedAudit(ctx, client, actorID, current.OwnerOrgID, "execution_profile", "delete", id)
+	})
+}
+
+// CheckAccess is the read authorization used by plan references and runtime snapshots.
+func (s *ExecutionProfileService) CheckAccess(ctx context.Context, actorID int, profile *ent.ExecutionProfile) error {
+	return sharedAccessError(checkSharedAccess(ctx, s.client, actorID, profile.Scope, profile.OwnerUserID, profile.OwnerOrgID, false), ErrExecutionProfileNotFound)
 }
 
 // validateProfileConfig 校验执行策略配置的有效性。

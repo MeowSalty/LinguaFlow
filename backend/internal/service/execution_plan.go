@@ -12,7 +12,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
@@ -26,260 +25,208 @@ var (
 	ErrExecutionPlanInUse         = errors.New("execution plan template is referenced by translation jobs")
 )
 
-// ExecutionPlanService 执行计划模板服务。
 type ExecutionPlanService struct {
 	client   *ent.Client
 	users    *UserService
 	profiles *ExecutionProfileService
 }
 
-// NewExecutionPlanService 创建执行计划模板服务。
 func NewExecutionPlanService(client *ent.Client, users *UserService, profiles *ExecutionProfileService) *ExecutionPlanService {
 	return &ExecutionPlanService{client: client, users: users, profiles: profiles}
 }
 
-// CreateExecutionPlanTemplateInput 创建执行计划模板的输入参数。
 type CreateExecutionPlanTemplateInput struct {
 	Name        string                              `json:"name"`
 	Description string                              `json:"description"`
-	Scope       string                              `json:"scope"` // user / org
-	OwnerUserID *int                                `json:"owner_user_id,omitempty"`
-	OwnerOrgID  *int                                `json:"owner_org_id,omitempty"`
-	ProfileID   int                                 `json:"profile_id"` // 计划级策略引用（ExecutionProfile），为全管道供七项行为预设
+	OrgID       *int                                `json:"org_id,omitempty"`
+	ProfileID   int                                 `json:"profile_id"`
 	RubyRetry   schema.ExecutionPlanRubyRetryConfig `json:"ruby_retry"`
 	Rounds      []schema.ExecutionRoundConfig       `json:"rounds"`
 }
-
-// UpdateExecutionPlanTemplateInput 更新执行计划模板的输入参数。
 type UpdateExecutionPlanTemplateInput struct {
 	Name        *string                              `json:"name,omitempty"`
 	Description *string                              `json:"description,omitempty"`
-	ProfileID   *int                                 `json:"profile_id,omitempty"` // nil = 保留现值
+	ProfileID   *int                                 `json:"profile_id,omitempty"`
 	RubyRetry   *schema.ExecutionPlanRubyRetryConfig `json:"ruby_retry,omitempty"`
 	Rounds      []schema.ExecutionRoundConfig        `json:"rounds,omitempty"`
 }
 
-// ListByUser 列出用户可访问的执行计划模板。
-// 包括：用户自己的（scope=user）+ 用户所属组织的（scope=org）。
+// ListByUser preserves the list of personal and all current organizations' plans.
 func (s *ExecutionPlanService) ListByUser(ctx context.Context, userID int) ([]*ent.ExecutionPlanTemplate, error) {
-	orgIDs, _ := s.client.Organization.Query().
-		Where(organization.HasMembershipsWith(orgmembership.HasUserWith(user.IDEQ(userID)))).
-		IDs(ctx)
-
-	var preds []predicate.ExecutionPlanTemplate
-	// 用户自己的
-	preds = append(preds, executionplantemplate.And(
-		executionplantemplate.ScopeEQ(ScopeUser),
-		executionplantemplate.OwnerUserIDEQ(userID),
-	))
-	// 用户所属组织的
-	if len(orgIDs) > 0 {
-		preds = append(preds, executionplantemplate.And(
-			executionplantemplate.ScopeEQ(ScopeOrg),
-			executionplantemplate.OwnerOrgIDIn(orgIDs...),
-		))
+	if userID <= 0 {
+		return nil, ErrInvalidInput
 	}
-
-	return s.client.ExecutionPlanTemplate.Query().
-		Where(executionplantemplate.Or(preds...)).
-		Order(ent.Asc(executionplantemplate.FieldID)).
-		All(ctx)
+	return s.client.ExecutionPlanTemplate.Query().Where(executionplantemplate.Or(
+		executionplantemplate.And(executionplantemplate.ScopeEQ(ScopeUser), executionplantemplate.OwnerUserIDEQ(userID), executionplantemplate.OwnerOrgIDIsNil()),
+		executionplantemplate.And(executionplantemplate.ScopeEQ(ScopeOrg), executionplantemplate.OwnerUserIDIsNil(),
+			executionplantemplate.HasOwnerOrgWith(organization.HasMembershipsWith(
+				orgmembership.HasUserWith(user.IDEQ(userID)), orgmembership.RoleIn(OrgRoleMember, OrgRoleAdmin, OrgRoleOwner),
+			)),
+		),
+	)).Order(ent.Asc(executionplantemplate.FieldID)).All(ctx)
 }
 
-// ListByOrg 列出指定组织的所有执行计划模板。
-func (s *ExecutionPlanService) ListByOrg(ctx context.Context, orgID int) ([]*ent.ExecutionPlanTemplate, error) {
-	return s.client.ExecutionPlanTemplate.Query().
-		Where(
-			executionplantemplate.ScopeEQ(ScopeOrg),
-			executionplantemplate.OwnerOrgIDEQ(orgID),
-		).
-		Order(ent.Asc(executionplantemplate.FieldID)).
-		All(ctx)
-}
-
-// GetByID 获取执行计划模板（带权限校验）。
-func (s *ExecutionPlanService) GetByID(ctx context.Context, userID, planID int) (*ent.ExecutionPlanTemplate, error) {
-	plan, err := s.client.ExecutionPlanTemplate.Get(ctx, planID)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrExecutionPlanNotFound
-		}
-		return nil, fmt.Errorf("query execution plan template: %w", err)
-	}
-	if err := s.checkAccess(ctx, userID, plan); err != nil {
+func (s *ExecutionPlanService) ListByOrg(ctx context.Context, actorID, orgID int) ([]*ent.ExecutionPlanTemplate, error) {
+	if err := requireSharedOrganization(ctx, s.client, actorID, orgID, false); err != nil {
 		return nil, err
 	}
-	return plan, nil
+	return s.client.ExecutionPlanTemplate.Query().Where(
+		executionplantemplate.ScopeEQ(ScopeOrg), executionplantemplate.OwnerOrgIDEQ(orgID), executionplantemplate.OwnerUserIDIsNil(),
+	).Order(ent.Asc(executionplantemplate.FieldID)).All(ctx)
 }
 
-// GetByIDRaw 根据 ID 获取执行计划模板（不做权限校验，供内部调用）。
-func (s *ExecutionPlanService) GetByIDRaw(ctx context.Context, planID int) (*ent.ExecutionPlanTemplate, error) {
-	plan, err := s.client.ExecutionPlanTemplate.Get(ctx, planID)
+func (s *ExecutionPlanService) GetByID(ctx context.Context, actorID, id int) (*ent.ExecutionPlanTemplate, error) {
+	row, err := s.GetByIDRaw(ctx, id)
 	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrExecutionPlanNotFound
-		}
-		return nil, fmt.Errorf("query execution plan template: %w", err)
-	}
-	return plan, nil
-}
-
-// Create 创建执行计划模板。userID 为创建者，用于计划级策略引用的属主校验。
-func (s *ExecutionPlanService) Create(ctx context.Context, userID int, input CreateExecutionPlanTemplateInput) (*ent.ExecutionPlanTemplate, error) {
-	if input.Scope == "" {
-		input.Scope = ScopeUser
-	}
-	if input.Scope != ScopeUser && input.Scope != ScopeOrg {
-		return nil, ErrExecutionPlanScopeInvalid
-	}
-
-	// 计划级 profile_id 引用校验（格式 + 存在性 + 属主；策略引用已从 translate 轮级上提到计划级）。
-	if err := s.validatePlanProfileRef(ctx, userID, input.ProfileID); err != nil {
 		return nil, err
 	}
+	if err := s.checkAccess(ctx, actorID, row); err != nil {
+		return nil, err
+	}
+	return row, nil
+}
 
+// GetByIDRaw is for trusted internal maintenance; user requests must call GetByID.
+func (s *ExecutionPlanService) GetByIDRaw(ctx context.Context, id int) (*ent.ExecutionPlanTemplate, error) {
+	row, err := s.client.ExecutionPlanTemplate.Get(ctx, id)
+	if err != nil {
+		return nil, sharedAccessError(err, ErrExecutionPlanNotFound)
+	}
+	return row, nil
+}
+
+func (s *ExecutionPlanService) Create(ctx context.Context, actorID int, input CreateExecutionPlanTemplateInput) (*ent.ExecutionPlanTemplate, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" || actorID <= 0 {
+		return nil, ErrInvalidInput
+	}
 	if err := validateExecutionRounds(input.Rounds); err != nil {
 		return nil, err
 	}
-
-	name := strings.TrimSpace(input.Name)
-	if name == "" {
-		return nil, ErrInvalidInput
-	}
-
-	create := s.client.ExecutionPlanTemplate.Create().
-		SetName(name).
-		SetDescription(strings.TrimSpace(input.Description)).
-		SetScope(input.Scope).
-		SetProfileID(input.ProfileID).
-		SetRubyRetry(input.RubyRetry).
-		SetRounds(input.Rounds)
-
-	switch input.Scope {
-	case ScopeUser:
-		if input.OwnerUserID == nil {
-			return nil, ErrInvalidInput
+	var row *ent.ExecutionPlanTemplate
+	err := withSharedMutation(ctx, s.client, input.OrgID, func(client *ent.Client) error {
+		scope, err := sharedCreateScope(ctx, client, actorID, input.OrgID)
+		if err != nil {
+			return err
 		}
-		create.SetOwnerUserID(*input.OwnerUserID)
-	case ScopeOrg:
-		if input.OwnerOrgID == nil {
-			return nil, ErrInvalidInput
+		bound := &ExecutionPlanService{client: client, users: s.users}
+		if err := bound.validatePlanReferences(ctx, actorID, input.OrgID, input.ProfileID, input.RubyRetry, input.Rounds); err != nil {
+			return err
 		}
-		create.SetOwnerOrgID(*input.OwnerOrgID)
-	}
-
-	plan, err := create.Save(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("create execution plan template: %w", err)
-	}
-	return plan, nil
-}
-
-// Update 更新执行计划模板。
-func (s *ExecutionPlanService) Update(ctx context.Context, userID, planID int, input UpdateExecutionPlanTemplateInput) (*ent.ExecutionPlanTemplate, error) {
-	plan, err := s.GetByID(ctx, userID, planID)
+		create := client.ExecutionPlanTemplate.Create().SetName(name).SetDescription(strings.TrimSpace(input.Description)).
+			SetScope(scope).SetProfileID(input.ProfileID).SetRubyRetry(input.RubyRetry).SetRounds(input.Rounds)
+		if input.OrgID == nil {
+			create.SetOwnerUserID(actorID)
+		} else {
+			create.SetOwnerOrgID(*input.OrgID)
+		}
+		row, err = create.Save(ctx)
+		if err != nil {
+			return err
+		}
+		return recordSharedAudit(ctx, client, actorID, input.OrgID, "execution_plan", "create", row.ID)
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if plan.Scope == "system" {
-		return nil, ErrExecutionPlanNotFound // 系统模板不可修改
-	}
-
-	if input.Rounds != nil {
-		if err := validateExecutionRounds(input.Rounds); err != nil {
-			return nil, err
-		}
-	}
-
-	// 计划级 profile_id 引用校验（格式 + 存在性 + 属主）；nil 表示保留现值（随 RubyRetry 惯例）。
-	if input.ProfileID != nil {
-		if err := s.validatePlanProfileRef(ctx, userID, *input.ProfileID); err != nil {
-			return nil, err
-		}
-	}
-
-	update := s.client.ExecutionPlanTemplate.UpdateOneID(planID)
-
-	if input.Name != nil {
-		name := strings.TrimSpace(*input.Name)
-		if name == "" {
-			return nil, ErrInvalidInput
-		}
-		update.SetName(name)
-	}
-	if input.Description != nil {
-		update.SetDescription(strings.TrimSpace(*input.Description))
-	}
-	if input.ProfileID != nil {
-		update.SetProfileID(*input.ProfileID)
-	}
-	if input.RubyRetry != nil {
-		update.SetRubyRetry(*input.RubyRetry)
-	}
-	if input.Rounds != nil {
-		update.SetRounds(input.Rounds)
-	}
-
-	updated, err := update.Save(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrExecutionPlanNotFound
-		}
-		return nil, fmt.Errorf("update execution plan template: %w", err)
-	}
-	return updated, nil
+	return row.Unwrap(), nil
 }
 
-// Delete 删除执行计划模板。
-// 如果有 Job 引用了该模板，拒绝删除。
-func (s *ExecutionPlanService) Delete(ctx context.Context, userID, planID int) error {
-	plan, err := s.GetByID(ctx, userID, planID)
+func (s *ExecutionPlanService) Update(ctx context.Context, actorID, id int, input UpdateExecutionPlanTemplateInput) (*ent.ExecutionPlanTemplate, error) {
+	original, err := s.GetByID(ctx, actorID, id)
+	if err != nil {
+		return nil, err
+	}
+	var row *ent.ExecutionPlanTemplate
+	err = withSharedMutation(ctx, s.client, original.OwnerOrgID, func(client *ent.Client) error {
+		bound := &ExecutionPlanService{client: client, users: s.users}
+		current, err := bound.GetByID(ctx, actorID, id)
+		if err != nil {
+			return err
+		}
+		if err := checkSharedAccess(ctx, client, actorID, current.Scope, current.OwnerUserID, current.OwnerOrgID, true); err != nil {
+			return sharedAccessError(err, ErrExecutionPlanNotFound)
+		}
+		profileID, rubyRetry, rounds := current.ProfileID, current.RubyRetry, current.Rounds
+		if input.ProfileID != nil {
+			profileID = *input.ProfileID
+		}
+		if input.RubyRetry != nil {
+			rubyRetry = *input.RubyRetry
+		}
+		if input.Rounds != nil {
+			rounds = input.Rounds
+		}
+		if err := validateExecutionRounds(rounds); err != nil {
+			return err
+		}
+		if err := bound.validatePlanReferences(ctx, actorID, current.OwnerOrgID, profileID, rubyRetry, rounds); err != nil {
+			return err
+		}
+		update := client.ExecutionPlanTemplate.UpdateOneID(id)
+		if input.Name != nil {
+			name := strings.TrimSpace(*input.Name)
+			if name == "" {
+				return ErrInvalidInput
+			}
+			update.SetName(name)
+		}
+		if input.Description != nil {
+			update.SetDescription(strings.TrimSpace(*input.Description))
+		}
+		if input.ProfileID != nil {
+			update.SetProfileID(profileID)
+		}
+		if input.RubyRetry != nil {
+			update.SetRubyRetry(rubyRetry)
+		}
+		if input.Rounds != nil {
+			update.SetRounds(rounds)
+		}
+		row, err = update.Save(ctx)
+		if err != nil {
+			return sharedAccessError(err, ErrExecutionPlanNotFound)
+		}
+		return recordSharedAudit(ctx, client, actorID, current.OwnerOrgID, "execution_plan", "update", id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return row.Unwrap(), nil
+}
+
+func (s *ExecutionPlanService) Delete(ctx context.Context, actorID, id int) error {
+	original, err := s.GetByID(ctx, actorID, id)
 	if err != nil {
 		return err
 	}
-
-	if plan.Scope == "system" {
-		return ErrExecutionPlanNotFound // 系统模板不可删除
-	}
-
-	// 检查是否有任务引用
-	count, err := s.client.Job.Query().
-		Where(job.ExecutionPlanIDEQ(plan.ID)).
-		Count(ctx)
-	if err != nil {
-		return fmt.Errorf("check job references: %w", err)
-	}
-	if count > 0 {
-		return fmt.Errorf("%w: %d translation jobs reference it", ErrExecutionPlanInUse, count)
-	}
-
-	return s.client.ExecutionPlanTemplate.DeleteOneID(plan.ID).Exec(ctx)
-}
-
-// checkAccess 验证用户是否有权访问指定执行计划模板。
-func (s *ExecutionPlanService) checkAccess(ctx context.Context, userID int, plan *ent.ExecutionPlanTemplate) error {
-	switch plan.Scope {
-	case ScopeUser:
-		if plan.OwnerUserID == nil || *plan.OwnerUserID != userID {
-			return ErrExecutionPlanNotFound // 不泄露资源存在性
-		}
-	case ScopeOrg:
-		if plan.OwnerOrgID == nil {
-			return ErrExecutionPlanNotFound
-		}
-		if _, err := s.users.requireMembership(ctx, userID, *plan.OwnerOrgID, OrgRoleMember); err != nil {
+	return withSharedMutation(ctx, s.client, original.OwnerOrgID, func(client *ent.Client) error {
+		bound := &ExecutionPlanService{client: client, users: s.users}
+		current, err := bound.GetByID(ctx, actorID, id)
+		if err != nil {
 			return err
 		}
-	default:
-		return ErrExecutionPlanScopeInvalid
-	}
-	return nil
+		if err := checkSharedAccess(ctx, client, actorID, current.Scope, current.OwnerUserID, current.OwnerOrgID, true); err != nil {
+			return sharedAccessError(err, ErrExecutionPlanNotFound)
+		}
+		referenced, err := client.Job.Query().Where(job.ExecutionPlanIDEQ(id)).Exist(ctx)
+		if err != nil {
+			return err
+		}
+		if referenced {
+			return ErrExecutionPlanInUse
+		}
+		if err := client.ExecutionPlanTemplate.DeleteOneID(id).Exec(ctx); err != nil {
+			return sharedAccessError(err, ErrExecutionPlanNotFound)
+		}
+		return recordSharedAudit(ctx, client, actorID, current.OwnerOrgID, "execution_plan", "delete", id)
+	})
 }
 
-// validatePlanProfileID 校验计划级 profile_id 引用的格式：非零；负数必须可解析为
-// 内置策略（IsBuiltinID 仅判定负号，可解析集合以 BuiltinExecutionProfile 为准，
-// 当前仅 -1）。正数的存在性与属主校验需查库，见 validatePlanProfileRef。
+func (s *ExecutionPlanService) checkAccess(ctx context.Context, actorID int, plan *ent.ExecutionPlanTemplate) error {
+	return sharedAccessError(checkSharedAccess(ctx, s.client, actorID, plan.Scope, plan.OwnerUserID, plan.OwnerOrgID, false), ErrExecutionPlanNotFound)
+}
+
 func validatePlanProfileID(profileID int) error {
 	if profileID == 0 {
 		return fmt.Errorf("%w: profile_id must not be zero", ErrExecutionPlanConfigInvalid)
@@ -290,30 +237,77 @@ func validatePlanProfileID(profileID int) error {
 	return nil
 }
 
-// validatePlanProfileRef 校验计划级 profile_id 引用对调用者可用：负数须可解析为
-// 内置策略；正数经 GetByID 确认存在、CheckAccess 复核属主/成员资格（规则单一来源
-// 见 ExecutionProfileService.CheckAccess）。越权或不存在的引用一律按 not found
-// 报错，不泄露他人资源的存在性（与 checkAccess 同一惯例）。
-func (s *ExecutionPlanService) validatePlanProfileRef(ctx context.Context, userID, profileID int) error {
+// validatePlanProfileRef preserves the standalone actor reference check.
+func (s *ExecutionPlanService) validatePlanProfileRef(ctx context.Context, actorID, profileID int) error {
+	return s.validatePlanProfileReference(ctx, actorID, nil, profileID)
+}
+
+func planReferenceError(field string, err error) error {
+	if errors.Is(err, ErrForbidden) || errors.Is(err, errSharedObjectNotFound) ||
+		errors.Is(err, ErrExecutionProfileNotFound) || errors.Is(err, ErrTranslationPromptTemplateNotFound) ||
+		errors.Is(err, ErrBootstrapPromptTemplateNotFound) || ent.IsNotFound(err) {
+		return fmt.Errorf("%w: %s not found or unavailable in this scope", ErrExecutionPlanConfigInvalid, field)
+	}
+	return err
+}
+
+func (s *ExecutionPlanService) validatePlanProfileReference(ctx context.Context, actorID int, orgID *int, profileID int) error {
 	if err := validatePlanProfileID(profileID); err != nil {
 		return err
 	}
-	if profileID < 0 {
-		return nil // 内置策略：validatePlanProfileID 已确认可解析
-	}
-	notFound := fmt.Errorf("%w: profile_id %d not found", ErrExecutionPlanConfigInvalid, profileID)
-	profile, err := s.profiles.GetByID(ctx, profileID)
-	if errors.Is(err, ErrExecutionProfileNotFound) {
-		return notFound
-	}
+	profile, err := (&ExecutionProfileService{client: s.client}).GetByID(ctx, actorID, profileID)
 	if err != nil {
+		return planReferenceError("profile_id", err)
+	}
+	return planReferenceError("profile_id", validateSharedReference(profile.Scope, profile.OwnerOrgID, orgID))
+}
+
+// validatePlanReferences checks all dependency ownership both when saving a plan and
+// immediately before producing a runtime snapshot. Organization targets cannot embed
+// private or other organizations' content, even if the actor can read that content.
+func (s *ExecutionPlanService) validatePlanReferences(ctx context.Context, actorID int, orgID *int, profileID int, rubyRetry schema.ExecutionPlanRubyRetryConfig, rounds []schema.ExecutionRoundConfig) error {
+	if err := s.validatePlanProfileReference(ctx, actorID, orgID, profileID); err != nil {
 		return err
 	}
-	if err := s.profiles.CheckAccess(ctx, userID, profile); err != nil {
-		if errors.Is(err, ErrExecutionProfileNotFound) {
-			return notFound
+	checkBackend := func(id int) error {
+		row, err := s.client.Backend.Get(ctx, id)
+		if err != nil {
+			return planReferenceError("backend_id", err)
 		}
-		return err
+		if err := checkSharedAccess(ctx, s.client, actorID, row.Scope, row.OwnerUserID, row.OwnerOrgID, false); err != nil {
+			return planReferenceError("backend_id", err)
+		}
+		return planReferenceError("backend_id", validateSharedReference(row.Scope, row.OwnerOrgID, orgID))
+	}
+	for i, round := range rounds {
+		if round.Mode != "correct" {
+			if err := checkBackend(round.BackendID); err != nil {
+				return fmt.Errorf("rounds[%d]: %w", i, err)
+			}
+		}
+		if round.Mode == "translate" && round.Translate != nil {
+			row, err := (&TranslationPromptTemplateService{client: s.client}).GetByID(ctx, actorID, round.Translate.PromptTemplateID)
+			if err != nil {
+				return planReferenceError("prompt_template_id", err)
+			}
+			if err := validateSharedReference(row.Scope, row.OwnerOrgID, orgID); err != nil {
+				return planReferenceError("prompt_template_id", err)
+			}
+		}
+		if round.Mode == "extract" && round.Extract != nil {
+			row, err := (&BootstrapPromptTemplateService{client: s.client}).GetByID(ctx, actorID, round.Extract.BootstrapTemplateID)
+			if err != nil {
+				return planReferenceError("template_id", err)
+			}
+			if err := validateSharedReference(row.Scope, row.OwnerOrgID, orgID); err != nil {
+				return planReferenceError("template_id", err)
+			}
+		}
+	}
+	if rubyRetry.Enabled && rubyRetry.BackendID != 0 {
+		if err := checkBackend(rubyRetry.BackendID); err != nil {
+			return fmt.Errorf("ruby_retry: %w", err)
+		}
 	}
 	return nil
 }

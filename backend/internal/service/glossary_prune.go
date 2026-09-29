@@ -215,8 +215,11 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	if templateID == 0 {
 		templateID = templates.BuiltinPrunePromptTemplateID
 	}
-	tmpl, err := s.pruneTemplates.GetByID(ctx, templateID)
+	tmpl, err := s.pruneTemplates.GetByID(ctx, actorUserID, templateID)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateSharedReference(tmpl.Scope, tmpl.OwnerOrgID, EffectiveProjectOrgID(projectRow)); err != nil {
 		return nil, err
 	}
 

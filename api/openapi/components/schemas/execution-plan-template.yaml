@@ -327,8 +327,12 @@ ExecutionPlanTemplateListResponse:
 
 CreateExecutionPlanTemplateRequest:
   type: object
+  description: 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。
   required: [name, profile_id, rounds]
   properties:
+    org_id:
+      type: integer
+      minimum: 1
     name:
       type: string
     description:
