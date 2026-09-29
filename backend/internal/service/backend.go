@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -11,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 )
 
 const (
@@ -35,6 +37,8 @@ type BackendService struct {
 	client      *ent.Client
 	users       *UserService
 	limiterPool *backend.LimiterPool
+	httpClients telemetry.HTTPClientFactory
+	policyMu    sync.Mutex // serialize committed configuration changes with the in-process registry
 }
 
 type BackendInput struct {
@@ -62,8 +66,12 @@ type BackendRecord struct {
 	OwnerOrgID         *int
 }
 
-func NewBackendService(client *ent.Client, users *UserService, limiterPool *backend.LimiterPool) *BackendService {
-	return &BackendService{client: client, users: users, limiterPool: limiterPool}
+func NewBackendService(client *ent.Client, users *UserService, limiterPool *backend.LimiterPool, clients ...telemetry.HTTPClientFactory) *BackendService {
+	s := &BackendService{client: client, users: users, limiterPool: limiterPool}
+	if len(clients) > 0 {
+		s.httpClients = clients[0]
+	}
+	return s
 }
 
 // Create 创建后端。
@@ -72,6 +80,8 @@ func NewBackendService(client *ent.Client, users *UserService, limiterPool *back
 //   - user scope：handler 直接从认证上下文取 actorUserID 作为 OwnerUserID（天然隔离）
 //   - org scope：handler 必须先验证 actorUserID 是 orgID 的管理员（RequireMembership）
 func (s *BackendService) Create(ctx context.Context, input CreateBackendInput) (*BackendRecord, error) {
+	s.policyMu.Lock()
+	defer s.policyMu.Unlock()
 	normalized, err := normalizeBackendInput(input.BackendInput)
 	if err != nil {
 		return nil, err
@@ -104,6 +114,9 @@ func (s *BackendService) Create(ctx context.Context, input CreateBackendInput) (
 			return nil, ErrBackendExists
 		}
 		return nil, err
+	}
+	if s.limiterPool != nil {
+		s.limiterPool.Register(created.ID, created.RateLimitPerMinute)
 	}
 	return backendRecord(created), nil
 }
@@ -181,6 +194,8 @@ func (s *BackendService) requireOwnership(ctx context.Context, actorUserID, back
 
 // Update 更新后端。需要 actorUserID 验证权限。
 func (s *BackendService) Update(ctx context.Context, actorUserID, backendID int, input BackendInput) (*BackendRecord, error) {
+	s.policyMu.Lock()
+	defer s.policyMu.Unlock()
 	if _, err := s.requireOwnership(ctx, actorUserID, backendID); err != nil {
 		return nil, err
 	}
@@ -211,6 +226,8 @@ func (s *BackendService) Update(ctx context.Context, actorUserID, backendID int,
 
 // Delete 删除后端。需要 actorUserID 验证权限。
 func (s *BackendService) Delete(ctx context.Context, actorUserID, backendID int) error {
+	s.policyMu.Lock()
+	defer s.policyMu.Unlock()
 	if _, err := s.requireOwnership(ctx, actorUserID, backendID); err != nil {
 		return err
 	}
@@ -312,7 +329,7 @@ func (s *BackendService) ListModels(ctx context.Context, typ string, opts map[st
 	if !isAllowedBackendType(typ) {
 		return nil, ErrBackendTypeInvalid
 	}
-	lister, err := backend.NewModelLister(typ, cloneMap(opts))
+	lister, err := backend.NewModelLister(typ, cloneMap(opts), telemetry.ClientFor(s.httpClients, typ, "list_models"))
 	if err != nil {
 		return nil, err
 	}
