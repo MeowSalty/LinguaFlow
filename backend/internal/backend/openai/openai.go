@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	openaigo "github.com/openai/openai-go/v3"
@@ -248,6 +249,9 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	if u, ok := opts["base_url"].(string); ok && u != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(u))
 	}
+	if cfg.HTTPClient != nil {
+		clientOpts = append(clientOpts, option.WithHTTPClient(cfg.HTTPClient))
+	}
 	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
 	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone:
@@ -284,7 +288,7 @@ type modelLister struct {
 	client openaigo.Client
 }
 
-func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
+func modelListerFactory(opts map[string]any, clients ...*http.Client) (backend.ModelLister, error) {
 	apiKey, _ := opts["api_key"].(string)
 	if apiKey == "" {
 		return nil, errors.New("openai: api_key is required")
@@ -297,6 +301,9 @@ func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
 	}
 	if u, ok := opts["base_url"].(string); ok && u != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(u))
+	}
+	if len(clients) > 0 && clients[0] != nil {
+		clientOpts = append(clientOpts, option.WithHTTPClient(clients[0]))
 	}
 	return &modelLister{client: openaigo.NewClient(clientOpts...)}, nil
 }
