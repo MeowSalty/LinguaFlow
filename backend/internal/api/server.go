@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,10 +17,12 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	backendentity "github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/sysmem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
 
@@ -64,6 +67,16 @@ type Server struct {
 	sseReplayBatch               int
 	sseMaxReplay                 int
 	ready                        atomic.Bool
+	collector                    *telemetry.Collector
+	limiterPool                  *backend.LimiterPool
+	httpClients                  *telemetry.HTTPClients
+	runMu                        sync.Mutex
+	runCancel                    context.CancelFunc
+	runStarted                   bool
+	shuttingDown                 bool
+	shutdownOnce                 sync.Once
+	shutdownDone                 chan struct{}
+	shutdownErr                  error
 }
 
 func (s *Server) isLocal() bool {
@@ -107,6 +120,26 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		sseMaxReplay:   cfg.SSE.MaxReplayEvents,
 	}
 	limiterPool := backend.NewLimiterPool()
+	s.collector = telemetry.NewCollector()
+	s.httpClients = telemetry.NewHTTPClients(s.collector)
+	s.limiterPool = limiterPool
+	s.shutdownDone = make(chan struct{})
+	initialized := false
+	defer func() {
+		if !initialized {
+			limiterPool.Shutdown()
+			s.httpClients.Shutdown()
+		}
+	}()
+	policies, err := client.Backend.Query().Select(backendentity.FieldID, backendentity.FieldRateLimitPerMinute).All(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("load current backend capacity policies: %w", err)
+	}
+	rates := make(map[int]int, len(policies))
+	for _, policy := range policies {
+		rates[policy.ID] = policy.RateLimitPerMinute
+	}
+	limiterPool.Initialize(rates)
 	s.adminService = service.NewAdminService(client)
 	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(*cfg), s.adminService)
 	s.userService = service.NewUserService(client, s.authService)
@@ -127,7 +160,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	}); err != nil {
 		logger.Warn("failed to initialize system settings", "error", err)
 	}
-	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool)
+	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool, s.httpClients)
 	s.projectSvc = service.NewProjectService(client, s.userService)
 	s.executionProfileSvc = service.NewExecutionProfileService(client, s.userService)
 	s.qaRecheck = service.NewQARecheckService(client, s.projectSvc, s.executionProfileSvc, logger)
@@ -148,10 +181,10 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	s.statsSvc = service.NewStatsService(client, s.projectSvc)
 	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	s.glossarySyncSvc = service.NewGlossarySyncService(client, s.glossarySvc, s.projectSvc, s.auditSvc, logger)
-	s.glossaryPruneSvc = service.NewGlossaryPruneService(client, s.projectSvc, s.backendSvc, s.glossarySvc, s.prunePromptTemplateSvc, limiterPool, logger)
+	s.glossaryPruneSvc = service.NewGlossaryPruneService(client, s.projectSvc, s.backendSvc, s.glossarySvc, s.prunePromptTemplateSvc, limiterPool, logger, s.httpClients)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
-	previewRunner := worker.NewPreviewRunner(logger, client, limiterPool)
-	revisionRunner := worker.NewRevisionPreviewRunner(logger, client, limiterPool)
+	previewRunner := worker.NewPreviewRunner(logger, client, limiterPool, s.httpClients)
+	revisionRunner := worker.NewRevisionPreviewRunner(logger, client, limiterPool, s.httpClients)
 	revisionSemaphore := service.NewPreviewSemaphore(cfg.Preview.MaxConcurrency)
 	s.previewSvc = service.NewPreviewServiceWithSemaphore(
 		logger,
@@ -178,7 +211,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		cfg.Preview.Timeout,
 		revisionSemaphore,
 	)
-	quickTranslateRunner := worker.NewQuickTranslateRunner(logger, client, limiterPool)
+	quickTranslateRunner := worker.NewQuickTranslateRunner(logger, client, limiterPool, s.httpClients)
 	s.quickTranslateSvc = service.NewQuickTranslateService(
 		logger,
 		client,
@@ -218,7 +251,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 			MaxInflightWeight:    int64(cfg.Pipeline.MaxInflightWeightMB) * 1024 * 1024,
 			MaxInflightResources: cfg.Pipeline.MaxInflightResources,
 		},
-		rssFuse,
+		rssFuse, s.httpClients,
 	)
 	syncTaskRunner := worker.NewSyncTaskRunner(
 		logger, client, s.glossarySyncSvc, syncQueue, s.resMutex,
@@ -233,41 +266,32 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+	initialized = true
 	return s, nil
 }
 
 func (s *Server) Run(ctx context.Context, ln net.Listener) error {
+	s.runMu.Lock()
+	if s.runStarted || s.shuttingDown {
+		s.runMu.Unlock()
+		return errors.New("server already started or shutting down")
+	}
+	s.runStarted = true
+	runCtx, cancel := context.WithCancel(ctx)
+	s.runCancel = cancel
+	s.httpServer.BaseContext = func(net.Listener) context.Context { return runCtx }
+	s.runMu.Unlock()
+	defer cancel()
 	serveErr := make(chan error, 1)
 
 	// 启动 Dispatcher（内部执行 Recover + WorkerPool）
 	if s.dispatcher != nil {
 		go func() {
-			if err := s.dispatcher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := s.dispatcher.Run(runCtx); err != nil && !errors.Is(err, context.Canceled) {
 				s.logger.Error("dispatcher stopped with error", "err", err)
 			}
 		}()
 	}
-
-	// 启动时执行一次过期任务清理
-	if err := s.glossarySyncSvc.CleanupExpiredTasks(ctx); err != nil {
-		s.logger.Warn("failed to cleanup expired sync tasks on startup", "error", err)
-	}
-
-	// 启动过期任务清理定时器（每小时执行一次）
-	go func() {
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := s.glossarySyncSvc.CleanupExpiredTasks(ctx); err != nil {
-					s.logger.Warn("failed to cleanup expired sync tasks", "error", err)
-				}
-			}
-		}
-	}()
 
 	s.ready.Store(true)
 
@@ -276,31 +300,94 @@ func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 		serveErr <- s.httpServer.Serve(ln)
 	}()
 
+	var servingError error
 	select {
-	case <-ctx.Done():
-		s.ready.Store(false)
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.serverCfg.ShutdownTimeout)
-		defer cancel()
-		if err := s.Shutdown(shutdownCtx); err != nil {
-			return err
-		}
-		err := <-serveErr
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return nil
-	case err := <-serveErr:
-		s.ready.Store(false)
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return nil
+	case <-runCtx.Done():
+	case servingError = <-serveErr:
 	}
+	s.ready.Store(false)
+	shutdownCtx, stop := context.WithTimeout(context.Background(), s.serverCfg.ShutdownTimeout)
+	defer stop()
+	closeErr := s.Shutdown(shutdownCtx)
+	if errors.Is(servingError, http.ErrServerClosed) {
+		servingError = nil
+	}
+	return errors.Join(servingError, closeErr)
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	s.logger.Info("http server shutting down")
-	return s.httpServer.Shutdown(ctx)
+	s.runMu.Lock()
+	s.shuttingDown = true
+	if s.shutdownDone == nil {
+		s.shutdownDone = make(chan struct{})
+	}
+	done := s.shutdownDone
+	s.runMu.Unlock()
+	s.shutdownOnce.Do(func() {
+		budget := 10 * time.Second
+		if s.serverCfg != nil && s.serverCfg.ShutdownTimeout > 0 {
+			budget = s.serverCfg.ShutdownTimeout
+		}
+		cleanupCtx, cancelCleanup := context.WithTimeout(ctx, budget)
+		go func() {
+			defer cancelCleanup()
+			s.ready.Store(false)
+			s.runMu.Lock()
+			if s.runCancel != nil {
+				s.runCancel()
+			}
+			s.runMu.Unlock()
+			if s.limiterPool != nil {
+				s.limiterPool.Shutdown()
+			}
+			if s.httpClients != nil {
+				s.httpClients.Shutdown()
+			}
+			results := make(chan error, 3)
+			go func() {
+				if s.dispatcher != nil {
+					results <- s.dispatcher.Shutdown(cleanupCtx)
+				} else {
+					results <- nil
+				}
+			}()
+			go func() {
+				if s.httpServer != nil {
+					err := s.httpServer.Shutdown(cleanupCtx)
+					if err != nil {
+						_ = s.httpServer.Close()
+					}
+					results <- err
+				} else {
+					results <- nil
+				}
+			}()
+			go func() {
+				if s.httpClients != nil {
+					results <- s.httpClients.Wait(cleanupCtx)
+				} else {
+					results <- nil
+				}
+			}()
+			for range 3 {
+				select {
+				case err := <-results:
+					s.shutdownErr = errors.Join(s.shutdownErr, err)
+				case <-cleanupCtx.Done():
+					s.shutdownErr = errors.Join(s.shutdownErr, cleanupCtx.Err())
+					close(done)
+					return
+				}
+			}
+			close(done)
+		}()
+	})
+	select {
+	case <-done:
+		return s.shutdownErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *Server) checkReadiness(ctx context.Context) error {
