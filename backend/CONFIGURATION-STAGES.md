@@ -10,3 +10,14 @@
 - 此阶段只增加设计与交付记录，不切换运行配置、API 或持久化格式。
 - 验证：`task backend:build`、`task backend:lint` 通过；没有 Go 源码变更，不新增或重复运行行为测试。
 - 后续范围：P1 独立解析/诊断；P2 初始化与启动；P3 凭据基础；P4 所有执行消费者与新快照同时切换；P5 生命周期管理。
+
+## P1：独立部署解析与诊断
+
+- 输入依赖：P0 契约。新增 `init --kind server`、`config check/explain --mode serve|local`。
+- 严格部署文档、逐字段 env/显式 flag 覆盖、来源解释、敏感值脱敏、跨字段默认值、local 网络许可和只读实例密钥状态已可独立验证。
+- keyring 文件格式、私有文件权限与原子发布属于配置依赖基础；此阶段没有持久化 provider 凭据或接入执行器。
+- 新解析器使用独立的纯默认值与不修改输入的校验；现有 serve/local 启动函数在 P2 接入初始化事务时一次切换，旧启动配置函数随后删除。新部署文档不通过旧加载器转换。
+- `init` 同时修复引用文件完整性和覆盖检查；翻译文档及执行语义仍在 P4 切换。
+- 验证：`task backend:format`、`task backend:lint`、`task backend:build` 通过；通过 Task 运行 config、cli、credential、templates 包全部测试。
+- Windows checkout 的 CRLF 模板已纳入 CLI 断言；没有将无关源码的换行状态噪声提交为内容差异。
+- 尚未验收：新启动输入的实际运行消费者（P2/P4）、凭据仓储（P3）、前端配套及全阶段集成。

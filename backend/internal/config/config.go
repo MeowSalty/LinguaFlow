@@ -283,6 +283,7 @@ type ServerConfig struct {
 	SSE               SSEConfig            `yaml:"sse"`
 	CORS              CORSConfig           `yaml:"cors"`
 	Registration      RegistrationConfig   `yaml:"registration"`
+	Credentials       CredentialsConfig    `yaml:"credentials"`
 	ServeUI           bool                 `yaml:"serve_ui"`
 }
 

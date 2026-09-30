@@ -1,0 +1,53 @@
+# Deployment input: mode defaults < explicit YAML < environment < explicit flags.
+# Select this document with --config; no directory or .env search is performed.
+kind: server
+version: 1
+server:
+  host: 0.0.0.0
+  port: 8080
+  data_dir: ./data
+  service_name: linguaflow
+  auto_migrate: true
+  serve_ui: true
+  # Supply a secret of at least 32 bytes through LINGUAFLOW_JWT_SECRET or _FILE.
+  jwt_issuer: linguaflow
+  jwt_expiry: 15m
+  refresh_token_expiry: 720h
+  shutdown_timeout: 10s
+  revision_retention: 2160h
+  database:
+    driver: sqlite
+    # Pool defaults depend on the final driver. PostgreSQL requires a DSN.
+  credentials:
+    # Existing deployment-managed keyring; see backend/CONFIGURATION.md.
+    keyring_file: ${LINGUAFLOW_CREDENTIALS_KEYRING_FILE}
+  # Omitted worker counts default to max(NumCPU, 2); queue capacities derive
+  # from the final counts: translation x4, sync x8.
+  pipeline:
+    max_inflight_weight_mb: 32
+    max_inflight_resources: 8
+    rss_limit_mb: 0
+  preview:
+    max_concurrency: 2
+    timeout: 5m
+    apply_token_ttl: 15m
+  quick_translate:
+    max_concurrency: 2
+    timeout: 5m
+    max_timeout: 30m
+  sse:
+    ring_buffer_capacity: 256
+    replay_batch_size: 200
+    # max_replay_events defaults to the final ring capacity x2.
+  cors:
+    allowed_origins: []
+log:
+  level: info
+  format: text
+bootstrap:
+  registration_enabled: false
+  # Remove admin inputs after initialization; database policy remains authoritative.
+  admin:
+    username: admin
+    email: admin@example.com
+    # Supply LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD or its _FILE form.

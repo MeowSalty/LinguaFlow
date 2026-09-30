@@ -61,6 +61,7 @@ func newRoot() (*cobra.Command, *appCtx) {
 	root.AddCommand(newLocalCmd(rt))
 	root.AddCommand(newTranslateCmd(rt))
 	root.AddCommand(newInitCmd())
+	root.AddCommand(newConfigCmd(rt))
 	root.AddCommand(newVersionCmd())
 	return root, rt
 }
