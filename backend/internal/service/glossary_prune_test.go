@@ -248,7 +248,7 @@ func TestResponseModeFromBackendOptions(t *testing.T) {
 
 func newTestPruneService(t *testing.T) (*GlossaryPruneService, *ent.Client) {
 	client := testClient(t)
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
 	glossarySvc := NewGlossaryService(client, projects)
 	svc := NewGlossaryPruneService(client, projects, NewBackendService(client, users, nil), glossarySvc, NewPrunePromptTemplateService(client), nil, discardLogger())

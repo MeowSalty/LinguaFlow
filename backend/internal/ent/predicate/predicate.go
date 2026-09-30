@@ -24,6 +24,9 @@ type ExecutionProfile func(*sql.Selector)
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
 
+// InstanceInitialization is the predicate function for instanceinitialization builders.
+type InstanceInitialization func(*sql.Selector)
+
 // Job is the predicate function for job builders.
 type Job func(*sql.Selector)
 

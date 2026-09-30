@@ -191,6 +191,7 @@ adminSettings:
   get:
     operationId: AdminGetSettings
     summary: 获取系统配置
+    description: 返回数据库权威政策。设置缺失、损坏或读取故障返回 503。
     security:
       - bearerAuth: []
     responses:
@@ -205,6 +206,7 @@ adminSettings:
   patch:
     operationId: AdminUpdateSettings
     summary: 更新系统配置
+    description: 原子更新布尔政策并记录操作者及非敏感变更；拒绝未知字段、null 和字符串布尔值。
     security:
       - bearerAuth: []
     requestBody:

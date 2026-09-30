@@ -37,7 +37,7 @@ import (
 // newJobRoundTestService 构造仅注入 client/projects/broker 的 JobService，
 // 与 job_cancel_retry_state_test.go 的做法一致，绕过 NewJobService 的完整依赖树。
 func newJobRoundTestService(client *ent.Client, broker *event.Broker) *JobService {
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
+	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
 	return &JobService{client: client, projects: projects, broker: broker}
 }
 

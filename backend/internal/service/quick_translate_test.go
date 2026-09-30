@@ -48,7 +48,7 @@ func newQuickFixture(t *testing.T) (*QuickTranslateService, *ent.Client, int, *f
 	t.Helper()
 	client := testClient(t)
 	logger := discardLogger()
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
 	backends := NewBackendService(client, users, nil)
 	profiles := NewExecutionProfileService(client, users)

@@ -80,6 +80,16 @@ func TestConfigCommandsRespectExplicitFlags(t *testing.T) {
 	}
 }
 
+func TestRemovedSecretFlagRejected(t *testing.T) {
+	root, _ := newRoot()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"serve", "--jwt-secret", "should-not-be-used"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("removed secret flag accepted")
+	}
+}
+
 func TestInitWritesCompleteReferences(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "translation.yaml")
 	cmd := newInitCmd()

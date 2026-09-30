@@ -21,7 +21,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/sysmem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
@@ -37,6 +36,8 @@ type Server struct {
 	localUser                    *ent.User // 本地模式下非 nil
 	authService                  *service.AuthService
 	adminService                 *service.AdminService
+	settingsService              *service.SettingsService
+	runtimeAddress               config.RuntimeAddress
 	userService                  *service.UserService
 	backendSvc                   *service.BackendService
 	projectSvc                   *service.ProjectService
@@ -94,7 +95,7 @@ func (s *Server) localAuthUser() (authenticatedUser, bool) {
 	return authenticatedUser{}, false
 }
 
-func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User) (*Server, error) {
+func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User, addresses ...config.RuntimeAddress) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -119,6 +120,10 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		sseReplayBatch: cfg.SSE.ReplayBatchSize,
 		sseMaxReplay:   cfg.SSE.MaxReplayEvents,
 	}
+	s.runtimeAddress = config.RuntimeAddress{Host: cfg.Host, Port: cfg.Port}
+	if len(addresses) > 0 {
+		s.runtimeAddress = addresses[0]
+	}
 	limiterPool := backend.NewLimiterPool()
 	s.collector = telemetry.NewCollector()
 	s.httpClients = telemetry.NewHTTPClients(s.collector)
@@ -141,25 +146,10 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	}
 	limiterPool.Initialize(rates)
 	s.adminService = service.NewAdminService(client)
-	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(*cfg), s.adminService)
+	s.settingsService = service.NewSettingsService(client)
+	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(*cfg), s.settingsService)
 	s.userService = service.NewUserService(client, s.authService)
 
-	// Seed default system settings from YAML config (only writes if table is empty for each key).
-	regEnabled := "true"
-	if !cfg.Registration.Enabled {
-		regEnabled = "false"
-	}
-	autoAdmin := "true"
-	if !cfg.Registration.AutoAdmin {
-		autoAdmin = "false"
-	}
-	if err := s.adminService.InitializeSettings(context.Background(), map[string]string{
-		service.SettingRegistrationEnabled: regEnabled,
-		service.SettingDefaultUserRole:     "user",
-		service.SettingAutoAdmin:           autoAdmin,
-	}); err != nil {
-		logger.Warn("failed to initialize system settings", "error", err)
-	}
 	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool, s.httpClients)
 	s.projectSvc = service.NewProjectService(client, s.userService)
 	s.executionProfileSvc = service.NewExecutionProfileService(client, s.userService)
@@ -233,24 +223,13 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 
 	// RSS 保险丝：进程级双水位准入闸门（0 = 关闭）。仅是准入控制，
 	// 不改变任务状态；触发时资源排队、在途请求继续。
-	var rssFuse *sysmem.Gate
-	if cfg.Pipeline.RssLimitMB > 0 {
-		rssFuse = sysmem.NewGate(uint64(cfg.Pipeline.RssLimitMB)*1024*1024, sysmem.ReadRSS, logger)
-		logger.Info("rss fuse enabled",
-			"limit_mb", cfg.Pipeline.RssLimitMB,
-			"high_watermark_mb", float64(cfg.Pipeline.RssLimitMB)*0.85,
-			"low_watermark_mb", float64(cfg.Pipeline.RssLimitMB)*0.70,
-		)
-	}
+	pipelineConfig, rssFuse := worker.PipelineRuntime(cfg.Pipeline, logger)
 
 	// 创建 Runner
 	translationRunner := worker.NewJobRunner(
 		logger, client, s.jobSvc, jobStore,
 		translationQueue, s.eventBroker, limiterPool, s.resMutex, cfg.Database.Driver,
-		worker.PipelineConfig{
-			MaxInflightWeight:    int64(cfg.Pipeline.MaxInflightWeightMB) * 1024 * 1024,
-			MaxInflightResources: cfg.Pipeline.MaxInflightResources,
-		},
+		pipelineConfig,
 		rssFuse, s.httpClients,
 	)
 	syncTaskRunner := worker.NewSyncTaskRunner(
@@ -403,5 +382,6 @@ func (s *Server) checkReadiness(ctx context.Context) error {
 	if err := s.db.PingContext(pingCtx); err != nil {
 		return err
 	}
-	return nil
+	_, err := service.NewInitializationService(s.entClient).Validate(pingCtx, s.mode)
+	return err
 }

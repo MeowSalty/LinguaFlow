@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -56,6 +57,7 @@ const (
 	TypeExecutionPlanTemplate     = "ExecutionPlanTemplate"
 	TypeExecutionProfile          = "ExecutionProfile"
 	TypeGlossaryEntry             = "GlossaryEntry"
+	TypeInstanceInitialization    = "InstanceInitialization"
 	TypeJob                       = "Job"
 	TypeJobResource               = "JobResource"
 	TypeJobRound                  = "JobRound"
@@ -5673,6 +5675,646 @@ func (m *GlossaryEntryMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown GlossaryEntry edge %s", name)
+}
+
+// InstanceInitializationMutation represents an operation that mutates the InstanceInitialization nodes in the graph.
+type InstanceInitializationMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int
+	created_at       *time.Time
+	updated_at       *time.Time
+	version          *int
+	addversion       *int
+	mode             *instanceinitialization.Mode
+	local_user_id    *int
+	addlocal_user_id *int
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*InstanceInitialization, error)
+	predicates       []predicate.InstanceInitialization
+}
+
+var _ ent.Mutation = (*InstanceInitializationMutation)(nil)
+
+// instanceinitializationOption allows management of the mutation configuration using functional options.
+type instanceinitializationOption func(*InstanceInitializationMutation)
+
+// newInstanceInitializationMutation creates new mutation for the InstanceInitialization entity.
+func newInstanceInitializationMutation(c config, op Op, opts ...instanceinitializationOption) *InstanceInitializationMutation {
+	m := &InstanceInitializationMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeInstanceInitialization,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withInstanceInitializationID sets the ID field of the mutation.
+func withInstanceInitializationID(id int) instanceinitializationOption {
+	return func(m *InstanceInitializationMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *InstanceInitialization
+		)
+		m.oldValue = func(ctx context.Context) (*InstanceInitialization, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().InstanceInitialization.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withInstanceInitialization sets the old InstanceInitialization of the mutation.
+func withInstanceInitialization(node *InstanceInitialization) instanceinitializationOption {
+	return func(m *InstanceInitializationMutation) {
+		m.oldValue = func(context.Context) (*InstanceInitialization, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m InstanceInitializationMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m InstanceInitializationMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of InstanceInitialization entities.
+func (m *InstanceInitializationMutation) SetID(id int) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *InstanceInitializationMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *InstanceInitializationMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().InstanceInitialization.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *InstanceInitializationMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *InstanceInitializationMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the InstanceInitialization entity.
+// If the InstanceInitialization object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InstanceInitializationMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *InstanceInitializationMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *InstanceInitializationMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *InstanceInitializationMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the InstanceInitialization entity.
+// If the InstanceInitialization object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InstanceInitializationMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *InstanceInitializationMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetVersion sets the "version" field.
+func (m *InstanceInitializationMutation) SetVersion(i int) {
+	m.version = &i
+	m.addversion = nil
+}
+
+// Version returns the value of the "version" field in the mutation.
+func (m *InstanceInitializationMutation) Version() (r int, exists bool) {
+	v := m.version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersion returns the old "version" field's value of the InstanceInitialization entity.
+// If the InstanceInitialization object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InstanceInitializationMutation) OldVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersion: %w", err)
+	}
+	return oldValue.Version, nil
+}
+
+// AddVersion adds i to the "version" field.
+func (m *InstanceInitializationMutation) AddVersion(i int) {
+	if m.addversion != nil {
+		*m.addversion += i
+	} else {
+		m.addversion = &i
+	}
+}
+
+// AddedVersion returns the value that was added to the "version" field in this mutation.
+func (m *InstanceInitializationMutation) AddedVersion() (r int, exists bool) {
+	v := m.addversion
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetVersion resets all changes to the "version" field.
+func (m *InstanceInitializationMutation) ResetVersion() {
+	m.version = nil
+	m.addversion = nil
+}
+
+// SetMode sets the "mode" field.
+func (m *InstanceInitializationMutation) SetMode(i instanceinitialization.Mode) {
+	m.mode = &i
+}
+
+// Mode returns the value of the "mode" field in the mutation.
+func (m *InstanceInitializationMutation) Mode() (r instanceinitialization.Mode, exists bool) {
+	v := m.mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMode returns the old "mode" field's value of the InstanceInitialization entity.
+// If the InstanceInitialization object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InstanceInitializationMutation) OldMode(ctx context.Context) (v instanceinitialization.Mode, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMode: %w", err)
+	}
+	return oldValue.Mode, nil
+}
+
+// ResetMode resets all changes to the "mode" field.
+func (m *InstanceInitializationMutation) ResetMode() {
+	m.mode = nil
+}
+
+// SetLocalUserID sets the "local_user_id" field.
+func (m *InstanceInitializationMutation) SetLocalUserID(i int) {
+	m.local_user_id = &i
+	m.addlocal_user_id = nil
+}
+
+// LocalUserID returns the value of the "local_user_id" field in the mutation.
+func (m *InstanceInitializationMutation) LocalUserID() (r int, exists bool) {
+	v := m.local_user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLocalUserID returns the old "local_user_id" field's value of the InstanceInitialization entity.
+// If the InstanceInitialization object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InstanceInitializationMutation) OldLocalUserID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLocalUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLocalUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLocalUserID: %w", err)
+	}
+	return oldValue.LocalUserID, nil
+}
+
+// AddLocalUserID adds i to the "local_user_id" field.
+func (m *InstanceInitializationMutation) AddLocalUserID(i int) {
+	if m.addlocal_user_id != nil {
+		*m.addlocal_user_id += i
+	} else {
+		m.addlocal_user_id = &i
+	}
+}
+
+// AddedLocalUserID returns the value that was added to the "local_user_id" field in this mutation.
+func (m *InstanceInitializationMutation) AddedLocalUserID() (r int, exists bool) {
+	v := m.addlocal_user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearLocalUserID clears the value of the "local_user_id" field.
+func (m *InstanceInitializationMutation) ClearLocalUserID() {
+	m.local_user_id = nil
+	m.addlocal_user_id = nil
+	m.clearedFields[instanceinitialization.FieldLocalUserID] = struct{}{}
+}
+
+// LocalUserIDCleared returns if the "local_user_id" field was cleared in this mutation.
+func (m *InstanceInitializationMutation) LocalUserIDCleared() bool {
+	_, ok := m.clearedFields[instanceinitialization.FieldLocalUserID]
+	return ok
+}
+
+// ResetLocalUserID resets all changes to the "local_user_id" field.
+func (m *InstanceInitializationMutation) ResetLocalUserID() {
+	m.local_user_id = nil
+	m.addlocal_user_id = nil
+	delete(m.clearedFields, instanceinitialization.FieldLocalUserID)
+}
+
+// Where appends a list predicates to the InstanceInitializationMutation builder.
+func (m *InstanceInitializationMutation) Where(ps ...predicate.InstanceInitialization) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the InstanceInitializationMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *InstanceInitializationMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.InstanceInitialization, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *InstanceInitializationMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *InstanceInitializationMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (InstanceInitialization).
+func (m *InstanceInitializationMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *InstanceInitializationMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.created_at != nil {
+		fields = append(fields, instanceinitialization.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, instanceinitialization.FieldUpdatedAt)
+	}
+	if m.version != nil {
+		fields = append(fields, instanceinitialization.FieldVersion)
+	}
+	if m.mode != nil {
+		fields = append(fields, instanceinitialization.FieldMode)
+	}
+	if m.local_user_id != nil {
+		fields = append(fields, instanceinitialization.FieldLocalUserID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *InstanceInitializationMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case instanceinitialization.FieldCreatedAt:
+		return m.CreatedAt()
+	case instanceinitialization.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case instanceinitialization.FieldVersion:
+		return m.Version()
+	case instanceinitialization.FieldMode:
+		return m.Mode()
+	case instanceinitialization.FieldLocalUserID:
+		return m.LocalUserID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *InstanceInitializationMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case instanceinitialization.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case instanceinitialization.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case instanceinitialization.FieldVersion:
+		return m.OldVersion(ctx)
+	case instanceinitialization.FieldMode:
+		return m.OldMode(ctx)
+	case instanceinitialization.FieldLocalUserID:
+		return m.OldLocalUserID(ctx)
+	}
+	return nil, fmt.Errorf("unknown InstanceInitialization field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *InstanceInitializationMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case instanceinitialization.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case instanceinitialization.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case instanceinitialization.FieldVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersion(v)
+		return nil
+	case instanceinitialization.FieldMode:
+		v, ok := value.(instanceinitialization.Mode)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMode(v)
+		return nil
+	case instanceinitialization.FieldLocalUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLocalUserID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown InstanceInitialization field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *InstanceInitializationMutation) AddedFields() []string {
+	var fields []string
+	if m.addversion != nil {
+		fields = append(fields, instanceinitialization.FieldVersion)
+	}
+	if m.addlocal_user_id != nil {
+		fields = append(fields, instanceinitialization.FieldLocalUserID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *InstanceInitializationMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case instanceinitialization.FieldVersion:
+		return m.AddedVersion()
+	case instanceinitialization.FieldLocalUserID:
+		return m.AddedLocalUserID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *InstanceInitializationMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case instanceinitialization.FieldVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddVersion(v)
+		return nil
+	case instanceinitialization.FieldLocalUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLocalUserID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown InstanceInitialization numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *InstanceInitializationMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(instanceinitialization.FieldLocalUserID) {
+		fields = append(fields, instanceinitialization.FieldLocalUserID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *InstanceInitializationMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *InstanceInitializationMutation) ClearField(name string) error {
+	switch name {
+	case instanceinitialization.FieldLocalUserID:
+		m.ClearLocalUserID()
+		return nil
+	}
+	return fmt.Errorf("unknown InstanceInitialization nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *InstanceInitializationMutation) ResetField(name string) error {
+	switch name {
+	case instanceinitialization.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case instanceinitialization.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case instanceinitialization.FieldVersion:
+		m.ResetVersion()
+		return nil
+	case instanceinitialization.FieldMode:
+		m.ResetMode()
+		return nil
+	case instanceinitialization.FieldLocalUserID:
+		m.ResetLocalUserID()
+		return nil
+	}
+	return fmt.Errorf("unknown InstanceInitialization field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *InstanceInitializationMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *InstanceInitializationMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *InstanceInitializationMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *InstanceInitializationMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *InstanceInitializationMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *InstanceInitializationMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *InstanceInitializationMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown InstanceInitialization unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *InstanceInitializationMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown InstanceInitialization edge %s", name)
 }
 
 // JobMutation represents an operation that mutates the Job nodes in the graph.

@@ -11,6 +11,7 @@ import (
 	"github.com/inconshreveable/mousetrap"
 	"github.com/spf13/cobra"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/logging"
 )
 
@@ -33,9 +34,18 @@ func newRoot() (*cobra.Command, *appCtx) {
 开箱即用：一行命令翻译 Markdown / 字幕 / 结构化数据。
 高度可定制：提示词模板、术语表、上下文注入、Lua 脚本扩展。`,
 		SilenceUsage: true,
-		PersistentPreRun: func(_ *cobra.Command, _ []string) {
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			if cmd.Parent() == nil && mousetrap.StartedByExplorer() {
+				return
+			}
+			// Deployment commands construct their logger after all sources resolve.
+			for current := cmd; current != nil; current = current.Parent() {
+				if current.Name() == "serve" || current.Name() == "local" || current.Name() == "config" || current.Name() == "admin" {
+					return
+				}
+			}
 			lvl := rt.logLevel
-			if rt.verbose && lvl == "" {
+			if rt.verbose && !cmd.Flags().Changed("log-level") {
 				lvl = "debug"
 			}
 			rt.logger = logging.New(os.Stderr, lvl, rt.logFormat)
@@ -43,10 +53,11 @@ func newRoot() (*cobra.Command, *appCtx) {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if mousetrap.StartedByExplorer() {
-				return runLocal(cmd.Context(), rt, localOptions{
-					host: "127.0.0.1",
-					port: 18080,
-				})
+				resolved, err := resolveDeployment(cmd, rt, config.ModeLocal)
+				if err != nil {
+					return err
+				}
+				return runLocal(cmd.Context(), resolved, false)
 			}
 			return cmd.Help()
 		},
@@ -62,6 +73,7 @@ func newRoot() (*cobra.Command, *appCtx) {
 	root.AddCommand(newTranslateCmd(rt))
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newConfigCmd(rt))
+	root.AddCommand(newAdminCmd(rt))
 	root.AddCommand(newVersionCmd())
 	return root, rt
 }

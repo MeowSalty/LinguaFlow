@@ -66,7 +66,7 @@ func TestExecutionPlanCreate_ProfileIDValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	plans := NewExecutionPlanService(client, users, NewExecutionProfileService(client, users))
 	backendRow, err := client.Backend.Create().SetName("plan-backend").SetScope(ScopeUser).SetOwnerUserID(user.ID).SetBackendType(entbackend.BackendTypeOpenai).Save(ctx)
 	if err != nil {
@@ -173,7 +173,7 @@ func TestExecutionPlanUpdate_ProfileID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	plans := NewExecutionPlanService(client, users, NewExecutionProfileService(client, users))
 	backendRow, err := client.Backend.Create().SetName("plan-backend").SetScope(ScopeUser).SetOwnerUserID(user.ID).SetBackendType(entbackend.BackendTypeOpenai).Save(ctx)
 	if err != nil {
@@ -288,7 +288,7 @@ func TestValidateAndSnapshotWith_MaterializesPlanLevelStrategy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	backends := NewBackendService(client, users, nil)
 	backendRow, err := client.Backend.Create().
 		SetName("strategy-backend").
@@ -407,7 +407,7 @@ func TestExecutionProfileDelete_ReferencedByPlanRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create other user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	profiles := NewExecutionProfileService(client, users)
 
 	referenced, err := client.ExecutionProfile.Create().

@@ -24,6 +24,8 @@ type Tx struct {
 	ExecutionProfile *ExecutionProfileClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
+	// InstanceInitialization is the client for interacting with the InstanceInitialization builders.
+	InstanceInitialization *InstanceInitializationClient
 	// Job is the client for interacting with the Job builders.
 	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
@@ -199,6 +201,7 @@ func (tx *Tx) init() {
 	tx.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(tx.config)
 	tx.ExecutionProfile = NewExecutionProfileClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
+	tx.InstanceInitialization = NewInstanceInitializationClient(tx.config)
 	tx.Job = NewJobClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
 	tx.JobRound = NewJobRoundClient(tx.config)

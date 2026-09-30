@@ -18,7 +18,7 @@ import (
 func newApplyFixture(t *testing.T) (*PreviewService, *ent.Client, int, int) {
 	t.Helper()
 	client := testClient(t)
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
 	backends := NewBackendService(client, users, nil)
 	profiles := NewExecutionProfileService(client, users)

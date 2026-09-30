@@ -59,7 +59,7 @@ func TestCancelJob_StatePrecondition(t *testing.T) {
 			ctx := context.Background()
 			user := createTestUser(t, client, "cancel-"+tt.name)
 			project := createTestProject(t, client, "cancel-proj-"+tt.name, user.ID)
-			projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
+			projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
 			svc := &JobService{client: client, projects: projects}
 			job, jrs := seedJobCancelRetry(t, client, project.ID, tt.jobStatus, tt.resStatuses)
 
@@ -110,7 +110,7 @@ func TestRetryJob_StatePrecondition(t *testing.T) {
 			ctx := context.Background()
 			user := createTestUser(t, client, "retry-"+tt.name)
 			project := createTestProject(t, client, "retry-proj-"+tt.name, user.ID)
-			projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
+			projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
 			svc := &JobService{client: client, projects: projects}
 			job, jrs := seedJobCancelRetry(t, client, project.ID, tt.jobStatus, tt.resStatuses)
 

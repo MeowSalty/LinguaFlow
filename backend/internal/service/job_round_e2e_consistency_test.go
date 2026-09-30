@@ -39,7 +39,7 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 	client := testClient(t)
 	user := createTestUser(t, client, "e2e-user")
 	project := createTestProject(t, client, "e2e-project", user.ID)
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
+	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
 	// 真实 fileStore（临时目录）：DeleteResource 事务提交后会删除存储文件，
 	// 测试资源 storage 路径不存在时 os.Remove 返回 IsNotExist 被吞掉。
 	fs, err := filestore.NewLocal(t.TempDir())

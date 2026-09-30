@@ -80,16 +80,27 @@ AdminAuditLogListResponse:
 
 SystemSettingsResponse:
   type: object
+  additionalProperties: false
+  required: [settings]
   properties:
     settings:
       type: object
-      additionalProperties:
-        type: string
+      additionalProperties: false
+      required: [registration_enabled]
+      properties:
+        registration_enabled:
+          type: boolean
+          description: 是否允许公开注册；公开注册账户始终为普通用户。
 
 UpdateSystemSettingsRequest:
   type: object
+  additionalProperties: false
+  required: [settings]
   properties:
     settings:
       type: object
-      additionalProperties:
-        type: string
+      additionalProperties: false
+      required: [registration_enabled]
+      properties:
+        registration_enabled:
+          type: boolean

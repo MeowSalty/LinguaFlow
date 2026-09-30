@@ -126,7 +126,7 @@ func TestMarkJobResourceCompleted_ConvergesStrandedRounds(t *testing.T) {
 	ctx := context.Background()
 	user := createTestUser(t, client, "converge-user")
 	project := createTestProject(t, client, "converge-proj", user.ID)
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
+	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
 	svc := &JobService{client: client, projects: projects}
 	job, jrs := seedJobCancelRetry(t, client, project.ID, JobStatusRunning, []string{JobResourceStatusRunning})
 
@@ -220,7 +220,7 @@ func TestRetryJob_ResetsRunningRounds(t *testing.T) {
 	ctx := context.Background()
 	user := createTestUser(t, client, "retry-running-user")
 	project := createTestProject(t, client, "retry-running-proj", user.ID)
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
+	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
 	svc := &JobService{client: client, projects: projects}
 	job, jrs := seedJobCancelRetry(t, client, project.ID, JobStatusFailed, []string{JobResourceStatusFailed})
 
@@ -274,7 +274,7 @@ func TestRetryJob_ResetsSkippedRounds(t *testing.T) {
 	ctx := context.Background()
 	user := createTestUser(t, client, "retry-skipped-user")
 	project := createTestProject(t, client, "retry-skipped-proj", user.ID)
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
+	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
 	svc := &JobService{client: client, projects: projects}
 	job, jrs := seedJobCancelRetry(t, client, project.ID, JobStatusFailed, []string{JobResourceStatusFailed})
 

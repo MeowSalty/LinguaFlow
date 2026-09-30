@@ -57,7 +57,7 @@ func newRevisionFixture(t *testing.T) (*RevisionPreviewService, *ent.Client, int
 	t.Helper()
 	client := testClient(t)
 	logger := discardLogger()
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
 	backends := NewBackendService(client, users, nil)
 	profiles := NewExecutionProfileService(client, users)
@@ -134,7 +134,7 @@ func TestRevisionPreviewService_Busy(t *testing.T) {
 	_, client, userID, _, runner := newRevisionFixture(t)
 	sem := make(chan struct{}, 1)
 	sem <- struct{}{}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	busySvc := NewRevisionPreviewService(discardLogger(), client, NewProjectService(client, users), nil, runner, "test-secret", time.Minute, 1, time.Minute, sem)
 
 	out, err := busySvc.RunRevisionPreview(context.Background(), RevisionPreviewInput{ActorUserID: userID})
@@ -468,7 +468,7 @@ func TestRevisionPreviewService_Synthesized_IssueCodesNarrowed(t *testing.T) {
 // 审计事件分流为 revision_preview.apply，且二次应用因基线变化冲突。
 func TestRevisionPreviewService_ApplyViaPreviewEndpoint(t *testing.T) {
 	svc, client, userID, projectID, runner := newRevisionFixture(t)
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
 	backends := NewBackendService(client, users, nil)
 	profiles := NewExecutionProfileService(client, users)

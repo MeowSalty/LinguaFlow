@@ -21,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -59,6 +60,8 @@ type Client struct {
 	ExecutionProfile *ExecutionProfileClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
+	// InstanceInitialization is the client for interacting with the InstanceInitialization builders.
+	InstanceInitialization *InstanceInitializationClient
 	// Job is the client for interacting with the Job builders.
 	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
@@ -114,6 +117,7 @@ func (c *Client) init() {
 	c.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(c.config)
 	c.ExecutionProfile = NewExecutionProfileClient(c.config)
 	c.GlossaryEntry = NewGlossaryEntryClient(c.config)
+	c.InstanceInitialization = NewInstanceInitializationClient(c.config)
 	c.Job = NewJobClient(c.config)
 	c.JobResource = NewJobResourceClient(c.config)
 	c.JobRound = NewJobRoundClient(c.config)
@@ -231,6 +235,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ExecutionPlanTemplate:     NewExecutionPlanTemplateClient(cfg),
 		ExecutionProfile:          NewExecutionProfileClient(cfg),
 		GlossaryEntry:             NewGlossaryEntryClient(cfg),
+		InstanceInitialization:    NewInstanceInitializationClient(cfg),
 		Job:                       NewJobClient(cfg),
 		JobResource:               NewJobResourceClient(cfg),
 		JobRound:                  NewJobRoundClient(cfg),
@@ -275,6 +280,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ExecutionPlanTemplate:     NewExecutionPlanTemplateClient(cfg),
 		ExecutionProfile:          NewExecutionProfileClient(cfg),
 		GlossaryEntry:             NewGlossaryEntryClient(cfg),
+		InstanceInitialization:    NewInstanceInitializationClient(cfg),
 		Job:                       NewJobClient(cfg),
 		JobResource:               NewJobResourceClient(cfg),
 		JobRound:                  NewJobRoundClient(cfg),
@@ -324,10 +330,10 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
-		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.JobRound,
-		c.JobRoundSegment, c.OrgMembership, c.Organization, c.Project,
-		c.PrunePromptTemplate, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
-		c.SegmentRevision, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.ExecutionProfile, c.GlossaryEntry, c.InstanceInitialization, c.Job,
+		c.JobResource, c.JobRound, c.JobRoundSegment, c.OrgMembership, c.Organization,
+		c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource, c.SSEEvent,
+		c.Segment, c.SegmentRevision, c.SyncTask, c.SystemSetting, c.TMEntry,
 		c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Use(hooks...)
@@ -339,10 +345,10 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
-		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.JobRound,
-		c.JobRoundSegment, c.OrgMembership, c.Organization, c.Project,
-		c.PrunePromptTemplate, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
-		c.SegmentRevision, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.ExecutionProfile, c.GlossaryEntry, c.InstanceInitialization, c.Job,
+		c.JobResource, c.JobRound, c.JobRoundSegment, c.OrgMembership, c.Organization,
+		c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource, c.SSEEvent,
+		c.Segment, c.SegmentRevision, c.SyncTask, c.SystemSetting, c.TMEntry,
 		c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Intercept(interceptors...)
@@ -364,6 +370,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ExecutionProfile.mutate(ctx, m)
 	case *GlossaryEntryMutation:
 		return c.GlossaryEntry.mutate(ctx, m)
+	case *InstanceInitializationMutation:
+		return c.InstanceInitialization.mutate(ctx, m)
 	case *JobMutation:
 		return c.Job.mutate(ctx, m)
 	case *JobResourceMutation:
@@ -1410,6 +1418,139 @@ func (c *GlossaryEntryClient) mutate(ctx context.Context, m *GlossaryEntryMutati
 		return (&GlossaryEntryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GlossaryEntry mutation op: %q", m.Op())
+	}
+}
+
+// InstanceInitializationClient is a client for the InstanceInitialization schema.
+type InstanceInitializationClient struct {
+	config
+}
+
+// NewInstanceInitializationClient returns a client for the InstanceInitialization from the given config.
+func NewInstanceInitializationClient(c config) *InstanceInitializationClient {
+	return &InstanceInitializationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `instanceinitialization.Hooks(f(g(h())))`.
+func (c *InstanceInitializationClient) Use(hooks ...Hook) {
+	c.hooks.InstanceInitialization = append(c.hooks.InstanceInitialization, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `instanceinitialization.Intercept(f(g(h())))`.
+func (c *InstanceInitializationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.InstanceInitialization = append(c.inters.InstanceInitialization, interceptors...)
+}
+
+// Create returns a builder for creating a InstanceInitialization entity.
+func (c *InstanceInitializationClient) Create() *InstanceInitializationCreate {
+	mutation := newInstanceInitializationMutation(c.config, OpCreate)
+	return &InstanceInitializationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of InstanceInitialization entities.
+func (c *InstanceInitializationClient) CreateBulk(builders ...*InstanceInitializationCreate) *InstanceInitializationCreateBulk {
+	return &InstanceInitializationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *InstanceInitializationClient) MapCreateBulk(slice any, setFunc func(*InstanceInitializationCreate, int)) *InstanceInitializationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &InstanceInitializationCreateBulk{err: fmt.Errorf("calling to InstanceInitializationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*InstanceInitializationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &InstanceInitializationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for InstanceInitialization.
+func (c *InstanceInitializationClient) Update() *InstanceInitializationUpdate {
+	mutation := newInstanceInitializationMutation(c.config, OpUpdate)
+	return &InstanceInitializationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *InstanceInitializationClient) UpdateOne(_m *InstanceInitialization) *InstanceInitializationUpdateOne {
+	mutation := newInstanceInitializationMutation(c.config, OpUpdateOne, withInstanceInitialization(_m))
+	return &InstanceInitializationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *InstanceInitializationClient) UpdateOneID(id int) *InstanceInitializationUpdateOne {
+	mutation := newInstanceInitializationMutation(c.config, OpUpdateOne, withInstanceInitializationID(id))
+	return &InstanceInitializationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for InstanceInitialization.
+func (c *InstanceInitializationClient) Delete() *InstanceInitializationDelete {
+	mutation := newInstanceInitializationMutation(c.config, OpDelete)
+	return &InstanceInitializationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *InstanceInitializationClient) DeleteOne(_m *InstanceInitialization) *InstanceInitializationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *InstanceInitializationClient) DeleteOneID(id int) *InstanceInitializationDeleteOne {
+	builder := c.Delete().Where(instanceinitialization.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &InstanceInitializationDeleteOne{builder}
+}
+
+// Query returns a query builder for InstanceInitialization.
+func (c *InstanceInitializationClient) Query() *InstanceInitializationQuery {
+	return &InstanceInitializationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeInstanceInitialization},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a InstanceInitialization entity by its id.
+func (c *InstanceInitializationClient) Get(ctx context.Context, id int) (*InstanceInitialization, error) {
+	return c.Query().Where(instanceinitialization.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *InstanceInitializationClient) GetX(ctx context.Context, id int) *InstanceInitialization {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *InstanceInitializationClient) Hooks() []Hook {
+	return c.hooks.InstanceInitialization
+}
+
+// Interceptors returns the client interceptors.
+func (c *InstanceInitializationClient) Interceptors() []Interceptor {
+	return c.inters.InstanceInitialization
+}
+
+func (c *InstanceInitializationClient) mutate(ctx context.Context, m *InstanceInitializationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&InstanceInitializationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&InstanceInitializationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&InstanceInitializationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&InstanceInitializationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown InstanceInitialization mutation op: %q", m.Op())
 	}
 }
 
@@ -5048,16 +5189,18 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
-		ExecutionProfile, GlossaryEntry, Job, JobResource, JobRound, JobRoundSegment,
-		OrgMembership, Organization, Project, PrunePromptTemplate, RefreshToken,
-		Resource, SSEEvent, Segment, SegmentRevision, SyncTask, SystemSetting, TMEntry,
-		TranslationPromptTemplate, UsageRecord, User []ent.Hook
+		ExecutionProfile, GlossaryEntry, InstanceInitialization, Job, JobResource,
+		JobRound, JobRoundSegment, OrgMembership, Organization, Project,
+		PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
+		SegmentRevision, SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate,
+		UsageRecord, User []ent.Hook
 	}
 	inters struct {
 		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
-		ExecutionProfile, GlossaryEntry, Job, JobResource, JobRound, JobRoundSegment,
-		OrgMembership, Organization, Project, PrunePromptTemplate, RefreshToken,
-		Resource, SSEEvent, Segment, SegmentRevision, SyncTask, SystemSetting, TMEntry,
-		TranslationPromptTemplate, UsageRecord, User []ent.Interceptor
+		ExecutionProfile, GlossaryEntry, InstanceInitialization, Job, JobResource,
+		JobRound, JobRoundSegment, OrgMembership, Organization, Project,
+		PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
+		SegmentRevision, SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate,
+		UsageRecord, User []ent.Interceptor
 	}
 )

@@ -76,7 +76,7 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve working directory: %w", err)
 	}
-	r := &ResolvedServer{Config: *defaultDeploymentConfig(), Log: LogConfig{Level: "info", Format: "text"}, AllowNetwork: in.AllowNetwork}
+	r := &ResolvedServer{Config: *DefaultServerConfig(), Log: LogConfig{Level: "info", Format: "text"}, AllowNetwork: in.AllowNetwork}
 	r.Config.Mode = in.Mode
 	if in.Mode == ModeLocal {
 		r.Config.Host = "127.0.0.1"

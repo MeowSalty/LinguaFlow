@@ -81,6 +81,18 @@ func (f GlossaryEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GlossaryEntryMutation", m)
 }
 
+// The InstanceInitializationFunc type is an adapter to allow the use of ordinary
+// function as InstanceInitialization mutator.
+type InstanceInitializationFunc func(context.Context, *ent.InstanceInitializationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f InstanceInitializationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.InstanceInitializationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.InstanceInitializationMutation", m)
+}
+
 // The JobFunc type is an adapter to allow the use of ordinary
 // function as Job mutator.
 type JobFunc func(context.Context, *ent.JobMutation) (ent.Value, error)

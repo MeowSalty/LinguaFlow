@@ -88,7 +88,7 @@ func TestRubyRetrySnapshot_BackendIDZeroFallsBackToTranslateBackend(t *testing.T
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	backends := NewBackendService(client, users, nil)
 	backendRow, err := client.Backend.Create().
 		SetName("main-translate-backend").

@@ -245,6 +245,21 @@ var (
 			},
 		},
 	}
+	// InstanceInitializationsColumns holds the columns for the "instance_initializations" table.
+	InstanceInitializationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "version", Type: field.TypeInt},
+		{Name: "mode", Type: field.TypeEnum, Enums: []string{"serve", "local"}},
+		{Name: "local_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// InstanceInitializationsTable holds the schema information for the "instance_initializations" table.
+	InstanceInitializationsTable = &schema.Table{
+		Name:       "instance_initializations",
+		Columns:    InstanceInitializationsColumns,
+		PrimaryKey: []*schema.Column{InstanceInitializationsColumns[0]},
+	}
 	// JobsColumns holds the columns for the "jobs" table.
 	JobsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -937,6 +952,7 @@ var (
 		ExecutionPlanTemplatesTable,
 		ExecutionProfilesTable,
 		GlossaryEntriesTable,
+		InstanceInitializationsTable,
 		JobsTable,
 		JobResourcesTable,
 		JobRoundsTable,

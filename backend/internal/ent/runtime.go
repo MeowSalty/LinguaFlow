@@ -11,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -267,6 +268,49 @@ func init() {
 	glossaryentryDescProjectID := glossaryentryFields[7].Descriptor()
 	// glossaryentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	glossaryentry.ProjectIDValidator = glossaryentryDescProjectID.Validators[0].(func(int) error)
+	instanceinitializationMixin := schema.InstanceInitialization{}.Mixin()
+	instanceinitializationMixinFields0 := instanceinitializationMixin[0].Fields()
+	_ = instanceinitializationMixinFields0
+	instanceinitializationFields := schema.InstanceInitialization{}.Fields()
+	_ = instanceinitializationFields
+	// instanceinitializationDescCreatedAt is the schema descriptor for created_at field.
+	instanceinitializationDescCreatedAt := instanceinitializationMixinFields0[0].Descriptor()
+	// instanceinitialization.DefaultCreatedAt holds the default value on creation for the created_at field.
+	instanceinitialization.DefaultCreatedAt = instanceinitializationDescCreatedAt.Default.(func() time.Time)
+	// instanceinitializationDescUpdatedAt is the schema descriptor for updated_at field.
+	instanceinitializationDescUpdatedAt := instanceinitializationMixinFields0[1].Descriptor()
+	// instanceinitialization.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	instanceinitialization.DefaultUpdatedAt = instanceinitializationDescUpdatedAt.Default.(func() time.Time)
+	// instanceinitialization.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	instanceinitialization.UpdateDefaultUpdatedAt = instanceinitializationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// instanceinitializationDescVersion is the schema descriptor for version field.
+	instanceinitializationDescVersion := instanceinitializationFields[1].Descriptor()
+	// instanceinitialization.VersionValidator is a validator for the "version" field. It is called by the builders before save.
+	instanceinitialization.VersionValidator = instanceinitializationDescVersion.Validators[0].(func(int) error)
+	// instanceinitializationDescLocalUserID is the schema descriptor for local_user_id field.
+	instanceinitializationDescLocalUserID := instanceinitializationFields[3].Descriptor()
+	// instanceinitialization.LocalUserIDValidator is a validator for the "local_user_id" field. It is called by the builders before save.
+	instanceinitialization.LocalUserIDValidator = instanceinitializationDescLocalUserID.Validators[0].(func(int) error)
+	// instanceinitializationDescID is the schema descriptor for id field.
+	instanceinitializationDescID := instanceinitializationFields[0].Descriptor()
+	// instanceinitialization.DefaultID holds the default value on creation for the id field.
+	instanceinitialization.DefaultID = instanceinitializationDescID.Default.(int)
+	// instanceinitialization.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	instanceinitialization.IDValidator = func() func(int) error {
+		validators := instanceinitializationDescID.Validators
+		fns := [...]func(int) error{
+			validators[0].(func(int) error),
+			validators[1].(func(int) error),
+		}
+		return func(id int) error {
+			for _, fn := range fns {
+				if err := fn(id); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
 	jobMixin := schema.Job{}.Mixin()
 	jobMixinFields0 := jobMixin[0].Fields()
 	_ = jobMixinFields0

@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -103,6 +104,7 @@ func checkColumn(t, c string) error {
 			executionplantemplate.Table:     executionplantemplate.ValidColumn,
 			executionprofile.Table:          executionprofile.ValidColumn,
 			glossaryentry.Table:             glossaryentry.ValidColumn,
+			instanceinitialization.Table:    instanceinitialization.ValidColumn,
 			job.Table:                       job.ValidColumn,
 			jobresource.Table:               jobresource.ValidColumn,
 			jobround.Table:                  jobround.ValidColumn,

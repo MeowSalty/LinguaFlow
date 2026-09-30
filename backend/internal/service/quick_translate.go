@@ -336,6 +336,10 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 	}
 
 	// 11. Record audit event (best-effort, bounded context — held under the semaphore slot).
+	if err := runCtx.Err(); err != nil {
+		return nil, fmt.Errorf("quick translate: execution deadline: %w", err)
+	}
+
 	if s.audit != nil {
 		metadata := map[string]any{"execution_plan_id": in.ExecutionPlanID}
 		var projectIDPtr *int

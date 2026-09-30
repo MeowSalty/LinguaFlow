@@ -18,10 +18,11 @@ import (
 func newAccountTestAuth(t *testing.T) (*AuthService, *ent.Client) {
 	t.Helper()
 	client := testClient(t)
+	client.SystemSetting.Create().SetKey(SettingRegistrationEnabled).SetValue("true").SaveX(context.Background())
 	return NewAuthService(client, AuthConfig{
 		Secret: []byte("account-service-test-secret"), Issuer: "account-service-test",
 		AccessTokenTTL: time.Hour, RefreshTokenTTL: 24 * time.Hour,
-	}, NewAdminService(client)), client
+	}, NewSettingsService(client)), client
 }
 
 func passwordContractCases() []struct {

@@ -21,3 +21,14 @@
 - 验证：`task backend:format`、`task backend:lint`、`task backend:build` 通过；通过 Task 运行 config、cli、credential、templates 包全部测试。
 - Windows checkout 的 CRLF 模板已纳入 CLI 断言；没有将无关源码的换行状态噪声提交为内容差异。
 - 尚未验收：新启动输入的实际运行消费者（P2/P4）、凭据仓储（P3）、前端配套及全阶段集成。
+
+## P2：系统设置、初始化与启动
+
+- 输入依赖：P1 部署解析和私有文件原语。serve/local 正式接入新配置、解析后日志、独立运行地址与初始化事务；删除旧服务配置加载器及 P1 独立默认值过渡文件。
+- 政策、管理员和版本/模式标记原子提交，已有实例只验证；SettingsService 使用布尔 API 并事务审计，读取异常拒绝注册，注册账户固定为普通用户。
+- 管理员 initialize/create/recover 命令已接入真实部署数据库；测试覆盖完整命令链、重复初始化、维护后政策与审计保留。迁移使用同一固定连接进行加锁和 schema 准备。
+- 新配置消费者包括 worker 容量、pipeline 配额、SSE、CORS、修订保留和 quick translate 超时/并发；相关真实服务图测试通过。P3 凭据仓储与 P4 执行器尚未接入。
+- ent 按新增初始化标记 schema 生成；OpenAPI 按本阶段 typed settings/auth 规范重新 bundle 并仅生成后端代码。
+- 验证：format、lint、build 通过；config、cli、database、service、api、worker 全包测试通过；初始化/设置/管理员/启动/迁移和真实配置消费者的针对性 race 通过。
+- PostgreSQL 实库测试需要 `LINGUAFLOW_TEST_POSTGRES_DSN`，本次没有配置，因此跳过；SQLite 固定连接、原子回滚和独立连接竞争已验证。
+- 前端设置页和类型需对应分支配套；本 PR 不表示已经向旧前端页面完成交付。现有翻译 CLI 保持此前实现至 P4，`translation_environment.go` 仅保留其原有环境展开函数，P4 整体切换时删除。

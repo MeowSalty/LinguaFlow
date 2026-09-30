@@ -22,6 +22,7 @@ const accountTestPassword = "original-password"
 func accountTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	t.Helper()
 	s, client, account := authTestServer(t)
+	client.SystemSetting.Create().SetKey(service.SettingRegistrationEnabled).SetValue("true").SaveX(context.Background())
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(accountTestPassword), bcrypt.MinCost)
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +34,7 @@ func accountTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	s.authService = service.NewAuthService(client, service.AuthConfig{
 		Secret: []byte(authTestSecret), Issuer: authTestIssuer,
 		AccessTokenTTL: time.Hour, RefreshTokenTTL: 24 * time.Hour,
-	}, service.NewAdminService(client))
+	}, service.NewSettingsService(client))
 	s.userService = service.NewUserService(client, s.authService)
 	return s, client, account
 }
