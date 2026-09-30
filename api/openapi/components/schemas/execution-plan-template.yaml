@@ -108,7 +108,7 @@ AdjudicateRoundConfig:
         type: string
         enum: [source_residual, length_ratio, punctuation_surplus, untranslated]
       description: |
-        可裁决的质量问题 code 子集。空或不传时默认 ["source_residual", "punctuation_surplus"]。
+        可裁决的质量问题 code 子集。不传时默认 ["source_residual", "punctuation_surplus"]；显式空数组表示不处理任何问题。
         duplicate 为硬规则，不可裁决（需同批多段输入，无单段裁决语义）。
         untranslated 可裁决：源语与目标语共用文字系统时，同形译文（专有名词、纯汉字标题、原样保留的英文片段）在确定性层面与真正的原文回传不可区分，需 LLM 判断是否为有意保留。
     # fallback_shrink: 当前仅 translate 轮实现缩批，adjudicate 失败模式与批次大小无关，
@@ -140,7 +140,6 @@ SemanticQARoundConfig:
         范围与任务级 segment_ids 取交集。scope≠all 时未扫段保留其原语义 issue。
     issue_codes:
       type: array
-      minItems: 1
       items:
         type: string
         enum: [untranslated, length_ratio, duplicate, source_residual, punctuation_pairing, punctuation_missing, punctuation_surplus, punctuation_wrap_loss, whitespace_irregular, repeated_space, width_mix, script_mismatch, number_mismatch, url_email_mismatch, subtitle_line_count, forbidden_term, term_inconsistency, leftover_placeholder, xml_tag_mismatch, duplicate_source_divergence, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register, ruby_restore_incomplete, ruby_tag_loss]
@@ -180,13 +179,13 @@ ReviseRoundConfig:
         范围与任务级 segment_ids 取交集。
     issue_codes:
       type: array
-      minItems: 1
       items:
         type: string
         enum: [calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register]
       description: |
-        仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要修复的语义 issue code
+        segment_scope=with_issue_codes 时必须列出至少一个要修复的语义 issue code
         （子集语义白名单，与 semantic_qa 轮的全量 code 筛选键不同）。
+        with_issues 下省略此字段表示全部语义问题，显式空数组表示不修订任何问题。
     # fallback_shrink: 当前仅 translate 轮实现缩批，revise 失败模式与批次大小无关，
     # 不需要缩批，故暂不暴露。若未来需要，在此加 type:number / minimum:0 / maximum:1。
     retry:

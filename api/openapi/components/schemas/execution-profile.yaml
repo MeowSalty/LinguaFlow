@@ -13,7 +13,7 @@ ProfileRubyConfig:
       items:
         type: string
         enum: [phonetic, semantic, creative]
-      default: [phonetic, semantic, creative]
+      default: [creative]
       description: 保留的注音分类列表
 
 ProfileProtectConfig:
@@ -131,19 +131,23 @@ ProfileQAConfig:
       type: number
       format: double
       minimum: 0
-      default: 0
+      default: 0.2
       description: "译文/原文最短长度比，0 表示不检测"
     length_ratio_max:
       type: number
       format: double
       minimum: 0
-      default: 0
+      default: 3
       description: "译文/原文最长长度比，0 表示不检测"
 
 ExecutionProfileConfig:
   type: object
-  required: [protect, postprocess, repair, glossary, context]
+  required: [schema_version, protect, postprocess, repair, glossary, context]
   properties:
+    schema_version:
+      type: integer
+      enum: [1]
+      default: 1
     protect:
       $ref: '#/ProfileProtectConfig'
     ruby:
@@ -206,7 +210,7 @@ CreateExecutionProfileRequest:
     description:
       type: string
     config:
-      $ref: '#/ExecutionProfileConfig'
+      $ref: '#/ExecutionProfileConfigInput'
   additionalProperties: false
 
 UpdateExecutionProfileRequest:
@@ -217,5 +221,166 @@ UpdateExecutionProfileRequest:
     description:
       type: string
     config:
-      $ref: '#/ExecutionProfileConfig'
+      $ref: '#/ExecutionProfileConfigInput'
+  additionalProperties: false
+
+ProfileRubyConfigInput:
+  type: object
+  properties:
+    enabled:
+      type: boolean
+    preserve_kinds:
+      type: array
+      items:
+        type: string
+        enum: [phonetic, semantic, creative]
+      default: [creative]
+      description: 保留的注音分类列表
+  additionalProperties: false
+
+ProfileProtectConfigInput:
+  type: object
+  properties:
+    enabled:
+      type: boolean
+    rules:
+      type: array
+      items:
+        type: string
+        enum: [code, link, placeholder, xml]
+  additionalProperties: false
+
+ProfilePostprocessConfigInput:
+  type: object
+  properties:
+    enabled:
+      type: boolean
+    trim_spaces:
+      type: boolean
+  additionalProperties: false
+
+ProfileRepairConfigInput:
+  type: object
+  properties:
+    enabled:
+      type: boolean
+    json_structural:
+      type: boolean
+    schema_aliases:
+      type: boolean
+    placeholder_normalize:
+      type: boolean
+    prompt_upgrade:
+      type: boolean
+  additionalProperties: false
+
+ProfileBootstrapConfigInput:
+  type: object
+  properties:
+    enabled:
+      type: boolean
+      default: false
+      description: 是否启用内联自举
+    max_terms_per_1000_chars:
+      type: number
+      format: double
+      minimum: 0
+      description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
+    min_source_len:
+      type: integer
+      minimum: 1
+      description: 内联自举术语源文最短字符数
+    inline_conflict_strategy:
+      type: string
+      enum: [off, rewrite-local]
+      description: 并发术语冲突处理策略
+  additionalProperties: false
+
+ProfileGlossaryConfigInput:
+  type: object
+  properties:
+    bootstrap:
+      $ref: '#/ProfileBootstrapConfigInput'
+  additionalProperties: false
+
+ProfileContextConfigInput:
+  type: object
+  properties:
+    enabled:
+      type: boolean
+      default: true
+      description: 是否启用上下文窗口
+    before:
+      type: integer
+      minimum: 0
+      default: 1
+      description: 上下文取前 N 段
+    after:
+      type: integer
+      minimum: 0
+      default: 1
+      description: 上下文取后 N 段
+    max_chars:
+      type: integer
+      minimum: 0
+      default: 0
+      description: 每个上下文段落的字符数上限（按 rune 计，超限截断并补省略号）；0 表示不限制
+  additionalProperties: false
+
+ProfileQAConfigInput:
+  type: object
+  properties:
+    enabled:
+      type: boolean
+      default: false
+      description: 是否启用翻译质量检测
+    auto_reject:
+      type: boolean
+      default: false
+      description: error 级别问题自动 reject；untranslated 例外——源语与目标语共用文字系统时降为 warning，该类"译文与原文相同"的段落不会被自动 reject
+    checks:
+      type: array
+      items:
+        type: string
+      description: "启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、script_mismatch、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence"
+    length_method:
+      type: string
+      enum: [char_weight, word_count]
+      default: char_weight
+      description: "长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词"
+    length_ratio_min:
+      type: number
+      format: double
+      minimum: 0
+      default: 0.2
+      description: "译文/原文最短长度比，0 表示不检测"
+    length_ratio_max:
+      type: number
+      format: double
+      minimum: 0
+      default: 3
+      description: "译文/原文最长长度比，0 表示不检测"
+  additionalProperties: false
+
+ExecutionProfileConfigInput:
+  type: object
+  properties:
+    schema_version:
+      type: integer
+      enum: [1]
+      default: 1
+    protect:
+      $ref: '#/ProfileProtectConfigInput'
+    ruby:
+      $ref: '#/ProfileRubyConfigInput'
+    postprocess:
+      $ref: '#/ProfilePostprocessConfigInput'
+    repair:
+      $ref: '#/ProfileRepairConfigInput'
+    glossary:
+      $ref: '#/ProfileGlossaryConfigInput'
+    context:
+      $ref: '#/ProfileContextConfigInput'
+    qa:
+      $ref: '#/ProfileQAConfigInput'
   additionalProperties: false

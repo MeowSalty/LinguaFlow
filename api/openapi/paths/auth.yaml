@@ -2,7 +2,7 @@ register:
   post:
     operationId: RegisterAuth
     summary: 注册用户并签发会话
-    description: 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。
+    description: 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。公开注册仅创建普通用户。数据库政策关闭注册时返回 403，政策缺失、损坏或读取故障返回 503。
     security: []
     requestBody:
       required: true
@@ -22,6 +22,8 @@ register:
       '403':
         $ref: '../base.yaml#/components/responses/Problem'
       '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
         $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
