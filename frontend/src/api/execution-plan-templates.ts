@@ -10,8 +10,13 @@ type UpdateExecutionPlanTemplateRequest = ApiSchemas['UpdateExecutionPlanTemplat
 
 export const fetchExecutionPlanTemplates = async (
   client: ApiClient = apiClient,
+  orgId?: number,
+  signal?: AbortSignal,
 ): Promise<ApiSchemas['ExecutionPlanTemplateListResponse']> => {
-  const { data, error, response } = await client.GET('/execution-plan-templates')
+  const { data, error, response } = await client.GET('/execution-plan-templates', {
+    params: { query: orgId === undefined ? undefined : { org_id: orgId } },
+    signal,
+  })
 
   if (!data) {
     throw buildRequestFailureError(

@@ -10,8 +10,13 @@ type UpdateExecutionProfileRequest = ApiSchemas['UpdateExecutionProfileRequest']
 
 export const fetchExecutionProfiles = async (
   client: ApiClient = apiClient,
+  orgId?: number,
+  signal?: AbortSignal,
 ): Promise<ApiSchemas['ExecutionProfileListResponse']> => {
-  const { data, error, response } = await client.GET('/execution-profiles')
+  const { data, error, response } = await client.GET('/execution-profiles', {
+    params: { query: orgId === undefined ? undefined : { org_id: orgId } },
+    signal,
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.fetchExecutionProfilesFailed'), error, response)

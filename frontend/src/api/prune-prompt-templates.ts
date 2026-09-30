@@ -10,8 +10,13 @@ type UpdatePrunePromptTemplateRequest = ApiSchemas['UpdatePrunePromptTemplateReq
 
 export const fetchPrunePromptTemplates = async (
   client: ApiClient = apiClient,
+  orgId?: number,
+  signal?: AbortSignal,
 ): Promise<ApiSchemas['PrunePromptTemplateListResponse']> => {
-  const { data, error, response } = await client.GET('/prune-prompt-templates')
+  const { data, error, response } = await client.GET('/prune-prompt-templates', {
+    params: { query: orgId === undefined ? undefined : { org_id: orgId } },
+    signal,
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.fetchPrunePromptTemplatesFailed'), error, response)

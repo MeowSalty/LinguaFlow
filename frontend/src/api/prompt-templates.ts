@@ -10,8 +10,13 @@ type UpdateTranslationPromptTemplateRequest = ApiSchemas['UpdateTranslationPromp
 
 export const fetchPromptTemplates = async (
   client: ApiClient = apiClient,
+  orgId?: number,
+  signal?: AbortSignal,
 ): Promise<ApiSchemas['TranslationPromptTemplateListResponse']> => {
-  const { data, error, response } = await client.GET('/translation-prompt-templates')
+  const { data, error, response } = await client.GET('/translation-prompt-templates', {
+    params: { query: orgId === undefined ? undefined : { org_id: orgId } },
+    signal,
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.fetchPromptTemplatesFailed'), error, response)
