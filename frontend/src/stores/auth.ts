@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import {
   type ApiSchemas,
   type AuthSession,
+  changeCurrentUserPassword,
   clearAuthTokens,
   fetchCurrentUser as fetchCurrentUserApi,
   getAccessToken,
@@ -13,6 +14,7 @@ import {
   registerAndLogin,
   setLocalMode,
   setUnauthorizedHandler,
+  updateCurrentUser,
 } from '@/api/client'
 import type { ServiceMode } from '@/stores/service'
 import { useServiceStore } from '@/stores/service'
@@ -26,6 +28,8 @@ export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref<string | null>(null)
   const refreshToken = ref<string | null>(null)
   const isReady = ref<boolean>(false)
+  const profileUpdating = ref(false)
+  const passwordChanging = ref(false)
 
   const isAuthenticated = computed(() => {
     const service = useServiceStore()
@@ -65,6 +69,26 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (error) {
       handleUnauthorized()
       throw error
+    }
+  }
+
+  const updateProfile = async (payload: ApiSchemas['UpdateCurrentUserRequest']): Promise<User> => {
+    profileUpdating.value = true
+    try {
+      const updated = await updateCurrentUser(payload)
+      user.value = updated
+      return updated
+    } finally {
+      profileUpdating.value = false
+    }
+  }
+
+  const changePassword = async (payload: ApiSchemas['ChangePasswordRequest']): Promise<void> => {
+    passwordChanging.value = true
+    try {
+      await changeCurrentUserPassword(payload)
+    } finally {
+      passwordChanging.value = false
     }
   }
 
@@ -154,11 +178,15 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken,
     refreshToken,
     isReady,
+    profileUpdating,
+    passwordChanging,
     isAuthenticated,
     login,
     register,
     logout,
     fetchCurrentUser,
+    updateProfile,
+    changePassword,
     bootstrap,
     bootstrapForMode,
     clearSession,
