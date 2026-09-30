@@ -48,9 +48,9 @@ func newQuickFixture(t *testing.T) (*QuickTranslateService, *ent.Client, int, *f
 	t.Helper()
 	client := testClient(t)
 	logger := discardLogger()
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
-	backends := NewBackendService(client, users, nil)
+	backends := newExecutionTestBackendService(t, client, users)
 	profiles := NewExecutionProfileService(client, users)
 	executionPlans := NewExecutionPlanService(client, users, profiles)
 	promptTemplates := NewTranslationPromptTemplateService(client)
@@ -83,7 +83,7 @@ func seedUserBackend(t *testing.T, client *ent.Client, userID int) int {
 	if err != nil {
 		t.Fatalf("create backend: %v", err)
 	}
-	return b.ID
+	return bindExecutionTestBackend(t, client, b).ID
 }
 
 // seedTranslatePlan 直接经 ent 创建一个仅含单 translate 轮的用户级执行计划模板，
@@ -105,6 +105,7 @@ func seedTranslatePlan(t *testing.T, client *ent.Client, userID, backendID int) 
 				BatchSize:        10,
 				MaxWordsPerBatch: 500,
 				Concurrency:      1,
+				FallbackShrink:   1,
 				Retry:            schema.RetryConfig{MaxAttempts: 0},
 			},
 		}}).
@@ -120,6 +121,7 @@ func seedExtractOnlyPlan(t *testing.T, client *ent.Client, userID, backendID int
 	t.Helper()
 	plan, err := client.ExecutionPlanTemplate.Create().
 		SetName("extract-only").
+		SetProfileID(-1).
 		SetScope("user").
 		SetOwnerUserID(userID).
 		SetRubyRetry(schema.ExecutionPlanRubyRetryConfig{}).

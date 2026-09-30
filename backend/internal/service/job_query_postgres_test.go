@@ -53,7 +53,7 @@ func TestPostgresJobTimeBoundariesAndSessionExpiry(t *testing.T) {
 		_, _ = client.Job.Delete().Where(job.ProjectIDEQ(project.ID)).Exec(context.Background())
 		_ = client.Project.DeleteOneID(project.ID).Exec(context.Background())
 	}()
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	base := time.Date(2026, 9, 29, 12, 0, 0, 123456000, time.UTC)
 	older := seedQueryJob(t, client, project.ID, JobStatusFailed, "manual", base)
 	tie := seedQueryJob(t, client, project.ID, JobStatusFailed, "manual", base.In(time.FixedZone("east", 8*60*60)))

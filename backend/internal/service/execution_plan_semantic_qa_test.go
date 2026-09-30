@@ -294,6 +294,10 @@ func TestMaterializeReviseSnapshotDefaults(t *testing.T) {
 	if !reflect.DeepEqual(withCodesSnap.IssueCodes, withCodes.IssueCodes) {
 		t.Fatalf("IssueCodes=%v want %v", withCodesSnap.IssueCodes, withCodes.IssueCodes)
 	}
+	empty := snapshotReviseRound(&schema.ReviseRoundConfig{SegmentScope: "with_issues", IssueCodes: []string{}})
+	if empty.IssueCodes == nil || len(empty.IssueCodes) != 0 {
+		t.Fatal("explicit empty revision selection became the default code set")
+	}
 }
 
 func TestValidateAndSnapshotRevise(t *testing.T) {
@@ -306,8 +310,8 @@ func TestValidateAndSnapshotRevise(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
-	backends := NewBackendService(client, users, nil)
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
+	backends := newExecutionTestBackendService(t, client, users)
 	backendRow, err := client.Backend.Create().
 		SetName("revise-backend").
 		SetBackendType(entbackend.BackendType("openai")).
@@ -319,6 +323,7 @@ func TestValidateAndSnapshotRevise(t *testing.T) {
 		t.Fatalf("create backend: %v", err)
 	}
 	jobs := &JobService{client: client, backends: backends, profiles: NewExecutionProfileService(client, users)}
+	backendRow = bindExecutionTestBackend(t, client, backendRow)
 	plan := &ent.ExecutionPlanTemplate{
 		ID:        1,
 		Name:      "revise-plan",

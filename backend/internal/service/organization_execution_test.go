@@ -30,6 +30,7 @@ func TestOrganizationExecutionWorkflowAndRevocation(t *testing.T) {
 	}
 	backend := client.Backend.Create().SetName("team-backend").SetScope(ScopeOrg).SetOwnerOrgID(org.ID).
 		SetBackendType("openai").SetOptions(map[string]any{"api_key": "frozen-team-secret"}).SaveX(ctx)
+	backend = bindExecutionTestBackend(t, client, backend)
 	profile, err := quick.jobs.profiles.Create(ctx, admin.ID, CreateExecutionProfileInput{Name: "team-profile", OrgID: &org.ID})
 	if err != nil {
 		t.Fatal(err)
@@ -89,8 +90,16 @@ func TestOrganizationExecutionWorkflowAndRevocation(t *testing.T) {
 		t.Fatalf("creator after removal=%v", err)
 	}
 	snapshot, err := quick.jobs.GetExecutionSnapshot(ctx, job.ID)
-	if err != nil || snapshot.Rounds[0].Backend.Options["api_key"] != "frozen-team-secret" {
+	if err != nil {
 		t.Fatalf("worker snapshot lost=%+v err=%v", snapshot, err)
+	}
+	bound := snapshot.Rounds[0].Backend
+	if _, ok := bound.Options["api_key"]; ok {
+		t.Fatal("worker snapshot contains a plaintext credential")
+	}
+	secret, err := quick.jobs.backends.Credentials().Resolve(ctx, bound.Credential, bound.Type, bound.Options["base_url"].(string))
+	if err != nil || secret != "frozen-team-secret" {
+		t.Fatalf("worker credential resolution after creator leaves: %v", err)
 	}
 	if _, err := quick.jobs.LoadJobExecution(ctx, job.ID); err != nil {
 		t.Fatalf("worker execution after creator leaves=%v", err)
@@ -121,8 +130,9 @@ func TestOrganizationExecutionRejectsPrivateSnapshotDependencies(t *testing.T) {
 	}
 	project := client.Project.Create().SetName("org-project").SetOwnerOrgID(org.ID).SaveX(ctx)
 	backend := client.Backend.Create().SetName("org-backend").SetScope(ScopeOrg).SetOwnerOrgID(org.ID).SetBackendType("openai").SaveX(ctx)
+	backend = bindExecutionTestBackend(t, client, backend)
 	privateBackend := seedUserBackend(t, client, ownerID)
-	privateProfile := client.ExecutionProfile.Create().SetName("private-profile").SetScope(ScopeUser).SetOwnerUserID(ownerID).SaveX(ctx)
+	privateProfile := client.ExecutionProfile.Create().SetName("private-profile").SetScope(ScopeUser).SetOwnerUserID(ownerID).SetConfig(schema.DefaultProfileConfig()).SaveX(ctx)
 	privatePrompt := client.TranslationPromptTemplate.Create().SetName("private-prompt").SetScope(ScopeUser).SetOwnerUserID(ownerID).SetSystemPromptContent("private text").SaveX(ctx)
 	privateBootstrap := client.BootstrapPromptTemplate.Create().SetName("private-bootstrap").SetScope(ScopeUser).SetOwnerUserID(ownerID).SetContent("private text").SaveX(ctx)
 	for _, tc := range []struct {
@@ -133,7 +143,7 @@ func TestOrganizationExecutionRejectsPrivateSnapshotDependencies(t *testing.T) {
 		{"profile", func(p *ent.ExecutionPlanTemplate) { p.ProfileID = privateProfile.ID }},
 		{"prompt", func(p *ent.ExecutionPlanTemplate) { p.Rounds[0].Translate.PromptTemplateID = privatePrompt.ID }},
 		{"bootstrap", func(p *ent.ExecutionPlanTemplate) {
-			p.Rounds = append(p.Rounds, schema.ExecutionRoundConfig{Mode: "extract", BackendID: backend.ID, Extract: &schema.ExtractRoundConfig{BootstrapTemplateID: privateBootstrap.ID}})
+			p.Rounds = append(p.Rounds, schema.ExecutionRoundConfig{Mode: "extract", BackendID: backend.ID, Extract: &schema.ExtractRoundConfig{BootstrapTemplateID: privateBootstrap.ID, BatchSize: 10, Concurrency: 1}})
 		}},
 		{"backend", func(p *ent.ExecutionPlanTemplate) { p.Rounds[0].BackendID = privateBackend }},
 		{"ruby_backend", func(p *ent.ExecutionPlanTemplate) {
@@ -141,6 +151,10 @@ func TestOrganizationExecutionRejectsPrivateSnapshotDependencies(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			wantErr := ErrExecutionPlanConfigInvalid
+			if tc.name == "plan" {
+				wantErr = ErrForbidden
+			}
 			plan := &ent.ExecutionPlanTemplate{Name: tc.name, Scope: ScopeOrg, OwnerOrgID: &org.ID, ProfileID: -1, Rounds: []schema.ExecutionRoundConfig{validTranslateRound(backend.ID)}}
 			tc.mutate(plan)
 			// Seed a legacy malformed plan directly, bypassing the new creation guard.
@@ -152,11 +166,19 @@ func TestOrganizationExecutionRejectsPrivateSnapshotDependencies(t *testing.T) {
 				create.SetOwnerUserID(*plan.OwnerUserID)
 			}
 			row := create.SaveX(ctx)
-			if _, err := quick.jobs.prepareExecutionSnapshot(ctx, ownerID, project, row.ID, ""); err == nil {
-				t.Fatal("job/preview snapshot accepted private dependency")
+			_, release, err := quick.jobs.prepareExecutionSnapshot(ctx, ownerID, project, row.ID, "")
+			if release != nil {
+				t.Cleanup(release)
 			}
-			if _, err := quick.jobs.prepareExecutionSnapshotForActor(ctx, ownerID, row.ID, "", "en", "zh", false, project); err == nil {
-				t.Fatal("quick translation snapshot accepted private dependency")
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("job/preview should reject private dependency with scope error, got %v", err)
+			}
+			_, release, err = quick.jobs.prepareExecutionSnapshotForActor(ctx, ownerID, row.ID, "", "en", "zh", false, project)
+			if release != nil {
+				t.Cleanup(release)
+			}
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("quick translation should reject private dependency with scope error, got %v", err)
 			}
 		})
 	}

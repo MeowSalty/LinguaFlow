@@ -56,7 +56,7 @@ func TestAccessibleJobsSQLiteUsesTimeIndexes(t *testing.T) {
 	for i := range 4 {
 		seedQueryJob(t, client, project.ID, JobStatusRunning, "manual", from.Add(time.Duration(i)*time.Nanosecond))
 	}
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	for _, tc := range []struct {
 		name  string
 		opts  AccessibleJobListOptions
@@ -110,7 +110,7 @@ func (postgresQueryOnlyDriver) Dialect() string { return dialect.Postgres }
 
 func TestAccessibleJobsRejectsPostgresNanosecondCursor(t *testing.T) {
 	client := ent.NewClient(ent.Driver(postgresQueryOnlyDriver{}))
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	cursor, err := encodeAccessibleJobCursor(&ent.Job{ID: 1, UpdatedAt: time.Date(2026, 9, 29, 0, 0, 0, 1, time.UTC)})
 	if err != nil {
 		t.Fatal(err)

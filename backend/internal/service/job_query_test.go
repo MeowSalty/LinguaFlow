@@ -56,7 +56,7 @@ func assertQueryJobIDs(t *testing.T, page *AccessibleJobPage, want ...int) {
 func TestListAccessibleJobsFilters(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	actor := createTestUser(t, client, "query-filter")
 	project := createTestProject(t, client, "first", actor.ID)
 	otherProject := createTestProject(t, client, "second", actor.ID)
@@ -111,7 +111,7 @@ func TestListAccessibleJobsFilters(t *testing.T) {
 
 func TestListAccessibleJobsRejectsInvalidOptions(t *testing.T) {
 	client := testClient(t)
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	before := time.Now().UTC()
 	after := before.Add(time.Second)
 	tests := []struct {
@@ -151,7 +151,7 @@ func TestListAccessibleJobsRejectsInvalidOptions(t *testing.T) {
 func TestListAccessibleJobsPermissionsMatchProjectAccess(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	actor := createTestUser(t, client, "query-member")
 	other := createTestUser(t, client, "query-other")
 	admin := createTestUser(t, client, "query-system-admin")
@@ -254,7 +254,7 @@ func TestListAccessibleJobsPermissionsMatchProjectAccess(t *testing.T) {
 func TestListAccessibleJobsPaginationPrecisionAndUpdates(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	actor := createTestUser(t, client, "query-pagination")
 	project := createTestProject(t, client, "pagination", actor.ID)
 	base := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
@@ -300,7 +300,7 @@ func TestListAccessibleJobsPaginationPrecisionAndUpdates(t *testing.T) {
 func TestListAccessibleJobsRechecksAccessOnEachPage(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	actor := createTestUser(t, client, "revoked-member")
 	org, err := client.Organization.Create().SetName("revoke-org").SetSlug("revoke-org").Save(ctx)
 	if err != nil {
@@ -342,7 +342,7 @@ func TestListAccessibleJobsTimestampZonesAndMonotonicValues(t *testing.T) {
 	t.Run("equivalent RFC3339 offsets", func(t *testing.T) {
 		client := testClient(t)
 		ctx := context.Background()
-		svc := newJobRoundTestService(client, nil)
+		svc := newJobRoundTestService(t, client, nil)
 		actor := createTestUser(t, client, "query-timezones")
 		project := createTestProject(t, client, "timezones", actor.ID)
 		base := time.Date(2026, 9, 20, 12, 0, 0, 123456789, time.UTC)
@@ -379,7 +379,7 @@ func TestListAccessibleJobsTimestampZonesAndMonotonicValues(t *testing.T) {
 	t.Run("native time.Now persisted values", func(t *testing.T) {
 		client := testClient(t)
 		ctx := context.Background()
-		svc := newJobRoundTestService(client, nil)
+		svc := newJobRoundTestService(t, client, nil)
 		actor := createTestUser(t, client, "query-monotonic")
 		project := createTestProject(t, client, "monotonic", actor.ID)
 		base := time.Now()
@@ -404,7 +404,7 @@ func TestListAccessibleJobsTimestampZonesAndMonotonicValues(t *testing.T) {
 func TestJobsSummaryWindowCountsAndRetry(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	actor := createTestUser(t, client, "query-counts")
 	project := createTestProject(t, client, "counts", actor.ID)
 	otherProject := createTestProject(t, client, "counts-second", actor.ID)
@@ -501,7 +501,7 @@ func jobQueryRecordingClient(t *testing.T) (*ent.Client, *stdsql.DB, *jobQueryRe
 func TestListAccessibleJobsUsesBoundedLightweightQueries(t *testing.T) {
 	client, _, recorder := jobQueryRecordingClient(t)
 	ctx := context.Background()
-	svc := newJobRoundTestService(client, nil)
+	svc := newJobRoundTestService(t, client, nil)
 	actor := createTestUser(t, client, "lightweight-query")
 	for i := range 12 {
 		project := createTestProject(t, client, fmt.Sprintf("projection-%d", i), actor.ID)
