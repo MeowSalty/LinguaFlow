@@ -53,7 +53,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 注册用户并签发会话 */
+        /**
+         * 注册用户并签发会话
+         * @description 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。
+         */
         post: operations["RegisterAuth"];
         delete?: never;
         options?: never;
@@ -104,7 +107,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 登出并撤销刷新令牌 */
+        /**
+         * 登出并撤销刷新令牌
+         * @description 只撤销当前认证用户提交的 refresh token，不影响其他会话。本人已撤销的 token 再次提交返回 204；
+         *     他人的 token（包括已撤销的 token）返回 403 且不修改。未知 token 保持 401 token-invalid 错误，
+         *     响应不包含 token 所属信息。数据库中仍存在的本人过期 refresh token 也可撤销。
+         *     已签发的 access token 在到期前仍可能有效，不承诺全设备退出或即时撤销 access token。
+         *     调用方在协调刷新后必须使用最新的 access 和 refresh token 重新构建登出请求。
+         */
         post: operations["LogoutAuth"];
         delete?: never;
         options?: never;
@@ -119,9 +129,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 获取当前用户 */
+        /**
+         * 获取当前用户
+         * @description 服务器模式要求 bearer 认证；本地模式沿用免 bearer 的本地用户身份。
+         */
         get: operations["GetCurrentUser"];
-        /** 更新当前用户资料 */
+        /**
+         * 更新当前用户资料
+         * @description 省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400，邮箱冲突返回 409；失败不部分更新。
+         *     服务器模式要求 bearer 认证；本地模式仍允许通过本地身份调用，页面只读不代表后端禁止写入。
+         */
         put: operations["UpdateCurrentUser"];
         post?: never;
         delete?: never;
@@ -138,7 +155,13 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 修改当前用户密码 */
+        /**
+         * 修改当前用户密码
+         * @description 只更新密码，已有 access/refresh token 继续沿用各自有效期。
+         *     缺失、空值、非法类型或新密码长度不合法返回 400；非空旧密码错误返回专用
+         *     urn:linguaflow:current-password-mismatch Problem（400），不会被当作认证失效。
+         *     401 仅表示请求认证缺失或失效。本地模式沿用现有本地身份授权，页面不提供密码表单。
+         */
         put: operations["ChangeCurrentUserPassword"];
         post?: never;
         delete?: never;
@@ -157,7 +180,10 @@ export interface paths {
         /** 列出当前用户所属组织 */
         get: operations["ListOrganizations"];
         put?: never;
-        /** 创建组织 */
+        /**
+         * 创建组织
+         * @description 创建组织及首位 owner 原子提交。name 与 slug 分别全局唯一，冲突为 409 organization_name_exists 或 organization_slug_exists。
+         */
         post: operations["CreateOrganization"];
         delete?: never;
         options?: never;
@@ -176,7 +202,10 @@ export interface paths {
         };
         /** 获取组织详情 */
         get: operations["GetOrganization"];
-        /** 更新组织信息 */
+        /**
+         * 更新组织信息
+         * @description 仅 owner/admin 可更新；name 与 slug 必填且各自唯一。可选资料省略保留、空串清空、null 拒绝。名称及 slug 冲突与创建采用相同的专用 409 Problem。
+         */
         put: operations["UpdateOrganization"];
         post?: never;
         delete?: never;
@@ -197,7 +226,10 @@ export interface paths {
         /** 获取组织成员列表 */
         get: operations["ListOrganizationMembers"];
         put?: never;
-        /** 添加组织成员 */
+        /**
+         * 添加组织成员
+         * @description 精确用户名添加已有账号并立即生效。admin 仅能添加 member，owner 可添加任意角色；重复成员返回 409 membership_exists。
+         */
         post: operations["AddOrganizationMember"];
         delete?: never;
         options?: never;
@@ -216,10 +248,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 修改组织成员角色 */
+        /**
+         * 修改组织成员角色
+         * @description 仅 owner 可修改，非法或缺失角色返回 400；最后 owner 不得降级，返回 409 owner_required。校验与修改在数据库锁保护的同一事务中执行。
+         */
         put: operations["UpdateOrganizationMember"];
         post?: never;
-        /** 移除组织成员 */
+        /**
+         * 移除成员或主动退出组织
+         * @description 本人可退出，必须保留至少一位 owner；owner 可移除他人，admin 仅能移除 member。最后 owner 冲突为 409 owner_required；不存在目标成员为 404，非成员再次退出为 403。成功返回 204，不删除账号或组织项目。
+         */
         delete: operations["DeleteOrganizationMember"];
         options?: never;
         head?: never;
@@ -1002,6 +1040,7 @@ export interface paths {
          *     仅在 target 发生变更时有意义。
          *     支持 resource_ids 参数限定分析范围。
          *     采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+         *     要求项目读取权限；非法或非正整数 ID、非法资源范围返回 400，未认证 401，无权限 403。
          */
         post: operations["AnalyzeGlossarySyncImpact"];
         delete?: never;
@@ -1027,6 +1066,9 @@ export interface paths {
          * @description 提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
          *     返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
          *     替换后的段落状态将被设置为 edited，需要人工复核。
+         *     要求项目写权限（个人所有者或组织 owner/admin），组织 member 仅可读取。
+         *     持久化成功即返回 202，内存投递失败由后台有界补投，不改报提交失败。
+         *     非法 ID 或资源范围 400，未认证 401，无写权限 403；不承诺网络重试幂等创建。
          */
         post: operations["ExecuteGlossarySyncUpdate"];
         delete?: never;
@@ -1049,7 +1091,9 @@ export interface paths {
         /**
          * 查询术语同步任务状态
          * @description 查询同步更新任务的执行进度和结果。
-         *     前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+         *     要求项目读取权限，仅打开详情时按需轮询；终态停止轮询。
+         *     非法或非正整数 ID 返回 400，未认证 401，无项目权限 403；已授权项目中任务不存在或不匹配返回 404。
+         *     result 为累计已提交结果，取消或失败不撤销已经完成的替换。
          */
         get: operations["GetGlossarySyncTaskStatus"];
         put?: never;
@@ -1076,7 +1120,9 @@ export interface paths {
         /**
          * 取消术语同步任务
          * @description 取消正在执行或等待执行的同步任务。
-         *     pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+         *     要求项目写权限（个人所有者或组织 owner/admin）；非法或非正整数 ID 400，未认证 401，无权限 403，任务不存在或不匹配 404。
+         *     取消与批次提交串行协调；成功响应后不再提交新修改，之前提交的结果保留。
+         *     重复取消幂等返回当前状态；completed/failed 返回 409 Problem。没有暂停、恢复或原任务重试能力。
          */
         post: operations["CancelGlossarySyncTask"];
         delete?: never;
@@ -1146,6 +1192,106 @@ export interface paths {
         put?: never;
         /** 创建任务 */
         post: operations["CreateJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出当前用户可访问的跨项目翻译任务
+         * @description 按项目读取权限查询，包含组织项目内其他成员创建的任务。
+         *     未指定 state 或 status 时默认查询 pending、running、paused。
+         *     state 与 status 互斥。project_id 不存在或无读取权限时返回空列表。
+         *     按 updated_at DESC、id DESC 排序；cursor 是不透明游标，仅用于原筛选条件的续页。
+         *     任务更新会改变排序，本接口不提供跨请求快照；轮询应从首页重新查询并按 ID 去重，
+         *     不能将单页中缺少某任务解释为任务已结束。
+         *     limit 缺省为 50，最大为 100；未知、重复或空查询参数返回 400。
+         */
+        get: operations["ListAccessibleJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取当前用户可访问任务的数量摘要
+         * @description 只支持 project_id 和 trigger_type 筛选，不接受状态、时间或分页参数。
+         *     未知、重复或空查询参数返回 400。
+         *     活动状态数量不受时间限制。recent_failed 统计当前为 failed 且 updated_at 位于
+         *     [recent_failed_since, as_of) 内的任务，窗口为连续 7×24 小时，不是失败事件次数。
+         *     项目读取权限与 GET /jobs 一致；无权或不存在的项目返回全部为零的计数。
+         */
+        get: operations["GetJobsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 按项目权限发现翻译与术语同步任务
+         * @description 只读投影，不新增通用任务实体。默认返回两类活动任务，组织成员可看到同项目其他成员的任务。
+         *     未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限。
+         *     state 默认 active，与 status 互斥；同步没有 paused。trigger_type 仅允许显式 task_type=translation。
+         *     updated_at 区间为 [updated_from, updated_before)，按 updated_at DESC, task_type DESC, 整数 task_id DESC 排序。
+         *     独立版本化游标绑定规范化筛选（不含 limit）；不可使用 Job 游标。每页重新鉴权，不提供跨请求快照。
+         *     刷新从第一页开始并处理全部续页，客户端以 (task_type,task_id) 去重，单页缺失不代表任务结束。
+         *     未知、重复、空或非法参数均返回 400。开始时间未知为 null，不返回 ETA、配置、段落或资源 ID 数组、错误正文和全实例队列。
+         */
+        get: operations["ListOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取两类任务的独立数量摘要
+         * @description 只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。
+         *     未知、重复、空或非法参数返回 400。权限与列表一致，无权项目返回零。
+         *     by_type 固定返回两类，未选类型计零，同步 paused 恒为零；total 为逐字段求和。
+         *     recent_failed 只数当前 failed 且 updated_at 位于 [recent_failed_since,as_of) 的记录，窗口为连续七天。
+         *     活动数不受时间限制；不受分页影响，不代表历史失败事件次数。
+         */
+        get: operations["GetOperationsSummary"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1320,7 +1466,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的执行计划模板 */
+        /**
+         * 列出当前用户的执行计划模板
+         * @description 不传 org_id 时返回个人及当前所属组织的计划；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListExecutionPlanTemplates"];
         put?: never;
         /** 创建执行计划模板 */
@@ -1359,7 +1508,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的翻译提示词模板 */
+        /**
+         * 列出当前用户的翻译提示词模板
+         * @description 不传 org_id 时返回个人和系统模板；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListPromptTemplates"];
         put?: never;
         /** 创建翻译提示词模板 */
@@ -1398,7 +1550,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的术语抽取提示词模板 */
+        /**
+         * 列出当前用户的术语抽取提示词模板
+         * @description 不传 org_id 时返回个人和系统模板；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListBootstrapPromptTemplates"];
         put?: never;
         /** 创建术语抽取提示词模板 */
@@ -1437,7 +1592,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的术语精简提示词模板 */
+        /**
+         * 列出当前用户的术语精简提示词模板
+         * @description 不传 org_id 时返回个人和系统模板；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListPrunePromptTemplates"];
         put?: never;
         /** 创建术语精简提示词模板 */
@@ -1476,7 +1634,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的执行策略配置 */
+        /**
+         * 列出当前用户的执行策略配置
+         * @description 不传 org_id 时返回个人和系统配置；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListExecutionProfiles"];
         put?: never;
         /** 创建执行策略配置 */
@@ -1579,6 +1740,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/runtime/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 当前实例运行容量与负载
+         * @description 仅当前系统管理员可读，组织角色不授予访问权；本地模式使用真实管理员身份。
+         *     不接受任何查询参数（认证使用 Authorization header）。未认证 401、无系统权限 403、非法查询 400。
+         *     collector 缺失返回 503 Problem，单 runner 恢复失败返回 200 和 degraded。
+         *     指标来自进程内存，不读写业务数量表。组件内部一致，跨组件近同时采样。
+         *     instance_id 每次 Server 运行随机生成；重启累计清零，不可拼接不同实例增量。
+         *     不含租户、任务、backend、模型、URL、凭据、路径或原始错误。
+         */
+        get: operations["AdminGetRuntimeSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/audit-logs": {
         parameters: {
             query?: never;
@@ -1634,6 +1820,8 @@ export interface paths {
     "/activity": {
         parameters: {
             query?: {
+                /** @description 仅查询指定组织的活动；正整数，不存在返回 404，非成员返回 403。拒绝未知、重复或空查询参数。 */
+                org_id?: number;
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -1699,6 +1887,7 @@ export interface components {
         };
         RegisterRequest: {
             username: string;
+            /** @description 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。 */
             password: string;
             /** Format: email */
             email: string;
@@ -1706,12 +1895,14 @@ export interface components {
         };
         LoginRequest: {
             username: string;
+            /** @description 原样验证密码，不施加注册或改密时的新密码长度规则，以兼容历史密码。 */
             password: string;
         };
         RefreshRequest: {
             refresh_token: string;
         };
         LogoutRequest: {
+            /** @description 当前认证用户本人持有的 refresh token；只撤销此 token，不影响其他会话。 */
             refresh_token: string;
         };
         AuthSession: {
@@ -1724,22 +1915,38 @@ export interface components {
             refresh_expires_at: string;
             user: components["schemas"]["User"];
         };
+        /**
+         * @description 仅更新提供的字段，省略字段保持原值；空对象返回当前资料且不修改更新时间。
+         *     字段不可为 null，用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
+         */
         UpdateCurrentUserRequest: {
+            /** @description 去除首尾空白；空字符串允许清空显示名。 */
             display_name?: string;
-            /** Format: email */
+            /**
+             * Format: email
+             * @description 去除首尾空白并转小写后校验单个纯邮箱地址；拒绝空值、内部空白、显示名及地址包装。
+             */
             email?: string;
         };
         ChangePasswordRequest: {
+            /** @description 原样验证当前密码，不去除空白，不施加新密码的长度规则。 */
             current_password: string;
+            /** @description 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。 */
             new_password: string;
         };
         Organization: {
+            /**
+             * @description 当前请求者在此组织的角色，与系统角色无关。
+             * @enum {string}
+             */
+            readonly current_user_role: "owner" | "admin" | "member";
             id: number;
             name: string;
             slug: string;
             display_name?: string;
             description?: string;
         };
+        /** @description name 去除首尾空白，slug 按身份规则规范化，两者必填且各自全局唯一。可选字段省略时更新保留、创建使用空值，空串清空，不接受 null。 */
         OrganizationRequest: {
             name: string;
             slug: string;
@@ -1759,10 +1966,16 @@ export interface components {
             items: components["schemas"]["OrganizationMember"][];
         };
         AddOrganizationMemberRequest: {
+            /** @description 精确匹配已有账号用户名；不发送邀请。 */
             username: string;
-            /** @enum {string} */
-            role?: "owner" | "admin" | "member";
+            /**
+             * @description 省略时为 member；admin 仅能添加 member，owner 可授予任意合法角色，显式空值或 null 无效。
+             * @default member
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member";
         };
+        /** @description 仅 owner 可修改角色，必须至少保留一位 owner；省略、空值及 null 均无效。 */
         UpdateOrganizationMemberRequest: {
             /** @enum {string} */
             role: "owner" | "admin" | "member";
@@ -2333,14 +2546,50 @@ export interface components {
              * @description 已完成工作量（单位=段落×轮，随轮次推进单调递增）
              */
             progress_completed: number;
-            /** @description 在队列中的位置（1-based），null 表示不在队列中 */
+            /** @description 暂不可用，省略或为 null；不暴露全实例队列位置。 */
             queue_position?: number | null;
-            /** @description 当前队列中的任务总数 */
+            /** @description 暂不可用，省略或为 null；不暴露全实例队列人数。 */
             queue_size?: number | null;
         };
         JobListResponse: {
             items: components["schemas"]["Job"][];
             next_cursor?: string;
+        };
+        JobSummary: {
+            id: number;
+            project_id: number;
+            project_name: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            /** @enum {string} */
+            trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
+            progress: components["schemas"]["JobSummaryProgress"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+        };
+        /** @description 与 JobProgress 使用相同的计数口径；本阶段队列位置和队列总数固定为 null，不暴露实例级队列负载 */
+        JobSummaryProgress: components["schemas"]["JobProgress"] & {
+            queue_position: number | null;
+            queue_size: number | null;
+        };
+        JobSummaryListResponse: {
+            items: components["schemas"]["JobSummary"][];
+            next_cursor?: string;
+        };
+        JobsSummaryResponse: {
+            pending: number;
+            running: number;
+            paused: number;
+            /** @description 当前失败且最近 7 天内更新的任务数；重试后不再计入 */
+            recent_failed: number;
+            /** Format: date-time */
+            recent_failed_since: string;
+            /** Format: date-time */
+            as_of: string;
         };
         JobEvent: {
             type: string;
@@ -2370,6 +2619,10 @@ export interface components {
             next_before_seq?: number;
         };
         Activity: {
+            /** @description 当前有效的组织归属，不从操作者身份推导。 */
+            organization_id?: number;
+            /** @description 活动所属的仍存在的项目。 */
+            project_id?: number;
             id: number;
             action: string;
             resource_type: string;
@@ -2582,7 +2835,7 @@ export interface components {
             processed: number;
             /** @description 待处理的段落总数 */
             total: number;
-            /** @description 任务完成后的结果摘要（仅 status=completed 时存在） */
+            /** @description 已提交批次的累计结果；运行、取消或失败时也可返回，取消不撤销已提交修改。 */
             result?: {
                 total_updated?: number;
                 total_skipped?: number;
@@ -2682,7 +2935,9 @@ export interface components {
         TranslationPromptTemplateListResponse: {
             items: components["schemas"]["TranslationPromptTemplate"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreateTranslationPromptTemplateRequest: {
+            org_id?: number;
             name: string;
             description?: string;
             /** @description 翻译提示词内容。 */
@@ -2711,7 +2966,9 @@ export interface components {
         BootstrapPromptTemplateListResponse: {
             items: components["schemas"]["BootstrapPromptTemplate"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreateBootstrapPromptTemplateRequest: {
+            org_id?: number;
             name: string;
             description?: string;
             /** @description 术语抽取提示词内容。 */
@@ -2740,7 +2997,9 @@ export interface components {
         PrunePromptTemplateListResponse: {
             items: components["schemas"]["PrunePromptTemplate"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreatePrunePromptTemplateRequest: {
+            org_id?: number;
             name: string;
             description?: string;
             /** @description 术语精简提示词内容。 */
@@ -2768,7 +3027,9 @@ export interface components {
         ExecutionProfileListResponse: {
             items: components["schemas"]["ExecutionProfile"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreateExecutionProfileRequest: {
+            org_id?: number;
             name: string;
             description?: string;
             config?: components["schemas"]["ExecutionProfileConfig"];
@@ -2851,7 +3112,9 @@ export interface components {
         ExecutionPlanTemplateListResponse: {
             items: components["schemas"]["ExecutionPlanTemplate"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreateExecutionPlanTemplateRequest: {
+            org_id?: number;
             name: string;
             description?: string;
             /** @description 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道供七项行为预设 */
@@ -3250,6 +3513,74 @@ export interface components {
             updated_count: number;
             skipped_count: number;
         };
+        OperationBase: {
+            task_id: string;
+            project_id: number;
+            project_name: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** @description 类型能力，不是当前状态或用户权限许可；执行时必须再次鉴权。 */
+            supported_actions: ("view" | "pause" | "resume" | "cancel" | "retry")[];
+        };
+        TranslationOperation: components["schemas"]["OperationBase"] & {
+            /** @enum {string} */
+            task_type: "translation";
+            /** @enum {string} */
+            trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
+            progress: components["schemas"]["JobSummaryProgress"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            task_type: "translation";
+        };
+        GlossarySyncOperation: components["schemas"]["OperationBase"] & {
+            /** @enum {string} */
+            task_type: "glossary_sync";
+            /** @enum {string} */
+            status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+            supported_actions?: ("view" | "cancel")[];
+            progress: {
+                /** @description 已检查并提交的段落数，包含安全跳过项。 */
+                processed_segments: number;
+                total_segments: number;
+            };
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            task_type: "glossary_sync";
+        };
+        OperationSummary: components["schemas"]["TranslationOperation"] | components["schemas"]["GlossarySyncOperation"];
+        OperationListResponse: {
+            items: components["schemas"]["OperationSummary"][];
+            next_cursor?: string;
+        };
+        OperationCounts: {
+            pending: number;
+            running: number;
+            paused: number;
+            recent_failed: number;
+        };
+        OperationsSummaryResponse: {
+            total: components["schemas"]["OperationCounts"];
+            by_type: {
+                translation: components["schemas"]["OperationCounts"];
+                glossary_sync: components["schemas"]["OperationCounts"];
+            };
+            /** Format: date-time */
+            recent_failed_since: string;
+            /** Format: date-time */
+            as_of: string;
+        };
         /** @enum {string} */
         ExecutionPlanTemplateScope: "user" | "org" | "system";
         ExecutionPlanRubyRetryConfig: {
@@ -3560,6 +3891,67 @@ export interface components {
             context: components["schemas"]["ProfileContextConfig"];
             qa?: components["schemas"]["ProfileQAConfig"];
         };
+        NullableGauge: number | null;
+        RuntimeRunner: {
+            /** @enum {string} */
+            task_type: "translation" | "glossary_sync";
+            /** @enum {string} */
+            state: "starting" | "recovering" | "running" | "degraded" | "stopping" | "stopped";
+            /** Format: int64 */
+            recovered_total: number;
+            /** Format: int64 */
+            recovery_errors_total: number;
+            queue_capacity: components["schemas"]["NullableGauge"];
+            queue_waiting: components["schemas"]["NullableGauge"];
+            enqueue_waiters: components["schemas"]["NullableGauge"];
+            worker_capacity: components["schemas"]["NullableGauge"];
+            workers_alive: components["schemas"]["NullableGauge"];
+            workers_busy: components["schemas"]["NullableGauge"];
+        };
+        RuntimeLimiters: {
+            /** @enum {string} */
+            state: "uninitialized" | "ready" | "stopped";
+            active_limiters: number;
+            waiters: number;
+            wait_duration_seconds_sum: number;
+            /** Format: int64 */
+            wait_duration_seconds_count: number;
+            /** Format: int64 */
+            wait_cancelled_total: number;
+        } | null;
+        RuntimeHTTPOutcome: {
+            /** @enum {string} */
+            outcome: "success" | "http_error" | "transport_error" | "timeout" | "cancelled";
+            /** Format: int64 */
+            http_attempts_finished_total: number;
+            http_attempt_duration_seconds_sum: number;
+            /** Format: int64 */
+            http_attempt_duration_seconds_count: number;
+        };
+        RuntimeExternalRequests: {
+            /** @enum {string} */
+            provider: "openai" | "anthropic" | "google" | "other";
+            /** @enum {string} */
+            operation: "generate" | "list_models";
+            /** Format: int64 */
+            http_attempts_inflight: number;
+            /** Format: int64 */
+            http_attempts_total: number;
+            outcomes: components["schemas"]["RuntimeHTTPOutcome"][];
+        };
+        RuntimeSummary: {
+            instance_id: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            as_of: string;
+            uptime_seconds: number;
+            /** @enum {string} */
+            scope: "instance";
+            runners: components["schemas"]["RuntimeRunner"][];
+            limiters: components["schemas"]["RuntimeLimiters"];
+            external_requests: components["schemas"]["RuntimeExternalRequests"][];
+        };
     };
     responses: {
         /** @description 错误响应 */
@@ -3590,6 +3982,9 @@ export interface components {
         Limit: number;
         AfterSeq: number;
         BeforeSeq: number;
+        jobProjectFilter: number;
+        jobTriggerFilter: "manual" | "file_update" | "glossary_change" | "web_edit";
+        taskType: "translation" | "glossary_sync";
     };
     requestBodies: never;
     headers: never;
@@ -3661,6 +4056,9 @@ export interface operations {
                     "application/json": components["schemas"]["AuthSession"];
                 };
             };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -3727,13 +4125,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已登出 */
+            /** @description 提交的本人 refresh token 已撤销，或此前已撤销。 */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -3755,6 +4156,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
+            401: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -3780,6 +4182,9 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -3803,6 +4208,16 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 参数不合法，或旧密码不匹配（type 为 urn:linguaflow:current-password-mismatch）。 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -5400,13 +5815,7 @@ export interface operations {
                     "application/json": components["schemas"]["GlossarySyncTaskStatusResponse"];
                 };
             };
-            /** @description 任务不存在 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            404: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -5432,13 +5841,7 @@ export interface operations {
                     "application/json": components["schemas"]["GlossarySyncTaskCancelResponse"];
                 };
             };
-            /** @description 任务已完成或已失败，无法取消 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -5546,6 +5949,121 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListAccessibleJobs: {
+        parameters: {
+            query?: {
+                /** @description active 包含 pending/running/paused；terminal 包含 completed/failed/cancelled；与 status 互斥 */
+                state?: "active" | "terminal" | "all";
+                /** @description 精确单状态筛选，与 state 互斥 */
+                status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+                project_id?: components["parameters"]["jobProjectFilter"];
+                trigger_type?: components["parameters"]["jobTriggerFilter"];
+                /** @description 更新时间下界（包含），RFC3339；与 updated_before 同传时必须更早 */
+                updated_from?: string;
+                /** @description 更新时间上界（不包含），RFC3339 */
+                updated_before?: string;
+                /** @description 上一页返回的不透明 next_cursor，不兼容项目任务列表的数字游标 */
+                cursor?: string;
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 轻量任务列表；队列位置与队列总数在本阶段固定为 null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobSummaryListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetJobsSummary: {
+        parameters: {
+            query?: {
+                project_id?: components["parameters"]["jobProjectFilter"];
+                trigger_type?: components["parameters"]["jobTriggerFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 独立于分页的任务数量摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsSummaryResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOperations: {
+        parameters: {
+            query?: {
+                task_type?: components["parameters"]["taskType"];
+                project_id?: components["parameters"]["jobProjectFilter"];
+                trigger_type?: components["parameters"]["jobTriggerFilter"];
+                state?: "active" | "terminal" | "all";
+                status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+                updated_from?: string;
+                updated_before?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 轻量任务分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetOperationsSummary: {
+        parameters: {
+            query?: {
+                task_type?: components["parameters"]["taskType"];
+                project_id?: components["parameters"]["jobProjectFilter"];
+                trigger_type?: components["parameters"]["jobTriggerFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 数量摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSummaryResponse"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -5723,7 +6241,10 @@ export interface operations {
     };
     ListExecutionPlanTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5840,7 +6361,10 @@ export interface operations {
     };
     ListPromptTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5957,7 +6481,10 @@ export interface operations {
     };
     ListBootstrapPromptTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6074,7 +6601,10 @@ export interface operations {
     };
     ListPrunePromptTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6191,7 +6721,10 @@ export interface operations {
     };
     ListExecutionProfiles: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6475,6 +7008,28 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    AdminGetRuntimeSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前实例快照 */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeSummary"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     AdminListAuditLogs: {
         parameters: {
             query?: {
@@ -6569,6 +7124,8 @@ export interface operations {
     ListActivity: {
         parameters: {
             query?: {
+                /** @description 仅查询指定组织的活动；正整数，不存在返回 404，非成员返回 403。拒绝未知、重复或空查询参数。 */
+                org_id?: number;
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
