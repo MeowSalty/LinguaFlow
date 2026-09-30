@@ -2,9 +2,7 @@ package cli
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -122,23 +120,7 @@ func prepareDatabase(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *e
 }
 
 func prepareLocalSecret(path string) (string, error) {
-	secret, err := config.ReadLocalSecret(path)
-	if err == nil {
-		return secret, nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return "", err
-	}
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return "", fmt.Errorf("generate local instance key: %w", err)
-	}
-	value := hex.EncodeToString(key)
-	if _, err := credential.PublishPrivateFile(path, []byte(value+"\n")); err != nil {
-		return "", fmt.Errorf("persist local instance key: %w", err)
-	}
-	// Another process may have published first. Always read the winning file.
-	return config.ReadLocalSecret(path)
+	return config.PrepareLocalSecret(path)
 }
 
 func bindListener(ctx context.Context, cfg *config.ServerConfig, allowNetwork bool) (net.Listener, error) {

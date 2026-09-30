@@ -111,7 +111,7 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 			continue
 		}
 		direct, hasDirect := in.Environment[f.Environment]
-		fileName, hasFile := in.Environment[f.Environment+"_FILE"]
+		_, hasFile := in.Environment[f.Environment+"_FILE"]
 		if !f.Sensitive {
 			hasFile = false
 		}
@@ -121,22 +121,15 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 		if f.Modes == "serve" && in.Mode == ModeLocal {
 			return nil, fmt.Errorf("%s is not applicable to local mode", f.Key)
 		}
-		if hasDirect && hasFile {
-			return nil, fmt.Errorf("%s: %s conflicts with %s_FILE", f.Key, f.Environment, f.Environment)
-		}
 		source := "env: " + f.Environment
-		if hasFile {
-			if strings.TrimSpace(fileName) == "" {
-				return nil, fmt.Errorf("%s: secret file path must not be empty", f.Key)
-			}
-			content, err := os.ReadFile(absolutePath(fileName, cwd))
+		if f.Sensitive {
+			var err error
+			direct, _, err = EnvironmentSecret(in.Environment, f.Environment, cwd)
 			if err != nil {
-				return nil, fmt.Errorf("%s: cannot read secret file", f.Key)
+				return nil, fmt.Errorf("%s: %w", f.Key, err)
 			}
-			direct = removeFinalNewline(string(content))
-			if direct == "" {
-				return nil, fmt.Errorf("%s: secret file is empty", f.Key)
-			}
+		}
+		if hasFile {
 			source += "_FILE (path relative to working directory)"
 		}
 		v, err := parseEnvironmentValue(f, direct)
