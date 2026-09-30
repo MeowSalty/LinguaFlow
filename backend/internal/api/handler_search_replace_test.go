@@ -44,7 +44,7 @@ func srTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	t.Cleanup(func() { _ = client.Close(); _ = db.Close() })
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	users := service.NewUserService(client, service.NewAuthService(client, service.AuthConfig{}, service.NewAdminService(client)))
+	users := service.NewUserService(client, service.NewAuthService(client, service.AuthConfig{}, service.NewSettingsService(client)))
 	projects := service.NewProjectService(client, users)
 	segmentSvc := service.NewSegmentService(client, projects, dialect.SQLite, 90*24*time.Hour, logger)
 	auditSvc := service.NewAuditService(client, users, projects)

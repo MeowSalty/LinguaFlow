@@ -193,6 +193,8 @@ func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err e
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	case errors.Is(err, service.ErrInvalidCredentials):
 		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"invalid-credentials", "unauthorized", "用户名或密码错误")
+	case errors.Is(err, service.ErrSettingsUnavailable):
+		s.writeProblemWithType(w, r, http.StatusServiceUnavailable, urnPrefix+"settings-unavailable", "unavailable", "系统设置暂不可用")
 	case errors.Is(err, service.ErrTokenExpired):
 		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"token-expired", "unauthorized", "Token 已过期，请重新登录")
 	case errors.Is(err, service.ErrTokenInvalid):

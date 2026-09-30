@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -62,11 +64,13 @@ type adminAuditLogListResponse struct {
 }
 
 type systemSettingsResponse struct {
-	Settings map[string]string `json:"settings"`
+	Settings service.SystemSettings `json:"settings"`
 }
 
 type updateSystemSettingsRequest struct {
-	Settings map[string]string `json:"settings"`
+	Settings *struct {
+		RegistrationEnabled *bool `json:"registration_enabled"`
+	} `json:"settings"`
 }
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
@@ -261,7 +265,7 @@ func toAdminAuditLogItem(log *ent.ActivityLog) adminAuditLogItem {
 }
 
 func (s *Server) handleAdminGetSettings(w http.ResponseWriter, r *http.Request) {
-	settings, err := s.adminService.GetSettings(r.Context())
+	settings, err := s.settingsService.Get(r.Context())
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -270,15 +274,24 @@ func (s *Server) handleAdminGetSettings(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
 	var req updateSystemSettingsRequest
-	if !s.decodeJSON(w, r, &req) {
+	defer r.Body.Close()
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil || req.Settings == nil || req.Settings.RegistrationEnabled == nil {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "settings.registration_enabled 必须是布尔值")
 		return
 	}
-	if err := s.adminService.UpdateSettings(r.Context(), req.Settings); err != nil {
-		s.writeServiceError(w, r, err)
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求体必须是单个 JSON 对象")
 		return
 	}
-	settings, err := s.adminService.GetSettings(r.Context())
+	settings, err := s.settingsService.Update(r.Context(), authUser.User.ID, service.SystemSettings{RegistrationEnabled: *req.Settings.RegistrationEnabled})
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return

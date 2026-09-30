@@ -43,7 +43,7 @@ func authTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 		authService: service.NewAuthService(client, service.AuthConfig{
 			Secret: []byte(authTestSecret),
 			Issuer: authTestIssuer,
-		}, service.NewAdminService(client)),
+		}, service.NewSettingsService(client)),
 	}
 	return s, client, user
 }
