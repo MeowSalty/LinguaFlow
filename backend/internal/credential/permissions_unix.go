@@ -20,6 +20,8 @@ func checkFilePermissions(f *os.File) error {
 
 func restrictFile(path string) error { return os.Chmod(path, 0600) }
 
+func restrictDirectory(path string) error { return os.Chmod(path, 0700) }
+
 func syncDirectory(path string) error {
 	f, err := os.Open(path)
 	if err != nil {

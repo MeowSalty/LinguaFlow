@@ -74,11 +74,19 @@ func checkFilePermissions(f *os.File) error {
 }
 
 func restrictFile(path string) error {
+	return restrictPath(path, "")
+}
+
+func restrictDirectory(path string) error {
+	return restrictPath(path, "OICI")
+}
+
+func restrictPath(path, inheritance string) error {
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
 		return err
 	}
-	sd, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;SY)(A;;FA;;;" + user.User.Sid.String() + ")")
+	sd, err := windows.SecurityDescriptorFromString("D:P(A;" + inheritance + ";FA;;;SY)(A;" + inheritance + ";FA;;;" + user.User.Sid.String() + ")")
 	if err != nil {
 		return err
 	}

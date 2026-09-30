@@ -147,16 +147,7 @@ func PrepareKeyring(path string, allowCreate bool) (*Keyring, error) {
 	if !errors.Is(err, os.ErrNotExist) || !allowCreate {
 		return nil, err
 	}
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return nil, err
-	}
-	idBytes := make([]byte, 12)
-	if _, err := rand.Read(idBytes); err != nil {
-		return nil, err
-	}
-	id := base64.RawURLEncoding.EncodeToString(idBytes)
-	data, err := json.Marshal(keyringDocument{Version: 1, ActiveKeyID: id, Keys: map[string]string{id: base64.StdEncoding.EncodeToString(key)}})
+	_, data, err := GenerateKeyring()
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +155,42 @@ func PrepareKeyring(path string, allowCreate bool) (*Keyring, error) {
 		return nil, err
 	}
 	return LoadKeyring(path)
+}
+
+// GenerateKeyring creates key material without publishing files. Importers can
+// use it for rehearsals and publish these exact bytes before committing data.
+func GenerateKeyring() (*Keyring, []byte, error) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, nil, err
+	}
+	idBytes := make([]byte, 12)
+	if _, err := rand.Read(idBytes); err != nil {
+		return nil, nil, err
+	}
+	id := base64.RawURLEncoding.EncodeToString(idBytes)
+	data, err := json.Marshal(keyringDocument{Version: 1, ActiveKeyID: id, Keys: map[string]string{id: base64.StdEncoding.EncodeToString(key)}})
+	if err != nil {
+		return nil, nil, err
+	}
+	keys, err := ParseKeyring(data)
+	return keys, data, err
+}
+
+// PreparePrivateDirectory creates or restricts a tool-owned directory before
+// writing sensitive content. Callers must validate its parent and ownership.
+func PreparePrivateDirectory(path string) error {
+	if err := os.Mkdir(path, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("private directory must be a regular directory")
+	}
+	return restrictDirectory(path)
 }
 
 // PublishPrivateFile atomically publishes private bytes without overwriting an
