@@ -1,4 +1,13 @@
+import operations from './operations'
+import runtime from './runtime'
+import workbench from './workbench'
+import team from './team'
+
 const messages = {
+  operations,
+  runtime,
+  workbench,
+  team,
   common: {
     appName: 'LinguaFlow',
     language: '语言',
