@@ -6,61 +6,70 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
-
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
+	"github.com/spf13/cobra"
 )
 
 func newInitCmd() *cobra.Command {
-	var (
-		path  string
-		force bool
-	)
-	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "在当前目录生成 linguaflow.yaml",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if path == "" {
-				path = "linguaflow.yaml"
+	var path, kind string
+	var force bool
+	cmd := &cobra.Command{Use: "init", Short: "生成配置模板及完整引用文件；不初始化数据库", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		if kind != "translation" && kind != "server" {
+			return errors.New("kind must be translation or server")
+		}
+		if !cmd.Flags().Changed("path") {
+			path = "linguaflow.yaml"
+			if kind == "server" {
+				path = "server.yaml"
 			}
-			if _, err := os.Stat(path); err == nil && !force {
-				return fmt.Errorf("%s 已存在；使用 --force 覆盖", path)
-			} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		}
+		if path == "" {
+			return errors.New("configuration output path must not be empty")
+		}
+		type output struct {
+			path string
+			data []byte
+		}
+		var files []output
+		if kind == "server" {
+			files = append(files, output{path, templates.DefaultServerConfigYAML()})
+		} else {
+			base := filepath.Dir(path)
+			files = append(files,
+				output{filepath.Join(base, "prompts", "default_translation.tmpl"), []byte(templates.EmbeddedPromptTemplate())},
+				output{filepath.Join(base, "prompts", "default_bootstrap.tmpl"), []byte(templates.EmbeddedBootstrapTemplate())},
+				output{filepath.Join(base, "profiles", "default.yaml"), templates.EmbeddedProfileConfig()},
+				output{path, templates.DefaultConfigYAML()},
+			)
+		}
+		for _, file := range files {
+			info, err := os.Stat(file.path)
+			if err == nil {
+				if info.IsDir() {
+					return fmt.Errorf("%s is a directory", file.path)
+				}
+				if !force {
+					return fmt.Errorf("%s already exists; use --force to overwrite", file.path)
+				}
+			} else if !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
-
-			// 1. 写入主配置文件（带注释，含 file 引用）
-			if err := os.WriteFile(path, templates.DefaultConfigYAML(), 0o644); err != nil {
-				return fmt.Errorf("写入失败：%w", err)
+		}
+		for _, file := range files {
+			if err := os.MkdirAll(filepath.Dir(file.path), 0o755); err != nil {
+				return fmt.Errorf("create template directory: %w", err)
 			}
-			fmt.Printf("已写入 %s\n", path)
-
-			// 2. 写入提示词模板
-			promptDir := filepath.Join(filepath.Dir(path), "prompts")
-			if err := os.MkdirAll(promptDir, 0o755); err != nil {
-				return fmt.Errorf("创建 prompts 目录失败：%w", err)
+			if err := os.WriteFile(file.path, file.data, 0o644); err != nil {
+				return fmt.Errorf("write template: %w", err)
 			}
-			promptPath := filepath.Join(promptDir, "default_translation.tmpl")
-			if err := os.WriteFile(promptPath, []byte(templates.EmbeddedPromptTemplate()), 0o644); err != nil {
-				return fmt.Errorf("写入提示词模板失败：%w", err)
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", file.path); err != nil {
+				return err
 			}
-			fmt.Printf("已写入 %s\n", promptPath)
-
-			// 3. 写入翻译策略
-			profileDir := filepath.Join(filepath.Dir(path), "profiles")
-			if err := os.MkdirAll(profileDir, 0o755); err != nil {
-				return fmt.Errorf("创建 profiles 目录失败：%w", err)
-			}
-			profilePath := filepath.Join(profileDir, "default.yaml")
-			if err := os.WriteFile(profilePath, templates.EmbeddedProfileConfig(), 0o644); err != nil {
-				return fmt.Errorf("写入翻译策略失败：%w", err)
-			}
-			fmt.Printf("已写入 %s\n", profilePath)
-
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&path, "path", "p", "linguaflow.yaml", "目标配置文件路径")
-	cmd.Flags().BoolVar(&force, "force", false, "如果文件已存在则覆盖")
+		}
+		return nil
+	}}
+	cmd.Flags().StringVarP(&path, "path", "p", "", "目标配置文件路径（默认 linguaflow.yaml 或 server.yaml）")
+	cmd.Flags().StringVar(&kind, "kind", "translation", "配置文档 translation 或 server")
+	cmd.Flags().BoolVar(&force, "force", false, "覆盖已有模板及引用文件")
 	return cmd
 }

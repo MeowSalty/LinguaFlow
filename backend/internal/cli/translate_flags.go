@@ -1,83 +1,93 @@
 package cli
 
 import (
-	"fmt"
+	"errors"
+	"path/filepath"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
 
-// applyTranslateFlags 把 CLI 覆盖应用到 CLIConfig。
-//
-// glossary-path 非空：cliCfg.Glossary.Path 改写、Enabled 强制 true。
-// bootstrap 非空：校验取值，覆盖独立自举开关；
-// 非 "off" 时一并把 Glossary.Enabled 设为 true（与 config.Validate 一致）。
-// profile 非空：将执行计划的计划级策略引用（execution.profile）替换为指定值。
-// prompt 非空：将所有翻译轮次的 prompt 替换为指定值。
-func applyTranslateFlags(cliCfg *config.CLIConfig, opts translateOptions) error {
-	if opts.glossaryPath != "" {
-		cliCfg.Glossary.Path = opts.glossaryPath
-		cliCfg.Glossary.Enabled = true
+func applyTranslateFlags(cfg *config.CLIConfig, opts translateOptions) error {
+	changed := func(name string) bool { return opts.changed[name] }
+	if changed("from") {
+		if opts.from == "" {
+			return errors.New("--from must not be empty")
+		}
+		cfg.SourceLang = opts.from
 	}
-	if opts.bootstrapMode != "" {
-		switch opts.bootstrapMode {
-		case config.BootstrapModeOff:
-			// 移除所有 extract 轮次
-			var filtered []config.CLIConfigRound
-			for _, r := range cliCfg.Execution.Rounds {
-				if r.Mode != "extract" {
-					filtered = append(filtered, r)
+	if changed("to") {
+		if opts.to == "" {
+			return errors.New("--to must not be empty")
+		}
+		cfg.TargetLang = opts.to
+	}
+	if changed("glossary-path") {
+		if opts.glossaryPath == "" {
+			return errors.New("--glossary-path must not be empty")
+		}
+		path, err := filepath.Abs(opts.glossaryPath)
+		if err != nil {
+			return err
+		}
+		cfg.Glossary.Path = path
+		cfg.Glossary.Enabled = true
+	}
+	if changed("profile") {
+		if _, ok := cfg.TranslationProfiles[opts.profile]; !ok || opts.profile == "" {
+			return errors.New("--profile must name an existing profile")
+		}
+		cfg.Execution.Profile = opts.profile
+	}
+	if changed("prompt") {
+		if _, ok := cfg.PromptTemplates[opts.prompt]; !ok || opts.prompt == "" {
+			return errors.New("--prompt must name an existing translation template")
+		}
+		for i := range cfg.Execution.Rounds {
+			r := &cfg.Execution.Rounds[i]
+			if r.Translate != nil {
+				r.Translate.Prompt = opts.prompt
+			}
+		}
+	}
+	if changed("bootstrap") {
+		if opts.bootstrapMode != "off" && opts.bootstrapMode != "pre" && opts.bootstrapMode != "inline" {
+			return errors.New("--bootstrap must be off, pre or inline")
+		}
+		profile, err := config.ResolveExecutionProfile(cfg)
+		if err != nil {
+			return err
+		}
+		profile.Glossary.Bootstrap.Enabled = opts.bootstrapMode == "inline"
+		if cfg.TranslationProfiles == nil {
+			cfg.TranslationProfiles = map[string]config.CLIConfigTranslationProfile{}
+		}
+		cfg.TranslationProfiles[cfg.Execution.Profile] = config.CLIConfigTranslationProfile{ProfileSpec: profile}
+		var extract, other []config.CLIConfigRound
+		for _, r := range cfg.Execution.Rounds {
+			if r.Mode == "extract" {
+				extract = append(extract, r)
+			} else {
+				other = append(other, r)
+			}
+		}
+		if opts.bootstrapMode == "pre" {
+			if len(extract) == 0 {
+				backend := ""
+				for _, r := range other {
+					if r.Mode == "translate" {
+						backend = r.Backend
+						break
+					}
 				}
+				extract = []config.CLIConfigRound{{Mode: "extract", Backend: backend, Extract: &config.CLIConfigExtractRound{BatchSize: 20, Concurrency: 2, MaxTermsPer1000Chars: 25, MinSourceLen: 2, Retry: config.RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true}}}}
 			}
-			cliCfg.Execution.Rounds = filtered
-		case config.BootstrapModePre:
-			// 确保存在 extract 轮次
-			hasExtract := false
-			for _, r := range cliCfg.Execution.Rounds {
-				if r.Mode == "extract" {
-					hasExtract = true
-					break
-				}
-			}
-			if !hasExtract {
-				// 在最前面插入一个 extract 轮次
-				extractRound := config.CLIConfigRound{
-					Mode:    "extract",
-					Backend: "openai-default",
-					Extract: &config.CLIConfigExtractRound{
-						Template:             "default",
-						BatchSize:            20,
-						Concurrency:          2,
-						MaxTermsPer1000Chars: 25.0,
-						MinSourceLen:         2,
-					},
-				}
-				cliCfg.Execution.Rounds = append([]config.CLIConfigRound{extractRound}, cliCfg.Execution.Rounds...)
-			}
-			cliCfg.Glossary.Enabled = true
-		case config.BootstrapModeInline:
-			// inline 模式由 Profile 配置控制，CLI flag 仅开启术语表
-			cliCfg.Glossary.Enabled = true
-		default:
-			return fmt.Errorf("--bootstrap must be one of off|pre|inline, got %q", opts.bootstrapMode)
+			cfg.Execution.Rounds = append(extract, other...)
+		} else {
+			cfg.Execution.Rounds = other
+		}
+		if opts.bootstrapMode != "off" {
+			cfg.Glossary.Enabled = true
 		}
 	}
-	// profile 覆盖：将执行计划的计划级策略引用替换为指定值
-	if opts.profile != "" {
-		if _, ok := cliCfg.TranslationProfiles[opts.profile]; !ok {
-			return fmt.Errorf("translation profile %q not found", opts.profile)
-		}
-		cliCfg.Execution.Profile = opts.profile
-	}
-	// prompt 覆盖：将所有翻译轮次的 prompt 替换为指定值
-	if opts.prompt != "" {
-		if _, ok := cliCfg.PromptTemplates[opts.prompt]; !ok {
-			return fmt.Errorf("prompt template %q not found", opts.prompt)
-		}
-		for i := range cliCfg.Execution.Rounds {
-			if cliCfg.Execution.Rounds[i].Mode == "translate" && cliCfg.Execution.Rounds[i].Translate != nil {
-				cliCfg.Execution.Rounds[i].Translate.Prompt = opts.prompt
-			}
-		}
-	}
-	return nil
+	return config.ValidateCLIConfig(cfg)
 }
