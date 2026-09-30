@@ -241,10 +241,11 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 	// prepareExecutionSnapshotForActor: with a project it reuses the project-level
 	// validateBackendAccess (same semantics as job/preview); without a project it
 	// authorizes against the actor's own identity.
-	snapshot, err := s.jobs.prepareExecutionSnapshotForActor(runCtx, in.ActorUserID, in.ExecutionPlanID, "", sourceLang, targetLang, glossaryBaseEnabled, projectRow)
+	snapshot, release, err := s.jobs.prepareExecutionSnapshotForActor(runCtx, in.ActorUserID, in.ExecutionPlanID, "", sourceLang, targetLang, glossaryBaseEnabled, projectRow)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
 	// 6. Reject plans without a translate round.
 	hasTranslate := false
@@ -336,6 +337,10 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 	}
 
 	// 11. Record audit event (best-effort, bounded context — held under the semaphore slot).
+	if err := runCtx.Err(); err != nil {
+		return nil, fmt.Errorf("quick translate: execution deadline: %w", err)
+	}
+
 	if s.audit != nil {
 		metadata := map[string]any{"execution_plan_id": in.ExecutionPlanID}
 		var projectIDPtr *int

@@ -12,11 +12,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/preview"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/previewtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 var (
@@ -205,10 +207,11 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 		return nil, ErrRevisionNoIssues
 	}
 
-	snapshot, err := s.jobs.prepareExecutionSnapshot(previewCtx, input.ActorUserID, projectRow, input.ExecutionPlanID, "")
+	snapshot, release, err := s.jobs.prepareExecutionSnapshot(previewCtx, input.ActorUserID, projectRow, input.ExecutionPlanID, "")
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
 	revisionRound, synthesized, err := revisionRoundFromSnapshot(snapshot, fixIssues)
 	if err != nil {
@@ -218,6 +221,11 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 	executionSnapshot.Rounds = []JobRoundSnapshot{revisionRound}
 	executionSnapshot.AutoApprove = false
 	executionSnapshot.ExplicitSegmentSelection = true
+	resolved, err := execution.Resolve(executionSnapshot)
+	if err != nil {
+		return nil, fmt.Errorf("revision preview: resolve execution: %w", err)
+	}
+	executionSnapshot = *resolved
 
 	allSegments, err := s.client.Segment.Query().
 		Where(segment.ResourceIDEQ(input.ResourceID)).
@@ -272,6 +280,9 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 	}
 
 	var applyToken string
+	if err := previewCtx.Err(); err != nil {
+		return nil, fmt.Errorf("revision preview: execution deadline: %w", err)
+	}
 	var applyExpiresAt time.Time
 	// failed 与 partial 轮的 TargetText 都可能是回退的原译文（非空）：渲染失败经
 	// preserveResult 写回原文、重试耗尽落入 unresolved 不回调、no-op 修订被批处理
@@ -373,6 +384,7 @@ func revisionRoundFromSnapshot(snapshot *JobExecutionSnapshot, fixIssues []qa.Qu
 			Concurrency:      1,
 			SegmentScope:     "with_issues",
 			IssueCodes:       append([]string(nil), codes...),
+			TemplateContent:  templates.EmbeddedReviseTemplate(),
 			Retry:            schema.RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
 		}
 		return JobRoundSnapshot{

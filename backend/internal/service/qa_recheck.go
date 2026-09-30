@@ -124,8 +124,6 @@ func (s *QARecheckService) Recheck(ctx context.Context, actorUserID, projectID i
 	if err := validateSharedReference(tp.Scope, tp.OwnerOrgID, EffectiveProjectOrgID(projectRow)); err != nil {
 		return nil, err
 	}
-	tp.Config.NormalizeContext()
-	tp.Config.NormalizePreserveKinds()
 	if !tp.Config.QA.Enabled {
 		return nil, ErrQAProfileDisabled
 	}

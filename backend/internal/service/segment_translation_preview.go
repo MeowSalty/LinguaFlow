@@ -230,10 +230,11 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 	}
 
 	// 3. Load, validate, and freeze the same execution snapshot used by jobs.
-	snapshot, err := s.jobs.prepareExecutionSnapshot(previewCtx, input.ActorUserID, projectRow, input.ExecutionPlanID, "")
+	snapshot, release, err := s.jobs.prepareExecutionSnapshot(previewCtx, input.ActorUserID, projectRow, input.ExecutionPlanID, "")
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
 	// 5. Preview forces explicit target segment; ignore plan segment filter and auto approve.
 	// Reject plans without a translate round.
@@ -304,6 +305,10 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 	}
 
 	// 10. Build apply token if we have a target.
+	if err := previewCtx.Err(); err != nil {
+		return nil, fmt.Errorf("preview: execution deadline: %w", err)
+	}
+
 	var applyToken string
 	var applyExpiresAt time.Time
 	if result.TargetText != "" {
