@@ -9,6 +9,7 @@ export interface TemplateEntity {
   name: string
   description?: string | null
   scope: string
+  owner_org_id?: number
   created_at?: string
   updated_at?: string
 }
@@ -33,7 +34,11 @@ export interface PromptTemplateStore {
   totalCount: number
   systemCount: number
   userCount: number
-  loadTemplates(): Promise<unknown>
+  orgCount: number
+  orgId: number | null
+  canEdit(item?: TemplateEntity): boolean
+  setOrganization(id: number | null): void
+  loadTemplates(orgId?: number | null): Promise<unknown>
   resetFilters(): void
   setSearchQuery(query: string): void
   setScopeFilter(scope: string): void
@@ -75,6 +80,11 @@ import { useEntityCrud } from '@/composables/useEntityCrud'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 import { formatDateTime } from '@/utils/datetime'
+import { useOrganizationScope } from '@/composables/useOrganizationScope'
+import OrganizationScopeSelect from '@/components/organizations/OrganizationScopeSelect.vue'
+import CopyToOrganization from '@/components/organizations/CopyToOrganization.vue'
+import { onOrganizationInvalidated } from '@/utils/organization-scope'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
 
 const props = withDefaults(
   defineProps<{
@@ -101,6 +111,10 @@ interface FormModel {
 
 const { t } = useI18n()
 const message = useMessage()
+const { orgId, canWrite, setScope } = useOrganizationScope((id) => {
+  props.store.setOrganization(id)
+  void props.store.loadTemplates(id)
+})
 
 /** 取当前命名空间下的文案（可选插值参数） */
 const tx = (key: string, params?: Record<string, unknown>): string =>
@@ -116,7 +130,7 @@ const { getScopeTagType, deleteModalVisible, deletingItem, confirmDelete, execut
 // ── 筛选 ──────────────────────────────────────────────
 
 interface ScopeFilterTab {
-  name: 'all' | 'system' | 'user'
+  name: 'all' | 'system' | 'user' | 'org'
   label: string
   count: number
 }
@@ -125,6 +139,7 @@ const filterTabs = computed<ScopeFilterTab[]>(() => [
   { name: 'all', label: tx('filters.all'), count: props.store.totalCount },
   { name: 'system', label: tx('scopes.system'), count: props.store.systemCount },
   { name: 'user', label: tx('scopes.user'), count: props.store.userCount },
+  { name: 'org', label: t('team.organization'), count: props.store.orgCount },
 ])
 
 const renderFilterTab = (tab: ScopeFilterTab): ReturnType<typeof h> =>
@@ -150,7 +165,7 @@ const editingItem = ref<TemplateEntity | null>(null)
 const formModel = reactive<FormModel>({ name: '', description: '', content: '' })
 
 const isEditMode = computed(() => Boolean(editingItem.value))
-const isSystemScope = computed(() => editingItem.value?.scope === 'system')
+const isSystemScope = computed(() => !props.store.canEdit(editingItem.value ?? undefined))
 
 const drawerTitle = computed(() =>
   isSystemScope.value
@@ -209,12 +224,17 @@ const openEditDrawer = (item: TemplateEntity): void => {
 }
 
 const onSubmit = async (): Promise<void> => {
+  const session = captureSession()
+  const organization = props.store.orgId
+  if (!props.store.canEdit(editingItem.value ?? undefined)) return
   try {
     await formRef.value?.validate()
   } catch {
     return
   }
 
+  if (!isSessionCurrent(session) || organization !== props.store.orgId || !drawerVisible.value)
+    return
   const payload: TemplateFormPayload = {
     name: formModel.name.trim(),
     content: formModel.content.trim(),
@@ -234,9 +254,25 @@ const onSubmit = async (): Promise<void> => {
 
 // ── 生命周期 ──────────────────────────────────────────
 
-onMounted(() => {
-  props.store.loadTemplates()
+watch(orgId, () => {
+  drawerVisible.value = false
+  deleteModalVisible.value = false
 })
+onOrganizationInvalidated((id) => {
+  if (id === orgId.value || id === editingItem.value?.owner_org_id) {
+    drawerVisible.value = false
+    deleteModalVisible.value = false
+    resetForm()
+  }
+})
+const copyToOrganization = async (item: TemplateEntity, target: number): Promise<void> => {
+  const session = captureSession()
+  await setScope(target)
+  if (!isSessionCurrent(session) || orgId.value !== target) return
+  props.store.setOrganization(target)
+  openEditDrawer(item)
+  editingItem.value = null
+}
 
 useStoreErrorToast(
   () => props.store.error,
@@ -253,15 +289,16 @@ useStoreErrorToast(
     :empty-description="tx(hasActiveFilters ? 'empty.filtered' : 'empty.default')"
   >
     <template #actions>
-      <NButton secondary :loading="store.loading" @click="store.loadTemplates">
+      <NButton secondary :loading="store.loading" @click="store.loadTemplates(orgId)">
         {{ t('common.actions.refresh') }}
       </NButton>
-      <NButton type="primary" @click="openCreateDrawer">
+      <NButton v-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ tx('actions.create') }}
       </NButton>
     </template>
 
     <template #filters>
+      <OrganizationScopeSelect :value="orgId" @update:value="setScope" />
       <NTabs
         :value="store.scopeFilter"
         type="segment"
@@ -289,7 +326,7 @@ useStoreErrorToast(
       <NButton v-if="hasActiveFilters" secondary @click="store.resetFilters()">
         {{ tx('filters.reset') }}
       </NButton>
-      <NButton v-else type="primary" @click="openCreateDrawer">
+      <NButton v-else-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ tx('actions.createFirst') }}
       </NButton>
     </template>
@@ -314,7 +351,7 @@ useStoreErrorToast(
             <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ item.id }}</p>
           </div>
           <NTag round size="small" :bordered="false" :type="getScopeTagType(item.scope)">
-            {{ tx(`scopes.${item.scope}`) }}
+            {{ item.scope === 'org' ? t('team.organization') : tx(`scopes.${item.scope}`) }}
           </NTag>
         </div>
 
@@ -341,7 +378,8 @@ useStoreErrorToast(
               {{ tx('card.updatedAt') }} {{ cardDate(item) }}
             </span>
             <div class="flex items-center gap-2" @click.stop>
-              <template v-if="item.scope !== 'system'">
+              <CopyToOrganization @copy="(target) => copyToOrganization(item, target)" />
+              <template v-if="store.canEdit(item)">
                 <NButton text type="primary" class="font-medium" @click="openEditDrawer(item)">
                   {{ t('common.actions.edit') }}
                 </NButton>

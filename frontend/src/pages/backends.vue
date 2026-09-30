@@ -30,6 +30,10 @@ import { useBackendsStore } from '@/stores/backends'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 import { sanitizeProbeErrorDetail } from '@/utils/errors'
+import { useOrganizationScope } from '@/composables/useOrganizationScope'
+import OrganizationScopeSelect from '@/components/organizations/OrganizationScopeSelect.vue'
+import { onOrganizationInvalidated } from '@/utils/organization-scope'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
 
 type Backend = ApiSchemas['Backend']
 type BackendType = Backend['type']
@@ -62,6 +66,10 @@ interface BackendFormModel {
 }
 
 const backends = useBackendsStore()
+const { orgId, canWrite, setScope } = useOrganizationScope((id) => {
+  backends.setOrganization(id)
+  void backends.loadBackends(id)
+})
 const message = useMessage()
 const { t } = useI18n()
 const formRef = ref<FormInst | null>(null)
@@ -142,6 +150,7 @@ const drawerDescription = computed(() =>
   isEditMode.value ? t('backends.edit.description') : t('backends.create.description'),
 )
 const submitting = computed(() => backends.creating || backends.updating)
+const isReadOnly = computed(() => !backends.canEdit(editingBackend.value ?? undefined))
 
 const requiresApiKey = computed(() => Boolean(formModel.type))
 const isAnthropic = computed(() => formModel.type === 'anthropic')
@@ -460,6 +469,9 @@ const buildOptions = (): BackendOptions => {
 }
 
 const onSubmit = async (): Promise<void> => {
+  const session = captureSession()
+  const organization = backends.orgId
+  if (isReadOnly.value) return
   try {
     await formRef.value?.validate()
   } catch {
@@ -469,6 +481,7 @@ const onSubmit = async (): Promise<void> => {
   if (!formModel.type) {
     return
   }
+  if (!isSessionCurrent(session) || organization !== backends.orgId || !drawerVisible.value) return
 
   const payload = {
     name: formModel.name.trim(),
@@ -554,13 +567,15 @@ const getThinkingLevelDisplay = (backend: Backend): ThinkingLevel | undefined =>
   return parseThinkingLevel(opts?.thinking_level)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const buildCardActions = (backend: Backend): DropdownOption[] => [
-  { label: t('common.actions.edit'), key: 'edit' },
-  { label: t('backends.actions.copy'), key: 'copy' },
-  { type: 'divider', key: 'divider' },
-  { label: t('common.actions.delete'), key: 'delete' },
-]
+const buildCardActions = (backend: Backend): DropdownOption[] =>
+  backends.canEdit(backend)
+    ? [
+        { label: t('common.actions.edit'), key: 'edit' },
+        { label: t('backends.actions.copy'), key: 'copy' },
+        { type: 'divider', key: 'divider' },
+        { label: t('common.actions.delete'), key: 'delete' },
+      ]
+    : []
 
 const handleCardAction = (backend: Backend, key: string | number): void => {
   if (key === 'edit') {
@@ -572,8 +587,19 @@ const handleCardAction = (backend: Backend, key: string | number): void => {
   }
 }
 
-onMounted(() => {
-  backends.loadBackends()
+watch(orgId, () => {
+  drawerVisible.value = false
+  deleteModalVisible.value = false
+  invalidateModelProbe()
+})
+onUnmounted(invalidateModelProbe)
+onOrganizationInvalidated((id) => {
+  if (id === orgId.value || id === editingBackend.value?.owner_org_id) {
+    drawerVisible.value = false
+    deleteModalVisible.value = false
+    editingBackend.value = null
+    invalidateModelProbe()
+  }
 })
 
 useStoreErrorToast(
@@ -596,15 +622,16 @@ useStoreErrorToast(
     "
   >
     <template #actions>
-      <NButton secondary :loading="backends.loading" @click="backends.loadBackends">
+      <NButton secondary :loading="backends.loading" @click="backends.loadBackends(orgId)">
         {{ t('common.actions.refresh') }}
       </NButton>
-      <NButton type="primary" @click="openCreateDrawer">
+      <NButton v-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('backends.create.title') }}
       </NButton>
     </template>
 
     <template #filters>
+      <OrganizationScopeSelect :value="orgId" @update:value="setScope" />
       <NTabs
         :value="backends.typeFilter"
         type="segment"
@@ -633,7 +660,7 @@ useStoreErrorToast(
       <NButton v-if="hasActiveFilters" secondary @click="backends.resetFilters()">
         {{ t('backends.filters.reset') }}
       </NButton>
-      <NButton v-else type="primary" @click="openCreateDrawer">
+      <NButton v-else-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('backends.create.title') }}
       </NButton>
     </template>
@@ -705,9 +732,10 @@ useStoreErrorToast(
           <div class="mt-auto border-t border-lf-border-soft pt-4">
             <div class="flex items-center justify-between gap-3">
               <NButton text type="primary" class="font-medium" @click="openEditDrawer(backend)">
-                {{ t('common.actions.edit') }}
+                {{ t(backends.canEdit(backend) ? 'common.actions.edit' : 'common.actions.view') }}
               </NButton>
               <NDropdown
+                v-if="backends.canEdit(backend)"
                 trigger="click"
                 placement="bottom-end"
                 :options="buildCardActions(backend)"
@@ -737,6 +765,7 @@ useStoreErrorToast(
 
       <NForm
         ref="formRef"
+        :disabled="isReadOnly"
         :model="formModel"
         :rules="rules"
         label-placement="top"
@@ -969,7 +998,7 @@ useStoreErrorToast(
           <NButton @click="drawerVisible = false">
             {{ t('common.cancel') }}
           </NButton>
-          <NButton type="primary" :loading="submitting" @click="onSubmit">
+          <NButton v-if="!isReadOnly" type="primary" :loading="submitting" @click="onSubmit">
             {{ t('common.save') }}
           </NButton>
         </div>

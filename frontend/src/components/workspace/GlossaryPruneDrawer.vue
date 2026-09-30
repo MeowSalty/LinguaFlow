@@ -25,6 +25,8 @@ import { useBackendsStore } from '@/stores/backends'
 import type { GlossarySyncQueueItem } from '@/stores/glossary'
 import { usePrunePromptTemplatesStore } from '@/stores/prunePromptTemplates'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
+import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import { isOrganizationDependency } from '@/utils/organization-scope'
 
 type Suggestion = ApiSchemas['GlossaryPruneSuggestion']
 type Preview = ApiSchemas['GlossaryPrunePreview']
@@ -41,6 +43,11 @@ const { t } = useI18n()
 const message = useMessage()
 const backends = useBackendsStore()
 const templates = usePrunePromptTemplatesStore()
+const workspace = useProjectWorkspaceStore()
+const orgId = computed(() => workspace.project?.owner_org_id ?? null)
+const availableTemplates = computed(() =>
+  templates.items.filter((item) => isOrganizationDependency(item, orgId.value)),
+)
 
 const backendId = ref<number | null>(null)
 const templateId = ref<number | null>(null)
@@ -51,17 +58,19 @@ const previewing = ref(false)
 const applying = ref(false)
 
 const backendOptions = computed<SelectOption[]>(() =>
-  backends.sortedItems.map((item) => ({ label: item.name, value: item.id })),
+  backends.sortedItems
+    .filter((item) => isOrganizationDependency(item, orgId.value))
+    .map((item) => ({ label: item.name, value: item.id })),
 )
 const templateOptions = computed<SelectOption[]>(() =>
-  templates.items.map((item) => ({ label: item.name, value: item.id })),
+  availableTemplates.value.map((item) => ({ label: item.name, value: item.id })),
 )
 
 /** 默认选中内置模板（id < 0），否则取列表第一项 */
 const resolveDefaultTemplateId = (): number | null => {
-  const builtin = templates.items.find((item) => item.id < 0)
+  const builtin = availableTemplates.value.find((item) => item.id < 0)
   if (builtin) return builtin.id
-  return templates.items[0]?.id ?? null
+  return availableTemplates.value[0]?.id ?? null
 }
 const selectedSuggestions = computed(() => {
   const ids = new Set(selectedKeys.value.map(Number))
@@ -285,10 +294,7 @@ const reset = (): void => {
 }
 
 const loadDependencies = async (): Promise<void> => {
-  await Promise.all([
-    backends.items.length ? Promise.resolve() : backends.loadBackends(),
-    templates.items.length ? Promise.resolve() : templates.loadTemplates(),
-  ])
+  await Promise.all([backends.loadBackends(orgId.value), templates.loadTemplates(null)])
   reset()
 }
 

@@ -22,6 +22,7 @@ import { type ApiSchemas } from '@/api/client'
 import { useLanguageOptions } from '@/composables/useLanguageOptions'
 import { useProjectsStore } from '@/stores/projects'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
 
 type Project = ApiSchemas['Project']
 
@@ -37,8 +38,9 @@ const props = withDefaults(
     show: boolean
     /** 待编辑的项目；null 或缺省表示新建 */
     project?: Project | null
+    orgId?: number | null
   }>(),
-  { project: null },
+  { project: null, orgId: null },
 )
 
 const emit = defineEmits<{
@@ -118,11 +120,24 @@ const close = (): void => {
 }
 
 const onSubmit = async (): Promise<void> => {
+  const session = captureSession()
+  const organization = props.orgId
+  const projectId = props.project?.id
+  if (!props.project) projects.setOrganization(props.orgId)
+  if (!projects.canEdit(props.project ?? undefined)) return
   try {
     await formRef.value?.validate()
   } catch {
     return
   }
+
+  if (
+    !isSessionCurrent(session) ||
+    !props.show ||
+    organization !== props.orgId ||
+    projectId !== props.project?.id
+  )
+    return
 
   const payload: ApiSchemas['CreateProjectRequest'] = {
     name: formModel.name.trim(),
@@ -141,6 +156,12 @@ const onSubmit = async (): Promise<void> => {
     emit('saved', project)
     close()
   } catch (error) {
+    if (
+      !isSessionCurrent(session) ||
+      !props.show ||
+      (error instanceof Error && error.name === 'AbortError')
+    )
+      return
     console.error(error)
     message.error(
       isEditMode.value

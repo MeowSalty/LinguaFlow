@@ -14,6 +14,11 @@ import {
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
+import { useOrganizationScope } from '@/composables/useOrganizationScope'
+import OrganizationScopeSelect from '@/components/organizations/OrganizationScopeSelect.vue'
+import CopyToOrganization from '@/components/organizations/CopyToOrganization.vue'
+import { onOrganizationInvalidated } from '@/utils/organization-scope'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
 import type { ApiSchemas } from '@/api/client'
 import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
 import ProfileConfigEditor from '@/components/templates/ProfileConfigEditor.vue'
@@ -76,6 +81,10 @@ function deepClone<T>(obj: T): T {
 // ── Store & 依赖 ──────────────────────────────────────────────
 
 const store = useExecutionProfilesStore()
+const { orgId, canWrite, setScope } = useOrganizationScope((id) => {
+  store.setOrganization(id)
+  void store.loadProfiles(id)
+})
 const message = useMessage()
 const { t } = useI18n()
 
@@ -109,10 +118,11 @@ const filterTabs = computed(() => [
   { name: 'all', label: t('executionProfiles.filters.all'), count: store.totalCount },
   { name: 'system', label: t('executionProfiles.scopes.system'), count: store.systemCount },
   { name: 'user', label: t('executionProfiles.scopes.user'), count: store.userCount },
+  { name: 'org', label: t('team.organization'), count: store.orgCount },
 ])
 
 const isEditMode = computed(() => Boolean(editingItem.value))
-const isSystemScope = computed(() => editingItem.value?.scope === 'system')
+const isSystemScope = computed(() => !store.canEdit(editingItem.value ?? undefined))
 const drawerTitle = computed(() =>
   isSystemScope.value
     ? t('executionProfiles.actions.viewTitle')
@@ -217,12 +227,16 @@ const buildPayload = (): CreateRequest => {
 }
 
 const onSubmit = async (): Promise<void> => {
+  const session = captureSession()
+  const organization = store.orgId
+  if (!store.canEdit(editingItem.value ?? undefined)) return
   try {
     await formRef.value?.validate()
   } catch {
     return
   }
 
+  if (!isSessionCurrent(session) || organization !== store.orgId || !drawerVisible.value) return
   const payload = buildPayload()
 
   try {
@@ -252,9 +266,25 @@ const cardDateTitle = (item: ExecutionProfile): string => {
 
 // ── 生命周期 ──────────────────────────────────────────────────
 
-onMounted(() => {
-  store.loadProfiles()
+watch(orgId, () => {
+  drawerVisible.value = false
+  deleteModalVisible.value = false
 })
+onOrganizationInvalidated((id) => {
+  if (id === orgId.value || id === editingItem.value?.owner_org_id) {
+    drawerVisible.value = false
+    deleteModalVisible.value = false
+    resetForm()
+  }
+})
+const copyToOrganization = async (item: ExecutionProfile, target: number) => {
+  const session = captureSession()
+  await setScope(target)
+  if (!isSessionCurrent(session) || orgId.value !== target) return
+  store.setOrganization(target)
+  openEditDrawer(item)
+  editingItem.value = null
+}
 
 useStoreErrorToast(
   () => store.error,
@@ -278,15 +308,16 @@ useStoreErrorToast(
     "
   >
     <template #actions>
-      <NButton secondary :loading="store.loading" @click="store.loadProfiles">
+      <NButton secondary :loading="store.loading" @click="store.loadProfiles(orgId)">
         {{ t('common.actions.refresh') }}
       </NButton>
-      <NButton type="primary" @click="openCreateDrawer">
+      <NButton v-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('executionProfiles.actions.create') }}
       </NButton>
     </template>
 
     <template #filters>
+      <OrganizationScopeSelect :value="orgId" @update:value="setScope" />
       <ScopeFilterTabs
         :tabs="filterTabs"
         :value="store.scopeFilter"
@@ -304,7 +335,7 @@ useStoreErrorToast(
       <NButton v-if="hasActiveFilters" secondary @click="store.resetFilters()">
         {{ t('executionProfiles.filters.reset') }}
       </NButton>
-      <NButton v-else type="primary" @click="openCreateDrawer">
+      <NButton v-else-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('executionProfiles.actions.createFirst') }}
       </NButton>
     </template>
@@ -329,7 +360,11 @@ useStoreErrorToast(
             <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ item.id }}</p>
           </div>
           <NTag round size="small" :bordered="false" :type="getScopeTagType(item.scope)">
-            {{ t(`executionProfiles.scopes.${item.scope}`) }}
+            {{
+              item.scope === 'org'
+                ? t('team.organization')
+                : t(`executionProfiles.scopes.${item.scope}`)
+            }}
           </NTag>
         </div>
 
@@ -377,7 +412,8 @@ useStoreErrorToast(
               {{ t('executionProfiles.card.updatedAt') }} {{ cardDate(item) }}
             </span>
             <div class="flex items-center gap-2" @click.stop>
-              <template v-if="item.scope !== 'system'">
+              <CopyToOrganization @copy="(target) => copyToOrganization(item, target)" />
+              <template v-if="store.canEdit(item)">
                 <NButton text type="primary" class="font-medium" @click="openEditDrawer(item)">
                   {{ t('common.actions.edit') }}
                 </NButton>

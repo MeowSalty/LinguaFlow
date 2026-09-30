@@ -16,16 +16,22 @@ import {
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
+import { useOrganizationScope } from '@/composables/useOrganizationScope'
+import OrganizationScopeSelect from '@/components/organizations/OrganizationScopeSelect.vue'
+import CopyToOrganization from '@/components/organizations/CopyToOrganization.vue'
+import { isOrganizationDependency, onOrganizationInvalidated } from '@/utils/organization-scope'
+import { clearUnavailablePlanDependencies } from '@/utils/organization-copy'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
+import { fetchBackends } from '@/api/backends'
+import { fetchPromptTemplates } from '@/api/prompt-templates'
+import { fetchBootstrapPromptTemplates } from '@/api/bootstrap-prompt-templates'
+import { fetchExecutionProfiles } from '@/api/execution-profiles'
 import type { ApiSchemas } from '@/api/client'
 import ExecutionPlanEditor from '@/components/templates/ExecutionPlanEditor.vue'
 import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
 import { useEntityCrud } from '@/composables/useEntityCrud'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
-import { useBackendsStore } from '@/stores/backends'
-import { useBootstrapPromptTemplatesStore } from '@/stores/bootstrapPromptTemplates'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
-import { usePromptTemplatesStore } from '@/stores/promptTemplates'
-import { useExecutionProfilesStore } from '@/stores/executionProfiles'
 import { formatDateTime } from '@/utils/datetime'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
@@ -71,10 +77,16 @@ function deepClone<T>(obj: T): T {
 // ── Store & 依赖 ──────────────────────────────────────────────
 
 const store = useExecutionPlanTemplatesStore()
-const backendsStore = useBackendsStore()
-const promptTemplatesStore = usePromptTemplatesStore()
-const bootstrapPromptTemplatesStore = useBootstrapPromptTemplatesStore()
-const executionProfilesStore = useExecutionProfilesStore()
+const { orgId, canWrite, setScope } = useOrganizationScope((id) => {
+  store.setOrganization(id)
+  void store.loadTemplates(id)
+})
+const dependencyOrgId = computed(() => editingItem.value?.owner_org_id ?? orgId.value)
+const availableBackends = ref<ApiSchemas['Backend'][]>([])
+const availablePrompts = ref<ApiSchemas['TranslationPromptTemplate'][]>([])
+const availableBootstrap = ref<ApiSchemas['BootstrapPromptTemplate'][]>([])
+const availableProfiles = ref<ApiSchemas['ExecutionProfile'][]>([])
+let dependencyGeneration = 0
 const message = useMessage()
 const { t } = useI18n()
 
@@ -102,24 +114,22 @@ const formModel = reactive<FormModel>({
 // ── 依赖选项（供 ExecutionPlanEditor 使用） ────────────────────
 
 const backendOptions = computed<SelectOption[]>(() =>
-  backendsStore.items.map((b) => ({ label: b.name, value: b.id })),
+  availableBackends.value.map((b) => ({ label: b.name, value: b.id })),
 )
 
 const promptTemplateOptions = computed<SelectOption[]>(() =>
-  promptTemplatesStore.items.map((t) => ({ label: t.name, value: t.id })),
+  availablePrompts.value.map((t) => ({ label: t.name, value: t.id })),
 )
 
 const bootstrapPromptTemplateOptions = computed<SelectOption[]>(() =>
-  bootstrapPromptTemplatesStore.items.map((t) => ({ label: t.name, value: t.id })),
+  availableBootstrap.value.map((t) => ({ label: t.name, value: t.id })),
 )
 
 const executionProfileOptions = computed<SelectOption[]>(() =>
-  executionProfilesStore.items.map((p) => ({ label: p.name, value: p.id })),
+  availableProfiles.value.map((p) => ({ label: p.name, value: p.id })),
 )
 
-const profileNameById = computed(
-  () => new Map(executionProfilesStore.items.map((p) => [p.id, p.name])),
-)
+const profileNameById = computed(() => new Map(availableProfiles.value.map((p) => [p.id, p.name])))
 
 // ── 计算属性 ──────────────────────────────────────────────────
 
@@ -131,10 +141,11 @@ const filterTabs = computed(() => [
   { name: 'all', label: t('executionPlanTemplates.filters.all'), count: store.totalCount },
   { name: 'system', label: t('executionPlanTemplates.scopes.system'), count: store.systemCount },
   { name: 'user', label: t('executionPlanTemplates.scopes.user'), count: store.userCount },
+  { name: 'org', label: t('team.organization'), count: store.orgCount },
 ])
 
 const isEditMode = computed(() => Boolean(editingItem.value))
-const isSystemScope = computed(() => editingItem.value?.scope === 'system')
+const isSystemScope = computed(() => !store.canEdit(editingItem.value ?? undefined))
 const drawerTitle = computed(() =>
   isSystemScope.value
     ? t('executionPlanTemplates.actions.viewTitle')
@@ -173,12 +184,34 @@ const rules = computed<FormRules>(() => ({
 // 执行策略随首屏加载（卡片标签依赖），不在此列
 const dependenciesLoaded = ref(false)
 
-const ensureDependenciesLoaded = (): void => {
-  if (dependenciesLoaded.value) return
-  dependenciesLoaded.value = true
-  void backendsStore.loadBackends()
-  void promptTemplatesStore.loadTemplates()
-  void bootstrapPromptTemplatesStore.loadTemplates()
+const ensureDependenciesLoaded = async (): Promise<void> => {
+  const scope = dependencyOrgId.value
+  const request = ++dependencyGeneration
+  const session = captureSession()
+  dependenciesLoaded.value = false
+  availableBackends.value = []
+  availablePrompts.value = []
+  availableBootstrap.value = []
+  availableProfiles.value = []
+  try {
+    const [backends, prompts, bootstrap, profiles] = await Promise.all([
+      fetchBackends(undefined, scope ?? undefined),
+      fetchPromptTemplates(),
+      fetchBootstrapPromptTemplates(),
+      fetchExecutionProfiles(),
+    ])
+    if (request !== dependencyGeneration || !isSessionCurrent(session)) return
+    availableBackends.value = backends.items.filter((item) => isOrganizationDependency(item, scope))
+    availablePrompts.value = prompts.items.filter((item) => isOrganizationDependency(item, scope))
+    availableBootstrap.value = bootstrap.items.filter((item) =>
+      isOrganizationDependency(item, scope),
+    )
+    availableProfiles.value = profiles.items.filter((item) => isOrganizationDependency(item, scope))
+    dependenciesLoaded.value = true
+  } catch (cause) {
+    if (request === dependencyGeneration && isSessionCurrent(session))
+      message.error(cause instanceof Error ? cause.message : t('team.errors.loadResource'))
+  }
 }
 
 const resetForm = (): void => {
@@ -404,6 +437,29 @@ const buildPayload = (): CreateRequest => {
 }
 
 const onSubmit = async (): Promise<void> => {
+  const session = captureSession()
+  const organization = store.orgId
+  if (!store.canEdit(editingItem.value ?? undefined)) return
+  if (
+    !dependenciesLoaded.value ||
+    !availableProfiles.value.some((item) => item.id === formModel.profile_id) ||
+    formModel.rounds.some(
+      (round) =>
+        (round.mode !== 'correct' &&
+          !availableBackends.value.some((item) => item.id === round.backend_id)) ||
+        (round.translate?.prompt_template_id != null &&
+          !availablePrompts.value.some(
+            (item) => item.id === round.translate?.prompt_template_id,
+          )) ||
+        (round.extract?.template_id != null &&
+          !availableBootstrap.value.some((item) => item.id === round.extract?.template_id)),
+    ) ||
+    (formModel.ruby_retry.backend_id &&
+      !availableBackends.value.some((item) => item.id === formModel.ruby_retry.backend_id))
+  ) {
+    message.error(t('team.errors.dependencies'))
+    return
+  }
   try {
     await formRef.value?.validate()
   } catch {
@@ -412,6 +468,7 @@ const onSubmit = async (): Promise<void> => {
 
   if (!validateRounds()) return
 
+  if (!isSessionCurrent(session) || organization !== store.orgId || !drawerVisible.value) return
   const payload = buildPayload()
 
   try {
@@ -460,10 +517,50 @@ const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
 // ── 生命周期 ──────────────────────────────────────────────────
 
 onMounted(() => {
-  store.loadTemplates()
-  // 卡片上的执行策略名称标签依赖 profiles，需随首屏加载
-  executionProfilesStore.loadProfiles()
+  void ensureDependenciesLoaded()
 })
+watch(orgId, () => {
+  drawerVisible.value = false
+  deleteModalVisible.value = false
+  editingItem.value = null
+  void ensureDependenciesLoaded()
+})
+onUnmounted(() => {
+  ++dependencyGeneration
+})
+onOrganizationInvalidated((id) => {
+  if (id === orgId.value || id === editingItem.value?.owner_org_id) {
+    ++dependencyGeneration
+    drawerVisible.value = false
+    deleteModalVisible.value = false
+    resetForm()
+    availableBackends.value = []
+    availablePrompts.value = []
+    availableBootstrap.value = []
+    availableProfiles.value = []
+    dependenciesLoaded.value = false
+  }
+})
+const copyToOrganization = async (item: ExecutionPlanTemplate, target: number) => {
+  const session = captureSession()
+  await setScope(target)
+  if (!isSessionCurrent(session) || orgId.value !== target) return
+  store.setOrganization(target)
+  openEditDrawer(item)
+  editingItem.value = null
+  await ensureDependenciesLoaded()
+  if (!isSessionCurrent(session) || orgId.value !== target || !drawerVisible.value) return
+  Object.assign(
+    formModel,
+    clearUnavailablePlanDependencies(formModel, {
+      profiles: availableProfiles.value,
+      backends: availableBackends.value,
+      prompts: availablePrompts.value,
+      bootstrap: availableBootstrap.value,
+    }),
+  )
+  message.info(t('team.copyDependencies'))
+}
 
 useStoreErrorToast(
   () => store.error,
@@ -487,15 +584,16 @@ useStoreErrorToast(
     "
   >
     <template #actions>
-      <NButton secondary :loading="store.loading" @click="store.loadTemplates">
+      <NButton secondary :loading="store.loading" @click="store.loadTemplates(orgId)">
         {{ t('common.actions.refresh') }}
       </NButton>
-      <NButton type="primary" @click="openCreateDrawer">
+      <NButton v-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('executionPlanTemplates.actions.create') }}
       </NButton>
     </template>
 
     <template #filters>
+      <OrganizationScopeSelect :value="orgId" @update:value="setScope" />
       <ScopeFilterTabs
         :tabs="filterTabs"
         :value="store.scopeFilter"
@@ -515,7 +613,7 @@ useStoreErrorToast(
       <NButton v-if="hasActiveFilters" secondary @click="store.resetFilters()">
         {{ t('executionPlanTemplates.filters.reset') }}
       </NButton>
-      <NButton v-else type="primary" @click="openCreateDrawer">
+      <NButton v-else-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('executionPlanTemplates.actions.createFirst') }}
       </NButton>
     </template>
@@ -540,7 +638,11 @@ useStoreErrorToast(
             <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ item.id }}</p>
           </div>
           <NTag round size="small" :bordered="false" :type="getScopeTagType(item.scope)">
-            {{ t(`executionPlanTemplates.scopes.${item.scope}`) }}
+            {{
+              item.scope === 'org'
+                ? t('team.organization')
+                : t(`executionPlanTemplates.scopes.${item.scope}`)
+            }}
           </NTag>
         </div>
 
@@ -589,7 +691,8 @@ useStoreErrorToast(
               {{ t('executionPlanTemplates.card.updatedAt') }} {{ cardDate(item) }}
             </span>
             <div class="flex items-center gap-2" @click.stop>
-              <template v-if="item.scope !== 'system'">
+              <CopyToOrganization @copy="(target) => copyToOrganization(item, target)" />
+              <template v-if="store.canEdit(item)">
                 <NButton text type="primary" class="font-medium" @click="openEditDrawer(item)">
                   {{ t('common.actions.edit') }}
                 </NButton>

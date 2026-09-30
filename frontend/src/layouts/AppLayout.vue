@@ -11,6 +11,9 @@ import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
 import { useServiceStore } from '@/stores/service'
 import { useThemeStore, type ThemeMode } from '@/stores/theme'
+import { getDefaultTokenStorage } from '@/api/token-storage'
+import { invalidateSessionViews } from '@/api/session-context'
+import { onOrganizationInvalidated } from '@/utils/organization-scope'
 
 const router = useRouter()
 const route = useRoute()
@@ -20,15 +23,22 @@ const service = useServiceStore()
 const theme = useThemeStore()
 const message = useMessage()
 const { t } = useI18n()
+onOrganizationInvalidated(() => {
+  invalidateSessionViews()
+})
+watch(
+  () => auth.user?.role,
+  (role) => {
+    if (role !== 'admin' && route.path.startsWith('/admin')) void router.replace('/')
+  },
+)
 
 const SIDEBAR_STORAGE_KEY = 'linguaflow.sidebar.collapsed'
 
-const sidebarCollapsed = ref(
-  typeof window !== 'undefined' && window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1',
-)
+const sidebarCollapsed = ref(getDefaultTokenStorage().getItem(SIDEBAR_STORAGE_KEY) === '1')
 
 watch(sidebarCollapsed, (collapsed) => {
-  window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0')
+  getDefaultTokenStorage().setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0')
 })
 
 const displayName = computed(() => {
@@ -87,6 +97,8 @@ const userOptions = computed<DropdownOption[]>(() => {
     { type: 'divider', key: 'divider-1' },
     { label: t('layout.userMenu.profile'), key: 'profile' },
     { label: t('layout.userMenu.security'), key: 'security' },
+    { label: t('workbench.settings.preferences'), key: 'preferences' },
+    ...(!service.isLocal ? [{ label: t('workbench.settings.team'), key: 'team' }] : []),
     { type: 'divider', key: 'divider-2' },
     { label: t('nav.changelog'), key: 'changelog' },
     { label: t('nav.about'), key: 'about' },
@@ -138,7 +150,8 @@ const onSelectUserAction = async (key: string | number) => {
       await router.push({ path: '/login' })
     } catch (error) {
       console.error(error)
-      message.error(t('layout.messages.logoutFailed'))
+      message.warning(t('operations.logoutUnconfirmed'))
+      await router.push({ path: '/login' })
     }
   } else if (key === 'switch-service') {
     const query = service.isLocal ? { force: '1' } : {}
@@ -148,9 +161,13 @@ const onSelectUserAction = async (key: string | number) => {
   } else if (key === 'about') {
     await router.push({ path: '/about' })
   } else if (key === 'profile') {
-    await router.push({ path: '/profile' })
+    await router.push({ path: '/settings/profile' })
   } else if (key === 'security') {
-    await router.push({ path: '/security' })
+    await router.push({ path: '/settings/security' })
+  } else if (key === 'preferences') {
+    await router.push({ path: '/settings/preferences' })
+  } else if (key === 'team') {
+    await router.push({ path: '/settings/team' })
   }
 }
 
@@ -323,7 +340,13 @@ const navigateTo = (path: string): void => {
 
       <!-- 宽度治理下放页面：普通页面根部用 .lf-content-narrow 保持居中窄栏；
            需要全宽的页面（如项目工作台）自行铺满 -->
-      <main class="flex-1 px-5 py-7 sm:px-8">
+      <main class="flex-1 px-5 pt-7 pb-28 sm:px-8">
+        <NAlert v-if="auth.initializationError" type="warning" :bordered="false" class="mb-5">
+          {{ auth.initializationError }}
+          <NButton text class="ml-3" @click="auth.fetchCurrentUser().catch(() => undefined)">{{
+            t('operations.authRetry')
+          }}</NButton>
+        </NAlert>
         <slot />
       </main>
     </div>
