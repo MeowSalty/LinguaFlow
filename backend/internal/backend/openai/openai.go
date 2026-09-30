@@ -271,8 +271,9 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 		stream:         backend.BoolOpt(opts, "stream", false),
 		thinking:       thinking,
 	}
-	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
-		b.timeout = time.Duration(t) * time.Second
+	b.timeout, err = backend.DurationOpt(opts, "timeout", 60*time.Second)
+	if err != nil || b.timeout < 0 {
+		return nil, errors.New("openai: invalid timeout")
 	}
 	if v, ok := opts["temperature"].(float64); ok {
 		b.temperature = &v

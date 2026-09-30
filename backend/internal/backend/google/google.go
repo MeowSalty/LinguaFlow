@@ -294,7 +294,10 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 		return nil, fmt.Errorf("google: %w", err)
 	}
 
-	t := backend.Int64Opt(opts, "timeout", 60)
+	t, err := backend.DurationOpt(opts, "timeout", 60*time.Second)
+	if err != nil || t < 0 {
+		return nil, errors.New("google: invalid timeout")
+	}
 	stream := backend.BoolOpt(opts, "stream", false)
 	headers := make(http.Header)
 	headers.Set("User-Agent", backend.ClientUserAgent())
@@ -308,8 +311,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	cc.HTTPOptions.Headers = headers
 	// 仅非流式设置 HTTPOptions.Timeout：流式下 SDK 会在 body 读完前 cancel。
 	if t > 0 && !stream {
-		timeout := time.Duration(t) * time.Second
-		cc.HTTPOptions.Timeout = &timeout
+		cc.HTTPOptions.Timeout = &t
 	}
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
 		cc.HTTPOptions.BaseURL = u
@@ -324,7 +326,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 		client:         client,
 		model:          model,
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
-		timeout:        time.Duration(t) * time.Second,
+		timeout:        t,
 		responseFormat: rf,
 		stream:         stream,
 		thinking:       thinking,
