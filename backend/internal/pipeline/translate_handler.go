@@ -32,11 +32,12 @@ type TranslateHandler struct {
 	Retry            backend.RetryPolicy
 	ResponseMode     string
 
-	Renderer *prompt.Renderer
-	Glossary glossary.Glossary
-	TM       tm.TranslationMemory
-	Repair   repair.Options
-	Context  ContextConfig
+	Renderer              *prompt.Renderer
+	Glossary              glossary.Glossary
+	TM                    tm.TranslationMemory
+	Repair                repair.Options
+	RetryReminderTemplate string
+	Context               ContextConfig
 
 	Protector         protect.Protector
 	RubyEnabled       bool
@@ -45,7 +46,8 @@ type TranslateHandler struct {
 	Postprocess       *PostprocessConfig
 
 	RubyRetryBackends []backend.Backend
-	RubyRetryAttempts int // 注音对齐定向重试轮数；<=0 兜底为 1（仅 backends 非空时生效）
+	RubyTemplates     prompt.RubyTemplates
+	RubyRetryAttempts int // 已解析的注音对齐重试轮数；0 表示禁用。
 
 	InlineBootstrap        bool
 	MaxTermsPer1000Chars   float64
@@ -555,7 +557,11 @@ func (h *TranslateHandler) tryPromptUpgrade(
 
 	isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
 
-	reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
+	reminder, err := repair.RenderRetryReminder(h.RetryReminderTemplate, nil, res.ParseErr, headSnippet(resp.Text, 200))
+	if err != nil {
+		logger.Error("cannot render retry reminder", "err", err)
+		return resp, res, false
+	}
 	req2 := req
 	req2.System = req.System + reminder
 
@@ -664,7 +670,7 @@ func (h *TranslateHandler) processTranslatedSegments(
 			isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
 			outcome := restoreSegmentRuby(ctx, seg, keepSet,
 				h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex, h.Repair,
-				h.RubyRetryAttempts)
+				h.RubyRetryAttempts, h.RubyTemplates)
 			// 守恒信号：应还原条目存在但未全部还原时追加 warning issue，
 			// 经 BuildBatchResult → worker translate batchHandler 落库。
 			if outcome.Want > 0 && outcome.Restored < outcome.Want {

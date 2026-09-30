@@ -80,7 +80,7 @@ func TestReviseHandler_ProtectRoundTrip(t *testing.T) {
 	fb := &fakeBackend{name: "fake", responses: []string{
 		mustJSON(t, map[string]any{"revisions": []map[string]string{{"id": "0", "target": revised}}}),
 	}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Protector: prot, Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Protector: prot, Logger: discardLogger()}
 
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
@@ -132,7 +132,7 @@ func TestReviseHandler_PlaceholderViolationRejected(t *testing.T) {
 			fb := &fakeBackend{name: "fake", responses: []string{
 				mustJSON(t, map[string]any{"revisions": []map[string]string{{"id": "0", "target": tc.revised}}}),
 			}}
-			h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Protector: prot, Logger: discardLogger()}
+			h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Protector: prot, Logger: discardLogger()}
 
 			result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 			if !reflect.DeepEqual(result.unresolved, []int{0}) {
@@ -162,7 +162,7 @@ func TestReviseHandler_RubyJSONRoundTrip(t *testing.T) {
 			},
 		}),
 	}}
-	h := &ReviseHandler{
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
 		RubyEnabled: true, RubyMode: "json",
 	}
@@ -199,7 +199,7 @@ func TestReviseHandler_RubyTextModeSection(t *testing.T) {
 	fb := &fakeBackend{name: "fake", responses: []string{
 		"[revisions]\n0 | 漢語之書\n[ruby]\n0: 漢語 | かんご | phonetic | 1\n",
 	}}
-	h := &ReviseHandler{
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
 		ResponseMode: "text", RubyEnabled: true, RubyMode: "section",
 	}
@@ -234,7 +234,7 @@ func TestReviseHandler_RubyInlineMarkersRejected(t *testing.T) {
 			{"id": "0", "target": "⟦ruby:漢語/かんご/phonetic⟧之書"},
 		}}),
 	}}
-	h := &ReviseHandler{
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
 		RubyEnabled: true, RubyMode: "json",
 	}
@@ -290,7 +290,7 @@ func TestReviseHandler_RubyRealignmentIncompleteRejected(t *testing.T) {
 				resp["ruby_output"] = map[string][]map[string]string{"0": {tc.rubyEntry}}
 			}
 			fb := &fakeBackend{name: "fake", responses: []string{mustJSON(t, resp)}}
-			h := &ReviseHandler{
+			h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 				Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
 				RubyEnabled: true, RubyMode: "json",
 			}
@@ -326,7 +326,7 @@ func TestReviseHandler_RubyKindRelabelAccepted(t *testing.T) {
 			},
 		}),
 	}}
-	h := &ReviseHandler{
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
 		RubyEnabled: true, RubyMode: "json",
 		RubyPreserveKinds: []string{"phonetic"},
@@ -353,7 +353,7 @@ func TestReviseHandler_RubyEmptyBaseItemAccepted(t *testing.T) {
 	fb := &fakeBackend{name: "fake", responses: []string{
 		mustJSON(t, map[string]any{"revisions": []map[string]string{{"id": "0", "target": "書"}}}),
 	}}
-	h := &ReviseHandler{
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
 		RubyEnabled: true, RubyMode: "json",
 	}
@@ -384,7 +384,7 @@ func TestReviseHandler_RubyPreserveKindsEmptyIgnored(t *testing.T) {
 			},
 		}),
 	}}
-	h := &ReviseHandler{
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
 		RubyEnabled: true, RubyMode: "json",
 		RubyPreserveKinds: []string{},
@@ -419,7 +419,7 @@ func TestReviseHandler_SnippetMappedToProtectedForm(t *testing.T) {
 		// LLM 判定问题不成立：原样回显保护形态（占位符守恒）。
 		mustJSON(t, map[string]any{"revisions": []map[string]string{{"id": "0", "target": protected}}}),
 	}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Protector: prot, Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Protector: prot, Logger: discardLogger()}
 
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
@@ -445,7 +445,7 @@ func TestReviseHandler_RubyDisabledSendsRaw(t *testing.T) {
 	fb := &fakeBackend{name: "fake", responses: []string{
 		mustJSON(t, map[string]any{"revisions": []map[string]string{{"id": "0", "target": target}}}),
 	}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 	if result.callbackResult == nil || result.callbackResult.Segments[0].TargetText != target {

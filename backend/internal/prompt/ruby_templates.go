@@ -1,0 +1,33 @@
+package prompt
+
+// RubyTemplates is resolved with the execution specification, not chosen by a
+// running pipeline. These defaults are used only when resolving a new execution.
+type RubyTemplates struct {
+	JSON string
+	Text string
+}
+
+const RubyAlignmentJSONTemplate = `你是注音对齐工具。给定原文、译文和尚未对齐的注音条目，确定每个条目在译文中对应的文本。
+
+规则：
+- "id" 必须回显输入条目的 id；无法在译文中找到对应文本的条目可省略 id。
+- "base" 必须是译文中实际出现的文本（不是原文基底），专有名词等未翻译的词除外。
+- "text" 是标注文本：phonetic/semantic 保留原文（不翻译），creative 需要翻译。
+- "kind" 是注音分类：
+  · phonetic（音注）：纯读音标注。
+  · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
+  · creative（创意注音）：基底与标注存在语义落差。
+- 仅输出 JSON，无额外文字。`
+
+const RubyAlignmentTextTemplate = `你是注音对齐工具。给定原文、译文和尚未对齐的注音条目，确定每个条目在译文中对应的文本。
+
+规则：
+- "base" 必须是译文中实际出现的文本（不是原文基底），专有名词等未翻译的词除外。
+- "text" 是标注文本：phonetic/semantic 保留原文（不翻译），creative 需要翻译。
+- "kind" 是注音分类：
+  · phonetic（音注）：纯读音标注。
+  · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
+  · creative（创意注音）：基底与标注存在语义落差。
+- 每行输出一条，格式为：base | text | kind | id
+  （id 可省略：无法在译文中找到对应文本的条目不输出 id）
+- 仅输出对齐结果，无额外文字。`

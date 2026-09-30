@@ -16,7 +16,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
@@ -55,7 +54,8 @@ type ReviseHandler struct {
 	RubyPreserveKinds []string
 	RubyMode          string
 	RubyRetryBackends []backend.Backend
-	RubyRetryAttempts int // 注音对齐定向重试轮数；<=0 兜底为 1（仅 backends 非空时生效）
+	RubyTemplates     prompt.RubyTemplates
+	RubyRetryAttempts int // 已解析的注音对齐重试轮数；0 表示禁用。
 }
 
 func (h *ReviseHandler) ModeName() string { return RoundModeRevise }
@@ -81,9 +81,6 @@ func (h *ReviseHandler) emitBatchOutcome(evt progress.BatchEvent) {
 
 func (h *ReviseHandler) issueCodeSet() map[string]struct{} {
 	codes := h.IssueCodes
-	if len(codes) == 0 {
-		codes = qa.SemanticQACodes()
-	}
 	set := make(map[string]struct{}, len(codes))
 	for _, code := range codes {
 		set[code] = struct{}{}
@@ -236,7 +233,7 @@ func (h *ReviseHandler) finalizeRevision(
 		// Total 单一来源，无需在调用方重复计算。
 		outcome := restoreSegmentRuby(ctx, tmp, nil,
 			h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex, h.Repair,
-			h.RubyRetryAttempts)
+			h.RubyRetryAttempts, h.RubyTemplates)
 		// 注音守恒守卫：修订前的 target 带注音，剥离后必须完整回填后才能采信。
 		// 判据用还原器实际插入数而非子串计数，LLM 写字面量 <ruby> 文本或
 		// ⟦ruby:⟧ 标记均无法凑数（后者直接在上方拒绝）。不完整即拒绝该段修订

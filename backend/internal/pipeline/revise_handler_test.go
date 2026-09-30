@@ -41,7 +41,7 @@ func reviseDoc() *Document {
 func TestReviseHandler_BuildBatchesFiltersPendingCodesAndResolved(t *testing.T) {
 	doc := reviseDoc()
 	doc.ResolvedIndices = map[int]struct{}{0: {}}
-	h := &ReviseHandler{Backend: &fakeBackend{name: "fake"}, Renderer: newReviseRenderer(t), BatchSize: 10, Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: &fakeBackend{name: "fake"}, Renderer: newReviseRenderer(t), BatchSize: 10, Logger: discardLogger()}
 	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestReviseHandler_BuildBatchesFiltersPendingCodesAndResolved(t *testing.T) 
 func TestReviseHandler_ProcessBatchReturnsKnownRevisionsAndMarksMissingUnresolved(t *testing.T) {
 	doc := reviseDoc()
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"你好啊"},{"id":"unknown","target":"丢弃"}]}`}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 	result := h.ProcessBatch(context.Background(), doc, []int{0, 1}, 0, discardLogger())
 	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
 		t.Fatalf("callback=%#v want one known revision", result.callbackResult)
@@ -87,7 +87,7 @@ func TestReviseHandler_ProcessBatchReturnsKnownRevisionsAndMarksMissingUnresolve
 func TestReviseHandler_ProcessBatchSameTextIsReturned(t *testing.T) {
 	doc := reviseDoc()
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"你好"}]}`}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 	if result.callbackResult == nil || result.callbackResult.Segments[0].TargetText != "你好" {
 		t.Fatalf("result=%#v want same target returned", result.callbackResult)
@@ -97,7 +97,7 @@ func TestReviseHandler_ProcessBatchSameTextIsReturned(t *testing.T) {
 func TestReviseHandler_ParseFailureRetries(t *testing.T) {
 	doc := reviseDoc()
 	fb := &fakeBackend{name: "fake", responses: []string{"bad json"}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Retry: backend.RetryPolicy{MaxAttempts: 2}, Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Retry: backend.RetryPolicy{MaxAttempts: 2}, Logger: discardLogger()}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 	if result.retry == nil || result.retry.attempt != 1 {
 		t.Fatalf("retry=%+v want attempt 1", result.retry)
@@ -110,7 +110,7 @@ func TestReviseHandler_ParseFailureRetries(t *testing.T) {
 func TestReviseHandler_TextMode(t *testing.T) {
 	doc := reviseDoc()
 	fb := &fakeBackend{name: "fake", responses: []string{"[revisions]\n0 | 你好啊"}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), ResponseMode: "text", Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), ResponseMode: "text", Logger: discardLogger()}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 	if result.callbackResult == nil || result.callbackResult.Segments[0].TargetText != "你好啊" {
 		t.Fatalf("result=%#v", result.callbackResult)
@@ -125,7 +125,7 @@ func TestReviseHandler_TextMode(t *testing.T) {
 
 func TestReviseHandler_IssueCodesEmptyFallsBackToSemanticCodes(t *testing.T) {
 	doc := reviseDoc()
-	h := &ReviseHandler{Backend: &fakeBackend{name: "fake"}, Renderer: newReviseRenderer(t), Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: &fakeBackend{name: "fake"}, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func TestReviseHandler_IssueCodesEmptyFallsBackToSemanticCodes(t *testing.T) {
 
 func TestReviseHandler_BackendErrorUnresolved(t *testing.T) {
 	doc := reviseDoc()
-	h := &ReviseHandler{Backend: &fakeBackend{name: "fake", errs: []error{errors.New("down")}}, Renderer: newReviseRenderer(t), Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: &fakeBackend{name: "fake", errs: []error{errors.New("down")}}, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 	if !reflect.DeepEqual(result.unresolved, []int{0}) {
 		t.Fatalf("unresolved=%v want [0]", result.unresolved)
@@ -164,7 +164,7 @@ func reviseMarkupDoc(format string) *Document {
 func TestReviseMarkupGuard_BrokenRevisionGoesUnresolved(t *testing.T) {
 	doc := reviseMarkupDoc("epub")
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"<p>你好</rt>"}]}`}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 
 	if result.callbackResult != nil && len(result.callbackResult.Segments) != 0 {
@@ -182,7 +182,7 @@ func TestReviseMarkupGuard_BrokenRevisionGoesUnresolved(t *testing.T) {
 func TestReviseMarkupGuard_WellFormedRevisionPasses(t *testing.T) {
 	doc := reviseMarkupDoc("epub")
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"<p>你好啊</p>"}]}`}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 
 	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
@@ -200,7 +200,7 @@ func TestReviseMarkupGuard_WellFormedRevisionPasses(t *testing.T) {
 func TestReviseMarkupGuard_FormatGateSkipsNonEpub(t *testing.T) {
 	doc := reviseMarkupDoc("txt")
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"<p>你好</rt>"}]}`}}
-	h := &ReviseHandler{Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
+	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
 
 	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {

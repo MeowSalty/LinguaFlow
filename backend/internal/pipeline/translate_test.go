@@ -517,11 +517,12 @@ func defaultRepairOpts() repair.Options {
 // newTestTranslateHandler 创建测试用 TranslateHandler。
 func newTestTranslateHandler(fb backend.Backend, batchSize, concurrency int, opts ...func(*TranslateHandler)) *TranslateHandler {
 	h := &TranslateHandler{
-		Backend:   fb,
-		BatchSize: batchSize,
-		Renderer:  nil, // 由调用方设置
-		Logger:    quietLogger(),
-		Repair:    defaultRepairOpts(),
+		Backend:               fb,
+		BatchSize:             batchSize,
+		Renderer:              nil, // 由调用方设置
+		Logger:                quietLogger(),
+		Repair:                defaultRepairOpts(),
+		RetryReminderTemplate: repair.DefaultRetryReminderTemplate,
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -667,6 +668,7 @@ func TestProcessBatch_PromptUpgradeRecovers(t *testing.T) {
 	}
 	h := newTestTranslateHandler(fb, 2, 1, func(h *TranslateHandler) {
 		h.Reporter = rep
+		h.RetryReminderTemplate = "\nFROZEN-REMINDER: {{.PreviousHead}}"
 	})
 	if err := runTestTranslateRound(t, h, doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -676,6 +678,9 @@ func TestProcessBatch_PromptUpgradeRecovers(t *testing.T) {
 	}
 	if got := int(fb.idx.Load()); got != 2 {
 		t.Errorf("backend calls: %d want 2 (1 fatal + 1 upgrade-retry)", got)
+	}
+	if len(fb.requests) != 2 || !strings.Contains(fb.requests[1].System, "FROZEN-REMINDER: I don't want to follow JSON schema today") || strings.Contains(fb.requests[1].System, "IMPORTANT: your previous response") {
+		t.Fatal("upgrade retry did not use the frozen reminder")
 	}
 }
 
