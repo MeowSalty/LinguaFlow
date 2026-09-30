@@ -6,6 +6,7 @@ import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 import { extractErrorMessage } from '@/utils/errors'
+import { StaleSessionError } from '@/api/session-context'
 
 definePage({
   meta: {
@@ -23,6 +24,10 @@ const { t } = useI18n()
 
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
+let alive = true
+onBeforeUnmount(() => {
+  alive = false
+})
 
 const formValue = reactive({
   username: '',
@@ -39,26 +44,35 @@ const rules = computed<FormRules>(() => ({
 }))
 
 const onSubmit = async () => {
+  if (submitting.value) return
   try {
     await formRef.value?.validate()
   } catch {
     return
   }
 
+  if (!alive || submitting.value) return
   submitting.value = true
   try {
     await auth.login({
       username: formValue.username.trim(),
       password: formValue.password,
     })
+    if (!alive) return
     message.success(t('login.messages.success'))
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
     await router.push(redirect ?? '/')
   } catch (error) {
+    if (
+      !alive ||
+      error instanceof StaleSessionError ||
+      (error instanceof DOMException && error.name === 'AbortError')
+    )
+      return
     console.error(error)
     message.error(extractErrorMessage(error, t('login.messages.failed')))
   } finally {
-    submitting.value = false
+    if (alive) submitting.value = false
   }
 }
 </script>

@@ -5,6 +5,8 @@ import { useMessage, type FormInst, type FormItemRule, type FormRules } from 'na
 import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { extractErrorMessage } from '@/utils/errors'
+import { StaleSessionError } from '@/api/session-context'
+import { validateNewPassword } from '@/utils/password'
 
 definePage({
   meta: {
@@ -21,6 +23,10 @@ const { t } = useI18n()
 
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
+let alive = true
+onBeforeUnmount(() => {
+  alive = false
+})
 
 const formValue = reactive({
   username: '',
@@ -68,7 +74,13 @@ const rules = computed<FormRules>(() => ({
       trigger: ['blur', 'input'],
       message: t('register.validation.passwordRequired'),
     },
-    { min: 8, trigger: ['blur', 'input'], message: t('register.validation.passwordMinLength') },
+    {
+      trigger: ['blur', 'input'],
+      validator(_rule, value: string) {
+        const issue = validateNewPassword(value || '')
+        return issue ? new Error(t(`workbench.password.${issue}`)) : true
+      },
+    },
   ],
   confirm_password: [
     {
@@ -81,12 +93,14 @@ const rules = computed<FormRules>(() => ({
 }))
 
 const onSubmit = async () => {
+  if (submitting.value) return
   try {
     await formRef.value?.validate()
   } catch {
     return
   }
 
+  if (!alive || submitting.value) return
   submitting.value = true
   try {
     await auth.register({
@@ -95,14 +109,21 @@ const onSubmit = async () => {
       display_name: formValue.display_name.trim() || undefined,
       password: formValue.password,
     })
+    if (!alive) return
     message.success(t('register.messages.success'))
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
     await router.push(redirect ?? '/')
   } catch (error) {
+    if (
+      !alive ||
+      error instanceof StaleSessionError ||
+      (error instanceof DOMException && error.name === 'AbortError')
+    )
+      return
     console.error(error)
     message.error(extractErrorMessage(error, t('register.messages.failed')))
   } finally {
-    submitting.value = false
+    if (alive) submitting.value = false
   }
 }
 </script>

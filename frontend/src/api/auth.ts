@@ -1,14 +1,16 @@
 import { t } from '@/i18n'
 
 import type { ApiClient, ApiSchemas } from './client'
-import { apiClient } from './client'
-import { getRefreshToken, setAuthSession, clearAuthTokens } from './token-storage'
+import { apiClient, logoutCurrentSession } from './client'
+import { captureSession, assertSessionCurrent } from './session-context'
+import { getRefreshToken, setAuthSession } from './token-storage'
 import { buildRequestFailureError } from './utils'
 
 export const loginWithPassword = async (
   credentials: ApiSchemas['LoginRequest'],
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['AuthSession']> => {
+  const context = captureSession()
   const { data, error, response } = await client.POST('/auth/login', {
     body: credentials,
   })
@@ -17,6 +19,7 @@ export const loginWithPassword = async (
     throw buildRequestFailureError(t('api.errors.loginFailed'), error, response)
   }
 
+  assertSessionCurrent(context)
   setAuthSession(data)
 
   return data
@@ -26,6 +29,7 @@ export const registerAndLogin = async (
   payload: ApiSchemas['RegisterRequest'],
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['AuthSession']> => {
+  const context = captureSession()
   const { data, error, response } = await client.POST('/auth/register', {
     body: payload,
   })
@@ -34,6 +38,7 @@ export const registerAndLogin = async (
     throw buildRequestFailureError(t('api.errors.registerFailed'), error, response)
   }
 
+  assertSessionCurrent(context)
   setAuthSession(data)
 
   return data
@@ -43,6 +48,7 @@ export const refreshAuthSession = async (
   refreshToken = getRefreshToken(),
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['AuthSession']> => {
+  const context = captureSession()
   if (!refreshToken) {
     throw new Error('Refresh token is missing.')
   }
@@ -57,28 +63,10 @@ export const refreshAuthSession = async (
     throw buildRequestFailureError(t('api.errors.refreshSessionFailed'), error, response)
   }
 
+  assertSessionCurrent(context)
   setAuthSession(data)
 
   return data
 }
 
-export const logout = async (
-  refreshToken = getRefreshToken(),
-  client: ApiClient = apiClient,
-): Promise<void> => {
-  try {
-    if (refreshToken) {
-      const { error } = await client.POST('/auth/logout', {
-        body: {
-          refresh_token: refreshToken,
-        },
-      })
-
-      if (error) {
-        throw error
-      }
-    }
-  } finally {
-    clearAuthTokens()
-  }
-}
+export const logout = logoutCurrentSession

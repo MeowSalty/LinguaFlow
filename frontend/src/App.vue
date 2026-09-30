@@ -5,6 +5,7 @@ import BootstrapNoticeHost from '@/components/BootstrapNoticeHost.vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useThemeStore } from '@/stores/theme'
+import { sessionGeneration } from '@/api/session-context'
 import { readLfTokens, type LfTokenName, type LfTokenState } from '@/utils/themeTokens'
 
 const route = useRoute()
@@ -147,7 +148,7 @@ const naiveDateLocale = computed(() => {
         <NDialogProvider>
           <RouterView v-slot="{ Component }">
             <component :is="Component" v-if="isBlank" />
-            <AppLayout v-else>
+            <AppLayout v-else :key="sessionGeneration">
               <component :is="Component" />
             </AppLayout>
           </RouterView>
