@@ -85,9 +85,12 @@ const userOptions = computed<DropdownOption[]>(() => {
         ]),
     },
     { type: 'divider', key: 'divider-1' },
+    { label: t('layout.userMenu.profile'), key: 'profile' },
+    { label: t('layout.userMenu.security'), key: 'security' },
+    { type: 'divider', key: 'divider-2' },
     { label: t('nav.changelog'), key: 'changelog' },
     { label: t('nav.about'), key: 'about' },
-    { type: 'divider', key: 'divider-2' },
+    { type: 'divider', key: 'divider-3' },
   ]
 
   if (service.isLocal) {
@@ -144,6 +147,10 @@ const onSelectUserAction = async (key: string | number) => {
     await router.push({ path: '/changelog' })
   } else if (key === 'about') {
     await router.push({ path: '/about' })
+  } else if (key === 'profile') {
+    await router.push({ path: '/profile' })
+  } else if (key === 'security') {
+    await router.push({ path: '/security' })
   }
 }
 
