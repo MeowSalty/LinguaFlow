@@ -5,6 +5,8 @@ import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
 import { batchReviewSegments } from '@/api/projects'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
+import { usePreferencesStore } from '@/stores/preferences'
 import ResourceExplorer from '@/components/workspace/ResourceExplorer.vue'
 import SelectionActionBar from '@/components/workspace/SelectionActionBar.vue'
 import UploadPanel from '@/components/workspace/UploadPanel.vue'
@@ -161,15 +163,26 @@ const handleGlossarySynced = async (): Promise<void> => {
 const conflictMgmt = useConflictHandling()
 
 // ── 工作区操作 ──
+const preferences = usePreferencesStore()
+let recordedProjectId: number | null = null
 const reloadWorkspace = async (): Promise<void> => {
   if (!projectId.value) {
     return
   }
 
-  await Promise.all([
-    workspace.loadProject(projectId.value),
-    workspace.loadResourceTree(projectId.value),
-  ])
+  const enteringId = projectId.value
+  const session = captureSession()
+  await Promise.all([workspace.loadProject(enteringId), workspace.loadResourceTree(enteringId)])
+
+  if (!isSessionCurrent(session) || projectId.value !== enteringId) return
+  if (
+    workspace.project?.id === enteringId &&
+    !workspace.projectError &&
+    recordedProjectId !== enteringId
+  ) {
+    preferences.recordVisit(enteringId)
+    recordedProjectId = enteringId
+  }
 
   // 重新加载当前标签页数据
   loadedTabs.clear()

@@ -1,65 +1,120 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-
+import { computed, onScopeDispose, ref, shallowRef } from 'vue'
 import { type ApiSchemas, fetchStatsSummary, fetchActivity } from '@/api/client'
+import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
+import { isAccessDenied } from '@/api/utils'
+import { onOrganizationInvalidated } from '@/utils/organization-scope'
 import { t } from '@/i18n'
 
-type UsageStats = ApiSchemas['UsageStats']
-type Activity = ApiSchemas['Activity']
-
 export const useStatsStore = defineStore('stats', () => {
-  const stats = ref<UsageStats | null>(null)
-  const activities = ref<Activity[]>([])
-  const nextCursor = ref<string | undefined>(undefined)
-
+  const stats = shallowRef<ApiSchemas['UsageStats'] | null>(null)
+  const activities = shallowRef<ApiSchemas['Activity'][]>([])
+  const nextCursor = ref<string | undefined>()
   const statsLoading = ref(false)
   const activitiesLoading = ref(false)
-
   const statsError = ref<string | null>(null)
   const activitiesError = ref<string | null>(null)
+  const statsUpdatedAt = ref<string | null>(null)
+  const activityOrgId = ref<number | null>(null)
+  let statsRequest: Promise<void> | null = null
+  let activityRequest: Promise<void> | null = null
+  let activityGeneration = 0
 
-  const loadStats = async (): Promise<void> => {
+  const clearActivities = (): void => {
+    activityGeneration++
+    activityRequest = null
+    activities.value = []
+    nextCursor.value = undefined
+    activitiesError.value = null
+    activitiesLoading.value = false
+  }
+  const reset = (): void => {
+    statsRequest = null
+    stats.value = null
+    statsLoading.value = false
+    statsError.value = null
+    statsUpdatedAt.value = null
+    activityOrgId.value = null
+    clearActivities()
+  }
+  onScopeDispose(onSessionChange(reset))
+  onOrganizationInvalidated((orgId) => {
+    if (activityOrgId.value === orgId) clearActivities()
+  })
+
+  const loadStats = (): Promise<void> => {
+    if (statsRequest) return statsRequest
+    const session = captureSession()
     statsLoading.value = true
     statsError.value = null
-
-    try {
-      stats.value = await fetchStatsSummary()
-    } catch (error) {
-      statsError.value = error instanceof Error ? error.message : t('api.errors.loadStatsFailed')
-    } finally {
-      statsLoading.value = false
+    const work = async (): Promise<void> => {
+      try {
+        // Usage statistics do not support organization filtering.
+        const response = await fetchStatsSummary()
+        if (isSessionCurrent(session)) {
+          stats.value = response
+          statsUpdatedAt.value = new Date().toISOString()
+        }
+      } catch (error) {
+        if (!isSessionCurrent(session)) return
+        if (isAccessDenied(error)) stats.value = null
+        statsError.value = error instanceof Error ? error.message : t('api.errors.loadStatsFailed')
+      } finally {
+        if (isSessionCurrent(session)) {
+          statsLoading.value = false
+          statsRequest = null
+        }
+      }
     }
+    statsRequest = work()
+    return statsRequest
   }
 
-  const loadActivities = async (reset = false): Promise<void> => {
+  const loadActivities = (resetPage = false): Promise<void> => {
+    if (activityRequest) return activityRequest
+    const session = captureSession()
+    const generation = activityGeneration
+    const current = () => isSessionCurrent(session) && generation === activityGeneration
     activitiesLoading.value = true
     activitiesError.value = null
-
-    try {
-      const cursor = reset ? undefined : nextCursor.value
-      const response = await fetchActivity({ cursor, limit: 20 })
-
-      if (reset) {
-        activities.value = response.items
-      } else {
-        activities.value.push(...response.items)
+    const work = async (): Promise<void> => {
+      try {
+        const response = await fetchActivity({
+          cursor: resetPage ? undefined : nextCursor.value,
+          limit: 20,
+          ...(activityOrgId.value === null ? {} : { org_id: activityOrgId.value }),
+        })
+        if (!current()) return
+        const items = resetPage ? response.items : [...activities.value, ...response.items]
+        activities.value = [...new Map(items.map((item) => [item.id, item])).values()]
+        nextCursor.value = response.next_cursor
+      } catch (error) {
+        if (!current()) return
+        if (isAccessDenied(error)) {
+          activities.value = []
+          nextCursor.value = undefined
+        }
+        activitiesError.value =
+          error instanceof Error ? error.message : t('api.errors.loadActivityFailed')
+      } finally {
+        if (current()) {
+          activitiesLoading.value = false
+          activityRequest = null
+        }
       }
-
-      nextCursor.value = response.next_cursor
-    } catch (error) {
-      activitiesError.value =
-        error instanceof Error ? error.message : t('api.errors.loadActivityFailed')
-    } finally {
-      activitiesLoading.value = false
     }
+    activityRequest = work()
+    return activityRequest
   }
-
-  const hasMoreActivities = computed(() => Boolean(nextCursor.value))
-
+  const setActivityOrganization = (orgId: number | null): void => {
+    if (activityOrgId.value === orgId) return
+    clearActivities()
+    activityOrgId.value = orgId
+  }
   const loadAll = async (): Promise<void> => {
     await Promise.all([loadStats(), loadActivities(true)])
   }
-
+  const hasMoreActivities = computed(() => Boolean(nextCursor.value))
   return {
     stats,
     activities,
@@ -67,9 +122,13 @@ export const useStatsStore = defineStore('stats', () => {
     activitiesLoading,
     statsError,
     activitiesError,
+    statsUpdatedAt,
+    activityOrgId,
     hasMoreActivities,
     loadStats,
     loadActivities,
     loadAll,
+    setActivityOrganization,
+    reset,
   }
 })

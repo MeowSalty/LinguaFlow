@@ -338,6 +338,9 @@ onUnmounted(() => {
 
       <!-- 步骤 2: 执行进度 -->
       <div v-if="glossary.syncStep === 'executing'" class="py-4">
+        <NAlert v-if="glossary.syncError" type="warning" class="mb-4">{{
+          glossary.syncError
+        }}</NAlert>
         <!-- 区分等待执行和正在执行状态 -->
         <div class="mb-4 text-center text-lf-text-muted">
           <template v-if="glossary.syncTaskStatus === 'pending'">
@@ -349,12 +352,19 @@ onUnmounted(() => {
         </div>
 
         <NProgress
+          v-if="glossary.syncTotal > 0"
           type="line"
           :percentage="glossary.syncProgress"
           :indicator-placement="'inside'"
           :processing="glossary.syncTaskStatus === 'running'"
           class="mb-3"
         />
+        <p v-else class="mb-3 text-center text-sm text-lf-text-muted">
+          {{ t('workbench.details.unknownTotal') }}
+        </p>
+        <p class="mb-3 text-center text-xs text-lf-text-muted">
+          {{ t('workbench.details.progressHint') }}
+        </p>
 
         <div class="mb-6 text-center text-sm tabular-nums text-lf-text-muted">
           {{
@@ -366,7 +376,7 @@ onUnmounted(() => {
         </div>
 
         <div class="flex justify-center">
-          <NButton type="error" ghost @click="handleCancel">
+          <NButton type="error" ghost :loading="glossary.syncCancelling" @click="handleCancel">
             {{ t('workspace.glossary.sync.cancel') }}
           </NButton>
         </div>

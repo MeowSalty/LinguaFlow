@@ -33,7 +33,11 @@ const getActionLabel = (action: string): string => {
       </div>
     </div>
 
-    <NEmpty v-else-if="stats.activitiesError" :description="stats.activitiesError" class="mt-8" />
+    <NEmpty
+      v-else-if="stats.activitiesError && !stats.activities.length"
+      :description="stats.activitiesError"
+      class="mt-8"
+    />
 
     <NEmpty
       v-else-if="stats.activities.length === 0"
@@ -42,6 +46,9 @@ const getActionLabel = (action: string): string => {
     />
 
     <div v-else class="relative mt-4 space-y-4">
+      <NAlert v-if="stats.activitiesError" type="warning" :title="t('workbench.stats.stale')">{{
+        stats.activitiesError
+      }}</NAlert>
       <div
         class="absolute top-1 bottom-1 left-[3px] w-px bg-gradient-to-b from-brand-500/40 via-lf-border-soft to-transparent"
       />
