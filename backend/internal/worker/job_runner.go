@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -33,15 +34,17 @@ import (
 
 // JobRunner 任务执行器，实现 TaskRunner 接口。
 type JobRunner struct {
-	logger      *slog.Logger
-	client      *ent.Client
-	jobs        *service.JobService
-	store       *filestore.LocalStore
-	queue       *Queue
-	eventBroker *event.Broker
-	limiterPool *backend.LimiterPool
-	httpClients []telemetry.HTTPClientFactory
-	resMutex    *ResourceMutex
+	logger            *slog.Logger
+	client            *ent.Client
+	jobs              *service.JobService
+	store             *filestore.LocalStore
+	queue             *Queue
+	eventBroker       *event.Broker
+	limiterPool       *backend.LimiterPool
+	httpClients       []telemetry.HTTPClientFactory
+	credentialReader  credential.Reader
+	credentialChecker credential.Checker
+	resMutex          *ResourceMutex
 	// dbDriver 标识数据库驱动（config.DatabaseDriverPostgres /
 	// DatabaseDriverSQLite），用于 batchHandler 中的写入错误分级。
 	dbDriver string
@@ -549,7 +552,7 @@ func (r *JobRunner) processJobResource(
 		return nil
 	}
 
-	factory := NewEngineFactory(r.logger, r.limiterPool, r.httpClients...)
+	factory := NewEngineFactoryWithCredentials(r.logger, r.limiterPool, r.credentialReader, r.credentialChecker, r.httpClients...)
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory}
 	eng, err := factory.BuildEngine(ctx, snapshot, resources, reporter)
 	if err != nil {

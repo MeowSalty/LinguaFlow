@@ -389,7 +389,7 @@ func (d *Dispatcher) workerCount(taskType string) int {
 		if d.workerCfg.Translation.Count > 0 {
 			return d.workerCfg.Translation.Count
 		}
-	case "sync":
+	case "sync", "glossary_sync":
 		if d.workerCfg.Sync.Count > 0 {
 			return d.workerCfg.Sync.Count
 		}
