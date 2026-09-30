@@ -67,9 +67,11 @@ type JobEdges struct {
 	JobRounds []*JobRound `json:"job_rounds,omitempty"`
 	// SseEvents holds the value of the sse_events edge.
 	SseEvents []*SSEEvent `json:"sse_events,omitempty"`
+	// CredentialReferences holds the value of the credential_references edge.
+	CredentialReferences []*CredentialJobReference `json:"credential_references,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [5]bool
+	loadedTypes [6]bool
 }
 
 // ProjectOrErr returns the Project value or an error if the edge
@@ -119,6 +121,15 @@ func (e JobEdges) SseEventsOrErr() ([]*SSEEvent, error) {
 		return e.SseEvents, nil
 	}
 	return nil, &NotLoadedError{edge: "sse_events"}
+}
+
+// CredentialReferencesOrErr returns the CredentialReferences value or an error if the edge
+// was not loaded in eager-loading.
+func (e JobEdges) CredentialReferencesOrErr() ([]*CredentialJobReference, error) {
+	if e.loadedTypes[5] {
+		return e.CredentialReferences, nil
+	}
+	return nil, &NotLoadedError{edge: "credential_references"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -288,6 +299,11 @@ func (_m *Job) QueryJobRounds() *JobRoundQuery {
 // QuerySseEvents queries the "sse_events" edge of the Job entity.
 func (_m *Job) QuerySseEvents() *SSEEventQuery {
 	return NewJobClient(_m.config).QuerySseEvents(_m)
+}
+
+// QueryCredentialReferences queries the "credential_references" edge of the Job entity.
+func (_m *Job) QueryCredentialReferences() *CredentialJobReferenceQuery {
+	return NewJobClient(_m.config).QueryCredentialReferences(_m)
 }
 
 // Update returns a builder for updating this Job.

@@ -18,9 +18,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credential"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialversion"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -53,12 +57,20 @@ type Client struct {
 	Backend *BackendClient
 	// BootstrapPromptTemplate is the client for interacting with the BootstrapPromptTemplate builders.
 	BootstrapPromptTemplate *BootstrapPromptTemplateClient
+	// Credential is the client for interacting with the Credential builders.
+	Credential *CredentialClient
+	// CredentialJobReference is the client for interacting with the CredentialJobReference builders.
+	CredentialJobReference *CredentialJobReferenceClient
+	// CredentialVersion is the client for interacting with the CredentialVersion builders.
+	CredentialVersion *CredentialVersionClient
 	// ExecutionPlanTemplate is the client for interacting with the ExecutionPlanTemplate builders.
 	ExecutionPlanTemplate *ExecutionPlanTemplateClient
 	// ExecutionProfile is the client for interacting with the ExecutionProfile builders.
 	ExecutionProfile *ExecutionProfileClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
+	// InstanceInitialization is the client for interacting with the InstanceInitialization builders.
+	InstanceInitialization *InstanceInitializationClient
 	// Job is the client for interacting with the Job builders.
 	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
@@ -111,9 +123,13 @@ func (c *Client) init() {
 	c.ActivityLog = NewActivityLogClient(c.config)
 	c.Backend = NewBackendClient(c.config)
 	c.BootstrapPromptTemplate = NewBootstrapPromptTemplateClient(c.config)
+	c.Credential = NewCredentialClient(c.config)
+	c.CredentialJobReference = NewCredentialJobReferenceClient(c.config)
+	c.CredentialVersion = NewCredentialVersionClient(c.config)
 	c.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(c.config)
 	c.ExecutionProfile = NewExecutionProfileClient(c.config)
 	c.GlossaryEntry = NewGlossaryEntryClient(c.config)
+	c.InstanceInitialization = NewInstanceInitializationClient(c.config)
 	c.Job = NewJobClient(c.config)
 	c.JobResource = NewJobResourceClient(c.config)
 	c.JobRound = NewJobRoundClient(c.config)
@@ -228,9 +244,13 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ActivityLog:               NewActivityLogClient(cfg),
 		Backend:                   NewBackendClient(cfg),
 		BootstrapPromptTemplate:   NewBootstrapPromptTemplateClient(cfg),
+		Credential:                NewCredentialClient(cfg),
+		CredentialJobReference:    NewCredentialJobReferenceClient(cfg),
+		CredentialVersion:         NewCredentialVersionClient(cfg),
 		ExecutionPlanTemplate:     NewExecutionPlanTemplateClient(cfg),
 		ExecutionProfile:          NewExecutionProfileClient(cfg),
 		GlossaryEntry:             NewGlossaryEntryClient(cfg),
+		InstanceInitialization:    NewInstanceInitializationClient(cfg),
 		Job:                       NewJobClient(cfg),
 		JobResource:               NewJobResourceClient(cfg),
 		JobRound:                  NewJobRoundClient(cfg),
@@ -272,9 +292,13 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ActivityLog:               NewActivityLogClient(cfg),
 		Backend:                   NewBackendClient(cfg),
 		BootstrapPromptTemplate:   NewBootstrapPromptTemplateClient(cfg),
+		Credential:                NewCredentialClient(cfg),
+		CredentialJobReference:    NewCredentialJobReferenceClient(cfg),
+		CredentialVersion:         NewCredentialVersionClient(cfg),
 		ExecutionPlanTemplate:     NewExecutionPlanTemplateClient(cfg),
 		ExecutionProfile:          NewExecutionProfileClient(cfg),
 		GlossaryEntry:             NewGlossaryEntryClient(cfg),
+		InstanceInitialization:    NewInstanceInitializationClient(cfg),
 		Job:                       NewJobClient(cfg),
 		JobResource:               NewJobResourceClient(cfg),
 		JobRound:                  NewJobRoundClient(cfg),
@@ -323,11 +347,12 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
-		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.JobRound,
-		c.JobRoundSegment, c.OrgMembership, c.Organization, c.Project,
-		c.PrunePromptTemplate, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
-		c.SegmentRevision, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.Credential,
+		c.CredentialJobReference, c.CredentialVersion, c.ExecutionPlanTemplate,
+		c.ExecutionProfile, c.GlossaryEntry, c.InstanceInitialization, c.Job,
+		c.JobResource, c.JobRound, c.JobRoundSegment, c.OrgMembership, c.Organization,
+		c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource, c.SSEEvent,
+		c.Segment, c.SegmentRevision, c.SyncTask, c.SystemSetting, c.TMEntry,
 		c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Use(hooks...)
@@ -338,11 +363,12 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
-		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.JobRound,
-		c.JobRoundSegment, c.OrgMembership, c.Organization, c.Project,
-		c.PrunePromptTemplate, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
-		c.SegmentRevision, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.Credential,
+		c.CredentialJobReference, c.CredentialVersion, c.ExecutionPlanTemplate,
+		c.ExecutionProfile, c.GlossaryEntry, c.InstanceInitialization, c.Job,
+		c.JobResource, c.JobRound, c.JobRoundSegment, c.OrgMembership, c.Organization,
+		c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource, c.SSEEvent,
+		c.Segment, c.SegmentRevision, c.SyncTask, c.SystemSetting, c.TMEntry,
 		c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Intercept(interceptors...)
@@ -358,12 +384,20 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Backend.mutate(ctx, m)
 	case *BootstrapPromptTemplateMutation:
 		return c.BootstrapPromptTemplate.mutate(ctx, m)
+	case *CredentialMutation:
+		return c.Credential.mutate(ctx, m)
+	case *CredentialJobReferenceMutation:
+		return c.CredentialJobReference.mutate(ctx, m)
+	case *CredentialVersionMutation:
+		return c.CredentialVersion.mutate(ctx, m)
 	case *ExecutionPlanTemplateMutation:
 		return c.ExecutionPlanTemplate.mutate(ctx, m)
 	case *ExecutionProfileMutation:
 		return c.ExecutionProfile.mutate(ctx, m)
 	case *GlossaryEntryMutation:
 		return c.GlossaryEntry.mutate(ctx, m)
+	case *InstanceInitializationMutation:
+		return c.InstanceInitialization.mutate(ctx, m)
 	case *JobMutation:
 		return c.Job.mutate(ctx, m)
 	case *JobResourceMutation:
@@ -696,6 +730,22 @@ func (c *BackendClient) GetX(ctx context.Context, id int) *Backend {
 	return obj
 }
 
+// QueryCredential queries the credential edge of a Backend.
+func (c *BackendClient) QueryCredential(_m *Backend) *CredentialQuery {
+	query := (&CredentialClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(backend.Table, backend.FieldID, id),
+			sqlgraph.To(credential.Table, credential.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, backend.CredentialTable, backend.CredentialColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryOwnerUser queries the owner_user edge of a Backend.
 func (c *BackendClient) QueryOwnerUser(_m *Backend) *UserQuery {
 	query := (&UserClient{config: c.config}).Query()
@@ -915,6 +965,501 @@ func (c *BootstrapPromptTemplateClient) mutate(ctx context.Context, m *Bootstrap
 		return (&BootstrapPromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown BootstrapPromptTemplate mutation op: %q", m.Op())
+	}
+}
+
+// CredentialClient is a client for the Credential schema.
+type CredentialClient struct {
+	config
+}
+
+// NewCredentialClient returns a client for the Credential from the given config.
+func NewCredentialClient(c config) *CredentialClient {
+	return &CredentialClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `credential.Hooks(f(g(h())))`.
+func (c *CredentialClient) Use(hooks ...Hook) {
+	c.hooks.Credential = append(c.hooks.Credential, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `credential.Intercept(f(g(h())))`.
+func (c *CredentialClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Credential = append(c.inters.Credential, interceptors...)
+}
+
+// Create returns a builder for creating a Credential entity.
+func (c *CredentialClient) Create() *CredentialCreate {
+	mutation := newCredentialMutation(c.config, OpCreate)
+	return &CredentialCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Credential entities.
+func (c *CredentialClient) CreateBulk(builders ...*CredentialCreate) *CredentialCreateBulk {
+	return &CredentialCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CredentialClient) MapCreateBulk(slice any, setFunc func(*CredentialCreate, int)) *CredentialCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CredentialCreateBulk{err: fmt.Errorf("calling to CredentialClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CredentialCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CredentialCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Credential.
+func (c *CredentialClient) Update() *CredentialUpdate {
+	mutation := newCredentialMutation(c.config, OpUpdate)
+	return &CredentialUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CredentialClient) UpdateOne(_m *Credential) *CredentialUpdateOne {
+	mutation := newCredentialMutation(c.config, OpUpdateOne, withCredential(_m))
+	return &CredentialUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CredentialClient) UpdateOneID(id int) *CredentialUpdateOne {
+	mutation := newCredentialMutation(c.config, OpUpdateOne, withCredentialID(id))
+	return &CredentialUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Credential.
+func (c *CredentialClient) Delete() *CredentialDelete {
+	mutation := newCredentialMutation(c.config, OpDelete)
+	return &CredentialDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CredentialClient) DeleteOne(_m *Credential) *CredentialDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CredentialClient) DeleteOneID(id int) *CredentialDeleteOne {
+	builder := c.Delete().Where(credential.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CredentialDeleteOne{builder}
+}
+
+// Query returns a query builder for Credential.
+func (c *CredentialClient) Query() *CredentialQuery {
+	return &CredentialQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCredential},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Credential entity by its id.
+func (c *CredentialClient) Get(ctx context.Context, id int) (*Credential, error) {
+	return c.Query().Where(credential.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CredentialClient) GetX(ctx context.Context, id int) *Credential {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryVersions queries the versions edge of a Credential.
+func (c *CredentialClient) QueryVersions(_m *Credential) *CredentialVersionQuery {
+	query := (&CredentialVersionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(credential.Table, credential.FieldID, id),
+			sqlgraph.To(credentialversion.Table, credentialversion.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, credential.VersionsTable, credential.VersionsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryBackends queries the backends edge of a Credential.
+func (c *CredentialClient) QueryBackends(_m *Credential) *BackendQuery {
+	query := (&BackendClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(credential.Table, credential.FieldID, id),
+			sqlgraph.To(backend.Table, backend.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, credential.BackendsTable, credential.BackendsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *CredentialClient) Hooks() []Hook {
+	return c.hooks.Credential
+}
+
+// Interceptors returns the client interceptors.
+func (c *CredentialClient) Interceptors() []Interceptor {
+	return c.inters.Credential
+}
+
+func (c *CredentialClient) mutate(ctx context.Context, m *CredentialMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CredentialCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CredentialUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CredentialUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CredentialDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Credential mutation op: %q", m.Op())
+	}
+}
+
+// CredentialJobReferenceClient is a client for the CredentialJobReference schema.
+type CredentialJobReferenceClient struct {
+	config
+}
+
+// NewCredentialJobReferenceClient returns a client for the CredentialJobReference from the given config.
+func NewCredentialJobReferenceClient(c config) *CredentialJobReferenceClient {
+	return &CredentialJobReferenceClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `credentialjobreference.Hooks(f(g(h())))`.
+func (c *CredentialJobReferenceClient) Use(hooks ...Hook) {
+	c.hooks.CredentialJobReference = append(c.hooks.CredentialJobReference, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `credentialjobreference.Intercept(f(g(h())))`.
+func (c *CredentialJobReferenceClient) Intercept(interceptors ...Interceptor) {
+	c.inters.CredentialJobReference = append(c.inters.CredentialJobReference, interceptors...)
+}
+
+// Create returns a builder for creating a CredentialJobReference entity.
+func (c *CredentialJobReferenceClient) Create() *CredentialJobReferenceCreate {
+	mutation := newCredentialJobReferenceMutation(c.config, OpCreate)
+	return &CredentialJobReferenceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of CredentialJobReference entities.
+func (c *CredentialJobReferenceClient) CreateBulk(builders ...*CredentialJobReferenceCreate) *CredentialJobReferenceCreateBulk {
+	return &CredentialJobReferenceCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CredentialJobReferenceClient) MapCreateBulk(slice any, setFunc func(*CredentialJobReferenceCreate, int)) *CredentialJobReferenceCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CredentialJobReferenceCreateBulk{err: fmt.Errorf("calling to CredentialJobReferenceClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CredentialJobReferenceCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CredentialJobReferenceCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for CredentialJobReference.
+func (c *CredentialJobReferenceClient) Update() *CredentialJobReferenceUpdate {
+	mutation := newCredentialJobReferenceMutation(c.config, OpUpdate)
+	return &CredentialJobReferenceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CredentialJobReferenceClient) UpdateOne(_m *CredentialJobReference) *CredentialJobReferenceUpdateOne {
+	mutation := newCredentialJobReferenceMutation(c.config, OpUpdateOne, withCredentialJobReference(_m))
+	return &CredentialJobReferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CredentialJobReferenceClient) UpdateOneID(id int) *CredentialJobReferenceUpdateOne {
+	mutation := newCredentialJobReferenceMutation(c.config, OpUpdateOne, withCredentialJobReferenceID(id))
+	return &CredentialJobReferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for CredentialJobReference.
+func (c *CredentialJobReferenceClient) Delete() *CredentialJobReferenceDelete {
+	mutation := newCredentialJobReferenceMutation(c.config, OpDelete)
+	return &CredentialJobReferenceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CredentialJobReferenceClient) DeleteOne(_m *CredentialJobReference) *CredentialJobReferenceDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CredentialJobReferenceClient) DeleteOneID(id int) *CredentialJobReferenceDeleteOne {
+	builder := c.Delete().Where(credentialjobreference.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CredentialJobReferenceDeleteOne{builder}
+}
+
+// Query returns a query builder for CredentialJobReference.
+func (c *CredentialJobReferenceClient) Query() *CredentialJobReferenceQuery {
+	return &CredentialJobReferenceQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCredentialJobReference},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a CredentialJobReference entity by its id.
+func (c *CredentialJobReferenceClient) Get(ctx context.Context, id int) (*CredentialJobReference, error) {
+	return c.Query().Where(credentialjobreference.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CredentialJobReferenceClient) GetX(ctx context.Context, id int) *CredentialJobReference {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryJob queries the job edge of a CredentialJobReference.
+func (c *CredentialJobReferenceClient) QueryJob(_m *CredentialJobReference) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(credentialjobreference.Table, credentialjobreference.FieldID, id),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, credentialjobreference.JobTable, credentialjobreference.JobColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryCredentialVersion queries the credential_version edge of a CredentialJobReference.
+func (c *CredentialJobReferenceClient) QueryCredentialVersion(_m *CredentialJobReference) *CredentialVersionQuery {
+	query := (&CredentialVersionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(credentialjobreference.Table, credentialjobreference.FieldID, id),
+			sqlgraph.To(credentialversion.Table, credentialversion.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, credentialjobreference.CredentialVersionTable, credentialjobreference.CredentialVersionColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *CredentialJobReferenceClient) Hooks() []Hook {
+	return c.hooks.CredentialJobReference
+}
+
+// Interceptors returns the client interceptors.
+func (c *CredentialJobReferenceClient) Interceptors() []Interceptor {
+	return c.inters.CredentialJobReference
+}
+
+func (c *CredentialJobReferenceClient) mutate(ctx context.Context, m *CredentialJobReferenceMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CredentialJobReferenceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CredentialJobReferenceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CredentialJobReferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CredentialJobReferenceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown CredentialJobReference mutation op: %q", m.Op())
+	}
+}
+
+// CredentialVersionClient is a client for the CredentialVersion schema.
+type CredentialVersionClient struct {
+	config
+}
+
+// NewCredentialVersionClient returns a client for the CredentialVersion from the given config.
+func NewCredentialVersionClient(c config) *CredentialVersionClient {
+	return &CredentialVersionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `credentialversion.Hooks(f(g(h())))`.
+func (c *CredentialVersionClient) Use(hooks ...Hook) {
+	c.hooks.CredentialVersion = append(c.hooks.CredentialVersion, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `credentialversion.Intercept(f(g(h())))`.
+func (c *CredentialVersionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.CredentialVersion = append(c.inters.CredentialVersion, interceptors...)
+}
+
+// Create returns a builder for creating a CredentialVersion entity.
+func (c *CredentialVersionClient) Create() *CredentialVersionCreate {
+	mutation := newCredentialVersionMutation(c.config, OpCreate)
+	return &CredentialVersionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of CredentialVersion entities.
+func (c *CredentialVersionClient) CreateBulk(builders ...*CredentialVersionCreate) *CredentialVersionCreateBulk {
+	return &CredentialVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CredentialVersionClient) MapCreateBulk(slice any, setFunc func(*CredentialVersionCreate, int)) *CredentialVersionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CredentialVersionCreateBulk{err: fmt.Errorf("calling to CredentialVersionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CredentialVersionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CredentialVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for CredentialVersion.
+func (c *CredentialVersionClient) Update() *CredentialVersionUpdate {
+	mutation := newCredentialVersionMutation(c.config, OpUpdate)
+	return &CredentialVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CredentialVersionClient) UpdateOne(_m *CredentialVersion) *CredentialVersionUpdateOne {
+	mutation := newCredentialVersionMutation(c.config, OpUpdateOne, withCredentialVersion(_m))
+	return &CredentialVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CredentialVersionClient) UpdateOneID(id int) *CredentialVersionUpdateOne {
+	mutation := newCredentialVersionMutation(c.config, OpUpdateOne, withCredentialVersionID(id))
+	return &CredentialVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for CredentialVersion.
+func (c *CredentialVersionClient) Delete() *CredentialVersionDelete {
+	mutation := newCredentialVersionMutation(c.config, OpDelete)
+	return &CredentialVersionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CredentialVersionClient) DeleteOne(_m *CredentialVersion) *CredentialVersionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CredentialVersionClient) DeleteOneID(id int) *CredentialVersionDeleteOne {
+	builder := c.Delete().Where(credentialversion.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CredentialVersionDeleteOne{builder}
+}
+
+// Query returns a query builder for CredentialVersion.
+func (c *CredentialVersionClient) Query() *CredentialVersionQuery {
+	return &CredentialVersionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCredentialVersion},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a CredentialVersion entity by its id.
+func (c *CredentialVersionClient) Get(ctx context.Context, id int) (*CredentialVersion, error) {
+	return c.Query().Where(credentialversion.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CredentialVersionClient) GetX(ctx context.Context, id int) *CredentialVersion {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryCredential queries the credential edge of a CredentialVersion.
+func (c *CredentialVersionClient) QueryCredential(_m *CredentialVersion) *CredentialQuery {
+	query := (&CredentialClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(credentialversion.Table, credentialversion.FieldID, id),
+			sqlgraph.To(credential.Table, credential.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, credentialversion.CredentialTable, credentialversion.CredentialColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryJobReferences queries the job_references edge of a CredentialVersion.
+func (c *CredentialVersionClient) QueryJobReferences(_m *CredentialVersion) *CredentialJobReferenceQuery {
+	query := (&CredentialJobReferenceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(credentialversion.Table, credentialversion.FieldID, id),
+			sqlgraph.To(credentialjobreference.Table, credentialjobreference.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, credentialversion.JobReferencesTable, credentialversion.JobReferencesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *CredentialVersionClient) Hooks() []Hook {
+	return c.hooks.CredentialVersion
+}
+
+// Interceptors returns the client interceptors.
+func (c *CredentialVersionClient) Interceptors() []Interceptor {
+	return c.inters.CredentialVersion
+}
+
+func (c *CredentialVersionClient) mutate(ctx context.Context, m *CredentialVersionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CredentialVersionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CredentialVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CredentialVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CredentialVersionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown CredentialVersion mutation op: %q", m.Op())
 	}
 }
 
@@ -1413,6 +1958,139 @@ func (c *GlossaryEntryClient) mutate(ctx context.Context, m *GlossaryEntryMutati
 	}
 }
 
+// InstanceInitializationClient is a client for the InstanceInitialization schema.
+type InstanceInitializationClient struct {
+	config
+}
+
+// NewInstanceInitializationClient returns a client for the InstanceInitialization from the given config.
+func NewInstanceInitializationClient(c config) *InstanceInitializationClient {
+	return &InstanceInitializationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `instanceinitialization.Hooks(f(g(h())))`.
+func (c *InstanceInitializationClient) Use(hooks ...Hook) {
+	c.hooks.InstanceInitialization = append(c.hooks.InstanceInitialization, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `instanceinitialization.Intercept(f(g(h())))`.
+func (c *InstanceInitializationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.InstanceInitialization = append(c.inters.InstanceInitialization, interceptors...)
+}
+
+// Create returns a builder for creating a InstanceInitialization entity.
+func (c *InstanceInitializationClient) Create() *InstanceInitializationCreate {
+	mutation := newInstanceInitializationMutation(c.config, OpCreate)
+	return &InstanceInitializationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of InstanceInitialization entities.
+func (c *InstanceInitializationClient) CreateBulk(builders ...*InstanceInitializationCreate) *InstanceInitializationCreateBulk {
+	return &InstanceInitializationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *InstanceInitializationClient) MapCreateBulk(slice any, setFunc func(*InstanceInitializationCreate, int)) *InstanceInitializationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &InstanceInitializationCreateBulk{err: fmt.Errorf("calling to InstanceInitializationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*InstanceInitializationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &InstanceInitializationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for InstanceInitialization.
+func (c *InstanceInitializationClient) Update() *InstanceInitializationUpdate {
+	mutation := newInstanceInitializationMutation(c.config, OpUpdate)
+	return &InstanceInitializationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *InstanceInitializationClient) UpdateOne(_m *InstanceInitialization) *InstanceInitializationUpdateOne {
+	mutation := newInstanceInitializationMutation(c.config, OpUpdateOne, withInstanceInitialization(_m))
+	return &InstanceInitializationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *InstanceInitializationClient) UpdateOneID(id int) *InstanceInitializationUpdateOne {
+	mutation := newInstanceInitializationMutation(c.config, OpUpdateOne, withInstanceInitializationID(id))
+	return &InstanceInitializationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for InstanceInitialization.
+func (c *InstanceInitializationClient) Delete() *InstanceInitializationDelete {
+	mutation := newInstanceInitializationMutation(c.config, OpDelete)
+	return &InstanceInitializationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *InstanceInitializationClient) DeleteOne(_m *InstanceInitialization) *InstanceInitializationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *InstanceInitializationClient) DeleteOneID(id int) *InstanceInitializationDeleteOne {
+	builder := c.Delete().Where(instanceinitialization.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &InstanceInitializationDeleteOne{builder}
+}
+
+// Query returns a query builder for InstanceInitialization.
+func (c *InstanceInitializationClient) Query() *InstanceInitializationQuery {
+	return &InstanceInitializationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeInstanceInitialization},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a InstanceInitialization entity by its id.
+func (c *InstanceInitializationClient) Get(ctx context.Context, id int) (*InstanceInitialization, error) {
+	return c.Query().Where(instanceinitialization.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *InstanceInitializationClient) GetX(ctx context.Context, id int) *InstanceInitialization {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *InstanceInitializationClient) Hooks() []Hook {
+	return c.hooks.InstanceInitialization
+}
+
+// Interceptors returns the client interceptors.
+func (c *InstanceInitializationClient) Interceptors() []Interceptor {
+	return c.inters.InstanceInitialization
+}
+
+func (c *InstanceInitializationClient) mutate(ctx context.Context, m *InstanceInitializationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&InstanceInitializationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&InstanceInitializationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&InstanceInitializationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&InstanceInitializationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown InstanceInitialization mutation op: %q", m.Op())
+	}
+}
+
 // JobClient is a client for the Job schema.
 type JobClient struct {
 	config
@@ -1594,6 +2272,22 @@ func (c *JobClient) QuerySseEvents(_m *Job) *SSEEventQuery {
 			sqlgraph.From(job.Table, job.FieldID, id),
 			sqlgraph.To(sseevent.Table, sseevent.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, job.SseEventsTable, job.SseEventsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryCredentialReferences queries the credential_references edge of a Job.
+func (c *JobClient) QueryCredentialReferences(_m *Job) *CredentialJobReferenceQuery {
+	query := (&CredentialJobReferenceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(job.Table, job.FieldID, id),
+			sqlgraph.To(credentialjobreference.Table, credentialjobreference.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, job.CredentialReferencesTable, job.CredentialReferencesColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -5047,17 +5741,21 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
-		ExecutionProfile, GlossaryEntry, Job, JobResource, JobRound, JobRoundSegment,
-		OrgMembership, Organization, Project, PrunePromptTemplate, RefreshToken,
-		Resource, SSEEvent, Segment, SegmentRevision, SyncTask, SystemSetting, TMEntry,
-		TranslationPromptTemplate, UsageRecord, User []ent.Hook
+		ActivityLog, Backend, BootstrapPromptTemplate, Credential,
+		CredentialJobReference, CredentialVersion, ExecutionPlanTemplate,
+		ExecutionProfile, GlossaryEntry, InstanceInitialization, Job, JobResource,
+		JobRound, JobRoundSegment, OrgMembership, Organization, Project,
+		PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
+		SegmentRevision, SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate,
+		UsageRecord, User []ent.Hook
 	}
 	inters struct {
-		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
-		ExecutionProfile, GlossaryEntry, Job, JobResource, JobRound, JobRoundSegment,
-		OrgMembership, Organization, Project, PrunePromptTemplate, RefreshToken,
-		Resource, SSEEvent, Segment, SegmentRevision, SyncTask, SystemSetting, TMEntry,
-		TranslationPromptTemplate, UsageRecord, User []ent.Interceptor
+		ActivityLog, Backend, BootstrapPromptTemplate, Credential,
+		CredentialJobReference, CredentialVersion, ExecutionPlanTemplate,
+		ExecutionProfile, GlossaryEntry, InstanceInitialization, Job, JobResource,
+		JobRound, JobRoundSegment, OrgMembership, Organization, Project,
+		PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
+		SegmentRevision, SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate,
+		UsageRecord, User []ent.Interceptor
 	}
 )

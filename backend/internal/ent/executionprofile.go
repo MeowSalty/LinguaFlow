@@ -12,8 +12,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 )
 
 // ExecutionProfile is the model entity for the ExecutionProfile schema.
@@ -36,7 +36,7 @@ type ExecutionProfile struct {
 	// OwnerOrgID holds the value of the "owner_org_id" field.
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
 	// 执行策略配置，JSON 内联存储
-	Config schema.ExecutionProfileConfigData `json:"config,omitempty"`
+	Config execution.ProfileSpec `json:"config,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the ExecutionProfileQuery when eager-loading is set.
 	Edges        ExecutionProfileEdges `json:"edges"`

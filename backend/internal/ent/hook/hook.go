@@ -45,6 +45,42 @@ func (f BootstrapPromptTemplateFunc) Mutate(ctx context.Context, m ent.Mutation)
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BootstrapPromptTemplateMutation", m)
 }
 
+// The CredentialFunc type is an adapter to allow the use of ordinary
+// function as Credential mutator.
+type CredentialFunc func(context.Context, *ent.CredentialMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f CredentialFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.CredentialMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CredentialMutation", m)
+}
+
+// The CredentialJobReferenceFunc type is an adapter to allow the use of ordinary
+// function as CredentialJobReference mutator.
+type CredentialJobReferenceFunc func(context.Context, *ent.CredentialJobReferenceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f CredentialJobReferenceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.CredentialJobReferenceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CredentialJobReferenceMutation", m)
+}
+
+// The CredentialVersionFunc type is an adapter to allow the use of ordinary
+// function as CredentialVersion mutator.
+type CredentialVersionFunc func(context.Context, *ent.CredentialVersionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f CredentialVersionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.CredentialVersionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CredentialVersionMutation", m)
+}
+
 // The ExecutionPlanTemplateFunc type is an adapter to allow the use of ordinary
 // function as ExecutionPlanTemplate mutator.
 type ExecutionPlanTemplateFunc func(context.Context, *ent.ExecutionPlanTemplateMutation) (ent.Value, error)
@@ -79,6 +115,18 @@ func (f GlossaryEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GlossaryEntryMutation", m)
+}
+
+// The InstanceInitializationFunc type is an adapter to allow the use of ordinary
+// function as InstanceInitialization mutator.
+type InstanceInitializationFunc func(context.Context, *ent.InstanceInitializationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f InstanceInitializationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.InstanceInitializationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.InstanceInitializationMutation", m)
 }
 
 // The JobFunc type is an adapter to allow the use of ordinary

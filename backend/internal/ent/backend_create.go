@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -110,6 +111,20 @@ func (_c *BackendCreate) SetOptions(v map[string]interface{}) *BackendCreate {
 	return _c
 }
 
+// SetCredentialID sets the "credential_id" field.
+func (_c *BackendCreate) SetCredentialID(v int) *BackendCreate {
+	_c.mutation.SetCredentialID(v)
+	return _c
+}
+
+// SetNillableCredentialID sets the "credential_id" field if the given value is not nil.
+func (_c *BackendCreate) SetNillableCredentialID(v *int) *BackendCreate {
+	if v != nil {
+		_c.SetCredentialID(*v)
+	}
+	return _c
+}
+
 // SetRateLimitPerMinute sets the "rate_limit_per_minute" field.
 func (_c *BackendCreate) SetRateLimitPerMinute(v int) *BackendCreate {
 	_c.mutation.SetRateLimitPerMinute(v)
@@ -122,6 +137,11 @@ func (_c *BackendCreate) SetNillableRateLimitPerMinute(v *int) *BackendCreate {
 		_c.SetRateLimitPerMinute(*v)
 	}
 	return _c
+}
+
+// SetCredential sets the "credential" edge to the Credential entity.
+func (_c *BackendCreate) SetCredential(v *Credential) *BackendCreate {
+	return _c.SetCredentialID(v.ID)
 }
 
 // SetOwnerUser sets the "owner_user" edge to the User entity.
@@ -231,6 +251,11 @@ func (_c *BackendCreate) check() error {
 	if _, ok := _c.mutation.Options(); !ok {
 		return &ValidationError{Name: "options", err: errors.New(`ent: missing required field "Backend.options"`)}
 	}
+	if v, ok := _c.mutation.CredentialID(); ok {
+		if err := backend.CredentialIDValidator(v); err != nil {
+			return &ValidationError{Name: "credential_id", err: fmt.Errorf(`ent: validator failed for field "Backend.credential_id": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.RateLimitPerMinute(); !ok {
 		return &ValidationError{Name: "rate_limit_per_minute", err: errors.New(`ent: missing required field "Backend.rate_limit_per_minute"`)}
 	}
@@ -287,6 +312,23 @@ func (_c *BackendCreate) createSpec() (*Backend, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateLimitPerMinute(); ok {
 		_spec.SetField(backend.FieldRateLimitPerMinute, field.TypeInt, value)
 		_node.RateLimitPerMinute = value
+	}
+	if nodes := _c.mutation.CredentialIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   backend.CredentialTable,
+			Columns: []string{backend.CredentialColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credential.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.CredentialID = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.OwnerUserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

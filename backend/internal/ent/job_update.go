@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -322,6 +323,21 @@ func (_u *JobUpdate) AddSseEvents(v ...*SSEEvent) *JobUpdate {
 	return _u.AddSseEventIDs(ids...)
 }
 
+// AddCredentialReferenceIDs adds the "credential_references" edge to the CredentialJobReference entity by IDs.
+func (_u *JobUpdate) AddCredentialReferenceIDs(ids ...int) *JobUpdate {
+	_u.mutation.AddCredentialReferenceIDs(ids...)
+	return _u
+}
+
+// AddCredentialReferences adds the "credential_references" edges to the CredentialJobReference entity.
+func (_u *JobUpdate) AddCredentialReferences(v ...*CredentialJobReference) *JobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCredentialReferenceIDs(ids...)
+}
+
 // Mutation returns the JobMutation object of the builder.
 func (_u *JobUpdate) Mutation() *JobMutation {
 	return _u.mutation
@@ -400,6 +416,27 @@ func (_u *JobUpdate) RemoveSseEvents(v ...*SSEEvent) *JobUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveSseEventIDs(ids...)
+}
+
+// ClearCredentialReferences clears all "credential_references" edges to the CredentialJobReference entity.
+func (_u *JobUpdate) ClearCredentialReferences() *JobUpdate {
+	_u.mutation.ClearCredentialReferences()
+	return _u
+}
+
+// RemoveCredentialReferenceIDs removes the "credential_references" edge to CredentialJobReference entities by IDs.
+func (_u *JobUpdate) RemoveCredentialReferenceIDs(ids ...int) *JobUpdate {
+	_u.mutation.RemoveCredentialReferenceIDs(ids...)
+	return _u
+}
+
+// RemoveCredentialReferences removes "credential_references" edges to CredentialJobReference entities.
+func (_u *JobUpdate) RemoveCredentialReferences(v ...*CredentialJobReference) *JobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCredentialReferenceIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -746,6 +783,51 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.CredentialReferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCredentialReferencesIDs(); len(nodes) > 0 && !_u.mutation.CredentialReferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CredentialReferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{job.Label}
@@ -1055,6 +1137,21 @@ func (_u *JobUpdateOne) AddSseEvents(v ...*SSEEvent) *JobUpdateOne {
 	return _u.AddSseEventIDs(ids...)
 }
 
+// AddCredentialReferenceIDs adds the "credential_references" edge to the CredentialJobReference entity by IDs.
+func (_u *JobUpdateOne) AddCredentialReferenceIDs(ids ...int) *JobUpdateOne {
+	_u.mutation.AddCredentialReferenceIDs(ids...)
+	return _u
+}
+
+// AddCredentialReferences adds the "credential_references" edges to the CredentialJobReference entity.
+func (_u *JobUpdateOne) AddCredentialReferences(v ...*CredentialJobReference) *JobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCredentialReferenceIDs(ids...)
+}
+
 // Mutation returns the JobMutation object of the builder.
 func (_u *JobUpdateOne) Mutation() *JobMutation {
 	return _u.mutation
@@ -1133,6 +1230,27 @@ func (_u *JobUpdateOne) RemoveSseEvents(v ...*SSEEvent) *JobUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveSseEventIDs(ids...)
+}
+
+// ClearCredentialReferences clears all "credential_references" edges to the CredentialJobReference entity.
+func (_u *JobUpdateOne) ClearCredentialReferences() *JobUpdateOne {
+	_u.mutation.ClearCredentialReferences()
+	return _u
+}
+
+// RemoveCredentialReferenceIDs removes the "credential_references" edge to CredentialJobReference entities by IDs.
+func (_u *JobUpdateOne) RemoveCredentialReferenceIDs(ids ...int) *JobUpdateOne {
+	_u.mutation.RemoveCredentialReferenceIDs(ids...)
+	return _u
+}
+
+// RemoveCredentialReferences removes "credential_references" edges to CredentialJobReference entities.
+func (_u *JobUpdateOne) RemoveCredentialReferences(v ...*CredentialJobReference) *JobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCredentialReferenceIDs(ids...)
 }
 
 // Where appends a list predicates to the JobUpdate builder.
@@ -1502,6 +1620,51 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.CredentialReferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCredentialReferencesIDs(); len(nodes) > 0 && !_u.mutation.CredentialReferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CredentialReferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

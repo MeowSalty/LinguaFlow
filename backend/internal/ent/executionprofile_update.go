@@ -14,8 +14,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 )
 
 // ExecutionProfileUpdate is the builder for updating ExecutionProfile entities.
@@ -120,13 +120,13 @@ func (_u *ExecutionProfileUpdate) ClearOwnerOrgID() *ExecutionProfileUpdate {
 }
 
 // SetConfig sets the "config" field.
-func (_u *ExecutionProfileUpdate) SetConfig(v schema.ExecutionProfileConfigData) *ExecutionProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetConfig(v execution.ProfileSpec) *ExecutionProfileUpdate {
 	_u.mutation.SetConfig(v)
 	return _u
 }
 
 // SetNillableConfig sets the "config" field if the given value is not nil.
-func (_u *ExecutionProfileUpdate) SetNillableConfig(v *schema.ExecutionProfileConfigData) *ExecutionProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetNillableConfig(v *execution.ProfileSpec) *ExecutionProfileUpdate {
 	if v != nil {
 		_u.SetConfig(*v)
 	}
@@ -410,13 +410,13 @@ func (_u *ExecutionProfileUpdateOne) ClearOwnerOrgID() *ExecutionProfileUpdateOn
 }
 
 // SetConfig sets the "config" field.
-func (_u *ExecutionProfileUpdateOne) SetConfig(v schema.ExecutionProfileConfigData) *ExecutionProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetConfig(v execution.ProfileSpec) *ExecutionProfileUpdateOne {
 	_u.mutation.SetConfig(v)
 	return _u
 }
 
 // SetNillableConfig sets the "config" field if the given value is not nil.
-func (_u *ExecutionProfileUpdateOne) SetNillableConfig(v *schema.ExecutionProfileConfigData) *ExecutionProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetNillableConfig(v *execution.ProfileSpec) *ExecutionProfileUpdateOne {
 	if v != nil {
 		_u.SetConfig(*v)
 	}

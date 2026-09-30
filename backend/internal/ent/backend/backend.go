@@ -31,14 +31,25 @@ const (
 	FieldBackendType = "backend_type"
 	// FieldOptions holds the string denoting the options field in the database.
 	FieldOptions = "options"
+	// FieldCredentialID holds the string denoting the credential_id field in the database.
+	FieldCredentialID = "credential_id"
 	// FieldRateLimitPerMinute holds the string denoting the rate_limit_per_minute field in the database.
 	FieldRateLimitPerMinute = "rate_limit_per_minute"
+	// EdgeCredential holds the string denoting the credential edge name in mutations.
+	EdgeCredential = "credential"
 	// EdgeOwnerUser holds the string denoting the owner_user edge name in mutations.
 	EdgeOwnerUser = "owner_user"
 	// EdgeOwnerOrg holds the string denoting the owner_org edge name in mutations.
 	EdgeOwnerOrg = "owner_org"
 	// Table holds the table name of the backend in the database.
 	Table = "backends"
+	// CredentialTable is the table that holds the credential relation/edge.
+	CredentialTable = "backends"
+	// CredentialInverseTable is the table name for the Credential entity.
+	// It exists in this package in order to avoid circular dependency with the "credential" package.
+	CredentialInverseTable = "credentials"
+	// CredentialColumn is the table column denoting the credential relation/edge.
+	CredentialColumn = "credential_id"
 	// OwnerUserTable is the table that holds the owner_user relation/edge.
 	OwnerUserTable = "backends"
 	// OwnerUserInverseTable is the table name for the User entity.
@@ -66,6 +77,7 @@ var Columns = []string{
 	FieldOwnerOrgID,
 	FieldBackendType,
 	FieldOptions,
+	FieldCredentialID,
 	FieldRateLimitPerMinute,
 }
 
@@ -96,6 +108,8 @@ var (
 	OwnerOrgIDValidator func(int) error
 	// DefaultOptions holds the default value on creation for the "options" field.
 	DefaultOptions func() map[string]interface{}
+	// CredentialIDValidator is a validator for the "credential_id" field. It is called by the builders before save.
+	CredentialIDValidator func(int) error
 	// DefaultRateLimitPerMinute holds the default value on creation for the "rate_limit_per_minute" field.
 	DefaultRateLimitPerMinute int
 )
@@ -167,9 +181,21 @@ func ByBackendType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBackendType, opts...).ToFunc()
 }
 
+// ByCredentialID orders the results by the credential_id field.
+func ByCredentialID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCredentialID, opts...).ToFunc()
+}
+
 // ByRateLimitPerMinute orders the results by the rate_limit_per_minute field.
 func ByRateLimitPerMinute(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateLimitPerMinute, opts...).ToFunc()
+}
+
+// ByCredentialField orders the results by credential field.
+func ByCredentialField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newCredentialStep(), sql.OrderByField(field, opts...))
+	}
 }
 
 // ByOwnerUserField orders the results by owner_user field.
@@ -184,6 +210,13 @@ func ByOwnerOrgField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newOwnerOrgStep(), sql.OrderByField(field, opts...))
 	}
+}
+func newCredentialStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(CredentialInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, CredentialTable, CredentialColumn),
+	)
 }
 func newOwnerUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(

@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -264,6 +265,21 @@ func (_c *JobCreate) AddSseEvents(v ...*SSEEvent) *JobCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddSseEventIDs(ids...)
+}
+
+// AddCredentialReferenceIDs adds the "credential_references" edge to the CredentialJobReference entity by IDs.
+func (_c *JobCreate) AddCredentialReferenceIDs(ids ...int) *JobCreate {
+	_c.mutation.AddCredentialReferenceIDs(ids...)
+	return _c
+}
+
+// AddCredentialReferences adds the "credential_references" edges to the CredentialJobReference entity.
+func (_c *JobCreate) AddCredentialReferences(v ...*CredentialJobReference) *JobCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddCredentialReferenceIDs(ids...)
 }
 
 // Mutation returns the JobMutation object of the builder.
@@ -572,6 +588,22 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.CredentialReferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

@@ -60,6 +60,7 @@ var (
 		{Name: "backend_type", Type: field.TypeEnum, Enums: []string{"openai", "anthropic", "google"}},
 		{Name: "options", Type: field.TypeJSON},
 		{Name: "rate_limit_per_minute", Type: field.TypeInt, Default: 0},
+		{Name: "credential_id", Type: field.TypeInt, Nullable: true},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
 		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
 	}
@@ -70,14 +71,20 @@ var (
 		PrimaryKey: []*schema.Column{BackendsColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "backends_organizations_backends",
+				Symbol:     "backends_credentials_backends",
 				Columns:    []*schema.Column{BackendsColumns[8]},
+				RefColumns: []*schema.Column{CredentialsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "backends_organizations_backends",
+				Columns:    []*schema.Column{BackendsColumns[9]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "backends_users_backends",
-				Columns:    []*schema.Column{BackendsColumns[9]},
+				Columns:    []*schema.Column{BackendsColumns[10]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -86,7 +93,7 @@ var (
 			{
 				Name:    "backend_name_owner_user_id",
 				Unique:  true,
-				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[9]},
+				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[10]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "scope = 'user' AND owner_user_id IS NOT NULL",
 				},
@@ -94,7 +101,7 @@ var (
 			{
 				Name:    "backend_name_owner_org_id",
 				Unique:  true,
-				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[8]},
+				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[9]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "scope = 'org' AND owner_org_id IS NOT NULL",
 				},
@@ -133,11 +140,96 @@ var (
 			},
 		},
 	}
+	// CredentialsColumns holds the columns for the "credentials" table.
+	CredentialsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "scope", Type: field.TypeString},
+		{Name: "owner_id", Type: field.TypeInt},
+		{Name: "provider", Type: field.TypeString},
+		{Name: "endpoint", Type: field.TypeString},
+		{Name: "current_version", Type: field.TypeInt},
+	}
+	// CredentialsTable holds the schema information for the "credentials" table.
+	CredentialsTable = &schema.Table{
+		Name:       "credentials",
+		Columns:    CredentialsColumns,
+		PrimaryKey: []*schema.Column{CredentialsColumns[0]},
+	}
+	// CredentialJobReferencesColumns holds the columns for the "credential_job_references" table.
+	CredentialJobReferencesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "credential_version_id", Type: field.TypeInt},
+		{Name: "job_id", Type: field.TypeInt},
+	}
+	// CredentialJobReferencesTable holds the schema information for the "credential_job_references" table.
+	CredentialJobReferencesTable = &schema.Table{
+		Name:       "credential_job_references",
+		Columns:    CredentialJobReferencesColumns,
+		PrimaryKey: []*schema.Column{CredentialJobReferencesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "credential_job_references_credential_versions_job_references",
+				Columns:    []*schema.Column{CredentialJobReferencesColumns[1]},
+				RefColumns: []*schema.Column{CredentialVersionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "credential_job_references_jobs_credential_references",
+				Columns:    []*schema.Column{CredentialJobReferencesColumns[2]},
+				RefColumns: []*schema.Column{JobsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "credentialjobreference_job_id_credential_version_id",
+				Unique:  true,
+				Columns: []*schema.Column{CredentialJobReferencesColumns[2], CredentialJobReferencesColumns[1]},
+			},
+		},
+	}
+	// CredentialVersionsColumns holds the columns for the "credential_versions" table.
+	CredentialVersionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "version", Type: field.TypeInt},
+		{Name: "encryption_version", Type: field.TypeInt, Default: 1},
+		{Name: "key_id", Type: field.TypeString},
+		{Name: "nonce", Type: field.TypeBytes},
+		{Name: "ciphertext", Type: field.TypeBytes},
+		{Name: "revoked", Type: field.TypeBool, Default: false},
+		{Name: "credential_id", Type: field.TypeInt},
+	}
+	// CredentialVersionsTable holds the schema information for the "credential_versions" table.
+	CredentialVersionsTable = &schema.Table{
+		Name:       "credential_versions",
+		Columns:    CredentialVersionsColumns,
+		PrimaryKey: []*schema.Column{CredentialVersionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "credential_versions_credentials_versions",
+				Columns:    []*schema.Column{CredentialVersionsColumns[9]},
+				RefColumns: []*schema.Column{CredentialsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "credentialversion_credential_id_version",
+				Unique:  true,
+				Columns: []*schema.Column{CredentialVersionsColumns[9], CredentialVersionsColumns[3]},
+			},
+		},
+	}
 	// ExecutionPlanTemplatesColumns holds the columns for the "execution_plan_templates" table.
 	ExecutionPlanTemplatesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "schema_version", Type: field.TypeInt, Default: 1},
 		{Name: "name", Type: field.TypeString},
 		{Name: "description", Type: field.TypeString, Default: ""},
 		{Name: "scope", Type: field.TypeString, Default: "user"},
@@ -155,13 +247,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "execution_plan_templates_organizations_execution_plan_templates",
-				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[9]},
+				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[10]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "execution_plan_templates_users_execution_plan_templates",
-				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[10]},
+				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[11]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -244,6 +336,21 @@ var (
 				},
 			},
 		},
+	}
+	// InstanceInitializationsColumns holds the columns for the "instance_initializations" table.
+	InstanceInitializationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "version", Type: field.TypeInt},
+		{Name: "mode", Type: field.TypeEnum, Enums: []string{"serve", "local"}},
+		{Name: "local_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// InstanceInitializationsTable holds the schema information for the "instance_initializations" table.
+	InstanceInitializationsTable = &schema.Table{
+		Name:       "instance_initializations",
+		Columns:    InstanceInitializationsColumns,
+		PrimaryKey: []*schema.Column{InstanceInitializationsColumns[0]},
 	}
 	// JobsColumns holds the columns for the "jobs" table.
 	JobsColumns = []*schema.Column{
@@ -934,9 +1041,13 @@ var (
 		ActivityLogsTable,
 		BackendsTable,
 		BootstrapPromptTemplatesTable,
+		CredentialsTable,
+		CredentialJobReferencesTable,
+		CredentialVersionsTable,
 		ExecutionPlanTemplatesTable,
 		ExecutionProfilesTable,
 		GlossaryEntriesTable,
+		InstanceInitializationsTable,
 		JobsTable,
 		JobResourcesTable,
 		JobRoundsTable,
@@ -963,10 +1074,14 @@ func init() {
 	ActivityLogsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ActivityLogsTable.ForeignKeys[1].RefTable = ProjectsTable
 	ActivityLogsTable.ForeignKeys[2].RefTable = UsersTable
-	BackendsTable.ForeignKeys[0].RefTable = OrganizationsTable
-	BackendsTable.ForeignKeys[1].RefTable = UsersTable
+	BackendsTable.ForeignKeys[0].RefTable = CredentialsTable
+	BackendsTable.ForeignKeys[1].RefTable = OrganizationsTable
+	BackendsTable.ForeignKeys[2].RefTable = UsersTable
 	BootstrapPromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	BootstrapPromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
+	CredentialJobReferencesTable.ForeignKeys[0].RefTable = CredentialVersionsTable
+	CredentialJobReferencesTable.ForeignKeys[1].RefTable = JobsTable
+	CredentialVersionsTable.ForeignKeys[0].RefTable = CredentialsTable
 	ExecutionPlanTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ExecutionPlanTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	ExecutionProfilesTable.ForeignKeys[0].RefTable = OrganizationsTable
