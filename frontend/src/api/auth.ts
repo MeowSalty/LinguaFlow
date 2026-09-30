@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 
-import type { ApiClient, ApiSchemas } from './client'
-import { apiClient, logoutCurrentSession } from './client'
+import type { ApiClient, ApiSchemas } from './client-core'
+import { apiClient, logoutCurrentSession } from './client-core'
 import { captureSession, assertSessionCurrent } from './session-context'
 import { getRefreshToken, setAuthSession } from './token-storage'
 import { buildRequestFailureError } from './utils'

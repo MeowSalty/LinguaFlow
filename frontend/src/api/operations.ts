@@ -1,4 +1,4 @@
-import { apiClient, type ApiPaths, type ApiSchemas } from './client'
+import { apiClient, type ApiPaths, type ApiSchemas } from './client-core'
 import { buildRequestFailureError } from './utils'
 import { t } from '@/i18n'
 

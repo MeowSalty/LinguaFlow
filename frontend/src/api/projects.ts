@@ -1,8 +1,8 @@
 import { t } from '@/i18n'
 import { countUnicodeCodePoints, SEGMENT_SEARCH_MAX_LENGTH } from '@/utils/unicode'
 
-import type { ApiClient, ApiPaths, ApiSchemas } from './client'
-import { apiClient } from './client'
+import type { ApiClient, ApiPaths, ApiSchemas } from './client-core'
+import { apiClient } from './client-core'
 import {
   buildFilesFormData,
   buildRequestFailureError,

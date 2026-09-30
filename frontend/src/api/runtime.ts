@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { apiClient, type ApiClient, type ApiSchemas } from './client'
+import { apiClient, type ApiClient, type ApiSchemas } from './client-core'
 import { buildRequestFailureError } from './utils'
 
 export type RuntimeSummary = ApiSchemas['RuntimeSummary']

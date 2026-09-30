@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 
-import type { ApiClient, ApiPaths, ApiSchemas } from './client'
-import { apiClient } from './client'
+import type { ApiClient, ApiPaths, ApiSchemas } from './client-core'
+import { apiClient } from './client-core'
 import { buildRequestFailureError } from './utils'
 
 export const fetchActivity = async (
