@@ -21,7 +21,10 @@ type Keyring struct {
 	keys   map[string][]byte
 }
 
-func (*Keyring) String() string { return "credential keyring (redacted)" }
+const maxKeyringFileSize = 1 << 20
+
+func (Keyring) String() string   { return "credential keyring (redacted)" }
+func (Keyring) GoString() string { return "credential keyring (redacted)" }
 
 type keyringDocument struct {
 	Version     int               `json:"version"`
@@ -47,11 +50,11 @@ func LoadKeyring(path string) (*Keyring, error) {
 	if err := checkFilePermissions(f); err != nil {
 		return nil, fmt.Errorf("credential keyring permissions: %w", err)
 	}
-	data, err := io.ReadAll(io.LimitReader(f, 1<<20+1))
+	data, err := io.ReadAll(io.LimitReader(f, maxKeyringFileSize+1))
 	if err != nil {
 		return nil, errors.New("cannot read credential keyring")
 	}
-	if len(data) > 1<<20 {
+	if len(data) > maxKeyringFileSize {
 		return nil, errors.New("credential keyring is too large")
 	}
 	return ParseKeyring(data)
@@ -160,20 +163,15 @@ func PrepareKeyring(path string, allowCreate bool) (*Keyring, error) {
 // GenerateKeyring creates key material without publishing files. Importers can
 // use it for rehearsals and publish these exact bytes before committing data.
 func GenerateKeyring() (*Keyring, []byte, error) {
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return nil, nil, err
-	}
-	idBytes := make([]byte, 12)
-	if _, err := rand.Read(idBytes); err != nil {
-		return nil, nil, err
-	}
-	id := base64.RawURLEncoding.EncodeToString(idBytes)
-	data, err := json.Marshal(keyringDocument{Version: 1, ActiveKeyID: id, Keys: map[string]string{id: base64.StdEncoding.EncodeToString(key)}})
+	value, err := GenerateMasterKey()
 	if err != nil {
 		return nil, nil, err
 	}
-	keys, err := ParseKeyring(data)
+	keys, err := FromMasterKey(value)
+	if err != nil {
+		return nil, nil, err
+	}
+	data, err := EncodeKeyring(keys)
 	return keys, data, err
 }
 
