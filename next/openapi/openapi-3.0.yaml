@@ -12,6 +12,168 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /credentials:
+    get:
+      operationId: ListUserCredentials
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 当前用户拥有的凭据元数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialList'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateUserCredential
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCredentialRequest'
+      responses:
+        '201':
+          description: 创建凭据和首个加密版本
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/credentials:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+    get:
+      operationId: ListOrgCredentials
+      security:
+        - bearerAuth: []
+      description: 仅组织管理员可管理凭据。
+      responses:
+        '200':
+          description: 组织凭据元数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialList'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateOrgCredential
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCredentialRequest'
+      responses:
+        '201':
+          description: 创建组织凭据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+        default:
+          $ref: '#/components/responses/Problem'
+  /credentials/{credentialId}/versions:
+    parameters:
+      - name: credentialId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: ListCredentialVersions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 版本元数据，不返回密钥或密文
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialVersionList'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: RotateCredential
+      description: 创建新版本并设置为当前；现存任务仍使用原版本。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateCredentialRequest'
+      responses:
+        '201':
+          description: 新版本绑定
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialBinding'
+        default:
+          $ref: '#/components/responses/Problem'
+  /credentials/{credentialId}/versions/{version}/revoke:
+    parameters:
+      - name: credentialId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: RevokeCredentialVersion
+      description: 撤销固定版本；所有共享 Backend 与现存执行的后续调用、恢复均被拒绝。
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 已撤销（幂等）
+        default:
+          $ref: '#/components/responses/Problem'
+  /credentials/{credentialId}/collect:
+    parameters:
+      - name: credentialId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: CollectCredentialVersions
+      description: 由运行中的服务显式回收非当前且无 Job 引用、无执行 lease 的版本；所有现存任务均保留引用直至删除。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 已删除版本数
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - deleted_versions
+                properties:
+                  deleted_versions:
+                    type: integer
+                    minimum: 0
+        default:
+          $ref: '#/components/responses/Problem'
   /ping:
     get:
       operationId: Ping
@@ -46,7 +208,7 @@ paths:
     post:
       operationId: RegisterAuth
       summary: 注册用户并签发会话
-      description: 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。
+      description: 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。公开注册仅创建普通用户。数据库政策关闭注册时返回 403，政策缺失、损坏或读取故障返回 503。
       security: []
       requestBody:
         required: true
@@ -66,6 +228,8 @@ paths:
         '403':
           $ref: '#/components/responses/Problem'
         '409':
+          $ref: '#/components/responses/Problem'
+        '503':
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
@@ -403,7 +567,7 @@ paths:
       operationId: ListBackendModels
       summary: 探测可用模型列表
       description: |
-        使用调用方当场提供的 api_key（及可选 base_url）向对应 AI 服务拉取可用模型列表，
+        使用调用方当场提供的 secret（及可选 base_url）向对应 AI 服务拉取可用模型列表，
         用于新建/编辑后端时填充 model 字段。凭据不落库，与后端归属无关。
       security:
         - bearerAuth: []
@@ -2832,6 +2996,7 @@ paths:
     get:
       operationId: AdminGetSettings
       summary: 获取系统配置
+      description: 返回数据库权威政策。设置缺失、损坏或读取故障返回 503。
       security:
         - bearerAuth: []
       responses:
@@ -2846,6 +3011,7 @@ paths:
     patch:
       operationId: AdminUpdateSettings
       summary: 更新系统配置
+      description: 原子更新布尔政策并记录操作者及非敏感变更；拒绝未知字段、null 和字符串布尔值。
       security:
         - bearerAuth: []
       requestBody:
@@ -4736,7 +4902,14 @@ components:
         - scope
         - name
         - type
+        - credential
+        - has_secret
       properties:
+        credential:
+          $ref: '#/components/schemas/CredentialBinding'
+        has_secret:
+          type: boolean
+          description: 已有独立存储的凭据；不保证版本尚未被撤销。读取永不返回真实 secret。
         id:
           type: integer
         scope:
@@ -4778,7 +4951,15 @@ components:
         - name
         - type
         - options
+      description: secret 与 credential_id 必须提供一个；凭据必须属于相同用户或组织，且 provider 与 endpoint 匹配。
       properties:
+        secret:
+          type: string
+          minLength: 1
+          writeOnly: true
+        credential_id:
+          type: integer
+          minimum: 1
         name:
           type: string
         type:
@@ -4801,7 +4982,15 @@ components:
         - name
         - type
         - options
+      description: secret 与 credential_id 不能同时提供。都省略时保留现有凭据；提供 secret 创建新凭据对象并重新绑定，不修改共享凭据。改变 provider 或 endpoint 必须同时提供匹配的新绑定。轮换共享凭据使用凭据 versions 接口。
       properties:
+        secret:
+          type: string
+          minLength: 1
+          writeOnly: true
+        credential_id:
+          type: integer
+          minimum: 1
         name:
           type: string
         type:
@@ -4822,7 +5011,7 @@ components:
       type: object
       required:
         - type
-        - api_key
+        - secret
       description: 凭用户输入的凭据探测可用模型列表（不落库）
       properties:
         type:
@@ -4832,8 +5021,10 @@ components:
             - anthropic
             - google
           description: 后端类型
-        api_key:
+        secret:
           type: string
+          writeOnly: true
+          minLength: 1
           description: AI 服务 API 密钥
         base_url:
           type: string
@@ -5579,7 +5770,7 @@ components:
         description:
           type: string
         config:
-          $ref: '#/components/schemas/ExecutionProfileConfig'
+          $ref: '#/components/schemas/ExecutionProfileConfigInput'
       additionalProperties: false
     UpdateExecutionProfileRequest:
       type: object
@@ -5589,7 +5780,7 @@ components:
         description:
           type: string
         config:
-          $ref: '#/components/schemas/ExecutionProfileConfig'
+          $ref: '#/components/schemas/ExecutionProfileConfigInput'
       additionalProperties: false
     ExecutionPlanTemplate:
       type: object
@@ -5726,18 +5917,33 @@ components:
           type: integer
     SystemSettingsResponse:
       type: object
+      additionalProperties: false
+      required:
+        - settings
       properties:
         settings:
           type: object
-          additionalProperties:
-            type: string
+          additionalProperties: false
+          required:
+            - registration_enabled
+          properties:
+            registration_enabled:
+              type: boolean
+              description: 是否允许公开注册；公开注册账户始终为普通用户。
     UpdateSystemSettingsRequest:
       type: object
+      additionalProperties: false
+      required:
+        - settings
       properties:
         settings:
           type: object
-          additionalProperties:
-            type: string
+          additionalProperties: false
+          required:
+            - registration_enabled
+          properties:
+            registration_enabled:
+              type: boolean
     ExecutionPlanTemplateListResponse:
       type: object
       required:
@@ -6057,6 +6263,112 @@ components:
           type: integer
           description: 占用该资源的未完成任务 ID
       additionalProperties: false
+    Credential:
+      type: object
+      required:
+        - id
+        - scope
+        - owner_id
+        - provider
+        - endpoint
+        - current_version
+      properties:
+        id:
+          type: integer
+        scope:
+          type: string
+          enum:
+            - user
+            - org
+        owner_id:
+          type: integer
+        provider:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - google
+        endpoint:
+          type: string
+          description: 不可变的规范化 base URL；版本密钥仅可发送到其范围内。
+        current_version:
+          type: integer
+          minimum: 1
+    CredentialList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Credential'
+    CreateCredentialRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - provider
+        - secret
+      properties:
+        provider:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - google
+        endpoint:
+          type: string
+          description: 留空使用 provider 的明确默认端点。
+        secret:
+          type: string
+          minLength: 1
+          writeOnly: true
+    CredentialVersion:
+      type: object
+      required:
+        - version
+        - revoked
+        - created_at
+      properties:
+        version:
+          type: integer
+        revoked:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    CredentialVersionList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CredentialVersion'
+    RotateCredentialRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - secret
+      properties:
+        secret:
+          type: string
+          minLength: 1
+          writeOnly: true
+    CredentialBinding:
+      type: object
+      required:
+        - id
+        - version
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          minimum: 1
     ResponseFormat:
       type: string
       enum:
@@ -6091,16 +6403,13 @@ components:
     OpenAIBackendOptions:
       type: object
       required:
-        - api_key
         - type
         - model
+      additionalProperties: false
       description: OpenAI 兼容后端选项。支持 OpenAI 官方 API 及 Azure OpenAI、Ollama、LM Studio 等兼容服务。
       properties:
         type:
           type: string
-        api_key:
-          type: string
-          description: AI 服务 API 密钥
         base_url:
           type: string
           description: |
@@ -6157,16 +6466,13 @@ components:
     AnthropicBackendOptions:
       type: object
       required:
-        - api_key
         - type
         - model
+      additionalProperties: false
       description: Anthropic Claude 后端选项。
       properties:
         type:
           type: string
-        api_key:
-          type: string
-          description: AI 服务 API 密钥
         base_url:
           type: string
           description: |
@@ -6234,16 +6540,13 @@ components:
     GoogleBackendOptions:
       type: object
       required:
-        - api_key
         - type
         - model
+      additionalProperties: false
       description: Google Gemini 后端选项。
       properties:
         type:
           type: string
-        api_key:
-          type: string
-          description: AI 服务 API 密钥
         base_url:
           type: string
           description: |
@@ -6734,7 +7037,7 @@ components:
               - punctuation_surplus
               - untranslated
           description: |
-            可裁决的质量问题 code 子集。空或不传时默认 ["source_residual", "punctuation_surplus"]。
+            可裁决的质量问题 code 子集。不传时默认 ["source_residual", "punctuation_surplus"]；显式空数组表示不处理任何问题。
             duplicate 为硬规则，不可裁决（需同批多段输入，无单段裁决语义）。
             untranslated 可裁决：源语与目标语共用文字系统时，同形译文（专有名词、纯汉字标题、原样保留的英文片段）在确定性层面与真正的原文回传不可区分，需 LLM 判断是否为有意保留。
         retry:
@@ -6766,7 +7069,6 @@ components:
             范围与任务级 segment_ids 取交集。scope≠all 时未扫段保留其原语义 issue。
         issue_codes:
           type: array
-          minItems: 1
           items:
             type: string
             enum:
@@ -6835,7 +7137,6 @@ components:
             范围与任务级 segment_ids 取交集。
         issue_codes:
           type: array
-          minItems: 1
           items:
             type: string
             enum:
@@ -6848,8 +7149,9 @@ components:
               - grammar
               - register
           description: |
-            仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要修复的语义 issue code
+            segment_scope=with_issue_codes 时必须列出至少一个要修复的语义 issue code
             （子集语义白名单，与 semantic_qa 轮的全量 code 筛选键不同）。
+            with_issues 下省略此字段表示全部语义问题，显式空数组表示不修订任何问题。
         retry:
           $ref: '#/components/schemas/RetryConfig'
     CorrectRuleConfig:
@@ -6984,8 +7286,6 @@ components:
               - semantic
               - creative
           default:
-            - phonetic
-            - semantic
             - creative
           description: 保留的注音分类列表
     ProfilePostprocessConfig:
@@ -7107,23 +7407,29 @@ components:
           type: number
           format: double
           minimum: 0
-          default: 0
+          default: 0.2
           description: 译文/原文最短长度比，0 表示不检测
         length_ratio_max:
           type: number
           format: double
           minimum: 0
-          default: 0
+          default: 3
           description: 译文/原文最长长度比，0 表示不检测
     ExecutionProfileConfig:
       type: object
       required:
+        - schema_version
         - protect
         - postprocess
         - repair
         - glossary
         - context
       properties:
+        schema_version:
+          type: integer
+          enum:
+            - 1
+          default: 1
         protect:
           $ref: '#/components/schemas/ProfileProtectConfig'
         ruby:
@@ -7138,6 +7444,171 @@ components:
           $ref: '#/components/schemas/ProfileContextConfig'
         qa:
           $ref: '#/components/schemas/ProfileQAConfig'
+    ProfileProtectConfigInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        rules:
+          type: array
+          items:
+            type: string
+            enum:
+              - code
+              - link
+              - placeholder
+              - xml
+      additionalProperties: false
+    ProfileRubyConfigInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        preserve_kinds:
+          type: array
+          items:
+            type: string
+            enum:
+              - phonetic
+              - semantic
+              - creative
+          default:
+            - creative
+          description: 保留的注音分类列表
+      additionalProperties: false
+    ProfilePostprocessConfigInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        trim_spaces:
+          type: boolean
+      additionalProperties: false
+    ProfileRepairConfigInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        json_structural:
+          type: boolean
+        schema_aliases:
+          type: boolean
+        placeholder_normalize:
+          type: boolean
+        prompt_upgrade:
+          type: boolean
+      additionalProperties: false
+    ProfileBootstrapConfigInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否启用内联自举
+        max_terms_per_1000_chars:
+          type: number
+          format: double
+          minimum: 0
+          description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
+        min_source_len:
+          type: integer
+          minimum: 1
+          description: 内联自举术语源文最短字符数
+        inline_conflict_strategy:
+          type: string
+          enum:
+            - 'off'
+            - rewrite-local
+          description: 并发术语冲突处理策略
+      additionalProperties: false
+    ProfileGlossaryConfigInput:
+      type: object
+      properties:
+        bootstrap:
+          $ref: '#/components/schemas/ProfileBootstrapConfigInput'
+      additionalProperties: false
+    ProfileContextConfigInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: true
+          description: 是否启用上下文窗口
+        before:
+          type: integer
+          minimum: 0
+          default: 1
+          description: 上下文取前 N 段
+        after:
+          type: integer
+          minimum: 0
+          default: 1
+          description: 上下文取后 N 段
+        max_chars:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每个上下文段落的字符数上限（按 rune 计，超限截断并补省略号）；0 表示不限制
+      additionalProperties: false
+    ProfileQAConfigInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否启用翻译质量检测
+        auto_reject:
+          type: boolean
+          default: false
+          description: error 级别问题自动 reject；untranslated 例外——源语与目标语共用文字系统时降为 warning，该类"译文与原文相同"的段落不会被自动 reject
+        checks:
+          type: array
+          items:
+            type: string
+          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、script_mismatch、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
+        length_method:
+          type: string
+          enum:
+            - char_weight
+            - word_count
+          default: char_weight
+          description: '长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词'
+        length_ratio_min:
+          type: number
+          format: double
+          minimum: 0
+          default: 0.2
+          description: 译文/原文最短长度比，0 表示不检测
+        length_ratio_max:
+          type: number
+          format: double
+          minimum: 0
+          default: 3
+          description: 译文/原文最长长度比，0 表示不检测
+      additionalProperties: false
+    ExecutionProfileConfigInput:
+      type: object
+      properties:
+        schema_version:
+          type: integer
+          enum:
+            - 1
+          default: 1
+        protect:
+          $ref: '#/components/schemas/ProfileProtectConfigInput'
+        ruby:
+          $ref: '#/components/schemas/ProfileRubyConfigInput'
+        postprocess:
+          $ref: '#/components/schemas/ProfilePostprocessConfigInput'
+        repair:
+          $ref: '#/components/schemas/ProfileRepairConfigInput'
+        glossary:
+          $ref: '#/components/schemas/ProfileGlossaryConfigInput'
+        context:
+          $ref: '#/components/schemas/ProfileContextConfigInput'
+        qa:
+          $ref: '#/components/schemas/ProfileQAConfigInput'
+      additionalProperties: false
     NullableGauge:
       type: integer
       minimum: 0
