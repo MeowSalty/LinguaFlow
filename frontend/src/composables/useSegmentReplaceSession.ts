@@ -321,10 +321,12 @@ export function useSegmentReplaceSession(options: ReplaceSessionOptions) {
     const session = frozen.value
     const result = preview.value
     if (!canApply.value || !session || !result) return null
-    const item = segmentId === undefined
-      ? null
-      : result.items.find(candidate => candidate.segment_id === segmentId)
-    if (segmentId !== undefined && (!item || !session.request.segment_ids.includes(segmentId))) return null
+    const item =
+      segmentId === undefined
+        ? null
+        : result.items.find((candidate) => candidate.segment_id === segmentId)
+    if (segmentId !== undefined && (!item || !session.request.segment_ids.includes(segmentId)))
+      return null
     return {
       token: session.token,
       projectId: session.input.projectId,
