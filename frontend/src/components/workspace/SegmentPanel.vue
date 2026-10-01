@@ -178,7 +178,9 @@ const handleCloseSearch = (): void => {
   } else {
     toggleSearch()
   }
-  void nextTick(() => { if (searchReturnFocus?.isConnected) searchReturnFocus.focus() })
+  void nextTick(() => {
+    if (searchReturnFocus?.isConnected) searchReturnFocus.focus()
+  })
 }
 
 const closeAllDrawers = (): void => {
@@ -242,12 +244,15 @@ watch(searchOpen, (open) => {
 const handleGlobalKeyDown = (e: KeyboardEvent): void => {
   if (e.isComposing || e.defaultPrevented) return
   const key = e.key.toLowerCase()
-  const replaceShortcut = (e.ctrlKey && !e.metaKey && key === 'h') || (e.metaKey && e.altKey && key === 'f')
+  const replaceShortcut =
+    (e.ctrlKey && !e.metaKey && key === 'h') || (e.metaKey && e.altKey && key === 'f')
   if (replaceShortcut || ((e.ctrlKey || e.metaKey) && !e.altKey && key === 'f')) {
     if (!workspace.activeResourceId) return
     e.preventDefault()
     handleSearchActivate()
-    void nextTick(() => replaceShortcut ? searchPanelRef.value?.openReplace() : searchPanelRef.value?.focusInput())
+    void nextTick(() =>
+      replaceShortcut ? searchPanelRef.value?.openReplace() : searchPanelRef.value?.focusInput(),
+    )
     return
   }
   if (e.key !== 'Escape' || !anyDrawerVisible.value) return
@@ -393,8 +398,13 @@ const segmentsCountLabel = computed(() => {
 })
 
 // ── 统一搜索替换面板的写入结果 ──
-const handleSearchReplaceApplied = (payload: { projectId: number; resourceId: number; items: Segment[] }): void => {
-  if (payload.projectId !== props.projectId || payload.resourceId !== workspace.activeResourceId) return
+const handleSearchReplaceApplied = (payload: {
+  projectId: number
+  resourceId: number
+  items: Segment[]
+}): void => {
+  if (payload.projectId !== props.projectId || payload.resourceId !== workspace.activeResourceId)
+    return
 
   // 直接合并接口返回的已更新段落，保留当前窗口、游标与滚动位置。
   const host = mainScrollRef.value
@@ -885,6 +895,5 @@ const handleCloseInlineComment = (): void => {
         class="fixed inset-0 z-40 bg-black/40 pointer-events-none opacity-0 transition-opacity duration-200"
       />
     </Teleport>
-
   </div>
 </template>
