@@ -21,13 +21,14 @@ import OrganizationScopeSelect from '@/components/organizations/OrganizationScop
 import CopyToOrganization from '@/components/organizations/CopyToOrganization.vue'
 import { isOrganizationDependency, onOrganizationInvalidated } from '@/utils/organization-scope'
 import { clearUnavailablePlanDependencies } from '@/utils/organization-copy'
-import { captureSession, isSessionCurrent } from '@/api/session-context'
+import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
 import { fetchBackends } from '@/api/backends'
 import { fetchPromptTemplates } from '@/api/prompt-templates'
 import { fetchBootstrapPromptTemplates } from '@/api/bootstrap-prompt-templates'
 import { fetchExecutionProfiles } from '@/api/execution-profiles'
 import type { ApiSchemas } from '@/api/client'
 import ExecutionPlanEditor from '@/components/templates/ExecutionPlanEditor.vue'
+import { buildExecutionRoundInput, validateRoundCodes } from '@/utils/execution-plan-config'
 import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
 import { useEntityCrud } from '@/composables/useEntityCrud'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
@@ -101,6 +102,9 @@ const { getScopeTagType, deleteModalVisible, deletingItem, confirmDelete, execut
 
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
+const submitting = ref(false)
+const pendingFormWrites = ref(0)
+let formGeneration = 0
 const editingItem = ref<ExecutionPlanTemplate | null>(null)
 
 const formModel = reactive<FormModel>({
@@ -215,6 +219,8 @@ const ensureDependenciesLoaded = async (): Promise<void> => {
 }
 
 const resetForm = (): void => {
+  formGeneration++
+  submitting.value = false
   formModel.name = ''
   formModel.description = ''
   formModel.profile_id = null
@@ -230,6 +236,7 @@ const openCreateDrawer = (): void => {
 }
 
 const openEditDrawer = (item: ExecutionPlanTemplate): void => {
+  resetForm()
   editingItem.value = item
   formModel.name = item.name
   formModel.description = item.description ?? ''
@@ -245,6 +252,15 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
 const validateRounds = (): boolean => {
   for (let i = 0; i < formModel.rounds.length; i++) {
     const round = formModel.rounds[i]!
+    const codeError = validateRoundCodes(round)
+    if (codeError) {
+      message.error(
+        codeError === 'required'
+          ? t('configurationProfiles.codesRequired')
+          : t('configurationProfiles.invalidCodes'),
+      )
+      return false
+    }
     if (round.mode !== 'correct' && !round.backend_id) {
       message.error(t('executionPlanTemplates.validation.roundBackendRequired', { n: i + 1 }))
       return false
@@ -333,101 +349,7 @@ const buildPayload = (): CreateRequest => {
   const payload: CreateRequest = {
     name: formModel.name.trim(),
     profile_id: formModel.profile_id!,
-    rounds: formModel.rounds.map((round) => {
-      const base: {
-        mode: typeof round.mode
-        concurrency: typeof round.concurrency
-        backend_id?: typeof round.backend_id
-      } = {
-        mode: round.mode,
-        concurrency: round.mode === 'correct' ? 1 : round.concurrency,
-      }
-      if (round.mode !== 'correct') {
-        base.backend_id = round.backend_id
-      }
-      if (round.mode === 'translate' && round.translate) {
-        return {
-          ...base,
-          translate: {
-            prompt_template_id: round.translate.prompt_template_id,
-            batch_size: round.translate.batch_size,
-            max_words_per_batch: round.translate.max_words_per_batch,
-            fallback_shrink: round.translate.fallback_shrink,
-            ...(round.translate.retry ? { retry: round.translate.retry } : {}),
-          },
-        }
-      }
-      if (round.mode === 'extract' && round.extract) {
-        return {
-          ...base,
-          extract: {
-            template_id: round.extract.template_id,
-            batch_size: round.extract.batch_size,
-            max_words_per_batch: round.extract.max_words_per_batch,
-            max_terms_per_1000_chars: round.extract.max_terms_per_1000_chars,
-            min_source_len: round.extract.min_source_len,
-            ...(round.extract.retry ? { retry: round.extract.retry } : {}),
-          },
-        }
-      }
-      if (round.mode === 'adjudicate' && round.adjudicate) {
-        return {
-          ...base,
-          adjudicate: {
-            batch_size: round.adjudicate.batch_size,
-            max_words_per_batch: round.adjudicate.max_words_per_batch,
-            adjudicate_codes:
-              round.adjudicate.adjudicate_codes && round.adjudicate.adjudicate_codes.length > 0
-                ? round.adjudicate.adjudicate_codes
-                : undefined,
-            ...(round.adjudicate.retry ? { retry: round.adjudicate.retry } : {}),
-          },
-        }
-      }
-      if (round.mode === 'semantic_qa' && round.semantic_qa) {
-        const segmentScope = round.semantic_qa.segment_scope ?? 'all'
-        return {
-          ...base,
-          semantic_qa: {
-            batch_size: round.semantic_qa.batch_size,
-            max_words_per_batch: round.semantic_qa.max_words_per_batch,
-            segment_scope: segmentScope,
-            ...(segmentScope === 'with_issue_codes' &&
-            round.semantic_qa.issue_codes &&
-            round.semantic_qa.issue_codes.length > 0
-              ? { issue_codes: round.semantic_qa.issue_codes }
-              : {}),
-            ...(round.semantic_qa.retry ? { retry: round.semantic_qa.retry } : {}),
-          },
-        }
-      }
-      if (round.mode === 'revise' && round.revise) {
-        const segmentScope = round.revise.segment_scope ?? 'with_issues'
-        return {
-          ...base,
-          revise: {
-            batch_size: round.revise.batch_size,
-            max_words_per_batch: round.revise.max_words_per_batch,
-            segment_scope: segmentScope,
-            ...(segmentScope === 'with_issue_codes' &&
-            round.revise.issue_codes &&
-            round.revise.issue_codes.length > 0
-              ? { issue_codes: round.revise.issue_codes }
-              : {}),
-            ...(round.revise.retry ? { retry: round.revise.retry } : {}),
-          },
-        }
-      }
-      if (round.mode === 'correct' && round.correct) {
-        return {
-          ...base,
-          correct: {
-            rules: round.correct.rules,
-          },
-        }
-      }
-      return base
-    }),
+    rounds: formModel.rounds.map(buildExecutionRoundInput),
   }
   if (formModel.description.trim()) {
     payload.description = formModel.description.trim()
@@ -439,7 +361,13 @@ const buildPayload = (): CreateRequest => {
 const onSubmit = async (): Promise<void> => {
   const session = captureSession()
   const organization = store.orgId
-  if (!store.canEdit(editingItem.value ?? undefined)) return
+  const generation = formGeneration
+  const current = () =>
+    isSessionCurrent(session) &&
+    organization === store.orgId &&
+    generation === formGeneration &&
+    drawerVisible.value
+  if (!store.canEdit(editingItem.value ?? undefined) || submitting.value) return
   if (
     !dependenciesLoaded.value ||
     !availableProfiles.value.some((item) => item.id === formModel.profile_id) ||
@@ -468,21 +396,36 @@ const onSubmit = async (): Promise<void> => {
 
   if (!validateRounds()) return
 
-  if (!isSessionCurrent(session) || organization !== store.orgId || !drawerVisible.value) return
+  if (!current()) return
   const payload = buildPayload()
+  submitting.value = true
+  pendingFormWrites.value++
 
   try {
     if (isEditMode.value && editingItem.value) {
       await store.updateTemplate(editingItem.value.id, payload as UpdateRequest)
+      if (!current()) return
       message.success(t('executionPlanTemplates.messages.updateSuccess'))
     } else {
       await store.createTemplate(payload)
+      if (!current()) return
       message.success(t('executionPlanTemplates.messages.createSuccess'))
     }
     drawerVisible.value = false
     resetForm()
-  } catch {
-    // Error is handled by the store
+  } catch (cause) {
+    // Consume the shared store error before releasing the suppression guard.
+    // A closed/replaced draft must not receive the old write's failure toast.
+    if (isSessionCurrent(session) && organization === store.orgId) store.error = null
+    if (current()) {
+      message.error(cause instanceof Error ? cause.message : t('team.errors.saveResource'), {
+        duration: 0,
+        closable: true,
+      })
+    }
+  } finally {
+    pendingFormWrites.value--
+    if (current()) submitting.value = false
   }
 }
 
@@ -519,7 +462,26 @@ const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
 onMounted(() => {
   void ensureDependenciesLoaded()
 })
+watch(
+  sessionGeneration,
+  () => {
+    drawerVisible.value = false
+    deleteModalVisible.value = false
+    resetForm()
+  },
+  { flush: 'sync' },
+)
+onBeforeUnmount(() => {
+  formGeneration++
+})
+watch(drawerVisible, (visible) => {
+  if (!visible) {
+    formGeneration++
+    submitting.value = false
+  }
+})
 watch(orgId, () => {
+  resetForm()
   drawerVisible.value = false
   deleteModalVisible.value = false
   editingItem.value = null
@@ -563,7 +525,7 @@ const copyToOrganization = async (item: ExecutionPlanTemplate, target: number) =
 }
 
 useStoreErrorToast(
-  () => store.error,
+  () => (pendingFormWrites.value > 0 ? null : store.error),
   () => {
     store.error = null
   },
@@ -728,7 +690,7 @@ useStoreErrorToast(
           <NInput
             v-model:value="formModel.name"
             :placeholder="t('executionPlanTemplates.form.namePlaceholder')"
-            :disabled="isSystemScope"
+            :disabled="isSystemScope || submitting"
           />
         </NFormItem>
 
@@ -738,7 +700,7 @@ useStoreErrorToast(
             type="textarea"
             :placeholder="t('executionPlanTemplates.form.descriptionPlaceholder')"
             :rows="3"
-            :disabled="isSystemScope"
+            :disabled="isSystemScope || submitting"
           />
         </NFormItem>
 
@@ -748,7 +710,7 @@ useStoreErrorToast(
               v-model:value="formModel.profile_id"
               :options="executionProfileOptions"
               :placeholder="t('executionPlanTemplates.form.profilePlaceholder')"
-              :disabled="isSystemScope"
+              :disabled="isSystemScope || submitting"
             />
             <div class="mt-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanTemplates.form.profileHint') }}
@@ -761,13 +723,15 @@ useStoreErrorToast(
           <span class="mb-2 block text-sm font-medium text-lf-text-strong">
             {{ t('executionPlanTemplates.form.rounds') }}
           </span>
+          <p class="mb-4 text-xs text-lf-text-subtle">{{ t('configurationProfiles.effect') }}</p>
           <ExecutionPlanEditor
+            :key="formGeneration"
             :rounds="formModel.rounds"
             :ruby-retry="formModel.ruby_retry"
             :backends="backendOptions"
             :prompt-templates="promptTemplateOptions"
             :bootstrap-prompt-templates="bootstrapPromptTemplateOptions"
-            :disabled="isSystemScope"
+            :disabled="isSystemScope || submitting"
             @update:rounds="formModel.rounds = $event"
             @update:ruby-retry="formModel.ruby_retry = $event"
           />
@@ -782,7 +746,12 @@ useStoreErrorToast(
           <NButton
             v-if="!isSystemScope"
             type="primary"
-            :loading="store.creating || store.updating"
+            :loading="submitting"
+            :disabled="
+              submitting ||
+              !dependenciesLoaded ||
+              formModel.rounds.some((round) => Boolean(validateRoundCodes(round)))
+            "
             @click="onSubmit"
           >
             {{
