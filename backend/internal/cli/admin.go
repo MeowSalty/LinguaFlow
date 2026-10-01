@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
@@ -107,9 +106,9 @@ func newAdminCredentialsCmd(rt *appCtx) *cobra.Command {
 			if _, err := service.NewInitializationService(client).Validate(cmd.Context(), cfg.Mode); err != nil {
 				return err
 			}
-			keys, err := credential.LoadKeyring(cfg.Credentials.KeyringFile)
-			if err != nil {
-				return fmt.Errorf("load deployment credential keyring: %w", err)
+			keys := resolved.CredentialKeys
+			if keys == nil {
+				return errors.New("existing credential keys are required for re-encryption")
 			}
 			credentials := service.NewCredentialService(client, keys, nil)
 			if err := credentials.ValidateKeys(cmd.Context()); err != nil {

@@ -56,7 +56,8 @@ func configurationConsumerServer(t *testing.T, mode string, edit func(*config.Se
 	if edit != nil {
 		edit(cfg)
 	}
-	if _, err := credential.PrepareKeyring(cfg.Credentials.KeyringFile, true); err != nil {
+	keys, err := credential.PrepareKeyring(cfg.Credentials.KeyringFile, true)
+	if err != nil {
 		t.Fatal(err)
 	}
 	bootstrap := config.BootstrapInput{}
@@ -67,7 +68,7 @@ func configurationConsumerServer(t *testing.T, mode string, edit func(*config.Se
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewServer(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), db, client, mode, local, address...)
+	s, err := NewServer(cfg, keys, slog.New(slog.NewTextHandler(io.Discard, nil)), db, client, mode, local, address...)
 	if err != nil {
 		t.Fatal(err)
 	}

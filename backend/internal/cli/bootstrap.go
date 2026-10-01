@@ -33,6 +33,10 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 	}
 	resolved := opts.Resolved
 	cfg := resolved.Config
+	keys := resolved.CredentialKeys
+	if keys == nil && (!cfg.IsLocal() || !resolved.KeyringPending) {
+		return nil, nil, nil, errors.New("resolved credential keys are required")
+	}
 	logger := opts.Logger
 	if logger == nil {
 		logger = logging.New(os.Stderr, resolved.Log.Level, resolved.Log.Format)
@@ -55,18 +59,17 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 		return nil, nil, nil, err
 	}
 	initialization := service.NewInitializationService(client)
-	allowCreateKeyring := false
-	if cfg.IsLocal() {
+	if resolved.KeyringPending {
 		empty, err := initialization.IsEmpty(ctx)
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, fmt.Errorf("read initialization state: %w", err)
 		}
-		allowCreateKeyring = empty
-	}
-	if _, err := credential.PrepareKeyring(cfg.Credentials.KeyringFile, allowCreateKeyring); err != nil {
-		_ = cleanup()
-		return nil, nil, nil, fmt.Errorf("prepare credential keyring: %w", err)
+		keys, err = credential.PrepareKeyring(cfg.Credentials.KeyringFile, empty)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, fmt.Errorf("prepare credential keyring: %w", err)
+		}
 	}
 	localUser, err := initialization.Initialize(ctx, cfg.Mode, resolved.Bootstrap)
 	if err != nil {
@@ -80,7 +83,7 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 	}
 	address := ln.Addr().(*net.TCPAddr)
 	runtimeAddress := config.RuntimeAddress{Host: address.IP.String(), Port: address.Port}
-	server, err := api.NewServer(&cfg, logger, db, client, cfg.Mode, localUser, runtimeAddress)
+	server, err := api.NewServer(&cfg, keys, logger, db, client, cfg.Mode, localUser, runtimeAddress)
 	if err != nil {
 		_ = ln.Close()
 		_ = cleanup()
