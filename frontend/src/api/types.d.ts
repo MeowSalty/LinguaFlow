@@ -4,6 +4,99 @@
  */
 
 export interface paths {
+    "/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListUserCredentials"];
+        put?: never;
+        post: operations["CreateUserCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /** @description 仅组织管理员可管理凭据。 */
+        get: operations["ListOrgCredentials"];
+        put?: never;
+        post: operations["CreateOrgCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/credentials/{credentialId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        get: operations["ListCredentialVersions"];
+        put?: never;
+        /** @description 创建新版本并设置为当前；现存任务仍使用原版本。 */
+        post: operations["RotateCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/credentials/{credentialId}/versions/{version}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+                version: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 撤销固定版本；所有共享 Backend 与现存执行的后续调用、恢复均被拒绝。 */
+        post: operations["RevokeCredentialVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/credentials/{credentialId}/collect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 由运行中的服务显式回收非当前且无 Job 引用、无执行 lease 的版本；所有现存任务均保留引用直至删除。 */
+        post: operations["CollectCredentialVersions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ping": {
         parameters: {
             query?: never;
@@ -55,7 +148,7 @@ export interface paths {
         put?: never;
         /**
          * 注册用户并签发会话
-         * @description 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。
+         * @description 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。公开注册仅创建普通用户。数据库政策关闭注册时返回 403，政策缺失、损坏或读取故障返回 503。
          */
         post: operations["RegisterAuth"];
         delete?: never;
@@ -293,7 +386,7 @@ export interface paths {
         put?: never;
         /**
          * 探测可用模型列表
-         * @description 使用调用方当场提供的 api_key（及可选 base_url）向对应 AI 服务拉取可用模型列表，
+         * @description 使用调用方当场提供的 secret（及可选 base_url）向对应 AI 服务拉取可用模型列表，
          *     用于新建/编辑后端时填充 model 字段。凭据不落库，与后端归属无关。
          */
         post: operations["ListBackendModels"];
@@ -1789,14 +1882,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 获取系统配置 */
+        /**
+         * 获取系统配置
+         * @description 返回数据库权威政策。设置缺失、损坏或读取故障返回 503。
+         */
         get: operations["AdminGetSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** 更新系统配置 */
+        /**
+         * 更新系统配置
+         * @description 原子更新布尔政策并记录操作者及非敏感变更；拒绝未知字段、null 和字符串布尔值。
+         */
         patch: operations["AdminUpdateSettings"];
         trace?: never;
     };
@@ -1973,7 +2072,7 @@ export interface components {
              * @default member
              * @enum {string}
              */
-            role: "owner" | "admin" | "member";
+            role?: "owner" | "admin" | "member";
         };
         /** @description 仅 owner 可修改角色，必须至少保留一位 owner；省略、空值及 null 均无效。 */
         UpdateOrganizationMemberRequest: {
@@ -2352,17 +2451,17 @@ export interface components {
             replace_with: string;
             match_mode?: components["schemas"]["SegmentMatchMode"];
             /** @default true */
-            case_sensitive: boolean;
+            case_sensitive?: boolean;
             /**
              * @description 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查
              * @default false
              */
-            whole_word: boolean;
+            whole_word?: boolean;
             /**
              * @description 返回样本上限
              * @default 20
              */
-            max_results: number;
+            max_results?: number;
             /** @enum {string} */
             status?: "pending" | "translated" | "edited" | "approved" | "rejected";
             /** @enum {string} */
@@ -2387,12 +2486,12 @@ export interface components {
             replace_with: string;
             match_mode?: components["schemas"]["SegmentMatchMode"];
             /** @default true */
-            case_sensitive: boolean;
+            case_sensitive?: boolean;
             /**
              * @description 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查；须与预览请求一致才能命中相同段落
              * @default false
              */
-            whole_word: boolean;
+            whole_word?: boolean;
             /** @description 可选，仅应用这些段落；省略=对该资源所有当前命中段落应用 */
             segment_ids?: number[];
         };
@@ -2440,7 +2539,7 @@ export interface components {
              * @description 翻译完成后是否自动审批通过所有段落
              * @default false
              */
-            auto_approve: boolean;
+            auto_approve?: boolean;
             execution_config?: {
                 [key: string]: unknown;
             };
@@ -2642,6 +2741,9 @@ export interface components {
             next_cursor?: string;
         };
         Backend: {
+            credential: components["schemas"]["CredentialBinding"];
+            /** @description 已有独立存储的凭据；不保证版本尚未被撤销。读取永不返回真实 secret。 */
+            has_secret: boolean;
             id: number;
             /** @enum {string} */
             scope: "user" | "org";
@@ -2653,14 +2755,17 @@ export interface components {
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
              */
-            rate_limit_per_minute: number;
+            rate_limit_per_minute?: number;
             owner_user_id?: number;
             owner_org_id?: number;
         };
         BackendListResponse: {
             items: components["schemas"]["Backend"][];
         };
+        /** @description secret 与 credential_id 必须提供一个；凭据必须属于相同用户或组织，且 provider 与 endpoint 匹配。 */
         CreateBackendRequest: {
+            secret?: string;
+            credential_id?: number;
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
@@ -2669,9 +2774,12 @@ export interface components {
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
              */
-            rate_limit_per_minute: number;
+            rate_limit_per_minute?: number;
         };
+        /** @description secret 与 credential_id 不能同时提供。都省略时保留现有凭据；提供 secret 创建新凭据对象并重新绑定，不修改共享凭据。改变 provider 或 endpoint 必须同时提供匹配的新绑定。轮换共享凭据使用凭据 versions 接口。 */
         UpdateBackendRequest: {
+            secret?: string;
+            credential_id?: number;
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
@@ -2680,7 +2788,7 @@ export interface components {
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
              */
-            rate_limit_per_minute: number;
+            rate_limit_per_minute?: number;
         };
         /** @description 凭用户输入的凭据探测可用模型列表（不落库） */
         ListBackendModelsRequest: {
@@ -2690,7 +2798,7 @@ export interface components {
              */
             type: "openai" | "anthropic" | "google";
             /** @description AI 服务 API 密钥 */
-            api_key: string;
+            secret: string;
             /** @description 自定义 API 端点 URL，留空使用默认值 */
             base_url?: string;
         };
@@ -2736,7 +2844,7 @@ export interface components {
              * @description 是否启用术语表
              * @default false
              */
-            glossary_enabled: boolean;
+            glossary_enabled?: boolean;
             source_lang?: string;
             target_lang?: string;
         };
@@ -2772,11 +2880,11 @@ export interface components {
             source: string;
             target: string;
             /** @default false */
-            case_sensitive: boolean;
+            case_sensitive?: boolean;
             /** @default false */
-            forbidden: boolean;
+            forbidden?: boolean;
             /** @default true */
-            mandatory: boolean;
+            mandatory?: boolean;
             notes?: string;
         };
         UpdateGlossaryEntryRequest: {
@@ -3032,12 +3140,12 @@ export interface components {
             org_id?: number;
             name: string;
             description?: string;
-            config?: components["schemas"]["ExecutionProfileConfig"];
+            config?: components["schemas"]["ExecutionProfileConfigInput"];
         };
         UpdateExecutionProfileRequest: {
             name?: string;
             description?: string;
-            config?: components["schemas"]["ExecutionProfileConfig"];
+            config?: components["schemas"]["ExecutionProfileConfigInput"];
         };
         ExecutionPlanTemplate: {
             id: number;
@@ -3074,7 +3182,7 @@ export interface components {
              * @default user
              * @enum {string}
              */
-            role: "user" | "admin";
+            role?: "user" | "admin";
         };
         AdminUpdateUserRequest: {
             display_name?: string;
@@ -3100,13 +3208,14 @@ export interface components {
             total: number;
         };
         SystemSettingsResponse: {
-            settings?: {
-                [key: string]: string;
+            settings: {
+                /** @description 是否允许公开注册；公开注册账户始终为普通用户。 */
+                registration_enabled: boolean;
             };
         };
         UpdateSystemSettingsRequest: {
-            settings?: {
-                [key: string]: string;
+            settings: {
+                registration_enabled: boolean;
             };
         };
         ExecutionPlanTemplateListResponse: {
@@ -3137,12 +3246,12 @@ export interface components {
              * @description 源语言;省略或 "auto" 表示自动检测
              * @default auto
              */
-            source_lang: string;
+            source_lang?: string;
             /**
              * @description 目标语言
              * @default zh
              */
-            target_lang: string;
+            target_lang?: string;
             /**
              * @description 执行计划模板 ID。执行计划模板统一为用户/org 级(ExecutionPlanTemplate
              *     无 project 关联),无论是否提供 project_id,用的都是同一套模板;
@@ -3183,11 +3292,11 @@ export interface components {
             source: string;
             target: string;
             /** @default false */
-            case_sensitive: boolean;
+            case_sensitive?: boolean;
             /** @default false */
-            forbidden: boolean;
+            forbidden?: boolean;
             /** @default true */
-            mandatory: boolean;
+            mandatory?: boolean;
             notes?: string;
         };
         QuickRoundSummary: {
@@ -3260,6 +3369,43 @@ export interface components {
             /** @description 占用该资源的未完成任务 ID */
             active_job_id: number;
         };
+        Credential: {
+            id: number;
+            /** @enum {string} */
+            scope: "user" | "org";
+            owner_id: number;
+            /** @enum {string} */
+            provider: "openai" | "anthropic" | "google";
+            /** @description 不可变的规范化 base URL；版本密钥仅可发送到其范围内。 */
+            endpoint: string;
+            current_version: number;
+        };
+        CredentialList: {
+            items: components["schemas"]["Credential"][];
+        };
+        CreateCredentialRequest: {
+            /** @enum {string} */
+            provider: "openai" | "anthropic" | "google";
+            /** @description 留空使用 provider 的明确默认端点。 */
+            endpoint?: string;
+            secret: string;
+        };
+        CredentialVersion: {
+            version: number;
+            revoked: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        CredentialVersionList: {
+            items: components["schemas"]["CredentialVersion"][];
+        };
+        RotateCredentialRequest: {
+            secret: string;
+        };
+        CredentialBinding: {
+            id: number;
+            version: number;
+        };
         /**
          * @description 响应格式：
          *     - json_schema: 强制结构化 JSON 输出（推荐）
@@ -3289,8 +3435,6 @@ export interface components {
              * @enum {string}
              */
             type: "openai";
-            /** @description AI 服务 API 密钥 */
-            api_key: string;
             /**
              * @description 自定义API端点URL。留空使用默认值。
              *     可用于指向 Azure OpenAI / Ollama / LM Studio / 自定义网关等兼容服务。
@@ -3302,12 +3446,12 @@ export interface components {
              * @description 最大生成 token 数。0 表示不限制。
              * @default 0
              */
-            max_tokens: number;
+            max_tokens?: number;
             /**
              * @description 请求超时时间（秒）。0 表示不限制。
              * @default 60
              */
-            timeout: number;
+            timeout?: number;
             response_format?: components["schemas"]["ResponseFormat"];
             /**
              * Format: double
@@ -3331,7 +3475,7 @@ export interface components {
              *     适用于只接受 stream:true 的兼容网关。默认 false。
              * @default false
              */
-            stream: boolean;
+            stream?: boolean;
             /**
              * @description 思考强度档位（统一语义）。不设置=开关关闭，不传 reasoning_effort（沿用模型/网关默认）；
              *     off=显式关闭（reasoning_effort "none"）；minimal/low/medium/high 映射为对应档位。
@@ -3345,8 +3489,6 @@ export interface components {
              * @enum {string}
              */
             type: "anthropic";
-            /** @description AI 服务 API 密钥 */
-            api_key: string;
             /** @description 自定义API端点URL。留空使用默认值。 */
             base_url?: string;
             /** @description 模型名称（必填）。须为 Anthropic 实际可用的模型 ID。 */
@@ -3355,12 +3497,12 @@ export interface components {
              * @description 最大生成 token 数。Anthropic 必填，默认 8192。
              * @default 8192
              */
-            max_tokens: number;
+            max_tokens?: number;
             /**
              * @description 请求超时时间（秒）。0 表示不限制。
              * @default 60
              */
-            timeout: number;
+            timeout?: number;
             response_format?: components["schemas"]["ResponseFormat"];
             /**
              * Format: double
@@ -3384,13 +3526,13 @@ export interface components {
              *     可显著降低重复翻译任务的token消耗和延迟。
              * @default true
              */
-            enable_prompt_cache: boolean;
+            enable_prompt_cache?: boolean;
             /**
              * @description 设为 true 时以流式发起请求并在内部累积为完整响应后返回，
              *     适用于只接受 stream:true 的兼容网关。默认 false。
              * @default false
              */
-            stream: boolean;
+            stream?: boolean;
             /**
              * @description 思考强度档位（统一语义）。不设置=开关关闭，不传 thinking。
              *     仅 minimal/low/medium/high 时跳过 temperature/top_p（API 拒绝非默认采样参数）；
@@ -3410,8 +3552,6 @@ export interface components {
              * @enum {string}
              */
             type: "google";
-            /** @description AI 服务 API 密钥 */
-            api_key: string;
             /** @description 自定义API端点URL。留空使用默认值。 */
             base_url?: string;
             /** @description 模型名称（必填）。须为 Google Gemini 实际可用的模型 ID。 */
@@ -3420,12 +3560,12 @@ export interface components {
              * @description 最大生成 token 数。默认 8192。
              * @default 8192
              */
-            max_tokens: number;
+            max_tokens?: number;
             /**
              * @description 请求超时时间（秒）。0 表示不限制。
              * @default 60
              */
-            timeout: number;
+            timeout?: number;
             response_format?: components["schemas"]["ResponseFormat"];
             /**
              * Format: double
@@ -3448,7 +3588,7 @@ export interface components {
              *     适用于只接受 stream:true 的兼容网关。默认 false。
              * @default false
              */
-            stream: boolean;
+            stream?: boolean;
             /**
              * @description 思考强度档位（统一语义）。不设置=开关关闭，不传 ThinkingConfig（沿用模型默认）；
              *     off=显式关闭（协议无 ThinkingLevel 关闭档，映射为 thinkingBudget 0）；
@@ -3595,7 +3735,7 @@ export interface components {
              * @description 注音对齐重试轮数（仅 enabled=true 时生效）
              * @default 1
              */
-            max_attempts: number;
+            max_attempts?: number;
         };
         /** @description 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。 */
         TranslateSegmentFilterConfig: {
@@ -3606,7 +3746,7 @@ export interface components {
              * @default pending_only
              * @enum {string}
              */
-            status_filter: "pending_only" | "skip_approved" | "all";
+            status_filter?: "pending_only" | "skip_approved" | "all";
         };
         RetryConfig: {
             /**
@@ -3614,11 +3754,11 @@ export interface components {
              *     在途重试预算内部封顶 min(max_attempts,3)，不单独暴露。
              * @default 3
              */
-            max_attempts: number;
+            max_attempts?: number;
             /** @default 2000 */
-            backoff_ms: number;
+            backoff_ms?: number;
             /** @default true */
-            jitter: boolean;
+            jitter?: boolean;
         };
         TranslateRoundConfig: {
             /** @description 翻译提示词模板 ID */
@@ -3645,19 +3785,19 @@ export interface components {
              * @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项；两者都为 0 时不分批，全部一次发送
              * @default 20
              */
-            batch_size: number;
+            batch_size?: number;
             /** @description 字词数上限；0=不限制，与 batch_size 至少填一项；两者都为 0 时不分批，全部一次发送 */
             max_words_per_batch?: number;
             /**
              * @description 每 1000 字词的术语抽取上限系数
              * @default 25
              */
-            max_terms_per_1000_chars: number;
+            max_terms_per_1000_chars?: number;
             /**
              * @description 术语源文最短字符数
              * @default 2
              */
-            min_source_len: number;
+            min_source_len?: number;
             retry?: components["schemas"]["RetryConfig"];
         };
         /** @description 质量裁决轮次配置。裁决 system prompt 内置不可见，无 prompt_template_id。 */
@@ -3667,7 +3807,7 @@ export interface components {
             /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
             max_words_per_batch?: number;
             /**
-             * @description 可裁决的质量问题 code 子集。空或不传时默认 ["source_residual", "punctuation_surplus"]。
+             * @description 可裁决的质量问题 code 子集。不传时默认 ["source_residual", "punctuation_surplus"]；显式空数组表示不处理任何问题。
              *     duplicate 为硬规则，不可裁决（需同批多段输入，无单段裁决语义）。
              *     untranslated 可裁决：源语与目标语共用文字系统时，同形译文（专有名词、纯汉字标题、原样保留的英文片段）在确定性层面与真正的原文回传不可区分，需 LLM 判断是否为有意保留。
              */
@@ -3689,7 +3829,7 @@ export interface components {
              * @default all
              * @enum {string}
              */
-            segment_scope: "all" | "with_issues" | "with_issue_codes";
+            segment_scope?: "all" | "with_issues" | "with_issue_codes";
             /**
              * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
              *     允许全部 issue code（规则 + 语义皆可作筛选键）。
@@ -3717,10 +3857,11 @@ export interface components {
              * @default with_issues
              * @enum {string}
              */
-            segment_scope: "with_issues" | "with_issue_codes";
+            segment_scope?: "with_issues" | "with_issue_codes";
             /**
-             * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要修复的语义 issue code
+             * @description segment_scope=with_issue_codes 时必须列出至少一个要修复的语义 issue code
              *     （子集语义白名单，与 semantic_qa 轮的全量 code 筛选键不同）。
+             *     with_issues 下省略此字段表示全部语义问题，显式空数组表示不修订任何问题。
              */
             issue_codes?: ("calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
             retry?: components["schemas"]["RetryConfig"];
@@ -3737,7 +3878,7 @@ export interface components {
              */
             name: "punctuation_missing_wrap" | "punctuation_wrap_loss_wrap" | "width_mix_normalize";
             /** @default true */
-            enabled: boolean;
+            enabled?: boolean;
         };
         /**
          * @description 本地改写轮次配置（纯本地、不调 LLM）。机械修复 QA 报出的高频安全问题子集。
@@ -3788,12 +3929,10 @@ export interface components {
             /**
              * @description 保留的注音分类列表
              * @default [
-             *       "phonetic",
-             *       "semantic",
              *       "creative"
              *     ]
              */
-            preserve_kinds: ("phonetic" | "semantic" | "creative")[];
+            preserve_kinds?: ("phonetic" | "semantic" | "creative")[];
         };
         ProfilePostprocessConfig: {
             enabled: boolean;
@@ -3860,7 +3999,7 @@ export interface components {
              * @description error 级别问题自动 reject；untranslated 例外——源语与目标语共用文字系统时降为 warning，该类"译文与原文相同"的段落不会被自动 reject
              * @default false
              */
-            auto_reject: boolean;
+            auto_reject?: boolean;
             /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、script_mismatch、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
             checks?: string[];
             /**
@@ -3868,21 +4007,26 @@ export interface components {
              * @default char_weight
              * @enum {string}
              */
-            length_method: "char_weight" | "word_count";
+            length_method?: "char_weight" | "word_count";
             /**
              * Format: double
              * @description 译文/原文最短长度比，0 表示不检测
-             * @default 0
+             * @default 0.2
              */
-            length_ratio_min: number;
+            length_ratio_min?: number;
             /**
              * Format: double
              * @description 译文/原文最长长度比，0 表示不检测
-             * @default 0
+             * @default 3
              */
-            length_ratio_max: number;
+            length_ratio_max?: number;
         };
         ExecutionProfileConfig: {
+            /**
+             * @default 1
+             * @enum {integer}
+             */
+            schema_version: 1;
             protect: components["schemas"]["ProfileProtectConfig"];
             ruby?: components["schemas"]["ProfileRubyConfig"];
             postprocess: components["schemas"]["ProfilePostprocessConfig"];
@@ -3890,6 +4034,121 @@ export interface components {
             glossary: components["schemas"]["ProfileGlossaryConfig"];
             context: components["schemas"]["ProfileContextConfig"];
             qa?: components["schemas"]["ProfileQAConfig"];
+        };
+        ProfileProtectConfigInput: {
+            enabled?: boolean;
+            rules?: ("code" | "link" | "placeholder" | "xml")[];
+        };
+        ProfileRubyConfigInput: {
+            enabled?: boolean;
+            /**
+             * @description 保留的注音分类列表
+             * @default [
+             *       "creative"
+             *     ]
+             */
+            preserve_kinds?: ("phonetic" | "semantic" | "creative")[];
+        };
+        ProfilePostprocessConfigInput: {
+            enabled?: boolean;
+            trim_spaces?: boolean;
+        };
+        ProfileRepairConfigInput: {
+            enabled?: boolean;
+            json_structural?: boolean;
+            schema_aliases?: boolean;
+            placeholder_normalize?: boolean;
+            prompt_upgrade?: boolean;
+        };
+        ProfileBootstrapConfigInput: {
+            /**
+             * @description 是否启用内联自举
+             * @default false
+             */
+            enabled?: boolean;
+            /**
+             * Format: double
+             * @description 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
+             */
+            max_terms_per_1000_chars?: number;
+            /** @description 内联自举术语源文最短字符数 */
+            min_source_len?: number;
+            /**
+             * @description 并发术语冲突处理策略
+             * @enum {string}
+             */
+            inline_conflict_strategy?: "off" | "rewrite-local";
+        };
+        ProfileGlossaryConfigInput: {
+            bootstrap?: components["schemas"]["ProfileBootstrapConfigInput"];
+        };
+        ProfileContextConfigInput: {
+            /**
+             * @description 是否启用上下文窗口
+             * @default true
+             */
+            enabled?: boolean;
+            /**
+             * @description 上下文取前 N 段
+             * @default 1
+             */
+            before?: number;
+            /**
+             * @description 上下文取后 N 段
+             * @default 1
+             */
+            after?: number;
+            /**
+             * @description 每个上下文段落的字符数上限（按 rune 计，超限截断并补省略号）；0 表示不限制
+             * @default 0
+             */
+            max_chars?: number;
+        };
+        ProfileQAConfigInput: {
+            /**
+             * @description 是否启用翻译质量检测
+             * @default false
+             */
+            enabled?: boolean;
+            /**
+             * @description error 级别问题自动 reject；untranslated 例外——源语与目标语共用文字系统时降为 warning，该类"译文与原文相同"的段落不会被自动 reject
+             * @default false
+             */
+            auto_reject?: boolean;
+            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、script_mismatch、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
+            checks?: string[];
+            /**
+             * @description 长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词
+             * @default char_weight
+             * @enum {string}
+             */
+            length_method?: "char_weight" | "word_count";
+            /**
+             * Format: double
+             * @description 译文/原文最短长度比，0 表示不检测
+             * @default 0.2
+             */
+            length_ratio_min?: number;
+            /**
+             * Format: double
+             * @description 译文/原文最长长度比，0 表示不检测
+             * @default 3
+             */
+            length_ratio_max?: number;
+        };
+        ExecutionProfileConfigInput: {
+            /**
+             * @default 1
+             * @enum {integer}
+             */
+            schema_version?: 1;
+            protect?: components["schemas"]["ProfileProtectConfigInput"];
+            ruby?: components["schemas"]["ProfileRubyConfigInput"];
+            postprocess?: components["schemas"]["ProfilePostprocessConfigInput"];
+            repair?: components["schemas"]["ProfileRepairConfigInput"];
+            glossary?: components["schemas"]["ProfileGlossaryConfigInput"];
+            context?: components["schemas"]["ProfileContextConfigInput"];
+            qa?: components["schemas"]["ProfileQAConfigInput"];
         };
         NullableGauge: number | null;
         RuntimeRunner: {
@@ -3992,6 +4251,199 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    ListUserCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前用户拥有的凭据元数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateUserCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建凭据和首个加密版本 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOrgCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 组织凭据元数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateOrgCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建组织凭据 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListCredentialVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 版本元数据，不返回密钥或密文 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialVersionList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RotateCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotateCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description 新版本绑定 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialBinding"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RevokeCredentialVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已撤销（幂等） */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CollectCredentialVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已删除版本数 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        deleted_versions: number;
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     Ping: {
         parameters: {
             query?: never;
@@ -4059,6 +4511,7 @@ export interface operations {
             400: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

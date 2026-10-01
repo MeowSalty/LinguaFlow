@@ -7,25 +7,24 @@
  * 用法：在 frontend/ 目录下执行
  *   node --import jiti/register scripts/generate-openapi-types.ts
  */
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 import openapiTS, { astToString, COMMENT_HEADER } from 'openapi-typescript'
 import ts from 'typescript'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const INPUT = new URL(`file://${path.resolve(__dirname, '../../api/openapi/openapi-3.0.yaml')}`)
+const INPUT = pathToFileURL(path.resolve(__dirname, '../../api/openapi/openapi-3.0.yaml'))
 const OUTPUT = path.resolve(__dirname, '../src/api/types.d.ts')
 
-const FILE = ts.factory.createIdentifier('File')
+const FILE = ts.factory.createTypeReferenceNode('File', undefined)
 const NULL = ts.factory.createLiteralTypeNode(ts.factory.createNull())
 
 const ast = await openapiTS(INPUT, {
-  transform(schemaObject) {
+  defaultNonNullable: false,
+  transform(schemaObject): ts.TypeNode | undefined {
     if (schemaObject.format === 'binary') {
-      return schemaObject.nullable
-        ? ts.factory.createUnionTypeNode([FILE, NULL])
-        : FILE
+      return schemaObject.nullable ? ts.factory.createUnionTypeNode([FILE, NULL]) : FILE
     }
   },
 })

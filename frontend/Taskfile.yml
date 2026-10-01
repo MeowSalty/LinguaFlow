@@ -8,7 +8,7 @@ tasks:
     desc: 读取已同步的 OpenAPI bundle，仅生成前端 TypeScript 类型
     deps: [openapi:verify]
     cmds:
-      - pnpm exec openapi-typescript ../api/openapi/openapi-3.0.yaml -o src/api/types.d.ts
+      - pnpm exec openapi-typescript ../api/openapi/openapi-3.0.yaml --default-non-nullable false -o src/api/types.d.ts
   openapi:verify:
     desc: 校验 OpenAPI 源文件与已同步 bundle 的类型合同一致
     cmds: [pnpm exec vitest run tests/unit/openapi-contract.test.ts]
