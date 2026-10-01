@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
@@ -24,13 +25,18 @@ import (
 type EngineFactory struct {
 	logger      *slog.Logger
 	limiterPool *backend.LimiterPool
+	httpClients telemetry.HTTPClientFactory
 }
 
-func NewEngineFactory(logger *slog.Logger, limiterPool *backend.LimiterPool) *EngineFactory {
+func NewEngineFactory(logger *slog.Logger, limiterPool *backend.LimiterPool, clients ...telemetry.HTTPClientFactory) *EngineFactory {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &EngineFactory{logger: logger, limiterPool: limiterPool}
+	f := &EngineFactory{logger: logger, limiterPool: limiterPool}
+	if len(clients) > 0 {
+		f.httpClients = clients[0]
+	}
+	return f
 }
 
 // BuildEngine constructs a fully configured engine.Engine from a snapshot.
@@ -63,10 +69,11 @@ func (f *EngineFactory) BuildEngineWithConfig(
 		var err error
 		if rs.Mode != "correct" {
 			bCfg := backend.Config{
-				Name:    rs.Backend.Name,
-				Type:    rs.Backend.Type,
-				Enabled: true,
-				Options: rs.Backend.Options,
+				Name:       rs.Backend.Name,
+				Type:       rs.Backend.Type,
+				Enabled:    true,
+				Options:    rs.Backend.Options,
+				HTTPClient: telemetry.ClientFor(f.httpClients, rs.Backend.Type, "generate"),
 			}
 			b, err = backend.Build(bCfg)
 			if err != nil {
@@ -75,8 +82,12 @@ func (f *EngineFactory) BuildEngineWithConfig(
 
 			b = backend.NewMeteredBackend(b)
 
-			if f.limiterPool != nil && rs.Backend.RateLimitPerMinute > 0 {
-				limiter := f.limiterPool.Get(rs.Backend.ID, rs.Backend.RateLimitPerMinute)
+			if f.limiterPool != nil {
+				limiter, lookupErr := f.limiterPool.Lookup(rs.Backend.ID)
+				if lookupErr != nil {
+					_ = b.Close()
+					return nil, fmt.Errorf("round[%d] rate limit policy: %w", i, lookupErr)
+				}
 				b = backend.NewRateLimitedBackend(b, limiter)
 			}
 		}
@@ -127,18 +138,23 @@ func (f *EngineFactory) BuildEngineWithConfig(
 	rubyRetryAttempts := 0
 	if snapshot.RubyRetry != nil && snapshot.RubyRetry.Enabled {
 		rrCfg := backend.Config{
-			Name:    snapshot.RubyRetry.Backend.Name,
-			Type:    snapshot.RubyRetry.Backend.Type,
-			Enabled: true,
-			Options: snapshot.RubyRetry.Backend.Options,
+			Name:       snapshot.RubyRetry.Backend.Name,
+			Type:       snapshot.RubyRetry.Backend.Type,
+			Enabled:    true,
+			Options:    snapshot.RubyRetry.Backend.Options,
+			HTTPClient: telemetry.ClientFor(f.httpClients, snapshot.RubyRetry.Backend.Type, "generate"),
 		}
 		rrBackend, err := backend.Build(rrCfg)
 		if err != nil {
 			return nil, fmt.Errorf("ruby retry backend: %w", err)
 		}
 		rrBackend = backend.NewMeteredBackend(rrBackend)
-		if f.limiterPool != nil && snapshot.RubyRetry.Backend.RateLimitPerMinute > 0 {
-			limiter := f.limiterPool.Get(snapshot.RubyRetry.Backend.ID, snapshot.RubyRetry.Backend.RateLimitPerMinute)
+		if f.limiterPool != nil {
+			limiter, lookupErr := f.limiterPool.Lookup(snapshot.RubyRetry.Backend.ID)
+			if lookupErr != nil {
+				_ = rrBackend.Close()
+				return nil, fmt.Errorf("ruby retry rate limit policy: %w", lookupErr)
+			}
 			rrBackend = backend.NewRateLimitedBackend(rrBackend, limiter)
 		}
 		rubyRetryBackends = []backend.Backend{rrBackend}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type createGlossaryEntryRequest struct {
@@ -54,8 +55,8 @@ func toGlossaryEntryResponse(e *ent.GlossaryEntry) glossaryEntryResponse {
 		Forbidden:     e.Forbidden,
 		Mandatory:     e.Mandatory,
 		Notes:         e.Notes,
-		CreatedAt:     e.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:     e.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:     timeutil.Format(e.CreatedAt),
+		UpdatedAt:     timeutil.Format(e.UpdatedAt),
 	}
 }
 

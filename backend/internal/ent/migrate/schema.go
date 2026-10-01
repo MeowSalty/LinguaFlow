@@ -14,6 +14,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "visibility_scope", Type: field.TypeEnum, Enums: []string{"legacy", "unknown", "personal", "organization", "project"}, Default: "legacy"},
 		{Name: "action", Type: field.TypeString},
 		{Name: "resource_type", Type: field.TypeString},
 		{Name: "resource_id", Type: field.TypeInt, Nullable: true},
@@ -31,19 +32,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "activity_logs_organizations_activity_logs",
-				Columns:    []*schema.Column{ActivityLogsColumns[8]},
+				Columns:    []*schema.Column{ActivityLogsColumns[9]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "activity_logs_projects_activity_logs",
-				Columns:    []*schema.Column{ActivityLogsColumns[9]},
+				Columns:    []*schema.Column{ActivityLogsColumns[10]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "activity_logs_users_activity_logs",
-				Columns:    []*schema.Column{ActivityLogsColumns[10]},
+				Columns:    []*schema.Column{ActivityLogsColumns[11]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -287,6 +288,16 @@ var (
 				Name:    "job_project_id_id",
 				Unique:  false,
 				Columns: []*schema.Column{JobsColumns[14], JobsColumns[0]},
+			},
+			{
+				Name:    "job_updated_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{JobsColumns[2], JobsColumns[0]},
+			},
+			{
+				Name:    "job_status_updated_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{JobsColumns[3], JobsColumns[2], JobsColumns[0]},
 			},
 		},
 	}
@@ -715,6 +726,9 @@ var (
 		{Name: "new_target", Type: field.TypeString},
 		{Name: "total_segments", Type: field.TypeInt},
 		{Name: "processed_segments", Type: field.TypeInt, Default: 0},
+		{Name: "checkpoint_version", Type: field.TypeInt, Default: 0},
+		{Name: "next_segment_index", Type: field.TypeInt, Default: 0},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
 		{Name: "segment_ids", Type: field.TypeString, Size: 2147483647},
 		{Name: "resource_ids", Type: field.TypeString, Size: 2147483647},
@@ -733,19 +747,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "sync_tasks_glossary_entries_sync_tasks",
-				Columns:    []*schema.Column{SyncTasksColumns[13]},
+				Columns:    []*schema.Column{SyncTasksColumns[16]},
 				RefColumns: []*schema.Column{GlossaryEntriesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "sync_tasks_projects_sync_tasks",
-				Columns:    []*schema.Column{SyncTasksColumns[14]},
+				Columns:    []*schema.Column{SyncTasksColumns[17]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "sync_tasks_users_sync_tasks",
-				Columns:    []*schema.Column{SyncTasksColumns[15]},
+				Columns:    []*schema.Column{SyncTasksColumns[18]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -754,12 +768,22 @@ var (
 			{
 				Name:    "synctask_project_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{SyncTasksColumns[14], SyncTasksColumns[7]},
+				Columns: []*schema.Column{SyncTasksColumns[17], SyncTasksColumns[10]},
 			},
 			{
 				Name:    "synctask_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{SyncTasksColumns[7], SyncTasksColumns[1]},
+				Columns: []*schema.Column{SyncTasksColumns[10], SyncTasksColumns[1]},
+			},
+			{
+				Name:    "synctask_updated_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{SyncTasksColumns[2], SyncTasksColumns[0]},
+			},
+			{
+				Name:    "synctask_status_updated_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{SyncTasksColumns[10], SyncTasksColumns[2], SyncTasksColumns[0]},
 			},
 		},
 	}
@@ -850,6 +874,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "visibility_scope", Type: field.TypeEnum, Enums: []string{"legacy", "unknown", "personal", "organization", "project"}, Default: "legacy"},
 		{Name: "source", Type: field.TypeString, Default: "job"},
 		{Name: "api_calls", Type: field.TypeInt, Default: 0},
 		{Name: "input_tokens", Type: field.TypeInt, Default: 0},
@@ -868,19 +893,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "usage_records_organizations_usage_records",
-				Columns:    []*schema.Column{UsageRecordsColumns[9]},
+				Columns:    []*schema.Column{UsageRecordsColumns[10]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "usage_records_projects_usage_records",
-				Columns:    []*schema.Column{UsageRecordsColumns[10]},
+				Columns:    []*schema.Column{UsageRecordsColumns[11]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "usage_records_users_usage_records",
-				Columns:    []*schema.Column{UsageRecordsColumns[11]},
+				Columns:    []*schema.Column{UsageRecordsColumns[12]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},

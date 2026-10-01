@@ -1,7 +1,12 @@
 Organization:
   type: object
-  required: [id, name, slug]
+  required: [id, name, slug, current_user_role]
   properties:
+    current_user_role:
+      type: string
+      enum: [owner, admin, member]
+      readOnly: true
+      description: 当前请求者在此组织的角色，与系统角色无关。
     id:
       type: integer
     name:
@@ -15,12 +20,16 @@ Organization:
 
 OrganizationRequest:
   type: object
+  additionalProperties: false
+  description: name 去除首尾空白，slug 按身份规则规范化，两者必填且各自全局唯一。可选字段省略时更新保留、创建使用空值，空串清空，不接受 null。
   required: [name, slug]
   properties:
     name:
       type: string
+      minLength: 1
     slug:
       type: string
+      minLength: 1
     display_name:
       type: string
     description:
@@ -58,16 +67,23 @@ OrganizationMemberListResponse:
 
 AddOrganizationMemberRequest:
   type: object
+  additionalProperties: false
   required: [username]
   properties:
     username:
       type: string
+      minLength: 1
+      description: 精确匹配已有账号用户名；不发送邀请。
     role:
       type: string
       enum: [owner, admin, member]
+      default: member
+      description: 省略时为 member；admin 仅能添加 member，owner 可授予任意合法角色，显式空值或 null 无效。
 
 UpdateOrganizationMemberRequest:
   type: object
+  additionalProperties: false
+  description: 仅 owner 可修改角色，必须至少保留一位 owner；省略、空值及 null 均无效。
   required: [role]
   properties:
     role:

@@ -530,15 +530,13 @@ func (s *PreviewService) ApplyPreview(
 	auditEvent := AuditEvent{
 		ActorUserID:  actorUserID,
 		ProjectID:    &projectID,
-		ResourceID:   resourceID,
+		ResourceID:   segmentID,
 		Action:       action,
 		ResourceType: "segment",
 		Message:      message,
 		Metadata:     metadata,
 	}
-	if projectRow.OwnerOrgID != nil {
-		auditEvent.OrgID = projectRow.OwnerOrgID
-	}
+	auditEvent.OrgID = EffectiveProjectOrgID(projectRow)
 	if s.audit != nil {
 		_ = s.audit.Record(ctx, auditEvent)
 	}
@@ -553,6 +551,7 @@ func (s *PreviewService) ApplyPreview(
 
 func (s *PreviewService) recordUsage(ctx context.Context, input PreviewInput, projectRow *ent.Project, metrics backend.MeterMetrics) error {
 	usage := s.client.UsageRecord.Create().
+		SetVisibilityScope("project").
 		SetProjectID(input.ProjectID).
 		SetSource("preview").
 		SetSegmentCount(1).
@@ -563,8 +562,8 @@ func (s *PreviewService) recordUsage(ctx context.Context, input PreviewInput, pr
 	if input.ActorUserID > 0 {
 		usage.SetUserID(input.ActorUserID)
 	}
-	if projectRow.OwnerOrgID != nil {
-		usage.SetOrganizationID(*projectRow.OwnerOrgID)
+	if orgID := EffectiveProjectOrgID(projectRow); orgID != nil {
+		usage.SetOrganizationID(*orgID)
 	}
 	return usage.Exec(ctx)
 }

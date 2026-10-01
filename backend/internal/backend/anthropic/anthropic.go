@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
@@ -346,6 +347,9 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(u))
 	}
+	if cfg.HTTPClient != nil {
+		clientOpts = append(clientOpts, option.WithHTTPClient(cfg.HTTPClient))
+	}
 	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
 	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone:
@@ -383,7 +387,7 @@ type modelLister struct {
 	client sdk.Client
 }
 
-func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
+func modelListerFactory(opts map[string]any, clients ...*http.Client) (backend.ModelLister, error) {
 	apiKey := backend.StringOpt(opts, "api_key", "")
 	if apiKey == "" {
 		return nil, errors.New("anthropic: api_key is required")
@@ -396,6 +400,9 @@ func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
 	}
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(u))
+	}
+	if len(clients) > 0 && clients[0] != nil {
+		clientOpts = append(clientOpts, option.WithHTTPClient(clients[0]))
 	}
 	return &modelLister{client: sdk.NewClient(clientOpts...)}, nil
 }

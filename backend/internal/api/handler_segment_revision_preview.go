@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // handlePreviewResourceSegmentRevision 单段修订预览。
@@ -118,7 +119,7 @@ func toSegmentRevisionPreviewResponse(result *service.RevisionPreviewOutput) Seg
 	}
 	if result.ApplyToken != "" {
 		response.ApplyToken = &result.ApplyToken
-		expires := result.ApplyExpiresAt
+		expires := timeutil.Normalize(result.ApplyExpiresAt)
 		response.ApplyExpiresAt = &expires
 	}
 	if result.Snapshot != nil {

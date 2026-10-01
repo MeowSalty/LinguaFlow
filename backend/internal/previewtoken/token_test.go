@@ -5,6 +5,21 @@ import (
 	"time"
 )
 
+func TestEncodeReturnsActualJWTExpiry(t *testing.T) {
+	codec := NewCodec("test-secret", time.Minute+123*time.Millisecond)
+	token, expires, err := codec.Encode(ApplyClaims{SegmentID: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := codec.Decode(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expires.Location() != time.UTC || !expires.Equal(claims.ExpiresAt.Time) {
+		t.Fatalf("returned expiry %v does not match JWT expiry %v", expires, claims.ExpiresAt.Time)
+	}
+}
+
 func TestApplyClaimsKindRoundTrip(t *testing.T) {
 	codec := NewCodec("test-secret", time.Minute)
 	want := ApplyClaims{

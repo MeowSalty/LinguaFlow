@@ -226,13 +226,12 @@ func (s *Server) handleApplyResourceSegmentsSearchReplace(w http.ResponseWriter,
 
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{
 		ActorUserID:  authUser.User.ID,
+		ProjectID:    &projectID,
 		Action:       "segment.search_replace",
 		ResourceType: "resource",
 		ResourceID:   resourceID,
 		Message:      "搜索替换段落译文",
 		Metadata: map[string]any{
-			"find":           opts.Find,
-			"replace_with":   opts.ReplaceWith,
 			"match_mode":     opts.MatchMode,
 			"case_sensitive": opts.CaseSensitive,
 			"whole_word":     opts.WholeWord,
@@ -288,6 +287,7 @@ func (s *Server) handleUndoResourceSegmentsSearchReplace(w http.ResponseWriter, 
 
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{
 		ActorUserID:  authUser.User.ID,
+		ProjectID:    &projectID,
 		Action:       "segment.search_replace_undo",
 		ResourceType: "resource",
 		ResourceID:   resourceID,

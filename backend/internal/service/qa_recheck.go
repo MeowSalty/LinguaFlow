@@ -114,11 +114,14 @@ func (s *QARecheckService) Recheck(ctx context.Context, actorUserID, projectID i
 	}
 
 	// 2. 加载执行策略并复核访问权（语义对齐 job.snapshotProfile）。
-	tp, err := s.profiles.GetByID(ctx, input.ProfileID)
+	tp, err := s.profiles.GetByID(ctx, actorUserID, input.ProfileID)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.profiles.CheckAccess(ctx, actorUserID, tp); err != nil {
+		return nil, err
+	}
+	if err := validateSharedReference(tp.Scope, tp.OwnerOrgID, EffectiveProjectOrgID(projectRow)); err != nil {
 		return nil, err
 	}
 	tp.Config.NormalizeContext()

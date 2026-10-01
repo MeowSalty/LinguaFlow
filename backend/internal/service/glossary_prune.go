@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
@@ -111,6 +112,7 @@ type GlossaryPruneService struct {
 	glossary       *GlossaryService
 	pruneTemplates *PrunePromptTemplateService
 	limiterPool    *backend.LimiterPool
+	httpClients    telemetry.HTTPClientFactory
 	logger         *slog.Logger
 }
 
@@ -123,11 +125,12 @@ func NewGlossaryPruneService(
 	pruneTemplates *PrunePromptTemplateService,
 	limiterPool *backend.LimiterPool,
 	logger *slog.Logger,
+	clients ...telemetry.HTTPClientFactory,
 ) *GlossaryPruneService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &GlossaryPruneService{
+	s := &GlossaryPruneService{
 		client:         client,
 		projects:       projects,
 		backends:       backends,
@@ -136,6 +139,10 @@ func NewGlossaryPruneService(
 		limiterPool:    limiterPool,
 		logger:         logger,
 	}
+	if len(clients) > 0 {
+		s.httpClients = clients[0]
+	}
+	return s
 }
 
 // defaultPruneRepairOptions 返回精简场景的默认修复选项。
@@ -215,8 +222,11 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	if templateID == 0 {
 		templateID = templates.BuiltinPrunePromptTemplateID
 	}
-	tmpl, err := s.pruneTemplates.GetByID(ctx, templateID)
+	tmpl, err := s.pruneTemplates.GetByID(ctx, actorUserID, templateID)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateSharedReference(tmpl.Scope, tmpl.OwnerOrgID, EffectiveProjectOrgID(projectRow)); err != nil {
 		return nil, err
 	}
 
@@ -258,18 +268,22 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	}
 
 	b, err := backend.Build(backend.Config{
-		Name:    backendRecord.Name,
-		Type:    backendRecord.Type,
-		Enabled: true,
-		Options: backendRecord.Options,
+		Name:       backendRecord.Name,
+		Type:       backendRecord.Type,
+		Enabled:    true,
+		Options:    backendRecord.Options,
+		HTTPClient: telemetry.ClientFor(s.httpClients, backendRecord.Type, "generate"),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("prune: build backend: %w", err)
 	}
 	defer b.Close()
 
-	if s.limiterPool != nil && backendRecord.RateLimitPerMinute > 0 {
-		limiter := s.limiterPool.Get(backendRecord.ID, backendRecord.RateLimitPerMinute)
+	if s.limiterPool != nil {
+		limiter, err := s.limiterPool.Lookup(backendRecord.ID)
+		if err != nil {
+			return nil, fmt.Errorf("prune: rate limit policy: %w", err)
+		}
 		b = backend.NewRateLimitedBackend(b, limiter)
 	}
 

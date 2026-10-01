@@ -4,181 +4,181 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 var (
-	ErrBootstrapPromptTemplateNotFound     = errors.New("bootstrap prompt template not found")
-	ErrBootstrapPromptTemplateScopeInvalid = errors.New("bootstrap prompt template scope invalid")
-	ErrBootstrapPromptTemplateInUse        = errors.New("bootstrap prompt template is referenced by execution plan(s)")
+	ErrBootstrapPromptTemplateNotFound     = errors.New("bootstrap_prompt_template not found")
+	ErrBootstrapPromptTemplateScopeInvalid = errors.New("bootstrap_prompt_template scope invalid")
+	ErrBootstrapPromptTemplateInUse        = errors.New("bootstrap_prompt_template is referenced by execution plan(s)")
 )
 
-// BootstrapPromptTemplateService 提供术语抽取提示词模板的 CRUD 操作。
-type BootstrapPromptTemplateService struct {
-	client *ent.Client
-}
+// BootstrapPromptTemplateService manages personal and organization templates.
+type BootstrapPromptTemplateService struct{ client *ent.Client }
 
-// NewBootstrapPromptTemplateService 创建 BootstrapPromptTemplateService 实例。
 func NewBootstrapPromptTemplateService(client *ent.Client) *BootstrapPromptTemplateService {
 	return &BootstrapPromptTemplateService{client: client}
 }
 
-// CreateBootstrapPromptTemplateInput 创建术语抽取提示词模板的输入参数。
 type CreateBootstrapPromptTemplateInput struct {
 	Name        string
 	Description string
-	Scope       string // user / org
-	OwnerUserID *int
-	OwnerOrgID  *int
+	OrgID       *int
 	Content     string
 }
-
-// UpdateBootstrapPromptTemplateInput 更新术语抽取提示词模板的输入参数。
 type UpdateBootstrapPromptTemplateInput struct {
 	Name        *string
 	Description *string
 	Content     *string
 }
 
-// ListByUser 列出指定用户的所有术语抽取提示词模板（包含内置模板）。
+// ListByUser preserves the existing personal plus builtin list.
 func (s *BootstrapPromptTemplateService) ListByUser(ctx context.Context, userID int) ([]*ent.BootstrapPromptTemplate, error) {
-	dbTemplates, err := s.client.BootstrapPromptTemplate.Query().
-		Where(
-			bootstrapprompttemplate.ScopeEQ("user"),
-			bootstrapprompttemplate.OwnerUserIDEQ(userID),
-		).
-		Order(ent.Asc(bootstrapprompttemplate.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list bootstrap prompt templates: %w", err)
+	if userID <= 0 {
+		return nil, ErrInvalidInput
 	}
-	return append(templates.BuiltinBootstrapPromptTemplates(), dbTemplates...), nil
+	rows, err := s.client.BootstrapPromptTemplate.Query().Where(
+		bootstrapprompttemplate.ScopeEQ(ScopeUser), bootstrapprompttemplate.OwnerUserIDEQ(userID), bootstrapprompttemplate.OwnerOrgIDIsNil(),
+	).Order(ent.Asc(bootstrapprompttemplate.FieldID)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list bootstrap_prompt_template: %w", err)
+	}
+	return append(templates.BuiltinBootstrapPromptTemplates(), rows...), nil
 }
 
-// ListByOrg 列出指定组织的所有术语抽取提示词模板（包含内置模板）。
-func (s *BootstrapPromptTemplateService) ListByOrg(ctx context.Context, orgID int) ([]*ent.BootstrapPromptTemplate, error) {
-	dbTemplates, err := s.client.BootstrapPromptTemplate.Query().
-		Where(
-			bootstrapprompttemplate.ScopeEQ("org"),
-			bootstrapprompttemplate.OwnerOrgIDEQ(orgID),
-		).
-		Order(ent.Asc(bootstrapprompttemplate.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list bootstrap prompt templates: %w", err)
+// ListByOrg returns only the requested organization's templates.
+func (s *BootstrapPromptTemplateService) ListByOrg(ctx context.Context, actorID, orgID int) ([]*ent.BootstrapPromptTemplate, error) {
+	if err := requireSharedOrganization(ctx, s.client, actorID, orgID, false); err != nil {
+		return nil, err
 	}
-	return append(templates.BuiltinBootstrapPromptTemplates(), dbTemplates...), nil
+	return s.client.BootstrapPromptTemplate.Query().Where(
+		bootstrapprompttemplate.ScopeEQ(ScopeOrg), bootstrapprompttemplate.OwnerOrgIDEQ(orgID), bootstrapprompttemplate.OwnerUserIDIsNil(),
+	).Order(ent.Asc(bootstrapprompttemplate.FieldID)).All(ctx)
 }
 
-// GetByID 根据 ID 获取术语抽取提示词模板（支持内置模板）。
-func (s *BootstrapPromptTemplateService) GetByID(ctx context.Context, id int) (*ent.BootstrapPromptTemplate, error) {
+func (s *BootstrapPromptTemplateService) GetByID(ctx context.Context, actorID, id int) (*ent.BootstrapPromptTemplate, error) {
+	var row *ent.BootstrapPromptTemplate
 	if templates.IsBuiltinID(id) {
-		pt := templates.BuiltinBootstrapPromptTemplate(id)
-		if pt == nil {
+		row = templates.BuiltinBootstrapPromptTemplate(id)
+		if row == nil {
 			return nil, ErrBootstrapPromptTemplateNotFound
 		}
-		return pt, nil
-	}
-	pt, err := s.client.BootstrapPromptTemplate.Get(ctx, id)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrBootstrapPromptTemplateNotFound
+	} else {
+		var err error
+		row, err = s.client.BootstrapPromptTemplate.Get(ctx, id)
+		if err != nil {
+			return nil, sharedAccessError(err, ErrBootstrapPromptTemplateNotFound)
 		}
-		return nil, fmt.Errorf("query bootstrap prompt template: %w", err)
 	}
-	return pt, nil
+	if err := checkSharedAccess(ctx, s.client, actorID, row.Scope, row.OwnerUserID, row.OwnerOrgID, false); err != nil {
+		return nil, sharedAccessError(err, ErrBootstrapPromptTemplateNotFound)
+	}
+	return row, nil
 }
 
-// Create 创建术语抽取提示词模板。
-func (s *BootstrapPromptTemplateService) Create(ctx context.Context, input CreateBootstrapPromptTemplateInput) (*ent.BootstrapPromptTemplate, error) {
-	if input.Scope == "" {
-		input.Scope = "user"
+func (s *BootstrapPromptTemplateService) Create(ctx context.Context, actorID int, input CreateBootstrapPromptTemplateInput) (*ent.BootstrapPromptTemplate, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" || actorID <= 0 {
+		return nil, ErrInvalidInput
 	}
-	if input.Scope != "user" && input.Scope != "org" && input.Scope != "system" {
-		return nil, ErrBootstrapPromptTemplateScopeInvalid
-	}
-
-	create := s.client.BootstrapPromptTemplate.Create().
-		SetName(input.Name).
-		SetDescription(input.Description).
-		SetScope(input.Scope).
-		SetContent(input.Content)
-
-	if input.OwnerUserID != nil {
-		create.SetOwnerUserID(*input.OwnerUserID)
-	}
-	if input.OwnerOrgID != nil {
-		create.SetOwnerOrgID(*input.OwnerOrgID)
-	}
-
-	pt, err := create.Save(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("create bootstrap prompt template: %w", err)
-	}
-	return pt, nil
-}
-
-// Update 更新术语抽取提示词模板（内置模板不可修改）。
-func (s *BootstrapPromptTemplateService) Update(ctx context.Context, id int, input UpdateBootstrapPromptTemplateInput) (*ent.BootstrapPromptTemplate, error) {
-	if templates.IsBuiltinID(id) {
-		return nil, ErrBootstrapPromptTemplateNotFound
-	}
-	pt, err := s.GetByID(ctx, id)
+	var row *ent.BootstrapPromptTemplate
+	err := withSharedMutation(ctx, s.client, input.OrgID, func(client *ent.Client) error {
+		scope, err := sharedCreateScope(ctx, client, actorID, input.OrgID)
+		if err != nil {
+			return err
+		}
+		create := client.BootstrapPromptTemplate.Create().SetName(name).SetDescription(input.Description).SetScope(scope).SetContent(input.Content)
+		if input.OrgID == nil {
+			create.SetOwnerUserID(actorID)
+		} else {
+			create.SetOwnerOrgID(*input.OrgID)
+		}
+		row, err = create.Save(ctx)
+		if err != nil {
+			return err
+		}
+		return recordSharedAudit(ctx, client, actorID, input.OrgID, "bootstrap_prompt_template", "create", row.ID)
+	})
 	if err != nil {
 		return nil, err
 	}
-	if pt.Scope == "system" {
-		return nil, ErrBootstrapPromptTemplateNotFound // 系统模板不可修改
-	}
-
-	update := s.client.BootstrapPromptTemplate.UpdateOneID(id)
-
-	if input.Name != nil {
-		update.SetName(*input.Name)
-	}
-	if input.Description != nil {
-		update.SetDescription(*input.Description)
-	}
-	if input.Content != nil {
-		update.SetContent(*input.Content)
-	}
-
-	updated, err := update.Save(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("update bootstrap prompt template: %w", err)
-	}
-	return updated, nil
+	return row.Unwrap(), nil
 }
 
-// Delete 删除术语抽取提示词模板（内置模板不可删除）。
-func (s *BootstrapPromptTemplateService) Delete(ctx context.Context, id int) error {
-	if templates.IsBuiltinID(id) {
-		return ErrBootstrapPromptTemplateNotFound
+func (s *BootstrapPromptTemplateService) Update(ctx context.Context, actorID, id int, input UpdateBootstrapPromptTemplateInput) (*ent.BootstrapPromptTemplate, error) {
+	original, err := s.GetByID(ctx, actorID, id)
+	if err != nil {
+		return nil, err
 	}
-	pt, err := s.GetByID(ctx, id)
+	var row *ent.BootstrapPromptTemplate
+	err = withSharedMutation(ctx, s.client, original.OwnerOrgID, func(client *ent.Client) error {
+		bound := &BootstrapPromptTemplateService{client: client}
+		current, err := bound.GetByID(ctx, actorID, id)
+		if err != nil {
+			return err
+		}
+		if err := checkSharedAccess(ctx, client, actorID, current.Scope, current.OwnerUserID, current.OwnerOrgID, true); err != nil {
+			return sharedAccessError(err, ErrBootstrapPromptTemplateNotFound)
+		}
+		update := client.BootstrapPromptTemplate.UpdateOneID(id)
+		if input.Name != nil {
+			name := strings.TrimSpace(*input.Name)
+			if name == "" {
+				return ErrInvalidInput
+			}
+			update.SetName(name)
+		}
+		if input.Description != nil {
+			update.SetDescription(*input.Description)
+		}
+		if input.Content != nil {
+			update.SetContent(*input.Content)
+		}
+		row, err = update.Save(ctx)
+		if err != nil {
+			return sharedAccessError(err, ErrBootstrapPromptTemplateNotFound)
+		}
+		return recordSharedAudit(ctx, client, actorID, current.OwnerOrgID, "bootstrap_prompt_template", "update", row.ID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return row.Unwrap(), nil
+}
+
+func (s *BootstrapPromptTemplateService) Delete(ctx context.Context, actorID, id int) error {
+	original, err := s.GetByID(ctx, actorID, id)
 	if err != nil {
 		return err
 	}
-	if pt.Scope == "system" {
-		return ErrBootstrapPromptTemplateNotFound // 系统模板不可删除
-	}
-
-	// 检查是否有执行计划模板引用了该提示词模板（通过 extract 轮次）
-	plans, err := s.client.ExecutionPlanTemplate.Query().All(ctx)
-	if err != nil {
-		return fmt.Errorf("check execution plan references: %w", err)
-	}
-	for _, plan := range plans {
-		for _, round := range plan.Rounds {
-			if round.Mode == "extract" && round.Extract != nil && round.Extract.BootstrapTemplateID == id {
-				return fmt.Errorf("%w: %q is referenced by execution plan %q",
-					ErrBootstrapPromptTemplateInUse, pt.Name, plan.Name)
+	return withSharedMutation(ctx, s.client, original.OwnerOrgID, func(client *ent.Client) error {
+		bound := &BootstrapPromptTemplateService{client: client}
+		current, err := bound.GetByID(ctx, actorID, id)
+		if err != nil {
+			return err
+		}
+		if err := checkSharedAccess(ctx, client, actorID, current.Scope, current.OwnerUserID, current.OwnerOrgID, true); err != nil {
+			return sharedAccessError(err, ErrBootstrapPromptTemplateNotFound)
+		}
+		plans, err := client.ExecutionPlanTemplate.Query().Select(executionplantemplate.FieldRounds).All(ctx)
+		if err != nil {
+			return err
+		}
+		for _, plan := range plans {
+			for _, round := range plan.Rounds {
+				if round.Mode == "extract" && round.Extract != nil && round.Extract.BootstrapTemplateID == id {
+					return ErrBootstrapPromptTemplateInUse
+				}
 			}
 		}
-	}
-
-	return s.client.BootstrapPromptTemplate.DeleteOneID(id).Exec(ctx)
+		if err := client.BootstrapPromptTemplate.DeleteOneID(id).Exec(ctx); err != nil {
+			return sharedAccessError(err, ErrBootstrapPromptTemplateNotFound)
+		}
+		return recordSharedAudit(ctx, client, actorID, current.OwnerOrgID, "bootstrap_prompt_template", "delete", id)
+	})
 }

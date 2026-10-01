@@ -1,0 +1,134 @@
+OperationListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/OperationSummary'
+    next_cursor:
+      type: string
+
+OperationSummary:
+  oneOf:
+    - $ref: '#/TranslationOperation'
+    - $ref: '#/GlossarySyncOperation'
+  discriminator:
+    propertyName: task_type
+    mapping:
+      translation: '#/TranslationOperation'
+      glossary_sync: '#/GlossarySyncOperation'
+
+OperationBase:
+  type: object
+  required: [task_id, project_id, project_name, status, created_at, updated_at, started_at, supported_actions]
+  properties:
+    task_id:
+      type: string
+      pattern: '^[1-9][0-9]*$'
+    project_id:
+      type: integer
+      minimum: 1
+    project_name:
+      type: string
+    status:
+      type: string
+      enum: [pending, running, paused, completed, failed, cancelled]
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+    started_at:
+      type: string
+      format: date-time
+      nullable: true
+    supported_actions:
+      type: array
+      description: 类型能力，不是当前状态或用户权限许可；执行时必须再次鉴权。
+      items:
+        type: string
+        enum: [view, pause, resume, cancel, retry]
+
+TranslationOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      required: [task_type, trigger_type, progress]
+      properties:
+        task_type:
+          type: string
+          enum: [translation]
+        trigger_type:
+          type: string
+          enum: [manual, file_update, glossary_change, web_edit]
+        progress:
+          $ref: './job.yaml#/JobSummaryProgress'
+
+GlossarySyncOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      required: [task_type, progress]
+      properties:
+        task_type:
+          type: string
+          enum: [glossary_sync]
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        supported_actions:
+          type: array
+          items:
+            type: string
+            enum: [view, cancel]
+        progress:
+          type: object
+          required: [processed_segments, total_segments]
+          properties:
+            processed_segments:
+              type: integer
+              minimum: 0
+              description: 已检查并提交的段落数，包含安全跳过项。
+            total_segments:
+              type: integer
+              minimum: 0
+
+OperationCounts:
+  type: object
+  required: [pending, running, paused, recent_failed]
+  properties:
+    pending:
+      type: integer
+      minimum: 0
+    running:
+      type: integer
+      minimum: 0
+    paused:
+      type: integer
+      minimum: 0
+    recent_failed:
+      type: integer
+      minimum: 0
+
+OperationsSummaryResponse:
+  type: object
+  required: [total, by_type, recent_failed_since, as_of]
+  properties:
+    total:
+      $ref: '#/OperationCounts'
+    by_type:
+      type: object
+      required: [translation, glossary_sync]
+      properties:
+        translation:
+          $ref: '#/OperationCounts'
+        glossary_sync:
+          $ref: '#/OperationCounts'
+    recent_failed_since:
+      type: string
+      format: date-time
+    as_of:
+      type: string
+      format: date-time

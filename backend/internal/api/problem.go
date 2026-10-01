@@ -171,6 +171,24 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) boo
 
 func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, service.ErrExecutionPlanNotFound), errors.Is(err, service.ErrExecutionProfileNotFound),
+		errors.Is(err, service.ErrTranslationPromptTemplateNotFound), errors.Is(err, service.ErrBootstrapPromptTemplateNotFound),
+		errors.Is(err, service.ErrPrunePromptTemplateNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "配置不存在或不可访问")
+	case errors.Is(err, service.ErrExecutionPlanConfigInvalid):
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_config", err.Error())
+	case errors.Is(err, service.ErrOrganizationNameExists):
+		s.writeProblem(w, r, http.StatusConflict, "organization_name_exists", "组织名称已存在")
+	case errors.Is(err, service.ErrOrganizationSlugExists):
+		s.writeProblem(w, r, http.StatusConflict, "organization_slug_exists", "组织 slug 已存在")
+	case errors.Is(err, service.ErrMembershipExists):
+		s.writeProblem(w, r, http.StatusConflict, "membership_exists", "组织成员已存在")
+	case errors.Is(err, service.ErrOwnerRequired):
+		s.writeProblem(w, r, http.StatusConflict, "owner_required", "组织必须保留至少一位 owner")
+	case errors.Is(err, service.ErrOrganizationNotFound), errors.Is(err, service.ErrMembershipNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
+	case errors.Is(err, service.ErrCurrentPasswordMismatch):
+		s.writeProblemWithType(w, r, http.StatusBadRequest, urnPrefix+"current-password-mismatch", "current_password_mismatch", "当前密码不正确")
 	case errors.Is(err, service.ErrInvalidInput):
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	case errors.Is(err, service.ErrInvalidCredentials):

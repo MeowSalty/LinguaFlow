@@ -13,6 +13,7 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 )
 
@@ -70,7 +71,7 @@ func alignFaultClient(t *testing.T) (*ent.Client, *faultDriver) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	db.SetMaxOpenConns(1)
-	fd := &faultDriver{Driver: entsql.OpenDB(dialect.SQLite, db)}
+	fd := &faultDriver{Driver: database.NewDriver(entsql.OpenDB(dialect.SQLite, db))}
 	client := ent.NewClient(ent.Driver(fd))
 	if err := client.Schema.Create(context.Background()); err != nil {
 		t.Fatalf("migrate: %v", err)

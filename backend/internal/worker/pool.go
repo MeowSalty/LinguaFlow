@@ -6,15 +6,25 @@ import (
 	"sync"
 )
 
-// WorkerPool 管理多个 Worker goroutine，每个 Worker 独立从队列取任务执行。
-// 错误独立处理，不汇总。
+type PoolSnapshot struct {
+	Capacity int `json:"worker_capacity"`
+	Alive    int `json:"workers_alive"`
+	Busy     int `json:"workers_busy"`
+}
+
+// WorkerPool owns claims until ProcessOne returns, including resource and
+// limiter waiting, admission, and pause draining.
 type WorkerPool struct {
 	concurrency int
 	logger      *slog.Logger
+	once        sync.Once
 	wg          sync.WaitGroup
+	mu          sync.Mutex
+	alive       int
+	busy        int
+	done        chan struct{}
 }
 
-// NewWorkerPool 创建一个新的 WorkerPool。
 func NewWorkerPool(concurrency int, logger *slog.Logger) *WorkerPool {
 	if concurrency < 1 {
 		concurrency = 1
@@ -22,34 +32,67 @@ func NewWorkerPool(concurrency int, logger *slog.Logger) *WorkerPool {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &WorkerPool{
-		concurrency: concurrency,
-		logger:      logger,
-	}
+	return &WorkerPool{concurrency: concurrency, logger: logger, done: make(chan struct{})}
 }
 
-// Start 启动所有 Worker goroutine，从 queue 中 Dequeue 并调用 processFn 处理。
-// Worker 在 ctx 取消后停止取新任务，等待正在执行的任务完成后返回。
-func (wp *WorkerPool) Start(ctx context.Context, queue *Queue, processFn func(ctx context.Context, id int) error) {
-	for i := 0; i < wp.concurrency; i++ {
-		wp.wg.Add(1)
+func (wp *WorkerPool) Start(ctx context.Context, queue *Queue, processFn func(context.Context, int) error) {
+	wp.once.Do(func() {
+		wp.wg.Add(wp.concurrency)
+		for i := 0; i < wp.concurrency; i++ {
+			go func() {
+				wp.mu.Lock()
+				wp.alive++
+				wp.mu.Unlock()
+				defer func() {
+					wp.mu.Lock()
+					wp.alive--
+					wp.mu.Unlock()
+					wp.wg.Done()
+				}()
+				for {
+					execution, err := queue.Dequeue(ctx)
+					if err != nil {
+						return
+					}
+					wp.process(queue, execution, processFn)
+				}
+			}()
+		}
 		go func() {
-			defer wp.wg.Done()
-			for {
-				id, err := queue.Dequeue(ctx)
-				if err != nil {
-					return // ctx cancelled or queue closed
-				}
-				if err := processFn(ctx, id); err != nil {
-					wp.logger.Error("worker pool: task processing failed", "task_id", id, "err", err)
-				}
-				queue.Done(id)
-			}
+			wp.wg.Wait()
+			close(wp.done)
 		}()
+	})
+}
+
+func (wp *WorkerPool) process(queue *Queue, execution Execution, processFn func(context.Context, int) error) {
+	wp.mu.Lock()
+	wp.busy++
+	wp.mu.Unlock()
+	defer func() {
+		wp.mu.Lock()
+		wp.busy--
+		wp.mu.Unlock()
+		queue.Done(execution)
+	}()
+	if err := processFn(execution.Context(), execution.TaskID); err != nil && execution.Context().Err() == nil {
+		wp.logger.Error("worker pool: task processing failed", "task_id", execution.TaskID, "err", err)
 	}
 }
 
-// Wait 等待所有 Worker goroutine 完成。
-func (wp *WorkerPool) Wait() {
-	wp.wg.Wait()
+func (wp *WorkerPool) Wait() { <-wp.done }
+
+func (wp *WorkerPool) WaitContext(ctx context.Context) error {
+	select {
+	case <-wp.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (wp *WorkerPool) Snapshot() PoolSnapshot {
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+	return PoolSnapshot{Capacity: wp.concurrency, Alive: wp.alive, Busy: wp.busy}
 }

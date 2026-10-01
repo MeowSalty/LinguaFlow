@@ -10,28 +10,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
-type updateMeRequest struct {
-	DisplayName string `json:"display_name"`
-	Email       string `json:"email"`
-}
-
-type changePasswordRequest struct {
-	CurrentPassword string `json:"current_password"`
-	NewPassword     string `json:"new_password"`
-}
-
-type organizationRequest struct {
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	DisplayName string `json:"display_name"`
-	Description string `json:"description"`
-}
-
-type orgMemberRequest struct {
-	Username string `json:"username,omitempty"`
-	Role     string `json:"role"`
-}
-
 type userResponse struct {
 	ID          int    `json:"id"`
 	Username    string `json:"username"`
@@ -42,11 +20,12 @@ type userResponse struct {
 }
 
 type organizationResponse struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	DisplayName string `json:"display_name,omitempty"`
-	Description string `json:"description,omitempty"`
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	Slug            string `json:"slug"`
+	DisplayName     string `json:"display_name,omitempty"`
+	Description     string `json:"description,omitempty"`
+	CurrentUserRole string `json:"current_user_role"`
 }
 
 type orgMembershipResponse struct {
@@ -75,13 +54,13 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	var req updateMeRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "display_name", "email")
+	if !ok {
 		return
 	}
 	updated, err := s.userService.UpdateMe(r.Context(), authUser.User.ID, service.UpdateProfileInput{
-		DisplayName: req.DisplayName,
-		Email:       req.Email,
+		DisplayName: fields["display_name"],
+		Email:       fields["email"],
 	})
 	if err != nil {
 		s.writeServiceError(w, r, err)
@@ -96,11 +75,16 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	var req changePasswordRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "current_password", "new_password")
+	if !ok {
 		return
 	}
-	if err := s.userService.ChangeMyPassword(r.Context(), authUser.User.ID, req.CurrentPassword, req.NewPassword); err != nil {
+	currentPassword, newPassword := fields["current_password"], fields["new_password"]
+	if currentPassword == nil || newPassword == nil || *currentPassword == "" || *newPassword == "" {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
+		return
+	}
+	if err := s.userService.ChangeMyPassword(r.Context(), authUser.User.ID, *currentPassword, *newPassword); err != nil {
 		s.writeServiceError(w, r, err)
 		return
 	}
@@ -131,15 +115,19 @@ func (s *Server) handleCreateOrg(w http.ResponseWriter, r *http.Request) {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	var req organizationRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "name", "slug", "display_name", "description")
+	if !ok {
+		return
+	}
+	if fields["name"] == nil || fields["slug"] == nil {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
 		return
 	}
 	org, err := s.userService.CreateOrganization(r.Context(), authUser.User.ID, service.CreateOrganizationInput{
-		Name:        req.Name,
-		Slug:        req.Slug,
-		DisplayName: req.DisplayName,
-		Description: req.Description,
+		Name:        *fields["name"],
+		Slug:        *fields["slug"],
+		DisplayName: organizationStringField(fields["display_name"]),
+		Description: organizationStringField(fields["description"]),
 	})
 	if err != nil {
 		s.writeUserServiceError(w, r, err)
@@ -176,15 +164,19 @@ func (s *Server) handleUpdateOrg(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req organizationRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "name", "slug", "display_name", "description")
+	if !ok {
 		return
 	}
-	org, err := s.userService.UpdateOrganization(r.Context(), authUser.User.ID, orgID, service.CreateOrganizationInput{
-		Name:        req.Name,
-		Slug:        req.Slug,
-		DisplayName: req.DisplayName,
-		Description: req.Description,
+	if fields["name"] == nil || fields["slug"] == nil {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
+		return
+	}
+	org, err := s.userService.UpdateOrganization(r.Context(), authUser.User.ID, orgID, service.UpdateOrganizationInput{
+		Name:        *fields["name"],
+		Slug:        *fields["slug"],
+		DisplayName: fields["display_name"],
+		Description: fields["description"],
 	})
 	if err != nil {
 		s.writeUserServiceError(w, r, err)
@@ -225,13 +217,13 @@ func (s *Server) handleAddOrgMember(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req orgMemberRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "username", "role")
+	if !ok {
 		return
 	}
 	membership, err := s.userService.AddMember(r.Context(), authUser.User.ID, orgID, service.AddOrgMemberInput{
-		Username: req.Username,
-		Role:     req.Role,
+		Username: organizationStringField(fields["username"]),
+		Role:     fields["role"],
 	})
 	if err != nil {
 		s.writeUserServiceError(w, r, err)
@@ -254,11 +246,11 @@ func (s *Server) handleUpdateOrgMember(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req orgMemberRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "role")
+	if !ok {
 		return
 	}
-	membership, err := s.userService.UpdateMemberRole(r.Context(), authUser.User.ID, orgID, memberUserID, service.UpdateOrgMemberRoleInput{Role: req.Role})
+	membership, err := s.userService.UpdateMemberRole(r.Context(), authUser.User.ID, orgID, memberUserID, service.UpdateOrgMemberRoleInput{Role: organizationStringField(fields["role"])})
 	if err != nil {
 		s.writeUserServiceError(w, r, err)
 		return
@@ -293,8 +285,14 @@ func (s *Server) writeUserServiceError(w http.ResponseWriter, r *http.Request, e
 		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrOrganizationNotFound), errors.Is(err, service.ErrMembershipNotFound):
 		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
-	case errors.Is(err, service.ErrOrganizationExists), errors.Is(err, service.ErrOwnerRequired), errors.Is(err, service.ErrUserExists):
-		s.writeProblem(w, r, http.StatusConflict, "conflict", err.Error())
+	case errors.Is(err, service.ErrOrganizationNameExists):
+		s.writeProblem(w, r, http.StatusConflict, "organization_name_exists", "组织名称已存在")
+	case errors.Is(err, service.ErrOrganizationSlugExists):
+		s.writeProblem(w, r, http.StatusConflict, "organization_slug_exists", "组织标识已存在")
+	case errors.Is(err, service.ErrMembershipExists):
+		s.writeProblem(w, r, http.StatusConflict, "membership_exists", "用户已经是组织成员")
+	case errors.Is(err, service.ErrOwnerRequired):
+		s.writeProblem(w, r, http.StatusConflict, "owner_required", "组织必须至少保留一位所有者")
 	default:
 		s.writeServiceError(w, r, err)
 	}
@@ -311,14 +309,22 @@ func toUserResponse(account *ent.User) userResponse {
 	}
 }
 
-func toOrganizationResponse(org *ent.Organization) organizationResponse {
+func toOrganizationResponse(org *service.OrganizationView) organizationResponse {
 	return organizationResponse{
-		ID:          org.ID,
-		Name:        org.Name,
-		Slug:        org.Slug,
-		DisplayName: org.DisplayName,
-		Description: org.Description,
+		ID:              org.ID,
+		Name:            org.Name,
+		Slug:            org.Slug,
+		DisplayName:     org.DisplayName,
+		Description:     org.Description,
+		CurrentUserRole: org.CurrentUserRole,
 	}
+}
+
+func organizationStringField(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func toOrgMembershipResponse(m *ent.OrgMembership) orgMembershipResponse {

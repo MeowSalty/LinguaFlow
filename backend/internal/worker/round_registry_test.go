@@ -11,6 +11,7 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
@@ -26,7 +27,7 @@ func newRegistryTestClient(t *testing.T) *ent.Client {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	db.SetMaxOpenConns(1)
-	driver := entsql.OpenDB(dialect.SQLite, db)
+	driver := database.NewDriver(entsql.OpenDB(dialect.SQLite, db))
 	client := ent.NewClient(ent.Driver(driver))
 	if err := client.Schema.Create(context.Background()); err != nil {
 		t.Fatalf("migrate: %v", err)

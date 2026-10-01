@@ -15,6 +15,7 @@ organizations:
         $ref: '../base.yaml#/components/responses/Problem'
   post:
     operationId: CreateOrganization
+    description: 创建组织及首位 owner 原子提交。name 与 slug 分别全局唯一，冲突为 409 organization_name_exists 或 organization_slug_exists。
     summary: 创建组织
     security:
       - bearerAuth: []
@@ -53,6 +54,7 @@ organizationById:
         $ref: '../base.yaml#/components/responses/Problem'
   put:
     operationId: UpdateOrganization
+    description: 仅 owner/admin 可更新；name 与 slug 必填且各自唯一。可选资料省略保留、空串清空、null 拒绝。名称及 slug 冲突与创建采用相同的专用 409 Problem。
     summary: 更新组织信息
     security:
       - bearerAuth: []
@@ -91,6 +93,7 @@ organizationMembers:
         $ref: '../base.yaml#/components/responses/Problem'
   post:
     operationId: AddOrganizationMember
+    description: 精确用户名添加已有账号并立即生效。admin 仅能添加 member，owner 可添加任意角色；重复成员返回 409 membership_exists。
     summary: 添加组织成员
     security:
       - bearerAuth: []
@@ -116,6 +119,7 @@ organizationMemberByUserId:
     - $ref: '../base.yaml#/components/parameters/UserId'
   put:
     operationId: UpdateOrganizationMember
+    description: 仅 owner 可修改，非法或缺失角色返回 400；最后 owner 不得降级，返回 409 owner_required。校验与修改在数据库锁保护的同一事务中执行。
     summary: 修改组织成员角色
     security:
       - bearerAuth: []
@@ -136,7 +140,8 @@ organizationMemberByUserId:
         $ref: '../base.yaml#/components/responses/Problem'
   delete:
     operationId: DeleteOrganizationMember
-    summary: 移除组织成员
+    summary: 移除成员或主动退出组织
+    description: 本人可退出，必须保留至少一位 owner；owner 可移除他人，admin 仅能移除 member。最后 owner 冲突为 409 owner_required；不存在目标成员为 404，非成员再次退出为 403。成功返回 204，不删除账号或组织项目。
     security:
       - bearerAuth: []
     responses:

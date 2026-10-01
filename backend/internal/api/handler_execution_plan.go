@@ -10,6 +10,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // HandlerExecutionPlan 执行计划模板 handler。
@@ -215,10 +216,10 @@ func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlan
 		resp.OwnerOrgId = t.OwnerOrgID
 	}
 	if !t.CreatedAt.IsZero() {
-		resp.CreatedAt = &t.CreatedAt
+		resp.CreatedAt = timeutil.NormalizePtr(&t.CreatedAt)
 	}
 	if !t.UpdatedAt.IsZero() {
-		resp.UpdatedAt = &t.UpdatedAt
+		resp.UpdatedAt = timeutil.NormalizePtr(&t.UpdatedAt)
 	}
 	// 注音对齐重试配置
 	if t.RubyRetry.Enabled {
@@ -471,9 +472,19 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 
 // handleListExecutionPlanTemplates 列出当前用户可访问的执行计划模板。
 func (h *HandlerExecutionPlan) handleList(w http.ResponseWriter, r *http.Request, userID int) {
-	templates, err := h.executionPlans.ListByUser(r.Context(), userID)
+	orgID, ok := h.server.parseSharedOrgQuery(w, r)
+	if !ok {
+		return
+	}
+	var templates []*ent.ExecutionPlanTemplate
+	var err error
+	if orgID == nil {
+		templates, err = h.executionPlans.ListByUser(r.Context(), userID)
+	} else {
+		templates, err = h.executionPlans.ListByOrg(r.Context(), userID, *orgID)
+	}
 	if err != nil {
-		h.server.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "查询执行计划模板失败")
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	items := make([]ExecutionPlanTemplate, 0, len(templates))
@@ -486,7 +497,7 @@ func (h *HandlerExecutionPlan) handleList(w http.ResponseWriter, r *http.Request
 // handleCreate 创建执行计划模板。
 func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Request, userID int) {
 	var req CreateExecutionPlanTemplateRequest
-	if !h.server.decodeJSON(w, r, &req) {
+	if !h.server.decodeSharedJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
@@ -495,12 +506,11 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 	}
 
 	input := service.CreateExecutionPlanTemplateInput{
-		Name:        req.Name,
-		Scope:       "user",
-		OwnerUserID: &userID,
-		ProfileID:   req.ProfileId,
-		RubyRetry:   parseRubyRetryConfig(req.RubyRetry),
-		Rounds:      toExecutionPlanRoundsAPI(req.Rounds),
+		Name:      req.Name,
+		OrgID:     req.OrgId,
+		ProfileID: req.ProfileId,
+		RubyRetry: parseRubyRetryConfig(req.RubyRetry),
+		Rounds:    toExecutionPlanRoundsAPI(req.Rounds),
 	}
 	if req.Description != nil {
 		input.Description = *req.Description
@@ -527,7 +537,7 @@ func (h *HandlerExecutionPlan) handleGet(w http.ResponseWriter, r *http.Request,
 // handleUpdate 更新执行计划模板。
 func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Request, userID, planID int) {
 	var req UpdateExecutionPlanTemplateRequest
-	if !h.server.decodeJSON(w, r, &req) {
+	if !h.server.decodeSharedJSON(w, r, &req) {
 		return
 	}
 

@@ -32,6 +32,12 @@ const (
 	FieldTotalSegments = "total_segments"
 	// FieldProcessedSegments holds the string denoting the processed_segments field in the database.
 	FieldProcessedSegments = "processed_segments"
+	// FieldCheckpointVersion holds the string denoting the checkpoint_version field in the database.
+	FieldCheckpointVersion = "checkpoint_version"
+	// FieldNextSegmentIndex holds the string denoting the next_segment_index field in the database.
+	FieldNextSegmentIndex = "next_segment_index"
+	// FieldStartedAt holds the string denoting the started_at field in the database.
+	FieldStartedAt = "started_at"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldSegmentIds holds the string denoting the segment_ids field in the database.
@@ -87,6 +93,9 @@ var Columns = []string{
 	FieldNewTarget,
 	FieldTotalSegments,
 	FieldProcessedSegments,
+	FieldCheckpointVersion,
+	FieldNextSegmentIndex,
+	FieldStartedAt,
 	FieldStatus,
 	FieldSegmentIds,
 	FieldResourceIds,
@@ -128,6 +137,14 @@ var (
 	DefaultProcessedSegments int
 	// ProcessedSegmentsValidator is a validator for the "processed_segments" field. It is called by the builders before save.
 	ProcessedSegmentsValidator func(int) error
+	// DefaultCheckpointVersion holds the default value on creation for the "checkpoint_version" field.
+	DefaultCheckpointVersion int
+	// CheckpointVersionValidator is a validator for the "checkpoint_version" field. It is called by the builders before save.
+	CheckpointVersionValidator func(int) error
+	// DefaultNextSegmentIndex holds the default value on creation for the "next_segment_index" field.
+	DefaultNextSegmentIndex int
+	// NextSegmentIndexValidator is a validator for the "next_segment_index" field. It is called by the builders before save.
+	NextSegmentIndexValidator func(int) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -185,6 +202,21 @@ func ByTotalSegments(opts ...sql.OrderTermOption) OrderOption {
 // ByProcessedSegments orders the results by the processed_segments field.
 func ByProcessedSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProcessedSegments, opts...).ToFunc()
+}
+
+// ByCheckpointVersion orders the results by the checkpoint_version field.
+func ByCheckpointVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCheckpointVersion, opts...).ToFunc()
+}
+
+// ByNextSegmentIndex orders the results by the next_segment_index field.
+func ByNextSegmentIndex(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNextSegmentIndex, opts...).ToFunc()
+}
+
+// ByStartedAt orders the results by the started_at field.
+func ByStartedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStartedAt, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

@@ -53,19 +53,19 @@ func init() {
 	// activitylog.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	activitylog.UpdateDefaultUpdatedAt = activitylogDescUpdatedAt.UpdateDefault.(func() time.Time)
 	// activitylogDescAction is the schema descriptor for action field.
-	activitylogDescAction := activitylogFields[0].Descriptor()
+	activitylogDescAction := activitylogFields[1].Descriptor()
 	// activitylog.ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	activitylog.ActionValidator = activitylogDescAction.Validators[0].(func(string) error)
 	// activitylogDescResourceType is the schema descriptor for resource_type field.
-	activitylogDescResourceType := activitylogFields[1].Descriptor()
+	activitylogDescResourceType := activitylogFields[2].Descriptor()
 	// activitylog.ResourceTypeValidator is a validator for the "resource_type" field. It is called by the builders before save.
 	activitylog.ResourceTypeValidator = activitylogDescResourceType.Validators[0].(func(string) error)
 	// activitylogDescResourceID is the schema descriptor for resource_id field.
-	activitylogDescResourceID := activitylogFields[2].Descriptor()
+	activitylogDescResourceID := activitylogFields[3].Descriptor()
 	// activitylog.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
 	activitylog.ResourceIDValidator = activitylogDescResourceID.Validators[0].(func(int) error)
 	// activitylogDescMetadata is the schema descriptor for metadata field.
-	activitylogDescMetadata := activitylogFields[4].Descriptor()
+	activitylogDescMetadata := activitylogFields[5].Descriptor()
 	// activitylog.DefaultMetadata holds the default value on creation for the metadata field.
 	activitylog.DefaultMetadata = activitylogDescMetadata.Default.(func() map[string]interface{})
 	backendMixin := schema.Backend{}.Mixin()
@@ -720,8 +720,20 @@ func init() {
 	synctask.DefaultProcessedSegments = synctaskDescProcessedSegments.Default.(int)
 	// synctask.ProcessedSegmentsValidator is a validator for the "processed_segments" field. It is called by the builders before save.
 	synctask.ProcessedSegmentsValidator = synctaskDescProcessedSegments.Validators[0].(func(int) error)
+	// synctaskDescCheckpointVersion is the schema descriptor for checkpoint_version field.
+	synctaskDescCheckpointVersion := synctaskFields[7].Descriptor()
+	// synctask.DefaultCheckpointVersion holds the default value on creation for the checkpoint_version field.
+	synctask.DefaultCheckpointVersion = synctaskDescCheckpointVersion.Default.(int)
+	// synctask.CheckpointVersionValidator is a validator for the "checkpoint_version" field. It is called by the builders before save.
+	synctask.CheckpointVersionValidator = synctaskDescCheckpointVersion.Validators[0].(func(int) error)
+	// synctaskDescNextSegmentIndex is the schema descriptor for next_segment_index field.
+	synctaskDescNextSegmentIndex := synctaskFields[8].Descriptor()
+	// synctask.DefaultNextSegmentIndex holds the default value on creation for the next_segment_index field.
+	synctask.DefaultNextSegmentIndex = synctaskDescNextSegmentIndex.Default.(int)
+	// synctask.NextSegmentIndexValidator is a validator for the "next_segment_index" field. It is called by the builders before save.
+	synctask.NextSegmentIndexValidator = synctaskDescNextSegmentIndex.Validators[0].(func(int) error)
 	// synctaskDescStatus is the schema descriptor for status field.
-	synctaskDescStatus := synctaskFields[7].Descriptor()
+	synctaskDescStatus := synctaskFields[10].Descriptor()
 	// synctask.DefaultStatus holds the default value on creation for the status field.
 	synctask.DefaultStatus = synctaskDescStatus.Default.(string)
 	// synctask.StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -849,29 +861,29 @@ func init() {
 	// usagerecord.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	usagerecord.UpdateDefaultUpdatedAt = usagerecordDescUpdatedAt.UpdateDefault.(func() time.Time)
 	// usagerecordDescSource is the schema descriptor for source field.
-	usagerecordDescSource := usagerecordFields[0].Descriptor()
+	usagerecordDescSource := usagerecordFields[1].Descriptor()
 	// usagerecord.DefaultSource holds the default value on creation for the source field.
 	usagerecord.DefaultSource = usagerecordDescSource.Default.(string)
 	// usagerecordDescAPICalls is the schema descriptor for api_calls field.
-	usagerecordDescAPICalls := usagerecordFields[1].Descriptor()
+	usagerecordDescAPICalls := usagerecordFields[2].Descriptor()
 	// usagerecord.DefaultAPICalls holds the default value on creation for the api_calls field.
 	usagerecord.DefaultAPICalls = usagerecordDescAPICalls.Default.(int)
 	// usagerecord.APICallsValidator is a validator for the "api_calls" field. It is called by the builders before save.
 	usagerecord.APICallsValidator = usagerecordDescAPICalls.Validators[0].(func(int) error)
 	// usagerecordDescInputTokens is the schema descriptor for input_tokens field.
-	usagerecordDescInputTokens := usagerecordFields[2].Descriptor()
+	usagerecordDescInputTokens := usagerecordFields[3].Descriptor()
 	// usagerecord.DefaultInputTokens holds the default value on creation for the input_tokens field.
 	usagerecord.DefaultInputTokens = usagerecordDescInputTokens.Default.(int)
 	// usagerecord.InputTokensValidator is a validator for the "input_tokens" field. It is called by the builders before save.
 	usagerecord.InputTokensValidator = usagerecordDescInputTokens.Validators[0].(func(int) error)
 	// usagerecordDescOutputTokens is the schema descriptor for output_tokens field.
-	usagerecordDescOutputTokens := usagerecordFields[3].Descriptor()
+	usagerecordDescOutputTokens := usagerecordFields[4].Descriptor()
 	// usagerecord.DefaultOutputTokens holds the default value on creation for the output_tokens field.
 	usagerecord.DefaultOutputTokens = usagerecordDescOutputTokens.Default.(int)
 	// usagerecord.OutputTokensValidator is a validator for the "output_tokens" field. It is called by the builders before save.
 	usagerecord.OutputTokensValidator = usagerecordDescOutputTokens.Validators[0].(func(int) error)
 	// usagerecordDescSegmentCount is the schema descriptor for segment_count field.
-	usagerecordDescSegmentCount := usagerecordFields[4].Descriptor()
+	usagerecordDescSegmentCount := usagerecordFields[5].Descriptor()
 	// usagerecord.DefaultSegmentCount holds the default value on creation for the segment_count field.
 	usagerecord.DefaultSegmentCount = usagerecordDescSegmentCount.Default.(int)
 	// usagerecord.SegmentCountValidator is a validator for the "segment_count" field. It is called by the builders before save.

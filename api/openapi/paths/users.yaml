@@ -2,6 +2,7 @@ currentUser:
   get:
     operationId: GetCurrentUser
     summary: 获取当前用户
+    description: 服务器模式要求 bearer 认证；本地模式沿用免 bearer 的本地用户身份。
     security:
       - bearerAuth: []
     responses:
@@ -11,11 +12,16 @@ currentUser:
           application/json:
             schema:
               $ref: '../base.yaml#/components/schemas/User'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   put:
     operationId: UpdateCurrentUser
     summary: 更新当前用户资料
+    description: |
+      省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400，邮箱冲突返回 409；失败不部分更新。
+      服务器模式要求 bearer 认证；本地模式仍允许通过本地身份调用，页面只读不代表后端禁止写入。
     security:
       - bearerAuth: []
     requestBody:
@@ -31,6 +37,12 @@ currentUser:
           application/json:
             schema:
               $ref: '../base.yaml#/components/schemas/User'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
@@ -38,6 +50,11 @@ currentUserPassword:
   put:
     operationId: ChangeCurrentUserPassword
     summary: 修改当前用户密码
+    description: |
+      只更新密码，已有 access/refresh token 继续沿用各自有效期。
+      缺失、空值、非法类型或新密码长度不合法返回 400；非空旧密码错误返回专用
+      urn:linguaflow:current-password-mismatch Problem（400），不会被当作认证失效。
+      401 仅表示请求认证缺失或失效。本地模式沿用现有本地身份授权，页面不提供密码表单。
     security:
       - bearerAuth: []
     requestBody:
@@ -49,5 +66,13 @@ currentUserPassword:
     responses:
       '204':
         description: 密码已更新
+      '400':
+        description: 参数不合法，或旧密码不匹配（type 为 urn:linguaflow:current-password-mismatch）。
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'

@@ -38,6 +38,12 @@ type SyncTask struct {
 	TotalSegments int `json:"total_segments,omitempty"`
 	// 已处理的段落数
 	ProcessedSegments int `json:"processed_segments,omitempty"`
+	// 批次检查点版本，0 表示历史未验证记录
+	CheckpointVersion int `json:"checkpoint_version,omitempty"`
+	// 固定段落 ID 列表的下一处理位置
+	NextSegmentIndex int `json:"next_segment_index,omitempty"`
+	// 首次成功认领时间，历史记录可以未知
+	StartedAt *time.Time `json:"started_at,omitempty"`
 	// 任务状态: pending, running, completed, failed, cancelled
 	Status string `json:"status,omitempty"`
 	// JSON 序列化的段落 ID 列表
@@ -107,11 +113,11 @@ func (*SyncTask) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case synctask.FieldID, synctask.FieldProjectID, synctask.FieldEntryID, synctask.FieldActorUserID, synctask.FieldTotalSegments, synctask.FieldProcessedSegments:
+		case synctask.FieldID, synctask.FieldProjectID, synctask.FieldEntryID, synctask.FieldActorUserID, synctask.FieldTotalSegments, synctask.FieldProcessedSegments, synctask.FieldCheckpointVersion, synctask.FieldNextSegmentIndex:
 			values[i] = new(sql.NullInt64)
 		case synctask.FieldOldTarget, synctask.FieldNewTarget, synctask.FieldStatus, synctask.FieldSegmentIds, synctask.FieldResourceIds, synctask.FieldResult, synctask.FieldError:
 			values[i] = new(sql.NullString)
-		case synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldCancelledAt:
+		case synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldStartedAt, synctask.FieldCancelledAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -187,6 +193,25 @@ func (_m *SyncTask) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field processed_segments", values[i])
 			} else if value.Valid {
 				_m.ProcessedSegments = int(value.Int64)
+			}
+		case synctask.FieldCheckpointVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field checkpoint_version", values[i])
+			} else if value.Valid {
+				_m.CheckpointVersion = int(value.Int64)
+			}
+		case synctask.FieldNextSegmentIndex:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field next_segment_index", values[i])
+			} else if value.Valid {
+				_m.NextSegmentIndex = int(value.Int64)
+			}
+		case synctask.FieldStartedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field started_at", values[i])
+			} else if value.Valid {
+				_m.StartedAt = new(time.Time)
+				*_m.StartedAt = value.Time
 			}
 		case synctask.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -302,6 +327,17 @@ func (_m *SyncTask) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("processed_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ProcessedSegments))
+	builder.WriteString(", ")
+	builder.WriteString("checkpoint_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CheckpointVersion))
+	builder.WriteString(", ")
+	builder.WriteString("next_segment_index=")
+	builder.WriteString(fmt.Sprintf("%v", _m.NextSegmentIndex))
+	builder.WriteString(", ")
+	if v := _m.StartedAt; v != nil {
+		builder.WriteString("started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

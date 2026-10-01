@@ -3,17 +3,33 @@ package event
 import (
 	"context"
 	"log/slog"
+	"time"
+
+	"entgo.io/ent/dialect"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type EntEventStore struct {
 	client *ent.Client
+	driver string
 }
 
-func NewEntEventStore(client *ent.Client) *EntEventStore {
-	return &EntEventStore{client: client}
+func NewEntEventStore(client *ent.Client, driver string) *EntEventStore {
+	return &EntEventStore{client: client, driver: driver}
+}
+
+// NormalizeTime matches the database's precision before a published event is
+// copied into memory or broadcast. PostgreSQL persists microseconds; SQLite
+// retains the full nanosecond instant.
+func (s *EntEventStore) NormalizeTime(t time.Time) time.Time {
+	t = timeutil.Normalize(t)
+	if s.driver == dialect.Postgres {
+		t = t.Truncate(time.Microsecond)
+	}
+	return t
 }
 
 func (s *EntEventStore) Append(jobID int, evt Event) (int64, error) {
@@ -30,7 +46,7 @@ func (s *EntEventStore) Append(jobID int, evt Event) (int64, error) {
 		SetMessage(evt.Message).
 		SetNillableStage(strPtr(evt.Stage)).
 		SetMetadata(metadata).
-		SetCreatedAt(evt.CreatedAt)
+		SetCreatedAt(s.NormalizeTime(evt.CreatedAt))
 	if _, err := create.Save(ctx); err != nil {
 		slog.Error("ent_event_store: append failed", "job_id", jobID, "seq", evt.Seq, "error", err)
 		return evt.Seq, err
@@ -102,7 +118,7 @@ func rowsToEvents(rows []*ent.SSEEvent) []Event {
 			Stage:     r.Stage,
 			Message:   r.Message,
 			Metadata:  r.Metadata,
-			CreatedAt: r.CreatedAt,
+			CreatedAt: timeutil.Normalize(r.CreatedAt),
 			Seq:       r.Seq,
 		}
 	}

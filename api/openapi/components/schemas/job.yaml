@@ -62,11 +62,11 @@ JobProgress:
     queue_position:
       type: integer
       nullable: true
-      description: 在队列中的位置（1-based），null 表示不在队列中
+      description: 暂不可用，省略或为 null；不暴露全实例队列位置。
     queue_size:
       type: integer
       nullable: true
-      description: 当前队列中的任务总数
+      description: 暂不可用，省略或为 null；不暴露全实例队列人数。
 
 JobResource:
   type: object
@@ -193,6 +193,84 @@ Job:
       type: string
       format: date-time
     updated_at:
+      type: string
+      format: date-time
+
+JobSummaryProgress:
+  description: 与 JobProgress 使用相同的计数口径；本阶段队列位置和队列总数固定为 null，不暴露实例级队列负载
+  allOf:
+    - $ref: '#/JobProgress'
+    - type: object
+      required: [queue_position, queue_size]
+      properties:
+        queue_position:
+          type: integer
+          nullable: true
+        queue_size:
+          type: integer
+          nullable: true
+
+JobSummary:
+  type: object
+  required: [id, project_id, project_name, status, trigger_type, progress, created_at, updated_at, started_at]
+  properties:
+    id:
+      type: integer
+    project_id:
+      type: integer
+    project_name:
+      type: string
+    status:
+      type: string
+      enum: [pending, running, paused, completed, failed, cancelled]
+    trigger_type:
+      type: string
+      enum: [manual, file_update, glossary_change, web_edit]
+    progress:
+      $ref: '#/JobSummaryProgress'
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+    started_at:
+      type: string
+      format: date-time
+      nullable: true
+
+JobSummaryListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/JobSummary'
+    next_cursor:
+      type: string
+
+JobsSummaryResponse:
+  type: object
+  required: [pending, running, paused, recent_failed, recent_failed_since, as_of]
+  properties:
+    pending:
+      type: integer
+      minimum: 0
+    running:
+      type: integer
+      minimum: 0
+    paused:
+      type: integer
+      minimum: 0
+    recent_failed:
+      type: integer
+      minimum: 0
+      description: 当前失败且最近 7 天内更新的任务数；重试后不再计入
+    recent_failed_since:
+      type: string
+      format: date-time
+    as_of:
       type: string
       format: date-time
 
@@ -331,6 +409,14 @@ Activity:
   type: object
   required: [id, action, resource_type, created_at, updated_at]
   properties:
+    organization_id:
+      type: integer
+      minimum: 1
+      description: 当前有效的组织归属，不从操作者身份推导。
+    project_id:
+      type: integer
+      minimum: 1
+      description: 活动所属的仍存在的项目。
     id:
       type: integer
     action:

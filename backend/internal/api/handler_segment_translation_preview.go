@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 func (s *Server) handlePreviewResourceSegmentTranslation(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +150,7 @@ func toSegmentTranslationPreviewResponse(result *service.PreviewOutput) SegmentT
 	}
 	if result.ApplyToken != "" {
 		response.ApplyToken = &result.ApplyToken
-		expires := result.ApplyExpiresAt
+		expires := timeutil.Normalize(result.ApplyExpiresAt)
 		response.ApplyExpiresAt = &expires
 	}
 	if result.Snapshot != nil {
@@ -265,13 +266,13 @@ func toOpenAPIQualityIssue(issue qa.QualityIssue) QualityIssue {
 	}
 	result.Disposition = QualityIssueDisposition(issue.Disposition)
 	result.DecidedBy = issue.DecidedBy
-	result.DecidedAt = issue.DecidedAt
+	result.DecidedAt = timeutil.NormalizePtr(issue.DecidedAt)
 	result.Note = stringPtr(issue.Note)
 	return result
 }
 
 func toOpenAPISegment(row *ent.Segment) Segment {
-	result := Segment{Id: row.ID, SegmentIndex: row.SegmentIndex, SourceText: row.SourceText, Status: SegmentStatus(row.Status), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	result := Segment{Id: row.ID, SegmentIndex: row.SegmentIndex, SourceText: row.SourceText, Status: SegmentStatus(row.Status), CreatedAt: timeutil.Normalize(row.CreatedAt), UpdatedAt: timeutil.Normalize(row.UpdatedAt)}
 	if row.TargetText != nil {
 		value := *row.TargetText
 		result.TargetText = &value

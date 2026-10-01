@@ -168,7 +168,7 @@ func (s *Server) handleUpdateResourceSegment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "resource.segment.update", ResourceType: "segment", ResourceID: segmentID, Message: "编辑资源段落"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &projectID, Action: "resource.segment.update", ResourceType: "segment", ResourceID: segmentID, Message: "编辑资源段落"})
 	writeJSON(w, http.StatusOK, toSegmentResponse(updated))
 }
 

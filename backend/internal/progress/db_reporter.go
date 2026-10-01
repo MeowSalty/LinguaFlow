@@ -12,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // segmentUpdate 记录一次 SegmentDone 事件的状态。
@@ -333,7 +334,7 @@ func (r *DBReporter) StageStart(name string, total int) {
 	// 不喂养任何持久化计数器。
 	r.stageDone.Store(int64(baseline))
 
-	now := time.Now()
+	now := timeutil.NowUTC()
 	// 事务包裹 JobRound 行更新与 Job 的 progress_total 累加，避免单条失败
 	// 导致矩阵与计数器缓存偏离。
 	tx, err := r.client.Tx(ctx)
@@ -793,7 +794,7 @@ func (r *DBReporter) publishEvent(eventType, stage, message string) {
 		Level:     "info",
 		Stage:     stage,
 		Message:   message,
-		CreatedAt: time.Now(),
+		CreatedAt: timeutil.NowUTC(),
 	})
 }
 
@@ -863,7 +864,7 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 		Stage:     batchEvent.Stage,
 		Message:   fmt.Sprintf("batch (%d segs): %s", batchEvent.SegmentCount, batchEvent.Status),
 		Metadata:  metadata,
-		CreatedAt: time.Now(),
+		CreatedAt: timeutil.NowUTC(),
 	})
 }
 
@@ -917,6 +918,6 @@ func (r *DBReporter) OnPoolEvent(poolEvent PoolEvent) {
 		Stage:     poolEvent.Mode,
 		Message:   message,
 		Metadata:  metadata,
-		CreatedAt: time.Now(),
+		CreatedAt: timeutil.NowUTC(),
 	})
 }

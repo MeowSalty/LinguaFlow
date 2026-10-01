@@ -175,6 +175,26 @@ func UpdatedAtLTE(v time.Time) predicate.UsageRecord {
 	return predicate.UsageRecord(sql.FieldLTE(FieldUpdatedAt, v))
 }
 
+// VisibilityScopeEQ applies the EQ predicate on the "visibility_scope" field.
+func VisibilityScopeEQ(v VisibilityScope) predicate.UsageRecord {
+	return predicate.UsageRecord(sql.FieldEQ(FieldVisibilityScope, v))
+}
+
+// VisibilityScopeNEQ applies the NEQ predicate on the "visibility_scope" field.
+func VisibilityScopeNEQ(v VisibilityScope) predicate.UsageRecord {
+	return predicate.UsageRecord(sql.FieldNEQ(FieldVisibilityScope, v))
+}
+
+// VisibilityScopeIn applies the In predicate on the "visibility_scope" field.
+func VisibilityScopeIn(vs ...VisibilityScope) predicate.UsageRecord {
+	return predicate.UsageRecord(sql.FieldIn(FieldVisibilityScope, vs...))
+}
+
+// VisibilityScopeNotIn applies the NotIn predicate on the "visibility_scope" field.
+func VisibilityScopeNotIn(vs ...VisibilityScope) predicate.UsageRecord {
+	return predicate.UsageRecord(sql.FieldNotIn(FieldVisibilityScope, vs...))
+}
+
 // SourceEQ applies the EQ predicate on the "source" field.
 func SourceEQ(v string) predicate.UsageRecord {
 	return predicate.UsageRecord(sql.FieldEQ(FieldSource, v))

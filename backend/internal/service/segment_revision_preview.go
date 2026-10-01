@@ -327,6 +327,7 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 
 func (s *RevisionPreviewService) recordUsage(ctx context.Context, input PreviewInput, projectRow *ent.Project, metrics backend.MeterMetrics) error {
 	usage := s.client.UsageRecord.Create().
+		SetVisibilityScope("project").
 		SetProjectID(input.ProjectID).
 		SetSource("preview").
 		SetSegmentCount(1).
@@ -337,8 +338,8 @@ func (s *RevisionPreviewService) recordUsage(ctx context.Context, input PreviewI
 	if input.ActorUserID > 0 {
 		usage.SetUserID(input.ActorUserID)
 	}
-	if projectRow.OwnerOrgID != nil {
-		usage.SetOrganizationID(*projectRow.OwnerOrgID)
+	if orgID := EffectiveProjectOrgID(projectRow); orgID != nil {
+		usage.SetOrganizationID(*orgID)
 	}
 	return usage.Exec(ctx)
 }

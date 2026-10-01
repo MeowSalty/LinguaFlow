@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -29,11 +30,11 @@ type RevisionPreviewRunner struct {
 }
 
 // NewRevisionPreviewRunner creates a revision preview runner.
-func NewRevisionPreviewRunner(logger *slog.Logger, client *ent.Client, limiterPool *backend.LimiterPool) *RevisionPreviewRunner {
+func NewRevisionPreviewRunner(logger *slog.Logger, client *ent.Client, limiterPool *backend.LimiterPool, httpClients ...telemetry.HTTPClientFactory) *RevisionPreviewRunner {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &RevisionPreviewRunner{logger: logger, client: client, factory: NewEngineFactory(logger, limiterPool)}
+	return &RevisionPreviewRunner{logger: logger, client: client, factory: NewEngineFactory(logger, limiterPool, httpClients...)}
 }
 
 // RunRevisionPreview executes the synthetic single revise round against all

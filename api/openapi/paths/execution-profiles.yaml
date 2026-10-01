@@ -1,5 +1,14 @@
 executionProfiles:
   get:
+    description: 不传 org_id 时返回个人和系统配置；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+    parameters:
+      - name: org_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: 组织不存在返回 404，非成员返回 403。
     operationId: ListExecutionProfiles
     summary: 列出当前用户的执行策略配置
     security:

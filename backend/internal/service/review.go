@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 const (
@@ -287,7 +287,7 @@ func (s *ReviewService) SetIssueDisposition(ctx context.Context, actorUserID, pr
 	if found < 0 {
 		return nil, ErrIssueNotFound
 	}
-	now := time.Now().UTC()
+	now := timeutil.NowUTC()
 	switch disposition {
 	case string(qa.DispositionDismissed):
 		issues[found].Disposition = qa.DispositionDismissed
