@@ -3,7 +3,7 @@ version: '3'
 tasks:
   install:
     desc: 安装前端依赖
-    cmds: [pnpm install]
+    cmds: ['pnpm install {{.CLI_ARGS}}']
   openapi:generate:
     desc: 读取已同步的 OpenAPI bundle，仅生成前端 TypeScript 类型
     deps: [openapi:verify]
