@@ -146,6 +146,13 @@ func TestProviderStreamingInflightAndCancellation(t *testing.T) {
 				case <-time.After(time.Second):
 					t.Fatal("stream did not stop")
 				}
+				// Cancellation may return from the SDK before its response body is
+				// handed to the stream decoder. Join transport cleanup before metrics.
+				waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
+				defer waitCancel()
+				if err := clients.Wait(waitCtx); err != nil {
+					t.Fatalf("stream transport did not finish: %v", err)
+				}
 				s = metric(t, c, provider, "generate")
 				if s.Total != 1 || s.Inflight != 0 {
 					t.Fatalf("stream not released: %+v", s)
