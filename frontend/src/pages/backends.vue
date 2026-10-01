@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  NAlert,
   NButton,
   NDivider,
   NDropdown,
@@ -16,107 +17,86 @@ import {
   NTab,
   NTag,
   NTabs,
+  useDialog,
   useMessage,
   type DropdownOption,
   type FormInst,
   type FormRules,
   type SelectOption,
 } from 'naive-ui'
-import { h } from 'vue'
+import { computed, h, onScopeDispose, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-
 import { listBackendModels, type ApiSchemas } from '@/api/client'
 import { useBackendsStore } from '@/stores/backends'
+import { useCredentialsStore } from '@/stores/credentials'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
-import { sanitizeProbeErrorDetail } from '@/utils/errors'
 import { useOrganizationScope } from '@/composables/useOrganizationScope'
 import OrganizationScopeSelect from '@/components/organizations/OrganizationScopeSelect.vue'
-import { onOrganizationInvalidated } from '@/utils/organization-scope'
-import { captureSession, isSessionCurrent } from '@/api/session-context'
+import CredentialManager from '@/components/backends/CredentialManager.vue'
+import {
+  canManageOrganization,
+  onOrganizationInvalidated,
+  organizationRoles,
+} from '@/utils/organization-scope'
+import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
+import {
+  createBackendForm,
+  buildBackendPayload,
+  backendBindingUnchanged,
+  type BackendFormModel,
+} from '@/utils/backend-form'
+import {
+  isUnknownCredentialWrite,
+  isCredentialAccessDenied,
+  safeCredentialError,
+} from '@/api/credential-errors'
 
 type Backend = ApiSchemas['Backend']
 type BackendType = Backend['type']
-type BackendOptions = ApiSchemas['BackendOptions']
 type ThinkingLevel = ApiSchemas['ThinkingLevel']
-
 const THINKING_LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high']
 const DEFAULT_THINKING_LEVEL: ThinkingLevel = 'low'
-
-interface BackendFormModel {
-  name: string
-  type: BackendType | null
-  api_key: string
-  base_url: string
-  model: string
-  temperatureEnabled: boolean
-  temperature: number
-  top_pEnabled: boolean
-  top_p: number
-  maxTokensEnabled: boolean
-  max_tokens: number
-  timeoutEnabled: boolean
-  timeout: number
-  response_format: string
-  enable_prompt_cache: boolean
-  stream: boolean
-  thinkingEnabled: boolean
-  thinking_level: ThinkingLevel
-  rate_limit_per_minute: number
-}
-
-const backends = useBackendsStore()
+const backends = useBackendsStore(),
+  credentials = useCredentialsStore()
 const { orgId, canWrite, setScope } = useOrganizationScope((id) => {
   backends.setOrganization(id)
   void backends.loadBackends(id)
 })
-const message = useMessage()
 const { t } = useI18n()
+const message = useMessage(),
+  dialog = useDialog()
 const formRef = ref<FormInst | null>(null)
-const drawerVisible = ref(false)
-const editingBackend = ref<Backend | null>(null)
-const deleteModalVisible = ref(false)
-const deletingBackend = ref<Backend | null>(null)
-const modelOptions = ref<SelectOption[]>([])
-const fetchingModels = ref(false)
-let modelFetchGeneration = 0
-
-const formModel = reactive<BackendFormModel>({
-  name: '',
-  type: null,
-  api_key: '',
-  base_url: '',
-  model: '',
-  temperatureEnabled: false,
-  temperature: 0.2,
-  top_pEnabled: false,
-  top_p: 1.0,
-  maxTokensEnabled: false,
-  max_tokens: 0,
-  timeoutEnabled: true,
-  timeout: 60,
-  response_format: 'json_schema',
-  enable_prompt_cache: true,
-  stream: false,
-  thinkingEnabled: false,
-  thinking_level: DEFAULT_THINKING_LEVEL,
-  rate_limit_per_minute: 0,
-})
-
-const typeOptions = computed<SelectOption[]>(() => [
-  { label: t('backends.types.openai'), value: 'openai' },
-  { label: t('backends.types.anthropic'), value: 'anthropic' },
-  { label: t('backends.types.google'), value: 'google' },
-])
-
+const drawerVisible = ref(false),
+  managerVisible = ref(false),
+  deleteModalVisible = ref(false)
+const editingBackend = ref<Backend | null>(null),
+  deletingBackend = ref<Backend | null>(null)
+const modelOptions = ref<SelectOption[]>([]),
+  fetchingModels = ref(false)
+const credentialError = ref<string | null>(null),
+  unknownWrite = ref(false),
+  saving = ref(false)
+const pendingBackendWrites = ref(0)
+let formGeneration = 0,
+  modelFetchGeneration = 0
+let hydrating = false,
+  clearingProbe = false
+let probeController = new AbortController()
+const formModel = reactive<BackendFormModel>(createBackendForm())
+const typeOptions = computed<SelectOption[]>(() =>
+  ['openai', 'anthropic', 'google'].map((value) => ({
+    label: t(`backends.types.${value}`),
+    value,
+  })),
+)
 const filterTabs = computed(() => [
   { name: 'all', label: t('backends.filters.all'), count: backends.backendCount },
   { name: 'openai', label: t('backends.types.openai'), count: backends.openaiCount },
   { name: 'anthropic', label: t('backends.types.anthropic'), count: backends.anthropicCount },
   { name: 'google', label: t('backends.types.google'), count: backends.googleCount },
 ])
-
-const renderFilterTab = (tab: (typeof filterTabs.value)[number]): ReturnType<typeof h> =>
+const renderFilterTab = (tab: (typeof filterTabs.value)[number]) =>
   h('span', { class: 'inline-flex items-baseline gap-1.5' }, [
     tab.label,
     h(
@@ -125,278 +105,252 @@ const renderFilterTab = (tab: (typeof filterTabs.value)[number]): ReturnType<typ
       String(tab.count),
     ),
   ])
-
 const responseFormatOptions = computed<SelectOption[]>(() => [
   { label: t('backends.form.responseFormatOptions.jsonSchema'), value: 'json_schema' },
   { label: t('backends.form.responseFormatOptions.jsonObject'), value: 'json_object' },
   { label: t('backends.form.responseFormatOptions.text'), value: 'text' },
   { label: t('backends.form.responseFormatOptions.none'), value: 'none' },
 ])
-
-const formatThinkingTooltip = (value: number): string => {
-  const level = THINKING_LEVELS[value]
-  return level ? t(`backends.form.thinkingLevels.${level}`) : String(value)
-}
-
+const formatThinkingTooltip = (value: number): string =>
+  THINKING_LEVELS[value]
+    ? t(`backends.form.thinkingLevels.${THINKING_LEVELS[value]}`)
+    : String(value)
 const hasActiveFilters = computed(
-  () => backends.searchQuery.trim().length > 0 || backends.typeFilter !== 'all',
+  () => !!backends.searchQuery.trim() || backends.typeFilter !== 'all',
 )
-
-const isEditMode = computed(() => Boolean(editingBackend.value))
+const isEditMode = computed(() => !!editingBackend.value)
 const drawerTitle = computed(() =>
-  isEditMode.value ? t('backends.edit.title') : t('backends.create.title'),
+  t(isEditMode.value ? 'backends.edit.title' : 'backends.create.title'),
 )
 const drawerDescription = computed(() =>
-  isEditMode.value ? t('backends.edit.description') : t('backends.create.description'),
+  t(isEditMode.value ? 'configurationCredentials.impact' : 'backends.create.description'),
 )
-const submitting = computed(() => backends.creating || backends.updating)
+const submitting = computed(() => saving.value || backends.creating || backends.updating)
 const isReadOnly = computed(() => !backends.canEdit(editingBackend.value ?? undefined))
-
-const requiresApiKey = computed(() => Boolean(formModel.type))
 const isAnthropic = computed(() => formModel.type === 'anthropic')
 const isThinkingEnabled = computed(
   () => formModel.thinkingEnabled && formModel.thinking_level !== 'off',
 )
-const thinkingLevelIndex = computed<number>({
+const thinkingLevelIndex = computed({
   get: () => THINKING_LEVELS.indexOf(formModel.thinking_level),
-  set: (value) => {
+  set: (value: number) => {
     const level = THINKING_LEVELS[value]
-    if (level) {
-      formModel.thinking_level = level
-    }
+    if (level) formModel.thinking_level = level
   },
 })
 const samplingControlsDisabled = computed(() => isAnthropic.value && isThinkingEnabled.value)
+const probeSecret = computed(() =>
+  formModel.credentialMode === 'new' ? formModel.secret : formModel.probeSecret,
+)
 const canFetchModels = computed(
-  () => Boolean(formModel.type) && formModel.api_key.trim().length > 0,
+  () => !!formModel.type && !!probeSecret.value.trim() && !submitting.value,
 )
 const hasModelOptions = computed(() => modelOptions.value.length > 0)
-
-const temperatureMax = computed(() => (formModel.type === 'anthropic' ? 1 : 2))
+const temperatureMax = computed(() => (isAnthropic.value ? 1 : 2))
 const maxTokensMin = computed(() => (formModel.type === 'openai' ? 0 : 1))
 const maxTokensDefault = computed(() => (formModel.type === 'openai' ? 0 : 8192))
-
 const parseThinkingLevel = (value: unknown): ThinkingLevel | undefined =>
   typeof value === 'string' && (THINKING_LEVELS as string[]).includes(value)
     ? (value as ThinkingLevel)
     : undefined
-
-const invalidateModelProbe = (): void => {
-  modelFetchGeneration += 1
+const credentialScope = computed(() => editingBackend.value?.owner_org_id ?? orgId.value)
+const canManageCredentials = computed(
+  () =>
+    credentialScope.value === null ||
+    canManageOrganization(organizationRoles.value[credentialScope.value]),
+)
+const bindingUnchanged = computed(() => backendBindingUnchanged(formModel, editingBackend.value))
+const credentialModeOptions = computed(() => [
+  ...(isEditMode.value
+    ? [
+        {
+          label: t('configurationCredentials.keep'),
+          value: 'keep',
+          disabled: !bindingUnchanged.value,
+        },
+      ]
+    : []),
+  { label: t('configurationCredentials.new'), value: 'new' },
+  ...(canManageCredentials.value
+    ? [{ label: t('configurationCredentials.existing'), value: 'existing' }]
+    : []),
+])
+const credentialOptions = computed(() =>
+  credentials.items
+    .filter((item) => item.provider === formModel.type)
+    .map((item) => ({
+      label: `#${item.id} ? ${item.endpoint} ? v${item.current_version}`,
+      value: item.id,
+    })),
+)
+const clearSecrets = () => {
+  formModel.secret = formModel.probeSecret = ''
+  formModel.credentialId = null
+}
+const invalidateModelProbe = () => {
+  ++modelFetchGeneration
+  probeController.abort()
+  probeController = new AbortController()
   modelOptions.value = []
   fetchingModels.value = false
 }
-
-const resolveModelProbeErrorSummary = (raw: string): string => {
-  if (/401|unauthorized|authentication|invalid.*api.?key|api.?key.*invalid/i.test(raw)) {
-    return t('backends.form.fetchModelsAuthFailed')
-  }
-  if (/403|forbidden/i.test(raw)) {
-    return t('backends.form.fetchModelsForbidden')
-  }
-  if (/404|not\s*found/i.test(raw)) {
-    return t('backends.form.fetchModelsNotFound')
-  }
-  if (/timeout|timed\s*out|econnrefused|network|fetch failed|failed to fetch/i.test(raw)) {
-    return t('backends.form.fetchModelsNetworkFailed')
-  }
-  return t('api.errors.listBackendModelsFailed')
+const formContext = () => {
+  const session = captureSession(),
+    generation = formGeneration,
+    scope = orgId.value
+  return () =>
+    isSessionCurrent(session) &&
+    generation === formGeneration &&
+    scope === orgId.value &&
+    drawerVisible.value
 }
-
-const showModelProbeError = (error: unknown): void => {
-  const raw =
-    error instanceof Error && error.message.trim()
-      ? error.message.trim()
-      : t('api.errors.listBackendModelsFailed')
-  const summary = resolveModelProbeErrorSummary(raw)
-  const detail = sanitizeProbeErrorDetail(raw)
-
-  if (!detail || detail === summary) {
-    message.error(summary, { duration: 0, closable: true })
-    return
-  }
-
-  message.error(
-    () =>
-      h('div', { class: 'max-w-md space-y-1' }, [
-        h('div', { class: 'font-medium leading-5' }, summary),
-        h('div', { class: 'text-xs leading-5 opacity-80 break-words' }, detail),
-      ]),
-    { duration: 0, closable: true },
-  )
+const refreshCredentialChoices = () =>
+  canManageCredentials.value ? credentials.load(credentialScope.value) : Promise.resolve(false)
+const refreshBackends = async (): Promise<boolean> => {
+  const session = captureSession(),
+    scope = orgId.value
+  await backends.loadBackends(scope)
+  return isSessionCurrent(session) && orgId.value === scope && !backends.error
 }
-
-const filterModelOption = (pattern: string, option: SelectOption): boolean => {
-  const query = pattern.trim().toLowerCase()
-  if (!query) {
-    return true
-  }
-
-  const label = typeof option.label === 'string' ? option.label.toLowerCase() : ''
-  const value = option.value == null ? '' : String(option.value).toLowerCase()
-  return label.includes(query) || value.includes(query)
+const openManager = () => {
+  drawerVisible.value = false
+  managerVisible.value = true
 }
-
 watch(
-  () => formModel.type,
-  () => {
+  () => [formModel.type, formModel.base_url] as const,
+  ([type], [oldType]) => {
+    if (hydrating) return
+    clearSecrets()
+    credentialError.value = null
     invalidateModelProbe()
-    if (formModel.temperature > temperatureMax.value) {
-      formModel.temperature = temperatureMax.value
-    }
-    if (formModel.max_tokens < maxTokensMin.value) {
-      formModel.max_tokens = maxTokensMin.value
+    if (type !== oldType) {
+      formModel.temperature = Math.min(formModel.temperature, temperatureMax.value)
+      formModel.max_tokens = Math.max(formModel.max_tokens, maxTokensMin.value)
     }
   },
+  { flush: 'sync' },
 )
-
 watch(
-  () => [formModel.api_key, formModel.base_url] as const,
-  () => {
+  () => formModel.credentialMode,
+  (mode, old) => {
+    if (hydrating) return
+    if (old === 'new') formModel.secret = ''
+    if (old === 'existing') formModel.credentialId = null
+    formModel.probeSecret = ''
+    credentialError.value = null
     invalidateModelProbe()
+    if (mode === 'existing' && drawerVisible.value) void refreshCredentialChoices()
   },
+  { flush: 'sync' },
 )
-
-watch(drawerVisible, (visible) => {
-  if (!visible) {
-    invalidateModelProbe()
-  }
-})
-
+watch(
+  () => [formModel.secret, formModel.probeSecret],
+  () => {
+    if (!clearingProbe) invalidateModelProbe()
+  },
+  { flush: 'sync' },
+)
+watch(
+  drawerVisible,
+  (visible) => {
+    ++formGeneration
+    if (!visible) {
+      clearSecrets()
+      invalidateModelProbe()
+      saving.value = false
+    }
+  },
+  { flush: 'sync' },
+)
 const rules = computed<FormRules>(() => ({
   name: [
-    {
-      required: true,
-      message: t('backends.validation.nameRequired'),
-      trigger: ['input', 'blur'],
-    },
+    { required: true, message: t('backends.validation.nameRequired'), trigger: ['input', 'blur'] },
   ],
   type: [
+    { required: true, message: t('backends.validation.typeRequired'), trigger: ['change', 'blur'] },
+  ],
+  model: [
+    { required: true, message: t('backends.validation.modelRequired'), trigger: ['input', 'blur'] },
+  ],
+  credentialMode: [
     {
-      required: true,
-      message: t('backends.validation.typeRequired'),
+      validator: () => {
+        if (formModel.credentialMode === 'keep')
+          return bindingUnchanged.value || new Error(t('configurationCredentials.rebind'))
+        if (formModel.credentialMode === 'new')
+          return !!formModel.secret.trim() || new Error(t('configurationCredentials.required'))
+        return (
+          (canManageCredentials.value &&
+            credentials.orgId === credentialScope.value &&
+            credentials.ready &&
+            credentialOptions.value.some((item) => item.value === formModel.credentialId)) ||
+          new Error(t('configurationCredentials.unavailable'))
+        )
+      },
       trigger: ['change', 'blur'],
     },
   ],
-  api_key: [
-    {
-      required: requiresApiKey.value,
-      message: t('backends.validation.apiKeyRequired'),
-      trigger: ['input', 'blur'],
-    },
-  ],
-  model: [
-    {
-      required: true,
-      message: t('backends.validation.modelRequired'),
-      trigger: ['input', 'blur'],
-    },
-  ],
 }))
-
-const resetForm = (): void => {
-  formModel.name = ''
-  formModel.type = null
-  formModel.api_key = ''
-  formModel.base_url = ''
-  formModel.model = ''
-  formModel.temperatureEnabled = false
-  formModel.temperature = 0.2
-  formModel.top_pEnabled = false
-  formModel.top_p = 1.0
-  formModel.maxTokensEnabled = false
-  formModel.max_tokens = 0
-  formModel.timeoutEnabled = true
-  formModel.timeout = 60
-  formModel.response_format = 'json_schema'
-  formModel.enable_prompt_cache = true
-  formModel.stream = false
-  formModel.thinkingEnabled = false
-  formModel.thinking_level = DEFAULT_THINKING_LEVEL
-  formModel.rate_limit_per_minute = 0
+const resetForm = () => {
+  ++formGeneration
+  hydrating = true
+  Object.assign(formModel, createBackendForm())
   editingBackend.value = null
+  credentialError.value = null
+  unknownWrite.value = false
+  hydrating = false
   invalidateModelProbe()
 }
-
-const handleFetchModels = async (): Promise<void> => {
-  if (!formModel.type) {
-    message.warning(t('backends.form.fetchModelsNeedCredentials'))
-    return
-  }
-
-  if (!formModel.api_key.trim()) {
-    message.warning(t('backends.form.fetchModelsNeedCredentials'))
-    return
-  }
-
-  const requestType = formModel.type
-  const requestApiKey = formModel.api_key.trim()
-  const requestBaseUrl = formModel.base_url.trim()
-  const generation = ++modelFetchGeneration
-
+const filterModelOption = (pattern: string, option: SelectOption) =>
+  `${option.label ?? ''} ${option.value ?? ''}`.toLowerCase().includes(pattern.trim().toLowerCase())
+async function handleFetchModels(): Promise<void> {
+  if (!canFetchModels.value || !formModel.type || fetchingModels.value) return
+  const type = formModel.type,
+    secret = probeSecret.value.trim(),
+    base = formModel.base_url.trim(),
+    generation = ++modelFetchGeneration,
+    current = formContext()
   fetchingModels.value = true
   try {
-    const response = await listBackendModels({
-      type: requestType,
-      api_key: requestApiKey,
-      ...(requestBaseUrl ? { base_url: requestBaseUrl } : {}),
-    })
-
-    if (generation !== modelFetchGeneration) {
-      return
-    }
-
-    if (
-      formModel.type !== requestType ||
-      formModel.api_key.trim() !== requestApiKey ||
-      formModel.base_url.trim() !== requestBaseUrl
-    ) {
-      return
-    }
-
-    const options = response.items.map((item) => ({
+    const response = await listBackendModels(
+      { type, secret, ...(base ? { base_url: base } : {}) },
+      undefined,
+      probeController.signal,
+    )
+    if (!current() || generation !== modelFetchGeneration) return
+    modelOptions.value = response.items.map((item) => ({
       label: item.name && item.name !== item.id ? `${item.name} (${item.id})` : item.id,
       value: item.id,
     }))
-    modelOptions.value = options
-
-    if (options.length === 0) {
-      message.info(t('backends.form.fetchModelsEmpty'))
-    } else {
-      message.success(t('backends.form.fetchModelsSuccess', { count: options.length }))
-      if (!formModel.model.trim() && options[0]?.value) {
-        formModel.model = String(options[0].value)
-      }
+    if (formModel.credentialMode !== 'new') {
+      clearingProbe = true
+      formModel.probeSecret = ''
+      clearingProbe = false
     }
-  } catch (fetchError) {
-    if (generation !== modelFetchGeneration) {
-      return
+    if (!response.items.length) message.info(t('backends.form.fetchModelsEmpty'))
+    else {
+      message.success(t('backends.form.fetchModelsSuccess', { count: response.items.length }))
+      if (!formModel.model.trim()) formModel.model = response.items[0]!.id
     }
-    showModelProbeError(fetchError)
+  } catch (cause) {
+    if (current() && generation === modelFetchGeneration)
+      message.error(safeCredentialError(cause).message)
   } finally {
-    if (generation === modelFetchGeneration) {
-      fetchingModels.value = false
-    }
+    if (current() && generation === modelFetchGeneration) fetchingModels.value = false
   }
 }
-
-const openCreateDrawer = (): void => {
-  resetForm()
-  drawerVisible.value = true
-}
-
-const fillFormFromBackend = (backend: Backend): void => {
+function fillFormFromBackend(backend: Backend): void {
+  const opts = backend.options as unknown as Record<string, unknown> | undefined
   formModel.name = backend.name
   formModel.type = backend.type
-  const opts = backend.options as Record<string, unknown> | undefined
-  formModel.api_key = typeof opts?.api_key === 'string' ? opts.api_key : ''
+  clearSecrets()
   formModel.base_url = typeof opts?.base_url === 'string' ? opts.base_url : ''
   formModel.model = typeof opts?.model === 'string' ? opts.model : ''
   formModel.temperatureEnabled = typeof opts?.temperature === 'number'
   formModel.temperature =
     typeof opts?.temperature === 'number' ? Math.min(opts.temperature, temperatureMax.value) : 0.2
   formModel.top_pEnabled = typeof opts?.top_p === 'number'
-  formModel.top_p = typeof opts?.top_p === 'number' ? opts.top_p : 1.0
+  formModel.top_p = typeof opts?.top_p === 'number' ? opts.top_p : 1
   formModel.maxTokensEnabled = typeof opts?.max_tokens === 'number'
   formModel.max_tokens =
     typeof opts?.max_tokens === 'number'
@@ -405,8 +359,11 @@ const fillFormFromBackend = (backend: Backend): void => {
   const timeout = typeof opts?.timeout === 'number' ? opts.timeout : 60
   formModel.timeoutEnabled = timeout > 0
   formModel.timeout = timeout > 0 ? timeout : 60
-  formModel.response_format =
-    typeof opts?.response_format === 'string' ? opts.response_format : 'json_schema'
+  formModel.response_format = ['json_schema', 'json_object', 'text', 'none'].includes(
+    String(opts?.response_format),
+  )
+    ? (opts!.response_format as ApiSchemas['ResponseFormat'])
+    : 'json_schema'
   formModel.enable_prompt_cache =
     typeof opts?.enable_prompt_cache === 'boolean' ? opts.enable_prompt_cache : true
   formModel.stream = typeof opts?.stream === 'boolean' ? opts.stream : false
@@ -415,158 +372,133 @@ const fillFormFromBackend = (backend: Backend): void => {
   formModel.thinking_level = thinkingLevel ?? DEFAULT_THINKING_LEVEL
   formModel.rate_limit_per_minute = backend.rate_limit_per_minute ?? 0
 }
-
-const openEditDrawer = (backend: Backend): void => {
+const openCreateDrawer = () => {
+  resetForm()
+  drawerVisible.value = true
+}
+const openEditDrawer = (backend: Backend) => {
+  resetForm()
+  hydrating = true
   editingBackend.value = backend
   fillFormFromBackend(backend)
-  invalidateModelProbe()
+  formModel.credentialMode = 'keep'
+  hydrating = false
   drawerVisible.value = true
 }
-
-const openCopyDrawer = (backend: Backend): void => {
-  editingBackend.value = null
+const openCopyDrawer = (backend: Backend) => {
+  resetForm()
+  hydrating = true
   fillFormFromBackend(backend)
   formModel.name = t('backends.copy.name', { name: backend.name })
-  invalidateModelProbe()
+  formModel.credentialMode = 'new'
+  hydrating = false
   drawerVisible.value = true
 }
-
-const buildOptions = (): BackendOptions => {
-  const options: Record<string, unknown> = {}
-
-  options.type = formModel.type
-  if (formModel.api_key.trim()) {
-    options.api_key = formModel.api_key.trim()
-  }
-  if (formModel.base_url.trim()) {
-    options.base_url = formModel.base_url.trim()
-  }
-  options.model = formModel.model.trim()
-  if (!samplingControlsDisabled.value && formModel.temperatureEnabled) {
-    options.temperature = formModel.temperature
-  }
-  if (!samplingControlsDisabled.value && formModel.top_pEnabled) {
-    options.top_p = formModel.top_p
-  }
-  if (formModel.maxTokensEnabled) {
-    options.max_tokens = formModel.max_tokens
-  }
-  options.timeout = formModel.timeoutEnabled ? formModel.timeout : 0
-  if (formModel.response_format !== 'json_schema') {
-    options.response_format = formModel.response_format
-  }
-  if (isAnthropic.value && !formModel.enable_prompt_cache) {
-    options.enable_prompt_cache = false
-  }
-  if (formModel.stream) {
-    options.stream = true
-  }
-  if (formModel.thinkingEnabled) {
-    options.thinking_level = formModel.thinking_level
-  }
-
-  return options as BackendOptions
-}
-
-const onSubmit = async (): Promise<void> => {
-  const session = captureSession()
-  const organization = backends.orgId
-  if (isReadOnly.value) return
-  try {
-    await formRef.value?.validate()
-  } catch {
+async function onSubmit(retryUnknown = false): Promise<void> {
+  if (isReadOnly.value || submitting.value) return
+  if (unknownWrite.value && !retryUnknown) {
+    const current = formContext()
+    dialog.warning({
+      title: t('common.confirm'),
+      content: t('configurationCredentials.retryWriteConfirm'),
+      positiveText: t('common.confirm'),
+      negativeText: t('common.cancel'),
+      onPositiveClick: () => {
+        if (current()) void onSubmit(true)
+      },
+    })
     return
   }
-
-  if (!formModel.type) {
-    return
-  }
-  if (!isSessionCurrent(session) || organization !== backends.orgId || !drawerVisible.value) return
-
-  const payload = {
-    name: formModel.name.trim(),
-    type: formModel.type,
-    options: buildOptions(),
-    rate_limit_per_minute: formModel.rate_limit_per_minute,
-  }
-
+  const current = formContext()
+  const writeSession = captureSession(),
+    writeScope = orgId.value
+  pendingBackendWrites.value++
+  saving.value = true
   try {
-    if (isEditMode.value && editingBackend.value) {
-      await backends.updateBackend(editingBackend.value.id, payload)
-      message.success(t('backends.messages.updateSuccess'))
-    } else {
-      await backends.createBackend(payload)
-      message.success(t('backends.messages.createSuccess'))
+    try {
+      await formRef.value?.validate()
+    } catch {
+      return
     }
+    if (!current() || isReadOnly.value) return
+    const scope = credentialScope.value,
+      payload = buildBackendPayload(formModel, editingBackend.value)
+    credentialError.value = null
+    unknownWrite.value = false
+    if (editingBackend.value) await backends.updateBackend(editingBackend.value.id, payload)
+    else await backends.createBackend(payload)
+    if (!current()) return
+    clearSecrets()
+    message.success(
+      t(isEditMode.value ? 'backends.messages.updateSuccess' : 'backends.messages.createSuccess'),
+    )
     drawerVisible.value = false
     resetForm()
-  } catch {
-    // Error is handled by the store
+    if (credentials.loaded && credentials.orgId === scope) void credentials.load(scope)
+  } catch (cause) {
+    if (isSessionCurrent(writeSession) && writeScope === orgId.value) backends.error = null
+    if (!current()) return
+    if (isCredentialAccessDenied(cause)) {
+      credentials.invalidate()
+      drawerVisible.value = false
+      message.error(t('configurationCredentials.denied'))
+      return
+    }
+    unknownWrite.value = isUnknownCredentialWrite(cause)
+    credentialError.value = unknownWrite.value
+      ? t('configurationCredentials.unknown')
+      : safeCredentialError(cause).message
+  } finally {
+    pendingBackendWrites.value--
+    if (current()) saving.value = false
   }
 }
-
-const confirmDelete = (backend: Backend): void => {
+const confirmDelete = (backend: Backend) => {
   deletingBackend.value = backend
   deleteModalVisible.value = true
 }
-
-const executeDelete = async (): Promise<void> => {
-  if (!deletingBackend.value) {
-    return
-  }
-
+async function executeDelete(): Promise<void> {
+  const backend = deletingBackend.value
+  if (!backend || backends.deletingBackendIds.includes(backend.id)) return
+  const session = captureSession(),
+    generation = formGeneration,
+    scope = orgId.value
   try {
-    await backends.deleteBackend(deletingBackend.value.id)
+    await backends.deleteBackend(backend.id)
+    if (
+      !isSessionCurrent(session) ||
+      generation !== formGeneration ||
+      scope !== orgId.value ||
+      deletingBackend.value?.id !== backend.id
+    )
+      return
     message.success(t('backends.messages.deleteSuccess'))
     deleteModalVisible.value = false
     deletingBackend.value = null
   } catch {
-    // Error is handled by the store
+    /* Store reports a sanitized error. */
   }
 }
-
-const getBackendTypeTagType = (type: string): 'success' | 'warning' | 'info' | 'default' => {
-  switch (type) {
-    case 'openai': {
-      return 'success'
-    }
-    case 'anthropic': {
-      return 'warning'
-    }
-    case 'google': {
-      return 'info'
-    }
-    default: {
-      return 'default'
-    }
-  }
-}
-
-const getModelDisplay = (backend: Backend): string => {
-  const opts = backend.options as Record<string, unknown> | undefined
-  if (typeof opts?.model === 'string' && opts.model) {
-    return opts.model
-  }
-  return '-'
-}
-
-const getBaseUrlHost = (backend: Backend): string => {
-  const opts = backend.options as Record<string, unknown> | undefined
-  if (typeof opts?.base_url !== 'string' || !opts.base_url.trim()) {
-    return ''
-  }
+const getBackendTypeTagType = (type: string): 'success' | 'warning' | 'info' | 'default' =>
+  type === 'openai'
+    ? 'success'
+    : type === 'anthropic'
+      ? 'warning'
+      : type === 'google'
+        ? 'info'
+        : 'default'
+const getModelDisplay = (backend: Backend) => backend.options?.model || '-'
+const getBaseUrlHost = (backend: Backend) => {
+  const url = backend.options?.base_url?.trim()
+  if (!url) return ''
   try {
-    return new URL(opts.base_url).host || opts.base_url
+    return new URL(url).host || url
   } catch {
-    return opts.base_url
+    return url
   }
 }
-
-const getThinkingLevelDisplay = (backend: Backend): ThinkingLevel | undefined => {
-  const opts = backend.options as Record<string, unknown> | undefined
-  return parseThinkingLevel(opts?.thinking_level)
-}
-
+const getThinkingLevelDisplay = (backend: Backend) =>
+  parseThinkingLevel(backend.options?.thinking_level)
 const buildCardActions = (backend: Backend): DropdownOption[] =>
   backends.canEdit(backend)
     ? [
@@ -576,34 +508,37 @@ const buildCardActions = (backend: Backend): DropdownOption[] =>
         { label: t('common.actions.delete'), key: 'delete' },
       ]
     : []
-
-const handleCardAction = (backend: Backend, key: string | number): void => {
-  if (key === 'edit') {
-    openEditDrawer(backend)
-  } else if (key === 'copy') {
-    openCopyDrawer(backend)
-  } else if (key === 'delete') {
-    confirmDelete(backend)
-  }
+const handleCardAction = (backend: Backend, key: string | number) => {
+  if (key === 'edit') openEditDrawer(backend)
+  else if (key === 'copy') openCopyDrawer(backend)
+  else if (key === 'delete') confirmDelete(backend)
 }
-
-watch(orgId, () => {
-  drawerVisible.value = false
-  deleteModalVisible.value = false
+const closeContext = () => {
+  ++formGeneration
+  drawerVisible.value = managerVisible.value = deleteModalVisible.value = false
+  clearSecrets()
+  editingBackend.value = deletingBackend.value = null
+  credentialError.value = null
+  unknownWrite.value = saving.value = false
   invalidateModelProbe()
-})
-onUnmounted(invalidateModelProbe)
+}
+watch(
+  () => credentials.accessDenied,
+  (denied) => {
+    if (denied && drawerVisible.value && formModel.credentialMode === 'existing') {
+      closeContext()
+      message.error(t('configurationCredentials.denied'))
+    }
+  },
+)
+watch(orgId, closeContext, { flush: 'sync' })
+onScopeDispose(onSessionChange(closeContext))
+onUnmounted(closeContext)
 onOrganizationInvalidated((id) => {
-  if (id === orgId.value || id === editingBackend.value?.owner_org_id) {
-    drawerVisible.value = false
-    deleteModalVisible.value = false
-    editingBackend.value = null
-    invalidateModelProbe()
-  }
+  if (id === orgId.value || id === editingBackend.value?.owner_org_id) closeContext()
 })
-
 useStoreErrorToast(
-  () => backends.error,
+  () => (submitting.value || pendingBackendWrites.value > 0 ? null : backends.error),
   () => {
     backends.error = null
   },
@@ -625,6 +560,9 @@ useStoreErrorToast(
       <NButton secondary :loading="backends.loading" @click="backends.loadBackends(orgId)">
         {{ t('common.actions.refresh') }}
       </NButton>
+      <NButton v-if="canWrite" secondary @click="openManager">{{
+        t('configurationCredentials.manage')
+      }}</NButton>
       <NButton v-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('backends.create.title') }}
       </NButton>
@@ -765,12 +703,13 @@ useStoreErrorToast(
 
       <NForm
         ref="formRef"
-        :disabled="isReadOnly"
+        :disabled="isReadOnly || submitting"
         :model="formModel"
         :rules="rules"
         label-placement="top"
         require-mark-placement="right-hanging"
       >
+        <NDivider>{{ t('configurationCredentials.basic') }}</NDivider>
         <NFormItem :label="t('backends.form.name')" path="name">
           <NInput
             v-model:value="formModel.name"
@@ -783,20 +722,10 @@ useStoreErrorToast(
             v-model:value="formModel.type"
             :options="typeOptions"
             :placeholder="t('backends.form.typePlaceholder')"
-            :disabled="isEditMode"
           />
         </NFormItem>
 
         <NDivider />
-
-        <NFormItem v-if="requiresApiKey" :label="t('backends.form.apiKey')" path="api_key">
-          <NInput
-            v-model:value="formModel.api_key"
-            type="password"
-            show-password-on="click"
-            :placeholder="t('backends.form.apiKeyPlaceholder')"
-          />
-        </NFormItem>
 
         <NFormItem :label="t('backends.form.baseUrl')" path="base_url">
           <NInput
@@ -805,6 +734,96 @@ useStoreErrorToast(
           />
         </NFormItem>
 
+        <NDivider>{{ t('configurationCredentials.credential') }}</NDivider>
+        <NAlert v-if="credentialError" class="mb-4" :type="unknownWrite ? 'warning' : 'error'">{{
+          credentialError
+        }}</NAlert>
+        <NFormItem :label="t('configurationCredentials.credential')" path="credentialMode">
+          <div class="w-full space-y-3">
+            <p v-if="editingBackend" class="text-xs text-lf-text-muted">
+              {{
+                t('configurationCredentials.bound', {
+                  id: editingBackend.credential.id,
+                  version: editingBackend.credential.version,
+                })
+              }}
+            </p>
+            <p v-if="editingBackend" class="text-xs text-lf-text-subtle">
+              {{
+                t(
+                  editingBackend.has_secret
+                    ? 'configurationCredentials.hasSecret'
+                    : 'configurationCredentials.noSecret',
+                )
+              }}
+            </p>
+            <NSelect
+              v-model:value="formModel.credentialMode"
+              :options="credentialModeOptions"
+              :aria-label="t('configurationCredentials.credential')"
+            />
+            <NAlert v-if="isEditMode && !bindingUnchanged" type="warning">{{
+              t('configurationCredentials.rebind')
+            }}</NAlert>
+            <template v-if="formModel.credentialMode === 'new'">
+              <NInput
+                v-model:value="formModel.secret"
+                type="password"
+                show-password-on="click"
+                :placeholder="t('backends.form.apiKeyPlaceholder')"
+                autocomplete="new-password"
+                :aria-label="t('configurationCredentials.secret')"
+              />
+              <p class="text-xs leading-5 text-lf-text-muted">
+                {{ t('configurationCredentials.newHint') }}
+              </p>
+            </template>
+            <template v-else-if="formModel.credentialMode === 'existing' && canManageCredentials">
+              <NSelect
+                v-model:value="formModel.credentialId"
+                :options="credentialOptions"
+                :loading="credentials.loading"
+                :disabled="!credentials.ready"
+                filterable
+                :placeholder="t('configurationCredentials.select')"
+                :aria-label="t('configurationCredentials.select')"
+              />
+              <p class="text-xs leading-5 text-lf-text-muted">
+                {{ t('configurationCredentials.selectHint') }}
+              </p>
+              <NAlert v-if="credentials.error" type="error">{{ credentials.error }}</NAlert>
+              <NAlert v-if="credentials.stale" type="warning">{{
+                t('configurationCredentials.stale')
+              }}</NAlert>
+              <NButton
+                size="small"
+                :loading="credentials.loading"
+                @click="refreshCredentialChoices"
+                >{{ t('configurationCredentials.refresh') }}</NButton
+              >
+            </template>
+            <p v-else class="text-xs leading-5 text-lf-text-muted">
+              {{ t('configurationCredentials.keepHint') }}
+            </p>
+          </div>
+        </NFormItem>
+        <NFormItem
+          v-if="formModel.credentialMode !== 'new' && !isReadOnly"
+          :label="t('configurationCredentials.probeSecret')"
+        >
+          <div class="w-full space-y-2">
+            <NInput
+              v-model:value="formModel.probeSecret"
+              type="password"
+              autocomplete="new-password"
+              :placeholder="t('configurationCredentials.probeSecret')"
+            />
+            <p class="text-xs leading-5 text-lf-text-muted">
+              {{ t('configurationCredentials.probeHint') }}
+            </p>
+          </div>
+        </NFormItem>
+        <NDivider>{{ t('configurationCredentials.parameters') }}</NDivider>
         <NFormItem :label="t('backends.form.model')" path="model">
           <div class="flex w-full flex-col gap-2">
             <div class="flex w-full items-center gap-2">
@@ -978,6 +997,7 @@ useStoreErrorToast(
           </template>
         </NFormItem>
 
+        <NDivider>{{ t('configurationCredentials.limit') }}</NDivider>
         <NFormItem :label="t('backends.form.rateLimitPerMinute')" path="rate_limit_per_minute">
           <NInputNumber
             v-model:value="formModel.rate_limit_per_minute"
@@ -998,13 +1018,19 @@ useStoreErrorToast(
           <NButton @click="drawerVisible = false">
             {{ t('common.cancel') }}
           </NButton>
-          <NButton v-if="!isReadOnly" type="primary" :loading="submitting" @click="onSubmit">
-            {{ t('common.save') }}
+          <NButton v-if="!isReadOnly" type="primary" :loading="submitting" @click="onSubmit()">
+            {{ t(unknownWrite ? 'configurationCredentials.retryWrite' : 'common.save') }}
           </NButton>
         </div>
       </template>
     </NDrawerContent>
   </NDrawer>
+
+  <CredentialManager
+    v-model:show="managerVisible"
+    :org-id="orgId"
+    :refresh-backends="refreshBackends"
+  />
 
   <!-- 删除确认弹窗 -->
   <NModal
@@ -1012,7 +1038,11 @@ useStoreErrorToast(
     preset="dialog"
     type="warning"
     :title="t('common.actions.confirmDelete')"
-    :content="deletingBackend ? t('backends.delete.confirm', { name: deletingBackend.name }) : ''"
+    :content="
+      deletingBackend
+        ? t('configurationCredentials.deleteConfirm', { name: deletingBackend.name })
+        : ''
+    "
     :positive-text="t('common.actions.deleteConfirmAction')"
     :negative-text="t('common.cancel')"
     :loading="deletingBackend ? backends.deletingBackendIds.includes(deletingBackend.id) : false"

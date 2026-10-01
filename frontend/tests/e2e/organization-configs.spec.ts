@@ -54,11 +54,25 @@ const specs = [
   },
 ] as const
 const profileConfig = {
+  schema_version: 1,
   protect: { enabled: true, rules: ['code'] },
   postprocess: { enabled: true, trim_spaces: true },
-  repair: { enabled: false },
-  glossary: { bootstrap: { enabled: false } },
-  context: { enabled: false },
+  repair: {
+    enabled: false,
+    json_structural: true,
+    schema_aliases: true,
+    placeholder_normalize: true,
+    prompt_upgrade: true,
+  },
+  glossary: {
+    bootstrap: {
+      enabled: false,
+      max_terms_per_1000_chars: 3,
+      min_source_len: 2,
+      inline_conflict_strategy: 'rewrite-local',
+    },
+  },
+  context: { enabled: false, before: 0, after: 0, max_chars: 0 },
 }
 const display = (kind: string, scope: 'user' | 'org' | 'system', orgId = 7) =>
   `${scope === 'user' ? '私人' : scope === 'system' ? '系统' : orgId === 7 ? '目标组织' : '其他组织'}-${kind}`
@@ -97,7 +111,9 @@ function entity(kind: Kind | 'backend', scope: 'user' | 'org' | 'system', orgId 
     return {
       ...common,
       type: 'openai',
-      options: { api_key: 'fixture-key', model: 'fixture-model' },
+      options: { type: 'openai', model: 'fixture-model' },
+      credential: { id, version: 1 },
+      has_secret: true,
       rate_limit_per_minute: 0,
     }
   return {
@@ -153,14 +169,17 @@ async function configApp(page: Page, role: 'owner' | 'member' = 'owner') {
         })
       const body = request.postData() ? (request.postDataJSON() as Record<string, unknown>) : null
       writes.push({ method: request.method(), path, body })
+      const safeBody = { ...body }
+      delete safeBody.secret
+      delete safeBody.credential_id
       if (request.method() === 'POST') {
-        const item = { ...entity('backend', 'org', orgId!), ...body, id: nextId++ } as Entity
+        const item = { ...entity('backend', 'org', orgId!), ...safeBody, id: nextId++ } as Entity
         backends.push(item)
         return json(route, item, 201)
       }
       const index = backends.findIndex((item) => item.id === id)
       if (request.method() === 'PUT') {
-        backends[index] = { ...backends[index]!, ...body }
+        backends[index] = { ...backends[index]!, ...safeBody }
         return json(route, backends[index])
       }
       if (request.method() === 'DELETE') {
@@ -350,7 +369,10 @@ test('organization backend CRUD uses organization paths and keeps ownership out 
   await drawer(page).getByPlaceholder('例如：My OpenAI').fill('Created backend')
   await selectOption(page, drawer(page).locator('.n-select').first(), 'OpenAI')
   await drawer(page).getByPlaceholder('sk-…').fill('synthetic-test-key')
-  const model = drawer(page).locator('.n-select').nth(1).locator('input')
+  const model = drawer(page)
+    .locator('.n-form-item')
+    .filter({ has: page.getByText('模型', { exact: true }) })
+    .locator('input')
   await model.fill('test-model')
   await model.press('Enter')
   await drawer(page).getByRole('button', { name: '保存', exact: true }).click()
