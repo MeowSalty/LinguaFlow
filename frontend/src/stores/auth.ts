@@ -25,6 +25,7 @@ import {
   getSessionUserId,
   isSessionCurrent,
   onSessionChange,
+  type SessionSnapshot,
 } from '@/api/session-context'
 
 type User = ApiSchemas['User']
@@ -71,13 +72,14 @@ export const useAuthStore = defineStore('auth', () => {
     applySession(session)
   }
 
-  const register = async (payload: RegisterPayload): Promise<void> => {
+  const register = async (payload: RegisterPayload): Promise<SessionSnapshot> => {
     clearAuthTokens()
     changeSessionContext(captureSession().baseUrl, null, true)
     const context = captureSession()
     const session = await registerAndLogin(payload)
     assertSessionCurrent(context)
     applySession(session)
+    return captureSession()
   }
 
   const fetchCurrentUser = async (): Promise<User | null> => {

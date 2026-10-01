@@ -5,7 +5,13 @@ import { useMessage, type FormInst, type FormItemRule, type FormRules } from 'na
 import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { extractErrorMessage } from '@/utils/errors'
-import { StaleSessionError } from '@/api/session-context'
+import {
+  captureSession,
+  isSessionCurrent,
+  onSessionChange,
+  StaleSessionError,
+} from '@/api/session-context'
+import { ApiError } from '@/api/utils'
 import { validateNewPassword } from '@/utils/password'
 
 definePage({
@@ -24,8 +30,14 @@ const { t } = useI18n()
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
 let alive = true
+let submissionGeneration = 0
+const stopSession = onSessionChange(() => {
+  submitting.value = false
+})
 onBeforeUnmount(() => {
   alive = false
+  submissionGeneration++
+  stopSession()
 })
 
 const formValue = reactive({
@@ -94,36 +106,50 @@ const rules = computed<FormRules>(() => ({
 
 const onSubmit = async () => {
   if (submitting.value) return
+  const generation = ++submissionGeneration
+  let context = captureSession()
+  const current = () => alive && generation === submissionGeneration && isSessionCurrent(context)
+  submitting.value = true
   try {
     await formRef.value?.validate()
   } catch {
+    if (current()) submitting.value = false
     return
   }
 
-  if (!alive || submitting.value) return
-  submitting.value = true
+  if (!current()) return
   try {
-    await auth.register({
+    const registration = auth.register({
       username: formValue.username.trim(),
       email: formValue.email.trim(),
       display_name: formValue.display_name.trim() || undefined,
       password: formValue.password,
     })
-    if (!alive) return
+    // Register starts a fresh anonymous session synchronously before awaiting the request.
+    context = captureSession()
+    submitting.value = true
+    context = await registration
+    if (!current()) return
     message.success(t('register.messages.success'))
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
     await router.push(redirect ?? '/')
   } catch (error) {
     if (
-      !alive ||
+      !current() ||
       error instanceof StaleSessionError ||
       (error instanceof DOMException && error.name === 'AbortError')
     )
       return
-    console.error(error)
-    message.error(extractErrorMessage(error, t('register.messages.failed')))
+    const status = error instanceof ApiError ? error.status : undefined
+    message.error(
+      status === 403
+        ? t('configurationSettings.registrationClosed')
+        : status === 503
+          ? t('configurationSettings.registrationUnavailable')
+          : extractErrorMessage(error, t('register.messages.failed')),
+    )
   } finally {
-    if (alive) submitting.value = false
+    if (current()) submitting.value = false
   }
 }
 </script>
