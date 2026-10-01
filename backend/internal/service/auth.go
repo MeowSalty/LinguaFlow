@@ -59,16 +59,16 @@ type AuthService struct {
 	cfg      AuthConfig
 	now      func() time.Time
 	rand     io.Reader
-	adminSvc *AdminService
+	settings RegistrationPolicy
 }
 
-func NewAuthService(client *ent.Client, cfg AuthConfig, adminSvc *AdminService) *AuthService {
+func NewAuthService(client *ent.Client, cfg AuthConfig, settings RegistrationPolicy) *AuthService {
 	return &AuthService{
 		client:   client,
 		cfg:      cfg,
 		now:      timeutil.NowUTC,
 		rand:     crand.Reader,
-		adminSvc: adminSvc,
+		settings: settings,
 	}
 }
 
@@ -100,10 +100,14 @@ type Session struct {
 }
 
 func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Session, error) {
-	if s.adminSvc == nil {
-		return nil, fmt.Errorf("auth service not initialized: admin service is required")
+	if s.settings == nil {
+		return nil, ErrSettingsUnavailable
 	}
-	if !s.adminSvc.IsRegistrationEnabled(ctx) {
+	enabled, err := s.settings.RegistrationEnabled(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrSettingsUnavailable, err)
+	}
+	if !enabled {
 		return nil, ErrRegistrationClosed
 	}
 
@@ -123,17 +127,12 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Sessi
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
-	role := SystemRoleUser
-	if s.adminSvc.ShouldAutoAdmin(ctx) {
-		role = SystemRoleAdmin
-	}
-
 	createdUser, err := s.client.User.Create().
 		SetUsername(username).
 		SetPasswordHash(passwordHash).
 		SetEmail(email).
 		SetDisplayName(strings.TrimSpace(input.DisplayName)).
-		SetRole(role).
+		SetRole(SystemRoleUser).
 		SetActive(true).
 		Save(ctx)
 	if err != nil {

@@ -13,10 +13,12 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/preview"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/previewtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 // fakeRevisionRunner 捕获 runner 输入并返回预设结果，供 RevisionPreviewService 单测。
@@ -57,9 +59,9 @@ func newRevisionFixture(t *testing.T) (*RevisionPreviewService, *ent.Client, int
 	t.Helper()
 	client := testClient(t)
 	logger := discardLogger()
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
-	backends := NewBackendService(client, users, nil)
+	backends := newExecutionTestBackendService(t, client, users)
 	profiles := NewExecutionProfileService(client, users)
 	executionPlans := NewExecutionPlanService(client, users, profiles)
 	promptTemplates := NewTranslationPromptTemplateService(client)
@@ -85,6 +87,7 @@ func seedRevisePlan(t *testing.T, client *ent.Client, userID, backendID int) int
 	t.Helper()
 	plan, err := client.ExecutionPlanTemplate.Create().
 		SetName("revise-plan").
+		SetProfileID(-1).
 		SetScope("user").
 		SetOwnerUserID(userID).
 		SetRubyRetry(schema.ExecutionPlanRubyRetryConfig{}).
@@ -134,7 +137,7 @@ func TestRevisionPreviewService_Busy(t *testing.T) {
 	_, client, userID, _, runner := newRevisionFixture(t)
 	sem := make(chan struct{}, 1)
 	sem <- struct{}{}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	busySvc := NewRevisionPreviewService(discardLogger(), client, NewProjectService(client, users), nil, runner, "test-secret", time.Minute, 1, time.Minute, sem)
 
 	out, err := busySvc.RunRevisionPreview(context.Background(), RevisionPreviewInput{ActorUserID: userID})
@@ -281,6 +284,12 @@ func TestRevisionPreviewService_Success_SynthesizedFromTranslate(t *testing.T) {
 
 	// 合成轮的 IssueCodes 收窄为实际修复目标（calque），不使用全量语义白名单。
 	rev := runner.capturedSnapshot.Rounds[0].Revise
+	if err := execution.ValidateSpec(runner.capturedSnapshot); err != nil {
+		t.Fatalf("preview must provide an executable frozen spec: %v", err)
+	}
+	if rev == nil || rev.TemplateContent != templates.EmbeddedReviseTemplate() {
+		t.Fatal("synthesized revision did not freeze its template")
+	}
 	if rev == nil || len(rev.IssueCodes) != 1 || rev.IssueCodes[0] != qa.IssueCodeCalque {
 		t.Fatalf("synthesized issue codes = %+v want [calque]", rev)
 	}
@@ -468,9 +477,9 @@ func TestRevisionPreviewService_Synthesized_IssueCodesNarrowed(t *testing.T) {
 // 审计事件分流为 revision_preview.apply，且二次应用因基线变化冲突。
 func TestRevisionPreviewService_ApplyViaPreviewEndpoint(t *testing.T) {
 	svc, client, userID, projectID, runner := newRevisionFixture(t)
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
-	backends := NewBackendService(client, users, nil)
+	backends := newExecutionTestBackendService(t, client, users)
 	profiles := NewExecutionProfileService(client, users)
 	executionPlans := NewExecutionPlanService(client, users, profiles)
 	promptTemplates := NewTranslationPromptTemplateService(client)

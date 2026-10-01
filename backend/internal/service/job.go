@@ -5,8 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 	"log/slog"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 
@@ -129,28 +134,10 @@ type JobExecution struct {
 // --- 快照类型定义 ---
 
 // JobExecutionSnapshot 任务执行快照，创建时生成，不可变。
-type JobExecutionSnapshot struct {
-	ExecutionPlanID   int    `json:"execution_plan_id"`
-	ExecutionPlanName string `json:"execution_plan_name"`
-	// Strategy 计划级策略快照：来自计划引用的 ExecutionProfile（profile_id），
-	// 为全管道（所有改写型轮次与引擎级行为）供 protect/ruby 等七项行为预设。
-	Strategy                 StrategySnapshot                `json:"strategy"`
-	Rounds                   []JobRoundSnapshot              `json:"rounds"`
-	SourceLang               string                          `json:"source_lang"`
-	TargetLang               string                          `json:"target_lang"`
-	GlossaryEnabled          bool                            `json:"glossary_enabled"`
-	TMEnabled                bool                            `json:"tm_enabled,omitempty"`
-	AutoApprove              bool                            `json:"auto_approve,omitempty"`
-	ExplicitSegmentSelection bool                            `json:"explicit_segment_selection,omitempty"`
-	RubyRetry                *ExecutionPlanRubyRetrySnapshot `json:"ruby_retry,omitempty"`
-}
+type JobExecutionSnapshot = execution.JobExecutionSnapshot
 
 // ExecutionPlanRubyRetrySnapshot 注音对齐重试快照。
-type ExecutionPlanRubyRetrySnapshot struct {
-	Enabled     bool            `json:"enabled"`
-	Backend     BackendSnapshot `json:"backend"`
-	MaxAttempts int             `json:"max_attempts,omitempty"`
-}
+type ExecutionPlanRubyRetrySnapshot = execution.ExecutionPlanRubyRetrySnapshot
 
 // NormalizeRubyRetryAttempts 规范化 ruby_retry.max_attempts：<=0 返回 1。
 func NormalizeRubyRetryAttempts(n int) int {
@@ -161,91 +148,40 @@ func NormalizeRubyRetryAttempts(n int) int {
 }
 
 // JobRoundSnapshot 单轮的完整执行快照。
-type JobRoundSnapshot struct {
-	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa" | "revise" | "correct"
-	Backend    BackendSnapshot             `json:"backend"`
-	Translate  *JobTranslateRoundSnapshot  `json:"translate,omitempty"`
-	Extract    *JobExtractRoundSnapshot    `json:"extract,omitempty"`
-	Adjudicate *JobAdjudicateRoundSnapshot `json:"adjudicate,omitempty"`
-	SemanticQA *JobSemanticQARoundSnapshot `json:"semantic_qa,omitempty"`
-	Revise     *JobReviseRoundSnapshot     `json:"revise,omitempty"`
-	Correct    *JobCorrectRoundSnapshot    `json:"correct,omitempty"`
-}
+type JobRoundSnapshot = execution.JobRoundSnapshot
 
 // JobTranslateRoundSnapshot 翻译轮次快照。
 // 无 Strategy 字段：策略快照位于 JobExecutionSnapshot.Strategy（计划级引用物化一次）。
-type JobTranslateRoundSnapshot struct {
-	Prompt           PromptSnapshot         `json:"prompt"`
-	BatchSize        int                    `json:"batch_size"`
-	MaxWordsPerBatch int                    `json:"max_words_per_batch"`
-	Concurrency      int                    `json:"concurrency"`
-	FallbackShrink   float64                `json:"fallback_shrink"`
-	SegmentFilter    *SegmentFilterSnapshot `json:"segment_filter,omitempty"`
-	Retry            schema.RetryConfig     `json:"retry"`
-}
+type JobTranslateRoundSnapshot = execution.JobTranslateRoundSnapshot
 
 // JobExtractRoundSnapshot 术语抽取轮次快照。
 // NOTE: 无 FallbackShrink 字段——extract 不需要缩批（仅 translate 实现）。
 // 若未来需要，在此结构体加 FallbackShrink float64，并在 prepareExecutionSnapshot 赋值。
-type JobExtractRoundSnapshot struct {
-	TemplateContent      string             `json:"template_content"` // 从 BootstrapPromptTemplate.Content 快照
-	BatchSize            int                `json:"batch_size"`
-	MaxWordsPerBatch     int                `json:"max_words_per_batch"`
-	Concurrency          int                `json:"concurrency"`
-	MaxTermsPer1000Chars float64            `json:"max_terms_per_1000_chars"`
-	MinSourceLen         int                `json:"min_source_len"`
-	Retry                schema.RetryConfig `json:"retry"`
-}
+type JobExtractRoundSnapshot = execution.JobExtractRoundSnapshot
 
 // JobAdjudicateRoundSnapshot 质量裁决轮次快照（无 prompt 字段，内置不可见）。
 // NOTE: 无 FallbackShrink 字段——adjudicate 不需要缩批（仅 translate 实现）。
 // 若未来需要，在此结构体加 FallbackShrink float64，并在 validateAndSnapshotWith 赋值。
-type JobAdjudicateRoundSnapshot struct {
-	BatchSize        int                `json:"batch_size"`
-	MaxWordsPerBatch int                `json:"max_words_per_batch"`
-	Concurrency      int                `json:"concurrency"`
-	AdjudicateCodes  []string           `json:"adjudicate_codes,omitempty"`
-	Retry            schema.RetryConfig `json:"retry"`
-}
+type JobAdjudicateRoundSnapshot = execution.JobAdjudicateRoundSnapshot
 
 // JobSemanticQARoundSnapshot 语义质检轮次快照（无 prompt 字段，内置不可见）。
 // NOTE: 无 FallbackShrink 字段——semantic_qa 不需要缩批（仅 translate 实现）。
 // 若未来需要，在此结构体加 FallbackShrink float64，并在 snapshotSemanticQARound 赋值。
-type JobSemanticQARoundSnapshot struct {
-	BatchSize        int                `json:"batch_size"`
-	MaxWordsPerBatch int                `json:"max_words_per_batch"`
-	Concurrency      int                `json:"concurrency"`
-	SegmentScope     string             `json:"segment_scope,omitempty"` // 物化后的 scope（空 → "all"）
-	IssueCodes       []string           `json:"issue_codes,omitempty"`   // 仅 with_issue_codes 有效
-	Retry            schema.RetryConfig `json:"retry"`
-}
+type JobSemanticQARoundSnapshot = execution.JobSemanticQARoundSnapshot
 
 // JobReviseRoundSnapshot LLM 修订轮次快照（无 prompt 字段，内置不可见）。
 // NOTE: 无 FallbackShrink 字段——revise 不需要缩批（仅 translate 实现）。
 // 若未来需要，在此结构体加 FallbackShrink float64，并在 snapshotReviseRound 赋值。
-type JobReviseRoundSnapshot struct {
-	BatchSize        int                `json:"batch_size"`
-	MaxWordsPerBatch int                `json:"max_words_per_batch"`
-	Concurrency      int                `json:"concurrency"`
-	SegmentScope     string             `json:"segment_scope,omitempty"` // 物化后的 scope（空 → "with_issues"）
-	IssueCodes       []string           `json:"issue_codes,omitempty"`   // with_issues 为空时物化为完整语义白名单
-	Retry            schema.RetryConfig `json:"retry"`
-}
+type JobReviseRoundSnapshot = execution.JobReviseRoundSnapshot
 
 // JobCorrectRoundSnapshot 本地改写轮次快照（纯本地、不调 LLM，无 prompt/backend 字段）。
 // NOTE: 无 FallbackShrink — correct 不接缩批（与 extract/adjudicate/semantic_qa 一致）。
 // NOTE: 无 Retry — schema 层 CorrectRoundConfig 无 Retry（纯本地、无外部 I/O、无重试语义）。
 // NOTE: 无 Enabled — 是否执行由轮次是否出现在 rounds 数组决定（与其他轮次一致）。
-type JobCorrectRoundSnapshot struct {
-	Rules       []JobCorrectRuleSnapshot `json:"rules,omitempty"`
-	Concurrency int                      `json:"concurrency"`
-}
+type JobCorrectRoundSnapshot = execution.JobCorrectRoundSnapshot
 
 // JobCorrectRuleSnapshot 单条本地改写规则快照。
-type JobCorrectRuleSnapshot struct {
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
-}
+type JobCorrectRuleSnapshot = execution.JobCorrectRuleSnapshot
 
 func snapshotCorrectRound(c *schema.CorrectRoundConfig) *JobCorrectRoundSnapshot {
 	rules := make([]JobCorrectRuleSnapshot, 0, len(c.Rules))
@@ -263,14 +199,14 @@ func snapshotReviseRound(r *schema.ReviseRoundConfig) *JobReviseRoundSnapshot {
 	if scope == "" {
 		scope = "with_issues"
 	}
-	issueCodes := append([]string(nil), r.IssueCodes...)
-	if scope == "with_issues" {
-		// 规范约定 issue_codes 仅 with_issue_codes 生效；with_issues 一律物化为
-		// 完整语义白名单。执行链（ReviseHandler）只有 codes 维度、无 scope 维度，
-		// 若保留用户误填的子集会被当作过滤条件，漏掉其余 pending 语义 issue。
+	issueCodes := slices.Clone(r.IssueCodes)
+	if scope == "with_issues" && (issueCodes == nil || len(issueCodes) > 0) {
+		// with_issues 下省略列表或提供非空子集均使用完整语义白名单，
+		// 显式空数组保留为不处理任何问题。执行链只消费冻结后的 codes。
 		issueCodes = append([]string(nil), qa.SemanticQACodes()...)
 	}
 	return &JobReviseRoundSnapshot{
+		TemplateContent:  templates.EmbeddedReviseTemplate(),
 		BatchSize:        r.BatchSize,
 		MaxWordsPerBatch: r.MaxWordsPerBatch,
 		Concurrency:      r.Concurrency,
@@ -286,6 +222,7 @@ func snapshotSemanticQARound(s *schema.SemanticQARoundConfig) *JobSemanticQARoun
 		scope = "all"
 	}
 	return &JobSemanticQARoundSnapshot{
+		TemplateContent:  templates.EmbeddedSemanticQATemplate(),
 		BatchSize:        s.BatchSize,
 		MaxWordsPerBatch: s.MaxWordsPerBatch,
 		Concurrency:      s.Concurrency,
@@ -296,47 +233,19 @@ func snapshotSemanticQARound(s *schema.SemanticQARoundConfig) *JobSemanticQARoun
 }
 
 // SegmentFilterSnapshot 翻译轮次段落过滤快照。
-type SegmentFilterSnapshot struct {
-	StatusFilter string `json:"status_filter"`        // "pending_only" | "skip_approved" | "all"
-	Overridden   bool   `json:"overridden,omitempty"` // true 表示由任务创建时显式覆盖
-}
+type SegmentFilterSnapshot = execution.SegmentFilterSnapshot
 
 // BackendSnapshot 后端配置快照。
-type BackendSnapshot struct {
-	ID                 int            `json:"id"`
-	Scope              string         `json:"scope"`
-	Name               string         `json:"name"`
-	Type               string         `json:"type"`
-	Options            map[string]any `json:"options"`
-	RateLimitPerMinute int            `json:"rate_limit_per_minute"`
-}
+type BackendSnapshot = execution.BackendSnapshot
 
 // PromptSnapshot 翻译提示词模板快照。
-type PromptSnapshot struct {
-	TemplateID   *int   `json:"template_id,omitempty"`
-	TemplateName string `json:"template_name"`
-	Content      string `json:"content"`
-}
+type PromptSnapshot = execution.PromptSnapshot
 
 // BootstrapPromptSnapshot 术语抽取提示词模板快照。
-type BootstrapPromptSnapshot struct {
-	TemplateID   *int   `json:"template_id,omitempty"`
-	TemplateName string `json:"template_name"`
-	Content      string `json:"content"`
-}
+type BootstrapPromptSnapshot = execution.BootstrapPromptSnapshot
 
 // StrategySnapshot 策略模板快照。
-type StrategySnapshot struct {
-	ProfileID   *int                            `json:"profile_id,omitempty"`
-	ProfileName string                          `json:"profile_name"`
-	Protect     schema.ProfileProtectConfig     `json:"protect"`
-	Postprocess schema.ProfilePostprocessConfig `json:"postprocess"`
-	Repair      schema.ProfileRepairConfig      `json:"repair"`
-	Glossary    schema.ProfileGlossaryConfig    `json:"glossary"`
-	Context     schema.ProfileContextConfig     `json:"context"`
-	Ruby        schema.ProfileRubyConfig        `json:"ruby"`
-	QA          schema.ProfileQAConfig          `json:"qa"`
-}
+type StrategySnapshot = execution.StrategySnapshot
 
 // --- CRUD 方法 ---
 
@@ -349,10 +258,11 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	}
 
 	// 2. 加载、校验执行计划并生成不可变快照。
-	snapshot, err := s.prepareExecutionSnapshot(ctx, actorUserID, projectRow, input.ExecutionPlanID, input.SegmentFilter)
+	snapshot, release, err := s.prepareExecutionSnapshot(ctx, actorUserID, projectRow, input.ExecutionPlanID, input.SegmentFilter)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 	snapshot.AutoApprove = input.AutoApprove
 	snapshot.ExplicitSegmentSelection = len(input.SegmentGroupKeys) == 0 && len(input.SegmentIDs) > 0
 
@@ -451,6 +361,11 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 		}
 	}
 
+	if credentials := s.backends.Credentials(); credentials != nil {
+		if err := credentials.RetainJob(ctx, tx, created.ID, snapshot.Bindings()); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -469,19 +384,31 @@ func (s *JobService) prepareExecutionSnapshot(
 	projectRow *ent.Project,
 	executionPlanID int,
 	overrideSegmentFilter string,
-) (*JobExecutionSnapshot, error) {
+) (*JobExecutionSnapshot, func(), error) {
+	ctx, leases := withExecutionLeases(ctx)
+	successful := false
+	defer func() {
+		if !successful {
+			leases.release()
+		}
+	}()
 	plan, err := s.executionPlans.GetByID(ctx, actorUserID, executionPlanID)
 	if err != nil {
-		return nil, fmt.Errorf("execution plan: %w", err)
+		return nil, nil, fmt.Errorf("execution plan: %w", err)
 	}
 	snapshot, err := s.validateAndSnapshot(ctx, actorUserID, projectRow, plan, overrideSegmentFilter)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	snapshot.SourceLang = projectRow.SourceLang
 	snapshot.TargetLang = projectRow.TargetLang
 	snapshot.GlossaryEnabled = jobGlossaryEnabled(projectRow.GlossaryEnabled, snapshot.Rounds)
-	return snapshot, nil
+	resolved, err := execution.Resolve(*snapshot)
+	if err != nil {
+		return nil, nil, err
+	}
+	successful = true
+	return resolved, leases.release, nil
 }
 
 // validateAndSnapshotWith 校验执行计划中的每轮配置并生成完整快照，backend 可访问性由 check 注入，
@@ -494,6 +421,8 @@ func (s *JobService) validateAndSnapshotWith(
 	check func(backendID int) error,
 ) (*JobExecutionSnapshot, error) {
 	snapshot := &JobExecutionSnapshot{
+		SchemaVersion: execution.SchemaVersion, DefaultsVersion: execution.DefaultsVersion,
+		RubyTemplates:     execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate},
 		ExecutionPlanID:   plan.ID,
 		ExecutionPlanName: plan.Name,
 		Rounds:            make([]JobRoundSnapshot, 0, len(plan.Rounds)),
@@ -600,13 +529,14 @@ func (s *JobService) validateAndSnapshotWith(
 			}
 			a := round.Adjudicate
 			codes := a.AdjudicateCodes
-			if len(codes) == 0 {
+			if codes == nil {
 				codes = qa.DefaultAdjudicateCodes()
 			}
 			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 				Mode:    "adjudicate",
 				Backend: *backendSnap,
 				Adjudicate: &JobAdjudicateRoundSnapshot{
+					TemplateContent:  templates.EmbeddedAdjudicationTemplate(),
 					BatchSize:        a.BatchSize,
 					MaxWordsPerBatch: a.MaxWordsPerBatch,
 					Concurrency:      a.Concurrency,
@@ -737,13 +667,20 @@ func (s *JobService) prepareExecutionSnapshotForActor(
 	overrideSegmentFilter, sourceLang, targetLang string,
 	glossaryEnabled bool,
 	projectRow *ent.Project,
-) (*JobExecutionSnapshot, error) {
+) (*JobExecutionSnapshot, func(), error) {
+	ctx, leases := withExecutionLeases(ctx)
+	successful := false
+	defer func() {
+		if !successful {
+			leases.release()
+		}
+	}()
 	plan, err := s.executionPlans.GetByID(ctx, actorUserID, executionPlanID)
 	if err != nil {
-		return nil, fmt.Errorf("execution plan: %w", err)
+		return nil, nil, fmt.Errorf("execution plan: %w", err)
 	}
 	if err := s.validateSnapshotReferences(ctx, actorUserID, projectRow, plan); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var check func(backendID int) error
 	if projectRow != nil {
@@ -757,12 +694,17 @@ func (s *JobService) prepareExecutionSnapshotForActor(
 	}
 	snapshot, err := s.validateAndSnapshotWith(ctx, actorUserID, plan, overrideSegmentFilter, check)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	snapshot.SourceLang = sourceLang
 	snapshot.TargetLang = targetLang
 	snapshot.GlossaryEnabled = glossaryEnabled
-	return snapshot, nil
+	resolved, err := execution.Resolve(*snapshot)
+	if err != nil {
+		return nil, nil, err
+	}
+	successful = true
+	return resolved, leases.release, nil
 }
 
 func jobGlossaryEnabled(projectEnabled bool, rounds []JobRoundSnapshot) bool {
@@ -828,12 +770,33 @@ func (s *JobService) snapshotBackend(ctx context.Context, backendID int) (*Backe
 		}
 		return nil, err
 	}
+	credentials := s.backends.Credentials()
+	if credentials == nil {
+		return nil, credential.ErrUnavailable
+	}
+	binding, release, err := credentials.AcquireBackend(ctx, backendID)
+	if err != nil {
+		return nil, err
+	}
+	if leases, ok := ctx.Value(executionLeaseKey{}).(*executionLeaseScope); ok {
+		leases.releases = append(leases.releases, release)
+	} else {
+		defer release()
+	}
+	options, err := execution.ResolveBackendOptions(string(b.BackendType), b.Options)
+	if err != nil {
+		return nil, err
+	}
+	if err := credentials.Check(ctx, binding, backendID, string(b.BackendType), options["base_url"].(string)); err != nil {
+		return nil, err
+	}
 	return &BackendSnapshot{
+		Credential:         binding,
 		ID:                 b.ID,
 		Scope:              b.Scope,
 		Name:               b.Name,
 		Type:               string(b.BackendType),
-		Options:            cloneMap(b.Options),
+		Options:            options,
 		RateLimitPerMinute: b.RateLimitPerMinute,
 	}, nil
 }
@@ -877,8 +840,7 @@ func (s *JobService) snapshotProfile(ctx context.Context, userID, profileID int)
 	if err := s.profiles.CheckAccess(ctx, userID, tp); err != nil {
 		return nil, err
 	}
-	tp.Config.NormalizeContext()
-	tp.Config.NormalizePreserveKinds()
+
 	id := tp.ID
 	return &StrategySnapshot{
 		ProfileID:   &id,
@@ -939,6 +901,12 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 	}
 	ids := make([]int, 0, len(jobs))
 	for _, current := range jobs {
+		if err := s.checkExecutionPolicies(ctx, current); err != nil {
+			if updateErr := s.client.Job.UpdateOneID(current.ID).SetStatus(JobStatusFailed).SetErrorMessage("execution recovery refused: " + err.Error()).Exec(ctx); updateErr != nil {
+				return nil, updateErr
+			}
+			continue
+		}
 		ids = append(ids, current.ID)
 		if current.Status == JobStatusRunning {
 			if err := s.client.Job.UpdateOneID(current.ID).SetStatus(JobStatusPending).Exec(ctx); err != nil {
@@ -974,10 +942,9 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 			Exec(ctx); err != nil {
 			return nil, err
 		}
-		// 升级回填：迁移前创建的任务可能没有任何轮次行（pre-migration job），
-		// 依据执行快照补建 resource×round pending 矩阵。
+		// Reconstruct the matrix only from a validated current-format snapshot.
 		if err := s.backfillJobRoundsForRecovery(ctx, current.ID); err != nil {
-			slog.Warn("recover: backfill job rounds failed", "job_id", current.ID, "err", err)
+			return nil, err
 		}
 		// 从矩阵重算进度计数器（无条件求和）：这是防止恢复重跑重复累加的正确性路径。
 		if err := recomputeJobProgress(ctx, clientProgressStore{s.client}, current.ID); err != nil {
@@ -987,11 +954,8 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 	return ids, nil
 }
 
-// backfillJobRoundsForRecovery 为没有任何 JobRound 行的任务补建 resource×round
-// pending 矩阵（升级回填）。轮次模式取自任务执行快照的 Rounds；快照缺失或无
-// 轮次（更早期存量任务）时，退化为每资源一条 round_index=0 的 pending 轮
-// （mode=translate），保证矩阵非空、进度分母可被 DBReporter 首次揭示。
-// 解析/建行失败时返回错误（由调用方记录日志并继续恢复流程）。
+// backfillJobRoundsForRecovery rebuilds a missing matrix from the complete,
+// validated snapshot only. It never interprets a missing or obsolete format.
 func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int) error {
 	count, err := s.client.JobRound.Query().
 		Where(jobround.JobIDEQ(jobID)).
@@ -1015,7 +979,7 @@ func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int
 	if len(resources) == 0 {
 		return nil
 	}
-	// 优先按执行快照的轮次物化；无快照/无轮次时退化为单 translate 轮。
+	// Missing or unsupported snapshots are never interpreted as a default round.
 	type backfillRound struct {
 		index int
 		mode  string
@@ -1023,15 +987,12 @@ func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int
 	rounds := make([]backfillRound, 0, 1)
 	snapshot, err := GetSnapshot(jobRow)
 	if err != nil {
-		slog.Warn("recover: parse execution snapshot failed, falling back to single round", "job_id", jobID, "err", err)
+		return err
 	}
 	if snapshot != nil && len(snapshot.Rounds) > 0 {
 		for i, rd := range snapshot.Rounds {
 			rounds = append(rounds, backfillRound{index: i, mode: rd.Mode})
 		}
-	} else {
-		slog.Warn("recover: job has no rounds in execution snapshot, backfilling single translate round", "job_id", jobID)
-		rounds = append(rounds, backfillRound{index: 0, mode: "translate"})
 	}
 	builders := make([]*ent.JobRoundCreate, 0, len(resources)*len(rounds))
 	for _, jr := range resources {
@@ -1665,6 +1626,9 @@ func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*en
 	if current.Status != JobStatusPaused {
 		return nil, ErrJobNotResumable
 	}
+	if err := s.checkExecutionPolicies(ctx, current); err != nil {
+		return nil, err
+	}
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -1743,6 +1707,9 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 	}
 	if retryableResources == 0 {
 		return nil, ErrJobNoFailedResource
+	}
+	if err := s.checkExecutionPolicies(ctx, current); err != nil {
+		return nil, err
 	}
 	// 轮次行 failed|running|skipped→pending（条件更新）：保留 segment_total/
 	// segment_completed 与 job_round_segments 断点关联行；completed 轮不动，重跑时
@@ -2014,8 +1981,8 @@ func defaultProjectConfig(projectRow *ent.Project) map[string]any {
 
 // GetSnapshot 从 Job 的 ExecutionConfig 字段解析快照。
 func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
-	if job.ExecutionConfig == nil {
-		return nil, nil
+	if job == nil || len(job.ExecutionConfig) == 0 {
+		return nil, errors.New("missing execution snapshot")
 	}
 	raw, err := json.Marshal(job.ExecutionConfig)
 	if err != nil {
@@ -2024,6 +1991,9 @@ func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
 	var snap JobExecutionSnapshot
 	if err := json.Unmarshal(raw, &snap); err != nil {
 		return nil, fmt.Errorf("unmarshal snapshot: %w", err)
+	}
+	if err := execution.ValidateSpec(&snap); err != nil {
+		return nil, err
 	}
 	return &snap, nil
 }

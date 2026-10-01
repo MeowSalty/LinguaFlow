@@ -10,6 +10,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
@@ -53,9 +54,6 @@ func (s *ExecutionProfileService) ListByUser(ctx context.Context, userID int) ([
 		return nil, err
 	}
 	rows = append(templates.BuiltinExecutionProfiles(), rows...)
-	for _, p := range rows {
-		p.Config.NormalizePreserveKinds()
-	}
 	return rows, nil
 }
 
@@ -68,9 +66,6 @@ func (s *ExecutionProfileService) ListByOrg(ctx context.Context, actorID, orgID 
 	).Order(ent.Asc(executionprofile.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
-	}
-	for _, p := range rows {
-		p.Config.NormalizePreserveKinds()
 	}
 	return rows, nil
 }
@@ -92,7 +87,9 @@ func (s *ExecutionProfileService) GetByID(ctx context.Context, actorID, id int) 
 	if err := s.CheckAccess(ctx, actorID, row); err != nil {
 		return nil, err
 	}
-	row.Config.NormalizePreserveKinds()
+	if err := execution.ValidateProfile(row.Config); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrExecutionProfileConfigInvalid, err)
+	}
 	return row, nil
 }
 
@@ -112,7 +109,7 @@ func (s *ExecutionProfileService) Create(ctx context.Context, actorID int, input
 		if err != nil {
 			return err
 		}
-		create := client.ExecutionProfile.Create().SetName(name).SetDescription(input.Description).SetScope(scope)
+		create := client.ExecutionProfile.Create().SetName(name).SetDescription(input.Description).SetScope(scope).SetConfig(execution.DefaultProfile())
 		if input.OrgID == nil {
 			create.SetOwnerUserID(actorID)
 		} else {
@@ -214,6 +211,9 @@ func (s *ExecutionProfileService) CheckAccess(ctx context.Context, actorID int, 
 
 // validateProfileConfig 校验执行策略配置的有效性。
 func validateProfileConfig(cfg *schema.ExecutionProfileConfigData) error {
+	if err := execution.ValidateProfile(*cfg); err != nil {
+		return fmt.Errorf("%w: %v", ErrExecutionProfileConfigInvalid, err)
+	}
 	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
 	for _, k := range cfg.Ruby.PreserveKinds {
 		if !validRubyKinds[k] {

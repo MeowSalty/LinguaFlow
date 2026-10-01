@@ -64,9 +64,6 @@ func (h *SemanticQAHandler) emitBatchOutcome(evt progress.BatchEvent) {
 }
 
 func (h *SemanticQAHandler) segmentScope() string {
-	if h.SegmentScope == "" {
-		return "all"
-	}
 	return h.SegmentScope
 }
 
@@ -93,7 +90,7 @@ func segmentInScope(seg Segment, scope string, codes map[string]struct{}) bool {
 		}
 		return false
 	default:
-		return true // 未知 scope 兜底为 all
+		return false
 	}
 }
 

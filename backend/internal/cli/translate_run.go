@@ -2,23 +2,28 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/logging"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
 
 type translateOptions struct {
@@ -30,355 +35,237 @@ type translateOptions struct {
 	bootstrapMode string
 	profile       string
 	prompt        string
+	revisionInput string
+	changed       map[string]bool
 }
 
 func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 	if len(opts.inputs) == 0 {
-		return fmt.Errorf("--input/-i 必填")
+		return errors.New("--input/-i is required")
 	}
 	if opts.output == "" {
-		return fmt.Errorf("--output/-o 必填")
+		return errors.New("--output/-o is required")
 	}
-
+	in := config.CLIInputs{Environment: config.Environment()}
+	if cmd.Flags().Changed("config") {
+		in.ConfigPath = &rt.configPath
+	}
+	if opts.changed["from"] {
+		in.SourceLang = &opts.from
+	}
+	if opts.changed["to"] {
+		in.TargetLang = &opts.to
+	}
+	if cmd.Flags().Changed("log-level") {
+		in.LogLevel = &rt.logLevel
+	} else if cmd.Flags().Changed("verbose") && rt.verbose {
+		level := "debug"
+		in.LogLevel = &level
+	}
+	if cmd.Flags().Changed("log-format") {
+		in.LogFormat = &rt.logFormat
+	}
+	cfg, err := config.ResolveCLIConfig(in)
+	if err != nil {
+		return err
+	}
+	if err := applyTranslateFlags(cfg, opts); err != nil {
+		return err
+	}
+	rt.logger = logging.New(os.Stderr, cfg.Log.Level, cfg.Log.Format)
+	slog.SetDefault(rt.logger)
 	jobs, report, err := buildTranslateJobs(opts.inputs, opts.output)
 	if err != nil {
 		return err
 	}
-
-	cliCfg, err := config.LoadCLIConfig(rt.configPath)
+	revision, err := resolveCLIRevisionInput(cfg, opts, len(jobs))
 	if err != nil {
 		return err
 	}
-
-	if err := applyTranslateFlags(cliCfg, opts); err != nil {
-		return err
-	}
-
 	reporter, err := newReporter(rt)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = reporter.Close() }()
-
-	engOpts, err := buildEngineFromCLIConfig(cliCfg)
+	eng, resolved, err := buildEngineFromCLIConfig(cmd.Context(), cfg, rt.logger, reporter)
 	if err != nil {
 		return err
 	}
-	if engOpts.Config.QA.Enabled {
-		rt.logger.Warn("QA is configured but not yet supported in CLI mode; QA settings will be ignored")
-	}
-	engOpts.Logger = rt.logger
-	engOpts.Reporter = reporter
-
-	eng, err := engine.NewWithOptions(*engOpts)
-	if err != nil {
-		return err
-	}
+	defer resolved.Close()
 	defer func() { _ = eng.Close() }()
-
 	var failed []string
 	for _, ignored := range report.Ignored {
 		rt.logger.Info("ignored unsupported file", "path", ignored.Path, "reason", ignored.Reason)
 	}
-	for _, fj := range jobs {
-		rt.logger.Info("translation queued", "input", fj.InputPath, "output", fj.OutputPath)
-		if err := translateSingleFile(cmd.Context(), eng, fj, opts.from, opts.to); err != nil {
-			failed = append(failed, fmt.Sprintf("%v", err))
-			rt.logger.Error("translation failed", "input", fj.InputPath, "err", err)
-			continue
+	for _, job := range jobs {
+		rt.logger.Info("translation queued", "input", job.InputPath, "output", job.OutputPath)
+		if err := translateSingleFile(cmd.Context(), eng, job, resolved.Spec.SourceLang, resolved.Spec.TargetLang, revision); err != nil {
+			failed = append(failed, err.Error())
+			rt.logger.Error("translation failed", "input", job.InputPath, "err", err)
 		}
 	}
-
-	rt.logger.Info("batch translate summary",
-		"succeeded", len(jobs)-len(failed),
-		"failed", len(failed),
-		"ignored", len(report.Ignored))
+	rt.logger.Info("batch translate summary", "succeeded", len(jobs)-len(failed), "failed", len(failed), "ignored", len(report.Ignored))
 	if len(failed) > 0 {
-		return fmt.Errorf("批量翻译完成，但有 %d 个文件失败:\n%s", len(failed), strings.Join(failed, "\n"))
+		return fmt.Errorf("translation finished with %d failed files:\n%s", len(failed), strings.Join(failed, "\n"))
 	}
 	return nil
 }
 
-// buildEngineFromCLIConfig 从 CLIConfig 构造 engine.Options。
-// 计划级策略来自 execution.profile（按名查 translation_profiles，缺省回退内置默认
-// 策略），translate 与 revise 轮统一从该唯一策略接入 protect/ruby。
-func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error) {
-	if len(cliCfg.Execution.Rounds) == 0 {
-		return nil, fmt.Errorf("execution.rounds 不能为空")
-	}
-
-	// 找到第一个 translate 轮次作为主翻译配置
-	var firstTranslateRound *config.CLIConfigTranslateRound
-	for _, r := range cliCfg.Execution.Rounds {
-		if r.Mode == "translate" && r.Translate != nil {
-			firstTranslateRound = r.Translate
-			break
-		}
-	}
-	if firstTranslateRound == nil {
-		return nil, fmt.Errorf("execution.rounds 中必须至少有一个 translate 轮次")
-	}
-
-	profileCfg := config.ResolveExecutionProfile(cliCfg)
-
-	firstPromptContent := resolvePromptContent(cliCfg, firstTranslateRound.Prompt)
-	if firstPromptContent == "" {
-		return nil, fmt.Errorf("prompt_templates %q has no content (translation prompt is required)", firstTranslateRound.Prompt)
-	}
-
-	cfg := &engine.Config{
-		SourceLang: cliCfg.SourceLang,
-		TargetLang: cliCfg.TargetLang,
-		TranslateDefaults: engine.TranslateDefaults{
-			BatchSize:        firstTranslateRound.BatchSize,
-			MaxWordsPerBatch: firstTranslateRound.MaxWordsPerBatch,
-			Concurrency:      firstTranslateRound.Concurrency,
-			FallbackShrink:   firstTranslateRound.FallbackShrink,
-			Retry:            toBackendRetryPolicy(firstTranslateRound.Retry),
-		},
-		Repair: repair.Config{
-			Enabled:              profileCfg.Repair.Enabled,
-			JSONStructural:       profileCfg.Repair.JSONStructural,
-			SchemaAliases:        profileCfg.Repair.SchemaAliases,
-			PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
-			PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
-		}.ToOptions(),
-		Ruby: engine.RubyConfig{
-			Enabled:       profileCfg.Ruby.Enabled,
-			PreserveKinds: profileCfg.Ruby.PreserveKinds,
-		},
-		Glossary: engine.GlossaryConfig{
-			Enabled:   cliCfg.Glossary.Enabled,
-			Path:      cliCfg.Glossary.Path,
-			Save:      cliCfg.Glossary.Save,
-			Bootstrap: profileCfg.Bootstrap,
-		},
-		TMEnabled: cliCfg.TranslationMemory.Enabled,
-		QA: qa.Config{
-			Enabled:        profileCfg.QA.Enabled,
-			AutoReject:     profileCfg.QA.AutoReject,
-			Checks:         profileCfg.QA.Checks,
-			LengthMethod:   qa.LengthMethod(profileCfg.QA.LengthMethod),
-			LengthRatioMin: profileCfg.QA.LengthRatioMin,
-			LengthRatioMax: profileCfg.QA.LengthRatioMax,
-			SourceLang:     cliCfg.SourceLang,
-			TargetLang:     cliCfg.TargetLang,
-		},
-	}
-
-	// 计划级 protect 规则：Enabled→Rules，否则 nil（与 worker 引擎工厂同语义）。
-	var protectRules []string
-	if profileCfg.Protect.Enabled {
-		protectRules = profileCfg.Protect.Rules
-	}
-	roundRuby := engine.RubyConfig{
-		Enabled:       profileCfg.Ruby.Enabled,
-		PreserveKinds: profileCfg.Ruby.PreserveKinds,
-	}
-	roundRepair := repair.Config{
-		Enabled:              profileCfg.Repair.Enabled,
-		JSONStructural:       profileCfg.Repair.JSONStructural,
-		SchemaAliases:        profileCfg.Repair.SchemaAliases,
-		PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
-		PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
-	}
-	roundContext := pipeline.ContextConfig{
-		Enabled:  profileCfg.Context.Enabled,
-		Before:   profileCfg.Context.Before,
-		After:    profileCfg.Context.After,
-		MaxChars: profileCfg.Context.MaxChars,
-	}
-	var roundPostprocess *pipeline.PostprocessConfig
-	if profileCfg.Postprocess.Enabled {
-		pp := pipeline.PostprocessConfig{
-			TrimSpaces: profileCfg.Postprocess.TrimSpaces,
-		}
-		roundPostprocess = &pp
-	}
-
-	var rounds []engine.Round
-	for i, r := range cliCfg.Execution.Rounds {
-		bCfg, ok := cliCfg.Backends[r.Backend]
-		if !ok {
-			return nil, fmt.Errorf("backend %q not found in backends", r.Backend)
-		}
-		b, err := backend.Build(backend.Config{
-			Name:               r.Backend,
-			Type:               bCfg.Type,
-			Enabled:            bCfg.Enabled,
-			RateLimitPerMinute: bCfg.RateLimitPerMinute,
-			Options:            bCfg.Options,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("build backend %q: %w", r.Backend, err)
-		}
-
-		if bCfg.RateLimitPerMinute > 0 {
-			limiter := backend.NewRateLimiterPerMinute(bCfg.RateLimitPerMinute)
-			b = backend.NewRateLimitedBackend(b, limiter)
-		}
-
-		switch r.Mode {
-		case "translate":
-			if r.Translate == nil {
-				return nil, fmt.Errorf("execution.rounds[%d]: mode=translate requires translate config", i)
-			}
-			t := r.Translate
-
-			var roundRenderer *prompt.Renderer
-			if promptContent := resolvePromptContent(cliCfg, t.Prompt); promptContent != "" {
-				roundRenderer, err = prompt.NewRenderer(promptContent)
-				if err != nil {
-					return nil, fmt.Errorf("build renderer for prompt %q: %w", t.Prompt, err)
-				}
-			}
-
-			rc := roundRepair
-			ctx := roundContext
-			rounds = append(rounds, engine.Round{
-				Backend:           b,
-				BatchSize:         t.BatchSize,
-				MaxWordsPerBatch:  t.MaxWordsPerBatch,
-				Concurrency:       t.Concurrency,
-				FallbackShrink:    t.FallbackShrink,
-				Retry:             toBackendRetryPolicy(t.Retry),
-				Renderer:          roundRenderer,
-				Repair:            &rc,
-				ResponseMode:      responseModeFromOptions(bCfg.Options),
-				Mode:              pipeline.RoundModeTranslate,
-				ProtectRules:      protectRules,
-				RubyEnabled:       roundRuby.Enabled,
-				RubyPreserveKinds: roundRuby.PreserveKinds,
-				Context:           &ctx,
-				Postprocess:       roundPostprocess,
-			})
-
-		case "revise":
-			if r.Revise == nil {
-				return nil, fmt.Errorf("execution.rounds[%d]: mode=revise requires revise config", i)
-			}
-			v := r.Revise
-
-			renderer, err := prompt.NewReviseRenderer(templates.EmbeddedReviseTemplate())
-			if err != nil {
-				return nil, fmt.Errorf("build revise renderer: %w", err)
-			}
-			issueCodes, err := resolveReviseIssueCodes(v)
-			if err != nil {
-				return nil, fmt.Errorf("execution.rounds[%d]: %w", i, err)
-			}
-
-			// protect/ruby 与 translate 轮同源：统一取计划级唯一策略。
-			rounds = append(rounds, engine.Round{
-				Backend:           b,
-				BatchSize:         v.BatchSize,
-				MaxWordsPerBatch:  v.MaxWordsPerBatch,
-				Concurrency:       v.Concurrency,
-				Retry:             toBackendRetryPolicy(v.Retry),
-				ResponseMode:      responseModeFromOptions(bCfg.Options),
-				Mode:              pipeline.RoundModeRevise,
-				ReviseRenderer:    renderer,
-				IssueCodes:        issueCodes,
-				ProtectRules:      protectRules,
-				RubyEnabled:       roundRuby.Enabled,
-				RubyPreserveKinds: roundRuby.PreserveKinds,
-			})
-
-		case "extract":
-			if r.Extract == nil {
-				return nil, fmt.Errorf("execution.rounds[%d]: mode=extract requires extract config", i)
-			}
-			e := r.Extract
-
-			var extractRenderer *prompt.BootstrapRenderer
-			if pt, ok := cliCfg.PromptTemplates[e.Template]; ok && pt.Content != "" {
-				extractRenderer, err = prompt.NewBootstrapRenderer(pt.Content)
-				if err != nil {
-					return nil, fmt.Errorf("build bootstrap renderer for template %q: %w", e.Template, err)
-				}
-			}
-
-			rounds = append(rounds, engine.Round{
-				Backend:      b,
-				BatchSize:    e.BatchSize,
-				Concurrency:  e.Concurrency,
-				Retry:        toBackendRetryPolicy(e.Retry),
-				Mode:         pipeline.RoundModeExtract,
-				ResponseMode: responseModeFromOptions(bCfg.Options),
-
-				ExtractRenderer:             extractRenderer,
-				ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
-				ExtractMinSourceLen:         e.MinSourceLen,
-				ExtractMaxWordsPerBatch:     e.MaxWordsPerBatch,
-			})
-
-		default:
-			return nil, fmt.Errorf("execution.rounds[%d]: unsupported mode %q", i, r.Mode)
-		}
-	}
-
-	var rubyRetryBackends []backend.Backend
-	retryName := profileCfg.Ruby.RetryBackend
-	if retryName != "" {
-		bCfg, ok := cliCfg.Backends[retryName]
-		if !ok {
-			return nil, fmt.Errorf("ruby retry backend %q not found in backends", retryName)
-		}
-		b, bErr := backend.Build(backend.Config{
-			Name:               retryName,
-			Type:               bCfg.Type,
-			Enabled:            bCfg.Enabled,
-			RateLimitPerMinute: bCfg.RateLimitPerMinute,
-			Options:            bCfg.Options,
-		})
-		if bErr != nil {
-			return nil, fmt.Errorf("build ruby retry backend %q: %w", retryName, bErr)
-		}
-		if bCfg.RateLimitPerMinute > 0 {
-			limiter := backend.NewRateLimiterPerMinute(bCfg.RateLimitPerMinute)
-			b = backend.NewRateLimitedBackend(b, limiter)
-		}
-		rubyRetryBackends = []backend.Backend{b}
-	}
-
-	return &engine.Options{
-		Config:            cfg,
-		Rounds:            rounds,
-		RubyRetryBackends: rubyRetryBackends,
-	}, nil
+type cliExecution struct {
+	Spec     *execution.ResolvedExecutionSpec
+	Secrets  *credential.Memory
+	Limiters *backend.LimiterPool
 }
 
-// resolveReviseIssueCodes 物化修订轮的语义 issue 目标集合（与 service 层快照语义
-// 一致）：with_issues（默认/空）物化为完整语义白名单；with_issue_codes 校验并透传
-// 用户指定 codes。
+func (r *cliExecution) Close() { r.Limiters.Shutdown(); _ = r.Secrets.Close() }
+
+func resolveCLIExecution(cfg *config.CLIConfig) (result *cliExecution, err error) {
+	if err := config.ValidateCLIConfig(cfg); err != nil {
+		return nil, err
+	}
+	profile, err := config.ResolveExecutionProfile(cfg)
+	if err != nil {
+		return nil, err
+	}
+	result = &cliExecution{Secrets: credential.NewMemory(), Limiters: backend.NewLimiterPool()}
+	defer func() {
+		if err != nil {
+			result.Close()
+		}
+	}()
+	backends := map[string]execution.BackendSnapshot{}
+	policies := map[int]int{}
+	resolveBackend := func(name string) (execution.BackendSnapshot, error) {
+		if b, ok := backends[name]; ok {
+			return b, nil
+		}
+		input, ok := cfg.Backends[name]
+		if !ok {
+			return execution.BackendSnapshot{}, errors.New("execution references an unknown backend")
+		}
+		if !input.Enabled {
+			return execution.BackendSnapshot{}, fmt.Errorf("backend %s is disabled", name)
+		}
+		if input.Secret == "" {
+			return execution.BackendSnapshot{}, fmt.Errorf("backend %s requires secret", name)
+		}
+		endpoint, _ := input.Options["base_url"].(string)
+		binding, err := result.Secrets.Register(input.Type, endpoint, input.Secret)
+		if err != nil {
+			return execution.BackendSnapshot{}, fmt.Errorf("backend %s has invalid credentials or endpoint", name)
+		}
+		options := make(map[string]any, len(input.Options))
+		for key, value := range input.Options {
+			options[key] = value
+		}
+		b := execution.BackendSnapshot{ID: binding.ID, Scope: "cli", Name: name, Type: input.Type, Options: options, Credential: binding, RateLimitPerMinute: input.RateLimitPerMinute}
+		backends[name] = b
+		policies[b.ID] = input.RateLimitPerMinute
+		return b, nil
+	}
+	snapshot := execution.JobExecutionSnapshot{
+		ExecutionPlanName: "CLI translation",
+		SourceLang:        cfg.SourceLang, TargetLang: cfg.TargetLang, GlossaryEnabled: cfg.Glossary.Enabled,
+		Strategy: execution.StrategySnapshot{
+			ProfileName: cfg.Execution.Profile, Protect: profile.Protect, Postprocess: profile.Postprocess, Repair: profile.Repair,
+			Glossary: profile.Glossary, Context: profile.Context, Ruby: profile.Ruby, QA: profile.QA,
+		},
+		RubyTemplates: execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate},
+	}
+	for i, r := range cfg.Execution.Rounds {
+		b, backendErr := resolveBackend(r.Backend)
+		if backendErr != nil {
+			return result, backendErr
+		}
+		round := execution.JobRoundSnapshot{Mode: r.Mode, Backend: b}
+		switch r.Mode {
+		case "translate":
+			t := r.Translate
+			content := templates.EmbeddedPromptTemplate()
+			if t.Prompt != "" {
+				p, ok := cfg.PromptTemplates[t.Prompt]
+				if !ok || p.Content == "" {
+					return result, fmt.Errorf("execution.rounds[%d] references an unavailable translation prompt", i)
+				}
+				content = p.Content
+			}
+			round.Translate = &execution.JobTranslateRoundSnapshot{Prompt: execution.PromptSnapshot{TemplateName: t.Prompt, Content: content}, BatchSize: t.BatchSize, MaxWordsPerBatch: t.MaxWordsPerBatch, Concurrency: t.Concurrency, FallbackShrink: t.FallbackShrink, SegmentFilter: &execution.SegmentFilterSnapshot{StatusFilter: "pending_only"}, Retry: execution.RetryConfig(t.Retry)}
+		case "extract":
+			e := r.Extract
+			content := templates.EmbeddedBootstrapTemplate()
+			if e.Template != "" {
+				p, ok := cfg.BootstrapPromptTemplates[e.Template]
+				if !ok || p.Content == "" {
+					return result, fmt.Errorf("execution.rounds[%d] references an unavailable extraction prompt", i)
+				}
+				content = p.Content
+			}
+			round.Extract = &execution.JobExtractRoundSnapshot{TemplateContent: content, BatchSize: e.BatchSize, MaxWordsPerBatch: e.MaxWordsPerBatch, Concurrency: e.Concurrency, MaxTermsPer1000Chars: e.MaxTermsPer1000Chars, MinSourceLen: e.MinSourceLen, Retry: execution.RetryConfig(e.Retry)}
+		case "revise":
+			v := r.Revise
+			codes, codeErr := resolveReviseIssueCodes(v)
+			if codeErr != nil {
+				return result, codeErr
+			}
+			round.Revise = &execution.JobReviseRoundSnapshot{TemplateContent: templates.EmbeddedReviseTemplate(), BatchSize: v.BatchSize, MaxWordsPerBatch: v.MaxWordsPerBatch, Concurrency: v.Concurrency, SegmentScope: v.SegmentScope, IssueCodes: codes, Retry: execution.RetryConfig(v.Retry)}
+		default:
+			return result, errors.New("unsupported CLI execution mode")
+		}
+		snapshot.Rounds = append(snapshot.Rounds, round)
+	}
+	if ruby := cfg.Execution.RubyRetry; ruby != nil && ruby.Enabled {
+		b, backendErr := resolveBackend(ruby.Backend)
+		if backendErr != nil {
+			return result, backendErr
+		}
+		snapshot.RubyRetry = &execution.ExecutionPlanRubyRetrySnapshot{Enabled: true, Backend: b, MaxAttempts: ruby.MaxAttempts}
+	}
+	result.Spec, err = execution.Resolve(snapshot)
+	if err != nil {
+		return result, err
+	}
+	result.Limiters.Initialize(policies)
+	return result, nil
+}
+
+func buildEngineFromCLIConfig(ctx context.Context, cfg *config.CLIConfig, logger *slog.Logger, reporter progress.Reporter) (*engine.Engine, *cliExecution, error) {
+	resolved, err := resolveCLIExecution(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	engineConfig := worker.BuildEngineConfig(resolved.Spec)
+	engineConfig.Glossary.Path = cfg.Glossary.Path
+	engineConfig.Glossary.Save = cfg.Glossary.Save
+	factory := worker.NewEngineFactoryWithCredentials(logger, resolved.Limiters, resolved.Secrets, resolved.Secrets)
+	eng, err := factory.BuildEngineWithConfig(ctx, resolved.Spec, engineConfig, engine.RuntimeResources{}, reporter)
+	if err != nil {
+		resolved.Close()
+		return nil, nil, err
+	}
+	return eng, resolved, nil
+}
+
 func resolveReviseIssueCodes(r *config.CLIConfigReviseRound) ([]string, error) {
 	switch r.SegmentScope {
 	case "", "with_issues":
 		return qa.SemanticQACodes(), nil
 	case "with_issue_codes":
 		if len(r.IssueCodes) == 0 {
-			return nil, fmt.Errorf("revise.issue_codes must contain at least one code when segment_scope is \"with_issue_codes\"")
+			return nil, errors.New("revise.issue_codes must not be empty")
 		}
 		for _, code := range r.IssueCodes {
 			if !qa.IsSemanticQACode(code) {
-				return nil, fmt.Errorf("revise.issue_codes contains invalid code %q", code)
+				return nil, errors.New("revise.issue_codes contains an unsupported code")
 			}
 		}
 		return append([]string(nil), r.IssueCodes...), nil
 	default:
-		return nil, fmt.Errorf("revise.segment_scope must be \"with_issues\" or \"with_issue_codes\", got %q", r.SegmentScope)
+		return nil, errors.New("revise.segment_scope must be with_issues or with_issue_codes")
 	}
-}
-
-func resolvePromptContent(cliCfg *config.CLIConfig, name string) string {
-	if pt, ok := cliCfg.PromptTemplates[name]; ok {
-		return pt.Content
-	}
-	return ""
 }
 
 // translateSingleFile 使用 TranslateRound 轮次循环翻译单个文件。
-func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, sourceLang, targetLang string) error {
+func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, sourceLang, targetLang string, revision *config.CLIRevisionInput) error {
 	p, err := parser.DetectByExt(fj.InputPath)
 	if err != nil {
 		return err
@@ -401,28 +288,48 @@ func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, so
 	if targetLang != "" {
 		doc.TargetLang = targetLang
 	}
+	// Parsers describe content; this CLI invocation selects every usable segment.
+	for i := range doc.Segments {
+		doc.Segments[i].Translate = !doc.Segments[i].Skip
+	}
+	if err := applyCLIRevisionInput(doc, eng, revision); err != nil {
+		return err
+	}
 
 	// 跨轮增量载体（in-memory）：per-mode 已解决段索引集合。
 	// 与 job_runner/preview/quick_translate 保持一致，使 CLI 行为与正式作业对齐。
 	// translate 不参与（由 doc.Vars _translate_failed_indices 驱动增量）。
 	resolvedByMode := engine.NewResolvedByMode()
 
-	// 轮次循环
+	// Extraction may precede translation; count translation passes independently.
+	translationPass := 0
 	for roundIdx := range eng.Rounds() {
 		mode := eng.Rounds()[roundIdx].Handler.ModeName()
 
 		if mode == pipeline.RoundModeTranslate {
-			segmentIndexes := collectPendingOrFailed(doc, roundIdx)
+			segmentIndexes := collectPendingOrFailed(doc, translationPass)
 			if len(segmentIndexes) == 0 {
 				continue
 			}
-			if roundIdx > 0 {
+			if translationPass > 0 {
 				restoreFailedSegments(doc, segmentIndexes)
 			}
 
+			translationPass++
 			_, err := eng.ExecuteRound(ctx, roundIdx, doc, engine.WithSegmentFilter(segmentIndexes))
 			if err != nil {
 				return fmt.Errorf("cli: translate round %d: %w", roundIdx, err)
+			}
+			for _, index := range segmentIndexes {
+				if doc.Segments[index].Target != "" {
+					doc.Segments[index].Status = "translated"
+				}
+			}
+			continue
+		}
+		if mode == pipeline.RoundModeRevise {
+			if err := executeCLIRevisionRound(ctx, eng, roundIdx, doc); err != nil {
+				return err
 			}
 			continue
 		}
@@ -445,6 +352,9 @@ func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, so
 		// 累加本轮成功段到对应模式的 resolved 集合（跨轮增量）。
 		engine.AccumulateResolved(resolvedByMode, mode, result.Resolved)
 	}
+	if err := validateCLIRevisionComplete(doc, eng); err != nil {
+		return err
+	}
 
 	original, err := os.Open(fj.InputPath)
 	if err != nil {
@@ -456,14 +366,14 @@ func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, so
 	if err != nil {
 		return err
 	}
-	defer func() { _ = writer.Close() }()
+	defer func() { _ = writer.Abort() }()
 
 	if err := p.Render(ctx, doc, original, writer); err != nil {
 		return fmt.Errorf("cli: render: %w", err)
 	}
 
 	eng.SaveGlossary(ctx)
-	return nil
+	return writer.Close()
 }
 
 // collectPendingOrFailed 收集待翻译或前一轮失败的段落索引。
@@ -504,21 +414,5 @@ func restoreFailedSegments(doc *pipeline.Document, indexes []int) {
 		}
 		seg.Protected = nil
 		seg.Target = ""
-	}
-}
-
-func responseModeFromOptions(opts map[string]any) string {
-	if v, ok := opts["response_format"].(string); ok {
-		return v
-	}
-	return ""
-}
-
-// toBackendRetryPolicy 将 config.RetryConfig 转换为 backend.RetryPolicy。
-func toBackendRetryPolicy(cfg config.RetryConfig) backend.RetryPolicy {
-	return backend.RetryPolicy{
-		MaxAttempts: cfg.MaxAttempts,
-		Backoff:     time.Duration(cfg.BackoffMs) * time.Millisecond,
-		Jitter:      cfg.Jitter,
 	}
 }

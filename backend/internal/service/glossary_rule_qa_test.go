@@ -12,7 +12,7 @@ import (
 func TestGlossaryRuleQAEntrySemantics(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
 	svc := NewGlossaryService(client, projects)
 	u := createTestUser(t, client, "glossary-rules")

@@ -26,6 +26,7 @@ func (Backend) Fields() []ent.Field {
 		field.Enum("backend_type").Values("openai", "anthropic", "google"),
 		field.JSON("options", map[string]any{}).
 			Default(func() map[string]any { return map[string]any{} }),
+		field.Int("credential_id").Optional().Nillable().Positive(),
 		field.Int("rate_limit_per_minute").Default(0).
 			Comment("每分钟请求限制；0 表示不限速"),
 	}
@@ -33,6 +34,7 @@ func (Backend) Fields() []ent.Field {
 
 func (Backend) Edges() []ent.Edge {
 	return []ent.Edge{
+		edge.From("credential", Credential.Type).Ref("backends").Field("credential_id").Unique(),
 		edge.From("owner_user", User.Type).
 			Ref("backends").
 			Field("owner_user_id").Unique(),

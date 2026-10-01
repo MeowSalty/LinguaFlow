@@ -54,7 +54,7 @@ func TestAdjudicateHandler_BuildBatches_SelectsTranslatedWithIssues(t *testing.T
 			{{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"}},
 		},
 	)
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   &fakeBackend{name: "fake"},
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -78,7 +78,7 @@ func TestAdjudicateHandler_BuildBatches_SkipsNonAdjudicableCodes(t *testing.T) {
 			{{Code: "duplicate", Severity: qa.SeverityWarning, Message: "dup"}},
 		},
 	)
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   &fakeBackend{name: "fake"},
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -107,7 +107,7 @@ func TestAdjudicateHandler_ProcessBatch_FalsePositiveDismissed(t *testing.T) {
 		name:      "fake",
 		responses: []string{`{"verdicts":[{"id":"0","issue_code":"source_residual","verdict":"false_positive","reason":"proper noun"}]}`},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -163,7 +163,7 @@ func TestAdjudicateHandler_ProcessBatch_RealPreserved(t *testing.T) {
 		name:      "fake",
 		responses: []string{`{"verdicts":[{"id":"0","issue_code":"source_residual","verdict":"real","reason":"missed translation"}]}`},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -186,7 +186,7 @@ func TestAdjudicateHandler_ProcessBatch_ParseFailureDefers(t *testing.T) {
 		},
 	)
 	fb := &fakeBackend{name: "fake", responses: []string{`not json at all`}}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -215,7 +215,7 @@ func TestAdjudicateHandler_ProcessBatch_BackendErrorDefers(t *testing.T) {
 	)
 	// 400 非 401/403（不致命）、非 ≥500/429（不可重试）→ 命中非致命不可重试分支。
 	fb := &fakeBackend{name: "fake", errs: []error{&backend.StatusError{StatusCode: 400, Err: errors.New("bad request")}}}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -246,7 +246,7 @@ func TestAdjudicateHandler_ProcessBatch_RenderFailureDefers(t *testing.T) {
 		t.Fatalf("new renderer: %v", err)
 	}
 	fb := &fakeBackend{name: "fake", responses: []string{`{}`}}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  renderer,
 		BatchSize: 10,
@@ -275,7 +275,7 @@ func TestAdjudicateHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
 		name:      "fake",
 		responses: []string{`{"verdicts":[{"id":"0","issue_code":"source_residual","verdict":"real","reason":"x"}]}`},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -307,7 +307,7 @@ func TestAdjudicateHandler_ProcessBatch_TextMode(t *testing.T) {
 		name:      "fake",
 		responses: []string{"[verdicts]\n0 | source_residual | false_positive | proper noun"},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:      fb,
 		Renderer:     newAdjudicationRenderer(t),
 		BatchSize:    10,
@@ -370,7 +370,7 @@ func TestAdjudicateHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
 		name:      "fake",
 		responses: []string{`{"verdicts":[{"id":"0","issue_code":"source_residual","verdict":"false_positive","reason":"ok"}]}`},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:      fb,
 		Renderer:     newAdjudicationRenderer(t),
 		BatchSize:    10,
@@ -405,7 +405,7 @@ func TestAdjudicateHandler_ProcessBatch_TextModeTruncatedRefused(t *testing.T) {
 			responses: []string{"[verdicts]\n0 | source_residual | false_positive | proper noun"},
 		},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:      fb,
 		Renderer:     newAdjudicationRenderer(t),
 		BatchSize:    10,
@@ -447,7 +447,7 @@ func TestAdjudicateHandler_BuildBatches_PackedDiscontinuous(t *testing.T) {
 			{{Code: "source_residual", Severity: qa.SeverityWarning, Message: "r4"}},
 		},
 	)
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   &fakeBackend{name: "fake"},
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -474,7 +474,7 @@ func TestAdjudicateHandler_BuildBatches_MaxBatchIndexSpan(t *testing.T) {
 		},
 	)
 	// pending 全选 [0..4]；span=2 → [0,1,2](2-0=2), [3,4]
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:           &fakeBackend{name: "fake"},
 		Renderer:          newAdjudicationRenderer(t),
 		BatchSize:         10,
@@ -508,7 +508,7 @@ func TestAdjudicateHandler_ProcessBatch_MatchedTextSelectiveDismiss(t *testing.T
 			{"id":"0","issue_code":"source_residual","matched_text":"bar","verdict":"real","reason":"keep"}
 		]}`},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -550,7 +550,7 @@ func TestAdjudicateHandler_ProcessBatch_MatchedTextMissingKeepsMultipleIssues(t 
 		name:      "fake",
 		responses: []string{`{"verdicts":[{"id":"0","issue_code":"source_residual","matched_text":"","verdict":"false_positive","reason":"missing identity"}]}`},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -660,7 +660,7 @@ func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusDefaultAdjudicable(t *
 		name:      "fake",
 		responses: []string{`{"verdicts":[{"id":"0","issue_code":"punctuation_surplus","matched_text":"“”","verdict":"false_positive","reason":"内心独白加引号"}]}`},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -714,7 +714,7 @@ func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusMatchedTextKeyed(t *te
 		name:      "fake",
 		responses: []string{`{"verdicts":[{"id":"0","issue_code":"punctuation_surplus","matched_text":"","verdict":"false_positive","reason":"拟声词加引号"}]}`},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,
@@ -760,7 +760,7 @@ func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusRealStaysPending(t *te
 		name:      "fake",
 		responses: []string{`{"verdicts":[{"id":"0","issue_code":"punctuation_surplus","matched_text":"“”","verdict":"real","reason":"无明显文体动机"}]}`},
 	}
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,

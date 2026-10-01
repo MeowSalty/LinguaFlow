@@ -3,241 +3,179 @@ package cli
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
+	"strconv"
 	"strings"
-
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/api"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/logging"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
-// BootOptions 描述服务器引导的共享参数。
+// BootOptions supplies the completed, read-only resolution result. Tests may
+// inject a logger; production always constructs it from the resolved log input.
 type BootOptions struct {
-	Logger    *slog.Logger
-	Overrides func(cfg *config.ServerConfig)
-	Mode      string // "server" | "local"
+	Resolved *config.ResolvedServer
+	Logger   *slog.Logger
 }
 
-// bootstrapServer 加载配置、打开数据库、运行迁移、创建监听器，
-// 返回准备就绪的 *api.Server 和监听器。调用方负责调用 server.Run(ctx, ln)。
 func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Listener, func() error, error) {
-	cfg, err := config.LoadServerConfig(opts.Mode)
-	if err != nil {
-		return nil, nil, nil, err
+	if opts.Resolved == nil {
+		return nil, nil, nil, errors.New("resolved deployment configuration is required")
 	}
-
-	if opts.Overrides != nil {
-		opts.Overrides(cfg)
+	resolved := opts.Resolved
+	cfg := resolved.Config
+	logger := opts.Logger
+	if logger == nil {
+		logger = logging.New(os.Stderr, resolved.Log.Level, resolved.Log.Format)
 	}
-	if err := config.ValidateServerConfig(cfg); err != nil {
-		return nil, nil, nil, err
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
+		return nil, nil, nil, fmt.Errorf("prepare data directory: %w", err)
 	}
-
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
-		return nil, nil, nil, fmt.Errorf("create server data dir %s: %w", cfg.DataDir, err)
-	}
-
-	db, client, err := database.Open(ctx, cfg)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	cleanup := func() error {
-		clientErr := client.Close()
-		dbErr := db.Close()
-		if clientErr != nil {
-			return clientErr
-		}
-		return dbErr
-	}
-
-	if cfg.AutoMigrate {
-		unlockMigration, err := database.AcquireMigrationLock(ctx, db, cfg.Database.Driver)
+	if resolved.LocalSecretPath != "" {
+		secret, err := prepareLocalSecret(resolved.LocalSecretPath)
 		if err != nil {
-			_ = cleanup()
 			return nil, nil, nil, err
 		}
-		migrationErr := client.Schema.Create(ctx)
-		if migrationErr == nil {
-			migrationErr = service.MigrateHistoryVisibility(ctx, client)
-		}
-		unlockErr := unlockMigration()
-		if err := errors.Join(migrationErr, unlockErr); err != nil {
-			_ = cleanup()
-			return nil, nil, nil, fmt.Errorf("run ent schema migration: %w", err)
-		}
+		cfg.JWTSecret = secret
 	}
-
-	var localUser *ent.User
+	if err := config.ValidateServerConfig(&cfg); err != nil {
+		return nil, nil, nil, err
+	}
+	db, client, cleanup, err := prepareDatabase(ctx, &cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	initialization := service.NewInitializationService(client)
+	allowCreateKeyring := false
 	if cfg.IsLocal() {
-		localUser, err = ensureLocalUser(ctx, client)
+		empty, err := initialization.IsEmpty(ctx)
 		if err != nil {
 			_ = cleanup()
-			return nil, nil, nil, fmt.Errorf("ensure local user: %w", err)
+			return nil, nil, nil, fmt.Errorf("read initialization state: %w", err)
 		}
+		allowCreateKeyring = empty
 	}
-
-	if err := ensureAdminUser(ctx, client, opts.Logger); err != nil {
+	if _, err := credential.PrepareKeyring(cfg.Credentials.KeyringFile, allowCreateKeyring); err != nil {
 		_ = cleanup()
-		return nil, nil, nil, fmt.Errorf("ensure admin user: %w", err)
+		return nil, nil, nil, fmt.Errorf("prepare credential keyring: %w", err)
 	}
-
-	ln, err := net.Listen("tcp", cfg.Address())
+	localUser, err := initialization.Initialize(ctx, cfg.Mode, resolved.Bootstrap)
 	if err != nil {
 		_ = cleanup()
-		return nil, nil, nil, fmt.Errorf("listen on %s: %w", cfg.Address(), err)
+		return nil, nil, nil, fmt.Errorf("initialize instance: %w", err)
 	}
-
-	// 回写实际端口（当端口为 0 时由 OS 分配）。
-	actualPort := ln.Addr().(*net.TCPAddr).Port
-	cfg.Port = actualPort
-
-	logArgs := []any{
-		"mode", cfg.Mode,
-		"addr", ln.Addr().String(),
-		"database_driver", cfg.Database.Driver,
-		"database_max_open_conns", cfg.Database.MaxOpenConns,
-		"database_max_idle_conns", cfg.Database.MaxIdleConns,
-		"database_conn_max_lifetime", cfg.Database.ConnMaxLifetime,
-		"auto_migrate", cfg.AutoMigrate,
-		"serve_ui", cfg.ServeUI,
+	ln, err := bindListener(ctx, &cfg, resolved.AllowNetwork)
+	if err != nil {
+		_ = cleanup()
+		return nil, nil, nil, err
 	}
-	if cfg.Database.Driver == config.DatabaseDriverSQLite && cfg.Database.DSN == "" {
-		logArgs = append(logArgs, "database_path", cfg.DatabasePath())
-	}
-	opts.Logger.Info("server bootstrapped", logArgs...)
-
-	server, err := api.NewServer(cfg, opts.Logger, db, client, cfg.Mode, localUser)
+	address := ln.Addr().(*net.TCPAddr)
+	runtimeAddress := config.RuntimeAddress{Host: address.IP.String(), Port: address.Port}
+	server, err := api.NewServer(&cfg, logger, db, client, cfg.Mode, localUser, runtimeAddress)
 	if err != nil {
 		_ = ln.Close()
 		_ = cleanup()
 		return nil, nil, nil, err
 	}
-
+	logger.Info("server bootstrapped", "mode", cfg.Mode, "requested_address", cfg.Address(), "bound_address", ln.Addr().String(), "database_driver", cfg.Database.Driver, "auto_migrate", cfg.AutoMigrate, "serve_ui", cfg.ServeUI)
+	if cfg.IsLocal() && resolved.AllowNetwork {
+		logger.Warn("local network access enabled: connecting clients have local administrator access")
+	}
 	return server, ln, cleanup, nil
 }
 
-// ensureLocalUser 创建本地用户（如果不存在）。
-// 本地用户使用随机 bcrypt 哈希作为密码，确保在 serve 模式下无法通过密码登录。
-func ensureLocalUser(ctx context.Context, client *ent.Client) (*ent.User, error) {
-	existing, err := client.User.Query().Where(user.UsernameEQ("local")).Only(ctx)
-	if err == nil {
-		return existing, nil
+// prepareDatabase is shared with offline administrator maintenance. It performs
+// schema preparation only; callers explicitly choose initialization and secrets.
+func prepareDatabase(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, func() error, error) {
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
+		return nil, nil, nil, fmt.Errorf("prepare data directory: %w", err)
 	}
-	if !ent.IsNotFound(err) {
-		return nil, fmt.Errorf("query local user: %w", err)
-	}
-
-	randomHash, err := randomBcryptHash()
+	db, client, err := database.Open(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("generate random password hash: %w", err)
+		return nil, nil, nil, err
 	}
-
-	u, err := client.User.Create().
-		SetUsername("local").
-		SetPasswordHash(randomHash).
-		SetEmail("local@linguaflow.local").
-		SetRole("admin").
-		SetActive(true).
-		Save(ctx)
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			// 竞态条件：另一个进程先创建了该用户。
-			existing, err2 := client.User.Query().Where(user.UsernameEQ("local")).Only(ctx)
-			if err2 != nil {
-				return nil, fmt.Errorf("query local user after constraint error: %w", err2)
+	cleanup := func() error { return errors.Join(client.Close(), db.Close()) }
+	if cfg.AutoMigrate {
+		err = database.WithMigrationLock(ctx, db, cfg.Database.Driver, func(migrationClient *ent.Client) error {
+			if err := migrationClient.Schema.Create(ctx); err != nil {
+				return err
 			}
-			return existing, nil
+			return service.MigrateHistoryVisibility(ctx, migrationClient)
+		})
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, fmt.Errorf("prepare database schema: %w", err)
 		}
-		return nil, fmt.Errorf("create local user: %w", err)
 	}
-	return u, nil
+	return db, client, cleanup, nil
 }
 
-// randomBcryptHash 从随机字节生成 bcrypt 哈希。
-// 生成的哈希无法被任何明文密码匹配。
-func randomBcryptHash() (string, error) {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
+func prepareLocalSecret(path string) (string, error) {
+	secret, err := config.ReadLocalSecret(path)
+	if err == nil {
+		return secret, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
-	randomStr := hex.EncodeToString(buf)
-	hash, err := bcrypt.GenerateFromPassword([]byte(randomStr), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return "", fmt.Errorf("generate local instance key: %w", err)
 	}
-	return string(hash), nil
+	value := hex.EncodeToString(key)
+	if _, err := credential.PublishPrivateFile(path, []byte(value+"\n")); err != nil {
+		return "", fmt.Errorf("persist local instance key: %w", err)
+	}
+	// Another process may have published first. Always read the winning file.
+	return config.ReadLocalSecret(path)
 }
 
-// ensureAdminUser 根据环境变量创建或确保管理员用户。
-// 优先级：LINGUAFLOW_ADMIN_USERNAME 环境变量方案。
-// 用户已存在时不会修改密码，只会确保 role 为 admin。
-func ensureAdminUser(ctx context.Context, client *ent.Client, logger *slog.Logger) error {
-	adminUsername := os.Getenv("LINGUAFLOW_ADMIN_USERNAME")
-	if adminUsername == "" {
-		return nil
-	}
-
-	adminUsername = strings.ToLower(strings.TrimSpace(adminUsername))
-
-	existing, err := client.User.Query().Where(user.UsernameEQ(adminUsername)).Only(ctx)
-	if err == nil {
-		if existing.Role != "admin" {
-			if err := client.User.UpdateOneID(existing.ID).SetRole("admin").Exec(ctx); err != nil {
-				return fmt.Errorf("ensure admin role: %w", err)
-			}
-			logger.Info("upgraded user role to admin", "username", adminUsername)
+func bindListener(ctx context.Context, cfg *config.ServerConfig, allowNetwork bool) (net.Listener, error) {
+	host := strings.Trim(cfg.Host, "[]")
+	if cfg.IsLocal() && !allowNetwork && strings.EqualFold(host, "localhost") {
+		addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, fmt.Errorf("resolve local loopback address: %w", err)
 		}
-		return nil
-	}
-	if !ent.IsNotFound(err) {
-		return fmt.Errorf("query admin user: %w", err)
-	}
-
-	adminPassword := os.Getenv("LINGUAFLOW_ADMIN_PASSWORD")
-	if adminPassword == "" {
-		logger.Warn("LINGUAFLOW_ADMIN_USERNAME is set but user does not exist and LINGUAFLOW_ADMIN_PASSWORD is not set, skipping admin creation",
-			"username", adminUsername)
-		return nil
-	}
-
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("hash admin password: %w", err)
-	}
-
-	u, err := client.User.Create().
-		SetUsername(adminUsername).
-		SetPasswordHash(string(passwordHash)).
-		SetEmail(adminUsername + "@admin.local").
-		SetRole("admin").
-		SetActive(true).
-		Save(ctx)
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			existing, err2 := client.User.Query().Where(user.UsernameEQ(adminUsername)).Only(ctx)
-			if err2 != nil {
-				return fmt.Errorf("query admin user after constraint error: %w", err2)
+		host = ""
+		for _, address := range addresses {
+			if address.IP.IsLoopback() {
+				host = address.IP.String()
+				break
 			}
-			if existing.Role != "admin" {
-				if err := client.User.UpdateOneID(existing.ID).SetRole("admin").Exec(ctx); err != nil {
-					return fmt.Errorf("ensure admin role: %w", err)
-				}
-			}
-			return nil
 		}
-		return fmt.Errorf("create admin user: %w", err)
+		if host == "" {
+			return nil, errors.New("localhost did not resolve to a loopback address")
+		}
 	}
-
-	logger.Info("created admin user from environment variables", "username", u.Username)
-	return nil
+	attempts := 1
+	if cfg.IsLocal() && cfg.Port != 0 {
+		attempts = 10
+	}
+	for i := 0; i < attempts && cfg.Port+i <= 65535; i++ {
+		addr := net.JoinHostPort(host, strconv.Itoa(cfg.Port+i))
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			if cfg.IsLocal() && !allowNetwork && !ln.Addr().(*net.TCPAddr).IP.IsLoopback() {
+				_ = ln.Close()
+				return nil, errors.New("local listener must use a loopback address")
+			}
+			return ln, nil
+		}
+		if !cfg.IsLocal() || !isAddressInUse(err) || i+1 == attempts || cfg.Port+i == 65535 {
+			return nil, fmt.Errorf("listen on %s: %w", addr, err)
+		}
+	}
+	return nil, errors.New("no available local listening port")
 }

@@ -21,13 +21,17 @@ func (s *Server) applyMiddleware(r *chi.Mux) {
 	allowedOrigins := s.serverCfg.CORS.AllowedOrigins
 	if s.isLocal() {
 		allowedOrigins = []string{
-			"http://127.0.0.1:" + fmt.Sprintf("%d", s.serverCfg.Port),
-			"http://localhost:" + fmt.Sprintf("%d", s.serverCfg.Port),
-			"http://127.0.0.1",
-			"http://localhost",
+			"http://127.0.0.1:" + fmt.Sprintf("%d", s.runtimeAddress.Port),
+			"http://localhost:" + fmt.Sprintf("%d", s.runtimeAddress.Port),
+			"http://[::1]:" + fmt.Sprintf("%d", s.runtimeAddress.Port),
 		}
 	}
 
+	// cors treats an empty list as '*'; absence of this middleware permits only
+	// ordinary same-origin browser requests, as the explicit empty policy intends.
+	if len(allowedOrigins) == 0 {
+		return
+	}
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -124,6 +125,26 @@ func (_u *BackendUpdate) SetOptions(v map[string]interface{}) *BackendUpdate {
 	return _u
 }
 
+// SetCredentialID sets the "credential_id" field.
+func (_u *BackendUpdate) SetCredentialID(v int) *BackendUpdate {
+	_u.mutation.SetCredentialID(v)
+	return _u
+}
+
+// SetNillableCredentialID sets the "credential_id" field if the given value is not nil.
+func (_u *BackendUpdate) SetNillableCredentialID(v *int) *BackendUpdate {
+	if v != nil {
+		_u.SetCredentialID(*v)
+	}
+	return _u
+}
+
+// ClearCredentialID clears the value of the "credential_id" field.
+func (_u *BackendUpdate) ClearCredentialID() *BackendUpdate {
+	_u.mutation.ClearCredentialID()
+	return _u
+}
+
 // SetRateLimitPerMinute sets the "rate_limit_per_minute" field.
 func (_u *BackendUpdate) SetRateLimitPerMinute(v int) *BackendUpdate {
 	_u.mutation.ResetRateLimitPerMinute()
@@ -145,6 +166,11 @@ func (_u *BackendUpdate) AddRateLimitPerMinute(v int) *BackendUpdate {
 	return _u
 }
 
+// SetCredential sets the "credential" edge to the Credential entity.
+func (_u *BackendUpdate) SetCredential(v *Credential) *BackendUpdate {
+	return _u.SetCredentialID(v.ID)
+}
+
 // SetOwnerUser sets the "owner_user" edge to the User entity.
 func (_u *BackendUpdate) SetOwnerUser(v *User) *BackendUpdate {
 	return _u.SetOwnerUserID(v.ID)
@@ -158,6 +184,12 @@ func (_u *BackendUpdate) SetOwnerOrg(v *Organization) *BackendUpdate {
 // Mutation returns the BackendMutation object of the builder.
 func (_u *BackendUpdate) Mutation() *BackendMutation {
 	return _u.mutation
+}
+
+// ClearCredential clears the "credential" edge to the Credential entity.
+func (_u *BackendUpdate) ClearCredential() *BackendUpdate {
+	_u.mutation.ClearCredential()
+	return _u
 }
 
 // ClearOwnerUser clears the "owner_user" edge to the User entity.
@@ -230,6 +262,11 @@ func (_u *BackendUpdate) check() error {
 			return &ValidationError{Name: "backend_type", err: fmt.Errorf(`ent: validator failed for field "Backend.backend_type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.CredentialID(); ok {
+		if err := backend.CredentialIDValidator(v); err != nil {
+			return &ValidationError{Name: "credential_id", err: fmt.Errorf(`ent: validator failed for field "Backend.credential_id": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -265,6 +302,35 @@ func (_u *BackendUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRateLimitPerMinute(); ok {
 		_spec.AddField(backend.FieldRateLimitPerMinute, field.TypeInt, value)
+	}
+	if _u.mutation.CredentialCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   backend.CredentialTable,
+			Columns: []string{backend.CredentialColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credential.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CredentialIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   backend.CredentialTable,
+			Columns: []string{backend.CredentialColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credential.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -438,6 +504,26 @@ func (_u *BackendUpdateOne) SetOptions(v map[string]interface{}) *BackendUpdateO
 	return _u
 }
 
+// SetCredentialID sets the "credential_id" field.
+func (_u *BackendUpdateOne) SetCredentialID(v int) *BackendUpdateOne {
+	_u.mutation.SetCredentialID(v)
+	return _u
+}
+
+// SetNillableCredentialID sets the "credential_id" field if the given value is not nil.
+func (_u *BackendUpdateOne) SetNillableCredentialID(v *int) *BackendUpdateOne {
+	if v != nil {
+		_u.SetCredentialID(*v)
+	}
+	return _u
+}
+
+// ClearCredentialID clears the value of the "credential_id" field.
+func (_u *BackendUpdateOne) ClearCredentialID() *BackendUpdateOne {
+	_u.mutation.ClearCredentialID()
+	return _u
+}
+
 // SetRateLimitPerMinute sets the "rate_limit_per_minute" field.
 func (_u *BackendUpdateOne) SetRateLimitPerMinute(v int) *BackendUpdateOne {
 	_u.mutation.ResetRateLimitPerMinute()
@@ -459,6 +545,11 @@ func (_u *BackendUpdateOne) AddRateLimitPerMinute(v int) *BackendUpdateOne {
 	return _u
 }
 
+// SetCredential sets the "credential" edge to the Credential entity.
+func (_u *BackendUpdateOne) SetCredential(v *Credential) *BackendUpdateOne {
+	return _u.SetCredentialID(v.ID)
+}
+
 // SetOwnerUser sets the "owner_user" edge to the User entity.
 func (_u *BackendUpdateOne) SetOwnerUser(v *User) *BackendUpdateOne {
 	return _u.SetOwnerUserID(v.ID)
@@ -472,6 +563,12 @@ func (_u *BackendUpdateOne) SetOwnerOrg(v *Organization) *BackendUpdateOne {
 // Mutation returns the BackendMutation object of the builder.
 func (_u *BackendUpdateOne) Mutation() *BackendMutation {
 	return _u.mutation
+}
+
+// ClearCredential clears the "credential" edge to the Credential entity.
+func (_u *BackendUpdateOne) ClearCredential() *BackendUpdateOne {
+	_u.mutation.ClearCredential()
+	return _u
 }
 
 // ClearOwnerUser clears the "owner_user" edge to the User entity.
@@ -557,6 +654,11 @@ func (_u *BackendUpdateOne) check() error {
 			return &ValidationError{Name: "backend_type", err: fmt.Errorf(`ent: validator failed for field "Backend.backend_type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.CredentialID(); ok {
+		if err := backend.CredentialIDValidator(v); err != nil {
+			return &ValidationError{Name: "credential_id", err: fmt.Errorf(`ent: validator failed for field "Backend.credential_id": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -609,6 +711,35 @@ func (_u *BackendUpdateOne) sqlSave(ctx context.Context) (_node *Backend, err er
 	}
 	if value, ok := _u.mutation.AddedRateLimitPerMinute(); ok {
 		_spec.AddField(backend.FieldRateLimitPerMinute, field.TypeInt, value)
+	}
+	if _u.mutation.CredentialCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   backend.CredentialTable,
+			Columns: []string{backend.CredentialColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credential.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CredentialIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   backend.CredentialTable,
+			Columns: []string{backend.CredentialColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credential.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{

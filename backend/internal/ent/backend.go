@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -36,6 +37,8 @@ type Backend struct {
 	BackendType backend.BackendType `json:"backend_type,omitempty"`
 	// Options holds the value of the "options" field.
 	Options map[string]interface{} `json:"options,omitempty"`
+	// CredentialID holds the value of the "credential_id" field.
+	CredentialID *int `json:"credential_id,omitempty"`
 	// 每分钟请求限制；0 表示不限速
 	RateLimitPerMinute int `json:"rate_limit_per_minute,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -46,13 +49,26 @@ type Backend struct {
 
 // BackendEdges holds the relations/edges for other nodes in the graph.
 type BackendEdges struct {
+	// Credential holds the value of the credential edge.
+	Credential *Credential `json:"credential,omitempty"`
 	// OwnerUser holds the value of the owner_user edge.
 	OwnerUser *User `json:"owner_user,omitempty"`
 	// OwnerOrg holds the value of the owner_org edge.
 	OwnerOrg *Organization `json:"owner_org,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
+}
+
+// CredentialOrErr returns the Credential value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e BackendEdges) CredentialOrErr() (*Credential, error) {
+	if e.Credential != nil {
+		return e.Credential, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: credential.Label}
+	}
+	return nil, &NotLoadedError{edge: "credential"}
 }
 
 // OwnerUserOrErr returns the OwnerUser value or an error if the edge
@@ -60,7 +76,7 @@ type BackendEdges struct {
 func (e BackendEdges) OwnerUserOrErr() (*User, error) {
 	if e.OwnerUser != nil {
 		return e.OwnerUser, nil
-	} else if e.loadedTypes[0] {
+	} else if e.loadedTypes[1] {
 		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner_user"}
@@ -71,7 +87,7 @@ func (e BackendEdges) OwnerUserOrErr() (*User, error) {
 func (e BackendEdges) OwnerOrgOrErr() (*Organization, error) {
 	if e.OwnerOrg != nil {
 		return e.OwnerOrg, nil
-	} else if e.loadedTypes[1] {
+	} else if e.loadedTypes[2] {
 		return nil, &NotFoundError{label: organization.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner_org"}
@@ -84,7 +100,7 @@ func (*Backend) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case backend.FieldOptions:
 			values[i] = new([]byte)
-		case backend.FieldID, backend.FieldOwnerUserID, backend.FieldOwnerOrgID, backend.FieldRateLimitPerMinute:
+		case backend.FieldID, backend.FieldOwnerUserID, backend.FieldOwnerOrgID, backend.FieldCredentialID, backend.FieldRateLimitPerMinute:
 			values[i] = new(sql.NullInt64)
 		case backend.FieldName, backend.FieldScope, backend.FieldBackendType:
 			values[i] = new(sql.NullString)
@@ -163,6 +179,13 @@ func (_m *Backend) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field options: %w", err)
 				}
 			}
+		case backend.FieldCredentialID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field credential_id", values[i])
+			} else if value.Valid {
+				_m.CredentialID = new(int)
+				*_m.CredentialID = int(value.Int64)
+			}
 		case backend.FieldRateLimitPerMinute:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field rate_limit_per_minute", values[i])
@@ -180,6 +203,11 @@ func (_m *Backend) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *Backend) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
+}
+
+// QueryCredential queries the "credential" edge of the Backend entity.
+func (_m *Backend) QueryCredential() *CredentialQuery {
+	return NewBackendClient(_m.config).QueryCredential(_m)
 }
 
 // QueryOwnerUser queries the "owner_user" edge of the Backend entity.
@@ -242,6 +270,11 @@ func (_m *Backend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("options=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Options))
+	builder.WriteString(", ")
+	if v := _m.CredentialID; v != nil {
+		builder.WriteString("credential_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("rate_limit_per_minute=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RateLimitPerMinute))

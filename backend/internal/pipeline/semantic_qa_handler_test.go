@@ -53,7 +53,7 @@ func TestSemanticQAHandler_BuildBatches_SelectsTranslatedEdited(t *testing.T) {
 		[]string{"translated", "approved", "edited", "pending", "rejected"},
 		nil,
 	)
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   &fakeBackend{name: "fake"},
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -73,7 +73,7 @@ func TestSemanticQAHandler_BuildBatches_SkipsEmptyTarget(t *testing.T) {
 		[]string{"translated", "translated"},
 		[]string{"你好", ""},
 	)
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   &fakeBackend{name: "fake"},
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -148,23 +148,23 @@ func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown scope falls back to all", func(t *testing.T) {
+	t.Run("unknown scope selects none", func(t *testing.T) {
 		batches, err := base("weird", nil).BuildBatches(context.Background(), doc, nil, 0)
 		if err != nil {
 			t.Fatalf("BuildBatches: %v", err)
 		}
-		if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0, 1, 2}) {
-			t.Fatalf("batches=%v want [[0 1 2]]", batches)
+		if len(batches) != 0 {
+			t.Fatalf("batches=%v want none", batches)
 		}
 	})
 
-	t.Run("empty scope defaults to all", func(t *testing.T) {
+	t.Run("empty scope selects none", func(t *testing.T) {
 		batches, err := base("", nil).BuildBatches(context.Background(), doc, nil, 0)
 		if err != nil {
 			t.Fatalf("BuildBatches: %v", err)
 		}
-		if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0, 1, 2}) {
-			t.Fatalf("batches=%v want [[0 1 2]]", batches)
+		if len(batches) != 0 {
+			t.Fatalf("batches=%v want none", batches)
 		}
 	})
 
@@ -195,7 +195,7 @@ func TestSemanticQAHandler_ProcessBatch_ProducesIssues(t *testing.T) {
 		name:      "fake",
 		responses: []string{`{"issues":[{"id":"0","code":"calque","message":"借译","snippet":"hello world"}]}`},
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -221,7 +221,7 @@ func TestSemanticQAHandler_ProcessBatch_ProducesIssues(t *testing.T) {
 func TestSemanticQAHandler_ProcessBatch_EmptyIssuesMarksSegmentProcessed(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{name: "fake", responses: []string{`{"issues":[]}`}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -242,7 +242,7 @@ func TestSemanticQAHandler_ProcessBatch_ParseFailureProducesNone(t *testing.T) {
 		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"},
 	}
 	fb := &fakeBackend{name: "fake", responses: []string{`not json at all`}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -270,7 +270,7 @@ func TestSemanticQAHandler_ProcessBatch_ParseFailureProducesNone(t *testing.T) {
 func TestSemanticQAHandler_ProcessBatch_ParseFailureRetries(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{name: "fake", responses: []string{`not json at all`}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:  fb,
 		Renderer: newSemanticQARenderer(t),
 		Retry:    backend.RetryPolicy{MaxAttempts: 2},
@@ -295,7 +295,7 @@ func TestSemanticQAHandler_ProcessBatch_BackendErrorProducesNone(t *testing.T) {
 	}
 	// MaxAttempts=0 → transientBudget=1 → 预算耗尽，落 unresolved（交下一池）
 	fb := &fakeBackend{name: "fake", errs: []error{errors.New("network down")}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -322,7 +322,7 @@ func TestSemanticQAHandler_ProcessBatch_BackendErrorProducesNone(t *testing.T) {
 func TestSemanticQAHandler_ProcessBatch_NetworkErrorRetries(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{name: "fake", errs: []error{errors.New("network down")}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:  fb,
 		Renderer: newSemanticQARenderer(t),
 		Retry: backend.RetryPolicy{
@@ -351,7 +351,7 @@ func TestSemanticQAHandler_ProcessBatch_5xxRetriesAndExhausts(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	err500 := &backend.StatusError{StatusCode: 500, Err: errors.New("internal")}
 	fb := &fakeBackend{name: "fake", errs: []error{err500}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:  fb,
 		Renderer: newSemanticQARenderer(t),
 		Retry: backend.RetryPolicy{
@@ -389,7 +389,7 @@ func TestSemanticQAHandler_ProcessBatch_401Terminal(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	err401 := &backend.StatusError{StatusCode: 401, Err: errors.New("unauthorized")}
 	fb := &fakeBackend{name: "fake", errs: []error{err401}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:  fb,
 		Renderer: newSemanticQARenderer(t),
 		Retry:    backend.RetryPolicy{MaxAttempts: 5},
@@ -413,7 +413,7 @@ func TestSemanticQAHandler_ProcessBatch_CtxCancelNotCounted(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	fb := &fakeBackend{name: "fake", errs: []error{context.Canceled}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:  fb,
 		Renderer: newSemanticQARenderer(t),
 		Retry:    backend.RetryPolicy{MaxAttempts: 2},
@@ -435,7 +435,7 @@ func TestSemanticQAHandler_ProcessBatch_CtxCancelNotCounted(t *testing.T) {
 func TestSemanticQAHandler_ProcessBatch_LocalTimeoutRetries(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:  fb,
 		Renderer: newSemanticQARenderer(t),
 		Retry: backend.RetryPolicy{
@@ -461,7 +461,7 @@ func TestSemanticQAHandler_ProcessBatch_LocalTimeoutRetries(t *testing.T) {
 func TestSemanticQAHandler_ProcessBatch_LocalTimeoutExhausts(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:  fb,
 		Renderer: newSemanticQARenderer(t),
 		Retry: backend.RetryPolicy{
@@ -508,7 +508,7 @@ func TestSemanticQAHandler_ProcessBatch_ParentDeadlineNotCounted(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	fb := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:  fb,
 		Renderer: newSemanticQARenderer(t),
 		Retry:    backend.RetryPolicy{MaxAttempts: 2},
@@ -532,7 +532,7 @@ func TestSemanticQAHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
 		name:      "fake",
 		responses: []string{`{"issues":[]}`},
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -556,7 +556,7 @@ func TestSemanticQAHandler_ProcessBatch_TextMode(t *testing.T) {
 		name:      "fake",
 		responses: []string{"[issues]\n0 | calque | 借译"},
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:      fb,
 		Renderer:     newSemanticQARenderer(t),
 		BatchSize:    10,
@@ -595,7 +595,7 @@ func TestSemanticQAHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
 		name:      "fake",
 		responses: []string{`{"issues":[{"id":"0","code":"naturalness","message":"生硬"}]}`},
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:      fb,
 		Renderer:     newSemanticQARenderer(t),
 		BatchSize:    10,
@@ -624,7 +624,7 @@ func TestSemanticQAHandler_ProcessBatch_TextModeTruncatedRefused(t *testing.T) {
 			responses: []string{"[issues]\n0 | calque | 借译"},
 		},
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:      fb,
 		Renderer:     newSemanticQARenderer(t),
 		BatchSize:    10,
@@ -659,7 +659,7 @@ func TestSemanticQAHandler_ProcessBatch_TruncatedCompleteJSONRefused(t *testing.
 			responses: []string{`{"issues":[{"id":"0","code":"naturalness","message":"生硬"}]}`},
 		},
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -681,7 +681,7 @@ func TestSemanticQAHandler_BuildBatches_PackedDiscontinuous(t *testing.T) {
 		[]string{"translated", "approved", "translated", "pending", "edited"},
 		nil,
 	)
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   &fakeBackend{name: "fake"},
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -701,7 +701,7 @@ func TestSemanticQAHandler_BuildBatches_MaxBatchIndexSpan(t *testing.T) {
 		[]string{"translated", "translated", "translated", "translated", "translated"},
 		nil,
 	)
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:           &fakeBackend{name: "fake"},
 		Renderer:          newSemanticQARenderer(t),
 		BatchSize:         10,
@@ -720,7 +720,7 @@ func TestSemanticQAHandler_BuildBatches_MaxBatchIndexSpan(t *testing.T) {
 
 func TestSemanticQAHandler_BuildBatches_CountsSourceAndTargetWords(t *testing.T) {
 	doc := semanticQADoc([]string{"translated", "translated"}, nil)
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:          &fakeBackend{name: "fake"},
 		Renderer:         newSemanticQARenderer(t),
 		BatchSize:        10,
@@ -747,7 +747,7 @@ func TestSemanticQAHandler_ProcessBatch_MultipleIssuesPerSegment(t *testing.T) {
 			{"id":"0","code":"calque","message":"重复","snippet":"hello"}
 		]}`},
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
@@ -773,7 +773,7 @@ func TestSemanticQAHandler_ProcessBatch_SameCodeDifferentSnippets(t *testing.T) 
 			{"id":"0","code":"calque","message":"b","snippet":"bar"}
 		]}`},
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,

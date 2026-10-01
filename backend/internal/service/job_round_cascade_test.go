@@ -126,8 +126,8 @@ func TestMarkJobResourceCompleted_ConvergesStrandedRounds(t *testing.T) {
 	ctx := context.Background()
 	user := createTestUser(t, client, "converge-user")
 	project := createTestProject(t, client, "converge-proj", user.ID)
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
-	svc := &JobService{client: client, projects: projects}
+	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
+	svc := &JobService{client: client, projects: projects, backends: newExecutionTestBackendService(t, client, NewUserService(client, nil))}
 	job, jrs := seedJobCancelRetry(t, client, project.ID, JobStatusRunning, []string{JobResourceStatusRunning})
 
 	// 种子：stranded running 轮（部分失败的 semantic_qa 轮）+ 正常 completed 轮。
@@ -220,8 +220,8 @@ func TestRetryJob_ResetsRunningRounds(t *testing.T) {
 	ctx := context.Background()
 	user := createTestUser(t, client, "retry-running-user")
 	project := createTestProject(t, client, "retry-running-proj", user.ID)
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
-	svc := &JobService{client: client, projects: projects}
+	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
+	svc := &JobService{client: client, projects: projects, backends: newExecutionTestBackendService(t, client, NewUserService(client, nil))}
 	job, jrs := seedJobCancelRetry(t, client, project.ID, JobStatusFailed, []string{JobResourceStatusFailed})
 
 	// 种子两条轮次行：running（未解决段冻结态）与 completed（正常完成）。
@@ -274,8 +274,8 @@ func TestRetryJob_ResetsSkippedRounds(t *testing.T) {
 	ctx := context.Background()
 	user := createTestUser(t, client, "retry-skipped-user")
 	project := createTestProject(t, client, "retry-skipped-proj", user.ID)
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
-	svc := &JobService{client: client, projects: projects}
+	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
+	svc := &JobService{client: client, projects: projects, backends: newExecutionTestBackendService(t, client, NewUserService(client, nil))}
 	job, jrs := seedJobCancelRetry(t, client, project.ID, JobStatusFailed, []string{JobResourceStatusFailed})
 
 	skipped, err := client.JobRound.Create().
@@ -391,7 +391,8 @@ func TestRecoverPendingJobs_ResetsFailedRounds(t *testing.T) {
 		t.Fatalf("create failed round: %v", err)
 	}
 
-	svc := &JobService{client: client}
+	svc := newJobRoundTestService(t, client, nil)
+	freezeExecutionTestJob(t, client, job)
 	if _, err := svc.RecoverPendingJobs(ctx); err != nil {
 		t.Fatalf("RecoverPendingJobs: %v", err)
 	}

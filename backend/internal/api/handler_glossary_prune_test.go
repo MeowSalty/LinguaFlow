@@ -41,7 +41,7 @@ func newTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	})
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	users := service.NewUserService(client, service.NewAuthService(client, service.AuthConfig{}, service.NewAdminService(client)))
+	users := service.NewUserService(client, service.NewAuthService(client, service.AuthConfig{}, service.NewSettingsService(client)))
 	projects := service.NewProjectService(client, users)
 	glossarySvc := service.NewGlossaryService(client, projects)
 	prunePromptTemplateSvc := service.NewPrunePromptTemplateService(client)

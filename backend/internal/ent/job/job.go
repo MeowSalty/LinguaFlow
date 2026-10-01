@@ -52,6 +52,8 @@ const (
 	EdgeJobRounds = "job_rounds"
 	// EdgeSseEvents holds the string denoting the sse_events edge name in mutations.
 	EdgeSseEvents = "sse_events"
+	// EdgeCredentialReferences holds the string denoting the credential_references edge name in mutations.
+	EdgeCredentialReferences = "credential_references"
 	// Table holds the table name of the job in the database.
 	Table = "jobs"
 	// ProjectTable is the table that holds the project relation/edge.
@@ -89,6 +91,13 @@ const (
 	SseEventsInverseTable = "sse_events"
 	// SseEventsColumn is the table column denoting the sse_events relation/edge.
 	SseEventsColumn = "job_id"
+	// CredentialReferencesTable is the table that holds the credential_references relation/edge.
+	CredentialReferencesTable = "credential_job_references"
+	// CredentialReferencesInverseTable is the table name for the CredentialJobReference entity.
+	// It exists in this package in order to avoid circular dependency with the "credentialjobreference" package.
+	CredentialReferencesInverseTable = "credential_job_references"
+	// CredentialReferencesColumn is the table column denoting the credential_references relation/edge.
+	CredentialReferencesColumn = "job_id"
 )
 
 // Columns holds all SQL columns for job fields.
@@ -298,6 +307,20 @@ func BySseEvents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newSseEventsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByCredentialReferencesCount orders the results by credential_references count.
+func ByCredentialReferencesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newCredentialReferencesStep(), opts...)
+	}
+}
+
+// ByCredentialReferences orders the results by credential_references terms.
+func ByCredentialReferences(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newCredentialReferencesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newProjectStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -331,5 +354,12 @@ func newSseEventsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(SseEventsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, SseEventsTable, SseEventsColumn),
+	)
+}
+func newCredentialReferencesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(CredentialReferencesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, CredentialReferencesTable, CredentialReferencesColumn),
 	)
 }

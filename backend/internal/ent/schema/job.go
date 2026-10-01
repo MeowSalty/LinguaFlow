@@ -62,6 +62,8 @@ func (Job) Edges() []ent.Edge {
 		edge.To("job_rounds", JobRound.Type).
 			Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("sse_events", SSEEvent.Type),
+		edge.To("credential_references", CredentialJobReference.Type).
+			Annotations(entsql.OnDelete(entsql.Cascade)),
 	}
 }
 

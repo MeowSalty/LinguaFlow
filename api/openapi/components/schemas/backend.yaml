@@ -24,14 +24,12 @@ ThinkingLevel:
 
 OpenAIBackendOptions:
   type: object
-  required: [api_key, type, model]
+  required: [type, model]
+  additionalProperties: false
   description: OpenAI 兼容后端选项。支持 OpenAI 官方 API 及 Azure OpenAI、Ollama、LM Studio 等兼容服务。
   properties:
     type:
       type: string
-    api_key:
-      type: string
-      description: AI 服务 API 密钥
     base_url:
       type: string
       description: |
@@ -88,14 +86,12 @@ OpenAIBackendOptions:
 
 AnthropicBackendOptions:
   type: object
-  required: [api_key, type, model]
+  required: [type, model]
+  additionalProperties: false
   description: Anthropic Claude 后端选项。
   properties:
     type:
       type: string
-    api_key:
-      type: string
-      description: AI 服务 API 密钥
     base_url:
       type: string
       description: |
@@ -163,14 +159,12 @@ AnthropicBackendOptions:
 
 GoogleBackendOptions:
   type: object
-  required: [api_key, type, model]
+  required: [type, model]
+  additionalProperties: false
   description: Google Gemini 后端选项。
   properties:
     type:
       type: string
-    api_key:
-      type: string
-      description: AI 服务 API 密钥
     base_url:
       type: string
       description: |
@@ -238,8 +232,13 @@ BackendOptions:
 
 Backend:
   type: object
-  required: [id, scope, name, type]
+  required: [id, scope, name, type, credential, has_secret]
   properties:
+    credential:
+      $ref: './credential.yaml#/CredentialBinding'
+    has_secret:
+      type: boolean
+      description: 已有独立存储的凭据；不保证版本尚未被撤销。读取永不返回真实 secret。
     id:
       type: integer
     scope:
@@ -274,7 +273,15 @@ BackendListResponse:
 CreateBackendRequest:
   type: object
   required: [name, type, options]
+  description: secret 与 credential_id 必须提供一个；凭据必须属于相同用户或组织，且 provider 与 endpoint 匹配。
   properties:
+    secret:
+      type: string
+      minLength: 1
+      writeOnly: true
+    credential_id:
+      type: integer
+      minimum: 1
     name:
       type: string
     type:
@@ -292,7 +299,15 @@ CreateBackendRequest:
 UpdateBackendRequest:
   type: object
   required: [name, type, options]
+  description: secret 与 credential_id 不能同时提供。都省略时保留现有凭据；提供 secret 创建新凭据对象并重新绑定，不修改共享凭据。改变 provider 或 endpoint 必须同时提供匹配的新绑定。轮换共享凭据使用凭据 versions 接口。
   properties:
+    secret:
+      type: string
+      minLength: 1
+      writeOnly: true
+    credential_id:
+      type: integer
+      minimum: 1
     name:
       type: string
     type:
@@ -309,15 +324,17 @@ UpdateBackendRequest:
 
 ListBackendModelsRequest:
   type: object
-  required: [type, api_key]
+  required: [type, secret]
   description: 凭用户输入的凭据探测可用模型列表（不落库）
   properties:
     type:
       type: string
       enum: [openai, anthropic, google]
       description: 后端类型
-    api_key:
+    secret:
       type: string
+      writeOnly: true
+      minLength: 1
       description: AI 服务 API 密钥
     base_url:
       type: string

@@ -97,7 +97,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			mwpb := a.MaxWordsPerBatch
 			adjudicateCfg.MaxWordsPerBatch = &mwpb
 		}
-		if len(a.AdjudicateCodes) > 0 {
+		if a.AdjudicateCodes != nil {
 			codes := make([]AdjudicateRoundConfigAdjudicateCodes, 0, len(a.AdjudicateCodes))
 			for _, c := range a.AdjudicateCodes {
 				codes = append(codes, AdjudicateRoundConfigAdjudicateCodes(c))
@@ -125,7 +125,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			ss := SemanticQARoundConfigSegmentScope(s.SegmentScope)
 			semanticQACfg.SegmentScope = &ss
 		}
-		if len(s.IssueCodes) > 0 {
+		if s.IssueCodes != nil {
 			codes := make([]SemanticQARoundConfigIssueCodes, 0, len(s.IssueCodes))
 			for _, c := range s.IssueCodes {
 				codes = append(codes, SemanticQARoundConfigIssueCodes(c))
@@ -153,7 +153,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			ss := ReviseRoundConfigSegmentScope(r.SegmentScope)
 			reviseCfg.SegmentScope = &ss
 		}
-		if len(r.IssueCodes) > 0 {
+		if r.IssueCodes != nil {
 			codes := make([]ReviseRoundConfigIssueCodes, 0, len(r.IssueCodes))
 			for _, c := range r.IssueCodes {
 				codes = append(codes, ReviseRoundConfigIssueCodes(c))

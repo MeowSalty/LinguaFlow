@@ -2,104 +2,59 @@ package cli
 
 import (
 	"context"
-	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/spf13/cobra"
 	"net"
-	"os"
 	"os/exec"
 	"runtime"
-
-	"github.com/spf13/cobra"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"strconv"
 )
 
-type localOptions struct {
-	host      string
-	port      int
-	dataDir   string
-	noBrowser bool
-	jwtSecret string
-}
-
 func newLocalCmd(rt *appCtx) *cobra.Command {
-	opts := localOptions{}
+	var noBrowser bool
 	cmd := &cobra.Command{
-		Use:   "local",
-		Short: "以单用户本地模式启动 LinguaFlow",
-		Example: `  linguaflow local
-  linguaflow local --port 19000 --no-browser`,
+		Use: "local", Short: "以单用户本地模式启动 LinguaFlow", Args: cobra.NoArgs,
+		Long:    "默认监听回环地址，自动使用本地管理员身份。\n非回环监听必须显式提供 --allow-network：能够连接的客户端将拥有本地管理员权限。\n该许可不启用认证，也不改变 host。数据库固定为 data_dir 下的 SQLite。",
+		Example: "  linguaflow local\n  linguaflow local --port 0 --no-browser\n  linguaflow local --host 0.0.0.0 --allow-network",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runLocal(cmd.Context(), rt, opts)
+			resolved, err := resolveDeployment(cmd, rt, config.ModeLocal)
+			if err != nil {
+				return err
+			}
+			return runLocal(cmd.Context(), resolved, noBrowser)
 		},
 	}
-
-	cmd.Flags().StringVar(&opts.host, "host", "127.0.0.1", "监听地址")
-	cmd.Flags().IntVar(&opts.port, "port", 18080, "监听端口（0=随机空闲端口）")
-	cmd.Flags().StringVar(&opts.dataDir, "data-dir", "", "数据目录（默认 UserConfigDir/LinguaFlow）")
-	cmd.Flags().BoolVar(&opts.noBrowser, "no-browser", false, "不自动打开浏览器")
-	cmd.Flags().StringVar(&opts.jwtSecret, "jwt-secret", "", "覆盖 LINGUAFLOW_JWT_SECRET")
+	addDeploymentFlags(cmd, true)
+	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "不自动打开浏览器")
 	return cmd
 }
-
-func runLocal(ctx context.Context, rt *appCtx, opts localOptions) error {
-	dataDir := opts.dataDir
-	if dataDir == "" {
-		ucd, err := os.UserConfigDir()
-		if err != nil {
-			return fmt.Errorf("get user config dir: %w", err)
-		}
-		dataDir = ucd + "/LinguaFlow"
-	}
-
-	port := resolvePort(opts.host, opts.port)
-
-	server, ln, cleanup, err := bootstrapServer(ctx, BootOptions{
-		Logger: rt.logger,
-		Mode:   config.ModeLocal,
-		Overrides: func(cfg *config.ServerConfig) {
-			cfg.Host = opts.host
-			cfg.Port = port
-			cfg.DataDir = dataDir
-			if opts.jwtSecret != "" {
-				cfg.JWTSecret = opts.jwtSecret
-			}
-		},
-	})
+func runLocal(ctx context.Context, resolved *config.ResolvedServer, noBrowser bool) error {
+	server, ln, cleanup, err := bootstrapServer(ctx, BootOptions{Resolved: resolved})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = cleanup() }()
-
-	if !opts.noBrowser {
-		go openBrowser("http://" + ln.Addr().String())
+	if !noBrowser {
+		go openBrowser(browserURL(ln.Addr().(*net.TCPAddr)))
 	}
-
 	return server.Run(ctx, ln)
 }
-
-// resolvePort 查找可用端口。如果请求端口为 0，返回 0（由 OS 分配）。
-// 如果端口被占用，尝试递增端口号最多 10 次。
-func resolvePort(host string, port int) int {
-	if port == 0 {
-		return 0
-	}
-	for i := 0; i < 10; i++ {
-		addr := fmt.Sprintf("%s:%d", host, port+i)
-		ln, err := net.Listen("tcp", addr)
-		if err == nil {
-			_ = ln.Close()
-			return port + i
+func browserURL(addr *net.TCPAddr) string {
+	host := addr.IP.String()
+	if addr.IP.IsUnspecified() {
+		if addr.IP.To4() != nil {
+			host = "127.0.0.1"
+		} else {
+			host = "::1"
 		}
 	}
-	return port
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(addr.Port))
 }
-
-// openBrowser 使用默认浏览器打开指定 URL。
 func openBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	case "darwin":
 		cmd = exec.Command("open", url)
 	default:

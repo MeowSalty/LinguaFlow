@@ -1,8 +1,10 @@
 package repair
 
 import (
-	"fmt"
+	"bytes"
+	"errors"
 	"strings"
+	"text/template"
 )
 
 // BuildRetryReminder 生成反例式 reminder，用于 L4 升级重试。
@@ -15,25 +17,34 @@ import (
 //
 // 注意：不要 echo 完整的破损 JSON——会让模型可能继续延续错误，token 也吃不消。
 func BuildRetryReminder(missingIDs []string, parseErr error, prevHead string) string {
-	var b strings.Builder
-	b.WriteString("\n\nIMPORTANT: your previous response could not be processed.")
+	result, _ := RenderRetryReminder(DefaultRetryReminderTemplate, missingIDs, parseErr, prevHead)
+	return result
+}
+
+// DefaultRetryReminderTemplate is frozen into each newly resolved execution.
+const DefaultRetryReminderTemplate = `
+
+IMPORTANT: your previous response could not be processed.{{if .Reason}} Reason: {{.Reason}}.{{end}}{{if .MissingIDs}} Missing IDs: {{.MissingIDs}}.{{end}}{{if .PreviousHead}} The previous response started with: {{printf "%q" .PreviousHead}}.{{end}} Reply with EXACTLY the JSON envelope schema described above: {"translations":{"<id>":"<text>",...}}. Do not include markdown fences, prose, or any other fields.`
+
+// RenderRetryReminder applies runtime diagnostic data to the saved template.
+func RenderRetryReminder(content string, missingIDs []string, parseErr error, prevHead string) (string, error) {
+	if content == "" {
+		return "", errors.New("missing frozen retry reminder template")
+	}
+	t, err := template.New("retry_reminder").Option("missingkey=error").Parse(content)
+	if err != nil {
+		return "", errors.New("invalid frozen retry reminder template")
+	}
+	data := struct{ Reason, MissingIDs, PreviousHead string }{MissingIDs: strings.Join(missingIDs, ", "), PreviousHead: prevHead}
 	if parseErr != nil {
-		b.WriteString(" Reason: ")
-		b.WriteString(parseErr.Error())
-		b.WriteString(".")
+		data.Reason = parseErr.Error()
 	}
-	if len(missingIDs) > 0 {
-		b.WriteString(fmt.Sprintf(" Missing IDs: %s.", strings.Join(missingIDs, ", ")))
+	if len(data.PreviousHead) > 200 {
+		data.PreviousHead = data.PreviousHead[:200] + "…"
 	}
-	if prevHead != "" {
-		head := prevHead
-		if len(head) > 200 {
-			head = head[:200] + "…"
-		}
-		b.WriteString(fmt.Sprintf(" The previous response started with: %q.", head))
+	var out bytes.Buffer
+	if err := t.Execute(&out, data); err != nil {
+		return "", errors.New("render frozen retry reminder template failed")
 	}
-	b.WriteString(` Reply with EXACTLY the JSON envelope schema described above: ` +
-		`{"translations":{"<id>":"<text>",...}}. ` +
-		`Do not include markdown fences, prose, or any other fields.`)
-	return b.String()
+	return out.String(), nil
 }

@@ -14,9 +14,11 @@ func newTranslateCmd(rt *appCtx) *cobra.Command {
 		bootstrapMode string
 		profile       string
 		prompt        string
+		revisionInput string
 	)
 	cmd := &cobra.Command{
 		Use:   "translate",
+		Args:  cobra.NoArgs,
 		Short: "翻译一个或多个文件/目录",
 		Example: `  linguaflow translate -i README.md -o README_zh.md --to zh
   linguaflow translate -i docs.md -o out.md --from en --to ja -c linguaflow.yaml
@@ -24,7 +26,12 @@ func newTranslateCmd(rt *appCtx) *cobra.Command {
 	linguaflow translate -i ./docs ./subtitles -o ./translated --to zh
   linguaflow translate -i docs.md -o out.md --to zh --glossary-path ./terms.csv --bootstrap=inline`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			changed := map[string]bool{}
+			for _, name := range []string{"from", "to", "glossary-path", "bootstrap", "profile", "prompt", "revision-input"} {
+				changed[name] = cmd.Flags().Changed(name)
+			}
 			return runTranslate(cmd, rt, translateOptions{
+				changed:       changed,
 				inputs:        inputs,
 				output:        output,
 				from:          from,
@@ -33,6 +40,7 @@ func newTranslateCmd(rt *appCtx) *cobra.Command {
 				bootstrapMode: bootstrapMode,
 				profile:       profile,
 				prompt:        prompt,
+				revisionInput: revisionInput,
 			})
 		},
 	}
@@ -43,6 +51,7 @@ func newTranslateCmd(rt *appCtx) *cobra.Command {
 	cmd.Flags().StringVar(&glossaryPath, "glossary-path", "", "术语表 CSV 路径；指定后强制启用 glossary")
 	cmd.Flags().StringVar(&bootstrapMode, "bootstrap", "", "术语自举模式 off|pre|inline；留空沿用配置（非 off 隐含启用 glossary）")
 	cmd.Flags().StringVar(&profile, "profile", "", "翻译策略名称（覆盖 execution.profile，引用 translation_profiles 中的 key）")
-	cmd.Flags().StringVar(&prompt, "prompt", "", "提示词模板名称（引用 prompt_templates 中的 key）")
+	cmd.Flags().StringVar(&prompt, "prompt", "", "提示词模板名称（引用 translation_prompt_templates 中的 key）")
+	cmd.Flags().StringVar(&revisionInput, "revision-input", "", "单文件修订输入：已有译文与语义问题的 schema_version: 1 YAML/JSON 文档")
 	return cmd
 }

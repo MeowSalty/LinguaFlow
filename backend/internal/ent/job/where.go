@@ -830,6 +830,29 @@ func HasSseEventsWith(preds ...predicate.SSEEvent) predicate.Job {
 	})
 }
 
+// HasCredentialReferences applies the HasEdge predicate on the "credential_references" edge.
+func HasCredentialReferences() predicate.Job {
+	return predicate.Job(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, CredentialReferencesTable, CredentialReferencesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasCredentialReferencesWith applies the HasEdge predicate on the "credential_references" edge with a given conditions (other predicates).
+func HasCredentialReferencesWith(preds ...predicate.CredentialJobReference) predicate.Job {
+	return predicate.Job(func(s *sql.Selector) {
+		step := newCredentialReferencesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Job) predicate.Job {
 	return predicate.Job(sql.AndPredicates(predicates...))

@@ -85,6 +85,11 @@ func OwnerOrgID(v int) predicate.Backend {
 	return predicate.Backend(sql.FieldEQ(FieldOwnerOrgID, v))
 }
 
+// CredentialID applies equality check predicate on the "credential_id" field. It's identical to CredentialIDEQ.
+func CredentialID(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldEQ(FieldCredentialID, v))
+}
+
 // RateLimitPerMinute applies equality check predicate on the "rate_limit_per_minute" field. It's identical to RateLimitPerMinuteEQ.
 func RateLimitPerMinute(v int) predicate.Backend {
 	return predicate.Backend(sql.FieldEQ(FieldRateLimitPerMinute, v))
@@ -380,6 +385,36 @@ func BackendTypeNotIn(vs ...BackendType) predicate.Backend {
 	return predicate.Backend(sql.FieldNotIn(FieldBackendType, vs...))
 }
 
+// CredentialIDEQ applies the EQ predicate on the "credential_id" field.
+func CredentialIDEQ(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldEQ(FieldCredentialID, v))
+}
+
+// CredentialIDNEQ applies the NEQ predicate on the "credential_id" field.
+func CredentialIDNEQ(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldNEQ(FieldCredentialID, v))
+}
+
+// CredentialIDIn applies the In predicate on the "credential_id" field.
+func CredentialIDIn(vs ...int) predicate.Backend {
+	return predicate.Backend(sql.FieldIn(FieldCredentialID, vs...))
+}
+
+// CredentialIDNotIn applies the NotIn predicate on the "credential_id" field.
+func CredentialIDNotIn(vs ...int) predicate.Backend {
+	return predicate.Backend(sql.FieldNotIn(FieldCredentialID, vs...))
+}
+
+// CredentialIDIsNil applies the IsNil predicate on the "credential_id" field.
+func CredentialIDIsNil() predicate.Backend {
+	return predicate.Backend(sql.FieldIsNull(FieldCredentialID))
+}
+
+// CredentialIDNotNil applies the NotNil predicate on the "credential_id" field.
+func CredentialIDNotNil() predicate.Backend {
+	return predicate.Backend(sql.FieldNotNull(FieldCredentialID))
+}
+
 // RateLimitPerMinuteEQ applies the EQ predicate on the "rate_limit_per_minute" field.
 func RateLimitPerMinuteEQ(v int) predicate.Backend {
 	return predicate.Backend(sql.FieldEQ(FieldRateLimitPerMinute, v))
@@ -418,6 +453,29 @@ func RateLimitPerMinuteLT(v int) predicate.Backend {
 // RateLimitPerMinuteLTE applies the LTE predicate on the "rate_limit_per_minute" field.
 func RateLimitPerMinuteLTE(v int) predicate.Backend {
 	return predicate.Backend(sql.FieldLTE(FieldRateLimitPerMinute, v))
+}
+
+// HasCredential applies the HasEdge predicate on the "credential" edge.
+func HasCredential() predicate.Backend {
+	return predicate.Backend(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, CredentialTable, CredentialColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasCredentialWith applies the HasEdge predicate on the "credential" edge with a given conditions (other predicates).
+func HasCredentialWith(preds ...predicate.Credential) predicate.Backend {
+	return predicate.Backend(func(s *sql.Selector) {
+		step := newCredentialStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
 }
 
 // HasOwnerUser applies the HasEdge predicate on the "owner_user" edge.

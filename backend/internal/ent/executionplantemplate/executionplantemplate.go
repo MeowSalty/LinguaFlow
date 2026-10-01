@@ -18,6 +18,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldSchemaVersion holds the string denoting the schema_version field in the database.
+	FieldSchemaVersion = "schema_version"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
 	// FieldDescription holds the string denoting the description field in the database.
@@ -61,6 +63,7 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldSchemaVersion,
 	FieldName,
 	FieldDescription,
 	FieldScope,
@@ -88,6 +91,10 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultSchemaVersion holds the default value on creation for the "schema_version" field.
+	DefaultSchemaVersion int
+	// SchemaVersionValidator is a validator for the "schema_version" field. It is called by the builders before save.
+	SchemaVersionValidator func(int) error
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
 	// DefaultDescription holds the default value on creation for the "description" field.
@@ -118,6 +125,11 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// BySchemaVersion orders the results by the schema_version field.
+func BySchemaVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSchemaVersion, opts...).ToFunc()
 }
 
 // ByName orders the results by the name field.

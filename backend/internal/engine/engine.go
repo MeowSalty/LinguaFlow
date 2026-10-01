@@ -84,6 +84,15 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("engine: build rounds: %w", err)
 	}
+	for _, round := range rounds {
+		switch h := round.Handler.(type) {
+		case *pipeline.TranslateHandler:
+			h.RubyTemplates = opts.RubyTemplates
+			h.RetryReminderTemplate = opts.RetryReminderTemplate
+		case *pipeline.ReviseHandler:
+			h.RubyTemplates = opts.RubyTemplates
+		}
+	}
 
 	e := &Engine{
 		cfg:               opts.Config,
@@ -120,6 +129,18 @@ func (e *Engine) Close() error {
 		} else if _, ok := r.Handler.(*pipeline.CorrectHandler); ok {
 			// correct 是纯本地轮，无 backend。
 		}
+		if b == nil {
+			continue
+		}
+		if _, ok := seen[b]; ok {
+			continue
+		}
+		seen[b] = struct{}{}
+		if err := b.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	for _, b := range e.rubyRetryBackends {
 		if b == nil {
 			continue
 		}

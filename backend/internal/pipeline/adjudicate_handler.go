@@ -65,9 +65,6 @@ func (h *AdjudicateHandler) emitBatchOutcome(evt progress.BatchEvent) {
 }
 
 func (h *AdjudicateHandler) adjudicateCodes() []string {
-	if len(h.AdjudicateCodes) == 0 {
-		return qa.DefaultAdjudicateCodes()
-	}
 	return h.AdjudicateCodes
 }
 

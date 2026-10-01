@@ -65,6 +65,11 @@ func UpdatedAt(v time.Time) predicate.ExecutionPlanTemplate {
 	return predicate.ExecutionPlanTemplate(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// SchemaVersion applies equality check predicate on the "schema_version" field. It's identical to SchemaVersionEQ.
+func SchemaVersion(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldEQ(FieldSchemaVersion, v))
+}
+
 // Name applies equality check predicate on the "name" field. It's identical to NameEQ.
 func Name(v string) predicate.ExecutionPlanTemplate {
 	return predicate.ExecutionPlanTemplate(sql.FieldEQ(FieldName, v))
@@ -173,6 +178,46 @@ func UpdatedAtLT(v time.Time) predicate.ExecutionPlanTemplate {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.ExecutionPlanTemplate {
 	return predicate.ExecutionPlanTemplate(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// SchemaVersionEQ applies the EQ predicate on the "schema_version" field.
+func SchemaVersionEQ(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldEQ(FieldSchemaVersion, v))
+}
+
+// SchemaVersionNEQ applies the NEQ predicate on the "schema_version" field.
+func SchemaVersionNEQ(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldNEQ(FieldSchemaVersion, v))
+}
+
+// SchemaVersionIn applies the In predicate on the "schema_version" field.
+func SchemaVersionIn(vs ...int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldIn(FieldSchemaVersion, vs...))
+}
+
+// SchemaVersionNotIn applies the NotIn predicate on the "schema_version" field.
+func SchemaVersionNotIn(vs ...int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldNotIn(FieldSchemaVersion, vs...))
+}
+
+// SchemaVersionGT applies the GT predicate on the "schema_version" field.
+func SchemaVersionGT(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldGT(FieldSchemaVersion, v))
+}
+
+// SchemaVersionGTE applies the GTE predicate on the "schema_version" field.
+func SchemaVersionGTE(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldGTE(FieldSchemaVersion, v))
+}
+
+// SchemaVersionLT applies the LT predicate on the "schema_version" field.
+func SchemaVersionLT(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldLT(FieldSchemaVersion, v))
+}
+
+// SchemaVersionLTE applies the LTE predicate on the "schema_version" field.
+func SchemaVersionLTE(v int) predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldLTE(FieldSchemaVersion, v))
 }
 
 // NameEQ applies the EQ predicate on the "name" field.

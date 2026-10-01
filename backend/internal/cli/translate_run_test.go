@@ -1,244 +1,311 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
-// newTestCLIConfig 构造最小可用的 CLIConfig：一个 openai 后端 + 内联翻译提示词，
-// execution.rounds 为空由各用例自行填充。
 func newTestCLIConfig() *config.CLIConfig {
 	return &config.CLIConfig{
-		Version:    1,
-		SourceLang: "en",
-		TargetLang: "zh",
+		Kind: "translation", Version: 2, SourceLang: "en", TargetLang: "zh",
+		Log: config.LogConfig{Level: "info", Format: "text"},
 		Backends: map[string]config.CLIConfigBackend{
-			"test": {
-				Type:    "openai",
-				Enabled: true,
-				Options: map[string]any{
-					"api_key":  "sk-test",
-					"base_url": "https://example.invalid/v1",
-					"model":    "test-model",
-				},
-			},
+			"test": {Type: "openai", Enabled: true, Secret: "sk-cli-test-secret", Options: map[string]any{"base_url": "https://example.invalid/v1", "model": "test-model"}},
 		},
-		PromptTemplates: map[string]config.CLIConfigPromptTemplate{
-			"default": {Content: "translate: {{ .SourceText }}"},
-		},
-		BootstrapPromptTemplates: map[string]config.CLIConfigBootstrapTemplate{},
+		PromptTemplates:          map[string]config.CLIConfigPromptTemplate{"default": {Content: templates.EmbeddedPromptTemplate()}},
+		BootstrapPromptTemplates: map[string]config.CLIConfigBootstrapTemplate{"default": {Content: templates.EmbeddedBootstrapTemplate()}},
 		TranslationProfiles:      map[string]config.CLIConfigTranslationProfile{},
-		Glossary:                 config.CLIConfigGlossary{Path: "./glossary.csv", Save: true},
+		Execution:                config.CLIConfigExecution{Rounds: []config.CLIConfigRound{translateRoundCfg()}},
 	}
 }
 
 func translateRoundCfg() config.CLIConfigRound {
-	return config.CLIConfigRound{
-		Mode:      "translate",
-		Backend:   "test",
-		Translate: &config.CLIConfigTranslateRound{Prompt: "default", BatchSize: 1, Concurrency: 1, FallbackShrink: 0.5},
-	}
+	return config.CLIConfigRound{Mode: "translate", Backend: "test", Translate: &config.CLIConfigTranslateRound{Prompt: "default", BatchSize: 1, Concurrency: 1, FallbackShrink: 0.5}}
 }
 
-// TestBuildEngineFromCLIConfig_TopLevelProfile 验证计划级策略从 execution.profile
-// 按名解析，translate 轮的 protect/ruby/postprocess/context 均取自该唯一策略。
-func TestBuildEngineFromCLIConfig_TopLevelProfile(t *testing.T) {
+func reviseRoundCfg() config.CLIConfigRound {
+	return config.CLIConfigRound{Mode: "revise", Backend: "test", Revise: &config.CLIConfigReviseRound{BatchSize: 10, Concurrency: 1, SegmentScope: "with_issues"}}
+}
+
+func TestResolveCLIExecutionFreezesValuesWithoutSecrets(t *testing.T) {
 	cfg := newTestCLIConfig()
+	profile := execution.DefaultProfile()
 	cfg.Execution.Profile = "strict"
-	cfg.TranslationProfiles["strict"] = config.CLIConfigTranslationProfile{
-		Protect:     config.ProtectConfig{Enabled: true, Rules: []string{"code", "xml"}},
-		Ruby:        config.RubyConfig{Enabled: true, PreserveKinds: []string{"semantic"}},
-		Postprocess: config.PostprocessConfig{Enabled: true, TrimSpaces: true},
-		Context:     config.ContextConfig{Enabled: true, Before: 2, After: 1, MaxChars: 80},
-		Repair:      config.RepairConfig{Enabled: true},
-	}
-	cfg.Execution.Rounds = []config.CLIConfigRound{translateRoundCfg()}
-
-	opts, err := buildEngineFromCLIConfig(cfg)
+	cfg.TranslationProfiles["strict"] = config.CLIConfigTranslationProfile{ProfileSpec: profile}
+	cfg.Execution.Rounds = append(cfg.Execution.Rounds, reviseRoundCfg())
+	cfg.Execution.RubyRetry = &config.CLIConfigRubyRetry{Enabled: true, Backend: "test", MaxAttempts: 1}
+	resolved, err := resolveCLIExecution(cfg)
 	if err != nil {
-		t.Fatalf("buildEngineFromCLIConfig: %v", err)
+		t.Fatal(err)
 	}
-	if !opts.Config.Ruby.Enabled || len(opts.Config.Ruby.PreserveKinds) != 1 || opts.Config.Ruby.PreserveKinds[0] != "semantic" {
-		t.Errorf("引擎级 Ruby 未按命名策略注入: %+v", opts.Config.Ruby)
+	defer resolved.Close()
+	before, err := json.Marshal(resolved.Spec)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(opts.Rounds) != 1 {
-		t.Fatalf("rounds = %d，want 1", len(opts.Rounds))
+	if strings.Contains(string(before), cfg.Backends["test"].Secret) || strings.Contains(string(before), "api_key") {
+		t.Fatal("execution snapshot contains plaintext credential material")
 	}
-	r := opts.Rounds[0]
-	if len(r.ProtectRules) != 2 || r.ProtectRules[0] != "code" || r.ProtectRules[1] != "xml" {
-		t.Errorf("ProtectRules = %v，want [code xml]", r.ProtectRules)
+	b := resolved.Spec.Rounds[0].Backend
+	if resolved.Spec.RubyRetry.Backend.Credential != b.Credential || resolved.Spec.Rounds[1].Backend.ID != b.ID {
+		t.Fatal("one CLI backend must share credential and capacity identities across rounds")
 	}
-	if !r.RubyEnabled || len(r.RubyPreserveKinds) != 1 || r.RubyPreserveKinds[0] != "semantic" {
-		t.Errorf("ruby 未按命名策略注入: enabled=%v kinds=%v", r.RubyEnabled, r.RubyPreserveKinds)
+	secret, err := resolved.Secrets.Resolve(context.Background(), b.Credential, b.Type, b.Options["base_url"].(string))
+	if err != nil || secret != cfg.Backends["test"].Secret {
+		t.Fatalf("credential resolution failed: %v", err)
 	}
-	if r.Postprocess == nil || !r.Postprocess.TrimSpaces {
-		t.Error("Postprocess 应按命名策略启用 trim_spaces")
+	first, err := resolved.Limiters.Lookup(b.ID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if r.Context == nil || r.Context.Before != 2 || r.Context.MaxChars != 80 {
-		t.Errorf("Context = %+v，未按命名策略注入", r.Context)
+	second, err := resolved.Limiters.Lookup(resolved.Spec.RubyRetry.Backend.ID)
+	if err != nil || first != second {
+		t.Fatal("rounds did not share their rate limiter")
 	}
-	if r.Repair == nil {
-		t.Error("Repair 应按命名策略注入")
+	if resolved.Spec.Rounds[1].Revise.TemplateContent != templates.EmbeddedReviseTemplate() {
+		t.Fatal("revision template was not frozen")
+	}
+	if resolved.Spec.RubyTemplates.JSON == "" || resolved.Spec.RubyTemplates.Text == "" {
+		t.Fatal("ruby templates were not frozen")
+	}
+	cfg.Backends["test"].Options["model"] = "changed"
+	cfg.TranslationProfiles["strict"].Protect.Rules[0] = "changed"
+	cfg.PromptTemplates["default"] = config.CLIConfigPromptTemplate{Content: "changed"}
+	cfg.Execution.Rounds[0].Translate.BatchSize = 999
+	after, err := json.Marshal(resolved.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("resolved execution changed after mutating its input")
+	}
+	resolved.Close()
+	if _, err := resolved.Secrets.Resolve(context.Background(), b.Credential, b.Type, b.Options["base_url"].(string)); err == nil {
+		t.Fatal("closed CLI registry still exposes its credential")
 	}
 }
 
-// TestBuildEngineFromCLIConfig_DefaultProfileFallback 验证 execution.profile 缺省时
-// 回退内置默认策略（protect 规则与 ruby 开关来自 templates 包嵌入资源）。
-func TestBuildEngineFromCLIConfig_DefaultProfileFallback(t *testing.T) {
-	cfg := newTestCLIConfig()
-	cfg.Execution.Rounds = []config.CLIConfigRound{translateRoundCfg()}
-
-	opts, err := buildEngineFromCLIConfig(cfg)
-	if err != nil {
-		t.Fatalf("buildEngineFromCLIConfig: %v", err)
-	}
-	builtin := config.BuiltinExecutionProfile()
-	r := opts.Rounds[0]
-	if len(r.ProtectRules) != len(builtin.Protect.Rules) {
-		t.Errorf("ProtectRules = %v，want 内置默认 %v", r.ProtectRules, builtin.Protect.Rules)
-	}
-	if r.RubyEnabled != builtin.Ruby.Enabled {
-		t.Errorf("RubyEnabled = %v，want 内置默认 %v", r.RubyEnabled, builtin.Ruby.Enabled)
+func TestBuildEngineUsesExplicitProfileValues(t *testing.T) {
+	for _, contextEnabled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "disabled", true: "zero_window"}[contextEnabled], func(t *testing.T) {
+			cfg := newTestCLIConfig()
+			profile := execution.DefaultProfile()
+			profile.Context = execution.ProfileContextConfig{Enabled: contextEnabled}
+			profile.Ruby.PreserveKinds = []string{}
+			profile.Protect.Enabled = false
+			cfg.Execution.Profile = "explicit"
+			cfg.TranslationProfiles["explicit"] = config.CLIConfigTranslationProfile{ProfileSpec: profile}
+			cfg.Execution.Rounds = append(cfg.Execution.Rounds, reviseRoundCfg())
+			eng, resolved, err := buildEngineFromCLIConfig(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resolved.Close()
+			defer eng.Close()
+			tr := eng.Rounds()[0].Handler.(*pipeline.TranslateHandler)
+			rv := eng.Rounds()[1].Handler.(*pipeline.ReviseHandler)
+			if tr.Context.Enabled != contextEnabled || tr.Context.Before != 0 || tr.Context.After != 0 || tr.Context.MaxChars != 0 {
+				t.Fatalf("explicit context was replaced: %+v", tr.Context)
+			}
+			if len(tr.RubyPreserveKinds) != 0 || len(rv.RubyPreserveKinds) != 0 {
+				t.Fatal("explicit empty ruby kinds were replaced")
+			}
+			if !tr.RubyEnabled || !rv.RubyEnabled {
+				t.Fatal("enabled ruby profile was lost")
+			}
+			for _, protector := range []protect.Protector{tr.Protector, rv.Protector} {
+				original := "Keep `code` and <tag>text</tag>"
+				actual, _, err := protect.ProtectText(protector, original)
+				if err != nil || actual != original {
+					t.Fatal("disabled protection changed source text")
+				}
+			}
+			if tr.Retry.MaxAttempts != 0 || rv.Retry.MaxAttempts != 0 {
+				t.Fatal("zero retry was replaced with defaults")
+			}
+			if !reflect.DeepEqual(rv.IssueCodes, qa.SemanticQACodes()) {
+				t.Fatal("revision scope was not resolved")
+			}
+		})
 	}
 }
 
-// TestBuildEngineFromCLIConfig_ReviseRoundWiresProtectRuby 验证 revise 轮与
-// translate 轮统一从解析出的唯一策略接入 protect/ruby（修复 revise 轮裸奔缺口）。
-func TestBuildEngineFromCLIConfig_ReviseRoundWiresProtectRuby(t *testing.T) {
-	cfg := newTestCLIConfig()
-	cfg.Execution.Profile = "strict"
-	cfg.TranslationProfiles["strict"] = config.CLIConfigTranslationProfile{
-		Protect: config.ProtectConfig{Enabled: true, Rules: []string{"link"}},
-		Ruby:    config.RubyConfig{Enabled: true, PreserveKinds: []string{"creative"}},
-	}
-	cfg.Execution.Rounds = []config.CLIConfigRound{
-		translateRoundCfg(),
-		{
-			Mode:    "revise",
-			Backend: "test",
-			Revise:  &config.CLIConfigReviseRound{BatchSize: 10, Concurrency: 1},
+func TestResolveCLIExecutionRejectsInvalidBindings(t *testing.T) {
+	cases := map[string]func(*config.CLIConfig){
+		"unknown backend":  func(c *config.CLIConfig) { c.Execution.Rounds[0].Backend = "missing" },
+		"disabled backend": func(c *config.CLIConfig) { b := c.Backends["test"]; b.Enabled = false; c.Backends["test"] = b },
+		"missing secret":   func(c *config.CLIConfig) { b := c.Backends["test"]; b.Secret = ""; c.Backends["test"] = b },
+		"unknown profile":  func(c *config.CLIConfig) { c.Execution.Profile = "missing" },
+		"unknown prompt":   func(c *config.CLIConfig) { c.Execution.Rounds[0].Translate.Prompt = "missing" },
+		"invalid issue code": func(c *config.CLIConfig) {
+			r := reviseRoundCfg()
+			r.Revise.SegmentScope = "with_issue_codes"
+			r.Revise.IssueCodes = []string{"not-a-code"}
+			c.Execution.Rounds = append(c.Execution.Rounds, r)
+		},
+		"unknown retry backend": func(c *config.CLIConfig) {
+			c.Execution.RubyRetry = &config.CLIConfigRubyRetry{Enabled: true, Backend: "missing", MaxAttempts: 1}
 		},
 	}
-
-	opts, err := buildEngineFromCLIConfig(cfg)
-	if err != nil {
-		t.Fatalf("buildEngineFromCLIConfig: %v", err)
-	}
-	if len(opts.Rounds) != 2 {
-		t.Fatalf("rounds = %d，want 2", len(opts.Rounds))
-	}
-	tr, rv := opts.Rounds[0], opts.Rounds[1]
-	if tr.Mode != pipeline.RoundModeTranslate || rv.Mode != pipeline.RoundModeRevise {
-		t.Fatalf("modes = %q/%q，want translate/revise", tr.Mode, rv.Mode)
-	}
-	// protect/ruby 两轮同源。
-	if !reflect.DeepEqual(tr.ProtectRules, rv.ProtectRules) {
-		t.Errorf("protect 不同源: translate=%v revise=%v", tr.ProtectRules, rv.ProtectRules)
-	}
-	if tr.RubyEnabled != rv.RubyEnabled || !reflect.DeepEqual(tr.RubyPreserveKinds, rv.RubyPreserveKinds) {
-		t.Errorf("ruby 不同源: translate=%v/%v revise=%v/%v",
-			tr.RubyEnabled, tr.RubyPreserveKinds, rv.RubyEnabled, rv.RubyPreserveKinds)
-	}
-	if len(rv.ProtectRules) != 1 || rv.ProtectRules[0] != "link" {
-		t.Errorf("revise ProtectRules = %v，want [link]", rv.ProtectRules)
-	}
-	if !rv.RubyEnabled || len(rv.RubyPreserveKinds) != 1 || rv.RubyPreserveKinds[0] != "creative" {
-		t.Errorf("revise ruby 未按策略注入: enabled=%v kinds=%v", rv.RubyEnabled, rv.RubyPreserveKinds)
-	}
-	// with_issues（默认）物化为完整语义白名单；渲染器必须就绪。
-	if rv.ReviseRenderer == nil {
-		t.Error("revise 轮缺少渲染器")
-	}
-	if !reflect.DeepEqual(rv.IssueCodes, qa.SemanticQACodes()) {
-		t.Errorf("revise IssueCodes 应物化为完整语义白名单，实际 %d 个", len(rv.IssueCodes))
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			cfg := newTestCLIConfig()
+			mutate(cfg)
+			if resolved, err := resolveCLIExecution(cfg); err == nil {
+				resolved.Close()
+				t.Fatal("invalid execution accepted")
+			}
+		})
 	}
 }
 
-// TestBuildEngineFromCLIConfig_ReviseExplicitIssueCodes 验证 with_issue_codes 作用域
-// 校验并透传用户指定 codes。
-func TestBuildEngineFromCLIConfig_ReviseExplicitIssueCodes(t *testing.T) {
-	cfg := newTestCLIConfig()
-	validCode := qa.SemanticQACodes()[0]
-	cfg.Execution.Rounds = []config.CLIConfigRound{
-		translateRoundCfg(),
-		{
-			Mode:    "revise",
-			Backend: "test",
-			Revise: &config.CLIConfigReviseRound{
-				BatchSize:    10,
-				Concurrency:  1,
-				SegmentScope: "with_issue_codes",
-				IssueCodes:   []string{validCode},
-			},
-		},
+func TestApplyTranslateFlagsChangeExecutableSemantics(t *testing.T) {
+	for _, mode := range []string{"off", "pre", "inline"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg := newTestCLIConfig()
+			cfg.TranslationProfiles["alternate"] = config.CLIConfigTranslationProfile{ProfileSpec: execution.DefaultProfile()}
+			cfg.PromptTemplates["alternate"] = config.CLIConfigPromptTemplate{Content: "custom prompt"}
+			err := applyTranslateFlags(cfg, translateOptions{from: "ja", to: "en", profile: "alternate", prompt: "alternate", bootstrapMode: mode, changed: map[string]bool{"from": true, "to": true, "profile": true, "prompt": true, "bootstrap": true}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resolved, err := resolveCLIExecution(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resolved.Close()
+			if resolved.Spec.SourceLang != "ja" || resolved.Spec.TargetLang != "en" {
+				t.Fatal("language flags were not resolved")
+			}
+			if resolved.Spec.Strategy.ProfileName != "alternate" {
+				t.Fatal("profile flag was not resolved")
+			}
+			if resolved.Spec.Strategy.Glossary.Bootstrap.Enabled != (mode == "inline") {
+				t.Fatal("inline bootstrap flag was not resolved")
+			}
+			if mode == "pre" && (len(resolved.Spec.Rounds) != 2 || resolved.Spec.Rounds[0].Mode != "extract" || resolved.Spec.Rounds[0].Extract.TemplateContent == "") {
+				t.Fatal("pre bootstrap did not create an executable extraction round")
+			}
+			for _, r := range resolved.Spec.Rounds {
+				if r.Translate != nil && r.Translate.Prompt.Content != "custom prompt" {
+					t.Fatal("prompt override was not frozen")
+				}
+			}
+		})
 	}
-
-	opts, err := buildEngineFromCLIConfig(cfg)
-	if err != nil {
-		t.Fatalf("buildEngineFromCLIConfig: %v", err)
-	}
-	rv := opts.Rounds[1]
-	if !reflect.DeepEqual(rv.IssueCodes, []string{validCode}) {
-		t.Errorf("IssueCodes = %v，want [%s]", rv.IssueCodes, validCode)
-	}
-
-	// 无效 code 报错而非静默透传。
-	cfg.Execution.Rounds[1].Revise.IssueCodes = []string{"not_a_code"}
-	if _, err := buildEngineFromCLIConfig(cfg); err == nil {
-		t.Fatal("expected error for invalid issue code")
-	}
-}
-
-// TestBuildEngineFromCLIConfig_DisabledProtectDegrades 验证策略关闭 protect/ruby 时
-// 两轮均零值降级（原文直发）。
-func TestBuildEngineFromCLIConfig_DisabledProtectDegrades(t *testing.T) {
-	cfg := newTestCLIConfig()
-	cfg.Execution.Profile = "bare"
-	cfg.TranslationProfiles["bare"] = config.CLIConfigTranslationProfile{
-		Protect: config.ProtectConfig{Enabled: false, Rules: []string{"code"}},
-		Ruby:    config.RubyConfig{Enabled: false},
-	}
-	cfg.Execution.Rounds = []config.CLIConfigRound{
-		translateRoundCfg(),
-		{Mode: "revise", Backend: "test", Revise: &config.CLIConfigReviseRound{BatchSize: 10, Concurrency: 1}},
-	}
-
-	opts, err := buildEngineFromCLIConfig(cfg)
-	if err != nil {
-		t.Fatalf("buildEngineFromCLIConfig: %v", err)
-	}
-	for i, r := range opts.Rounds {
-		if len(r.ProtectRules) != 0 {
-			t.Errorf("round[%d] ProtectRules = %v，protect 未启用时应为零值", i, r.ProtectRules)
-		}
-		if r.RubyEnabled {
-			t.Errorf("round[%d] RubyEnabled = true，策略已关闭注音", i)
+	for _, opts := range []translateOptions{{profile: "missing", changed: map[string]bool{"profile": true}}, {prompt: "missing", changed: map[string]bool{"prompt": true}}, {bootstrapMode: "missing", changed: map[string]bool{"bootstrap": true}}, {changed: map[string]bool{"from": true}}} {
+		if err := applyTranslateFlags(newTestCLIConfig(), opts); err == nil {
+			t.Fatal("invalid explicit flag accepted")
 		}
 	}
 }
 
-// TestApplyTranslateFlags_ProfileOverridesTopLevel 验证 --profile flag 覆盖
-// execution.profile，且未知名称报错。
-func TestApplyTranslateFlags_ProfileOverridesTopLevel(t *testing.T) {
+func TestTranslateSingleFileExtractBeforeTranslate(t *testing.T) {
+	var extractCalls, translateCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer sk-cli-test-secret" {
+			t.Error("request did not use the bound credential")
+		}
+		var request struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			w.WriteHeader(400)
+			return
+		}
+		var input struct {
+			Task       string `json:"task"`
+			SourceLang string `json:"source_lang"`
+			TargetLang string `json:"target_lang"`
+			Segments   map[string]struct {
+				Translate bool `json:"translate"`
+			} `json:"segments"`
+		}
+		for _, m := range request.Messages {
+			if m.Role == "user" {
+				if err := json.Unmarshal([]byte(m.Content), &input); err != nil {
+					t.Error(err)
+					w.WriteHeader(400)
+					return
+				}
+			}
+		}
+		if input.SourceLang != "en" || input.TargetLang != "zh" {
+			t.Errorf("unexpected resolved languages: %s/%s", input.SourceLang, input.TargetLang)
+		}
+		var reply any
+		if input.Task == "extract_terms" {
+			extractCalls.Add(1)
+			reply = map[string]any{"glossary": []any{}}
+		} else {
+			translateCalls.Add(1)
+			translations := map[string]string{}
+			for id, seg := range input.Segments {
+				if seg.Translate {
+					translations[id] = "你好"
+				}
+			}
+			reply = map[string]any{"translations": translations}
+		}
+		body, _ := json.Marshal(reply)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "test", "object": "chat.completion", "choices": []any{map[string]any{"index": 0, "message": map[string]any{"role": "assistant", "content": string(body)}, "finish_reason": "stop"}}, "usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}})
+	}))
+	defer server.Close()
 	cfg := newTestCLIConfig()
-	cfg.Execution.Profile = "a"
-	cfg.TranslationProfiles["a"] = config.CLIConfigTranslationProfile{}
-	cfg.TranslationProfiles["b"] = config.CLIConfigTranslationProfile{}
-	cfg.Execution.Rounds = []config.CLIConfigRound{translateRoundCfg()}
-
-	if err := applyTranslateFlags(cfg, translateOptions{profile: "b"}); err != nil {
-		t.Fatalf("applyTranslateFlags: %v", err)
+	cfg.Backends["test"].Options["base_url"] = server.URL + "/v1"
+	cfg.Glossary.Path = filepath.Join(t.TempDir(), "glossary.csv")
+	profile := execution.DefaultProfile()
+	profile.Protect.Enabled, profile.Ruby.Enabled = false, false
+	cfg.Execution.Profile = "plain"
+	cfg.TranslationProfiles["plain"] = config.CLIConfigTranslationProfile{ProfileSpec: profile}
+	if err := applyTranslateFlags(cfg, translateOptions{bootstrapMode: "pre", changed: map[string]bool{"bootstrap": true}}); err != nil {
+		t.Fatal(err)
 	}
-	if cfg.Execution.Profile != "b" {
-		t.Errorf("execution.profile = %q，want b", cfg.Execution.Profile)
+	cfg.Execution.Rounds[0].Extract.Retry = config.RetryConfig{}
+	eng, resolved, err := buildEngineFromCLIConfig(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	err := applyTranslateFlags(cfg, translateOptions{profile: "nope"})
-	if err == nil {
-		t.Fatal("expected error for unknown profile")
+	defer resolved.Close()
+	defer eng.Close()
+	dir := t.TempDir()
+	src, dst := filepath.Join(dir, "input.txt"), filepath.Join(dir, "output.txt")
+	if err := os.WriteFile(src, []byte("hello world\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := translateSingleFile(context.Background(), eng, FileJob{InputPath: src, OutputPath: dst}, resolved.Spec.SourceLang, resolved.Spec.TargetLang, nil); err != nil {
+		t.Fatal(err)
+	}
+	output, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(output), "你好") {
+		t.Fatalf("translation did not reach output: %q", output)
+	}
+	if extractCalls.Load() != 1 || translateCalls.Load() != 1 {
+		t.Fatalf("requests: extraction=%d translation=%d", extractCalls.Load(), translateCalls.Load())
 	}
 }

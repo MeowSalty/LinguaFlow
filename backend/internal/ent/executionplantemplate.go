@@ -12,8 +12,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 )
 
 // ExecutionPlanTemplate is the model entity for the ExecutionPlanTemplate schema.
@@ -25,6 +25,8 @@ type ExecutionPlanTemplate struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// SchemaVersion holds the value of the "schema_version" field.
+	SchemaVersion int `json:"schema_version,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
 	// Description holds the value of the "description" field.
@@ -38,9 +40,9 @@ type ExecutionPlanTemplate struct {
 	// 计划级策略引用（ExecutionProfile），为全管道供七项行为预设
 	ProfileID int `json:"profile_id,omitempty"`
 	// 注音对齐重试配置
-	RubyRetry schema.ExecutionPlanRubyRetryConfig `json:"ruby_retry,omitempty"`
+	RubyRetry execution.ExecutionPlanRubyRetryConfig `json:"ruby_retry,omitempty"`
 	// 轮次配置列表，每轮引用后端+提示词
-	Rounds []schema.ExecutionRoundConfig `json:"rounds,omitempty"`
+	Rounds []execution.ExecutionRoundConfig `json:"rounds,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the ExecutionPlanTemplateQuery when eager-loading is set.
 	Edges        ExecutionPlanTemplateEdges `json:"edges"`
@@ -87,7 +89,7 @@ func (*ExecutionPlanTemplate) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case executionplantemplate.FieldRubyRetry, executionplantemplate.FieldRounds:
 			values[i] = new([]byte)
-		case executionplantemplate.FieldID, executionplantemplate.FieldOwnerUserID, executionplantemplate.FieldOwnerOrgID, executionplantemplate.FieldProfileID:
+		case executionplantemplate.FieldID, executionplantemplate.FieldSchemaVersion, executionplantemplate.FieldOwnerUserID, executionplantemplate.FieldOwnerOrgID, executionplantemplate.FieldProfileID:
 			values[i] = new(sql.NullInt64)
 		case executionplantemplate.FieldName, executionplantemplate.FieldDescription, executionplantemplate.FieldScope:
 			values[i] = new(sql.NullString)
@@ -125,6 +127,12 @@ func (_m *ExecutionPlanTemplate) assignValues(columns []string, values []any) er
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case executionplantemplate.FieldSchemaVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field schema_version", values[i])
+			} else if value.Valid {
+				_m.SchemaVersion = int(value.Int64)
 			}
 		case executionplantemplate.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -231,6 +239,9 @@ func (_m *ExecutionPlanTemplate) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("schema_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SchemaVersion))
 	builder.WriteString(", ")
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)

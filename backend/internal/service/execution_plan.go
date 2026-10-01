@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
@@ -91,6 +92,9 @@ func (s *ExecutionPlanService) GetByIDRaw(ctx context.Context, id int) (*ent.Exe
 	row, err := s.client.ExecutionPlanTemplate.Get(ctx, id)
 	if err != nil {
 		return nil, sharedAccessError(err, ErrExecutionPlanNotFound)
+	}
+	if row.SchemaVersion != execution.SchemaVersion {
+		return nil, fmt.Errorf("%w: unsupported or missing plan schema version", ErrExecutionPlanConfigInvalid)
 	}
 	return row, nil
 }

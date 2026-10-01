@@ -24,7 +24,6 @@ func (ExecutionProfile) Fields() []ent.Field {
 		field.Int("owner_user_id").Optional().Nillable().Positive(),
 		field.Int("owner_org_id").Optional().Nillable().Positive(),
 		field.JSON("config", ExecutionProfileConfigData{}).
-			Default(DefaultProfileConfig()).
 			Comment("执行策略配置，JSON 内联存储"),
 	}
 }

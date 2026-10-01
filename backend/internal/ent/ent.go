@@ -15,9 +15,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credential"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialversion"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -100,9 +104,13 @@ func checkColumn(t, c string) error {
 			activitylog.Table:               activitylog.ValidColumn,
 			backend.Table:                   backend.ValidColumn,
 			bootstrapprompttemplate.Table:   bootstrapprompttemplate.ValidColumn,
+			credential.Table:                credential.ValidColumn,
+			credentialjobreference.Table:    credentialjobreference.ValidColumn,
+			credentialversion.Table:         credentialversion.ValidColumn,
 			executionplantemplate.Table:     executionplantemplate.ValidColumn,
 			executionprofile.Table:          executionprofile.ValidColumn,
 			glossaryentry.Table:             glossaryentry.ValidColumn,
+			instanceinitialization.Table:    instanceinitialization.ValidColumn,
 			job.Table:                       job.ValidColumn,
 			jobresource.Table:               jobresource.ValidColumn,
 			jobround.Table:                  jobround.ValidColumn,

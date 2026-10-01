@@ -22,7 +22,7 @@ func TestRunRound_SemanticQA401FatalUnresolvedCrossRound(t *testing.T) {
 			&backend.StatusError{StatusCode: 401, Err: errors.New("unauthorized")},
 		},
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   fb,
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 1,                                   // 两批各 1 段
@@ -64,7 +64,7 @@ func TestRunRound_SemanticQARenderFailureLeavesUnresolvedEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build bad renderer: %v", err)
 	}
-	h := &SemanticQAHandler{
+	h := &SemanticQAHandler{SegmentScope: "all",
 		Backend:   &fakeBackend{name: "fake"},
 		Renderer:  badRenderer,
 		BatchSize: 1,

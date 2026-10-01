@@ -18,7 +18,7 @@ func seedSharedReferenceSet(t *testing.T, f sharedTestFixture, ownerID int, orgI
 	if orgID != nil {
 		scope = ScopeOrg
 	}
-	profile := f.client.ExecutionProfile.Create().SetName("profile").SetScope(scope)
+	profile := f.client.ExecutionProfile.Create().SetName("profile").SetScope(scope).SetConfig(schema.DefaultProfileConfig())
 	translation := f.client.TranslationPromptTemplate.Create().SetName("translation").SetSystemPromptContent("secret").SetScope(scope)
 	bootstrap := f.client.BootstrapPromptTemplate.Create().SetName("bootstrap").SetContent("secret").SetScope(scope)
 	backend := f.client.Backend.Create().SetName("backend").SetBackendType("openai").SetScope(scope).
@@ -50,7 +50,7 @@ func seedSharedReferenceSet(t *testing.T, f sharedTestFixture, ownerID int, orgI
 	if err != nil {
 		t.Fatal(err)
 	}
-	return sharedReferenceSet{p.ID, tr.ID, bt.ID, be.ID}
+	return sharedReferenceSet{p.ID, tr.ID, bt.ID, bindExecutionTestBackend(t, f.client, be).ID}
 }
 
 func sharedReferencePlan(orgID *int, refs sharedReferenceSet) CreateExecutionPlanTemplateInput {

@@ -17,13 +17,15 @@ import (
 
 // Options 是 Engine 的构造参数。
 type Options struct {
-	Rounds            []Round
-	RubyRetryBackends []backend.Backend
-	RubyRetryAttempts int // 注音对齐定向重试轮数；<=0 由 handler 兜底为 1（仅 backends 非空时生效）
-	Config            *Config
-	Logger            *slog.Logger
-	Reporter          progress.Reporter
-	Resources         RuntimeResources
+	Rounds                []Round
+	RubyRetryBackends     []backend.Backend
+	RubyRetryAttempts     int // 已解析的注音对齐重试轮数；0 表示禁用。
+	RubyTemplates         prompt.RubyTemplates
+	RetryReminderTemplate string
+	Config                *Config
+	Logger                *slog.Logger
+	Reporter              progress.Reporter
+	Resources             RuntimeResources
 }
 
 // Round 描述一轮翻译的执行配置（Engine 级别）。
@@ -82,13 +84,9 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 	if len(in) == 0 {
 		return nil
 	}
-	globalRetry := cfg.TranslateDefaults.Retry
 	out := make([]RoundConfig, 0, len(in))
 	for _, r := range in {
 		retry := r.Retry
-		if retry.MaxAttempts == 0 {
-			retry = globalRetry
-		}
 
 		mode := r.Mode
 		if mode == "" {

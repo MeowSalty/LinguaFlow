@@ -12,6 +12,16 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /credentials:
+    $ref: './paths/credentials.yaml#/userCredentials'
+  /orgs/{orgId}/credentials:
+    $ref: './paths/credentials.yaml#/orgCredentials'
+  /credentials/{credentialId}/versions:
+    $ref: './paths/credentials.yaml#/credentialVersions'
+  /credentials/{credentialId}/versions/{version}/revoke:
+    $ref: './paths/credentials.yaml#/credentialVersionRevoke'
+  /credentials/{credentialId}/collect:
+    $ref: './paths/credentials.yaml#/credentialCollect'
   /ping:
     $ref: './paths/system.yaml#/ping'
   /mode:

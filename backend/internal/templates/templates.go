@@ -10,6 +10,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	yaml "gopkg.in/yaml.v3"
 )
 
@@ -114,16 +115,16 @@ const (
 // IsBuiltinID 报告 id 是否为内置虚拟实体的负数 ID。
 func IsBuiltinID(id int) bool { return id < 0 }
 
-// ── config.yaml 元数据解析 ───────────────────────────────────
+// ── catalog.yaml 元数据解析 ───────────────────────────────────
 
-// builtinMeta 从 config.yaml 中解析的单条内置实体元数据。
+// builtinMeta 从 catalog.yaml 中解析的单条内置实体元数据。
 type builtinMeta struct {
 	ID          int    `yaml:"id"`
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 }
 
-// builtinConfig 对应 config.yaml 的顶层结构（仅解析所需字段）。
+// builtinConfig 对应 catalog.yaml 的顶层结构（仅解析所需字段）。
 type builtinConfig struct {
 	TranslationPromptTemplate builtinMeta `yaml:"translation_prompt_template"`
 	BootstrapPromptTemplate   builtinMeta `yaml:"bootstrap_prompt_template"`
@@ -131,15 +132,15 @@ type builtinConfig struct {
 	TranslationProfile        builtinMeta `yaml:"translation_profile"`
 }
 
-// parseBuiltinConfig 从嵌入 FS 解析 config.yaml 元数据。
+// parseBuiltinConfig 从嵌入 FS 解析 catalog.yaml 元数据。
 func parseBuiltinConfig() builtinConfig {
-	data, err := fs.ReadFile(builtinFS, "default/config.yaml")
+	data, err := fs.ReadFile(builtinFS, "default/catalog.yaml")
 	if err != nil {
-		panic(fmt.Sprintf("embedded config.yaml not found: %v", err))
+		panic(fmt.Sprintf("embedded catalog.yaml not found: %v", err))
 	}
 	var cfg builtinConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		panic(fmt.Sprintf("failed to parse embedded config.yaml: %v", err))
+		panic(fmt.Sprintf("failed to parse embedded catalog.yaml: %v", err))
 	}
 	return cfg
 }
@@ -233,11 +234,7 @@ func BuiltinPrunePromptTemplate(id int) *ent.PrunePromptTemplate {
 var builtinProfileConfig schema.ExecutionProfileConfigData
 var builtinExecutionProfile *ent.ExecutionProfile
 
-func init() {
-	if err := yaml.Unmarshal(EmbeddedProfileConfig(), &builtinProfileConfig); err != nil {
-		panic(fmt.Sprintf("failed to parse embedded profile config: %v", err))
-	}
-}
+func init() { builtinProfileConfig = execution.DefaultProfile() }
 
 func init() {
 	meta := parseBuiltinConfig()

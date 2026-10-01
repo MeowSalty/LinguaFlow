@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
@@ -116,11 +118,19 @@ func (l *runtimeSignalListener) Accept() (net.Conn, error) {
 func TestServerRuntimeLifecycle(t *testing.T) {
 	for _, scenario := range []string{"shutdown", "parent_cancel", "serve_failure", "shutdown_before_run"} {
 		t.Run(scenario, func(t *testing.T) {
-			_, c, u := authTestServer(t)
+			c := newTestEntClient(t)
 			cfg := config.DefaultServerConfig()
 			cfg.DataDir = t.TempDir()
 			cfg.ShutdownTimeout = 2 * time.Second
-			s, err := NewServer(cfg, nil, nil, c, config.ModeServer, u)
+			cfg.JWTSecret = strings.Repeat("runtime-test-key", 3)
+			cfg.Credentials.KeyringFile = filepath.Join(cfg.DataDir, "keyring.json")
+			if _, err := credential.PrepareKeyring(cfg.Credentials.KeyringFile, true); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.NewInitializationService(c).Initialize(context.Background(), config.ModeServer, config.BootstrapInput{Admin: &config.BootstrapAdmin{Username: "runtime-admin", Email: "runtime@test.invalid", Password: "runtime-password"}}); err != nil {
+				t.Fatal(err)
+			}
+			s, err := NewServer(cfg, nil, nil, c, config.ModeServer, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

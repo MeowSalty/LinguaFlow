@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -242,9 +244,35 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	if err := s.validateBackendForProject(ctx, projectRow, backendRecord); err != nil {
 		return nil, err
 	}
+	credentials := s.backends.Credentials()
+	if credentials == nil {
+		return nil, credential.ErrUnavailable
+	}
+	binding, release, err := credentials.AcquireBackend(ctx, backendID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	runtimeOptions, err := execution.ResolveBackendOptions(backendRecord.Type, backendRecord.Options)
+	if err != nil {
+		return nil, err
+	}
+	endpoint, _ := runtimeOptions["base_url"].(string)
+	secret, err := credentials.Resolve(ctx, binding, backendRecord.Type, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	runtimeOptions["api_key"] = secret
+	check := func(ctx context.Context) error {
+		return credentials.Check(ctx, binding, backendID, backendRecord.Type, endpoint)
+	}
+	client, err := credential.GuardClient(telemetry.ClientFor(s.httpClients, backendRecord.Type, "generate"), credentials, binding, backendID, backendRecord.Type, endpoint)
+	if err != nil {
+		return nil, err
+	}
 
 	// response_format → Protocol（text / json_loose / json_strict）
-	responseMode := responseModeFromBackendOptions(backendRecord.Options)
+	responseMode := responseModeFromBackendOptions(runtimeOptions)
 	proto := prompt.ProtocolFromResponseMode(responseMode)
 	isTextMode := proto.IsText()
 
@@ -271,8 +299,8 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 		Name:       backendRecord.Name,
 		Type:       backendRecord.Type,
 		Enabled:    true,
-		Options:    backendRecord.Options,
-		HTTPClient: telemetry.ClientFor(s.httpClients, backendRecord.Type, "generate"),
+		Options:    runtimeOptions,
+		HTTPClient: client,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("prune: build backend: %w", err)
@@ -282,10 +310,14 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	if s.limiterPool != nil {
 		limiter, err := s.limiterPool.Lookup(backendRecord.ID)
 		if err != nil {
+			if policyErr := check(ctx); policyErr != nil {
+				return nil, policyErr
+			}
 			return nil, fmt.Errorf("prune: rate limit policy: %w", err)
 		}
 		b = backend.NewRateLimitedBackend(b, limiter)
 	}
+	b = backend.NewPolicyBackend(b, check)
 
 	start := time.Now()
 
