@@ -67,6 +67,7 @@ var serverFields = []serverField{
 	field("server.sse.replay_batch_size", "LINGUAFLOW_SSE_REPLAY_BATCH_SIZE", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.SSE.ReplayBatchSize }),
 	field("server.sse.max_replay_events", "LINGUAFLOW_SSE_MAX_REPLAY_EVENTS", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.SSE.MaxReplayEvents }),
 	field("server.cors.allowed_origins", "LINGUAFLOW_CORS_ORIGINS", "strings", "serve/local", false, func(r *ResolvedServer) *[]string { return &r.Config.CORS.AllowedOrigins }),
+	field("server.credentials.master_key", "LINGUAFLOW_CREDENTIALS_MASTER_KEY", "string", "serve/local", true, func(r *ResolvedServer) *string { return &r.masterKey }),
 	field("server.credentials.keyring_file", "LINGUAFLOW_CREDENTIALS_KEYRING_FILE", "path", "serve/local", false, func(r *ResolvedServer) *string { return &r.Config.Credentials.KeyringFile }),
 	field("log.level", "LINGUAFLOW_LOG_LEVEL", "string", "serve/local", false, func(r *ResolvedServer) *string { return &r.Log.Level }),
 	field("log.format", "LINGUAFLOW_LOG_FORMAT", "string", "serve/local", false, func(r *ResolvedServer) *string { return &r.Log.Format }),

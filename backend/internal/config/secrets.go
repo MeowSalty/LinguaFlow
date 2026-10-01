@@ -37,6 +37,20 @@ func EnvironmentSecret(environment map[string]string, name, workingDirectory str
 	return value, true, nil
 }
 
+// EnvironmentMasterKey shares the explicit master-key input contract with
+// offline tools. Absence is distinct from invalid or explicitly empty input.
+func EnvironmentMasterKey(environment map[string]string, workingDirectory string) (*credential.Keyring, bool, error) {
+	value, present, err := EnvironmentSecret(environment, "LINGUAFLOW_CREDENTIALS_MASTER_KEY", workingDirectory)
+	if err != nil || !present {
+		return nil, present, err
+	}
+	keys, err := credential.FromMasterKey(value)
+	if err != nil {
+		return nil, true, fmt.Errorf("LINGUAFLOW_CREDENTIALS_MASTER_KEY: %w", err)
+	}
+	return keys, true, nil
+}
+
 // PrepareLocalSecret publishes a new persistent 32-byte instance secret only
 // when absent. A failed read or malformed existing file never triggers replacement.
 func PrepareLocalSecret(path string) (string, error) {

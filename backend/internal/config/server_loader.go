@@ -48,8 +48,12 @@ type ResolvedServer struct {
 	LocalSecretPath    string
 	LocalSecretPending bool
 	KeyringPending     bool
+	CredentialKeys     *credential.Keyring
 	AllowNetwork       bool
 	ConfigPath         string
+	// masterKey exists only during resolution, is described as redacted, and
+	// is cleared before returning. Runtime consumers receive CredentialKeys.
+	masterKey string
 }
 
 type sourcedValue struct {
@@ -222,7 +226,8 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 				r.Config.JWTSecret = secret
 			}
 		}
-		if _, explicit := values["server.credentials.keyring_file"]; !explicit {
+		_, explicitMaster := values["server.credentials.master_key"]
+		if _, explicit := values["server.credentials.keyring_file"]; !explicit && !explicitMaster {
 			r.Config.Credentials.KeyringFile = filepath.Join(r.Config.DataDir, "credentials-keyring.json")
 		}
 	}
@@ -235,15 +240,8 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 	if r.Log.Format != "text" && r.Log.Format != "json" {
 		return nil, fmt.Errorf("log.format must be text or json")
 	}
-	if strings.TrimSpace(r.Config.Credentials.KeyringFile) == "" {
-		return nil, fmt.Errorf("server.credentials.keyring_file is required in serve mode")
-	}
-	if _, err := credential.LoadKeyring(r.Config.Credentials.KeyringFile); err != nil {
-		if in.Mode == ModeLocal && errors.Is(err, os.ErrNotExist) {
-			r.KeyringPending = true
-		} else {
-			return nil, fmt.Errorf("server.credentials.keyring_file: %w", err)
-		}
+	if err := r.resolveCredentialKeys(values, in.Mode); err != nil {
+		return nil, err
 	}
 	if r.Bootstrap.Admin != nil {
 		if strings.TrimSpace(r.Bootstrap.Admin.Username) == "" || strings.TrimSpace(r.Bootstrap.Admin.Email) == "" || r.Bootstrap.Admin.Password == "" {
@@ -251,7 +249,40 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 		}
 	}
 	r.describe(values, in.Mode)
+	r.masterKey = ""
 	return r, nil
+}
+
+func (r *ResolvedServer) resolveCredentialKeys(values map[string]sourcedValue, mode string) error {
+	_, masterPresent := values["server.credentials.master_key"]
+	_, filePresent := values["server.credentials.keyring_file"]
+	if masterPresent && filePresent {
+		return fmt.Errorf("server.credentials.master_key conflicts with server.credentials.keyring_file; configure only one source")
+	}
+	if masterPresent {
+		keys, err := credential.FromMasterKey(r.masterKey)
+		if err != nil {
+			return fmt.Errorf("server.credentials.master_key: %w", err)
+		}
+		r.CredentialKeys = keys
+		return nil
+	}
+	if strings.TrimSpace(r.Config.Credentials.KeyringFile) == "" {
+		if filePresent {
+			return fmt.Errorf("server.credentials.keyring_file must not be empty")
+		}
+		return fmt.Errorf("server.credentials.master_key or server.credentials.keyring_file is required in serve mode")
+	}
+	keys, err := credential.LoadKeyring(r.Config.Credentials.KeyringFile)
+	if err != nil {
+		if mode == ModeLocal && errors.Is(err, os.ErrNotExist) {
+			r.KeyringPending = true
+			return nil
+		}
+		return fmt.Errorf("server.credentials.keyring_file: %w", err)
+	}
+	r.CredentialKeys = keys
+	return nil
 }
 
 func (r *ResolvedServer) describe(values map[string]sourcedValue, mode string) {
@@ -269,7 +300,9 @@ func (r *ResolvedServer) describe(values map[string]sourcedValue, mode string) {
 					source = "mode default (relative to working directory)"
 				}
 			case "server.credentials.keyring_file":
-				source = "derived from data_dir"
+				if mode == ModeLocal && r.Config.Credentials.KeyringFile != "" {
+					source = "derived from data_dir"
+				}
 			}
 		}
 		var value string
