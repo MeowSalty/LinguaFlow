@@ -40,7 +40,7 @@ func newRoot() (*cobra.Command, *appCtx) {
 			}
 			// Deployment commands construct their logger after all sources resolve.
 			for current := cmd; current != nil; current = current.Parent() {
-				if current.Name() == "serve" || current.Name() == "local" || current.Name() == "config" || current.Name() == "admin" || current.Name() == "translate" {
+				if current.Name() == "serve" || current.Name() == "local" || current.Name() == "config" || current.Name() == "admin" || current.Name() == "translate" || current.Name() == "secrets" {
 					return
 				}
 			}
@@ -74,6 +74,7 @@ func newRoot() (*cobra.Command, *appCtx) {
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newConfigCmd(rt))
 	root.AddCommand(newAdminCmd(rt))
+	root.AddCommand(newSecretsCmd())
 	root.AddCommand(newVersionCmd())
 	return root, rt
 }
