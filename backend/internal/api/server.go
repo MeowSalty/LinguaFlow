@@ -96,7 +96,10 @@ func (s *Server) localAuthUser() (authenticatedUser, bool) {
 	return authenticatedUser{}, false
 }
 
-func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User, addresses ...config.RuntimeAddress) (*Server, error) {
+func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User, addresses ...config.RuntimeAddress) (*Server, error) {
+	if keys == nil || !keys.HasKey(keys.ActiveKeyID()) {
+		return nil, fmt.Errorf("resolved provider credential keys are required")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -152,10 +155,6 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	s.userService = service.NewUserService(client, s.authService)
 
 	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool, s.httpClients)
-	keys, err := credential.LoadKeyring(cfg.Credentials.KeyringFile)
-	if err != nil {
-		return nil, fmt.Errorf("load provider credential keyring: %w", err)
-	}
 	credentials := service.NewCredentialService(client, keys, s.userService)
 	if err := credentials.ValidateKeys(context.Background()); err != nil {
 		return nil, fmt.Errorf("validate provider credential keys: %w", err)

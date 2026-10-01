@@ -124,13 +124,14 @@ func TestServerRuntimeLifecycle(t *testing.T) {
 			cfg.ShutdownTimeout = 2 * time.Second
 			cfg.JWTSecret = strings.Repeat("runtime-test-key", 3)
 			cfg.Credentials.KeyringFile = filepath.Join(cfg.DataDir, "keyring.json")
-			if _, err := credential.PrepareKeyring(cfg.Credentials.KeyringFile, true); err != nil {
+			keys, err := credential.PrepareKeyring(cfg.Credentials.KeyringFile, true)
+			if err != nil {
 				t.Fatal(err)
 			}
 			if _, err := service.NewInitializationService(c).Initialize(context.Background(), config.ModeServer, config.BootstrapInput{Admin: &config.BootstrapAdmin{Username: "runtime-admin", Email: "runtime@test.invalid", Password: "runtime-password"}}); err != nil {
 				t.Fatal(err)
 			}
-			s, err := NewServer(cfg, nil, nil, c, config.ModeServer, nil)
+			s, err := NewServer(cfg, keys, nil, nil, c, config.ModeServer, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

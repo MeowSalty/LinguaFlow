@@ -15,6 +15,7 @@ paths:
   /credentials:
     get:
       operationId: ListUserCredentials
+      summary: 列出当前用户凭据
       security:
         - bearerAuth: []
       responses:
@@ -28,6 +29,7 @@ paths:
           $ref: '#/components/responses/Problem'
     post:
       operationId: CreateUserCredential
+      summary: 创建用户凭据
       security:
         - bearerAuth: []
       requestBody:
@@ -50,6 +52,7 @@ paths:
       - $ref: '#/components/parameters/OrgId'
     get:
       operationId: ListOrgCredentials
+      summary: 列出组织凭据
       security:
         - bearerAuth: []
       description: 仅组织管理员可管理凭据。
@@ -64,6 +67,7 @@ paths:
           $ref: '#/components/responses/Problem'
     post:
       operationId: CreateOrgCredential
+      summary: 创建组织凭据
       security:
         - bearerAuth: []
       requestBody:
@@ -91,6 +95,7 @@ paths:
           minimum: 1
     get:
       operationId: ListCredentialVersions
+      summary: 列出凭据版本
       security:
         - bearerAuth: []
       responses:
@@ -104,6 +109,7 @@ paths:
           $ref: '#/components/responses/Problem'
     post:
       operationId: RotateCredential
+      summary: 轮换凭据版本
       description: 创建新版本并设置为当前；现存任务仍使用原版本。
       security:
         - bearerAuth: []
@@ -138,6 +144,7 @@ paths:
           minimum: 1
     post:
       operationId: RevokeCredentialVersion
+      summary: 撤销凭据版本
       description: 撤销固定版本；所有共享 Backend 与现存执行的后续调用、恢复均被拒绝。
       security:
         - bearerAuth: []
@@ -156,6 +163,7 @@ paths:
           minimum: 1
     post:
       operationId: CollectCredentialVersions
+      summary: 回收凭据版本
       description: 由运行中的服务显式回收非当前且无 Job 引用、无执行 lease 的版本；所有现存任务均保留引用直至删除。
       security:
         - bearerAuth: []

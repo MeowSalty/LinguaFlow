@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credentialstore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	cred "github.com/MeowSalty/LinguaFlow/backend/internal/ent/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
@@ -102,31 +103,13 @@ func (s *CredentialService) Create(ctx context.Context, actorID int, input Creat
 // createWith runs under mu and the caller's transaction, allowing Backend and
 // its first secret to commit atomically.
 func (s *CredentialService) createWith(ctx context.Context, client *ent.Client, input CreateCredentialInput) (*ent.Credential, error) {
-	if input.OwnerID <= 0 || (input.Scope != ScopeUser && input.Scope != ScopeOrg) || !isAllowedBackendType(input.Provider) || input.Secret == "" {
-		return nil, credential.ErrInvalid
-	}
-	ep, err := credential.NormalizeEndpoint(input.Provider, input.Endpoint)
-	if err != nil {
-		return nil, err
-	}
-	row, err := client.Credential.Create().SetScope(input.Scope).SetOwnerID(input.OwnerID).SetProvider(input.Provider).SetEndpoint(ep).SetCurrentVersion(1).Save(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.storeVersion(ctx, client, row, 1, input.Secret); err != nil {
-		return nil, err
-	}
-	return row, nil
+	return credentialstore.Create(ctx, client, s.keys, credentialstore.CreateInput(input))
 }
 func credentialAAD(row *ent.Credential, version int) credential.AssociatedData {
-	return credential.AssociatedData{ID: row.ID, Version: version, Provider: row.Provider, Endpoint: row.Endpoint, Scope: row.Scope, OwnerID: row.OwnerID}
+	return credentialstore.AssociatedData(row, version)
 }
 func (s *CredentialService) storeVersion(ctx context.Context, client *ent.Client, row *ent.Credential, version int, secret string) (*ent.CredentialVersion, error) {
-	encrypted, err := s.keys.Encrypt(secret, credentialAAD(row, version))
-	if err != nil {
-		return nil, err
-	}
-	return client.CredentialVersion.Create().SetCredentialID(row.ID).SetVersion(version).SetEncryptionVersion(encrypted.Version).SetKeyID(encrypted.KeyID).SetNonce(encrypted.Nonce).SetCiphertext(encrypted.Data).Save(ctx)
+	return credentialstore.WriteVersion(ctx, client, s.keys, row, version, secret)
 }
 
 func (s *CredentialService) List(ctx context.Context, actorID int, scope string, ownerID int) ([]*CredentialRecord, error) {

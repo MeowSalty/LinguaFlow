@@ -18,9 +18,10 @@ server:
   database:
     driver: sqlite
     # Pool defaults depend on the final driver. PostgreSQL requires a DSN.
-  credentials:
-    # Existing deployment-managed keyring; see backend/docs/configuration.md.
-    keyring_file: ${LINGUAFLOW_CREDENTIALS_KEYRING_FILE}
+  # Supply one credential encryption source through the environment:
+  # LINGUAFLOW_CREDENTIALS_MASTER_KEY (base64 of 32 random bytes), its _FILE
+  # form, OR LINGUAFLOW_CREDENTIALS_KEYRING_FILE (existing private JSON file).
+  # serve never generates keys. See backend/docs/configuration.md.
   # Omitted worker counts default to max(NumCPU, 2); queue capacities derive
   # from the final counts: translation x4, sync x8.
   pipeline:
