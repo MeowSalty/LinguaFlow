@@ -11,8 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** 列出当前用户凭据 */
         get: operations["ListUserCredentials"];
         put?: never;
+        /** 创建用户凭据 */
         post: operations["CreateUserCredential"];
         delete?: never;
         options?: never;
@@ -29,9 +31,13 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description 仅组织管理员可管理凭据。 */
+        /**
+         * 列出组织凭据
+         * @description 仅组织管理员可管理凭据。
+         */
         get: operations["ListOrgCredentials"];
         put?: never;
+        /** 创建组织凭据 */
         post: operations["CreateOrgCredential"];
         delete?: never;
         options?: never;
@@ -48,9 +54,13 @@ export interface paths {
             };
             cookie?: never;
         };
+        /** 列出凭据版本 */
         get: operations["ListCredentialVersions"];
         put?: never;
-        /** @description 创建新版本并设置为当前；现存任务仍使用原版本。 */
+        /**
+         * 轮换凭据版本
+         * @description 创建新版本并设置为当前；现存任务仍使用原版本。
+         */
         post: operations["RotateCredential"];
         delete?: never;
         options?: never;
@@ -70,7 +80,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 撤销固定版本；所有共享 Backend 与现存执行的后续调用、恢复均被拒绝。 */
+        /**
+         * 撤销凭据版本
+         * @description 撤销固定版本；所有共享 Backend 与现存执行的后续调用、恢复均被拒绝。
+         */
         post: operations["RevokeCredentialVersion"];
         delete?: never;
         options?: never;
@@ -89,7 +102,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 由运行中的服务显式回收非当前且无 Job 引用、无执行 lease 的版本；所有现存任务均保留引用直至删除。 */
+        /**
+         * 回收凭据版本
+         * @description 由运行中的服务显式回收非当前且无 Job 引用、无执行 lease 的版本；所有现存任务均保留引用直至删除。
+         */
         post: operations["CollectCredentialVersions"];
         delete?: never;
         options?: never;
