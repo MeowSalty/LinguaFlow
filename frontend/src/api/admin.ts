@@ -130,7 +130,7 @@ export const fetchAdminSettings = async (
 ): Promise<ApiSchemas['SystemSettingsResponse']> => {
   const { data, error, response } = await client.GET('/admin/settings')
 
-  if (!data) {
+  if (!data || typeof data.settings?.registration_enabled !== 'boolean') {
     throw buildRequestFailureError(t('api.errors.fetchAdminSettingsFailed'), error, response)
   }
 
@@ -143,7 +143,7 @@ export const updateAdminSettings = async (
 ): Promise<ApiSchemas['SystemSettingsResponse']> => {
   const { data, error, response } = await client.PATCH('/admin/settings', { body })
 
-  if (!data) {
+  if (!data || typeof data.settings?.registration_enabled !== 'boolean') {
     throw buildRequestFailureError(t('api.errors.updateAdminSettingsFailed'), error, response)
   }
 

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onScopeDispose } from 'vue'
 
 import { type ApiSchemas } from '@/api/client'
 import {
@@ -14,10 +14,13 @@ import {
   updateAdminSettings,
 } from '@/api/admin'
 import { t } from '@/i18n'
+import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
+import { ApiError } from '@/api/utils'
 
 type SystemStats = ApiSchemas['SystemStats']
 type User = ApiSchemas['User']
 type Activity = ApiSchemas['Activity']
+type SystemSettings = ApiSchemas['SystemSettingsResponse']['settings']
 
 export const useAdminStore = defineStore('admin', () => {
   const stats = ref<SystemStats | null>(null)
@@ -37,10 +40,23 @@ export const useAdminStore = defineStore('admin', () => {
   const auditLogsLoading = ref(false)
   const auditLogsError = ref<string | null>(null)
 
-  const settings = ref<Record<string, string>>({})
+  const settings = ref<SystemSettings | null>(null)
   const settingsLoading = ref(false)
   const settingsError = ref<string | null>(null)
   const settingsSaving = ref(false)
+  const settingsSaveError = ref<string | null>(null)
+  let settingsRequest = 0
+
+  onScopeDispose(
+    onSessionChange(() => {
+      settingsRequest++
+      settings.value = null
+      settingsLoading.value = false
+      settingsSaving.value = false
+      settingsError.value = null
+      settingsSaveError.value = null
+    }),
+  )
 
   const creatingUser = ref(false)
   const updatingUser = ref(false)
@@ -192,29 +208,69 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  const loadSettings = async (): Promise<void> => {
+  const loadSettings = async (): Promise<boolean> => {
+    if (settingsLoading.value || settingsSaving.value) return false
+    const context = captureSession()
+    const request = ++settingsRequest
+    const current = () => request === settingsRequest && isSessionCurrent(context)
     settingsLoading.value = true
     settingsError.value = null
+    settingsSaveError.value = null
 
     try {
       const response = await fetchAdminSettings()
-      settings.value = response.settings ?? {}
+      if (!current()) return false
+      settings.value = response.settings
+      settingsSaveError.value = null
+      return true
     } catch (error) {
-      settingsError.value =
-        error instanceof Error ? error.message : t('api.errors.fetchAdminSettingsFailed')
+      if (!current()) return false
+      const denied = error instanceof ApiError && [401, 403].includes(error.status ?? 0)
+      if (denied) settings.value = null
+      settingsError.value = denied
+        ? t('configurationSettings.accessDenied')
+        : settings.value
+          ? t('configurationSettings.refreshFailed')
+          : t('configurationSettings.loadFailed')
+      return false
     } finally {
-      settingsLoading.value = false
+      if (current()) settingsLoading.value = false
     }
   }
 
-  const saveSettings = async (newSettings: Record<string, string>): Promise<void> => {
+  const saveSettings = async (newSettings: SystemSettings): Promise<boolean> => {
+    if (
+      settingsLoading.value ||
+      settingsSaving.value ||
+      !settings.value ||
+      typeof newSettings.registration_enabled !== 'boolean' ||
+      newSettings.registration_enabled === settings.value.registration_enabled
+    )
+      return false
+    const context = captureSession()
+    const request = ++settingsRequest
+    const current = () => request === settingsRequest && isSessionCurrent(context)
     settingsSaving.value = true
+    settingsSaveError.value = null
 
     try {
-      const response = await updateAdminSettings({ settings: newSettings })
-      settings.value = response.settings ?? {}
+      const response = await updateAdminSettings({
+        settings: { registration_enabled: newSettings.registration_enabled },
+      })
+      if (!current()) return false
+      settings.value = response.settings
+      settingsError.value = null
+      return true
+    } catch (error) {
+      if (!current()) return false
+      const denied = error instanceof ApiError && [401, 403].includes(error.status ?? 0)
+      if (denied) settings.value = null
+      settingsSaveError.value = t(
+        denied ? 'configurationSettings.accessDenied' : 'configurationSettings.saveFailed',
+      )
+      return false
     } finally {
-      settingsSaving.value = false
+      if (current()) settingsSaving.value = false
     }
   }
 
@@ -249,6 +305,7 @@ export const useAdminStore = defineStore('admin', () => {
     settingsLoading,
     settingsError,
     settingsSaving,
+    settingsSaveError,
     creatingUser,
     updatingUser,
     disablingUserIds,
