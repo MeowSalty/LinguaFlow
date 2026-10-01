@@ -1,8 +1,8 @@
 import { t } from '@/i18n'
 import { countUnicodeCodePoints, SEGMENT_SEARCH_MAX_LENGTH } from '@/utils/unicode'
 
-import type { ApiClient, ApiPaths, ApiSchemas } from './client'
-import { apiClient } from './client'
+import type { ApiClient, ApiPaths, ApiSchemas } from './client-core'
+import { apiClient } from './client-core'
 import {
   buildFilesFormData,
   buildRequestFailureError,
@@ -103,8 +103,9 @@ export const fetchStatsSummary = async (
 
 export const fetchProjects = async (
   client: ApiClient = apiClient,
+  signal?: AbortSignal,
 ): Promise<ApiSchemas['ProjectListResponse']> => {
-  const { data, error, response } = await client.GET('/projects')
+  const { data, error, response } = await client.GET('/projects', { signal })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.fetchProjectsFailed'), error, response)
@@ -116,9 +117,11 @@ export const fetchProjects = async (
 export const fetchProject = async (
   projectId: number,
   client: ApiClient = apiClient,
+  signal?: AbortSignal,
 ): Promise<ApiSchemas['Project']> => {
   const { data, error, response } = await client.GET('/projects/{projectId}', {
     params: { path: { projectId } },
+    signal,
   })
 
   if (!data) {
@@ -895,9 +898,11 @@ export const createOrgProject = async (
 export const fetchOrgProjects = async (
   orgId: number,
   client: ApiClient = apiClient,
+  signal?: AbortSignal,
 ): Promise<ApiSchemas['ProjectListResponse']> => {
   const { data, error, response } = await client.GET('/orgs/{orgId}/projects', {
     params: { path: { orgId } },
+    signal,
   })
 
   if (!data) {

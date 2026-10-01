@@ -1,12 +1,16 @@
 version: '3'
 
+includes:
+  frontend:
+    taskfile: ./frontend/Taskfile.yml
+    dir: ./frontend
+
 vars:
   FRONTEND_DIR: frontend
   BACKEND_DIR: backend
   DOCS_DIR: docs
   OPENAPI_ENTRY: api/openapi/base.yaml
   OPENAPI_SCHEMA: api/openapi/openapi-3.0.yaml
-  FRONTEND_OPENAPI_TYPES: src/api/types.d.ts
   BACKEND_BINARY: bin/linguaflow
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
@@ -34,60 +38,9 @@ tasks:
     desc: 生成前端和后端 OpenAPI 代码
     deps:
       - openapi:bundle
-      - frontend:openapi:generate
-      - backend:openapi:generate
-
-  frontend:install:
-    desc: 安装前端依赖
-    dir: '{{.FRONTEND_DIR}}'
     cmds:
-      - pnpm install
-
-  frontend:dev:
-    desc: 启动前端开发服务器
-    dir: '{{.FRONTEND_DIR}}'
-    cmds:
-      - pnpm dev
-
-  frontend:build:
-    desc: 构建前端应用
-    deps:
-      - frontend:openapi:generate
-    dir: '{{.FRONTEND_DIR}}'
-    cmds:
-      - pnpm build
-
-  frontend:type-check:
-    desc: 执行前端 TypeScript 类型检查
-    deps:
-      - frontend:openapi:generate
-    dir: '{{.FRONTEND_DIR}}'
-    cmds:
-      - pnpm type-check
-
-  frontend:lint:
-    desc: 执行前端代码检查
-    dir: '{{.FRONTEND_DIR}}'
-    cmds:
-      - pnpm lint
-
-  frontend:format:
-    desc: 格式化前端源码
-    dir: '{{.FRONTEND_DIR}}'
-    cmds:
-      - pnpm format
-
-  frontend:openapi:generate:
-    desc: 使用 openapi-typescript 生成前端 OpenAPI TypeScript 定义
-    deps:
-      - openapi:bundle
-    dir: '{{.FRONTEND_DIR}}'
-    sources:
-      - '../{{.OPENAPI_SCHEMA}}'
-    generates:
-      - '{{.FRONTEND_OPENAPI_TYPES}}'
-    cmds:
-      - pnpm exec openapi-typescript ../{{.OPENAPI_SCHEMA}} -o {{.FRONTEND_OPENAPI_TYPES}}
+      - task: frontend:openapi:generate
+      - task: backend:openapi:generate
 
   backend:install:
     desc: 下载后端 Go 模块依赖

@@ -1,4 +1,5 @@
 import { getAccessToken, readStoredApiBaseUrl } from '@/api/token-storage'
+import { isLocalMode } from '@/api/client'
 
 import type { ApiSchemas } from '@/api/client'
 
@@ -87,10 +88,10 @@ export const KNOWN_EVENT_TYPES = [
 
 export const resolveStreamUrl = (jobId: number): string | null => {
   const token = getAccessToken()
-  if (!token) return null
+  if (!token && !isLocalMode()) return null
 
   const storedBase = readStoredApiBaseUrl()
   const base = (storedBase || '/api/v1').replace(/\/+$/, '')
 
-  return `${base}/jobs/${jobId}/stream?access_token=${encodeURIComponent(token)}`
+  return `${base}/jobs/${jobId}/stream${isLocalMode() ? '' : `?access_token=${encodeURIComponent(token!)}`}`
 }

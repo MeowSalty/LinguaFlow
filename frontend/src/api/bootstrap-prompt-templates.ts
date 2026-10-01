@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 
-import type { ApiClient, ApiSchemas } from './client'
-import { apiClient } from './client'
+import type { ApiClient, ApiSchemas } from './client-core'
+import { apiClient } from './client-core'
 import { buildRequestFailureError } from './utils'
 
 type BootstrapPromptTemplate = ApiSchemas['BootstrapPromptTemplate']
@@ -10,8 +10,13 @@ type UpdateBootstrapPromptTemplateRequest = ApiSchemas['UpdateBootstrapPromptTem
 
 export const fetchBootstrapPromptTemplates = async (
   client: ApiClient = apiClient,
+  orgId?: number,
+  signal?: AbortSignal,
 ): Promise<ApiSchemas['BootstrapPromptTemplateListResponse']> => {
-  const { data, error, response } = await client.GET('/bootstrap-prompt-templates')
+  const { data, error, response } = await client.GET('/bootstrap-prompt-templates', {
+    params: { query: orgId === undefined ? undefined : { org_id: orgId } },
+    signal,
+  })
 
   if (!data) {
     throw buildRequestFailureError(

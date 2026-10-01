@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 
-import type { ApiClient, ApiSchemas } from './client'
-import { apiClient } from './client'
+import type { ApiClient, ApiSchemas } from './client-core'
+import { apiClient } from './client-core'
 import { buildRequestFailureError } from './utils'
 
 export const fetchAdminStats = async (
@@ -130,7 +130,7 @@ export const fetchAdminSettings = async (
 ): Promise<ApiSchemas['SystemSettingsResponse']> => {
   const { data, error, response } = await client.GET('/admin/settings')
 
-  if (!data) {
+  if (!data || typeof data.settings?.registration_enabled !== 'boolean') {
     throw buildRequestFailureError(t('api.errors.fetchAdminSettingsFailed'), error, response)
   }
 
@@ -143,7 +143,7 @@ export const updateAdminSettings = async (
 ): Promise<ApiSchemas['SystemSettingsResponse']> => {
   const { data, error, response } = await client.PATCH('/admin/settings', { body })
 
-  if (!data) {
+  if (!data || typeof data.settings?.registration_enabled !== 'boolean') {
     throw buildRequestFailureError(t('api.errors.updateAdminSettingsFailed'), error, response)
   }
 

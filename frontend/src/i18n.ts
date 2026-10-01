@@ -1,3 +1,4 @@
+import { getDefaultTokenStorage } from '@/api/token-storage'
 import { createI18n } from 'vue-i18n'
 
 import {
@@ -15,7 +16,7 @@ const readStoredLocale = (): SupportedLocale => {
     return DEFAULT_LOCALE
   }
 
-  const stored = window.localStorage.getItem(STORAGE_KEY)
+  const stored = getDefaultTokenStorage().getItem(STORAGE_KEY)
   return stored && isSupportedLocale(stored) ? stored : DEFAULT_LOCALE
 }
 
@@ -24,7 +25,7 @@ export const writeStoredLocale = (locale: SupportedLocale): void => {
     return
   }
 
-  window.localStorage.setItem(STORAGE_KEY, locale)
+  getDefaultTokenStorage().setItem(STORAGE_KEY, locale)
 }
 
 export const i18n = createI18n({

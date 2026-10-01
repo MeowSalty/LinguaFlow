@@ -1,3 +1,4 @@
+import { getDefaultTokenStorage } from '@/api/token-storage'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
@@ -16,7 +17,7 @@ const readStoredMode = (): ThemeMode => {
     return 'system'
   }
 
-  const stored = window.localStorage.getItem(STORAGE_KEY)
+  const stored = getDefaultTokenStorage().getItem(STORAGE_KEY)
   return isThemeMode(stored) ? stored : 'system'
 }
 
@@ -51,7 +52,7 @@ export const useThemeStore = defineStore('theme', () => {
     mode.value = nextMode
 
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STORAGE_KEY, nextMode)
+      getDefaultTokenStorage().setItem(STORAGE_KEY, nextMode)
     }
   }
 

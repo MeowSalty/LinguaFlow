@@ -1,4 +1,19 @@
+import operations from './operations'
+import runtime from './runtime'
+import workbench from './workbench'
+import team from './team'
+import configurationSettings from './configuration-settings'
+import configurationCredentials from './credentials'
+import configurationProfiles from './configuration-profiles'
+
 const messages = {
+  configurationSettings,
+  configurationCredentials,
+  configurationProfiles,
+  operations,
+  runtime,
+  workbench,
+  team,
   common: {
     appName: 'LinguaFlow',
     language: '语言',

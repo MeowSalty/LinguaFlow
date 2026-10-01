@@ -4,6 +4,8 @@ import { useMessage } from 'naive-ui'
 
 import { quickTranslate } from '@/api/client'
 import type { ApiSchemas } from '@/api/client'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
+import { usePreferencesStore } from '@/stores/preferences'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useProjectsStore } from '@/stores/projects'
 import { useLanguageOptions } from '@/composables/useLanguageOptions'
@@ -13,6 +15,13 @@ import SegmentTranslationPreviewDiagnostic from '@/components/workspace/SegmentT
 
 const { t } = useI18n()
 const message = useMessage()
+const preferences = usePreferencesStore()
+const context = captureSession()
+let disposed = false
+const current = () => !disposed && isSessionCurrent(context)
+onScopeDispose(() => {
+  disposed = true
+})
 
 const planTemplates = useExecutionPlanTemplatesStore()
 const projects = useProjectsStore()
@@ -87,7 +96,8 @@ const HighlightedTarget = computed(() => {
 })
 
 const applyExecutionPlanDefault = (): void => {
-  const storedId = Number(localStorage.getItem('linguaflow.quick_translate.plan_id'))
+  if (!current()) return
+  const storedId = preferences.quickTranslatePlanId
   const storedPlan = translatablePlans.value.find((item) => item.id === storedId)
   if (Number.isFinite(storedId) && storedPlan) {
     executionPlanId.value = storedPlan.id
@@ -100,7 +110,7 @@ const applyExecutionPlanDefault = (): void => {
 
 const onExecutionPlanChange = (id: number | null): void => {
   executionPlanId.value = id
-  if (id != null) localStorage.setItem('linguaflow.quick_translate.plan_id', String(id))
+  preferences.quickTranslatePlanId = id
 }
 
 const onSwapLanguages = (): void => {
@@ -135,14 +145,16 @@ const onSubmit = async (): Promise<void> => {
       })
     if (glossaryEntries.length) payload.glossary = glossaryEntries
     const res = await quickTranslate(payload)
+    if (!current()) return
     result.value = res
     if (res.status === 'success') message.success(t('quickTranslate.messages.success'))
     else if (res.status === 'partial') message.warning(t('quickTranslate.messages.partial'))
     else message.error(t('quickTranslate.messages.failed'))
   } catch (err) {
+    if (!current()) return
     message.error(err instanceof Error ? err.message : t('quickTranslate.messages.failed'))
   } finally {
-    submitting.value = false
+    if (current()) submitting.value = false
   }
 }
 
@@ -150,8 +162,10 @@ const onCopy = async (): Promise<void> => {
   if (!result.value?.target_text) return
   try {
     await navigator.clipboard.writeText(result.value.target_text)
+    if (!current()) return
     message.success(t('quickTranslate.copySuccess'))
   } catch {
+    if (!current()) return
     message.error(t('quickTranslate.copyFailed'))
   }
 }
@@ -231,7 +245,7 @@ onMounted(() => {
           type="textarea"
           :autosize="{ minRows: 6, maxRows: 14 }"
           :placeholder="t('quickTranslate.sourcePlaceholder')"
-          :aria-label="t('quickTranslate.sourceLabel')"
+          :input-props="{ 'aria-label': t('quickTranslate.sourceLabel') }"
         />
       </div>
 

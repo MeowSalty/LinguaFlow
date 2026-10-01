@@ -1,3 +1,4 @@
+import { getDefaultTokenStorage } from '@/api/token-storage'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
@@ -32,7 +33,7 @@ const readStoredServerName = (): string | null => {
     return null
   }
 
-  return window.localStorage.getItem(SERVER_NAME_STORAGE_KEY)
+  return getDefaultTokenStorage().getItem(SERVER_NAME_STORAGE_KEY)
 }
 
 const writeStoredServerName = (name: string): void => {
@@ -40,7 +41,7 @@ const writeStoredServerName = (name: string): void => {
     return
   }
 
-  window.localStorage.setItem(SERVER_NAME_STORAGE_KEY, name)
+  getDefaultTokenStorage().setItem(SERVER_NAME_STORAGE_KEY, name)
 }
 
 const clearStoredServerName = (): void => {
@@ -48,7 +49,7 @@ const clearStoredServerName = (): void => {
     return
   }
 
-  window.localStorage.removeItem(SERVER_NAME_STORAGE_KEY)
+  getDefaultTokenStorage().removeItem(SERVER_NAME_STORAGE_KEY)
 }
 
 const probeBaseUrl = async (

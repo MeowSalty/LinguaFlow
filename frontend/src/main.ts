@@ -11,6 +11,7 @@ import { i18n } from './i18n'
 import { installRouterGuards } from './router/guards'
 import { useLocaleStore } from './stores/locale'
 import { useThemeStore } from './stores/theme'
+import { installSessionIsolation } from './stores/sessionIsolation'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -20,6 +21,7 @@ const router = createRouter({
 
 const app = createApp(App)
 const pinia = createPinia()
+installSessionIsolation(pinia)
 
 app.use(pinia)
 app.use(i18n)

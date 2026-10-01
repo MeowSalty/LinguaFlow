@@ -1,20 +1,26 @@
-import assert from 'node:assert/strict'
-import { createJiti } from 'jiti'
-
-const jiti = createJiti(import.meta.url)
-const {
+import { expect, it } from 'vitest'
+import type { ApiSchemas } from '@/api/client'
+import {
   getDetailRoundSeconds,
   getResourceRoundSummary,
   getRoundDisplayState,
   isJobEventAnomaly,
   selectResourceRound,
-} = await jiti.import('../src/utils/jobPresentation.ts')
+} from '../jobPresentation'
+
+type Round = ApiSchemas['JobResourceRound']
+type Resource = ApiSchemas['JobResource']
+type Job = ApiSchemas['Job']
 
 const START = '2026-09-27T00:00:00.000Z'
 const STOP = '2026-09-27T00:02:00.000Z'
 const NOW = Date.parse('2026-09-27T01:00:00.000Z')
 
-const round = (roundIndex, status, overrides = {}) => ({
+const round = (
+  roundIndex: number,
+  status: Round['status'],
+  overrides: Partial<Round> = {},
+): Round => ({
   round_index: roundIndex,
   mode: 'translate',
   status,
@@ -25,7 +31,7 @@ const round = (roundIndex, status, overrides = {}) => ({
   ...overrides,
 })
 
-const resource = (status, rounds) => ({
+const resource = (status: Resource['status'], rounds: Round[]): Resource => ({
   id: 1,
   resource_id: 1,
   status,
@@ -38,7 +44,8 @@ const resource = (status, rounds) => ({
   updated_at: STOP,
 })
 
-const job = (status, overrides = {}) => ({
+const job = (status: Job['status'], overrides: Partial<Job> = {}): Job => ({
+  execution_config: {},
   id: 1,
   project_id: 1,
   execution_plan_id: 1,
@@ -55,16 +62,6 @@ const job = (status, overrides = {}) => ({
   updated_at: STOP,
   ...overrides,
 })
-
-let checks = 0
-const check = (name, run) => {
-  try {
-    run()
-    checks += 1
-  } catch (cause) {
-    throw new Error(`Job detail regression: ${name}`, { cause })
-  }
-}
 
 const failed = round(0, 'failed')
 const pending = round(1, 'pending')
@@ -121,14 +118,14 @@ for (const [name, row, status, expected] of [
     'completed',
     completed,
   ],
-]) {
-  check(name, () => assert.equal(selectResourceRound(row, status), expected))
+] as const) {
+  it(name, () => expect(selectResourceRound(row, status)).toBe(expected))
 }
 
-check('round selection preserves the supplied array order', () => {
+it('round selection preserves the supplied array order', () => {
   const row = resource('running', [running, failed, pending])
   selectResourceRound(row, 'running')
-  assert.deepEqual(row.rounds, [running, failed, pending])
+  expect(row.rounds).toEqual([running, failed, pending])
 })
 
 for (const [jobStatus, resourceStatus, roundStatus, expected] of [
@@ -145,17 +142,16 @@ for (const [jobStatus, resourceStatus, roundStatus, expected] of [
   ['cancelled', 'pending', 'pending', 'not_run'],
   ['running', 'failed', 'pending', 'not_run'],
   ['paused', 'running', 'pending', 'pending'],
-]) {
-  check(`round display ${jobStatus}/${resourceStatus}/${roundStatus}`, () => {
-    assert.equal(getRoundDisplayState(jobStatus, resourceStatus, roundStatus), expected)
+] as const) {
+  it(`round display ${jobStatus}/${resourceStatus}/${roundStatus}`, () => {
+    expect(getRoundDisplayState(jobStatus, resourceStatus, roundStatus)).toBe(expected)
   })
 }
 
-for (const historicalStatus of ['completed', 'failed', 'skipped']) {
-  for (const parentStatus of ['running', 'paused', 'cancelled', 'failed', 'completed']) {
-    check(`preserve historical ${historicalStatus} under ${parentStatus}`, () => {
-      assert.equal(
-        getRoundDisplayState(parentStatus, 'cancelled', historicalStatus),
+for (const historicalStatus of ['completed', 'failed', 'skipped'] as const) {
+  for (const parentStatus of ['running', 'paused', 'cancelled', 'failed', 'completed'] as const) {
+    it(`preserve historical ${historicalStatus} under ${parentStatus}`, () => {
+      expect(getRoundDisplayState(parentStatus, 'cancelled', historicalStatus)).toBe(
         historicalStatus,
       )
     })
@@ -189,13 +185,13 @@ for (const [name, row, expected] of [
     { kind: 'current', total: 2, completed: 1, skipped: 0 },
   ],
   ['legacy', resource('completed', []), { kind: 'legacy', total: 0, completed: 0, skipped: 0 }],
-]) {
-  check(`${name} summary`, () => assert.deepEqual(getResourceRoundSummary(row), expected))
+] as const) {
+  it(`${name} summary`, () => expect(getResourceRoundSummary(row)).toEqual(expected))
 }
 
-for (const level of ['warn', 'warning', 'error', 'WARN', 'Warning', 'ERROR']) {
-  check(`raw ${level} event is anomalous even for a dimmed pool row`, () => {
-    assert.equal(isJobEventAnomaly({ type: 'pool', level }), true)
+for (const level of ['warn', 'warning', 'error', 'WARN', 'Warning', 'ERROR'] as const) {
+  it(`raw ${level} event is anomalous even for a dimmed pool row`, () => {
+    expect(isJobEventAnomaly({ type: 'pool', level })).toBe(true)
   })
 }
 
@@ -211,14 +207,14 @@ for (const [name, event, expected] of [
   ['ordinary pool', { type: 'pool', level: 'info', metadata: { phase: 'pool_start' } }, false],
   ['missing batch metadata', { type: 'batch', level: 'info' }, false],
   ['null batch metadata', { type: 'batch', level: 'info', metadata: null }, false],
-]) {
-  check(name, () => assert.equal(isJobEventAnomaly(event), expected))
+] as const) {
+  it(name, () => expect(isJobEventAnomaly(event)).toBe(expected))
 }
 
-for (const status of ['paused', 'cancelled', 'failed', 'completed']) {
-  check(`${status} elapsed time remains frozen`, () => {
-    assert.equal(getDetailRoundSeconds(running, job(status), NOW), 120)
-    assert.equal(getDetailRoundSeconds(running, job(status), NOW + 3_600_000), 120)
+for (const status of ['paused', 'cancelled', 'failed', 'completed'] as const) {
+  it(`${status} elapsed time remains frozen`, () => {
+    expect(getDetailRoundSeconds(running, job(status), NOW)).toBe(120)
+    expect(getDetailRoundSeconds(running, job(status), NOW + 3_600_000)).toBe(120)
   })
 }
 
@@ -268,8 +264,6 @@ for (const [name, item, parent, now, expected] of [
     NOW,
     null,
   ],
-]) {
-  check(name, () => assert.equal(getDetailRoundSeconds(item, parent, now), expected))
+] as const) {
+  it(name, () => expect(getDetailRoundSeconds(item, parent, now)).toBe(expected))
 }
-
-console.log(`Job detail presentation: ${checks} regression checks passed.`)

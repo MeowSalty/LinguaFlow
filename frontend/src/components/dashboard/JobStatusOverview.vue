@@ -37,7 +37,11 @@ const failedPercent = computed(() => {
       </div>
     </div>
 
-    <NEmpty v-else-if="stats.statsError" :description="stats.statsError" class="mt-8" />
+    <NEmpty
+      v-else-if="stats.statsError && !stats.stats"
+      :description="stats.statsError"
+      class="mt-8"
+    />
 
     <template v-else>
       <div class="mt-5">

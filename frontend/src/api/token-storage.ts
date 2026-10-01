@@ -19,13 +19,33 @@ export const authTokenStorageKeys = {
   apiBaseUrl: API_BASE_URL_STORAGE_KEY,
 } as const
 
-export const getDefaultTokenStorage = (): TokenStorage | undefined => {
-  if (typeof window === 'undefined') {
-    return undefined
-  }
-
-  return window.localStorage
+const memory = new Map<string, string>()
+const safeStorage: TokenStorage = {
+  getItem(key) {
+    try {
+      return window.localStorage.getItem(key) ?? memory.get(key) ?? null
+    } catch {
+      return memory.get(key) ?? null
+    }
+  },
+  setItem(key, value) {
+    memory.set(key, value)
+    try {
+      window.localStorage.setItem(key, value)
+    } catch {
+      /* Continue in memory. */
+    }
+  },
+  removeItem(key) {
+    memory.delete(key)
+    try {
+      window.localStorage.removeItem(key)
+    } catch {
+      /* Continue in memory. */
+    }
+  },
 }
+export const getDefaultTokenStorage = (): TokenStorage => safeStorage
 
 export const getAccessToken = (tokenStorage = getDefaultTokenStorage()): string | null => {
   return tokenStorage?.getItem(ACCESS_TOKEN_STORAGE_KEY) ?? null

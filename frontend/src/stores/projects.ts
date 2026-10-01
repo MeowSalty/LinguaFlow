@@ -1,194 +1,72 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-
+import type { ApiSchemas } from '@/api/client'
 import {
-  type ApiSchemas,
-  createProject as createProjectRequest,
-  deleteProject as deleteProjectRequest,
+  createProject,
+  createOrgProject,
+  updateProject,
+  deleteProject,
   fetchProjects,
-  updateProject as updateProjectRequest,
-} from '@/api/client'
-import { t } from '@/i18n'
+  fetchOrgProjects,
+} from '@/api/projects'
+import { createScopedEntityState } from './scopedEntity'
 
-type Project = ApiSchemas['Project']
-type CreateProjectPayload = ApiSchemas['CreateProjectRequest']
-type UpdateProjectPayload = ApiSchemas['UpdateProjectRequest']
-
-const getProjectTime = (project: Project): number => {
-  const timestamp = project.updated_at ?? project.created_at
-
-  if (!timestamp) {
-    return 0
-  }
-
-  return new Date(timestamp).getTime()
-}
-
-const includesNormalized = (source: string | undefined, query: string): boolean => {
-  return source?.toLowerCase().includes(query) ?? false
-}
-
-/** 术语表启用维度的分段筛选值，与列表页 ScopeFilterTabs 对应 */
 export type GlossaryFilter = 'all' | 'enabled' | 'disabled'
-
 export const useProjectsStore = defineStore('projects', () => {
-  const items = ref<Project[]>([])
-
-  const loading = ref(false)
-  const creating = ref(false)
-  const updating = ref(false)
-  const deletingProjectIds = ref<number[]>([])
-
-  const error = ref<string | null>(null)
-  const createError = ref<string | null>(null)
-  const updateError = ref<string | null>(null)
-  const deleteError = ref<string | null>(null)
-
-  const searchQuery = ref('')
-  const glossaryFilter = ref<GlossaryFilter>('all')
-
-  const sortedItems = computed(() =>
-    [...items.value].sort((left, right) => getProjectTime(right) - getProjectTime(left)),
-  )
-
-  const filteredItems = computed(() => {
-    const query = searchQuery.value.trim().toLowerCase()
-
-    return sortedItems.value.filter((project) => {
-      const matchesQuery =
-        query.length === 0 ||
-        includesNormalized(project.name, query) ||
-        includesNormalized(project.source_lang, query) ||
-        includesNormalized(project.target_lang, query)
-
-      const matchesGlossary =
-        glossaryFilter.value === 'all' ||
-        (glossaryFilter.value === 'enabled') === project.glossary_enabled
-
-      return matchesQuery && matchesGlossary
-    })
+  const state = createScopedEntityState<
+    ApiSchemas['Project'],
+    ApiSchemas['CreateProjectRequest'],
+    ApiSchemas['UpdateProjectRequest']
+  >({
+    list: (orgId, signal) =>
+      orgId === null
+        ? fetchProjects(undefined, signal)
+        : fetchOrgProjects(orgId, undefined, signal),
+    create: (body, orgId) => (orgId === null ? createProject(body) : createOrgProject(orgId, body)),
+    update: (id, body) => updateProject(id, body),
+    remove: (id) => deleteProject(id),
   })
-
-  const totalCount = computed(() => items.value.length)
-  const glossaryEnabledCount = computed(
-    () => items.value.filter((project) => project.glossary_enabled).length,
+  const glossaryFilter = ref<GlossaryFilter>('all')
+  const sortedItems = computed(() =>
+    [...state.items.value].sort(
+      (a, b) =>
+        new Date(b.updated_at ?? b.created_at ?? 0).getTime() -
+        new Date(a.updated_at ?? a.created_at ?? 0).getTime(),
+    ),
   )
-  const glossaryDisabledCount = computed(() => totalCount.value - glossaryEnabledCount.value)
-
-  const loadProjectsPromise = ref<Promise<void> | null>(null)
-
-  const loadProjects = async (): Promise<void> => {
-    if (loadProjectsPromise.value) return loadProjectsPromise.value
-
-    const run = async (): Promise<void> => {
-      loading.value = true
-      error.value = null
-
-      try {
-        const response = await fetchProjects()
-        items.value = response.items
-      } catch (loadError) {
-        error.value =
-          loadError instanceof Error ? loadError.message : t('api.errors.loadProjectsFailed')
-      } finally {
-        loading.value = false
-      }
-    }
-
-    loadProjectsPromise.value = run().finally(() => {
-      loadProjectsPromise.value = null
-    })
-    return loadProjectsPromise.value
-  }
-
-  const createProject = async (payload: CreateProjectPayload): Promise<Project> => {
-    creating.value = true
-    createError.value = null
-
-    try {
-      const project = await createProjectRequest(payload)
-      items.value = [project, ...items.value.filter((item) => item.id !== project.id)]
-      return project
-    } catch (submitError) {
-      createError.value =
-        submitError instanceof Error ? submitError.message : t('api.errors.createProjectFailed')
-      throw submitError
-    } finally {
-      creating.value = false
-    }
-  }
-
-  const updateProject = async (
-    projectId: number,
-    payload: UpdateProjectPayload,
-  ): Promise<Project> => {
-    updating.value = true
-    updateError.value = null
-
-    try {
-      const project = await updateProjectRequest(projectId, payload)
-      items.value = items.value.map((item) => (item.id === project.id ? project : item))
-      return project
-    } catch (submitError) {
-      updateError.value =
-        submitError instanceof Error ? submitError.message : t('api.errors.updateProjectFailed')
-      throw submitError
-    } finally {
-      updating.value = false
-    }
-  }
-
-  const deleteProject = async (projectId: number): Promise<void> => {
-    deletingProjectIds.value = [...deletingProjectIds.value, projectId]
-    deleteError.value = null
-
-    try {
-      await deleteProjectRequest(projectId)
-      items.value = items.value.filter((item) => item.id !== projectId)
-    } catch (submitError) {
-      deleteError.value =
-        submitError instanceof Error ? submitError.message : t('api.errors.deleteProjectFailed')
-      throw submitError
-    } finally {
-      deletingProjectIds.value = deletingProjectIds.value.filter((id) => id !== projectId)
-    }
-  }
-
-  const isDeletingProject = (projectId: number): boolean =>
-    deletingProjectIds.value.includes(projectId)
-
-  const resetFilters = (): void => {
-    searchQuery.value = ''
-    glossaryFilter.value = 'all'
-  }
-
-  const setGlossaryFilter = (filter: GlossaryFilter): void => {
-    glossaryFilter.value = filter
-  }
-
+  const filteredItems = computed(() =>
+    sortedItems.value.filter(
+      (item) =>
+        state.filteredItems.value.includes(item) &&
+        (glossaryFilter.value === 'all' ||
+          (glossaryFilter.value === 'enabled') === item.glossary_enabled),
+    ),
+  )
+  const glossaryEnabledCount = computed(
+    () => state.items.value.filter((item) => item.glossary_enabled).length,
+  )
   return {
-    items,
-    loading,
-    creating,
-    updating,
-    deletingProjectIds,
-    error,
-    createError,
-    updateError,
-    deleteError,
-    searchQuery,
+    ...state,
     glossaryFilter,
     sortedItems,
     filteredItems,
-    totalCount,
     glossaryEnabledCount,
-    glossaryDisabledCount,
-    loadProjects,
-    createProject,
-    updateProject,
-    deleteProject,
-    isDeletingProject,
-    resetFilters,
-    setGlossaryFilter,
+    glossaryDisabledCount: computed(() => state.items.value.length - glossaryEnabledCount.value),
+    deletingProjectIds: state.deletingIds,
+    createError: state.error,
+    updateError: state.error,
+    deleteError: state.error,
+    loadProjects: state.load,
+    createProject: state.create,
+    updateProject: state.update,
+    deleteProject: state.remove,
+    isDeletingProject: (id: number) => state.deletingIds.value.includes(id),
+    setGlossaryFilter: (value: GlossaryFilter) => {
+      glossaryFilter.value = value
+    },
+    resetFilters: () => {
+      state.resetFilters()
+      glossaryFilter.value = 'all'
+    },
   }
 })

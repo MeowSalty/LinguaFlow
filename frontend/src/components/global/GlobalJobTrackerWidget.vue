@@ -1,217 +1,122 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { NButton, NIcon, NBadge, NProgress, NEmpty } from 'naive-ui'
+import { computed, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-
-import { type ApiSchemas } from '@/api/client'
-import { getJobProgress, getJobProgressText } from '@/composables/useWorkspaceUtils'
-import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
+import { useOperationsStore } from '@/stores/operations'
+import { usePreferencesStore } from '@/stores/preferences'
+import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-
-type Job = ApiSchemas['Job']
-
-const { t } = useI18n()
-const tracker = useGlobalJobTrackerStore()
-const ui = useUiStore()
-
-const isPanelOpen = ref(false)
-
-onMounted(() => {
-  void tracker.initialize()
-})
-
-const activeCount = computed(() => tracker.activeJobs.length)
-
-const togglePanel = (): void => {
-  isPanelOpen.value = !isPanelOpen.value
+import { isTerminalOperation, operationKey, operationLocation } from '@/utils/operationQuery'
+import type { Operation } from '@/api/operations'
+const { t } = useI18n(),
+  router = useRouter(),
+  operations = useOperationsStore(),
+  preferences = usePreferencesStore(),
+  auth = useAuthStore(),
+  ui = useUiStore()
+const { trackerExpanded: expanded } = storeToRefs(preferences)
+const progress = (task: Operation): string => {
+  if (task.task_type === 'glossary_sync')
+    return t('operations.syncProgress', {
+      processed: task.progress.processed_segments,
+      total: task.progress.total_segments,
+    })
+  const { progress_completed: completed, progress_total: total } = task.progress
+  return completed == null || total == null ? '—' : `${completed} / ${total}`
 }
-
-const closePanel = (): void => {
-  isPanelOpen.value = false
+const activeCount = computed(() =>
+  operations.summary
+    ? operations.summary.total.running +
+      operations.summary.total.pending +
+      operations.summary.total.paused
+    : null,
+)
+const displayed = computed(() =>
+  [
+    ...operations.active,
+    ...(preferences.retainTerminal
+      ? operations.terminal.filter(
+          (task) => !preferences.hiddenTerminalKeys.includes(operationKey(task)),
+        )
+      : []),
+  ].slice(0, 20),
+)
+const open = (task: Operation): void => {
+  expanded.value = false
+  void router.push(operationLocation(task))
 }
-
-const handleOpenDetail = (jobId: number): void => {
-  void tracker.openDetail(jobId)
-  isPanelOpen.value = false
+const clear = (): void => {
+  for (const task of operations.terminal) preferences.hideTerminal(operationKey(task))
 }
-
-const handleUntrack = (jobId: number, e: MouseEvent): void => {
-  e.stopPropagation()
-  tracker.untrackJob(jobId)
+const viewAll = (): void => {
+  expanded.value = false
+  void router.push('/operations')
 }
-
-const handleClearCompleted = (): void => {
-  tracker.clearCompleted()
-}
-
-const isTerminal = (status: Job['status']): boolean =>
-  ['completed', 'failed', 'cancelled'].includes(status)
-
-const progressPercent = (job: Job): number => getJobProgress(job)
-
-const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
-  if (job.status === 'completed') return 'success'
-  if (job.status === 'failed') return 'error'
-  return 'default'
-}
+watch(
+  () => auth.user?.id,
+  (id) => {
+    if (id) operations.start()
+    else operations.stop()
+  },
+  { immediate: true },
+)
 </script>
-
 <template>
   <div
-    v-if="tracker.initialized && tracker.trackedJobs.length > 0"
-    class="fixed right-6 z-50 transition-[bottom] duration-300"
+    v-if="auth.user"
+    class="fixed right-4 z-50 md:right-6"
     :class="ui.selectionBarActive ? 'bottom-24' : 'bottom-6'"
   >
-    <!-- 展开面板 -->
-    <Transition name="tracker-panel">
-      <div
-        v-if="isPanelOpen"
-        class="absolute bottom-16 right-0 w-80 max-w-[calc(100vw-3rem)] max-h-[60vh] flex flex-col overflow-hidden rounded-lf-card border border-lf-border-soft bg-lf-surface/95 shadow-[0_4px_24px_rgba(0,0,0,0.12)] backdrop-blur-xl"
-      >
-        <!-- 头部 -->
-        <div class="flex items-center justify-between border-b border-lf-border-soft px-4 py-3">
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-semibold text-lf-text-strong">{{
-              t('globalJobTracker.title')
-            }}</span>
-            <NBadge v-if="activeCount > 0" :value="activeCount" type="info" :max="99" />
-          </div>
-          <NButton quaternary circle size="tiny" @click="closePanel">
-            <template #icon>
-              <NIcon size="14"><IconCarbonClose /></NIcon>
-            </template>
-          </NButton>
-        </div>
-
-        <!-- 任务列表 -->
-        <div class="flex-1 overflow-y-auto">
-          <div v-if="tracker.displayJobs.length === 0" class="py-8">
-            <NEmpty size="small" :description="t('globalJobTracker.noTrackedJobs')" />
-          </div>
-
-          <div
-            v-for="job in tracker.displayJobs"
-            :key="job.id"
-            class="group cursor-pointer border-b border-lf-border-soft/50 px-4 py-3 transition-colors hover:bg-lf-surface-muted/50"
-            @click="handleOpenDetail(job.id)"
-          >
-            <!-- 第一行：状态图标 + 任务 ID + 项目名 + 移除按钮 -->
-            <div class="flex items-center gap-2">
-              <!-- 状态指示器 -->
-              <span
-                v-if="job.status === 'running'"
-                class="h-2 w-2 shrink-0 rounded-full bg-lf-info animate-pulse"
-              />
-              <span
-                v-else-if="job.status === 'pending'"
-                class="h-2 w-2 shrink-0 rounded-full bg-lf-warning"
-              />
-              <span
-                v-else-if="job.status === 'paused'"
-                class="h-2 w-2 shrink-0 rounded-full bg-lf-warning"
-              />
-              <span
-                v-else-if="job.status === 'completed'"
-                class="h-2 w-2 shrink-0 rounded-full bg-lf-success"
-              />
-              <span
-                v-else-if="job.status === 'failed'"
-                class="h-2 w-2 shrink-0 rounded-full bg-lf-danger"
-              />
-              <span v-else class="h-2 w-2 shrink-0 rounded-full bg-lf-text-subtle" />
-
-              <span class="text-xs font-mono text-lf-text-muted">#{{ job.id }}</span>
-              <span v-if="job.project_name" class="mx-0.5 text-xs text-lf-text-subtle">·</span>
-              <span class="min-w-0 flex-1 truncate text-sm font-medium text-lf-text-strong">
-                {{ job.project_name || '' }}
-              </span>
-
-              <!-- 移除按钮（仅终态任务） -->
-              <NButton
-                v-if="isTerminal(job.status)"
-                quaternary
-                circle
-                size="tiny"
-                class="shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
-                @click="(e: MouseEvent) => handleUntrack(job.id, e)"
-              >
-                <template #icon>
-                  <NIcon size="12"><IconCarbonClose /></NIcon>
-                </template>
-              </NButton>
-            </div>
-
-            <!-- 第二行：进度条 + 百分比 -->
-            <div class="mt-1.5 flex items-center gap-2">
-              <NProgress
-                type="line"
-                :percentage="progressPercent(job)"
-                :show-indicator="false"
-                :stroke-width="4"
-                :border-radius="2"
-                :processing="job.status === 'running'"
-                :status="progressStatus(job)"
-                class="flex-1"
-              />
-              <span class="w-8 text-right text-xs font-medium text-lf-text-muted tabular-nums">
-                {{ progressPercent(job) }}%
-              </span>
-            </div>
-
-            <!-- 第三行：进度文案 -->
-            <div class="mt-1 text-xs text-lf-text-muted">
-              {{ getJobProgressText(job) }}
-            </div>
-          </div>
-        </div>
-
-        <!-- 底部操作栏 -->
-        <div v-if="tracker.hasTerminalJobs" class="border-t border-lf-border-soft px-4 py-2.5">
-          <NButton quaternary size="small" block @click="handleClearCompleted">
-            {{ t('globalJobTracker.clearCompleted') }}
-          </NButton>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- FAB 按钮 -->
-    <button
-      type="button"
-      class="relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-lf-border-soft bg-lf-surface/90 shadow-lg shadow-lf-shadow-strong backdrop-blur-xl transition-all hover:ring-2 hover:ring-brand-500/30"
-      :class="{ 'ring-2 ring-brand-500/30': isPanelOpen }"
-      @click="togglePanel"
+    <div
+      v-if="expanded"
+      class="absolute bottom-14 right-0 flex max-h-[65vh] w-84 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lf-card border border-lf-border-soft bg-lf-surface shadow-lg"
     >
-      <IconCarbonActivity class="h-4 w-4 text-brand-500" />
-
-      <!-- 活跃任务徽标（带脉冲动画） -->
-      <span v-if="activeCount > 0" class="absolute -right-1 -top-1">
-        <span
-          class="absolute inline-flex h-5 w-5 animate-ping rounded-full bg-brand-400 opacity-40"
-        />
-        <span class="relative">
-          <NBadge :value="activeCount" type="info" :max="99" />
-        </span>
-      </span>
-    </button>
+      <div class="flex items-center justify-between border-b border-lf-border-soft p-4">
+        <strong class="text-sm">{{ t('operations.widget') }}</strong
+        ><NButton quaternary size="tiny" @click="expanded = false">{{
+          t('operations.close')
+        }}</NButton>
+      </div>
+      <div v-if="operations.discoveryError" class="p-3 text-xs text-lf-warning">
+        {{ t('operations.stale') }}
+      </div>
+      <div class="overflow-y-auto">
+        <div
+          v-for="task in displayed"
+          :key="operationKey(task)"
+          class="flex items-center gap-2 border-b border-lf-border-soft p-4 last:border-0"
+        >
+          <button type="button" class="min-w-0 flex-1 cursor-pointer text-left" @click="open(task)">
+            <div class="truncate text-sm font-medium">{{ task.project_name }}</div>
+            <div class="mt-1 text-xs text-lf-text-muted">
+              {{ t(`operations.${task.task_type}`) }} #{{ task.task_id }} ·
+              {{ t(`operations.${task.status}`) }}
+            </div>
+            <div class="mt-1 text-xs tabular-nums text-lf-text-subtle">
+              {{ t('operations.progress') }} · {{ progress(task) }}
+            </div>
+          </button>
+          <NButton
+            v-if="isTerminalOperation(task.status)"
+            quaternary
+            size="tiny"
+            :aria-label="t('operations.hide')"
+            @click="preferences.hideTerminal(operationKey(task))"
+            >×</NButton
+          >
+        </div>
+        <NEmpty v-if="!displayed.length" class="p-8" :description="t('operations.empty')" />
+      </div>
+      <div class="flex items-center justify-between border-t border-lf-border-soft p-3">
+        <NButton quaternary size="small" @click="clear">{{
+          t('operations.clearCompleted')
+        }}</NButton
+        ><NButton secondary size="small" @click="viewAll">{{ t('operations.viewAll') }}</NButton>
+      </div>
+    </div>
+    <NButton round type="primary" :aria-expanded="expanded" @click="expanded = !expanded"
+      >{{ t('operations.widget')
+      }}<span class="ml-2 tabular-nums">{{ activeCount ?? '—' }}</span></NButton
+    >
   </div>
 </template>
-
-<style scoped>
-.tracker-panel-enter-active {
-  transition: all 0.2s ease-out;
-}
-
-.tracker-panel-leave-active {
-  transition: all 0.15s ease-in;
-}
-
-.tracker-panel-enter-from {
-  transform: scale(0.9) translateY(8px);
-  opacity: 0;
-}
-
-.tracker-panel-leave-to {
-  transform: scale(0.9) translateY(8px);
-  opacity: 0;
-}
-</style>

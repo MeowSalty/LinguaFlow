@@ -1,227 +1,141 @@
 <script setup lang="ts">
-import { NButton, NEmpty, NInput, NModal, NSkeleton, useMessage } from 'naive-ui'
+import { NAlert, NButton, NModal, NSkeleton, NSwitch, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { useAdminStore } from '@/stores/admin'
-import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
+import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
 
 const admin = useAdminStore()
 const message = useMessage()
 const { t } = useI18n()
+const draft = ref<boolean | null>(admin.settings?.registration_enabled ?? null)
+const discardVisible = ref(false)
+let alive = true
+let requestGeneration = 0
+const busy = computed(() => admin.settingsLoading || admin.settingsSaving)
+const hasChanges = computed(
+  () =>
+    draft.value !== null &&
+    admin.settings !== null &&
+    draft.value !== admin.settings.registration_enabled,
+)
 
-interface SettingEntry {
-  key: string
-  value: string
-  originalKey: string
-}
-
-const editingSettings = ref<SettingEntry[]>([])
-const newKey = ref('')
-const newValue = ref('')
-const deleteConfirmVisible = ref(false)
-const deletingSettingIndex = ref<number | null>(null)
-
-const buildEditingSettings = (): void => {
-  editingSettings.value = Object.entries(admin.settings).map(([key, value]) => ({
-    key,
-    value,
-    originalKey: key,
-  }))
-}
-
+// A read started by a previous page instance can finish after navigating back.
 watch(
   () => admin.settings,
-  () => {
-    buildEditingSettings()
+  (confirmed) => {
+    if (draft.value === null && confirmed) draft.value = confirmed.registration_enabled
   },
-  { immediate: true },
 )
 
-const addSetting = (): void => {
-  if (!newKey.value.trim()) return
-
-  const exists = editingSettings.value.some((s) => s.key === newKey.value.trim())
-  if (exists) return
-
-  editingSettings.value.push({
-    key: newKey.value.trim(),
-    value: newValue.value,
-    originalKey: newKey.value.trim(),
-  })
-
-  newKey.value = ''
-  newValue.value = ''
-}
-
-const removeSetting = (index: number): void => {
-  deletingSettingIndex.value = index
-  deleteConfirmVisible.value = true
-}
-
-const confirmRemoveSetting = (): void => {
-  if (deletingSettingIndex.value !== null) {
-    editingSettings.value.splice(deletingSettingIndex.value, 1)
-  }
-  closeDeleteConfirm()
-}
-
-const closeDeleteConfirm = (): void => {
-  deleteConfirmVisible.value = false
-  deletingSettingIndex.value = null
-}
-
-const saveSettings = async (): Promise<void> => {
-  const settings: Record<string, string> = {}
-  for (const entry of editingSettings.value) {
-    settings[entry.key] = entry.value
-  }
-
-  try {
-    await admin.saveSettings(settings)
-    message.success(t('admin.settings.messages.saveSuccess'))
-  } catch {
-    // Error is handled by the store
-  }
-}
-
-const hasChanges = computed(() => {
-  const currentKeys = Object.keys(admin.settings)
-  const editKeys = editingSettings.value.map((s) => s.key)
-
-  if (currentKeys.length !== editKeys.length) return true
-
-  for (const entry of editingSettings.value) {
-    if (admin.settings[entry.key] !== entry.value) return true
-    if (entry.key !== entry.originalKey) return true
-  }
-
-  return false
+const stopSession = onSessionChange(() => {
+  requestGeneration++
+  draft.value = null
+  discardVisible.value = false
 })
+onBeforeUnmount(() => {
+  alive = false
+  requestGeneration++
+  stopSession()
+})
+
+const reload = async (): Promise<void> => {
+  if (busy.value) return
+  const context = captureSession()
+  const generation = ++requestGeneration
+  const loaded = await admin.loadSettings()
+  if (!alive || generation !== requestGeneration || !isSessionCurrent(context)) return
+  if (loaded && admin.settings) draft.value = admin.settings.registration_enabled
+}
+const refresh = (): void => {
+  if (busy.value) return
+  if (hasChanges.value) discardVisible.value = true
+  else void reload()
+}
+const confirmRefresh = (): void => {
+  discardVisible.value = false
+  void reload()
+}
+const save = async (): Promise<void> => {
+  if (busy.value || !hasChanges.value || draft.value === null) return
+  const context = captureSession()
+  const generation = ++requestGeneration
+  const saved = await admin.saveSettings({ registration_enabled: draft.value })
+  if (!alive || generation !== requestGeneration || !isSessionCurrent(context)) return
+  if (saved && admin.settings) {
+    draft.value = admin.settings.registration_enabled
+    message.success(t('configurationSettings.saveSuccess'))
+  }
+}
 
 onMounted(() => {
-  admin.loadSettings()
+  void reload()
 })
-
-useStoreErrorToast(
-  () => admin.settingsError,
-  () => {
-    admin.settingsError = null
-  },
-)
 </script>
 
 <template>
   <div class="lf-page lf-content-narrow">
-    <PageHeader :title="t('admin.settings.title')" :subtitle="t('admin.settings.description')">
-      <NButton secondary :loading="admin.settingsLoading" @click="admin.loadSettings">
-        {{ t('admin.settings.actions.refresh') }}
-      </NButton>
-      <NButton
-        type="primary"
-        :loading="admin.settingsSaving"
-        :disabled="!hasChanges"
-        @click="saveSettings"
-      >
-        {{ t('admin.settings.actions.save') }}
-      </NButton>
+    <PageHeader
+      :title="t('admin.settings.title')"
+      :subtitle="t('configurationSettings.description')"
+    >
+      <template #actions>
+        <NButton secondary :loading="admin.settingsLoading" :disabled="busy" @click="refresh">
+          {{ t('admin.settings.actions.refresh') }}
+        </NButton>
+        <NButton
+          type="primary"
+          :loading="admin.settingsSaving"
+          :disabled="busy || !hasChanges"
+          @click="save"
+        >
+          {{ t('admin.settings.actions.save') }}
+        </NButton>
+      </template>
     </PageHeader>
 
-    <div class="lf-panel p-5">
-      <div class="mb-4 flex items-center justify-between gap-3">
-        <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
-          {{ t('admin.settings.title') }}
-        </h2>
-        <span class="text-xs tabular-nums text-lf-text-subtle">
-          {{ t('admin.settings.keyCount', { count: editingSettings.length }) }}
-        </span>
-      </div>
-
-      <div v-if="admin.settingsLoading" class="space-y-3">
-        <NSkeleton v-for="i in 3" :key="i" text :repeat="1" class="h-16" />
-      </div>
-
-      <NEmpty
-        v-else-if="editingSettings.length === 0 && !admin.settingsLoading"
-        class="py-12"
-        :description="t('admin.settings.empty')"
-      />
-
-      <div v-else class="space-y-3">
-        <div
-          v-for="(entry, index) in editingSettings"
-          :key="index"
-          class="flex items-start gap-3 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted p-3.5 sm:gap-4 sm:p-4"
-        >
-          <div class="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label class="mb-1.5 block text-xs font-medium text-lf-text-muted">
-                {{ t('admin.settings.form.key') }}
-              </label>
-              <NInput
-                v-model:value="entry.key"
-                class="font-mono"
-                :placeholder="t('admin.settings.form.keyPlaceholder')"
-              />
-            </div>
-            <div>
-              <label class="mb-1.5 block text-xs font-medium text-lf-text-muted">
-                {{ t('admin.settings.form.value') }}
-              </label>
-              <NInput
-                v-model:value="entry.value"
-                :placeholder="t('admin.settings.form.valuePlaceholder')"
-              />
-            </div>
+    <NAlert v-if="admin.settingsError || admin.settingsSaveError" type="error" role="alert">
+      {{ admin.settingsSaveError || admin.settingsError }}
+    </NAlert>
+    <div class="lf-panel p-5 sm:p-6" :aria-busy="admin.settingsLoading">
+      <NSkeleton v-if="admin.settingsLoading && draft === null" text :repeat="3" />
+      <template v-else-if="admin.settings && draft !== null">
+        <div class="flex items-start justify-between gap-5">
+          <div class="min-w-0">
+            <h2 id="registration-policy-label" class="text-base font-semibold text-lf-text-strong">
+              {{ t('configurationSettings.registrationEnabled') }}
+            </h2>
+            <p
+              id="registration-policy-effect"
+              class="mt-2 text-sm leading-relaxed text-lf-text-muted"
+            >
+              {{ t('configurationSettings.effect') }}
+            </p>
           </div>
-          <NButton quaternary type="error" class="mt-6" @click="removeSetting(index)">
-            <template #icon>
-              <IconCarbonClose />
-            </template>
-          </NButton>
-        </div>
-      </div>
-    </div>
-
-    <div class="lf-panel p-5">
-      <h3 class="mb-4 text-sm font-semibold tracking-wide text-lf-text-strong">
-        {{ t('admin.settings.actions.addSetting') }}
-      </h3>
-      <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
-        <div class="min-w-0 flex-1">
-          <label class="mb-1.5 block text-xs font-medium text-lf-text-muted">
-            {{ t('admin.settings.form.key') }}
-          </label>
-          <NInput
-            v-model:value="newKey"
-            class="font-mono"
-            :placeholder="t('admin.settings.form.keyPlaceholder')"
+          <NSwitch
+            v-model:value="draft"
+            :disabled="busy"
+            :aria-disabled="busy"
+            aria-labelledby="registration-policy-label"
+            aria-describedby="registration-policy-effect"
           />
         </div>
-        <div class="min-w-0 flex-1">
-          <label class="mb-1.5 block text-xs font-medium text-lf-text-muted">
-            {{ t('admin.settings.form.value') }}
-          </label>
-          <NInput
-            v-model:value="newValue"
-            :placeholder="t('admin.settings.form.valuePlaceholder')"
-          />
-        </div>
-        <NButton type="primary" @click="addSetting">
-          {{ t('admin.settings.actions.addSetting') }}
-        </NButton>
-      </div>
+        <p v-if="hasChanges" class="mt-4 text-xs text-lf-text-subtle">
+          {{ t('configurationSettings.unsaved') }}
+        </p>
+      </template>
+      <p v-else class="text-sm text-lf-text-muted">{{ t('configurationSettings.unconfirmed') }}</p>
     </div>
 
     <NModal
-      v-model:show="deleteConfirmVisible"
+      v-model:show="discardVisible"
       preset="dialog"
       type="warning"
-      :title="t('common.actions.confirmDelete')"
-      :content="t('admin.settings.deleteConfirm')"
-      :positive-text="t('common.actions.deleteConfirmAction')"
+      :title="t('configurationSettings.discardTitle')"
+      :content="t('configurationSettings.discardContent')"
+      :positive-text="t('configurationSettings.discardConfirm')"
       :negative-text="t('common.cancel')"
-      @positive-click="confirmRemoveSetting"
-      @negative-click="closeDeleteConfirm"
+      @positive-click="confirmRefresh"
     />
   </div>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  NAlert,
   NButton,
   NDrawer,
   NDrawerContent,
@@ -14,9 +15,19 @@ import {
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
+import { useOrganizationScope } from '@/composables/useOrganizationScope'
+import OrganizationScopeSelect from '@/components/organizations/OrganizationScopeSelect.vue'
+import CopyToOrganization from '@/components/organizations/CopyToOrganization.vue'
+import { onOrganizationInvalidated } from '@/utils/organization-scope'
+import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
 import type { ApiSchemas } from '@/api/client'
 import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
 import ProfileConfigEditor from '@/components/templates/ProfileConfigEditor.vue'
+import {
+  createProfileConfig,
+  readProfileConfig,
+  buildProfileConfigInput,
+} from '@/utils/execution-profile-config'
 import { useEntityCrud } from '@/composables/useEntityCrud'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useExecutionProfilesStore } from '@/stores/executionProfiles'
@@ -36,39 +47,6 @@ interface FormModel {
 
 // ── 默认配置 ──────────────────────────────────────────────────
 
-const CONFIG_DEFAULTS: ExecutionProfileConfig = {
-  protect: { enabled: true, rules: ['code', 'link', 'placeholder', 'xml'] },
-  ruby: {
-    enabled: false,
-    preserve_kinds: ['phonetic', 'semantic', 'creative'],
-  },
-  postprocess: { enabled: true, trim_spaces: true },
-  repair: {
-    enabled: true,
-    json_structural: true,
-    schema_aliases: true,
-    placeholder_normalize: true,
-    prompt_upgrade: true,
-  },
-  glossary: {
-    bootstrap: {
-      enabled: false,
-      max_terms_per_1000_chars: 20,
-      min_source_len: 2,
-      inline_conflict_strategy: 'off',
-    },
-  },
-  context: { enabled: true, before: 1, after: 1, max_chars: 0 },
-  qa: {
-    enabled: false,
-    auto_reject: false,
-    checks: undefined,
-    length_method: 'char_weight',
-    length_ratio_min: 0,
-    length_ratio_max: 0,
-  },
-}
-
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
 }
@@ -76,6 +54,10 @@ function deepClone<T>(obj: T): T {
 // ── Store & 依赖 ──────────────────────────────────────────────
 
 const store = useExecutionProfilesStore()
+const { orgId, canWrite, setScope } = useOrganizationScope((id) => {
+  store.setOrganization(id)
+  void store.loadProfiles(id)
+})
 const message = useMessage()
 const { t } = useI18n()
 
@@ -91,12 +73,17 @@ const { getScopeTagType, deleteModalVisible, deletingItem, confirmDelete, execut
 const formRef = ref<FormInst | null>(null)
 const configEditorRef = ref<InstanceType<typeof ProfileConfigEditor> | null>(null)
 const drawerVisible = ref(false)
+const originalConfig = ref<ExecutionProfileConfig | undefined>()
+const incompatibleConfig = ref(false)
+const submitting = ref(false)
+const pendingFormWrites = ref(0)
+let formGeneration = 0
 const editingItem = ref<ExecutionProfile | null>(null)
 
 const formModel = reactive<FormModel>({
   name: '',
   description: '',
-  config: deepClone(CONFIG_DEFAULTS),
+  config: createProfileConfig(),
 })
 
 // ── 计算属性 ──────────────────────────────────────────────────
@@ -109,10 +96,11 @@ const filterTabs = computed(() => [
   { name: 'all', label: t('executionProfiles.filters.all'), count: store.totalCount },
   { name: 'system', label: t('executionProfiles.scopes.system'), count: store.systemCount },
   { name: 'user', label: t('executionProfiles.scopes.user'), count: store.userCount },
+  { name: 'org', label: t('team.organization'), count: store.orgCount },
 ])
 
 const isEditMode = computed(() => Boolean(editingItem.value))
-const isSystemScope = computed(() => editingItem.value?.scope === 'system')
+const isSystemScope = computed(() => !store.canEdit(editingItem.value ?? undefined))
 const drawerTitle = computed(() =>
   isSystemScope.value
     ? t('executionProfiles.actions.viewTitle')
@@ -128,7 +116,12 @@ const drawerSubtitle = computed(() => {
     : editingItem.value.name
 })
 
-const hasConfigError = computed(() => Boolean(configEditorRef.value?.lengthRatioError))
+const hasConfigError = computed(
+  () =>
+    incompatibleConfig.value ||
+    !readProfileConfig(formModel.config).ok ||
+    Boolean(configEditorRef.value?.configError),
+)
 
 /** 卡片是否有任一启用的配置特征标签（无则展示「无启用能力」占位文案） */
 const hasFeatures = (item: ExecutionProfile): boolean =>
@@ -154,41 +147,14 @@ const rules = computed<FormRules>(() => ({
 
 // ── 方法 ──────────────────────────────────────────────────────
 
-/** 从 API 对象中提取配置，缺失字段用默认值填充 */
-function extractConfig(profile: ExecutionProfile): ExecutionProfileConfig {
-  const src = profile.config
-  if (!src) return deepClone(CONFIG_DEFAULTS)
-  return {
-    protect: {
-      ...CONFIG_DEFAULTS.protect,
-      ...src.protect,
-      rules: src.protect?.rules ?? CONFIG_DEFAULTS.protect.rules,
-    },
-    ruby: {
-      enabled: src.ruby?.enabled ?? CONFIG_DEFAULTS.ruby!.enabled,
-      preserve_kinds: src.ruby?.preserve_kinds ?? CONFIG_DEFAULTS.ruby!.preserve_kinds,
-    },
-    postprocess: { ...CONFIG_DEFAULTS.postprocess, ...src.postprocess },
-    repair: { ...CONFIG_DEFAULTS.repair, ...src.repair },
-    glossary: {
-      bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...src.glossary?.bootstrap },
-    },
-    context: { ...CONFIG_DEFAULTS.context, ...src.context },
-    qa: {
-      enabled: src.qa?.enabled ?? CONFIG_DEFAULTS.qa!.enabled,
-      auto_reject: src.qa?.auto_reject ?? CONFIG_DEFAULTS.qa!.auto_reject,
-      checks: src.qa?.checks ?? CONFIG_DEFAULTS.qa!.checks,
-      length_method: src.qa?.length_method ?? CONFIG_DEFAULTS.qa!.length_method,
-      length_ratio_min: src.qa?.length_ratio_min ?? CONFIG_DEFAULTS.qa!.length_ratio_min,
-      length_ratio_max: src.qa?.length_ratio_max ?? CONFIG_DEFAULTS.qa!.length_ratio_max,
-    },
-  }
-}
-
 const resetForm = (): void => {
+  formGeneration++
+  submitting.value = false
+  incompatibleConfig.value = false
+  originalConfig.value = undefined
   formModel.name = ''
   formModel.description = ''
-  formModel.config = deepClone(CONFIG_DEFAULTS)
+  formModel.config = createProfileConfig()
   editingItem.value = null
 }
 
@@ -198,17 +164,26 @@ const openCreateDrawer = (): void => {
 }
 
 const openEditDrawer = (item: ExecutionProfile): void => {
+  resetForm()
   editingItem.value = item
   formModel.name = item.name
   formModel.description = item.description ?? ''
-  formModel.config = extractConfig(item)
+  const result = readProfileConfig(item.config)
+  incompatibleConfig.value = !result.ok
+  if (result.ok) {
+    originalConfig.value = deepClone(result.config)
+    formModel.config = result.config
+  }
   drawerVisible.value = true
 }
 
 const buildPayload = (): CreateRequest => {
   const payload: CreateRequest = {
     name: formModel.name.trim(),
-    config: deepClone(formModel.config),
+    config: buildProfileConfigInput(
+      formModel.config,
+      editingItem.value ? originalConfig.value : undefined,
+    ),
   }
   if (formModel.description.trim()) {
     payload.description = formModel.description.trim()
@@ -217,26 +192,52 @@ const buildPayload = (): CreateRequest => {
 }
 
 const onSubmit = async (): Promise<void> => {
+  const session = captureSession()
+  const organization = store.orgId
+  const generation = formGeneration
+  const current = () =>
+    isSessionCurrent(session) &&
+    organization === store.orgId &&
+    generation === formGeneration &&
+    drawerVisible.value
+  if (!store.canEdit(editingItem.value ?? undefined) || hasConfigError.value || submitting.value)
+    return
   try {
     await formRef.value?.validate()
   } catch {
     return
   }
 
+  if (!current() || hasConfigError.value) return
   const payload = buildPayload()
+  submitting.value = true
+  pendingFormWrites.value++
 
   try {
     if (isEditMode.value && editingItem.value) {
       await store.updateProfile(editingItem.value.id, payload as UpdateRequest)
+      if (!current()) return
       message.success(t('executionProfiles.messages.updateSuccess'))
     } else {
       await store.createProfile(payload)
+      if (!current()) return
       message.success(t('executionProfiles.messages.createSuccess'))
     }
     drawerVisible.value = false
     resetForm()
-  } catch {
-    // Error is handled by the store
+  } catch (cause) {
+    // Consume the shared store error before releasing the suppression guard.
+    // A closed/replaced draft must not receive the old write's failure toast.
+    if (isSessionCurrent(session) && organization === store.orgId) store.error = null
+    if (current()) {
+      message.error(cause instanceof Error ? cause.message : t('team.errors.saveResource'), {
+        duration: 0,
+        closable: true,
+      })
+    }
+  } finally {
+    pendingFormWrites.value--
+    if (current()) submitting.value = false
   }
 }
 
@@ -252,12 +253,51 @@ const cardDateTitle = (item: ExecutionProfile): string => {
 
 // ── 生命周期 ──────────────────────────────────────────────────
 
-onMounted(() => {
-  store.loadProfiles()
+watch(
+  sessionGeneration,
+  () => {
+    drawerVisible.value = false
+    deleteModalVisible.value = false
+    resetForm()
+  },
+  { flush: 'sync' },
+)
+onBeforeUnmount(() => {
+  formGeneration++
 })
+watch(drawerVisible, (visible) => {
+  if (!visible) {
+    formGeneration++
+    submitting.value = false
+  }
+})
+watch(orgId, () => {
+  resetForm()
+  drawerVisible.value = false
+  deleteModalVisible.value = false
+})
+onOrganizationInvalidated((id) => {
+  if (id === orgId.value || id === editingItem.value?.owner_org_id) {
+    drawerVisible.value = false
+    deleteModalVisible.value = false
+    resetForm()
+  }
+})
+const copyToOrganization = async (item: ExecutionProfile, target: number) => {
+  if (!readProfileConfig(item.config).ok) {
+    message.error(t('configurationProfiles.incompatible'))
+    return
+  }
+  const session = captureSession()
+  await setScope(target)
+  if (!isSessionCurrent(session) || orgId.value !== target) return
+  store.setOrganization(target)
+  openEditDrawer(item)
+  editingItem.value = null
+}
 
 useStoreErrorToast(
-  () => store.error,
+  () => (pendingFormWrites.value > 0 ? null : store.error),
   () => {
     store.error = null
   },
@@ -278,15 +318,16 @@ useStoreErrorToast(
     "
   >
     <template #actions>
-      <NButton secondary :loading="store.loading" @click="store.loadProfiles">
+      <NButton secondary :loading="store.loading" @click="store.loadProfiles(orgId)">
         {{ t('common.actions.refresh') }}
       </NButton>
-      <NButton type="primary" @click="openCreateDrawer">
+      <NButton v-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('executionProfiles.actions.create') }}
       </NButton>
     </template>
 
     <template #filters>
+      <OrganizationScopeSelect :value="orgId" @update:value="setScope" />
       <ScopeFilterTabs
         :tabs="filterTabs"
         :value="store.scopeFilter"
@@ -304,7 +345,7 @@ useStoreErrorToast(
       <NButton v-if="hasActiveFilters" secondary @click="store.resetFilters()">
         {{ t('executionProfiles.filters.reset') }}
       </NButton>
-      <NButton v-else type="primary" @click="openCreateDrawer">
+      <NButton v-else-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('executionProfiles.actions.createFirst') }}
       </NButton>
     </template>
@@ -329,7 +370,11 @@ useStoreErrorToast(
             <p class="mt-1 font-mono text-xs text-lf-text-subtle">#{{ item.id }}</p>
           </div>
           <NTag round size="small" :bordered="false" :type="getScopeTagType(item.scope)">
-            {{ t(`executionProfiles.scopes.${item.scope}`) }}
+            {{
+              item.scope === 'org'
+                ? t('team.organization')
+                : t(`executionProfiles.scopes.${item.scope}`)
+            }}
           </NTag>
         </div>
 
@@ -377,7 +422,8 @@ useStoreErrorToast(
               {{ t('executionProfiles.card.updatedAt') }} {{ cardDate(item) }}
             </span>
             <div class="flex items-center gap-2" @click.stop>
-              <template v-if="item.scope !== 'system'">
+              <CopyToOrganization @copy="(target) => copyToOrganization(item, target)" />
+              <template v-if="store.canEdit(item)">
                 <NButton text type="primary" class="font-medium" @click="openEditDrawer(item)">
                   {{ t('common.actions.edit') }}
                 </NButton>
@@ -413,7 +459,7 @@ useStoreErrorToast(
           <NInput
             v-model:value="formModel.name"
             :placeholder="t('executionProfiles.form.namePlaceholder')"
-            :disabled="isSystemScope"
+            :disabled="isSystemScope || incompatibleConfig || submitting"
           />
         </NFormItem>
 
@@ -423,15 +469,22 @@ useStoreErrorToast(
             type="textarea"
             :placeholder="t('executionProfiles.form.descriptionPlaceholder')"
             :rows="3"
-            :disabled="isSystemScope"
+            :disabled="isSystemScope || incompatibleConfig || submitting"
           />
         </NFormItem>
 
+        <NAlert v-if="incompatibleConfig" type="error" :bordered="false" class="mb-4">
+          {{ t('configurationProfiles.incompatible') }}
+        </NAlert>
+        <p class="mb-4 text-xs text-lf-text-subtle">{{ t('configurationProfiles.effect') }}</p>
         <!-- 翻译配置编辑器 -->
         <ProfileConfigEditor
+          v-if="!incompatibleConfig"
+          :key="formGeneration"
+          :allow-checks-default="!editingItem || originalConfig?.qa?.checks === undefined"
           ref="configEditorRef"
           :config="formModel.config"
-          :disabled="isSystemScope"
+          :disabled="isSystemScope || incompatibleConfig || submitting"
           @update:config="formModel.config = $event"
         />
       </NForm>
@@ -444,8 +497,8 @@ useStoreErrorToast(
           <NButton
             v-if="!isSystemScope"
             type="primary"
-            :loading="store.creating || store.updating"
-            :disabled="hasConfigError"
+            :loading="submitting"
+            :disabled="hasConfigError || submitting"
             @click="onSubmit"
           >
             {{

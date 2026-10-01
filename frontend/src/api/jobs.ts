@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 
-import type { ApiClient, ApiSchemas } from './client'
-import { apiClient } from './client'
+import type { ApiClient, ApiSchemas } from './client-core'
+import { apiClient } from './client-core'
 import { buildRequestFailureError } from './utils'
 
 export const fetchJobs = async (
@@ -45,9 +45,11 @@ export const createJob = async (
 export const fetchJob = async (
   jobId: number,
   client: ApiClient = apiClient,
+  options?: { signal?: AbortSignal },
 ): Promise<ApiSchemas['Job']> => {
   const { data, error, response } = await client.GET('/jobs/{jobId}', {
     params: { path: { jobId } },
+    signal: options?.signal,
   })
 
   if (!data) {
@@ -125,7 +127,7 @@ export interface JobEventsPage {
 
 export const listJobEvents = async (
   jobId: number,
-  opts?: { beforeSeq?: number; afterSeq?: number; limit?: number },
+  opts?: { beforeSeq?: number; afterSeq?: number; limit?: number; signal?: AbortSignal },
   client: ApiClient = apiClient,
 ): Promise<JobEventsPage> => {
   const query: {
@@ -139,6 +141,7 @@ export const listJobEvents = async (
 
   const { data, error, response } = await client.GET('/jobs/{jobId}/events', {
     params: { path: { jobId }, query },
+    signal: opts?.signal,
   })
 
   if (!data) {

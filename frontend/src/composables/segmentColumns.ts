@@ -483,6 +483,7 @@ export function useSegmentColumns(
                     {
                       size: 'small',
                       quaternary: true,
+                      'aria-label': t('workspace.segment.actions.cancelInline'),
                       onClick: () => deps.cancelInlineEdit(),
                     },
                     { icon: () => h(NIcon, null, { default: () => h(IconCarbonClose) }) },
@@ -501,6 +502,7 @@ export function useSegmentColumns(
                       size: 'small',
                       type: 'primary',
                       loading: deps.editingSegmentIds.value.includes(row.id),
+                      'aria-label': t('workspace.segment.actions.saveInline'),
                       onClick: () => deps.saveInlineEdit(row),
                     },
                     { icon: () => h(NIcon, null, { default: () => h(IconCarbonCheckmark) }) },
@@ -519,6 +521,7 @@ export function useSegmentColumns(
                       size: 'small',
                       type: 'primary',
                       loading: deps.editingSegmentIds.value.includes(row.id),
+                      'aria-label': t('workspace.segment.actions.saveAndNext'),
                       onClick: () => deps.saveAndEditNext(row),
                     },
                     {
@@ -544,6 +547,7 @@ export function useSegmentColumns(
                     quaternary: true,
                     type: 'primary',
                     loading: deps.editingSegmentIds.value.includes(row.id),
+                    'aria-label': t('workspace.segment.actions.edit'),
                     onClick: () => deps.startInlineEdit(row),
                   },
                   { icon: () => h(NIcon, null, { default: () => h(IconCarbonEdit) }) },
@@ -564,6 +568,7 @@ export function useSegmentColumns(
                         {
                           size: 'small',
                           quaternary: true,
+                          'aria-label': t('workspace.segment.actions.comment'),
                           onClick: () => deps.openInlineComment(row),
                         },
                         { icon: () => h(NIcon, null, { default: () => h(IconCarbonChat) }) },
@@ -584,6 +589,7 @@ export function useSegmentColumns(
                   {
                     size: 'small',
                     quaternary: true,
+                    'aria-label': t('workspace.segment.actions.previewTranslation'),
                     onClick: () => deps.onPreviewTranslation(row),
                   },
                   { icon: () => h(NIcon, null, { default: () => h(IconCarbonLanguage) }) },
@@ -605,6 +611,7 @@ export function useSegmentColumns(
                           size: 'small',
                           quaternary: true,
                           type: 'primary',
+                          'aria-label': t('workspace.segment.actions.previewRevision'),
                           onClick: () => deps.onPreviewRevision(row),
                         },
                         { icon: () => h(NIcon, null, { default: () => h(IconCarbonMagicWand) }) },
