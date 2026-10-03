@@ -52,7 +52,7 @@ type UpdateExecutionPlanTemplateInput struct {
 	Rounds      []schema.ExecutionRoundConfig        `json:"rounds,omitempty"`
 }
 
-// ListByUser preserves the list of personal and all current organizations' plans.
+// ListByUser 保持列表范围不变：包含个人计划以及用户当前所属全部组织的计划。
 func (s *ExecutionPlanService) ListByUser(ctx context.Context, userID int) ([]*ent.ExecutionPlanTemplate, error) {
 	if userID <= 0 {
 		return nil, ErrInvalidInput
@@ -87,7 +87,7 @@ func (s *ExecutionPlanService) GetByID(ctx context.Context, actorID, id int) (*e
 	return row, nil
 }
 
-// GetByIDRaw is for trusted internal maintenance; user requests must call GetByID.
+// GetByIDRaw 仅供可信的内部维护使用；用户请求必须调用 GetByID。
 func (s *ExecutionPlanService) GetByIDRaw(ctx context.Context, id int) (*ent.ExecutionPlanTemplate, error) {
 	row, err := s.client.ExecutionPlanTemplate.Get(ctx, id)
 	if err != nil {
@@ -241,7 +241,7 @@ func validatePlanProfileID(profileID int) error {
 	return nil
 }
 
-// validatePlanProfileRef preserves the standalone actor reference check.
+// validatePlanProfileRef 保留独立的操作者引用检查。
 func (s *ExecutionPlanService) validatePlanProfileRef(ctx context.Context, actorID, profileID int) error {
 	return s.validatePlanProfileReference(ctx, actorID, nil, profileID)
 }
@@ -266,9 +266,8 @@ func (s *ExecutionPlanService) validatePlanProfileReference(ctx context.Context,
 	return planReferenceError("profile_id", validateSharedReference(profile.Scope, profile.OwnerOrgID, orgID))
 }
 
-// validatePlanReferences checks all dependency ownership both when saving a plan and
-// immediately before producing a runtime snapshot. Organization targets cannot embed
-// private or other organizations' content, even if the actor can read that content.
+// validatePlanReferences 在保存计划时与生成运行时快照前，都会检查所有依赖项的
+// 归属。组织目标不得内嵌私有内容或其他组织的内容，即使操作者有权读取这些内容。
 func (s *ExecutionPlanService) validatePlanReferences(ctx context.Context, actorID int, orgID *int, profileID int, rubyRetry schema.ExecutionPlanRubyRetryConfig, rounds []schema.ExecutionRoundConfig) error {
 	if err := s.validatePlanProfileReference(ctx, actorID, orgID, profileID); err != nil {
 		return err
@@ -340,14 +339,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 				return fmt.Errorf("%w: rounds[%d].translate.prompt_template_id %d is not a valid builtin translation template", ErrExecutionPlanConfigInvalid, i, t.PromptTemplateID)
 			}
 			// NOTE: profile_id 校验已上提到计划级（validatePlanProfileID），轮级不再持有策略引用。
-			if t.BatchSize < 0 {
-				return fmt.Errorf("%w: rounds[%d].translate.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
-			}
-			if t.MaxWordsPerBatch < 0 {
-				return fmt.Errorf("%w: rounds[%d].translate.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
-			}
-			if t.BatchSize <= 0 && t.MaxWordsPerBatch <= 0 {
-				return fmt.Errorf("%w: rounds[%d].translate.batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
+			if err := execution.ValidateBatchLimits(round.Mode, t.BatchSize, t.MaxWordsPerBatch); err != nil {
+				return fmt.Errorf("%w: rounds[%d].translate.%w", ErrExecutionPlanConfigInvalid, i, err)
 			}
 			if t.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].translate.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
@@ -368,11 +361,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			if e.BootstrapTemplateID < 0 && e.BootstrapTemplateID != templates.BuiltinBootstrapPromptTemplateID {
 				return fmt.Errorf("%w: rounds[%d].extract.bootstrap_template_id %d is not a valid builtin bootstrap template", ErrExecutionPlanConfigInvalid, i, e.BootstrapTemplateID)
 			}
-			if e.BatchSize < 0 {
-				return fmt.Errorf("%w: rounds[%d].extract.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
-			}
-			if e.MaxWordsPerBatch < 0 {
-				return fmt.Errorf("%w: rounds[%d].extract.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			if err := execution.ValidateBatchLimits(round.Mode, e.BatchSize, e.MaxWordsPerBatch); err != nil {
+				return fmt.Errorf("%w: rounds[%d].extract.%w", ErrExecutionPlanConfigInvalid, i, err)
 			}
 			if e.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].extract.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
@@ -384,14 +374,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 				return fmt.Errorf("%w: rounds[%d].adjudicate config required when mode=adjudicate", ErrExecutionPlanConfigInvalid, i)
 			}
 			a := round.Adjudicate
-			if a.BatchSize < 0 {
-				return fmt.Errorf("%w: rounds[%d].adjudicate.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
-			}
-			if a.MaxWordsPerBatch < 0 {
-				return fmt.Errorf("%w: rounds[%d].adjudicate.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
-			}
-			if a.BatchSize <= 0 && a.MaxWordsPerBatch <= 0 {
-				return fmt.Errorf("%w: rounds[%d].adjudicate.batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
+			if err := execution.ValidateBatchLimits(round.Mode, a.BatchSize, a.MaxWordsPerBatch); err != nil {
+				return fmt.Errorf("%w: rounds[%d].adjudicate.%w", ErrExecutionPlanConfigInvalid, i, err)
 			}
 			if a.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].adjudicate.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
@@ -408,14 +392,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 				return fmt.Errorf("%w: rounds[%d].semantic_qa config required when mode=semantic_qa", ErrExecutionPlanConfigInvalid, i)
 			}
 			s := round.SemanticQA
-			if s.BatchSize < 0 {
-				return fmt.Errorf("%w: rounds[%d].semantic_qa.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
-			}
-			if s.MaxWordsPerBatch < 0 {
-				return fmt.Errorf("%w: rounds[%d].semantic_qa.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
-			}
-			if s.BatchSize <= 0 && s.MaxWordsPerBatch <= 0 {
-				return fmt.Errorf("%w: rounds[%d].semantic_qa.batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
+			if err := execution.ValidateBatchLimits(round.Mode, s.BatchSize, s.MaxWordsPerBatch); err != nil {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.%w", ErrExecutionPlanConfigInvalid, i, err)
 			}
 			if s.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].semantic_qa.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
@@ -428,7 +406,7 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			}
 			switch scope {
 			case "all", "with_issues", "with_issue_codes":
-				// ok
+				// 合法值，直接放行
 			default:
 				return fmt.Errorf("%w: rounds[%d].semantic_qa.segment_scope must be 'all', 'with_issues' or 'with_issue_codes'", ErrExecutionPlanConfigInvalid, i)
 			}
@@ -445,14 +423,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 				return fmt.Errorf("%w: rounds[%d].revise config required when mode=revise", ErrExecutionPlanConfigInvalid, i)
 			}
 			r := round.Revise
-			if r.BatchSize < 0 {
-				return fmt.Errorf("%w: rounds[%d].revise.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
-			}
-			if r.MaxWordsPerBatch < 0 {
-				return fmt.Errorf("%w: rounds[%d].revise.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
-			}
-			if r.BatchSize <= 0 && r.MaxWordsPerBatch <= 0 {
-				return fmt.Errorf("%w: rounds[%d].revise.batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
+			if err := execution.ValidateBatchLimits(round.Mode, r.BatchSize, r.MaxWordsPerBatch); err != nil {
+				return fmt.Errorf("%w: rounds[%d].revise.%w", ErrExecutionPlanConfigInvalid, i, err)
 			}
 			if r.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].revise.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
