@@ -395,19 +395,9 @@ LLM 请求层：
 
 产品操作见 [翻译配置 · 使用 · 单段试译](/zh/guide/translation-config#单段试译) / [单段修订预览](/zh/guide/translation-config#单段修订预览)；接口契约见 [翻译配置 · 参考 · 单段预览](/zh/guide/translation-config-reference#单段预览-preview)。
 
----
-
-## 插件（规划中）
-
-::: warning 尚未实现
-计划通过 Lua 脚本挂 `before_translate` / `after_translate` 等钩子。当前仅有接口与配置占位，请勿依赖。
+::: warning 插件与翻译记忆配置已移除
+旧版 CLI 配置中的 `plugins`（脚本插件）与 `translation_memory`（翻译记忆）占位已从配置契约中移除：在 `linguaflow.yaml` 中写入这些键会直接报错。相关能力如有需要，以 Web 端后续版本为准。
 :::
-
-```yaml
-plugins:
-  enabled: false
-  scripts: []
-```
 
 ---
 
