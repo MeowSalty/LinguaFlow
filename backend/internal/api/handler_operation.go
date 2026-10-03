@@ -57,6 +57,15 @@ func (s *Server) handleListOperations(w http.ResponseWriter, r *http.Request, p 
 		if row.Job != nil {
 			j := row.Job
 			err = item.FromTranslationOperation(TranslationOperation{TaskType: "translation", TaskId: strconv.Itoa(j.ID), ProjectId: j.ProjectID, ProjectName: row.ProjectName, Status: TranslationOperationStatus(j.Status), TriggerType: TranslationOperationTriggerType(j.TriggerType), CreatedAt: timeutil.Normalize(j.CreatedAt), UpdatedAt: timeutil.Normalize(j.UpdatedAt), StartedAt: timeutil.NormalizePtr(j.StartedAt), SupportedActions: []TranslationOperationSupportedActions{"view", "pause", "resume", "cancel", "retry"}, Progress: JobSummaryProgress{TotalResources: j.ResourceCount, CompletedResources: j.CompletedResources, FailedResources: j.FailedResources, ProgressTotal: j.ProgressTotal, ProgressCompleted: j.ProgressCompleted}})
+		} else if row.StorageTask != nil {
+			t := row.StorageTask
+			err = item.FromStorageOperation(StorageOperation{
+				TaskType: "storage", TaskId: strconv.Itoa(t.ID), ProjectId: t.ProjectID, ProjectName: row.ProjectName,
+				StorageKind: t.Kind, Status: StorageOperationStatus(t.Status), Phase: t.Phase,
+				CleanupStatus: StorageOperationCleanupStatus(t.CleanupStatus), ErrorCode: t.ErrorCode,
+				NextRetryAt: timeutil.NormalizePtr(t.NextRetryAt), CreatedAt: timeutil.Normalize(t.CreatedAt), UpdatedAt: timeutil.Normalize(t.UpdatedAt),
+				SupportedActions: []StorageOperationSupportedActions{"view", "cancel", "retry"},
+			})
 		} else {
 			t := row.SyncTask
 			sync := GlossarySyncOperation{TaskType: "glossary_sync", TaskId: strconv.Itoa(t.ID), ProjectId: t.ProjectID, ProjectName: row.ProjectName, Status: GlossarySyncOperationStatus(t.Status), CreatedAt: timeutil.Normalize(t.CreatedAt), UpdatedAt: timeutil.Normalize(t.UpdatedAt), StartedAt: timeutil.NormalizePtr(t.StartedAt), SupportedActions: []GlossarySyncOperationSupportedActions{"view", "cancel"}}

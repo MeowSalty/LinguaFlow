@@ -36,7 +36,10 @@ func (s *Server) handlePreviewResourceSegmentTranslation(w http.ResponseWriter, 
 		return
 	}
 
-	var req SegmentTranslationPreviewRequest
+	var req struct {
+		ExecutionPlanId int             `json:"execution_plan_id"`
+		SourceText      json.RawMessage `json:"source_text"`
+	}
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
@@ -47,9 +50,9 @@ func (s *Server) handlePreviewResourceSegmentTranslation(w http.ResponseWriter, 
 		SegmentID:       segmentID,
 		ExecutionPlanID: req.ExecutionPlanId,
 	}
-	if req.SourceText != nil {
-		input.SourceTextSet = true
-		input.SourceText = *req.SourceText
+	if len(req.SourceText) != 0 {
+		s.writeProblem(w, r, http.StatusBadRequest, "source_read_only", "文件原文只读，请通过更新原文件创建新版本")
+		return
 	}
 
 	result, err := s.previewSvc.RunPreview(r.Context(), input)
@@ -96,6 +99,10 @@ func (s *Server) handleApplyResourceSegmentTranslationPreview(w http.ResponseWri
 
 func (s *Server) writePreviewServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, service.ErrSourceReadOnly):
+		s.writeProblem(w, r, http.StatusBadRequest, "source_read_only", "文件原文只读，请通过更新原文件创建新版本")
+	case errors.Is(err, service.ErrSourceRevisionConflict):
+		s.writeProblem(w, r, http.StatusConflict, "source_revision_conflict", "原文件版本已变化，请重新预览")
 	case errors.Is(err, service.ErrPreviewBusy):
 		w.Header().Set("Retry-After", "1")
 		s.writeProblem(w, r, http.StatusTooManyRequests, "preview_busy", "预览并发已满，请稍后重试")

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -13,9 +14,9 @@ import (
 )
 
 type resourceSegmentUpdateRequest struct {
-	SourceText *string `json:"source_text"`
-	TargetText *string `json:"target_text"`
-	Comment    *string `json:"comment"`
+	SourceText json.RawMessage `json:"source_text"`
+	TargetText *string         `json:"target_text"`
+	Comment    *string         `json:"comment"`
 }
 
 func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Request) {
@@ -157,9 +158,12 @@ func (s *Server) handleUpdateResourceSegment(w http.ResponseWriter, r *http.Requ
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
+	if len(req.SourceText) != 0 {
+		s.writeProblem(w, r, http.StatusBadRequest, "source_read_only", "文件原文只读，请通过更新原文件创建新版本")
+		return
+	}
 
 	updated, err := s.segmentSvc.UpdateResourceSegment(r.Context(), authUser.User.ID, projectID, resourceID, segmentID, service.ResourceSegmentUpdateInput{
-		SourceText: req.SourceText,
 		TargetText: req.TargetText,
 		Comment:    req.Comment,
 	})

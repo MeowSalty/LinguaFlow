@@ -27,16 +27,16 @@ func (s *Server) applyMiddleware(r *chi.Mux) {
 		}
 	}
 
-	// cors treats an empty list as '*'; absence of this middleware permits only
-	// ordinary same-origin browser requests, as the explicit empty policy intends.
+	// cors 把空列表视为 '*'；而完全不挂载本中间件时，浏览器只能发起
+	// 普通的同源请求——这正是显式配置空策略的意图。
 	if len(allowedOrigins) == 0 {
 		return
 	}
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
-		ExposedHeaders:   []string{"X-Request-ID"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "Idempotency-Key"},
+		ExposedHeaders:   []string{"X-Request-ID", "Content-Disposition"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))

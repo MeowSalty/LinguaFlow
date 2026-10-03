@@ -19,6 +19,7 @@ type healthResponse struct {
 func (s *Server) newRouter() http.Handler {
 	r := chi.NewRouter()
 	s.applyMiddleware(r)
+	r.Use(s.storageMaintenanceMiddleware)
 
 	r.Get("/health", s.handleHealth)
 	r.Get("/health/ready", s.handleReady)
