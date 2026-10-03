@@ -24,7 +24,7 @@ import (
 const maxDOCXSize = 100 << 20
 
 // maxDecompressedEntrySize 引用共享的解压尺寸上限，用于需要全量读入内存的解析路径。
-// 原样直通的资产复制不走此限制。
+// 资产流式复制使用归档累计解压预算。
 const maxDecompressedEntrySize = ziputil.MaxDecompressedEntrySize
 
 // documentXMLPath 是主文档在 ZIP 内的路径。
@@ -40,8 +40,8 @@ func New() *Parser { return &Parser{} }
 func (*Parser) Extensions() []string { return []string{".docx"} }
 
 // Parse 将 DOCX 文件解析为 Document。
-func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Document, error) {
-	zipReader, err := ziputil.OpenZip(r, maxDOCXSize)
+func (*Parser) Parse(ctx context.Context, r io.Reader, _ string) (*pipeline.Document, error) {
+	zipReader, err := ziputil.OpenZipContext(ctx, r, maxDOCXSize)
 	if err != nil {
 		return nil, fmt.Errorf("docx: open zip: %w", err)
 	}
@@ -55,6 +55,9 @@ func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Docume
 	if err != nil {
 		return nil, fmt.Errorf("docx: extract: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	slog.Debug("[docx:parse] segments", "count", len(segments))
 
 	return &pipeline.Document{
@@ -66,18 +69,22 @@ func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Docume
 // Render 将翻译后的 Document 渲染回 DOCX 格式。
 //
 // 仅重写 word/document.xml，其余条目原样复制。
-func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error {
-	zipReader, err := ziputil.OpenZip(original, maxDOCXSize)
+func (*Parser) Render(ctx context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error {
+	zipReader, err := ziputil.OpenZipContext(ctx, original, maxDOCXSize)
 	if err != nil {
 		return fmt.Errorf("docx: open zip: %w", err)
 	}
 
 	segmentsByPath := groupSegmentsByPath(doc.Segments)
 
-	zipWriter := zip.NewWriter(w)
+	zipWriter := zip.NewWriter(ziputil.OutputWriter(ctx, w))
 
 	var writeErr error
 	for _, file := range zipReader.File {
+		if err := ctx.Err(); err != nil {
+			writeErr = err
+			break
+		}
 		clean := path.Clean(file.Name)
 		if clean == documentXMLPath || file.Name == documentXMLPath {
 			raw, err := ziputil.ReadFile(file, maxDecompressedEntrySize)
@@ -104,7 +111,7 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 			}
 			continue
 		}
-		// 非主文档条目 → 原样复制（资产不经解析，不解压进内存，无炸弹风险）
+		// 非主文档条目仍受归档累计解压量和输出预算约束。
 		if err := ziputil.CopyEntryUnbounded(zipWriter, file); err != nil {
 			writeErr = fmt.Errorf("docx: copy %s: %w", file.Name, err)
 			break
