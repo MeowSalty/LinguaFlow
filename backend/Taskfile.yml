@@ -21,6 +21,56 @@ vars:
   BACKEND_LDFLAGS: '{{default (printf "%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=%s" .BACKEND_LDFLAGS_EXTRA .VERSION .COMMIT) .BACKEND_LDFLAGS}}'
 
 tasks:
+  deps:tidy:
+    desc: 整理后端 Go 模块依赖
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go mod tidy
+
+  storage:backup:
+    desc: 独立存储备份工具（CLI_ARGS选择manifest/capture/restore-check；需 --offline）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate backup {{.CLI_ARGS}}
+
+  storage:inventory:
+    desc: 只读生成旧文件存储迁移清单（显式指定 --manifest）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate inventory {{.CLI_ARGS}}
+
+  storage:dry-run:
+    desc: 只读预演旧文件引用、摘要与定位核验
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate dry-run {{.CLI_ARGS}}
+
+  storage:apply:
+    desc: 停服备份后显式迁移旧文件元数据（需 --offline --backup-confirmed）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate apply {{.CLI_ARGS}}
+
+  storage:resume:
+    desc: 按持久清单恢复中断的旧文件元数据迁移
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate resume {{.CLI_ARGS}}
+
+  storage:rollback:
+    desc: 回滚尚未继续编辑或写入的旧文件迁移元数据（不回滚schema，不删除原件）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate rollback {{.CLI_ARGS}}
+
+  deps:add:
+    desc: 添加或更新显式指定的后端 Go 模块依赖
+    dir: '{{.TASKFILE_DIR}}'
+    requires:
+      vars: [CLI_ARGS]
+    cmds:
+      - go get {{.CLI_ARGS}}
+
   install:
     desc: 下载后端 Go 模块依赖
     dir: '{{.TASKFILE_DIR}}'
