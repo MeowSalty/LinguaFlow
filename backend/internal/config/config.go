@@ -283,15 +283,16 @@ type ServerConfig struct {
 	SSE               SSEConfig            `yaml:"sse"`
 	CORS              CORSConfig           `yaml:"cors"`
 	Credentials       CredentialsConfig    `yaml:"credentials"`
+	Storage           StorageConfig        `yaml:"storage"`
 	ServeUI           bool                 `yaml:"serve_ui"`
 }
 
-// CredentialsConfig identifies deployment-owned encryption keys.
+// CredentialsConfig 标识部署侧持有的加密密钥。
 type CredentialsConfig struct {
 	KeyringFile string `yaml:"keyring_file"`
 }
 
-// BootstrapInput is consumed only by the instance initialization transaction.
+// BootstrapInput 仅由实例初始化事务消费。
 type BootstrapInput struct {
 	RegistrationEnabled bool
 	Admin               *BootstrapAdmin
@@ -303,7 +304,7 @@ type BootstrapAdmin struct {
 	Password string
 }
 
-// RuntimeAddress is the bound address, separate from the requested configuration.
+// RuntimeAddress 是实际绑定的地址，与请求的配置相互独立。
 type RuntimeAddress struct {
 	Host string
 	Port int
@@ -405,6 +406,7 @@ func DefaultServerConfig() *ServerConfig {
 		Preview:           DefaultPreviewConfig(),
 		QuickTranslate:    DefaultQuickTranslateConfig(),
 		SSE:               DefaultSSEConfig(),
+		Storage:           DefaultStorageConfig(),
 		CORS: CORSConfig{
 			AllowedOrigins: []string{"*"},
 		},
@@ -412,7 +414,7 @@ func DefaultServerConfig() *ServerConfig {
 	}
 }
 
-// ValidateServerConfig validates a fully resolved configuration without changing it.
+// ValidateServerConfig 校验完整解析后的配置，且不做任何修改。
 func ValidateServerConfig(c *ServerConfig) error {
 	return validateServerConfig(c, true)
 }
@@ -503,7 +505,7 @@ func validateServerConfig(c *ServerConfig, requireSecret bool) error {
 	if c.QuickTranslate.Timeout > c.QuickTranslate.MaxTimeout {
 		return fmt.Errorf("server.quick_translate.timeout must not exceed max_timeout")
 	}
-	return nil
+	return c.Storage.Validate()
 }
 
 func validateSQLitePath(dsn string) error {

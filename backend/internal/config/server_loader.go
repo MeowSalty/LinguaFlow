@@ -18,8 +18,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 )
 
-// ServerInputs contains only explicit command inputs. A nil ConfigPath means
-// no flag was supplied; an empty Environment is an intentionally empty snapshot.
+// ServerInputs 只包含显式的命令行输入。ConfigPath 为 nil 表示未提供
+// 对应 flag；Environment 为空映射表示刻意的空环境快照。
 type ServerInputs struct {
 	Mode             string
 	ConfigPath       *string
@@ -37,9 +37,9 @@ type FieldExplanation struct {
 	Source string
 }
 
-// ResolvedServer is the immutable result of offline input resolution. Startup
-// copies Config before injecting prepared secrets. Bootstrap is not retained by
-// business services, and no field below represents a bound network address.
+// ResolvedServer 是离线输入解析得到的不可变结果。启动时先复制 Config，
+// 再注入准备好的密钥。业务服务不保留 Bootstrap，下列任何字段都不代表
+// 实际绑定的网络地址。
 type ResolvedServer struct {
 	Config             ServerConfig
 	Log                LogConfig
@@ -51,8 +51,8 @@ type ResolvedServer struct {
 	CredentialKeys     *credential.Keyring
 	AllowNetwork       bool
 	ConfigPath         string
-	// masterKey exists only during resolution, is described as redacted, and
-	// is cleared before returning. Runtime consumers receive CredentialKeys.
+	// masterKey 仅在解析期间存在，对外描述为已脱敏，并在返回前清空；
+	// 运行时消费方拿到的是 CredentialKeys。
 	masterKey string
 }
 
@@ -144,6 +144,9 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 			v = absolutePath(v.(string), cwd)
 			source += " (relative to working directory)"
 		}
+		if f.Type == "storage_backends" {
+			v = absoluteBackendRoots(v.([]StorageBackendConfig), cwd)
+		}
 		values[f.Key] = sourcedValue{v, source}
 	}
 	for key, v := range in.Overrides {
@@ -183,7 +186,7 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 			r.Config.DataDir = filepath.Join(ucd, "LinguaFlow")
 		}
 	}
-	// Defaults depending on another field are applied only after its final value.
+	// 依赖其他字段的默认值，必须等该字段最终值确定后才应用。
 	dbDefaults := defaultDatabaseConfig(r.Config.Database.Driver)
 	if _, ok := values["server.database.max_open_conns"]; !ok {
 		r.Config.Database.MaxOpenConns = dbDefaults.MaxOpenConns
@@ -206,8 +209,9 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 	if r.Config.DataDir != "" {
 		r.Config.DataDir = absolutePath(r.Config.DataDir, cwd)
 	}
-	// Validate paths and capacities before using derived dependency paths. A
-	// missing local secret is resolved separately, never as a placeholder value.
+	resolveStorageDirectories(&r.Config, values)
+	// 在使用派生的依赖路径之前先校验路径与容量。缺失的本地密钥单独解析，
+	// 绝不用占位值顶替。
 	if err := validateServerConfig(&r.Config, false); err != nil {
 		return nil, err
 	}
@@ -303,6 +307,8 @@ func (r *ResolvedServer) describe(values map[string]sourcedValue, mode string) {
 				if mode == ModeLocal && r.Config.Credentials.KeyringFile != "" {
 					source = "derived from data_dir"
 				}
+			case "server.storage.work_dir", "server.storage.cache_dir":
+				source = "derived from data_dir"
 			}
 		}
 		var value string
@@ -318,6 +324,9 @@ func (r *ResolvedServer) describe(values map[string]sourcedValue, mode string) {
 					value = "configured (redacted)"
 				}
 			} else if s, ok := f.read(r).(string); ok && s != "" {
+				value = "configured (redacted)"
+			}
+			if f.Type == "storage_backends" && len(r.Config.Storage.Backends) > 0 {
 				value = "configured (redacted)"
 			}
 		}
@@ -450,6 +459,9 @@ func decodeServerObject(node *yaml.Node, prefix, path string, env map[string]str
 			v = absolutePath(v.(string), filepath.Dir(path))
 			source += " (relative to document directory)"
 		}
+		if f.Type == "storage_backends" {
+			v = absoluteBackendRoots(v.([]StorageBackendConfig), filepath.Dir(path))
+		}
 		values[key] = sourcedValue{v, source}
 	}
 	return nil
@@ -460,6 +472,17 @@ func parseYAMLField(f serverField, n *yaml.Node, env map[string]string) (any, er
 		return nil, fmt.Errorf("aliases and null are not supported")
 	}
 	switch f.Type {
+	case "storage_backends":
+		return parseStorageBackends(n, env)
+	case "integer64":
+		if n.Kind != yaml.ScalarNode || n.Tag != "!!int" {
+			return nil, fmt.Errorf("must be an integer")
+		}
+		v, err := strconv.ParseInt(n.Value, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("must be a decimal integer")
+		}
+		return v, nil
 	case "string", "path", "duration":
 		if n.Kind != yaml.ScalarNode || n.Tag != "!!str" {
 			return nil, fmt.Errorf("must be a string")
@@ -510,8 +533,8 @@ func parseYAMLField(f serverField, n *yaml.Node, env map[string]string) (any, er
 	return nil, fmt.Errorf("unsupported input type")
 }
 
-// ExpandReferences expands scalar values after YAML decoding. It never alters
-// document structure and reports missing references without including values.
+// ExpandReferences 在 YAML 解码后展开标量值中的引用。它从不改变文档
+// 结构，报告缺失引用时也不包含引用的值。
 func ExpandReferences(value string, env map[string]string) (string, error) {
 	var missing string
 	expanded := envVarPattern.ReplaceAllStringFunc(value, func(match string) string {
@@ -533,6 +556,14 @@ func ExpandReferences(value string, env map[string]string) (string, error) {
 
 func parseEnvironmentValue(f serverField, s string) (any, error) {
 	switch f.Type {
+	case "storage_backends":
+		return parseStorageBackendsEnvironment(s)
+	case "integer64":
+		v, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("must be an integer")
+		}
+		return v, nil
 	case "integer":
 		v, err := strconv.Atoi(s)
 		if err != nil {
@@ -577,6 +608,12 @@ func parseDuration(value string) (time.Duration, error) {
 
 func validValueType(kind string, v any) bool {
 	switch kind {
+	case "storage_backends":
+		_, ok := v.([]StorageBackendConfig)
+		return ok
+	case "integer64":
+		_, ok := v.(int64)
+		return ok
 	case "string", "path":
 		_, ok := v.(string)
 		return ok
@@ -652,8 +689,8 @@ func validateLocalHost(host string, allowNetwork bool) error {
 	return nil
 }
 
-// ReadLocalSecret reads an existing persistent secret; absence is distinguished
-// from unreadability or corruption so startup can safely decide whether to create.
+// ReadLocalSecret 读取已存在的持久化密钥；读取结果会区分“不存在”与
+// “不可读或已损坏”，让启动流程能安全决定是否创建。
 func ReadLocalSecret(path string) (string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
