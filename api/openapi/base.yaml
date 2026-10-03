@@ -12,6 +12,56 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /admin/storage/diagnostics:
+    $ref: './paths/storage.yaml#/storageDiagnostics'
+  /admin/storage/policy:
+    $ref: './paths/storage.yaml#/storagePolicy'
+  /admin/storage/connections:
+    $ref: './paths/storage.yaml#/siteStorageConnections'
+  /storage/connections:
+    $ref: './paths/storage.yaml#/storageConnections'
+  /orgs/{orgId}/storage/connections:
+    $ref: './paths/storage.yaml#/orgStorageConnections'
+  /storage/connections/{connectionId}:
+    $ref: './paths/storage.yaml#/storageConnection'
+  /storage/connections/{connectionId}/spaces:
+    $ref: './paths/storage.yaml#/connectionSpaces'
+  /storage/connections/{connectionId}/authorize:
+    $ref: './paths/storage.yaml#/authorizeStorage'
+  /storage/connections/{connectionId}/check:
+    $ref: './paths/storage.yaml#/checkStorage'
+  /storage/connections/{connectionId}/revoke:
+    $ref: './paths/storage.yaml#/revokeStorage'
+  /storage/spaces/{spaceId}:
+    $ref: './paths/storage.yaml#/storageSpace'
+  /projects/{projectId}/storage:
+    $ref: './paths/storage.yaml#/projectStorage'
+  /projects/{projectId}/storage/migrations:
+    $ref: './paths/storage.yaml#/storageMigrations'
+  /projects/{projectId}/storage/tasks:
+    $ref: './paths/storage.yaml#/storageTasks'
+  /projects/{projectId}/storage/tasks/{taskId}:
+    $ref: './paths/storage.yaml#/storageTask'
+  /projects/{projectId}/storage/tasks/{taskId}/content:
+    $ref: './paths/storage.yaml#/storageTaskContent'
+  /projects/{projectId}/storage/tasks/{taskId}/cancel:
+    $ref: './paths/storage.yaml#/cancelStorageTask'
+  /projects/{projectId}/storage/tasks/{taskId}/retry:
+    $ref: './paths/storage.yaml#/retryStorageTask'
+  /projects/{projectId}/resources/{resourceId}/versions:
+    $ref: './paths/storage.yaml#/sourceVersions'
+  /projects/{projectId}/resources/{resourceId}/source-preview:
+    $ref: './paths/storage.yaml#/sourcePreview'
+  /projects/{projectId}/resources/{resourceId}/source-commit:
+    $ref: './paths/storage.yaml#/sourceCommit'
+  /projects/{projectId}/resources/{resourceId}/exports:
+    $ref: './paths/storage.yaml#/sourceExports'
+  /projects/{projectId}/exports/{artifactId}:
+    $ref: './paths/storage.yaml#/exportArtifact'
+  /projects/{projectId}/exports/{artifactId}/download:
+    $ref: './paths/storage.yaml#/exportDownload'
+  /projects/{projectId}/exports/{artifactId}/rebuild:
+    $ref: './paths/storage.yaml#/exportRebuild'
   /credentials:
     $ref: './paths/credentials.yaml#/userCredentials'
   /orgs/{orgId}/credentials:

@@ -13,11 +13,13 @@ OperationSummary:
   oneOf:
     - $ref: '#/TranslationOperation'
     - $ref: '#/GlossarySyncOperation'
+    - $ref: '#/StorageOperation'
   discriminator:
     propertyName: task_type
     mapping:
       translation: '#/TranslationOperation'
       glossary_sync: '#/GlossarySyncOperation'
+      storage: '#/StorageOperation'
 
 OperationBase:
   type: object
@@ -33,7 +35,7 @@ OperationBase:
       type: string
     status:
       type: string
-      enum: [pending, running, paused, completed, failed, cancelled]
+      enum: [pending, running, paused, waiting_retry, needs_action, completed, failed, cancelled]
     created_at:
       type: string
       format: date-time
@@ -60,6 +62,9 @@ TranslationOperation:
         task_type:
           type: string
           enum: [translation]
+        status:
+          type: string
+          enum: [pending, running, paused, completed, failed, cancelled]
         trigger_type:
           type: string
           enum: [manual, file_update, glossary_change, web_edit]
@@ -95,9 +100,42 @@ GlossarySyncOperation:
               type: integer
               minimum: 0
 
+StorageOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      required: [task_type, storage_kind, phase, cleanup_status, error_code, next_retry_at]
+      properties:
+        task_type:
+          type: string
+          enum: [storage]
+        storage_kind:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, waiting_retry, needs_action, completed, failed, cancelled]
+        phase:
+          type: string
+        cleanup_status:
+          type: string
+          enum: [cleanup_pending, running, blocked, done]
+        error_code:
+          type: string
+          description: 脱敏的稳定领域错误码；空字符串表示无错误。
+        next_retry_at:
+          type: string
+          format: date-time
+          nullable: true
+        supported_actions:
+          type: array
+          description: 类型能力；当前阶段能否控制以存储任务详情的 allowed_actions 为准。
+          items:
+            type: string
+            enum: [view, cancel, retry]
+
 OperationCounts:
   type: object
-  required: [pending, running, paused, recent_failed]
+  required: [pending, running, paused, recent_failed, waiting_retry, needs_action]
   properties:
     pending:
       type: integer
@@ -111,6 +149,12 @@ OperationCounts:
     recent_failed:
       type: integer
       minimum: 0
+    waiting_retry:
+      type: integer
+      minimum: 0
+    needs_action:
+      type: integer
+      minimum: 0
 
 OperationsSummaryResponse:
   type: object
@@ -120,11 +164,13 @@ OperationsSummaryResponse:
       $ref: '#/OperationCounts'
     by_type:
       type: object
-      required: [translation, glossary_sync]
+      required: [translation, glossary_sync, storage]
       properties:
         translation:
           $ref: '#/OperationCounts'
         glossary_sync:
+          $ref: '#/OperationCounts'
+        storage:
           $ref: '#/OperationCounts'
     recent_failed_since:
       type: string

@@ -2,6 +2,18 @@ Resource:
   type: object
   required: [id, path, name, directory, format, total_segments, translated_segments, approved_segments, created_at, updated_at]
   properties:
+    current_source_revision_id:
+      type: integer
+      nullable: true
+    source_generation:
+      type: integer
+      format: int64
+      minimum: 0
+    translation_generation:
+      type: integer
+      format: int64
+      minimum: 0
+
     id:
       type: integer
     path:
@@ -119,9 +131,8 @@ ResourceSegmentListResponse:
 
 ResourceSegmentUpdateRequest:
   type: object
+  description: 文件原文只读；提交 source_text 返回 source_read_only，原文变更须创建新源版本。
   properties:
-    source_text:
-      type: string
     target_text:
       type: string
     comment:
@@ -264,17 +275,13 @@ ResourceSegmentGroupListResponse:
 
 SegmentTranslationPreviewRequest:
   type: object
+  description: 使用当前文件原文预览；提交 source_text 返回 source_read_only。
   required: [execution_plan_id]
   properties:
     execution_plan_id:
       type: integer
       minimum: 1
       description: 执行计划模板 ID；计划中必须至少包含一个 translate 轮次
-    source_text:
-      type: string
-      description: |
-        可选：编辑器中尚未保存的原文。省略时使用数据库原文；传入时必须为非空白文本，
-        将作为本次预览的原文（模拟一次原文变更后执行计划）。
   additionalProperties: false
 
 SegmentTranslationPreviewResponse:

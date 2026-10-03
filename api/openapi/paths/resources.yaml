@@ -149,6 +149,7 @@ projectResourceById:
   put:
     operationId: UpdateResource
     summary: 更新资源文件
+    description: 先确认源文件差异预览，再提交预览任务 ID 及源、译文预期代次。缺少条件或代次过期返回冲突；提交使用预览中已经验证的候选文件。
     security:
       - bearerAuth: []
     requestBody:
@@ -157,8 +158,19 @@ projectResourceById:
         multipart/form-data:
           schema:
             type: object
-            required: [file]
+            required: [file, preview_task_id, expected_source_generation, expected_translation_generation]
             properties:
+              preview_task_id:
+                type: integer
+                description: 已确认的源文件差异预览任务 ID；提交使用该任务持久保存的候选内容。
+              expected_source_generation:
+                type: integer
+                format: int64
+                minimum: 0
+              expected_translation_generation:
+                type: integer
+                format: int64
+                minimum: 0
               file:
                 type: string
                 format: binary
@@ -175,8 +187,9 @@ projectResourceById:
     operationId: IncrementalUpdateResource
     summary: 增量更新资源文件
     description: |
-      上传新版本文件，系统自动对比段落变化：
-      - 相同源文本的段落保留已有译文
+      先创建源文件差异预览，再携带预览任务及源、译文预期代次确认。缺少条件或代次过期返回冲突。
+      系统按已确认的候选文件对比段落变化：
+      - 唯一且无歧义的相同源文本段落保留已有译文
       - 源文本变化的段落重置为待翻译
       - 新增段落状态为待翻译
       - 不再存在的段落将被删除
@@ -188,8 +201,19 @@ projectResourceById:
         multipart/form-data:
           schema:
             type: object
-            required: [file]
+            required: [file, preview_task_id, expected_source_generation, expected_translation_generation]
             properties:
+              preview_task_id:
+                type: integer
+                description: 已确认的源文件差异预览任务 ID；提交使用该任务持久保存的候选内容。
+              expected_source_generation:
+                type: integer
+                format: int64
+                minimum: 0
+              expected_translation_generation:
+                type: integer
+                format: int64
+                minimum: 0
               file:
                 type: string
                 format: binary

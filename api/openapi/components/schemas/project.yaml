@@ -2,6 +2,18 @@ Project:
   type: object
   required: [id, name, source_lang, target_lang, glossary_enabled]
   properties:
+    storage_space_id:
+      type: integer
+      nullable: true
+    storage_generation:
+      type: integer
+      format: int64
+    output_generation:
+      type: integer
+      format: int64
+    storage_state:
+      type: string
+
     id:
       type: integer
     name:
@@ -41,6 +53,10 @@ CreateProjectRequest:
   type: object
   required: [name]
   properties:
+    storage_space_id:
+      type: integer
+      minimum: 1
+
     name:
       type: string
     config:

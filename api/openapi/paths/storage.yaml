@@ -1,0 +1,1038 @@
+storageDiagnostics:
+  get:
+    operationId: GetStorageDiagnostics
+    summary: 查看存储容量、恢复积压与备份状态
+    description: 仅平台管理员。只聚合平台登记的数据库事实与临时盘预留，不探测远端、扫描对象桶或产生写入；cursor 是上一页末空间 ID。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: cursor
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+    responses:
+      '200':
+        description: 只读存储诊断
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage-diagnostics.yaml#/StorageDiagnostics'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+siteStorageConnections:
+  get:
+    operationId: ListSiteStorageConnections
+    summary: List configured site storage connections
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: Deployment connections visible to administrators
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageConnectionList'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+checkStorage:
+  parameters:
+    - name: connectionId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: CheckStorageConnection
+    summary: Verify the connection and its managed spaces
+    description: Read checks never write; explicit write checks persist and clean exact probe objects. Requires connection ownership or site administrator access.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [write_check, expected_generation]
+            properties:
+              write_check:
+                type: boolean
+              expected_generation:
+                type: integer
+                format: int64
+                minimum: 0
+    responses:
+      '200':
+        description: Verified connection metadata
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageConnection'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storagePolicy:
+  get:
+    operationId: GetStoragePolicy
+    summary: GetStoragePolicy
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StoragePolicy'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: SetStoragePolicy
+    summary: SetStoragePolicy
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StoragePolicy'
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StoragePolicy'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageConnections:
+  get:
+    operationId: ListStorageConnections
+    summary: ListStorageConnections
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageConnectionList'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateStorageConnection
+    summary: CreateStorageConnection
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageConnectionRequest'
+    responses:
+      '201':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageConnection'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+orgStorageConnections:
+  parameters:
+    - name: orgId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  get:
+    operationId: ListOrgStorageConnections
+    summary: ListOrgStorageConnections
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageConnectionList'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateOrgStorageConnection
+    summary: CreateOrgStorageConnection
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageConnectionRequest'
+    responses:
+      '201':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageConnection'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageConnection:
+  parameters:
+    - name: connectionId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  patch:
+    operationId: SetStorageConnectionState
+    summary: SetStorageConnectionState
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageStateRequest'
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageConnection'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+connectionSpaces:
+  parameters:
+    - name: connectionId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  get:
+    operationId: ListStorageConnectionSpaces
+    summary: ListStorageConnectionSpaces
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageSpaceList'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateStorageSpace
+    summary: CreateStorageSpace
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageSpaceRequest'
+    responses:
+      '201':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageSpace'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+authorizeStorage:
+  parameters:
+    - name: connectionId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: AuthorizeStorage
+    summary: AuthorizeStorage
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageAuthorizationRequest'
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageConnection'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+revokeStorage:
+  parameters:
+    - name: connectionId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: RevokeStorageAuthorization
+    summary: RevokeStorageAuthorization
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageStateRequest'
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageConnection'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageSpace:
+  parameters:
+    - name: spaceId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  patch:
+    operationId: SetStorageSpaceState
+    summary: SetStorageSpaceState
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageStateRequest'
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageSpace'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+projectStorage:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  get:
+    operationId: GetProjectStorage
+    summary: GetProjectStorage
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageSpace'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: BindProjectStorage
+    summary: BindProjectStorage
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageBindingRequest'
+    responses:
+      '204':
+        description: 操作结果
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageMigrations:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: MigrateProjectStorage
+    summary: MigrateProjectStorage
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageBindingRequest'
+    responses:
+      '202':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTask'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageTasks:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  get:
+    operationId: ListStorageTasks
+    summary: ListStorageTasks
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTaskList'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateStorageIntent
+    summary: CreateStorageIntent
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageIntent'
+    responses:
+      '202':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTask'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageTask:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: taskId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  get:
+    operationId: GetStorageTask
+    summary: GetStorageTask
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTask'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageTaskContent:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: taskId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  put:
+    operationId: ReceiveStorageContent
+    summary: ReceiveStorageContent
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/octet-stream:
+          schema:
+            type: string
+            format: binary
+    responses:
+      '202':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTask'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+cancelStorageTask:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: taskId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: CancelStorageTask
+    summary: CancelStorageTask
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTask'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+retryStorageTask:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: taskId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: RetryStorageTask
+    summary: RetryStorageTask
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '202':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTask'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+sourceVersions:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: resourceId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  get:
+    operationId: ListSourceVersions
+    summary: ListSourceVersions
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/SourceVersionList'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+sourcePreview:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: resourceId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: PreviewSourceUpdate
+    parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+    summary: PreviewSourceUpdate
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/octet-stream:
+          schema:
+            type: string
+            format: binary
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/SourceUpdatePreview'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+sourceCommit:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: resourceId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: CommitSourceUpdate
+    summary: CommitSourceUpdate
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/SourceUpdateCommit'
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTask'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+sourceExports:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: resourceId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  get:
+    operationId: ListExportArtifacts
+    summary: ListExportArtifacts
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/ExportArtifactList'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateExportArtifact
+    parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+    summary: CreateExportArtifact
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '202':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTask'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+exportArtifact:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: artifactId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  delete:
+    operationId: DeleteExportArtifact
+    summary: DeleteExportArtifact
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 操作结果
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+exportDownload:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: artifactId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  get:
+    operationId: DownloadExportArtifact
+    summary: DownloadExportArtifact
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+exportRebuild:
+  parameters:
+    - name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - name: artifactId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: RebuildExportArtifact
+    parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+    summary: RebuildExportArtifact
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    responses:
+      '202':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageTask'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

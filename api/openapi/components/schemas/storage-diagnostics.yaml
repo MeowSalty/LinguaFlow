@@ -1,0 +1,66 @@
+StorageDiagnostics:
+  type: object
+  required: [spaces, temporary_bytes, recovery_backlog, blocked_cleanup_by_code, migrations_by_phase]
+  properties:
+    spaces:
+      type: array
+      items:
+        $ref: '#/StorageSpaceDiagnostics'
+    next_cursor:
+      type: integer
+    temporary_bytes:
+      type: integer
+      format: int64
+    oldest_intent_at:
+      type: string
+      format: date-time
+    recovery_backlog:
+      type: integer
+    blocked_cleanup_by_code:
+      type: object
+      additionalProperties:
+        type: integer
+    migrations_by_phase:
+      type: object
+      additionalProperties:
+        type: integer
+    latest_backup:
+      type: object
+      required: [id, status, created_at]
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [complete, metadata_only, incomplete]
+        created_at:
+          type: string
+          format: date-time
+StorageSpaceDiagnostics:
+  type: object
+  required: [id, reserved_bytes, candidate_bytes, live_bytes, pending_delete_bytes, unchecked_objects, missing_objects, corrupt_objects]
+  properties:
+    id:
+      type: integer
+    reserved_bytes:
+      type: integer
+      format: int64
+    candidate_bytes:
+      type: integer
+      format: int64
+    live_bytes:
+      type: integer
+      format: int64
+    pending_delete_bytes:
+      type: integer
+      format: int64
+    unchecked_objects:
+      type: integer
+    missing_objects:
+      type: integer
+    corrupt_objects:
+      type: integer
+    last_checked_at:
+      description: 最近一次持久化的完整字节校验时间，不代表最近一次失败观测。
+      type: string
+      format: date-time

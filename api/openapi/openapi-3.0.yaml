@@ -12,6 +12,1046 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /admin/storage/diagnostics:
+    get:
+      operationId: GetStorageDiagnostics
+      summary: 查看存储容量、恢复积压与备份状态
+      description: 仅平台管理员。只聚合平台登记的数据库事实与临时盘预留，不探测远端、扫描对象桶或产生写入；cursor 是上一页末空间 ID。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: 只读存储诊断
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageDiagnostics'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/storage/policy:
+    get:
+      operationId: GetStoragePolicy
+      summary: GetStoragePolicy
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoragePolicy'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: SetStoragePolicy
+      summary: SetStoragePolicy
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoragePolicy'
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoragePolicy'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/storage/connections:
+    get:
+      operationId: ListSiteStorageConnections
+      summary: List configured site storage connections
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Deployment connections visible to administrators
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageConnectionList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/connections:
+    get:
+      operationId: ListStorageConnections
+      summary: ListStorageConnections
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageConnectionList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateStorageConnection
+      summary: CreateStorageConnection
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageConnectionRequest'
+      responses:
+        '201':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageConnection'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/storage/connections:
+    parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: ListOrgStorageConnections
+      summary: ListOrgStorageConnections
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageConnectionList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateOrgStorageConnection
+      summary: CreateOrgStorageConnection
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageConnectionRequest'
+      responses:
+        '201':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageConnection'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/connections/{connectionId}:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    patch:
+      operationId: SetStorageConnectionState
+      summary: SetStorageConnectionState
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageStateRequest'
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageConnection'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/connections/{connectionId}/spaces:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: ListStorageConnectionSpaces
+      summary: ListStorageConnectionSpaces
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSpaceList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateStorageSpace
+      summary: CreateStorageSpace
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageSpaceRequest'
+      responses:
+        '201':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSpace'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/connections/{connectionId}/authorize:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: AuthorizeStorage
+      summary: AuthorizeStorage
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageAuthorizationRequest'
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageConnection'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/connections/{connectionId}/check:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: CheckStorageConnection
+      summary: Verify the connection and its managed spaces
+      description: Read checks never write; explicit write checks persist and clean exact probe objects. Requires connection ownership or site administrator access.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - write_check
+                - expected_generation
+              properties:
+                write_check:
+                  type: boolean
+                expected_generation:
+                  type: integer
+                  format: int64
+                  minimum: 0
+      responses:
+        '200':
+          description: Verified connection metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageConnection'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/connections/{connectionId}/revoke:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: RevokeStorageAuthorization
+      summary: RevokeStorageAuthorization
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageStateRequest'
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageConnection'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/spaces/{spaceId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    patch:
+      operationId: SetStorageSpaceState
+      summary: SetStorageSpaceState
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageStateRequest'
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSpace'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/storage:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: GetProjectStorage
+      summary: GetProjectStorage
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSpace'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: BindProjectStorage
+      summary: BindProjectStorage
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageBindingRequest'
+      responses:
+        '204':
+          description: 操作结果
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/storage/migrations:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: MigrateProjectStorage
+      summary: MigrateProjectStorage
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageBindingRequest'
+      responses:
+        '202':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTask'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/storage/tasks:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: ListStorageTasks
+      summary: ListStorageTasks
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTaskList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateStorageIntent
+      summary: CreateStorageIntent
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageIntent'
+      responses:
+        '202':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTask'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/storage/tasks/{taskId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: GetStorageTask
+      summary: GetStorageTask
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTask'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/storage/tasks/{taskId}/content:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    put:
+      operationId: ReceiveStorageContent
+      summary: ReceiveStorageContent
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '202':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTask'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/storage/tasks/{taskId}/cancel:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: CancelStorageTask
+      summary: CancelStorageTask
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTask'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/storage/tasks/{taskId}/retry:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: RetryStorageTask
+      summary: RetryStorageTask
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '202':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTask'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/versions:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: resourceId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: ListSourceVersions
+      summary: ListSourceVersions
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceVersionList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/source-preview:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: resourceId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: PreviewSourceUpdate
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      summary: PreviewSourceUpdate
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceUpdatePreview'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/source-commit:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: resourceId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: CommitSourceUpdate
+      summary: CommitSourceUpdate
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceUpdateCommit'
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTask'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/exports:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: resourceId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: ListExportArtifacts
+      summary: ListExportArtifacts
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportArtifactList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateExportArtifact
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      summary: CreateExportArtifact
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '202':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTask'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/exports/{artifactId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: artifactId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    delete:
+      operationId: DeleteExportArtifact
+      summary: DeleteExportArtifact
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 操作结果
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/exports/{artifactId}/download:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: artifactId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: DownloadExportArtifact
+      summary: DownloadExportArtifact
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/exports/{artifactId}/rebuild:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: artifactId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: RebuildExportArtifact
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      summary: RebuildExportArtifact
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      responses:
+        '202':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageTask'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /credentials:
     get:
       operationId: ListUserCredentials
@@ -967,6 +2007,7 @@ paths:
     put:
       operationId: UpdateResource
       summary: 更新资源文件
+      description: 先确认源文件差异预览，再提交预览任务 ID 及源、译文预期代次。缺少条件或代次过期返回冲突；提交使用预览中已经验证的候选文件。
       security:
         - bearerAuth: []
       requestBody:
@@ -977,7 +2018,21 @@ paths:
               type: object
               required:
                 - file
+                - preview_task_id
+                - expected_source_generation
+                - expected_translation_generation
               properties:
+                preview_task_id:
+                  type: integer
+                  description: 已确认的源文件差异预览任务 ID；提交使用该任务持久保存的候选内容。
+                expected_source_generation:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                expected_translation_generation:
+                  type: integer
+                  format: int64
+                  minimum: 0
                 file:
                   type: string
                   format: binary
@@ -994,8 +2049,9 @@ paths:
       operationId: IncrementalUpdateResource
       summary: 增量更新资源文件
       description: |
-        上传新版本文件，系统自动对比段落变化：
-        - 相同源文本的段落保留已有译文
+        先创建源文件差异预览，再携带预览任务及源、译文预期代次确认。缺少条件或代次过期返回冲突。
+        系统按已确认的候选文件对比段落变化：
+        - 唯一且无歧义的相同源文本段落保留已有译文
         - 源文本变化的段落重置为待翻译
         - 新增段落状态为待翻译
         - 不再存在的段落将被删除
@@ -1009,7 +2065,21 @@ paths:
               type: object
               required:
                 - file
+                - preview_task_id
+                - expected_source_generation
+                - expected_translation_generation
               properties:
+                preview_task_id:
+                  type: integer
+                  description: 已确认的源文件差异预览任务 ID；提交使用该任务持久保存的候选内容。
+                expected_source_generation:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                expected_translation_generation:
+                  type: integer
+                  format: int64
+                  minimum: 0
                 file:
                   type: string
                   format: binary
@@ -2112,11 +3182,12 @@ paths:
   /operations:
     get:
       operationId: ListOperations
-      summary: 按项目权限发现翻译与术语同步任务
+      summary: 按项目权限发现翻译、术语同步与存储任务
       description: |
-        只读投影，不新增通用任务实体。默认返回两类活动任务，组织成员可看到同项目其他成员的任务。
+        只读投影，不新增通用任务实体。默认返回三类活动任务，组织成员可看到同项目其他成员的任务。
         未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限。
         state 默认 active，与 status 互斥；同步没有 paused。trigger_type 仅允许显式 task_type=translation。
+        存储任务的 waiting_retry、needs_action 属于活动状态；其实际可控制动作以存储任务详情为准。
         updated_at 区间为 [updated_from, updated_before)，按 updated_at DESC, task_type DESC, 整数 task_id DESC 排序。
         独立版本化游标绑定规范化筛选（不含 limit）；不可使用 Job 游标。每页重新鉴权，不提供跨请求快照。
         刷新从第一页开始并处理全部续页，客户端以 (task_type,task_id) 去重，单页缺失不代表任务结束。
@@ -2143,6 +3214,8 @@ paths:
               - pending
               - running
               - paused
+              - waiting_retry
+              - needs_action
               - completed
               - failed
               - cancelled
@@ -2179,11 +3252,12 @@ paths:
   /operations/summary:
     get:
       operationId: GetOperationsSummary
-      summary: 获取两类任务的独立数量摘要
+      summary: 获取三类任务的独立数量摘要
       description: |
         只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。
         未知、重复、空或非法参数返回 400。权限与列表一致，无权项目返回零。
-        by_type 固定返回两类，未选类型计零，同步 paused 恒为零；total 为逐字段求和。
+        by_type 固定返回三类，未选类型计零，同步和存储 paused 恒为零；total 为逐字段求和。
+        waiting_retry、needs_action 分开统计，翻译与术语同步的这两个计数恒为零。
         recent_failed 只数当前 failed 且 updated_at 位于 [recent_failed_since,as_of) 的记录，窗口为连续七天。
         活动数不受时间限制；不受分页影响，不代表历史失败事件次数。
       security:
@@ -3245,6 +4319,7 @@ components:
         enum:
           - translation
           - glossary_sync
+          - storage
   responses:
     Problem:
       description: 错误响应
@@ -3653,6 +4728,17 @@ components:
         - created_at
         - updated_at
       properties:
+        current_source_revision_id:
+          type: integer
+          nullable: true
+        source_generation:
+          type: integer
+          format: int64
+          minimum: 0
+        translation_generation:
+          type: integer
+          format: int64
+          minimum: 0
         id:
           type: integer
         path:
@@ -3721,9 +4807,8 @@ components:
           $ref: '#/components/schemas/ResourceTreeNode'
     ResourceSegmentUpdateRequest:
       type: object
+      description: 文件原文只读；提交 source_text 返回 source_read_only，原文变更须创建新源版本。
       properties:
-        source_text:
-          type: string
         target_text:
           type: string
         comment:
@@ -3914,6 +4999,7 @@ components:
             $ref: '#/components/schemas/ResourceSegmentGroup'
     SegmentTranslationPreviewRequest:
       type: object
+      description: 使用当前文件原文预览；提交 source_text 返回 source_read_only。
       required:
         - execution_plan_id
       properties:
@@ -3921,11 +5007,6 @@ components:
           type: integer
           minimum: 1
           description: 执行计划模板 ID；计划中必须至少包含一个 translate 轮次
-        source_text:
-          type: string
-          description: |
-            可选：编辑器中尚未保存的原文。省略时使用数据库原文；传入时必须为非空白文本，
-            将作为本次预览的原文（模拟一次原文变更后执行计划）。
       additionalProperties: false
     SegmentTranslationPreviewResponse:
       type: object
@@ -5069,6 +6150,17 @@ components:
         - target_lang
         - glossary_enabled
       properties:
+        storage_space_id:
+          type: integer
+          nullable: true
+        storage_generation:
+          type: integer
+          format: int64
+        output_generation:
+          type: integer
+          format: int64
+        storage_state:
+          type: string
         id:
           type: integer
         name:
@@ -5108,6 +6200,9 @@ components:
       required:
         - name
       properties:
+        storage_space_id:
+          type: integer
+          minimum: 1
         name:
           type: string
         config:
@@ -6271,6 +7366,576 @@ components:
           type: integer
           description: 占用该资源的未完成任务 ID
       additionalProperties: false
+    StorageSpaceDiagnostics:
+      type: object
+      required:
+        - id
+        - reserved_bytes
+        - candidate_bytes
+        - live_bytes
+        - pending_delete_bytes
+        - unchecked_objects
+        - missing_objects
+        - corrupt_objects
+      properties:
+        id:
+          type: integer
+        reserved_bytes:
+          type: integer
+          format: int64
+        candidate_bytes:
+          type: integer
+          format: int64
+        live_bytes:
+          type: integer
+          format: int64
+        pending_delete_bytes:
+          type: integer
+          format: int64
+        unchecked_objects:
+          type: integer
+        missing_objects:
+          type: integer
+        corrupt_objects:
+          type: integer
+        last_checked_at:
+          description: 最近一次持久化的完整字节校验时间，不代表最近一次失败观测。
+          type: string
+          format: date-time
+    StorageDiagnostics:
+      type: object
+      required:
+        - spaces
+        - temporary_bytes
+        - recovery_backlog
+        - blocked_cleanup_by_code
+        - migrations_by_phase
+      properties:
+        spaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageSpaceDiagnostics'
+        next_cursor:
+          type: integer
+        temporary_bytes:
+          type: integer
+          format: int64
+        oldest_intent_at:
+          type: string
+          format: date-time
+        recovery_backlog:
+          type: integer
+        blocked_cleanup_by_code:
+          type: object
+          additionalProperties:
+            type: integer
+        migrations_by_phase:
+          type: object
+          additionalProperties:
+            type: integer
+        latest_backup:
+          type: object
+          required:
+            - id
+            - status
+            - created_at
+          properties:
+            id:
+              type: integer
+            status:
+              type: string
+              enum:
+                - complete
+                - metadata_only
+                - incomplete
+            created_at:
+              type: string
+              format: date-time
+    StoragePolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+        - default_choice
+        - generation
+        - logical_limit_bytes
+      properties:
+        mode:
+          type: string
+          enum:
+            - site_only
+            - both
+            - user_required
+        default_choice:
+          type: string
+          enum:
+            - site
+            - user
+        generation:
+          type: integer
+          format: int64
+          minimum: 0
+        logical_limit_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+    StorageConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - scope
+        - owner_id
+        - driver
+        - endpoint
+        - region
+        - status
+        - health
+        - has_auth
+        - management_generation
+        - auth_generation
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        scope:
+          type: string
+        owner_id:
+          type: integer
+        driver:
+          type: string
+        endpoint:
+          type: string
+        region:
+          type: string
+        path_style:
+          type: boolean
+        status:
+          type: string
+        health:
+          type: string
+        has_auth:
+          type: boolean
+        management_generation:
+          type: integer
+          format: int64
+        auth_generation:
+          type: integer
+          format: int64
+        checked_at:
+          type: string
+          format: date-time
+          nullable: true
+    StorageConnectionList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageConnection'
+    StorageConnectionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - endpoint
+        - region
+      properties:
+        name:
+          type: string
+        scope:
+          type: string
+          enum:
+            - user
+            - org
+        owner_id:
+          type: integer
+        endpoint:
+          type: string
+          format: uri
+        region:
+          type: string
+        path_style:
+          type: boolean
+    StorageStateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - expected_generation
+      properties:
+        status:
+          type: string
+          enum:
+            - enabled
+            - disabled
+            - active
+            - read_only
+        expected_generation:
+          type: integer
+          format: int64
+          minimum: 0
+    StorageSpace:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - connection_id
+        - name
+        - status
+        - verified
+        - management_generation
+        - capacity_bytes
+        - reserved_bytes
+        - candidate_bytes
+        - live_bytes
+        - pending_delete_bytes
+      properties:
+        id:
+          type: integer
+        connection_id:
+          type: integer
+        name:
+          type: string
+        scope:
+          type: string
+        owner_id:
+          type: integer
+        bucket:
+          type: string
+        prefix:
+          type: string
+        status:
+          type: string
+        verified:
+          type: boolean
+        versioned:
+          type: boolean
+        management_generation:
+          type: integer
+          format: int64
+        capacity_bytes:
+          type: integer
+          format: int64
+        reserved_bytes:
+          type: integer
+          format: int64
+        candidate_bytes:
+          type: integer
+          format: int64
+        live_bytes:
+          type: integer
+          format: int64
+        pending_delete_bytes:
+          type: integer
+          format: int64
+    StorageSpaceList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageSpace'
+    StorageSpaceRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - bucket
+        - prefix
+        - capacity_bytes
+      properties:
+        name:
+          type: string
+        bucket:
+          type: string
+        prefix:
+          type: string
+        capacity_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+    StorageAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - access_key_id
+        - secret_access_key
+        - expected_management_generation
+        - write_check
+      properties:
+        access_key_id:
+          type: string
+          writeOnly: true
+        secret_access_key:
+          type: string
+          writeOnly: true
+        session_token:
+          type: string
+          writeOnly: true
+        write_check:
+          type: boolean
+        expected_management_generation:
+          type: integer
+          format: int64
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+    StorageBindingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - space_id
+        - expected_generation
+      properties:
+        space_id:
+          type: integer
+          minimum: 1
+        expected_generation:
+          type: integer
+          format: int64
+          minimum: 0
+        idempotency_key:
+          type: string
+          maxLength: 200
+    StorageTask:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - operation_id
+        - kind
+        - status
+        - phase
+        - cleanup_status
+        - allowed_actions
+      properties:
+        id:
+          type: integer
+        operation_id:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - waiting_retry
+            - needs_action
+            - completed
+            - failed
+            - cancelled
+        phase:
+          type: string
+        cleanup_status:
+          type: string
+          enum:
+            - cleanup_pending
+            - running
+            - blocked
+            - done
+        error_code:
+          type: string
+        next_retry_at:
+          type: string
+          format: date-time
+          nullable: true
+        allowed_actions:
+          type: array
+          items:
+            type: string
+        result_resource_id:
+          type: integer
+          nullable: true
+        result_revision_id:
+          type: integer
+          nullable: true
+        result_artifact_id:
+          type: integer
+          nullable: true
+    StorageTaskList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTask'
+    StorageIntent:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - size
+        - idempotency_key
+        - storage_generation
+      properties:
+        kind:
+          type: string
+          enum:
+            - upload
+            - source_update
+            - repair
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 200
+        path:
+          type: string
+        resource_id:
+          type: integer
+        source_revision_id:
+          type: integer
+        target_space_id:
+          type: integer
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+        source_generation:
+          type: integer
+          format: int64
+          minimum: 0
+        translation_generation:
+          type: integer
+          format: int64
+          minimum: 0
+        storage_generation:
+          type: integer
+          format: int64
+          minimum: 0
+        location_generation:
+          type: integer
+          format: int64
+          minimum: 0
+    SourceVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - verification_state
+        - format
+        - parser_version
+        - current
+        - location_generation
+        - health
+      properties:
+        id:
+          type: integer
+        verification_state:
+          type: string
+          enum:
+            - verified
+            - legacy_unverified
+        format:
+          type: string
+        parser_version:
+          type: string
+        current:
+          type: boolean
+        size:
+          type: integer
+          format: int64
+          nullable: true
+        sha256:
+          type: string
+          nullable: true
+        location_generation:
+          type: integer
+          format: int64
+        health:
+          type: string
+    SourceVersionList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceVersion'
+    SourceUpdatePreview:
+      type: object
+      required:
+        - task_id
+        - source_generation
+        - translation_generation
+        - stats
+      properties:
+        task_id:
+          type: integer
+        source_generation:
+          type: integer
+          format: int64
+        translation_generation:
+          type: integer
+          format: int64
+        stats:
+          type: object
+          additionalProperties:
+            type: integer
+    SourceUpdateCommit:
+      type: object
+      additionalProperties: false
+      required:
+        - task_id
+        - expected_source_generation
+        - expected_translation_generation
+      properties:
+        task_id:
+          type: integer
+        expected_source_generation:
+          type: integer
+          format: int64
+        expected_translation_generation:
+          type: integer
+          format: int64
+    ExportArtifact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - source_revision_id
+        - status
+        - rebuildable
+        - renderer_version
+        - filename
+      properties:
+        id:
+          type: integer
+        source_revision_id:
+          type: integer
+        status:
+          type: string
+          enum:
+            - pending
+            - ready
+            - failed
+            - deleted
+        rebuildable:
+          type: boolean
+        renderer_version:
+          type: string
+        filename:
+          type: string
+    ExportArtifactList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExportArtifact'
     Credential:
       type: object
       required:
@@ -6758,6 +8423,8 @@ components:
             - pending
             - running
             - paused
+            - waiting_retry
+            - needs_action
             - completed
             - failed
             - cancelled
@@ -6795,6 +8462,15 @@ components:
               type: string
               enum:
                 - translation
+            status:
+              type: string
+              enum:
+                - pending
+                - running
+                - paused
+                - completed
+                - failed
+                - cancelled
             trigger_type:
               type: string
               enum:
@@ -6844,15 +8520,70 @@ components:
                 total_segments:
                   type: integer
                   minimum: 0
+    StorageOperation:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required:
+            - task_type
+            - storage_kind
+            - phase
+            - cleanup_status
+            - error_code
+            - next_retry_at
+          properties:
+            task_type:
+              type: string
+              enum:
+                - storage
+            storage_kind:
+              type: string
+            status:
+              type: string
+              enum:
+                - pending
+                - running
+                - waiting_retry
+                - needs_action
+                - completed
+                - failed
+                - cancelled
+            phase:
+              type: string
+            cleanup_status:
+              type: string
+              enum:
+                - cleanup_pending
+                - running
+                - blocked
+                - done
+            error_code:
+              type: string
+              description: 脱敏的稳定领域错误码；空字符串表示无错误。
+            next_retry_at:
+              type: string
+              format: date-time
+              nullable: true
+            supported_actions:
+              type: array
+              description: 类型能力；当前阶段能否控制以存储任务详情的 allowed_actions 为准。
+              items:
+                type: string
+                enum:
+                  - view
+                  - cancel
+                  - retry
     OperationSummary:
       oneOf:
         - $ref: '#/components/schemas/TranslationOperation'
         - $ref: '#/components/schemas/GlossarySyncOperation'
+        - $ref: '#/components/schemas/StorageOperation'
       discriminator:
         propertyName: task_type
         mapping:
           translation: '#/components/schemas/TranslationOperation'
           glossary_sync: '#/components/schemas/GlossarySyncOperation'
+          storage: '#/components/schemas/StorageOperation'
     OperationListResponse:
       type: object
       required:
@@ -6871,6 +8602,8 @@ components:
         - running
         - paused
         - recent_failed
+        - waiting_retry
+        - needs_action
       properties:
         pending:
           type: integer
@@ -6882,6 +8615,12 @@ components:
           type: integer
           minimum: 0
         recent_failed:
+          type: integer
+          minimum: 0
+        waiting_retry:
+          type: integer
+          minimum: 0
+        needs_action:
           type: integer
           minimum: 0
     OperationsSummaryResponse:
@@ -6899,10 +8638,13 @@ components:
           required:
             - translation
             - glossary_sync
+            - storage
           properties:
             translation:
               $ref: '#/components/schemas/OperationCounts'
             glossary_sync:
+              $ref: '#/components/schemas/OperationCounts'
+            storage:
               $ref: '#/components/schemas/OperationCounts'
         recent_failed_since:
           type: string
