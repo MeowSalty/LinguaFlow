@@ -32,9 +32,9 @@ func NewInitializationService(client *ent.Client) *InitializationService {
 	return &InitializationService{client: client}
 }
 
-// IsEmpty checks whether startup may prepare dependencies for a new instance.
-// This is read-only and does not reserve initialization; Initialize rechecks
-// business data inside its database-protected transaction before committing.
+// IsEmpty 检查启动是否可为新实例准备依赖。
+// 该检查只读，不预留初始化；Initialize 在提交前
+// 会在其受数据库保护的事务内重新检查业务数据。
 func (s *InitializationService) IsEmpty(ctx context.Context) (bool, error) {
 	exists, err := s.client.InstanceInitialization.Query().Exist(ctx)
 	if err != nil || exists {
@@ -60,8 +60,8 @@ func instanceMode(mode string) (instanceinitialization.Mode, error) {
 	}
 }
 
-// Initialize only applies bootstrap to an empty database. Existing instances are
-// validated without modifying identities or policy, even when no admins remain.
+// Initialize 仅在空数据库上应用 bootstrap。已存在的实例
+// 会被校验但不修改身份或策略，即使已无任何管理员。
 func (s *InitializationService) Initialize(ctx context.Context, mode string, input config.BootstrapInput) (*ent.User, error) {
 	wantMode, err := instanceMode(mode)
 	if err != nil {
@@ -99,7 +99,7 @@ func (s *InitializationService) Initialize(ctx context.Context, mode string, inp
 		}
 	}
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
-		// First write: unique ID serializes concurrent initializers on both engines.
+		// 首次写入：唯一 ID 在两个引擎上串行化并发初始化者。
 		if _, err := tx.InstanceInitialization.Create().SetID(1).SetVersion(InitializationVersion).SetMode(wantMode).Save(ctx); err != nil {
 			if ent.IsConstraintError(err) {
 				return errInitializationWonElsewhere
@@ -180,9 +180,24 @@ func (s *InitializationService) Validate(ctx context.Context, mode string) (*ent
 	return local, nil
 }
 
-// Keep this inventory in sync with ent/migrate.Tables; its completeness is tested.
+// 保持此清单与 ent/migrate.Tables 同步；其完整性有测试保障。
 func initializationBusinessChecks(c *ent.Client) map[string]func(context.Context) (bool, error) {
 	return map[string]func(context.Context) (bool, error){
+		"storage_connections":     c.StorageConnection.Query().Exist,
+		"storage_spaces":          c.StorageSpace.Query().Exist,
+		"storage_auth_versions":   c.StorageAuthVersion.Query().Exist,
+		"blobs":                   c.Blob.Query().Exist,
+		"blob_locations":          c.BlobLocation.Query().Exist,
+		"source_revisions":        c.SourceRevision.Query().Exist,
+		"storage_tasks":           c.StorageTask.Query().Exist,
+		"storage_writes":          c.StorageWrite.Query().Exist,
+		"storage_reservations":    c.StorageReservation.Query().Exist,
+		"deletion_entries":        c.DeletionEntry.Query().Exist,
+		"backup_pins":             c.BackupPin.Query().Exist,
+		"export_artifacts":        c.ExportArtifact.Query().Exist,
+		"storage_migration_items": c.StorageMigrationItem.Query().Exist,
+		"storage_backups":         c.StorageBackup.Query().Exist,
+
 		"activity_logs": c.ActivityLog.Query().Exist, "backends": c.Backend.Query().Exist,
 		"credentials": c.Credential.Query().Exist, "credential_versions": c.CredentialVersion.Query().Exist,
 		"credential_job_references":  c.CredentialJobReference.Query().Exist,
@@ -201,8 +216,8 @@ func initializationBusinessChecks(c *ent.Client) map[string]func(context.Context
 	}
 }
 
-// MaintainAdministrator is an explicit deployment-side action. It cannot claim
-// an uninitialized instance or alter its registration policy.
+// MaintainAdministrator 是显式的部署侧操作。它不能认领
+// 未初始化的实例，也不能更改其注册策略。
 func (s *InitializationService) MaintainAdministrator(ctx context.Context, input AdminCreateUserInput, recoverExisting bool) (*ent.User, error) {
 	username, email := normalizeIdentity(input.Username), normalizeIdentity(input.Email)
 	if username == "" || (!recoverExisting && !strings.Contains(email, "@")) {
@@ -217,7 +232,7 @@ func (s *InitializationService) MaintainAdministrator(ctx context.Context, input
 	}
 	var result *ent.User
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
-		// Serializes maintenance actions and establishes SQLite's write snapshot.
+		// 串行化维护操作，并建立 SQLite 的写快照。
 		if _, err := tx.InstanceInitialization.Update().Where(instanceinitialization.IDEQ(1)).SetUpdatedAt(timeutil.NowUTC()).Save(ctx); err != nil {
 			return err
 		}

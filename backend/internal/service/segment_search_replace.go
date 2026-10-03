@@ -233,6 +233,10 @@ func (s *SegmentService) ApplySearchReplace(ctx context.Context, actorUserID, pr
 	if err != nil {
 		return nil, fmt.Errorf("search-replace: begin transaction: %w", err)
 	}
+	defer tx.Rollback()
+	if err := AdvanceTranslationGeneration(ctx, tx.Client(), resourceID, res.SourceGeneration); err != nil {
+		return nil, err
+	}
 
 	// 候选集：segment_ids 非空则限定，否则资源全部段。apply 不应用 status/quality 过滤
 	//（这些仅服务预览展示；应用范围由 segment_ids 或全部段决定）。
@@ -324,6 +328,7 @@ func (s *SegmentService) ApplySearchReplace(ctx context.Context, actorUserID, pr
 			SetSegmentID(seg.ID).
 			SetResourceID(resourceID).
 			SetOperationID(operationID).
+			SetSourceGeneration(res.SourceGeneration).
 			SetKind(segmentrevision.KindReplace).
 			SetNillableBeforeTarget(seg.TargetText).
 			SetNillableAfterTarget(&newTargetCopy).
@@ -370,7 +375,8 @@ func (s *SegmentService) ApplySearchReplace(ctx context.Context, actorUserID, pr
 // 拒绝，用户就会被永久锁在当前状态里出不来。历史里的非法译文由导出预检与审校界面
 // 的 xml_tag_mismatch 负责暴露。
 func (s *SegmentService) UndoSearchReplace(ctx context.Context, actorUserID, projectID, resourceID int, operationID string) (*SearchReplaceUndoResult, error) {
-	if _, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, true); err != nil {
+	res, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, true)
+	if err != nil {
 		return nil, err
 	}
 
@@ -385,6 +391,11 @@ func (s *SegmentService) UndoSearchReplace(ctx context.Context, actorUserID, pro
 	if len(revs) == 0 {
 		return nil, ErrRevisionNotFound
 	}
+	for _, rev := range revs {
+		if rev.SourceGeneration != res.SourceGeneration {
+			return nil, ErrSourceRevisionConflict
+		}
+	}
 
 	segIDs := make([]int, 0, len(revs))
 	for _, rev := range revs {
@@ -394,6 +405,10 @@ func (s *SegmentService) UndoSearchReplace(ctx context.Context, actorUserID, pro
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("undo: begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	if err := AdvanceTranslationGeneration(ctx, tx.Client(), resourceID, res.SourceGeneration); err != nil {
+		return nil, err
 	}
 
 	segs, err := tx.Segment.Query().Where(segment.IDIn(segIDs...)).WithReviewedBy().All(ctx)
@@ -450,6 +465,7 @@ func (s *SegmentService) UndoSearchReplace(ctx context.Context, actorUserID, pro
 			SetSegmentID(seg.ID).
 			SetResourceID(resourceID).
 			SetOperationID(undoOperationID).
+			SetSourceGeneration(res.SourceGeneration).
 			SetKind(segmentrevision.KindReverse).
 			SetNillableBeforeTarget(seg.TargetText).
 			SetNillableAfterTarget(rev.BeforeTarget).
@@ -572,8 +588,8 @@ func equalIssues(a, b []qa.QualityIssue) bool {
 		if !ok || !equalIssueDecisionTime(ia.DecidedAt, ib.DecidedAt) {
 			return false
 		}
-		// A decision is the same instant after a timezone/JSON round trip.
-		// Preserve strict comparison of every other field.
+		// 经过时区/JSON 往返后，裁决时间（DecidedAt）仍是同一时刻；
+		// 其余所有字段保持严格比较。
 		ia.DecidedAt, ib.DecidedAt = nil, nil
 		if !reflect.DeepEqual(ia, ib) {
 			return false

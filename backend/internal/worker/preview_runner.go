@@ -21,17 +21,16 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
-// PreviewRunner executes a single segment translation preview in-memory
-// without persisting any results to the database (except UsageRecord via the
-// caller). It reuses the same EngineFactory as JobRunner for identical
-// execution configuration.
+// PreviewRunner 在内存中执行单段翻译预览，不向数据库持久化任何结果
+// （由调用方负责的 UsageRecord 除外）。它复用与 JobRunner 相同的
+// EngineFactory，保证执行配置完全一致。
 type PreviewRunner struct {
 	logger  *slog.Logger
 	client  *ent.Client
 	factory *EngineFactory
 }
 
-// NewPreviewRunner creates a PreviewRunner.
+// NewPreviewRunner 创建 PreviewRunner。
 func NewPreviewRunner(logger *slog.Logger, client *ent.Client, limiterPool *backend.LimiterPool, httpClients ...telemetry.HTTPClientFactory) *PreviewRunner {
 	if logger == nil {
 		logger = slog.Default()
@@ -43,18 +42,17 @@ func NewPreviewRunner(logger *slog.Logger, client *ent.Client, limiterPool *back
 	}
 }
 
-// RunPreview executes a single segment translation preview.
+// RunPreview 执行单段翻译预览。
 //
-// Parameters:
-//   - snapshot: the validated JobExecutionSnapshot (must have at least one translate round)
-//   - projectRow: the project (for glossary and language config)
-//   - resourceRow: the resource (for format detection)
-//   - allSegments: all segments of the resource, ordered by segment_index
-//   - targetSegmentIdx: the 0-based index within allSegments for the target segment
-//   - sourceOverride: optional source text to use instead of the database value
+// 参数：
+//   - snapshot：已校验的 JobExecutionSnapshot（必须至少含一个 translate 轮次）
+//   - projectRow：项目（用于术语表与语言配置）
+//   - resourceRow：资源（用于格式检测）
+//   - allSegments：资源的全部分段，按 segment_index 排序
+//   - targetSegmentIdx：目标分段在 allSegments 中的 0 起始下标
+//   - sourceOverride：可选的 source 文本，用于替代数据库中的值
 //
-// The caller must provide the in-memory resource snapshot. This function never
-// reads from the database itself.
+// 调用方必须提供内存中的资源快照。本函数自身从不读取数据库。
 func (r *PreviewRunner) RunPreview(
 	ctx context.Context,
 	snapshot *service.JobExecutionSnapshot,
@@ -86,7 +84,7 @@ func (r *PreviewRunner) RunPreview(
 	targetSeg := allSegments[targetSegmentIdx]
 	previewSource := targetSeg.SourceText
 	if sourceOverride != "" {
-		previewSource = sourceOverride
+		return nil, service.ErrSourceReadOnly
 	}
 	baseline := &service.PreviewBaseline{
 		ResourceID:    resourceRow.ID,
@@ -116,16 +114,16 @@ func (r *PreviewRunner) RunPreview(
 	}
 	defer func() { _ = eng.Close() }()
 
-	// Build the in-memory Document from the full resource snapshot.
-	// All segments are included as context; only the target translates.
+	// 基于完整的资源快照构建内存 Document。
+	// 全部分段都作为上下文纳入；只有目标分段参与翻译。
 	inputs := r.buildSegmentInputs(allSegments, targetSegmentIdx, sourceOverride)
 	doc := pipeline.BuildDocumentFromSegments(inputs, snapshot.SourceLang, snapshot.TargetLang, resourceRow.Format)
 
-	// Mark only the target segment for translation.
+	// 仅把目标分段标记为待翻译。
 	targetDocIdx := -1
 	for i := range doc.Segments {
-		// The document segments are built from allSegments in order, so the
-		// target segment is at position targetSegmentIdx.
+		// Document 的分段按 allSegments 顺序构建，因此目标分段
+		// 正位于 targetSegmentIdx 处。
 		if i == targetSegmentIdx {
 			targetDocIdx = i
 			doc.Segments[i].Translate = true
@@ -137,7 +135,7 @@ func (r *PreviewRunner) RunPreview(
 		return nil, fmt.Errorf("preview: target segment not found in document at index %d", targetSegmentIdx)
 	}
 
-	// Determine the last translate round index.
+	// 确定最后一个 translate 轮次的下标。
 	lastTranslateRoundIdx := -1
 	firstTranslateRoundIdx := -1
 	for i := range snapshot.Rounds {
@@ -157,7 +155,7 @@ func (r *PreviewRunner) RunPreview(
 	var warnings []string
 	var roundSummaries []service.PreviewRoundSummary
 
-	// Round loop.
+	// 轮次循环。
 	for roundIdx := range snapshot.Rounds {
 		if ctx.Err() != nil {
 			warnings = append(warnings, "preview cancelled during round execution")
@@ -167,9 +165,8 @@ func (r *PreviewRunner) RunPreview(
 		round := snapshot.Rounds[roundIdx]
 		roundStart := time.Now()
 
-		// For translate rounds, build a fresh document from the current
-		// in-memory state so that adjudicate/semantic QA results are visible
-		// to subsequent rounds, emulating JobRunner's "reload from DB" pattern.
+		// 对 translate 轮次，基于当前内存状态重建全新 Document，让后续轮次
+		// 能看到 adjudicate/语义 QA 的结果，模拟 JobRunner 的“从 DB 重载”模式。
 		if roundIdx > 0 {
 			inputs := r.buildSegmentInputsFromDoc(doc)
 			doc = pipeline.BuildDocumentFromSegments(inputs, snapshot.SourceLang, snapshot.TargetLang, resourceRow.Format)
@@ -214,7 +211,7 @@ func (r *PreviewRunner) RunPreview(
 			segmentIndexes = []int{targetDocIdx}
 		}
 
-		// Build the batch handler for this round.
+		// 为本轮构建批次处理器。
 		var batchHandler func(ctx context.Context, batchResult pipeline.BatchResult) error
 		switch round.Mode {
 		case "translate":
@@ -269,7 +266,7 @@ func (r *PreviewRunner) RunPreview(
 				warnings = append(warnings, fmt.Sprintf("round %d (%s) failed: %s", roundIdx, round.Mode, roundErr))
 				continue
 			}
-			// Translate/adjudicate failures are terminal.
+			// translate/adjudicate 轮失败即为终态。
 			metrics := CollectMeterMetrics(eng)
 			return &service.PreviewResult{
 				Status:       "failed",
@@ -306,7 +303,7 @@ func (r *PreviewRunner) RunPreview(
 		// 单段场景下集合退化为空或 {targetDocIdx}；第二个同模式轮据此跳过已 resolved 的目标。
 		engine.AccumulateResolved(resolvedByMode, round.Mode, result.Resolved)
 
-		// Run duplicate-source-divergence check after the last translate round.
+		// 在最后一个 translate 轮次之后执行同文异译检查。
 		if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
 			divergenceIssues := r.runDuplicateSourceDivergence(doc, targetDocIdx)
 			if len(divergenceIssues) > 0 {
@@ -317,10 +314,10 @@ func (r *PreviewRunner) RunPreview(
 		}
 	}
 
-	// Collect metering metrics.
+	// 收集计量指标。
 	metrics := CollectMeterMetrics(eng)
 
-	// Build the final result.
+	// 构建最终结果。
 	target := doc.Segments[targetDocIdx]
 	targetText := target.Target
 	finalIssues := target.Issues
@@ -376,7 +373,7 @@ func (r *PreviewRunner) runDuplicateSourceDivergence(doc *pipeline.Document, tar
 	inputs := make([]qa.CheckInput, 0, len(doc.Segments))
 	for i, seg := range doc.Segments {
 		inputs = append(inputs, qa.CheckInput{
-			Index:      i, // doc array index; matches targetDocIdx filter below
+			Index:      i, // doc 数组下标；与下方的 targetDocIdx 过滤一致
 			SourceText: seg.Source,
 			TargetText: seg.Target,
 		})
@@ -410,8 +407,8 @@ func (r *PreviewRunner) buildPreviewTM(enabled bool) tm.TranslationMemory {
 	return preview.NoopTM{}
 }
 
-// buildSegmentInputs converts DB segments to pipeline.SegmentInput, applying
-// sourceOverride for the target segment if provided.
+// buildSegmentInputs 把数据库分段转换为 pipeline.SegmentInput，
+// 若提供 sourceOverride 则将其应用于目标分段。
 func (r *PreviewRunner) buildSegmentInputs(rows []*ent.Segment, targetIdx int, sourceOverride string) []pipeline.SegmentInput {
 	inputs := make([]pipeline.SegmentInput, len(rows))
 	for i, row := range rows {
@@ -444,8 +441,8 @@ func (r *PreviewRunner) buildSegmentInputs(rows []*ent.Segment, targetIdx int, s
 	return inputs
 }
 
-// buildSegmentInputsFromDoc converts an in-memory Document back to SegmentInputs
-// for the next round's document rebuild.
+// buildSegmentInputsFromDoc 把内存中的 Document 转回 SegmentInputs，
+// 供下一轮重建文档使用。
 func (r *PreviewRunner) buildSegmentInputsFromDoc(doc *pipeline.Document) []pipeline.SegmentInput {
 	inputs := make([]pipeline.SegmentInput, len(doc.Segments))
 	for i, seg := range doc.Segments {

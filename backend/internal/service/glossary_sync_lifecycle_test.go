@@ -141,6 +141,9 @@ func TestGlossarySyncLifecycleResumeSkipsMissingAndChangedSegments(t *testing.T)
 		t.Fatalf("first batch done=%v err=%v", done, err)
 	}
 	first := f.client.SyncTask.GetX(ctx, task.ID)
+	if generation := f.client.Resource.GetX(ctx, f.resourceID).TranslationGeneration; generation != 1 {
+		t.Fatalf("first batch translation_generation=%d want=1", generation)
+	}
 	if first.NextSegmentIndex != 100 || first.ProcessedSegments != 100 {
 		t.Fatalf("checkpoint=%+v", first)
 	}

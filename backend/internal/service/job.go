@@ -21,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
@@ -272,6 +273,14 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	}
 
 	// 5. 解析任务选择
+	sourceRows, err := s.client.Resource.Query().Where(resource.ProjectIDEQ(projectID)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sources := make(map[int]*ent.Resource, len(sourceRows))
+	for _, row := range sourceRows {
+		sources[row.ID] = row
+	}
 	selection, err := resolveJobSelection(ctx, s.client, projectID, input)
 	if err != nil {
 		return nil, err
@@ -335,9 +344,18 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	for _, resourceID := range resourceIDs {
 		segmentIDs := append([]int(nil), selection[resourceID]...)
 		sort.Ints(segmentIDs)
+		source := sources[resourceID]
+		if source == nil {
+			return nil, ErrSourceRevisionConflict
+		}
+		if err := GuardSourceGeneration(ctx, tx.Client(), resourceID, source.SourceGeneration); err != nil {
+			return nil, err
+		}
 		jr, err := tx.JobResource.Create().
 			SetJobID(created.ID).
 			SetResourceID(resourceID).
+			SetSourceGeneration(source.SourceGeneration).
+			SetNillableSourceRevisionID(source.CurrentSourceRevisionID).
 			SetStatus(JobResourceStatusPending).
 			SetSegmentIds(segmentIDs).
 			SetSegmentCount(len(segmentIDs)).
@@ -376,8 +394,8 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 
 // --- 快照方法 ---
 
-// prepareExecutionSnapshot loads an execution plan and freezes every runtime
-// dependency used by jobs and synchronous previews at request creation time.
+// prepareExecutionSnapshot 加载执行计划，并在请求创建时冻结
+// job 与同步预览所用的每一项运行时依赖。
 func (s *JobService) prepareExecutionSnapshot(
 	ctx context.Context,
 	actorUserID int,
@@ -894,6 +912,7 @@ func NormalizeShrink(v float64) float64 {
 func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 	jobs, err := s.client.Job.Query().
 		Where(job.StatusIn(JobStatusPending, JobStatusRunning)).
+		WithJobResources().
 		Order(ent.Asc(job.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -901,6 +920,24 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 	}
 	ids := make([]int, 0, len(jobs))
 	for _, current := range jobs {
+		var sourceErr error
+		for _, item := range current.Edges.JobResources {
+			if item.Status != JobResourceStatusPending && item.Status != JobResourceStatusRunning {
+				continue
+			}
+			if sourceErr = ValidateJobResourceSource(ctx, s.client, item); sourceErr != nil {
+				break
+			}
+		}
+		if sourceErr != nil {
+			if !errors.Is(sourceErr, ErrSourceRevisionConflict) {
+				return nil, sourceErr
+			}
+			if err := s.client.Job.UpdateOneID(current.ID).SetStatus(JobStatusFailed).SetErrorMessage("source_revision_conflict: source changed before recovery").Exec(ctx); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if err := s.checkExecutionPolicies(ctx, current); err != nil {
 			if updateErr := s.client.Job.UpdateOneID(current.ID).SetStatus(JobStatusFailed).SetErrorMessage("execution recovery refused: " + err.Error()).Exec(ctx); updateErr != nil {
 				return nil, updateErr
@@ -942,7 +979,7 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 			Exec(ctx); err != nil {
 			return nil, err
 		}
-		// Reconstruct the matrix only from a validated current-format snapshot.
+		// 仅从经过校验的当前格式快照重建矩阵。
 		if err := s.backfillJobRoundsForRecovery(ctx, current.ID); err != nil {
 			return nil, err
 		}
@@ -954,8 +991,8 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 	return ids, nil
 }
 
-// backfillJobRoundsForRecovery rebuilds a missing matrix from the complete,
-// validated snapshot only. It never interprets a missing or obsolete format.
+// backfillJobRoundsForRecovery 仅从完整、经过校验的快照重建缺失的矩阵。
+// 它绝不解释缺失或过时的格式。
 func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int) error {
 	count, err := s.client.JobRound.Query().
 		Where(jobround.JobIDEQ(jobID)).
@@ -979,7 +1016,7 @@ func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int
 	if len(resources) == 0 {
 		return nil
 	}
-	// Missing or unsupported snapshots are never interpreted as a default round.
+	// 缺失或不受支持的快照绝不被解释为默认轮次。
 	type backfillRound struct {
 		index int
 		mode  string
@@ -1344,7 +1381,7 @@ func (s *JobService) MarkJobRunning(ctx context.Context, jobID int) error {
 	return nil
 }
 
-// publishEvent publishes a lifecycle event to the Broker. No-op if broker is nil.
+// publishEvent 向 Broker 发布生命周期事件。broker 为 nil 时不执行任何操作。
 func (s *JobService) publishEvent(jobID int, eventType, level, stage, message string) {
 	if s.broker == nil {
 		return
@@ -1411,6 +1448,19 @@ func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobRes
 	defer func() {
 		_ = tx.Rollback()
 	}()
+	current, err := tx.JobResource.Get(ctx, jobResourceID)
+	if err != nil {
+		return err
+	}
+	if current.Status == JobResourceStatusPending || current.Status == JobResourceStatusRunning {
+		if err := guardJobResourceSource(ctx, tx.Client(), current); err != nil {
+			_ = tx.Rollback()
+			if errors.Is(err, ErrSourceRevisionConflict) {
+				return s.MarkJobResourceFailed(ctx, jobID, jobResourceID, err)
+			}
+			return err
+		}
+	}
 	update := tx.JobResource.Update().
 		Where(
 			jobresource.IDEQ(jobResourceID),
@@ -1639,6 +1689,14 @@ func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*en
 			_ = tx.Rollback()
 		}
 	}()
+	for _, item := range current.Edges.JobResources {
+		if item.Status != JobResourceStatusPending && item.Status != JobResourceStatusRunning {
+			continue
+		}
+		if err := guardJobResourceSource(ctx, tx.Client(), item); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.JobResource.Update().
 		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusRunning)).
 		SetStatus(JobResourceStatusPending).
@@ -1711,6 +1769,19 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 	if err := s.checkExecutionPolicies(ctx, current); err != nil {
 		return nil, err
 	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	for _, item := range current.Edges.JobResources {
+		if item.Status != JobResourceStatusFailed && item.Status != JobResourceStatusCancelled {
+			continue
+		}
+		if err := guardJobResourceSource(ctx, tx.Client(), item); err != nil {
+			return nil, err
+		}
+	}
 	// 轮次行 failed|running|skipped→pending（条件更新）：保留 segment_total/
 	// segment_completed 与 job_round_segments 断点关联行；completed 轮不动，重跑时
 	// 按断点跳过。segment_completed 是断点集合的派生缓存（DBReporter 独占写入），
@@ -1722,7 +1793,7 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 	// 按「将被重跑的资源」收窄：failed/cancelled 资源之外的轮次行（如
 	// completed 资源的轮）不重置，避免误翻造成矩阵与资源状态矛盾。
 	// 必须先于下方资源重置执行：过滤依赖重置前的 failed/cancelled 资源状态。
-	if err := s.client.JobRound.Update().
+	if err := tx.JobRound.Update().
 		Where(
 			jobround.HasJobWith(job.IDEQ(current.ID)),
 			jobround.HasJobResourceWith(jobresource.StatusIn(JobResourceStatusFailed, JobResourceStatusCancelled)),
@@ -1732,7 +1803,7 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 		Exec(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.client.JobResource.Update().
+	if err := tx.JobResource.Update().
 		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusIn(JobResourceStatusFailed, JobResourceStatusCancelled)).
 		SetStatus(JobResourceStatusPending).
 		SetSkippedSegments(0).
@@ -1741,18 +1812,22 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 		Exec(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.client.Job.UpdateOneID(current.ID).
+	n, err := tx.Job.Update().Where(job.IDEQ(current.ID), job.StatusEQ(current.Status)).
 		SetStatus(JobStatusPending).
 		SetFailedResources(0).
 		ClearErrorMessage().
-		Exec(ctx); err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrJobNotFound
-		}
+		Save(ctx)
+	if err != nil {
 		return nil, err
 	}
+	if n != 1 {
+		return nil, ErrJobNotRetryable
+	}
 	// 从矩阵重算进度计数器（无条件求和）：reset 保留计数，求和天然一致。
-	if err := recomputeJobProgress(ctx, clientProgressStore{s.client}, current.ID); err != nil {
+	if err := recomputeJobProgress(ctx, txProgressStore{tx}, current.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.GetJob(ctx, actorUserID, current.ID)
@@ -1846,7 +1921,7 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		return err
 	}
 
-	// Publish lifecycle events based on derived status.
+	// 依据派生的状态发布生命周期事件。
 	switch status {
 	case JobStatusCompleted:
 		s.publishEvent(jobID, "job_completed", "info", "", "任务完成")

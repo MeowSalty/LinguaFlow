@@ -55,10 +55,16 @@ func NewReviewService(client *ent.Client, projects *ProjectService) *ReviewServi
 
 // ApproveSegment 审批通过单个段落。
 func (s *ReviewService) ApproveSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input SegmentDecisionInput) (*ent.Segment, error) {
-	if _, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true); err != nil {
+	authorized, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true)
+	if err != nil {
 		return nil, err
 	}
-	current, err := s.client.Segment.Query().Where(segment.IDEQ(segmentID)).Only(ctx)
+	tx, err := s.beginResourceWrite(ctx, authorized.Edges.Resource)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	current, err := tx.Segment.Query().Where(segment.IDEQ(segmentID)).Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return nil, ErrSegmentNotFound
@@ -68,7 +74,7 @@ func (s *ReviewService) ApproveSegment(ctx context.Context, actorUserID, project
 	if current.Status != SegmentStatusTranslated && current.Status != SegmentStatusEdited && current.Status != SegmentStatusRejected {
 		return nil, ErrInvalidReviewState
 	}
-	update := s.client.Segment.UpdateOneID(segmentID).
+	update := tx.Segment.UpdateOneID(segmentID).
 		SetStatus(SegmentStatusApproved).
 		SetReviewedByID(actorUserID)
 	if strings.TrimSpace(input.Comment) == "" {
@@ -83,15 +89,24 @@ func (s *ReviewService) ApproveSegment(ctx context.Context, actorUserID, project
 		}
 		return nil, err
 	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)
 }
 
 // RejectSegment 审批拒绝单个段落。
 func (s *ReviewService) RejectSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input SegmentDecisionInput) (*ent.Segment, error) {
-	if _, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true); err != nil {
+	authorized, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true)
+	if err != nil {
 		return nil, err
 	}
-	current, err := s.client.Segment.Query().Where(segment.IDEQ(segmentID)).Only(ctx)
+	tx, err := s.beginResourceWrite(ctx, authorized.Edges.Resource)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	current, err := tx.Segment.Query().Where(segment.IDEQ(segmentID)).Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return nil, ErrSegmentNotFound
@@ -101,7 +116,7 @@ func (s *ReviewService) RejectSegment(ctx context.Context, actorUserID, projectI
 	if current.Status != SegmentStatusTranslated && current.Status != SegmentStatusEdited {
 		return nil, ErrInvalidReviewState
 	}
-	update := s.client.Segment.UpdateOneID(segmentID).
+	update := tx.Segment.UpdateOneID(segmentID).
 		SetStatus(SegmentStatusRejected).
 		SetReviewedByID(actorUserID)
 	if strings.TrimSpace(input.Comment) == "" {
@@ -114,6 +129,9 @@ func (s *ReviewService) RejectSegment(ctx context.Context, actorUserID, projectI
 		if ent.IsNotFound(err) {
 			return nil, ErrSegmentNotFound
 		}
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)
@@ -132,7 +150,19 @@ func (s *ReviewService) BatchReview(ctx context.Context, actorUserID, projectID,
 		return nil, err
 	}
 	// 验证所有段落属于该资源
-	rows, err := s.client.Segment.Query().
+	res, err := s.client.Resource.Query().Where(resource.IDEQ(resourceID), resource.ProjectIDEQ(projectID)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return nil, ErrResourceNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.beginResourceWrite(ctx, res)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Segment.Query().
 		Where(segment.IDIn(input.SegmentIDs...), segment.ResourceIDEQ(resourceID)).
 		All(ctx)
 	if err != nil {
@@ -160,7 +190,7 @@ func (s *ReviewService) BatchReview(ctx context.Context, actorUserID, projectID,
 				continue
 			}
 		}
-		update := s.client.Segment.UpdateOneID(row.ID).
+		update := tx.Segment.UpdateOneID(row.ID).
 			SetStatus(targetStatus).
 			SetReviewedByID(actorUserID)
 		if comment == "" {
@@ -173,6 +203,9 @@ func (s *ReviewService) BatchReview(ctx context.Context, actorUserID, projectID,
 		}
 	}
 	// 返回更新后的段落
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return s.client.Segment.Query().
 		Where(segment.IDIn(input.SegmentIDs...)).
 		WithReviewedBy().
@@ -186,13 +219,19 @@ func (s *ReviewService) ApproveAllResource(ctx context.Context, actorUserID, pro
 		return 0, err
 	}
 	// 验证资源存在且属于项目
-	if _, err := s.client.Resource.Query().Where(resource.IDEQ(resourceID), resource.ProjectIDEQ(projectID)).Only(ctx); err != nil {
+	res, err := s.client.Resource.Query().Where(resource.IDEQ(resourceID), resource.ProjectIDEQ(projectID)).Only(ctx)
+	if err != nil {
 		if ent.IsNotFound(err) {
 			return 0, ErrResourceNotFound
 		}
 		return 0, err
 	}
-	count, err := s.client.Segment.Update().
+	tx, err := s.beginResourceWrite(ctx, res)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	count, err := tx.Segment.Update().
 		Where(
 			segment.ResourceIDEQ(resourceID),
 			segment.StatusIn(SegmentStatusTranslated, SegmentStatusEdited, SegmentStatusRejected),
@@ -204,6 +243,9 @@ func (s *ReviewService) ApproveAllResource(ctx context.Context, actorUserID, pro
 	if err != nil {
 		return 0, err
 	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 	return count, nil
 }
 
@@ -213,13 +255,19 @@ func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, pr
 		return 0, err
 	}
 	// 验证资源存在且属于项目
-	if _, err := s.client.Resource.Query().Where(resource.IDEQ(resourceID), resource.ProjectIDEQ(projectID)).Only(ctx); err != nil {
+	res, err := s.client.Resource.Query().Where(resource.IDEQ(resourceID), resource.ProjectIDEQ(projectID)).Only(ctx)
+	if err != nil {
 		if ent.IsNotFound(err) {
 			return 0, ErrResourceNotFound
 		}
 		return 0, err
 	}
-	count, err := s.client.Segment.Query().
+	tx, err := s.beginResourceWrite(ctx, res)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	count, err := tx.Segment.Query().
 		Where(segment.ResourceIDEQ(resourceID), segment.StatusEQ(SegmentStatusRejected)).
 		Count(ctx)
 	if err != nil {
@@ -228,7 +276,7 @@ func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, pr
 	if count == 0 {
 		return 0, ErrRetranslateNoReject
 	}
-	if err := s.client.Segment.Update().
+	if err := tx.Segment.Update().
 		// 重译后译文将整体改变，旧 issues 指纹基本全变，清空合理；
 		// re-translate 的语义即"从头来过"，旧裁决不跨文本存活。
 		Where(segment.ResourceIDEQ(resourceID), segment.StatusEQ(SegmentStatusRejected)).
@@ -237,6 +285,9 @@ func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, pr
 		ClearReviewComment().
 		ClearQualityIssues().
 		Exec(ctx); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	return count, nil
@@ -248,7 +299,8 @@ func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, pr
 // disposition=dismissed → 标记为非问题；disposition=pending → 撤销裁决改回未决。
 // 通过 (code, matched_text) 定位单条 issue（与 qa.Fingerprint 一致）。
 func (s *ReviewService) SetIssueDisposition(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, code, matchedText, disposition, note string) (updated *ent.Segment, err error) {
-	if _, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true); err != nil {
+	authorized, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true)
+	if err != nil {
 		return nil, err
 	}
 	// 按 fingerprint 定位目标 issue（与 qa.Fingerprint 同一构造，避免漂移）
@@ -259,7 +311,7 @@ func (s *ReviewService) SetIssueDisposition(ctx context.Context, actorUserID, pr
 	// 与 persistSemanticQASegmentIssues/persistDuplicateSourceDivergence 等
 	// 并发写者之间 last-writer-wins 静默丢失裁决。TargetTextEQ 作为额外
 	// 语义保护：若译文已被改写，旧指纹定位的 issue 不再适用，拒绝写入。
-	tx, err := s.client.Tx(ctx)
+	tx, err := s.beginResourceWrite(ctx, authorized.Edges.Resource)
 	if err != nil {
 		return nil, fmt.Errorf("set issue disposition: begin transaction: %w", err)
 	}
@@ -352,4 +404,19 @@ func (s *ReviewService) authorizeSegment(ctx context.Context, actorUserID, proje
 		return nil, err
 	}
 	return row, nil
+}
+
+func (s *ReviewService) beginResourceWrite(ctx context.Context, res *ent.Resource) (*ent.Tx, error) {
+	if res == nil {
+		return nil, ErrResourceNotFound
+	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := AdvanceTranslationGeneration(ctx, tx.Client(), res.ID, res.SourceGeneration); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	return tx, nil
 }

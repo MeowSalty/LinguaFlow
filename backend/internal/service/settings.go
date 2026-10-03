@@ -41,6 +41,13 @@ func readSettings(ctx context.Context, client *ent.Client) (SystemSettings, erro
 	if err != nil {
 		return SystemSettings{}, err
 	}
+	filtered := rows[:0]
+	for _, row := range rows {
+		if row.Key != storagePolicyKey {
+			filtered = append(filtered, row)
+		}
+	}
+	rows = filtered
 	if len(rows) != 1 || rows[0].Key != SettingRegistrationEnabled {
 		return SystemSettings{}, errors.New("system settings are missing or contain unsupported keys")
 	}
@@ -61,7 +68,7 @@ func (s *SettingsService) RegistrationEnabled(ctx context.Context) (bool, error)
 
 func (s *SettingsService) Update(ctx context.Context, actorID int, input SystemSettings) (SystemSettings, error) {
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
-		// Lock the existing policy before reading either its old value or authority.
+		// 在读取现有策略的旧值或权限之前先将其锁定。
 		if _, err := tx.SystemSetting.Update().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).
 			SetDescription("Public registration policy").Save(ctx); err != nil {
 			return err
