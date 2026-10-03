@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 )
 
-// Keyring is immutable after loading. Rotation is deployed by restarting with a
-// superset of keys and a new active ID, then reencrypting stored versions.
+// Keyring 加载后不可变。密钥轮换的部署方式：先以密钥超集和新的生效 ID 重启，
+// 再重新加密已存储的版本。
 type Keyring struct {
 	active string
 	keys   map[string][]byte
@@ -45,8 +45,8 @@ func LoadKeyring(path string) (*Keyring, error) {
 	if !info.Mode().IsRegular() {
 		return nil, errors.New("credential keyring must be a regular private file")
 	}
-	// Check the open file we are about to read, not a second lookup of its path.
-	// Diagnostics and startup share this read-only policy; neither repairs ACLs.
+	// 校验的是即将读取的已打开文件，而不是对路径的二次查找。
+	// 诊断与启动共用这一只读策略，两者都不修复 ACL。
 	if err := checkFilePermissions(f); err != nil {
 		return nil, fmt.Errorf("credential keyring permissions: %w", err)
 	}
@@ -90,7 +90,7 @@ func ParseKeyring(data []byte) (*Keyring, error) {
 	return k, nil
 }
 
-// rejectDuplicateKeys additionally rejects trailing documents and repeated keys.
+// rejectDuplicateKeys 还会拒绝尾随文档与重复的键。
 func rejectDuplicateKeys(dec *json.Decoder) error {
 	var read func() error
 	read = func() error {
@@ -140,8 +140,8 @@ func rejectDuplicateKeys(dec *json.Decoder) error {
 	return nil
 }
 
-// PrepareKeyring publishes a fully written private file without replacing an
-// existing keyring. The caller must determine allowCreate from instance state.
+// PrepareKeyring 发布一个完整写入的私有文件，且绝不替换已有的密钥环。
+// 调用方必须依据实例状态决定 allowCreate。
 func PrepareKeyring(path string, allowCreate bool) (*Keyring, error) {
 	k, err := LoadKeyring(path)
 	if err == nil {
@@ -160,8 +160,8 @@ func PrepareKeyring(path string, allowCreate bool) (*Keyring, error) {
 	return LoadKeyring(path)
 }
 
-// GenerateKeyring creates key material without publishing files. Importers can
-// use it for rehearsals and publish these exact bytes before committing data.
+// GenerateKeyring 生成密钥材料但不发布文件。导入方可借此演练，
+// 并在提交数据前原样发布这些字节。
 func GenerateKeyring() (*Keyring, []byte, error) {
 	value, err := GenerateMasterKey()
 	if err != nil {
@@ -175,57 +175,71 @@ func GenerateKeyring() (*Keyring, []byte, error) {
 	return keys, data, err
 }
 
-// PreparePrivateDirectory creates or restricts a tool-owned directory before
-// writing sensitive content. Callers must validate its parent and ownership.
+// CreatePrivateDirectory 以独占方式创建私有目录，绝不改动已存在的路径。
+// 调用方必须校验其父目录与所有权。
+func CreatePrivateDirectory(path string) error {
+	if _, err := createPrivateDirectory(path); err != nil {
+		return fmt.Errorf("create private directory %q: %w", path, err)
+	}
+	return nil
+}
+
+// PreparePrivateDirectory 在写入敏感内容前创建或收紧工具专属目录的权限。
+// 调用方必须校验其父目录与所有权。
 func PreparePrivateDirectory(path string) error {
-	if err := os.Mkdir(path, 0700); err != nil && !errors.Is(err, os.ErrExist) {
-		return err
+	// 创建目录后的清理错误也可能匹配 ErrExist（目录非空）；
+	// 只有真正的创建冲突才允许进入修复流程。
+	if created, err := createPrivateDirectory(path); err == nil {
+		return nil
+	} else if created || !errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("prepare private directory %q: %w", path, err)
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return err
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("private directory must be a regular directory")
+		return fmt.Errorf("prepare private directory %q: must be a regular directory", path)
 	}
 	return restrictDirectory(path)
 }
 
-// PublishPrivateFile atomically publishes private bytes without overwriting an
-// existing path. False means a concurrent/existing owner already published it.
-func PublishPrivateFile(path string, data []byte) (bool, error) {
+// PublishPrivateFile 原子地发布私有字节，且不覆盖已存在的路径。
+// 返回 false 表示并发方或既有所有者已经发布过。
+func PublishPrivateFile(path string, data []byte) (published bool, err error) {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return false, err
 	}
-	f, err := os.CreateTemp(dir, ".private-*")
+	f, err := createPrivateTempFile(dir)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("create private file for %q: %w", path, err)
 	}
 	temp := f.Name()
-	defer os.Remove(temp)
-	if err := restrictFile(temp); err != nil {
-		f.Close()
-		return false, err
-	}
+	defer func() {
+		if f != nil {
+			err = errors.Join(err, f.Close())
+		}
+		err = errors.Join(err, os.Remove(temp))
+	}()
 	if _, err := f.Write(data); err != nil {
-		f.Close()
 		return false, err
 	}
 	if err := f.Sync(); err != nil {
-		f.Close()
 		return false, err
 	}
-	if err := f.Close(); err != nil {
+	err = f.Close()
+	f = nil
+	if err != nil {
 		return false, err
 	}
-	// Hard-link publication is atomic and fails if another starter won. Unlike
-	// rename on Unix this never overwrites the winner's key material.
+	// 硬链接发布是原子操作，若另一启动方抢先则失败。与 Unix 的 rename 不同，
+	// 它绝不会覆盖获胜方的密钥材料。
 	if err := os.Link(temp, path); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return false, nil
 		}
-		return false, fmt.Errorf("publish private file: %w", err)
+		return false, fmt.Errorf("publish private file %q: %w", path, err)
 	}
 	if err := syncDirectory(dir); err != nil {
 		return true, err
@@ -241,7 +255,7 @@ func (k *Keyring) ActiveKeyID() string {
 	return k.active
 }
 
-// AssociatedData is versioned and uses JSON's unambiguous string encoding.
+// AssociatedData 带版本号，并使用 JSON 无歧义的字符串编码。
 type AssociatedData struct {
 	Format   int    `json:"format"`
 	ID       int    `json:"id"`
