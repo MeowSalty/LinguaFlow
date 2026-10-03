@@ -7006,11 +7006,11 @@ components:
           type: integer
           minimum: 0
           default: 20
-          description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项；两者都为 0 时不分批，全部一次发送
+          description: 段落数上限；0=不限制；与 max_words_per_batch 都为 0 时不分批，全部一次发送
         max_words_per_batch:
           type: integer
           minimum: 0
-          description: 字词数上限；0=不限制，与 batch_size 至少填一项；两者都为 0 时不分批，全部一次发送
+          description: 字词数上限；0=不限制；与 batch_size 都为 0 时不分批，全部一次发送
         max_terms_per_1000_chars:
           type: number
           minimum: 0
