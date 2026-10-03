@@ -38,6 +38,54 @@ func (_u *JobResourceUpdate) SetUpdatedAt(v time.Time) *JobResourceUpdate {
 	return _u
 }
 
+// SetSourceRevisionID sets the "source_revision_id" field.
+func (_u *JobResourceUpdate) SetSourceRevisionID(v int) *JobResourceUpdate {
+	_u.mutation.ResetSourceRevisionID()
+	_u.mutation.SetSourceRevisionID(v)
+	return _u
+}
+
+// SetNillableSourceRevisionID sets the "source_revision_id" field if the given value is not nil.
+func (_u *JobResourceUpdate) SetNillableSourceRevisionID(v *int) *JobResourceUpdate {
+	if v != nil {
+		_u.SetSourceRevisionID(*v)
+	}
+	return _u
+}
+
+// AddSourceRevisionID adds value to the "source_revision_id" field.
+func (_u *JobResourceUpdate) AddSourceRevisionID(v int) *JobResourceUpdate {
+	_u.mutation.AddSourceRevisionID(v)
+	return _u
+}
+
+// ClearSourceRevisionID clears the value of the "source_revision_id" field.
+func (_u *JobResourceUpdate) ClearSourceRevisionID() *JobResourceUpdate {
+	_u.mutation.ClearSourceRevisionID()
+	return _u
+}
+
+// SetSourceGeneration sets the "source_generation" field.
+func (_u *JobResourceUpdate) SetSourceGeneration(v int64) *JobResourceUpdate {
+	_u.mutation.ResetSourceGeneration()
+	_u.mutation.SetSourceGeneration(v)
+	return _u
+}
+
+// SetNillableSourceGeneration sets the "source_generation" field if the given value is not nil.
+func (_u *JobResourceUpdate) SetNillableSourceGeneration(v *int64) *JobResourceUpdate {
+	if v != nil {
+		_u.SetSourceGeneration(*v)
+	}
+	return _u
+}
+
+// AddSourceGeneration adds value to the "source_generation" field.
+func (_u *JobResourceUpdate) AddSourceGeneration(v int64) *JobResourceUpdate {
+	_u.mutation.AddSourceGeneration(v)
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *JobResourceUpdate) SetStatus(v string) *JobResourceUpdate {
 	_u.mutation.SetStatus(v)
@@ -341,6 +389,16 @@ func (_u *JobResourceUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *JobResourceUpdate) check() error {
+	if v, ok := _u.mutation.SourceRevisionID(); ok {
+		if err := jobresource.SourceRevisionIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_revision_id", err: fmt.Errorf(`ent: validator failed for field "JobResource.source_revision_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceGeneration(); ok {
+		if err := jobresource.SourceGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "source_generation", err: fmt.Errorf(`ent: validator failed for field "JobResource.source_generation": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SegmentCount(); ok {
 		if err := jobresource.SegmentCountValidator(v); err != nil {
 			return &ValidationError{Name: "segment_count", err: fmt.Errorf(`ent: validator failed for field "JobResource.segment_count": %w`, err)}
@@ -384,6 +442,21 @@ func (_u *JobResourceUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(jobresource.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.SourceRevisionID(); ok {
+		_spec.SetField(jobresource.FieldSourceRevisionID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSourceRevisionID(); ok {
+		_spec.AddField(jobresource.FieldSourceRevisionID, field.TypeInt, value)
+	}
+	if _u.mutation.SourceRevisionIDCleared() {
+		_spec.ClearField(jobresource.FieldSourceRevisionID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.SourceGeneration(); ok {
+		_spec.SetField(jobresource.FieldSourceGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSourceGeneration(); ok {
+		_spec.AddField(jobresource.FieldSourceGeneration, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(jobresource.FieldStatus, field.TypeString, value)
@@ -570,6 +643,54 @@ type JobResourceUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *JobResourceUpdateOne) SetUpdatedAt(v time.Time) *JobResourceUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetSourceRevisionID sets the "source_revision_id" field.
+func (_u *JobResourceUpdateOne) SetSourceRevisionID(v int) *JobResourceUpdateOne {
+	_u.mutation.ResetSourceRevisionID()
+	_u.mutation.SetSourceRevisionID(v)
+	return _u
+}
+
+// SetNillableSourceRevisionID sets the "source_revision_id" field if the given value is not nil.
+func (_u *JobResourceUpdateOne) SetNillableSourceRevisionID(v *int) *JobResourceUpdateOne {
+	if v != nil {
+		_u.SetSourceRevisionID(*v)
+	}
+	return _u
+}
+
+// AddSourceRevisionID adds value to the "source_revision_id" field.
+func (_u *JobResourceUpdateOne) AddSourceRevisionID(v int) *JobResourceUpdateOne {
+	_u.mutation.AddSourceRevisionID(v)
+	return _u
+}
+
+// ClearSourceRevisionID clears the value of the "source_revision_id" field.
+func (_u *JobResourceUpdateOne) ClearSourceRevisionID() *JobResourceUpdateOne {
+	_u.mutation.ClearSourceRevisionID()
+	return _u
+}
+
+// SetSourceGeneration sets the "source_generation" field.
+func (_u *JobResourceUpdateOne) SetSourceGeneration(v int64) *JobResourceUpdateOne {
+	_u.mutation.ResetSourceGeneration()
+	_u.mutation.SetSourceGeneration(v)
+	return _u
+}
+
+// SetNillableSourceGeneration sets the "source_generation" field if the given value is not nil.
+func (_u *JobResourceUpdateOne) SetNillableSourceGeneration(v *int64) *JobResourceUpdateOne {
+	if v != nil {
+		_u.SetSourceGeneration(*v)
+	}
+	return _u
+}
+
+// AddSourceGeneration adds value to the "source_generation" field.
+func (_u *JobResourceUpdateOne) AddSourceGeneration(v int64) *JobResourceUpdateOne {
+	_u.mutation.AddSourceGeneration(v)
 	return _u
 }
 
@@ -889,6 +1010,16 @@ func (_u *JobResourceUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *JobResourceUpdateOne) check() error {
+	if v, ok := _u.mutation.SourceRevisionID(); ok {
+		if err := jobresource.SourceRevisionIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_revision_id", err: fmt.Errorf(`ent: validator failed for field "JobResource.source_revision_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceGeneration(); ok {
+		if err := jobresource.SourceGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "source_generation", err: fmt.Errorf(`ent: validator failed for field "JobResource.source_generation": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SegmentCount(); ok {
 		if err := jobresource.SegmentCountValidator(v); err != nil {
 			return &ValidationError{Name: "segment_count", err: fmt.Errorf(`ent: validator failed for field "JobResource.segment_count": %w`, err)}
@@ -949,6 +1080,21 @@ func (_u *JobResourceUpdateOne) sqlSave(ctx context.Context) (_node *JobResource
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(jobresource.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.SourceRevisionID(); ok {
+		_spec.SetField(jobresource.FieldSourceRevisionID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSourceRevisionID(); ok {
+		_spec.AddField(jobresource.FieldSourceRevisionID, field.TypeInt, value)
+	}
+	if _u.mutation.SourceRevisionIDCleared() {
+		_spec.ClearField(jobresource.FieldSourceRevisionID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.SourceGeneration(); ok {
+		_spec.SetField(jobresource.FieldSourceGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSourceGeneration(); ok {
+		_spec.AddField(jobresource.FieldSourceGeneration, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(jobresource.FieldStatus, field.TypeString, value)

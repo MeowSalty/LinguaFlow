@@ -18,6 +18,12 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldCurrentSourceRevisionID holds the string denoting the current_source_revision_id field in the database.
+	FieldCurrentSourceRevisionID = "current_source_revision_id"
+	// FieldSourceGeneration holds the string denoting the source_generation field in the database.
+	FieldSourceGeneration = "source_generation"
+	// FieldTranslationGeneration holds the string denoting the translation_generation field in the database.
+	FieldTranslationGeneration = "translation_generation"
 	// FieldPath holds the string denoting the path field in the database.
 	FieldPath = "path"
 	// FieldFormat holds the string denoting the format field in the database.
@@ -64,6 +70,9 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldCurrentSourceRevisionID,
+	FieldSourceGeneration,
+	FieldTranslationGeneration,
 	FieldPath,
 	FieldFormat,
 	FieldStoragePath,
@@ -88,6 +97,16 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// CurrentSourceRevisionIDValidator is a validator for the "current_source_revision_id" field. It is called by the builders before save.
+	CurrentSourceRevisionIDValidator func(int) error
+	// DefaultSourceGeneration holds the default value on creation for the "source_generation" field.
+	DefaultSourceGeneration int64
+	// SourceGenerationValidator is a validator for the "source_generation" field. It is called by the builders before save.
+	SourceGenerationValidator func(int64) error
+	// DefaultTranslationGeneration holds the default value on creation for the "translation_generation" field.
+	DefaultTranslationGeneration int64
+	// TranslationGenerationValidator is a validator for the "translation_generation" field. It is called by the builders before save.
+	TranslationGenerationValidator func(int64) error
 	// PathValidator is a validator for the "path" field. It is called by the builders before save.
 	PathValidator func(string) error
 	// FormatValidator is a validator for the "format" field. It is called by the builders before save.
@@ -118,6 +137,21 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByCurrentSourceRevisionID orders the results by the current_source_revision_id field.
+func ByCurrentSourceRevisionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCurrentSourceRevisionID, opts...).ToFunc()
+}
+
+// BySourceGeneration orders the results by the source_generation field.
+func BySourceGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceGeneration, opts...).ToFunc()
+}
+
+// ByTranslationGeneration orders the results by the translation_generation field.
+func ByTranslationGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTranslationGeneration, opts...).ToFunc()
 }
 
 // ByPath orders the results by the path field.

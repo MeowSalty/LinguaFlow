@@ -57,6 +57,76 @@ func (_c *ProjectCreate) SetNillableUpdatedAt(v *time.Time) *ProjectCreate {
 	return _c
 }
 
+// SetStorageSpaceID sets the "storage_space_id" field.
+func (_c *ProjectCreate) SetStorageSpaceID(v int) *ProjectCreate {
+	_c.mutation.SetStorageSpaceID(v)
+	return _c
+}
+
+// SetNillableStorageSpaceID sets the "storage_space_id" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableStorageSpaceID(v *int) *ProjectCreate {
+	if v != nil {
+		_c.SetStorageSpaceID(*v)
+	}
+	return _c
+}
+
+// SetStorageGeneration sets the "storage_generation" field.
+func (_c *ProjectCreate) SetStorageGeneration(v int64) *ProjectCreate {
+	_c.mutation.SetStorageGeneration(v)
+	return _c
+}
+
+// SetNillableStorageGeneration sets the "storage_generation" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableStorageGeneration(v *int64) *ProjectCreate {
+	if v != nil {
+		_c.SetStorageGeneration(*v)
+	}
+	return _c
+}
+
+// SetOutputGeneration sets the "output_generation" field.
+func (_c *ProjectCreate) SetOutputGeneration(v int64) *ProjectCreate {
+	_c.mutation.SetOutputGeneration(v)
+	return _c
+}
+
+// SetNillableOutputGeneration sets the "output_generation" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableOutputGeneration(v *int64) *ProjectCreate {
+	if v != nil {
+		_c.SetOutputGeneration(*v)
+	}
+	return _c
+}
+
+// SetStorageState sets the "storage_state" field.
+func (_c *ProjectCreate) SetStorageState(v string) *ProjectCreate {
+	_c.mutation.SetStorageState(v)
+	return _c
+}
+
+// SetNillableStorageState sets the "storage_state" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableStorageState(v *string) *ProjectCreate {
+	if v != nil {
+		_c.SetStorageState(*v)
+	}
+	return _c
+}
+
+// SetStorageMigrationTaskID sets the "storage_migration_task_id" field.
+func (_c *ProjectCreate) SetStorageMigrationTaskID(v int) *ProjectCreate {
+	_c.mutation.SetStorageMigrationTaskID(v)
+	return _c
+}
+
+// SetNillableStorageMigrationTaskID sets the "storage_migration_task_id" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableStorageMigrationTaskID(v *int) *ProjectCreate {
+	if v != nil {
+		_c.SetStorageMigrationTaskID(*v)
+	}
+	return _c
+}
+
 // SetName sets the "name" field.
 func (_c *ProjectCreate) SetName(v string) *ProjectCreate {
 	_c.mutation.SetName(v)
@@ -297,6 +367,18 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.StorageGeneration(); !ok {
+		v := project.DefaultStorageGeneration
+		_c.mutation.SetStorageGeneration(v)
+	}
+	if _, ok := _c.mutation.OutputGeneration(); !ok {
+		v := project.DefaultOutputGeneration
+		_c.mutation.SetOutputGeneration(v)
+	}
+	if _, ok := _c.mutation.StorageState(); !ok {
+		v := project.DefaultStorageState
+		_c.mutation.SetStorageState(v)
+	}
 	if _, ok := _c.mutation.Config(); !ok {
 		v := project.DefaultConfig()
 		_c.mutation.SetConfig(v)
@@ -322,6 +404,30 @@ func (_c *ProjectCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Project.updated_at"`)}
+	}
+	if v, ok := _c.mutation.StorageSpaceID(); ok {
+		if err := project.StorageSpaceIDValidator(v); err != nil {
+			return &ValidationError{Name: "storage_space_id", err: fmt.Errorf(`ent: validator failed for field "Project.storage_space_id": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.StorageGeneration(); !ok {
+		return &ValidationError{Name: "storage_generation", err: errors.New(`ent: missing required field "Project.storage_generation"`)}
+	}
+	if v, ok := _c.mutation.StorageGeneration(); ok {
+		if err := project.StorageGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "storage_generation", err: fmt.Errorf(`ent: validator failed for field "Project.storage_generation": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.OutputGeneration(); !ok {
+		return &ValidationError{Name: "output_generation", err: errors.New(`ent: missing required field "Project.output_generation"`)}
+	}
+	if v, ok := _c.mutation.OutputGeneration(); ok {
+		if err := project.OutputGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "output_generation", err: fmt.Errorf(`ent: validator failed for field "Project.output_generation": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.StorageState(); !ok {
+		return &ValidationError{Name: "storage_state", err: errors.New(`ent: missing required field "Project.storage_state"`)}
 	}
 	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "Project.name"`)}
@@ -386,6 +492,26 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(project.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.StorageSpaceID(); ok {
+		_spec.SetField(project.FieldStorageSpaceID, field.TypeInt, value)
+		_node.StorageSpaceID = &value
+	}
+	if value, ok := _c.mutation.StorageGeneration(); ok {
+		_spec.SetField(project.FieldStorageGeneration, field.TypeInt64, value)
+		_node.StorageGeneration = value
+	}
+	if value, ok := _c.mutation.OutputGeneration(); ok {
+		_spec.SetField(project.FieldOutputGeneration, field.TypeInt64, value)
+		_node.OutputGeneration = value
+	}
+	if value, ok := _c.mutation.StorageState(); ok {
+		_spec.SetField(project.FieldStorageState, field.TypeString, value)
+		_node.StorageState = value
+	}
+	if value, ok := _c.mutation.StorageMigrationTaskID(); ok {
+		_spec.SetField(project.FieldStorageMigrationTaskID, field.TypeInt, value)
+		_node.StorageMigrationTaskID = &value
 	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(project.FieldName, field.TypeString, value)

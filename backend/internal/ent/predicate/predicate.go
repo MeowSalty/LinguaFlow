@@ -12,6 +12,15 @@ type ActivityLog func(*sql.Selector)
 // Backend is the predicate function for backend builders.
 type Backend func(*sql.Selector)
 
+// BackupPin is the predicate function for backuppin builders.
+type BackupPin func(*sql.Selector)
+
+// Blob is the predicate function for blob builders.
+type Blob func(*sql.Selector)
+
+// BlobLocation is the predicate function for bloblocation builders.
+type BlobLocation func(*sql.Selector)
+
 // BootstrapPromptTemplate is the predicate function for bootstrapprompttemplate builders.
 type BootstrapPromptTemplate func(*sql.Selector)
 
@@ -24,11 +33,17 @@ type CredentialJobReference func(*sql.Selector)
 // CredentialVersion is the predicate function for credentialversion builders.
 type CredentialVersion func(*sql.Selector)
 
+// DeletionEntry is the predicate function for deletionentry builders.
+type DeletionEntry func(*sql.Selector)
+
 // ExecutionPlanTemplate is the predicate function for executionplantemplate builders.
 type ExecutionPlanTemplate func(*sql.Selector)
 
 // ExecutionProfile is the predicate function for executionprofile builders.
 type ExecutionProfile func(*sql.Selector)
+
+// ExportArtifact is the predicate function for exportartifact builders.
+type ExportArtifact func(*sql.Selector)
 
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
@@ -74,6 +89,33 @@ type Segment func(*sql.Selector)
 
 // SegmentRevision is the predicate function for segmentrevision builders.
 type SegmentRevision func(*sql.Selector)
+
+// SourceRevision is the predicate function for sourcerevision builders.
+type SourceRevision func(*sql.Selector)
+
+// StorageAuthVersion is the predicate function for storageauthversion builders.
+type StorageAuthVersion func(*sql.Selector)
+
+// StorageBackup is the predicate function for storagebackup builders.
+type StorageBackup func(*sql.Selector)
+
+// StorageConnection is the predicate function for storageconnection builders.
+type StorageConnection func(*sql.Selector)
+
+// StorageMigrationItem is the predicate function for storagemigrationitem builders.
+type StorageMigrationItem func(*sql.Selector)
+
+// StorageReservation is the predicate function for storagereservation builders.
+type StorageReservation func(*sql.Selector)
+
+// StorageSpace is the predicate function for storagespace builders.
+type StorageSpace func(*sql.Selector)
+
+// StorageTask is the predicate function for storagetask builders.
+type StorageTask func(*sql.Selector)
+
+// StorageWrite is the predicate function for storagewrite builders.
+type StorageWrite func(*sql.Selector)
 
 // SyncTask is the predicate function for synctask builders.
 type SyncTask func(*sql.Selector)

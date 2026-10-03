@@ -51,6 +51,34 @@ func (_c *JobResourceCreate) SetNillableUpdatedAt(v *time.Time) *JobResourceCrea
 	return _c
 }
 
+// SetSourceRevisionID sets the "source_revision_id" field.
+func (_c *JobResourceCreate) SetSourceRevisionID(v int) *JobResourceCreate {
+	_c.mutation.SetSourceRevisionID(v)
+	return _c
+}
+
+// SetNillableSourceRevisionID sets the "source_revision_id" field if the given value is not nil.
+func (_c *JobResourceCreate) SetNillableSourceRevisionID(v *int) *JobResourceCreate {
+	if v != nil {
+		_c.SetSourceRevisionID(*v)
+	}
+	return _c
+}
+
+// SetSourceGeneration sets the "source_generation" field.
+func (_c *JobResourceCreate) SetSourceGeneration(v int64) *JobResourceCreate {
+	_c.mutation.SetSourceGeneration(v)
+	return _c
+}
+
+// SetNillableSourceGeneration sets the "source_generation" field if the given value is not nil.
+func (_c *JobResourceCreate) SetNillableSourceGeneration(v *int64) *JobResourceCreate {
+	if v != nil {
+		_c.SetSourceGeneration(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *JobResourceCreate) SetStatus(v string) *JobResourceCreate {
 	_c.mutation.SetStatus(v)
@@ -263,6 +291,10 @@ func (_c *JobResourceCreate) defaults() {
 		v := jobresource.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.SourceGeneration(); !ok {
+		v := jobresource.DefaultSourceGeneration
+		_c.mutation.SetSourceGeneration(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := jobresource.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -296,6 +328,19 @@ func (_c *JobResourceCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "JobResource.updated_at"`)}
+	}
+	if v, ok := _c.mutation.SourceRevisionID(); ok {
+		if err := jobresource.SourceRevisionIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_revision_id", err: fmt.Errorf(`ent: validator failed for field "JobResource.source_revision_id": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SourceGeneration(); !ok {
+		return &ValidationError{Name: "source_generation", err: errors.New(`ent: missing required field "JobResource.source_generation"`)}
+	}
+	if v, ok := _c.mutation.SourceGeneration(); ok {
+		if err := jobresource.SourceGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "source_generation", err: fmt.Errorf(`ent: validator failed for field "JobResource.source_generation": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "JobResource.status"`)}
@@ -374,6 +419,14 @@ func (_c *JobResourceCreate) createSpec() (*JobResource, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(jobresource.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.SourceRevisionID(); ok {
+		_spec.SetField(jobresource.FieldSourceRevisionID, field.TypeInt, value)
+		_node.SourceRevisionID = &value
+	}
+	if value, ok := _c.mutation.SourceGeneration(); ok {
+		_spec.SetField(jobresource.FieldSourceGeneration, field.TypeInt64, value)
+		_node.SourceGeneration = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(jobresource.FieldStatus, field.TypeString, value)

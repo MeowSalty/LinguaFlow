@@ -37,6 +37,75 @@ func (_u *ResourceUpdate) SetUpdatedAt(v time.Time) *ResourceUpdate {
 	return _u
 }
 
+// SetCurrentSourceRevisionID sets the "current_source_revision_id" field.
+func (_u *ResourceUpdate) SetCurrentSourceRevisionID(v int) *ResourceUpdate {
+	_u.mutation.ResetCurrentSourceRevisionID()
+	_u.mutation.SetCurrentSourceRevisionID(v)
+	return _u
+}
+
+// SetNillableCurrentSourceRevisionID sets the "current_source_revision_id" field if the given value is not nil.
+func (_u *ResourceUpdate) SetNillableCurrentSourceRevisionID(v *int) *ResourceUpdate {
+	if v != nil {
+		_u.SetCurrentSourceRevisionID(*v)
+	}
+	return _u
+}
+
+// AddCurrentSourceRevisionID adds value to the "current_source_revision_id" field.
+func (_u *ResourceUpdate) AddCurrentSourceRevisionID(v int) *ResourceUpdate {
+	_u.mutation.AddCurrentSourceRevisionID(v)
+	return _u
+}
+
+// ClearCurrentSourceRevisionID clears the value of the "current_source_revision_id" field.
+func (_u *ResourceUpdate) ClearCurrentSourceRevisionID() *ResourceUpdate {
+	_u.mutation.ClearCurrentSourceRevisionID()
+	return _u
+}
+
+// SetSourceGeneration sets the "source_generation" field.
+func (_u *ResourceUpdate) SetSourceGeneration(v int64) *ResourceUpdate {
+	_u.mutation.ResetSourceGeneration()
+	_u.mutation.SetSourceGeneration(v)
+	return _u
+}
+
+// SetNillableSourceGeneration sets the "source_generation" field if the given value is not nil.
+func (_u *ResourceUpdate) SetNillableSourceGeneration(v *int64) *ResourceUpdate {
+	if v != nil {
+		_u.SetSourceGeneration(*v)
+	}
+	return _u
+}
+
+// AddSourceGeneration adds value to the "source_generation" field.
+func (_u *ResourceUpdate) AddSourceGeneration(v int64) *ResourceUpdate {
+	_u.mutation.AddSourceGeneration(v)
+	return _u
+}
+
+// SetTranslationGeneration sets the "translation_generation" field.
+func (_u *ResourceUpdate) SetTranslationGeneration(v int64) *ResourceUpdate {
+	_u.mutation.ResetTranslationGeneration()
+	_u.mutation.SetTranslationGeneration(v)
+	return _u
+}
+
+// SetNillableTranslationGeneration sets the "translation_generation" field if the given value is not nil.
+func (_u *ResourceUpdate) SetNillableTranslationGeneration(v *int64) *ResourceUpdate {
+	if v != nil {
+		_u.SetTranslationGeneration(*v)
+	}
+	return _u
+}
+
+// AddTranslationGeneration adds value to the "translation_generation" field.
+func (_u *ResourceUpdate) AddTranslationGeneration(v int64) *ResourceUpdate {
+	_u.mutation.AddTranslationGeneration(v)
+	return _u
+}
+
 // SetPath sets the "path" field.
 func (_u *ResourceUpdate) SetPath(v string) *ResourceUpdate {
 	_u.mutation.SetPath(v)
@@ -246,6 +315,21 @@ func (_u *ResourceUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *ResourceUpdate) check() error {
+	if v, ok := _u.mutation.CurrentSourceRevisionID(); ok {
+		if err := resource.CurrentSourceRevisionIDValidator(v); err != nil {
+			return &ValidationError{Name: "current_source_revision_id", err: fmt.Errorf(`ent: validator failed for field "Resource.current_source_revision_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceGeneration(); ok {
+		if err := resource.SourceGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "source_generation", err: fmt.Errorf(`ent: validator failed for field "Resource.source_generation": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TranslationGeneration(); ok {
+		if err := resource.TranslationGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "translation_generation", err: fmt.Errorf(`ent: validator failed for field "Resource.translation_generation": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Path(); ok {
 		if err := resource.PathValidator(v); err != nil {
 			return &ValidationError{Name: "path", err: fmt.Errorf(`ent: validator failed for field "Resource.path": %w`, err)}
@@ -288,6 +372,27 @@ func (_u *ResourceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(resource.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.CurrentSourceRevisionID(); ok {
+		_spec.SetField(resource.FieldCurrentSourceRevisionID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCurrentSourceRevisionID(); ok {
+		_spec.AddField(resource.FieldCurrentSourceRevisionID, field.TypeInt, value)
+	}
+	if _u.mutation.CurrentSourceRevisionIDCleared() {
+		_spec.ClearField(resource.FieldCurrentSourceRevisionID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.SourceGeneration(); ok {
+		_spec.SetField(resource.FieldSourceGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSourceGeneration(); ok {
+		_spec.AddField(resource.FieldSourceGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.TranslationGeneration(); ok {
+		_spec.SetField(resource.FieldTranslationGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTranslationGeneration(); ok {
+		_spec.AddField(resource.FieldTranslationGeneration, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Path(); ok {
 		_spec.SetField(resource.FieldPath, field.TypeString, value)
@@ -446,6 +551,75 @@ type ResourceUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ResourceUpdateOne) SetUpdatedAt(v time.Time) *ResourceUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetCurrentSourceRevisionID sets the "current_source_revision_id" field.
+func (_u *ResourceUpdateOne) SetCurrentSourceRevisionID(v int) *ResourceUpdateOne {
+	_u.mutation.ResetCurrentSourceRevisionID()
+	_u.mutation.SetCurrentSourceRevisionID(v)
+	return _u
+}
+
+// SetNillableCurrentSourceRevisionID sets the "current_source_revision_id" field if the given value is not nil.
+func (_u *ResourceUpdateOne) SetNillableCurrentSourceRevisionID(v *int) *ResourceUpdateOne {
+	if v != nil {
+		_u.SetCurrentSourceRevisionID(*v)
+	}
+	return _u
+}
+
+// AddCurrentSourceRevisionID adds value to the "current_source_revision_id" field.
+func (_u *ResourceUpdateOne) AddCurrentSourceRevisionID(v int) *ResourceUpdateOne {
+	_u.mutation.AddCurrentSourceRevisionID(v)
+	return _u
+}
+
+// ClearCurrentSourceRevisionID clears the value of the "current_source_revision_id" field.
+func (_u *ResourceUpdateOne) ClearCurrentSourceRevisionID() *ResourceUpdateOne {
+	_u.mutation.ClearCurrentSourceRevisionID()
+	return _u
+}
+
+// SetSourceGeneration sets the "source_generation" field.
+func (_u *ResourceUpdateOne) SetSourceGeneration(v int64) *ResourceUpdateOne {
+	_u.mutation.ResetSourceGeneration()
+	_u.mutation.SetSourceGeneration(v)
+	return _u
+}
+
+// SetNillableSourceGeneration sets the "source_generation" field if the given value is not nil.
+func (_u *ResourceUpdateOne) SetNillableSourceGeneration(v *int64) *ResourceUpdateOne {
+	if v != nil {
+		_u.SetSourceGeneration(*v)
+	}
+	return _u
+}
+
+// AddSourceGeneration adds value to the "source_generation" field.
+func (_u *ResourceUpdateOne) AddSourceGeneration(v int64) *ResourceUpdateOne {
+	_u.mutation.AddSourceGeneration(v)
+	return _u
+}
+
+// SetTranslationGeneration sets the "translation_generation" field.
+func (_u *ResourceUpdateOne) SetTranslationGeneration(v int64) *ResourceUpdateOne {
+	_u.mutation.ResetTranslationGeneration()
+	_u.mutation.SetTranslationGeneration(v)
+	return _u
+}
+
+// SetNillableTranslationGeneration sets the "translation_generation" field if the given value is not nil.
+func (_u *ResourceUpdateOne) SetNillableTranslationGeneration(v *int64) *ResourceUpdateOne {
+	if v != nil {
+		_u.SetTranslationGeneration(*v)
+	}
+	return _u
+}
+
+// AddTranslationGeneration adds value to the "translation_generation" field.
+func (_u *ResourceUpdateOne) AddTranslationGeneration(v int64) *ResourceUpdateOne {
+	_u.mutation.AddTranslationGeneration(v)
 	return _u
 }
 
@@ -671,6 +845,21 @@ func (_u *ResourceUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *ResourceUpdateOne) check() error {
+	if v, ok := _u.mutation.CurrentSourceRevisionID(); ok {
+		if err := resource.CurrentSourceRevisionIDValidator(v); err != nil {
+			return &ValidationError{Name: "current_source_revision_id", err: fmt.Errorf(`ent: validator failed for field "Resource.current_source_revision_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceGeneration(); ok {
+		if err := resource.SourceGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "source_generation", err: fmt.Errorf(`ent: validator failed for field "Resource.source_generation": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TranslationGeneration(); ok {
+		if err := resource.TranslationGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "translation_generation", err: fmt.Errorf(`ent: validator failed for field "Resource.translation_generation": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Path(); ok {
 		if err := resource.PathValidator(v); err != nil {
 			return &ValidationError{Name: "path", err: fmt.Errorf(`ent: validator failed for field "Resource.path": %w`, err)}
@@ -730,6 +919,27 @@ func (_u *ResourceUpdateOne) sqlSave(ctx context.Context) (_node *Resource, err 
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(resource.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.CurrentSourceRevisionID(); ok {
+		_spec.SetField(resource.FieldCurrentSourceRevisionID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCurrentSourceRevisionID(); ok {
+		_spec.AddField(resource.FieldCurrentSourceRevisionID, field.TypeInt, value)
+	}
+	if _u.mutation.CurrentSourceRevisionIDCleared() {
+		_spec.ClearField(resource.FieldCurrentSourceRevisionID, field.TypeInt)
+	}
+	if value, ok := _u.mutation.SourceGeneration(); ok {
+		_spec.SetField(resource.FieldSourceGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSourceGeneration(); ok {
+		_spec.AddField(resource.FieldSourceGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.TranslationGeneration(); ok {
+		_spec.SetField(resource.FieldTranslationGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTranslationGeneration(); ok {
+		_spec.AddField(resource.FieldTranslationGeneration, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Path(); ok {
 		_spec.SetField(resource.FieldPath, field.TypeString, value)

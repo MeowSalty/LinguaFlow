@@ -33,6 +33,42 @@ func (f BackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BackendMutation", m)
 }
 
+// The BackupPinFunc type is an adapter to allow the use of ordinary
+// function as BackupPin mutator.
+type BackupPinFunc func(context.Context, *ent.BackupPinMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f BackupPinFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.BackupPinMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BackupPinMutation", m)
+}
+
+// The BlobFunc type is an adapter to allow the use of ordinary
+// function as Blob mutator.
+type BlobFunc func(context.Context, *ent.BlobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f BlobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.BlobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BlobMutation", m)
+}
+
+// The BlobLocationFunc type is an adapter to allow the use of ordinary
+// function as BlobLocation mutator.
+type BlobLocationFunc func(context.Context, *ent.BlobLocationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f BlobLocationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.BlobLocationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BlobLocationMutation", m)
+}
+
 // The BootstrapPromptTemplateFunc type is an adapter to allow the use of ordinary
 // function as BootstrapPromptTemplate mutator.
 type BootstrapPromptTemplateFunc func(context.Context, *ent.BootstrapPromptTemplateMutation) (ent.Value, error)
@@ -81,6 +117,18 @@ func (f CredentialVersionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CredentialVersionMutation", m)
 }
 
+// The DeletionEntryFunc type is an adapter to allow the use of ordinary
+// function as DeletionEntry mutator.
+type DeletionEntryFunc func(context.Context, *ent.DeletionEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f DeletionEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.DeletionEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.DeletionEntryMutation", m)
+}
+
 // The ExecutionPlanTemplateFunc type is an adapter to allow the use of ordinary
 // function as ExecutionPlanTemplate mutator.
 type ExecutionPlanTemplateFunc func(context.Context, *ent.ExecutionPlanTemplateMutation) (ent.Value, error)
@@ -103,6 +151,18 @@ func (f ExecutionProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.V
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExecutionProfileMutation", m)
+}
+
+// The ExportArtifactFunc type is an adapter to allow the use of ordinary
+// function as ExportArtifact mutator.
+type ExportArtifactFunc func(context.Context, *ent.ExportArtifactMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ExportArtifactFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ExportArtifactMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExportArtifactMutation", m)
 }
 
 // The GlossaryEntryFunc type is an adapter to allow the use of ordinary
@@ -283,6 +343,114 @@ func (f SegmentRevisionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SegmentRevisionMutation", m)
+}
+
+// The SourceRevisionFunc type is an adapter to allow the use of ordinary
+// function as SourceRevision mutator.
+type SourceRevisionFunc func(context.Context, *ent.SourceRevisionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SourceRevisionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SourceRevisionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SourceRevisionMutation", m)
+}
+
+// The StorageAuthVersionFunc type is an adapter to allow the use of ordinary
+// function as StorageAuthVersion mutator.
+type StorageAuthVersionFunc func(context.Context, *ent.StorageAuthVersionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageAuthVersionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageAuthVersionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageAuthVersionMutation", m)
+}
+
+// The StorageBackupFunc type is an adapter to allow the use of ordinary
+// function as StorageBackup mutator.
+type StorageBackupFunc func(context.Context, *ent.StorageBackupMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageBackupFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageBackupMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageBackupMutation", m)
+}
+
+// The StorageConnectionFunc type is an adapter to allow the use of ordinary
+// function as StorageConnection mutator.
+type StorageConnectionFunc func(context.Context, *ent.StorageConnectionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageConnectionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageConnectionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageConnectionMutation", m)
+}
+
+// The StorageMigrationItemFunc type is an adapter to allow the use of ordinary
+// function as StorageMigrationItem mutator.
+type StorageMigrationItemFunc func(context.Context, *ent.StorageMigrationItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageMigrationItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageMigrationItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageMigrationItemMutation", m)
+}
+
+// The StorageReservationFunc type is an adapter to allow the use of ordinary
+// function as StorageReservation mutator.
+type StorageReservationFunc func(context.Context, *ent.StorageReservationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageReservationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageReservationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageReservationMutation", m)
+}
+
+// The StorageSpaceFunc type is an adapter to allow the use of ordinary
+// function as StorageSpace mutator.
+type StorageSpaceFunc func(context.Context, *ent.StorageSpaceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageSpaceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageSpaceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageSpaceMutation", m)
+}
+
+// The StorageTaskFunc type is an adapter to allow the use of ordinary
+// function as StorageTask mutator.
+type StorageTaskFunc func(context.Context, *ent.StorageTaskMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageTaskMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageTaskMutation", m)
+}
+
+// The StorageWriteFunc type is an adapter to allow the use of ordinary
+// function as StorageWrite mutator.
+type StorageWriteFunc func(context.Context, *ent.StorageWriteMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageWriteFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageWriteMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageWriteMutation", m)
 }
 
 // The SyncTaskFunc type is an adapter to allow the use of ordinary

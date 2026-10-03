@@ -24,6 +24,10 @@ type JobResource struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// SourceRevisionID holds the value of the "source_revision_id" field.
+	SourceRevisionID *int `json:"source_revision_id,omitempty"`
+	// SourceGeneration holds the value of the "source_generation" field.
+	SourceGeneration int64 `json:"source_generation,omitempty"`
 	// pending, running, completed, failed, cancelled（paused 仅 Job 级；暂停时资源冻结在 running，恢复走 running→pending 重置）
 	Status string `json:"status,omitempty"`
 	// 本任务要处理的 Resource 级 Segment ID 快照；空数组表示按资源 pending 段动态选择
@@ -103,7 +107,7 @@ func (*JobResource) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case jobresource.FieldSegmentIds:
 			values[i] = new([]byte)
-		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldSkippedSegments, jobresource.FieldWorkWeight:
+		case jobresource.FieldID, jobresource.FieldSourceRevisionID, jobresource.FieldSourceGeneration, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldSkippedSegments, jobresource.FieldWorkWeight:
 			values[i] = new(sql.NullInt64)
 		case jobresource.FieldStatus, jobresource.FieldOutputPath, jobresource.FieldErrorMessage, jobresource.FieldWarningMessage:
 			values[i] = new(sql.NullString)
@@ -145,6 +149,19 @@ func (_m *JobResource) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case jobresource.FieldSourceRevisionID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field source_revision_id", values[i])
+			} else if value.Valid {
+				_m.SourceRevisionID = new(int)
+				*_m.SourceRevisionID = int(value.Int64)
+			}
+		case jobresource.FieldSourceGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field source_generation", values[i])
+			} else if value.Valid {
+				_m.SourceGeneration = value.Int64
 			}
 		case jobresource.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -281,6 +298,14 @@ func (_m *JobResource) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	if v := _m.SourceRevisionID; v != nil {
+		builder.WriteString("source_revision_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("source_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SourceGeneration))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
