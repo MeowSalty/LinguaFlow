@@ -289,6 +289,15 @@ func (k *Keyring) Encrypt(secret string, aad AssociatedData) (Ciphertext, error)
 	if secret == "" {
 		return Ciphertext{}, ErrInvalid
 	}
+	return k.Seal([]byte(secret), aad.bytes())
+}
+
+// Seal 是共享的 AEAD 原语。各领域包必须基于可信身份构造自己的
+// 带版本号的关联数据（AAD），绝不能直接使用请求负载。
+func (k *Keyring) Seal(plain, aad []byte) (Ciphertext, error) {
+	if len(plain) == 0 || len(aad) == 0 {
+		return Ciphertext{}, ErrInvalid
+	}
 	a, err := k.aead(k.ActiveKeyID())
 	if err != nil {
 		return Ciphertext{}, err
@@ -297,22 +306,29 @@ func (k *Keyring) Encrypt(secret string, aad AssociatedData) (Ciphertext, error)
 	if _, err := rand.Read(nonce); err != nil {
 		return Ciphertext{}, err
 	}
-	return Ciphertext{Version: 1, KeyID: k.active, Nonce: nonce, Data: a.Seal(nil, nonce, []byte(secret), aad.bytes())}, nil
+	return Ciphertext{Version: 1, KeyID: k.active, Nonce: nonce, Data: a.Seal(nil, nonce, plain, aad)}, nil
 }
 func (k *Keyring) Decrypt(value Ciphertext, aad AssociatedData) (string, error) {
+	plain, err := k.Open(value, aad.bytes())
+	return string(plain), err
+}
+
+// Open 只对所属领域的关联数据字节做认证。现有 LLM AAD 编码在
+// AssociatedData.bytes 中刻意保持不变。
+func (k *Keyring) Open(value Ciphertext, aad []byte) ([]byte, error) {
 	if value.Version != 1 {
-		return "", ErrDecrypt
+		return nil, ErrDecrypt
 	}
 	a, err := k.aead(value.KeyID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if len(value.Nonce) != a.NonceSize() {
-		return "", ErrDecrypt
+	if len(value.Nonce) != a.NonceSize() || len(aad) == 0 {
+		return nil, ErrDecrypt
 	}
-	plain, err := a.Open(nil, value.Nonce, value.Data, aad.bytes())
+	plain, err := a.Open(nil, value.Nonce, value.Data, aad)
 	if err != nil {
-		return "", ErrDecrypt
+		return nil, ErrDecrypt
 	}
-	return string(plain), nil
+	return plain, nil
 }
