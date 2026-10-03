@@ -6,10 +6,10 @@
 
 ### 应该用二进制还是 Docker？端口是多少？
 
-| 方式                | 模式               | 默认地址                 | 说明                 |
-| ------------------- | ------------------ | ------------------------ | -------------------- |
-| 预编译二进制 / 双击 | 本地模式           | `http://127.0.0.1:18080` | **个人推荐**，免登录 |
-| Docker 默认         | 服务器模式（预览） | `http://localhost:8080`  | 需注册/登录          |
+| 方式                | 模式               | 默认地址                 | 说明                          |
+| ------------------- | ------------------ | ------------------------ | ----------------------------- |
+| 预编译二进制 / 双击 | 本地模式           | `http://127.0.0.1:18080` | **个人推荐**，免登录          |
+| Docker 默认         | 服务器模式（预览） | `http://localhost:8080`  | 需登录；启动前须注入密钥与管理员 |
 
 个人试用请优先二进制本地模式。详见 [安装部署](/zh/guide/installation) 与 [使用模式](/zh/guide/modes)。
 
@@ -49,7 +49,7 @@ Web 里点「翻译」时必须选一份计划，因为服务端不会替你猜 
 
 仍失败时加 CLI `-v` 或查看服务日志，并到 [GitHub Issues](https://github.com/MeowSalty/LinguaFlow/issues) 搜索同类问题。
 
-### Docker 启动后无法访问？
+### Docker 启动后无法访问（或容器反复退出）？
 
 ```bash
 docker ps  # 确认容器正在运行
@@ -58,7 +58,8 @@ docker logs linguaflow  # 查看日志
 
 - 端口映射应为 **8080**（例：`-p 8080:8080`）
 - 浏览器访问 `http://localhost:8080`
-- Docker 默认是 **服务器模式**，需要注册/登录，不是本地模式的免登录体验
+- Docker 默认是 **服务器模式**，需登录使用（注册默认关闭，用初始管理员账号登录）
+- **容器启动即退出**通常是缺必需输入：`LINGUAFLOW_JWT_SECRET`、`LINGUAFLOW_CREDENTIALS_MASTER_KEY`、`LINGUAFLOW_BOOTSTRAP_ADMIN_*` 三类缺一即拒绝启动，日志会写明缺哪项（见 [安装部署 · Docker 部署](/zh/guide/installation#docker-部署)）
 - 检查本机防火墙与端口占用
 
 ### 从源码构建失败？
@@ -192,6 +193,13 @@ LinguaFlow 会自动保护时间码。若发现时间码被改：
 # 示例：服务器模式默认相对路径
 cp ./data/linguaflow.db ./backup/linguaflow_backup.db
 ```
+
+::: warning 备份必须连密钥一起
+数据库里保存的 AI 密钥是加密的：
+
+- **本地模式** — 数据目录中的 `credentials-keyring.json`（凭据加密 keyring）与数据库**成对备份**
+- **服务器模式** — `LINGUAFLOW_CREDENTIALS_MASTER_KEY` 或 keyring 文件与数据库**成对保存**；只有备份没有密钥，恢复后已保存的 AI 密钥将无法解密
+:::
 
 ### 如何迁移数据？
 

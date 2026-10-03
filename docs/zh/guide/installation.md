@@ -6,8 +6,8 @@ LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（�
 | --- | --- | --- | --- |
 | 预编译二进制 / 双击运行 | 本地模式 | `18080` | 免登录，推荐上手 |
 | `linguaflow local` | 本地模式 | `18080` | 同上 |
-| Docker 镜像默认 | 服务器模式（预览） | `8080` | 需注册/登录；见下方说明 |
-| `linguaflow serve` | 服务器模式（预览） | `8080` | 功能仍在完善，勿用于生产关键业务 |
+| Docker 镜像默认 | 服务器模式（预览） | `8080` | 需注入密钥与管理员后启动；见下方说明 |
+| `linguaflow serve` | 服务器模式（预览） | `8080` | 需部署配置与密钥；见 [使用模式](/zh/guide/modes) |
 
 跑通第一次翻译请先看 [快速开始 · Web](/zh/guide/getting-started)。
 
@@ -22,8 +22,14 @@ LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（�
 
 ## Docker 部署
 
-::: warning 容器默认是服务器模式
-官方镜像默认执行服务器模式（端口 `8080`），与本机双击二进制进入的本地模式不同。服务器模式仍在完善中，适合试用，不建议作为生产唯一依赖。个人本机请优先使用 [预编译二进制](#预编译二进制)。
+::: warning 容器默认是服务器模式，且必须提供密钥
+官方镜像默认执行服务器模式（端口 `8080`），与本机双击二进制进入的本地模式不同。服务器模式启动前**必须**提供三类输入，缺一即拒绝启动：
+
+1. **JWT 签名密钥** — `LINGUAFLOW_JWT_SECRET`（≥32 字节随机值）
+2. **凭据加密密钥** — `LINGUAFLOW_CREDENTIALS_MASTER_KEY`（32 字节随机值的 Base64）
+3. **初始管理员** — `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD`（仅首次初始化需要）
+
+三个值都可用 `linguaflow secrets generate --stdout` 生成；JWT secret 与凭据加密密钥必须是两个不同的随机值。服务器模式仍在完善中，适合试用，不建议作为生产唯一依赖。个人本机请优先使用 [预编译二进制](#预编译二进制)。
 :::
 
 ### 基本部署
@@ -34,10 +40,19 @@ docker run -d \
   --name linguaflow \
   -p 8080:8080 \
   -v linguaflow-data:/app/data \
+  -e LINGUAFLOW_JWT_SECRET="$(linguaflow secrets generate --stdout)" \
+  -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="$(linguaflow secrets generate --stdout)" \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="请改成强密码" \
   ghcr.io/meowsalty/linguaflow:latest
 ```
 
-浏览器访问 `http://localhost:8080`，按提示注册/登录后使用。
+浏览器访问 `http://localhost:8080`，用上面的管理员账号登录后使用。
+
+::: warning 密钥保存与复用
+JWT secret 与凭据加密密钥请保存到密码管理器或部署平台的秘密配置中，并在**每次重建容器时注入同一份值**——凭据加密密钥一旦更换，数据库里已保存的 AI 密钥将无法解密。首次初始化成功后，`LINGUAFLOW_BOOTSTRAP_ADMIN_*` 三个变量可以不再注入（账号与注册政策已存入数据库）。
+:::
 
 ::: tip 注意「非安全上下文」限制
 浏览器只在 HTTPS 或 `localhost` 下放开部分 API。若你把容器映射到局域网 IP / 域名用**明文 HTTP** 访问，**文件上传**和**复制到剪贴板**会被浏览器禁用。生产建议经反向代理上 HTTPS，详见 [使用模式 · 通过 HTTP 访问的限制](/zh/guide/modes#通过-http-访问的限制-非安全上下文)。
@@ -45,7 +60,7 @@ docker run -d \
 
 ### Docker Compose
 
-使用 SQLite（默认）的部署示例：
+SQLite（默认）+ 环境变量注入密钥的部署示例：
 
 ```yaml
 services:
@@ -58,12 +73,31 @@ services:
     volumes:
       - linguaflow-data:/app/data
     environment:
-      - LINGUAFLOW_DATA_DIR=/app/data
-      - LINGUAFLOW_JWT_SECRET=change-me-to-a-random-string
+      LINGUAFLOW_DATA_DIR: /app/data
+      # 以下三项建议通过部署平台的秘密配置或 .env 注入，不要明文提交
+      LINGUAFLOW_JWT_SECRET: ${LINGUAFLOW_JWT_SECRET:?需要至少 32 字节的随机值}
+      LINGUAFLOW_CREDENTIALS_MASTER_KEY: ${LINGUAFLOW_CREDENTIALS_MASTER_KEY:?需要 32 字节随机值的 Base64}
+      LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME: ${LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL: ${LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL:?需要初始管理员邮箱}
+      LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD: ${LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD:?需要初始管理员密码}
 
 volumes:
   linguaflow-data:
 ```
+
+在 Compose 文件同级放一个 `.env`（加入 `.gitignore`，不要提交）：
+
+```bash
+LINGUAFLOW_JWT_SECRET=<secrets generate --stdout 的输出>
+LINGUAFLOW_CREDENTIALS_MASTER_KEY=<另一个独立随机值>
+LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
+LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD=<强密码>
+```
+
+::: tip 更安全的密钥文件方式
+敏感值支持 `_FILE` 后缀的环境变量，指向容器内可读的文件路径，配合 Docker secrets 或 bind mount 使用（如 `LINGUAFLOW_JWT_SECRET_FILE: /run/secrets/jwt-secret`）。JWT secret、凭据加密密钥、数据库 DSN 与管理员密码均支持该形式。
+:::
 
 使用 PostgreSQL 的部署示例（适合高并发场景）：
 
@@ -76,9 +110,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - LINGUAFLOW_DATABASE_DRIVER=postgres
-      - LINGUAFLOW_DATABASE_DSN=postgres://linguaflow:secret@postgres:5432/linguaflow?sslmode=disable
-      - LINGUAFLOW_JWT_SECRET=change-me-to-a-random-string
+      LINGUAFLOW_JWT_SECRET: ${LINGUAFLOW_JWT_SECRET:?需要至少 32 字节的随机值}
+      LINGUAFLOW_CREDENTIALS_MASTER_KEY: ${LINGUAFLOW_CREDENTIALS_MASTER_KEY:?需要 32 字节随机值的 Base64}
+      LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME: ${LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL: ${LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL:?需要初始管理员邮箱}
+      LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD: ${LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD:?需要初始管理员密码}
+      LINGUAFLOW_DATABASE_DRIVER: postgres
+      LINGUAFLOW_DATABASE_DSN: postgres://linguaflow:secret@postgres:5432/linguaflow?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,12 +154,14 @@ Compose 示例中常用变量：
 | 变量 | 用途 |
 | --- | --- |
 | `LINGUAFLOW_DATA_DIR` | 数据目录（SQLite 文件等） |
-| `LINGUAFLOW_JWT_SECRET` | JWT 密钥（务必改掉默认值） |
-| `LINGUAFLOW_DATABASE_DRIVER` / `DSN` | 切换 PostgreSQL 时使用 |
+| `LINGUAFLOW_JWT_SECRET` | JWT 签名密钥（必需，≥32 字节；支持 `_FILE`） |
+| `LINGUAFLOW_CREDENTIALS_MASTER_KEY` | 凭据加密密钥（必需；支持 `_FILE`） |
+| `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | 首次初始化的管理员（密码支持 `_FILE`） |
+| `LINGUAFLOW_BOOTSTRAP_REGISTRATION_ENABLED` | 是否开放注册（默认 `false`，也可登录后管理员在设置页开启） |
+| `LINGUAFLOW_DATABASE_DRIVER` / `DSN` | 切换 PostgreSQL 时使用（`DSN` 支持 `_FILE`） |
 | `LINGUAFLOW_SERVE_UI` | `false` 时仅 API（也可用 `--no-ui`） |
-| `LINGUAFLOW_ADMIN_USERNAME` / `PASSWORD` | 启动时管理员账户 |
 
-**完整环境变量表、连接池参数与配置文件字段** 只维护在一处：
+**完整环境变量表、部署文档字段与配置优先级** 只维护在一处：
 
 → [配置文件与环境变量](/zh/guide/configuration)
 
@@ -158,20 +198,24 @@ LinguaFlow 支持部署到 HuggingFace Spaces，使用 `Dockerfile.hf` 构建。
 
 3. **环境变量配置**
 
-   在 Space 的 **Settings** 页面添加环境变量：
+   在 Space 的 **Settings** 页面添加环境变量（可用 secrets 形式保存）：
 
-   | 变量名                      | 描述         |
-   | --------------------------- | ------------ |
-   | `LINGUAFLOW_ADMIN_USERNAME` | 管理员用户名 |
-   | `LINGUAFLOW_ADMIN_PASSWORD` | 管理员密码   |
+   | 变量名                              | 描述                                   |
+   | ----------------------------------- | -------------------------------------- |
+   | `LINGUAFLOW_JWT_SECRET`             | JWT 签名密钥（≥32 字节随机值）         |
+   | `LINGUAFLOW_CREDENTIALS_MASTER_KEY` | 凭据加密密钥（32 字节随机值的 Base64） |
+   | `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` | 初始管理员用户名                     |
+   | `LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL`  | 初始管理员邮箱                         |
+   | `LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD` | 初始管理员密码                       |
+   | `LINGUAFLOW_DATA_DIR`               | 设为 `/data`，否则重启丢数据           |
 
    ::: warning
-   Space 容器仅 `/data` 目录持久化。如需保留 SQLite 数据，请设置 `LINGUAFLOW_DATA_DIR=/data`，否则重启后数据丢失。
+   Space 容器仅 `/data` 目录持久化。请务必设置 `LINGUAFLOW_DATA_DIR=/data` 保留 SQLite 数据；JWT secret 与凭据加密密钥也要长期保存不变，否则重启后已保存的 AI 密钥将无法解密。
    :::
 
 4. **访问服务**
 
-   部署完成后，通过 `https://<username>-<space-name>.hf.space` 访问服务。
+   部署完成后，通过 `https://<username>-<space-name>.hf.space` 访问服务，用初始管理员账号登录。
 
 ::: tip
 HuggingFace Spaces 默认使用 7860 端口，`Dockerfile.hf` 已自动配置。
