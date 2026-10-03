@@ -24,7 +24,7 @@ Web 可用「探测模型」拉取列表后选择。
 
 | 选项                    | 类型       | 默认值                                | 说明                                                  |
 | ----------------------- | ---------- | ------------------------------------- | ----------------------------------------------------- |
-| `api_key`               | string     | **必填**                              | API 密钥，支持 `${ENV_VAR}`                           |
+| `secret`                | string     | **必填**（后端级字段，非 options 内） | 该后端的 API 密钥；Web 端保存为加密凭据后不可回显，CLI 支持 `${ENV_VAR}` |
 | `base_url`              | string     | SDK 默认                              | 自定义端点                                            |
 | `model`                 | string     | **必填**                              | 模型 ID                                               |
 | `max_tokens`            | int        | OpenAI: `0`；Anthropic/Gemini: `8192` | 最大生成 token；`0` 常表示不额外限制                  |
@@ -35,6 +35,10 @@ Web 可用「探测模型」拉取列表后选择。
 | `stream`                | bool       | `false`                               | 上游流式请求，内部累积为完整响应                      |
 | `thinking_level`        | string     | 不设置                               | 统一思考强度：`off` \| `minimal` \| `low` \| `medium` \| `high` |
 | `rate_limit_per_minute` | int        | `0`                                   | 每分钟请求上限；`0` 不限（后端级字段，非 options 内） |
+
+::: warning 旧字段 `options.api_key` 已移除
+密钥统一写在后端的 `secret` 字段，`options.api_key` 会被严格校验拒绝。Web 端的密钥以**凭据**形式加密保存，编辑后端时可选择保留当前凭据、绑定已有凭据或输入新密钥；凭据版本支持轮换与撤销，见 [翻译配置 · 使用 · AI 后端](/zh/guide/translation-config#ai-后端)。
+:::
 
 ### 思考强度（`thinking_level`）
 
@@ -62,7 +66,7 @@ Web 可用「探测模型」拉取列表后选择。
 
 ### 探测可用模型（Web / API）
 
-`POST /api/v1/backends/models`：用当场填写的 `type`、`api_key` 与可选 `base_url` 向服务商拉取模型列表，**凭据不落库**。返回 `items[].id` / `name`，可将 `id` 直接写入 `options.model`。
+`POST /api/v1/backends/models`：用当场填写的 `type`、`secret` 与可选 `base_url` 向服务商拉取模型列表，**凭据不落库**。返回 `items[].id` / `name`，可将 `id` 直接写入 `options.model`。Web 界面上探测用的密钥是临时输入，不会保存、也不会改变后端的凭据绑定。
 
 ### Base URL 示例
 
