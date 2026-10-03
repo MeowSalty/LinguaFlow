@@ -28,8 +28,45 @@ tasks:
       - go mod download
 
   dev:
-    desc: 启动后端开发服务器
+    desc: 启动后端开发服务器（自动生成并加载 .env；显式环境变量优先）
     dir: '{{.TASKFILE_DIR}}'
+    deps:
+      - dev:setup
+    cmds:
+      - task: dev:serve
+
+  dev:setup:
+    desc: 初始化 backend/.env（仅缺失时生成；含 JWT、凭据密钥与初始管理员密码）
+    dir: '{{.TASKFILE_DIR}}'
+    status:
+      - test -f .env
+    cmds:
+      - |
+        set -e
+        jwt=$(go run ./cmd/linguaflow secrets generate --stdout)
+        master=$(go run ./cmd/linguaflow secrets generate --stdout)
+        password=$(go run ./cmd/linguaflow secrets generate --stdout)
+        cat > .env <<EOF
+        # 由 task backend:dev:setup 生成，仅在文件缺失时创建；已存在时不会覆盖。
+        # 含真实密钥且已被 .gitignore 忽略，切勿提交或分享。
+        # 显式设置的同名环境变量优先于本文件。
+        LINGUAFLOW_JWT_SECRET=$jwt
+        LINGUAFLOW_CREDENTIALS_MASTER_KEY=$master
+
+        # 首次启动时初始化管理员，仅初始化阶段读取；实例已初始化后可删除。
+        LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
+        LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+        LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD=$password
+
+        # 常用可选变量（取消注释即生效）：
+        # LINGUAFLOW_LOG_LEVEL=debug
+        # LINGUAFLOW_PORT=8080
+        EOF
+        echo "已生成 backend/.env：初始管理员用户名 admin，密码等密钥见该文件。"
+
+  dev:serve:
+    dir: '{{.TASKFILE_DIR}}'
+    dotenv: ['.env']
     cmds:
       - go run ./cmd/linguaflow serve {{.CLI_ARGS}}
 
