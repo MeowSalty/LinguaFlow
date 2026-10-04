@@ -12,6 +12,7 @@ type ExportArtifact struct{ ent.Schema }
 func (ExportArtifact) Mixin() []ent.Mixin { return []ent.Mixin{TimeMixin{}} }
 func (ExportArtifact) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("deletion_task_id").Optional().Nillable(),
 		field.Int("project_id").Positive().Immutable(),
 		field.Int("resource_id").Positive().Immutable(),
 		field.Int("source_revision_id").Positive().Immutable(),

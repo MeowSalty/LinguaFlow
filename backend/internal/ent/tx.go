@@ -74,6 +74,10 @@ type Tx struct {
 	StorageAuthVersion *StorageAuthVersionClient
 	// StorageBackup is the client for interacting with the StorageBackup builders.
 	StorageBackup *StorageBackupClient
+	// StorageCheck is the client for interacting with the StorageCheck builders.
+	StorageCheck *StorageCheckClient
+	// StorageCheckWrite is the client for interacting with the StorageCheckWrite builders.
+	StorageCheckWrite *StorageCheckWriteClient
 	// StorageConnection is the client for interacting with the StorageConnection builders.
 	StorageConnection *StorageConnectionClient
 	// StorageMigrationItem is the client for interacting with the StorageMigrationItem builders.
@@ -84,6 +88,10 @@ type Tx struct {
 	StorageSpace *StorageSpaceClient
 	// StorageTask is the client for interacting with the StorageTask builders.
 	StorageTask *StorageTaskClient
+	// StorageUploadBatch is the client for interacting with the StorageUploadBatch builders.
+	StorageUploadBatch *StorageUploadBatchClient
+	// StorageUploadBatchItem is the client for interacting with the StorageUploadBatchItem builders.
+	StorageUploadBatchItem *StorageUploadBatchItemClient
 	// StorageWrite is the client for interacting with the StorageWrite builders.
 	StorageWrite *StorageWriteClient
 	// SyncTask is the client for interacting with the SyncTask builders.
@@ -260,11 +268,15 @@ func (tx *Tx) init() {
 	tx.SourceRevision = NewSourceRevisionClient(tx.config)
 	tx.StorageAuthVersion = NewStorageAuthVersionClient(tx.config)
 	tx.StorageBackup = NewStorageBackupClient(tx.config)
+	tx.StorageCheck = NewStorageCheckClient(tx.config)
+	tx.StorageCheckWrite = NewStorageCheckWriteClient(tx.config)
 	tx.StorageConnection = NewStorageConnectionClient(tx.config)
 	tx.StorageMigrationItem = NewStorageMigrationItemClient(tx.config)
 	tx.StorageReservation = NewStorageReservationClient(tx.config)
 	tx.StorageSpace = NewStorageSpaceClient(tx.config)
 	tx.StorageTask = NewStorageTaskClient(tx.config)
+	tx.StorageUploadBatch = NewStorageUploadBatchClient(tx.config)
+	tx.StorageUploadBatchItem = NewStorageUploadBatchItemClient(tx.config)
 	tx.StorageWrite = NewStorageWriteClient(tx.config)
 	tx.SyncTask = NewSyncTaskClient(tx.config)
 	tx.SystemSetting = NewSystemSettingClient(tx.config)

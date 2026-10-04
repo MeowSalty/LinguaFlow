@@ -12,6 +12,7 @@ type DeletionEntry struct{ ent.Schema }
 func (DeletionEntry) Mixin() []ent.Mixin { return []ent.Mixin{TimeMixin{}} }
 func (DeletionEntry) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("deletion_task_id").Optional().Nillable(),
 		field.Int("location_id").Positive().Unique(),
 		field.Int("project_id").Default(0).NonNegative(),
 		field.String("owner_kind").Default("site"),

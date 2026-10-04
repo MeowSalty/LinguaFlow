@@ -50,6 +50,20 @@ func (_c *ExportArtifactCreate) SetNillableUpdatedAt(v *time.Time) *ExportArtifa
 	return _c
 }
 
+// SetDeletionTaskID sets the "deletion_task_id" field.
+func (_c *ExportArtifactCreate) SetDeletionTaskID(v int) *ExportArtifactCreate {
+	_c.mutation.SetDeletionTaskID(v)
+	return _c
+}
+
+// SetNillableDeletionTaskID sets the "deletion_task_id" field if the given value is not nil.
+func (_c *ExportArtifactCreate) SetNillableDeletionTaskID(v *int) *ExportArtifactCreate {
+	if v != nil {
+		_c.SetDeletionTaskID(*v)
+	}
+	return _c
+}
+
 // SetProjectID sets the "project_id" field.
 func (_c *ExportArtifactCreate) SetProjectID(v int) *ExportArtifactCreate {
 	_c.mutation.SetProjectID(v)
@@ -368,6 +382,10 @@ func (_c *ExportArtifactCreate) createSpec() (*ExportArtifact, *sqlgraph.CreateS
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(exportartifact.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.DeletionTaskID(); ok {
+		_spec.SetField(exportartifact.FieldDeletionTaskID, field.TypeInt, value)
+		_node.DeletionTaskID = &value
 	}
 	if value, ok := _c.mutation.ProjectID(); ok {
 		_spec.SetField(exportartifact.FieldProjectID, field.TypeInt, value)

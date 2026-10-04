@@ -4,12 +4,14 @@ package ent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
@@ -31,6 +33,170 @@ func (_u *StorageTaskUpdate) Where(ps ...predicate.StorageTask) *StorageTaskUpda
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *StorageTaskUpdate) SetUpdatedAt(v time.Time) *StorageTaskUpdate {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetContractVersion sets the "contract_version" field.
+func (_u *StorageTaskUpdate) SetContractVersion(v int) *StorageTaskUpdate {
+	_u.mutation.ResetContractVersion()
+	_u.mutation.SetContractVersion(v)
+	return _u
+}
+
+// SetNillableContractVersion sets the "contract_version" field if the given value is not nil.
+func (_u *StorageTaskUpdate) SetNillableContractVersion(v *int) *StorageTaskUpdate {
+	if v != nil {
+		_u.SetContractVersion(*v)
+	}
+	return _u
+}
+
+// AddContractVersion adds value to the "contract_version" field.
+func (_u *StorageTaskUpdate) AddContractVersion(v int) *StorageTaskUpdate {
+	_u.mutation.AddContractVersion(v)
+	return _u
+}
+
+// SetInputSize sets the "input_size" field.
+func (_u *StorageTaskUpdate) SetInputSize(v int64) *StorageTaskUpdate {
+	_u.mutation.ResetInputSize()
+	_u.mutation.SetInputSize(v)
+	return _u
+}
+
+// SetNillableInputSize sets the "input_size" field if the given value is not nil.
+func (_u *StorageTaskUpdate) SetNillableInputSize(v *int64) *StorageTaskUpdate {
+	if v != nil {
+		_u.SetInputSize(*v)
+	}
+	return _u
+}
+
+// AddInputSize adds value to the "input_size" field.
+func (_u *StorageTaskUpdate) AddInputSize(v int64) *StorageTaskUpdate {
+	_u.mutation.AddInputSize(v)
+	return _u
+}
+
+// SetInputSha256 sets the "input_sha256" field.
+func (_u *StorageTaskUpdate) SetInputSha256(v string) *StorageTaskUpdate {
+	_u.mutation.SetInputSha256(v)
+	return _u
+}
+
+// SetNillableInputSha256 sets the "input_sha256" field if the given value is not nil.
+func (_u *StorageTaskUpdate) SetNillableInputSha256(v *string) *StorageTaskUpdate {
+	if v != nil {
+		_u.SetInputSha256(*v)
+	}
+	return _u
+}
+
+// SetSourcePlan sets the "source_plan" field.
+func (_u *StorageTaskUpdate) SetSourcePlan(v json.RawMessage) *StorageTaskUpdate {
+	_u.mutation.SetSourcePlan(v)
+	return _u
+}
+
+// AppendSourcePlan appends value to the "source_plan" field.
+func (_u *StorageTaskUpdate) AppendSourcePlan(v json.RawMessage) *StorageTaskUpdate {
+	_u.mutation.AppendSourcePlan(v)
+	return _u
+}
+
+// ClearSourcePlan clears the value of the "source_plan" field.
+func (_u *StorageTaskUpdate) ClearSourcePlan() *StorageTaskUpdate {
+	_u.mutation.ClearSourcePlan()
+	return _u
+}
+
+// SetLegacySnapshot sets the "legacy_snapshot" field.
+func (_u *StorageTaskUpdate) SetLegacySnapshot(v json.RawMessage) *StorageTaskUpdate {
+	_u.mutation.SetLegacySnapshot(v)
+	return _u
+}
+
+// AppendLegacySnapshot appends value to the "legacy_snapshot" field.
+func (_u *StorageTaskUpdate) AppendLegacySnapshot(v json.RawMessage) *StorageTaskUpdate {
+	_u.mutation.AppendLegacySnapshot(v)
+	return _u
+}
+
+// ClearLegacySnapshot clears the value of the "legacy_snapshot" field.
+func (_u *StorageTaskUpdate) ClearLegacySnapshot() *StorageTaskUpdate {
+	_u.mutation.ClearLegacySnapshot()
+	return _u
+}
+
+// SetLegacySnapshotExpiresAt sets the "legacy_snapshot_expires_at" field.
+func (_u *StorageTaskUpdate) SetLegacySnapshotExpiresAt(v time.Time) *StorageTaskUpdate {
+	_u.mutation.SetLegacySnapshotExpiresAt(v)
+	return _u
+}
+
+// SetNillableLegacySnapshotExpiresAt sets the "legacy_snapshot_expires_at" field if the given value is not nil.
+func (_u *StorageTaskUpdate) SetNillableLegacySnapshotExpiresAt(v *time.Time) *StorageTaskUpdate {
+	if v != nil {
+		_u.SetLegacySnapshotExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearLegacySnapshotExpiresAt clears the value of the "legacy_snapshot_expires_at" field.
+func (_u *StorageTaskUpdate) ClearLegacySnapshotExpiresAt() *StorageTaskUpdate {
+	_u.mutation.ClearLegacySnapshotExpiresAt()
+	return _u
+}
+
+// SetResultSnapshot sets the "result_snapshot" field.
+func (_u *StorageTaskUpdate) SetResultSnapshot(v json.RawMessage) *StorageTaskUpdate {
+	_u.mutation.SetResultSnapshot(v)
+	return _u
+}
+
+// AppendResultSnapshot appends value to the "result_snapshot" field.
+func (_u *StorageTaskUpdate) AppendResultSnapshot(v json.RawMessage) *StorageTaskUpdate {
+	_u.mutation.AppendResultSnapshot(v)
+	return _u
+}
+
+// ClearResultSnapshot clears the value of the "result_snapshot" field.
+func (_u *StorageTaskUpdate) ClearResultSnapshot() *StorageTaskUpdate {
+	_u.mutation.ClearResultSnapshot()
+	return _u
+}
+
+// SetLeaseToken sets the "lease_token" field.
+func (_u *StorageTaskUpdate) SetLeaseToken(v string) *StorageTaskUpdate {
+	_u.mutation.SetLeaseToken(v)
+	return _u
+}
+
+// SetNillableLeaseToken sets the "lease_token" field if the given value is not nil.
+func (_u *StorageTaskUpdate) SetNillableLeaseToken(v *string) *StorageTaskUpdate {
+	if v != nil {
+		_u.SetLeaseToken(*v)
+	}
+	return _u
+}
+
+// SetLeaseUntil sets the "lease_until" field.
+func (_u *StorageTaskUpdate) SetLeaseUntil(v time.Time) *StorageTaskUpdate {
+	_u.mutation.SetLeaseUntil(v)
+	return _u
+}
+
+// SetNillableLeaseUntil sets the "lease_until" field if the given value is not nil.
+func (_u *StorageTaskUpdate) SetNillableLeaseUntil(v *time.Time) *StorageTaskUpdate {
+	if v != nil {
+		_u.SetLeaseUntil(*v)
+	}
+	return _u
+}
+
+// ClearLeaseUntil clears the value of the "lease_until" field.
+func (_u *StorageTaskUpdate) ClearLeaseUntil() *StorageTaskUpdate {
+	_u.mutation.ClearLeaseUntil()
 	return _u
 }
 
@@ -472,6 +638,16 @@ func (_u *StorageTaskUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *StorageTaskUpdate) check() error {
+	if v, ok := _u.mutation.ContractVersion(); ok {
+		if err := storagetask.ContractVersionValidator(v); err != nil {
+			return &ValidationError{Name: "contract_version", err: fmt.Errorf(`ent: validator failed for field "StorageTask.contract_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.InputSize(); ok {
+		if err := storagetask.InputSizeValidator(v); err != nil {
+			return &ValidationError{Name: "input_size", err: fmt.Errorf(`ent: validator failed for field "StorageTask.input_size": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := storagetask.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "StorageTask.status": %w`, err)}
@@ -504,6 +680,69 @@ func (_u *StorageTaskUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(storagetask.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.ContractVersion(); ok {
+		_spec.SetField(storagetask.FieldContractVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedContractVersion(); ok {
+		_spec.AddField(storagetask.FieldContractVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.InputSize(); ok {
+		_spec.SetField(storagetask.FieldInputSize, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedInputSize(); ok {
+		_spec.AddField(storagetask.FieldInputSize, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.InputSha256(); ok {
+		_spec.SetField(storagetask.FieldInputSha256, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourcePlan(); ok {
+		_spec.SetField(storagetask.FieldSourcePlan, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSourcePlan(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, storagetask.FieldSourcePlan, value)
+		})
+	}
+	if _u.mutation.SourcePlanCleared() {
+		_spec.ClearField(storagetask.FieldSourcePlan, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.LegacySnapshot(); ok {
+		_spec.SetField(storagetask.FieldLegacySnapshot, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedLegacySnapshot(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, storagetask.FieldLegacySnapshot, value)
+		})
+	}
+	if _u.mutation.LegacySnapshotCleared() {
+		_spec.ClearField(storagetask.FieldLegacySnapshot, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.LegacySnapshotExpiresAt(); ok {
+		_spec.SetField(storagetask.FieldLegacySnapshotExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.LegacySnapshotExpiresAtCleared() {
+		_spec.ClearField(storagetask.FieldLegacySnapshotExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ResultSnapshot(); ok {
+		_spec.SetField(storagetask.FieldResultSnapshot, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedResultSnapshot(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, storagetask.FieldResultSnapshot, value)
+		})
+	}
+	if _u.mutation.ResultSnapshotCleared() {
+		_spec.ClearField(storagetask.FieldResultSnapshot, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.LeaseToken(); ok {
+		_spec.SetField(storagetask.FieldLeaseToken, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LeaseUntil(); ok {
+		_spec.SetField(storagetask.FieldLeaseUntil, field.TypeTime, value)
+	}
+	if _u.mutation.LeaseUntilCleared() {
+		_spec.ClearField(storagetask.FieldLeaseUntil, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(storagetask.FieldStatus, field.TypeEnum, value)
@@ -648,6 +887,170 @@ type StorageTaskUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *StorageTaskUpdateOne) SetUpdatedAt(v time.Time) *StorageTaskUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetContractVersion sets the "contract_version" field.
+func (_u *StorageTaskUpdateOne) SetContractVersion(v int) *StorageTaskUpdateOne {
+	_u.mutation.ResetContractVersion()
+	_u.mutation.SetContractVersion(v)
+	return _u
+}
+
+// SetNillableContractVersion sets the "contract_version" field if the given value is not nil.
+func (_u *StorageTaskUpdateOne) SetNillableContractVersion(v *int) *StorageTaskUpdateOne {
+	if v != nil {
+		_u.SetContractVersion(*v)
+	}
+	return _u
+}
+
+// AddContractVersion adds value to the "contract_version" field.
+func (_u *StorageTaskUpdateOne) AddContractVersion(v int) *StorageTaskUpdateOne {
+	_u.mutation.AddContractVersion(v)
+	return _u
+}
+
+// SetInputSize sets the "input_size" field.
+func (_u *StorageTaskUpdateOne) SetInputSize(v int64) *StorageTaskUpdateOne {
+	_u.mutation.ResetInputSize()
+	_u.mutation.SetInputSize(v)
+	return _u
+}
+
+// SetNillableInputSize sets the "input_size" field if the given value is not nil.
+func (_u *StorageTaskUpdateOne) SetNillableInputSize(v *int64) *StorageTaskUpdateOne {
+	if v != nil {
+		_u.SetInputSize(*v)
+	}
+	return _u
+}
+
+// AddInputSize adds value to the "input_size" field.
+func (_u *StorageTaskUpdateOne) AddInputSize(v int64) *StorageTaskUpdateOne {
+	_u.mutation.AddInputSize(v)
+	return _u
+}
+
+// SetInputSha256 sets the "input_sha256" field.
+func (_u *StorageTaskUpdateOne) SetInputSha256(v string) *StorageTaskUpdateOne {
+	_u.mutation.SetInputSha256(v)
+	return _u
+}
+
+// SetNillableInputSha256 sets the "input_sha256" field if the given value is not nil.
+func (_u *StorageTaskUpdateOne) SetNillableInputSha256(v *string) *StorageTaskUpdateOne {
+	if v != nil {
+		_u.SetInputSha256(*v)
+	}
+	return _u
+}
+
+// SetSourcePlan sets the "source_plan" field.
+func (_u *StorageTaskUpdateOne) SetSourcePlan(v json.RawMessage) *StorageTaskUpdateOne {
+	_u.mutation.SetSourcePlan(v)
+	return _u
+}
+
+// AppendSourcePlan appends value to the "source_plan" field.
+func (_u *StorageTaskUpdateOne) AppendSourcePlan(v json.RawMessage) *StorageTaskUpdateOne {
+	_u.mutation.AppendSourcePlan(v)
+	return _u
+}
+
+// ClearSourcePlan clears the value of the "source_plan" field.
+func (_u *StorageTaskUpdateOne) ClearSourcePlan() *StorageTaskUpdateOne {
+	_u.mutation.ClearSourcePlan()
+	return _u
+}
+
+// SetLegacySnapshot sets the "legacy_snapshot" field.
+func (_u *StorageTaskUpdateOne) SetLegacySnapshot(v json.RawMessage) *StorageTaskUpdateOne {
+	_u.mutation.SetLegacySnapshot(v)
+	return _u
+}
+
+// AppendLegacySnapshot appends value to the "legacy_snapshot" field.
+func (_u *StorageTaskUpdateOne) AppendLegacySnapshot(v json.RawMessage) *StorageTaskUpdateOne {
+	_u.mutation.AppendLegacySnapshot(v)
+	return _u
+}
+
+// ClearLegacySnapshot clears the value of the "legacy_snapshot" field.
+func (_u *StorageTaskUpdateOne) ClearLegacySnapshot() *StorageTaskUpdateOne {
+	_u.mutation.ClearLegacySnapshot()
+	return _u
+}
+
+// SetLegacySnapshotExpiresAt sets the "legacy_snapshot_expires_at" field.
+func (_u *StorageTaskUpdateOne) SetLegacySnapshotExpiresAt(v time.Time) *StorageTaskUpdateOne {
+	_u.mutation.SetLegacySnapshotExpiresAt(v)
+	return _u
+}
+
+// SetNillableLegacySnapshotExpiresAt sets the "legacy_snapshot_expires_at" field if the given value is not nil.
+func (_u *StorageTaskUpdateOne) SetNillableLegacySnapshotExpiresAt(v *time.Time) *StorageTaskUpdateOne {
+	if v != nil {
+		_u.SetLegacySnapshotExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearLegacySnapshotExpiresAt clears the value of the "legacy_snapshot_expires_at" field.
+func (_u *StorageTaskUpdateOne) ClearLegacySnapshotExpiresAt() *StorageTaskUpdateOne {
+	_u.mutation.ClearLegacySnapshotExpiresAt()
+	return _u
+}
+
+// SetResultSnapshot sets the "result_snapshot" field.
+func (_u *StorageTaskUpdateOne) SetResultSnapshot(v json.RawMessage) *StorageTaskUpdateOne {
+	_u.mutation.SetResultSnapshot(v)
+	return _u
+}
+
+// AppendResultSnapshot appends value to the "result_snapshot" field.
+func (_u *StorageTaskUpdateOne) AppendResultSnapshot(v json.RawMessage) *StorageTaskUpdateOne {
+	_u.mutation.AppendResultSnapshot(v)
+	return _u
+}
+
+// ClearResultSnapshot clears the value of the "result_snapshot" field.
+func (_u *StorageTaskUpdateOne) ClearResultSnapshot() *StorageTaskUpdateOne {
+	_u.mutation.ClearResultSnapshot()
+	return _u
+}
+
+// SetLeaseToken sets the "lease_token" field.
+func (_u *StorageTaskUpdateOne) SetLeaseToken(v string) *StorageTaskUpdateOne {
+	_u.mutation.SetLeaseToken(v)
+	return _u
+}
+
+// SetNillableLeaseToken sets the "lease_token" field if the given value is not nil.
+func (_u *StorageTaskUpdateOne) SetNillableLeaseToken(v *string) *StorageTaskUpdateOne {
+	if v != nil {
+		_u.SetLeaseToken(*v)
+	}
+	return _u
+}
+
+// SetLeaseUntil sets the "lease_until" field.
+func (_u *StorageTaskUpdateOne) SetLeaseUntil(v time.Time) *StorageTaskUpdateOne {
+	_u.mutation.SetLeaseUntil(v)
+	return _u
+}
+
+// SetNillableLeaseUntil sets the "lease_until" field if the given value is not nil.
+func (_u *StorageTaskUpdateOne) SetNillableLeaseUntil(v *time.Time) *StorageTaskUpdateOne {
+	if v != nil {
+		_u.SetLeaseUntil(*v)
+	}
+	return _u
+}
+
+// ClearLeaseUntil clears the value of the "lease_until" field.
+func (_u *StorageTaskUpdateOne) ClearLeaseUntil() *StorageTaskUpdateOne {
+	_u.mutation.ClearLeaseUntil()
 	return _u
 }
 
@@ -1102,6 +1505,16 @@ func (_u *StorageTaskUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *StorageTaskUpdateOne) check() error {
+	if v, ok := _u.mutation.ContractVersion(); ok {
+		if err := storagetask.ContractVersionValidator(v); err != nil {
+			return &ValidationError{Name: "contract_version", err: fmt.Errorf(`ent: validator failed for field "StorageTask.contract_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.InputSize(); ok {
+		if err := storagetask.InputSizeValidator(v); err != nil {
+			return &ValidationError{Name: "input_size", err: fmt.Errorf(`ent: validator failed for field "StorageTask.input_size": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := storagetask.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "StorageTask.status": %w`, err)}
@@ -1151,6 +1564,69 @@ func (_u *StorageTaskUpdateOne) sqlSave(ctx context.Context) (_node *StorageTask
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(storagetask.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.ContractVersion(); ok {
+		_spec.SetField(storagetask.FieldContractVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedContractVersion(); ok {
+		_spec.AddField(storagetask.FieldContractVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.InputSize(); ok {
+		_spec.SetField(storagetask.FieldInputSize, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedInputSize(); ok {
+		_spec.AddField(storagetask.FieldInputSize, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.InputSha256(); ok {
+		_spec.SetField(storagetask.FieldInputSha256, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourcePlan(); ok {
+		_spec.SetField(storagetask.FieldSourcePlan, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSourcePlan(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, storagetask.FieldSourcePlan, value)
+		})
+	}
+	if _u.mutation.SourcePlanCleared() {
+		_spec.ClearField(storagetask.FieldSourcePlan, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.LegacySnapshot(); ok {
+		_spec.SetField(storagetask.FieldLegacySnapshot, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedLegacySnapshot(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, storagetask.FieldLegacySnapshot, value)
+		})
+	}
+	if _u.mutation.LegacySnapshotCleared() {
+		_spec.ClearField(storagetask.FieldLegacySnapshot, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.LegacySnapshotExpiresAt(); ok {
+		_spec.SetField(storagetask.FieldLegacySnapshotExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.LegacySnapshotExpiresAtCleared() {
+		_spec.ClearField(storagetask.FieldLegacySnapshotExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ResultSnapshot(); ok {
+		_spec.SetField(storagetask.FieldResultSnapshot, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedResultSnapshot(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, storagetask.FieldResultSnapshot, value)
+		})
+	}
+	if _u.mutation.ResultSnapshotCleared() {
+		_spec.ClearField(storagetask.FieldResultSnapshot, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.LeaseToken(); ok {
+		_spec.SetField(storagetask.FieldLeaseToken, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LeaseUntil(); ok {
+		_spec.SetField(storagetask.FieldLeaseUntil, field.TypeTime, value)
+	}
+	if _u.mutation.LeaseUntilCleared() {
+		_spec.ClearField(storagetask.FieldLeaseUntil, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(storagetask.FieldStatus, field.TypeEnum, value)

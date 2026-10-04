@@ -35,6 +35,33 @@ func (_u *DeletionEntryUpdate) SetUpdatedAt(v time.Time) *DeletionEntryUpdate {
 	return _u
 }
 
+// SetDeletionTaskID sets the "deletion_task_id" field.
+func (_u *DeletionEntryUpdate) SetDeletionTaskID(v int) *DeletionEntryUpdate {
+	_u.mutation.ResetDeletionTaskID()
+	_u.mutation.SetDeletionTaskID(v)
+	return _u
+}
+
+// SetNillableDeletionTaskID sets the "deletion_task_id" field if the given value is not nil.
+func (_u *DeletionEntryUpdate) SetNillableDeletionTaskID(v *int) *DeletionEntryUpdate {
+	if v != nil {
+		_u.SetDeletionTaskID(*v)
+	}
+	return _u
+}
+
+// AddDeletionTaskID adds value to the "deletion_task_id" field.
+func (_u *DeletionEntryUpdate) AddDeletionTaskID(v int) *DeletionEntryUpdate {
+	_u.mutation.AddDeletionTaskID(v)
+	return _u
+}
+
+// ClearDeletionTaskID clears the value of the "deletion_task_id" field.
+func (_u *DeletionEntryUpdate) ClearDeletionTaskID() *DeletionEntryUpdate {
+	_u.mutation.ClearDeletionTaskID()
+	return _u
+}
+
 // SetLocationID sets the "location_id" field.
 func (_u *DeletionEntryUpdate) SetLocationID(v int) *DeletionEntryUpdate {
 	_u.mutation.SetLocationID(v)
@@ -288,6 +315,15 @@ func (_u *DeletionEntryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(deletionentry.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if value, ok := _u.mutation.DeletionTaskID(); ok {
+		_spec.SetField(deletionentry.FieldDeletionTaskID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDeletionTaskID(); ok {
+		_spec.AddField(deletionentry.FieldDeletionTaskID, field.TypeInt, value)
+	}
+	if _u.mutation.DeletionTaskIDCleared() {
+		_spec.ClearField(deletionentry.FieldDeletionTaskID, field.TypeInt)
+	}
 	if value, ok := _u.mutation.ProjectID(); ok {
 		_spec.SetField(deletionentry.FieldProjectID, field.TypeInt, value)
 	}
@@ -376,6 +412,33 @@ type DeletionEntryUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *DeletionEntryUpdateOne) SetUpdatedAt(v time.Time) *DeletionEntryUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetDeletionTaskID sets the "deletion_task_id" field.
+func (_u *DeletionEntryUpdateOne) SetDeletionTaskID(v int) *DeletionEntryUpdateOne {
+	_u.mutation.ResetDeletionTaskID()
+	_u.mutation.SetDeletionTaskID(v)
+	return _u
+}
+
+// SetNillableDeletionTaskID sets the "deletion_task_id" field if the given value is not nil.
+func (_u *DeletionEntryUpdateOne) SetNillableDeletionTaskID(v *int) *DeletionEntryUpdateOne {
+	if v != nil {
+		_u.SetDeletionTaskID(*v)
+	}
+	return _u
+}
+
+// AddDeletionTaskID adds value to the "deletion_task_id" field.
+func (_u *DeletionEntryUpdateOne) AddDeletionTaskID(v int) *DeletionEntryUpdateOne {
+	_u.mutation.AddDeletionTaskID(v)
+	return _u
+}
+
+// ClearDeletionTaskID clears the value of the "deletion_task_id" field.
+func (_u *DeletionEntryUpdateOne) ClearDeletionTaskID() *DeletionEntryUpdateOne {
+	_u.mutation.ClearDeletionTaskID()
 	return _u
 }
 
@@ -661,6 +724,15 @@ func (_u *DeletionEntryUpdateOne) sqlSave(ctx context.Context) (_node *DeletionE
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(deletionentry.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.DeletionTaskID(); ok {
+		_spec.SetField(deletionentry.FieldDeletionTaskID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDeletionTaskID(); ok {
+		_spec.AddField(deletionentry.FieldDeletionTaskID, field.TypeInt, value)
+	}
+	if _u.mutation.DeletionTaskIDCleared() {
+		_spec.ClearField(deletionentry.FieldDeletionTaskID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.ProjectID(); ok {
 		_spec.SetField(deletionentry.FieldProjectID, field.TypeInt, value)

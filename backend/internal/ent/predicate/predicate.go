@@ -99,6 +99,12 @@ type StorageAuthVersion func(*sql.Selector)
 // StorageBackup is the predicate function for storagebackup builders.
 type StorageBackup func(*sql.Selector)
 
+// StorageCheck is the predicate function for storagecheck builders.
+type StorageCheck func(*sql.Selector)
+
+// StorageCheckWrite is the predicate function for storagecheckwrite builders.
+type StorageCheckWrite func(*sql.Selector)
+
 // StorageConnection is the predicate function for storageconnection builders.
 type StorageConnection func(*sql.Selector)
 
@@ -113,6 +119,12 @@ type StorageSpace func(*sql.Selector)
 
 // StorageTask is the predicate function for storagetask builders.
 type StorageTask func(*sql.Selector)
+
+// StorageUploadBatch is the predicate function for storageuploadbatch builders.
+type StorageUploadBatch func(*sql.Selector)
+
+// StorageUploadBatchItem is the predicate function for storageuploadbatchitem builders.
+type StorageUploadBatchItem func(*sql.Selector)
 
 // StorageWrite is the predicate function for storagewrite builders.
 type StorageWrite func(*sql.Selector)

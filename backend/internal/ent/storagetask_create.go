@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -44,6 +45,108 @@ func (_c *StorageTaskCreate) SetUpdatedAt(v time.Time) *StorageTaskCreate {
 func (_c *StorageTaskCreate) SetNillableUpdatedAt(v *time.Time) *StorageTaskCreate {
 	if v != nil {
 		_c.SetUpdatedAt(*v)
+	}
+	return _c
+}
+
+// SetContractVersion sets the "contract_version" field.
+func (_c *StorageTaskCreate) SetContractVersion(v int) *StorageTaskCreate {
+	_c.mutation.SetContractVersion(v)
+	return _c
+}
+
+// SetNillableContractVersion sets the "contract_version" field if the given value is not nil.
+func (_c *StorageTaskCreate) SetNillableContractVersion(v *int) *StorageTaskCreate {
+	if v != nil {
+		_c.SetContractVersion(*v)
+	}
+	return _c
+}
+
+// SetInputSize sets the "input_size" field.
+func (_c *StorageTaskCreate) SetInputSize(v int64) *StorageTaskCreate {
+	_c.mutation.SetInputSize(v)
+	return _c
+}
+
+// SetNillableInputSize sets the "input_size" field if the given value is not nil.
+func (_c *StorageTaskCreate) SetNillableInputSize(v *int64) *StorageTaskCreate {
+	if v != nil {
+		_c.SetInputSize(*v)
+	}
+	return _c
+}
+
+// SetInputSha256 sets the "input_sha256" field.
+func (_c *StorageTaskCreate) SetInputSha256(v string) *StorageTaskCreate {
+	_c.mutation.SetInputSha256(v)
+	return _c
+}
+
+// SetNillableInputSha256 sets the "input_sha256" field if the given value is not nil.
+func (_c *StorageTaskCreate) SetNillableInputSha256(v *string) *StorageTaskCreate {
+	if v != nil {
+		_c.SetInputSha256(*v)
+	}
+	return _c
+}
+
+// SetSourcePlan sets the "source_plan" field.
+func (_c *StorageTaskCreate) SetSourcePlan(v json.RawMessage) *StorageTaskCreate {
+	_c.mutation.SetSourcePlan(v)
+	return _c
+}
+
+// SetLegacySnapshot sets the "legacy_snapshot" field.
+func (_c *StorageTaskCreate) SetLegacySnapshot(v json.RawMessage) *StorageTaskCreate {
+	_c.mutation.SetLegacySnapshot(v)
+	return _c
+}
+
+// SetLegacySnapshotExpiresAt sets the "legacy_snapshot_expires_at" field.
+func (_c *StorageTaskCreate) SetLegacySnapshotExpiresAt(v time.Time) *StorageTaskCreate {
+	_c.mutation.SetLegacySnapshotExpiresAt(v)
+	return _c
+}
+
+// SetNillableLegacySnapshotExpiresAt sets the "legacy_snapshot_expires_at" field if the given value is not nil.
+func (_c *StorageTaskCreate) SetNillableLegacySnapshotExpiresAt(v *time.Time) *StorageTaskCreate {
+	if v != nil {
+		_c.SetLegacySnapshotExpiresAt(*v)
+	}
+	return _c
+}
+
+// SetResultSnapshot sets the "result_snapshot" field.
+func (_c *StorageTaskCreate) SetResultSnapshot(v json.RawMessage) *StorageTaskCreate {
+	_c.mutation.SetResultSnapshot(v)
+	return _c
+}
+
+// SetLeaseToken sets the "lease_token" field.
+func (_c *StorageTaskCreate) SetLeaseToken(v string) *StorageTaskCreate {
+	_c.mutation.SetLeaseToken(v)
+	return _c
+}
+
+// SetNillableLeaseToken sets the "lease_token" field if the given value is not nil.
+func (_c *StorageTaskCreate) SetNillableLeaseToken(v *string) *StorageTaskCreate {
+	if v != nil {
+		_c.SetLeaseToken(*v)
+	}
+	return _c
+}
+
+// SetLeaseUntil sets the "lease_until" field.
+func (_c *StorageTaskCreate) SetLeaseUntil(v time.Time) *StorageTaskCreate {
+	_c.mutation.SetLeaseUntil(v)
+	return _c
+}
+
+// SetNillableLeaseUntil sets the "lease_until" field if the given value is not nil.
+func (_c *StorageTaskCreate) SetNillableLeaseUntil(v *time.Time) *StorageTaskCreate {
+	if v != nil {
+		_c.SetLeaseUntil(*v)
 	}
 	return _c
 }
@@ -401,6 +504,22 @@ func (_c *StorageTaskCreate) defaults() {
 		v := storagetask.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.ContractVersion(); !ok {
+		v := storagetask.DefaultContractVersion
+		_c.mutation.SetContractVersion(v)
+	}
+	if _, ok := _c.mutation.InputSize(); !ok {
+		v := storagetask.DefaultInputSize
+		_c.mutation.SetInputSize(v)
+	}
+	if _, ok := _c.mutation.InputSha256(); !ok {
+		v := storagetask.DefaultInputSha256
+		_c.mutation.SetInputSha256(v)
+	}
+	if _, ok := _c.mutation.LeaseToken(); !ok {
+		v := storagetask.DefaultLeaseToken
+		_c.mutation.SetLeaseToken(v)
+	}
 	if _, ok := _c.mutation.ActorID(); !ok {
 		v := storagetask.DefaultActorID
 		_c.mutation.SetActorID(v)
@@ -454,6 +573,28 @@ func (_c *StorageTaskCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "StorageTask.updated_at"`)}
+	}
+	if _, ok := _c.mutation.ContractVersion(); !ok {
+		return &ValidationError{Name: "contract_version", err: errors.New(`ent: missing required field "StorageTask.contract_version"`)}
+	}
+	if v, ok := _c.mutation.ContractVersion(); ok {
+		if err := storagetask.ContractVersionValidator(v); err != nil {
+			return &ValidationError{Name: "contract_version", err: fmt.Errorf(`ent: validator failed for field "StorageTask.contract_version": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.InputSize(); !ok {
+		return &ValidationError{Name: "input_size", err: errors.New(`ent: missing required field "StorageTask.input_size"`)}
+	}
+	if v, ok := _c.mutation.InputSize(); ok {
+		if err := storagetask.InputSizeValidator(v); err != nil {
+			return &ValidationError{Name: "input_size", err: fmt.Errorf(`ent: validator failed for field "StorageTask.input_size": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.InputSha256(); !ok {
+		return &ValidationError{Name: "input_sha256", err: errors.New(`ent: missing required field "StorageTask.input_sha256"`)}
+	}
+	if _, ok := _c.mutation.LeaseToken(); !ok {
+		return &ValidationError{Name: "lease_token", err: errors.New(`ent: missing required field "StorageTask.lease_token"`)}
 	}
 	if _, ok := _c.mutation.OperationID(); !ok {
 		return &ValidationError{Name: "operation_id", err: errors.New(`ent: missing required field "StorageTask.operation_id"`)}
@@ -578,6 +719,42 @@ func (_c *StorageTaskCreate) createSpec() (*StorageTask, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(storagetask.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.ContractVersion(); ok {
+		_spec.SetField(storagetask.FieldContractVersion, field.TypeInt, value)
+		_node.ContractVersion = value
+	}
+	if value, ok := _c.mutation.InputSize(); ok {
+		_spec.SetField(storagetask.FieldInputSize, field.TypeInt64, value)
+		_node.InputSize = value
+	}
+	if value, ok := _c.mutation.InputSha256(); ok {
+		_spec.SetField(storagetask.FieldInputSha256, field.TypeString, value)
+		_node.InputSha256 = value
+	}
+	if value, ok := _c.mutation.SourcePlan(); ok {
+		_spec.SetField(storagetask.FieldSourcePlan, field.TypeJSON, value)
+		_node.SourcePlan = value
+	}
+	if value, ok := _c.mutation.LegacySnapshot(); ok {
+		_spec.SetField(storagetask.FieldLegacySnapshot, field.TypeJSON, value)
+		_node.LegacySnapshot = value
+	}
+	if value, ok := _c.mutation.LegacySnapshotExpiresAt(); ok {
+		_spec.SetField(storagetask.FieldLegacySnapshotExpiresAt, field.TypeTime, value)
+		_node.LegacySnapshotExpiresAt = &value
+	}
+	if value, ok := _c.mutation.ResultSnapshot(); ok {
+		_spec.SetField(storagetask.FieldResultSnapshot, field.TypeJSON, value)
+		_node.ResultSnapshot = value
+	}
+	if value, ok := _c.mutation.LeaseToken(); ok {
+		_spec.SetField(storagetask.FieldLeaseToken, field.TypeString, value)
+		_node.LeaseToken = value
+	}
+	if value, ok := _c.mutation.LeaseUntil(); ok {
+		_spec.SetField(storagetask.FieldLeaseUntil, field.TypeTime, value)
+		_node.LeaseUntil = &value
 	}
 	if value, ok := _c.mutation.OperationID(); ok {
 		_spec.SetField(storagetask.FieldOperationID, field.TypeString, value)

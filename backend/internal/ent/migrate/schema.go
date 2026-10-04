@@ -332,6 +332,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "deletion_task_id", Type: field.TypeInt, Nullable: true},
 		{Name: "project_id", Type: field.TypeInt, Default: 0},
 		{Name: "owner_kind", Type: field.TypeString, Default: "site"},
 		{Name: "owner_id", Type: field.TypeInt, Default: 0},
@@ -350,7 +351,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "deletion_entries_blob_locations_location",
-				Columns:    []*schema.Column{DeletionEntriesColumns[11]},
+				Columns:    []*schema.Column{DeletionEntriesColumns[12]},
 				RefColumns: []*schema.Column{BlobLocationsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -428,6 +429,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "deletion_task_id", Type: field.TypeInt, Nullable: true},
 		{Name: "project_id", Type: field.TypeInt},
 		{Name: "resource_id", Type: field.TypeInt},
 		{Name: "renderer_version", Type: field.TypeString},
@@ -450,19 +452,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "export_artifacts_source_revisions_source_revision",
-				Columns:    []*schema.Column{ExportArtifactsColumns[13]},
+				Columns:    []*schema.Column{ExportArtifactsColumns[14]},
 				RefColumns: []*schema.Column{SourceRevisionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "export_artifacts_blobs_snapshot_blob",
-				Columns:    []*schema.Column{ExportArtifactsColumns[14]},
+				Columns:    []*schema.Column{ExportArtifactsColumns[15]},
 				RefColumns: []*schema.Column{BlobsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "export_artifacts_blobs_output_blob",
-				Columns:    []*schema.Column{ExportArtifactsColumns[15]},
+				Columns:    []*schema.Column{ExportArtifactsColumns[16]},
 				RefColumns: []*schema.Column{BlobsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -1102,6 +1104,54 @@ var (
 		Columns:    StorageBackupsColumns,
 		PrimaryKey: []*schema.Column{StorageBackupsColumns[0]},
 	}
+	// StorageChecksColumns holds the columns for the "storage_checks" table.
+	StorageChecksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "connection_id", Type: field.TypeInt},
+		{Name: "actor_id", Type: field.TypeInt},
+		{Name: "mode", Type: field.TypeString},
+		{Name: "management_generation", Type: field.TypeInt64},
+		{Name: "status", Type: field.TypeString, Default: "running"},
+		{Name: "error_code", Type: field.TypeString, Default: ""},
+		{Name: "completed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "authorization_activated", Type: field.TypeBool, Default: false},
+		{Name: "deadline", Type: field.TypeTime, Nullable: true},
+		{Name: "results", Type: field.TypeJSON, Nullable: true},
+	}
+	// StorageChecksTable holds the schema information for the "storage_checks" table.
+	StorageChecksTable = &schema.Table{
+		Name:       "storage_checks",
+		Columns:    StorageChecksColumns,
+		PrimaryKey: []*schema.Column{StorageChecksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "storagecheck_connection_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{StorageChecksColumns[3], StorageChecksColumns[0]},
+			},
+		},
+	}
+	// StorageCheckWritesColumns holds the columns for the "storage_check_writes" table.
+	StorageCheckWritesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "check_id", Type: field.TypeInt},
+		{Name: "write_id", Type: field.TypeInt},
+	}
+	// StorageCheckWritesTable holds the schema information for the "storage_check_writes" table.
+	StorageCheckWritesTable = &schema.Table{
+		Name:       "storage_check_writes",
+		Columns:    StorageCheckWritesColumns,
+		PrimaryKey: []*schema.Column{StorageCheckWritesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "storagecheckwrite_check_id_write_id",
+				Unique:  true,
+				Columns: []*schema.Column{StorageCheckWritesColumns[1], StorageCheckWritesColumns[2]},
+			},
+		},
+	}
 	// StorageConnectionsColumns holds the columns for the "storage_connections" table.
 	StorageConnectionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -1251,6 +1301,15 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "contract_version", Type: field.TypeInt, Default: 0},
+		{Name: "input_size", Type: field.TypeInt64, Default: 0},
+		{Name: "input_sha256", Type: field.TypeString, Default: ""},
+		{Name: "source_plan", Type: field.TypeJSON, Nullable: true},
+		{Name: "legacy_snapshot", Type: field.TypeJSON, Nullable: true},
+		{Name: "legacy_snapshot_expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "result_snapshot", Type: field.TypeJSON, Nullable: true},
+		{Name: "lease_token", Type: field.TypeString, Default: ""},
+		{Name: "lease_until", Type: field.TypeTime, Nullable: true},
 		{Name: "operation_id", Type: field.TypeString, Unique: true},
 		{Name: "idempotency_key", Type: field.TypeString},
 		{Name: "request_hash", Type: field.TypeString},
@@ -1286,12 +1345,12 @@ var (
 			{
 				Name:    "storagetask_actor_id_project_id_kind_idempotency_key",
 				Unique:  true,
-				Columns: []*schema.Column{StorageTasksColumns[6], StorageTasksColumns[7], StorageTasksColumns[8], StorageTasksColumns[4]},
+				Columns: []*schema.Column{StorageTasksColumns[15], StorageTasksColumns[16], StorageTasksColumns[17], StorageTasksColumns[13]},
 			},
 			{
 				Name:    "storagetask_status_next_retry_at",
 				Unique:  false,
-				Columns: []*schema.Column{StorageTasksColumns[9], StorageTasksColumns[25]},
+				Columns: []*schema.Column{StorageTasksColumns[18], StorageTasksColumns[34]},
 			},
 			{
 				Name:    "storagetask_updated_at_id",
@@ -1301,12 +1360,69 @@ var (
 			{
 				Name:    "storagetask_status_updated_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{StorageTasksColumns[9], StorageTasksColumns[2], StorageTasksColumns[0]},
+				Columns: []*schema.Column{StorageTasksColumns[18], StorageTasksColumns[2], StorageTasksColumns[0]},
 			},
 			{
 				Name:    "storagetask_project_id_updated_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{StorageTasksColumns[7], StorageTasksColumns[2], StorageTasksColumns[0]},
+				Columns: []*schema.Column{StorageTasksColumns[16], StorageTasksColumns[2], StorageTasksColumns[0]},
+			},
+		},
+	}
+	// StorageUploadBatchesColumns holds the columns for the "storage_upload_batches" table.
+	StorageUploadBatchesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "actor_id", Type: field.TypeInt},
+		{Name: "project_id", Type: field.TypeInt},
+		{Name: "idempotency_key", Type: field.TypeString},
+		{Name: "operation_id", Type: field.TypeString, Unique: true},
+		{Name: "contract_version", Type: field.TypeInt, Default: 1},
+		{Name: "manifest_hash", Type: field.TypeString},
+		{Name: "manifest", Type: field.TypeJSON, Nullable: true},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "lease_token", Type: field.TypeString, Default: ""},
+		{Name: "lease_until", Type: field.TypeTime, Nullable: true},
+	}
+	// StorageUploadBatchesTable holds the schema information for the "storage_upload_batches" table.
+	StorageUploadBatchesTable = &schema.Table{
+		Name:       "storage_upload_batches",
+		Columns:    StorageUploadBatchesColumns,
+		PrimaryKey: []*schema.Column{StorageUploadBatchesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "storageuploadbatch_actor_id_project_id_idempotency_key",
+				Unique:  true,
+				Columns: []*schema.Column{StorageUploadBatchesColumns[3], StorageUploadBatchesColumns[4], StorageUploadBatchesColumns[5]},
+			},
+		},
+	}
+	// StorageUploadBatchItemsColumns holds the columns for the "storage_upload_batch_items" table.
+	StorageUploadBatchItemsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "batch_id", Type: field.TypeInt},
+		{Name: "ordinal", Type: field.TypeInt},
+		{Name: "path", Type: field.TypeString},
+		{Name: "size", Type: field.TypeInt64},
+		{Name: "sha256", Type: field.TypeString},
+		{Name: "task_id", Type: field.TypeInt, Nullable: true},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "error_code", Type: field.TypeString, Default: ""},
+		{Name: "response", Type: field.TypeJSON, Nullable: true},
+	}
+	// StorageUploadBatchItemsTable holds the schema information for the "storage_upload_batch_items" table.
+	StorageUploadBatchItemsTable = &schema.Table{
+		Name:       "storage_upload_batch_items",
+		Columns:    StorageUploadBatchItemsColumns,
+		PrimaryKey: []*schema.Column{StorageUploadBatchItemsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "storageuploadbatchitem_batch_id_ordinal",
+				Unique:  true,
+				Columns: []*schema.Column{StorageUploadBatchItemsColumns[3], StorageUploadBatchItemsColumns[4]},
 			},
 		},
 	}
@@ -1609,11 +1725,15 @@ var (
 		SourceRevisionsTable,
 		StorageAuthVersionsTable,
 		StorageBackupsTable,
+		StorageChecksTable,
+		StorageCheckWritesTable,
 		StorageConnectionsTable,
 		StorageMigrationItemsTable,
 		StorageReservationsTable,
 		StorageSpacesTable,
 		StorageTasksTable,
+		StorageUploadBatchesTable,
+		StorageUploadBatchItemsTable,
 		StorageWritesTable,
 		SyncTasksTable,
 		SystemSettingsTable,

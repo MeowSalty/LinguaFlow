@@ -64,6 +64,36 @@ func UpdatedAt(v time.Time) predicate.StorageTask {
 	return predicate.StorageTask(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// ContractVersion applies equality check predicate on the "contract_version" field. It's identical to ContractVersionEQ.
+func ContractVersion(v int) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldContractVersion, v))
+}
+
+// InputSize applies equality check predicate on the "input_size" field. It's identical to InputSizeEQ.
+func InputSize(v int64) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldInputSize, v))
+}
+
+// InputSha256 applies equality check predicate on the "input_sha256" field. It's identical to InputSha256EQ.
+func InputSha256(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldInputSha256, v))
+}
+
+// LegacySnapshotExpiresAt applies equality check predicate on the "legacy_snapshot_expires_at" field. It's identical to LegacySnapshotExpiresAtEQ.
+func LegacySnapshotExpiresAt(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldLegacySnapshotExpiresAt, v))
+}
+
+// LeaseToken applies equality check predicate on the "lease_token" field. It's identical to LeaseTokenEQ.
+func LeaseToken(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldLeaseToken, v))
+}
+
+// LeaseUntil applies equality check predicate on the "lease_until" field. It's identical to LeaseUntilEQ.
+func LeaseUntil(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldLeaseUntil, v))
+}
+
 // OperationID applies equality check predicate on the "operation_id" field. It's identical to OperationIDEQ.
 func OperationID(v string) predicate.StorageTask {
 	return predicate.StorageTask(sql.FieldEQ(FieldOperationID, v))
@@ -252,6 +282,346 @@ func UpdatedAtLT(v time.Time) predicate.StorageTask {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.StorageTask {
 	return predicate.StorageTask(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// ContractVersionEQ applies the EQ predicate on the "contract_version" field.
+func ContractVersionEQ(v int) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldContractVersion, v))
+}
+
+// ContractVersionNEQ applies the NEQ predicate on the "contract_version" field.
+func ContractVersionNEQ(v int) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNEQ(FieldContractVersion, v))
+}
+
+// ContractVersionIn applies the In predicate on the "contract_version" field.
+func ContractVersionIn(vs ...int) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIn(FieldContractVersion, vs...))
+}
+
+// ContractVersionNotIn applies the NotIn predicate on the "contract_version" field.
+func ContractVersionNotIn(vs ...int) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotIn(FieldContractVersion, vs...))
+}
+
+// ContractVersionGT applies the GT predicate on the "contract_version" field.
+func ContractVersionGT(v int) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGT(FieldContractVersion, v))
+}
+
+// ContractVersionGTE applies the GTE predicate on the "contract_version" field.
+func ContractVersionGTE(v int) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGTE(FieldContractVersion, v))
+}
+
+// ContractVersionLT applies the LT predicate on the "contract_version" field.
+func ContractVersionLT(v int) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLT(FieldContractVersion, v))
+}
+
+// ContractVersionLTE applies the LTE predicate on the "contract_version" field.
+func ContractVersionLTE(v int) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLTE(FieldContractVersion, v))
+}
+
+// InputSizeEQ applies the EQ predicate on the "input_size" field.
+func InputSizeEQ(v int64) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldInputSize, v))
+}
+
+// InputSizeNEQ applies the NEQ predicate on the "input_size" field.
+func InputSizeNEQ(v int64) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNEQ(FieldInputSize, v))
+}
+
+// InputSizeIn applies the In predicate on the "input_size" field.
+func InputSizeIn(vs ...int64) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIn(FieldInputSize, vs...))
+}
+
+// InputSizeNotIn applies the NotIn predicate on the "input_size" field.
+func InputSizeNotIn(vs ...int64) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotIn(FieldInputSize, vs...))
+}
+
+// InputSizeGT applies the GT predicate on the "input_size" field.
+func InputSizeGT(v int64) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGT(FieldInputSize, v))
+}
+
+// InputSizeGTE applies the GTE predicate on the "input_size" field.
+func InputSizeGTE(v int64) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGTE(FieldInputSize, v))
+}
+
+// InputSizeLT applies the LT predicate on the "input_size" field.
+func InputSizeLT(v int64) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLT(FieldInputSize, v))
+}
+
+// InputSizeLTE applies the LTE predicate on the "input_size" field.
+func InputSizeLTE(v int64) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLTE(FieldInputSize, v))
+}
+
+// InputSha256EQ applies the EQ predicate on the "input_sha256" field.
+func InputSha256EQ(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldInputSha256, v))
+}
+
+// InputSha256NEQ applies the NEQ predicate on the "input_sha256" field.
+func InputSha256NEQ(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNEQ(FieldInputSha256, v))
+}
+
+// InputSha256In applies the In predicate on the "input_sha256" field.
+func InputSha256In(vs ...string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIn(FieldInputSha256, vs...))
+}
+
+// InputSha256NotIn applies the NotIn predicate on the "input_sha256" field.
+func InputSha256NotIn(vs ...string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotIn(FieldInputSha256, vs...))
+}
+
+// InputSha256GT applies the GT predicate on the "input_sha256" field.
+func InputSha256GT(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGT(FieldInputSha256, v))
+}
+
+// InputSha256GTE applies the GTE predicate on the "input_sha256" field.
+func InputSha256GTE(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGTE(FieldInputSha256, v))
+}
+
+// InputSha256LT applies the LT predicate on the "input_sha256" field.
+func InputSha256LT(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLT(FieldInputSha256, v))
+}
+
+// InputSha256LTE applies the LTE predicate on the "input_sha256" field.
+func InputSha256LTE(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLTE(FieldInputSha256, v))
+}
+
+// InputSha256Contains applies the Contains predicate on the "input_sha256" field.
+func InputSha256Contains(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldContains(FieldInputSha256, v))
+}
+
+// InputSha256HasPrefix applies the HasPrefix predicate on the "input_sha256" field.
+func InputSha256HasPrefix(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldHasPrefix(FieldInputSha256, v))
+}
+
+// InputSha256HasSuffix applies the HasSuffix predicate on the "input_sha256" field.
+func InputSha256HasSuffix(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldHasSuffix(FieldInputSha256, v))
+}
+
+// InputSha256EqualFold applies the EqualFold predicate on the "input_sha256" field.
+func InputSha256EqualFold(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEqualFold(FieldInputSha256, v))
+}
+
+// InputSha256ContainsFold applies the ContainsFold predicate on the "input_sha256" field.
+func InputSha256ContainsFold(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldContainsFold(FieldInputSha256, v))
+}
+
+// SourcePlanIsNil applies the IsNil predicate on the "source_plan" field.
+func SourcePlanIsNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIsNull(FieldSourcePlan))
+}
+
+// SourcePlanNotNil applies the NotNil predicate on the "source_plan" field.
+func SourcePlanNotNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotNull(FieldSourcePlan))
+}
+
+// LegacySnapshotIsNil applies the IsNil predicate on the "legacy_snapshot" field.
+func LegacySnapshotIsNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIsNull(FieldLegacySnapshot))
+}
+
+// LegacySnapshotNotNil applies the NotNil predicate on the "legacy_snapshot" field.
+func LegacySnapshotNotNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotNull(FieldLegacySnapshot))
+}
+
+// LegacySnapshotExpiresAtEQ applies the EQ predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtEQ(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldLegacySnapshotExpiresAt, v))
+}
+
+// LegacySnapshotExpiresAtNEQ applies the NEQ predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtNEQ(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNEQ(FieldLegacySnapshotExpiresAt, v))
+}
+
+// LegacySnapshotExpiresAtIn applies the In predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtIn(vs ...time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIn(FieldLegacySnapshotExpiresAt, vs...))
+}
+
+// LegacySnapshotExpiresAtNotIn applies the NotIn predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtNotIn(vs ...time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotIn(FieldLegacySnapshotExpiresAt, vs...))
+}
+
+// LegacySnapshotExpiresAtGT applies the GT predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtGT(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGT(FieldLegacySnapshotExpiresAt, v))
+}
+
+// LegacySnapshotExpiresAtGTE applies the GTE predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtGTE(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGTE(FieldLegacySnapshotExpiresAt, v))
+}
+
+// LegacySnapshotExpiresAtLT applies the LT predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtLT(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLT(FieldLegacySnapshotExpiresAt, v))
+}
+
+// LegacySnapshotExpiresAtLTE applies the LTE predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtLTE(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLTE(FieldLegacySnapshotExpiresAt, v))
+}
+
+// LegacySnapshotExpiresAtIsNil applies the IsNil predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtIsNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIsNull(FieldLegacySnapshotExpiresAt))
+}
+
+// LegacySnapshotExpiresAtNotNil applies the NotNil predicate on the "legacy_snapshot_expires_at" field.
+func LegacySnapshotExpiresAtNotNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotNull(FieldLegacySnapshotExpiresAt))
+}
+
+// ResultSnapshotIsNil applies the IsNil predicate on the "result_snapshot" field.
+func ResultSnapshotIsNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIsNull(FieldResultSnapshot))
+}
+
+// ResultSnapshotNotNil applies the NotNil predicate on the "result_snapshot" field.
+func ResultSnapshotNotNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotNull(FieldResultSnapshot))
+}
+
+// LeaseTokenEQ applies the EQ predicate on the "lease_token" field.
+func LeaseTokenEQ(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldLeaseToken, v))
+}
+
+// LeaseTokenNEQ applies the NEQ predicate on the "lease_token" field.
+func LeaseTokenNEQ(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNEQ(FieldLeaseToken, v))
+}
+
+// LeaseTokenIn applies the In predicate on the "lease_token" field.
+func LeaseTokenIn(vs ...string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIn(FieldLeaseToken, vs...))
+}
+
+// LeaseTokenNotIn applies the NotIn predicate on the "lease_token" field.
+func LeaseTokenNotIn(vs ...string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotIn(FieldLeaseToken, vs...))
+}
+
+// LeaseTokenGT applies the GT predicate on the "lease_token" field.
+func LeaseTokenGT(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGT(FieldLeaseToken, v))
+}
+
+// LeaseTokenGTE applies the GTE predicate on the "lease_token" field.
+func LeaseTokenGTE(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGTE(FieldLeaseToken, v))
+}
+
+// LeaseTokenLT applies the LT predicate on the "lease_token" field.
+func LeaseTokenLT(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLT(FieldLeaseToken, v))
+}
+
+// LeaseTokenLTE applies the LTE predicate on the "lease_token" field.
+func LeaseTokenLTE(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLTE(FieldLeaseToken, v))
+}
+
+// LeaseTokenContains applies the Contains predicate on the "lease_token" field.
+func LeaseTokenContains(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldContains(FieldLeaseToken, v))
+}
+
+// LeaseTokenHasPrefix applies the HasPrefix predicate on the "lease_token" field.
+func LeaseTokenHasPrefix(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldHasPrefix(FieldLeaseToken, v))
+}
+
+// LeaseTokenHasSuffix applies the HasSuffix predicate on the "lease_token" field.
+func LeaseTokenHasSuffix(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldHasSuffix(FieldLeaseToken, v))
+}
+
+// LeaseTokenEqualFold applies the EqualFold predicate on the "lease_token" field.
+func LeaseTokenEqualFold(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEqualFold(FieldLeaseToken, v))
+}
+
+// LeaseTokenContainsFold applies the ContainsFold predicate on the "lease_token" field.
+func LeaseTokenContainsFold(v string) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldContainsFold(FieldLeaseToken, v))
+}
+
+// LeaseUntilEQ applies the EQ predicate on the "lease_until" field.
+func LeaseUntilEQ(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldEQ(FieldLeaseUntil, v))
+}
+
+// LeaseUntilNEQ applies the NEQ predicate on the "lease_until" field.
+func LeaseUntilNEQ(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNEQ(FieldLeaseUntil, v))
+}
+
+// LeaseUntilIn applies the In predicate on the "lease_until" field.
+func LeaseUntilIn(vs ...time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIn(FieldLeaseUntil, vs...))
+}
+
+// LeaseUntilNotIn applies the NotIn predicate on the "lease_until" field.
+func LeaseUntilNotIn(vs ...time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotIn(FieldLeaseUntil, vs...))
+}
+
+// LeaseUntilGT applies the GT predicate on the "lease_until" field.
+func LeaseUntilGT(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGT(FieldLeaseUntil, v))
+}
+
+// LeaseUntilGTE applies the GTE predicate on the "lease_until" field.
+func LeaseUntilGTE(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldGTE(FieldLeaseUntil, v))
+}
+
+// LeaseUntilLT applies the LT predicate on the "lease_until" field.
+func LeaseUntilLT(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLT(FieldLeaseUntil, v))
+}
+
+// LeaseUntilLTE applies the LTE predicate on the "lease_until" field.
+func LeaseUntilLTE(v time.Time) predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldLTE(FieldLeaseUntil, v))
+}
+
+// LeaseUntilIsNil applies the IsNil predicate on the "lease_until" field.
+func LeaseUntilIsNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldIsNull(FieldLeaseUntil))
+}
+
+// LeaseUntilNotNil applies the NotNil predicate on the "lease_until" field.
+func LeaseUntilNotNil() predicate.StorageTask {
+	return predicate.StorageTask(sql.FieldNotNull(FieldLeaseUntil))
 }
 
 // OperationIDEQ applies the EQ predicate on the "operation_id" field.

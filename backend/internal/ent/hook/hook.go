@@ -381,6 +381,30 @@ func (f StorageBackupFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageBackupMutation", m)
 }
 
+// The StorageCheckFunc type is an adapter to allow the use of ordinary
+// function as StorageCheck mutator.
+type StorageCheckFunc func(context.Context, *ent.StorageCheckMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageCheckFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageCheckMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageCheckMutation", m)
+}
+
+// The StorageCheckWriteFunc type is an adapter to allow the use of ordinary
+// function as StorageCheckWrite mutator.
+type StorageCheckWriteFunc func(context.Context, *ent.StorageCheckWriteMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageCheckWriteFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageCheckWriteMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageCheckWriteMutation", m)
+}
+
 // The StorageConnectionFunc type is an adapter to allow the use of ordinary
 // function as StorageConnection mutator.
 type StorageConnectionFunc func(context.Context, *ent.StorageConnectionMutation) (ent.Value, error)
@@ -439,6 +463,30 @@ func (f StorageTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageTaskMutation", m)
+}
+
+// The StorageUploadBatchFunc type is an adapter to allow the use of ordinary
+// function as StorageUploadBatch mutator.
+type StorageUploadBatchFunc func(context.Context, *ent.StorageUploadBatchMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageUploadBatchFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageUploadBatchMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageUploadBatchMutation", m)
+}
+
+// The StorageUploadBatchItemFunc type is an adapter to allow the use of ordinary
+// function as StorageUploadBatchItem mutator.
+type StorageUploadBatchItemFunc func(context.Context, *ent.StorageUploadBatchItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageUploadBatchItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageUploadBatchItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageUploadBatchItemMutation", m)
 }
 
 // The StorageWriteFunc type is an adapter to allow the use of ordinary

@@ -65,6 +65,11 @@ func UpdatedAt(v time.Time) predicate.ExportArtifact {
 	return predicate.ExportArtifact(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// DeletionTaskID applies equality check predicate on the "deletion_task_id" field. It's identical to DeletionTaskIDEQ.
+func DeletionTaskID(v int) predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldEQ(FieldDeletionTaskID, v))
+}
+
 // ProjectID applies equality check predicate on the "project_id" field. It's identical to ProjectIDEQ.
 func ProjectID(v int) predicate.ExportArtifact {
 	return predicate.ExportArtifact(sql.FieldEQ(FieldProjectID, v))
@@ -198,6 +203,56 @@ func UpdatedAtLT(v time.Time) predicate.ExportArtifact {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.ExportArtifact {
 	return predicate.ExportArtifact(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// DeletionTaskIDEQ applies the EQ predicate on the "deletion_task_id" field.
+func DeletionTaskIDEQ(v int) predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldEQ(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDNEQ applies the NEQ predicate on the "deletion_task_id" field.
+func DeletionTaskIDNEQ(v int) predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldNEQ(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDIn applies the In predicate on the "deletion_task_id" field.
+func DeletionTaskIDIn(vs ...int) predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldIn(FieldDeletionTaskID, vs...))
+}
+
+// DeletionTaskIDNotIn applies the NotIn predicate on the "deletion_task_id" field.
+func DeletionTaskIDNotIn(vs ...int) predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldNotIn(FieldDeletionTaskID, vs...))
+}
+
+// DeletionTaskIDGT applies the GT predicate on the "deletion_task_id" field.
+func DeletionTaskIDGT(v int) predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldGT(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDGTE applies the GTE predicate on the "deletion_task_id" field.
+func DeletionTaskIDGTE(v int) predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldGTE(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDLT applies the LT predicate on the "deletion_task_id" field.
+func DeletionTaskIDLT(v int) predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldLT(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDLTE applies the LTE predicate on the "deletion_task_id" field.
+func DeletionTaskIDLTE(v int) predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldLTE(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDIsNil applies the IsNil predicate on the "deletion_task_id" field.
+func DeletionTaskIDIsNil() predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldIsNull(FieldDeletionTaskID))
+}
+
+// DeletionTaskIDNotNil applies the NotNil predicate on the "deletion_task_id" field.
+func DeletionTaskIDNotNil() predicate.ExportArtifact {
+	return predicate.ExportArtifact(sql.FieldNotNull(FieldDeletionTaskID))
 }
 
 // ProjectIDEQ applies the EQ predicate on the "project_id" field.

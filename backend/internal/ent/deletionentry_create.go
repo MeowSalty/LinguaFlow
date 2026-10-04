@@ -49,6 +49,20 @@ func (_c *DeletionEntryCreate) SetNillableUpdatedAt(v *time.Time) *DeletionEntry
 	return _c
 }
 
+// SetDeletionTaskID sets the "deletion_task_id" field.
+func (_c *DeletionEntryCreate) SetDeletionTaskID(v int) *DeletionEntryCreate {
+	_c.mutation.SetDeletionTaskID(v)
+	return _c
+}
+
+// SetNillableDeletionTaskID sets the "deletion_task_id" field if the given value is not nil.
+func (_c *DeletionEntryCreate) SetNillableDeletionTaskID(v *int) *DeletionEntryCreate {
+	if v != nil {
+		_c.SetDeletionTaskID(*v)
+	}
+	return _c
+}
+
 // SetLocationID sets the "location_id" field.
 func (_c *DeletionEntryCreate) SetLocationID(v int) *DeletionEntryCreate {
 	_c.mutation.SetLocationID(v)
@@ -326,6 +340,10 @@ func (_c *DeletionEntryCreate) createSpec() (*DeletionEntry, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(deletionentry.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.DeletionTaskID(); ok {
+		_spec.SetField(deletionentry.FieldDeletionTaskID, field.TypeInt, value)
+		_node.DeletionTaskID = &value
 	}
 	if value, ok := _c.mutation.ProjectID(); ok {
 		_spec.SetField(deletionentry.FieldProjectID, field.TypeInt, value)

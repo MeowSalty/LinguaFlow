@@ -18,6 +18,24 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldContractVersion holds the string denoting the contract_version field in the database.
+	FieldContractVersion = "contract_version"
+	// FieldInputSize holds the string denoting the input_size field in the database.
+	FieldInputSize = "input_size"
+	// FieldInputSha256 holds the string denoting the input_sha256 field in the database.
+	FieldInputSha256 = "input_sha256"
+	// FieldSourcePlan holds the string denoting the source_plan field in the database.
+	FieldSourcePlan = "source_plan"
+	// FieldLegacySnapshot holds the string denoting the legacy_snapshot field in the database.
+	FieldLegacySnapshot = "legacy_snapshot"
+	// FieldLegacySnapshotExpiresAt holds the string denoting the legacy_snapshot_expires_at field in the database.
+	FieldLegacySnapshotExpiresAt = "legacy_snapshot_expires_at"
+	// FieldResultSnapshot holds the string denoting the result_snapshot field in the database.
+	FieldResultSnapshot = "result_snapshot"
+	// FieldLeaseToken holds the string denoting the lease_token field in the database.
+	FieldLeaseToken = "lease_token"
+	// FieldLeaseUntil holds the string denoting the lease_until field in the database.
+	FieldLeaseUntil = "lease_until"
 	// FieldOperationID holds the string denoting the operation_id field in the database.
 	FieldOperationID = "operation_id"
 	// FieldIdempotencyKey holds the string denoting the idempotency_key field in the database.
@@ -77,6 +95,15 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldContractVersion,
+	FieldInputSize,
+	FieldInputSha256,
+	FieldSourcePlan,
+	FieldLegacySnapshot,
+	FieldLegacySnapshotExpiresAt,
+	FieldResultSnapshot,
+	FieldLeaseToken,
+	FieldLeaseUntil,
 	FieldOperationID,
 	FieldIdempotencyKey,
 	FieldRequestHash,
@@ -121,6 +148,18 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultContractVersion holds the default value on creation for the "contract_version" field.
+	DefaultContractVersion int
+	// ContractVersionValidator is a validator for the "contract_version" field. It is called by the builders before save.
+	ContractVersionValidator func(int) error
+	// DefaultInputSize holds the default value on creation for the "input_size" field.
+	DefaultInputSize int64
+	// InputSizeValidator is a validator for the "input_size" field. It is called by the builders before save.
+	InputSizeValidator func(int64) error
+	// DefaultInputSha256 holds the default value on creation for the "input_sha256" field.
+	DefaultInputSha256 string
+	// DefaultLeaseToken holds the default value on creation for the "lease_token" field.
+	DefaultLeaseToken string
 	// OperationIDValidator is a validator for the "operation_id" field. It is called by the builders before save.
 	OperationIDValidator func(string) error
 	// IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
@@ -230,6 +269,36 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByContractVersion orders the results by the contract_version field.
+func ByContractVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldContractVersion, opts...).ToFunc()
+}
+
+// ByInputSize orders the results by the input_size field.
+func ByInputSize(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInputSize, opts...).ToFunc()
+}
+
+// ByInputSha256 orders the results by the input_sha256 field.
+func ByInputSha256(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInputSha256, opts...).ToFunc()
+}
+
+// ByLegacySnapshotExpiresAt orders the results by the legacy_snapshot_expires_at field.
+func ByLegacySnapshotExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLegacySnapshotExpiresAt, opts...).ToFunc()
+}
+
+// ByLeaseToken orders the results by the lease_token field.
+func ByLeaseToken(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLeaseToken, opts...).ToFunc()
+}
+
+// ByLeaseUntil orders the results by the lease_until field.
+func ByLeaseUntil(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLeaseUntil, opts...).ToFunc()
 }
 
 // ByOperationID orders the results by the operation_id field.

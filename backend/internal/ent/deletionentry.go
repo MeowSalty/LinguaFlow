@@ -22,6 +22,8 @@ type DeletionEntry struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// DeletionTaskID holds the value of the "deletion_task_id" field.
+	DeletionTaskID *int `json:"deletion_task_id,omitempty"`
 	// LocationID holds the value of the "location_id" field.
 	LocationID int `json:"location_id,omitempty"`
 	// ProjectID holds the value of the "project_id" field.
@@ -71,7 +73,7 @@ func (*DeletionEntry) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case deletionentry.FieldID, deletionentry.FieldLocationID, deletionentry.FieldProjectID, deletionentry.FieldOwnerID, deletionentry.FieldAttempts:
+		case deletionentry.FieldID, deletionentry.FieldDeletionTaskID, deletionentry.FieldLocationID, deletionentry.FieldProjectID, deletionentry.FieldOwnerID, deletionentry.FieldAttempts:
 			values[i] = new(sql.NullInt64)
 		case deletionentry.FieldOwnerKind, deletionentry.FieldStatus, deletionentry.FieldErrorCode:
 			values[i] = new(sql.NullString)
@@ -109,6 +111,13 @@ func (_m *DeletionEntry) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case deletionentry.FieldDeletionTaskID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field deletion_task_id", values[i])
+			} else if value.Valid {
+				_m.DeletionTaskID = new(int)
+				*_m.DeletionTaskID = int(value.Int64)
 			}
 		case deletionentry.FieldLocationID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -211,6 +220,11 @@ func (_m *DeletionEntry) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	if v := _m.DeletionTaskID; v != nil {
+		builder.WriteString("deletion_task_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("location_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.LocationID))

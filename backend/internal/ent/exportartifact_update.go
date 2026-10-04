@@ -35,6 +35,33 @@ func (_u *ExportArtifactUpdate) SetUpdatedAt(v time.Time) *ExportArtifactUpdate 
 	return _u
 }
 
+// SetDeletionTaskID sets the "deletion_task_id" field.
+func (_u *ExportArtifactUpdate) SetDeletionTaskID(v int) *ExportArtifactUpdate {
+	_u.mutation.ResetDeletionTaskID()
+	_u.mutation.SetDeletionTaskID(v)
+	return _u
+}
+
+// SetNillableDeletionTaskID sets the "deletion_task_id" field if the given value is not nil.
+func (_u *ExportArtifactUpdate) SetNillableDeletionTaskID(v *int) *ExportArtifactUpdate {
+	if v != nil {
+		_u.SetDeletionTaskID(*v)
+	}
+	return _u
+}
+
+// AddDeletionTaskID adds value to the "deletion_task_id" field.
+func (_u *ExportArtifactUpdate) AddDeletionTaskID(v int) *ExportArtifactUpdate {
+	_u.mutation.AddDeletionTaskID(v)
+	return _u
+}
+
+// ClearDeletionTaskID clears the value of the "deletion_task_id" field.
+func (_u *ExportArtifactUpdate) ClearDeletionTaskID() *ExportArtifactUpdate {
+	_u.mutation.ClearDeletionTaskID()
+	return _u
+}
+
 // SetSnapshotBlobID sets the "snapshot_blob_id" field.
 func (_u *ExportArtifactUpdate) SetSnapshotBlobID(v int) *ExportArtifactUpdate {
 	_u.mutation.SetSnapshotBlobID(v)
@@ -307,6 +334,15 @@ func (_u *ExportArtifactUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(exportartifact.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if value, ok := _u.mutation.DeletionTaskID(); ok {
+		_spec.SetField(exportartifact.FieldDeletionTaskID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDeletionTaskID(); ok {
+		_spec.AddField(exportartifact.FieldDeletionTaskID, field.TypeInt, value)
+	}
+	if _u.mutation.DeletionTaskIDCleared() {
+		_spec.ClearField(exportartifact.FieldDeletionTaskID, field.TypeInt)
+	}
 	if value, ok := _u.mutation.RendererVersion(); ok {
 		_spec.SetField(exportartifact.FieldRendererVersion, field.TypeString, value)
 	}
@@ -424,6 +460,33 @@ type ExportArtifactUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ExportArtifactUpdateOne) SetUpdatedAt(v time.Time) *ExportArtifactUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetDeletionTaskID sets the "deletion_task_id" field.
+func (_u *ExportArtifactUpdateOne) SetDeletionTaskID(v int) *ExportArtifactUpdateOne {
+	_u.mutation.ResetDeletionTaskID()
+	_u.mutation.SetDeletionTaskID(v)
+	return _u
+}
+
+// SetNillableDeletionTaskID sets the "deletion_task_id" field if the given value is not nil.
+func (_u *ExportArtifactUpdateOne) SetNillableDeletionTaskID(v *int) *ExportArtifactUpdateOne {
+	if v != nil {
+		_u.SetDeletionTaskID(*v)
+	}
+	return _u
+}
+
+// AddDeletionTaskID adds value to the "deletion_task_id" field.
+func (_u *ExportArtifactUpdateOne) AddDeletionTaskID(v int) *ExportArtifactUpdateOne {
+	_u.mutation.AddDeletionTaskID(v)
+	return _u
+}
+
+// ClearDeletionTaskID clears the value of the "deletion_task_id" field.
+func (_u *ExportArtifactUpdateOne) ClearDeletionTaskID() *ExportArtifactUpdateOne {
+	_u.mutation.ClearDeletionTaskID()
 	return _u
 }
 
@@ -728,6 +791,15 @@ func (_u *ExportArtifactUpdateOne) sqlSave(ctx context.Context) (_node *ExportAr
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(exportartifact.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.DeletionTaskID(); ok {
+		_spec.SetField(exportartifact.FieldDeletionTaskID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDeletionTaskID(); ok {
+		_spec.AddField(exportartifact.FieldDeletionTaskID, field.TypeInt, value)
+	}
+	if _u.mutation.DeletionTaskIDCleared() {
+		_spec.ClearField(exportartifact.FieldDeletionTaskID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.RendererVersion(); ok {
 		_spec.SetField(exportartifact.FieldRendererVersion, field.TypeString, value)

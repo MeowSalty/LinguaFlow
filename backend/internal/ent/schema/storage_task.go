@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -12,6 +13,15 @@ type StorageTask struct{ ent.Schema }
 func (StorageTask) Mixin() []ent.Mixin { return []ent.Mixin{TimeMixin{}} }
 func (StorageTask) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("contract_version").Default(0).NonNegative(),
+		field.Int64("input_size").Default(0).NonNegative(),
+		field.String("input_sha256").Default(""),
+		field.JSON("source_plan", json.RawMessage{}).Optional(),
+		field.JSON("legacy_snapshot", json.RawMessage{}).Optional(),
+		field.Time("legacy_snapshot_expires_at").Optional().Nillable(),
+		field.JSON("result_snapshot", json.RawMessage{}).Optional(),
+		field.String("lease_token").Default(""),
+		field.Time("lease_until").Optional().Nillable(),
 		field.String("operation_id").NotEmpty().Unique().Immutable(),
 		field.String("idempotency_key").NotEmpty().Immutable(),
 		field.String("request_hash").NotEmpty().Immutable(),

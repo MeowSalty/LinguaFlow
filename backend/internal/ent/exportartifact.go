@@ -24,6 +24,8 @@ type ExportArtifact struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// DeletionTaskID holds the value of the "deletion_task_id" field.
+	DeletionTaskID *int `json:"deletion_task_id,omitempty"`
 	// ProjectID holds the value of the "project_id" field.
 	ProjectID int `json:"project_id,omitempty"`
 	// ResourceID holds the value of the "resource_id" field.
@@ -111,7 +113,7 @@ func (*ExportArtifact) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case exportartifact.FieldRebuildable:
 			values[i] = new(sql.NullBool)
-		case exportartifact.FieldID, exportartifact.FieldProjectID, exportartifact.FieldResourceID, exportartifact.FieldSourceRevisionID, exportartifact.FieldSnapshotBlobID, exportartifact.FieldOutputBlobID, exportartifact.FieldSourceGeneration, exportartifact.FieldTranslationGeneration, exportartifact.FieldOutputGeneration:
+		case exportartifact.FieldID, exportartifact.FieldDeletionTaskID, exportartifact.FieldProjectID, exportartifact.FieldResourceID, exportartifact.FieldSourceRevisionID, exportartifact.FieldSnapshotBlobID, exportartifact.FieldOutputBlobID, exportartifact.FieldSourceGeneration, exportartifact.FieldTranslationGeneration, exportartifact.FieldOutputGeneration:
 			values[i] = new(sql.NullInt64)
 		case exportartifact.FieldRendererVersion, exportartifact.FieldStatus, exportartifact.FieldFilename:
 			values[i] = new(sql.NullString)
@@ -149,6 +151,13 @@ func (_m *ExportArtifact) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case exportartifact.FieldDeletionTaskID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field deletion_task_id", values[i])
+			} else if value.Valid {
+				_m.DeletionTaskID = new(int)
+				*_m.DeletionTaskID = int(value.Int64)
 			}
 		case exportartifact.FieldProjectID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -288,6 +297,11 @@ func (_m *ExportArtifact) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	if v := _m.DeletionTaskID; v != nil {
+		builder.WriteString("deletion_task_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("project_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ProjectID))

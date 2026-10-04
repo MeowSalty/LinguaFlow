@@ -43,11 +43,15 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageauthversion"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagebackup"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheck"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheckwrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagemigrationitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatch"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatchitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
@@ -146,11 +150,15 @@ func checkColumn(t, c string) error {
 			sourcerevision.Table:            sourcerevision.ValidColumn,
 			storageauthversion.Table:        storageauthversion.ValidColumn,
 			storagebackup.Table:             storagebackup.ValidColumn,
+			storagecheck.Table:              storagecheck.ValidColumn,
+			storagecheckwrite.Table:         storagecheckwrite.ValidColumn,
 			storageconnection.Table:         storageconnection.ValidColumn,
 			storagemigrationitem.Table:      storagemigrationitem.ValidColumn,
 			storagereservation.Table:        storagereservation.ValidColumn,
 			storagespace.Table:              storagespace.ValidColumn,
 			storagetask.Table:               storagetask.ValidColumn,
+			storageuploadbatch.Table:        storageuploadbatch.ValidColumn,
+			storageuploadbatchitem.Table:    storageuploadbatchitem.ValidColumn,
 			storagewrite.Table:              storagewrite.ValidColumn,
 			synctask.Table:                  synctask.ValidColumn,
 			systemsetting.Table:             systemsetting.ValidColumn,

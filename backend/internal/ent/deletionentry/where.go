@@ -65,6 +65,11 @@ func UpdatedAt(v time.Time) predicate.DeletionEntry {
 	return predicate.DeletionEntry(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// DeletionTaskID applies equality check predicate on the "deletion_task_id" field. It's identical to DeletionTaskIDEQ.
+func DeletionTaskID(v int) predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldEQ(FieldDeletionTaskID, v))
+}
+
 // LocationID applies equality check predicate on the "location_id" field. It's identical to LocationIDEQ.
 func LocationID(v int) predicate.DeletionEntry {
 	return predicate.DeletionEntry(sql.FieldEQ(FieldLocationID, v))
@@ -183,6 +188,56 @@ func UpdatedAtLT(v time.Time) predicate.DeletionEntry {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.DeletionEntry {
 	return predicate.DeletionEntry(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// DeletionTaskIDEQ applies the EQ predicate on the "deletion_task_id" field.
+func DeletionTaskIDEQ(v int) predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldEQ(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDNEQ applies the NEQ predicate on the "deletion_task_id" field.
+func DeletionTaskIDNEQ(v int) predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldNEQ(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDIn applies the In predicate on the "deletion_task_id" field.
+func DeletionTaskIDIn(vs ...int) predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldIn(FieldDeletionTaskID, vs...))
+}
+
+// DeletionTaskIDNotIn applies the NotIn predicate on the "deletion_task_id" field.
+func DeletionTaskIDNotIn(vs ...int) predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldNotIn(FieldDeletionTaskID, vs...))
+}
+
+// DeletionTaskIDGT applies the GT predicate on the "deletion_task_id" field.
+func DeletionTaskIDGT(v int) predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldGT(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDGTE applies the GTE predicate on the "deletion_task_id" field.
+func DeletionTaskIDGTE(v int) predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldGTE(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDLT applies the LT predicate on the "deletion_task_id" field.
+func DeletionTaskIDLT(v int) predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldLT(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDLTE applies the LTE predicate on the "deletion_task_id" field.
+func DeletionTaskIDLTE(v int) predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldLTE(FieldDeletionTaskID, v))
+}
+
+// DeletionTaskIDIsNil applies the IsNil predicate on the "deletion_task_id" field.
+func DeletionTaskIDIsNil() predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldIsNull(FieldDeletionTaskID))
+}
+
+// DeletionTaskIDNotNil applies the NotNil predicate on the "deletion_task_id" field.
+func DeletionTaskIDNotNil() predicate.DeletionEntry {
+	return predicate.DeletionEntry(sql.FieldNotNull(FieldDeletionTaskID))
 }
 
 // LocationIDEQ applies the EQ predicate on the "location_id" field.

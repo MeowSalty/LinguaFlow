@@ -46,11 +46,15 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageauthversion"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagebackup"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheck"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheckwrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagemigrationitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatch"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatchitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
@@ -127,6 +131,10 @@ type Client struct {
 	StorageAuthVersion *StorageAuthVersionClient
 	// StorageBackup is the client for interacting with the StorageBackup builders.
 	StorageBackup *StorageBackupClient
+	// StorageCheck is the client for interacting with the StorageCheck builders.
+	StorageCheck *StorageCheckClient
+	// StorageCheckWrite is the client for interacting with the StorageCheckWrite builders.
+	StorageCheckWrite *StorageCheckWriteClient
 	// StorageConnection is the client for interacting with the StorageConnection builders.
 	StorageConnection *StorageConnectionClient
 	// StorageMigrationItem is the client for interacting with the StorageMigrationItem builders.
@@ -137,6 +145,10 @@ type Client struct {
 	StorageSpace *StorageSpaceClient
 	// StorageTask is the client for interacting with the StorageTask builders.
 	StorageTask *StorageTaskClient
+	// StorageUploadBatch is the client for interacting with the StorageUploadBatch builders.
+	StorageUploadBatch *StorageUploadBatchClient
+	// StorageUploadBatchItem is the client for interacting with the StorageUploadBatchItem builders.
+	StorageUploadBatchItem *StorageUploadBatchItemClient
 	// StorageWrite is the client for interacting with the StorageWrite builders.
 	StorageWrite *StorageWriteClient
 	// SyncTask is the client for interacting with the SyncTask builders.
@@ -193,11 +205,15 @@ func (c *Client) init() {
 	c.SourceRevision = NewSourceRevisionClient(c.config)
 	c.StorageAuthVersion = NewStorageAuthVersionClient(c.config)
 	c.StorageBackup = NewStorageBackupClient(c.config)
+	c.StorageCheck = NewStorageCheckClient(c.config)
+	c.StorageCheckWrite = NewStorageCheckWriteClient(c.config)
 	c.StorageConnection = NewStorageConnectionClient(c.config)
 	c.StorageMigrationItem = NewStorageMigrationItemClient(c.config)
 	c.StorageReservation = NewStorageReservationClient(c.config)
 	c.StorageSpace = NewStorageSpaceClient(c.config)
 	c.StorageTask = NewStorageTaskClient(c.config)
+	c.StorageUploadBatch = NewStorageUploadBatchClient(c.config)
+	c.StorageUploadBatchItem = NewStorageUploadBatchItemClient(c.config)
 	c.StorageWrite = NewStorageWriteClient(c.config)
 	c.SyncTask = NewSyncTaskClient(c.config)
 	c.SystemSetting = NewSystemSettingClient(c.config)
@@ -328,11 +344,15 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		SourceRevision:            NewSourceRevisionClient(cfg),
 		StorageAuthVersion:        NewStorageAuthVersionClient(cfg),
 		StorageBackup:             NewStorageBackupClient(cfg),
+		StorageCheck:              NewStorageCheckClient(cfg),
+		StorageCheckWrite:         NewStorageCheckWriteClient(cfg),
 		StorageConnection:         NewStorageConnectionClient(cfg),
 		StorageMigrationItem:      NewStorageMigrationItemClient(cfg),
 		StorageReservation:        NewStorageReservationClient(cfg),
 		StorageSpace:              NewStorageSpaceClient(cfg),
 		StorageTask:               NewStorageTaskClient(cfg),
+		StorageUploadBatch:        NewStorageUploadBatchClient(cfg),
+		StorageUploadBatchItem:    NewStorageUploadBatchItemClient(cfg),
 		StorageWrite:              NewStorageWriteClient(cfg),
 		SyncTask:                  NewSyncTaskClient(cfg),
 		SystemSetting:             NewSystemSettingClient(cfg),
@@ -390,11 +410,15 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		SourceRevision:            NewSourceRevisionClient(cfg),
 		StorageAuthVersion:        NewStorageAuthVersionClient(cfg),
 		StorageBackup:             NewStorageBackupClient(cfg),
+		StorageCheck:              NewStorageCheckClient(cfg),
+		StorageCheckWrite:         NewStorageCheckWriteClient(cfg),
 		StorageConnection:         NewStorageConnectionClient(cfg),
 		StorageMigrationItem:      NewStorageMigrationItemClient(cfg),
 		StorageReservation:        NewStorageReservationClient(cfg),
 		StorageSpace:              NewStorageSpaceClient(cfg),
 		StorageTask:               NewStorageTaskClient(cfg),
+		StorageUploadBatch:        NewStorageUploadBatchClient(cfg),
+		StorageUploadBatchItem:    NewStorageUploadBatchItemClient(cfg),
 		StorageWrite:              NewStorageWriteClient(cfg),
 		SyncTask:                  NewSyncTaskClient(cfg),
 		SystemSetting:             NewSystemSettingClient(cfg),
@@ -438,10 +462,11 @@ func (c *Client) Use(hooks ...Hook) {
 		c.InstanceInitialization, c.Job, c.JobResource, c.JobRound, c.JobRoundSegment,
 		c.OrgMembership, c.Organization, c.Project, c.PrunePromptTemplate,
 		c.RefreshToken, c.Resource, c.SSEEvent, c.Segment, c.SegmentRevision,
-		c.SourceRevision, c.StorageAuthVersion, c.StorageBackup, c.StorageConnection,
-		c.StorageMigrationItem, c.StorageReservation, c.StorageSpace, c.StorageTask,
-		c.StorageWrite, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.SourceRevision, c.StorageAuthVersion, c.StorageBackup, c.StorageCheck,
+		c.StorageCheckWrite, c.StorageConnection, c.StorageMigrationItem,
+		c.StorageReservation, c.StorageSpace, c.StorageTask, c.StorageUploadBatch,
+		c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask, c.SystemSetting,
+		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -458,10 +483,11 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.InstanceInitialization, c.Job, c.JobResource, c.JobRound, c.JobRoundSegment,
 		c.OrgMembership, c.Organization, c.Project, c.PrunePromptTemplate,
 		c.RefreshToken, c.Resource, c.SSEEvent, c.Segment, c.SegmentRevision,
-		c.SourceRevision, c.StorageAuthVersion, c.StorageBackup, c.StorageConnection,
-		c.StorageMigrationItem, c.StorageReservation, c.StorageSpace, c.StorageTask,
-		c.StorageWrite, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.SourceRevision, c.StorageAuthVersion, c.StorageBackup, c.StorageCheck,
+		c.StorageCheckWrite, c.StorageConnection, c.StorageMigrationItem,
+		c.StorageReservation, c.StorageSpace, c.StorageTask, c.StorageUploadBatch,
+		c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask, c.SystemSetting,
+		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -532,6 +558,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.StorageAuthVersion.mutate(ctx, m)
 	case *StorageBackupMutation:
 		return c.StorageBackup.mutate(ctx, m)
+	case *StorageCheckMutation:
+		return c.StorageCheck.mutate(ctx, m)
+	case *StorageCheckWriteMutation:
+		return c.StorageCheckWrite.mutate(ctx, m)
 	case *StorageConnectionMutation:
 		return c.StorageConnection.mutate(ctx, m)
 	case *StorageMigrationItemMutation:
@@ -542,6 +572,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.StorageSpace.mutate(ctx, m)
 	case *StorageTaskMutation:
 		return c.StorageTask.mutate(ctx, m)
+	case *StorageUploadBatchMutation:
+		return c.StorageUploadBatch.mutate(ctx, m)
+	case *StorageUploadBatchItemMutation:
+		return c.StorageUploadBatchItem.mutate(ctx, m)
 	case *StorageWriteMutation:
 		return c.StorageWrite.mutate(ctx, m)
 	case *SyncTaskMutation:
@@ -5916,6 +5950,272 @@ func (c *StorageBackupClient) mutate(ctx context.Context, m *StorageBackupMutati
 	}
 }
 
+// StorageCheckClient is a client for the StorageCheck schema.
+type StorageCheckClient struct {
+	config
+}
+
+// NewStorageCheckClient returns a client for the StorageCheck from the given config.
+func NewStorageCheckClient(c config) *StorageCheckClient {
+	return &StorageCheckClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `storagecheck.Hooks(f(g(h())))`.
+func (c *StorageCheckClient) Use(hooks ...Hook) {
+	c.hooks.StorageCheck = append(c.hooks.StorageCheck, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `storagecheck.Intercept(f(g(h())))`.
+func (c *StorageCheckClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StorageCheck = append(c.inters.StorageCheck, interceptors...)
+}
+
+// Create returns a builder for creating a StorageCheck entity.
+func (c *StorageCheckClient) Create() *StorageCheckCreate {
+	mutation := newStorageCheckMutation(c.config, OpCreate)
+	return &StorageCheckCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StorageCheck entities.
+func (c *StorageCheckClient) CreateBulk(builders ...*StorageCheckCreate) *StorageCheckCreateBulk {
+	return &StorageCheckCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StorageCheckClient) MapCreateBulk(slice any, setFunc func(*StorageCheckCreate, int)) *StorageCheckCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StorageCheckCreateBulk{err: fmt.Errorf("calling to StorageCheckClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StorageCheckCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StorageCheckCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StorageCheck.
+func (c *StorageCheckClient) Update() *StorageCheckUpdate {
+	mutation := newStorageCheckMutation(c.config, OpUpdate)
+	return &StorageCheckUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StorageCheckClient) UpdateOne(_m *StorageCheck) *StorageCheckUpdateOne {
+	mutation := newStorageCheckMutation(c.config, OpUpdateOne, withStorageCheck(_m))
+	return &StorageCheckUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StorageCheckClient) UpdateOneID(id int) *StorageCheckUpdateOne {
+	mutation := newStorageCheckMutation(c.config, OpUpdateOne, withStorageCheckID(id))
+	return &StorageCheckUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StorageCheck.
+func (c *StorageCheckClient) Delete() *StorageCheckDelete {
+	mutation := newStorageCheckMutation(c.config, OpDelete)
+	return &StorageCheckDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StorageCheckClient) DeleteOne(_m *StorageCheck) *StorageCheckDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StorageCheckClient) DeleteOneID(id int) *StorageCheckDeleteOne {
+	builder := c.Delete().Where(storagecheck.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StorageCheckDeleteOne{builder}
+}
+
+// Query returns a query builder for StorageCheck.
+func (c *StorageCheckClient) Query() *StorageCheckQuery {
+	return &StorageCheckQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStorageCheck},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StorageCheck entity by its id.
+func (c *StorageCheckClient) Get(ctx context.Context, id int) (*StorageCheck, error) {
+	return c.Query().Where(storagecheck.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StorageCheckClient) GetX(ctx context.Context, id int) *StorageCheck {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *StorageCheckClient) Hooks() []Hook {
+	return c.hooks.StorageCheck
+}
+
+// Interceptors returns the client interceptors.
+func (c *StorageCheckClient) Interceptors() []Interceptor {
+	return c.inters.StorageCheck
+}
+
+func (c *StorageCheckClient) mutate(ctx context.Context, m *StorageCheckMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StorageCheckCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StorageCheckUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StorageCheckUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StorageCheckDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StorageCheck mutation op: %q", m.Op())
+	}
+}
+
+// StorageCheckWriteClient is a client for the StorageCheckWrite schema.
+type StorageCheckWriteClient struct {
+	config
+}
+
+// NewStorageCheckWriteClient returns a client for the StorageCheckWrite from the given config.
+func NewStorageCheckWriteClient(c config) *StorageCheckWriteClient {
+	return &StorageCheckWriteClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `storagecheckwrite.Hooks(f(g(h())))`.
+func (c *StorageCheckWriteClient) Use(hooks ...Hook) {
+	c.hooks.StorageCheckWrite = append(c.hooks.StorageCheckWrite, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `storagecheckwrite.Intercept(f(g(h())))`.
+func (c *StorageCheckWriteClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StorageCheckWrite = append(c.inters.StorageCheckWrite, interceptors...)
+}
+
+// Create returns a builder for creating a StorageCheckWrite entity.
+func (c *StorageCheckWriteClient) Create() *StorageCheckWriteCreate {
+	mutation := newStorageCheckWriteMutation(c.config, OpCreate)
+	return &StorageCheckWriteCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StorageCheckWrite entities.
+func (c *StorageCheckWriteClient) CreateBulk(builders ...*StorageCheckWriteCreate) *StorageCheckWriteCreateBulk {
+	return &StorageCheckWriteCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StorageCheckWriteClient) MapCreateBulk(slice any, setFunc func(*StorageCheckWriteCreate, int)) *StorageCheckWriteCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StorageCheckWriteCreateBulk{err: fmt.Errorf("calling to StorageCheckWriteClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StorageCheckWriteCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StorageCheckWriteCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StorageCheckWrite.
+func (c *StorageCheckWriteClient) Update() *StorageCheckWriteUpdate {
+	mutation := newStorageCheckWriteMutation(c.config, OpUpdate)
+	return &StorageCheckWriteUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StorageCheckWriteClient) UpdateOne(_m *StorageCheckWrite) *StorageCheckWriteUpdateOne {
+	mutation := newStorageCheckWriteMutation(c.config, OpUpdateOne, withStorageCheckWrite(_m))
+	return &StorageCheckWriteUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StorageCheckWriteClient) UpdateOneID(id int) *StorageCheckWriteUpdateOne {
+	mutation := newStorageCheckWriteMutation(c.config, OpUpdateOne, withStorageCheckWriteID(id))
+	return &StorageCheckWriteUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StorageCheckWrite.
+func (c *StorageCheckWriteClient) Delete() *StorageCheckWriteDelete {
+	mutation := newStorageCheckWriteMutation(c.config, OpDelete)
+	return &StorageCheckWriteDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StorageCheckWriteClient) DeleteOne(_m *StorageCheckWrite) *StorageCheckWriteDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StorageCheckWriteClient) DeleteOneID(id int) *StorageCheckWriteDeleteOne {
+	builder := c.Delete().Where(storagecheckwrite.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StorageCheckWriteDeleteOne{builder}
+}
+
+// Query returns a query builder for StorageCheckWrite.
+func (c *StorageCheckWriteClient) Query() *StorageCheckWriteQuery {
+	return &StorageCheckWriteQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStorageCheckWrite},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StorageCheckWrite entity by its id.
+func (c *StorageCheckWriteClient) Get(ctx context.Context, id int) (*StorageCheckWrite, error) {
+	return c.Query().Where(storagecheckwrite.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StorageCheckWriteClient) GetX(ctx context.Context, id int) *StorageCheckWrite {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *StorageCheckWriteClient) Hooks() []Hook {
+	return c.hooks.StorageCheckWrite
+}
+
+// Interceptors returns the client interceptors.
+func (c *StorageCheckWriteClient) Interceptors() []Interceptor {
+	return c.inters.StorageCheckWrite
+}
+
+func (c *StorageCheckWriteClient) mutate(ctx context.Context, m *StorageCheckWriteMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StorageCheckWriteCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StorageCheckWriteUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StorageCheckWriteUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StorageCheckWriteDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StorageCheckWrite mutation op: %q", m.Op())
+	}
+}
+
 // StorageConnectionClient is a client for the StorageConnection schema.
 type StorageConnectionClient struct {
 	config
@@ -6690,6 +6990,272 @@ func (c *StorageTaskClient) mutate(ctx context.Context, m *StorageTaskMutation) 
 		return (&StorageTaskDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown StorageTask mutation op: %q", m.Op())
+	}
+}
+
+// StorageUploadBatchClient is a client for the StorageUploadBatch schema.
+type StorageUploadBatchClient struct {
+	config
+}
+
+// NewStorageUploadBatchClient returns a client for the StorageUploadBatch from the given config.
+func NewStorageUploadBatchClient(c config) *StorageUploadBatchClient {
+	return &StorageUploadBatchClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `storageuploadbatch.Hooks(f(g(h())))`.
+func (c *StorageUploadBatchClient) Use(hooks ...Hook) {
+	c.hooks.StorageUploadBatch = append(c.hooks.StorageUploadBatch, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `storageuploadbatch.Intercept(f(g(h())))`.
+func (c *StorageUploadBatchClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StorageUploadBatch = append(c.inters.StorageUploadBatch, interceptors...)
+}
+
+// Create returns a builder for creating a StorageUploadBatch entity.
+func (c *StorageUploadBatchClient) Create() *StorageUploadBatchCreate {
+	mutation := newStorageUploadBatchMutation(c.config, OpCreate)
+	return &StorageUploadBatchCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StorageUploadBatch entities.
+func (c *StorageUploadBatchClient) CreateBulk(builders ...*StorageUploadBatchCreate) *StorageUploadBatchCreateBulk {
+	return &StorageUploadBatchCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StorageUploadBatchClient) MapCreateBulk(slice any, setFunc func(*StorageUploadBatchCreate, int)) *StorageUploadBatchCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StorageUploadBatchCreateBulk{err: fmt.Errorf("calling to StorageUploadBatchClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StorageUploadBatchCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StorageUploadBatchCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StorageUploadBatch.
+func (c *StorageUploadBatchClient) Update() *StorageUploadBatchUpdate {
+	mutation := newStorageUploadBatchMutation(c.config, OpUpdate)
+	return &StorageUploadBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StorageUploadBatchClient) UpdateOne(_m *StorageUploadBatch) *StorageUploadBatchUpdateOne {
+	mutation := newStorageUploadBatchMutation(c.config, OpUpdateOne, withStorageUploadBatch(_m))
+	return &StorageUploadBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StorageUploadBatchClient) UpdateOneID(id int) *StorageUploadBatchUpdateOne {
+	mutation := newStorageUploadBatchMutation(c.config, OpUpdateOne, withStorageUploadBatchID(id))
+	return &StorageUploadBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StorageUploadBatch.
+func (c *StorageUploadBatchClient) Delete() *StorageUploadBatchDelete {
+	mutation := newStorageUploadBatchMutation(c.config, OpDelete)
+	return &StorageUploadBatchDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StorageUploadBatchClient) DeleteOne(_m *StorageUploadBatch) *StorageUploadBatchDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StorageUploadBatchClient) DeleteOneID(id int) *StorageUploadBatchDeleteOne {
+	builder := c.Delete().Where(storageuploadbatch.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StorageUploadBatchDeleteOne{builder}
+}
+
+// Query returns a query builder for StorageUploadBatch.
+func (c *StorageUploadBatchClient) Query() *StorageUploadBatchQuery {
+	return &StorageUploadBatchQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStorageUploadBatch},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StorageUploadBatch entity by its id.
+func (c *StorageUploadBatchClient) Get(ctx context.Context, id int) (*StorageUploadBatch, error) {
+	return c.Query().Where(storageuploadbatch.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StorageUploadBatchClient) GetX(ctx context.Context, id int) *StorageUploadBatch {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *StorageUploadBatchClient) Hooks() []Hook {
+	return c.hooks.StorageUploadBatch
+}
+
+// Interceptors returns the client interceptors.
+func (c *StorageUploadBatchClient) Interceptors() []Interceptor {
+	return c.inters.StorageUploadBatch
+}
+
+func (c *StorageUploadBatchClient) mutate(ctx context.Context, m *StorageUploadBatchMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StorageUploadBatchCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StorageUploadBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StorageUploadBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StorageUploadBatchDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StorageUploadBatch mutation op: %q", m.Op())
+	}
+}
+
+// StorageUploadBatchItemClient is a client for the StorageUploadBatchItem schema.
+type StorageUploadBatchItemClient struct {
+	config
+}
+
+// NewStorageUploadBatchItemClient returns a client for the StorageUploadBatchItem from the given config.
+func NewStorageUploadBatchItemClient(c config) *StorageUploadBatchItemClient {
+	return &StorageUploadBatchItemClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `storageuploadbatchitem.Hooks(f(g(h())))`.
+func (c *StorageUploadBatchItemClient) Use(hooks ...Hook) {
+	c.hooks.StorageUploadBatchItem = append(c.hooks.StorageUploadBatchItem, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `storageuploadbatchitem.Intercept(f(g(h())))`.
+func (c *StorageUploadBatchItemClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StorageUploadBatchItem = append(c.inters.StorageUploadBatchItem, interceptors...)
+}
+
+// Create returns a builder for creating a StorageUploadBatchItem entity.
+func (c *StorageUploadBatchItemClient) Create() *StorageUploadBatchItemCreate {
+	mutation := newStorageUploadBatchItemMutation(c.config, OpCreate)
+	return &StorageUploadBatchItemCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StorageUploadBatchItem entities.
+func (c *StorageUploadBatchItemClient) CreateBulk(builders ...*StorageUploadBatchItemCreate) *StorageUploadBatchItemCreateBulk {
+	return &StorageUploadBatchItemCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StorageUploadBatchItemClient) MapCreateBulk(slice any, setFunc func(*StorageUploadBatchItemCreate, int)) *StorageUploadBatchItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StorageUploadBatchItemCreateBulk{err: fmt.Errorf("calling to StorageUploadBatchItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StorageUploadBatchItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StorageUploadBatchItemCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StorageUploadBatchItem.
+func (c *StorageUploadBatchItemClient) Update() *StorageUploadBatchItemUpdate {
+	mutation := newStorageUploadBatchItemMutation(c.config, OpUpdate)
+	return &StorageUploadBatchItemUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StorageUploadBatchItemClient) UpdateOne(_m *StorageUploadBatchItem) *StorageUploadBatchItemUpdateOne {
+	mutation := newStorageUploadBatchItemMutation(c.config, OpUpdateOne, withStorageUploadBatchItem(_m))
+	return &StorageUploadBatchItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StorageUploadBatchItemClient) UpdateOneID(id int) *StorageUploadBatchItemUpdateOne {
+	mutation := newStorageUploadBatchItemMutation(c.config, OpUpdateOne, withStorageUploadBatchItemID(id))
+	return &StorageUploadBatchItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StorageUploadBatchItem.
+func (c *StorageUploadBatchItemClient) Delete() *StorageUploadBatchItemDelete {
+	mutation := newStorageUploadBatchItemMutation(c.config, OpDelete)
+	return &StorageUploadBatchItemDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StorageUploadBatchItemClient) DeleteOne(_m *StorageUploadBatchItem) *StorageUploadBatchItemDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StorageUploadBatchItemClient) DeleteOneID(id int) *StorageUploadBatchItemDeleteOne {
+	builder := c.Delete().Where(storageuploadbatchitem.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StorageUploadBatchItemDeleteOne{builder}
+}
+
+// Query returns a query builder for StorageUploadBatchItem.
+func (c *StorageUploadBatchItemClient) Query() *StorageUploadBatchItemQuery {
+	return &StorageUploadBatchItemQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStorageUploadBatchItem},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StorageUploadBatchItem entity by its id.
+func (c *StorageUploadBatchItemClient) Get(ctx context.Context, id int) (*StorageUploadBatchItem, error) {
+	return c.Query().Where(storageuploadbatchitem.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StorageUploadBatchItemClient) GetX(ctx context.Context, id int) *StorageUploadBatchItem {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *StorageUploadBatchItemClient) Hooks() []Hook {
+	return c.hooks.StorageUploadBatchItem
+}
+
+// Interceptors returns the client interceptors.
+func (c *StorageUploadBatchItemClient) Interceptors() []Interceptor {
+	return c.inters.StorageUploadBatchItem
+}
+
+func (c *StorageUploadBatchItemClient) mutate(ctx context.Context, m *StorageUploadBatchItemMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StorageUploadBatchItemCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StorageUploadBatchItemUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StorageUploadBatchItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StorageUploadBatchItemDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StorageUploadBatchItem mutation op: %q", m.Op())
 	}
 }
 
@@ -8049,9 +8615,11 @@ type (
 		InstanceInitialization, Job, JobResource, JobRound, JobRoundSegment,
 		OrgMembership, Organization, Project, PrunePromptTemplate, RefreshToken,
 		Resource, SSEEvent, Segment, SegmentRevision, SourceRevision,
-		StorageAuthVersion, StorageBackup, StorageConnection, StorageMigrationItem,
-		StorageReservation, StorageSpace, StorageTask, StorageWrite, SyncTask,
-		SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord, User []ent.Hook
+		StorageAuthVersion, StorageBackup, StorageCheck, StorageCheckWrite,
+		StorageConnection, StorageMigrationItem, StorageReservation, StorageSpace,
+		StorageTask, StorageUploadBatch, StorageUploadBatchItem, StorageWrite,
+		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
+		User []ent.Hook
 	}
 	inters struct {
 		ActivityLog, Backend, BackupPin, Blob, BlobLocation, BootstrapPromptTemplate,
@@ -8060,9 +8628,10 @@ type (
 		InstanceInitialization, Job, JobResource, JobRound, JobRoundSegment,
 		OrgMembership, Organization, Project, PrunePromptTemplate, RefreshToken,
 		Resource, SSEEvent, Segment, SegmentRevision, SourceRevision,
-		StorageAuthVersion, StorageBackup, StorageConnection, StorageMigrationItem,
-		StorageReservation, StorageSpace, StorageTask, StorageWrite, SyncTask,
-		SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
+		StorageAuthVersion, StorageBackup, StorageCheck, StorageCheckWrite,
+		StorageConnection, StorageMigrationItem, StorageReservation, StorageSpace,
+		StorageTask, StorageUploadBatch, StorageUploadBatchItem, StorageWrite,
+		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
 		User []ent.Interceptor
 	}
 )

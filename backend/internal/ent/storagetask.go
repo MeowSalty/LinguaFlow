@@ -22,6 +22,24 @@ type StorageTask struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// ContractVersion holds the value of the "contract_version" field.
+	ContractVersion int `json:"contract_version,omitempty"`
+	// InputSize holds the value of the "input_size" field.
+	InputSize int64 `json:"input_size,omitempty"`
+	// InputSha256 holds the value of the "input_sha256" field.
+	InputSha256 string `json:"input_sha256,omitempty"`
+	// SourcePlan holds the value of the "source_plan" field.
+	SourcePlan json.RawMessage `json:"source_plan,omitempty"`
+	// LegacySnapshot holds the value of the "legacy_snapshot" field.
+	LegacySnapshot json.RawMessage `json:"legacy_snapshot,omitempty"`
+	// LegacySnapshotExpiresAt holds the value of the "legacy_snapshot_expires_at" field.
+	LegacySnapshotExpiresAt *time.Time `json:"legacy_snapshot_expires_at,omitempty"`
+	// ResultSnapshot holds the value of the "result_snapshot" field.
+	ResultSnapshot json.RawMessage `json:"result_snapshot,omitempty"`
+	// LeaseToken holds the value of the "lease_token" field.
+	LeaseToken string `json:"lease_token,omitempty"`
+	// LeaseUntil holds the value of the "lease_until" field.
+	LeaseUntil *time.Time `json:"lease_until,omitempty"`
 	// OperationID holds the value of the "operation_id" field.
 	OperationID string `json:"operation_id,omitempty"`
 	// IdempotencyKey holds the value of the "idempotency_key" field.
@@ -80,13 +98,13 @@ func (*StorageTask) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case storagetask.FieldInput:
+		case storagetask.FieldSourcePlan, storagetask.FieldLegacySnapshot, storagetask.FieldResultSnapshot, storagetask.FieldInput:
 			values[i] = new([]byte)
-		case storagetask.FieldID, storagetask.FieldActorID, storagetask.FieldProjectID, storagetask.FieldResourceID, storagetask.FieldSourceRevisionID, storagetask.FieldTargetSpaceID, storagetask.FieldResultResourceID, storagetask.FieldResultRevisionID, storagetask.FieldResultArtifactID, storagetask.FieldExpectedSourceGeneration, storagetask.FieldExpectedTranslationGeneration, storagetask.FieldExpectedStorageGeneration, storagetask.FieldExpectedLocationGeneration, storagetask.FieldAttempts:
+		case storagetask.FieldID, storagetask.FieldContractVersion, storagetask.FieldInputSize, storagetask.FieldActorID, storagetask.FieldProjectID, storagetask.FieldResourceID, storagetask.FieldSourceRevisionID, storagetask.FieldTargetSpaceID, storagetask.FieldResultResourceID, storagetask.FieldResultRevisionID, storagetask.FieldResultArtifactID, storagetask.FieldExpectedSourceGeneration, storagetask.FieldExpectedTranslationGeneration, storagetask.FieldExpectedStorageGeneration, storagetask.FieldExpectedLocationGeneration, storagetask.FieldAttempts:
 			values[i] = new(sql.NullInt64)
-		case storagetask.FieldOperationID, storagetask.FieldIdempotencyKey, storagetask.FieldRequestHash, storagetask.FieldKind, storagetask.FieldStatus, storagetask.FieldPhase, storagetask.FieldCleanupStatus, storagetask.FieldErrorCode:
+		case storagetask.FieldInputSha256, storagetask.FieldLeaseToken, storagetask.FieldOperationID, storagetask.FieldIdempotencyKey, storagetask.FieldRequestHash, storagetask.FieldKind, storagetask.FieldStatus, storagetask.FieldPhase, storagetask.FieldCleanupStatus, storagetask.FieldErrorCode:
 			values[i] = new(sql.NullString)
-		case storagetask.FieldCreatedAt, storagetask.FieldUpdatedAt, storagetask.FieldRetryStartedAt, storagetask.FieldNextRetryAt, storagetask.FieldDeadline:
+		case storagetask.FieldCreatedAt, storagetask.FieldUpdatedAt, storagetask.FieldLegacySnapshotExpiresAt, storagetask.FieldLeaseUntil, storagetask.FieldRetryStartedAt, storagetask.FieldNextRetryAt, storagetask.FieldDeadline:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -120,6 +138,68 @@ func (_m *StorageTask) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case storagetask.FieldContractVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field contract_version", values[i])
+			} else if value.Valid {
+				_m.ContractVersion = int(value.Int64)
+			}
+		case storagetask.FieldInputSize:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field input_size", values[i])
+			} else if value.Valid {
+				_m.InputSize = value.Int64
+			}
+		case storagetask.FieldInputSha256:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field input_sha256", values[i])
+			} else if value.Valid {
+				_m.InputSha256 = value.String
+			}
+		case storagetask.FieldSourcePlan:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field source_plan", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SourcePlan); err != nil {
+					return fmt.Errorf("unmarshal field source_plan: %w", err)
+				}
+			}
+		case storagetask.FieldLegacySnapshot:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field legacy_snapshot", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.LegacySnapshot); err != nil {
+					return fmt.Errorf("unmarshal field legacy_snapshot: %w", err)
+				}
+			}
+		case storagetask.FieldLegacySnapshotExpiresAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field legacy_snapshot_expires_at", values[i])
+			} else if value.Valid {
+				_m.LegacySnapshotExpiresAt = new(time.Time)
+				*_m.LegacySnapshotExpiresAt = value.Time
+			}
+		case storagetask.FieldResultSnapshot:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field result_snapshot", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.ResultSnapshot); err != nil {
+					return fmt.Errorf("unmarshal field result_snapshot: %w", err)
+				}
+			}
+		case storagetask.FieldLeaseToken:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field lease_token", values[i])
+			} else if value.Valid {
+				_m.LeaseToken = value.String
+			}
+		case storagetask.FieldLeaseUntil:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field lease_until", values[i])
+			} else if value.Valid {
+				_m.LeaseUntil = new(time.Time)
+				*_m.LeaseUntil = value.Time
 			}
 		case storagetask.FieldOperationID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -323,6 +403,37 @@ func (_m *StorageTask) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("contract_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ContractVersion))
+	builder.WriteString(", ")
+	builder.WriteString("input_size=")
+	builder.WriteString(fmt.Sprintf("%v", _m.InputSize))
+	builder.WriteString(", ")
+	builder.WriteString("input_sha256=")
+	builder.WriteString(_m.InputSha256)
+	builder.WriteString(", ")
+	builder.WriteString("source_plan=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SourcePlan))
+	builder.WriteString(", ")
+	builder.WriteString("legacy_snapshot=")
+	builder.WriteString(fmt.Sprintf("%v", _m.LegacySnapshot))
+	builder.WriteString(", ")
+	if v := _m.LegacySnapshotExpiresAt; v != nil {
+		builder.WriteString("legacy_snapshot_expires_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("result_snapshot=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ResultSnapshot))
+	builder.WriteString(", ")
+	builder.WriteString("lease_token=")
+	builder.WriteString(_m.LeaseToken)
+	builder.WriteString(", ")
+	if v := _m.LeaseUntil; v != nil {
+		builder.WriteString("lease_until=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("operation_id=")
 	builder.WriteString(_m.OperationID)
