@@ -1,6 +1,7 @@
 import { computed, onScopeDispose, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import { fetchJob, getGlossarySyncTaskStatus, type ApiSchemas } from '@/api/client'
+import { getStorageTask } from '@/api/storage'
 import {
   fetchOperationsSummary,
   listOperations,
@@ -26,12 +27,32 @@ import {
 } from '@/utils/operationQuery'
 import { t } from '@/i18n'
 
-type TaskDetail = ApiSchemas['Job'] | ApiSchemas['GlossarySyncTaskStatusResponse']
+export type TaskDetailMap = {
+  translation: ApiSchemas['Job']
+  glossary_sync: ApiSchemas['GlossarySyncTaskStatusResponse']
+  storage: ApiSchemas['StorageTask']
+}
+type TaskType = keyof TaskDetailMap
+type TaskDetail = TaskDetailMap[TaskType]
+const withDetailStatus = (operation: Operation, detail: TaskDetail): Operation => {
+  if (operation.task_type === 'storage' && 'cleanup_status' in detail) {
+    return {
+      ...operation,
+      status: detail.status,
+      phase: detail.phase,
+      cleanup_status: detail.cleanup_status,
+      error_code: detail.error_code ?? '',
+      next_retry_at: detail.next_retry_at ?? null,
+    }
+  }
+  return { ...operation, status: detail.status } as Operation
+}
 type Subscription = {
   locator: OperationLocator
   receive: (detail: TaskDetail) => void
   fail: (error: unknown) => void
   active: boolean
+  nextPollAt: number
   controller: AbortController
 }
 type TaskFlight = {
@@ -162,11 +183,18 @@ export const useOperationsStore = defineStore('operations', () => {
       if (isCurrent(context)) summaryLoading.value = false
     }
   }
-  const queryTask = (
+  const requestTask = (
     locator: OperationLocator,
     consumerSignal?: AbortSignal,
   ): Promise<TaskDetail> => {
     if (consumerSignal?.aborted) return Promise.reject(consumerSignal.reason)
+    // Validate before allocating a flight; storage and sync are project-scoped APIs.
+    try {
+      if (locator.task_type !== 'translation') safeTaskNumber(String(locator.project_id))
+      if (locator.task_type !== 'glossary_sync') safeTaskNumber(locator.task_id)
+    } catch (error) {
+      return Promise.reject(error)
+    }
     const consumerContext = captureOperations()
     // Translation IDs are globally unique; project matching is a per-consumer constraint.
     const key =
@@ -185,11 +213,18 @@ export const useOperationsStore = defineStore('operations', () => {
         promise: Promise.resolve()
           .then<TaskDetail>(() => {
             signal.throwIfAborted()
-            return locator.task_type === 'translation'
-              ? fetchJob(safeTaskNumber(locator.task_id), undefined, { signal })
-              : getGlossarySyncTaskStatus(locator.project_id!, locator.task_id, undefined, {
+            switch (locator.task_type) {
+              case 'translation':
+                return fetchJob(safeTaskNumber(locator.task_id), undefined, { signal })
+              case 'glossary_sync':
+                return getGlossarySyncTaskStatus(locator.project_id!, locator.task_id, undefined, {
                   signal,
                 })
+              case 'storage':
+                return getStorageTask(locator.project_id!, safeTaskNumber(locator.task_id), {
+                  signal,
+                })
+            }
           })
           .then((data) => {
             assertCurrent(context)
@@ -246,17 +281,24 @@ export const useOperationsStore = defineStore('operations', () => {
       return data
     })
   }
+  const queryTask = <T extends TaskType>(
+    locator: OperationLocator & { task_type: T },
+    signal?: AbortSignal,
+  ): Promise<TaskDetailMap[T]> => requestTask(locator, signal) as Promise<TaskDetailMap[T]>
   const queryTranslation = (id: string, signal?: AbortSignal): Promise<ApiSchemas['Job']> =>
-    queryTask({ task_type: 'translation', task_id: id }, signal) as Promise<ApiSchemas['Job']>
+    queryTask({ task_type: 'translation', task_id: id }, signal)
   const querySync = (
     projectId: number,
     id: string,
     signal?: AbortSignal,
   ): Promise<ApiSchemas['GlossarySyncTaskStatusResponse']> =>
-    queryTask(
-      { task_type: 'glossary_sync', task_id: id, project_id: projectId },
-      signal,
-    ) as Promise<ApiSchemas['GlossarySyncTaskStatusResponse']>
+    queryTask({ task_type: 'glossary_sync', task_id: id, project_id: projectId }, signal)
+  const queryStorage = (
+    projectId: number,
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<ApiSchemas['StorageTask']> =>
+    queryTask({ task_type: 'storage', task_id: id, project_id: projectId }, signal)
   const removeProject = (projectId: number): void => {
     discardRequests()
     active.value = active.value.filter((item) => item.project_id !== projectId)
@@ -302,7 +344,7 @@ export const useOperationsStore = defineStore('operations', () => {
           try {
             const detail = await queryTask(old)
             assertCurrent(context)
-            const updated = { ...old, status: detail.status } as Operation
+            const updated = withDetailStatus(old, detail)
             if (isTerminalOperation(detail.status))
               terminal.value = [
                 updated,
@@ -418,10 +460,26 @@ export const useOperationsStore = defineStore('operations', () => {
   }
   const pollSubscription = async (subscription: Subscription): Promise<void> => {
     const context = captureOperations()
+    // Keep cleanup retries at the low frequency even if a detail read fails.
+    if (subscription.nextPollAt > 0) subscription.nextPollAt = Date.now() + 30_000
     try {
       const data = await queryTask(subscription.locator, subscription.controller.signal)
       if (!subscriptions.has(subscription) || !isCurrent(context)) return
-      subscription.active = !isTerminalOperation(data.status)
+      const businessTerminal = isTerminalOperation(data.status)
+      const pendingCleanup =
+        subscription.locator.task_type === 'storage' &&
+        'cleanup_status' in data &&
+        ['cleanup_pending', 'running', 'blocked'].includes(data.cleanup_status)
+      subscription.active = !businessTerminal || pendingCleanup
+      subscription.nextPollAt = businessTerminal && pendingCleanup ? Date.now() + 30_000 : 0
+      if (subscription.locator.task_type === 'storage') {
+        const key = operationKey(subscription.locator)
+        const update = (item: Operation) =>
+          operationKey(item) === key ? withDetailStatus(item, data) : item
+        active.value = active.value.map(update)
+        terminal.value = terminal.value.map(update)
+        items.value = items.value.map(update)
+      }
       subscription.receive(data)
     } catch (error) {
       if (!subscriptions.has(subscription) || !isCurrent(context)) return
@@ -432,12 +490,19 @@ export const useOperationsStore = defineStore('operations', () => {
       subscription.fail(error)
     }
   }
-  const subscribeTask = (
-    locator: OperationLocator,
-    receive: Subscription['receive'],
+  const subscribeTask = <T extends TaskType>(
+    locator: OperationLocator & { task_type: T },
+    receive: (detail: TaskDetailMap[T]) => void,
     fail: Subscription['fail'],
   ): (() => void) => {
-    const subscription = { locator, receive, fail, active: true, controller: new AbortController() }
+    const subscription: Subscription = {
+      locator,
+      receive: (detail) => receive(detail as TaskDetailMap[T]),
+      fail,
+      active: true,
+      nextPollAt: 0,
+      controller: new AbortController(),
+    }
     subscriptions.add(subscription)
     void pollSubscription(subscription)
     return () => {
@@ -468,7 +533,9 @@ export const useOperationsStore = defineStore('operations', () => {
     const flight = Promise.allSettled([
       discover(),
       ensureSummary(),
-      ...[...subscriptions].filter((sub) => sub.active).map(pollSubscription),
+      ...[...subscriptions]
+        .filter((sub) => sub.active && sub.nextPollAt <= Date.now())
+        .map(pollSubscription),
       ...(listUsers ? [...(!listExpanded ? [loadList()] : []), refreshFilteredSummary()] : []),
     ])
       .then(() => {
@@ -518,7 +585,10 @@ export const useOperationsStore = defineStore('operations', () => {
     if (document.hidden) {
       if (timer) clearTimeout(timer)
       timer = null
-    } else if (started) void refresh()
+    } else if (started) {
+      for (const subscription of subscriptions) subscription.nextPollAt = 0
+      void refresh()
+    }
   }
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', visibility)
   onScopeDispose(() => {
@@ -556,6 +626,7 @@ export const useOperationsStore = defineStore('operations', () => {
     queryTask,
     queryTranslation,
     querySync,
+    queryStorage,
     subscribeTask,
     discover,
     loadList,

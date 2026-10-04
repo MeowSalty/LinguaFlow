@@ -62,7 +62,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   )
 
   const hideTerminal = (key: string): void => {
-    if (!/^(translation|glossary_sync):[1-9][0-9]*$/.test(key)) return
+    if (!/^(translation|glossary_sync|storage):[1-9][0-9]*$/.test(key)) return
     hiddenTerminalKeys.value = [
       ...hiddenTerminalKeys.value.filter((item) => item !== key),
       key,
