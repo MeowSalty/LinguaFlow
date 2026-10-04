@@ -18,7 +18,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sourcerevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
@@ -28,7 +27,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ziputil"
 )
 
-const storageParserVersion = "1"
+const storageParserVersion = "2"
 
 func (s *ResourceService) SetStorage(storage *StorageService) {
 	s.storage = storage
@@ -62,6 +61,8 @@ func (s *ResourceService) uploadStoredResource(ctx context.Context, actor, proje
 	if err := s.ensureStorage(ctx); err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, s.storage.cfg.TransferTimeout)
+	defer cancel()
 	path, err := NormalizeResourcePath(firstNonEmpty(file.Path, file.Filename))
 	if err != nil {
 		return nil, err
@@ -73,12 +74,59 @@ func (s *ResourceService) uploadStoredResource(ctx context.Context, actor, proje
 	if p.StorageSpaceID == nil {
 		return nil, ErrStoragePolicy
 	}
-	task, err := s.storage.Begin(ctx, actor, projectID, StorageIntent{Kind: "upload", IdempotencyKey: file.IdempotencyKey, Path: path, Size: file.Size})
+	intent := StorageIntent{Kind: "upload", IdempotencyKey: file.IdempotencyKey, Path: path, Size: file.Size}
+	if file.ExpectedStorageGeneration != nil {
+		intent.StorageGeneration = *file.ExpectedStorageGeneration
+		intent.RequireStorageGeneration = true
+	}
+	task, err := s.storage.Begin(ctx, actor, projectID, intent)
 	if err != nil {
 		return nil, err
 	}
 	if task.Phase == "committed" && task.ResultResourceID != nil {
-		r, e := s.client.Resource.Get(ctx, *task.ResultResourceID)
+		if e := s.storage.verifyTaskContent(ctx, task, file.Reader, file.Size); e != nil {
+			return nil, e
+		}
+		r, _, e := replayResourceResult(task)
+		if e != nil {
+			return nil, e
+		}
+		return &ResourceUploadResult{Resource: r, TotalSegments: r.TotalSegments}, nil
+	}
+	if err = storageTerminalError(task); err != nil {
+		return nil, err
+	}
+	release, err := s.storage.ClaimTaskExecution(ctx, task.ID)
+	if err != nil {
+		return nil, &StorageOperationError{Err: err, TaskID: task.ID}
+	}
+	defer release()
+	task, err = s.client.StorageTask.Get(ctx, task.ID)
+	if err != nil {
+		return nil, err
+	}
+	if task.Phase == "committed" {
+		if err = s.storage.verifyTaskContent(ctx, task, file.Reader, file.Size); err != nil {
+			return nil, err
+		}
+		r, _, e := replayResourceResult(task)
+		if e != nil {
+			return nil, e
+		}
+		return &ResourceUploadResult{Resource: r, TotalSegments: r.TotalSegments}, nil
+	}
+	if task.Phase == "prepared" {
+		if e := s.storage.verifyTaskContent(ctx, task, file.Reader, file.Size); e != nil {
+			return nil, e
+		}
+		if e := s.resumeUpload(ctx, task); e != nil {
+			return nil, e
+		}
+		done, e := s.client.StorageTask.Get(ctx, task.ID)
+		if e != nil {
+			return nil, e
+		}
+		r, _, e := replayResourceResult(done)
 		if e != nil {
 			return nil, e
 		}
@@ -133,13 +181,27 @@ func (s *ResourceService) commitUploaded(ctx context.Context, task *ent.StorageT
 		if e = tx.StorageTask.UpdateOneID(task.ID).SetResultResourceID(result.ID).SetResultRevisionID(rev.ID).Exec(ctx); e != nil {
 			return e
 		}
+		result, e = tx.Resource.Get(ctx, result.ID)
+		if e != nil {
+			return e
+		}
+		if e = saveResourceResult(ctx, tx, task.ID, result, IncrementalUpdateStats{}); e != nil {
+			return e
+		}
+		if e = completeUploadBatchItem(ctx, tx, task.ID, result); e != nil {
+			return e
+		}
 		return s.storage.finishTask(ctx, tx, task.ID)
 	})
 	if err != nil {
 		_ = s.storage.failWrite(context.WithoutCancel(ctx), staged.Write.ID, err)
 		return nil, err
 	}
-	result, err = s.client.Resource.Get(ctx, result.ID)
+	done, err := s.client.StorageTask.Get(ctx, task.ID)
+	if err != nil {
+		return nil, err
+	}
+	result, _, err = replayResourceResult(done)
 	if err != nil {
 		return nil, err
 	}
@@ -176,9 +238,9 @@ func parseStoredSegmentsWithConfig(ctx context.Context, f *os.File, format strin
 		if err = ctx.Err(); err != nil {
 			return nil, err
 		}
-		source := strings.TrimSpace(item.OriginalSource)
+		source := item.OriginalSource
 		if source == "" {
-			source = strings.TrimSpace(item.Source)
+			source = item.Source
 		}
 		if source == "" {
 			source = " "
@@ -197,52 +259,80 @@ func parseStoredSegmentsWithConfig(ctx context.Context, f *os.File, format strin
 }
 
 type SourceUpdatePreview struct {
-	TaskID                int                    `json:"task_id"`
-	SourceGeneration      int64                  `json:"source_generation"`
-	TranslationGeneration int64                  `json:"translation_generation"`
-	Stats                 IncrementalUpdateStats `json:"stats"`
+	TaskID                  int                    `json:"task_id"`
+	SourceGeneration        int64                  `json:"source_generation"`
+	TranslationGeneration   int64                  `json:"translation_generation"`
+	Stats                   IncrementalUpdateStats `json:"stats"`
+	ExpiresAt               *time.Time             `json:"expires_at"`
+	BaselineTrust           string                 `json:"baseline_trust"`
+	LegacySnapshotAvailable bool                   `json:"legacy_snapshot_available"`
+	LegacySnapshotExpiresAt *time.Time             `json:"legacy_snapshot_expires_at"`
 }
 
 func (s *ResourceService) PreviewSourceUpdate(ctx context.Context, actor, projectID, resourceID int, file UploadedFile) (*SourceUpdatePreview, error) {
 	if err := s.ensureStorage(ctx); err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, s.storage.cfg.TransferTimeout)
+	defer cancel()
+	if _, err := s.projects.requireProjectAccess(ctx, actor, projectID, true); err != nil {
+		return nil, err
+	}
+	task, err := s.storage.Begin(ctx, actor, projectID, StorageIntent{Kind: "source_update", IdempotencyKey: file.IdempotencyKey, ResourceID: resourceID, Size: file.Size, CaptureSourceBaseline: true})
+	if err != nil {
+		return nil, err
+	}
+	if len(task.SourcePlan) > 0 {
+		if err = s.storage.verifyTaskContent(ctx, task, file.Reader, file.Size); err != nil {
+			return nil, err
+		}
+		return s.SourcePreviewForTask(ctx, actor, projectID, task.ID)
+	}
+	if err = storageTerminalError(task); err != nil {
+		return nil, err
+	}
 	res, err := s.GetResource(ctx, actor, projectID, resourceID)
 	if err != nil {
 		return nil, err
 	}
-	if _, err = s.projects.requireProjectAccess(ctx, actor, projectID, true); err != nil {
-		return nil, err
+	release, err := s.storage.ClaimTaskExecution(ctx, task.ID)
+	if err != nil {
+		return nil, &StorageOperationError{Err: err, TaskID: task.ID}
 	}
-	task, err := s.storage.Begin(ctx, actor, projectID, StorageIntent{Kind: "source_update", IdempotencyKey: file.IdempotencyKey, ResourceID: resourceID, Path: res.Resource.Path, Size: file.Size, SourceGeneration: res.Resource.SourceGeneration, TranslationGeneration: res.Resource.TranslationGeneration})
+	defer release()
+	task, err = s.client.StorageTask.Get(ctx, task.ID)
 	if err != nil {
 		return nil, err
 	}
-	if task.Phase == "prepared" || task.Phase == "committed" {
-		return s.sourcePreview(ctx, task, res.Resource)
+	if len(task.SourcePlan) > 0 {
+		if err = s.storage.verifyTaskContent(ctx, task, file.Reader, file.Size); err != nil {
+			return nil, err
+		}
+		return s.SourcePreviewForTask(ctx, actor, projectID, task.ID)
+	}
+	if task.Phase == "parsing" {
+		if err = s.storage.verifyTaskContent(ctx, task, file.Reader, file.Size); err != nil {
+			return nil, err
+		}
+		if err = s.resumeSourcePlan(ctx, task); err != nil {
+			return nil, err
+		}
+		return s.SourcePreviewForTask(ctx, actor, projectID, task.ID)
 	}
 	stage, err := s.storage.Stage(ctx, task, file.Reader, file.Size)
 	if err != nil {
 		return nil, err
 	}
 	defer stage.Close()
-	if _, err = parseStoredSegments(ctx, stage.File, res.Resource.Format); err != nil {
+	items, err := s.parseStoredSegments(ctx, stage.File, res.Resource.Format)
+	if err != nil {
 		_ = s.storage.failWrite(ctx, stage.Write.ID, err)
 		return nil, err
 	}
-	return s.sourcePreview(ctx, task, res.Resource)
-}
-
-func (s *ResourceService) sourcePreview(ctx context.Context, task *ent.StorageTask, res *ent.Resource) (*SourceUpdatePreview, error) {
-	items, err := s.readPreparedSource(ctx, task, res.Format)
-	if err != nil {
+	if err = s.prepareSourcePlan(ctx, task, items); err != nil {
 		return nil, err
 	}
-	old, err := s.client.Segment.Query().Where(segment.ResourceIDEQ(res.ID)).Order(ent.Asc(segment.FieldSegmentIndex)).All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &SourceUpdatePreview{TaskID: task.ID, SourceGeneration: task.ExpectedSourceGeneration, TranslationGeneration: task.ExpectedTranslationGeneration, Stats: *changeStats(diffSegments(old, items))}, nil
+	return s.SourcePreviewForTask(ctx, actor, projectID, task.ID)
 }
 
 func (s *ResourceService) readPreparedSource(ctx context.Context, task *ent.StorageTask, format string) ([]parsedResourceSegment, error) {
@@ -255,7 +345,7 @@ func (s *ResourceService) readPreparedSource(ctx context.Context, task *ent.Stor
 		return nil, err
 	}
 	defer f.Close()
-	return parseStoredSegments(ctx, f.File, format)
+	return s.parseStoredSegments(ctx, f.File, format)
 }
 
 func (s *ResourceService) updateStoredResource(ctx context.Context, actor, projectID, resourceID int, file UploadedFile) (*ent.Resource, *IncrementalUpdateStats, error) {
@@ -266,6 +356,8 @@ func (s *ResourceService) updateStoredResource(ctx context.Context, actor, proje
 }
 
 func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, projectID, resourceID, taskID int, sourceGen, translationGen int64) (*ent.Resource, *IncrementalUpdateStats, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.storage.cfg.TransferTimeout)
+	defer cancel()
 	if _, err := s.projects.requireProjectAccess(ctx, actor, projectID, true); err != nil {
 		return nil, nil, err
 	}
@@ -276,23 +368,49 @@ func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, project
 	if task.Kind != "source_update" || task.ResourceID == nil || *task.ResourceID != resourceID {
 		return nil, nil, ErrInvalidInput
 	}
-	if task.Phase == "committed" {
-		r, e := s.client.Resource.Get(ctx, resourceID)
-		return r, &IncrementalUpdateStats{}, e
-	}
 	if task.ExpectedSourceGeneration != sourceGen || task.ExpectedTranslationGeneration != translationGen {
 		return nil, nil, ErrSourceRevisionConflict
+	}
+	if task.Phase == "committed" {
+		return replayResourceResult(task)
+	}
+	if err = storageTerminalError(task); err != nil {
+		return nil, nil, err
+	}
+	plan, err := decodeSourcePlan(task)
+	if err != nil {
+		return nil, nil, err
+	}
+	release, err := s.storage.ClaimTaskExecution(ctx, task.ID)
+	if err != nil {
+		return nil, nil, &StorageOperationError{Err: err, TaskID: task.ID}
+	}
+	defer release()
+	task, err = s.client.StorageTask.Get(ctx, task.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if task.Phase == "committed" {
+		return replayResourceResult(task)
 	}
 	res, err := s.client.Resource.Get(ctx, resourceID)
 	if err != nil {
 		return nil, nil, err
 	}
-	items, err := s.readPreparedSource(ctx, task, res.Format)
+	w, err := s.client.StorageWrite.Query().Where(storagewrite.TaskIDEQ(task.ID), storagewrite.PhaseEQ("prepared")).Only(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	w, err := s.client.StorageWrite.Query().Where(storagewrite.TaskIDEQ(task.ID), storagewrite.PhaseEQ("prepared")).Only(ctx)
+	if w.ID != plan.WriteID || w.Sha256 != plan.SHA256 || w.ActualBytes != plan.Size {
+		return nil, nil, ErrSourceRevisionConflict
+	}
+	// Confirmation can occur long after preparation. Verify the immutable
+	// candidate again without reparsing or changing the frozen segment plan.
+	candidate, err := s.storage.materialize(ctx, w.SpaceID, w.ObjectKey, w.ProviderVersion, w.ActualBytes, w.Sha256)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err = candidate.Close(); err != nil {
 		return nil, nil, err
 	}
 	var stats *IncrementalUpdateStats
@@ -317,12 +435,22 @@ func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, project
 		if e = s.storage.logicalAdmission(ctx, tx, p, w.ActualBytes); e != nil {
 			return e
 		}
-		old, e := tx.Segment.Query().Where(segment.ResourceIDEQ(resourceID)).Order(ent.Asc(segment.FieldSegmentIndex)).All(ctx)
-		if e != nil {
-			return e
+		changes := make([]SegmentChange, 0, len(plan.Changes))
+		for _, c := range plan.Changes {
+			change := SegmentChange{ChangeType: c.Kind, NewIndex: c.Index, NewSource: c.Source, NewMeta: normalizeMeta(c.Meta)}
+			if c.OldID > 0 {
+				old, e := tx.Segment.Get(ctx, c.OldID)
+				if e != nil {
+					return e
+				}
+				if old.ResourceID == nil || *old.ResourceID != resourceID {
+					return ErrSourceRevisionConflict
+				}
+				change.OldSegment = old
+			}
+			changes = append(changes, change)
 		}
-		changes := diffSegments(old, items)
-		stats = changeStats(changes)
+		stats = &plan.Stats
 		b, e := s.storage.publish(ctx, tx, w, blob.PurposeSource, nil)
 		if e != nil {
 			return e
@@ -341,19 +469,34 @@ func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, project
 		if e = local.applySegmentChanges(ctx, resourceID, changes); e != nil {
 			return e
 		}
-		if e = tx.Resource.UpdateOneID(resourceID).SetCurrentSourceRevisionID(rev.ID).SetStoragePath("blob:" + b.Identity).SetTotalSegments(len(items)).Exec(ctx); e != nil {
+		if e = tx.Resource.UpdateOneID(resourceID).SetCurrentSourceRevisionID(rev.ID).SetStoragePath("blob:" + b.Identity).SetTotalSegments(plan.Stats.Added + plan.Stats.Updated + plan.Stats.Unchanged).Exec(ctx); e != nil {
 			return e
 		}
 		if e = tx.StorageTask.UpdateOneID(task.ID).SetResultResourceID(resourceID).SetResultRevisionID(rev.ID).Exec(ctx); e != nil {
 			return e
+		}
+		result, e := tx.Resource.Get(ctx, resourceID)
+		if e != nil {
+			return e
+		}
+		if e = saveResourceResult(ctx, tx, task.ID, result, *stats); e != nil {
+			return e
+		}
+		if len(task.LegacySnapshot) > 0 {
+			if e = tx.StorageTask.UpdateOneID(task.ID).SetLegacySnapshotExpiresAt(time.Now().UTC().Add(s.storage.sourceRetention)).Exec(ctx); e != nil {
+				return e
+			}
 		}
 		return s.storage.finishTask(ctx, tx, task.ID)
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	res, err = s.client.Resource.Get(ctx, resourceID)
-	return res, stats, err
+	done, err := s.client.StorageTask.Get(ctx, task.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return replayResourceResult(done)
 }
 
 func changeStats(changes []SegmentChange) *IncrementalUpdateStats {
@@ -392,6 +535,8 @@ func storageSourceIdle(ctx context.Context, tx *ent.Client, resourceID, projectI
 }
 
 func (s *ResourceService) RepairSource(ctx context.Context, actor, projectID, resourceID, revisionID, targetSpace int, locationGeneration int64, file UploadedFile) (*ent.StorageTask, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.storage.cfg.TransferTimeout)
+	defer cancel()
 	rev, err := s.client.SourceRevision.Query().Where(sourcerevision.IDEQ(revisionID), sourcerevision.ResourceIDEQ(resourceID), sourcerevision.ProjectIDEQ(projectID), sourcerevision.DeletedEQ(false)).Only(ctx)
 	if err != nil {
 		return nil, err
@@ -404,7 +549,37 @@ func (s *ResourceService) RepairSource(ctx context.Context, actor, projectID, re
 		return nil, err
 	}
 	if task.Phase == "committed" {
+		if e := s.storage.verifyTaskContent(ctx, task, file.Reader, file.Size); e != nil {
+			return nil, e
+		}
 		return task, nil
+	}
+	if err = storageTerminalError(task); err != nil {
+		return nil, err
+	}
+	release, err := s.storage.ClaimTaskExecution(ctx, task.ID)
+	if err != nil {
+		return nil, &StorageOperationError{Err: err, TaskID: task.ID}
+	}
+	defer release()
+	task, err = s.client.StorageTask.Get(ctx, task.ID)
+	if err != nil {
+		return nil, err
+	}
+	if task.Phase == "committed" {
+		if err = s.storage.verifyTaskContent(ctx, task, file.Reader, file.Size); err != nil {
+			return nil, err
+		}
+		return task, nil
+	}
+	if task.Phase == "prepared" {
+		if e := s.storage.verifyTaskContent(ctx, task, file.Reader, file.Size); e != nil {
+			return nil, e
+		}
+		if e := s.resumeRepair(ctx, task); e != nil {
+			return nil, e
+		}
+		return s.storage.task(ctx, actor, projectID, task.ID)
 	}
 	stage, err := s.storage.Stage(ctx, task, file.Reader, file.Size)
 	if err != nil {

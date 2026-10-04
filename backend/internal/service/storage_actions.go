@@ -24,5 +24,48 @@ func (s *StorageService) TaskActions(ctx context.Context, actor int, task *ent.S
 	if _, err := s.projects.requireProjectAccess(ctx, actor, task.ProjectID, true); err != nil {
 		return []string{}
 	}
-	return StorageAllowedActions(task)
+	actions := StorageAllowedActions(task)
+	if len(actions) == 0 {
+		return actions
+	}
+	p, err := s.client.Project.Get(ctx, task.ProjectID)
+	if err != nil {
+		return []string{}
+	}
+	valid := p.StorageGeneration == task.ExpectedStorageGeneration
+	if task.Kind != "migration" && task.Kind != "repair" && p.StorageState != "active" {
+		valid = false
+	}
+	if task.Kind == "source_update" && task.ResourceID != nil {
+		r, e := s.client.Resource.Get(ctx, *task.ResourceID)
+		if e != nil || r.SourceGeneration != task.ExpectedSourceGeneration || r.TranslationGeneration != task.ExpectedTranslationGeneration {
+			valid = false
+		}
+	}
+	if s.maintenance {
+		valid = false
+	}
+	if task.TargetSpaceID != nil {
+		var e error
+		if task.Kind == "repair" && task.SourceRevisionID != nil {
+			e = s.allowedRepairTarget(ctx, s.client, p, *task.SourceRevisionID, *task.TargetSpaceID, 0)
+		} else if task.Kind == "migration" {
+			e = s.validateStorageTarget(ctx, s.client, p, *task.TargetSpaceID, 0, false)
+		} else {
+			e = s.allowedExistingTarget(ctx, s.client, p, *task.TargetSpaceID, 0)
+		}
+		if e != nil {
+			valid = false
+		}
+	}
+	if !valid {
+		out := []string{}
+		for _, action := range actions {
+			if action == "cancel" {
+				out = append(out, action)
+			}
+		}
+		return out
+	}
+	return actions
 }

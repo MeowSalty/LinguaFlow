@@ -149,7 +149,7 @@ func TestStorageConnectionAuthorizationHasDurableProbeAndExactAccounting(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.HasAuth || got.AuthGeneration != 1 {
+	if !got.HasAuth || got.AuthGeneration != 1 || got.ManagementGeneration != c.ManagementGeneration+1 {
 		t.Fatal("authorization not activated")
 	}
 	space := client.StorageSpace.GetX(ctx, sp.ID)
@@ -183,6 +183,7 @@ func TestStorageConnectionRevocationWinsSlowCandidate(t *testing.T) {
 	if _, err := s.Authorize(ctx, u.ID, c.ID, storageAuthorizeInput(c.ManagementGeneration)); err != nil {
 		t.Fatal(err)
 	}
+	c, _ = s.Get(ctx, u.ID, c.ID)
 	started, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	d.capabilities = func(ctx context.Context) error {
@@ -277,7 +278,7 @@ func TestStorageConnectionDeleteResponseLossAndReadonlyCleanup(t *testing.T) {
 		t.Fatalf("read-only cleanup blocked: %v", err)
 	}
 	puts := d.puts
-	input := storageAuthorizeInput(c.ManagementGeneration)
+	input := storageAuthorizeInput(client.StorageConnection.GetX(ctx, c.ID).ManagementGeneration)
 	input.WriteCheck = false
 	if _, err = s.Authorize(ctx, u.ID, c.ID, input); err != nil {
 		t.Fatal(err)
@@ -285,7 +286,7 @@ func TestStorageConnectionDeleteResponseLossAndReadonlyCleanup(t *testing.T) {
 	if d.puts != puts {
 		t.Fatal("readonly reconnect wrote remote objects")
 	}
-	if _, err = s.Revoke(ctx, u.ID, c.ID, c.ManagementGeneration); err != nil {
+	if _, err = s.Revoke(ctx, u.ID, c.ID, client.StorageConnection.GetX(ctx, c.ID).ManagementGeneration); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = driver.Stat(ctx, storage.Object{Key: storageMarkerKey}); !errors.Is(err, storage.ErrAuthRequired) {
@@ -361,7 +362,7 @@ func TestStorageConnectionCryptoIsolationAndReauthorization(t *testing.T) {
 	if _, err := s.ResolveDriver(ctx, sp.ID, false); !errors.Is(err, ErrStorageCrypto) {
 		t.Fatalf("missing key did not stop connection: %v", err)
 	}
-	in := storageAuthorizeInput(c.ManagementGeneration)
+	in := storageAuthorizeInput(client.StorageConnection.GetX(ctx, c.ID).ManagementGeneration)
 	in.WriteCheck = false
 	if _, err := s.Authorize(ctx, u.ID, c.ID, in); err != nil {
 		t.Fatalf("new authorization could not recover access: %v", err)

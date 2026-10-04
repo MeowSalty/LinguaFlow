@@ -263,6 +263,7 @@ type UploadedFile struct {
 	IdempotencyKey                string
 	ExpectedSourceGeneration      *int64
 	ExpectedTranslationGeneration *int64
+	ExpectedStorageGeneration     *int64
 	PreviewTaskID                 int
 }
 
@@ -346,59 +347,31 @@ func (s *ResourceService) GetResource(ctx context.Context, actorUserID, projectI
 // 在事务中按依赖顺序级联删除关联记录（JobResource → Segment → Resource），
 // 避免 FOREIGN KEY constraint failed 错误。
 func (s *ResourceService) DeleteResource(ctx context.Context, actorUserID, projectID, resourceID int) error {
-	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
-		return err
-	}
-
-	res, err := s.client.Resource.Query().
-		Where(resource.ID(resourceID), resource.ProjectID(projectID)).
-		Only(ctx)
-	if err != nil {
+	return s.projects.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, p *ent.Project) error {
+		if p.StorageState != "active" {
+			return ErrStorageMaintenance
+		}
+		if err := storageProjectGate(ctx, client, p.ID, p.StorageGeneration); err != nil {
+			return err
+		}
+		res, err := client.Resource.Query().Where(resource.IDEQ(resourceID), resource.ProjectIDEQ(projectID)).Only(ctx)
 		if ent.IsNotFound(err) {
 			return ErrResourceNotFound
 		}
-		return err
-	}
-
-	// 使用事务保证级联删除的原子性
-	tx, err := s.client.Tx(ctx)
-	if err != nil {
-		return fmt.Errorf("resource: begin transaction: %w", err)
-	}
-
-	// 1. 删除关联的 JobResource 记录（引用 resource_id 外键）
-	if err := registerResourceDeletion(ctx, tx.Client(), projectID, resourceID, s.storage); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-	if _, err := tx.JobResource.Delete().
-		Where(jobresource.HasResourceWith(resource.ID(res.ID))).
-		Exec(ctx); err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("resource: delete job_resources: %w", err)
-	}
-
-	// 2. 删除关联的 Segment 记录（引用 resource_id 外键）
-	if _, err := tx.Segment.Delete().
-		Where(segment.ResourceID(res.ID)).
-		Exec(ctx); err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("resource: delete segments: %w", err)
-	}
-
-	// 3. 删除 Resource 记录本身
-	if err := tx.Resource.DeleteOneID(res.ID).Exec(ctx); err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("resource: delete resource: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("resource: commit transaction: %w", err)
-	}
-
-	// 删除存储文件（事务提交成功后再删除物理文件）
-
-	return nil
+		if err != nil {
+			return err
+		}
+		if err := registerResourceDeletion(ctx, client, projectID, resourceID, s.storage); err != nil {
+			return err
+		}
+		if _, err := client.JobResource.Delete().Where(jobresource.HasResourceWith(resource.IDEQ(res.ID))).Exec(ctx); err != nil {
+			return fmt.Errorf("resource: delete job_resources: %w", err)
+		}
+		if _, err := client.Segment.Delete().Where(segment.ResourceIDEQ(res.ID)).Exec(ctx); err != nil {
+			return fmt.Errorf("resource: delete segments: %w", err)
+		}
+		return client.Resource.DeleteOneID(res.ID).Exec(ctx)
+	})
 }
 
 // UpdateResource 替换资源文件内容。

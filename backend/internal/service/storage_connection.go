@@ -335,7 +335,7 @@ func storageCiphertext(a *ent.StorageAuthVersion) credential.Ciphertext {
 	return credential.Ciphertext{Version: 1, KeyID: a.KeyID, Nonce: a.Nonce, Data: a.Ciphertext}
 }
 
-func (s *StorageConnectionService) Authorize(ctx context.Context, actor, id int, in AuthorizeStorageInput) (*StorageConnectionRecord, error) {
+func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int, in AuthorizeStorageInput) (*StorageConnectionRecord, error) {
 	if !s.cfg.Enabled && in.WriteCheck {
 		return nil, ErrStoragePolicy
 	}
@@ -409,6 +409,7 @@ func (s *StorageConnectionService) Authorize(ctx context.Context, actor, id int,
 			checked[sp.ID] = caps
 		}
 		if err != nil {
+			_ = s.recordCheckSpace(ctx, sp.ID, err)
 			break
 		}
 	}
@@ -426,7 +427,7 @@ func (s *StorageConnectionService) Authorize(ctx context.Context, actor, id int,
 		if err := s.requireOwner(ctx, tx, actor, string(c.OwnerKind), c.OwnerID); err != nil {
 			return err
 		}
-		n, err := tx.StorageConnection.Update().Where(storageconnection.IDEQ(c.ID), storageconnection.ManagementGenerationEQ(c.ManagementGeneration), storageconnection.ActiveAuthGenerationEQ(c.ActiveAuthGeneration), storageconnection.StatusEQ(storageconnection.StatusEnabled)).SetActiveAuthGeneration(candidate.Generation).SetHealth("available").SetCheckedAt(time.Now().UTC()).Save(ctx)
+		n, err := tx.StorageConnection.Update().Where(storageconnection.IDEQ(c.ID), storageconnection.ManagementGenerationEQ(c.ManagementGeneration), storageconnection.ActiveAuthGenerationEQ(c.ActiveAuthGeneration), storageconnection.StatusEQ(storageconnection.StatusEnabled)).SetActiveAuthGeneration(candidate.Generation).AddManagementGeneration(1).SetHealth("available").SetCheckedAt(time.Now().UTC()).Save(ctx)
 		if err != nil {
 			return err
 		}
@@ -454,6 +455,11 @@ func (s *StorageConnectionService) Authorize(ctx context.Context, actor, id int,
 			}
 		}
 		_, err = tx.StorageAuthVersion.Update().Where(storageauthversion.ConnectionIDEQ(c.ID), storageauthversion.GenerationNEQ(candidate.Generation), storageauthversion.StatusEQ(storageauthversion.StatusActive)).SetStatus(storageauthversion.StatusRetired).Save(ctx)
+		if err == nil {
+			if checkID, ok := ctx.Value(storageCheckContextKey{}).(int); ok {
+				err = tx.StorageCheck.UpdateOneID(checkID).SetAuthorizationActivated(true).Exec(ctx)
+			}
+		}
 		return err
 	})
 	if err != nil {
@@ -546,13 +552,13 @@ func (s *StorageConnectionService) Reencrypt(ctx context.Context) (changed, fail
 }
 
 func (s *StorageConnectionService) sanitize(err error) error {
-	for _, safe := range []error{storage.ErrNotFound, storage.ErrCorrupt, storage.ErrPermission, storage.ErrAuthRequired, storage.ErrLimit, storage.ErrUnsupported, ErrStorageConflict, ErrStorageCrypto, ErrStorageMaintenance, ErrForbidden} {
+	if errors.Is(err, context.Canceled) {
+		return storage.ErrUnavailable
+	}
+	for _, safe := range []error{storage.ErrNotFound, storage.ErrCorrupt, storage.ErrPermission, storage.ErrAuthRequired, storage.ErrLimit, storage.ErrPayloadTooLarge, storage.ErrUnsupported, ErrStorageConflict, ErrStorageCrypto, ErrStorageMaintenance, ErrForbidden, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, safe) {
 			return safe
 		}
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return err
 	}
 	return storage.ErrUnavailable
 }

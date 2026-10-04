@@ -49,7 +49,7 @@ func (s *StorageService) temporary(size int64) (*StorageFile, error) {
 	s.mu.Lock()
 	if size < 0 || size > s.maxTempBytes-s.tempBytes {
 		s.mu.Unlock()
-		return nil, storage.ErrLimit
+		return nil, storage.ErrPayloadTooLarge
 	}
 	s.tempBytes += size
 	s.mu.Unlock()

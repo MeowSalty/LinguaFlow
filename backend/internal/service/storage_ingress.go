@@ -19,7 +19,7 @@ func (s *ResourceService) BeginUpload(ctx context.Context) (context.Context, con
 	select {
 	case s.storage.ingressSlots <- struct{}{}:
 	default:
-		return ctx, config.StorageLimits{}, nil, storage.ErrLimit
+		return ctx, config.StorageLimits{}, nil, storage.ErrPayloadTooLarge
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.storage.cfg.TransferTimeout)
 	return ctx, s.storage.cfg.Limits, func() { cancel(); <-s.storage.ingressSlots }, nil
@@ -32,7 +32,7 @@ func (s *ResourceService) UploadBuffer(size int64) (*StorageFile, error) {
 // Seal 在接收完有界流后释放未使用的预留。
 func (f *StorageFile) Seal(size int64) error {
 	if size < 0 || size > f.reserved {
-		return storage.ErrLimit
+		return storage.ErrPayloadTooLarge
 	}
 	f.s.mu.Lock()
 	f.s.tempBytes -= f.reserved - size

@@ -47,27 +47,28 @@ type ObjectDriver interface {
 }
 
 type StorageService struct {
-	client          *ent.Client
-	projects        *ProjectService
-	resources       *ResourceService
-	cfg             config.StorageConfig
-	mu              sync.Mutex
-	transferMu      sync.Mutex
-	drivers         map[int]storage.Driver
-	resolve         func(context.Context, int, bool) (storage.Driver, error)
-	workDir         string
-	defaultSpaceID  int
-	maxFileBytes    int64
-	maxTempBytes    int64
-	tempBytes       int64
-	inFlight        map[int]bool
-	readers         map[int]int
-	slots           chan struct{}
-	ingressSlots    chan struct{}
-	maintenance     bool
-	deleteGrace     time.Duration
-	sourceRetention time.Duration
-	dialect         string
+	client               *ent.Client
+	projects             *ProjectService
+	resources            *ResourceService
+	cfg                  config.StorageConfig
+	mu                   sync.Mutex
+	transferMu           sync.Mutex
+	drivers              map[int]storage.Driver
+	resolve              func(context.Context, int, bool) (storage.Driver, error)
+	workDir              string
+	defaultSpaceID       int
+	maxFileBytes         int64
+	maxTempBytes         int64
+	tempBytes            int64
+	inFlight             map[int]bool
+	readers              map[int]int
+	slots                chan struct{}
+	ingressSlots         chan struct{}
+	maintenance          bool
+	deleteGrace          time.Duration
+	sourceRetention      time.Duration
+	dialect              string
+	legacySnapshotCursor int
 }
 
 func NewStorageService(client *ent.Client, projects *ProjectService, workDir string) (*StorageService, error) {
@@ -126,13 +127,11 @@ type StorageIntent struct {
 	TranslationGeneration    int64  `json:"translation_generation"`
 	StorageGeneration        int64  `json:"storage_generation"`
 	RequireStorageGeneration bool   `json:"-"`
+	CaptureSourceBaseline    bool   `json:"-"`
 	LocationGeneration       int64  `json:"location_generation"`
 }
 
 func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in StorageIntent) (*ent.StorageTask, error) {
-	if s.maintenance {
-		return nil, ErrStorageMaintenance
-	}
 	p, err := s.projects.requireProjectAccess(ctx, actorID, projectID, true)
 	if err != nil {
 		return nil, err
@@ -143,10 +142,22 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 	if in.IdempotencyKey == "" {
 		in.IdempotencyKey = generateUniqueID()
 	}
-	if len(in.IdempotencyKey) > 200 {
-		return nil, ErrInvalidInput
+	if err = ValidateStorageIdempotencyKey(in.IdempotencyKey); err != nil {
+		return nil, err
 	}
-	data, err := json.Marshal(in)
+	fingerprintInput := in
+	originalKey := in.IdempotencyKey
+	if in.CaptureSourceBaseline {
+		keyHash := sha256.Sum256([]byte("source-preview\x00" + in.IdempotencyKey))
+		in.IdempotencyKey = hex.EncodeToString(keyHash[:])
+		fingerprintInput.Path = ""
+		fingerprintInput.SourceGeneration = 0
+		fingerprintInput.TranslationGeneration = 0
+	} else if in.Kind == "source_update" {
+		keyHash := sha256.Sum256([]byte("source-intent\x00" + in.IdempotencyKey))
+		in.IdempotencyKey = hex.EncodeToString(keyHash[:])
+	}
+	data, err := json.Marshal(fingerprintInput)
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +166,15 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 	var task *ent.StorageTask
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		var e error
-		task, e = tx.StorageTask.Query().Where(storagetask.ActorIDEQ(actorID), storagetask.ProjectIDEQ(projectID), storagetask.KindEQ(in.Kind), storagetask.IdempotencyKeyEQ(in.IdempotencyKey)).Only(ctx)
+		keyPredicate := storagetask.IdempotencyKeyEQ(in.IdempotencyKey)
+		if in.Kind == "source_update" {
+			keyPredicate = storagetask.Or(keyPredicate, storagetask.And(storagetask.ContractVersionEQ(0), storagetask.IdempotencyKeyEQ(originalKey)))
+		}
+		task, e = tx.StorageTask.Query().Where(storagetask.ActorIDEQ(actorID), storagetask.ProjectIDEQ(projectID), storagetask.KindEQ(in.Kind), keyPredicate).Only(ctx)
 		if e == nil {
+			if task.Kind == "source_update" && task.ContractVersion == 0 {
+				return &StorageOperationError{Err: ErrSourceRevisionConflict, TaskID: task.ID}
+			}
 			if task.RequestHash != fingerprint {
 				return ErrStorageIdempotency
 			}
@@ -164,6 +182,9 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 		}
 		if !ent.IsNotFound(e) {
 			return e
+		}
+		if s.maintenance {
+			return ErrStorageMaintenance
 		}
 		current, e := tx.Project.Get(ctx, p.ID)
 		if e != nil {
@@ -190,8 +211,14 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 			return ErrInvalidInput
 		}
 		if in.ResourceID > 0 {
-			if _, e = tx.Resource.Query().Where(resource.IDEQ(in.ResourceID), resource.ProjectIDEQ(projectID)).Only(ctx); e != nil {
+			var res *ent.Resource
+			if res, e = tx.Resource.Query().Where(resource.IDEQ(in.ResourceID), resource.ProjectIDEQ(projectID)).Only(ctx); e != nil {
 				return e
+			}
+			if in.CaptureSourceBaseline {
+				in.Path = res.Path
+				in.SourceGeneration = res.SourceGeneration
+				in.TranslationGeneration = res.TranslationGeneration
 			}
 		}
 		if in.SourceRevisionID > 0 {
@@ -202,6 +229,18 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 			if revision.ResourceID != in.ResourceID {
 				return ErrInvalidInput
 			}
+			if in.Kind == "repair" {
+				if revision.VerificationState != sourcerevision.VerificationStateVerified || revision.Size == nil || revision.Sha256 == nil || *revision.Size != in.Size {
+					return ErrRepairMismatch
+				}
+				object, e := tx.Blob.Get(ctx, revision.SourceBlobID)
+				if e != nil {
+					return e
+				}
+				if object.LocationGeneration != in.LocationGeneration {
+					return ErrStorageConflict
+				}
+			}
 		}
 		if current.StorageSpaceID == nil {
 			return ErrStoragePolicy
@@ -210,7 +249,7 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 		if in.TargetSpaceID != 0 {
 			target = in.TargetSpaceID
 		}
-		if target != *current.StorageSpaceID {
+		if target != *current.StorageSpaceID && in.Kind != "repair" {
 			if e := s.allowedTarget(ctx, tx, current, target); e != nil {
 				return e
 			}
@@ -222,11 +261,24 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 		if space.Status != storagespace.StatusActive {
 			return ErrStorageMaintenance
 		}
+		if in.Kind == "repair" {
+			if e = s.allowedRepairTarget(ctx, tx, current, in.SourceRevisionID, target, in.Size); e != nil {
+				return e
+			}
+		} else if in.Kind == "upload" || in.Kind == "source_update" {
+			if e = s.allowedExistingTarget(ctx, tx, current, target, in.Size); e != nil {
+				return e
+			}
+		}
 		input := map[string]any{}
-		if e = json.Unmarshal(data, &input); e != nil {
+		resolved, e := json.Marshal(in)
+		if e != nil {
 			return e
 		}
-		create := tx.StorageTask.Create().SetOperationID(generateUniqueID()).SetIdempotencyKey(in.IdempotencyKey).SetRequestHash(fingerprint).SetActorID(actorID).SetProjectID(projectID).SetKind(in.Kind).SetTargetSpaceID(target).SetExpectedStorageGeneration(current.StorageGeneration).SetExpectedSourceGeneration(in.SourceGeneration).SetExpectedTranslationGeneration(in.TranslationGeneration).SetExpectedLocationGeneration(in.LocationGeneration).SetInput(input).SetDeadline(time.Now().UTC().Add(s.cfg.IntentTTL))
+		if e = json.Unmarshal(resolved, &input); e != nil {
+			return e
+		}
+		create := tx.StorageTask.Create().SetContractVersion(1).SetInputSize(in.Size).SetOperationID(generateUniqueID()).SetIdempotencyKey(in.IdempotencyKey).SetRequestHash(fingerprint).SetActorID(actorID).SetProjectID(projectID).SetKind(in.Kind).SetTargetSpaceID(target).SetExpectedStorageGeneration(current.StorageGeneration).SetExpectedSourceGeneration(in.SourceGeneration).SetExpectedTranslationGeneration(in.TranslationGeneration).SetExpectedLocationGeneration(in.LocationGeneration).SetInput(input).SetDeadline(time.Now().UTC().Add(s.cfg.IntentTTL))
 		if in.ResourceID > 0 {
 			create.SetResourceID(in.ResourceID)
 		}
@@ -283,7 +335,7 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 	if s.tempBytes+size > s.maxTempBytes {
 		s.mu.Unlock()
 		<-s.slots
-		return nil, storage.ErrLimit
+		return nil, storage.ErrPayloadTooLarge
 	}
 	s.tempBytes += size
 	s.mu.Unlock()
@@ -312,8 +364,8 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 		if e != nil {
 			return e
 		}
-		if current.Status == storagetask.StatusCancelled {
-			return ErrStorageCancelled
+		if e = storageTerminalError(current); e != nil {
+			return e
 		}
 		if current.Phase == "committed" {
 			return ErrStorageConflict
@@ -323,6 +375,28 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 		}
 		if e = storageTaskGate(ctx, tx, current); e != nil {
 			return e
+		}
+		p, e := tx.Project.Get(ctx, current.ProjectID)
+		if e != nil {
+			return e
+		}
+		if e = storageProjectGate(ctx, tx, p.ID, current.ExpectedStorageGeneration); e != nil {
+			return e
+		}
+		if p.StorageState != "active" && !(current.Kind == "repair" || current.Kind == "migration") {
+			return ErrStorageMaintenance
+		}
+		if current.Kind == "repair" {
+			if current.SourceRevisionID == nil {
+				return ErrInvalidInput
+			}
+			if e = s.allowedRepairTarget(ctx, tx, p, *current.SourceRevisionID, *current.TargetSpaceID, size); e != nil {
+				return e
+			}
+		} else if current.Kind != "migration" {
+			if e = s.allowedExistingTarget(ctx, tx, p, *current.TargetSpaceID, size); e != nil {
+				return e
+			}
 		}
 		if current.Kind == "export" {
 			existing, e := tx.StorageWrite.Query().Where(storagewrite.TaskIDEQ(current.ID), storagewrite.PhaseNotIn("committed", "cleaned")).Exist(ctx)
@@ -356,7 +430,7 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 			return ErrStorageConflict
 		}
 		key := fmt.Sprintf("objects/%s/%d/%s", space.Identity, task.ProjectID, generateUniqueID())
-		write, e = tx.StorageWrite.Create().SetTaskID(task.ID).SetSpaceID(space.ID).SetAttemptID(generateUniqueID()).SetObjectKey(key).SetMaxBytes(size).SetConnectionGeneration(conn.ManagementGeneration).SetSpaceGeneration(space.ManagementGeneration).SetAuthGeneration(conn.ActiveAuthGeneration).SetExpiresAt(time.Now().UTC().Add(s.cfg.IntentTTL)).Save(ctx)
+		write, e = tx.StorageWrite.Create().SetTaskID(task.ID).SetSpaceID(space.ID).SetAttemptID(generateUniqueID()).SetObjectKey(key).SetMaxBytes(size).SetConnectionGeneration(conn.ManagementGeneration).SetSpaceGeneration(space.ManagementGeneration).SetAuthGeneration(conn.ActiveAuthGeneration).SetNillableExpiresAt(current.Deadline).Save(ctx)
 		if e != nil {
 			return e
 		}
@@ -396,6 +470,33 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 		return nil, ErrRepairMismatch
 	}
 	digest := hex.EncodeToString(h.Sum(nil))
+	if task.Kind == "upload" || task.Kind == "repair" || task.Kind == "source_update" {
+		err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+			current, e := tx.StorageTask.Get(ctx, task.ID)
+			if e != nil {
+				return e
+			}
+			if e = storageTaskGate(ctx, tx, current); e != nil {
+				return e
+			}
+			if current.InputSha256 != "" && (current.InputSha256 != digest || current.InputSize != n) {
+				return ErrStorageIdempotency
+			}
+			return tx.StorageTask.UpdateOneID(task.ID).SetInputSha256(digest).SetInputSize(n).Exec(ctx)
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	if task.Kind == "repair" && task.SourceRevisionID != nil {
+		rev, e := s.client.SourceRevision.Get(ctx, *task.SourceRevisionID)
+		if e != nil {
+			return nil, e
+		}
+		if rev.VerificationState != sourcerevision.VerificationStateVerified || rev.Sha256 == nil || rev.Size == nil || *rev.Sha256 != digest || *rev.Size != n {
+			return nil, ErrRepairMismatch
+		}
+	}
 	if e = f.Sync(); e != nil {
 		return nil, e
 	}
@@ -450,7 +551,11 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 			return e
 		}
 		if task.Kind == "upload" || task.Kind == "repair" || task.Kind == "source_update" {
-			return tx.StorageTask.UpdateOneID(task.ID).SetPhase("prepared").Exec(ctx)
+			phase := "prepared"
+			if task.Kind == "source_update" {
+				phase = "parsing"
+			}
+			return tx.StorageTask.UpdateOneID(task.ID).SetPhase(phase).Exec(ctx)
 		}
 		return nil
 	})
@@ -509,6 +614,18 @@ func (s *StorageService) publish(ctx context.Context, tx *ent.Client, w *ent.Sto
 	}
 	if p.StorageState != "active" && !((task.Kind == "repair" || task.Kind == "migration") && (p.StorageState == "draining" || p.StorageState == "migrating")) {
 		return nil, ErrStorageMaintenance
+	}
+	if task.Kind == "repair" {
+		if task.SourceRevisionID == nil {
+			return nil, ErrInvalidInput
+		}
+		if err = s.allowedRepairTarget(ctx, tx, p, *task.SourceRevisionID, w.SpaceID, 0); err != nil {
+			return nil, err
+		}
+	} else if task.Kind != "migration" {
+		if err = s.allowedExistingTarget(ctx, tx, p, w.SpaceID, 0); err != nil {
+			return nil, err
+		}
 	}
 	sp, err := tx.StorageSpace.Get(ctx, w.SpaceID)
 	if err != nil {
@@ -612,6 +729,12 @@ func (s *StorageService) Cancel(ctx context.Context, actor, projectID, id int) (
 		if t.Phase == "committed" {
 			return nil
 		}
+		if t.Status == storagetask.StatusCancelled {
+			return nil
+		}
+		if e = storageTerminalError(t); e != nil {
+			return e
+		}
 		if t.Kind == "migration" && (t.Phase == "cutover" || t.Phase == "cleanup") {
 			return ErrStorageConflict
 		}
@@ -641,18 +764,7 @@ func (s *StorageService) Cancel(ctx context.Context, actor, projectID, id int) (
 }
 
 func storageCode(err error) string {
-	if errors.Is(err, ErrSourceRevisionConflict) {
-		return "source_revision_conflict"
-	}
-	for _, candidate := range []error{storage.ErrNotFound, storage.ErrCorrupt, storage.ErrPermission, storage.ErrAuthRequired, storage.ErrLimit, storage.ErrUnavailable, ErrRepairMismatch, ErrStorageCancelled, ErrStorageConflict, ErrStorageMaintenance, ErrStorageTooLarge, ErrSourceRevisionConflict} {
-		if errors.Is(err, candidate) {
-			return candidate.Error()
-		}
-	}
-	if errors.Is(err, context.Canceled) {
-		return "storage_cancelled"
-	}
-	return "storage_unavailable"
+	return StorageErrorCode(err)
 }
 
 func (s *StorageService) writeLimit(kind string) int64 {
@@ -664,8 +776,8 @@ func (s *StorageService) writeLimit(kind string) int64 {
 
 // 该行更新用于串行化取消、发布与阶段流转。
 func storageTaskGate(ctx context.Context, tx *ent.Client, task *ent.StorageTask) error {
-	if task.Status == storagetask.StatusCancelled {
-		return ErrStorageCancelled
+	if err := storageTerminalError(task); err != nil {
+		return err
 	}
 	n, err := tx.StorageTask.Update().Where(storagetask.IDEQ(task.ID), storagetask.PhaseEQ(task.Phase), storagetask.StatusEQ(task.Status)).SetPhase(task.Phase).Save(ctx)
 	if err != nil {

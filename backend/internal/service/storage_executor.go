@@ -15,7 +15,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/exportartifact"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sourcerevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
@@ -55,6 +54,8 @@ func (s *StorageService) SpaceForProject(ctx context.Context, actor, projectID i
 }
 
 func (s *StorageService) Receive(ctx context.Context, actor, projectID, id int, r io.Reader, size int64) (*ent.StorageTask, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.TransferTimeout)
+	defer cancel()
 	if _, e := s.projects.requireProjectAccess(ctx, actor, projectID, true); e != nil {
 		return nil, e
 	}
@@ -66,10 +67,52 @@ func (s *StorageService) Receive(ctx context.Context, actor, projectID, id int, 
 		return nil, ErrInvalidInput
 	}
 	if task.Phase == "committed" {
+		if e = s.verifyTaskContent(ctx, task, r, size); e != nil {
+			return nil, e
+		}
 		return task, nil
 	}
+	if e = storageTerminalError(task); e != nil {
+		return nil, e
+	}
 	if task.Phase == "prepared" {
-		return nil, ErrStorageConflict
+		if e = s.verifyTaskContent(ctx, task, r, size); e != nil {
+			return nil, e
+		}
+		return task, nil
+	}
+	release, e := s.ClaimTaskExecution(ctx, id)
+	if e != nil {
+		return nil, &StorageOperationError{Err: e, TaskID: id}
+	}
+	defer release()
+	task, e = s.client.StorageTask.Get(ctx, id)
+	if e != nil {
+		return nil, e
+	}
+	if task.Phase == "committed" {
+		if e = s.verifyTaskContent(ctx, task, r, size); e != nil {
+			return nil, e
+		}
+		return task, nil
+	}
+	if e = storageTerminalError(task); e != nil {
+		return nil, e
+	}
+	if task.Phase == "prepared" {
+		if e = s.verifyTaskContent(ctx, task, r, size); e != nil {
+			return nil, e
+		}
+		return task, nil
+	}
+	if task.Kind == "source_update" && task.Phase == "parsing" {
+		if e = s.verifyTaskContent(ctx, task, r, size); e != nil {
+			return nil, e
+		}
+		if e = s.resources.resumeSourcePlan(ctx, task); e != nil {
+			return nil, e
+		}
+		return s.task(ctx, actor, projectID, id)
 	}
 	encoded, e := json.Marshal(task.Input)
 	if e != nil {
@@ -86,6 +129,25 @@ func (s *StorageService) Receive(ctx context.Context, actor, projectID, id int, 
 	if e != nil {
 		return nil, e
 	}
+	if task.Kind == "source_update" {
+		defer stage.Close()
+		if s.resources == nil || task.ResourceID == nil {
+			return nil, ErrInvalidInput
+		}
+		res, e := s.client.Resource.Get(ctx, *task.ResourceID)
+		if e != nil {
+			return nil, e
+		}
+		items, e := s.resources.parseStoredSegments(ctx, stage.File, res.Format)
+		if e != nil {
+			_ = s.failWrite(context.WithoutCancel(ctx), stage.Write.ID, e)
+			return nil, e
+		}
+		if e = s.resources.prepareSourcePlan(ctx, task, items); e != nil {
+			return nil, e
+		}
+		return s.task(ctx, actor, projectID, id)
+	}
 	if e = stage.Close(); e != nil {
 		return nil, e
 	}
@@ -94,6 +156,9 @@ func (s *StorageService) Receive(ctx context.Context, actor, projectID, id int, 
 
 func StorageAllowedActions(t *ent.StorageTask) []string {
 	if t == nil || !interactiveStorageTask(t.Kind) {
+		return []string{}
+	}
+	if storageTerminalError(t) != nil || t.Phase == "invalidated" {
 		return []string{}
 	}
 	if t.Phase == "committed" || t.Status == storagetask.StatusCompleted {
@@ -114,7 +179,7 @@ func StorageAllowedActions(t *ent.StorageTask) []string {
 			actions = append(actions, "upload_content")
 		}
 	}
-	if t.Kind == "source_update" && t.Phase == "prepared" {
+	if t.Kind == "source_update" && t.Phase == "prepared" && len(t.SourcePlan) > 0 {
 		actions = append(actions, "commit")
 	}
 	return actions
@@ -123,6 +188,9 @@ func StorageAllowedActions(t *ent.StorageTask) []string {
 func (s *StorageService) Retry(ctx context.Context, actor, projectID, id int) (*ent.StorageTask, error) {
 	task, e := s.task(ctx, actor, projectID, id)
 	if e != nil {
+		return nil, e
+	}
+	if e = storageTerminalError(task); e != nil {
 		return nil, e
 	}
 	if !interactiveStorageTask(task.Kind) {
@@ -168,6 +236,9 @@ func (s *StorageService) Retry(ctx context.Context, actor, projectID, id int) (*
 }
 
 func (s *StorageService) ProcessTasks(ctx context.Context) error {
+	if err := s.expireTasks(ctx); err != nil {
+		return err
+	}
 	if s.maintenance || s.resources == nil {
 		return nil
 	}
@@ -178,6 +249,7 @@ func (s *StorageService) ProcessTasks(ctx context.Context) error {
 	tasks, err := s.client.StorageTask.Query().Where(
 		storagetask.ProjectIDGT(0),
 		storagetask.Or(storagetask.KindEQ("migration"),
+			storagetask.And(storagetask.KindEQ("source_update"), storagetask.PhaseEQ("parsing")),
 			storagetask.And(storagetask.KindIn("upload", "repair"), storagetask.PhaseEQ("prepared")),
 			storagetask.And(storagetask.KindEQ("export"), storagetask.Or(storagetask.ResultArtifactIDNotNil(), preparedExport))),
 		storagetask.Or(storagetask.NextRetryAtIsNil(), storagetask.NextRetryAtLTE(time.Now().UTC())),
@@ -236,10 +308,19 @@ func (s *StorageService) ProcessTasks(ctx context.Context) error {
 			}
 			continue
 		}
+		release, leaseErr := s.ClaimTaskExecution(ctx, t.ID)
+		if errors.Is(leaseErr, ErrStorageInProgress) {
+			continue
+		}
+		if leaseErr != nil {
+			return leaseErr
+		}
 		attemptCtx, cancel := context.WithTimeout(ctx, min(s.cfg.TransferTimeout, time.Until(t.RetryStartedAt.Add(s.cfg.RetryWindow))))
 		switch t.Kind {
 		case "upload":
 			e = s.resources.resumeUpload(attemptCtx, t)
+		case "source_update":
+			e = s.resources.resumeSourcePlan(attemptCtx, t)
 		case "repair":
 			e = s.resources.resumeRepair(attemptCtx, t)
 		case "migration":
@@ -248,6 +329,7 @@ func (s *StorageService) ProcessTasks(ctx context.Context) error {
 			e = s.resources.finishExport(attemptCtx, t)
 		}
 		cancel()
+		release()
 		if e != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -394,8 +476,5 @@ func (s *ResourceService) Versions(ctx context.Context, actor, projectID, resour
 	return out, nil
 }
 func (s *ResourceService) ListExports(ctx context.Context, actor, projectID, resourceID int) ([]*ent.ExportArtifact, error) {
-	if _, e := s.GetResource(ctx, actor, projectID, resourceID); e != nil {
-		return nil, e
-	}
-	return s.client.ExportArtifact.Query().Where(exportartifact.ProjectIDEQ(projectID), exportartifact.ResourceIDEQ(resourceID), exportartifact.StatusNEQ(exportartifact.StatusDeleted)).Order(ent.Desc(exportartifact.FieldID)).Limit(100).All(ctx)
+	return s.ListExportsIncludingDeleted(ctx, actor, projectID, resourceID, false)
 }

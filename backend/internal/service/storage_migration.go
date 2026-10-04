@@ -14,11 +14,6 @@ import (
 )
 
 func (s *StorageService) StartMigration(ctx context.Context, actor, projectID, target int, generation int64, key string) (*ent.StorageTask, error) {
-	if err := s.projects.mutateProject(ctx, actor, projectID, func(tx *ent.Client, p *ent.Project) error {
-		return s.allowedTarget(ctx, tx, p, target)
-	}); err != nil {
-		return nil, err
-	}
 	task, err := s.Begin(ctx, actor, projectID, StorageIntent{Kind: "migration", IdempotencyKey: key, TargetSpaceID: target, StorageGeneration: generation})
 	if err != nil {
 		return nil, err
@@ -26,7 +21,21 @@ func (s *StorageService) StartMigration(ctx context.Context, actor, projectID, t
 	if task.Phase != "accepted" {
 		return task, nil
 	}
+	if err = storageTerminalError(task); err != nil {
+		return nil, err
+	}
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		p, e := tx.Project.Get(ctx, projectID)
+		if e != nil {
+			return e
+		}
+		size, e := storageMigrationSize(ctx, tx, projectID)
+		if e != nil {
+			return e
+		}
+		if e = s.validateStorageTarget(ctx, tx, p, target, size, false); e != nil {
+			return e
+		}
 		n, e := tx.Project.Update().Where(project.IDEQ(projectID), project.StorageGenerationEQ(generation), project.StorageStateEQ("active")).SetStorageState("draining").SetStorageMigrationTaskID(task.ID).AddStorageGeneration(1).Save(ctx)
 		if e != nil {
 			return e
@@ -36,6 +45,18 @@ func (s *StorageService) StartMigration(ctx context.Context, actor, projectID, t
 		}
 		if e = storageTaskGate(ctx, tx, task); e != nil {
 			return e
+		}
+		rows, e := tx.Blob.Query().Where(blob.ProjectIDEQ(projectID), blob.StatusEQ(blob.StatusReady)).All(ctx)
+		if e != nil {
+			return e
+		}
+		for _, b := range rows {
+			if b.ActiveLocationID == nil || b.Size == nil || b.Sha256 == nil {
+				return ErrRepairMismatch
+			}
+			if e = tx.StorageMigrationItem.Create().SetTaskID(task.ID).SetBlobID(b.ID).SetSourceLocationID(*b.ActiveLocationID).SetExpectedLocationGeneration(b.LocationGeneration).Exec(ctx); e != nil {
+				return e
+			}
 		}
 		return tx.StorageTask.UpdateOneID(task.ID).SetExpectedStorageGeneration(generation + 1).SetPhase("draining").Exec(ctx)
 	})
@@ -60,7 +81,7 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) error {
 		return s.cancelMigration(ctx, task)
 	}
 	if task.Phase == "draining" {
-		writes, e := s.client.StorageWrite.Query().Where(storagewrite.HasTaskWith(storagetask.ProjectIDEQ(task.ProjectID), storagetask.IDNEQ(task.ID)), storagewrite.PhaseNotIn("committed", "cleaned")).All(ctx)
+		writes, e := s.client.StorageWrite.Query().Where(storagewrite.HasTaskWith(storagetask.ProjectIDEQ(task.ProjectID), storagetask.IDNEQ(task.ID), storagetask.Not(storagetask.And(storagetask.KindEQ("repair"), storagetask.ExpectedStorageGenerationEQ(task.ExpectedStorageGeneration)))), storagewrite.PhaseNotIn("committed", "cleaned")).All(ctx)
 		if e != nil {
 			return e
 		}
@@ -86,6 +107,13 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) error {
 			for _, b := range rows {
 				if b.ActiveLocationID == nil || b.Size == nil || b.Sha256 == nil {
 					return ErrRepairMismatch
+				}
+				exists, e := tx.StorageMigrationItem.Query().Where(storagemigrationitem.TaskIDEQ(id), storagemigrationitem.BlobIDEQ(b.ID)).Exist(ctx)
+				if e != nil {
+					return e
+				}
+				if exists {
+					continue
 				}
 				if _, e = tx.StorageMigrationItem.Create().SetTaskID(id).SetBlobID(b.ID).SetSourceLocationID(*b.ActiveLocationID).SetExpectedLocationGeneration(b.LocationGeneration).Save(ctx); e != nil {
 					return e
@@ -214,7 +242,7 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) error {
 			if e != nil || pending {
 				return e
 			}
-			if e = tx.StorageTask.UpdateOneID(id).SetPhase("cutover").Exec(ctx); e != nil {
+			if e = tx.StorageTask.UpdateOneID(id).SetPhase("cutover").ClearDeadline().Exec(ctx); e != nil {
 				return e
 			}
 			ready = true
@@ -322,7 +350,7 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) error {
 			if e != nil {
 				return e
 			}
-			if e = s.allowedTarget(ctx, tx, p, *task.TargetSpaceID); e != nil {
+			if e = s.validateStorageTarget(ctx, tx, p, *task.TargetSpaceID, 0, false); e != nil {
 				return e
 			}
 			if e = tx.Project.UpdateOneID(task.ProjectID).SetStorageSpaceID(*task.TargetSpaceID).SetStorageState("active").ClearStorageMigrationTaskID().AddStorageGeneration(1).Exec(ctx); e != nil {
@@ -400,9 +428,6 @@ func (s *StorageService) reconcileMigrationRepair(ctx context.Context, tx *ent.C
 		return ErrStorageConflict
 	}
 	item, err := tx.StorageMigrationItem.Query().Where(storagemigrationitem.TaskIDEQ(task.ID), storagemigrationitem.BlobIDEQ(b.ID)).Only(ctx)
-	if ent.IsNotFound(err) && task.Phase == "draining" {
-		return nil
-	}
 	if err != nil {
 		return err
 	}

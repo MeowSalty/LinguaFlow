@@ -190,6 +190,8 @@ func (s *StorageService) Diagnostics(ctx context.Context, actor, afterSpaceID, l
 
 func diagnosticCleanupCode(code string) string {
 	switch code {
+	case "storage_payload_too_large", "storage_timeout", "storage_intent_expired", "storage_idempotency_conflict", "storage_operation_in_progress", "storage_crypto_unavailable", "storage_policy_violation", "invalid_input", "storage_parse_failed":
+		return code
 	case "source_missing", "source_corrupt", "storage_permission_denied", "storage_auth_required", "storage_quota_exceeded", "storage_unavailable", "storage_generation_conflict", "storage_transfer_interrupted", "legacy_location_unverified", "storage_retry_exhausted", "storage_cancelled", "storage_maintenance", "storage_file_too_large", "repair_content_mismatch", "storage_invalid_key", "storage_capability_unsupported", "source_revision_conflict":
 		return code
 	default:

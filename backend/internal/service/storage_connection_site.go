@@ -103,7 +103,7 @@ func (s *StorageConnectionService) deploymentDriver(ctx context.Context, c *ent.
 
 // Check 校验当前部署或已生效的存储授权；只读检查绝不发送写入，
 // 也不会改变空间的管理访问模式。
-func (s *StorageConnectionService) Check(ctx context.Context, actor, id int, write bool, expectedGeneration int64) (*StorageConnectionRecord, error) {
+func (s *StorageConnectionService) check(ctx context.Context, actor, id int, write bool, expectedGeneration int64) (*StorageConnectionRecord, error) {
 	if write && (!s.cfg.Enabled || s.cfg.Maintenance) {
 		return nil, ErrStorageMaintenance
 	}

@@ -19,6 +19,9 @@ func TestStoragePolicyRequiresDeploymentEnablement(t *testing.T) {
 	policy := StoragePolicy{Mode: "both", DefaultChoice: "site", LogicalLimitBytes: 100 << 30}
 	for _, mode := range []string{"both", "user_required"} {
 		policy.Mode = mode
+		if mode == "user_required" {
+			policy.DefaultChoice = "user"
+		}
 		if _, err := service.SetPolicy(ctx, admin.ID, policy); !errors.Is(err, ErrStoragePolicy) {
 			t.Fatalf("disabled deployment accepted %s: %v", mode, err)
 		}
@@ -28,6 +31,7 @@ func TestStoragePolicyRequiresDeploymentEnablement(t *testing.T) {
 		t.Fatalf("rejected policy was published: %+v, %v", stored, err)
 	}
 	policy.Mode = "site_only"
+	policy.DefaultChoice = "site"
 	policy, err = service.SetPolicy(ctx, admin.ID, policy)
 	if err != nil || policy.Generation != 1 {
 		t.Fatalf("disabled deployment cannot update site policy: %+v, %v", policy, err)

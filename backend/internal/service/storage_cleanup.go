@@ -77,9 +77,6 @@ func (s *StorageService) failWrite(ctx context.Context, id int, cause error) err
 		if w.Phase == "committed" || w.Phase == "cleaned" {
 			return nil
 		}
-		if e = tx.StorageWrite.UpdateOneID(id).SetPhase("reconcile").Exec(ctx); e != nil {
-			return e
-		}
 		t, e := tx.StorageTask.Get(ctx, w.TaskID)
 		if e != nil {
 			return e
@@ -87,11 +84,28 @@ func (s *StorageService) failWrite(ctx context.Context, id int, cause error) err
 		if t.Phase == "committed" {
 			return nil
 		}
-		u := tx.StorageTask.UpdateOneID(t.ID).SetCleanupStatus(storagetask.CleanupStatusCleanupPending).SetErrorCode(storageCode(cause))
-		if t.Status != storagetask.StatusCancelled {
+		u := tx.StorageTask.Update().Where(storagetask.IDEQ(t.ID), storagetask.PhaseEQ(t.Phase), storagetask.StatusEQ(t.Status)).SetCleanupStatus(storagetask.CleanupStatusCleanupPending).SetErrorCode(storageCode(cause))
+		if t.Status != storagetask.StatusCancelled && t.Status != storagetask.StatusFailed {
 			u.SetStatus(storagetask.StatusNeedsAction)
 		}
-		return u.Exec(ctx)
+		if t.Status == storagetask.StatusFailed || t.Status == storagetask.StatusCancelled {
+			u.SetErrorCode(t.ErrorCode)
+		}
+		n, e := u.Save(ctx)
+		if e != nil {
+			return e
+		}
+		if n != 1 {
+			return ErrStorageConflict
+		}
+		n, e = tx.StorageWrite.Update().Where(storagewrite.IDEQ(id), storagewrite.PhaseEQ(w.Phase)).SetPhase("reconcile").Save(ctx)
+		if e != nil {
+			return e
+		}
+		if n != 1 {
+			return ErrStorageConflict
+		}
+		return nil
 	})
 }
 
@@ -99,6 +113,9 @@ func (s *StorageService) failWrite(ctx context.Context, id int, cause error) err
 func (s *StorageService) Reconcile(ctx context.Context) error {
 	if s.maintenance {
 		return nil
+	}
+	if err := s.expireTasks(ctx); err != nil {
+		return err
 	}
 	if err := s.expireSourceRevisions(ctx); err != nil {
 		return err
@@ -161,6 +178,11 @@ func (s *StorageService) claimCleanup(ctx context.Context, id int) (*ent.Storage
 			return e
 		}
 		if t.Kind == "storage_probe" || t.Kind == "storage_marker" {
+			return nil
+		}
+		// Another server may own the receiving/executing operation. Its bounded
+		// durable lease protects unknown writes as well as this process's inFlight.
+		if t.LeaseUntil != nil && t.LeaseUntil.After(time.Now().UTC()) {
 			return nil
 		}
 		// 不可逆切换期间，即使超过截止期限，迁移目的地仍然必要。
@@ -275,17 +297,27 @@ func (s *StorageService) cleanWrite(ctx context.Context, w *ent.StorageWrite) er
 		if e != nil {
 			return e
 		}
-		u := tx.StorageTask.UpdateOneID(t.ID)
+		u := tx.StorageTask.Update().Where(storagetask.IDEQ(t.ID), storagetask.PhaseEQ(t.Phase), storagetask.StatusEQ(t.Status))
 		if !remaining {
 			u.SetCleanupStatus(storagetask.CleanupStatusDone)
 		}
-		if t.Kind != "migration" && t.Phase != "committed" && t.Status != storagetask.StatusCancelled {
+		if t.Kind != "migration" && t.Phase != "committed" && t.Status != storagetask.StatusCancelled && t.Status != storagetask.StatusFailed {
 			u.SetStatus(storagetask.StatusNeedsAction).SetErrorCode("storage_transfer_interrupted")
 			if t.Kind == "upload" || t.Kind == "repair" || t.Kind == "source_update" {
 				u.SetPhase("cleaned")
 			}
+			if t.ErrorCode == "repair_content_mismatch" || t.ErrorCode == "storage_idempotency_conflict" || t.ErrorCode == "storage_parse_failed" {
+				u.SetStatus(storagetask.StatusFailed).SetPhase("rejected").SetErrorCode(t.ErrorCode)
+			}
 		}
-		return u.Exec(ctx)
+		n, e := u.Save(ctx)
+		if e != nil {
+			return e
+		}
+		if n != 1 {
+			return ErrStorageConflict
+		}
+		return nil
 	})
 }
 
@@ -449,7 +481,10 @@ func (s *StorageService) collect(ctx context.Context) error {
 }
 
 func (s *StorageService) refreshTaskCleanup(ctx context.Context) error {
-	tasks, err := s.client.StorageTask.Query().Where(storagetask.ProjectIDGT(0), storagetask.StatusIn(storagetask.StatusCancelled, storagetask.StatusCompleted), storagetask.CleanupStatusEQ(storagetask.CleanupStatusCleanupPending)).Order(ent.Asc(storagetask.FieldUpdatedAt)).Limit(s.cfg.ReconcileBatchSize).All(ctx)
+	if err := s.refreshDeletionTaskCleanup(ctx); err != nil {
+		return err
+	}
+	tasks, err := s.client.StorageTask.Query().Where(storagetask.KindNEQ("export_delete"), storagetask.ProjectIDGT(0), storagetask.StatusIn(storagetask.StatusCancelled, storagetask.StatusCompleted, storagetask.StatusFailed), storagetask.CleanupStatusEQ(storagetask.CleanupStatusCleanupPending)).Order(ent.Asc(storagetask.FieldUpdatedAt)).Limit(s.cfg.ReconcileBatchSize).All(ctx)
 	if err != nil {
 		return err
 	}

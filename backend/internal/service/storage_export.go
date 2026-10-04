@@ -5,44 +5,73 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/deletionentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/exportartifact"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 )
 
+const storageRendererVersion = "1"
+
 func (s *ResourceService) CreateExport(ctx context.Context, actor, projectID, resourceID int, key string) (*ent.StorageTask, error) {
-	res, err := s.GetResource(ctx, actor, projectID, resourceID)
+	ctx, cancel := context.WithTimeout(ctx, s.storage.cfg.TransferTimeout)
+	defer cancel()
+	if _, err := s.projects.requireProjectAccess(ctx, actor, projectID, true); err != nil {
+		return nil, err
+	}
+	task, err := s.findExportReplay(ctx, actor, projectID, resourceID, 0, key)
 	if err != nil {
 		return nil, err
 	}
-	if res.Resource.CurrentSourceRevisionID == nil {
-		return nil, ErrRepairMismatch
+	if task != nil && task.ResultArtifactID != nil {
+		return task, nil
 	}
-	task, err := s.storage.Begin(ctx, actor, projectID, StorageIntent{Kind: "export", IdempotencyKey: key, ResourceID: resourceID, SourceRevisionID: *res.Resource.CurrentSourceRevisionID, SourceGeneration: res.Resource.SourceGeneration, TranslationGeneration: res.Resource.TranslationGeneration})
+	if task == nil {
+		res, err := s.GetResource(ctx, actor, projectID, resourceID)
+		if err != nil {
+			return nil, err
+		}
+		if res.Resource.CurrentSourceRevisionID == nil {
+			return nil, ErrRepairMismatch
+		}
+		task, err = s.storage.Begin(ctx, actor, projectID, StorageIntent{Kind: "export", IdempotencyKey: key, ResourceID: resourceID, SourceRevisionID: *res.Resource.CurrentSourceRevisionID, SourceGeneration: res.Resource.SourceGeneration, TranslationGeneration: res.Resource.TranslationGeneration})
+		if err != nil {
+			return nil, err
+		}
+		if task.ResultArtifactID != nil {
+			return task, nil
+		}
+	}
+	release, err := s.storage.ClaimTaskExecution(ctx, task.ID)
+	if err != nil {
+		return task, err
+	}
+	defer release()
+	task, err = s.client.StorageTask.Get(ctx, task.ID)
 	if err != nil {
 		return nil, err
 	}
 	if task.ResultArtifactID != nil {
 		return task, nil
 	}
+	if err = storageTerminalError(task); err != nil {
+		return task, err
+	}
 	prepared, err := s.client.StorageWrite.Query().Where(storagewrite.TaskIDEQ(task.ID), storagewrite.PhaseEQ("prepared")).Exist(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if !prepared {
-		snapshot, err := s.captureSnapshot(ctx, actor, projectID, resourceID)
+		data, err := s.freezeExportSnapshot(ctx, actor, task)
 		if err != nil {
-			return nil, err
-		}
-		data, err := json.Marshal(snapshot)
-		if err != nil {
-			return nil, err
+			return task, err
 		}
 		if int64(len(data)) > s.storage.cfg.Limits.MaxMetadataBytes {
 			return nil, ErrStorageTooLarge
@@ -69,6 +98,14 @@ func (s *ResourceService) prepareExportArtifact(ctx context.Context, task *ent.S
 		return task, nil
 	}
 	w, err := s.client.StorageWrite.Query().Where(storagewrite.TaskIDEQ(task.ID), storagewrite.PhaseEQ("prepared")).Only(ctx)
+	if ent.IsNotFound(err) && len(task.SourcePlan) > 0 {
+		stage, e := s.storage.Stage(ctx, task, bytes.NewReader(task.SourcePlan), int64(len(task.SourcePlan)))
+		if e != nil {
+			return nil, e
+		}
+		w = stage.Write
+		err = stage.Close()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +121,7 @@ func (s *ResourceService) prepareExportArtifact(ctx context.Context, task *ent.S
 	if closeErr != nil {
 		return nil, closeErr
 	}
-	if snapshot.RevisionID == nil || task.ResourceID == nil || snapshot.ResourceID != *task.ResourceID || snapshot.ProjectID != task.ProjectID || snapshot.SourceGeneration != task.ExpectedSourceGeneration || snapshot.TranslationGeneration != task.ExpectedTranslationGeneration {
+	if snapshot.RevisionID == nil || task.SourceRevisionID == nil || *snapshot.RevisionID != *task.SourceRevisionID || task.ResourceID == nil || snapshot.ResourceID != *task.ResourceID || snapshot.ProjectID != task.ProjectID || snapshot.SourceGeneration != task.ExpectedSourceGeneration || snapshot.TranslationGeneration != task.ExpectedTranslationGeneration {
 		return nil, ErrStorageConflict
 	}
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
@@ -106,7 +143,7 @@ func (s *ResourceService) prepareExportArtifact(ctx context.Context, task *ent.S
 		if e != nil {
 			return e
 		}
-		artifact, e := tx.ExportArtifact.Create().SetProjectID(task.ProjectID).SetResourceID(snapshot.ResourceID).SetSourceRevisionID(*snapshot.RevisionID).SetSnapshotBlobID(b.ID).SetRendererVersion(storageParserVersion).SetSourceGeneration(snapshot.SourceGeneration).SetTranslationGeneration(snapshot.TranslationGeneration).SetOutputGeneration(snapshot.OutputGeneration).SetFilename(filepath.Base(res.Path)).Save(ctx)
+		artifact, e := tx.ExportArtifact.Create().SetProjectID(task.ProjectID).SetResourceID(snapshot.ResourceID).SetSourceRevisionID(*snapshot.RevisionID).SetSnapshotBlobID(b.ID).SetRendererVersion(storageRendererVersion).SetSourceGeneration(snapshot.SourceGeneration).SetTranslationGeneration(snapshot.TranslationGeneration).SetOutputGeneration(snapshot.OutputGeneration).SetFilename(filepath.Base(res.Path)).Save(ctx)
 		if e != nil {
 			return e
 		}
@@ -162,7 +199,11 @@ func (s *ResourceService) finishExport(ctx context.Context, task *ent.StorageTas
 	if artifact.Status == exportartifact.StatusDeleted {
 		return ErrStorageCancelled
 	}
-	if artifact.SnapshotBlobID == nil || artifact.RendererVersion != storageParserVersion {
+	valid, err := s.ExportRebuildable(ctx, artifact)
+	if err != nil {
+		return err
+	}
+	if !valid {
 		return ErrRepairMismatch
 	}
 	// 提交响应丢失或重启后，复用已完全校验的输出。
@@ -253,6 +294,13 @@ func (s *ResourceService) DeleteExport(ctx context.Context, actor, projectID, ar
 		return err
 	}
 	return withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		a, e := tx.ExportArtifact.Query().Where(exportartifact.IDEQ(artifactID), exportartifact.ProjectIDEQ(projectID)).Only(ctx)
+		if e != nil {
+			return e
+		}
+		if a.DeletionTaskID != nil {
+			return nil
+		}
 		p, e := tx.Project.Get(ctx, projectID)
 		if e != nil {
 			return e
@@ -263,11 +311,12 @@ func (s *ResourceService) DeleteExport(ctx context.Context, actor, projectID, ar
 		if e = storageProjectGate(ctx, tx, projectID, p.StorageGeneration); e != nil {
 			return e
 		}
-		a, e := tx.ExportArtifact.Query().Where(exportartifact.IDEQ(artifactID), exportartifact.ProjectIDEQ(projectID)).Only(ctx)
+		key := fmt.Sprintf("export-delete-%d", a.ID)
+		deletionTask, e := tx.StorageTask.Create().SetOperationID(generateUniqueID()).SetIdempotencyKey(key).SetRequestHash(key).SetActorID(actor).SetProjectID(projectID).SetResourceID(a.ResourceID).SetKind("export_delete").SetStatus(storagetask.StatusCompleted).SetPhase("committed").SetResultArtifactID(a.ID).SetCleanupStatus(storagetask.CleanupStatusCleanupPending).Save(ctx)
 		if e != nil {
 			return e
 		}
-		if e = tx.ExportArtifact.UpdateOneID(a.ID).SetStatus(exportartifact.StatusDeleted).Exec(ctx); e != nil {
+		if e = tx.ExportArtifact.UpdateOneID(a.ID).SetStatus(exportartifact.StatusDeleted).SetDeletionTaskID(deletionTask.ID).Exec(ctx); e != nil {
 			return e
 		}
 		if _, e = tx.StorageTask.Update().Where(storagetask.ResultArtifactIDEQ(a.ID), storagetask.PhaseNEQ("committed")).SetStatus(storagetask.StatusCancelled).SetCleanupStatus(storagetask.CleanupStatusCleanupPending).Save(ctx); e != nil {
@@ -295,29 +344,63 @@ func (s *ResourceService) DeleteExport(ctx context.Context, actor, projectID, ar
 				if e = s.storage.retireLocation(ctx, tx, *b.ActiveLocationID, projectID); e != nil {
 					return e
 				}
+				if e = tx.DeletionEntry.Update().Where(deletionentry.LocationIDEQ(*b.ActiveLocationID), deletionentry.DeletionTaskIDIsNil()).SetDeletionTaskID(deletionTask.ID).Exec(ctx); e != nil {
+					return e
+				}
 			}
+		}
+		pending, e := tx.DeletionEntry.Query().Where(deletionentry.DeletionTaskIDEQ(deletionTask.ID), deletionentry.StatusNEQ(deletionentry.StatusDone)).Exist(ctx)
+		if e != nil {
+			return e
+		}
+		if !pending {
+			return tx.StorageTask.UpdateOneID(deletionTask.ID).SetCleanupStatus(storagetask.CleanupStatusDone).SetInput(map[string]any{"cleanup_reason": "no_objects"}).Exec(ctx)
 		}
 		return nil
 	})
 }
 
 func (s *ResourceService) RebuildExport(ctx context.Context, actor, projectID, artifactID int, key string) (*ent.StorageTask, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.storage.cfg.TransferTimeout)
+	defer cancel()
 	if _, err := s.projects.requireProjectAccess(ctx, actor, projectID, true); err != nil {
 		return nil, err
+	}
+	replay, err := s.findExportReplay(ctx, actor, projectID, 0, artifactID, key)
+	if err != nil {
+		return nil, err
+	}
+	if replay != nil && replay.ResultArtifactID != nil {
+		return replay, nil
 	}
 	old, err := s.client.ExportArtifact.Query().Where(exportartifact.IDEQ(artifactID), exportartifact.ProjectIDEQ(projectID), exportartifact.StatusNEQ(exportartifact.StatusDeleted)).Only(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if old.SnapshotBlobID == nil || old.RendererVersion != storageParserVersion {
+	valid, err := s.ExportRebuildable(ctx, old)
+	if err != nil {
+		return nil, err
+	}
+	if !valid {
 		return nil, ErrRepairMismatch
 	}
-	task, err := s.storage.Begin(ctx, actor, projectID, StorageIntent{Kind: "export", ArtifactID: old.ID, IdempotencyKey: key, ResourceID: old.ResourceID, SourceRevisionID: old.SourceRevisionID, SourceGeneration: old.SourceGeneration, TranslationGeneration: old.TranslationGeneration})
+	task := replay
+	if task == nil {
+		task, err = s.storage.Begin(ctx, actor, projectID, StorageIntent{Kind: "export", ArtifactID: old.ID, IdempotencyKey: key, ResourceID: old.ResourceID, SourceRevisionID: old.SourceRevisionID, SourceGeneration: old.SourceGeneration, TranslationGeneration: old.TranslationGeneration})
+	}
 	if err != nil {
 		return nil, err
 	}
 	if task.ResultArtifactID != nil {
 		return task, nil
+	}
+	release, err := s.storage.ClaimTaskExecution(ctx, task.ID)
+	if err != nil {
+		return task, err
+	}
+	defer release()
+	if err = storageTerminalError(task); err != nil {
+		return task, err
 	}
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		if e := storageProjectGate(ctx, tx, projectID, task.ExpectedStorageGeneration); e != nil {
@@ -327,8 +410,15 @@ func (s *ResourceService) RebuildExport(ctx context.Context, actor, projectID, a
 		if e != nil {
 			return e
 		}
-		if current.Status == exportartifact.StatusDeleted {
+		if current.Status == exportartifact.StatusDeleted || current.SnapshotBlobID == nil || *current.SnapshotBlobID != *old.SnapshotBlobID {
 			return ErrStorageConflict
+		}
+		valid, e := exportRebuildable(ctx, tx, current)
+		if e != nil {
+			return e
+		}
+		if !valid {
+			return ErrRepairMismatch
 		}
 		a, e := tx.ExportArtifact.Create().SetProjectID(projectID).SetResourceID(old.ResourceID).SetSourceRevisionID(old.SourceRevisionID).SetSnapshotBlobID(*old.SnapshotBlobID).SetRendererVersion(old.RendererVersion).SetFilename(old.Filename).SetSourceGeneration(old.SourceGeneration).SetTranslationGeneration(old.TranslationGeneration).SetOutputGeneration(old.OutputGeneration).Save(ctx)
 		if e != nil {

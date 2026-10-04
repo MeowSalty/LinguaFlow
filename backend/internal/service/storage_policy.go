@@ -13,7 +13,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
@@ -22,10 +21,11 @@ import (
 const storagePolicyKey = "storage_policy"
 
 type StoragePolicy struct {
-	Mode              string `json:"mode"`
-	DefaultChoice     string `json:"default_choice"`
-	Generation        int64  `json:"generation"`
-	LogicalLimitBytes int64  `json:"logical_limit_bytes"`
+	Mode                     string `json:"mode"`
+	DefaultChoice            string `json:"default_choice"`
+	Generation               int64  `json:"generation"`
+	LogicalLimitBytes        int64  `json:"logical_limit_bytes"`
+	ConfigurationNeedsUpdate bool   `json:"configuration_needs_update,omitempty" readOnly:"true"`
 }
 
 func storagePolicy(ctx context.Context, client *ent.Client) (StoragePolicy, error) {
@@ -40,19 +40,34 @@ func storagePolicy(ctx context.Context, client *ent.Client) (StoragePolicy, erro
 	if err = json.Unmarshal([]byte(row.Value), &p); err != nil {
 		return p, err
 	}
+	p.ConfigurationNeedsUpdate = (p.Mode == "site_only" && p.DefaultChoice != "site") || (p.Mode == "user_required" && p.DefaultChoice != "user")
+	switch p.Mode {
+	case "site_only":
+		p.DefaultChoice = "site"
+	case "user_required":
+		p.DefaultChoice = "user"
+	case "both":
+		if p.DefaultChoice != "site" && p.DefaultChoice != "user" {
+			return p, ErrStoragePolicy
+		}
+	default:
+		return p, ErrStoragePolicy
+	}
 	return p, nil
 }
 func (s *StorageService) Policy(ctx context.Context) (StoragePolicy, error) {
 	return storagePolicy(ctx, s.client)
 }
 func (s *StorageService) SetPolicy(ctx context.Context, actor int, p StoragePolicy) (StoragePolicy, error) {
+	// This read-only hint is derived from stored configuration, never persisted.
+	p.ConfigurationNeedsUpdate = false
 	if p.Mode != "site_only" && p.Mode != "both" && p.Mode != "user_required" {
 		return p, ErrInvalidInput
 	}
 	if p.DefaultChoice != "site" && p.DefaultChoice != "user" {
 		return p, ErrInvalidInput
 	}
-	if p.LogicalLimitBytes <= 0 {
+	if p.LogicalLimitBytes <= 0 || p.Generation < 0 || (p.Mode == "site_only" && p.DefaultChoice != "site") || (p.Mode == "user_required" && p.DefaultChoice != "user") {
 		return p, ErrInvalidInput
 	}
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
@@ -98,28 +113,7 @@ func (s *StorageService) SetPolicy(ctx context.Context, actor int, p StoragePoli
 }
 
 func (s *StorageService) allowedTarget(ctx context.Context, tx *ent.Client, p *ent.Project, id int) error {
-	sp, err := tx.StorageSpace.Get(ctx, id)
-	if err != nil {
-		return err
-	}
-	if sp.Status != storagespace.StatusActive || !sp.Verified {
-		return ErrStoragePolicy
-	}
-	policy, err := storagePolicy(ctx, tx)
-	if err != nil {
-		return err
-	}
-	kind, owner := storageProjectOwner(p)
-	if sp.OwnerKind == storagespace.OwnerKindSite {
-		if policy.Mode == "user_required" {
-			return ErrStoragePolicy
-		}
-		return nil
-	}
-	if policy.Mode == "site_only" || string(sp.OwnerKind) != kind || sp.OwnerID != owner {
-		return ErrStoragePolicy
-	}
-	return nil
+	return s.validateStorageTarget(ctx, tx, p, id, -1, false)
 }
 
 func (s *StorageService) selectSpace(ctx context.Context, tx *ent.Client, p *ent.Project, requested *int) (int, error) {
@@ -179,24 +173,13 @@ func (s *StorageService) Bind(ctx context.Context, actor, projectID, spaceID int
 		if p.StorageGeneration != generation {
 			return ErrStorageConflict
 		}
-		if p.StorageState != "active" {
+		if p.StorageState != "active" || s.maintenance {
 			return ErrStorageMaintenance
 		}
-		has, e := tx.Blob.Query().Where(blob.ProjectIDEQ(projectID), blob.StatusNEQ(blob.StatusDeleted)).Exist(ctx)
-		if e != nil {
+		if e := storageEmptyProject(ctx, tx, projectID); e != nil {
 			return e
 		}
-		if has {
-			return ErrStorageConflict
-		}
-		active, e := tx.StorageTask.Query().Where(storagetask.ProjectIDEQ(projectID), storagetask.StatusNotIn(storagetask.StatusCompleted, storagetask.StatusCancelled, storagetask.StatusFailed)).Exist(ctx)
-		if e != nil {
-			return e
-		}
-		if active {
-			return ErrStorageConflict
-		}
-		if e = s.allowedTarget(ctx, tx, p, spaceID); e != nil {
+		if e := s.allowedTarget(ctx, tx, p, spaceID); e != nil {
 			return e
 		}
 		n, e := tx.Project.Update().Where(project.IDEQ(projectID), project.StorageGenerationEQ(generation)).SetStorageSpaceID(spaceID).AddStorageGeneration(1).Save(ctx)

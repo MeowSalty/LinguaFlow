@@ -66,7 +66,12 @@ func readStorageProbe(ctx context.Context, d storage.Driver, o storage.Object, w
 	return nil
 }
 
-func (s *StorageConnectionService) verifySpace(ctx context.Context, actor int, c *ent.StorageConnection, sp *ent.StorageSpace, a *ent.StorageAuthVersion, d storage.Driver, write bool) (storage.Capabilities, error) {
+func (s *StorageConnectionService) verifySpace(ctx context.Context, actor int, c *ent.StorageConnection, sp *ent.StorageSpace, a *ent.StorageAuthVersion, d storage.Driver, write bool) (result storage.Capabilities, resultErr error) {
+	defer func() {
+		if err := s.recordCheckSpace(ctx, sp.ID, resultErr); resultErr == nil && err != nil {
+			resultErr = err
+		}
+	}()
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.TransferTimeout)
 	defer cancel()
 	inspector, ok := d.(storage.CapabilityInspector)
@@ -231,6 +236,9 @@ func (s *StorageConnectionService) registerProbe(ctx context.Context, actor int,
 func (s *StorageConnectionService) writeProbe(ctx context.Context, actor int, c *ent.StorageConnection, sp *ent.StorageSpace, a *ent.StorageAuthVersion, d storage.Driver, key string, data []byte, marker bool, caps storage.Capabilities) (result storage.Object, err error) {
 	s.mu.Lock()
 	w, err := s.registerProbe(ctx, actor, c, sp, a, key, data, marker)
+	if err == nil {
+		err = s.associateCheckWrite(ctx, w.ID)
+	}
 	if err == nil {
 		s.activeWrites[w.ID] = true
 	}
@@ -479,6 +487,9 @@ func (s *StorageConnectionService) recoveryAttempt(ctx context.Context, w *ent.S
 func (s *StorageConnectionService) Reconcile(ctx context.Context) error {
 	if s.cfg.Maintenance {
 		return nil
+	}
+	if err := s.recoverInterruptedChecks(ctx); err != nil {
+		return err
 	}
 	rows, err := s.client.StorageWrite.Query().Where(storagewrite.PhaseNotIn("committed", "cleaned"), storagewrite.HasTaskWith(storagetask.KindIn("storage_probe", "storage_marker"))).Order(ent.Asc(storagewrite.FieldUpdatedAt)).Limit(s.cfg.ReconcileBatchSize).All(ctx)
 	if err != nil {
