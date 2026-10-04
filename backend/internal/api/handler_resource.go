@@ -113,7 +113,7 @@ func toResourceResponse(r *ent.Resource, translated, approved int) resourceRespo
 func toGeneratedResource(r *ent.Resource, translated, approved int) Resource {
 	pathValue := resourceResponsePath(r)
 	return Resource{
-		CurrentSourceRevisionId: r.CurrentSourceRevisionID, SourceGeneration: &r.SourceGeneration, TranslationGeneration: &r.TranslationGeneration,
+		CurrentSourceRevisionId: r.CurrentSourceRevisionID, SourceGeneration: r.SourceGeneration, TranslationGeneration: r.TranslationGeneration,
 		Id:                 r.ID,
 		Path:               pathValue,
 		Name:               resourceResponseName(pathValue),
@@ -175,6 +175,10 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 	}
 	defer cleanup()
 
+	key, validKey := s.storageIdempotency(w, r)
+	if !validKey {
+		return
+	}
 	files := form.File["files"]
 	if len(files) == 0 {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "至少上传一个文件")
@@ -203,7 +207,7 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 			return
 		}
 		uploaded = append(uploaded, service.UploadedFile{
-			IdempotencyKey: resourceUploadKey(r.Header.Get("Idempotency-Key"), i),
+			IdempotencyKey: key,
 			Filename:       header.Filename,
 			Path:           candidatePath,
 			Size:           header.Size,
@@ -220,64 +224,12 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		}
 	}()
 
-	results, err := s.resourceSvc.UploadResources(r.Context(), authUser.User.ID, projectID, uploaded)
+	result, err := s.resourceSvc.UploadResourceBatch(r.Context(), authUser.User.ID, projectID, key, uploaded)
 	if err != nil {
-		s.writeResourceServiceError(w, r, err)
+		s.writeStorageError(w, r, err)
 		return
 	}
-
-	resourceIDs := make([]int, 0)
-	for _, result := range results {
-		switch result.Action {
-		case "created":
-			if result.Resource != nil {
-				resourceIDs = append(resourceIDs, result.Resource.ID)
-			}
-		case "conflict":
-			if result.ExistingResource != nil {
-				resourceIDs = append(resourceIDs, result.ExistingResource.ID)
-			}
-		}
-	}
-	progressMap, _ := s.resourceSvc.ListResourcesProgress(r.Context(), resourceIDs)
-
-	respItems := make([]ResourceUploadFileResult, 0, len(results))
-	for _, result := range results {
-		item := ResourceUploadFileResult{
-			Path: result.Path,
-		}
-		switch result.Action {
-		case "created":
-			item.Action = ResourceUploadFileResultActionCreated
-			if result.Resource != nil {
-				p := progressMap[result.Resource.ID]
-				translated, approved := 0, 0
-				if p != nil {
-					translated, approved = p.Translated, p.Approved
-				}
-				gr := toGeneratedResource(result.Resource, translated, approved)
-				item.Resource = &gr
-			}
-		case "conflict":
-			item.Action = ResourceUploadFileResultActionConflict
-			if result.ExistingResource != nil {
-				p := progressMap[result.ExistingResource.ID]
-				translated, approved := 0, 0
-				if p != nil {
-					translated, approved = p.Translated, p.Approved
-				}
-				gr := toGeneratedResource(result.ExistingResource, translated, approved)
-				item.ExistingResource = &gr
-			}
-		case "failed":
-			item.Action = ResourceUploadFileResultActionFailed
-			if result.Error != "" {
-				item.Error = &result.Error
-			}
-		}
-		respItems = append(respItems, item)
-	}
-	writeJSON(w, http.StatusOK, ResourceUploadBatchResponse{Items: respItems})
+	writeJSON(w, http.StatusOK, result)
 }
 
 // handlePrecheckProjectResources 处理资源上传预检。
@@ -734,26 +686,14 @@ func summarizeMultipartFileFields(files map[string][]*multipart.FileHeader) []st
 
 // writeResourceServiceError 写入资源服务的错误响应。
 func (s *Server) writeResourceServiceError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case err == nil:
+	if err == nil {
 		return
-	case errors.Is(err, service.ErrProjectNotFound):
-		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")
-	case errors.Is(err, service.ErrResourceNotFound):
-		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
-	case errors.Is(err, service.ErrResourceAlreadyExists):
-		s.writeProblem(w, r, http.StatusConflict, "conflict", "项目中已存在同路径资源")
-	case errors.Is(err, service.ErrResourcePathInvalid):
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_resource_path", "资源路径不合法")
-	case errors.Is(err, service.ErrForbidden):
-		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
-	case errors.Is(err, service.ErrUnsupportedFormat):
-		s.writeProblem(w, r, http.StatusBadRequest, "unsupported_format", err.Error())
-	case errors.Is(err, service.ErrParseFailed):
-		s.writeProblem(w, r, http.StatusBadRequest, "parse_failed", err.Error())
-	default:
-		s.writeServiceError(w, r, err)
 	}
+	if errors.Is(err, service.ErrResourceAlreadyExists) {
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "项目中已存在同路径资源")
+		return
+	}
+	s.writeStorageError(w, r, err)
 }
 
 // safeZipResourceEntryName 根据资源路径生成安全的 ZIP 条目名称。

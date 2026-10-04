@@ -81,7 +81,7 @@ func TestStorageMultipartBoundsCleanupAndAdmission(t *testing.T) {
 	if err != nil || string(got) != "valid" || form.Value["paths"][0] != "sub/source.txt" {
 		t.Fatalf("form=%+v bytes=%q err=%v", form, got, err)
 	}
-	if _, _, _, err := s.resourceSvc.BeginUpload(context.Background()); !errors.Is(err, storage.ErrLimit) {
+	if _, _, _, err := s.resourceSvc.BeginUpload(context.Background()); !errors.Is(err, storage.ErrPayloadTooLarge) {
 		t.Fatalf("admission=%v", err)
 	}
 	release()

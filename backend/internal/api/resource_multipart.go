@@ -23,8 +23,12 @@ type resourceUploadPart struct {
 }
 
 func (p *resourceUploadPart) Open() (io.ReadCloser, error) {
-	return io.NopCloser(io.NewSectionReader(p.file, 0, p.Size)), nil
+	return resourcePartReader{io.NewSectionReader(p.file, 0, p.Size)}, nil
 }
+
+type resourcePartReader struct{ *io.SectionReader }
+
+func (resourcePartReader) Close() error { return nil }
 
 type resourceMultipart struct {
 	File  map[string][]*resourceUploadPart
@@ -156,11 +160,11 @@ func (s *Server) writeResourceMultipartError(w http.ResponseWriter, r *http.Requ
 	if errors.As(err, &maxBytes) {
 		err = service.ErrStorageTooLarge
 	}
-	if errors.Is(err, service.ErrStorageTooLarge) || errors.Is(err, service.ErrStorageMaintenance) || errors.Is(err, storage.ErrLimit) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, service.ErrStorageTooLarge) || errors.Is(err, storage.ErrPayloadTooLarge) || errors.Is(err, service.ErrStorageMaintenance) || errors.Is(err, storage.ErrLimit) || errors.Is(err, context.DeadlineExceeded) {
 		s.writeStorageError(w, r, err)
 		return
 	}
-	s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+	s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "上传表单解析失败")
 }
 
 func resourceUploadKey(key string, index int) string {

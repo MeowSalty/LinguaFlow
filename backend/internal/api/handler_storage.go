@@ -15,9 +15,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/exportartifact"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storageauth"
 )
 
@@ -47,20 +45,25 @@ func (s *Server) decodeStorageJSON(w http.ResponseWriter, r *http.Request, out a
 	defer r.Body.Close()
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
 	if err != nil {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求体无效或过大")
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			s.writeStorageError(w, r, service.ErrStorageTooLarge)
+			return false
+		}
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求体无效或过大")
 		return false
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	token, err := decoder.Token()
 	if err != nil || token != json.Delim('{') {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求体必须是 JSON 对象")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求体必须是 JSON 对象")
 		return false
 	}
 	allowed := map[string]bool{}
 	typ := reflect.TypeOf(out).Elem()
 	for i := 0; i < typ.NumField(); i++ {
 		name := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
-		if name != "" && name != "-" {
+		if name != "" && name != "-" && typ.Field(i).Tag.Get("readOnly") != "true" {
 			allowed[name] = true
 		}
 	}
@@ -69,83 +72,79 @@ func (s *Server) decodeStorageJSON(w http.ResponseWriter, r *http.Request, out a
 		token, err = decoder.Token()
 		name, ok := token.(string)
 		if err != nil || !ok || !allowed[name] || fields[name] != nil {
-			s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求包含未知或重复字段")
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求包含未知或重复字段")
 			return false
 		}
 		var value json.RawMessage
 		if err = decoder.Decode(&value); err != nil {
-			s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求字段无效")
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求字段无效")
 			return false
 		}
 		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) && name != "expires_at" {
-			s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求字段不能为 null")
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求字段不能为 null")
 			return false
 		}
 		fields[name] = value
 	}
 	if token, err = decoder.Token(); err != nil || token != json.Delim('}') {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求体无效")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求体无效")
 		return false
 	}
 	if _, err = decoder.Token(); err != io.EOF {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求只能包含一个 JSON 对象")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求只能包含一个 JSON 对象")
 		return false
 	}
 	for _, name := range required {
 		v, ok := fields[name]
 		if !ok || bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
-			s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "缺少必填字段 "+name)
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "缺少必填字段 "+name)
 			return false
 		}
 	}
 	decoder = json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err = decoder.Decode(out); err != nil {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求字段类型无效")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求字段类型无效")
 		return false
 	}
 	return true
 }
 
 func (s *Server) writeStorageError(w http.ResponseWriter, r *http.Request, err error) {
-	status, code, detail := http.StatusServiceUnavailable, "storage_unavailable", "存储暂不可用，请查看任务状态后重试"
+	code := service.StorageErrorCode(err)
+	status, detail := http.StatusServiceUnavailable, "存储暂不可用，请查看原操作状态"
+	switch code {
+	case "source_revision_conflict", "storage_generation_conflict", "storage_idempotency_conflict":
+		status, detail = http.StatusConflict, "请求与原操作或当前基线不一致，请核对原操作"
+	case "storage_operation_in_progress":
+		status, detail = http.StatusConflict, "原操作仍在执行，请查询原身份或稍后重放"
+	case "storage_intent_expired", "storage_cancelled", "storage_maintenance":
+		status, detail = http.StatusConflict, "当前任务或维护状态不允许执行该操作"
+	case "source_missing", "source_corrupt", "repair_content_mismatch":
+		status, detail = http.StatusConflict, "原件缺失、校验失败或修复文件与登记原件不一致"
+	case "storage_auth_required", "storage_crypto_unavailable", "storage_capability_unsupported":
+		status, detail = http.StatusConflict, "存储授权或能力不满足要求"
+	case "storage_permission_denied", "storage_policy_violation":
+		status, detail = http.StatusForbidden, "存储权限或政策不允许该操作"
+	case "storage_quota_exceeded":
+		status, detail = http.StatusConflict, "可用存储额度不足"
+	case "storage_payload_too_large":
+		status, detail = http.StatusRequestEntityTooLarge, "文件或处理预算超过允许大小"
+	case "invalid_input", "storage_parse_failed":
+		status, detail = http.StatusBadRequest, "请求组合不合法或文件无法解析"
+	case "storage_timeout":
+		status, detail = http.StatusGatewayTimeout, "存储操作超时，请先查询原操作状态"
+	}
 	switch {
 	case errors.Is(err, service.ErrForbidden):
 		status, code, detail = http.StatusForbidden, "forbidden", "没有权限执行此操作"
 	case errors.Is(err, service.ErrProjectNotFound), errors.Is(err, service.ErrResourceNotFound), ent.IsNotFound(err):
 		status, code, detail = http.StatusNotFound, "not_found", "资源不存在或不可访问"
-	case errors.Is(err, service.ErrInvalidInput), errors.Is(err, service.ErrResourcePathInvalid), errors.Is(err, storageauth.ErrInvalid):
-		status, code, detail = http.StatusBadRequest, "invalid_input", "请求参数不合法"
-	case errors.Is(err, service.ErrStorageConflict), errors.Is(err, service.ErrSourceRevisionConflict), errors.Is(err, service.ErrStorageIdempotency):
-		status, code, detail = http.StatusConflict, "storage_generation_conflict", "内容或存储状态已变化，请刷新后重试"
-	case errors.Is(err, service.ErrRepairMismatch):
-		status, code, detail = http.StatusConflict, "repair_content_mismatch", "修复文件与已登记原件不一致"
-	case errors.Is(err, service.ErrStorageMaintenance):
-		status, code, detail = http.StatusConflict, "storage_maintenance", "项目或存储正在维护，暂时不能执行此操作"
-	case errors.Is(err, service.ErrStoragePolicy):
-		status, code, detail = http.StatusForbidden, "storage_policy_violation", "当前存储政策不允许此操作"
-	case errors.Is(err, storage.ErrLimit), errors.Is(err, service.ErrStorageTooLarge):
-		status, code, detail = http.StatusRequestEntityTooLarge, "storage_quota_exceeded", "存储或处理容量已达上限"
-	case errors.Is(err, storage.ErrNotFound):
-		status, code, detail = http.StatusConflict, "source_missing", "原件缺失，需要修复或重新连接"
-	case errors.Is(err, storage.ErrCorrupt):
-		status, code, detail = http.StatusConflict, "source_corrupt", "原件校验失败，需要修复"
-	case errors.Is(err, storage.ErrPermission):
-		status, code, detail = http.StatusForbidden, "storage_permission_denied", "存储授权或管理状态不允许此操作"
-	case errors.Is(err, storage.ErrAuthRequired):
-		status, code, detail = http.StatusConflict, "storage_auth_required", "请重新授权存储连接"
-	case errors.Is(err, service.ErrStorageCrypto):
-		status, code, detail = http.StatusConflict, "storage_crypto_unavailable", "当前存储授权无法解密，请重新授权或联系管理员"
-	case errors.Is(err, storage.ErrUnsupported):
-		status, code, detail = http.StatusConflict, "storage_capability_unsupported", "存储服务缺少所需能力"
-	case errors.Is(err, service.ErrUnsupportedFormat), errors.Is(err, service.ErrParseFailed):
-		status, code, detail = http.StatusBadRequest, "storage_parse_failed", "文件格式不受支持或无法解析"
-	case errors.Is(err, context.Canceled), errors.Is(err, service.ErrStorageCancelled):
-		status, code, detail = http.StatusConflict, "storage_cancelled", "操作已取消"
-	case errors.Is(err, context.DeadlineExceeded):
-		status, code, detail = http.StatusGatewayTimeout, "storage_timeout", "存储操作超时，已保留任务状态供对账"
 	}
-	// 绝不把提供方返回的错误原文附进响应：其中可能包含密钥、签名 URL 或其他机密。
+	var operation *service.StorageOperationError
+	if errors.As(err, &operation) {
+		r = r.WithContext(context.WithValue(r.Context(), storageProblemIdentityKey{}, operation))
+	}
 	s.writeProblem(w, r, status, code, detail)
 }
 
@@ -154,7 +153,25 @@ func (s *Server) storageTaskResponse(r *http.Request, t *ent.StorageTask) Storag
 	if auth, ok := authUserFromContext(r.Context()); ok {
 		actions = s.storageSvc.TaskActions(r.Context(), auth.User.ID, t)
 	}
-	return StorageTask{Id: t.ID, OperationId: t.OperationID, Kind: t.Kind, Status: StorageTaskStatus(t.Status), Phase: t.Phase, CleanupStatus: StorageTaskCleanupStatus(t.CleanupStatus), ErrorCode: &t.ErrorCode, NextRetryAt: t.NextRetryAt, AllowedActions: actions, ResultResourceId: t.ResultResourceID, ResultRevisionId: t.ResultRevisionID, ResultArtifactId: t.ResultArtifactID}
+	out := StorageTask{Id: t.ID, ProjectId: t.ProjectID, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, ExpiresAt: t.Deadline, OperationId: t.OperationID, Kind: t.Kind, Status: StorageTaskStatus(t.Status), Phase: t.Phase, CleanupStatus: StorageTaskCleanupStatus(t.CleanupStatus), ErrorCode: &t.ErrorCode, NextRetryAt: t.NextRetryAt, AllowedActions: actions, ResultResourceId: t.ResultResourceID, ResultRevisionId: t.ResultRevisionID, ResultArtifactId: t.ResultArtifactID,
+		ResourceId: t.ResourceID, SourceRevisionId: t.SourceRevisionID, TargetSpaceId: t.TargetSpaceID, ExpectedStorageGeneration: &t.ExpectedStorageGeneration, ExpectedSourceGeneration: &t.ExpectedSourceGeneration, ExpectedTranslationGeneration: &t.ExpectedTranslationGeneration, ExpectedLocationGeneration: &t.ExpectedLocationGeneration}
+	if t.ContractVersion > 0 {
+		out.InputSize = &t.InputSize
+		if t.InputSha256 != "" {
+			out.InputSha256 = &t.InputSha256
+		}
+	}
+	if auth, ok := authUserFromContext(r.Context()); ok && len(t.SourcePlan) > 0 {
+		if preview, err := s.resourceSvc.SourcePreviewForTask(r.Context(), auth.User.ID, t.ProjectID, t.ID); err == nil {
+			if data, e := json.Marshal(preview); e == nil {
+				var dto SourceUpdatePreview
+				if json.Unmarshal(data, &dto) == nil {
+					out.SourcePreview = &dto
+				}
+			}
+		}
+	}
+	return out
 }
 func (s *Server) storageTaskResult(w http.ResponseWriter, r *http.Request, t *ent.StorageTask, err error, status int) {
 	if err != nil {
@@ -274,7 +291,7 @@ func (s *Server) CreateStorageSpace(w http.ResponseWriter, r *http.Request, id i
 }
 func (s *Server) SetStorageConnectionState(w http.ResponseWriter, r *http.Request, id int) {
 	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
-		var input StorageStateRequest
+		var input StorageConnectionStateRequest
 		if !s.decodeStorageJSON(w, r, &input, "status", "expected_generation") {
 			return
 		}
@@ -288,7 +305,7 @@ func (s *Server) SetStorageConnectionState(w http.ResponseWriter, r *http.Reques
 }
 func (s *Server) SetStorageSpaceState(w http.ResponseWriter, r *http.Request, id int) {
 	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
-		var input StorageStateRequest
+		var input StorageSpaceStateRequest
 		if !s.decodeStorageJSON(w, r, &input, "status", "expected_generation") {
 			return
 		}
@@ -313,22 +330,21 @@ func (s *Server) AuthorizeStorage(w http.ResponseWriter, r *http.Request, id int
 		if !s.decodeStorageJSON(w, r, &input, "access_key_id", "secret_access_key", "write_check", "expected_management_generation") {
 			return
 		}
-		row, err := s.storageConnections.Authorize(r.Context(), actor, id, service.AuthorizeStorageInput{Payload: storageauth.S3Payload{Version: 1, AccessKeyID: input.AccessKeyID, SecretAccessKey: input.SecretAccessKey, SessionToken: input.SessionToken}, WriteCheck: input.WriteCheck, ExpiresAt: input.ExpiresAt, ExpectedManagementGeneration: input.ExpectedManagementGeneration})
+		row, check, err := s.storageConnections.AuthorizeWithCheck(r.Context(), actor, id, service.AuthorizeStorageInput{Payload: storageauth.S3Payload{Version: 1, AccessKeyID: input.AccessKeyID, SecretAccessKey: input.SecretAccessKey, SessionToken: input.SessionToken}, WriteCheck: input.WriteCheck, ExpiresAt: input.ExpiresAt, ExpectedManagementGeneration: input.ExpectedManagementGeneration})
 		if err != nil {
+			if check != nil {
+				err = &service.StorageOperationError{Err: err, CheckID: check.CheckID}
+			}
 			s.writeStorageError(w, r, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, row)
+		s.writeConnectionCheckResult(w, row, check)
 	})
 }
 func (s *Server) RevokeStorageAuthorization(w http.ResponseWriter, r *http.Request, id int) {
 	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
-		var input StorageStateRequest
-		if !s.decodeStorageJSON(w, r, &input, "status", "expected_generation") {
-			return
-		}
-		if string(input.Status) != "disabled" {
-			s.writeStorageError(w, r, service.ErrInvalidInput)
+		var input StorageRevokeRequest
+		if !s.decodeStorageJSON(w, r, &input, "expected_generation") {
 			return
 		}
 		row, err := s.storageConnections.Revoke(r.Context(), actor, id, input.ExpectedGeneration)
@@ -348,23 +364,26 @@ func (s *Server) CheckStorageConnection(w http.ResponseWriter, r *http.Request, 
 		if !s.decodeStorageJSON(w, r, &input, "write_check", "expected_generation") {
 			return
 		}
-		row, err := s.storageConnections.Check(r.Context(), actor, id, input.WriteCheck, input.ExpectedGeneration)
+		row, check, err := s.storageConnections.CheckWithResult(r.Context(), actor, id, input.WriteCheck, input.ExpectedGeneration)
 		if err != nil {
+			if check != nil {
+				err = &service.StorageOperationError{Err: err, CheckID: check.CheckID}
+			}
 			s.writeStorageError(w, r, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, row)
+		s.writeConnectionCheckResult(w, row, check)
 	})
 }
 
 func (s *Server) GetProjectStorage(w http.ResponseWriter, r *http.Request, projectID int) {
 	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
-		sp, err := s.storageSvc.SpaceForProject(r.Context(), actor, projectID)
+		sp, err := s.storageSvc.ProjectStorage(r.Context(), actor, projectID)
 		if err != nil {
 			s.writeStorageError(w, r, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"id": sp.ID, "connection_id": sp.ConnectionID, "name": sp.Name, "status": sp.Status, "verified": sp.Verified, "versioned": sp.Versioned, "management_generation": sp.ManagementGeneration, "capacity_bytes": sp.CapacityBytes, "reserved_bytes": sp.ReservedBytes, "candidate_bytes": sp.CandidateBytes, "live_bytes": sp.LiveBytes, "pending_delete_bytes": sp.PendingDeleteBytes})
+		writeJSON(w, http.StatusOK, sp)
 	})
 }
 func (s *Server) BindProjectStorage(w http.ResponseWriter, r *http.Request, projectID int) {
@@ -382,14 +401,11 @@ func (s *Server) BindProjectStorage(w http.ResponseWriter, r *http.Request, proj
 }
 func (s *Server) MigrateProjectStorage(w http.ResponseWriter, r *http.Request, projectID int) {
 	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
-		var input StorageBindingRequest
-		if !s.decodeStorageJSON(w, r, &input, "space_id", "expected_generation") {
+		var input StorageMigrationRequest
+		if !s.decodeStorageJSON(w, r, &input, "space_id", "expected_generation", "idempotency_key") {
 			return
 		}
-		key := ""
-		if input.IdempotencyKey != nil {
-			key = *input.IdempotencyKey
-		}
+		key := input.IdempotencyKey
 		task, err := s.storageSvc.StartMigration(r.Context(), actor, projectID, input.SpaceId, input.ExpectedGeneration, key)
 		s.storageTaskResult(w, r, task, err, http.StatusAccepted)
 	})
@@ -423,25 +439,53 @@ func storageValue[T any](value *T) (zero T) {
 }
 func (s *Server) CreateStorageIntent(w http.ResponseWriter, r *http.Request, projectID int) {
 	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
-		var input StorageIntent
-		if !s.decodeStorageJSON(w, r, &input, "kind", "size", "idempotency_key", "storage_generation") {
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+		_ = r.Body.Close()
+		if err != nil {
+			s.writeStorageError(w, r, service.ErrStorageTooLarge)
 			return
 		}
-		if !input.Kind.Valid() || strings.TrimSpace(input.IdempotencyKey) == "" || len(input.IdempotencyKey) > 200 {
+		var identity struct {
+			Kind string `json:"kind"`
+			Key  string `json:"idempotency_key"`
+		}
+		if json.Unmarshal(raw, &identity) != nil {
 			s.writeStorageError(w, r, service.ErrInvalidInput)
 			return
 		}
-		in := service.StorageIntent{Kind: string(input.Kind), IdempotencyKey: input.IdempotencyKey, Path: storageValue(input.Path), ResourceID: storageValue(input.ResourceId), SourceRevisionID: storageValue(input.SourceRevisionId), TargetSpaceID: storageValue(input.TargetSpaceId), Size: input.Size, SourceGeneration: storageValue(input.SourceGeneration), TranslationGeneration: storageValue(input.TranslationGeneration), StorageGeneration: input.StorageGeneration, LocationGeneration: storageValue(input.LocationGeneration)}
-		in.RequireStorageGeneration = true
-		if in.StorageGeneration < 0 || in.SourceGeneration < 0 || in.TranslationGeneration < 0 || in.LocationGeneration < 0 || in.Kind == "source_update" && (input.SourceGeneration == nil || input.TranslationGeneration == nil) || in.Kind == "repair" && input.LocationGeneration == nil {
+		var dto any
+		required := []string{"kind", "idempotency_key", "size", "storage_generation"}
+		switch identity.Kind {
+		case "upload":
+			dto = &StorageUploadIntent{}
+			required = append(required, "path")
+		case "source_update":
+			dto = &StorageSourceUpdateIntent{}
+			required = append(required, "resource_id", "source_generation", "translation_generation")
+		case "repair":
+			dto = &StorageRepairIntent{}
+			required = append(required, "resource_id", "source_revision_id", "location_generation", "target_space_id")
+		default:
 			s.writeStorageError(w, r, service.ErrInvalidInput)
 			return
 		}
-		if in.Kind == "upload" && in.Path == "" || in.Kind != "upload" && in.ResourceID <= 0 || in.Kind == "repair" && in.SourceRevisionID <= 0 {
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		if !s.decodeStorageJSON(w, r, dto, required...) {
+			return
+		}
+		var input service.StorageIntent
+		if json.Unmarshal(raw, &input) != nil || service.ValidateStorageIdempotencyKey(identity.Key) != nil {
 			s.writeStorageError(w, r, service.ErrInvalidInput)
 			return
 		}
-		task, err := s.storageSvc.Begin(r.Context(), actor, projectID, in)
+		input.IdempotencyKey = identity.Key
+		input.RequireStorageGeneration = true
+		if input.Size < 0 || input.StorageGeneration < 0 || input.SourceGeneration < 0 || input.TranslationGeneration < 0 || input.LocationGeneration < 0 ||
+			input.Kind == "upload" && input.Path == "" || input.Kind != "upload" && input.ResourceID <= 0 || input.Kind == "repair" && (input.SourceRevisionID <= 0 || input.TargetSpaceID <= 0) {
+			s.writeStorageError(w, r, service.ErrInvalidInput)
+			return
+		}
+		task, err := s.storageSvc.Begin(r.Context(), actor, projectID, input)
 		s.storageTaskResult(w, r, task, err, http.StatusAccepted)
 	})
 }
@@ -502,7 +546,7 @@ func (s *Server) ListSourceVersions(w http.ResponseWriter, r *http.Request, proj
 }
 func (s *Server) storageIdempotency(w http.ResponseWriter, r *http.Request) (string, bool) {
 	key := r.Header.Get("Idempotency-Key")
-	if strings.TrimSpace(key) == "" || len(key) > 200 {
+	if service.ValidateStorageIdempotencyKey(key) != nil {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_idempotency_key", "必须提供有效的 Idempotency-Key")
 		return "", false
 	}
@@ -541,16 +585,16 @@ func (s *Server) CommitSourceUpdate(w http.ResponseWriter, r *http.Request, proj
 	})
 }
 
-func (s *Server) ListExportArtifacts(w http.ResponseWriter, r *http.Request, projectID, resourceID int) {
+func (s *Server) ListExportArtifacts(w http.ResponseWriter, r *http.Request, projectID, resourceID int, params ListExportArtifactsParams) {
 	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
-		rows, err := s.resourceSvc.ListExports(r.Context(), actor, projectID, resourceID)
+		rows, err := s.resourceSvc.ListExportsIncludingDeleted(r.Context(), actor, projectID, resourceID, storageValue(params.IncludeDeleted))
 		if err != nil {
 			s.writeStorageError(w, r, err)
 			return
 		}
 		out := make([]ExportArtifact, 0, len(rows))
 		for _, a := range rows {
-			out = append(out, ExportArtifact{Id: a.ID, SourceRevisionId: a.SourceRevisionID, Status: ExportArtifactStatus(a.Status), Rebuildable: a.SnapshotBlobID != nil && a.Status != exportartifact.StatusDeleted, RendererVersion: a.RendererVersion, Filename: a.Filename})
+			out = append(out, ExportArtifact{Id: a.ID, SourceRevisionId: a.SourceRevisionID, Status: ExportArtifactStatus(a.Status), Rebuildable: a.Rebuildable, RendererVersion: a.RendererVersion, Filename: a.Filename, DeletionTaskId: a.DeletionTaskID})
 		}
 		writeJSON(w, http.StatusOK, ExportArtifactList{Items: out})
 	})

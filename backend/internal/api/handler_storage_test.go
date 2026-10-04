@@ -154,10 +154,18 @@ func TestStorageAPIOwnershipSecretsAndAdminPolicy(t *testing.T) {
 func TestStorageAPITaskActionsFollowOrganizationRole(t *testing.T) {
 	s, client, u, p, _ := storageAPIServer(t)
 	ctx := context.Background()
+	upload, err := s.resourceSvc.UploadResources(ctx, u.ID, p.ID, []service.UploadedFile{{Path: "actions.txt", Filename: "actions.txt", Reader: strings.NewReader("old"), Size: 3, IdempotencyKey: "role-upload"}})
+	if err != nil || len(upload) != 1 || upload[0].Resource == nil {
+		t.Fatalf("upload fixture: %v %+v", err, upload)
+	}
+	preview, err := s.resourceSvc.PreviewSourceUpdate(ctx, u.ID, p.ID, upload[0].Resource.ID, service.UploadedFile{Reader: strings.NewReader("new"), Size: 3, IdempotencyKey: "role-preview"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	org := client.Organization.Create().SetName("storage-actions").SetSlug("storage-actions").SaveX(ctx)
 	member := client.OrgMembership.Create().SetOrganizationID(org.ID).SetUserID(u.ID).SetRole(service.OrgRoleMember).SaveX(ctx)
 	client.Project.UpdateOneID(p.ID).ClearOwnerUserID().SetOwnerOrgID(org.ID).ExecX(ctx)
-	task := client.StorageTask.Create().SetOperationID("actions-operation").SetIdempotencyKey("actions-idempotency").SetRequestHash("actions-hash").SetProjectID(p.ID).SetKind("source_update").SetStatus("needs_action").SetPhase("prepared").SaveX(ctx)
+	task := client.StorageTask.GetX(ctx, preview.TaskID)
 	for _, role := range []string{service.OrgRoleMember, service.OrgRoleAdmin, service.OrgRoleMember} {
 		client.OrgMembership.UpdateOneID(member.ID).SetRole(role).ExecX(ctx)
 		for _, list := range []bool{false, true} {
@@ -174,7 +182,7 @@ func TestStorageAPITaskActionsFollowOrganizationRole(t *testing.T) {
 			var response StorageTask
 			if list {
 				var tasks StorageTaskList
-				if err := json.Unmarshal(w.Body.Bytes(), &tasks); err != nil || len(tasks.Items) != 1 {
+				if err := json.Unmarshal(w.Body.Bytes(), &tasks); err != nil || len(tasks.Items) != 2 {
 					t.Fatalf("task list: %s, %v", w.Body.String(), err)
 				}
 				response = tasks.Items[0]
@@ -184,8 +192,8 @@ func TestStorageAPITaskActionsFollowOrganizationRole(t *testing.T) {
 			if role == service.OrgRoleMember && len(response.AllowedActions) != 0 {
 				t.Fatalf("member received write actions: %v", response.AllowedActions)
 			}
-			if role == service.OrgRoleAdmin && len(response.AllowedActions) != 3 {
-				t.Fatalf("admin missing cancel/retry/commit: %v", response.AllowedActions)
+			if role == service.OrgRoleAdmin && strings.Join(response.AllowedActions, ",") != "cancel,commit" {
+				t.Fatalf("admin missing valid prepared actions: %v", response.AllowedActions)
 			}
 		}
 	}

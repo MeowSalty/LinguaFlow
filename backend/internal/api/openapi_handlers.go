@@ -186,7 +186,7 @@ func (s *Server) ListProjectResources(w http.ResponseWriter, r *http.Request, _ 
 	s.requireAuth(http.HandlerFunc(s.handleListProjectResources)).ServeHTTP(w, r)
 }
 
-func (s *Server) UploadProjectResources(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+func (s *Server) UploadProjectResources(w http.ResponseWriter, r *http.Request, _ ProjectId, _ UploadProjectResourcesParams) {
 	s.requireAuth(http.HandlerFunc(s.handleUploadProjectResources)).ServeHTTP(w, r)
 }
 
