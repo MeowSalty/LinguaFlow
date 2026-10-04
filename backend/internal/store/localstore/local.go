@@ -308,7 +308,7 @@ func localError(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded), errors.Is(err, storage.ErrLimit), errors.Is(err, storage.ErrCorrupt):
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded), errors.Is(err, storage.ErrLimit), errors.Is(err, storage.ErrPayloadTooLarge), errors.Is(err, storage.ErrCorrupt):
 		return err
 	case errors.Is(err, os.ErrExist):
 		return storage.ErrExists

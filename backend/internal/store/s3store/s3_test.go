@@ -162,6 +162,8 @@ func TestErrorsAreRedactedAndWritesAreNeverRetried(t *testing.T) {
 		{"SignatureDoesNotMatch", 403, storage.ErrAuthRequired}, {"ExpiredToken", 400, storage.ErrAuthRequired},
 		{"SlowDown", 429, storage.ErrUnavailable}, {"InternalError", 500, storage.ErrUnavailable},
 		{"PreconditionFailed", 412, storage.ErrExists}, {"NotImplemented", 501, storage.ErrUnsupported},
+		{"EntityTooLarge", 413, storage.ErrPayloadTooLarge}, {"QuotaExceeded", 409, storage.ErrLimit},
+		{"InsufficientStorage", 507, storage.ErrLimit},
 	} {
 		t.Run(test.code, func(t *testing.T) {
 			var count atomic.Int32

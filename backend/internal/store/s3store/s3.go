@@ -128,7 +128,7 @@ func (s *Store) PutNew(ctx context.Context, key string, source io.Reader, size i
 		options.APIOptions = append(options.APIOptions, v4.SwapComputePayloadSHA256ForUnsignedPayloadMiddleware)
 	})
 	if err != nil {
-		if check := reader.Complete(); errors.Is(check, storage.ErrLimit) || errors.Is(check, context.Canceled) || errors.Is(check, context.DeadlineExceeded) {
+		if check := reader.Complete(); errors.Is(check, storage.ErrPayloadTooLarge) || errors.Is(check, context.Canceled) || errors.Is(check, context.DeadlineExceeded) {
 			return storage.Object{}, check
 		}
 		return storage.Object{}, mapError(err)
@@ -334,7 +334,9 @@ func mapError(err error) error {
 			return storage.ErrPermission
 		case "PreconditionFailed", "ConditionalRequestConflict":
 			return storage.ErrExists
-		case "EntityTooLarge", "QuotaExceeded", "InsufficientStorage":
+		case "EntityTooLarge":
+			return storage.ErrPayloadTooLarge
+		case "QuotaExceeded", "InsufficientStorage":
 			return storage.ErrLimit
 		case "BadDigest", "IncompleteBody":
 			return storage.ErrCorrupt
@@ -351,7 +353,9 @@ func mapError(err error) error {
 			return storage.ErrPermission
 		case http.StatusPreconditionFailed:
 			return storage.ErrExists
-		case http.StatusRequestEntityTooLarge, http.StatusInsufficientStorage:
+		case http.StatusRequestEntityTooLarge:
+			return storage.ErrPayloadTooLarge
+		case http.StatusInsufficientStorage:
 			return storage.ErrLimit
 		}
 		if response.Response != nil && response.Response.Response != nil {

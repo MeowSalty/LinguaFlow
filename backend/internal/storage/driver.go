@@ -9,15 +9,16 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("source_missing")
-	ErrCorrupt      = errors.New("source_corrupt")
-	ErrExists       = errors.New("storage_object_exists")
-	ErrUnavailable  = errors.New("storage_unavailable")
-	ErrPermission   = errors.New("storage_permission_denied")
-	ErrAuthRequired = errors.New("storage_auth_required")
-	ErrLimit        = errors.New("storage_quota_exceeded")
-	ErrInvalidKey   = errors.New("storage_invalid_key")
-	ErrUnsupported  = errors.New("storage_capability_unsupported")
+	ErrNotFound        = errors.New("source_missing")
+	ErrCorrupt         = errors.New("source_corrupt")
+	ErrExists          = errors.New("storage_object_exists")
+	ErrUnavailable     = errors.New("storage_unavailable")
+	ErrPermission      = errors.New("storage_permission_denied")
+	ErrAuthRequired    = errors.New("storage_auth_required")
+	ErrLimit           = errors.New("storage_quota_exceeded")
+	ErrPayloadTooLarge = errors.New("storage_payload_too_large")
+	ErrInvalidKey      = errors.New("storage_invalid_key")
+	ErrUnsupported     = errors.New("storage_capability_unsupported")
 )
 
 // Object 标识一个精确位置。Stat 返回的 Size 与 checksum 只是

@@ -46,7 +46,7 @@ type ExactReader struct {
 
 func NewExactReader(ctx context.Context, r io.Reader, size int64) (*ExactReader, error) {
 	if size < 0 || r == nil {
-		return nil, storage.ErrLimit
+		return nil, storage.ErrPayloadTooLarge
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (r *ExactReader) finish() error {
 	var extra [1]byte
 	n, err := io.ReadFull(r.r, extra[:])
 	if n > 0 {
-		r.err = storage.ErrLimit
+		r.err = storage.ErrPayloadTooLarge
 		return r.err
 	}
 	if !errors.Is(err, io.EOF) {
