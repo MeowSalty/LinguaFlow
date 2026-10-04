@@ -30,6 +30,27 @@ func (_u *SegmentRevisionUpdate) Where(ps ...predicate.SegmentRevision) *Segment
 	return _u
 }
 
+// SetSourceGeneration sets the "source_generation" field.
+func (_u *SegmentRevisionUpdate) SetSourceGeneration(v int64) *SegmentRevisionUpdate {
+	_u.mutation.ResetSourceGeneration()
+	_u.mutation.SetSourceGeneration(v)
+	return _u
+}
+
+// SetNillableSourceGeneration sets the "source_generation" field if the given value is not nil.
+func (_u *SegmentRevisionUpdate) SetNillableSourceGeneration(v *int64) *SegmentRevisionUpdate {
+	if v != nil {
+		_u.SetSourceGeneration(*v)
+	}
+	return _u
+}
+
+// AddSourceGeneration adds value to the "source_generation" field.
+func (_u *SegmentRevisionUpdate) AddSourceGeneration(v int64) *SegmentRevisionUpdate {
+	_u.mutation.AddSourceGeneration(v)
+	return _u
+}
+
 // SetSegmentID sets the "segment_id" field.
 func (_u *SegmentRevisionUpdate) SetSegmentID(v int) *SegmentRevisionUpdate {
 	_u.mutation.SetSegmentID(v)
@@ -317,6 +338,11 @@ func (_u *SegmentRevisionUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SegmentRevisionUpdate) check() error {
+	if v, ok := _u.mutation.SourceGeneration(); ok {
+		if err := segmentrevision.SourceGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "source_generation", err: fmt.Errorf(`ent: validator failed for field "SegmentRevision.source_generation": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SegmentID(); ok {
 		if err := segmentrevision.SegmentIDValidator(v); err != nil {
 			return &ValidationError{Name: "segment_id", err: fmt.Errorf(`ent: validator failed for field "SegmentRevision.segment_id": %w`, err)}
@@ -369,6 +395,12 @@ func (_u *SegmentRevisionUpdate) sqlSave(ctx context.Context) (_node int, err er
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.SourceGeneration(); ok {
+		_spec.SetField(segmentrevision.FieldSourceGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSourceGeneration(); ok {
+		_spec.AddField(segmentrevision.FieldSourceGeneration, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.ResourceID(); ok {
 		_spec.SetField(segmentrevision.FieldResourceID, field.TypeInt, value)
@@ -493,6 +525,27 @@ type SegmentRevisionUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *SegmentRevisionMutation
+}
+
+// SetSourceGeneration sets the "source_generation" field.
+func (_u *SegmentRevisionUpdateOne) SetSourceGeneration(v int64) *SegmentRevisionUpdateOne {
+	_u.mutation.ResetSourceGeneration()
+	_u.mutation.SetSourceGeneration(v)
+	return _u
+}
+
+// SetNillableSourceGeneration sets the "source_generation" field if the given value is not nil.
+func (_u *SegmentRevisionUpdateOne) SetNillableSourceGeneration(v *int64) *SegmentRevisionUpdateOne {
+	if v != nil {
+		_u.SetSourceGeneration(*v)
+	}
+	return _u
+}
+
+// AddSourceGeneration adds value to the "source_generation" field.
+func (_u *SegmentRevisionUpdateOne) AddSourceGeneration(v int64) *SegmentRevisionUpdateOne {
+	_u.mutation.AddSourceGeneration(v)
+	return _u
 }
 
 // SetSegmentID sets the "segment_id" field.
@@ -795,6 +848,11 @@ func (_u *SegmentRevisionUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SegmentRevisionUpdateOne) check() error {
+	if v, ok := _u.mutation.SourceGeneration(); ok {
+		if err := segmentrevision.SourceGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "source_generation", err: fmt.Errorf(`ent: validator failed for field "SegmentRevision.source_generation": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SegmentID(); ok {
 		if err := segmentrevision.SegmentIDValidator(v); err != nil {
 			return &ValidationError{Name: "segment_id", err: fmt.Errorf(`ent: validator failed for field "SegmentRevision.segment_id": %w`, err)}
@@ -864,6 +922,12 @@ func (_u *SegmentRevisionUpdateOne) sqlSave(ctx context.Context) (_node *Segment
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.SourceGeneration(); ok {
+		_spec.SetField(segmentrevision.FieldSourceGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSourceGeneration(); ok {
+		_spec.AddField(segmentrevision.FieldSourceGeneration, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.ResourceID(); ok {
 		_spec.SetField(segmentrevision.FieldResourceID, field.TypeInt, value)

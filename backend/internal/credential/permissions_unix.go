@@ -3,6 +3,7 @@
 package credential
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
@@ -18,7 +19,36 @@ func checkFilePermissions(f *os.File) error {
 	return nil
 }
 
-func restrictFile(path string) error { return os.Chmod(path, 0600) }
+func createPrivateTempFile(dir string) (*os.File, error) {
+	f, err := os.CreateTemp(dir, ".private-*")
+	if err != nil {
+		return nil, err
+	}
+	if err := f.Chmod(0600); err != nil {
+		return nil, errors.Join(err, f.Close(), os.Remove(f.Name()))
+	}
+	if err := checkFilePermissions(f); err != nil {
+		return nil, errors.Join(err, f.Close(), os.Remove(f.Name()))
+	}
+	return f, nil
+}
+
+func createPrivateDirectory(path string) (created bool, err error) {
+	if err := os.Mkdir(path, 0700); err != nil {
+		return false, err
+	}
+	if err := restrictDirectory(path); err != nil {
+		return true, errors.Join(err, os.Remove(path))
+	}
+	info, err := os.Lstat(path)
+	if err == nil && (!info.IsDir() || info.Mode().Perm() != 0700) {
+		err = fmt.Errorf("verify private directory %q: %w", path, os.ErrPermission)
+	}
+	if err != nil {
+		return true, errors.Join(err, os.Remove(path))
+	}
+	return true, nil
+}
 
 func restrictDirectory(path string) error { return os.Chmod(path, 0700) }
 

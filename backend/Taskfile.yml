@@ -21,6 +21,56 @@ vars:
   BACKEND_LDFLAGS: '{{default (printf "%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=%s" .BACKEND_LDFLAGS_EXTRA .VERSION .COMMIT) .BACKEND_LDFLAGS}}'
 
 tasks:
+  deps:tidy:
+    desc: 整理后端 Go 模块依赖
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go mod tidy
+
+  storage:backup:
+    desc: 独立存储备份工具（CLI_ARGS选择manifest/capture/restore-check；需 --offline）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate backup {{.CLI_ARGS}}
+
+  storage:inventory:
+    desc: 只读生成旧文件存储迁移清单（显式指定 --manifest）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate inventory {{.CLI_ARGS}}
+
+  storage:dry-run:
+    desc: 只读预演旧文件引用、摘要与定位核验
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate dry-run {{.CLI_ARGS}}
+
+  storage:apply:
+    desc: 停服备份后显式迁移旧文件元数据（需 --offline --backup-confirmed）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate apply {{.CLI_ARGS}}
+
+  storage:resume:
+    desc: 按持久清单恢复中断的旧文件元数据迁移
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate resume {{.CLI_ARGS}}
+
+  storage:rollback:
+    desc: 回滚尚未继续编辑或写入的旧文件迁移元数据（不回滚schema，不删除原件）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate rollback {{.CLI_ARGS}}
+
+  deps:add:
+    desc: 添加或更新显式指定的后端 Go 模块依赖
+    dir: '{{.TASKFILE_DIR}}'
+    requires:
+      vars: [CLI_ARGS]
+    cmds:
+      - go get {{.CLI_ARGS}}
+
   install:
     desc: 下载后端 Go 模块依赖
     dir: '{{.TASKFILE_DIR}}'
@@ -28,8 +78,45 @@ tasks:
       - go mod download
 
   dev:
-    desc: 启动后端开发服务器
+    desc: 启动后端开发服务器（自动生成并加载 .env；显式环境变量优先）
     dir: '{{.TASKFILE_DIR}}'
+    deps:
+      - dev:setup
+    cmds:
+      - task: dev:serve
+
+  dev:setup:
+    desc: 初始化 backend/.env（仅缺失时生成；含 JWT、凭据密钥与初始管理员密码）
+    dir: '{{.TASKFILE_DIR}}'
+    status:
+      - test -f .env
+    cmds:
+      - |
+        set -e
+        jwt=$(go run ./cmd/linguaflow secrets generate --stdout)
+        master=$(go run ./cmd/linguaflow secrets generate --stdout)
+        password=$(go run ./cmd/linguaflow secrets generate --stdout)
+        cat > .env <<EOF
+        # 由 task backend:dev:setup 生成，仅在文件缺失时创建；已存在时不会覆盖。
+        # 含真实密钥且已被 .gitignore 忽略，切勿提交或分享。
+        # 显式设置的同名环境变量优先于本文件。
+        LINGUAFLOW_JWT_SECRET=$jwt
+        LINGUAFLOW_CREDENTIALS_MASTER_KEY=$master
+
+        # 首次启动时初始化管理员，仅初始化阶段读取；实例已初始化后可删除。
+        LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
+        LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+        LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD=$password
+
+        # 常用可选变量（取消注释即生效）：
+        # LINGUAFLOW_LOG_LEVEL=debug
+        # LINGUAFLOW_PORT=8080
+        EOF
+        echo "已生成 backend/.env：初始管理员用户名 admin，密码等密钥见该文件。"
+
+  dev:serve:
+    dir: '{{.TASKFILE_DIR}}'
+    dotenv: ['.env']
     cmds:
       - go run ./cmd/linguaflow serve {{.CLI_ARGS}}
 
@@ -74,6 +161,12 @@ tasks:
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go test -race {{default "./..." .CLI_ARGS}}
+
+  test:storage:deployment:
+    desc: 显式真实存储部署验收（缺少环境时逐项标记未验收；只清理测试独立命名空间）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test -v -count=1 -timeout=10m -run TestStorageDeployment ./internal/service ./internal/store/s3store
 
   lint:
     desc: 执行后端静态检查

@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
@@ -24,9 +25,10 @@ import (
 const (
 	OperationTranslation  = "translation"
 	OperationGlossarySync = "glossary_sync"
+	OperationStorage      = "storage"
 )
 
-// OperationQueryService projects independent business entities without owning their lifecycle.
+// OperationQueryService 投影独立的业务实体，但不持有它们的生命周期。
 type OperationQueryService struct{ client *ent.Client }
 
 func NewOperationQueryService(client *ent.Client) *OperationQueryService {
@@ -46,22 +48,32 @@ type OperationRow struct {
 	TaskType    string
 	Job         *ent.Job
 	SyncTask    *ent.SyncTask
+	StorageTask *ent.StorageTask
 	ProjectName string
 }
 
 func (r OperationRow) ID() int {
+	if r.StorageTask != nil {
+		return r.StorageTask.ID
+	}
 	if r.Job != nil {
 		return r.Job.ID
 	}
 	return r.SyncTask.ID
 }
 func (r OperationRow) ProjectID() int {
+	if r.StorageTask != nil {
+		return r.StorageTask.ProjectID
+	}
 	if r.Job != nil {
 		return r.Job.ProjectID
 	}
 	return r.SyncTask.ProjectID
 }
 func (r OperationRow) UpdatedAt() time.Time {
+	if r.StorageTask != nil {
+		return r.StorageTask.UpdatedAt
+	}
 	if r.Job != nil {
 		return r.Job.UpdatedAt
 	}
@@ -77,12 +89,15 @@ type OperationCounts struct {
 	Running      int `json:"running"`
 	Paused       int `json:"paused"`
 	RecentFailed int `json:"recent_failed"`
+	WaitingRetry int `json:"waiting_retry"`
+	NeedsAction  int `json:"needs_action"`
 }
 type OperationsCountsSummary struct {
 	Total  OperationCounts `json:"total"`
 	ByType struct {
 		Translation  OperationCounts `json:"translation"`
 		GlossarySync OperationCounts `json:"glossary_sync"`
+		Storage      OperationCounts `json:"storage"`
 	} `json:"by_type"`
 	RecentFailedSince time.Time `json:"recent_failed_since"`
 	AsOf              time.Time `json:"as_of"`
@@ -96,7 +111,7 @@ type operationCursor struct {
 }
 
 func validateOperationScope(kind string, projectID int, trigger string) error {
-	if kind != "" && kind != OperationTranslation && kind != OperationGlossarySync {
+	if kind != "" && kind != OperationTranslation && kind != OperationGlossarySync && kind != OperationStorage {
 		return fmt.Errorf("%w: invalid task_type", ErrInvalidInput)
 	}
 	if trigger != "" && kind != OperationTranslation {
@@ -118,7 +133,7 @@ func operationFilterKey(opts OperationListOptions) string {
 		t := opts.UpdatedBefore.UTC()
 		opts.UpdatedBefore = &t
 	}
-	raw, _ := json.Marshal(opts) // All fields are JSON primitives or validated time values.
+	raw, _ := json.Marshal(opts) // 所有字段均为 JSON 基本类型或已校验的时间值。
 	hash := sha256.Sum256(raw)
 	return hex.EncodeToString(hash[:])
 }
@@ -137,15 +152,15 @@ func decodeOperationCursor(raw, filter string) (*operationCursor, error) {
 	if err := dec.Decode(&c); err != nil {
 		return nil, invalid
 	}
-	if dec.Decode(new(any)) != io.EOF || c.Version != 1 || c.Filter != filter || c.TaskID <= 0 || c.UpdatedAt.IsZero() || (c.TaskType != OperationTranslation && c.TaskType != OperationGlossarySync) {
+	if dec.Decode(new(any)) != io.EOF || c.Version != 1 || c.Filter != filter || c.TaskID <= 0 || c.UpdatedAt.IsZero() || (c.TaskType != OperationTranslation && c.TaskType != OperationGlossarySync && c.TaskType != OperationStorage) {
 		return nil, invalid
 	}
 	c.UpdatedAt = c.UpdatedAt.UTC()
 	return &c, nil
 }
 
-// Bare timestamp columns preserve indexes. Fractional PostgreSQL bounds round up
-// so a half-open interval keeps its meaning at the database's microsecond precision.
+// 裸时间戳列保留索引。PostgreSQL 的小数边界向上取整，
+// 使半开区间在数据库的微秒精度下仍保持其含义。
 func operationTimePredicate(op sql.Op, instant time.Time) func(*sql.Selector) {
 	return func(s *sql.Selector) {
 		bound := instant.UTC()
@@ -166,7 +181,9 @@ func operationQueryFilter(opts OperationListOptions, kind string, c *operationCu
 		} else {
 			switch opts.State {
 			case "", "active":
-				if kind == OperationGlossarySync {
+				if kind == OperationStorage {
+					s.Where(sql.In(s.C("status"), "pending", "running", "waiting_retry", "needs_action"))
+				} else if kind == OperationGlossarySync {
 					s.Where(sql.In(s.C("status"), "pending", "running"))
 				} else {
 					s.Where(sql.In(s.C("status"), "pending", "running", "paused"))
@@ -218,11 +235,27 @@ func (s *OperationQueryService) syncTasks(actor, projectID int) *ent.SyncTaskQue
 	return q
 }
 
+func (s *OperationQueryService) storageTasks(actor, projectID int) *ent.StorageTaskQuery {
+	q := s.client.StorageTask.Query().Where(func(selector *sql.Selector) {
+		projects := sql.Dialect(selector.Dialect()).Select(project.FieldID).From(sql.Table(project.Table))
+		readableProjectPredicate(actor)(projects)
+		selector.Where(sql.In(selector.C(storagetask.FieldProjectID), projects))
+	})
+	if projectID != 0 {
+		q.Where(storagetask.ProjectIDEQ(projectID))
+	}
+	return q
+}
+
 func (s *OperationQueryService) List(ctx context.Context, actor int, opts OperationListOptions) (*OperationPage, error) {
 	if err := validateOperationScope(opts.TaskType, opts.ProjectID, opts.TriggerType); err != nil {
 		return nil, err
 	}
-	if err := validateAccessibleJobOptions(opts.AccessibleJobListOptions); err != nil {
+	validation := opts.AccessibleJobListOptions
+	if validation.Status == "waiting_retry" || validation.Status == "needs_action" {
+		validation.Status = "pending"
+	}
+	if err := validateAccessibleJobOptions(validation); err != nil {
 		return nil, err
 	}
 	if opts.Limit == 0 {
@@ -239,7 +272,7 @@ func (s *OperationQueryService) List(ctx context.Context, actor int, opts Operat
 	}
 	rows := make([]OperationRow, 0, 2*(opts.Limit+1))
 	var precisionErr error
-	if opts.TaskType != OperationGlossarySync {
+	if opts.TaskType == "" || opts.TaskType == OperationTranslation {
 		found, err := s.jobs(actor, opts.ProjectID, opts.TriggerType).
 			Where(operationQueryFilter(opts, OperationTranslation, cursor, &precisionErr)).
 			Select(job.FieldID, job.FieldProjectID, job.FieldStatus, job.FieldTriggerType, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldProgressTotal, job.FieldProgressCompleted, job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt).
@@ -254,7 +287,7 @@ func (s *OperationQueryService) List(ctx context.Context, actor int, opts Operat
 			rows = append(rows, OperationRow{TaskType: OperationTranslation, Job: row})
 		}
 	}
-	if opts.TaskType != OperationTranslation {
+	if opts.TaskType == "" || opts.TaskType == OperationGlossarySync {
 		found, err := s.syncTasks(actor, opts.ProjectID).
 			Where(operationQueryFilter(opts, OperationGlossarySync, cursor, &precisionErr)).
 			Select(synctask.FieldID, synctask.FieldProjectID, synctask.FieldStatus, synctask.FieldProcessedSegments, synctask.FieldTotalSegments, synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldStartedAt).
@@ -267,6 +300,20 @@ func (s *OperationQueryService) List(ctx context.Context, actor int, opts Operat
 		}
 		for _, row := range found {
 			rows = append(rows, OperationRow{TaskType: OperationGlossarySync, SyncTask: row})
+		}
+	}
+	if opts.TaskType == "" || opts.TaskType == OperationStorage {
+		found, err := s.storageTasks(actor, opts.ProjectID).Where(operationQueryFilter(opts, OperationStorage, cursor, &precisionErr)).
+			Select(storagetask.FieldID, storagetask.FieldProjectID, storagetask.FieldKind, storagetask.FieldStatus, storagetask.FieldPhase, storagetask.FieldCleanupStatus, storagetask.FieldErrorCode, storagetask.FieldNextRetryAt, storagetask.FieldCreatedAt, storagetask.FieldUpdatedAt).
+			Order(ent.Desc(storagetask.FieldUpdatedAt), ent.Desc(storagetask.FieldID)).Limit(opts.Limit + 1).All(ctx)
+		if precisionErr != nil {
+			return nil, precisionErr
+		}
+		if err != nil {
+			return nil, fmt.Errorf("query storage tasks: %w", err)
+		}
+		for _, task := range found {
+			rows = append(rows, OperationRow{TaskType: OperationStorage, StorageTask: task})
 		}
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -327,7 +374,7 @@ func (s *OperationQueryService) summaryAt(ctx context.Context, actor int, opts O
 			since = timeutil.CeilMicrosecond(since)
 			until = timeutil.CeilMicrosecond(until)
 		}
-		q.Where(sql.Or(sql.In(q.C("status"), "pending", "running", "paused"), sql.And(sql.EQ(q.C("status"), "failed"), sql.GTE(q.C("updated_at"), since), sql.LT(q.C("updated_at"), until))))
+		q.Where(sql.Or(sql.In(q.C("status"), "pending", "running", "paused", "waiting_retry", "needs_action"), sql.And(sql.EQ(q.C("status"), "failed"), sql.GTE(q.C("updated_at"), since), sql.LT(q.C("updated_at"), until))))
 	}
 	type bucket struct {
 		Status string `json:"status"`
@@ -347,25 +394,36 @@ func (s *OperationQueryService) summaryAt(ctx context.Context, actor int, opts O
 				}
 			case "failed":
 				c.RecentFailed = r.Count
+			case "waiting_retry":
+				c.WaitingRetry = r.Count
+			case "needs_action":
+				c.NeedsAction = r.Count
 			}
 		}
 		return c
 	}
-	if opts.TaskType != OperationGlossarySync {
+	if opts.TaskType == "" || opts.TaskType == OperationTranslation {
 		var buckets []bucket
 		if err := s.jobs(actor, opts.ProjectID, opts.TriggerType).Where(filter).GroupBy(job.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
 			return nil, err
 		}
 		result.ByType.Translation = convert(buckets, false)
 	}
-	if opts.TaskType != OperationTranslation {
+	if opts.TaskType == "" || opts.TaskType == OperationGlossarySync {
 		var buckets []bucket
 		if err := s.syncTasks(actor, opts.ProjectID).Where(filter).GroupBy(synctask.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
 			return nil, err
 		}
 		result.ByType.GlossarySync = convert(buckets, true)
 	}
-	a, b := result.ByType.Translation, result.ByType.GlossarySync
-	result.Total = OperationCounts{a.Pending + b.Pending, a.Running + b.Running, a.Paused + b.Paused, a.RecentFailed + b.RecentFailed}
+	if opts.TaskType == "" || opts.TaskType == OperationStorage {
+		var buckets []bucket
+		if err := s.storageTasks(actor, opts.ProjectID).Where(filter).GroupBy(storagetask.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
+			return nil, err
+		}
+		result.ByType.Storage = convert(buckets, true)
+	}
+	a, b, c := result.ByType.Translation, result.ByType.GlossarySync, result.ByType.Storage
+	result.Total = OperationCounts{Pending: a.Pending + b.Pending + c.Pending, Running: a.Running + b.Running + c.Running, Paused: a.Paused + b.Paused, RecentFailed: a.RecentFailed + b.RecentFailed + c.RecentFailed, WaitingRetry: c.WaitingRetry, NeedsAction: c.NeedsAction}
 	return result, nil
 }

@@ -21,4 +21,7 @@
 # Go workspace file
 go.work
 
+# 本地开发密钥（task backend:dev:setup 生成，勿提交）
+.env
+
 # End of https://www.toptal.com/developers/gitignore/api/go

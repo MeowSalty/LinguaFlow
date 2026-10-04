@@ -18,6 +18,10 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldSourceRevisionID holds the string denoting the source_revision_id field in the database.
+	FieldSourceRevisionID = "source_revision_id"
+	// FieldSourceGeneration holds the string denoting the source_generation field in the database.
+	FieldSourceGeneration = "source_generation"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldSegmentIds holds the string denoting the segment_ids field in the database.
@@ -74,6 +78,8 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldSourceRevisionID,
+	FieldSourceGeneration,
 	FieldStatus,
 	FieldSegmentIds,
 	FieldSegmentCount,
@@ -115,6 +121,12 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// SourceRevisionIDValidator is a validator for the "source_revision_id" field. It is called by the builders before save.
+	SourceRevisionIDValidator func(int) error
+	// DefaultSourceGeneration holds the default value on creation for the "source_generation" field.
+	DefaultSourceGeneration int64
+	// SourceGenerationValidator is a validator for the "source_generation" field. It is called by the builders before save.
+	SourceGenerationValidator func(int64) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// DefaultSegmentIds holds the default value on creation for the "segment_ids" field.
@@ -153,6 +165,16 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// BySourceRevisionID orders the results by the source_revision_id field.
+func BySourceRevisionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceRevisionID, opts...).ToFunc()
+}
+
+// BySourceGeneration orders the results by the source_generation field.
+func BySourceGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceGeneration, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

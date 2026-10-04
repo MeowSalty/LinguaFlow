@@ -60,6 +60,9 @@ type Server struct {
 	statsSvc                     *service.StatsService
 	auditSvc                     *service.AuditService
 	resourceSvc                  *service.ResourceService
+	storageSvc                   *service.StorageService
+	storageConnections           *service.StorageConnectionService
+	storageRuntime               *storageRuntime
 	jobStore                     *filestore.LocalStore
 	dispatcher                   *worker.Dispatcher
 	resMutex                     *worker.ResourceMutex
@@ -138,6 +141,7 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 		if !initialized {
 			limiterPool.Shutdown()
 			s.httpClients.Shutdown()
+			s.closeStorageResources()
 		}
 	}()
 	policies, err := client.Backend.Query().Select(backendentity.FieldID, backendentity.FieldRateLimitPerMinute).All(context.Background())
@@ -182,6 +186,9 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	s.glossarySyncSvc = service.NewGlossarySyncService(client, s.glossarySvc, s.projectSvc, s.auditSvc, logger)
 	s.glossaryPruneSvc = service.NewGlossaryPruneService(client, s.projectSvc, s.backendSvc, s.glossarySvc, s.prunePromptTemplateSvc, limiterPool, logger, s.httpClients)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
+	if err := s.initStorage(context.Background(), keys); err != nil {
+		return nil, fmt.Errorf("initialize storage: %w", err)
+	}
 	previewRunner := worker.NewPreviewRunner(logger, client, limiterPool, s.httpClients)
 	previewRunner.SetCredentials(credentials, credentials)
 	revisionRunner := worker.NewRevisionPreviewRunner(logger, client, limiterPool, s.httpClients)
@@ -274,10 +281,11 @@ func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 	s.httpServer.BaseContext = func(net.Listener) context.Context { return runCtx }
 	s.runMu.Unlock()
 	defer cancel()
+	s.startStorage(runCtx)
 	serveErr := make(chan error, 1)
 
 	// 启动 Dispatcher（内部执行 Recover + WorkerPool）
-	if s.dispatcher != nil {
+	if s.dispatcher != nil && !s.storageMaintenance() {
 		go func() {
 			if err := s.dispatcher.Run(runCtx); err != nil && !errors.Is(err, context.Canceled) {
 				s.logger.Error("dispatcher stopped with error", "err", err)
@@ -335,7 +343,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			if s.httpClients != nil {
 				s.httpClients.Shutdown()
 			}
-			results := make(chan error, 3)
+			results := make(chan error, 4)
+			go func() { results <- s.waitStorage(cleanupCtx) }()
 			go func() {
 				if s.dispatcher != nil {
 					results <- s.dispatcher.Shutdown(cleanupCtx)
@@ -361,7 +370,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 					results <- nil
 				}
 			}()
-			for range 3 {
+			for range 4 {
 				select {
 				case err := <-results:
 					s.shutdownErr = errors.Join(s.shutdownErr, err)
@@ -371,6 +380,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 					return
 				}
 			}
+			s.closeStorageResources()
 			close(done)
 		}()
 	})

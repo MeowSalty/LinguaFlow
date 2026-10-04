@@ -23,13 +23,14 @@ const (
 	SegmentRevisionStatusRejected   = "rejected"
 )
 
-// SegmentRevision stores the before and after snapshots for a segment change.
+// SegmentRevision 保存分段变更前后的快照。
 type SegmentRevision struct {
 	ent.Schema
 }
 
 func (SegmentRevision) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int64("source_generation").Default(0).NonNegative(),
 		field.Int("segment_id").Positive(),
 		field.Int("resource_id").Positive(),
 		field.String("operation_id").NotEmpty(),

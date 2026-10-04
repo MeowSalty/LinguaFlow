@@ -7,16 +7,18 @@ package ziputil
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"path"
 )
 
 // MaxDecompressedEntrySize 是单个 ZIP 条目解压后的默认最大允许字节数。
 // 用于防御高压缩率 zip 炸弹：压缩流上限不能阻止解压后内存爆炸。
 // 仅在需要将条目完整读入内存（解析/翻译）时应用；
-// 原样直通的资产复制走 CopyEntryUnbounded，不受此限制。
+// 资产流式复制使用更大的有限上限，并计入整包累计解压预算。
 const MaxDecompressedEntrySize int64 = 200 << 20
 
 // ErrDecompressedSizeExceeded 在条目解压后字节数超过调用方指定的上限时返回。
@@ -31,6 +33,28 @@ var ErrDecompressedSizeExceeded = errors.New("ziputil: decompressed size exceeds
 //
 // 重要：接口检查必须在任何 io.LimitReader 包裹之前。
 func OpenZip(r io.Reader, maxCompressed int64) (*zip.Reader, error) {
+	return OpenZipContext(context.Background(), r, maxCompressed)
+}
+
+// OpenZipContext 保留随机访问能力，并强制执行每次操作的归档条目数、
+// 实际解压量与取消预算。
+func OpenZipContext(ctx context.Context, r io.Reader, maxCompressed int64) (*zip.Reader, error) {
+	archive, err := OpenArchiveContext(ctx, r, maxCompressed)
+	if err != nil {
+		return nil, err
+	}
+	return archive.Reader, nil
+}
+
+// OpenArchiveContext 还会暴露粘性的预算超限错误：解析器可以容忍可选条目
+// 缺失，但绝不能掩盖预算已耗尽的事实。
+func OpenArchiveContext(ctx context.Context, r io.Reader, maxCompressed int64) (*Archive, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if maxCompressed <= 0 || maxCompressed == int64(^uint64(0)>>1) {
+		return nil, ErrDecompressedSizeExceeded
+	}
 	// 零拷贝路径：先检查接口，避免 LimitReader 隐藏底层类型。
 	if seeker, ok := r.(io.Seeker); ok {
 		if ra, ok := r.(io.ReaderAt); ok {
@@ -44,16 +68,20 @@ func OpenZip(r io.Reader, maxCompressed int64) (*zip.Reader, error) {
 			if size > maxCompressed {
 				return nil, fmt.Errorf("ziputil: compressed size %d exceeds max %d", size, maxCompressed)
 			}
-			zr, err := zip.NewReader(ra, size)
+			bounded := contextReaderAt{ctx: ctx, reader: ra}
+			if err := preflightDirectory(bounded, size, LimitsFromContext(ctx).MaxEntries); err != nil {
+				return nil, err
+			}
+			zr, err := zip.NewReader(bounded, size)
 			if err != nil {
 				return nil, fmt.Errorf("ziputil: open zip: %w", err)
 			}
-			return zr, nil
+			return constrainArchive(ctx, zr)
 		}
 	}
 
 	// 回退：全量读取（带压缩上限）。
-	lr := io.LimitReader(r, maxCompressed+1)
+	lr := io.LimitReader(&contextReader{ctx: ctx, reader: r}, maxCompressed+1)
 	data, err := io.ReadAll(lr)
 	if err != nil {
 		return nil, fmt.Errorf("ziputil: read: %w", err)
@@ -61,11 +89,14 @@ func OpenZip(r io.Reader, maxCompressed int64) (*zip.Reader, error) {
 	if int64(len(data)) > maxCompressed {
 		return nil, fmt.Errorf("ziputil: compressed size exceeds max %d", maxCompressed)
 	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err := preflightDirectory(contextReaderAt{ctx: ctx, reader: bytes.NewReader(data)}, int64(len(data)), LimitsFromContext(ctx).MaxEntries); err != nil {
+		return nil, err
+	}
+	zr, err := zip.NewReader(contextReaderAt{ctx: ctx, reader: bytes.NewReader(data)}, int64(len(data)))
 	if err != nil {
 		return nil, fmt.Errorf("ziputil: open zip: %w", err)
 	}
-	return zr, nil
+	return constrainArchive(ctx, zr)
 }
 
 // ReadFile 打开单个 zip.File 并读取其解压内容，带 maxDecompressed 上限。
@@ -96,6 +127,9 @@ func ReadEntry(zr *zip.Reader, name string, maxDecompressed int64) ([]byte, erro
 
 // CopyEntry 将 src 条目流式复制到 zw，保留原始 FileHeader，带解压上限。
 func CopyEntry(zw *zip.Writer, src *zip.File, maxDecompressed int64) error {
+	if maxDecompressed < 0 || maxDecompressed == math.MaxInt64 {
+		return ErrDecompressedSizeExceeded
+	}
 	rc, err := src.Open()
 	if err != nil {
 		return fmt.Errorf("ziputil: open %q: %w", src.Name, err)
@@ -118,11 +152,9 @@ func CopyEntry(zw *zip.Writer, src *zip.File, maxDecompressed int64) error {
 	return nil
 }
 
-// CopyEntryUnbounded 将 src 条目流式复制到 zw，保留原始 FileHeader，不限制解压大小。
-//
-// 用于原样直通的资产（字体、图片、CSS、音频等）：这些条目不经解析、
-// 不进入内存，直接从压缩流拷到目标压缩流，因此不存在解压炸弹的内存风险。
-// 解压上限仅对需要全量缓冲的读取路径有意义。
+// CopyEntryUnbounded 为源码兼容而保留。它跳过较小的单条目内存限制，
+// 但仍强制有限的流上限；由 OpenZipContext 打开的读取器还共享
+// 操作的总解压预算。
 func CopyEntryUnbounded(zw *zip.Writer, src *zip.File) error {
 	rc, err := src.Open()
 	if err != nil {
@@ -135,8 +167,10 @@ func CopyEntryUnbounded(zw *zip.Writer, src *zip.File) error {
 		return fmt.Errorf("ziputil: create header %q: %w", src.Name, err)
 	}
 
-	if _, err := io.Copy(w, rc); err != nil {
+	if n, err := io.Copy(w, io.LimitReader(rc, DefaultLimits().MaxExpandedBytes+1)); err != nil {
 		return fmt.Errorf("ziputil: copy %q: %w", src.Name, err)
+	} else if n > DefaultLimits().MaxExpandedBytes {
+		return ErrDecompressedSizeExceeded
 	}
 	return nil
 }
@@ -159,6 +193,9 @@ func WriteEntry(zw *zip.Writer, name string, data []byte, method uint16) error {
 
 // ReadBounded 读取 r 全部内容，限制不超过 max 字节，超出返回错误。
 func ReadBounded(r io.Reader, max int64) ([]byte, error) {
+	if max < 0 || max == math.MaxInt64 {
+		return nil, ErrDecompressedSizeExceeded
+	}
 	lr := io.LimitReader(r, max+1)
 	data, err := io.ReadAll(lr)
 	if err != nil {

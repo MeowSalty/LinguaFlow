@@ -16,6 +16,11 @@ func (Project) Mixin() []ent.Mixin {
 
 func (Project) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("storage_space_id").Optional().Nillable().Positive(),
+		field.Int64("storage_generation").Default(0).NonNegative(),
+		field.Int64("output_generation").Default(0).NonNegative(),
+		field.String("storage_state").Default("active"),
+		field.Int("storage_migration_task_id").Optional().Nillable(),
 		field.String("name").NotEmpty(),
 		field.Int("owner_user_id").Optional().Nillable().Positive(),
 		field.Int("owner_org_id").Optional().Nillable().Positive(),

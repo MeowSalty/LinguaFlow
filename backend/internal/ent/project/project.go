@@ -18,6 +18,16 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldStorageSpaceID holds the string denoting the storage_space_id field in the database.
+	FieldStorageSpaceID = "storage_space_id"
+	// FieldStorageGeneration holds the string denoting the storage_generation field in the database.
+	FieldStorageGeneration = "storage_generation"
+	// FieldOutputGeneration holds the string denoting the output_generation field in the database.
+	FieldOutputGeneration = "output_generation"
+	// FieldStorageState holds the string denoting the storage_state field in the database.
+	FieldStorageState = "storage_state"
+	// FieldStorageMigrationTaskID holds the string denoting the storage_migration_task_id field in the database.
+	FieldStorageMigrationTaskID = "storage_migration_task_id"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
 	// FieldOwnerUserID holds the string denoting the owner_user_id field in the database.
@@ -122,6 +132,11 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldStorageSpaceID,
+	FieldStorageGeneration,
+	FieldOutputGeneration,
+	FieldStorageState,
+	FieldStorageMigrationTaskID,
 	FieldName,
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
@@ -148,6 +163,18 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// StorageSpaceIDValidator is a validator for the "storage_space_id" field. It is called by the builders before save.
+	StorageSpaceIDValidator func(int) error
+	// DefaultStorageGeneration holds the default value on creation for the "storage_generation" field.
+	DefaultStorageGeneration int64
+	// StorageGenerationValidator is a validator for the "storage_generation" field. It is called by the builders before save.
+	StorageGenerationValidator func(int64) error
+	// DefaultOutputGeneration holds the default value on creation for the "output_generation" field.
+	DefaultOutputGeneration int64
+	// OutputGenerationValidator is a validator for the "output_generation" field. It is called by the builders before save.
+	OutputGenerationValidator func(int64) error
+	// DefaultStorageState holds the default value on creation for the "storage_state" field.
+	DefaultStorageState string
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
 	// OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
@@ -180,6 +207,31 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByStorageSpaceID orders the results by the storage_space_id field.
+func ByStorageSpaceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStorageSpaceID, opts...).ToFunc()
+}
+
+// ByStorageGeneration orders the results by the storage_generation field.
+func ByStorageGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStorageGeneration, opts...).ToFunc()
+}
+
+// ByOutputGeneration orders the results by the output_generation field.
+func ByOutputGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOutputGeneration, opts...).ToFunc()
+}
+
+// ByStorageState orders the results by the storage_state field.
+func ByStorageState(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStorageState, opts...).ToFunc()
+}
+
+// ByStorageMigrationTaskID orders the results by the storage_migration_task_id field.
+func ByStorageMigrationTaskID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStorageMigrationTaskID, opts...).ToFunc()
 }
 
 // ByName orders the results by the name field.

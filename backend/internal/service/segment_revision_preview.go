@@ -150,8 +150,8 @@ func NewRevisionPreviewService(
 	}
 }
 
-// RunRevisionPreview validates the segment and execution plan, runs one revise
-// round against an in-memory resource snapshot, and issues an apply token.
+// RunRevisionPreview 校验分段与执行计划，基于内存中的资源快照执行一轮
+// 修订（revise），并签发 apply 令牌。
 func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input RevisionPreviewInput) (*RevisionPreviewOutput, error) {
 	select {
 	case s.semaphore <- struct{}{}:
@@ -290,19 +290,21 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 	// 清空 review_comment，因此除状态外还必须确认译文发生了实质变化。
 	if result.TargetText != "" && result.Status != "failed" && sha256Hex(result.TargetText) != sha256Hex(*segRow.TargetText) {
 		claims := previewtoken.ApplyClaims{
-			ActorUserID:     input.ActorUserID,
-			ProjectID:       input.ProjectID,
-			ResourceID:      input.ResourceID,
-			SegmentID:       input.SegmentID,
-			ExecutionPlanID: input.ExecutionPlanID,
-			Kind:            previewtoken.KindRevision,
-			SourceHash:      sha256Hex(segRow.SourceText),
-			PreviewSource:   segRow.SourceText,
-			TargetHash:      sha256Hex(result.TargetText),
-			BaselineSource:  segRow.SourceText,
-			BaselineTarget:  segRow.TargetText,
-			BaselineStatus:  string(segRow.Status),
-			FinalIssues:     result.QualityIssues,
+			ActorUserID:      input.ActorUserID,
+			ProjectID:        input.ProjectID,
+			ResourceID:       input.ResourceID,
+			SourceRevisionID: resRow.CurrentSourceRevisionID,
+			SourceGeneration: resRow.SourceGeneration,
+			SegmentID:        input.SegmentID,
+			ExecutionPlanID:  input.ExecutionPlanID,
+			Kind:             previewtoken.KindRevision,
+			SourceHash:       sha256Hex(segRow.SourceText),
+			PreviewSource:    segRow.SourceText,
+			TargetHash:       sha256Hex(result.TargetText),
+			BaselineSource:   segRow.SourceText,
+			BaselineTarget:   segRow.TargetText,
+			BaselineStatus:   string(segRow.Status),
+			FinalIssues:      result.QualityIssues,
 			// 声明已修复的 code 集合与喂给 LLM 的修复目标同源（均为请求交集收窄
 			// 后的 Revise.IssueCodes），apply 改写文本时按同一契约剔除命中 pending。
 			ResolvedCodes: revisionRound.Revise.IssueCodes,

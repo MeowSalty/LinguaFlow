@@ -31,11 +31,13 @@ var (
 )
 
 type ProjectService struct {
-	client *ent.Client
-	users  *UserService
+	client  *ent.Client
+	users   *UserService
+	storage *StorageService
 }
 
 type CreateProjectInput struct {
+	StorageSpaceID  *int
 	Name            string
 	OwnerUserID     *int
 	OwnerOrgID      *int
@@ -62,27 +64,37 @@ func (s *ProjectService) CreateProject(ctx context.Context, actorUserID int, inp
 	if err != nil {
 		return nil, err
 	}
-	create := s.client.Project.Create().
-		SetName(normalized.Name).
-		SetConfig(cloneMap(normalized.Config)).
-		SetGlossaryEnabled(normalized.GlossaryEnabled != nil && *normalized.GlossaryEnabled).
-		SetSourceLang(normalized.SourceLang).
-		SetTargetLang(normalized.TargetLang)
-	if normalized.OwnerUserID != nil {
-		create.SetOwnerUserID(*normalized.OwnerUserID)
-	}
-	created, err := create.Save(ctx)
+	var created *ent.Project
+	err = withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+		create := client.Project.Create().
+			SetName(normalized.Name).
+			SetConfig(cloneMap(normalized.Config)).
+			SetGlossaryEnabled(normalized.GlossaryEnabled != nil && *normalized.GlossaryEnabled).
+			SetSourceLang(normalized.SourceLang).
+			SetTargetLang(normalized.TargetLang).
+			SetOwnerUserID(actorUserID)
+		if s.storage != nil {
+			id, err := s.storage.selectSpace(ctx, client, &ent.Project{OwnerUserID: normalized.OwnerUserID, StorageState: "active"}, input.StorageSpaceID)
+			if err != nil {
+				return err
+			}
+			create.SetStorageSpaceID(id)
+		}
+		var err error
+		created, err = create.Save(ctx)
+		return err
+	})
 	if err != nil {
 		if ent.IsConstraintError(err) {
 			return nil, ErrInvalidInput
 		}
 		return nil, err
 	}
-	return created, nil
+	return created.Unwrap(), nil
 }
 
 // CreateOrgProject 创建组织项目。
-// Authorization and audit share the organization's serialized mutation transaction.
+// 鉴权与审计共享该组织串行化的变更事务。
 func (s *ProjectService) CreateOrgProject(ctx context.Context, actorUserID, orgID int, input CreateProjectInput) (*ent.Project, error) {
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
@@ -101,6 +113,13 @@ func (s *ProjectService) CreateOrgProject(ctx context.Context, actorUserID, orgI
 			SetSourceLang(normalizeLangOrDefault(input.SourceLang, "auto")).
 			SetTargetLang(normalizeLangOrDefault(input.TargetLang, "zh"))
 		var err error
+		if s.storage != nil {
+			id, e := s.storage.selectSpace(ctx, client, &ent.Project{OwnerOrgID: &orgID}, input.StorageSpaceID)
+			if e != nil {
+				return e
+			}
+			create.SetStorageSpaceID(id)
+		}
 		created, err = create.Save(ctx)
 		if err != nil {
 			return err
@@ -121,9 +140,9 @@ func (s *ProjectService) ListProjectsForUser(ctx context.Context, actorUserID in
 		All(ctx)
 }
 
-// readableProjectPredicate mirrors requireProjectAccess for reads, including
-// its personal-owner precedence when malformed data has both owners set.
-// Keep the permission inside discovery queries so filtering precedes pagination.
+// readableProjectPredicate 为读取镜像 requireProjectAccess，包括
+// 在畸形数据同时设置两种 owner 时个人属主的优先。
+// 将权限保留在发现类查询内，使过滤先于分页。
 func readableProjectPredicate(actorUserID int) predicate.Project {
 	return project.Or(
 		project.OwnerUserIDEQ(actorUserID),
@@ -138,7 +157,7 @@ func readableProjectPredicate(actorUserID int) predicate.Project {
 }
 
 // ListOrgProjects 列出指定组织的所有项目。
-// Personal ownership takes precedence even when a malformed row also carries orgID.
+// 即使畸形行同时带有 orgID，个人所有权仍优先。
 func (s *ProjectService) ListOrgProjects(ctx context.Context, actorUserID, orgID int) ([]*ent.Project, error) {
 	if _, err := requireOrganizationMembership(ctx, s.client, actorUserID, orgID, OrgRoleMember); err != nil {
 		return nil, err
@@ -162,6 +181,7 @@ func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, project
 		}
 		glossaryEnabled := normalized.GlossaryEnabled
 		updated, err = client.Project.UpdateOneID(projectID).
+			AddOutputGeneration(1).
 			SetName(normalized.Name).
 			SetConfig(cloneMap(normalized.Config)).
 			SetGlossaryEnabled(glossaryEnabled != nil && *glossaryEnabled).
@@ -189,6 +209,12 @@ func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, project
 func (s *ProjectService) DeleteProject(ctx context.Context, actorUserID, projectID int) ([]string, error) {
 	var paths []string
 	err := s.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, current *ent.Project) error {
+		if current.StorageState != "active" {
+			return ErrStorageMaintenance
+		}
+		if err := storageProjectGate(ctx, client, projectID, current.StorageGeneration); err != nil {
+			return err
+		}
 		if EffectiveProjectOrgID(current) != nil {
 			if err := recordAuditEvent(ctx, client, AuditEvent{ActorUserID: actorUserID, ProjectID: &projectID,
 				Action: "project.delete", ResourceType: "project", ResourceID: projectID}); err != nil {
@@ -196,7 +222,7 @@ func (s *ProjectService) DeleteProject(ctx context.Context, actorUserID, project
 			}
 		}
 		var err error
-		paths, err = cascadeDeleteProject(ctx, client, current)
+		paths, err = cascadeDeleteProject(ctx, client, current, s.storage)
 		return err
 	})
 	return paths, err
@@ -208,6 +234,11 @@ func (s *ProjectService) mutateProject(ctx context.Context, actorUserID, project
 		return err
 	}
 	apply := func(client *ent.Client) error {
+		// Serialize all project mutations before reading state or permissions.
+		// Organization serialization alone does not fence migration cutover.
+		if _, err := client.Project.Update().Where(project.IDEQ(projectID)).SetUpdatedAt(time.Now().UTC()).Save(ctx); err != nil {
+			return err
+		}
 		transactionService := NewProjectService(client, NewUserService(client, nil))
 		row, err := transactionService.requireProjectAccess(ctx, actorUserID, projectID, true)
 		if err != nil {
@@ -218,18 +249,12 @@ func (s *ProjectService) mutateProject(ctx context.Context, actorUserID, project
 	if orgID := EffectiveProjectOrgID(current); orgID != nil {
 		return withOrganizationMutation(ctx, s.client, *orgID, apply)
 	}
-	return withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
-		// Acquire SQLite's writer lock before the authorization read snapshot.
-		if _, err := client.Project.Update().Where(project.IDEQ(projectID)).SetUpdatedAt(time.Now().UTC()).Save(ctx); err != nil {
-			return err
-		}
-		return apply(client)
-	})
+	return withOrganizationTransaction(ctx, s.client, apply)
 }
 
 // cascadeDeleteProject 在事务中执行项目级联删除，返回需要清理的物理文件存储路径列表。
 // 删除顺序遵循依赖关系：叶子节点优先，最后删除项目本身。
-func cascadeDeleteProject(ctx context.Context, tx *ent.Client, current *ent.Project) (storagePaths []string, err error) {
+func cascadeDeleteProject(ctx context.Context, tx *ent.Client, current *ent.Project, storageService *StorageService) (storagePaths []string, err error) {
 	projectID := current.ID
 	// 1. 收集需要删除文件的 Resource 存储路径
 	resources, err := tx.Resource.Query().
@@ -239,8 +264,8 @@ func cascadeDeleteProject(ctx context.Context, tx *ent.Client, current *ent.Proj
 		return nil, fmt.Errorf("query project resources: %w", err)
 	}
 	for _, r := range resources {
-		if r.StoragePath != "" {
-			storagePaths = append(storagePaths, r.StoragePath)
+		if err = registerResourceDeletion(ctx, tx, projectID, r.ID, storageService); err != nil {
+			return nil, err
 		}
 	}
 
@@ -339,7 +364,7 @@ func cascadeDeleteProject(ctx context.Context, tx *ent.Client, current *ent.Proj
 		return nil, fmt.Errorf("delete tm entries: %w", err)
 	}
 
-	// Preserve valid organization history; deleted personal projects never become personal history.
+	// 保留有效的组织历史；已删除的个人项目绝不转为个人历史。
 	activities := tx.ActivityLog.Update().Where(activitylog.HasProjectWith(project.IDEQ(projectID)),
 		activitylog.VisibilityScopeEQ(activitylog.VisibilityScopeProject))
 	usage := tx.UsageRecord.Update().Where(usagerecord.HasProjectWith(project.IDEQ(projectID)),

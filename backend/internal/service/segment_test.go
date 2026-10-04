@@ -157,36 +157,36 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 	project := createTestProject(t, client, "seg-qa-proj", user.ID)
 	res := createTestResource(t, client, project.ID, "chapters/a.txt")
 
-	// 0: NULL quality_issues
+	// 0：quality_issues 为 NULL
 	createTestSegment(t, client, res.ID, 0, "src0", nil)
-	// 1: empty array []
+	// 1：空数组 []
 	createTestSegment(t, client, res.ID, 1, "src1", []qa.QualityIssue{})
-	// 2: warning + untranslated
+	// 2：warning 级 + untranslated
 	createTestSegment(t, client, res.ID, 2, "src2", []qa.QualityIssue{
 		{SegmentIndex: 2, Severity: qa.SeverityWarning, Code: "untranslated", Message: "not translated"},
 	})
-	// 3: error + length_ratio
+	// 3：error 级 + length_ratio
 	createTestSegment(t, client, res.ID, 3, "src3", []qa.QualityIssue{
 		{SegmentIndex: 3, Severity: qa.SeverityError, Code: "length_ratio", Message: "too long"},
 	})
-	// 4: warning + duplicate AND error + untranslated (two issues)
+	// 4：warning 级 duplicate 与 error 级 untranslated（两条 issue）
 	createTestSegment(t, client, res.ID, 4, "src4", []qa.QualityIssue{
 		{SegmentIndex: 4, Severity: qa.SeverityWarning, Code: "duplicate", Message: "dup"},
 		{SegmentIndex: 4, Severity: qa.SeverityError, Code: "untranslated", Message: "empty"},
 	})
-	// 5: warning + source_residual
+	// 5：warning 级 + source_residual
 	createTestSegment(t, client, res.ID, 5, "src5", []qa.QualityIssue{
 		{SegmentIndex: 5, Severity: qa.SeverityWarning, Code: "source_residual", Message: "residual"},
 	})
-	// 6: warning + calque
+	// 6：warning 级 + calque
 	createTestSegment(t, client, res.ID, 6, "src6", []qa.QualityIssue{
 		{SegmentIndex: 6, Severity: qa.SeverityWarning, Code: "calque", Message: "calque"},
 	})
-	// 7: warning + term_fidelity
+	// 7：warning 级 + term_fidelity
 	createTestSegment(t, client, res.ID, 7, "src7", []qa.QualityIssue{
 		{SegmentIndex: 7, Severity: qa.SeverityWarning, Code: "term_fidelity", Message: "term"},
 	})
-	// 8: warning + naturalness
+	// 8：warning 级 + naturalness
 	createTestSegment(t, client, res.ID, 8, "src8", []qa.QualityIssue{
 		{SegmentIndex: 8, Severity: qa.SeverityWarning, Code: "naturalness", Message: "awkward"},
 	})
@@ -217,7 +217,7 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "has", Limit: 50}, []int{2, 3, 4, 5, 6, 7, 8})
 	})
 	t.Run("none", func(t *testing.T) {
-		// NULL and [] both count as none
+		// NULL 与 [] 都算作“无问题”
 		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "none", Limit: 50}, []int{0, 1})
 	})
 	t.Run("severity_warning", func(t *testing.T) {
@@ -248,9 +248,9 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 		assertIndexes(t, ResourceSegmentListOptions{QualityCode: "naturalness", Limit: 50}, []int{8})
 	})
 	t.Run("severity_and_code_independent_exists", func(t *testing.T) {
-		// segment 4 has (warning, duplicate) and (error, untranslated) on different issues.
-		// Independent EXISTS: matches severity=error AND code=duplicate.
-		// Same-issue AND would match none.
+		// 分段 4 在两条不同 issue 上分别为 (warning, duplicate) 和 (error, untranslated)。
+		// 独立 EXISTS：可同时匹配 severity=error 与 code=duplicate。
+		// 若按同一条 issue 求 AND，则一条都匹配不到。
 		assertIndexes(t, ResourceSegmentListOptions{
 			QualitySeverity: "error",
 			QualityCode:     "duplicate",
@@ -372,13 +372,13 @@ func TestListResourceSegmentsQualityFilterWithGroupKey(t *testing.T) {
 	metaA := `{"epub_file":"ch1.xhtml"}`
 	metaB := `{"epub_file":"ch2.xhtml"}`
 
-	// ch1: has issues
+	// ch1：有问题
 	createTestSegmentWithMeta(t, client, res.ID, 0, "a0", metaA, []qa.QualityIssue{
 		{SegmentIndex: 0, Severity: qa.SeverityError, Code: "untranslated", Message: "x"},
 	})
-	// ch1: no issues
+	// ch1：无问题
 	createTestSegmentWithMeta(t, client, res.ID, 1, "a1", metaA, nil)
-	// ch2: has issues (should be excluded by group_key)
+	// ch2：有问题（应被 group_key 排除）
 	createTestSegmentWithMeta(t, client, res.ID, 2, "b0", metaB, []qa.QualityIssue{
 		{SegmentIndex: 2, Severity: qa.SeverityWarning, Code: "duplicate", Message: "y"},
 	})
@@ -432,11 +432,8 @@ func createTestSegment(t *testing.T, client *ent.Client, resourceID, index int, 
 	return row
 }
 
-// TestUpdateResourceSegmentRegression 覆盖 UpdateResourceSegment 各字段组合，
-// 重点防回归同时传 source_text 与 target_text 的场景：原实现会在同一 mutation
-// 上对 target_text 同时 Clear + Set，PostgreSQL 报 "multiple assignments to
-// same column target_text" (SQLSTATE 42601)，API 返回 500。
-// SQLite 容忍重复赋值，故本测试用于锁定修复后的业务语义不退化。
+// TestUpdateResourceSegmentRegression 确保把 source 字段当作完整请求提交会被拒绝，
+// 而仅编辑 target 时会保留已解析的 source。
 func TestUpdateResourceSegmentRegression(t *testing.T) {
 	strPtr := func(s string) *string { return &s }
 
@@ -468,39 +465,22 @@ func TestUpdateResourceSegmentRegression(t *testing.T) {
 			SourceText: strPtr("Hi there"),
 			TargetText: strPtr("你好啊"),
 		})
-		if err != nil {
-			t.Fatalf("UpdateResourceSegment with both source+target: %v", err)
+		if !errors.Is(err, ErrSourceReadOnly) || updated != nil {
+			t.Fatalf("source mutation result=%v err=%v", updated, err)
 		}
-		if updated.SourceText != "Hi there" {
-			t.Fatalf("source_text=%q want %q", updated.SourceText, "Hi there")
-		}
-		if updated.TargetText == nil || *updated.TargetText != "你好啊" {
-			t.Fatalf("target_text=%v want %q", updated.TargetText, "你好啊")
-		}
-		if updated.Status != SegmentStatusEdited {
-			t.Fatalf("status=%q want %q", updated.Status, SegmentStatusEdited)
-		}
-		if updated.Edges.ReviewedBy == nil || updated.Edges.ReviewedBy.ID != user.ID {
-			t.Fatalf("reviewed_by=%v want %d", updated.Edges.ReviewedBy, user.ID)
+		unchanged := svc.client.Segment.GetX(ctx, seg.ID)
+		if unchanged.SourceText != "Hello" || *unchanged.TargetText != "你好" || unchanged.Status != SegmentStatusApproved {
+			t.Fatal("rejected source edit changed the segment")
 		}
 	})
 
-	t.Run("source_only_clears_target_and_reviewer", func(t *testing.T) {
+	t.Run("source_only_is_rejected", func(t *testing.T) {
 		svc, ctx, user, project, res, seg := setup(t)
 		updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 			SourceText: strPtr("New source"),
 		})
-		if err != nil {
-			t.Fatalf("UpdateResourceSegment source-only: %v", err)
-		}
-		if updated.TargetText != nil {
-			t.Fatalf("target_text=%v want nil (cleared)", updated.TargetText)
-		}
-		if updated.Edges.ReviewedBy != nil {
-			t.Fatalf("reviewed_by=%v want nil (cleared)", updated.Edges.ReviewedBy)
-		}
-		if updated.Status != SegmentStatusPending {
-			t.Fatalf("status=%q want %q", updated.Status, SegmentStatusPending)
+		if !errors.Is(err, ErrSourceReadOnly) || updated != nil {
+			t.Fatalf("source mutation result=%v err=%v", updated, err)
 		}
 	})
 
@@ -700,9 +680,8 @@ func TestUpdateResourceSegmentQAReplacesOldIssues(t *testing.T) {
 	}
 }
 
-// TestUpdateResourceSegmentSourceOnlyClearsIssues 验证仅改 source 时旧译文与旧 issues 一起清空。
-// 场景：sourceChanged && !targetChanged → 无译文不跑 QA，旧 issues 直接清空。
-func TestUpdateResourceSegmentSourceOnlyClearsIssues(t *testing.T) {
+// 被拒绝的 source 编辑会保留译文与质检 issue。
+func TestUpdateResourceSegmentSourceOnlyPreservesIssues(t *testing.T) {
 	strPtr := func(s string) *string { return &s }
 	client := testClient(t)
 	ctx := context.Background()
@@ -720,14 +699,12 @@ func TestUpdateResourceSegmentSourceOnlyClearsIssues(t *testing.T) {
 	updated, err := svc.UpdateResourceSegment(ctx, user.ID, project.ID, res.ID, seg.ID, ResourceSegmentUpdateInput{
 		SourceText: strPtr("4 dogs"),
 	})
-	if err != nil {
-		t.Fatalf("UpdateResourceSegment: %v", err)
+	if !errors.Is(err, ErrSourceReadOnly) || updated != nil {
+		t.Fatalf("source mutation result=%v err=%v", updated, err)
 	}
-	if updated.TargetText != nil {
-		t.Fatalf("expected target cleared on source-only change, got %v", updated.TargetText)
-	}
-	if len(updated.QualityIssues) > 0 {
-		t.Fatalf("expected quality_issues cleared on source-only change, got %v", updated.QualityIssues)
+	unchanged := client.Segment.GetX(ctx, seg.ID)
+	if unchanged.SourceText != seg.SourceText || *unchanged.TargetText != *seg.TargetText || len(unchanged.QualityIssues) != 1 {
+		t.Fatal("rejected source edit lost translation or QA")
 	}
 }
 
@@ -758,9 +735,7 @@ func TestUpdateResourceSegmentCommentOnlyKeepsIssues(t *testing.T) {
 	}
 }
 
-// TestUpdateResourceSegmentSourceAndTargetUsesNewSource 验证同时变更时 QA 用新 source + 新 target。
-// 场景：源由"3 cats"改为"4 dogs"（含数字 4），译文"三只狗"无阿拉伯数字 → 用新源跑出 number_mismatch。
-func TestUpdateResourceSegmentSourceAndTargetUsesNewSource(t *testing.T) {
+func TestUpdateResourceSegmentSourceAndTargetRejected(t *testing.T) {
 	strPtr := func(s string) *string { return &s }
 	client := testClient(t)
 	ctx := context.Background()
@@ -774,11 +749,8 @@ func TestUpdateResourceSegmentSourceAndTargetUsesNewSource(t *testing.T) {
 		SourceText: strPtr("4 dogs"),
 		TargetText: strPtr("三只狗"),
 	})
-	if err != nil {
-		t.Fatalf("UpdateResourceSegment: %v", err)
-	}
-	if !hasIssueCode(updated.QualityIssues, qa.CheckNumberMismatch) {
-		t.Fatalf("expected number_mismatch using new source, got %v", updated.QualityIssues)
+	if !errors.Is(err, ErrSourceReadOnly) || updated != nil {
+		t.Fatalf("source mutation result=%v err=%v", updated, err)
 	}
 }
 
@@ -843,7 +815,7 @@ func TestListResourceSegmentsQualityFilterDismissed(t *testing.T) {
 	project := createTestProject(t, client, "seg-qa-dismiss-proj", user.ID)
 	res := createTestResource(t, client, project.ID, "chapters/dismiss.txt")
 
-	// 0: NULL quality_issues
+	// 0：quality_issues 为 NULL
 	createTestSegment(t, client, res.ID, 0, "src0", nil)
 	// 1: 单条 pending issue（disposition 显式为 pending）
 	createTestSegment(t, client, res.ID, 1, "src1", []qa.QualityIssue{
@@ -1444,7 +1416,7 @@ func TestListResourceSegmentsSearch(t *testing.T) {
 	project := createTestProject(t, client, "seg-search-proj", user.ID)
 	res := createTestResource(t, client, project.ID, "chapters/search.txt")
 
-	// index → source / target
+	// 各行字段：index → source / target
 	rows := []struct {
 		index  int
 		source string
@@ -1453,7 +1425,7 @@ func TestListResourceSegmentsSearch(t *testing.T) {
 		{0, "Alpha cat", strPtr("第一批")},
 		{1, "beta dog", strPtr("ALPHA 狗")},     // target 大写（大小写敏感时不命中 alpha）
 		{2, "alphabet soup", strPtr("字母汤")},    // source 含 "alpha" 但非整词
-		{3, "CAT and cat", nil},                // nil target
+		{3, "CAT and cat", nil},                // target 为 nil
 		{4, "犬", strPtr("alpha 猫")},            // target 小写 alpha
 		{5, "nothing here", strPtr("无命中")},     // 完全不命中
 		{6, "ALPHA force", strPtr("ALPHA 队")},  // 全大写

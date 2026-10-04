@@ -51,6 +51,48 @@ func (_c *ResourceCreate) SetNillableUpdatedAt(v *time.Time) *ResourceCreate {
 	return _c
 }
 
+// SetCurrentSourceRevisionID sets the "current_source_revision_id" field.
+func (_c *ResourceCreate) SetCurrentSourceRevisionID(v int) *ResourceCreate {
+	_c.mutation.SetCurrentSourceRevisionID(v)
+	return _c
+}
+
+// SetNillableCurrentSourceRevisionID sets the "current_source_revision_id" field if the given value is not nil.
+func (_c *ResourceCreate) SetNillableCurrentSourceRevisionID(v *int) *ResourceCreate {
+	if v != nil {
+		_c.SetCurrentSourceRevisionID(*v)
+	}
+	return _c
+}
+
+// SetSourceGeneration sets the "source_generation" field.
+func (_c *ResourceCreate) SetSourceGeneration(v int64) *ResourceCreate {
+	_c.mutation.SetSourceGeneration(v)
+	return _c
+}
+
+// SetNillableSourceGeneration sets the "source_generation" field if the given value is not nil.
+func (_c *ResourceCreate) SetNillableSourceGeneration(v *int64) *ResourceCreate {
+	if v != nil {
+		_c.SetSourceGeneration(*v)
+	}
+	return _c
+}
+
+// SetTranslationGeneration sets the "translation_generation" field.
+func (_c *ResourceCreate) SetTranslationGeneration(v int64) *ResourceCreate {
+	_c.mutation.SetTranslationGeneration(v)
+	return _c
+}
+
+// SetNillableTranslationGeneration sets the "translation_generation" field if the given value is not nil.
+func (_c *ResourceCreate) SetNillableTranslationGeneration(v *int64) *ResourceCreate {
+	if v != nil {
+		_c.SetTranslationGeneration(*v)
+	}
+	return _c
+}
+
 // SetPath sets the "path" field.
 func (_c *ResourceCreate) SetPath(v string) *ResourceCreate {
 	_c.mutation.SetPath(v)
@@ -175,6 +217,14 @@ func (_c *ResourceCreate) defaults() {
 		v := resource.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.SourceGeneration(); !ok {
+		v := resource.DefaultSourceGeneration
+		_c.mutation.SetSourceGeneration(v)
+	}
+	if _, ok := _c.mutation.TranslationGeneration(); !ok {
+		v := resource.DefaultTranslationGeneration
+		_c.mutation.SetTranslationGeneration(v)
+	}
 	if _, ok := _c.mutation.TotalSegments(); !ok {
 		v := resource.DefaultTotalSegments
 		_c.mutation.SetTotalSegments(v)
@@ -188,6 +238,27 @@ func (_c *ResourceCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Resource.updated_at"`)}
+	}
+	if v, ok := _c.mutation.CurrentSourceRevisionID(); ok {
+		if err := resource.CurrentSourceRevisionIDValidator(v); err != nil {
+			return &ValidationError{Name: "current_source_revision_id", err: fmt.Errorf(`ent: validator failed for field "Resource.current_source_revision_id": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SourceGeneration(); !ok {
+		return &ValidationError{Name: "source_generation", err: errors.New(`ent: missing required field "Resource.source_generation"`)}
+	}
+	if v, ok := _c.mutation.SourceGeneration(); ok {
+		if err := resource.SourceGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "source_generation", err: fmt.Errorf(`ent: validator failed for field "Resource.source_generation": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.TranslationGeneration(); !ok {
+		return &ValidationError{Name: "translation_generation", err: errors.New(`ent: missing required field "Resource.translation_generation"`)}
+	}
+	if v, ok := _c.mutation.TranslationGeneration(); ok {
+		if err := resource.TranslationGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "translation_generation", err: fmt.Errorf(`ent: validator failed for field "Resource.translation_generation": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Path(); !ok {
 		return &ValidationError{Name: "path", err: errors.New(`ent: missing required field "Resource.path"`)}
@@ -259,6 +330,18 @@ func (_c *ResourceCreate) createSpec() (*Resource, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(resource.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.CurrentSourceRevisionID(); ok {
+		_spec.SetField(resource.FieldCurrentSourceRevisionID, field.TypeInt, value)
+		_node.CurrentSourceRevisionID = &value
+	}
+	if value, ok := _c.mutation.SourceGeneration(); ok {
+		_spec.SetField(resource.FieldSourceGeneration, field.TypeInt64, value)
+		_node.SourceGeneration = value
+	}
+	if value, ok := _c.mutation.TranslationGeneration(); ok {
+		_spec.SetField(resource.FieldTranslationGeneration, field.TypeInt64, value)
+		_node.TranslationGeneration = value
 	}
 	if value, ok := _c.mutation.Path(); ok {
 		_spec.SetField(resource.FieldPath, field.TypeString, value)

@@ -20,6 +20,8 @@ type SegmentRevision struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
+	// SourceGeneration holds the value of the "source_generation" field.
+	SourceGeneration int64 `json:"source_generation,omitempty"`
 	// SegmentID holds the value of the "segment_id" field.
 	SegmentID int `json:"segment_id,omitempty"`
 	// ResourceID holds the value of the "resource_id" field.
@@ -81,7 +83,7 @@ func (*SegmentRevision) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case segmentrevision.FieldBeforeIssues, segmentrevision.FieldAfterIssues:
 			values[i] = new([]byte)
-		case segmentrevision.FieldID, segmentrevision.FieldSegmentID, segmentrevision.FieldResourceID, segmentrevision.FieldBeforeReviewerID, segmentrevision.FieldAfterReviewerID, segmentrevision.FieldActorID:
+		case segmentrevision.FieldID, segmentrevision.FieldSourceGeneration, segmentrevision.FieldSegmentID, segmentrevision.FieldResourceID, segmentrevision.FieldBeforeReviewerID, segmentrevision.FieldAfterReviewerID, segmentrevision.FieldActorID:
 			values[i] = new(sql.NullInt64)
 		case segmentrevision.FieldOperationID, segmentrevision.FieldKind, segmentrevision.FieldBeforeTarget, segmentrevision.FieldAfterTarget, segmentrevision.FieldBeforeStatus, segmentrevision.FieldAfterStatus:
 			values[i] = new(sql.NullString)
@@ -108,6 +110,12 @@ func (_m *SegmentRevision) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int(value.Int64)
+		case segmentrevision.FieldSourceGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field source_generation", values[i])
+			} else if value.Valid {
+				_m.SourceGeneration = value.Int64
+			}
 		case segmentrevision.FieldSegmentID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field segment_id", values[i])
@@ -241,6 +249,9 @@ func (_m *SegmentRevision) String() string {
 	var builder strings.Builder
 	builder.WriteString("SegmentRevision(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("source_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SourceGeneration))
+	builder.WriteString(", ")
 	builder.WriteString("segment_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SegmentID))
 	builder.WriteString(", ")

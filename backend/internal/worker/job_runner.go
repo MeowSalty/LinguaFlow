@@ -458,6 +458,10 @@ func (r *JobRunner) processJobResource(
 	stations []*pipeline.Station,
 ) error {
 	job := exec.Job
+	if err := service.ValidateJobResourceSource(ctx, r.client, item); err != nil {
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+		return nil
+	}
 
 	if err := r.jobs.MarkJobResourceRunning(ctx, job.ID, item.ID); err != nil {
 		// 条件更新未命中：资源已被并发取消/置终态，静默跳过。
@@ -682,7 +686,7 @@ func (r *JobRunner) processJobResource(
 				}
 			}
 			if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
-				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
+				if err := r.persistDuplicateSourceDivergence(ctx, res.ID, item.SourceGeneration); err != nil {
 					_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 					return nil
 				}
@@ -773,23 +777,28 @@ func (r *JobRunner) processJobResource(
 						segStatus = service.SegmentStatusRejected
 					}
 
-					update := r.client.Segment.UpdateOneID(dbID).
-						SetSourceText(firstNonEmpty(ts.SourceText, " ")).
-						SetTargetText(ts.TargetText).
-						SetStatus(segStatus)
-					if autoApprove {
-						update.ClearReviewComment()
-					}
-					// --- 写入 QA 结果（if/else 二选一，避免 ent mutation
-					// 对同一列既 Clear 又 Set 导致 PostgreSQL 42601 重复赋值）---
-					// 不对账：新译文导致指纹基本全变，旧裁决不跨文本存活；
-					// 若未来引入同译文手动重算，须接入 qa.ReconcileIssues。
-					if len(segIssues) > 0 {
-						update.SetQualityIssues(segIssues)
-					} else {
-						update.ClearQualityIssues()
-					}
-					if err := update.Exec(ctx); err != nil {
+					persistErr := service.WithResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+						update := client.Segment.UpdateOneID(dbID).
+							SetTargetText(ts.TargetText).
+							SetStatus(segStatus)
+						if autoApprove {
+							update.ClearReviewComment()
+						}
+						// --- 写入 QA 结果（if/else 二选一，避免 ent mutation
+						// 对同一列既 Clear 又 Set 导致 PostgreSQL 42601 重复赋值）---
+						// 不对账：新译文导致指纹基本全变，旧裁决不跨文本存活；
+						// 若未来引入同译文手动重算，须接入 qa.ReconcileIssues。
+						if len(segIssues) > 0 {
+							update.SetQualityIssues(segIssues)
+						} else {
+							update.ClearQualityIssues()
+						}
+						return update.Exec(ctx)
+					})
+					if err := persistErr; err != nil {
+						if errors.Is(err, service.ErrSourceRevisionConflict) {
+							return err
+						}
 						// 取消/超时交由 round_executor 的 ctx 检查接管，不归类重试。
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							continue
@@ -832,14 +841,20 @@ func (r *JobRunner) processJobResource(
 					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
 					// 不对账：新译文导致指纹基本全变，旧裁决不跨文本存活；
 					// 若未来引入同译文手动重算，须接入 qa.ReconcileIssues。
-					update := r.client.Segment.UpdateOneID(dbID).
-						SetTargetText(ts.TargetText)
-					if len(ts.Issues) > 0 {
-						update.SetQualityIssues(ts.Issues)
-					} else {
-						update.ClearQualityIssues()
-					}
-					if err := update.Exec(ctx); err != nil {
+					persistErr := service.WithResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+						update := client.Segment.UpdateOneID(dbID).
+							SetTargetText(ts.TargetText)
+						if len(ts.Issues) > 0 {
+							update.SetQualityIssues(ts.Issues)
+						} else {
+							update.ClearQualityIssues()
+						}
+						return update.Exec(ctx)
+					})
+					if err := persistErr; err != nil {
+						if errors.Is(err, service.ErrSourceRevisionConflict) {
+							return err
+						}
 						// 取消/超时交由 round_executor 的 ctx 检查接管，不归类重试。
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							continue
@@ -868,13 +883,19 @@ func (r *JobRunner) processJobResource(
 					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
 					// 不对账：adjudicate 不产生新 issue，只是标记已有的
 					// （applyVerdicts 写 dismissed）；新译文场景下指纹全变，无需对账。
-					update := r.client.Segment.UpdateOneID(dbID)
-					if len(ts.Issues) > 0 {
-						update.SetQualityIssues(ts.Issues)
-					} else {
-						update.ClearQualityIssues()
-					}
-					if err := update.Exec(ctx); err != nil {
+					persistErr := service.WithResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+						update := client.Segment.UpdateOneID(dbID)
+						if len(ts.Issues) > 0 {
+							update.SetQualityIssues(ts.Issues)
+						} else {
+							update.ClearQualityIssues()
+						}
+						return update.Exec(ctx)
+					})
+					if err := persistErr; err != nil {
+						if errors.Is(err, service.ErrSourceRevisionConflict) {
+							return err
+						}
 						// 取消/超时交由 round_executor 的 ctx 检查接管，不归类重试。
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							continue
@@ -928,8 +949,16 @@ func (r *JobRunner) processJobResource(
 					if !ok {
 						continue
 					}
-					updated, err := persistSemanticQASegmentIssues(batchCtx, r.client, row, ts.TargetText, ts.Issues)
+					var updated int
+					err := service.WithResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+						var err error
+						updated, err = persistSemanticQASegmentIssues(batchCtx, client, row, ts.TargetText, ts.Issues)
+						return err
+					})
 					if err != nil {
+						if errors.Is(err, service.ErrSourceRevisionConflict) {
+							return err
+						}
 						// 取消/超时交由 round_executor 的 ctx 检查接管，不计入统计。
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							continue
@@ -1008,8 +1037,16 @@ func (r *JobRunner) processJobResource(
 						continue
 					}
 					fresh := qa.IssuesFor(ts.Index, allIssues)
-					updated, err := persistReviseSegmentResult(batchCtx, r.client, row, baseline, ts.TargetText, fresh, reviseCodes, qaRan)
+					var updated int
+					err := service.WithResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+						var err error
+						updated, err = persistReviseSegmentResult(batchCtx, client, row, baseline, ts.TargetText, fresh, reviseCodes, qaRan)
+						return err
+					})
 					if err != nil {
+						if errors.Is(err, service.ErrSourceRevisionConflict) {
+							return err
+						}
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							continue
 						}
@@ -1031,7 +1068,7 @@ func (r *JobRunner) processJobResource(
 			}
 		}
 
-		roundIdx := roundIdx // capture for closure
+		roundIdx := roundIdx // 为闭包捕获当前轮次值
 		// 所有轮次统一用 SegmentFilter 限定任务级段落范围；
 		// adjudicate handler 的 BuildBatches 在已过滤 doc 上按 status∈{translated,edited}
 		// 且含可裁决 issue 进一步筛选，无需清空共享 doc 的 Status/Issues。
@@ -1061,7 +1098,7 @@ func (r *JobRunner) processJobResource(
 			// 轮末无需强制落盘兜底。
 			engine.AccumulateResolved(resolvedByMode, round.Mode, result.Resolved)
 			if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
-				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
+				if err := r.persistDuplicateSourceDivergence(ctx, res.ID, item.SourceGeneration); err != nil {
 					roundErr = err
 				}
 			}
@@ -1405,7 +1442,15 @@ func buildQACheckInputs(batchResult pipeline.BatchResult) []qa.CheckInput {
 
 // persistDuplicateSourceDivergence 在最后一个翻译轮次后执行全文同文异译检查。
 // 仅合并 quality_issues，不改写译文或审核状态。
-func (r *JobRunner) persistDuplicateSourceDivergence(ctx context.Context, resourceID int) error {
+func (r *JobRunner) persistDuplicateSourceDivergence(ctx context.Context, resourceID int, expectedSource ...int64) error {
+	res, err := r.client.Resource.Get(ctx, resourceID)
+	if err != nil {
+		return err
+	}
+	generation := res.SourceGeneration
+	if len(expectedSource) != 0 {
+		generation = expectedSource[0]
+	}
 	_, rows, err := r.loadSegments(ctx, resourceID, nil)
 	if err != nil {
 		return fmt.Errorf("load segments for duplicate source QA: %w", err)
@@ -1441,7 +1486,9 @@ func (r *JobRunner) persistDuplicateSourceDivergence(ctx context.Context, resour
 		// 已剔除旧的同 code issues，对账会从 row.QualityIssues 找回同指纹裁决；
 		// 保留的非该 code 旧 issues 与自身对账是幂等的，因此安全。
 		merged = qa.ReconcileIssues(merged, row.QualityIssues)
-		if err := r.client.Segment.UpdateOneID(row.ID).SetQualityIssues(merged).Exec(ctx); err != nil {
+		if err := service.WithResourceTranslation(ctx, r.client, resourceID, generation, func(client *ent.Client) error {
+			return client.Segment.UpdateOneID(row.ID).SetQualityIssues(merged).Exec(ctx)
+		}); err != nil {
 			return fmt.Errorf("persist duplicate source QA for segment %d: %w", row.ID, err)
 		}
 	}

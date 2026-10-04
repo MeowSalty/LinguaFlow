@@ -17,6 +17,9 @@ func (Resource) Mixin() []ent.Mixin {
 
 func (Resource) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("current_source_revision_id").Optional().Nillable().Positive(),
+		field.Int64("source_generation").Default(0).NonNegative(),
+		field.Int64("translation_generation").Default(0).NonNegative(),
 		field.String("path").NotEmpty().
 			Comment("项目内规范化资源相对路径，如 ui/common.json"),
 		field.String("format").NotEmpty().

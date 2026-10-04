@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -77,6 +78,33 @@ func assertP4ResponseSchema(t *testing.T, path string, response *httptest.Respon
 	schema := spec.Paths.Find(path).Get.Responses.Status(200).Value.Content["application/json"].Schema.Value
 	if err := schema.VisitJSON(value); err != nil {
 		t.Fatalf("%s response violates OpenAPI: %v\n%s", path, err, response.Body.String())
+	}
+}
+
+func TestStorageOperationHTTPProjection(t *testing.T) {
+	s, c, u := jobQueryTestServer(t)
+	p := jobQueryProject(t, c, u.ID)
+	c.StorageTask.Create().SetOperationID("operation-storage").SetIdempotencyKey("key").SetRequestHash("hash").SetProjectID(p.ID).SetActorID(u.ID).
+		SetKind("repair").SetStatus(storagetask.StatusNeedsAction).SetPhase("verify").SetCleanupStatus(storagetask.CleanupStatusBlocked).SetErrorCode("storage_auth_required").SetInput(map[string]any{"auth": "private-secret"}).SaveX(context.Background())
+	token := authTestToken(t, u, time.Now().Add(time.Hour), []byte(authTestSecret))
+	w := jobQueryRequest(s.newRouter(), "/api/v1/operations?task_type=storage&status=needs_action", token)
+	assertP4ResponseSchema(t, "/operations", w)
+	page := jobQueryDecode[OperationListResponse](t, w)
+	if len(page.Items) != 1 {
+		t.Fatalf("items=%+v", page)
+	}
+	item, err := page.Items[0].AsStorageOperation()
+	if err != nil || item.TaskType != "storage" || item.Status != "needs_action" || item.Phase != "verify" || item.CleanupStatus != "blocked" || item.StartedAt != nil {
+		t.Fatalf("item=%+v err=%v", item, err)
+	}
+	if strings.Contains(w.Body.String(), "private-secret") || strings.Contains(w.Body.String(), `"input"`) {
+		t.Fatal("storage secrets leaked")
+	}
+	w = jobQueryRequest(s.newRouter(), "/api/v1/operations/summary?task_type=storage", token)
+	assertP4ResponseSchema(t, "/operations/summary", w)
+	counts := jobQueryDecode[OperationsSummaryResponse](t, w)
+	if counts.ByType.Storage.NeedsAction != 1 || counts.Total.NeedsAction != 1 {
+		t.Fatalf("summary=%+v", counts)
 	}
 }
 func TestOperationsHTTPValidationAndAuthentication(t *testing.T) {

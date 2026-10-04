@@ -67,7 +67,7 @@ func syncResourceIDs(rows []*ent.Segment) []int {
 	return ids
 }
 
-// SubmitSyncTask commits the immutable work list before the dispatcher is notified.
+// SubmitSyncTask 在通知派发器之前提交不可变的工作清单。
 func (s *GlossarySyncService) SubmitSyncTask(ctx context.Context, actorUserID, projectID, entryID int, input GlossarySyncExecuteInput) (*SyncTaskInfo, error) {
 	if actorUserID <= 0 || projectID <= 0 || entryID <= 0 || input.OldTarget == "" || input.NewTarget == "" {
 		return nil, ErrInvalidInput
@@ -160,8 +160,8 @@ func (s *GlossarySyncService) CancelSyncTask(ctx context.Context, actorUserID, p
 	}
 	var task *ent.SyncTask
 	err = s.projects.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, _ *ent.Project) error {
-		// This UPDATE and each batch's first UPDATE compete for the same task row.
-		// SQLite acquires the writer lock; PostgreSQL serializes the row update.
+		// 这条 UPDATE 与每个批次的首条 UPDATE 竞争同一任务行。
+		// SQLite 获取写锁；PostgreSQL 串行化该行更新。
 		_, err := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.ProjectIDEQ(projectID),
 			synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).
 			SetStatus(SyncTaskStatusCancelled).SetCancelledAt(timeutil.NowUTC()).Save(ctx)
@@ -180,8 +180,8 @@ func (s *GlossarySyncService) CancelSyncTask(ctx context.Context, actorUserID, p
 	return task, err
 }
 
-// decodeSyncCheckpoint validates progress independently of the number of rows
-// still present: deleted work-list entries remain positions that must be skipped.
+// decodeSyncCheckpoint 独立于仍存在的行数校验进度：已删除的工作清单条目
+// 仍会作为必须跳过的位置保留。
 func decodeSyncCheckpoint(task *ent.SyncTask) ([]int, []int, *GlossarySyncResult, error) {
 	var ids, resources []int
 	if err := json.Unmarshal([]byte(task.SegmentIds), &ids); err != nil {
@@ -246,8 +246,8 @@ func encodeSyncResult(result *GlossarySyncResult) (string, error) {
 	return string(data), err
 }
 
-// prepareSyncTask is called while holding a task-row write lock. It never
-// guesses how much a legacy running task committed before the process stopped.
+// prepareSyncTask 在持有任务行写锁时被调用。它绝不
+// 猜测遗留 running 任务在进程停止前已提交了多少。
 func prepareSyncTask(ctx context.Context, client *ent.Client, task *ent.SyncTask) (*ent.SyncTask, error) {
 	if task.CheckpointVersion == 0 && task.Status == SyncTaskStatusPending && task.ProcessedSegments == 0 && task.NextSegmentIndex == 0 && task.Result == "" && task.StartedAt == nil && task.CancelledAt == nil {
 		var ids []int
@@ -285,8 +285,8 @@ func prepareSyncTask(ctx context.Context, client *ent.Client, task *ent.SyncTask
 	return task, nil
 }
 
-// PrepareRecovery runs before this runner consumes any queue element. Terminal
-// history is untouched. The operation is idempotent and uses bounded DB pages.
+// PrepareRecovery 在本 runner 消费任何队列元素之前运行。终态
+// 历史不受影响。该操作幂等，并使用有界的数据库分页。
 func (s *GlossarySyncService) PrepareRecovery(ctx context.Context) error {
 	last := 0
 	for {
@@ -301,8 +301,8 @@ func (s *GlossarySyncService) PrepareRecovery(ctx context.Context) error {
 		for _, snapshot := range rows {
 			id := snapshot.ID
 			err := withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
-				// Recovery runs before execution. Preserve timestamps for already
-				// initialized pending rows so repeated startup migration is inert.
+				// Recovery 在执行之前运行。保留已初始化 pending 行的
+				// 时间戳，使重复的启动迁移不产生副作用。
 				count, err := client.SyncTask.Update().Where(synctask.IDEQ(id), synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).AddProcessedSegments(0).SetUpdatedAt(snapshot.UpdatedAt).Save(ctx)
 				if err != nil || count == 0 {
 					return err
@@ -360,11 +360,11 @@ func (s *GlossarySyncService) RecoverPendingJobs(ctx context.Context) ([]int, er
 
 func (s *GlossarySyncService) ReconcileJob(context.Context, int) error { return nil }
 
-// CleanupExpiredTasks is kept for old callers. Creation age is not an execution deadline.
+// CleanupExpiredTasks 为旧调用方保留。创建时间年龄不是执行截止期限。
 func (s *GlossarySyncService) CleanupExpiredTasks(context.Context) error { return nil }
 
-// ExecuteSyncTask owns the pending -> running claim. Duplicate delivery and
-// terminal queue elements are harmless; shutdown preserves a resumable checkpoint.
+// ExecuteSyncTask 负责 pending -> running 的抢占。重复投递与
+// 终态队列元素均无害；关闭时保留可恢复的检查点。
 func (s *GlossarySyncService) ExecuteSyncTask(ctx context.Context, taskID int) error {
 	claimed := false
 	err := withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
@@ -418,8 +418,8 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 	done := false
 	err := withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
 		done = false
-		// First statement takes the write lock before any snapshot read. A
-		// committed cancellation therefore prevents every later segment write.
+		// 首条语句在任何快照读取之前获取写锁。因此已提交的
+		// 取消会阻止其后所有段落写入。
 		count, err := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.StatusEQ(SyncTaskStatusRunning)).AddProcessedSegments(0).Save(ctx)
 		if err != nil {
 			return err
@@ -467,9 +467,14 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 			return err
 		}
 		byResource := make(map[int]*ent.Resource, len(resources))
+		sort.Slice(resources, func(i, j int) bool { return resources[i].ID < resources[j].ID })
 		for _, row := range resources {
+			if err := GuardSourceGeneration(ctx, client, row.ID, row.SourceGeneration); err != nil {
+				return err
+			}
 			byResource[row.ID] = row
 		}
+		advanced := make(map[int]bool, len(resources))
 		for _, id := range batchIDs {
 			row := byID[id]
 			if row == nil || row.ResourceID == nil || byResource[*row.ResourceID] == nil {
@@ -499,8 +504,14 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 				skip()
 				continue
 			}
-			// Guard against concurrent manual edits between the read and UPDATE,
-			// including a resource move or resetting the translation to pending.
+			if !advanced[res.ID] {
+				if err := AdvanceTranslationGeneration(ctx, client, res.ID, res.SourceGeneration); err != nil {
+					return err
+				}
+				advanced[res.ID] = true
+			}
+			// 防止读取与 UPDATE 之间的并发手动编辑，
+			// 包括资源迁移或将译文重置为 pending。
 			updated, err := client.Segment.Update().Where(segment.IDEQ(row.ID), segment.ResourceIDEQ(res.ID),
 				segment.SourceTextEQ(row.SourceText), segment.TargetTextEQ(*row.TargetText), segment.StatusEQ(row.Status)).
 				SetTargetText(newText).SetStatus(SegmentStatusEdited).ClearReviewedBy().ClearReviewComment().Save(ctx)
@@ -554,8 +565,8 @@ func syncSegmentMatches(row *ent.Segment, entry *ent.GlossaryEntry) bool {
 	return strings.Contains(strings.ToLower(row.SourceText), strings.ToLower(entry.Source))
 }
 
-// FailSyncTask does not turn shutdown or a persisted terminal state into failure.
-// Both runner validation failures and execution failures use this single guard.
+// FailSyncTask 不会把关闭或已持久化的终态变成失败。
+// runner 的校验失败与执行失败共用这同一道防护。
 func (s *GlossarySyncService) FailSyncTask(ctx context.Context, taskID int, cause error) error {
 	if cause == nil {
 		return nil
