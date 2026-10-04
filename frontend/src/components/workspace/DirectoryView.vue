@@ -12,6 +12,7 @@ type Resource = ApiSchemas['Resource']
 
 const props = defineProps<{
   /** 当前目录的子目录列表 */
+  manifestWritable?: boolean
   directories: DirectoryChild[]
   /** 当前目录的资源列表 */
   resourceItems: DirectoryChild[]
@@ -33,9 +34,9 @@ const emit = defineEmits<{
   /** 打开资源段落（跳转段落编辑） */
   openSegments: [resource: Resource]
   /** 替换资源 */
-  replace: [resource: Resource]
+  sourceUpdate: [resource: Resource]
   /** 增量更新资源 */
-  incrementalUpdate: [resource: Resource]
+  storage: [resource: Resource]
   /** 下载资源 */
   download: [resource: Resource]
   /** 下载翻译后的资源 */
@@ -144,6 +145,7 @@ const currentDirectorySelectionAriaLabel = computed(() =>
       v-for="item in resourceItems"
       :key="item.path"
       :resource="item.resource!"
+      :manifest-writable="manifestWritable"
       :replacing="replacingResourceIds.includes(item.resource!.id)"
       :incremental-updating="incrementalUpdatingIds.includes(item.resource!.id)"
       :downloading="downloadingKeys.includes(`resource:${item.resource!.id}`)"
@@ -151,8 +153,8 @@ const currentDirectorySelectionAriaLabel = computed(() =>
       :deleting="deletingResourceIds.includes(item.resource!.id)"
       :selected="selectedIdSet.has(item.resource!.id)"
       @open-segments="(r) => emit('openSegments', r)"
-      @replace="(r) => emit('replace', r)"
-      @incremental-update="(r) => emit('incrementalUpdate', r)"
+      @source-update="(r) => emit('sourceUpdate', r)"
+      @storage="(r) => emit('storage', r)"
       @download="(r) => emit('download', r)"
       @download-translated="(r) => emit('downloadTranslated', r)"
       @delete="(r) => emit('delete', r)"
