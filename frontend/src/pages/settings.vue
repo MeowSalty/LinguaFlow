@@ -10,6 +10,7 @@ const tabs = computed(() => [
   { path: '/settings/profile', label: t('workbench.settings.profile') },
   { path: '/settings/security', label: t('workbench.settings.security') },
   { path: '/settings/preferences', label: t('workbench.settings.preferences') },
+  { path: '/settings/storage', label: t('storage.title') },
   ...(!service.isLocal ? [{ path: '/settings/team', label: t('workbench.settings.team') }] : []),
 ])
 </script>

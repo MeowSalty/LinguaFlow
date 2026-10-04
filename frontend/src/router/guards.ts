@@ -35,6 +35,8 @@ const ROUTE_TITLES: Record<string, string> = {
   '/settings/profile': 'workbench.settings.profile',
   '/settings/security': 'workbench.settings.security',
   '/settings/preferences': 'workbench.settings.preferences',
+  '/settings/storage': 'storage.title',
+  '/admin/storage': 'storage.adminTitle',
   '/settings/team': 'workbench.settings.team',
   '/admin/runtime': 'runtime.title',
   '/tools/epub-rotate': 'nav.epubRotate',
