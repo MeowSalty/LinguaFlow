@@ -162,6 +162,12 @@ tasks:
     cmds:
       - go test -race {{default "./..." .CLI_ARGS}}
 
+  test:storage:deployment:
+    desc: 显式真实存储部署验收（缺少环境时逐项标记未验收；只清理测试独立命名空间）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test -v -count=1 -timeout=10m -run TestStorageDeployment ./internal/service ./internal/store/s3store
+
   lint:
     desc: 执行后端静态检查
     dir: '{{.TASKFILE_DIR}}'
