@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 
 import {
   type ApiSchemas,
@@ -9,13 +9,19 @@ import {
   downloadResourceResult as downloadResourceResultRequest,
   fetchProjectResources,
   fetchProjectResourceTree,
-  incrementalUpdateResource as incrementalUpdateResourceRequest,
   precheckProjectResources as precheckProjectResourcesRequest,
-  replaceProjectResource as replaceProjectResourceRequest,
   uploadProjectResourcesWithProgress,
 } from '@/api/client'
 import { t } from '@/i18n'
 import { extractErrorMessage } from '@/utils/errors'
+import {
+  captureSession,
+  assertSessionCurrent,
+  isSessionCurrent,
+  onSessionChange,
+} from '@/api/session-context'
+import { isAccessDenied } from '@/api/utils'
+import { getStorageContractGate } from '@/utils/storage-contract'
 
 type Resource = ApiSchemas['Resource']
 type ResourceTreeNode = ApiSchemas['ResourceTreeNode']
@@ -47,7 +53,7 @@ export interface UploadTask {
   summary?: UploadResultSummary
 }
 
-export type PendingUploadStrategy = 'create' | 'incremental_update' | 'replace' | 'skip'
+export type PendingUploadStrategy = 'create' | 'source_update' | 'skip'
 
 export interface PendingUploadItem {
   id: string
@@ -153,6 +159,12 @@ const buildUploadSummary = (
 })
 
 export const useResourceStore = defineStore('resource', () => {
+  let treeRequestRevision = 0
+  let listRequestRevision = 0
+  let projectContextRevision = 0
+  let resourceSnapshotRevision = 0
+  let activeProjectId: number | null = null
+  let listTarget: string | null = null
   // ── 资源目录树 ──
   const resourceTree = ref<ResourceTreeNode | null>(null)
   const currentPath = ref('')
@@ -182,6 +194,41 @@ export const useResourceStore = defineStore('resource', () => {
   // ── 筛选器 ──
   const resourceSearch = ref('')
   const resourceFormatFilter = ref<string>('all')
+
+  const clearResourceList = (): void => {
+    resources.value = []
+    resourcesCursor.value = null
+    selectedResourceIds.value = []
+    activeResourceId.value = null
+  }
+  const activateProject = (projectId: number): void => {
+    if (activeProjectId === projectId) return
+    activeProjectId = projectId
+    projectContextRevision++
+    treeRequestRevision++
+    listRequestRevision++
+    resourceSnapshotRevision++
+    resourceTree.value = null
+    currentPath.value = ''
+    resourceTreeError.value = resourcesError.value = null
+    loadingResourceTree.value = loadingResources.value = false
+    listTarget = null
+    clearResourceList()
+  }
+  // List responses are tied to the requested filter, not whichever filter is visible later.
+  watch(
+    [resourceSearch, resourceFormatFilter],
+    () => {
+      if (listTarget === null) return
+      listRequestRevision++
+      resourceSnapshotRevision++
+      loadingResources.value = false
+      resourcesError.value = null
+      listTarget = null
+      clearResourceList()
+    },
+    { flush: 'sync' },
+  )
 
   // ── 计算属性：资源树导航 ──
 
@@ -331,17 +378,42 @@ export const useResourceStore = defineStore('resource', () => {
   }
 
   const loadResourceTree = async (projectId: number): Promise<void> => {
+    activateProject(projectId)
+    const revision = ++treeRequestRevision
+    const contextRevision = projectContextRevision
+    const snapshotRevision = ++resourceSnapshotRevision
+    // A tree refresh produces the flat list too; a prior list fetch cannot overwrite it.
+    listRequestRevision++
+    loadingResources.value = false
+    listTarget = null
+    const session = captureSession()
+    const current = () =>
+      revision === treeRequestRevision &&
+      contextRevision === projectContextRevision &&
+      activeProjectId === projectId &&
+      isSessionCurrent(session)
     loadingResourceTree.value = true
     resourceTreeError.value = null
 
     try {
       const response = await fetchProjectResourceTree(projectId)
+      if (!current()) return
       resourceTree.value = response.root
-      syncResourcesFromTree()
+      if (snapshotRevision === resourceSnapshotRevision) {
+        syncResourcesFromTree()
+        resourcesCursor.value = null
+        resourcesError.value = null
+      }
     } catch (error) {
+      if (!current()) return
+      if (isAccessDenied(error)) {
+        resourceTree.value = null
+        currentPath.value = ''
+        if (snapshotRevision === resourceSnapshotRevision) clearResourceList()
+      }
       resourceTreeError.value = extractErrorMessage(error, t('api.errors.fetchResourceTreeFailed'))
     } finally {
-      loadingResourceTree.value = false
+      if (current()) loadingResourceTree.value = false
     }
   }
 
@@ -360,17 +432,39 @@ export const useResourceStore = defineStore('resource', () => {
   // ── Actions：资源列表（保留用于段落 Tab 和筛选） ──
 
   const loadResources = async (projectId: number, append = false): Promise<void> => {
+    activateProject(projectId)
+    const format = resourceFormatFilter.value
+    const search = resourceSearch.value.trim()
+    const target = JSON.stringify([projectId, format, search])
+    const canAppend = append && listTarget === target
+    if (
+      (listTarget !== null && listTarget !== target) ||
+      (listTarget === null && (format !== 'all' || search))
+    )
+      clearResourceList()
+    listTarget = target
+    const revision = ++listRequestRevision
+    const contextRevision = projectContextRevision
+    const snapshotRevision = ++resourceSnapshotRevision
+    const session = captureSession()
+    const current = () =>
+      revision === listRequestRevision &&
+      snapshotRevision === resourceSnapshotRevision &&
+      contextRevision === projectContextRevision &&
+      activeProjectId === projectId &&
+      isSessionCurrent(session)
     loadingResources.value = true
     resourcesError.value = null
 
     try {
       const response = await fetchProjectResources(projectId, {
-        format: resourceFormatFilter.value === 'all' ? undefined : resourceFormatFilter.value,
-        search: resourceSearch.value.trim() || undefined,
-        cursor: append ? (resourcesCursor.value ?? undefined) : undefined,
+        format: format === 'all' ? undefined : format,
+        search: search || undefined,
+        cursor: canAppend ? (resourcesCursor.value ?? undefined) : undefined,
         limit: 50,
       })
-      resources.value = append ? [...resources.value, ...response.items] : response.items
+      if (!current()) return
+      resources.value = canAppend ? [...resources.value, ...response.items] : response.items
       resourcesCursor.value = null
 
       if (!activeResourceId.value && resources.value[0]) {
@@ -387,13 +481,27 @@ export const useResourceStore = defineStore('resource', () => {
         activeResourceId.value = resources.value[0]?.id ?? null
       }
     } catch (error) {
+      if (!current()) return
+      if (isAccessDenied(error)) {
+        clearResourceList()
+        // The tree is another snapshot of this same project's resource collection.
+        treeRequestRevision++
+        loadingResourceTree.value = false
+        resourceTree.value = null
+        currentPath.value = ''
+      }
       resourcesError.value = extractErrorMessage(error, t('api.errors.fetchResourcesFailed'))
     } finally {
-      loadingResources.value = false
+      if (current()) loadingResources.value = false
     }
   }
 
   // ── Actions：上传 ──
+
+  const uploadBatches = new Map<
+    string,
+    { projectId: number; files: File[]; paths: string[]; key: string }
+  >()
 
   const addUploadTask = (fileName: string, fileCount = 1): string => {
     const id = crypto.randomUUID()
@@ -422,6 +530,7 @@ export const useResourceStore = defineStore('resource', () => {
   }
 
   const removeUploadTask = (taskId: string): void => {
+    uploadBatches.delete(taskId)
     uploadTasks.value = uploadTasks.value.filter((task) => task.id !== taskId)
   }
 
@@ -431,6 +540,7 @@ export const useResourceStore = defineStore('resource', () => {
 
   const clearAllUploadTasks = (): void => {
     uploadTasks.value = []
+    uploadBatches.clear()
   }
 
   const precheckUploadResources = async (
@@ -460,7 +570,9 @@ export const useResourceStore = defineStore('resource', () => {
           precheck.action === 'create'
             ? 'create'
             : precheck.action === 'conflict'
-              ? 'incremental_update'
+              ? getStorageContractGate('sourceUpdate').available
+                ? 'source_update'
+                : 'skip'
               : 'skip',
       }
     })
@@ -530,6 +642,13 @@ export const useResourceStore = defineStore('resource', () => {
     taskId?: string,
     skippedItems: PendingUploadItem[] = [],
   ): Promise<UploadExecutionResult> => {
+    const session = captureSession()
+    if (activeProjectId === null) activateProject(projectId)
+    const contextRevision = projectContextRevision
+    const current = () =>
+      isSessionCurrent(session) &&
+      activeProjectId === projectId &&
+      contextRevision === projectContextRevision
     const emptyResponse: ResourceUploadBatchResponse = { items: [] }
     if (files.length === 0) {
       const summary = buildUploadSummary(emptyResponse, skippedItems)
@@ -540,34 +659,68 @@ export const useResourceStore = defineStore('resource', () => {
         replaceResults: [],
         summary,
       }
-      lastUploadResult.value = result
+      if (current()) lastUploadResult.value = result
       return result
     }
 
-    actionError.value = null
+    const batchId = taskId ?? crypto.randomUUID()
+    const intendedPaths = files.map((file, index) => paths?.[index] ?? file.name)
+    let batch = uploadBatches.get(batchId)
+    if (
+      batch &&
+      (batch.projectId !== projectId ||
+        batch.files.length !== files.length ||
+        files.some(
+          (file, index) =>
+            file !== batch!.files[index] || intendedPaths[index] !== batch!.paths[index],
+        ))
+    ) {
+      throw new Error(t('sourceStorage.batchChanged'))
+    }
+    batch ??= { projectId, files: [...files], paths: [...intendedPaths], key: crypto.randomUUID() }
+    uploadBatches.set(batchId, batch)
+    if (current()) actionError.value = null
 
     try {
-      const response = await uploadProjectResourcesWithProgress(projectId, files, paths, {
-        onProgress: (percent) => {
-          if (taskId) {
-            updateUploadTaskProgress(taskId, percent)
-          }
+      const response = await uploadProjectResourcesWithProgress(
+        projectId,
+        batch.files,
+        batch.paths,
+        {
+          idempotencyKey: batch.key,
+          signal: session.signal,
+          onProgress: (percent) => {
+            if (taskId && current()) {
+              updateUploadTaskProgress(taskId, percent)
+            }
+          },
+          onServerProcessing: () => {
+            if (taskId && current()) {
+              updateUploadTaskStage(taskId, 'processing')
+            }
+          },
         },
-        onServerProcessing: () => {
-          if (taskId) {
-            updateUploadTaskStage(taskId, 'processing')
-          }
-        },
-      })
+      )
+      assertSessionCurrent(session)
+      const summary = buildUploadSummary(response, skippedItems)
+      const result = { response, skippedItems, incrementalResults: [], replaceResults: [], summary }
+      if (!current()) return result
+      // Publishing new objects supersedes resource snapshots requested before the upload finished.
+      resourceSnapshotRevision++
+      listRequestRevision++
+      treeRequestRevision++
+      loadingResources.value = loadingResourceTree.value = false
       const createdResources = response.items
         .filter((item) => item.action === 'created' && item.resource)
         .map((item) => item.resource!)
-      resources.value = [...createdResources, ...resources.value]
+      const createdById = new Map(createdResources.map((resource) => [resource.id, resource]))
+      resources.value = [
+        ...createdById.values(),
+        ...resources.value.filter((resource) => !createdById.has(resource.id)),
+      ]
       if (!activeResourceId.value && createdResources[0]) {
         activeResourceId.value = createdResources[0].id
       }
-      const summary = buildUploadSummary(response, skippedItems)
-      const result = { response, skippedItems, incrementalResults: [], replaceResults: [], summary }
       lastUploadResult.value = result
       if (taskId) {
         updateUploadTaskStage(
@@ -583,10 +736,11 @@ export const useResourceStore = defineStore('resource', () => {
       }
       return result
     } catch (error) {
+      assertSessionCurrent(session)
       const message = extractErrorMessage(error, t('api.errors.uploadResourcesFailed'))
-      actionError.value = message
-      if (taskId) {
-        updateUploadTaskStage(taskId, 'error', message)
+      if (current()) {
+        actionError.value = message
+        if (taskId) updateUploadTaskStage(taskId, 'error', message)
       }
       throw error
     }
@@ -598,55 +752,6 @@ export const useResourceStore = defineStore('resource', () => {
   const setActiveResource = (resourceId: number | null, resetSegments?: () => void): void => {
     activeResourceId.value = resourceId
     resetSegments?.()
-  }
-
-  const replaceResource = async (
-    projectId: number,
-    resourceId: number,
-    file: File,
-    resetSegments?: () => void,
-  ): Promise<void> => {
-    replacingResourceIds.value = [...replacingResourceIds.value, resourceId]
-    actionError.value = null
-
-    try {
-      const resource = await replaceProjectResourceRequest(projectId, resourceId, file)
-      resources.value = resources.value.map((item) => (item.id === resource.id ? resource : item))
-      if (activeResourceId.value === resourceId) {
-        resetSegments?.()
-      }
-    } catch (error) {
-      actionError.value = extractErrorMessage(error, t('api.errors.replaceResourceFailed'))
-      throw error
-    } finally {
-      replacingResourceIds.value = replacingResourceIds.value.filter((id) => id !== resourceId)
-    }
-  }
-
-  const incrementalUpdateResource = async (
-    projectId: number,
-    resourceId: number,
-    file: File,
-    resetSegments?: () => void,
-  ): Promise<ApiSchemas['IncrementalUpdateResponse']> => {
-    incrementalUpdatingIds.value = [...incrementalUpdatingIds.value, resourceId]
-    actionError.value = null
-
-    try {
-      const result = await incrementalUpdateResourceRequest(projectId, resourceId, file)
-      resources.value = resources.value.map((item) =>
-        item.id === result.resource.id ? result.resource : item,
-      )
-      if (activeResourceId.value === resourceId) {
-        resetSegments?.()
-      }
-      return result
-    } catch (error) {
-      actionError.value = extractErrorMessage(error, t('api.errors.incrementalUpdateFailed'))
-      throw error
-    } finally {
-      incrementalUpdatingIds.value = incrementalUpdatingIds.value.filter((id) => id !== resourceId)
-    }
   }
 
   const deleteResource = async (
@@ -714,6 +819,12 @@ export const useResourceStore = defineStore('resource', () => {
   // ── 工具方法 ──
 
   const reset = (): void => {
+    projectContextRevision++
+    resourceSnapshotRevision++
+    activeProjectId = null
+    listTarget = null
+    treeRequestRevision++
+    listRequestRevision++
     resourceTree.value = null
     currentPath.value = ''
     loadingResourceTree.value = false
@@ -723,6 +834,7 @@ export const useResourceStore = defineStore('resource', () => {
     activeResourceId.value = null
     resourcesCursor.value = null
     resourcesError.value = null
+    loadingResources.value = false
     resourceSearch.value = ''
     resourceFormatFilter.value = 'all'
     clearAllUploadTasks()
@@ -731,6 +843,9 @@ export const useResourceStore = defineStore('resource', () => {
     incrementalUpdatingIds.value = []
     actionError.value = null
   }
+
+  onScopeDispose(onSessionChange(reset))
+  onScopeDispose(reset)
 
   return {
     // 资源树
@@ -789,8 +904,6 @@ export const useResourceStore = defineStore('resource', () => {
     mergeLastUploadResult,
     uploadResources,
     setActiveResource,
-    replaceResource,
-    incrementalUpdateResource,
     deleteResource,
     downloadResource,
     downloadResourceResult,

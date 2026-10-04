@@ -33,6 +33,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  storage: []
   previewTranslation: [segment: Segment]
   previewRevision: [segment: Segment]
   refresh: []
@@ -59,6 +60,10 @@ const {
   saveInlineComment,
   dismissIssue,
   reinstateIssue,
+  hasPendingDrafts,
+  savePendingDrafts,
+  discardPendingDrafts,
+  confirmPendingDrafts,
 } = useSegmentEditing(projectIdRef, activeResourceIdRef)
 
 // ── 文本渲染模式 ──
@@ -89,7 +94,19 @@ watch(
 defineExpose({
   selectedSegmentIds,
   clearSelectedSegments,
+  hasPendingDrafts,
+  savePendingDrafts,
+  discardPendingDrafts,
+  confirmPendingDrafts,
 })
+
+const protectBrowserUnload = (event: BeforeUnloadEvent): void => {
+  if (!hasPendingDrafts()) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+onMounted(() => window.addEventListener('beforeunload', protectBrowserUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', protectBrowserUnload))
 
 // ── 编辑视图路由：query.edit / query.chapter 由页面层写入与恢复 ──
 const exitEditor = (): void => {
@@ -110,9 +127,6 @@ const handleResourceChange = (value: number | null): void => {
   // 标志须在 setActiveResource 之前置位：其回调 resetEpubState 清 epubActiveGroupKey
   // 时就会触发章节同步 watcher
   suppressChapterRouteSync = true
-  workspace.setActiveResource(value)
-  workspace.exitChapter()
-
   const query = { ...route.query }
   if (value) {
     query.edit = String(value)
@@ -592,7 +606,7 @@ const handleUpdateInlineCommentText = (value: string): void => {
 }
 
 const handleCloseInlineComment = (): void => {
-  inlineCommentVisible.value = null
+  discardPendingDrafts()
 }
 </script>
 
@@ -604,6 +618,9 @@ const handleCloseInlineComment = (): void => {
     <div
       class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5"
     >
+      <NButton size="small" quaternary @click="emit('storage')">{{
+        t('sourceStorage.title')
+      }}</NButton>
       <NButton
         quaternary
         size="small"
@@ -616,7 +633,7 @@ const handleCloseInlineComment = (): void => {
       </NButton>
 
       <NSelect
-        v-model:value="workspace.activeResourceId"
+        :value="workspace.activeResourceId"
         clearable
         size="small"
         class="w-56! shrink-0"

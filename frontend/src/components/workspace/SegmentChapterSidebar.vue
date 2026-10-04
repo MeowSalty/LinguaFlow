@@ -16,6 +16,8 @@ const emit = defineEmits<{
 }>()
 
 const workspace = useProjectWorkspaceStore()
+const route = useRoute()
+const router = useRouter()
 
 const chapters = computed(() => workspace.segmentGroups)
 
@@ -33,12 +35,14 @@ const selectedCount = computed(() => workspace.epubSelectedGroupKeys.size)
 
 const selectAll = (): void => {
   if (!props.projectId || !workspace.activeResourceId) return
-  workspace.exitChapter()
+  const query = { ...route.query }
+  delete query.chapter
+  void router.replace({ query })
 }
 
-const selectChapter = (groupKey: string, title: string): void => {
+const selectChapter = (groupKey: string): void => {
   if (!props.projectId || !workspace.activeResourceId) return
-  workspace.enterChapter(groupKey, title)
+  void router.replace({ query: { ...route.query, chapter: groupKey } })
 }
 
 const toggleSelection = (groupKey: string): void => {
@@ -140,11 +144,7 @@ const toggleSelection = (groupKey: string): void => {
         "
         :aria-pressed="multiSelect ? selectedKeys.has(group.group_key) : undefined"
         :aria-current="!multiSelect && activeKey === group.group_key ? 'page' : undefined"
-        @click="
-          multiSelect
-            ? toggleSelection(group.group_key)
-            : selectChapter(group.group_key, group.group_title)
-        "
+        @click="multiSelect ? toggleSelection(group.group_key) : selectChapter(group.group_key)"
       >
         <span
           v-if="!multiSelect && activeKey === group.group_key"
