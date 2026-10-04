@@ -216,8 +216,11 @@ func TestInventoryApplyResumeRollbackPreservesBusinessData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resource.CurrentSourceRevisionID != nil || resource.SourceGeneration != 0 {
+	if resource.CurrentSourceRevisionID != nil || resource.SourceGeneration != 2 {
 		t.Fatal("source reference not rolled back")
+	}
+	if project := f.client.Project.GetX(ctx, f.project.ID); project.StorageGeneration != 4 || project.StorageState != "active" {
+		t.Fatalf("rollback must preserve monotonic maintenance generations: %+v", project)
 	}
 	job, err = f.client.Job.Get(ctx, f.job.ID)
 	if err != nil {

@@ -146,7 +146,7 @@ func (m *Migrator) prepare(ctx context.Context, manifest *Manifest) error {
 	return transaction(ctx, m.client, func(client *ent.Client) error {
 		op, err := client.StorageTask.Query().Where(storagetask.OperationIDEQ(manifest.OperationID)).Only(ctx)
 		if err == nil {
-			if op.Kind != "legacy_migration" || op.RequestHash != migrationFingerprint(manifest) || op.Phase == "rolled_back" {
+			if op.Kind != "legacy_migration" || op.RequestHash != migrationFingerprint(manifest) || op.Phase == "rolled_back" || op.Phase == "rolling_back" {
 				return ErrChanged
 			}
 			manifest.LegacySpaceID = number(op.Input["legacy_space_id"])
@@ -199,7 +199,7 @@ func (m *Migrator) prepare(ctx context.Context, manifest *Manifest) error {
 				return err
 			}
 		}
-		input := map[string]any{"legacy_space_id": legacy.ID, "default_space_id": current.ID, "legacy_root": manifest.LegacyRoot, "default_root": manifest.DefaultRoot}
+		input := map[string]any{"legacy_space_id": legacy.ID, "default_space_id": current.ID, "legacy_root": manifest.LegacyRoot, "default_root": manifest.DefaultRoot, "generation_protocol": 2}
 		_, err = client.StorageTask.Create().SetOperationID(manifest.OperationID).SetIdempotencyKey(manifest.OperationID).SetRequestHash(migrationFingerprint(manifest)).SetKind("legacy_migration").SetStatus(storagetask.StatusNeedsAction).SetPhase("applying").SetErrorCode("offline_migration_in_progress").SetInput(input).Save(ctx)
 		return err
 	})
@@ -393,25 +393,39 @@ func (m *Migrator) checkObserved(ctx context.Context, entry *Entry, root *locals
 
 func (m *Migrator) finish(ctx context.Context, manifest *Manifest) error {
 	return transaction(ctx, m.client, func(client *ent.Client) error {
+		op, err := client.StorageTask.Query().Where(storagetask.OperationIDEQ(manifest.OperationID)).Only(ctx)
+		if err != nil {
+			return err
+		}
 		for i := range manifest.Projects {
 			p := &manifest.Projects[i]
 			row, err := client.Project.Get(ctx, p.ID)
 			if err != nil {
 				return err
 			}
-			if row.StorageGeneration != p.Generation+1 {
-				return ErrChanged
-			}
-			if row.StorageState == "legacy_migration" {
-				if err := client.Project.UpdateOneID(p.ID).SetStorageState("active").Exec(ctx); err != nil {
+			if op.Phase == "committed" {
+				expected := p.Generation + 1 // pre-contract completed operations
+				if number(op.Input["generation_protocol"]) >= 2 {
+					expected++
+				}
+				if row.StorageState != "active" || row.StorageGeneration != expected {
+					return ErrChanged
+				}
+			} else if row.StorageState == "legacy_migration" && row.StorageGeneration == p.Generation+1 {
+				if err := client.Project.UpdateOneID(p.ID).SetStorageState("active").AddStorageGeneration(1).Exec(ctx); err != nil {
 					return err
 				}
-			} else if row.StorageState != "active" {
+			} else {
 				return ErrChanged
 			}
 			p.Applied = true
 		}
-		_, err := client.StorageTask.Update().Where(storagetask.OperationIDEQ(manifest.OperationID)).SetStatus(storagetask.StatusCompleted).SetPhase("committed").SetErrorCode("").Save(ctx)
+		if op.Phase == "committed" {
+			return nil
+		}
+		input := op.Input
+		input["generation_protocol"] = 2
+		_, err = client.StorageTask.UpdateOneID(op.ID).SetInput(input).SetStatus(storagetask.StatusCompleted).SetPhase("committed").SetErrorCode("").Save(ctx)
 		return err
 	})
 }

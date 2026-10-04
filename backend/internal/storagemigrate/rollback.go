@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
@@ -46,12 +47,28 @@ func (m *Migrator) Rollback(ctx context.Context, manifest *Manifest, checkpoint 
 		}
 	}
 	if err := transaction(ctx, m.client, func(client *ent.Client) error {
+		currentOp, err := client.StorageTask.Get(ctx, op.ID)
+		if err != nil {
+			return err
+		}
+		input := currentOp.Input
+		generations, _ := input["rollback_generations"].(map[string]any)
+		if generations == nil {
+			generations = map[string]any{}
+		}
 		for _, p := range manifest.Projects {
 			row, err := client.Project.Get(ctx, p.ID)
 			if err != nil {
 				return err
 			}
-			if row.StorageGeneration != p.Generation+1 {
+			expected := p.Generation + 1
+			if currentOp.Phase == "committed" && number(input["generation_protocol"]) >= 2 {
+				expected++
+			}
+			if saved, ok := generations[strconv.Itoa(p.ID)]; ok {
+				expected = int64(number(saved))
+			}
+			if row.StorageGeneration != expected {
 				return ErrChanged
 			}
 			ids, err := client.Resource.Query().Where(resource.ProjectIDEQ(p.ID)).Order(ent.Asc(resource.FieldID)).IDs(ctx)
@@ -71,9 +88,15 @@ func (m *Migrator) Rollback(ctx context.Context, manifest *Manifest, checkpoint 
 			if row.StorageState != "active" && row.StorageState != "legacy_migration" && row.StorageState != "legacy_rollback" {
 				return ErrChanged
 			}
-			if err := client.Project.UpdateOneID(p.ID).SetStorageState("legacy_rollback").Exec(ctx); err != nil {
+			update := client.Project.UpdateOneID(p.ID).SetStorageState("legacy_rollback")
+			if row.StorageState == "active" {
+				expected++
+				update.AddStorageGeneration(1)
+			}
+			if err := update.Exec(ctx); err != nil {
 				return err
 			}
+			generations[strconv.Itoa(p.ID)] = expected
 		}
 		for _, saved := range manifest.Jobs {
 			row, err := client.Job.Get(ctx, saved.ID)
@@ -84,7 +107,8 @@ func (m *Migrator) Rollback(ctx context.Context, manifest *Manifest, checkpoint 
 				return ErrChanged
 			}
 		}
-		return client.StorageTask.UpdateOneID(op.ID).SetStatus(storagetask.StatusNeedsAction).SetPhase("rolling_back").Exec(ctx)
+		input["rollback_generations"] = generations
+		return client.StorageTask.UpdateOneID(op.ID).SetInput(input).SetStatus(storagetask.StatusNeedsAction).SetPhase("rolling_back").Exec(ctx)
 	}); err != nil {
 		return err
 	}
@@ -108,7 +132,7 @@ func (m *Migrator) Rollback(ctx context.Context, manifest *Manifest, checkpoint 
 			if err != nil {
 				return err
 			}
-			if err := client.Resource.UpdateOneID(entry.ResourceID).ClearCurrentSourceRevisionID().SetSourceGeneration(entry.SourceGeneration).Exec(ctx); err != nil {
+			if err := client.Resource.UpdateOneID(entry.ResourceID).ClearCurrentSourceRevisionID().AddSourceGeneration(1).Exec(ctx); err != nil {
 				return err
 			}
 			if err := client.SourceRevision.DeleteOneID(entry.RevisionID).Exec(ctx); err != nil {
@@ -136,15 +160,23 @@ func (m *Migrator) Rollback(ctx context.Context, manifest *Manifest, checkpoint 
 		}
 	}
 	if err := transaction(ctx, m.client, func(client *ent.Client) error {
+		currentOp, err := client.StorageTask.Get(ctx, op.ID)
+		if err != nil {
+			return err
+		}
+		generations, ok := currentOp.Input["rollback_generations"].(map[string]any)
+		if !ok {
+			return ErrChanged
+		}
 		for _, p := range manifest.Projects {
 			row, err := client.Project.Get(ctx, p.ID)
 			if err != nil {
 				return err
 			}
-			if row.StorageGeneration != p.Generation+1 || row.StorageState != "legacy_rollback" {
+			if row.StorageGeneration != int64(number(generations[strconv.Itoa(p.ID)])) || row.StorageState != "legacy_rollback" {
 				return ErrChanged
 			}
-			update := client.Project.UpdateOneID(p.ID).SetStorageGeneration(p.Generation).SetStorageState("active")
+			update := client.Project.UpdateOneID(p.ID).AddStorageGeneration(1).SetStorageState("active")
 			if p.PreviousSpaceID == nil {
 				update.ClearStorageSpaceID()
 			} else {
@@ -187,7 +219,7 @@ func (m *Migrator) checkRollbackEntry(ctx context.Context, client *ent.Client, m
 	}
 	object, err := client.Blob.Query().Where(blob.IdentityEQ(fmt.Sprintf("legacy-%s-%d", manifest.OperationID, entry.ResourceID))).Only(ctx)
 	if ent.IsNotFound(err) {
-		if row.CurrentSourceRevisionID != nil || row.SourceGeneration != entry.SourceGeneration {
+		if row.CurrentSourceRevisionID != nil || (row.SourceGeneration != entry.SourceGeneration && row.SourceGeneration != entry.SourceGeneration+2) {
 			return ErrChanged
 		}
 		entry.Applied = false
