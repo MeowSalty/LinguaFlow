@@ -116,7 +116,7 @@ services:
       LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL: ${LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL:?需要初始管理员邮箱}
       LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD: ${LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD:?需要初始管理员密码}
       LINGUAFLOW_DATABASE_DRIVER: postgres
-      LINGUAFLOW_DATABASE_DSN: postgres://linguaflow:secret@postgres:5432/linguaflow?sslmode=disable
+      LINGUAFLOW_DATABASE_DSN: postgres://linguaflow:secret@postgres:5432/linguaflow?sslmode=require
     depends_on:
       postgres:
         condition: service_healthy
