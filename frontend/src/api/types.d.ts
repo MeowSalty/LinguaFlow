@@ -4,6 +4,679 @@
  */
 
 export interface paths {
+    "/storage/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Discover eligible project creation targets */
+        get: operations["GetStorageOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        /** Discover bind, migrate or repair targets */
+        get: operations["GetProjectStorageOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        /** Recent durable connection checks ordered by descending ID */
+        get: operations["ListStorageChecks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/checks/{checkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+                checkId: number;
+            };
+            cookie?: never;
+        };
+        /** Read durable verification and cleanup facts */
+        get: operations["GetStorageCheck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}/legacy-snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        /** Download protected legacy business data before source replacement */
+        get: operations["DownloadLegacySourceSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/storage/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查看存储容量、恢复积压与备份状态
+         * @description 仅平台管理员。只聚合平台登记的数据库事实与临时盘预留，不探测远端、扫描对象桶或产生写入；cursor 是上一页末空间 ID。
+         */
+        get: operations["GetStorageDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/storage/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GetStoragePolicy
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["GetStoragePolicy"];
+        /**
+         * SetStoragePolicy
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        put: operations["SetStoragePolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/storage/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configured site storage connections */
+        get: operations["ListSiteStorageConnections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ListStorageConnections
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListStorageConnections"];
+        put?: never;
+        /**
+         * CreateStorageConnection
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateStorageConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/storage/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListOrgStorageConnections
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListOrgStorageConnections"];
+        put?: never;
+        /**
+         * CreateOrgStorageConnection
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateOrgStorageConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * SetStorageConnectionState
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        patch: operations["SetStorageConnectionState"];
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/spaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListStorageConnectionSpaces
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListStorageConnectionSpaces"];
+        put?: never;
+        /**
+         * CreateStorageSpace
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateStorageSpace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * AuthorizeStorage
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["AuthorizeStorage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify the connection and its managed spaces
+         * @description Read checks never write; explicit write checks persist and clean exact probe objects. Requires connection ownership or site administrator access.
+         */
+        post: operations["CheckStorageConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * RevokeStorageAuthorization
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["RevokeStorageAuthorization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/spaces/{spaceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * SetStorageSpaceState
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        patch: operations["SetStorageSpaceState"];
+        trace?: never;
+    };
+    "/projects/{projectId}/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * GetProjectStorage
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["GetProjectStorage"];
+        /**
+         * BindProjectStorage
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        put: operations["BindProjectStorage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * MigrateProjectStorage
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["MigrateProjectStorage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListStorageTasks
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListStorageTasks"];
+        put?: never;
+        /**
+         * CreateStorageIntent
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateStorageIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * GetStorageTask
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["GetStorageTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * ReceiveStorageContent
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        put: operations["ReceiveStorageContent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * CancelStorageTask
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CancelStorageTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * RetryStorageTask
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["RetryStorageTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListSourceVersions
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListSourceVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/source-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * PreviewSourceUpdate
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["PreviewSourceUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/source-commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * CommitSourceUpdate
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CommitSourceUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListExportArtifacts
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListExportArtifacts"];
+        put?: never;
+        /**
+         * CreateExportArtifact
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateExportArtifact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/exports/{artifactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * DeleteExportArtifact
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        delete: operations["DeleteExportArtifact"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/exports/{artifactId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * DownloadExportArtifact
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["DownloadExportArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/exports/{artifactId}/rebuild": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * RebuildExportArtifact
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["RebuildExportArtifact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/credentials": {
         parameters: {
             query?: never;
@@ -552,6 +1225,8 @@ export interface paths {
          *     - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
          *     - 项目内资源唯一性以规范化 path 判断，而不是 filename
          *     - 冲突或失败的文件不会阻断其他文件的上传，每个文件独立返回处理结果
+         *     - 首项发布前固定完整有序批次及完整文件摘要；同键换序、删项、改路径或改字节返回 409
+         *     - 原键重放保留原条目成功或失败；仅重传失败子批次需要新键
          */
         post: operations["UploadProjectResources"];
         delete?: never;
@@ -620,12 +1295,16 @@ export interface paths {
         };
         /** 获取资源详情 */
         get: operations["GetResource"];
-        /** 更新资源文件 */
+        /**
+         * 更新资源文件
+         * @description 先确认源文件差异预览，再提交预览任务 ID 及源、译文预期代次。缺少条件或代次过期返回冲突；提交使用预览中已经验证的候选文件。
+         */
         put: operations["UpdateResource"];
         /**
          * 增量更新资源文件
-         * @description 上传新版本文件，系统自动对比段落变化：
-         *     - 相同源文本的段落保留已有译文
+         * @description 先创建源文件差异预览，再携带预览任务及源、译文预期代次确认。缺少条件或代次过期返回冲突。
+         *     系统按已确认的候选文件对比段落变化：
+         *     - 唯一且无歧义的相同源文本段落保留已有译文
          *     - 源文本变化的段落重置为待翻译
          *     - 新增段落状态为待翻译
          *     - 不再存在的段落将被删除
@@ -1365,10 +2044,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 按项目权限发现翻译与术语同步任务
-         * @description 只读投影，不新增通用任务实体。默认返回两类活动任务，组织成员可看到同项目其他成员的任务。
+         * 按项目权限发现翻译、术语同步与存储任务
+         * @description 只读投影，不新增通用任务实体。默认返回三类活动任务，组织成员可看到同项目其他成员的任务。
          *     未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限。
          *     state 默认 active，与 status 互斥；同步没有 paused。trigger_type 仅允许显式 task_type=translation。
+         *     存储任务的 waiting_retry、needs_action 属于活动状态；其实际可控制动作以存储任务详情为准。
          *     updated_at 区间为 [updated_from, updated_before)，按 updated_at DESC, task_type DESC, 整数 task_id DESC 排序。
          *     独立版本化游标绑定规范化筛选（不含 limit）；不可使用 Job 游标。每页重新鉴权，不提供跨请求快照。
          *     刷新从第一页开始并处理全部续页，客户端以 (task_type,task_id) 去重，单页缺失不代表任务结束。
@@ -1391,10 +2071,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 获取两类任务的独立数量摘要
+         * 获取三类任务的独立数量摘要
          * @description 只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。
          *     未知、重复、空或非法参数返回 400。权限与列表一致，无权项目返回零。
-         *     by_type 固定返回两类，未选类型计零，同步 paused 恒为零；total 为逐字段求和。
+         *     by_type 固定返回三类，未选类型计零，同步和存储 paused 恒为零；total 为逐字段求和。
+         *     waiting_retry、needs_action 分开统计，翻译与术语同步的这两个计数恒为零。
          *     recent_failed 只数当前 failed 且 updated_at 位于 [recent_failed_since,as_of) 的记录，窗口为连续七天。
          *     活动数不受时间限制；不受分页影响，不代表历史失败事件次数。
          */
@@ -1976,6 +2657,11 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Problem: {
+            /** @description Stable domain error code; required on storage domain failures. */
+            error_code?: string;
+            task_id?: number;
+            operation_id?: string;
+            check_id?: number;
             type?: string;
             title: string;
             status: number;
@@ -2148,6 +2834,11 @@ export interface components {
             failed_jobs: number;
         };
         Resource: {
+            current_source_revision_id: number | null;
+            /** Format: int64 */
+            source_generation: number;
+            /** Format: int64 */
+            translation_generation: number;
             id: number;
             /** @description 项目内规范化资源相对路径，使用 / 分隔，例如 ui/common.json */
             path: string;
@@ -2181,8 +2872,8 @@ export interface components {
         ResourceTreeResponse: {
             root: components["schemas"]["ResourceTreeNode"];
         };
+        /** @description 文件原文只读；提交 source_text 返回 source_read_only，原文变更须创建新源版本。 */
         ResourceSegmentUpdateRequest: {
-            source_text?: string;
             target_text?: string;
             comment?: string;
         };
@@ -2230,6 +2921,7 @@ export interface components {
             changes: components["schemas"]["IncrementalUpdateChanges"];
         };
         ResourceUploadFileResult: {
+            error_code?: string;
             /** @description 资源项目内规范化相对路径 */
             path: string;
             /**
@@ -2245,6 +2937,7 @@ export interface components {
             error?: string;
         };
         ResourceUploadBatchResponse: {
+            operation_id?: string;
             items: components["schemas"]["ResourceUploadFileResult"][];
         };
         ResourcePrecheckFileResult: {
@@ -2276,14 +2969,10 @@ export interface components {
         ResourceSegmentGroupListResponse: {
             items: components["schemas"]["ResourceSegmentGroup"][];
         };
+        /** @description 使用当前文件原文预览；提交 source_text 返回 source_read_only。 */
         SegmentTranslationPreviewRequest: {
             /** @description 执行计划模板 ID；计划中必须至少包含一个 translate 轮次 */
             execution_plan_id: number;
-            /**
-             * @description 可选：编辑器中尚未保存的原文。省略时使用数据库原文；传入时必须为非空白文本，
-             *     将作为本次预览的原文（模拟一次原文变更后执行计划）。
-             */
-            source_text?: string;
         };
         SegmentTranslationPreviewResponse: {
             /**
@@ -2829,6 +3518,13 @@ export interface components {
             items: components["schemas"]["BackendModel"][];
         };
         Project: {
+            storage_space_id: number | null;
+            /** Format: int64 */
+            storage_generation: number;
+            /** Format: int64 */
+            output_generation: number;
+            /** @enum {string} */
+            storage_state: "active" | "draining" | "migrating" | "legacy_migration" | "legacy_rollback";
             id: number;
             name: string;
             owner_user_id?: number;
@@ -2852,6 +3548,7 @@ export interface components {
             items: components["schemas"]["Project"][];
         };
         CreateProjectRequest: {
+            storage_space_id?: number;
             name: string;
             config?: {
                 [key: string]: unknown;
@@ -3385,6 +4082,384 @@ export interface components {
             /** @description 占用该资源的未完成任务 ID */
             active_job_id: number;
         };
+        StorageOption: {
+            space_id: number;
+            name: string;
+            /** @enum {string} */
+            scope: "site" | "user" | "org";
+            selectable: boolean;
+            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
+        };
+        StorageOptions: {
+            /** @enum {string} */
+            scope: "user" | "org";
+            owner_id: number;
+            policy: {
+                /** @enum {string} */
+                mode: "site_only" | "both" | "user_required";
+                /** @enum {string} */
+                default_choice: "site" | "user";
+                /** Format: int64 */
+                generation: number;
+            };
+            default_space_id: number | null;
+            /** @enum {string|null} */
+            default_unavailable_reason: "policy_disallowed" | "selection_required" | "byos_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty" | null;
+            items: components["schemas"]["StorageOption"][];
+            /** Format: int64 */
+            storage_generation?: number;
+        };
+        StorageCheckSpaceResult: {
+            space_id: number;
+            status: string;
+            error_code?: string;
+        };
+        StorageCheck: {
+            check_id: number;
+            connection_id: number;
+            mode: string;
+            /** Format: int64 */
+            management_generation: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at: string | null;
+            status: string;
+            /** @enum {string} */
+            cleanup_status: "cleanup_pending" | "running" | "blocked" | "done";
+            error_code?: string;
+            /** Format: int64 */
+            accounted_bytes: number;
+            authorization_activated: boolean;
+            results: components["schemas"]["StorageCheckSpaceResult"][];
+        };
+        StorageCheckList: {
+            items: components["schemas"]["StorageCheck"][];
+        };
+        StorageSpaceDiagnostics: {
+            id: number;
+            /** Format: int64 */
+            reserved_bytes: number;
+            /** Format: int64 */
+            candidate_bytes: number;
+            /** Format: int64 */
+            live_bytes: number;
+            /** Format: int64 */
+            pending_delete_bytes: number;
+            unchecked_objects: number;
+            missing_objects: number;
+            corrupt_objects: number;
+            /**
+             * Format: date-time
+             * @description 最近一次持久化的完整字节校验时间，不代表最近一次失败观测。
+             */
+            last_checked_at?: string;
+        };
+        StorageDiagnostics: {
+            spaces: components["schemas"]["StorageSpaceDiagnostics"][];
+            next_cursor?: number;
+            /** Format: int64 */
+            temporary_bytes: number;
+            /** Format: date-time */
+            oldest_intent_at?: string;
+            recovery_backlog: number;
+            blocked_cleanup_by_code: {
+                [key: string]: number;
+            };
+            migrations_by_phase: {
+                [key: string]: number;
+            };
+            latest_backup?: {
+                id: number;
+                /** @enum {string} */
+                status: "complete" | "metadata_only" | "incomplete";
+                /** Format: date-time */
+                created_at: string;
+            };
+        };
+        StoragePolicy: {
+            /** @enum {string} */
+            mode: "site_only" | "both" | "user_required";
+            /** @enum {string} */
+            default_choice: "site" | "user";
+            /** Format: int64 */
+            generation: number;
+            /** Format: int64 */
+            logical_limit_bytes: number;
+            /** @description Stored mode/default combination needs administrator correction; effective values are normalized. */
+            readonly configuration_needs_update?: boolean;
+        };
+        StorageConnection: {
+            id: number;
+            name: string;
+            scope: string;
+            owner_id: number;
+            driver: string;
+            endpoint: string;
+            region: string;
+            path_style?: boolean;
+            status: string;
+            /** @enum {string} */
+            health: "unknown" | "available" | "degraded" | "auth_required" | "permission_denied" | "crypto_unavailable";
+            has_auth: boolean;
+            /** Format: int64 */
+            management_generation: number;
+            /** Format: int64 */
+            auth_generation: number;
+            /** Format: date-time */
+            checked_at?: string | null;
+            check_id?: number | null;
+        };
+        StorageConnectionList: {
+            items: components["schemas"]["StorageConnection"][];
+        };
+        StorageConnectionRequest: {
+            name: string;
+            /** @enum {string} */
+            scope?: "user" | "org";
+            owner_id?: number;
+            /** Format: uri */
+            endpoint: string;
+            region: string;
+            path_style?: boolean;
+        };
+        StorageConnectionStateRequest: {
+            /** @enum {string} */
+            status: "enabled" | "disabled";
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        StorageSpace: {
+            id: number;
+            connection_id: number;
+            name: string;
+            scope?: string;
+            owner_id?: number;
+            bucket?: string;
+            prefix?: string;
+            status: string;
+            verified: boolean;
+            versioned?: boolean;
+            /** Format: int64 */
+            management_generation: number;
+            /** Format: int64 */
+            capacity_bytes: number;
+            /** Format: int64 */
+            reserved_bytes: number;
+            /** Format: int64 */
+            candidate_bytes: number;
+            /** Format: int64 */
+            live_bytes: number;
+            /** Format: int64 */
+            pending_delete_bytes: number;
+        };
+        StorageSpaceList: {
+            items: components["schemas"]["StorageSpace"][];
+        };
+        StorageSpaceRequest: {
+            name: string;
+            bucket: string;
+            prefix: string;
+            /** Format: int64 */
+            capacity_bytes: number;
+        };
+        StorageAuthorizationRequest: {
+            access_key_id: string;
+            secret_access_key: string;
+            session_token?: string;
+            write_check: boolean;
+            /** Format: int64 */
+            expected_management_generation: number;
+            /** Format: date-time */
+            expires_at?: string | null;
+        };
+        StorageRevokeRequest: {
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        StorageSpaceStateRequest: {
+            /** @enum {string} */
+            status: "active" | "read_only" | "disabled";
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        ProjectStorage: {
+            project_id: number;
+            /** Format: int64 */
+            storage_generation: number;
+            /** @enum {string} */
+            storage_state: "active" | "draining" | "migrating" | "legacy_migration" | "legacy_rollback";
+            migration_task_id: number | null;
+            binding: {
+                space_id: number;
+                name: string;
+                /** @enum {string} */
+                scope: "site" | "user" | "org";
+                status: string;
+                historical: boolean;
+                owner_id: number;
+            } | null;
+            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
+        };
+        StorageBindingRequest: {
+            space_id: number;
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        StorageMigrationRequest: {
+            space_id: number;
+            /** Format: int64 */
+            expected_generation: number;
+            idempotency_key: string;
+        };
+        SourceUpdateStats: {
+            unchanged: number;
+            updated: number;
+            added: number;
+            deleted: number;
+        };
+        SourceUpdatePreview: {
+            task_id: number;
+            /** Format: int64 */
+            source_generation: number;
+            /** Format: int64 */
+            translation_generation: number;
+            stats: components["schemas"]["SourceUpdateStats"];
+            /** Format: date-time */
+            expires_at: string | null;
+            /** @enum {string} */
+            baseline_trust?: "verified" | "legacy_unverified";
+            legacy_snapshot_available?: boolean;
+            /** Format: date-time */
+            legacy_snapshot_expires_at?: string | null;
+        };
+        StorageTask: {
+            id: number;
+            operation_id: string;
+            kind: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
+            phase: string;
+            /** @enum {string} */
+            cleanup_status: "cleanup_pending" | "running" | "blocked" | "done";
+            error_code?: string;
+            /** Format: date-time */
+            next_retry_at?: string | null;
+            allowed_actions: string[];
+            result_resource_id?: number | null;
+            result_revision_id?: number | null;
+            result_artifact_id?: number | null;
+            project_id: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            expires_at: string | null;
+            resource_id?: number | null;
+            source_revision_id?: number | null;
+            target_space_id?: number | null;
+            /** Format: int64 */
+            expected_storage_generation?: number;
+            /** Format: int64 */
+            expected_source_generation?: number;
+            /** Format: int64 */
+            expected_translation_generation?: number;
+            /** Format: int64 */
+            expected_location_generation?: number;
+            /** Format: int64 */
+            input_size?: number;
+            input_sha256?: string;
+            source_preview?: components["schemas"]["SourceUpdatePreview"];
+        };
+        StorageTaskList: {
+            items: components["schemas"]["StorageTask"][];
+        };
+        StorageUploadIntent: {
+            idempotency_key: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            storage_generation: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "upload";
+            path: string;
+        };
+        StorageSourceUpdateIntent: {
+            idempotency_key: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            storage_generation: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "source_update";
+            resource_id: number;
+            /** Format: int64 */
+            source_generation: number;
+            /** Format: int64 */
+            translation_generation: number;
+        };
+        StorageRepairIntent: {
+            idempotency_key: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            storage_generation: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "repair";
+            resource_id: number;
+            source_revision_id: number;
+            /** Format: int64 */
+            location_generation: number;
+            target_space_id: number;
+        };
+        StorageIntent: components["schemas"]["StorageUploadIntent"] | components["schemas"]["StorageSourceUpdateIntent"] | components["schemas"]["StorageRepairIntent"];
+        SourceVersion: {
+            id: number;
+            /** @enum {string} */
+            verification_state: "verified" | "legacy_unverified";
+            format: string;
+            parser_version: string;
+            current: boolean;
+            /** Format: int64 */
+            size?: number | null;
+            sha256?: string | null;
+            /** Format: int64 */
+            location_generation: number;
+            health: string;
+        };
+        SourceVersionList: {
+            items: components["schemas"]["SourceVersion"][];
+        };
+        SourceUpdateCommit: {
+            task_id: number;
+            /** Format: int64 */
+            expected_source_generation: number;
+            /** Format: int64 */
+            expected_translation_generation: number;
+        };
+        ExportArtifact: {
+            id: number;
+            source_revision_id: number;
+            /** @enum {string} */
+            status: "pending" | "ready" | "failed" | "deleted";
+            rebuildable: boolean;
+            renderer_version: string;
+            filename: string;
+            deletion_task_id: number | null;
+        };
+        ExportArtifactList: {
+            items: components["schemas"]["ExportArtifact"][];
+        };
         Credential: {
             id: number;
             /** @enum {string} */
@@ -3674,7 +4749,7 @@ export interface components {
             project_id: number;
             project_name: string;
             /** @enum {string} */
-            status: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            status: "pending" | "running" | "paused" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -3687,6 +4762,8 @@ export interface components {
         TranslationOperation: components["schemas"]["OperationBase"] & {
             /** @enum {string} */
             task_type: "translation";
+            /** @enum {string} */
+            status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
             /** @enum {string} */
             trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
             progress: components["schemas"]["JobSummaryProgress"];
@@ -3715,7 +4792,29 @@ export interface components {
              */
             task_type: "glossary_sync";
         };
-        OperationSummary: components["schemas"]["TranslationOperation"] | components["schemas"]["GlossarySyncOperation"];
+        StorageOperation: components["schemas"]["OperationBase"] & {
+            /** @enum {string} */
+            task_type: "storage";
+            storage_kind: string;
+            /** @enum {string} */
+            status?: "pending" | "running" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
+            phase: string;
+            /** @enum {string} */
+            cleanup_status: "cleanup_pending" | "running" | "blocked" | "done";
+            /** @description 脱敏的稳定领域错误码；空字符串表示无错误。 */
+            error_code: string;
+            /** Format: date-time */
+            next_retry_at: string | null;
+            /** @description 类型能力；当前阶段能否控制以存储任务详情的 allowed_actions 为准。 */
+            supported_actions?: ("view" | "cancel" | "retry")[];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            task_type: "storage";
+        };
+        OperationSummary: components["schemas"]["TranslationOperation"] | components["schemas"]["GlossarySyncOperation"] | components["schemas"]["StorageOperation"];
         OperationListResponse: {
             items: components["schemas"]["OperationSummary"][];
             next_cursor?: string;
@@ -3725,12 +4824,15 @@ export interface components {
             running: number;
             paused: number;
             recent_failed: number;
+            waiting_retry: number;
+            needs_action: number;
         };
         OperationsSummaryResponse: {
             total: components["schemas"]["OperationCounts"];
             by_type: {
                 translation: components["schemas"]["OperationCounts"];
                 glossary_sync: components["schemas"]["OperationCounts"];
+                storage: components["schemas"]["OperationCounts"];
             };
             /** Format: date-time */
             recent_failed_since: string;
@@ -3798,11 +4900,11 @@ export interface components {
             /** @description 术语抽取提示词模板 ID（BootstrapPromptTemplate） */
             template_id?: number;
             /**
-             * @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项；两者都为 0 时不分批，全部一次发送
+             * @description 段落数上限；0=不限制；与 max_words_per_batch 都为 0 时不分批，全部一次发送
              * @default 20
              */
             batch_size?: number;
-            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项；两者都为 0 时不分批，全部一次发送 */
+            /** @description 字词数上限；0=不限制；与 batch_size 都为 0 时不分批，全部一次发送 */
             max_words_per_batch?: number;
             /**
              * @description 每 1000 字词的术语抽取上限系数
@@ -4259,7 +5361,7 @@ export interface components {
         BeforeSeq: number;
         jobProjectFilter: number;
         jobTriggerFilter: "manual" | "file_update" | "glossary_change" | "web_edit";
-        taskType: "translation" | "glossary_sync";
+        taskType: "translation" | "glossary_sync" | "storage";
     };
     requestBodies: never;
     headers: never;
@@ -4267,6 +5369,1049 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    GetStorageOptions: {
+        parameters: {
+            query: {
+                scope: "user" | "org";
+                organization_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discover eligible project creation targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageOptions"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetProjectStorageOptions: {
+        parameters: {
+            query: {
+                purpose: "bind" | "migrate" | "repair";
+                source_revision_id?: number;
+            };
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discover bind, migrate or repair targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageOptions"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStorageChecks: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent durable connection checks ordered by descending ID */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageCheckList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStorageCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+                checkId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read durable verification and cleanup facts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageCheck"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DownloadLegacySourceSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Download protected legacy business data before source replacement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStorageDiagnostics: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 只读存储诊断 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageDiagnostics"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStoragePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoragePolicy"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStoragePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoragePolicy"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoragePolicy"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListSiteStorageConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deployment connections visible to administrators */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnectionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStorageConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnectionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateStorageConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOrgStorageConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnectionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateOrgStorageConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStorageConnectionState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageConnectionStateRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStorageConnectionSpaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageSpaceList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateStorageSpace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageSpaceRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageSpace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    AuthorizeStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CheckStorageConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    write_check: boolean;
+                    /** Format: int64 */
+                    expected_generation: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Verified connection metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    RevokeStorageAuthorization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStorageSpaceState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageSpaceStateRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageSpace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetProjectStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStorage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    BindProjectStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    MigrateProjectStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageMigrationRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStorageTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTaskList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateStorageIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageIntent"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStorageTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ReceiveStorageContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CancelStorageTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    RetryStorageTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListSourceVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceVersionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    PreviewSourceUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceUpdatePreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CommitSourceUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceUpdateCommit"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListExportArtifacts: {
+        parameters: {
+            query?: {
+                include_deleted?: boolean;
+            };
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportArtifactList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateExportArtifact: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteExportArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DownloadExportArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    RebuildExportArtifact: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     ListUserCredentials: {
         parameters: {
             query?: never;
@@ -5303,7 +7448,9 @@ export interface operations {
     UploadProjectResources: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
             path: {
                 projectId: components["parameters"]["ProjectId"];
             };
@@ -5421,6 +7568,12 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
+                    /** @description 已确认的源文件差异预览任务 ID；提交使用该任务持久保存的候选内容。 */
+                    preview_task_id: number;
+                    /** Format: int64 */
+                    expected_source_generation: number;
+                    /** Format: int64 */
+                    expected_translation_generation: number;
                     /** Format: binary */
                     file: string;
                 };
@@ -5452,6 +7605,12 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
+                    /** @description 已确认的源文件差异预览任务 ID；提交使用该任务持久保存的候选内容。 */
+                    preview_task_id: number;
+                    /** Format: int64 */
+                    expected_source_generation: number;
+                    /** Format: int64 */
+                    expected_translation_generation: number;
                     /** Format: binary */
                     file: string;
                 };
@@ -6489,7 +8648,7 @@ export interface operations {
                 project_id?: components["parameters"]["jobProjectFilter"];
                 trigger_type?: components["parameters"]["jobTriggerFilter"];
                 state?: "active" | "terminal" | "all";
-                status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+                status?: "pending" | "running" | "paused" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
                 updated_from?: string;
                 updated_before?: string;
                 cursor?: string;
