@@ -31,6 +31,14 @@ projectResources:
   post:
     operationId: UploadProjectResources
     summary: 上传资源文件到项目
+    parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
     description: |
       批量上传资源文件，允许部分成功。
       - files 与 paths 按数组下标一一对应
@@ -38,6 +46,8 @@ projectResources:
       - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
       - 项目内资源唯一性以规范化 path 判断，而不是 filename
       - 冲突或失败的文件不会阻断其他文件的上传，每个文件独立返回处理结果
+      - 首项发布前固定完整有序批次及完整文件摘要；同键换序、删项、改路径或改字节返回 409
+      - 原键重放保留原条目成功或失败；仅重传失败子批次需要新键
     security:
       - bearerAuth: []
     requestBody:

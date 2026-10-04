@@ -1,6 +1,6 @@
 Project:
   type: object
-  required: [id, name, source_lang, target_lang, glossary_enabled]
+  required: [id, name, source_lang, target_lang, glossary_enabled, storage_space_id, storage_generation, output_generation, storage_state]
   properties:
     storage_space_id:
       type: integer
@@ -8,11 +8,14 @@ Project:
     storage_generation:
       type: integer
       format: int64
+      minimum: 0
     output_generation:
       type: integer
       format: int64
+      minimum: 0
     storage_state:
       type: string
+      enum: [active, draining, migrating, legacy_migration, legacy_rollback]
 
     id:
       type: integer

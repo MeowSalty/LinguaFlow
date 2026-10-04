@@ -12,6 +12,200 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /storage/options:
+    get:
+      operationId: GetStorageOptions
+      summary: Discover eligible project creation targets
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - user
+              - org
+        - name: organization_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Discover eligible project creation targets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageOptions'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/storage/options:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: GetProjectStorageOptions
+      summary: Discover bind, migrate or repair targets
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: purpose
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - bind
+              - migrate
+              - repair
+        - name: source_revision_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Discover bind, migrate or repair targets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageOptions'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/connections/{connectionId}/checks:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: ListStorageChecks
+      summary: Recent durable connection checks ordered by descending ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Recent durable connection checks ordered by descending ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageCheckList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/connections/{connectionId}/checks/{checkId}:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: checkId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: GetStorageCheck
+      summary: Read durable verification and cleanup facts
+      security:
+        - bearerAuth: []
+      parameters: []
+      responses:
+        '200':
+          description: Read durable verification and cleanup facts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageCheck'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/storage/tasks/{taskId}/legacy-snapshot:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: DownloadLegacySourceSnapshot
+      summary: Download protected legacy business data before source replacement
+      security:
+        - bearerAuth: []
+      parameters: []
+      responses:
+        '200':
+          description: Download protected legacy business data before source replacement
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /admin/storage/diagnostics:
     get:
       operationId: GetStorageDiagnostics
@@ -239,7 +433,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StorageStateRequest'
+              $ref: '#/components/schemas/StorageConnectionStateRequest'
       responses:
         '200':
           description: 操作结果
@@ -411,7 +605,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StorageStateRequest'
+              $ref: '#/components/schemas/StorageRevokeRequest'
       responses:
         '200':
           description: 操作结果
@@ -446,7 +640,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StorageStateRequest'
+              $ref: '#/components/schemas/StorageSpaceStateRequest'
       responses:
         '200':
           description: 操作结果
@@ -482,7 +676,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StorageSpace'
+                $ref: '#/components/schemas/ProjectStorage'
         '400':
           $ref: '#/components/responses/Problem'
         '403':
@@ -533,7 +727,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StorageBindingRequest'
+              $ref: '#/components/schemas/StorageMigrationRequest'
       responses:
         '202':
           description: 操作结果
@@ -893,6 +1087,12 @@ paths:
           type: integer
           minimum: 1
     get:
+      parameters:
+        - name: include_deleted
+          in: query
+          schema:
+            type: boolean
+            default: false
       operationId: ListExportArtifacts
       summary: ListExportArtifacts
       description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
@@ -1890,6 +2090,14 @@ paths:
     post:
       operationId: UploadProjectResources
       summary: 上传资源文件到项目
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
       description: |
         批量上传资源文件，允许部分成功。
         - files 与 paths 按数组下标一一对应
@@ -1897,6 +2105,8 @@ paths:
         - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
         - 项目内资源唯一性以规范化 path 判断，而不是 filename
         - 冲突或失败的文件不会阻断其他文件的上传，每个文件独立返回处理结果
+        - 首项发布前固定完整有序批次及完整文件摘要；同键换序、删项、改路径或改字节返回 409
+        - 原键重放保留原条目成功或失败；仅重传失败子批次需要新键
       security:
         - bearerAuth: []
       requestBody:
@@ -4334,6 +4544,15 @@ components:
         - title
         - status
       properties:
+        error_code:
+          type: string
+          description: Stable domain error code; required on storage domain failures.
+        task_id:
+          type: integer
+        operation_id:
+          type: string
+        check_id:
+          type: integer
         type:
           type: string
         title:
@@ -4727,6 +4946,9 @@ components:
         - approved_segments
         - created_at
         - updated_at
+        - current_source_revision_id
+        - source_generation
+        - translation_generation
       properties:
         current_source_revision_id:
           type: integer
@@ -4908,6 +5130,8 @@ components:
         - path
         - action
       properties:
+        error_code:
+          type: string
         path:
           type: string
           description: 资源项目内规范化相对路径
@@ -4932,6 +5156,8 @@ components:
       required:
         - items
       properties:
+        operation_id:
+          type: string
         items:
           type: array
           items:
@@ -6149,6 +6375,10 @@ components:
         - source_lang
         - target_lang
         - glossary_enabled
+        - storage_space_id
+        - storage_generation
+        - output_generation
+        - storage_state
       properties:
         storage_space_id:
           type: integer
@@ -6156,11 +6386,19 @@ components:
         storage_generation:
           type: integer
           format: int64
+          minimum: 0
         output_generation:
           type: integer
           format: int64
+          minimum: 0
         storage_state:
           type: string
+          enum:
+            - active
+            - draining
+            - migrating
+            - legacy_migration
+            - legacy_rollback
         id:
           type: integer
         name:
@@ -7366,6 +7604,202 @@ components:
           type: integer
           description: 占用该资源的未完成任务 ID
       additionalProperties: false
+    StorageOption:
+      type: object
+      additionalProperties: false
+      required:
+        - space_id
+        - name
+        - scope
+        - selectable
+        - reason_codes
+      properties:
+        space_id:
+          type: integer
+          minimum: 0
+        name:
+          type: string
+        scope:
+          type: string
+          enum:
+            - site
+            - user
+            - org
+        selectable:
+          type: boolean
+        reason_codes:
+          type: array
+          items:
+            type: string
+            enum:
+              - policy_disallowed
+              - selection_required
+              - byos_disabled
+              - storage_maintenance
+              - connection_disabled
+              - storage_auth_required
+              - storage_crypto_unavailable
+              - storage_permission_denied
+              - storage_unavailable
+              - space_unverified
+              - space_read_only
+              - space_disabled
+              - storage_quota_exceeded
+              - storage_operation_in_progress
+              - project_not_empty
+    StorageOptions:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - owner_id
+        - policy
+        - default_space_id
+        - default_unavailable_reason
+        - items
+      properties:
+        scope:
+          type: string
+          enum:
+            - user
+            - org
+        owner_id:
+          type: integer
+          minimum: 0
+        policy:
+          type: object
+          additionalProperties: false
+          required:
+            - mode
+            - default_choice
+            - generation
+          properties:
+            mode:
+              type: string
+              enum:
+                - site_only
+                - both
+                - user_required
+            default_choice:
+              type: string
+              enum:
+                - site
+                - user
+            generation:
+              type: integer
+              minimum: 0
+              format: int64
+        default_space_id:
+          type: integer
+          minimum: 0
+          nullable: true
+        default_unavailable_reason:
+          type: string
+          nullable: true
+          enum:
+            - policy_disallowed
+            - selection_required
+            - byos_disabled
+            - storage_maintenance
+            - connection_disabled
+            - storage_auth_required
+            - storage_crypto_unavailable
+            - storage_permission_denied
+            - storage_unavailable
+            - space_unverified
+            - space_read_only
+            - space_disabled
+            - storage_quota_exceeded
+            - storage_operation_in_progress
+            - project_not_empty
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageOption'
+        storage_generation:
+          type: integer
+          minimum: 0
+          format: int64
+    StorageCheckSpaceResult:
+      type: object
+      additionalProperties: false
+      required:
+        - space_id
+        - status
+      properties:
+        space_id:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+        error_code:
+          type: string
+    StorageCheck:
+      type: object
+      additionalProperties: false
+      required:
+        - check_id
+        - connection_id
+        - mode
+        - management_generation
+        - created_at
+        - completed_at
+        - status
+        - cleanup_status
+        - accounted_bytes
+        - authorization_activated
+        - results
+      properties:
+        check_id:
+          type: integer
+          minimum: 0
+        connection_id:
+          type: integer
+          minimum: 0
+        mode:
+          type: string
+        management_generation:
+          type: integer
+          minimum: 0
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+        cleanup_status:
+          type: string
+          enum:
+            - cleanup_pending
+            - running
+            - blocked
+            - done
+        error_code:
+          type: string
+        accounted_bytes:
+          type: integer
+          minimum: 0
+          format: int64
+        authorization_activated:
+          type: boolean
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageCheckSpaceResult'
+    StorageCheckList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageCheck'
     StorageSpaceDiagnostics:
       type: object
       required:
@@ -7479,6 +7913,10 @@ components:
           type: integer
           format: int64
           minimum: 1
+        configuration_needs_update:
+          type: boolean
+          readOnly: true
+          description: Stored mode/default combination needs administrator correction; effective values are normalized.
     StorageConnection:
       type: object
       additionalProperties: false
@@ -7516,6 +7954,13 @@ components:
           type: string
         health:
           type: string
+          enum:
+            - unknown
+            - available
+            - degraded
+            - auth_required
+            - permission_denied
+            - crypto_unavailable
         has_auth:
           type: boolean
         management_generation:
@@ -7527,6 +7972,10 @@ components:
         checked_at:
           type: string
           format: date-time
+          nullable: true
+        check_id:
+          type: integer
+          minimum: 0
           nullable: true
     StorageConnectionList:
       type: object
@@ -7561,7 +8010,7 @@ components:
           type: string
         path_style:
           type: boolean
-    StorageStateRequest:
+    StorageConnectionStateRequest:
       type: object
       additionalProperties: false
       required:
@@ -7573,12 +8022,10 @@ components:
           enum:
             - enabled
             - disabled
-            - active
-            - read_only
         expected_generation:
           type: integer
-          format: int64
           minimum: 0
+          format: int64
     StorageSpace:
       type: object
       additionalProperties: false
@@ -7688,6 +8135,113 @@ components:
           type: string
           format: date-time
           nullable: true
+    StorageRevokeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_generation
+      properties:
+        expected_generation:
+          type: integer
+          minimum: 0
+          format: int64
+    StorageSpaceStateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - expected_generation
+      properties:
+        status:
+          type: string
+          enum:
+            - active
+            - read_only
+            - disabled
+        expected_generation:
+          type: integer
+          minimum: 0
+          format: int64
+    ProjectStorage:
+      type: object
+      additionalProperties: false
+      required:
+        - project_id
+        - storage_generation
+        - storage_state
+        - migration_task_id
+        - binding
+        - reason_codes
+      properties:
+        project_id:
+          type: integer
+          minimum: 0
+        storage_generation:
+          type: integer
+          minimum: 0
+          format: int64
+        storage_state:
+          type: string
+          enum:
+            - active
+            - draining
+            - migrating
+            - legacy_migration
+            - legacy_rollback
+        migration_task_id:
+          type: integer
+          minimum: 0
+          nullable: true
+        binding:
+          type: object
+          additionalProperties: false
+          required:
+            - space_id
+            - name
+            - scope
+            - status
+            - historical
+            - owner_id
+          properties:
+            space_id:
+              type: integer
+              minimum: 0
+            name:
+              type: string
+            scope:
+              type: string
+              enum:
+                - site
+                - user
+                - org
+            status:
+              type: string
+            historical:
+              type: boolean
+            owner_id:
+              type: integer
+              minimum: 0
+          nullable: true
+        reason_codes:
+          type: array
+          items:
+            type: string
+            enum:
+              - policy_disallowed
+              - selection_required
+              - byos_disabled
+              - storage_maintenance
+              - connection_disabled
+              - storage_auth_required
+              - storage_crypto_unavailable
+              - storage_permission_denied
+              - storage_unavailable
+              - space_unverified
+              - space_read_only
+              - space_disabled
+              - storage_quota_exceeded
+              - storage_operation_in_progress
+              - project_not_empty
     StorageBindingRequest:
       type: object
       additionalProperties: false
@@ -7702,9 +8256,80 @@ components:
           type: integer
           format: int64
           minimum: 0
+    StorageMigrationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - space_id
+        - expected_generation
+        - idempotency_key
+      properties:
+        space_id:
+          type: integer
+          minimum: 1
+        expected_generation:
+          type: integer
+          format: int64
+          minimum: 0
         idempotency_key:
           type: string
+          minLength: 1
           maxLength: 200
+    SourceUpdateStats:
+      type: object
+      additionalProperties: false
+      required:
+        - unchanged
+        - updated
+        - added
+        - deleted
+      properties:
+        unchanged:
+          type: integer
+          minimum: 0
+        updated:
+          type: integer
+          minimum: 0
+        added:
+          type: integer
+          minimum: 0
+        deleted:
+          type: integer
+          minimum: 0
+    SourceUpdatePreview:
+      type: object
+      required:
+        - task_id
+        - source_generation
+        - translation_generation
+        - stats
+        - expires_at
+      properties:
+        task_id:
+          type: integer
+        source_generation:
+          type: integer
+          format: int64
+        translation_generation:
+          type: integer
+          format: int64
+        stats:
+          $ref: '#/components/schemas/SourceUpdateStats'
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        baseline_trust:
+          type: string
+          enum:
+            - verified
+            - legacy_unverified
+        legacy_snapshot_available:
+          type: boolean
+        legacy_snapshot_expires_at:
+          type: string
+          format: date-time
+          nullable: true
     StorageTask:
       type: object
       additionalProperties: false
@@ -7716,6 +8341,10 @@ components:
         - phase
         - cleanup_status
         - allowed_actions
+        - project_id
+        - created_at
+        - updated_at
+        - expires_at
       properties:
         id:
           type: integer
@@ -7761,6 +8390,55 @@ components:
         result_artifact_id:
           type: integer
           nullable: true
+        project_id:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        resource_id:
+          type: integer
+          minimum: 0
+          nullable: true
+        source_revision_id:
+          type: integer
+          minimum: 0
+          nullable: true
+        target_space_id:
+          type: integer
+          minimum: 0
+          nullable: true
+        expected_storage_generation:
+          type: integer
+          minimum: 0
+          format: int64
+        expected_source_generation:
+          type: integer
+          minimum: 0
+          format: int64
+        expected_translation_generation:
+          type: integer
+          minimum: 0
+          format: int64
+        expected_location_generation:
+          type: integer
+          minimum: 0
+          format: int64
+        input_size:
+          type: integer
+          minimum: 0
+          format: int64
+        input_sha256:
+          type: string
+        source_preview:
+          $ref: '#/components/schemas/SourceUpdatePreview'
     StorageTaskList:
       type: object
       required:
@@ -7770,53 +8448,126 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StorageTask'
-    StorageIntent:
+    StorageUploadIntent:
       type: object
       additionalProperties: false
       required:
-        - kind
-        - size
         - idempotency_key
+        - size
         - storage_generation
+        - kind
+        - path
       properties:
-        kind:
-          type: string
-          enum:
-            - upload
-            - source_update
-            - repair
         idempotency_key:
           type: string
           minLength: 1
           maxLength: 200
-        path:
-          type: string
-        resource_id:
-          type: integer
-        source_revision_id:
-          type: integer
-        target_space_id:
-          type: integer
         size:
           type: integer
-          format: int64
           minimum: 0
-        source_generation:
-          type: integer
           format: int64
-          minimum: 0
-        translation_generation:
-          type: integer
-          format: int64
-          minimum: 0
         storage_generation:
           type: integer
-          format: int64
           minimum: 0
+          format: int64
+        kind:
+          type: string
+          enum:
+            - upload
+        path:
+          type: string
+    StorageSourceUpdateIntent:
+      type: object
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - size
+        - storage_generation
+        - kind
+        - resource_id
+        - source_generation
+        - translation_generation
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 200
+        size:
+          type: integer
+          minimum: 0
+          format: int64
+        storage_generation:
+          type: integer
+          minimum: 0
+          format: int64
+        kind:
+          type: string
+          enum:
+            - source_update
+        resource_id:
+          type: integer
+          minimum: 1
+        source_generation:
+          type: integer
+          minimum: 0
+          format: int64
+        translation_generation:
+          type: integer
+          minimum: 0
+          format: int64
+    StorageRepairIntent:
+      type: object
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - size
+        - storage_generation
+        - kind
+        - resource_id
+        - source_revision_id
+        - location_generation
+        - target_space_id
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 200
+        size:
+          type: integer
+          minimum: 0
+          format: int64
+        storage_generation:
+          type: integer
+          minimum: 0
+          format: int64
+        kind:
+          type: string
+          enum:
+            - repair
+        resource_id:
+          type: integer
+          minimum: 1
+        source_revision_id:
+          type: integer
+          minimum: 1
         location_generation:
           type: integer
-          format: int64
           minimum: 0
+          format: int64
+        target_space_id:
+          type: integer
+          minimum: 1
+    StorageIntent:
+      oneOf:
+        - $ref: '#/components/schemas/StorageUploadIntent'
+        - $ref: '#/components/schemas/StorageSourceUpdateIntent'
+        - $ref: '#/components/schemas/StorageRepairIntent'
+      discriminator:
+        propertyName: kind
+        mapping:
+          upload: '#/components/schemas/StorageUploadIntent'
+          source_update: '#/components/schemas/StorageSourceUpdateIntent'
+          repair: '#/components/schemas/StorageRepairIntent'
     SourceVersion:
       type: object
       additionalProperties: false
@@ -7863,26 +8614,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SourceVersion'
-    SourceUpdatePreview:
-      type: object
-      required:
-        - task_id
-        - source_generation
-        - translation_generation
-        - stats
-      properties:
-        task_id:
-          type: integer
-        source_generation:
-          type: integer
-          format: int64
-        translation_generation:
-          type: integer
-          format: int64
-        stats:
-          type: object
-          additionalProperties:
-            type: integer
     SourceUpdateCommit:
       type: object
       additionalProperties: false
@@ -7909,6 +8640,7 @@ components:
         - rebuildable
         - renderer_version
         - filename
+        - deletion_task_id
       properties:
         id:
           type: integer
@@ -7927,6 +8659,10 @@ components:
           type: string
         filename:
           type: string
+        deletion_task_id:
+          type: integer
+          minimum: 0
+          nullable: true
     ExportArtifactList:
       type: object
       required:

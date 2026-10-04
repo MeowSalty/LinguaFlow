@@ -269,7 +269,7 @@ storageConnection:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/storage.yaml#/StorageStateRequest'
+            $ref: '../components/schemas/storage.yaml#/StorageConnectionStateRequest'
     responses:
       '200':
         description: 操作结果
@@ -395,7 +395,7 @@ revokeStorage:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/storage.yaml#/StorageStateRequest'
+            $ref: '../components/schemas/storage.yaml#/StorageRevokeRequest'
     responses:
       '200':
         description: 操作结果
@@ -430,7 +430,7 @@ storageSpace:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/storage.yaml#/StorageStateRequest'
+            $ref: '../components/schemas/storage.yaml#/StorageSpaceStateRequest'
     responses:
       '200':
         description: 操作结果
@@ -466,7 +466,7 @@ projectStorage:
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/storage.yaml#/StorageSpace'
+              $ref: '../components/schemas/storage.yaml#/ProjectStorage'
       '400':
         $ref: '../base.yaml#/components/responses/Problem'
       '403':
@@ -517,7 +517,7 @@ storageMigrations:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/storage.yaml#/StorageBindingRequest'
+            $ref: '../components/schemas/storage.yaml#/StorageMigrationRequest'
     responses:
       '202':
         description: 操作结果
@@ -877,6 +877,12 @@ sourceExports:
         type: integer
         minimum: 1
   get:
+    parameters:
+      - name: include_deleted
+        in: query
+        schema:
+          type: boolean
+          default: false
     operationId: ListExportArtifacts
     summary: ListExportArtifacts
     description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
@@ -1036,3 +1042,197 @@ exportRebuild:
         $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
+storageOptions:
+  get:
+    operationId: "GetStorageOptions"
+    summary: "Discover eligible project creation targets"
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: "scope"
+        in: "query"
+        required: true
+        schema:
+          type: "string"
+          enum:
+            - "user"
+            - "org"
+      - name: "organization_id"
+        in: "query"
+        required: false
+        schema:
+          type: "integer"
+          minimum: 1
+    responses:
+      200:
+        description: "Discover eligible project creation targets"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/storage.yaml#/StorageOptions"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+projectStorageOptions:
+  parameters:
+    - name: "projectId"
+      in: "path"
+      required: true
+      schema:
+        type: "integer"
+        minimum: 1
+  get:
+    operationId: "GetProjectStorageOptions"
+    summary: "Discover bind, migrate or repair targets"
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: "purpose"
+        in: "query"
+        required: true
+        schema:
+          type: "string"
+          enum:
+            - "bind"
+            - "migrate"
+            - "repair"
+      - name: "source_revision_id"
+        in: "query"
+        required: false
+        schema:
+          type: "integer"
+          minimum: 1
+    responses:
+      200:
+        description: "Discover bind, migrate or repair targets"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/storage.yaml#/StorageOptions"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+storageChecks:
+  parameters:
+    - name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "integer"
+        minimum: 1
+  get:
+    operationId: "ListStorageChecks"
+    summary: "Recent durable connection checks ordered by descending ID"
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: "cursor"
+        in: "query"
+        required: false
+        schema:
+          type: "integer"
+          minimum: 0
+      - name: "limit"
+        in: "query"
+        required: false
+        schema:
+          type: "integer"
+          minimum: 1
+          maximum: 100
+          default: 50
+    responses:
+      200:
+        description: "Recent durable connection checks ordered by descending ID"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/storage.yaml#/StorageCheckList"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+storageCheck:
+  parameters:
+    - name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "integer"
+        minimum: 1
+    - name: "checkId"
+      in: "path"
+      required: true
+      schema:
+        type: "integer"
+        minimum: 1
+  get:
+    operationId: "GetStorageCheck"
+    summary: "Read durable verification and cleanup facts"
+    security:
+      - bearerAuth: []
+    parameters: []
+    responses:
+      200:
+        description: "Read durable verification and cleanup facts"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/storage.yaml#/StorageCheck"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+legacySnapshot:
+  parameters:
+    - name: "projectId"
+      in: "path"
+      required: true
+      schema:
+        type: "integer"
+        minimum: 1
+    - name: "taskId"
+      in: "path"
+      required: true
+      schema:
+        type: "integer"
+        minimum: 1
+  get:
+    operationId: "DownloadLegacySourceSnapshot"
+    summary: "Download protected legacy business data before source replacement"
+    security:
+      - bearerAuth: []
+    parameters: []
+    responses:
+      200:
+        description: "Download protected legacy business data before source replacement"
+        content:
+          application/json:
+            schema:
+              type: "object"
+              additionalProperties: true
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"

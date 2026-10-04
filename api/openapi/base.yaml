@@ -12,6 +12,16 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /storage/options:
+    $ref: './paths/storage.yaml#/storageOptions'
+  /projects/{projectId}/storage/options:
+    $ref: './paths/storage.yaml#/projectStorageOptions'
+  /storage/connections/{connectionId}/checks:
+    $ref: './paths/storage.yaml#/storageChecks'
+  /storage/connections/{connectionId}/checks/{checkId}:
+    $ref: './paths/storage.yaml#/storageCheck'
+  /projects/{projectId}/storage/tasks/{taskId}/legacy-snapshot:
+    $ref: './paths/storage.yaml#/legacySnapshot'
   /admin/storage/diagnostics:
     $ref: './paths/storage.yaml#/storageDiagnostics'
   /admin/storage/policy:

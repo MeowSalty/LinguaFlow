@@ -24,6 +24,15 @@ Problem:
   type: object
   required: [title, status]
   properties:
+    error_code:
+      type: string
+      description: Stable domain error code; required on storage domain failures.
+    task_id:
+      type: integer
+    operation_id:
+      type: string
+    check_id:
+      type: integer
     type:
       type: string
     title:

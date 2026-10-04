@@ -1,6 +1,6 @@
 Resource:
   type: object
-  required: [id, path, name, directory, format, total_segments, translated_segments, approved_segments, created_at, updated_at]
+  required: [id, path, name, directory, format, total_segments, translated_segments, approved_segments, created_at, updated_at, current_source_revision_id, source_generation, translation_generation]
   properties:
     current_source_revision_id:
       type: integer
@@ -46,6 +46,8 @@ ResourceUploadFileResult:
   type: object
   required: [path, action]
   properties:
+    error_code:
+      type: string
     path:
       type: string
       description: 资源项目内规范化相对路径
@@ -67,6 +69,8 @@ ResourceUploadBatchResponse:
   type: object
   required: [items]
   properties:
+    operation_id:
+      type: string
     items:
       type: array
       items:
