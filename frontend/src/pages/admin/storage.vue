@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import {
   NAlert,
   NButton,
@@ -9,13 +9,21 @@ import {
   NInputNumber,
   NSelect,
   NSkeleton,
+  useDialog,
   useMessage,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import type { ApiSchemas } from '@/api/client-core'
 import { getStorageDiagnostics } from '@/api/storage'
 import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
-import { isAccessDenied } from '@/api/utils'
+import {
+  storageAccessDenied,
+  storageErrorMessage,
+  storageTaskErrorMessage,
+} from '@/api/storage-errors'
+import { createStoragePolicyDraft } from '@/utils/storage-policy-draft'
+import { hasStoragePolicyCapabilities } from '@/utils/storage-availability'
+import { invalidateStorageSnapshots, subscribeStorageRefresh } from '@/utils/storage-snapshots'
 import { useStorageStore } from '@/stores/storage'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/datetime'
@@ -24,18 +32,37 @@ import StorageManager from '@/components/storage/StorageManager.vue'
 import StorageCapacity from '@/components/storage/StorageCapacity.vue'
 
 const { t } = useI18n(),
-  message = useMessage()
+  message = useMessage(),
+  dialog = useDialog()
 const store = useStorageStore(),
   auth = useAuthStore()
-const form = reactive({
-  mode: 'site_only' as ApiSchemas['StoragePolicy']['mode'],
-  default_choice: 'site' as ApiSchemas['StoragePolicy']['default_choice'],
-  logical_limit_bytes: 1,
-})
+const draft = createStoragePolicyDraft()
+const { form, dirty, conflict } = draft
+const modeAllowed = computed(
+  () =>
+    !!store.policy &&
+    hasStoragePolicyCapabilities(store.policy) &&
+    store.policy.allowed_policy_modes.includes(form.mode),
+)
+const canSave = computed(
+  () =>
+    !!draft.baseline.value &&
+    !conflict.value &&
+    modeAllowed.value &&
+    !store.policyStale &&
+    !store.policyLoading &&
+    !store.busy.policy &&
+    !store.unknownWrites.policy &&
+    Number.isSafeInteger(form.logical_limit_bytes) &&
+    form.logical_limit_bytes > 0 &&
+    (form.mode !== 'site_only' || form.default_choice === 'site') &&
+    (form.mode !== 'user_required' || form.default_choice === 'user'),
+)
 const modes = computed(() =>
   (['site_only', 'both', 'user_required'] as const).map((value) => ({
     value,
     label: t(`storage.modes.${value}`),
+    disabled: !store.policy?.allowed_policy_modes?.includes(value),
   })),
 )
 const choices = computed(() =>
@@ -52,24 +79,42 @@ const diagnosticsError = ref<string | null>(null),
 const cursor = ref<number | undefined>(undefined)
 let sequence = 0,
   controller = new AbortController()
+let active = true
 watch(
   () => store.policy,
   (value) => {
-    if (value)
-      Object.assign(form, {
-        mode: value.mode,
-        default_choice: value.default_choice,
-        logical_limit_bytes: value.logical_limit_bytes,
-      })
+    if (value) draft.receive(value)
+    else draft.clear()
   },
+  { immediate: true },
 )
-watch(
-  () => form.mode,
-  (value) => {
-    if (value === 'site_only') form.default_choice = 'site'
-    else if (value === 'user_required') form.default_choice = 'user'
-  },
-)
+function reviewBaseline() {
+  const latest = draft.server.value,
+    baseline = draft.baseline.value
+  if (!latest || !baseline || !conflict.value) return
+  const describe = (value: typeof latest) =>
+    `${t(`storage.modes.${value.mode}`)} / ${t(`storage.choices.${value.default_choice}`)} / ${value.logical_limit_bytes.toLocaleString()}`
+  const session = captureSession()
+  dialog.warning({
+    title: t('storageManagement.reviewPolicy'),
+    content: t('storageManagement.policyComparison', {
+      before: describe(baseline),
+      after: describe(latest),
+      draft: describe({ ...latest, ...form }),
+    }),
+    positiveText: t('storageManagement.adoptBaseline'),
+    negativeText: t('storage.cancel'),
+    onPositiveClick: () => {
+      if (
+        active &&
+        isSessionCurrent(session) &&
+        auth.user?.role === 'admin' &&
+        draft.server.value === latest
+      )
+        draft.adoptBaseline()
+    },
+  })
+}
 async function loadDiagnostics(next?: number) {
   if (auth.user?.role !== 'admin') return
   controller.abort()
@@ -91,26 +136,28 @@ async function loadDiagnostics(next?: number) {
     }
   } catch (error) {
     if (current()) {
-      if (isAccessDenied(error)) diagnostics.value = null
-      diagnosticsError.value = t(isAccessDenied(error) ? 'storage.denied' : 'storage.readFailed')
+      if (storageAccessDenied(error)) diagnostics.value = null
+      diagnosticsError.value = storageErrorMessage(error)
     }
   } finally {
     if (current()) diagnosticsLoading.value = false
   }
 }
 async function savePolicy() {
-  if (
-    !store.policy ||
-    !Number.isSafeInteger(form.logical_limit_bytes) ||
-    form.logical_limit_bytes < 1
-  )
-    return
-  const result = await store.savePolicy({ ...form, generation: store.policy.generation })
+  const snapshot = draft.snapshot()
+  if (!canSave.value || !snapshot) return
+  const result = await store.savePolicy(snapshot)
   if (result.status === 'success') {
+    invalidateStorageSnapshots()
+    if (!active) return
+    draft.accept(result.value)
     message.success(t('storage.saved'))
-    await store.loadPolicy()
   }
 }
+const unsubscribeRefresh = subscribeStorageRefresh({
+  invalidate: store.markPolicyStale,
+  refresh: () => store.loadPolicy(),
+})
 watch(
   () => [sessionGeneration.value, auth.user?.role],
   () => {
@@ -119,6 +166,7 @@ watch(
     diagnostics.value = null
     diagnosticsError.value = null
     diagnosticsLoading.value = false
+    draft.clear()
     if (auth.user?.role === 'admin') {
       store.setScope({ kind: 'site' })
       void store.loadPolicy()
@@ -128,6 +176,9 @@ watch(
   { immediate: true },
 )
 onUnmounted(() => {
+  active = false
+  draft.clear()
+  unsubscribeRefresh()
   ++sequence
   controller.abort()
 })
@@ -144,32 +195,82 @@ onUnmounted(() => {
       <NAlert v-if="store.policyError || store.writeErrors.policy" type="warning" class="mb-4">{{
         store.policyError || store.writeErrors.policy
       }}</NAlert>
+      <NAlert v-if="store.policySavedPendingRefresh" type="info" class="mb-4">{{
+        t('storageManagement.savedPendingRefresh')
+      }}</NAlert>
       <NSkeleton v-if="store.policyLoading && !store.policy" height="180px" />
       <NForm v-else-if="store.policy" label-placement="top" @submit.prevent="savePolicy">
+        <NAlert
+          v-if="store.policy.runtime?.deployment_enabled === false"
+          type="info"
+          class="mb-4"
+          >{{ t('storageManagement.deploymentSetup') }}</NAlert
+        >
+        <NAlert v-if="store.policy.runtime?.maintenance" type="info" class="mb-4">{{
+          t('storageManagement.policyMaintenance')
+        }}</NAlert>
+        <NAlert v-if="store.policy.configuration_needs_update" type="warning" class="mb-4">{{
+          t('storageManagement.policyConfiguration')
+        }}</NAlert>
+        <p
+          v-for="code in store.policy.policy_restriction_codes ?? []"
+          :key="code"
+          class="mb-3 text-sm text-lf-text-muted"
+        >
+          {{ storageTaskErrorMessage(code) }}
+        </p>
+        <NAlert v-if="!modeAllowed" type="warning" class="mb-4">
+          <p>{{ t('storageManagement.modeRestricted') }}</p>
+          <NButton
+            v-if="store.policy.allowed_policy_modes?.includes('site_only')"
+            class="mt-3"
+            :disabled="!!store.busy.policy"
+            @click="draft.chooseMode('site_only')"
+            >{{ t('storageManagement.useSiteOnly') }}</NButton
+          >
+          <p class="mt-2 text-xs">{{ t('storageManagement.siteOnlyHint') }}</p>
+        </NAlert>
+        <NAlert v-if="conflict" type="warning" class="mb-4">
+          <p>{{ t('storageManagement.policyConflict') }}</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <NButton @click="draft.reload">{{ t('storageManagement.reloadPolicy') }}</NButton
+            ><NButton @click="reviewBaseline">{{ t('storageManagement.reviewPolicy') }}</NButton>
+          </div>
+        </NAlert>
         <div class="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
           <NFormItem :label="t('storage.policyMode')"
-            ><NSelect v-model:value="form.mode" :options="modes"
+            ><NSelect
+              :value="form.mode"
+              :options="modes"
+              :disabled="!!store.busy.policy"
+              @update:value="draft.chooseMode"
           /></NFormItem>
           <NFormItem :label="t('storage.policyDefault')"
-            ><NSelect v-model:value="form.default_choice" :options="choices"
+            ><NSelect
+              v-model:value="form.default_choice"
+              :options="choices"
+              :disabled="!!store.busy.policy"
           /></NFormItem>
         </div>
         <NFormItem :label="t('storage.logicalLimit')"
           ><NInputNumber
             :value="form.logical_limit_bytes"
+            :disabled="!!store.busy.policy"
             :min="1"
             :max="Number.MAX_SAFE_INTEGER"
-            :precision="0"
             class="w-full"
             @update:value="(value) => (form.logical_limit_bytes = value ?? 0)"
         /></NFormItem>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <p class="text-xs text-lf-text-muted">{{ t('storage.policyHint') }}</p>
+          <p class="text-xs text-lf-text-muted">
+            {{ t('storage.policyHint')
+            }}<span v-if="dirty"> · {{ t('storageManagement.unsavedDraft') }}</span>
+          </p>
           <NButton
             type="primary"
             attr-type="submit"
             :loading="!!store.busy.policy"
-            :disabled="store.policyStale || store.policyLoading || !!store.unknownWrites.policy"
+            :disabled="!canSave"
             >{{ t('storage.save') }}</NButton
           >
         </div>

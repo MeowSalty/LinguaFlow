@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/storage/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover storage management capabilities
+         * @description Metadata-only discovery for an active authenticated account. User scope is always the current user and forbids organization_id; org scope requires a positive organization_id and organization owner/admin membership. Platform administrators do not bypass organization membership. Unknown, repeated and empty parameters are rejected. Disabled deployment returns a normal 200 response, even when no connections or spaces exist. Responses are private and must not be cached.
+         */
+        get: operations["GetStorageCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storage/options": {
         parameters: {
             query?: never;
@@ -133,7 +153,7 @@ export interface paths {
         get: operations["GetStoragePolicy"];
         /**
          * SetStoragePolicy
-         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         * @description 完整保存政策；部署关闭仅支持 site_only，不支持的模式返回 storage_deployment_disabled（409）且不部分更新额度或代次。维护状态不收缩模式枚举。
          */
         put: operations["SetStoragePolicy"];
         post?: never;
@@ -2657,7 +2677,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Problem: {
-            /** @description Stable domain error code; required on storage domain failures. */
+            /** @description Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Provider authorization, quota and availability retain their separate domain codes. */
             error_code?: string;
             task_id?: number;
             operation_id?: string;
@@ -4082,15 +4102,55 @@ export interface components {
             /** @description 占用该资源的未完成任务 ID */
             active_job_id: number;
         };
+        /** @description Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate. */
+        StorageRuntime: {
+            deployment_enabled: boolean;
+            maintenance: boolean;
+        };
+        /** @enum {string} */
+        StorageActionReasonCode: "storage_maintenance" | "storage_deployment_disabled" | "storage_capability_unsupported" | "connection_disabled" | "storage_space_required" | "storage_check_space_limit_exceeded" | "space_disabled" | "space_read_only" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_quota_exceeded" | "storage_unavailable";
+        /** @description Metadata-only admission snapshot, not a guarantee of provider I/O success. Allowed actions have an empty reason array; denied actions have at least one stable reason. */
+        StorageActionAvailability: {
+            allowed: boolean;
+            reason_codes: components["schemas"]["StorageActionReasonCode"][];
+        };
+        /**
+         * @example {
+         *       "scope": "user",
+         *       "owner_id": 1,
+         *       "runtime": {
+         *         "deployment_enabled": false,
+         *         "maintenance": false
+         *       },
+         *       "management_actions": {
+         *         "create_connection": {
+         *           "allowed": false,
+         *           "reason_codes": [
+         *             "storage_deployment_disabled"
+         *           ]
+         *         }
+         *       }
+         *     }
+         */
+        StorageCapabilities: {
+            /** @enum {string} */
+            scope: "user" | "org";
+            owner_id: number;
+            runtime: components["schemas"]["StorageRuntime"];
+            readonly management_actions: {
+                create_connection: components["schemas"]["StorageActionAvailability"];
+            };
+        };
         StorageOption: {
             space_id: number;
             name: string;
             /** @enum {string} */
             scope: "site" | "user" | "org";
             selectable: boolean;
-            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
+            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
         };
         StorageOptions: {
+            runtime: components["schemas"]["StorageRuntime"];
             /** @enum {string} */
             scope: "user" | "org";
             owner_id: number;
@@ -4104,7 +4164,7 @@ export interface components {
             };
             default_space_id: number | null;
             /** @enum {string|null} */
-            default_unavailable_reason: "policy_disallowed" | "selection_required" | "byos_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty" | null;
+            default_unavailable_reason: "policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty" | null;
             items: components["schemas"]["StorageOption"][];
             /** Format: int64 */
             storage_generation?: number;
@@ -4177,7 +4237,30 @@ export interface components {
                 created_at: string;
             };
         };
+        /**
+         * @example {
+         *       "mode": "both",
+         *       "default_choice": "user",
+         *       "generation": 3,
+         *       "logical_limit_bytes": 107374182400,
+         *       "runtime": {
+         *         "deployment_enabled": false,
+         *         "maintenance": false
+         *       },
+         *       "allowed_policy_modes": [
+         *         "site_only"
+         *       ],
+         *       "policy_restriction_codes": [
+         *         "storage_deployment_disabled"
+         *       ]
+         *     }
+         */
         StoragePolicy: {
+            runtime: components["schemas"]["StorageRuntime"];
+            /** @description Modes supported for a complete save by this deployment; maintenance does not narrow this list. */
+            readonly allowed_policy_modes: ("site_only" | "both" | "user_required")[];
+            /** @description Conflicts between the stored mode and deployment support, independent of target health. */
+            readonly policy_restriction_codes: "storage_deployment_disabled"[];
             /** @enum {string} */
             mode: "site_only" | "both" | "user_required";
             /** @enum {string} */
@@ -4189,7 +4272,28 @@ export interface components {
             /** @description Stored mode/default combination needs administrator correction; effective values are normalized. */
             readonly configuration_needs_update?: boolean;
         };
+        /** @description Complete policy update. Deployment restrictions reject the whole save, including quota-only changes to an unsupported mode. Read-only response fields are rejected. */
+        StoragePolicyRequest: {
+            /** @enum {string} */
+            mode: "site_only" | "both" | "user_required";
+            /** @enum {string} */
+            default_choice: "site" | "user";
+            /** Format: int64 */
+            generation: number;
+            /** Format: int64 */
+            logical_limit_bytes: number;
+        };
+        StorageConnectionManagementActions: {
+            create_space: components["schemas"]["StorageActionAvailability"];
+            authorize_read: components["schemas"]["StorageActionAvailability"];
+            authorize_write: components["schemas"]["StorageActionAvailability"];
+            check_read: components["schemas"]["StorageActionAvailability"];
+            check_write: components["schemas"]["StorageActionAvailability"];
+            revoke_auth: components["schemas"]["StorageActionAvailability"];
+            set_status: components["schemas"]["StorageActionAvailability"];
+        };
         StorageConnection: {
+            management_actions: components["schemas"]["StorageConnectionManagementActions"];
             id: number;
             name: string;
             scope: string;
@@ -4229,7 +4333,11 @@ export interface components {
             /** Format: int64 */
             expected_generation: number;
         };
+        StorageSpaceManagementActions: {
+            set_status: components["schemas"]["StorageActionAvailability"];
+        };
         StorageSpace: {
+            management_actions: components["schemas"]["StorageSpaceManagementActions"];
             id: number;
             connection_id: number;
             name: string;
@@ -4284,6 +4392,7 @@ export interface components {
             expected_generation: number;
         };
         ProjectStorage: {
+            runtime: components["schemas"]["StorageRuntime"];
             project_id: number;
             /** Format: int64 */
             storage_generation: number;
@@ -4299,7 +4408,7 @@ export interface components {
                 historical: boolean;
                 owner_id: number;
             } | null;
-            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
+            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
         };
         StorageBindingRequest: {
             space_id: number;
@@ -5369,6 +5478,35 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    GetStorageCapabilities: {
+        parameters: {
+            query: {
+                scope: "user" | "org";
+                organization_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current subject management capabilities */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageCapabilities"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     GetStorageOptions: {
         parameters: {
             query: {
@@ -5569,7 +5707,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StoragePolicy"];
+                "application/json": components["schemas"]["StoragePolicyRequest"];
             };
         };
         responses: {

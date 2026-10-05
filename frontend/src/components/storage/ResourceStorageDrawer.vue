@@ -20,8 +20,8 @@ import type { ApiSchemas } from '@/api/client-core'
 import { fetchProject } from '@/api/projects'
 import * as api from '@/api/storage'
 import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
-import { isAccessDenied } from '@/api/utils'
-import { storageErrorMessage } from '@/api/storage-errors'
+import { storageAccessDenied, storageErrorMessage } from '@/api/storage-errors'
+import { useProjectStorageSnapshot } from '@/composables/useProjectStorageSnapshot'
 import { storageActionAllowed } from '@/utils/storage-contract'
 import { useOperationsStore } from '@/stores/operations'
 import { useOrganizationsStore } from '@/stores/organizations'
@@ -45,6 +45,10 @@ const { t } = useI18n(),
   router = useRouter()
 const operations = useOperationsStore()
 const organizations = useOrganizationsStore()
+const storageSnapshot = useProjectStorageSnapshot(
+  () => props.project,
+  () => props.show,
+)
 const writeContextValid = ref(true)
 async function prepareMutation() {
   const previous = props.project
@@ -56,7 +60,7 @@ async function prepareMutation() {
     await organizations.refresh()
     if (organizations.error || !organizations.canWrite(previous.owner_org_id)) return false
   }
-  const current = await fetchProject(projectId)
+  const [current] = await Promise.all([fetchProject(projectId), storageSnapshot.refresh()])
   if (
     !isSessionCurrent(session) ||
     props.projectId !== projectId ||
@@ -65,6 +69,8 @@ async function prepareMutation() {
   )
     return false
   writeContextValid.value =
+    storageSnapshot.ready.value &&
+    !storageSnapshot.value.value?.runtime.maintenance &&
     current.storage_generation === previous.storage_generation &&
     storageActionAllowed(current, 'exportMutation')
   if (!writeContextValid.value) emit('changed')
@@ -85,8 +91,11 @@ function newExportSession() {
     resourceId: props.resource.id,
     beforeSavedContent: () => props.beforeSavedContent?.() ?? Promise.resolve(true),
     beforeMutation: prepareMutation,
+    canCreate: () => storageSnapshot.contentWritable.value,
     canMutate: () =>
       props.show &&
+      storageSnapshot.ready.value &&
+      !storageSnapshot.value.value?.runtime.maintenance &&
       writeContextValid.value &&
       storageActionAllowed(props.project, 'exportMutation'),
     subscribe: (projectId, taskId, receive, fail) =>
@@ -105,6 +114,7 @@ const exportState = computed(() => ({
   loaded: exports.value.loaded.value,
   busy: exports.value.busy.value,
   unknown: exports.value.unknown.value,
+  blocked: exports.value.blocked.value,
   error: exports.value.error.value,
   task: exports.value.task.value,
   published: exports.value.published.value,
@@ -112,7 +122,14 @@ const exportState = computed(() => ({
 }))
 const mutationReady = computed(
   () =>
-    props.show && writeContextValid.value && storageActionAllowed(props.project, 'exportMutation'),
+    props.show &&
+    storageSnapshot.ready.value &&
+    !storageSnapshot.value.value?.runtime.maintenance &&
+    writeContextValid.value &&
+    storageActionAllowed(props.project, 'exportMutation'),
+)
+const contentMutationReady = computed(
+  () => mutationReady.value && storageSnapshot.contentWritable.value,
 )
 async function refreshVersions() {
   const request = ++sequence,
@@ -130,7 +147,7 @@ async function refreshVersions() {
     }
   } catch (cause) {
     if (current()) {
-      if (isAccessDenied(cause)) versions.value = []
+      if (storageAccessDenied(cause)) versions.value = []
       versionsError.value = storageErrorMessage(cause)
     }
   } finally {
@@ -140,12 +157,9 @@ async function refreshVersions() {
 async function refresh() {
   await Promise.all([refreshVersions(), exports.value.refresh()])
 }
-watch(
-  () => [props.project?.storage_generation, props.project?.storage_state],
-  () => {
-    writeContextValid.value = true
-  },
-)
+watch([() => props.project?.storage_generation, () => props.project?.storage_state], () => {
+  writeContextValid.value = true
+})
 async function download(item: ApiSchemas['ExportArtifact']) {
   if (!exports.value.canDownload(item) || downloading.value !== null) return
   const session = captureSession(),
@@ -164,7 +178,7 @@ async function download(item: ApiSchemas['ExportArtifact']) {
   }
 }
 function rebuild(item: ApiSchemas['ExportArtifact']) {
-  if (!mutationReady.value || !item.rebuildable) return
+  if (!contentMutationReady.value || !item.rebuildable) return
   const session = exports.value
   dialog.info({
     title: t('storage.rebuild'),
@@ -190,7 +204,13 @@ function remove(item: ApiSchemas['ExportArtifact']) {
   })
 }
 watch(
-  () => [props.projectId, props.resource.id, sessionGeneration.value],
+  [
+    () => props.projectId,
+    () => props.resource.id,
+    () => props.project?.owner_user_id,
+    () => props.project?.owner_org_id,
+    () => sessionGeneration.value,
+  ],
   () => {
     ++sequence
     controller.abort()
@@ -206,6 +226,7 @@ watch(
     exports.value = newExportSession()
     if (props.show) void refresh()
   },
+  { flush: 'sync' },
 )
 watch(
   () => props.show,
@@ -314,17 +335,33 @@ onUnmounted(() => {
             <p class="text-sm text-lf-text-muted">{{ t('storage.exportHint') }}</p>
             <NButton
               type="primary"
-              :disabled="!mutationReady || exportState.busy || exportState.unknown"
+              :disabled="
+                !contentMutationReady ||
+                exportState.busy ||
+                exportState.unknown ||
+                exportState.blocked
+              "
               :loading="exportState.busy"
               @click="exports.start()"
               >{{ t('storage.createExport') }}</NButton
             >
             <NAlert v-if="!mutationReady" type="info">{{ t('storage.exportPending') }}</NAlert>
+            <NAlert v-if="storageSnapshot.error.value" type="warning">{{
+              storageSnapshot.error.value
+            }}</NAlert>
+            <NAlert v-if="storageSnapshot.value.value?.runtime.maintenance" type="warning">{{
+              t('storageProject.serviceMaintenance')
+            }}</NAlert>
+            <NAlert
+              v-if="storageSnapshot.value.value?.runtime.deployment_enabled === false"
+              type="info"
+              >{{ t('storageProject.deploymentDisabled') }}</NAlert
+            >
             <NAlert v-if="exportState.error" type="warning">{{ exportState.error }}</NAlert>
             <NAlert v-if="exportState.published" type="success">{{
               t('storageManagement.exportPublished')
             }}</NAlert>
-            <div v-if="exportState.unknown" class="space-y-2">
+            <div v-if="exportState.unknown || exportState.blocked" class="space-y-2">
               <p class="text-sm text-lf-text-muted">
                 {{ t('storageManagement.exportRecoveryHint') }}
               </p>
@@ -399,7 +436,12 @@ onUnmounted(() => {
                   @click="download(item)"
                   >{{ t('storage.download') }}</NButton
                 ><NButton
-                  :disabled="!mutationReady || !item.rebuildable || exportState.busy"
+                  :disabled="
+                    !contentMutationReady ||
+                    !item.rebuildable ||
+                    exportState.busy ||
+                    exportState.blocked
+                  "
                   :title="t(item.rebuildable ? 'storage.rebuildHint' : 'storage.cannotRebuild')"
                   @click="rebuild(item)"
                   >{{ t('storage.rebuild') }}</NButton

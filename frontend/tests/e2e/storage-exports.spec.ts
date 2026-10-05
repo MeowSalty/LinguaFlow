@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { json, mockApp } from './fixtures'
+import { storageRuntime } from '../storage-fixtures'
 
 const timestamp = '2026-10-04T00:00:00Z'
 const project = {
@@ -89,6 +90,7 @@ async function setup(page: Page) {
     if (path === '/projects/7/resources') return json(route, { items: [resource] })
     if (path === '/projects/7/storage')
       return json(route, {
+        runtime: storageRuntime(),
         project_id: 7,
         storage_generation: 0,
         storage_state: 'active',

@@ -16,6 +16,7 @@ export default {
   newPreview: '创建新预览',
   recover: '恢复原任务结果',
   states: {
+    blocked: '当前存储能力限制了本次操作。候选、原键和任务已保留，请先刷新原任务后明确继续。',
     failed: '操作失败，请读取原任务状态。',
     expired: '服务端已确认候选过期，请创建新预览。',
     cancelled: '候选已取消。',

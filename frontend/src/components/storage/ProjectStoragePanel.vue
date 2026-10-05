@@ -6,13 +6,21 @@ import { useRouter } from 'vue-router'
 import type { ApiSchemas } from '@/api/client-core'
 import { bindProjectStorage, getProjectStorage } from '@/api/storage'
 import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
-import { storageErrorMessage, storageRequestError } from '@/api/storage-errors'
+import {
+  storageAccessDenied,
+  storageErrorMessage,
+  storageRequestError,
+  storageNeedsRefresh,
+} from '@/api/storage-errors'
+import { hasStorageRuntime } from '@/utils/storage-availability'
+import { invalidateStorageSnapshots, subscribeStorageRefresh } from '@/utils/storage-snapshots'
 import { fetchProject } from '@/api/projects'
 import { useOrganizationsStore } from '@/stores/organizations'
 import {
   isSafeStorageId,
   isStorageGeneration,
   storageActionAllowed,
+  storageProjectWritable,
   storageTaskCommitted,
 } from '@/utils/storage-contract'
 import StorageTargetSelect from './StorageTargetSelect.vue'
@@ -50,6 +58,8 @@ const migration = shallowRef<ReturnType<typeof createMigrationSession> | null>(n
 const canSubmit = computed(
   () =>
     !loading.value &&
+    !error.value &&
+    hasStorageRuntime(space.value) &&
     !binding.value &&
     !migration.value?.busy.value &&
     !migration.value?.unknown.value &&
@@ -81,7 +91,7 @@ async function refresh() {
     }
   } catch (cause) {
     if (current()) {
-      space.value = null
+      if (storageAccessDenied(cause)) space.value = null
       error.value = storageErrorMessage(cause)
     }
   } finally {
@@ -89,23 +99,35 @@ async function refresh() {
   }
 }
 watch(
-  () => [props.project.id, sessionGeneration.value],
+  [
+    () => props.project.id,
+    () => props.project.owner_user_id,
+    () => props.project.owner_org_id,
+    () => sessionGeneration.value,
+  ],
   () => {
     space.value = null
     discovery.value = null
     selected.value = null
     migration.value?.dispose()
-    migration.value = createMigrationSession({ project: () => currentProject.value })
+    migration.value = createMigrationSession({
+      project: () => currentProject.value,
+      available: () =>
+        !loading.value &&
+        !error.value &&
+        hasStorageRuntime(space.value) &&
+        !space.value.runtime.maintenance &&
+        (migration.value?.hasOperation.value
+          ? storageProjectWritable(currentProject.value)
+          : storageActionAllowed(currentProject.value, 'migration')),
+    })
     void refresh()
   },
   { immediate: true, flush: 'sync' },
 )
-watch(
-  () => [props.project.storage_generation, props.project.storage_state],
-  () => {
-    void refresh()
-  },
-)
+watch([() => props.project.storage_generation, () => props.project.storage_state], () => {
+  void refresh()
+})
 async function submit() {
   if (!canSubmit.value || !selected.value || !space.value) return
   const session = captureSession(),
@@ -125,7 +147,13 @@ async function submit() {
       getProjectStorage(id),
     ])
     if (!isSessionCurrent(session) || id !== props.project.id) return
+    if (hasStorageRuntime(latestStorage) && latestStorage.runtime.maintenance)
+      throw storageRequestError({ status: 409 }, { error_code: 'storage_maintenance' })
     if (
+      !selected.value ||
+      selected.value.space_id !== target.space_id ||
+      !discovery.value ||
+      !hasStorageRuntime(latestStorage) ||
       latestStorage.project_id !== id ||
       latestStorage.storage_generation !== generation ||
       latestProject.storage_generation !== generation ||
@@ -135,17 +163,19 @@ async function submit() {
       space.value = latestStorage
       throw storageRequestError({ status: 409 }, { error_code: 'storage_generation_conflict' })
     }
-    if (action === 'migrate') await migration.value?.start(target, generation)
-    else
+    if (action === 'migrate') {
+      if (!(await migration.value?.start(target, generation))) return
+    } else
       await bindProjectStorage(id, { space_id: target.space_id, expected_generation: generation })
     if (isSessionCurrent(session) && id === props.project.id) {
       emit('changed')
+      invalidateStorageSnapshots({ projectId: id })
       await refresh()
     }
   } catch (cause) {
     if (isSessionCurrent(session) && id === props.project.id) {
       error.value = storageErrorMessage(cause)
-      discovery.value = null
+      if (storageNeedsRefresh(cause)) invalidateStorageSnapshots({ projectId: id })
     }
   } finally {
     binding.value = false
@@ -192,6 +222,20 @@ onUnmounted(() => {
   controller.abort()
   migration.value?.dispose()
 })
+onUnmounted(
+  subscribeStorageRefresh({
+    scope: () => ({ projectId: props.project.id, organizationId: props.project.owner_org_id }),
+    invalidate: () => {
+      ++sequence
+      controller.abort()
+      controller = new AbortController()
+      loading.value = true
+      discovery.value = null
+      selected.value = null
+    },
+    refresh,
+  }),
+)
 </script>
 <template>
   <NCard :title="t('storage.projectTitle')" size="small">
@@ -217,8 +261,17 @@ onUnmounted(() => {
         <NAlert v-if="space.binding?.historical" type="info">{{
           t('storageProject.historicalBinding')
         }}</NAlert>
+        <NAlert v-if="space.runtime?.deployment_enabled === false" type="info">{{
+          t('storageProject.deploymentDisabled')
+        }}</NAlert>
+        <NAlert v-if="space.runtime?.maintenance" type="warning">{{
+          t('storageProject.serviceMaintenance')
+        }}</NAlert>
+        <NAlert v-if="!hasStorageRuntime(space)" type="warning">{{
+          t('storageProject.contractIncomplete')
+        }}</NAlert>
         <NAlert v-if="space.storage_state !== 'active'" type="info">{{
-          t('storage.maintenancePending')
+          t('storageProject.projectBarrier')
         }}</NAlert>
         <template
           v-if="

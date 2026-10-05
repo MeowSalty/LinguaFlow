@@ -15,6 +15,9 @@ import {
   deleteExportArtifact,
 } from '@/api/storage'
 import {
+  createProject,
+  createOrgProject,
+  deleteProject,
   downloadResourceResult,
   uploadProjectResources,
   uploadProjectResourcesWithProgress,
@@ -55,6 +58,40 @@ afterEach(() => {
 })
 
 describe('storage transport boundaries', () => {
+  it.each(['create', 'org-create', 'delete'] as const)(
+    'keeps %s policy refusal safe without replay',
+    async (operation) => {
+      fetchMock.mockImplementation(async (request) => {
+        requests.push(request as Request)
+        return json(
+          {
+            title: 'provider response',
+            detail: 'private provider location',
+            error_code: 'storage_policy_violation',
+          },
+          403,
+        )
+      })
+      const payload = {
+        name: 'Policy test',
+        source_lang: 'en',
+        target_lang: 'zh',
+        storage_space_id: 1,
+      }
+      const action =
+        operation === 'delete'
+          ? deleteProject(1)
+          : operation === 'org-create'
+            ? createOrgProject(2, payload)
+            : createProject(payload)
+      await expect(action).rejects.toMatchObject({
+        status: 403,
+        error_code: 'storage_policy_violation',
+        message: 'storageErrors.policyViolation',
+      })
+      expect(requests).toHaveLength(1)
+    },
+  )
   it('sends exact binary bytes without JSON conversion or a forbidden length header', async () => {
     const bytes = new Uint8Array([0, 34, 10, 128, 255])
     await previewSourceUpdate(1, 2, new Blob([bytes]), 'candidate-key')

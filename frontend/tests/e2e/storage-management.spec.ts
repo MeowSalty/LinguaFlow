@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 import { json, mockApp } from './fixtures'
+import {
+  connectionActions,
+  spaceActions,
+  policyCapabilities,
+  storageCapabilities,
+  storageAction,
+} from '../storage-fixtures'
 
 const storageCheck = {
   check_id: 10,
@@ -34,6 +41,7 @@ async function setup(page: Page, role = 'admin') {
     has_auth: true,
     management_generation: 8,
     auth_generation: 2,
+    management_actions: connectionActions(),
   }
   await page.route('**/api/v1/**', (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '')
@@ -44,10 +52,26 @@ async function setup(page: Page, role = 'admin') {
         method,
         body: method === 'GET' ? null : route.request().postDataJSON(),
       })
+      if (path === '/storage/capabilities') return json(route, storageCapabilities())
       if (path === '/storage/connections') return json(route, { items: [connection] })
       if (path === '/admin/storage/connections')
         return json(route, {
-          items: [{ ...connection, scope: 'site', owner_id: 0, name: '站点托管' }],
+          items: [
+            {
+              ...connection,
+              scope: 'site',
+              owner_id: 0,
+              name: '站点托管',
+              management_actions: {
+                ...connectionActions(),
+                create_space: storageAction(false, ['storage_capability_unsupported']),
+                authorize_read: storageAction(false, ['storage_capability_unsupported']),
+                authorize_write: storageAction(false, ['storage_capability_unsupported']),
+                revoke_auth: storageAction(false, ['storage_capability_unsupported']),
+                set_status: storageAction(false, ['storage_capability_unsupported']),
+              },
+            },
+          ],
         })
       if (path.endsWith('/spaces'))
         return json(route, {
@@ -59,6 +83,7 @@ async function setup(page: Page, role = 'admin') {
               status: 'active',
               verified: true,
               management_generation: 3,
+              management_actions: spaceActions(),
               capacity_bytes: 10000,
               reserved_bytes: 100,
               candidate_bytes: 200,
@@ -86,6 +111,7 @@ async function setup(page: Page, role = 'admin') {
       if (path === '/admin/storage/policy')
         return json(route, {
           mode: 'site_only',
+          ...policyCapabilities(),
           default_choice: 'site',
           generation: 6,
           logical_limit_bytes: 10000,
@@ -208,6 +234,46 @@ test('submitting slow authorization clears the secret form and keeps emergency r
   await expect.poll(() => requests.some((request) => request.path.endsWith('/revoke'))).toBe(true)
   finishAuthorization()
   await expect(drawer.getByText('尚未授权', { exact: true })).toBeVisible()
+})
+
+test('a late authorization cannot clear a new secret draft opened after revocation', async ({
+  page,
+}) => {
+  const requests = await setup(page)
+  let finishAuthorization!: () => void
+  await page.route('**/api/v1/storage/connections/1/authorize', async (route) => {
+    await new Promise<void>((resolve) => {
+      finishAuthorization = resolve
+    })
+    await route.fallback()
+  })
+  await page.goto('/settings/storage')
+  await page.getByRole('button', { name: '查看详情', exact: true }).click()
+  const drawer = page.locator('.n-drawer:visible')
+  await drawer.getByRole('button', { name: '更新授权', exact: true }).click()
+  const modal = page.locator('.n-modal:visible')
+  await modal.locator('input').nth(0).fill('first-access')
+  await modal.locator('input').nth(1).fill('first-secret')
+  await modal.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => typeof finishAuthorization).toBe('function')
+  await drawer.getByRole('button', { name: '撤销授权', exact: true }).click()
+  await page
+    .locator('.n-dialog:visible')
+    .getByRole('button', { name: '撤销授权', exact: true })
+    .click()
+  await expect(drawer.getByRole('button', { name: '更新授权', exact: true })).toBeEnabled()
+  await drawer.getByRole('button', { name: '更新授权', exact: true }).click()
+  await modal.locator('input').nth(0).fill('replacement-access')
+  await modal.locator('input').nth(1).fill('replacement-secret')
+  const completed = page.waitForResponse('**/api/v1/storage/connections/1/authorize')
+  finishAuthorization()
+  await (await completed).finished()
+  await expect(modal.locator('input').nth(0)).toHaveValue('replacement-access')
+  await expect(modal.locator('input').nth(1)).toHaveValue('replacement-secret')
+  expect(requests.filter((request) => request.path.endsWith('/authorize'))).toHaveLength(1)
+  expect(
+    await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),
+  ).not.toContain('replacement-secret')
 })
 
 test('administrator diagnostics do not perform remote probes or mutation', async ({ page }) => {

@@ -12,6 +12,7 @@ import {
   NInput,
   NInputNumber,
   NModal,
+  NSelect,
   NSkeleton,
   NSwitch,
   NTag,
@@ -28,6 +29,8 @@ import {
   type StorageWriteResult,
 } from '@/stores/storage'
 import { getStorageContractGate } from '@/utils/storage-contract'
+import { subscribeStorageRefresh, invalidateStorageSnapshots } from '@/utils/storage-snapshots'
+import type { StorageManagementAction } from '@/utils/storage-availability'
 import { formatDateTime } from '@/utils/datetime'
 import StorageCapacity from './StorageCapacity.vue'
 import StorageHealth from './StorageHealth.vue'
@@ -58,6 +61,22 @@ const form = reactive({
   capacity_bytes: 1024 * 1024 * 1024,
 })
 const secrets = reactive({ access_key_id: '', secret_access_key: '', session_token: '' })
+const authorizationWrite = ref(false)
+const authorizationOptions = computed(() => [
+  {
+    value: 'read',
+    label: t('storageManagement.authorizeRead'),
+    disabled: !selected.value || !store.connectionAllowed(selected.value.id, 'authorize_read'),
+  },
+  {
+    value: 'write',
+    label: t('storageManagement.authorizeWrite'),
+    disabled:
+      !selected.value ||
+      !store.connectionAllowed(selected.value.id, 'authorize_write') ||
+      !getStorageContractGate('writeCheck').available,
+  },
+])
 const formError = ref<string | null>(null)
 const writeKey = computed(() =>
   formKind.value === 'connection' ? 'create' : `connection:${selectedId.value}`,
@@ -65,11 +84,54 @@ const writeKey = computed(() =>
 const selectedBusy = computed(
   () => selectedId.value !== null && !!store.busy[`connection:${selectedId.value}`],
 )
-const writable = computed(
-  () =>
-    store.ready && !selectedBusy.value && !store.unknownWrites[`connection:${selectedId.value}`],
+const formAllowed = computed(() =>
+  formKind.value === 'connection'
+    ? store.canCreateConnection
+    : !!selected.value &&
+      store.connectionAllowed(
+        selected.value.id,
+        formKind.value === 'space'
+          ? 'create_space'
+          : authorizationWrite.value
+            ? 'authorize_write'
+            : 'authorize_read',
+      ) &&
+      (formKind.value !== 'authorization' ||
+        !authorizationWrite.value ||
+        getStorageContractGate('writeCheck').available),
 )
-let generation = 0
+const formReason = computed(() =>
+  formKind.value === 'connection'
+    ? store.createConnectionReason
+    : selected.value
+      ? store.connectionReason(
+          selected.value.id,
+          formKind.value === 'space'
+            ? 'create_space'
+            : authorizationWrite.value
+              ? 'authorize_write'
+              : 'authorize_read',
+        )
+      : t('storage.notAvailable'),
+)
+const actionLabels: Record<StorageManagementAction, string> = {
+  create_space: 'storage.createSpace',
+  authorize_read: 'storageManagement.authorizeRead',
+  authorize_write: 'storageManagement.authorizeWrite',
+  check_read: 'storage.readCheck',
+  check_write: 'storage.writeCheck',
+  revoke_auth: 'storage.revoke',
+  set_status: 'storage.state',
+}
+const blockedActions = computed(() =>
+  selected.value
+    ? (Object.keys(actionLabels) as StorageManagementAction[])
+        .map((action) => ({ action, reason: store.connectionReason(selected.value!.id, action) }))
+        .filter(({ reason }) => !!reason)
+    : [],
+)
+let generation = 0,
+  formGeneration = 0
 function clearSecrets() {
   secrets.access_key_id = ''
   secrets.secret_access_key = ''
@@ -81,6 +143,7 @@ function closeForm() {
   formError.value = null
 }
 function openForm(kind: NonNullable<typeof formKind.value>) {
+  ++formGeneration
   clearSecrets()
   Object.assign(form, {
     name: '',
@@ -92,6 +155,7 @@ function openForm(kind: NonNullable<typeof formKind.value>) {
     capacity_bytes: 1024 * 1024 * 1024,
   })
   formError.value = null
+  if (kind === 'authorization') authorizationWrite.value = false
   formKind.value = kind
 }
 async function refresh() {
@@ -113,19 +177,20 @@ async function complete<T>(
   if (!isSessionCurrent(session) || version !== generation) return false
   if (result.status === 'success') {
     message.success(t(success))
-    await refresh()
+    invalidateStorageSnapshots(props.scope.kind === 'org' ? { organizationId: props.scope.id } : {})
     return isSessionCurrent(session) && version === generation
   }
   return false
 }
 async function submit() {
-  if (!store.canManage) return
+  if (!store.canManage || !formAllowed.value) return
   const kind = formKind.value,
     id = selectedId.value
   if (kind === null) return
   formError.value = null
   const session = captureSession(),
-    version = generation
+    version = generation,
+    submittedForm = formGeneration
   try {
     if (kind === 'authorization') {
       if (!secrets.access_key_id.trim() || !secrets.secret_access_key || id === null) {
@@ -136,7 +201,7 @@ async function submit() {
         access_key_id: secrets.access_key_id.trim(),
         secret_access_key: secrets.secret_access_key,
         ...(secrets.session_token ? { session_token: secrets.session_token } : {}),
-        write_check: false,
+        write_check: authorizationWrite.value,
       }
       // Release the modal immediately so emergency revocation stays reachable during a slow probe.
       closeForm()
@@ -191,13 +256,23 @@ async function submit() {
       }
     }
   } finally {
-    if (kind === 'authorization' && isSessionCurrent(session) && version === generation)
+    if (
+      kind === 'authorization' &&
+      isSessionCurrent(session) &&
+      version === generation &&
+      submittedForm === formGeneration
+    )
       clearSecrets()
   }
 }
 function changeConnection() {
   const item = selected.value
-  if (!item || !['enabled', 'disabled'].includes(item.status)) return
+  if (
+    !item ||
+    !store.connectionAllowed(item.id, 'set_status') ||
+    !['enabled', 'disabled'].includes(item.status)
+  )
+    return
   const state = item.status === 'enabled' ? 'disabled' : 'enabled'
   const session = captureSession(),
     version = generation,
@@ -213,7 +288,8 @@ function changeConnection() {
         version !== generation ||
         owner !== storageScopeKey(props.scope) ||
         selected.value?.id !== item.id ||
-        selected.value.management_generation !== item.management_generation
+        selected.value.management_generation !== item.management_generation ||
+        !store.connectionAllowed(item.id, 'set_status')
       )
         return
       return complete(() => store.setConnectionState(item.id, state)).then(() => undefined)
@@ -222,7 +298,7 @@ function changeConnection() {
 }
 function revoke() {
   const item = selected.value
-  if (!item) return
+  if (!item || !store.connectionAllowed(item.id, 'revoke_auth')) return
   const session = captureSession(),
     version = generation
   dialog.warning({
@@ -231,7 +307,13 @@ function revoke() {
     positiveText: t('storage.revoke'),
     negativeText: t('storage.cancel'),
     onPositiveClick: () => {
-      if (!isSessionCurrent(session) || version !== generation || selected.value?.id !== item.id)
+      if (
+        !isSessionCurrent(session) ||
+        version !== generation ||
+        selected.value?.id !== item.id ||
+        selected.value.management_generation !== item.management_generation ||
+        !store.connectionAllowed(item.id, 'revoke_auth')
+      )
         return
       closeForm()
       return complete(() => store.revoke(item.id)).then(() => undefined)
@@ -263,7 +345,12 @@ function checkLabel(group: 'checkStates' | 'checkModes' | 'cleanupStates', value
 }
 function changeSpace(id: number, status: string, name: string) {
   const connection = selectedId.value
-  if (connection === null || !['active', 'read_only', 'disabled'].includes(status)) return
+  if (
+    connection === null ||
+    !store.spaceAllowed(connection, id) ||
+    !['active', 'read_only', 'disabled'].includes(status)
+  )
+    return
   const next = status === 'active' ? 'read_only' : 'active'
   const session = captureSession(),
     version = generation,
@@ -283,7 +370,8 @@ function changeSpace(id: number, status: string, name: string) {
         owner !== storageScopeKey(props.scope) ||
         selectedId.value !== connection ||
         selectedSpaces.value?.items.find((item) => item.id === id)?.management_generation !==
-          managementGeneration
+          managementGeneration ||
+        !store.spaceAllowed(connection, id)
       )
         return
       return complete(() => store.setSpaceState(connection, id, next)).then(() => undefined)
@@ -317,7 +405,13 @@ watch(selectedId, () => {
 watch(selected, (value) => {
   if (!value) closeForm()
 })
+const unsubscribeRefresh = subscribeStorageRefresh({
+  scope: () => (props.scope.kind === 'org' ? { organizationId: props.scope.id } : {}),
+  invalidate: store.markStale,
+  refresh,
+})
 onUnmounted(() => {
+  unsubscribeRefresh()
   ++generation
   clearSecrets()
 })
@@ -345,12 +439,24 @@ onUnmounted(() => {
         <NButton
           v-if="scope.kind !== 'site' && store.canManage"
           type="primary"
-          :disabled="!store.ready || !!store.unknownWrites.create"
+          :disabled="!store.canCreateConnection"
           @click="openForm('connection')"
           >{{ t('storage.createConnection') }}</NButton
         >
       </div>
     </div>
+    <NAlert v-if="store.runtime?.deployment_enabled === false" type="info">{{
+      t('storageManagement.runtimeDisabled')
+    }}</NAlert>
+    <NAlert v-if="store.runtime?.maintenance" type="info">{{
+      t('storageManagement.runtimeMaintenance')
+    }}</NAlert>
+    <p
+      v-if="scope.kind !== 'site' && store.createConnectionReason"
+      class="text-sm text-lf-text-muted"
+    >
+      {{ t('storage.createConnection') }}：{{ store.createConnectionReason }}
+    </p>
     <NAlert v-if="store.connections.error" type="error">{{ store.connections.error }}</NAlert>
     <NAlert v-if="store.connections.stale" type="warning">{{ t('storage.stale') }}</NAlert>
     <p v-if="store.updatedAt" class="text-xs text-lf-text-subtle">
@@ -438,13 +544,16 @@ onUnmounted(() => {
           </div>
           <div class="flex flex-wrap gap-2">
             <NButton
-              :disabled="!writable"
+              :disabled="!store.connectionAllowed(selected.id, 'check_read')"
               :loading="selectedBusy"
               @click="complete(() => store.check(selected!.id), 'storage.checked')"
               >{{ t('storage.readCheck') }}</NButton
             >
             <NButton
-              :disabled="!writable || !getStorageContractGate('writeCheck').available"
+              :disabled="
+                !store.connectionAllowed(selected.id, 'check_write') ||
+                !getStorageContractGate('writeCheck').available
+              "
               :title="
                 getStorageContractGate('writeCheck').available
                   ? undefined
@@ -454,25 +563,34 @@ onUnmounted(() => {
               >{{ t('storage.writeCheck') }}</NButton
             >
             <NButton
-              v-if="scope.kind !== 'site'"
-              :disabled="!writable"
+              :disabled="
+                !store.connectionAllowed(selected.id, 'authorize_read') &&
+                !store.connectionAllowed(selected.id, 'authorize_write')
+              "
               @click="openForm('authorization')"
               >{{ t('storage.authorize') }}</NButton
             >
             <NButton
-              v-if="scope.kind !== 'site'"
-              :disabled="!store.ready || !!store.busy[`revoke:${selected.id}`]"
+              :disabled="!store.connectionAllowed(selected.id, 'revoke_auth')"
               :loading="!!store.busy[`revoke:${selected.id}`]"
               @click="revoke"
               >{{ t('storage.revoke') }}</NButton
             >
             <NButton
-              :disabled="!writable || !['enabled', 'disabled'].includes(selected.status)"
+              :disabled="
+                !store.connectionAllowed(selected.id, 'set_status') ||
+                !['enabled', 'disabled'].includes(selected.status)
+              "
               @click="changeConnection"
               >{{
                 t(selected.status === 'enabled' ? 'storage.disable' : 'storage.enable')
               }}</NButton
             >
+          </div>
+          <div v-if="blockedActions.length" class="space-y-1 text-sm text-lf-text-muted">
+            <p v-for="item in blockedActions" :key="item.action">
+              {{ t(actionLabels[item.action]) }}：{{ item.reason }}
+            </p>
           </div>
           <p class="text-xs text-lf-text-subtle">{{ t('storage.checkHint') }}</p>
           <section class="space-y-3">
@@ -542,8 +660,7 @@ onUnmounted(() => {
           <div class="flex items-center justify-between gap-3">
             <h3 class="font-semibold">{{ t('storage.spaces') }}</h3>
             <NButton
-              v-if="scope.kind !== 'site'"
-              :disabled="!writable"
+              :disabled="!store.connectionAllowed(selected.id, 'create_space')"
               @click="openForm('space')"
               >{{ t('storage.createSpace') }}</NButton
             >
@@ -577,7 +694,7 @@ onUnmounted(() => {
             <NButton
               class="mt-3"
               :disabled="
-                !writable ||
+                !store.spaceAllowed(selected.id, space.id) ||
                 selectedSpaces?.stale ||
                 !['active', 'read_only', 'disabled'].includes(space.status)
               "
@@ -586,6 +703,12 @@ onUnmounted(() => {
                 t(space.status === 'active' ? 'storage.makeReadOnly' : 'storage.makeActive')
               }}</NButton
             >
+            <p
+              v-if="store.spaceReason(selected.id, space.id)"
+              class="mt-2 text-xs text-lf-text-muted"
+            >
+              {{ store.spaceReason(selected.id, space.id) }}
+            </p>
           </NCard>
         </div>
       </NDrawerContent>
@@ -614,6 +737,15 @@ onUnmounted(() => {
       }}</NAlert>
       <NForm label-placement="top" @submit.prevent="submit">
         <template v-if="formKind === 'authorization'">
+          <NFormItem :label="t('storageManagement.authorizationPurpose')"
+            ><NSelect
+              :value="authorizationWrite ? 'write' : 'read'"
+              :options="authorizationOptions"
+              @update:value="(value) => (authorizationWrite = value === 'write')"
+          /></NFormItem>
+          <p class="mb-3 text-sm text-lf-text-muted">
+            {{ t('storageManagement.authorizationPurposeHint') }}
+          </p>
           <p class="mb-4 text-sm text-lf-text-muted">{{ t('storage.secretHint') }}</p>
           <NFormItem :label="t('storage.accessKey')" required
             ><NInput v-model:value="secrets.access_key_id" :input-props="{ autocomplete: 'off' }"
@@ -666,13 +798,14 @@ onUnmounted(() => {
           </template>
         </template>
       </NForm>
+      <p v-if="!formAllowed" class="mt-3 text-sm text-lf-text-muted">{{ formReason }}</p>
       <template #footer
         ><div class="flex justify-end gap-2">
           <NButton @click="closeForm">{{ t('storage.cancel') }}</NButton
           ><NButton
             type="primary"
             :loading="!!store.busy[writeKey]"
-            :disabled="!!store.unknownWrites[writeKey]"
+            :disabled="!formAllowed || !!store.unknownWrites[writeKey]"
             @click="submit"
             >{{ t('storage.save') }}</NButton
           >

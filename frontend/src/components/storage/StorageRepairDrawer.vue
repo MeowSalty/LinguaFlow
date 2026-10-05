@@ -9,6 +9,7 @@ import { storageErrorMessage, storageRequestError } from '@/api/storage-errors'
 import { fetchProject } from '@/api/projects'
 import { useOrganizationsStore } from '@/stores/organizations'
 import { isStorageGeneration } from '@/utils/storage-contract'
+import { useProjectStorageSnapshot } from '@/composables/useProjectStorageSnapshot'
 import StorageTargetSelect from './StorageTargetSelect.vue'
 import {
   createRepairSession,
@@ -27,6 +28,10 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:show': [value: boolean]; changed: [] }>()
 const { t } = useI18n()
 const organizations = useOrganizationsStore()
+const storageSnapshot = useProjectStorageSnapshot(
+  () => props.project,
+  () => props.show,
+)
 const resolvedVersion = shallowRef<ApiSchemas['SourceVersion'] | null>(null)
 const readError = ref<string | null>(null)
 const context = computed(() =>
@@ -56,18 +61,22 @@ const canStart = computed(
     !!session.value?.file.value &&
     !!selected.value &&
     repairContextAllowed(context.value) &&
+    storageSnapshot.ready.value &&
+    !storageSnapshot.value.value?.runtime.maintenance &&
     isStorageGeneration(discovery.value?.storage_generation) &&
     discovery.value?.storage_generation === props.project.storage_generation,
 )
 watch(
-  () => [
-    props.show,
-    props.project.id,
-    props.resourceId,
-    props.version?.id,
-    props.taskId,
-    props.sourceRevisionId,
-    sessionGeneration.value,
+  [
+    () => props.show,
+    () => props.project.id,
+    () => props.project.owner_user_id,
+    () => props.project.owner_org_id,
+    () => props.resourceId,
+    () => props.version?.id,
+    () => props.taskId,
+    () => props.sourceRevisionId,
+    () => sessionGeneration.value,
   ],
   async () => {
     const request = ++sequence,
@@ -87,6 +96,14 @@ watch(
       if (!resolvedVersion.value) return
       session.value = createRepairSession({
         context: () => context.value,
+        available: () =>
+          props.show &&
+          storageSnapshot.ready.value &&
+          !storageSnapshot.value.value?.runtime.maintenance &&
+          repairContextAllowed(context.value) &&
+          (!!session.value?.hasOperation.value ||
+            !!props.taskId ||
+            (!!selected.value && !!discovery.value)),
         changed: () => emit('changed'),
         beforeMutation: async (expected) => {
           const owner = captureSession()
@@ -94,14 +111,17 @@ watch(
             await organizations.refresh()
             if (organizations.error) throw storageRequestError({ status: 403 })
           }
-          const latest = await fetchProject(expected.project.id)
+          const [latest] = await Promise.all([
+            fetchProject(expected.project.id),
+            storageSnapshot.refresh(),
+          ])
           if (!isSessionCurrent(owner) || !props.show || request !== sequence) return false
           if (!repairProjectSnapshotMatches(expected.project, latest))
             throw storageRequestError(
               { status: 409 },
               { error_code: 'storage_generation_conflict' },
             )
-          return true
+          return storageSnapshot.ready.value && !storageSnapshot.value.value?.runtime.maintenance
         },
       })
       if (props.taskId) await session.value.recover(props.taskId)
@@ -132,6 +152,12 @@ onUnmounted(() => {
       <div class="space-y-4">
         <NAlert type="info">{{ t('storageProject.repairHint') }}</NAlert>
         <NAlert v-if="readError" type="warning">{{ readError }}</NAlert>
+        <NAlert v-if="storageSnapshot.error.value" type="warning">{{
+          storageSnapshot.error.value
+        }}</NAlert>
+        <NAlert v-if="storageSnapshot.value.value?.runtime.maintenance" type="warning">{{
+          t('storageProject.serviceMaintenance')
+        }}</NAlert>
         <NAlert v-if="resolvedVersion?.verification_state === 'legacy_unverified'" type="warning">{{
           t('storageProject.legacyRepairBlocked')
         }}</NAlert>

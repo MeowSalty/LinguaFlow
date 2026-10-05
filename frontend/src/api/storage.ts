@@ -8,6 +8,7 @@ import {
   requireIdempotencyKey,
 } from '@/utils/storage-contract'
 import { t } from '@/i18n'
+import { canManageOrganization, organizationRoles } from '@/utils/organization-scope'
 
 export type StorageScope = { kind: 'user' } | { kind: 'org'; id: number } | { kind: 'site' }
 export type StorageRequestOptions = { signal?: AbortSignal }
@@ -58,10 +59,33 @@ const connectionPath = (connectionId: number) => ({ connectionId: requireStorage
 const idempotencyHeader = (key: string) => ({ 'Idempotency-Key': requireIdempotencyKey(key) })
 
 export const getStoragePolicy = (options?: StorageRequestOptions) =>
-  read(apiClient.GET('/admin/storage/policy', options))
+  read(apiClient.GET('/admin/storage/policy', { ...options, cache: 'no-store' }))
+
+export const getStorageCapabilities = (
+  scope: Exclude<StorageScope, { kind: 'site' }>,
+  options?: StorageRequestOptions,
+) => {
+  if (scope.kind !== 'user' && scope.kind !== 'org')
+    throw storageRequestError({ status: 400 }, { error_code: 'invalid_input' })
+  if (scope.kind === 'org') {
+    requireStorageId(scope.id)
+    if (!canManageOrganization(organizationRoles.value[scope.id]))
+      throw storageRequestError({ status: 403 }, { error_code: 'forbidden' })
+  }
+  return read(
+    apiClient.GET('/storage/capabilities', {
+      ...options,
+      cache: 'no-store',
+      params: {
+        query:
+          scope.kind === 'user' ? { scope: 'user' } : { scope: 'org', organization_id: scope.id },
+      },
+    }),
+  )
+}
 
 export const setStoragePolicy = (
-  body: ApiSchemas['StoragePolicy'],
+  body: ApiSchemas['StoragePolicyRequest'],
   options?: StorageRequestOptions,
 ) => {
   requireStorageGeneration(body.generation)
@@ -216,6 +240,7 @@ export const getProjectStorage = (projectId: number, options?: StorageRequestOpt
   read(
     apiClient.GET('/projects/{projectId}/storage', {
       ...options,
+      cache: 'no-store',
       params: { path: projectPath(projectId) },
     }),
   )
@@ -525,6 +550,7 @@ export const getStorageOptions = (
   read(
     apiClient.GET('/storage/options', {
       ...options,
+      cache: 'no-store',
       params: {
         query:
           scope.kind === 'org'
@@ -549,6 +575,7 @@ export const getProjectStorageOptions = (
   return read(
     apiClient.GET('/projects/{projectId}/storage/options', {
       ...options,
+      cache: 'no-store',
       params: { path: projectPath(projectId), query: params },
     }),
   )

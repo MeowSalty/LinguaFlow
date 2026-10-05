@@ -9,8 +9,25 @@ import {
   onSessionChange,
   sessionGeneration,
 } from '@/api/session-context'
-import { isAccessDenied } from '@/api/utils'
-import { safeStorageProblem, storageErrorMessage, storageResultUnknown } from '@/api/storage-errors'
+import { ApiError } from '@/api/utils'
+import {
+  safeStorageProblem,
+  storageAccessDenied,
+  storageErrorMessage,
+  storageNeedsRefresh,
+  storageResultUnknown,
+  storageTaskErrorMessage,
+} from '@/api/storage-errors'
+import {
+  hasConnectionManagementActions,
+  hasSpaceManagementActions,
+  hasStoragePolicyCapabilities,
+  isStorageCapabilities,
+  storageManagementAllowed,
+  type StorageManagementAction,
+  type StorageSnapshotStatus,
+} from '@/utils/storage-availability'
+import { invalidateStorageSnapshots } from '@/utils/storage-snapshots'
 import {
   canManageOrganization,
   onOrganizationInvalidated,
@@ -54,6 +71,10 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
   const policyError = ref<string | null>(null)
   const policyLoading = ref(false)
   const policyStale = ref(false)
+  const capabilities = shallowRef<ApiSchemas['StorageCapabilities'] | null>(null)
+  const capabilityStatus = ref<StorageSnapshotStatus>('idle')
+  const capabilityError = ref<string | null>(null)
+  const policySavedPendingRefresh = ref(false)
   const updatedAt = ref<number | null>(null)
   const denied = ref(false)
   const busy = ref<Record<string, boolean>>({})
@@ -62,6 +83,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
   let epoch = 0
   let listSequence = 0
   let policySequence = 0
+  let capabilitySequence = 0
   let controller = new AbortController()
   const spaceSequences = new Map<number, number>()
   const checkSequences = new Map<number, number>()
@@ -84,6 +106,56 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       !connections.value.loading &&
       !denied.value,
   )
+  const runtime = computed(() =>
+    scope.value.kind === 'site' ? policy.value?.runtime : capabilities.value?.runtime,
+  )
+  const runtimeReady = computed(() =>
+    scope.value.kind === 'site'
+      ? !!policy.value &&
+        hasStoragePolicyCapabilities(policy.value) &&
+        !policyStale.value &&
+        !policyLoading.value
+      : capabilityStatus.value === 'ready',
+  )
+  const canCreateConnection = computed(
+    () =>
+      scope.value.kind !== 'site' &&
+      canManage.value &&
+      !denied.value &&
+      storageManagementAllowed(
+        capabilities.value?.management_actions.create_connection,
+        capabilityStatus.value === 'ready',
+      ) &&
+      !busy.value.create &&
+      !unknownWrites.value.create,
+  )
+  const createConnectionReason = computed(
+    () =>
+      capabilityError.value ||
+      (capabilityStatus.value !== 'ready'
+        ? t('storage.notAvailable')
+        : (capabilities.value?.management_actions.create_connection.reason_codes
+            .map(storageTaskErrorMessage)
+            .join(' · ') ?? '')),
+  )
+  function markStale() {
+    ++listSequence
+    ++capabilitySequence
+    connections.value.loading = false
+    connections.value.stale = connections.value.loaded
+    for (const [id, state] of Object.entries(spaces.value)) {
+      spaceSequences.set(Number(id), (spaceSequences.get(Number(id)) ?? 0) + 1)
+      state.loading = false
+      state.stale = state.loaded
+    }
+    if (capabilityStatus.value !== 'idle') capabilityStatus.value = 'stale'
+    markPolicyStale()
+  }
+  function markPolicyStale() {
+    ++policySequence
+    policyLoading.value = false
+    policyStale.value = !!policy.value
+  }
   function invalidate() {
     ++epoch
     controller.abort()
@@ -94,6 +166,10 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     policy.value = null
     policyError.value = null
     policyLoading.value = policyStale.value = false
+    capabilities.value = null
+    capabilityStatus.value = 'idle'
+    capabilityError.value = null
+    policySavedPendingRefresh.value = false
     updatedAt.value = null
     busy.value = {}
     writeErrors.value = {}
@@ -137,8 +213,8 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       loseAccess()
       return false
     }
-    // A snapshot taken during a write can still contain the previous generation.
-    if (Object.values(busy.value).some(Boolean)) return false
+    // Reads remain available during slow probes. A completed mutation invalidates their sequence.
+    const capabilityRead = scope.value.kind === 'site' ? Promise.resolve(true) : loadCapabilities()
     const context = currentContext(),
       sequence = ++listSequence
     const current = () => context() && sequence === listSequence
@@ -156,10 +232,13 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       updatedAt.value = Date.now()
       for (const id of Object.keys(spaces.value))
         if (!state.items.some((item) => item.id === Number(id))) delete spaces.value[Number(id)]
-      return true
+      // Present authorized metadata independently of optional-version discovery latency.
+      state.loading = false
+      await capabilityRead
+      return current()
     } catch (error) {
       if (current()) {
-        if (isAccessDenied(error)) loseAccess()
+        if (storageAccessDenied(error)) loseAccess()
         else {
           state.stale = state.loaded
           state.error = t('storage.readFailed')
@@ -168,6 +247,49 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       return false
     } finally {
       if (current()) state.loading = false
+    }
+  }
+  async function loadCapabilities(): Promise<boolean> {
+    if (scope.value.kind === 'site' || !canManage.value) return false
+    const owner = scope.value,
+      context = currentContext(),
+      sequence = ++capabilitySequence
+    const current = () => context() && sequence === capabilitySequence
+    capabilityStatus.value = 'loading'
+    capabilityError.value = null
+    try {
+      const value = await transport.getStorageCapabilities(owner, { signal: controller.signal })
+      if (!current()) return false
+      if (
+        !isStorageCapabilities(value) ||
+        value.scope !== owner.kind ||
+        value.owner_id !== (owner.kind === 'org' ? owner.id : getSessionUserId())
+      ) {
+        capabilityStatus.value = 'unsupported'
+        capabilityError.value = t('storage.notAvailable')
+        return false
+      }
+      capabilities.value = value
+      capabilityStatus.value = 'ready'
+      return true
+    } catch (error) {
+      if (current()) {
+        // An org 404 is ambiguous: preserve reads but never fall back to personal capability.
+        if (error instanceof ApiError && error.status === 404) {
+          capabilityStatus.value = owner.kind === 'user' ? 'unsupported' : 'error'
+          capabilityError.value = t(
+            owner.kind === 'user'
+              ? 'storageErrors.capabilityUnsupportedVersion'
+              : 'storageErrors.capabilityScopeUnavailable',
+          )
+          return false
+        } else if (storageAccessDenied(error)) {
+          loseAccess()
+          return false
+        } else capabilityStatus.value = 'error'
+        capabilityError.value = storageErrorMessage(error)
+      }
+      return false
     }
   }
   async function loadSpaces(connectionId: number): Promise<boolean> {
@@ -196,7 +318,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       return true
     } catch (error) {
       if (current()) {
-        if (isAccessDenied(error)) {
+        if (storageAccessDenied(error)) {
           forgetConnection(connectionId)
         } else {
           state.stale = state.loaded
@@ -245,7 +367,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       return true
     } catch (error) {
       if (current()) {
-        if (isAccessDenied(error)) {
+        if (storageAccessDenied(error)) {
           forgetConnection(connectionId)
           return false
         }
@@ -268,11 +390,13 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       const value = await transport.getStoragePolicy({ signal: controller.signal })
       if (!current()) return false
       policy.value = value
-      policyStale.value = false
+      policyStale.value = !hasStoragePolicyCapabilities(value)
+      policyError.value = policyStale.value ? t('storage.notAvailable') : null
+      policySavedPendingRefresh.value = false
       return true
     } catch (error) {
       if (current()) {
-        if (isAccessDenied(error)) policy.value = null
+        if (storageAccessDenied(error)) policy.value = null
         policyError.value = t('storage.readFailed')
         policyStale.value = true
       }
@@ -298,7 +422,9 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       return { status: 'error' }
     if (
       connectionId !== undefined &&
-      (!ready.value || !connections.value.items.some((item) => item.id === connectionId))
+      ((!ready.value &&
+        !(key === `revoke:${connectionId}` && busy.value[`connection:${connectionId}`])) ||
+        !connections.value.items.some((item) => item.id === connectionId))
     )
       return { status: 'error' }
     const context = currentContext()
@@ -329,11 +455,13 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     try {
       const value = await action(controller.signal)
       if (!current()) return { status: 'stale' }
+      ++listSequence
+      connections.value.loading = false
       connections.value.stale = connections.value.loaded
       return { status: 'success', value }
     } catch (error) {
       if (!current()) return { status: 'stale' }
-      if (isAccessDenied(error)) {
+      if (storageAccessDenied(error)) {
         if (connectionId === undefined) loseAccess()
         else {
           forgetConnection(connectionId)
@@ -344,6 +472,13 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       const unknown = storageResultUnknown(error)
       unknownWrites.value[key] = unknown
       writeErrors.value[key] = storageErrorMessage(error)
+      if (
+        storageNeedsRefresh(error) ||
+        (key === 'policy' && error instanceof ApiError && error.status === 409)
+      )
+        invalidateStorageSnapshots(
+          scope.value.kind === 'org' ? { organizationId: scope.value.id } : {},
+        )
       const checkId = safeStorageProblem(error).check_id
       if (connectionId !== undefined && checkId !== undefined) {
         try {
@@ -369,6 +504,58 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     }
   }
   const connection = (id: number) => connections.value.items.find((item) => item.id === id)
+  function connectionAllowed(id: number, action: StorageManagementAction) {
+    const item = connection(id)
+    const emergency = action === 'revoke_auth' && !!busy.value[`connection:${id}`]
+    return (
+      canManage.value &&
+      !denied.value &&
+      !!item &&
+      hasConnectionManagementActions(item) &&
+      validGeneration(item.management_generation) &&
+      storageManagementAllowed(
+        item.management_actions[action],
+        emergency || (ready.value && runtimeReady.value),
+      ) &&
+      !busy.value[`revoke:${id}`] &&
+      (action === 'revoke_auth' ||
+        (!busy.value[`connection:${id}`] && !unknownWrites.value[`connection:${id}`])) &&
+      (action !== 'revoke_auth' || !unknownWrites.value[`revoke:${id}`])
+    )
+  }
+  function connectionReason(id: number, action: StorageManagementAction) {
+    const item = connection(id)
+    if (!item || !hasConnectionManagementActions(item)) return t('storage.notAvailable')
+    if (item.management_actions[action].reason_codes.length)
+      return item.management_actions[action].reason_codes.map(storageTaskErrorMessage).join(' · ')
+    return connectionAllowed(id, action) ? '' : t('storage.stale')
+  }
+  function spaceAllowed(id: number, spaceId: number) {
+    const state = spaces.value[id],
+      item = state?.items.find((value) => value.id === spaceId)
+    return (
+      ready.value &&
+      runtimeReady.value &&
+      !!state?.loaded &&
+      !state.stale &&
+      !state.loading &&
+      !!item &&
+      hasSpaceManagementActions(item) &&
+      validGeneration(item.management_generation) &&
+      storageManagementAllowed(item.management_actions.set_status, true) &&
+      !busy.value[`connection:${id}`] &&
+      !busy.value[`revoke:${id}`] &&
+      !unknownWrites.value[`connection:${id}`]
+    )
+  }
+  function spaceReason(id: number, spaceId: number) {
+    const item = spaces.value[id]?.items.find((value) => value.id === spaceId)
+    if (!item || !hasSpaceManagementActions(item)) return t('storage.notAvailable')
+    return (
+      item.management_actions.set_status.reason_codes.map(storageTaskErrorMessage).join(' · ') ||
+      (spaceAllowed(id, spaceId) ? '' : t('storage.stale'))
+    )
+  }
   const validGeneration = (value: number | undefined): value is number =>
     value !== undefined && Number.isSafeInteger(value) && value >= 0
   async function recoverCheck(id: number, checkId: number | null | undefined) {
@@ -386,7 +573,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
           checks.value[id]!.loaded = true
         }
       } catch (cause) {
-        if (current() && isAccessDenied(cause)) {
+        if (current() && storageAccessDenied(cause)) {
           forgetConnection(id)
           return
         }
@@ -396,7 +583,10 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
   }
   async function check(id: number, writeCheck = false) {
     const generation = connection(id)?.management_generation
-    if (!validGeneration(generation))
+    if (
+      !validGeneration(generation) ||
+      !connectionAllowed(id, writeCheck ? 'check_write' : 'check_read')
+    )
       return Promise.resolve<StorageWriteResult<Connection>>({ status: 'error' })
     const current = currentContext()
     const result = await write(
@@ -418,7 +608,10 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     secrets: Omit<ApiSchemas['StorageAuthorizationRequest'], 'expected_management_generation'>,
   ) {
     const generation = connection(id)?.management_generation
-    if (!validGeneration(generation))
+    if (
+      !validGeneration(generation) ||
+      !connectionAllowed(id, secrets.write_check ? 'authorize_write' : 'authorize_read')
+    )
       return Promise.resolve<StorageWriteResult<Connection>>({ status: 'error' })
     const current = currentContext()
     const result = await write(
@@ -437,7 +630,8 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
   }
   async function revoke(id: number) {
     const generation = connection(id)?.management_generation
-    if (!validGeneration(generation)) return { status: 'error' } as const
+    if (!validGeneration(generation) || !connectionAllowed(id, 'revoke_auth'))
+      return { status: 'error' } as const
     const pending = write(
       `revoke:${id}`,
       (signal) =>
@@ -456,7 +650,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
   }
   function setConnectionState(id: number, status: 'enabled' | 'disabled') {
     const generation = connection(id)?.management_generation
-    if (!validGeneration(generation))
+    if (!validGeneration(generation) || !connectionAllowed(id, 'set_status'))
       return Promise.resolve<StorageWriteResult<Connection>>({ status: 'error' })
     return write(
       `connection:${id}`,
@@ -472,7 +666,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
   function setSpaceState(id: number, spaceId: number, status: 'active' | 'read_only' | 'disabled') {
     const state = spaces.value[id],
       item = state?.items.find((value) => value.id === spaceId)
-    if (!state?.loaded || state.stale || !validGeneration(item?.management_generation))
+    if (!spaceAllowed(id, spaceId) || !validGeneration(item?.management_generation))
       return Promise.resolve<StorageWriteResult<Space>>({ status: 'error' })
     return write(
       `connection:${id}`,
@@ -487,22 +681,46 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
   }
   function createConnection(body: ApiSchemas['StorageConnectionRequest']) {
     const owner = scope.value
-    if (owner.kind === 'site')
+    if (owner.kind === 'site' || !canCreateConnection.value)
       return Promise.resolve<StorageWriteResult<Connection>>({ status: 'error' })
     return write('create', (signal) => transport.createStorageConnection(owner, body, { signal }))
   }
   const createSpace = (id: number, body: ApiSchemas['StorageSpaceRequest']) =>
-    write(`connection:${id}`, (signal) => transport.createStorageSpace(id, body, { signal }), id)
-  function savePolicy(body: ApiSchemas['StoragePolicy']) {
+    connectionAllowed(id, 'create_space')
+      ? write(
+          `connection:${id}`,
+          (signal) => transport.createStorageSpace(id, body, { signal }),
+          id,
+        )
+      : Promise.resolve<StorageWriteResult<Space>>({ status: 'error' })
+  async function savePolicy(body: ApiSchemas['StoragePolicyRequest']) {
     if (
       scope.value.kind !== 'site' ||
       !policy.value ||
       policyStale.value ||
       policyLoading.value ||
+      !hasStoragePolicyCapabilities(policy.value) ||
+      !policy.value.allowed_policy_modes.includes(body.mode) ||
+      (body.mode === 'site_only' && body.default_choice !== 'site') ||
+      (body.mode === 'user_required' && body.default_choice !== 'user') ||
       body.generation !== policy.value.generation
     )
       return Promise.resolve<StorageWriteResult<ApiSchemas['StoragePolicy']>>({ status: 'error' })
-    return write('policy', (signal) => transport.setStoragePolicy(body, { signal }))
+    const snapshot: ApiSchemas['StoragePolicyRequest'] = {
+      mode: body.mode,
+      default_choice: body.default_choice,
+      generation: body.generation,
+      logical_limit_bytes: body.logical_limit_bytes,
+    }
+    const result = await write('policy', (signal) =>
+      transport.setStoragePolicy(snapshot, { signal }),
+    )
+    if (result.status === 'success') {
+      policy.value = result.value
+      policyStale.value = true
+      policySavedPendingRefresh.value = true
+    }
+    return result
   }
   onScopeDispose(onSessionChange(invalidate))
   onOrganizationInvalidated((id) => {
@@ -518,6 +736,19 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     policyError,
     policyLoading,
     policyStale,
+    policySavedPendingRefresh,
+    capabilities,
+    capabilityStatus,
+    capabilityError,
+    runtime,
+    canCreateConnection,
+    createConnectionReason,
+    connectionAllowed,
+    connectionReason,
+    spaceAllowed,
+    spaceReason,
+    markStale,
+    markPolicyStale,
     updatedAt,
     denied,
     busy,
@@ -531,6 +762,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     loadSpaces,
     loadChecks,
     loadPolicy,
+    loadCapabilities,
     check,
     authorize,
     revoke,

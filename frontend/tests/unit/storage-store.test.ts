@@ -7,6 +7,14 @@ import { ApiError } from '@/api/utils'
 import { storageRequestError } from '@/api/storage-errors'
 import { createStorageState } from '@/stores/storage'
 import { invalidateOrganization, organizationRoles } from '@/utils/organization-scope'
+import { subscribeStorageRefresh } from '@/utils/storage-snapshots'
+import {
+  connectionActions,
+  spaceActions,
+  policyCapabilities,
+  storageCapabilities,
+  storageAction,
+} from '../storage-fixtures'
 
 const connection = (id = 1, scope = 'user', ownerId = 1): ApiSchemas['StorageConnection'] => ({
   id,
@@ -21,6 +29,7 @@ const connection = (id = 1, scope = 'user', ownerId = 1): ApiSchemas['StorageCon
   has_auth: false,
   management_generation: 4,
   auth_generation: 2,
+  management_actions: connectionActions(),
 })
 const deferred = <T>() => {
   let resolve!: (value: T) => void
@@ -31,7 +40,21 @@ let scope: EffectScope
 const state = (overrides: Partial<typeof api> = {}, admin = false) =>
   scope.run(() =>
     createStorageState(
-      { ...api, listStorageChecks: vi.fn().mockResolvedValue({ items: [] }), ...overrides },
+      {
+        ...api,
+        listStorageChecks: vi.fn().mockResolvedValue({ items: [] }),
+        getStorageCapabilities: vi
+          .fn()
+          .mockImplementation((scope: api.StorageScope) =>
+            Promise.resolve(
+              storageCapabilities(
+                scope.kind === 'org' ? 'org' : 'user',
+                scope.kind === 'org' ? scope.id : 1,
+              ),
+            ),
+          ),
+        ...overrides,
+      },
       () => admin,
     ),
   )!
@@ -42,6 +65,255 @@ beforeEach(() => {
 afterEach(() => scope.stop())
 
 describe('storage scope and concurrency', () => {
+  it('shows authorized connection metadata while capability discovery is still pending', async () => {
+    const capability = deferred<ApiSchemas['StorageCapabilities']>()
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [connection()] }),
+      getStorageCapabilities: vi.fn().mockReturnValue(capability.promise),
+      listStorageSpaces: vi.fn().mockResolvedValue({ items: [] }),
+    })
+    const loading = store.load()
+    await vi.waitFor(() => expect(store.connections.value.items).toHaveLength(1))
+    expect(store.connections.value.loading).toBe(false)
+    expect(store.connectionAllowed(1, 'check_read')).toBe(false)
+    expect(await store.loadSpaces(1)).toBe(true)
+    capability.resolve(storageCapabilities())
+    await loading
+    expect(store.connectionAllowed(1, 'check_read')).toBe(true)
+  })
+  it('refreshes policy after a generic legacy 409 without losing access or resending PUT', async () => {
+    vi.useFakeTimers()
+    const original: ApiSchemas['StoragePolicy'] = {
+      ...policyCapabilities(),
+      mode: 'both',
+      default_choice: 'user',
+      generation: 2,
+      logical_limit_bytes: 100,
+    }
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(original)
+      .mockResolvedValue({ ...original, generation: 3, logical_limit_bytes: 150 })
+    const save = vi.fn().mockRejectedValue(new ApiError('conflict', 409))
+    const store = state({ getStoragePolicy: read, setStoragePolicy: save }, true)
+    store.setScope({ kind: 'site' })
+    await store.loadPolicy()
+    const unsubscribe = subscribeStorageRefresh({
+      invalidate: store.markPolicyStale,
+      refresh: store.loadPolicy,
+    })
+    try {
+      expect(await store.savePolicy({ ...original, logical_limit_bytes: 200 })).toEqual({
+        status: 'error',
+      })
+      expect(store.policy.value?.generation).toBe(2)
+      expect(store.unknownWrites.value.policy).toBe(false)
+      expect(store.denied.value).toBe(false)
+      await vi.runAllTimersAsync()
+      expect(read).toHaveBeenCalledTimes(2)
+      expect(store.policy.value?.generation).toBe(3)
+      expect(save).toHaveBeenCalledTimes(1)
+    } finally {
+      unsubscribe()
+      vi.useRealTimers()
+    }
+  })
+  it('invalidates in-flight admission reads immediately before the coalesced refresh starts', async () => {
+    const listing = deferred<ApiSchemas['StorageConnectionList']>()
+    const capability = deferred<ApiSchemas['StorageCapabilities']>()
+    const store = state({
+      listStorageConnections: vi.fn().mockReturnValue(listing.promise),
+      getStorageCapabilities: vi.fn().mockReturnValue(capability.promise),
+    })
+    const reading = store.load()
+    store.markStale()
+    capability.resolve(storageCapabilities())
+    listing.resolve({ items: [connection()] })
+    expect(await reading).toBe(false)
+    expect(store.connections.value.items).toEqual([])
+    expect(store.connections.value.loading).toBe(false)
+    expect(store.capabilityStatus.value).toBe('stale')
+    expect(store.canCreateConnection.value).toBe(false)
+  })
+  it('rejects a stale space response and a stale policy response before new reads begin', async () => {
+    const listing = deferred<ApiSchemas['StorageSpaceList']>()
+    const policy = deferred<ApiSchemas['StoragePolicy']>()
+    const store = state(
+      {
+        listStorageConnections: vi.fn().mockResolvedValue({ items: [connection()] }),
+        listStorageSpaces: vi.fn().mockReturnValue(listing.promise),
+        getStoragePolicy: vi.fn().mockReturnValue(policy.promise),
+      },
+      true,
+    )
+    await store.load()
+    const spaces = store.loadSpaces(1)
+    store.markStale()
+    listing.resolve({ items: [] })
+    expect(await spaces).toBe(false)
+    expect(store.spaces.value[1]?.loaded).toBe(false)
+    store.setScope({ kind: 'site' })
+    const reading = store.loadPolicy()
+    store.markPolicyStale()
+    policy.resolve({
+      ...policyCapabilities(),
+      mode: 'site_only',
+      default_choice: 'site',
+      logical_limit_bytes: 100,
+      generation: 1,
+    })
+    expect(await reading).toBe(false)
+    expect(store.policy.value).toBeNull()
+    expect(store.policyLoading.value).toBe(false)
+  })
+  it('keeps org capability 404 separate from an unsupported personal discovery route', async () => {
+    organizationRoles.value = { 7: 'admin' }
+    const capabilities = vi.fn().mockRejectedValue(new ApiError('ambiguous', 404))
+    const store = state({
+      getStorageCapabilities: capabilities,
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [connection(1, 'org', 7)] }),
+    })
+    await store.load({ kind: 'org', id: 7 })
+    expect(store.capabilityStatus.value).toBe('error')
+    expect(store.connections.value.items).toHaveLength(1)
+    expect(store.canCreateConnection.value).toBe(false)
+    expect(capabilities).toHaveBeenCalledTimes(1)
+    expect(capabilities.mock.calls[0]?.[0]).toEqual({ kind: 'org', id: 7 })
+  })
+  it('discovers creation capability even for an empty list and never treats disabled deployment as an invalid snapshot', async () => {
+    const cap = storageCapabilities()
+    cap.runtime.deployment_enabled = false
+    cap.management_actions.create_connection = storageAction(false)
+    const create = vi.fn()
+    const capabilities = vi.fn().mockResolvedValue(cap)
+    const store = state({
+      getStorageCapabilities: capabilities,
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [] }),
+      createStorageConnection: create,
+    })
+    await store.load()
+    expect(capabilities.mock.calls[0]?.[0]).toEqual({ kind: 'user' })
+    expect(store.capabilityStatus.value).toBe('ready')
+    expect(store.canCreateConnection.value).toBe(false)
+    await store.createConnection({
+      name: 'blocked',
+      endpoint: 'https://example.invalid',
+      region: 'test',
+    })
+    expect(create).not.toHaveBeenCalled()
+  })
+  it('keeps readable metadata on unsupported capability routes and incomplete object actions', async () => {
+    const item = connection()
+    delete (item.management_actions as Partial<typeof item.management_actions>).check_write
+    const store = state({
+      getStorageCapabilities: vi.fn().mockRejectedValue(new ApiError('missing route', 404)),
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [item] }),
+    })
+    await store.load()
+    expect(store.connections.value.items).toHaveLength(1)
+    expect(store.capabilityStatus.value).toBe('unsupported')
+    expect(store.denied.value).toBe(false)
+    expect(store.connectionAllowed(1, 'check_read')).toBe(false)
+  })
+  it.each([
+    'create_space',
+    'authorize_read',
+    'authorize_write',
+    'check_read',
+    'check_write',
+    'revoke_auth',
+    'set_status',
+  ] as const)('uses the %s action without deriving permission from deployment', async (action) => {
+    const item = connection()
+    item.management_actions[action] = storageAction(false, ['storage_maintenance'])
+    const cap = storageCapabilities()
+    cap.runtime.deployment_enabled = false
+    const request = vi.fn()
+    const store = state({
+      getStorageCapabilities: vi.fn().mockResolvedValue(cap),
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [item] }),
+      createStorageSpace: request,
+      authorizeStorage: request,
+      checkStorageConnection: request,
+      revokeStorageAuthorization: request,
+      setStorageConnectionState: request,
+    })
+    await store.load()
+    expect(store.connectionAllowed(1, action)).toBe(false)
+    const other = action === 'revoke_auth' ? 'check_read' : 'revoke_auth'
+    expect(store.connectionAllowed(1, other)).toBe(true)
+    const result =
+      action === 'create_space'
+        ? await store.createSpace(1, { name: 'space', bucket: 'bucket', capacity_bytes: 100 })
+        : action === 'authorize_read' || action === 'authorize_write'
+          ? await store.authorize(1, {
+              access_key_id: 'id',
+              secret_access_key: 'secret',
+              write_check: action === 'authorize_write',
+            })
+          : action === 'check_read' || action === 'check_write'
+            ? await store.check(1, action === 'check_write')
+            : action === 'revoke_auth'
+              ? await store.revoke(1)
+              : await store.setConnectionState(1, 'disabled')
+    expect(result).toEqual({ status: 'error' })
+    expect(request).not.toHaveBeenCalled()
+  })
+  it('retains metadata and definite write outcome on a policy refusal returned with legacy 403', async () => {
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [connection()] }),
+      checkStorageConnection: vi
+        .fn()
+        .mockRejectedValue(
+          storageRequestError({ status: 403 }, { error_code: 'storage_policy_violation' }),
+        ),
+    })
+    await store.load()
+    expect(await store.check(1)).toEqual({ status: 'error' })
+    expect(store.connections.value.items).toHaveLength(1)
+    expect(store.denied.value).toBe(false)
+    expect(store.unknownWrites.value['connection:1']).toBe(false)
+  })
+  it('rejects quota-only changes to restricted policies and permits legal metadata saves during maintenance', async () => {
+    const original: ApiSchemas['StoragePolicy'] = {
+      ...policyCapabilities(),
+      runtime: { deployment_enabled: false, maintenance: true },
+      allowed_policy_modes: ['site_only'],
+      mode: 'both',
+      default_choice: 'user',
+      generation: 2,
+      logical_limit_bytes: 100,
+    }
+    const save = vi
+      .fn()
+      .mockResolvedValue({ ...original, mode: 'site_only', default_choice: 'site', generation: 3 })
+    const read = vi.fn().mockResolvedValue(original)
+    const store = state({ getStoragePolicy: read, setStoragePolicy: save }, true)
+    store.setScope({ kind: 'site' })
+    await store.loadPolicy()
+    expect(await store.savePolicy({ ...original, logical_limit_bytes: 200 })).toEqual({
+      status: 'error',
+    })
+    expect(save).not.toHaveBeenCalled()
+    await store.savePolicy({
+      ...original,
+      mode: 'site_only',
+      default_choice: 'site',
+      logical_limit_bytes: 200,
+    })
+    expect(save.mock.calls[0]?.[0]).toEqual({
+      mode: 'site_only',
+      default_choice: 'site',
+      logical_limit_bytes: 200,
+      generation: 2,
+    })
+    expect(store.policy.value?.generation).toBe(3)
+    read.mockRejectedValue(new ApiError('temporary', 503))
+    await store.loadPolicy()
+    expect(store.policySavedPendingRefresh.value).toBe(true)
+    expect(store.policy.value?.generation).toBe(3)
+    expect(save).toHaveBeenCalledTimes(1)
+  })
   it('revokes during a slow authorization and never restores its late result', async () => {
     const late = deferred<ApiSchemas['StorageConnection']>()
     const revoked = { ...connection(), has_auth: false, management_generation: 5 }
@@ -121,6 +393,7 @@ describe('storage scope and concurrency', () => {
           status: 'active',
           verified: true,
           management_generation: 1,
+          management_actions: spaceActions(),
           capacity_bytes: 100,
           reserved_bytes: 0,
           candidate_bytes: 0,
@@ -254,7 +527,7 @@ describe('storage scope and concurrency', () => {
     expect(store.denied.value).toBe(true)
   })
 
-  it('defers connection and space snapshots until the management write finishes', async () => {
+  it('allows metadata refresh during slow authorization without reopening ordinary writes', async () => {
     const result = deferred<ApiSchemas['StorageConnection']>()
     const list = vi.fn().mockResolvedValue({ items: [connection()] })
     const listSpaces = vi.fn().mockResolvedValue({ items: [] })
@@ -269,9 +542,11 @@ describe('storage scope and concurrency', () => {
       secret_access_key: 'secret',
       write_check: false,
     })
-    expect(await store.load()).toBe(false)
+    store.markStale()
+    expect(store.connectionAllowed(1, 'revoke_auth')).toBe(true)
+    expect(await store.load()).toBe(true)
     expect(await store.loadSpaces(1)).toBe(false)
-    expect(list).toHaveBeenCalledTimes(1)
+    expect(list).toHaveBeenCalledTimes(2)
     expect(listSpaces).not.toHaveBeenCalled()
     result.resolve({ ...connection(), management_generation: 5, has_auth: true })
     await pending
@@ -286,6 +561,7 @@ describe('storage scope and concurrency', () => {
 
   it('requires a fresh policy read after saving and never reads an in-flight policy snapshot', async () => {
     const original: ApiSchemas['StoragePolicy'] = {
+      ...policyCapabilities(),
       mode: 'site_only',
       default_choice: 'site',
       generation: 2,
@@ -327,6 +603,7 @@ describe('storage scope and concurrency', () => {
 
   it('never reads admin policy for a personal scope, even for an admin identity', async () => {
     const policy = vi.fn().mockResolvedValue({
+      ...policyCapabilities(),
       mode: 'site_only',
       default_choice: 'site',
       generation: 2,

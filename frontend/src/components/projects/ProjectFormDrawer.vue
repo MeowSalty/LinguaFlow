@@ -27,6 +27,8 @@ import { captureSession, isSessionCurrent } from '@/api/session-context'
 import { getStorageContractGate } from '@/utils/storage-contract'
 import StorageTargetSelect from '@/components/storage/StorageTargetSelect.vue'
 import { storageTargetContextAllowed } from '@/composables/useStorageTargets'
+import { storageNeedsRefresh } from '@/api/storage-errors'
+import { invalidateStorageSnapshots } from '@/utils/storage-snapshots'
 
 type Project = ApiSchemas['Project']
 
@@ -192,7 +194,8 @@ const onSubmit = async (): Promise<void> => {
       (error instanceof Error && error.name === 'AbortError')
     )
       return
-    console.error(error)
+    if (!props.project && storageNeedsRefresh(error))
+      invalidateStorageSnapshots({ organizationId: organization })
     message.error(
       isEditMode.value
         ? projects.updateError || t('projects.messages.updateFailed')

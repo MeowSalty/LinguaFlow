@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useResourceStore } from '@/stores/resource'
 import { changeSessionContext } from '@/api/session-context'
 import type { ApiSchemas } from '@/api/client'
+import { StorageApiError } from '@/api/storage-errors'
 
 const api = vi.hoisted(() => ({ upload: vi.fn() }))
 vi.mock('@/api/client', () => ({
@@ -43,6 +44,23 @@ describe('upload batches', () => {
     expect(replay[1][0]).toBe(file)
     expect(replay[2]).toEqual(['source.txt'])
   })
+  it.each(['storage_deployment_disabled', 'byos_disabled', 'storage_policy_violation'])(
+    'preserves the exact upload input and key after %s for explicit replay',
+    async (error_code) => {
+      const store = useResourceStore()
+      const file = new File(['hello'], 'source.txt')
+      api.upload.mockRejectedValueOnce(new StorageApiError('blocked', 409, { error_code }))
+      await expect(
+        store.uploadResources(1, [file], ['source.txt'], 'blocked-batch'),
+      ).rejects.toThrow()
+      const key = api.upload.mock.calls[0]![3].idempotencyKey
+      expect(api.upload).toHaveBeenCalledTimes(1)
+      await store.uploadResources(1, [file], ['source.txt'], 'blocked-batch')
+      expect(api.upload.mock.calls[1]![3].idempotencyKey).toBe(key)
+      expect(api.upload.mock.calls[1]![1][0]).toBe(file)
+      expect(store.resources.map((item) => item.id)).toEqual([7])
+    },
+  )
   it('refuses changed bytes or paths for an existing batch before sending another request', async () => {
     const store = useResourceStore()
     const file = new File(['hello'], 'source.txt')

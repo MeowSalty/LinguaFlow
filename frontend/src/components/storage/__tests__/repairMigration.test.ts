@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiSchemas } from '@/api/client-core'
 import { changeSessionContext } from '@/api/session-context'
 import {
@@ -10,6 +10,7 @@ import {
 import { organizationRoles } from '@/utils/organization-scope'
 import { createMigrationSession } from '../migrationSession'
 import { StorageApiError } from '@/api/storage-errors'
+import { invalidateStorageSnapshots } from '@/utils/storage-snapshots'
 
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
 const project = {
@@ -56,6 +57,10 @@ const task = (overrides: Partial<ApiSchemas['StorageTask']> = {}): ApiSchemas['S
   ...overrides,
 })
 const file = () => new File(['abc'], 'source.json')
+const disposals: (() => void)[] = []
+afterEach(() => {
+  for (const dispose of disposals.splice(0)) dispose()
+})
 function repair() {
   let context: RepairContext = { project: { ...project }, resourceId: 2, version: { ...version } }
   const deps = {
@@ -72,6 +77,7 @@ function repair() {
     { context: () => context, available, changed, beforeMutation },
     deps,
   )
+  disposals.push(session.dispose)
   session.selectFile(file())
   return {
     session,
@@ -87,6 +93,65 @@ function repair() {
 }
 beforeEach(() => changeSessionContext('/api/v1', 1, true))
 describe('repair original identity and content recovery', () => {
+  it.each([
+    'storage_deployment_disabled',
+    'byos_disabled',
+    'storage_maintenance',
+    'storage_policy_violation',
+  ])(
+    'retains repair input and the original key, target and deadline after %s without content replay',
+    async (error_code) => {
+      const { session, deps } = repair()
+      const expires_at = '2026-10-06T12:00:00Z'
+      deps.createStorageIntent.mockResolvedValue(task({ expires_at }))
+      await session.start(target, 0)
+      const candidate = session.file.value
+      const original = deps.createStorageIntent.mock.calls[0]?.[1]
+      deps.getStorageTask.mockResolvedValue(task({ expires_at }))
+      deps.receiveStorageContent.mockRejectedValueOnce(
+        new StorageApiError('blocked', 409, { error_code }),
+      )
+      expect(await session.upload()).toBe(false)
+      deps.getStorageTask.mockResolvedValue(
+        task({
+          status: 'needs_action',
+          error_code,
+          expires_at,
+          allowed_actions: ['cancel'],
+        }),
+      )
+      await session.recover()
+      expect(session.file.value).toBe(candidate)
+      expect(session.task.value).toMatchObject({
+        id: 4,
+        target_space_id: 9,
+        expires_at,
+        status: 'needs_action',
+      })
+      expect(session.canUpload.value).toBe(false)
+      expect(await session.start({ ...target, space_id: 10 }, 0)).toBe(false)
+      expect(await session.upload()).toBe(false)
+      expect(deps.createStorageIntent).toHaveBeenCalledTimes(1)
+      expect(deps.createStorageIntent.mock.calls[0]?.[1]).toBe(original)
+      expect(deps.receiveStorageContent).toHaveBeenCalledTimes(1)
+      deps.getStorageTask.mockResolvedValue(task({ expires_at }))
+      await session.recover()
+      expect(session.canUpload.value).toBe(true)
+      expect(deps.receiveStorageContent).toHaveBeenCalledTimes(1)
+    },
+  )
+  it('does not upload if task actions were invalidated while permission preflight was in progress', async () => {
+    const { session, deps, beforeMutation } = repair()
+    await session.start(target, 0)
+    beforeMutation.mockImplementation(async () => {
+      invalidateStorageSnapshots({ projectId: 1 })
+      return true
+    })
+    expect(await session.upload()).toBe(false)
+    expect(deps.receiveStorageContent).not.toHaveBeenCalled()
+    expect(session.file.value).not.toBeNull()
+    expect(session.task.value?.id).toBe(4)
+  })
   it('does not create an intent or consume the candidate when fresh permission preflight refuses', async () => {
     const { session, deps, beforeMutation } = repair()
     beforeMutation.mockResolvedValue(false)
@@ -249,13 +314,59 @@ describe('migration reconciliation', () => {
       ),
     }
     const available = vi.fn(() => true)
+    const session = createMigrationSession({ project: () => current, available }, deps)
+    disposals.push(session.dispose)
     return {
       current,
       deps,
       available,
-      session: createMigrationSession({ project: () => current, available }, deps),
+      session,
     }
   }
+  it.each(['storage_deployment_disabled', 'byos_disabled', 'storage_maintenance'])(
+    'reconciles a migration refused by %s with its original task, target and cleanup facts',
+    async (error_code) => {
+      const { session, deps, current, available } = setup()
+      deps.migrateProjectStorage.mockRejectedValueOnce(
+        new StorageApiError('blocked', 409, { error_code, task_id: 4 }),
+      )
+      await session.start(target, 0)
+      const original = deps.migrateProjectStorage.mock.calls[0]?.[1]
+      available.mockReturnValue(false)
+      current.storage_state = 'migrating'
+      deps.getStorageTask.mockResolvedValue(
+        task({
+          kind: 'migration',
+          phase: 'cutover',
+          status: 'needs_action',
+          cleanup_status: 'blocked',
+          error_code,
+          allowed_actions: [],
+          expires_at: '2026-10-06T12:00:00Z',
+        }),
+      )
+      expect(await session.recover()).toBe(true)
+      expect(session.task.value).toMatchObject({
+        id: 4,
+        target_space_id: 9,
+        phase: 'cutover',
+        status: 'needs_action',
+        cleanup_status: 'blocked',
+        expires_at: '2026-10-06T12:00:00Z',
+        allowed_actions: [],
+      })
+      expect(session.startNew()).toBe(false)
+      expect(await session.start({ ...target, space_id: 10 }, 0)).toBe(false)
+      expect(deps.migrateProjectStorage).toHaveBeenCalledTimes(1)
+      expect(deps.migrateProjectStorage.mock.calls[0]?.[1]).toBe(original)
+      deps.getStorageTask.mockResolvedValue(
+        task({ kind: 'migration', phase: 'cutover', allowed_actions: ['retry'] }),
+      )
+      await session.recover()
+      expect(session.task.value?.allowed_actions).toEqual(['retry'])
+      expect(deps.migrateProjectStorage).toHaveBeenCalledTimes(1)
+    },
+  )
   it('rejects absent generations and target discovery refusals', async () => {
     const { session, deps } = setup()
     expect(await session.start(target, Number.NaN)).toBe(false)

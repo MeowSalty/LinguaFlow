@@ -3,13 +3,13 @@ import { computed, onUnmounted, watch } from 'vue'
 import { NAlert, NButton, NEmpty, NSelect, NSkeleton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import type { ApiSchemas } from '@/api/client-core'
-import { sessionGeneration } from '@/api/session-context'
 import {
   createStorageTargets,
   storageTargetContextAllowed,
-  storageTargetContextKey,
+  watchStorageTargetContext,
   type StorageTargetContext,
 } from '@/composables/useStorageTargets'
+import { subscribeStorageRefresh } from '@/utils/storage-snapshots'
 
 const props = withDefaults(
   defineProps<{ context: StorageTargetContext | null; disabled?: boolean }>(),
@@ -31,28 +31,37 @@ const reasonText = (reason: string) =>
   te(`storageProject.reasons.${reason}`)
     ? t(`storageProject.reasons.${reason}`)
     : t('storageProject.reasons.unavailable')
-const choices = computed(
-  () =>
-    response.value?.items.map((item) => ({
-      value: item.space_id,
-      label: `${item.name} · ${t(`storageProject.scopes.${item.scope}`)}${item.reason_codes.length ? ` · ${item.reason_codes.map(reasonText).join(' / ')}` : ''}`,
-      disabled: !item.selectable,
-    })) ?? [],
+const choices = computed(() => {
+  const items = response.value?.items ?? []
+  const retained = targets.retainedSelection.value
+  return [
+    ...items,
+    ...(retained && !items.some((item) => item.space_id === retained.space_id)
+      ? [{ ...retained, selectable: false, reason_codes: ['unavailable'] }]
+      : []),
+  ].map((item) => ({
+    value: item.space_id,
+    label: `${item.name} · ${t(`storageProject.scopes.${item.scope}`)}${item.reason_codes.length ? ` · ${item.reason_codes.map(reasonText).join(' / ')}` : ''}`,
+    disabled: !item.selectable,
+  }))
+})
+onUnmounted(
+  watchStorageTargetContext(
+    () => props.context,
+    () => allowed.value,
+    targets,
+  ),
 )
 watch(
-  () => [storageTargetContextKey(props.context), allowed.value, sessionGeneration.value],
-  () => {
-    targets.clear()
-    void targets.refresh()
-  },
-  { immediate: true, flush: 'sync' },
+  [response, targets.status],
+  ([result, status]) => emit('loaded', status === 'ready' ? result : null),
+  { flush: 'sync' },
 )
-watch(response, (result) => emit('loaded', result), { flush: 'sync' })
 watch(
-  selectedId,
-  (id) => {
+  [selectedId, targets.selected, targets.valid],
+  ([id, selected, valid]) => {
     value.value = id
-    emit('selection', targets.selected.value)
+    emit('selection', valid ? selected : null)
   },
   { flush: 'sync' },
 )
@@ -60,6 +69,19 @@ watch(value, (id) => {
   if (id !== selectedId.value) targets.select(id)
 })
 onUnmounted(targets.clear)
+onUnmounted(
+  subscribeStorageRefresh({
+    scope: () =>
+      props.context?.kind === 'project'
+        ? {
+            projectId: props.context.project.id,
+            organizationId: props.context.project.owner_org_id,
+          }
+        : { organizationId: props.context?.organizationId },
+    invalidate: targets.invalidate,
+    refresh: targets.refresh,
+  }),
+)
 defineExpose({ refresh: targets.refresh, clear: targets.clear })
 </script>
 
@@ -67,17 +89,22 @@ defineExpose({ refresh: targets.refresh, clear: targets.clear })
   <div class="w-full space-y-3">
     <NAlert v-if="!allowed" type="info">{{ t('storageProject.selectionUnavailable') }}</NAlert>
     <NAlert v-if="error" type="warning">{{ error }}</NAlert>
-    <NSkeleton v-if="loading" height="34px" />
+    <NSkeleton v-if="loading && !response" height="34px" />
     <template v-else>
       <NSelect
         :value="selectedId"
         :options="choices"
-        :disabled="disabled || !allowed || !response"
+        :disabled="disabled || !allowed || !response || loading || !!error"
         :placeholder="t('storageProject.chooseTarget')"
         :aria-label="t('storageProject.chooseTarget')"
         clearable
         @update:value="targets.select"
       />
+      <NAlert v-if="targets.selectionUnavailable.value" type="warning">{{
+        t('storageProject.retainedSelection', {
+          name: targets.retainedSelection.value?.name ?? selectedId,
+        })
+      }}</NAlert>
       <NAlert v-if="response?.default_unavailable_reason" type="info">{{
         reasonText(response.default_unavailable_reason)
       }}</NAlert>

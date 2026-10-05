@@ -33,7 +33,9 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
-const writable = computed(() => storageActionAllowed(workspace.project, 'sourceUpdate'))
+const writable = computed(
+  () => workspace.storageContentWritable && storageActionAllowed(workspace.project, 'sourceUpdate'),
+)
 const session = useSourceUpdateSession(
   async () => {
     if (!(await (props.beforeSavedContent?.() ?? true))) return false
@@ -45,7 +47,7 @@ const session = useSourceUpdateSession(
 const busy = computed(
   () => ['previewing', 'submitting'].includes(session.state.value) || session.recovering.value,
 )
-const unresolved = computed(() => ['unknown', 'tracking'].includes(session.state.value))
+const unresolved = computed(() => ['unknown', 'tracking', 'blocked'].includes(session.state.value))
 const viewState = ref<'refreshed' | 'deferred' | 'failed' | null>(null)
 const downloadBusy = ref(false)
 const downloadError = ref('')
@@ -53,7 +55,12 @@ const selectedResource = computed(
   () => workspace.resources.find((item) => item.id === props.resource.id) ?? props.resource,
 )
 watch(
-  () => [props.projectId, props.resource.id],
+  [
+    () => props.projectId,
+    () => props.resource.id,
+    () => workspace.project?.owner_user_id,
+    () => workspace.project?.owner_org_id,
+  ],
   () => {
     session.reset()
     viewState.value = null
@@ -61,10 +68,10 @@ watch(
   { flush: 'sync' },
 )
 watch(
-  () => [
-    selectedResource.value.source_generation,
-    selectedResource.value.translation_generation,
-    workspace.contentWriteRevision,
+  [
+    () => selectedResource.value.source_generation,
+    () => selectedResource.value.translation_generation,
+    () => workspace.contentWriteRevision,
   ],
   () => session.invalidate(),
   { flush: 'sync' },
@@ -74,7 +81,7 @@ watch(sessionGeneration, () => {
   emit('update:show', false)
 })
 watch(
-  () => [props.show, props.projectId, props.resource.id, props.file] as const,
+  [() => props.show, () => props.projectId, () => props.resource.id, () => props.file],
   ([show, project, resource, file]) => {
     if (show && file && session.file.value !== file) session.select(project, resource, file)
   },
@@ -82,7 +89,7 @@ watch(
 )
 watch(session.state, (value) => emit('state', value))
 watch(
-  () => [props.show, props.projectId, props.resource.id, props.task] as const,
+  [() => props.show, () => props.projectId, () => props.resource.id, () => props.task],
   ([show, project, resource, task]) => {
     if (show && task && session.taskId.value !== task.id) session.restore(project, resource, task)
   },
@@ -228,7 +235,9 @@ const taskHref = computed(() =>
           t('sourceStorage.invalidated')
         }}</NAlert>
         <NAlert
-          v-if="['failed', 'expired', 'cancelled', 'read_only'].includes(session.state.value)"
+          v-if="
+            ['failed', 'expired', 'cancelled', 'read_only', 'blocked'].includes(session.state.value)
+          "
           type="warning"
           :bordered="false"
           >{{ t(`sourceStorage.states.${session.state.value}`) }}</NAlert
@@ -279,7 +288,12 @@ const taskHref = computed(() =>
           >
           <NButton
             type="primary"
-            :disabled="!writable || busy || session.state.value !== 'preview_ready'"
+            :disabled="
+              !writable ||
+              busy ||
+              !session.taskSnapshotReady.value ||
+              session.state.value !== 'preview_ready'
+            "
             :loading="session.state.value === 'submitting'"
             @click="session.confirm"
             >{{ t('sourceStorage.confirm') }}</NButton
