@@ -1,6 +1,12 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { json, mockApp } from './fixtures'
 import {
+  storageControl,
+  storageDrawerTab,
+  storageAdminTab,
+  expectStorageControl,
+} from './storage-management-helpers'
+import {
   connectionActions,
   policyCapabilities,
   spaceActions,
@@ -184,11 +190,18 @@ const writes = (state: Awaited<ReturnType<typeof setup>>) =>
 const policyCard = (page: Page) =>
   page
     .locator('.n-card')
-    .filter({ has: page.locator('.n-card-header__main', { hasText: '站点存储政策' }) })
+    .filter({ has: page.locator('.n-card-header__main', { hasText: '策略与配额' }) })
     .first()
-const quota = (page: Page) => policyCard(page).locator('input').last()
+const quota = (page: Page) =>
+  policyCard(page).getByRole('textbox', { name: '逻辑配额', exact: true })
 const policySave = (page: Page) =>
-  policyCard(page).getByRole('button', { name: '保存', exact: true })
+  policyCard(page).getByRole('button', { name: '保存更改', exact: true })
+async function openPolicy(page: Page) {
+  await page.goto('/admin/storage')
+  await storageAdminTab(page, '存储策略')
+  await policyCard(page).locator('.n-base-selection').last().click()
+  await page.locator('.n-base-select-option').filter({ hasText: /^B$/ }).click()
+}
 const focus = (page: Page) =>
   page.evaluate(() => {
     window.dispatchEvent(new Event('focus'))
@@ -284,7 +297,7 @@ for (const [mode, defaultChoice, modeLabel, choiceLabel] of modes) {
           enabled && !maintenance,
           maintenance ? ['storage_maintenance'] : ['storage_deployment_disabled'],
         )
-        await page.goto('/admin/storage')
+        await openPolicy(page)
         await expect(quota(page)).toHaveValue('10000')
         const selects = policyCard(page).locator('.n-base-selection-label')
         await expect(selects.nth(0)).toContainText(modeLabel)
@@ -300,19 +313,22 @@ for (const [mode, defaultChoice, modeLabel, choiceLabel] of modes) {
         expect(state.requests.some((request) => request.path === '/storage/capabilities')).toBe(
           false,
         )
+        if (new URL(page.url()).pathname === '/admin/storage')
+          await storageAdminTab(page, '存储连接')
         await page.getByRole('button', { name: '查看详情', exact: true }).click()
         const drawer = page.locator('.n-drawer:visible')
         for (const name of ['新建空间', '更新授权', '撤销授权', '禁用连接'])
-          await expect(drawer.getByRole('button', { name, exact: true })).toBeDisabled()
+          await expectStorageControl(page, name, false)
+        await storageDrawerTab(page, '连接与授权')
         for (const name of ['恢复只读授权', '授权并写检查'])
           await expect(
             drawer.getByText(`${name}：此存储不支持该操作。`, { exact: true }),
           ).toBeVisible()
-        await expect(drawer.getByRole('button', { name: '只读检测', exact: true })).toBeEnabled()
-        const writeCheck = drawer.getByRole('button', { name: '写入检测', exact: true })
+        await expectStorageControl(page, '只读检测', true)
+        const writeCheck = await storageControl(page, '写入检测')
         if (enabled && !maintenance) await expect(writeCheck).toBeEnabled()
         else await expect(writeCheck).toBeDisabled()
-        await expect(drawer.getByRole('button', { name: '设为只读', exact: true })).toBeEnabled()
+        await expectStorageControl(page, '设为只读', true)
         expect(writes(state)).toHaveLength(0)
       })
     }
@@ -329,7 +345,7 @@ test('E-T04 restricted quota draft changes policy only through the explicit site
     allowed_policy_modes: ['site_only'],
     policy_restriction_codes: ['storage_deployment_disabled'],
   })
-  await page.goto('/admin/storage')
+  await openPolicy(page)
   await quota(page).fill('23000')
   await expect(policySave(page)).toBeDisabled()
   expect(writes(state)).toHaveLength(0)
@@ -352,7 +368,7 @@ test('E-T04/E-T09 focus preserves a dirty draft and external generation requires
 }) => {
   const state = await setup(page)
   state.empty = true
-  await page.goto('/admin/storage')
+  await openPolicy(page)
   await quota(page).fill('23000')
   state.policy = { ...state.policy, generation: 7, logical_limit_bytes: 17000 }
   await focus(page)
@@ -390,7 +406,7 @@ test('E-T04 a deployment refusal after an old snapshot retains the entire draft 
     }
     await json(route, { error_code: 'storage_deployment_disabled' }, 409)
   }
-  await page.goto('/admin/storage')
+  await openPolicy(page)
   await quota(page).fill('23000')
   await policySave(page).click()
   await expect(page.getByText('当前部署不支持保存此政策模式。', { exact: true })).toBeVisible()
@@ -418,12 +434,12 @@ test('E-T04 freezes fields during PUT and advances the baseline for the next exp
     state.policy = { ...state.policy, ...body, generation: state.policy.generation + 1 }
     await json(route, state.policy)
   }
-  await page.goto('/admin/storage')
+  await openPolicy(page)
   await quota(page).fill('23000')
   await policySave(page).click()
   await expect.poll(() => typeof finish).toBe('function')
   await expect(quota(page)).toBeDisabled()
-  await expect(policyCard(page).locator('.n-base-selection--disabled')).toHaveCount(2)
+  await expect(policyCard(page).locator('.n-base-selection--disabled')).toHaveCount(3)
   finish()
   await expect(quota(page)).toBeEnabled()
   state.onPolicyPut = null
@@ -445,7 +461,7 @@ test('E-T04 successful PUT followed by failed GET stays saved, preserves new edi
     state.policyReadStatus = 503
     await json(route, state.policy)
   }
-  await page.goto('/admin/storage')
+  await openPolicy(page)
   await quota(page).fill('23000')
   await policySave(page).click()
   await expect(
@@ -458,7 +474,7 @@ test('E-T04 successful PUT followed by failed GET stays saved, preserves new edi
   await expect(policySave(page)).toBeDisabled()
   expect(writes(state)).toHaveLength(1)
   state.policyReadStatus = 200
-  await policyCard(page).getByRole('button', { name: '刷新', exact: true }).click()
+  await page.getByRole('button', { name: '刷新', exact: true }).click()
   await expect(policySave(page)).toBeEnabled()
   await expect(quota(page)).toHaveValue('25000')
   expect(writes(state)).toHaveLength(1)
@@ -487,8 +503,9 @@ for (const writeCheck of [false, true]) {
     ]
     await page.goto('/settings/storage')
     await page.getByRole('button', { name: '查看详情', exact: true }).click()
+    await storageDrawerTab(page, '检测历史')
     await expect(page.getByText('检测失败', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: '更新授权', exact: true }).click()
+    await (await storageControl(page, '更新授权')).click()
     const modal = page.locator('.n-modal:visible')
     await expect(modal.getByText('恢复只读授权', { exact: true })).toBeVisible()
     if (writeCheck) {
@@ -518,13 +535,12 @@ test('E-T06 deployment blocks only refused actions and preserves read recovery a
     state.connection.management_actions[action] = storageAction(false)
   await page.goto('/settings/storage')
   await page.getByRole('button', { name: '查看详情', exact: true }).click()
-  const drawer = page.locator('.n-drawer:visible')
-  await expect(drawer.getByRole('button', { name: '新建空间', exact: true })).toBeDisabled()
-  await expect(drawer.getByRole('button', { name: '写入检测', exact: true })).toBeDisabled()
-  await expect(drawer.getByRole('button', { name: '只读检测', exact: true })).toBeEnabled()
-  await expect(drawer.getByRole('button', { name: '更新授权', exact: true })).toBeEnabled()
-  await expect(drawer.getByRole('button', { name: '撤销授权', exact: true })).toBeEnabled()
-  await drawer.getByRole('button', { name: '只读检测', exact: true }).click()
+  await expectStorageControl(page, '新建空间', false)
+  await expectStorageControl(page, '写入检测', false)
+  await expectStorageControl(page, '只读检测', true)
+  await expectStorageControl(page, '更新授权', true)
+  await expectStorageControl(page, '撤销授权', true)
+  await (await storageControl(page, '只读检测')).click()
   await expect.poll(() => writes(state).length).toBe(1)
   expect(writes(state)[0]!.body).toEqual({ write_check: false, expected_generation: 8 })
 })
@@ -542,8 +558,8 @@ for (const reason of [
     await page.goto('/settings/storage')
     await page.getByRole('button', { name: '查看详情', exact: true }).click()
     const drawer = page.locator('.n-drawer:visible')
-    await expect(drawer.getByRole('button', { name: '只读检测', exact: true })).toBeDisabled()
-    await expect(drawer.getByRole('button', { name: '写入检测', exact: true })).toBeDisabled()
+    await expectStorageControl(page, '只读检测', false)
+    await expectStorageControl(page, '写入检测', false)
     const reasonText =
       reason === 'storage_capability_unsupported'
         ? '此存储不支持该操作。'
@@ -567,13 +583,13 @@ test('E-T06 site Local connection actions remain unavailable while its space sta
       'storage_capability_unsupported',
     ])
   }
-  await page.goto('/admin/storage')
+  await openPolicy(page)
+  await storageAdminTab(page, '存储连接')
   await page.getByRole('button', { name: '查看详情', exact: true }).click()
-  const drawer = page.locator('.n-drawer:visible')
   for (const name of ['新建空间', '只读检测', '写入检测', '更新授权', '撤销授权', '禁用连接']) {
-    await expect(drawer.getByRole('button', { name, exact: true })).toBeDisabled()
+    await expectStorageControl(page, name, false)
   }
-  const change = drawer.getByRole('button', { name: '设为只读', exact: true })
+  const change = await storageControl(page, '设为只读')
   await expect(change).toBeEnabled()
   await change.focus()
   await page.keyboard.press('Enter')
@@ -599,9 +615,9 @@ test('E-T06 a refused space state does not disable allowed connection state mana
   await page.goto('/settings/storage')
   await page.getByRole('button', { name: '查看详情', exact: true }).click()
   const drawer = page.locator('.n-drawer:visible')
-  await expect(drawer.getByRole('button', { name: '设为只读', exact: true })).toBeDisabled()
-  await expect(drawer.getByRole('button', { name: '禁用连接', exact: true })).toBeEnabled()
+  await expectStorageControl(page, '设为只读', false)
   await expect(drawer.getByText(maintenanceMessage, { exact: true })).toBeVisible()
+  await expectStorageControl(page, '禁用连接', true)
   expect(writes(state)).toHaveLength(0)
 })
 
