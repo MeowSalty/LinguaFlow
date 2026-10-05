@@ -12,7 +12,10 @@ import {
 } from '@/api/projects'
 import { storageActionAllowed, storageProjectWritable } from '@/utils/storage-contract'
 import { assertSessionCurrent, captureSession } from '@/api/session-context'
-import { storageRequestError } from '@/api/storage-errors'
+import { storageAccessDenied, storageNeedsRefresh, storageRequestError } from '@/api/storage-errors'
+import { getProjectStorage } from '@/api/storage'
+import { hasStorageRuntime } from '@/utils/storage-availability'
+import { invalidateStorageSnapshots } from '@/utils/storage-snapshots'
 import { createScopedEntityState } from './scopedEntity'
 import { useOrganizationsStore } from './organizations'
 
@@ -23,6 +26,7 @@ export const useProjectsStore = defineStore('projects', () => {
     ApiSchemas['CreateProjectRequest'],
     ApiSchemas['UpdateProjectRequest']
   >({
+    accessDenied: storageAccessDenied,
     list: (orgId, signal) =>
       orgId === null
         ? fetchProjects(undefined, signal)
@@ -63,11 +67,26 @@ export const useProjectsStore = defineStore('projects', () => {
       if (organizations.error || !organizations.canWrite(previous.owner_org_id))
         throw storageRequestError({ status: 403 })
     }
-    const current = await fetchProject(id)
-    assertSessionCurrent(session)
-    if (!canDelete(current) || current.storage_generation !== previous.storage_generation)
-      throw storageRequestError({ status: 409 }, { error_code: 'storage_generation_conflict' })
-    return state.remove(id)
+    try {
+      const [current, storage] = await Promise.all([fetchProject(id), getProjectStorage(id)])
+      assertSessionCurrent(session)
+      if (
+        !canDelete(current) ||
+        current.storage_generation !== previous.storage_generation ||
+        storage.project_id !== id ||
+        storage.storage_generation !== current.storage_generation ||
+        storage.storage_state !== 'active'
+      )
+        throw storageRequestError({ status: 409 }, { error_code: 'storage_generation_conflict' })
+      if (!hasStorageRuntime(storage))
+        throw storageRequestError({ status: 409 }, { error_code: 'storage_unavailable' })
+      if (storage.runtime.maintenance)
+        throw storageRequestError({ status: 409 }, { error_code: 'storage_maintenance' })
+      return await state.remove(id)
+    } catch (cause) {
+      if (storageNeedsRefresh(cause)) invalidateStorageSnapshots({ projectId: id })
+      throw cause
+    }
   }
   return {
     ...state,

@@ -8,9 +8,11 @@ import { useSegmentStore } from './segment'
 import { useJobStore } from './job'
 import { captureSession, assertSessionCurrent, isSessionCurrent } from '@/api/session-context'
 import { storageActionAllowed, type StorageProjectAction } from '@/utils/storage-contract'
-import { storageRequestError } from '@/api/storage-errors'
+import { storageNeedsRefresh, storageRequestError } from '@/api/storage-errors'
+import { invalidateStorageSnapshots } from '@/utils/storage-snapshots'
 import { useOrganizationsStore } from './organizations'
 import { hasWorkspaceDrafts } from '@/utils/workspace-draft-state'
+import { useProjectStorageSnapshot } from '@/composables/useProjectStorageSnapshot'
 
 // ── 重新导出所有类型，保持向后兼容 ──
 export type {
@@ -43,6 +45,11 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
 
   // ── 重新导出项目 Store 的响应式状态 ──
   const { project, loadingProject, projectError } = storeToRefs(projectStore)
+  const storageSnapshot = useProjectStorageSnapshot(() => project.value)
+  const storageContentWritable = storageSnapshot.contentWritable
+  const storageMetadataWritable = computed(
+    () => storageSnapshot.ready.value && !storageSnapshot.value.value?.runtime.maintenance,
+  )
 
   // ── 重新导出资源 Store 的响应式状态 ──
   const {
@@ -238,7 +245,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       if (organizations.error || !organizations.canWrite(previous.owner_org_id))
         throw storageRequestError({ status: 403 })
     }
-    await loadProject(projectId)
+    await Promise.all([loadProject(projectId), storageSnapshot.refresh()])
     assertSessionCurrent(session)
     if (
       project.value?.id !== projectId ||
@@ -247,11 +254,25 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       project.value.storage_generation !== previous.storage_generation
     )
       throw storageRequestError({ status: 409 }, { error_code: 'storage_generation_conflict' })
+    if (!storageSnapshot.ready.value)
+      throw storageRequestError({ status: 409 }, { error_code: 'storage_unavailable' })
+    if (storageSnapshot.value.value?.runtime.maintenance)
+      throw storageRequestError({ status: 409 }, { error_code: 'storage_maintenance' })
+    if (action !== 'delete' && !storageContentWritable.value)
+      throw storageRequestError({ status: 409 }, { error_code: 'storage_deployment_disabled' })
   }
 
   const uploadResources = async (...args: Parameters<typeof resourceStore.uploadResources>) => {
     await prepareStorageWrite(args[0], 'upload')
-    return resourceStore.uploadResources(...args)
+    try {
+      const result = await resourceStore.uploadResources(...args)
+      if (result.response.items.some((item) => storageNeedsRefresh(item)))
+        invalidateStorageSnapshots({ projectId: args[0] })
+      return result
+    } catch (cause) {
+      if (storageNeedsRefresh(cause)) invalidateStorageSnapshots({ projectId: args[0] })
+      throw cause
+    }
   }
 
   const refreshAfterSourceUpdate = async (
@@ -315,7 +336,12 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   /** 删除资源并清空关联段落 */
   const deleteResource = async (projectId: number, resourceId: number): Promise<void> => {
     await prepareStorageWrite(projectId, 'delete')
-    return resourceStore.deleteResource(projectId, resourceId, segmentStore.resetSegments)
+    try {
+      await resourceStore.deleteResource(projectId, resourceId, segmentStore.resetSegments)
+    } catch (cause) {
+      if (storageNeedsRefresh(cause)) invalidateStorageSnapshots({ projectId })
+      throw cause
+    }
   }
 
   /**
@@ -334,6 +360,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   }
 
   return {
+    storageContentWritable,
+    storageMetadataWritable,
     prepareStorageWrite,
     refreshAfterSourceUpdate,
     contentWriteRevision,
