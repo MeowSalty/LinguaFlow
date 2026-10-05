@@ -1,3 +1,50 @@
+storageCapabilities:
+  get:
+    operationId: GetStorageCapabilities
+    summary: Discover storage management capabilities
+    description: >-
+      Metadata-only discovery for an active authenticated account. User scope is always
+      the current user and forbids organization_id; org scope requires a positive
+      organization_id and organization owner/admin membership. Platform administrators
+      do not bypass organization membership. Unknown, repeated and empty parameters
+      are rejected. Disabled deployment returns a normal 200 response, even when no
+      connections or spaces exist. Responses are private and must not be cached.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: scope
+        in: query
+        required: true
+        schema:
+          type: string
+          enum: [user, org]
+      - name: organization_id
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+    responses:
+      '200':
+        description: Current subject management capabilities
+        headers:
+          Cache-Control:
+            schema:
+              type: string
+              enum: ['private, no-store']
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageCapabilities'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
 storageDiagnostics:
   get:
     operationId: GetStorageDiagnostics
@@ -121,7 +168,7 @@ storagePolicy:
   put:
     operationId: SetStoragePolicy
     summary: SetStoragePolicy
-    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    description: 完整保存政策；部署关闭仅支持 site_only，不支持的模式返回 storage_deployment_disabled（409）且不部分更新额度或代次。维护状态不收缩模式枚举。
     security:
       - bearerAuth: []
     requestBody:
@@ -129,7 +176,7 @@ storagePolicy:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/storage.yaml#/StoragePolicy'
+            $ref: '../components/schemas/storage.yaml#/StoragePolicyRequest'
     responses:
       '200':
         description: 操作结果

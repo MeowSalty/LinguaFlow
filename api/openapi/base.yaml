@@ -9,9 +9,14 @@ info:
     时间区间默认按接口声明解释；任务更新时间筛选使用左闭右开区间。
     根路径 /metrics 为系统管理员认证的持久化数量兼容入口，保留原文本格式；
     实时运行监控使用 /api/v1/admin/runtime/summary。外部抓取方须携带管理员认证。
+    存储部署能力合同 E01：能力和管理动作是只读快照；部署拒绝使用
+    storage_deployment_disabled（409，无 Retry-After），政策违规保持 403。
+    旧 byos_disabled 原因仅保留枚举兼容；客户端须按具体操作重新发现能力。
 servers:
   - url: /api/v1
 paths:
+  /storage/capabilities:
+    $ref: './paths/storage.yaml#/storageCapabilities'
   /storage/options:
     $ref: './paths/storage.yaml#/storageOptions'
   /projects/{projectId}/storage/options:
