@@ -58,7 +58,7 @@ func TestStorageOptionsPolicyAndOwnershipMatrix(t *testing.T) {
 		if mode == "user_required" {
 			policy.DefaultChoice = "user"
 		}
-		policy, err = s.SetPolicy(ctx, f.other.ID, policy)
+		policy, err = s.SetPolicy(ctx, f.other.ID, StoragePolicyRequest{Mode: policy.Mode, DefaultChoice: policy.DefaultChoice, Generation: policy.Generation, LogicalLimitBytes: policy.LogicalLimitBytes})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +134,7 @@ func TestStorageOptionsDefaultUnavailableAndPolicyNormalization(t *testing.T) {
 		t.Fatalf("effective policy: %+v %v", policy, err)
 	}
 	policy.DefaultChoice = "user"
-	if _, err := s.SetPolicy(ctx, owner.ID, policy); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.SetPolicy(ctx, owner.ID, StoragePolicyRequest{Mode: policy.Mode, DefaultChoice: policy.DefaultChoice, Generation: policy.Generation, LogicalLimitBytes: policy.LogicalLimitBytes}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("contradictory policy accepted: %v", err)
 	}
 	client.StorageSpace.UpdateOneID(*p.StorageSpaceID).SetStatus(storagespace.StatusReadOnly).ExecX(ctx)
@@ -178,7 +178,7 @@ func TestStorageOptionsRecheckAuthenticationCapacityAndDeployment(t *testing.T) 
 		{"deployment", func() {
 			client.StorageSpace.UpdateOneID(sp.ID).SetPendingDeleteBytes(0).ExecX(ctx)
 			s.cfg.Enabled = false
-		}, ErrStoragePolicy},
+		}, ErrStorageDeploymentDisabled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.change()

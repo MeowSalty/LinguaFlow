@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sourcerevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
@@ -196,47 +197,61 @@ func (s *StorageService) Retry(ctx context.Context, actor, projectID, id int) (*
 	if !interactiveStorageTask(task.Kind) {
 		return nil, storage.ErrUnsupported
 	}
-	if task.Kind == "migration" {
-		if e = s.projects.mutateProject(ctx, actor, projectID, func(*ent.Client, *ent.Project) error { return nil }); e != nil {
-			return nil, e
+	if _, e = s.projects.requireProjectAccess(ctx, actor, projectID, true); e != nil {
+		return nil, e
+	}
+	e = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		current, err := tx.StorageTask.Get(ctx, id)
+		if err != nil {
+			return err
 		}
-	} else if _, e = s.projects.requireProjectAccess(ctx, actor, projectID, true); e != nil {
-		return nil, e
-	}
-	if task.Status != storagetask.StatusNeedsAction && task.Status != storagetask.StatusFailed && task.Status != storagetask.StatusWaitingRetry {
-		return nil, ErrStorageConflict
-	}
-	writes, e := s.client.StorageWrite.Query().Where(storagewrite.TaskIDEQ(id), storagewrite.PhaseNotIn("committed", "cleaned", "prepared")).Exist(ctx)
-	if e != nil {
-		return nil, e
-	}
-	if writes {
-		return nil, ErrStorageConflict
-	}
-	update := s.client.StorageTask.Update().Where(storagetask.IDEQ(id), storagetask.StatusEQ(task.Status), storagetask.PhaseEQ(task.Phase)).SetStatus(storagetask.StatusPending).SetErrorCode("").ClearNextRetryAt().ClearRetryStartedAt().SetAttempts(0)
-	prepared, e := s.client.StorageWrite.Query().Where(storagewrite.TaskIDEQ(id), storagewrite.PhaseEQ("prepared")).Exist(ctx)
-	if e != nil {
-		return nil, e
-	}
-	if prepared {
-		if task.Kind != "migration" {
-			update.SetPhase("prepared")
+		if err = storageTerminalError(current); err != nil {
+			return err
 		}
-	} else if task.Kind == "upload" || task.Kind == "repair" || task.Kind == "source_update" {
-		update.SetPhase("accepted")
-	}
-	n, e := update.Save(ctx)
+		if current.Status != storagetask.StatusNeedsAction && current.Status != storagetask.StatusFailed {
+			return ErrStorageConflict
+		}
+		if err = s.taskWriteAdmission(ctx, tx, current); err != nil {
+			return err
+		}
+		if err = s.taskRetryReady(ctx, tx, current); err != nil {
+			return err
+		}
+		if err = storageProjectGate(ctx, tx, projectID, current.ExpectedStorageGeneration); err != nil {
+			return err
+		}
+		update := tx.StorageTask.Update().Where(storagetask.IDEQ(id), storagetask.StatusEQ(current.Status), storagetask.PhaseEQ(current.Phase)).SetStatus(storagetask.StatusPending).SetErrorCode("").ClearNextRetryAt().ClearRetryStartedAt().SetAttempts(0)
+		prepared, err := tx.StorageWrite.Query().Where(storagewrite.TaskIDEQ(id), storagewrite.PhaseEQ("prepared")).Exist(ctx)
+		if err != nil {
+			return err
+		}
+		if prepared {
+			if current.Kind != "migration" {
+				update.SetPhase("prepared")
+			}
+		} else if current.Kind == "upload" || current.Kind == "repair" || current.Kind == "source_update" {
+			update.SetPhase("accepted")
+		}
+		n, err := update.Save(ctx)
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return ErrStorageConflict
+		}
+		return nil
+	})
 	if e != nil {
 		return nil, e
-	}
-	if n != 1 {
-		return nil, ErrStorageConflict
 	}
 	return s.task(ctx, actor, projectID, id)
 }
 
 func (s *StorageService) ProcessTasks(ctx context.Context) error {
 	if err := s.expireTasks(ctx); err != nil {
+		return err
+	}
+	if err := s.blockDisabledTasks(ctx); err != nil {
 		return err
 	}
 	if s.maintenance || s.resources == nil {
@@ -316,17 +331,20 @@ func (s *StorageService) ProcessTasks(ctx context.Context) error {
 			return leaseErr
 		}
 		attemptCtx, cancel := context.WithTimeout(ctx, min(s.cfg.TransferTimeout, time.Until(t.RetryStartedAt.Add(s.cfg.RetryWindow))))
-		switch t.Kind {
-		case "upload":
-			e = s.resources.resumeUpload(attemptCtx, t)
-		case "source_update":
-			e = s.resources.resumeSourcePlan(attemptCtx, t)
-		case "repair":
-			e = s.resources.resumeRepair(attemptCtx, t)
-		case "migration":
-			e = s.ContinueMigration(attemptCtx, t.ID)
-		case "export":
-			e = s.resources.finishExport(attemptCtx, t)
+		e = s.taskWriteAdmission(attemptCtx, s.client, t)
+		if e == nil {
+			switch t.Kind {
+			case "upload":
+				e = s.resources.resumeUpload(attemptCtx, t)
+			case "source_update":
+				e = s.resources.resumeSourcePlan(attemptCtx, t)
+			case "repair":
+				e = s.resources.resumeRepair(attemptCtx, t)
+			case "migration":
+				e = s.ContinueMigration(attemptCtx, t.ID)
+			case "export":
+				e = s.resources.finishExport(attemptCtx, t)
+			}
 		}
 		cancel()
 		release()
@@ -361,6 +379,72 @@ func (s *StorageService) ProcessTasks(ctx context.Context) error {
 			if _, err = update.SetStatus(state).Save(ctx); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// recordDeploymentBlock preserves the phase, candidate deadline and accounting.
+// Call it outside publishing transactions so a rejected publication can roll
+// back without also rolling back the durable needs_action state.
+func (s *StorageService) recordDeploymentBlock(ctx context.Context, id int, cause error) error {
+	if !errors.Is(cause, ErrStorageDeploymentDisabled) {
+		return cause
+	}
+	return errors.Join(cause, s.setDeploymentBlocked(ctx, id))
+}
+
+func (s *StorageService) setDeploymentBlocked(ctx context.Context, id int) error {
+	c, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.cfg.MetadataTimeout)
+	defer cancel()
+	_, err := s.client.StorageTask.Update().Where(storagetask.IDEQ(id),
+		storagetask.PhaseNEQ("committed"),
+		storagetask.StatusIn(storagetask.StatusPending, storagetask.StatusRunning, storagetask.StatusWaitingRetry, storagetask.StatusNeedsAction)).
+		SetStatus(storagetask.StatusNeedsAction).SetErrorCode("storage_deployment_disabled").ClearNextRetryAt().Save(c)
+	return err
+}
+
+// Accepted uploads and source previews may have no automatic execution step.
+// Include them in restart recovery so deployment refusal does not leave an
+// apparently runnable task or a persisted retry timer behind.
+func (s *StorageService) blockDisabledTasks(ctx context.Context) error {
+	if s.Runtime().DeploymentEnabled || s.Runtime().Maintenance {
+		return nil
+	}
+	connections, err := s.client.StorageConnection.Query().All(ctx)
+	if err != nil {
+		return err
+	}
+	ids := []int{}
+	for _, conn := range connections {
+		if errors.Is(storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpWrite, conn)), ErrStorageDeploymentDisabled) {
+			ids = append(ids, conn.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	disabledTarget := func(selector *sql.Selector) {
+		spaces := sql.Table(storagespace.Table)
+		selector.Where(sql.In(selector.C(storagetask.FieldTargetSpaceID),
+			sql.Select(spaces.C(storagespace.FieldID)).From(spaces).Where(sql.InInts(spaces.C(storagespace.FieldConnectionID), ids...))))
+	}
+	now := time.Now().UTC()
+	tasks, err := s.client.StorageTask.Query().Where(disabledTarget,
+		storagetask.ProjectIDGT(0), storagetask.KindIn("upload", "source_update", "repair", "migration", "export"),
+		storagetask.PhaseNEQ("committed"),
+		storagetask.Or(storagetask.LeaseUntilIsNil(), storagetask.LeaseUntilLTE(now)),
+		storagetask.StatusIn(storagetask.StatusPending, storagetask.StatusRunning, storagetask.StatusWaitingRetry)).
+		Order(ent.Asc(storagetask.FieldUpdatedAt)).Limit(s.cfg.ReconcileBatchSize).All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		if storageTerminalError(task) != nil {
+			continue
+		}
+		if err = s.setDeploymentBlocked(ctx, task.ID); err != nil {
+			return err
 		}
 	}
 	return nil

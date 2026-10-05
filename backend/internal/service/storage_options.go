@@ -21,6 +21,7 @@ import (
 // StorageOptions contains only information needed to choose a target. Connection
 // identities, credentials and the space-wide capacity ledger are management data.
 type StorageOptions struct {
+	Runtime                  StorageRuntime       `json:"runtime"`
 	Scope                    string               `json:"scope"`
 	OwnerID                  int                  `json:"owner_id"`
 	Policy                   StorageOptionsPolicy `json:"policy"`
@@ -45,6 +46,7 @@ type StorageOption struct {
 }
 
 type ProjectStorageRecord struct {
+	Runtime           StorageRuntime         `json:"runtime"`
 	ProjectID         int                    `json:"project_id"`
 	StorageGeneration int64                  `json:"storage_generation"`
 	StorageState      string                 `json:"storage_state"`
@@ -120,7 +122,7 @@ func (s *StorageService) storageOptions(ctx context.Context, p *ent.Project, pur
 	if err != nil {
 		return nil, err
 	}
-	out := &StorageOptions{Scope: kind, OwnerID: owner,
+	out := &StorageOptions{Scope: kind, OwnerID: owner, Runtime: s.Runtime(),
 		Policy: StorageOptionsPolicy{Mode: policy.Mode, DefaultChoice: policy.DefaultChoice, Generation: policy.Generation},
 		Items:  make([]StorageOption, 0, len(rows))}
 	if p.ID != 0 {
@@ -165,6 +167,7 @@ func (s *StorageService) storageOptions(ctx context.Context, p *ent.Project, pur
 				reasons = appendReason(reasons, "storage_maintenance")
 			}
 		}
+		reasons = normalizeStorageReasons(reasons)
 		out.Items = append(out.Items, StorageOption{SpaceID: sp.ID, Name: sp.Name, Scope: string(sp.OwnerKind), Selectable: len(reasons) == 0, ReasonCodes: reasons})
 	}
 	if policy.DefaultChoice == "user" {
@@ -186,8 +189,24 @@ func (s *StorageService) storageOptions(ctx context.Context, p *ent.Project, pur
 		return out, nil
 	}
 	reason := "selection_required"
+	if reasons := s.defaultStorageReasons(); len(reasons) > 0 {
+		reason = reasons[0]
+	}
 	out.DefaultUnavailableReason = &reason
 	return out, nil
+}
+
+// An unregistered deployment default can still have a known deployment block:
+// startup deliberately does not create S3 metadata while disabled/maintained.
+// Do not invent a space ID or select a different configured backend.
+func (s *StorageService) defaultStorageReasons() []string {
+	for _, backend := range s.cfg.Backends {
+		if backend.ID == s.cfg.DefaultSiteSpace {
+			connection := &ent.StorageConnection{Driver: storageconnection.Driver(backend.Driver), OwnerKind: storageconnection.OwnerKindSite, AuthSource: storageconnection.AuthSourceDeployment}
+			return storageOperationReasons(s.Runtime(), storageOpWrite, connection)
+		}
+	}
+	return []string{}
 }
 
 func (s *StorageService) ProjectStorage(ctx context.Context, actor, projectID int) (*ProjectStorageRecord, error) {
@@ -195,7 +214,7 @@ func (s *StorageService) ProjectStorage(ctx context.Context, actor, projectID in
 	if err != nil {
 		return nil, err
 	}
-	out := &ProjectStorageRecord{ProjectID: p.ID, StorageGeneration: p.StorageGeneration, StorageState: p.StorageState,
+	out := &ProjectStorageRecord{Runtime: s.Runtime(), ProjectID: p.ID, StorageGeneration: p.StorageGeneration, StorageState: p.StorageState,
 		MigrationTaskID: p.StorageMigrationTaskID, ReasonCodes: []string{}}
 	if p.StorageState != "active" || s.maintenance {
 		out.ReasonCodes = append(out.ReasonCodes, "storage_maintenance")
@@ -221,6 +240,7 @@ func (s *StorageService) ProjectStorage(ctx context.Context, actor, projectID in
 	for _, reason := range reasons {
 		out.ReasonCodes = appendReason(out.ReasonCodes, reason)
 	}
+	out.ReasonCodes = normalizeStorageReasons(out.ReasonCodes)
 	return out, nil
 }
 
@@ -251,12 +271,6 @@ func (s *StorageService) storageTargetReasons(ctx context.Context, client *ent.C
 	if !owned || (!existing && !storagePolicyAllows(policy, p, sp)) {
 		reasons = append(reasons, "policy_disallowed")
 	}
-	if sp.OwnerKind != storagespace.OwnerKindSite && !s.cfg.Enabled {
-		reasons = append(reasons, "byos_disabled")
-	}
-	if s.maintenance {
-		reasons = append(reasons, "storage_maintenance")
-	}
 	conn, err := client.StorageConnection.Get(ctx, sp.ConnectionID)
 	if err != nil {
 		return nil, err
@@ -264,6 +278,7 @@ func (s *StorageService) storageTargetReasons(ctx context.Context, client *ent.C
 	if string(conn.OwnerKind) != string(sp.OwnerKind) || conn.OwnerID != sp.OwnerID {
 		reasons = appendReason(reasons, "policy_disallowed")
 	}
+	reasons = append(reasons, storageOperationReasons(s.Runtime(), storageOpWrite, conn)...)
 	if conn.Status != storageconnection.StatusEnabled {
 		reasons = append(reasons, "connection_disabled")
 	}
@@ -299,18 +314,11 @@ func (s *StorageService) storageTargetReasons(ctx context.Context, client *ent.C
 		reasons = append(reasons, "space_disabled")
 	}
 	// Saturating subtraction avoids overflow and retains over-quota accounting.
-	available := sp.CapacityBytes
-	for _, used := range []int64{sp.ReservedBytes, sp.CandidateBytes, sp.LiveBytes, sp.PendingDeleteBytes} {
-		if used >= available {
-			available = 0
-			break
-		}
-		available -= used
-	}
+	available := storageAvailableBytes(sp)
 	if (size < 0 && available == 0) || size > available {
 		reasons = append(reasons, "storage_quota_exceeded")
 	}
-	return reasons, nil
+	return normalizeStorageReasons(reasons), nil
 }
 
 func (s *StorageService) validateStorageTarget(ctx context.Context, client *ent.Client, p *ent.Project, id int, size int64, existing bool) error {
@@ -321,30 +329,19 @@ func (s *StorageService) validateStorageTarget(ctx context.Context, client *ent.
 	if err != nil {
 		return err
 	}
+	kind, owner := storageProjectOwner(p)
+	if sp.OwnerKind != storagespace.OwnerKindSite && (string(sp.OwnerKind) != kind || sp.OwnerID != owner) {
+		return ErrStoragePolicy
+	}
 	policy, err := storagePolicy(ctx, client)
 	if err != nil {
 		return err
 	}
 	reasons, err := s.storageTargetReasons(ctx, client, p, sp, policy, size, existing)
-	if err != nil || len(reasons) == 0 {
+	if err != nil {
 		return err
 	}
-	switch reasons[0] {
-	case "policy_disallowed", "byos_disabled":
-		return ErrStoragePolicy
-	case "storage_maintenance", "space_read_only":
-		return ErrStorageMaintenance
-	case "storage_auth_required", "space_unverified":
-		return storage.ErrAuthRequired
-	case "storage_crypto_unavailable":
-		return ErrStorageCrypto
-	case "connection_disabled", "space_disabled", "storage_permission_denied":
-		return storage.ErrPermission
-	case "storage_quota_exceeded":
-		return storage.ErrLimit
-	default:
-		return storage.ErrUnavailable
-	}
+	return storageAdmissionError(reasons)
 }
 
 // allowedExistingTarget preserves an existing binding across policy changes.

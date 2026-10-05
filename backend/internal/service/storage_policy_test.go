@@ -16,13 +16,13 @@ func TestStoragePolicyRequiresDeploymentEnablement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy := StoragePolicy{Mode: "both", DefaultChoice: "site", LogicalLimitBytes: 100 << 30}
+	policy := StoragePolicyRequest{Mode: "both", DefaultChoice: "site", LogicalLimitBytes: 100 << 30}
 	for _, mode := range []string{"both", "user_required"} {
 		policy.Mode = mode
 		if mode == "user_required" {
 			policy.DefaultChoice = "user"
 		}
-		if _, err := service.SetPolicy(ctx, admin.ID, policy); !errors.Is(err, ErrStoragePolicy) {
+		if _, err := service.SetPolicy(ctx, admin.ID, policy); !errors.Is(err, ErrStorageDeploymentDisabled) {
 			t.Fatalf("disabled deployment accepted %s: %v", mode, err)
 		}
 	}
@@ -32,10 +32,11 @@ func TestStoragePolicyRequiresDeploymentEnablement(t *testing.T) {
 	}
 	policy.Mode = "site_only"
 	policy.DefaultChoice = "site"
-	policy, err = service.SetPolicy(ctx, admin.ID, policy)
-	if err != nil || policy.Generation != 1 {
-		t.Fatalf("disabled deployment cannot update site policy: %+v, %v", policy, err)
+	stored, err = service.SetPolicy(ctx, admin.ID, policy)
+	if err != nil || stored.Generation != 1 {
+		t.Fatalf("disabled deployment cannot update site policy: %+v, %v", stored, err)
 	}
+	policy.Generation = stored.Generation
 	cfg := config.DefaultStorageConfig()
 	cfg.Enabled = true
 	service.Configure(cfg, "sqlite", 0)

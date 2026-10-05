@@ -82,7 +82,8 @@ func (s *ResourceService) resumeSourcePlan(ctx context.Context, t *ent.StorageTa
 
 // prepareSourcePlan is shared by the synchronous preview and content endpoint.
 // No prepared confirmation exists until this transaction saves its entire plan.
-func (s *ResourceService) prepareSourcePlan(ctx context.Context, t *ent.StorageTask, items []parsedResourceSegment) error {
+func (s *ResourceService) prepareSourcePlan(ctx context.Context, t *ent.StorageTask, items []parsedResourceSegment) (err error) {
+	defer func() { err = s.storage.recordDeploymentBlock(ctx, t.ID, err) }()
 	return withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		current, e := tx.StorageTask.Get(ctx, t.ID)
 		if e != nil {
@@ -92,6 +93,9 @@ func (s *ResourceService) prepareSourcePlan(ctx context.Context, t *ent.StorageT
 			return nil
 		}
 		if e = storageTaskGate(ctx, tx, current); e != nil {
+			return e
+		}
+		if e = s.storage.taskWriteAdmission(ctx, tx, current); e != nil {
 			return e
 		}
 		if current.ResourceID == nil {

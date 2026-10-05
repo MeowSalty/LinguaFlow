@@ -60,45 +60,47 @@ type AuthorizeStorageInput struct {
 	ExpectedManagementGeneration int64                 `json:"expected_management_generation"`
 }
 type StorageConnectionRecord struct {
-	ID                   int        `json:"id"`
-	Name                 string     `json:"name"`
-	Scope                string     `json:"scope"`
-	OwnerID              int        `json:"owner_id"`
-	Driver               string     `json:"driver"`
-	Endpoint             string     `json:"endpoint"`
-	Region               string     `json:"region"`
-	PathStyle            bool       `json:"path_style"`
-	Status               string     `json:"status"`
-	Health               string     `json:"health"`
-	HasAuth              bool       `json:"has_auth"`
-	AuthGeneration       int64      `json:"auth_generation"`
-	ManagementGeneration int64      `json:"management_generation"`
-	CheckedAt            *time.Time `json:"checked_at,omitempty"`
+	ID                   int                                `json:"id"`
+	Name                 string                             `json:"name"`
+	Scope                string                             `json:"scope"`
+	OwnerID              int                                `json:"owner_id"`
+	Driver               string                             `json:"driver"`
+	Endpoint             string                             `json:"endpoint"`
+	Region               string                             `json:"region"`
+	PathStyle            bool                               `json:"path_style"`
+	Status               string                             `json:"status"`
+	Health               string                             `json:"health"`
+	HasAuth              bool                               `json:"has_auth"`
+	AuthGeneration       int64                              `json:"auth_generation"`
+	ManagementGeneration int64                              `json:"management_generation"`
+	CheckedAt            *time.Time                         `json:"checked_at,omitempty"`
+	ManagementActions    StorageConnectionManagementActions `json:"management_actions"`
 }
 type StorageSpaceRecord struct {
-	ID                   int    `json:"id"`
-	ConnectionID         int    `json:"connection_id"`
-	Name                 string `json:"name"`
-	Scope                string `json:"scope"`
-	OwnerID              int    `json:"owner_id"`
-	Bucket               string `json:"bucket"`
-	Prefix               string `json:"prefix"`
-	Status               string `json:"status"`
-	Verified             bool   `json:"verified"`
-	Versioned            bool   `json:"versioned"`
-	ManagementGeneration int64  `json:"management_generation"`
-	CapacityBytes        int64  `json:"capacity_bytes"`
-	ReservedBytes        int64  `json:"reserved_bytes"`
-	CandidateBytes       int64  `json:"candidate_bytes"`
-	LiveBytes            int64  `json:"live_bytes"`
-	PendingDeleteBytes   int64  `json:"pending_delete_bytes"`
+	ID                   int                           `json:"id"`
+	ConnectionID         int                           `json:"connection_id"`
+	Name                 string                        `json:"name"`
+	Scope                string                        `json:"scope"`
+	OwnerID              int                           `json:"owner_id"`
+	Bucket               string                        `json:"bucket"`
+	Prefix               string                        `json:"prefix"`
+	Status               string                        `json:"status"`
+	Verified             bool                          `json:"verified"`
+	Versioned            bool                          `json:"versioned"`
+	ManagementGeneration int64                         `json:"management_generation"`
+	CapacityBytes        int64                         `json:"capacity_bytes"`
+	ReservedBytes        int64                         `json:"reserved_bytes"`
+	CandidateBytes       int64                         `json:"candidate_bytes"`
+	LiveBytes            int64                         `json:"live_bytes"`
+	PendingDeleteBytes   int64                         `json:"pending_delete_bytes"`
+	ManagementActions    StorageSpaceManagementActions `json:"management_actions"`
 }
 
 func storageConnectionRecord(c *ent.StorageConnection) *StorageConnectionRecord {
-	return &StorageConnectionRecord{c.ID, c.Name, string(c.OwnerKind), c.OwnerID, string(c.Driver), c.Endpoint, c.Region, c.PathStyle, string(c.Status), c.Health, c.ActiveAuthGeneration > 0, c.ActiveAuthGeneration, c.ManagementGeneration, c.CheckedAt}
+	return &StorageConnectionRecord{ID: c.ID, Name: c.Name, Scope: string(c.OwnerKind), OwnerID: c.OwnerID, Driver: string(c.Driver), Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle, Status: string(c.Status), Health: c.Health, HasAuth: c.ActiveAuthGeneration > 0, AuthGeneration: c.ActiveAuthGeneration, ManagementGeneration: c.ManagementGeneration, CheckedAt: c.CheckedAt}
 }
 func storageSpaceRecord(s *ent.StorageSpace) *StorageSpaceRecord {
-	return &StorageSpaceRecord{s.ID, s.ConnectionID, s.Name, string(s.OwnerKind), s.OwnerID, s.Bucket, s.Prefix, string(s.Status), s.Verified, s.Versioned, s.ManagementGeneration, s.CapacityBytes, s.ReservedBytes, s.CandidateBytes, s.LiveBytes, s.PendingDeleteBytes}
+	return &StorageSpaceRecord{ID: s.ID, ConnectionID: s.ConnectionID, Name: s.Name, Scope: string(s.OwnerKind), OwnerID: s.OwnerID, Bucket: s.Bucket, Prefix: s.Prefix, Status: string(s.Status), Verified: s.Verified, Versioned: s.Versioned, ManagementGeneration: s.ManagementGeneration, CapacityBytes: s.CapacityBytes, ReservedBytes: s.ReservedBytes, CandidateBytes: s.CandidateBytes, LiveBytes: s.LiveBytes, PendingDeleteBytes: s.PendingDeleteBytes}
 }
 
 func (s *StorageConnectionService) requireOwner(ctx context.Context, client *ent.Client, actor int, scope string, owner int) error {
@@ -143,12 +145,6 @@ func (s *StorageConnectionService) authorized(ctx context.Context, client *ent.C
 }
 
 func (s *StorageConnectionService) Create(ctx context.Context, actor int, in CreateStorageConnectionInput) (*StorageConnectionRecord, error) {
-	if !s.cfg.Enabled {
-		return nil, ErrStoragePolicy
-	}
-	if s.cfg.Maintenance {
-		return nil, ErrStorageMaintenance
-	}
 	if in.Scope != ScopeUser && in.Scope != ScopeOrg {
 		return nil, ErrForbidden
 	}
@@ -162,11 +158,14 @@ func (s *StorageConnectionService) Create(ctx context.Context, actor int, in Cre
 	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 200 || strings.TrimSpace(in.Region) == "" || len(in.Region) > 100 {
 		return nil, ErrInvalidInput
 	}
+	if err = storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpCreateConnection, nil)); err != nil {
+		return nil, err
+	}
 	c, err := s.client.StorageConnection.Create().SetName(strings.TrimSpace(in.Name)).SetOwnerKind(storageconnection.OwnerKind(in.Scope)).SetOwnerID(in.OwnerID).SetDriver(storageconnection.DriverS3).SetEndpoint(endpoint).SetRegion(in.Region).SetPathStyle(in.PathStyle).SetAuthSource(storageconnection.AuthSourceStored).Save(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return storageConnectionRecord(c), nil
+	return s.connectionRecord(ctx, s.client, c)
 }
 
 func (s *StorageConnectionService) List(ctx context.Context, actor int, scope string, owner int) ([]*StorageConnectionRecord, error) {
@@ -179,7 +178,11 @@ func (s *StorageConnectionService) List(ctx context.Context, actor int, scope st
 	}
 	out := make([]*StorageConnectionRecord, 0, len(rows))
 	for _, c := range rows {
-		out = append(out, storageConnectionRecord(c))
+		record, err := s.connectionRecord(ctx, s.client, c)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, record)
 	}
 	return out, nil
 }
@@ -188,7 +191,7 @@ func (s *StorageConnectionService) Get(ctx context.Context, actor, id int) (*Sto
 	if err != nil {
 		return nil, err
 	}
-	return storageConnectionRecord(c), nil
+	return s.connectionRecord(ctx, s.client, c)
 }
 
 func (s *StorageConnectionService) Spaces(ctx context.Context, actor, connectionID int) ([]*StorageSpaceRecord, error) {
@@ -201,18 +204,12 @@ func (s *StorageConnectionService) Spaces(ctx context.Context, actor, connection
 	}
 	out := make([]*StorageSpaceRecord, 0, len(rows))
 	for _, sp := range rows {
-		out = append(out, storageSpaceRecord(sp))
+		out = append(out, s.spaceRecord(sp))
 	}
 	return out, nil
 }
 
 func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, connectionID int, in CreateStorageSpaceInput) (*StorageSpaceRecord, error) {
-	if !s.cfg.Enabled {
-		return nil, ErrStoragePolicy
-	}
-	if s.cfg.Maintenance {
-		return nil, ErrStorageMaintenance
-	}
 	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 200 || in.Bucket == "" || len(in.Bucket) > 63 || strings.ContainsAny(in.Bucket, "/\\\x00 \t\r\n") || strings.ContainsAny(in.Prefix, "\\\x00\r\n") || strings.HasPrefix(in.Prefix, "/") || len(in.Prefix) > 512 || in.CapacityBytes < 0 {
 		return nil, ErrInvalidInput
 	}
@@ -236,11 +233,8 @@ func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, conne
 		if err != nil {
 			return err
 		}
-		if c.AuthSource != storageconnection.AuthSourceStored {
-			return ErrForbidden
-		}
-		if c.Status != storageconnection.StatusEnabled {
-			return storage.ErrPermission
+		if err = s.admitManagement(ctx, tx, c, storageOpCreateSpace); err != nil {
+			return err
 		}
 		// 端点别名并不能证明是不同的物理存储桶。即使端点名称不同，
 		// 也要求托管根路径互不相交。
@@ -263,7 +257,7 @@ func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, conne
 	if err != nil {
 		return nil, err
 	}
-	return storageSpaceRecord(out), nil
+	return s.spaceRecord(out), nil
 }
 
 func storagePrefixesOverlap(a, b string) bool {
@@ -279,8 +273,11 @@ func (s *StorageConnectionService) SetStatus(ctx context.Context, actor, id int,
 		if err != nil {
 			return err
 		}
-		if c.AuthSource != storageconnection.AuthSourceStored {
-			return ErrForbidden
+		if c.ManagementGeneration != generation {
+			return ErrStorageConflict
+		}
+		if err = s.admitManagement(ctx, tx, c, storageOpSetStatus); err != nil {
+			return err
 		}
 		n, err := tx.StorageConnection.Update().Where(storageconnection.IDEQ(id), storageconnection.ManagementGenerationEQ(generation)).SetStatus(storageconnection.Status(status)).AddManagementGeneration(1).Save(ctx)
 		if err != nil {
@@ -309,6 +306,12 @@ func (s *StorageConnectionService) SetSpaceStatus(ctx context.Context, actor, id
 		if _, err = s.authorized(ctx, tx, actor, sp.ConnectionID); err != nil {
 			return err
 		}
+		if sp.ManagementGeneration != generation {
+			return ErrStorageConflict
+		}
+		if err = storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpSetStatus, nil)); err != nil {
+			return err
+		}
 		n, err := tx.StorageSpace.Update().Where(storagespace.IDEQ(id), storagespace.ManagementGenerationEQ(generation)).SetStatus(storagespace.Status(status)).AddManagementGeneration(1).Save(ctx)
 		if err != nil {
 			return err
@@ -325,7 +328,7 @@ func (s *StorageConnectionService) SetSpaceStatus(ctx context.Context, actor, id
 	if err != nil {
 		return nil, err
 	}
-	return storageSpaceRecord(sp), nil
+	return s.spaceRecord(sp), nil
 }
 
 func storageAuthIdentity(c *ent.StorageConnection, generation int64) storageauth.Identity {
@@ -336,12 +339,6 @@ func storageCiphertext(a *ent.StorageAuthVersion) credential.Ciphertext {
 }
 
 func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int, in AuthorizeStorageInput) (*StorageConnectionRecord, error) {
-	if !s.cfg.Enabled && in.WriteCheck {
-		return nil, ErrStoragePolicy
-	}
-	if s.cfg.Maintenance {
-		return nil, ErrStorageMaintenance
-	}
 	if err := in.Payload.Validate(); err != nil {
 		return nil, ErrInvalidInput
 	}
@@ -358,11 +355,15 @@ func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int,
 		if err != nil {
 			return err
 		}
-		if c.AuthSource != storageconnection.AuthSourceStored || c.Status != storageconnection.StatusEnabled {
-			return storage.ErrPermission
-		}
 		if c.ManagementGeneration != in.ExpectedManagementGeneration {
 			return ErrStorageConflict
+		}
+		op := storageOpAuthorizeRead
+		if in.WriteCheck {
+			op = storageOpAuthorizeWrite
+		}
+		if err = s.admitManagement(ctx, tx, c, op); err != nil {
+			return err
 		}
 		spaces, err = tx.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(id)).Order(ent.Asc(storagespace.FieldID)).Limit(101).All(ctx)
 		if err != nil {
@@ -427,6 +428,13 @@ func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int,
 		if err := s.requireOwner(ctx, tx, actor, string(c.OwnerKind), c.OwnerID); err != nil {
 			return err
 		}
+		op := storageOpAuthorizeRead
+		if in.WriteCheck {
+			op = storageOpAuthorizeWrite
+		}
+		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), op, c)); err != nil {
+			return err
+		}
 		n, err := tx.StorageConnection.Update().Where(storageconnection.IDEQ(c.ID), storageconnection.ManagementGenerationEQ(c.ManagementGeneration), storageconnection.ActiveAuthGenerationEQ(c.ActiveAuthGeneration), storageconnection.StatusEQ(storageconnection.StatusEnabled)).SetActiveAuthGeneration(candidate.Generation).AddManagementGeneration(1).SetHealth("available").SetCheckedAt(time.Now().UTC()).Save(ctx)
 		if err != nil {
 			return err
@@ -481,8 +489,11 @@ func (s *StorageConnectionService) Revoke(ctx context.Context, actor, id int, ge
 		if err != nil {
 			return err
 		}
-		if c.AuthSource != storageconnection.AuthSourceStored {
-			return ErrForbidden
+		if c.ManagementGeneration != generation {
+			return ErrStorageConflict
+		}
+		if err = s.admitManagement(ctx, tx, c, storageOpRevokeAuth); err != nil {
+			return err
 		}
 		n, err := tx.StorageConnection.Update().Where(storageconnection.IDEQ(id), storageconnection.ManagementGenerationEQ(generation)).SetActiveAuthGeneration(0).SetHealth("auth_required").AddManagementGeneration(1).Save(ctx)
 		if err != nil {
@@ -555,7 +566,7 @@ func (s *StorageConnectionService) sanitize(err error) error {
 	if errors.Is(err, context.Canceled) {
 		return storage.ErrUnavailable
 	}
-	for _, safe := range []error{storage.ErrNotFound, storage.ErrCorrupt, storage.ErrPermission, storage.ErrAuthRequired, storage.ErrLimit, storage.ErrPayloadTooLarge, storage.ErrUnsupported, ErrStorageConflict, ErrStorageCrypto, ErrStorageMaintenance, ErrForbidden, context.Canceled, context.DeadlineExceeded} {
+	for _, safe := range []error{storage.ErrNotFound, storage.ErrCorrupt, storage.ErrPermission, storage.ErrAuthRequired, storage.ErrLimit, storage.ErrPayloadTooLarge, storage.ErrUnsupported, ErrStorageConflict, ErrStorageCrypto, ErrStorageMaintenance, ErrStorageDeploymentDisabled, ErrStoragePolicy, ErrForbidden, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, safe) {
 			return safe
 		}
@@ -587,26 +598,20 @@ func (s *StorageConnectionService) loadAuth(ctx context.Context, c *ent.StorageC
 // ResolveDriver 是内部入口：调用方已完成针对项目的操作者鉴权。
 // 每次操作都会重新检查当前生效的授权。
 func (s *StorageConnectionService) ResolveDriver(ctx context.Context, spaceID int, write bool) (storage.Driver, error) {
-	if write && s.cfg.Maintenance {
-		return nil, ErrStorageMaintenance
-	}
 	sp, err := s.client.StorageSpace.Get(ctx, spaceID)
 	if err != nil {
+		return nil, err
+	}
+	if _, _, err = s.activeDriver(ctx, sp.ID, write); err != nil {
 		return nil, err
 	}
 	if !sp.Verified {
 		return nil, storage.ErrAuthRequired
 	}
-	if _, _, err = s.activeDriver(ctx, sp.ID, write); err != nil {
-		return nil, err
-	}
 	return &storageGuardedDriver{service: s, spaceID: sp.ID}, nil
 }
 
 func (s *StorageConnectionService) activeDriver(ctx context.Context, spaceID int, write bool) (storage.Driver, *ent.StorageSpace, error) {
-	if write && !s.cfg.Enabled {
-		return nil, nil, ErrStoragePolicy
-	}
 	sp, err := s.client.StorageSpace.Get(ctx, spaceID)
 	if err != nil {
 		return nil, nil, err
@@ -615,11 +620,8 @@ func (s *StorageConnectionService) activeDriver(ctx context.Context, spaceID int
 	if err != nil {
 		return nil, nil, err
 	}
-	if c.Status != storageconnection.StatusEnabled || sp.Status == storagespace.StatusDisabled {
-		return nil, nil, storage.ErrPermission
-	}
-	if write && (s.cfg.Maintenance || sp.Status != storagespace.StatusActive) {
-		return nil, nil, ErrStorageMaintenance
+	if err = s.driverAdmission(c, sp, write); err != nil {
+		return nil, nil, err
 	}
 	if c.AuthSource == storageconnection.AuthSourceDeployment {
 		d, err := s.deploymentDriver(ctx, c, sp)
@@ -649,11 +651,11 @@ func (s *StorageConnectionService) candidateDriver(ctx context.Context, c *ent.S
 		if err != nil {
 			return nil, err
 		}
-		if current.Status != storageconnection.StatusEnabled || current.ManagementGeneration != c.ManagementGeneration || current.ActiveAuthGeneration != c.ActiveAuthGeneration || space.ManagementGeneration != sp.ManagementGeneration || space.Status == storagespace.StatusDisabled {
+		if current.ManagementGeneration != c.ManagementGeneration || current.ActiveAuthGeneration != c.ActiveAuthGeneration || space.ManagementGeneration != sp.ManagementGeneration {
 			return nil, ErrStorageConflict
 		}
-		if write && (s.cfg.Maintenance || space.Status != storagespace.StatusActive) {
-			return nil, storage.ErrPermission
+		if err = s.driverAdmission(current, space, write); err != nil {
+			return nil, err
 		}
 		_, payload, err := s.loadAuth(ctx, current, a.Generation, storageauthversion.StatusCandidate)
 		if err != nil {
@@ -668,8 +670,8 @@ func (s *StorageConnectionService) candidateDriver(ctx context.Context, c *ent.S
 		return nil, err
 	}
 	return &storageGuardedDriver{check: check, deleteCheck: func(ctx context.Context) (storage.Driver, error) {
-		if s.cfg.Maintenance {
-			return nil, ErrStorageMaintenance
+		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpDelete, c)); err != nil {
+			return nil, err
 		}
 		return check(ctx, false)
 	}}, nil
@@ -716,8 +718,8 @@ func (d *storageGuardedDriver) Delete(ctx context.Context, o storage.Object) err
 	if d.deleteCheck != nil {
 		v, err = d.deleteCheck(ctx)
 	} else if d.service != nil {
-		if d.service.cfg.Maintenance {
-			return ErrStorageMaintenance
+		if err = storageAdmissionError(storageOperationReasons(d.service.Runtime(), storageOpDelete, nil)); err != nil {
+			return err
 		}
 		v, err = d.resolve(ctx, false)
 	} else {

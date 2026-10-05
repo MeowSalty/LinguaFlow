@@ -84,11 +84,11 @@ func (s *StorageService) failWrite(ctx context.Context, id int, cause error) err
 		if t.Phase == "committed" {
 			return nil
 		}
-		u := tx.StorageTask.Update().Where(storagetask.IDEQ(t.ID), storagetask.PhaseEQ(t.Phase), storagetask.StatusEQ(t.Status)).SetCleanupStatus(storagetask.CleanupStatusCleanupPending).SetErrorCode(storageCode(cause))
+		u := tx.StorageTask.Update().Where(storagetask.IDEQ(t.ID), storagetask.PhaseEQ(t.Phase), storagetask.StatusEQ(t.Status)).SetCleanupStatus(storagetask.CleanupStatusCleanupPending).SetErrorCode(storageCode(cause)).ClearNextRetryAt()
 		if t.Status != storagetask.StatusCancelled && t.Status != storagetask.StatusFailed {
 			u.SetStatus(storagetask.StatusNeedsAction)
 		}
-		if t.Status == storagetask.StatusFailed || t.Status == storagetask.StatusCancelled {
+		if t.Status == storagetask.StatusFailed || t.Status == storagetask.StatusCancelled || t.ErrorCode == "storage_deployment_disabled" {
 			u.SetErrorCode(t.ErrorCode)
 		}
 		n, e := u.Save(ctx)
@@ -303,6 +303,9 @@ func (s *StorageService) cleanWrite(ctx context.Context, w *ent.StorageWrite) er
 		}
 		if t.Kind != "migration" && t.Phase != "committed" && t.Status != storagetask.StatusCancelled && t.Status != storagetask.StatusFailed {
 			u.SetStatus(storagetask.StatusNeedsAction).SetErrorCode("storage_transfer_interrupted")
+			if t.ErrorCode == "storage_deployment_disabled" {
+				u.SetErrorCode(t.ErrorCode).ClearNextRetryAt()
+			}
 			if t.Kind == "upload" || t.Kind == "repair" || t.Kind == "source_update" {
 				u.SetPhase("cleaned")
 			}

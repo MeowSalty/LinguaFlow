@@ -20,6 +20,7 @@ import (
 )
 
 func (s *Server) storageRequest(w http.ResponseWriter, r *http.Request, admin bool, handle func(http.ResponseWriter, *http.Request, int)) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth, ok := authUserFromContext(r.Context())
 		if !ok {
@@ -118,6 +119,8 @@ func (s *Server) writeStorageError(w http.ResponseWriter, r *http.Request, err e
 		status, detail = http.StatusConflict, "请求与原操作或当前基线不一致，请核对原操作"
 	case "storage_operation_in_progress":
 		status, detail = http.StatusConflict, "原操作仍在执行，请查询原身份或稍后重放"
+	case "storage_deployment_disabled":
+		status, detail = http.StatusConflict, "站点尚未启用此操作所需的存储能力，请联系管理员"
 	case "storage_intent_expired", "storage_cancelled", "storage_maintenance":
 		status, detail = http.StatusConflict, "当前任务或维护状态不允许执行该操作"
 	case "source_missing", "source_corrupt", "repair_content_mismatch":
@@ -193,12 +196,8 @@ func (s *Server) GetStoragePolicy(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) SetStoragePolicy(w http.ResponseWriter, r *http.Request) {
 	s.storageRequest(w, r, true, func(w http.ResponseWriter, r *http.Request, actor int) {
-		var p service.StoragePolicy
+		var p service.StoragePolicyRequest
 		if !s.decodeStorageJSON(w, r, &p, "mode", "default_choice", "generation", "logical_limit_bytes") {
-			return
-		}
-		if s.serverCfg != nil && !s.serverCfg.Storage.Enabled && p.Mode != "site_only" {
-			s.writeStorageError(w, r, service.ErrStoragePolicy)
 			return
 		}
 		out, err := s.storageSvc.SetPolicy(r.Context(), actor, p)

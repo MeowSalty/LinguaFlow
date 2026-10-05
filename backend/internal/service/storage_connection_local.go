@@ -16,9 +16,6 @@ import (
 // AdmitLocalSpace 在写入被受理之前，把本地根目录与其持久化标记绑定。
 // 它绝不探测远程存储，也不使用授权密钥环。
 func (s *StorageConnectionService) AdmitLocalSpace(ctx context.Context, spaceID int, driver storage.Driver) error {
-	if s.cfg.Maintenance {
-		return ErrStorageMaintenance
-	}
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.TransferTimeout)
 	defer cancel()
 	sp, err := s.client.StorageSpace.Get(ctx, spaceID)
@@ -31,6 +28,9 @@ func (s *StorageConnectionService) AdmitLocalSpace(ctx context.Context, spaceID 
 	}
 	if c.Driver != storageconnection.DriverLocal || c.OwnerKind != storageconnection.OwnerKindSite || c.BackendID == "legacy" {
 		return storage.ErrUnsupported
+	}
+	if err = storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpWrite, c)); err != nil {
+		return err
 	}
 	if c.Status != storageconnection.StatusEnabled || sp.Status == storagespace.StatusDisabled {
 		return storage.ErrPermission
