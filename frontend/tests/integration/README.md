@@ -67,4 +67,4 @@ S5 需要已安装的 Playwright Chromium，可执行 `task frontend:test:instal
 
 S6 还需要已构建前端及 4173 预览服务：先执行 `task frontend:build`，在另一终端执行 `task frontend:preview`。测试仅在临时浏览器 context 中保存隔离测试账号的令牌，关闭后销毁，不记录 HAR/trace。S9 的对象故障注入核查真实路径位于自己的 runDir 内；S10 仅修改自己隔离服务的清理延迟并重启该服务。
 
-2026-10-04 已在独立后端 `b4f46422` 的 C01–C09 工作树合同上实跑十项通过。各场景报告自动记录实际后端 HEAD、二进制 SHA-256、前后端合同 SHA-256 和对象身份；汇总报告为 `tests/artifacts/storage-integration/vitest-report.json`。当前前后端 bundle 仅换行符不同。真实 S3/PostgreSQL、提供商撤销/迁出和清理阻塞、cutover 进程中断与备份 pin 仍需部署证据，详见 [本轮实施与验收](../../design/file-storage-implementation-verification.md)。
+2026-10-04 已在独立后端 `b4f46422` 的 C01–C09 工作树合同上实跑十项通过。各场景报告自动记录实际后端 HEAD、二进制 SHA-256、前后端合同 SHA-256 和对象身份；汇总报告为 `tests/artifacts/storage-integration/vitest-report.json`。当前前后端 bundle 仅换行符不同。真实 S3/PostgreSQL、提供商撤销/迁出和清理阻塞、cutover 进程中断与备份 pin 仍需部署证据，详见 [本轮实施与验收](../../docs/design/file-storage-implementation-verification.md)。
