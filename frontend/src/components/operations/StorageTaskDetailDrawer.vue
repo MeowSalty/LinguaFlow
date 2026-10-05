@@ -4,9 +4,15 @@ import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import { fetchProject, type ApiSchemas } from '@/api/client'
 import { cancelStorageTask, retryStorageTask } from '@/api/storage'
-import { storageErrorMessage, storageTaskErrorMessage } from '@/api/storage-errors'
+import {
+  storageAccessDenied,
+  storageNeedsRefresh,
+  storageErrorMessage,
+  storageTaskErrorMessage,
+} from '@/api/storage-errors'
+import { invalidateStorageSnapshots, subscribeStorageRefresh } from '@/utils/storage-snapshots'
 import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
-import { ApiError, isAccessDenied } from '@/api/utils'
+import { ApiError } from '@/api/utils'
 import { useOperationsStore } from '@/stores/operations'
 import { useOrganizationsStore } from '@/stores/organizations'
 import { onOrganizationInvalidated } from '@/utils/organization-scope'
@@ -30,6 +36,8 @@ const mutating = ref(false)
 const permissionLoading = ref(false)
 const error = ref<string | null>(null)
 const repairVisible = ref(false)
+const taskReady = ref(false)
+let admissionVersion = 0
 let generation = 0
 let unsubscribe: (() => void) | null = null
 let controller = new AbortController()
@@ -50,6 +58,7 @@ const clear = (): void => {
   permissionLoading.value = false
   error.value = null
   repairVisible.value = false
+  taskReady.value = false
 }
 const writable = computed(() => {
   if (!project.value || permissionLoading.value) return false
@@ -61,6 +70,9 @@ const writable = computed(() => {
 })
 const can = (action: 'cancel' | 'retry'): boolean =>
   writable.value &&
+  taskReady.value &&
+  !loading.value &&
+  !mutating.value &&
   !error.value &&
   task.value?.kind !== 'export_delete' &&
   !!task.value?.allowed_actions.includes(action)
@@ -74,10 +86,11 @@ const kind = computed(() => {
 })
 const fail = (cause: unknown): void => {
   loading.value = false
-  error.value = isAccessDenied(cause)
+  taskReady.value = false
+  error.value = storageAccessDenied(cause)
     ? t('workbench.details.unavailable')
     : storageErrorMessage(cause)
-  if (isAccessDenied(cause)) {
+  if (storageAccessDenied(cause)) {
     generation++
     task.value = null
     project.value = null
@@ -92,12 +105,15 @@ const subscribe = (): void => {
   unsubscribe?.()
   const snapshot = captureSession()
   const request = generation
-  const current = () => request === generation && isSessionCurrent(snapshot)
+  const admission = admissionVersion
+  const current = () =>
+    request === generation && admission === admissionVersion && isSessionCurrent(snapshot)
   unsubscribe = operations.subscribeTask(
     locator,
     (value) => {
       if (!current()) return
       task.value = value
+      taskReady.value = true
       error.value = null
       loading.value = false
     },
@@ -138,11 +154,13 @@ const refresh = async (): Promise<void> => {
   generation++
   stop()
   loading.value = true
+  taskReady.value = false
   subscribe()
 }
 const act = async (action: 'cancel' | 'retry'): Promise<void> => {
   const locator = props.locator
   if (!locator?.project_id || !can(action) || mutating.value) return
+  const admission = admissionVersion
   // Stop pre-mutation deliveries before checking the current server allowance.
   generation++
   stop()
@@ -163,7 +181,11 @@ const act = async (action: 'cancel' | 'retry'): Promise<void> => {
     )
     if (!current()) return
     task.value = latest
-    if (!writable.value || !latest.allowed_actions.includes(action)) {
+    if (
+      admission !== admissionVersion ||
+      !writable.value ||
+      !latest.allowed_actions.includes(action)
+    ) {
       message.info(t('operations.storageTask.actionChanged'))
       return
     }
@@ -180,10 +202,11 @@ const act = async (action: 'cancel' | 'retry'): Promise<void> => {
     error.value = null
   } catch (cause) {
     if (!current()) return
-    if (isAccessDenied(cause)) {
+    if (storageAccessDenied(cause)) {
       fail(cause)
       operations.forget(locator)
-    } else if (cause instanceof ApiError && cause.status === 409) {
+    } else if (storageNeedsRefresh(cause) || (cause instanceof ApiError && cause.status === 409)) {
+      if (storageNeedsRefresh(cause)) invalidateStorageSnapshots({ projectId: locator.project_id })
       await operations.invalidate()
       if (current()) message.warning(storageErrorMessage(cause))
     } else {
@@ -241,13 +264,20 @@ watch(
 onOrganizationInvalidated((orgId) => {
   if (project.value?.owner_org_id === orgId) void load()
 })
-const visible = (): void => {
-  if (document.visibilityState === 'visible' && props.locator && !mutating.value) void load()
-}
-document.addEventListener('visibilitychange', visible)
+const stopRefresh = subscribeStorageRefresh({
+  scope: () => ({
+    projectId: props.locator?.project_id,
+    organizationId: project.value?.owner_org_id,
+  }),
+  invalidate: () => {
+    admissionVersion++
+    taskReady.value = false
+  },
+  refresh: () => (props.locator ? refresh() : undefined),
+})
 onBeforeUnmount(() => {
   clear()
-  document.removeEventListener('visibilitychange', visible)
+  stopRefresh()
 })
 </script>
 

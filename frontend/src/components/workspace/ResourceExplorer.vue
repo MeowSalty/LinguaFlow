@@ -52,7 +52,7 @@ const onSourceState = (state: string) => {
     sourceQueue.settle('failed')
 }
 const openQueuedSource = () => {
-  if (['previewing', 'submitting', 'tracking', 'unknown'].includes(sourceState.value)) {
+  if (['previewing', 'submitting', 'tracking', 'unknown', 'blocked'].includes(sourceState.value)) {
     sourceDrawerVisible.value = true
     return
   }
@@ -157,9 +157,14 @@ const sourceResource = ref<Resource | null>(null)
 const sourceDrawerVisible = ref(false)
 const storageResource = ref<Resource | null>(null)
 const storageDrawerVisible = ref(false)
-const manifestWritable = computed(() => storageManifestWriteAllowed(workspace.project))
+const manifestWritable = computed(
+  () => workspace.storageContentWritable && storageManifestWriteAllowed(workspace.project),
+)
+const metadataWritable = computed(
+  () => workspace.storageMetadataWritable && storageManifestWriteAllowed(workspace.project),
+)
 const openSourceUpdate = (resource: Resource): void => {
-  if (['previewing', 'submitting', 'tracking', 'unknown'].includes(sourceState.value)) {
+  if (['previewing', 'submitting', 'tracking', 'unknown', 'blocked'].includes(sourceState.value)) {
     sourceDrawerVisible.value = true
     return
   }
@@ -223,7 +228,7 @@ const downloadResourceResult = async (resource: Resource): Promise<void> => {
 
 const deleteResource = async (resource: Resource): Promise<void> => {
   const context = captureContext()
-  if (!manifestWritable.value) {
+  if (!metadataWritable.value) {
     message.warning(t('sourceStorage.maintenanceUnknown'))
     return
   }
@@ -645,7 +650,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       :deleting-resource-ids="workspace.deletingResourceIds"
       @navigate="handleNavigate"
       @open-segments="(r) => emit('openSegments', r)"
-      :manifest-writable="manifestWritable"
+      :manifest-writable="metadataWritable"
       @source-update="openSourceUpdate"
       @storage="openResourceStorage"
       @download="(r) => void downloadResource(r)"
