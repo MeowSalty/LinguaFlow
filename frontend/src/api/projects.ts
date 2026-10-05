@@ -154,6 +154,7 @@ export const createProject = async (
   })
 
   if (!data) {
+    if (safeStorageProblem(error).error_code) throw storageRequestError(response, error)
     throw buildRequestFailureError(t('api.errors.createProjectFailed'), error, response)
   }
 
@@ -186,6 +187,7 @@ export const deleteProject = async (
   })
 
   if (error || response.status !== 204) {
+    if (safeStorageProblem(error).error_code) throw storageRequestError(response, error)
     throw buildRequestFailureError(t('api.errors.deleteProjectFailed'), error, response)
   }
 }
@@ -885,6 +887,7 @@ export const createOrgProject = async (
   })
 
   if (!data) {
+    if (safeStorageProblem(error).error_code) throw storageRequestError(response, error)
     throw buildRequestFailureError(t('api.errors.createProjectFailed'), error, response)
   }
 

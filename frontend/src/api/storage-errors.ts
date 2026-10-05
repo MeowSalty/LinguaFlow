@@ -11,6 +11,7 @@ export interface StorageProblem {
 
 /** Only contract-defined identifiers; provider messages and locations are never retained. */
 export const safeStorageProblem = (input: unknown): StorageProblem => {
+  if (input instanceof ApiError && input.problem) input = input.problem
   if (typeof input === 'string') {
     try {
       input = JSON.parse(input)
@@ -32,6 +33,19 @@ export const safeStorageProblem = (input: unknown): StorageProblem => {
 }
 
 const codeMessages = {
+  storage_deployment_disabled: 'deploymentDisabled',
+  byos_disabled: 'deploymentDisabled',
+  storage_policy_violation: 'policyViolation',
+  policy_disallowed: 'policyViolation',
+  storage_capability_unsupported: 'capabilityUnsupported',
+  storage_space_required: 'spaceRequired',
+  storage_check_space_limit_exceeded: 'checkSpaceLimit',
+  connection_disabled: 'connectionDisabled',
+  space_disabled: 'spaceDisabled',
+  space_read_only: 'spaceReadOnly',
+  space_unverified: 'spaceUnverified',
+  selection_required: 'selectionRequired',
+  project_not_empty: 'projectNotEmpty',
   source_missing: 'sourceMissing',
   source_corrupt: 'sourceCorrupt',
   storage_auth_required: 'authRequired',
@@ -118,6 +132,7 @@ export const storageTransportFailure = (error: unknown): Error => {
 }
 
 export const storageResultUnknown = (error: unknown): boolean => {
+  if (storageAdmissionBlocked(error)) return false
   if (error instanceof StorageApiError && error.error_code === 'storage_operation_in_progress')
     return true
   return (
@@ -127,3 +142,33 @@ export const storageResultUnknown = (error: unknown): boolean => {
     error.status >= 500
   )
 }
+
+/** Admission failures are definite refusals, regardless of an older server's HTTP status. */
+export const storageAdmissionBlocked = (error: unknown): boolean =>
+  [
+    'storage_deployment_disabled',
+    'byos_disabled',
+    'storage_maintenance',
+    'storage_policy_violation',
+    'policy_disallowed',
+  ].includes(safeStorageProblem(error).error_code ?? '')
+
+/** A policy refusal must not erase data that the same identity can still read. */
+export const storageAccessDenied = (error: unknown): boolean =>
+  error instanceof ApiError &&
+  (error.status === 403 || error.status === 404) &&
+  !storageAdmissionBlocked(error)
+
+export const storageNeedsRefresh = (error: unknown): boolean =>
+  storageAdmissionBlocked(error) ||
+  [
+    'storage_generation_conflict',
+    'storage_auth_required',
+    'storage_permission_denied',
+    'storage_crypto_unavailable',
+    'storage_quota_exceeded',
+    'storage_operation_in_progress',
+    'connection_disabled',
+    'space_disabled',
+    'space_read_only',
+  ].includes(safeStorageProblem(error).error_code ?? '')

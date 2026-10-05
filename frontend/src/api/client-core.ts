@@ -86,6 +86,24 @@ const notifyUnauthorized = (context: SessionSnapshot): void => {
   unauthorized()
 }
 
+/** Legacy deployments may use 401 for a definite storage refusal, not an expired session. */
+const isStorageDeploymentRefusal = async (response: { status: number }): Promise<boolean> => {
+  try {
+    // Keep the original Fetch body readable for the storage error boundary.
+    const problem: unknown =
+      response instanceof Response
+        ? await response.clone().json()
+        : 'text' in response && typeof response.text === 'string'
+          ? JSON.parse(response.text)
+          : undefined
+    if (!problem || typeof problem !== 'object' || Array.isArray(problem)) return false
+    const code = 'error_code' in problem ? problem.error_code : undefined
+    return code === 'storage_deployment_disabled' || code === 'byos_disabled'
+  } catch {
+    return false
+  }
+}
+
 /** Shared fetch/XHR recovery: one token rotation and at most one transport replay. */
 export const recoverUnauthorizedResponse = async <T extends { status: number }>(
   response: T,
@@ -94,7 +112,10 @@ export const recoverUnauthorizedResponse = async <T extends { status: number }>(
 ): Promise<T> => {
   assertSessionCurrent(context)
   if (response.status !== 401) return response
+  const deploymentRefusal = await isStorageDeploymentRefusal(response)
+  assertSessionCurrent(context)
   if (closing) throw new StaleSessionError()
+  if (deploymentRefusal) return response
   if (_isLocalMode) {
     notifyUnauthorized(context)
     return response
@@ -111,7 +132,11 @@ export const recoverUnauthorizedResponse = async <T extends { status: number }>(
   assertSessionCurrent(context)
   const retried = await replay(session.access_token)
   assertSessionCurrent(context)
-  if (retried.status === 401) notifyUnauthorized(context)
+  if (retried.status === 401) {
+    const refused = await isStorageDeploymentRefusal(retried)
+    assertSessionCurrent(context)
+    if (!refused) notifyUnauthorized(context)
+  }
   return retried
 }
 
