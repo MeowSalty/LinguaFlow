@@ -327,8 +327,8 @@ test('storage rows without progress render in the list and global widget', async
   page.on('pageerror', (error) => errors.push(error.message))
   await page.goto('/operations')
   await expect(page.getByText('Storage without progress', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: /^当前任务\s*5$/ })).toBeVisible()
-  await page.getByRole('button', { name: /^当前任务\s*5$/ }).click()
+  await expect(page.getByTestId('global-job-tracker-trigger')).toHaveAccessibleName(/^当前任务 5，/)
+  await page.getByTestId('global-job-tracker-trigger').click()
   await expect(
     page.getByRole('button', { name: /Storage without progress.*等待自动重试/ }),
   ).toBeVisible()
