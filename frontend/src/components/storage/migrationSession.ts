@@ -2,7 +2,14 @@ import { computed, ref, shallowRef } from 'vue'
 import type { ApiSchemas } from '@/api/client-core'
 import * as api from '@/api/storage'
 import { captureSession, isSessionCurrent } from '@/api/session-context'
-import { safeStorageProblem, storageErrorMessage, storageResultUnknown } from '@/api/storage-errors'
+import {
+  safeStorageProblem,
+  storageAccessDenied,
+  storageErrorMessage,
+  storageNeedsRefresh,
+  storageResultUnknown,
+} from '@/api/storage-errors'
+import { subscribeStorageRefresh, invalidateStorageSnapshots } from '@/utils/storage-snapshots'
 import {
   isSafeStorageId,
   isStorageGeneration,
@@ -22,6 +29,8 @@ export function createMigrationSession(
     hasOperation = ref(false)
   let request: ApiSchemas['StorageMigrationRequest'] | null = null,
     taskId: number | null = null,
+    readSequence = 0,
+    refreshPending = false,
     disposed = false
   const controller = new AbortController()
   const projectId = options.project().id
@@ -46,11 +55,12 @@ export function createMigrationSession(
     hasOperation.value = false
     return true
   }
-  async function run(operation: () => Promise<ApiSchemas['StorageTask']>) {
+  async function run(operation: () => Promise<ApiSchemas['StorageTask']>, writing = false) {
     if (busy.value || disposed) return false
     const session = captureSession()
-    const current = () =>
-      !disposed && isSessionCurrent(session) && options.project().id === projectId
+    const read = readSequence
+    const owns = () => !disposed && isSessionCurrent(session) && options.project().id === projectId
+    const current = () => owns() && (writing || read === readSequence)
     busy.value = true
     error.value = null
     try {
@@ -73,13 +83,26 @@ export function createMigrationSession(
       return true
     } catch (cause) {
       if (current()) {
+        if (storageAccessDenied(cause)) {
+          dispose()
+          task.value = null
+          request = null
+          return false
+        }
         error.value = storageErrorMessage(cause)
         unknown.value = storageResultUnknown(cause)
         taskId ??= safeStorageProblem(cause).task_id ?? null
+        if (writing && storageNeedsRefresh(cause)) invalidateStorageSnapshots({ projectId })
       }
       return false
     } finally {
-      if (current()) busy.value = false
+      if (owns()) {
+        busy.value = false
+        if (refreshPending && taskId !== null) {
+          refreshPending = false
+          void recover()
+        }
+      }
     }
   }
   async function start(target: ApiSchemas['StorageOption'], generation: number) {
@@ -99,8 +122,9 @@ export function createMigrationSession(
       idempotency_key: crypto.randomUUID(),
     }
     hasOperation.value = true
-    return run(() =>
-      transport.migrateProjectStorage(projectId, request!, { signal: controller.signal }),
+    return run(
+      () => transport.migrateProjectStorage(projectId, request!, { signal: controller.signal }),
+      true,
     )
   }
   async function recover(id?: number) {
@@ -116,16 +140,32 @@ export function createMigrationSession(
       !disposed &&
       (options.available?.() ?? storageProjectWritable(options.project()))
     )
-      return run(() =>
-        transport.migrateProjectStorage(projectId, request!, { signal: controller.signal }),
+      return run(
+        () => transport.migrateProjectStorage(projectId, request!, { signal: controller.signal }),
+        true,
       )
     return false
   }
   function dispose() {
+    stopRefresh()
     disposed = true
     controller.abort()
     busy.value = false
   }
+  const stopRefresh = subscribeStorageRefresh({
+    scope: () => ({ projectId, organizationId: options.project().owner_org_id }),
+    invalidate: () => {
+      ++readSequence
+    },
+    refresh: () => {
+      if (taskId === null) return
+      if (busy.value) {
+        refreshPending = true
+        return
+      }
+      return recover()
+    },
+  })
   return {
     task,
     busy,

@@ -2,7 +2,14 @@ import { computed, ref, shallowRef } from 'vue'
 import type { ApiSchemas } from '@/api/client-core'
 import * as api from '@/api/storage'
 import { captureSession, isSessionCurrent } from '@/api/session-context'
-import { safeStorageProblem, storageErrorMessage, storageResultUnknown } from '@/api/storage-errors'
+import {
+  safeStorageProblem,
+  storageAccessDenied,
+  storageErrorMessage,
+  storageNeedsRefresh,
+  storageResultUnknown,
+} from '@/api/storage-errors'
+import { subscribeStorageRefresh, invalidateStorageSnapshots } from '@/utils/storage-snapshots'
 import {
   isSafeStorageId,
   isStorageGeneration,
@@ -57,10 +64,13 @@ export function createRepairSession(
     unknown = ref(false),
     error = ref<string | null>(null),
     hasOperation = ref(false)
+  const taskReady = ref(false)
   let intent: ApiSchemas['StorageRepairIntent'] | null = null
   let recoveryId: number | null = null
   let disposed = false,
     epoch = 0,
+    readSequence = 0,
+    refreshPending = false,
     notified = false
   const controller = new AbortController()
   const identity = () => {
@@ -78,6 +88,7 @@ export function createRepairSession(
   const canUpload = computed(
     () =>
       allowed() &&
+      taskReady.value &&
       !!file.value &&
       !!task.value?.allowed_actions.includes('upload_content') &&
       !busy.value &&
@@ -102,6 +113,7 @@ export function createRepairSession(
     )
       return false
     task.value = value
+    taskReady.value = true
     recoveryId = value.id
     unknown.value = false
     if (completed.value && !notified) {
@@ -114,9 +126,16 @@ export function createRepairSession(
     if (busy.value || (intent && !task.value)) return
     file.value = value
   }
-  async function run(operation: () => Promise<Task>, mutationContext?: RepairContext) {
+  async function run(
+    operation: () => Promise<Task>,
+    mutationContext?: RepairContext,
+    writing = false,
+    admission: () => boolean = () => true,
+  ) {
     if (busy.value || disposed) return false
-    const current = currentGuard()
+    const owns = currentGuard(),
+      request = readSequence
+    const current = () => owns() && (!!mutationContext || writing || request === readSequence)
     busy.value = true
     error.value = null
     try {
@@ -138,6 +157,7 @@ export function createRepairSession(
         )
           return false
       }
+      if (!admission()) return false
       const value = await operation()
       if (!current()) return false
       if (!accept(value)) {
@@ -147,14 +167,27 @@ export function createRepairSession(
       return true
     } catch (cause) {
       if (current()) {
+        if (storageAccessDenied(cause)) {
+          dispose()
+          task.value = null
+          return false
+        }
         error.value = storageErrorMessage(cause)
         unknown.value = storageResultUnknown(cause)
         const id = safeStorageProblem(cause).task_id
         if (id && recoveryId === null) recoveryId = id
+        if ((mutationContext || writing) && storageNeedsRefresh(cause))
+          invalidateStorageSnapshots({ projectId: options.context()?.project.id })
       }
       return false
     } finally {
-      if (current()) busy.value = false
+      if (owns()) {
+        busy.value = false
+        if (refreshPending && recoveryId !== null) {
+          refreshPending = false
+          void recover()
+        }
+      }
     }
   }
   async function start(target: ApiSchemas['StorageOption'], generation: number) {
@@ -202,8 +235,10 @@ export function createRepairSession(
       )
     // A lost create response is reconciled with the original immutable request and key.
     if (intent && allowed())
-      return run(() =>
-        transport.createStorageIntent(c.project.id, intent!, { signal: controller.signal }),
+      return run(
+        () => transport.createStorageIntent(c.project.id, intent!, { signal: controller.signal }),
+        undefined,
+        true,
       )
     return false
   }
@@ -230,15 +265,39 @@ export function createRepairSession(
           signal: controller.signal,
         }),
       c,
+      false,
+      () =>
+        taskReady.value &&
+        task.value === latest &&
+        latest.allowed_actions.includes('upload_content'),
     )
   }
   function dispose() {
+    stopRefresh()
     disposed = true
     ++epoch
     controller.abort()
     file.value = null
     busy.value = false
   }
+  const stopRefresh = subscribeStorageRefresh({
+    scope: () => ({
+      projectId: options.context()?.project.id,
+      organizationId: options.context()?.project.owner_org_id,
+    }),
+    invalidate: () => {
+      ++readSequence
+      taskReady.value = false
+    },
+    refresh: () => {
+      if (recoveryId === null) return
+      if (busy.value) {
+        refreshPending = true
+        return
+      }
+      return recover()
+    },
+  })
   return {
     task,
     file,

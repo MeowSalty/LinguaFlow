@@ -1,7 +1,15 @@
 import { computed, onScopeDispose, shallowRef } from 'vue'
 import type { ApiSchemas } from '@/api/client'
 import { previewSourceUpdate, commitSourceUpdate, getStorageTask } from '@/api/storage'
-import { safeStorageProblem, storageResultUnknown, type StorageProblem } from '@/api/storage-errors'
+import {
+  safeStorageProblem,
+  storageAdmissionBlocked,
+  storageAccessDenied,
+  storageNeedsRefresh,
+  storageResultUnknown,
+  type StorageProblem,
+} from '@/api/storage-errors'
+import { invalidateStorageSnapshots, subscribeStorageRefresh } from '@/utils/storage-snapshots'
 import {
   captureSession,
   isSessionCurrent,
@@ -31,6 +39,7 @@ export type SourceUpdateState =
   | 'cancelled'
   | 'expired'
   | 'read_only'
+  | 'blocked'
 export interface SourceUpdatePublication {
   taskId: number
   projectId: number
@@ -59,6 +68,7 @@ export const isSourceUpdatePreview = (value: Preview | undefined | null): value 
   )
 const clonePreview = (value: Preview): Preview => ({ ...value, stats: { ...value.stats } })
 const failureState = (error: unknown): SourceUpdateState => {
+  if (storageAdmissionBlocked(error)) return 'blocked'
   const problem = safeStorageProblem(error)
   if (problem.error_code === 'source_revision_conflict') return 'invalidated'
   if (problem.error_code === 'storage_intent_expired') return 'expired'
@@ -85,6 +95,7 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
   const lastError = shallowRef<StorageProblem | null>(null)
   const refreshError = shallowRef(false)
   const recovering = shallowRef(false)
+  const taskSnapshotReady = shallowRef(false)
   const expiresAt = computed(() =>
     task.value ? task.value.expires_at : (preview.value?.expires_at ?? null),
   )
@@ -112,6 +123,7 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
     lastError.value = null
     refreshError.value = false
     recovering.value = false
+    taskSnapshotReady.value = false
     confirmationInvalidated = false
     previewAttempted = false
     ownerSession = null
@@ -130,12 +142,20 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
     }
   }
   const recordFailure = (error: unknown) => {
+    if (storageAccessDenied(error)) {
+      reset()
+      return
+    }
     const problem = safeStorageProblem(error)
     lastError.value = problem
     // A failure cannot replace an already established operation identity.
     if (problem.task_id && !taskId.value) taskId.value = problem.task_id
     if (problem.operation_id && !operationId.value) operationId.value = problem.operation_id
     state.value = failureState(error)
+    if (storageNeedsRefresh(error) && projectId.value) {
+      taskSnapshotReady.value = false
+      invalidateStorageSnapshots({ projectId: projectId.value })
+    }
     if (state.value === 'invalidated') confirmationInvalidated = true
   }
   const ownsTask = (value: Task): boolean =>
@@ -160,10 +180,17 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
       return false
     }
     task.value = { ...value }
+    taskSnapshotReady.value = true
     taskId.value = value.id
     operationId.value = value.operation_id
     refreshError.value = false
-    lastError.value = value.error_code ? { error_code: value.error_code } : null
+    lastError.value = value.error_code
+      ? { error_code: value.error_code }
+      : storageAdmissionBlocked(lastError.value) &&
+          !storageTaskCommitted(value) &&
+          !value.allowed_actions.includes('commit')
+        ? lastError.value
+        : null
     if (storageTaskCommitted(value)) {
       if (
         value.result_resource_id === resourceId.value &&
@@ -190,6 +217,12 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
     if (value.error_code === 'source_revision_conflict') {
       confirmationInvalidated = true
       state.value = 'invalidated'
+      return true
+    }
+    if (storageAdmissionBlocked(lastError.value) && !value.allowed_actions.includes('commit')) {
+      if (isSourceUpdatePreview(value.source_preview) && value.source_preview.task_id === value.id)
+        preview.value = clonePreview(value.source_preview)
+      state.value = 'blocked'
       return true
     }
     if (value.status === 'failed') {
@@ -224,7 +257,7 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
   const select = (project: number, resource: number, candidate: File): boolean => {
     if (!isSafeStorageId(project) || !isSafeStorageId(resource)) return false
     if (ownerSession && !isSessionCurrent(ownerSession)) reset()
-    if (recovering.value || ['submitting', 'tracking', 'unknown'].includes(state.value))
+    if (recovering.value || ['submitting', 'tracking', 'unknown', 'blocked'].includes(state.value))
       return false
     reset()
     projectId.value = project
@@ -292,6 +325,7 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
       }
       taskId.value = result.task_id
       preview.value = clonePreview(result)
+      taskSnapshotReady.value = true
       state.value = confirmationInvalidated ? 'invalidated' : 'preview_ready'
       return !confirmationInvalidated
     } catch (error) {
@@ -316,6 +350,8 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
       !deps.available() ||
       recovering.value ||
       state.value !== 'preview_ready' ||
+      !taskSnapshotReady.value ||
+      (task.value && !task.value.allowed_actions.includes('commit')) ||
       !preview.value ||
       !projectId.value ||
       !resourceId.value
@@ -330,6 +366,7 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
       version !== round ||
       !isSessionCurrent(session) ||
       !deps.available() ||
+      !taskSnapshotReady.value ||
       confirmationInvalidated
     ) {
       if (version === round && isSessionCurrent(session))
@@ -364,6 +401,7 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
     const version = round
     const request = ++refreshRound
     const session = captureSession()
+    taskSnapshotReady.value = false
     try {
       const result = await deps.task(projectId.value, taskId.value, { signal: controller.signal })
       if (version !== round || request !== refreshRound || !isSessionCurrent(session)) return false
@@ -387,7 +425,7 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
     const version = round
     try {
       if (taskId.value) return await refresh()
-      if (state.value !== 'unknown') return false
+      if (!['unknown', 'blocked'].includes(state.value)) return false
       const prepared = await requestPreview(true)
       if (version !== round || !ownsCurrentSession()) return false
       // Replay responses can describe an already committed original plan.
@@ -437,6 +475,11 @@ export function createSourceUpdateSession(deps: SourceUpdateDependencies) {
     lastError,
     refreshError,
     recovering,
+    taskSnapshotReady,
+    invalidateTaskSnapshot: () => {
+      ++refreshRound
+      taskSnapshotReady.value = false
+    },
     expiresAt,
     select,
     newPreview,
@@ -462,5 +505,12 @@ export function useSourceUpdateSession(
   })
   onScopeDispose(session.reset)
   onScopeDispose(onSessionChange(session.reset))
+  onScopeDispose(
+    subscribeStorageRefresh({
+      scope: () => ({ projectId: session.projectId.value ?? undefined }),
+      invalidate: session.invalidateTaskSnapshot,
+      refresh: () => (session.taskId.value ? session.refresh() : undefined),
+    }),
+  )
   return session
 }

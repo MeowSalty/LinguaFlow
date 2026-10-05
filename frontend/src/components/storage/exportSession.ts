@@ -2,8 +2,16 @@ import { computed, ref, shallowRef } from 'vue'
 import type { ApiSchemas } from '@/api/client-core'
 import * as api from '@/api/storage'
 import { captureSession, isSessionCurrent } from '@/api/session-context'
-import { isAccessDenied } from '@/api/utils'
-import { safeStorageProblem, storageErrorMessage, storageResultUnknown } from '@/api/storage-errors'
+import { subscribeStorageRefresh, invalidateStorageSnapshots } from '@/utils/storage-snapshots'
+import {
+  safeStorageProblem,
+  storageAccessDenied,
+  storageAdmissionBlocked,
+  storageNeedsRefresh,
+  storageTaskErrorMessage,
+  storageErrorMessage,
+  storageResultUnknown,
+} from '@/api/storage-errors'
 import {
   getStorageContractGate,
   isSafeStorageId,
@@ -34,6 +42,7 @@ export function createExportSession(
     subscribe: Subscribe
     changed?: () => void
     canMutate?: () => boolean
+    canCreate?: () => boolean
   },
   transport = api,
   contractReady: () => boolean = () => getStorageContractGate('exportMutation').available,
@@ -43,7 +52,9 @@ export function createExportSession(
     loaded = ref(false),
     busy = ref(false),
     unknown = ref(false)
+  const blocked = ref(false)
   const error = ref<string | null>(null)
+  const admissionError = ref<string | null>(null)
   const task = shallowRef<Task | null>(null)
   const key = ref<string | null>(null)
   const deletions = ref<Record<number, ExportDeletion>>({})
@@ -60,6 +71,7 @@ export function createExportSession(
   let recoveryTaskId: number | null = null
   const canMutate = () =>
     !controller.signal.aborted && contractReady() && (options.canMutate?.() ?? true)
+  const canCreate = () => canMutate() && (options.canCreate?.() ?? true)
   const controller = new AbortController()
   const context = () => {
     const session = captureSession(),
@@ -128,7 +140,7 @@ export function createExportSession(
               },
               (cause) => {
                 if (!contextCurrent() || deletionVersions.get(taskId) !== version) return
-                if (isAccessDenied(cause)) {
+                if (storageAccessDenied(cause)) {
                   revokeAccess()
                   return
                 }
@@ -142,7 +154,7 @@ export function createExportSession(
       return current()
     } catch (cause) {
       if (current()) {
-        if (isAccessDenied(cause)) revokeAccess()
+        if (storageAccessDenied(cause)) revokeAccess()
         error.value = storageErrorMessage(cause)
       }
       return false
@@ -162,6 +174,13 @@ export function createExportSession(
       return
     }
     task.value = value
+    if (storageAdmissionBlocked(value)) {
+      admissionError.value = storageTaskErrorMessage(value.error_code)
+      blocked.value = true
+    } else if (storageTaskCommitted(value) || value.allowed_actions.includes('retry')) {
+      admissionError.value = null
+      blocked.value = false
+    }
     if (!storageTaskCommitted(value)) {
       if (value.status === 'completed') {
         unknown.value = true
@@ -194,9 +213,10 @@ export function createExportSession(
   }
   async function start(artifactId?: number): Promise<boolean> {
     if (
-      !canMutate() ||
+      !canCreate() ||
       busy.value ||
       unknown.value ||
+      blocked.value ||
       (task.value && !['completed', 'failed', 'cancelled'].includes(task.value.status))
     )
       return false
@@ -218,9 +238,9 @@ export function createExportSession(
         !(await options.beforeSavedContent())
       )
         return false
-      if (!current() || !canMutate()) return false
+      if (!current() || !canCreate()) return false
       if (options.beforeMutation && !(await options.beforeMutation())) return false
-      if (!current() || !canMutate()) return false
+      if (!current() || !canCreate()) return false
       key.value = crypto.randomUUID()
       const operation = ++operationSequence
       // Fence the previous task before the new POST can wait or lose its response.
@@ -244,6 +264,7 @@ export function createExportSession(
         return false
       }
       task.value = value
+      admissionError.value = null
       recoveryTaskId = value.id
       unsubscribe = options.subscribe(
         options.projectId,
@@ -253,7 +274,7 @@ export function createExportSession(
         },
         (cause) => {
           if (current() && operation === operationSequence) {
-            if (isAccessDenied(cause)) {
+            if (storageAccessDenied(cause)) {
               revokeAccess()
               return
             }
@@ -266,7 +287,7 @@ export function createExportSession(
       return true
     } catch (cause) {
       if (current()) {
-        if (isAccessDenied(cause)) {
+        if (storageAccessDenied(cause)) {
           revokeAccess()
           error.value = storageErrorMessage(cause)
           return false
@@ -276,8 +297,11 @@ export function createExportSession(
           return false
         }
         recoveryTaskId = safeStorageProblem(cause).task_id ?? null
-        unknown.value = storageResultUnknown(cause) || recoveryTaskId !== null
+        blocked.value = storageAdmissionBlocked(cause)
+        if (blocked.value) admissionError.value = storageErrorMessage(cause)
+        unknown.value = !blocked.value && (storageResultUnknown(cause) || recoveryTaskId !== null)
         error.value = storageErrorMessage(cause)
+        if (storageNeedsRefresh(cause)) invalidateStorageSnapshots({ projectId: options.projectId })
       }
       return false
     } finally {
@@ -300,13 +324,14 @@ export function createExportSession(
     if (!key.value) return refresh()
     const current = context(),
       operation = operationSequence
-    if (!current() || (!recoveryTaskId && !canMutate())) return false
+    const replaying = recoveryTaskId === null
+    if (!current() || (!recoveryTaskId && !canCreate())) return false
     busy.value = true
     error.value = null
     try {
       if (!recoveryTaskId && options.beforeMutation && !(await options.beforeMutation()))
         return false
-      if (!current() || (!recoveryTaskId && !canMutate())) return false
+      if (!current() || (!recoveryTaskId && !canCreate())) return false
       const value = recoveryTaskId
         ? await transport.getStorageTask(options.projectId, recoveryTaskId, {
             signal: controller.signal,
@@ -321,6 +346,8 @@ export function createExportSession(
       recoveryTaskId = value.id
       task.value = value
       unknown.value = false
+      blocked.value =
+        blocked.value && !storageTaskCommitted(value) && !value.allowed_actions.includes('retry')
       unsubscribe?.()
       unsubscribe = options.subscribe(
         options.projectId,
@@ -330,7 +357,7 @@ export function createExportSession(
         },
         (cause) => {
           if (current() && operation === operationSequence) {
-            if (isAccessDenied(cause)) {
+            if (storageAccessDenied(cause)) {
               revokeAccess()
               return
             }
@@ -343,14 +370,18 @@ export function createExportSession(
       return current() && !unknown.value
     } catch (cause) {
       if (current()) {
-        if (isAccessDenied(cause)) {
+        if (storageAccessDenied(cause)) {
           revokeAccess()
           error.value = storageErrorMessage(cause)
           return false
         }
         recoveryTaskId ??= safeStorageProblem(cause).task_id ?? null
-        unknown.value = true
+        blocked.value = storageAdmissionBlocked(cause)
+        if (blocked.value) admissionError.value = storageErrorMessage(cause)
+        unknown.value = !blocked.value
         error.value = storageErrorMessage(cause)
+        if (replaying && storageNeedsRefresh(cause))
+          invalidateStorageSnapshots({ projectId: options.projectId })
       }
       return false
     } finally {
@@ -386,12 +417,14 @@ export function createExportSession(
       return current()
     } catch (cause) {
       if (current()) {
-        if (isAccessDenied(cause)) {
+        if (storageAccessDenied(cause)) {
           revokeAccess()
           error.value = storageErrorMessage(cause)
           return false
         }
         error.value = storageErrorMessage(cause)
+        if (storageAdmissionBlocked(cause)) admissionError.value = error.value
+        if (storageNeedsRefresh(cause)) invalidateStorageSnapshots({ projectId: options.projectId })
         if (storageResultUnknown(cause) && deletions.value[id]) {
           deletions.value[id]!.status = 'unknown'
           deletions.value[id]!.error = error.value
@@ -404,6 +437,7 @@ export function createExportSession(
     }
   }
   function dispose() {
+    stopRefresh()
     ++epoch
     controller.abort()
     unsubscribe?.()
@@ -415,6 +449,7 @@ export function createExportSession(
     key.value = null
     deletions.value = {}
     recoveryTaskId = null
+    admissionError.value = null
   }
   function revokeAccess() {
     dispose()
@@ -431,13 +466,23 @@ export function createExportSession(
       (trustedArtifacts.value === null || trustedArtifacts.value.has(item.id))
     )
   }
+  const stopRefresh = subscribeStorageRefresh({
+    scope: () => ({ projectId: options.projectId }),
+    invalidate: () => {},
+    refresh: async () => {
+      // Focus and admission changes only read; an absent task ID never replays a POST here.
+      if (recoveryTaskId && !busy.value) await recover()
+      else await refresh()
+    },
+  })
   return {
     items,
     loading,
     loaded,
     busy,
     unknown,
-    error,
+    blocked,
+    error: computed(() => error.value ?? admissionError.value),
     task,
     key,
     published,

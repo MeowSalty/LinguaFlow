@@ -35,6 +35,37 @@ beforeEach(() => changeSessionContext('/api/v1', 1, true))
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 describe('fixed export session', () => {
+  it.each(['storage_deployment_disabled', 'byos_disabled', 'storage_policy_violation'])(
+    'retains export history and the original key after %s until explicit reconciliation',
+    async (error_code) => {
+      const create = vi
+        .fn()
+        .mockRejectedValueOnce(new StorageApiError('blocked', 403, { error_code }))
+        .mockResolvedValue(task('completed'))
+      const session = createExportSession(
+        { projectId: 1, resourceId: 2, subscribe: vi.fn() },
+        {
+          ...api,
+          createExportArtifact: create,
+          listExportArtifacts: vi.fn().mockResolvedValue({ items: [artifact()] }),
+        },
+        () => true,
+      )
+      await session.refresh()
+      await session.start()
+      const key = session.key.value
+      expect(session.blocked.value).toBe(true)
+      expect(session.unknown.value).toBe(false)
+      expect(session.items.value).toHaveLength(1)
+      expect(session.task.value).toBeNull()
+      expect(await session.start()).toBe(false)
+      await session.recover()
+      expect(create.mock.calls[1]![2]).toBe(key)
+      expect(session.published.value).toBe(true)
+      expect(session.blocked.value).toBe(false)
+      session.dispose()
+    },
+  )
   it('does not invent an unknown export operation when the preflight read fails before submission', async () => {
     const create = vi.fn()
     const session = createExportSession(

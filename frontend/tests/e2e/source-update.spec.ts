@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { json, mockApp } from './fixtures'
+import { storageRuntime } from '../storage-fixtures'
 
 const timestamp = '2026-10-04T00:00:00Z'
 const project = {
@@ -62,6 +63,8 @@ type State = {
   generation: number
   loseCommit?: boolean
   rejectSize?: boolean
+  blockCommitCode?: string
+  taskReads?: number
 }
 async function setup(page: Page, state: State) {
   await mockApp(page, { role: 'user' })
@@ -90,6 +93,7 @@ async function setup(page: Page, state: State) {
       return json(route, { items: [{ ...resource, source_generation: state.generation }] })
     if (path === '/projects/7/storage')
       return json(route, {
+        runtime: storageRuntime(),
         project_id: 7,
         storage_generation: 0,
         storage_state: 'active',
@@ -111,6 +115,16 @@ async function setup(page: Page, state: State) {
     if (path.endsWith('/source-commit')) {
       const body = request.postDataJSON()
       state.commits.push(body)
+      if (state.blockCommitCode)
+        return json(
+          route,
+          {
+            error_code: state.blockCommitCode,
+            task_id: 42,
+            operation_id: 'original-operation',
+          },
+          state.blockCommitCode === 'storage_policy_violation' ? 403 : 409,
+        )
       if (body.expected_source_generation !== state.generation)
         return json(
           route,
@@ -121,7 +135,25 @@ async function setup(page: Page, state: State) {
       if (state.loseCommit) return route.abort('connectionreset')
       return json(route, committed)
     }
-    if (path === '/projects/7/storage/tasks/42') return json(route, committed)
+    if (path === '/projects/7/storage/tasks/42') {
+      state.taskReads = (state.taskReads ?? 0) + 1
+      return json(
+        route,
+        state.blockCommitCode
+          ? {
+              ...committed,
+              status: 'pending',
+              phase: 'prepared',
+              source_preview: preview,
+              expected_source_generation: 0,
+              expected_translation_generation: 9,
+              expected_storage_generation: 0,
+              allowed_actions: [],
+              result_revision_id: undefined,
+            }
+          : committed,
+      )
+    }
     return route.fallback()
   })
 }
@@ -159,6 +191,30 @@ test('ordinary owner previews four counts and publishes the frozen generations u
     { task_id: 42, expected_source_generation: 0, expected_translation_generation: 9 },
   ])
 })
+
+for (const code of ['storage_deployment_disabled', 'byos_disabled', 'storage_policy_violation']) {
+  test(`E-T08 ${code} preserves the original candidate and reads its task without resubmission`, async ({
+    page,
+  }) => {
+    const state: State = { commits: [], files: [], keys: [], generation: 0, blockCommitCode: code }
+    await setup(page, state)
+    await openCandidate(page)
+    await page.getByRole('button', { name: '确认更新', exact: true }).click()
+    await expect.poll(() => state.taskReads ?? 0).toBeGreaterThan(0)
+    await expect(page.getByRole('button', { name: '确认更新', exact: true })).toBeDisabled()
+    await expect(page.getByText('welcome.txt', { exact: true }).last()).toBeVisible()
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await expect.poll(() => state.taskReads ?? 0).toBeGreaterThan(1)
+    expect(state.commits).toHaveLength(1)
+    expect(state.files).toEqual(['new source bytes'])
+    expect(new Set(state.keys).size).toBe(1)
+    state.blockCommitCode = undefined
+    await page.getByRole('button', { name: '恢复原任务结果', exact: true }).click()
+    await expect(page.getByText('源文件已更新，视图已刷新。', { exact: true })).toBeVisible()
+    expect(state.commits).toHaveLength(1)
+    expect(state.files).toHaveLength(1)
+  })
+}
 test('lost commit response recovers original task without resubmitting the commit', async ({
   page,
 }) => {

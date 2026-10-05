@@ -230,7 +230,7 @@ describe('source update confirmation session', () => {
     expect(await session.prepare()).toBe(false)
     expect(deps.preview).not.toHaveBeenCalled()
   })
-  it('does not let a pre-commit read overwrite the committed task response', async () => {
+  it('pauses confirmation while a fresh task read is in flight', async () => {
     const { deps, session } = setup()
     const response = deferred<ApiSchemas['StorageTask']>()
     deps.task.mockReturnValue(response.promise)
@@ -238,10 +238,11 @@ describe('source update confirmation session', () => {
     session.select(1, 2, file())
     await session.prepare()
     const reading = session.refresh()
-    await session.confirm()
+    expect(await session.confirm()).toBe(false)
     response.resolve(task)
     await reading
-    expect(session.task.value?.phase).toBe('committed')
+    expect(deps.commit).not.toHaveBeenCalled()
+    expect(session.task.value?.phase).toBe('prepared')
   })
   it('invalidates confirmation when saving before submit changes content', async () => {
     const { deps, session } = setup()
@@ -305,5 +306,98 @@ describe('source update confirmation session', () => {
     await session.confirm()
     expect(session.state.value).toBe('failed')
     expect(session.preview.value?.task_id).toBe(42)
+  })
+  it.each([
+    'storage_deployment_disabled',
+    'byos_disabled',
+    'storage_maintenance',
+    'storage_policy_violation',
+  ])(
+    'preserves candidate, key, expiry and original task after %s without inventing a task status',
+    async (error_code) => {
+      const { deps, session } = setup()
+      const candidate = file()
+      deps.commit.mockRejectedValue(new StorageApiError('blocked', 403, { error_code }))
+      session.select(1, 2, candidate)
+      const key = session.key.value
+      await session.prepare()
+      await session.confirm()
+      expect(session.state.value).toBe('blocked')
+      expect(session.file.value).toBe(candidate)
+      expect(session.key.value).toBe(key)
+      expect(session.taskId.value).toBe(42)
+      expect(session.preview.value).toEqual(preview)
+      expect(session.task.value).toBeNull()
+      expect(await session.prepare()).toBe(false)
+      deps.task.mockResolvedValue({
+        ...task,
+        status: 'pending',
+        allowed_actions: [],
+        source_preview: preview,
+        expected_source_generation: 0,
+        expected_translation_generation: 9,
+        expected_storage_generation: 0,
+      })
+      await session.recover()
+      expect(await session.confirm()).toBe(false)
+      expect(session.state.value).toBe('blocked')
+      expect(session.select(1, 2, file())).toBe(false)
+      expect(await session.prepare()).toBe(false)
+      expect(session.lastError.value?.error_code).toBe(error_code)
+      expect(deps.commit).toHaveBeenCalledTimes(1)
+      expect(deps.preview).toHaveBeenCalledTimes(1)
+    },
+  )
+  it.each(['storage_deployment_disabled', 'byos_disabled'])(
+    'keeps a server-reported failed task with %s attached to its original candidate until recovery allows commit',
+    async (error_code) => {
+      const { deps, session } = setup()
+      const candidate = file()
+      session.select(1, 2, candidate)
+      await session.prepare()
+      const key = session.key.value
+      deps.task.mockResolvedValue({ ...task, status: 'failed', error_code, allowed_actions: [] })
+      await session.recover()
+      expect(session.state.value).toBe('blocked')
+      expect(session.file.value).toBe(candidate)
+      expect(session.key.value).toBe(key)
+      expect(session.preview.value).toEqual(preview)
+      expect(session.newPreview()).toBe(false)
+      deps.task.mockResolvedValue({
+        ...task,
+        status: 'pending',
+        allowed_actions: ['commit'],
+        source_preview: preview,
+        expected_source_generation: 0,
+        expected_translation_generation: 9,
+        expected_storage_generation: 0,
+      })
+      await session.recover()
+      expect(session.state.value).toBe('preview_ready')
+      expect(deps.commit).not.toHaveBeenCalled()
+      expect(deps.preview).toHaveBeenCalledTimes(1)
+    },
+  )
+  it('does not let an in-flight old task read undo synchronous snapshot invalidation', async () => {
+    const { deps, session } = setup()
+    session.select(1, 2, file())
+    await session.prepare()
+    const pending = deferred<ApiSchemas['StorageTask']>()
+    deps.task.mockReturnValue(pending.promise)
+    const reading = session.refresh()
+    session.invalidateTaskSnapshot()
+    pending.resolve({
+      ...task,
+      status: 'pending',
+      allowed_actions: ['commit'],
+      source_preview: preview,
+      expected_source_generation: 0,
+      expected_translation_generation: 9,
+      expected_storage_generation: 0,
+    })
+    expect(await reading).toBe(false)
+    expect(session.taskSnapshotReady.value).toBe(false)
+    expect(await session.confirm()).toBe(false)
+    expect(deps.commit).not.toHaveBeenCalled()
   })
 })
