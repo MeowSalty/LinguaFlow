@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import { computed, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
+import { storageConfirmationButtons } from './confirmation'
 import {
   NAlert,
   NButton,
-  NCard,
   NDrawer,
   NDrawerContent,
+  NDropdown,
   NEmpty,
   NForm,
   NFormItem,
   NInput,
-  NInputNumber,
   NModal,
+  NPopover,
   NSelect,
   NSkeleton,
   NSwitch,
@@ -32,15 +33,28 @@ import { getStorageContractGate } from '@/utils/storage-contract'
 import { subscribeStorageRefresh, invalidateStorageSnapshots } from '@/utils/storage-snapshots'
 import type { StorageManagementAction } from '@/utils/storage-availability'
 import { formatDateTime } from '@/utils/datetime'
-import StorageCapacity from './StorageCapacity.vue'
+import StorageCapacityInput from './StorageCapacityInput.vue'
+import StorageSpaces from './StorageSpaces.vue'
+import StorageTabs from './StorageTabs.vue'
+import StorageAppearance from './StorageAppearance.vue'
+import { formatStorageBytes } from './capacity'
 import StorageHealth from './StorageHealth.vue'
 
-const props = defineProps<{ scope: StorageScope }>()
+const props = defineProps<{ scope: StorageScope; embedded?: boolean }>()
 const { t } = useI18n()
 const store = useStorageStore()
 const dialog = useDialog(),
   message = useMessage()
 const selectedId = ref<number | null>(null)
+const detailTab = ref('spaces')
+const detailTabs = computed(() => [
+  { name: 'spaces', label: t('storage.spaces') },
+  { name: 'connection', label: t('storageUi.connectionDetails') },
+  { name: 'checks', label: t('storageManagement.checks') },
+])
+let returnFocus: HTMLElement | null = null
+let active = true
+let viewRequest = 0
 const selected = computed(() =>
   store.connections.items.find((item) => item.id === selectedId.value),
 )
@@ -130,6 +144,30 @@ const blockedActions = computed(() =>
         .filter(({ reason }) => !!reason)
     : [],
 )
+const moreActions = computed(() => {
+  const id = selectedId.value
+  const reason = id === null ? '' : store.connectionReason(id, 'revoke_auth')
+  return [
+    {
+      key: 'revoke',
+      disabled: id === null || !store.connectionAllowed(id, 'revoke_auth'),
+      label: () =>
+        h('div', { class: 'max-w-60 whitespace-normal' }, [
+          h('span', t('storage.revoke')),
+          reason ? h('p', { class: 'mt-1 text-xs leading-5 text-lf-text-muted' }, reason) : null,
+        ]),
+    },
+  ]
+})
+const formValid = computed(
+  () =>
+    formKind.value !== 'space' ||
+    (Number.isSafeInteger(form.capacity_bytes) && form.capacity_bytes > 0),
+)
+function restoreFocus() {
+  if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true })
+  returnFocus = null
+}
 let generation = 0,
   formGeneration = 0
 function clearSecrets() {
@@ -159,13 +197,63 @@ function openForm(kind: NonNullable<typeof formKind.value>) {
   formKind.value = kind
 }
 async function refresh() {
-  const id = selectedId.value
-  if (await store.load(props.scope))
-    if (id !== null) await Promise.all([store.loadSpaces(id), store.loadChecks(id)])
+  const session = captureSession(),
+    scope = storageScopeKey(props.scope)
+  if (
+    !(await store.load(props.scope)) ||
+    !active ||
+    !isSessionCurrent(session) ||
+    storageScopeKey(props.scope) !== scope
+  )
+    return
+  await Promise.all([
+    store.loadSpaceSummaries(),
+    selectedId.value !== null && detailTab.value === 'checks'
+      ? store.loadChecks(selectedId.value)
+      : Promise.resolve(),
+  ])
 }
-async function showDetails(id: number) {
+async function showDetails(id: number, event?: MouseEvent, spaceId?: number) {
+  returnFocus =
+    event?.currentTarget instanceof HTMLElement
+      ? event.currentTarget
+      : document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+  detailTab.value = 'spaces'
   selectedId.value = id
-  await Promise.all([store.loadSpaces(id), store.loadChecks(id)])
+  const request = ++viewRequest,
+    formVersion = formGeneration,
+    session = captureSession()
+  await store.loadSpaces(id)
+  await nextTick()
+  if (
+    !active ||
+    !isSessionCurrent(session) ||
+    selectedId.value !== id ||
+    !selected.value ||
+    request !== viewRequest ||
+    formVersion !== formGeneration
+  )
+    return false
+  if (spaceId !== undefined) {
+    document
+      .querySelector(`.n-drawer [data-storage-space-id="${spaceId}"]`)
+      ?.scrollIntoView({ block: 'nearest' })
+  }
+  return true
+}
+async function createSpaceFromList(id: number) {
+  const session = captureSession()
+  const current = await showDetails(id)
+  if (
+    current &&
+    active &&
+    isSessionCurrent(session) &&
+    selectedId.value === id &&
+    store.connectionAllowed(id, 'create_space')
+  )
+    openForm('space')
 }
 async function complete<T>(
   action: () => Promise<StorageWriteResult<T>>,
@@ -282,6 +370,7 @@ function changeConnection() {
     content: t('storage.stateConfirm', { name: item.name }),
     positiveText: t('storage.save'),
     negativeText: t('storage.cancel'),
+    ...storageConfirmationButtons,
     onPositiveClick: () => {
       if (
         !isSessionCurrent(session) ||
@@ -306,6 +395,7 @@ function revoke() {
     content: t('storageManagement.revokeConfirm'),
     positiveText: t('storage.revoke'),
     negativeText: t('storage.cancel'),
+    ...storageConfirmationButtons,
     onPositiveClick: () => {
       if (
         !isSessionCurrent(session) ||
@@ -363,6 +453,7 @@ function changeSpace(id: number, status: string, name: string) {
     content: t('storage.stateConfirm', { name }),
     positiveText: t('storage.save'),
     negativeText: t('storage.cancel'),
+    ...storageConfirmationButtons,
     onPositiveClick: () => {
       if (
         !isSessionCurrent(session) ||
@@ -384,7 +475,7 @@ watch(
     ++generation
     selectedId.value = null
     closeForm()
-    void store.load(props.scope)
+    void refresh()
   },
   { immediate: true },
 )
@@ -398,19 +489,37 @@ watch(
     }
   },
 )
-watch(selectedId, () => {
-  ++generation
-  closeForm()
-})
+watch(
+  selectedId,
+  () => {
+    ++generation
+    ++viewRequest
+    closeForm()
+  },
+  { flush: 'sync' },
+)
 watch(selected, (value) => {
   if (!value) closeForm()
 })
+watch(
+  detailTab,
+  (value) => {
+    ++viewRequest
+    closeForm()
+    const id = selectedId.value
+    const checks = id === null ? null : store.checks[id]
+    if (value === 'checks' && id !== null && !checks?.loading && (!checks?.loaded || checks.stale))
+      void store.loadChecks(id)
+  },
+  { flush: 'sync' },
+)
 const unsubscribeRefresh = subscribeStorageRefresh({
   scope: () => (props.scope.kind === 'org' ? { organizationId: props.scope.id } : {}),
   invalidate: store.markStale,
   refresh,
 })
 onUnmounted(() => {
+  active = false
   unsubscribeRefresh()
   ++generation
   clearSecrets()
@@ -418,399 +527,543 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="space-y-4">
-    <NAlert v-if="scope.kind !== 'site'" type="info">{{ t('storage.preparationHint') }}</NAlert>
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <h2 class="text-lg font-semibold text-lf-text-strong">
-        {{
-          t(
-            scope.kind === 'site'
-              ? 'storage.site'
-              : scope.kind === 'org'
-                ? 'storage.organization'
-                : 'storage.personal',
-          )
-        }}
-      </h2>
-      <div class="flex gap-2">
-        <NButton :loading="store.connections.loading" @click="refresh">{{
-          t('storage.refreshStorage')
-        }}</NButton>
-        <NButton
-          v-if="scope.kind !== 'site' && store.canManage"
-          type="primary"
-          :disabled="!store.canCreateConnection"
-          @click="openForm('connection')"
-          >{{ t('storage.createConnection') }}</NButton
-        >
-      </div>
-    </div>
-    <NAlert v-if="store.runtime?.deployment_enabled === false" type="info">{{
-      t('storageManagement.runtimeDisabled')
-    }}</NAlert>
-    <NAlert v-if="store.runtime?.maintenance" type="info">{{
-      t('storageManagement.runtimeMaintenance')
-    }}</NAlert>
-    <p
-      v-if="scope.kind !== 'site' && store.createConnectionReason"
-      class="text-sm text-lf-text-muted"
-    >
-      {{ t('storage.createConnection') }}：{{ store.createConnectionReason }}
-    </p>
-    <NAlert v-if="store.connections.error" type="error">{{ store.connections.error }}</NAlert>
-    <NAlert v-if="store.connections.stale" type="warning">{{ t('storage.stale') }}</NAlert>
-    <p v-if="store.updatedAt" class="text-xs text-lf-text-subtle">
-      {{
-        t('storage.updatedAt', {
-          time: formatDateTime(new Date(store.updatedAt).toISOString(), {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-          }),
-        })
-      }}
-    </p>
-    <NSkeleton v-if="store.connections.loading && !store.connections.loaded" height="150px" />
-    <NEmpty
-      v-else-if="store.connections.loaded && !store.connections.items.length"
-      :description="t('storage.empty')"
-      class="py-10"
-    />
-    <div v-else class="grid gap-3">
-      <NCard v-for="item in store.connections.items" :key="item.id" size="small">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p class="font-medium">{{ item.name }}</p>
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <NTag size="small">{{
-                ['enabled', 'disabled'].includes(item.status)
-                  ? t(`storage.states.${item.status}`)
-                  : t('storage.unknown')
-              }}</NTag
-              ><StorageHealth :value="item.health" /><span class="text-xs text-lf-text-subtle">{{
-                item.driver
-              }}</span>
-            </div>
-          </div>
-          <NButton secondary @click="showDetails(item.id)">{{ t('storage.details') }}</NButton>
-        </div>
-      </NCard>
-    </div>
-    <NDrawer
-      :show="selectedId !== null && !!selected"
-      :width="580"
-      placement="right"
-      class="max-w-full"
-      @update:show="
-        (value: boolean) => {
-          if (!value) selectedId = null
-        }
-      "
-    >
-      <NDrawerContent :title="selected?.name" closable>
-        <div v-if="selected" class="space-y-5">
-          <NAlert v-if="store.writeErrors[`connection:${selected.id}`]" type="warning">{{
-            store.writeErrors[`connection:${selected.id}`]
-          }}</NAlert>
-          <NAlert v-if="store.writeErrors[`revoke:${selected.id}`]" type="warning">{{
-            store.writeErrors[`revoke:${selected.id}`]
-          }}</NAlert>
-          <dl class="grid grid-cols-1 gap-3 text-sm">
-            <div>
-              <dt class="text-lf-text-subtle">{{ t('storage.endpoint') }}</dt>
-              <dd class="break-all">{{ selected.endpoint }}</dd>
-            </div>
-            <div>
-              <dt class="text-lf-text-subtle">{{ t('storage.region') }}</dt>
-              <dd>{{ selected.region }}</dd>
-            </div>
-            <div>
-              <dt class="text-lf-text-subtle">{{ t('storage.lastChecked') }}</dt>
-              <dd>
-                {{
-                  selected.checked_at
-                    ? formatDateTime(selected.checked_at, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })
-                    : t('storage.neverChecked')
-                }}
-              </dd>
-            </div>
-          </dl>
-          <div class="flex flex-wrap gap-2">
-            <StorageHealth :value="selected.health" /><NTag>{{
-              t(selected.has_auth ? 'storage.hasAuth' : 'storage.noAuth')
-            }}</NTag>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <NButton
-              :disabled="!store.connectionAllowed(selected.id, 'check_read')"
-              :loading="selectedBusy"
-              @click="complete(() => store.check(selected!.id), 'storage.checked')"
-              >{{ t('storage.readCheck') }}</NButton
-            >
-            <NButton
-              :disabled="
-                !store.connectionAllowed(selected.id, 'check_write') ||
-                !getStorageContractGate('writeCheck').available
-              "
-              :title="
-                getStorageContractGate('writeCheck').available
-                  ? undefined
-                  : t('storage.writeCheckPending')
-              "
-              @click="complete(() => store.check(selected!.id, true))"
-              >{{ t('storage.writeCheck') }}</NButton
-            >
-            <NButton
-              :disabled="
-                !store.connectionAllowed(selected.id, 'authorize_read') &&
-                !store.connectionAllowed(selected.id, 'authorize_write')
-              "
-              @click="openForm('authorization')"
-              >{{ t('storage.authorize') }}</NButton
-            >
-            <NButton
-              :disabled="!store.connectionAllowed(selected.id, 'revoke_auth')"
-              :loading="!!store.busy[`revoke:${selected.id}`]"
-              @click="revoke"
-              >{{ t('storage.revoke') }}</NButton
-            >
-            <NButton
-              :disabled="
-                !store.connectionAllowed(selected.id, 'set_status') ||
-                !['enabled', 'disabled'].includes(selected.status)
-              "
-              @click="changeConnection"
-              >{{
-                t(selected.status === 'enabled' ? 'storage.disable' : 'storage.enable')
-              }}</NButton
-            >
-          </div>
-          <div v-if="blockedActions.length" class="space-y-1 text-sm text-lf-text-muted">
-            <p v-for="item in blockedActions" :key="item.action">
-              {{ t(actionLabels[item.action]) }}：{{ item.reason }}
-            </p>
-          </div>
-          <p class="text-xs text-lf-text-subtle">{{ t('storage.checkHint') }}</p>
-          <section class="space-y-3">
-            <div class="flex items-center justify-between gap-3">
-              <h3 class="font-semibold">{{ t('storageManagement.checks') }}</h3>
-              <NButton
-                size="small"
-                :loading="selectedChecks?.loading"
-                @click="store.loadChecks(selected!.id)"
-                >{{ t('storage.refreshStorage') }}</NButton
+  <StorageAppearance>
+    <section class="min-w-0 space-y-6" data-testid="storage-manager">
+      <header class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 v-if="!embedded" class="text-lg font-semibold text-lf-text-strong">
+              {{
+                t(
+                  scope.kind === 'site'
+                    ? 'storage.site'
+                    : scope.kind === 'org'
+                      ? 'storage.organization'
+                      : 'storage.personal',
+                )
+              }}
+            </h2>
+            <NPopover trigger="click" placement="bottom-start" :width="280">
+              <template #trigger
+                ><NButton quaternary size="small" :aria-label="t('storageUi.help')">{{
+                  t('storageUi.help')
+                }}</NButton></template
               >
-            </div>
-            <p class="text-xs text-lf-text-subtle">{{ t('storageManagement.checksHint') }}</p>
-            <NAlert v-if="selectedChecks?.error" type="warning">{{ selectedChecks.error }}</NAlert>
-            <NSkeleton v-if="selectedChecks?.loading && !selectedChecks.loaded" height="80px" />
-            <NEmpty
-              v-else-if="selectedChecks?.loaded && !selectedChecks.items.length"
-              :description="t('storageManagement.checksEmpty')"
-            />
-            <NCard v-for="check in selectedChecks?.items ?? []" :key="check.check_id" size="small">
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="text-sm font-medium"
-                  >#{{ check.check_id }} · {{ checkLabel('checkModes', check.mode) }}</span
-                >
-                <NTag size="small">{{ checkLabel('checkStates', check.status) }}</NTag>
-                <NTag size="small" :type="check.authorization_activated ? 'success' : 'default'">{{
-                  t(
-                    check.authorization_activated
-                      ? 'storageManagement.authorizationActivated'
-                      : 'storageManagement.authorizationNotActivated',
-                  )
-                }}</NTag>
-              </div>
-              <p class="mt-2 text-xs text-lf-text-subtle">
-                {{ formatDateTime(check.created_at, { dateStyle: 'medium', timeStyle: 'short' }) }}
-              </p>
-              <p v-if="check.error_code" class="mt-2 text-sm text-lf-text-muted">
-                {{ storageTaskErrorMessage(check.error_code) }}
-              </p>
-              <ul class="mt-3 space-y-1 text-sm">
-                <li v-for="result in check.results" :key="result.space_id">
-                  {{ t('storageManagement.spaceResult', { id: result.space_id }) }} ·
-                  {{ checkLabel('checkStates', result.status)
-                  }}<span v-if="result.error_code">
-                    · {{ storageTaskErrorMessage(result.error_code) }}</span
-                  >
-                </li>
-              </ul>
-              <p class="mt-3 text-xs text-lf-text-muted">
-                {{ checkLabel('cleanupStates', check.cleanup_status) }} ·
-                {{ t('storageManagement.probeAccounted') }}:
-                {{
-                  Number.isSafeInteger(check.accounted_bytes) && check.accounted_bytes >= 0
-                    ? t('storage.bytes', { value: check.accounted_bytes.toLocaleString() })
-                    : t('storage.unknown')
-                }}
-              </p>
-            </NCard>
-            <NButton
-              v-if="selectedChecks?.nextCursor"
-              size="small"
-              :disabled="selectedChecks.loading"
-              @click="store.loadChecks(selected!.id, true)"
-              >{{ t('storageManagement.loadMoreChecks') }}</NButton
-            >
-          </section>
-          <div class="flex items-center justify-between gap-3">
-            <h3 class="font-semibold">{{ t('storage.spaces') }}</h3>
-            <NButton
-              :disabled="!store.connectionAllowed(selected.id, 'create_space')"
-              @click="openForm('space')"
-              >{{ t('storage.createSpace') }}</NButton
-            >
+              <p class="text-sm leading-6">{{ t('storageUi.helpText') }}</p>
+            </NPopover>
           </div>
-          <NAlert v-if="selectedSpaces?.error" type="error">{{ selectedSpaces.error }}</NAlert>
-          <NSkeleton v-if="selectedSpaces?.loading && !selectedSpaces.loaded" height="130px" />
-          <NEmpty
-            v-else-if="selectedSpaces?.loaded && !selectedSpaces.items.length"
-            :description="t('storage.spacesEmpty')"
-          />
-          <NCard
-            v-for="space in selectedSpaces?.items ?? []"
-            :key="space.id"
-            :title="space.name"
-            size="small"
-          >
-            <div class="mb-3 flex flex-wrap gap-2">
-              <NTag size="small">{{
-                ['active', 'read_only', 'disabled'].includes(space.status)
-                  ? t(`storage.states.${space.status}`)
-                  : t('storage.unknown')
-              }}</NTag
-              ><NTag size="small">{{
-                t(space.verified ? 'storage.verified' : 'storage.unverified')
-              }}</NTag>
-            </div>
-            <p v-if="space.bucket" class="mb-3 break-all text-xs text-lf-text-muted">
-              {{ space.bucket }} / {{ space.prefix }}
-            </p>
-            <StorageCapacity :space="space" />
-            <NButton
-              class="mt-3"
-              :disabled="
-                !store.spaceAllowed(selected.id, space.id) ||
-                selectedSpaces?.stale ||
-                !['active', 'read_only', 'disabled'].includes(space.status)
-              "
-              @click="changeSpace(space.id, space.status, space.name)"
-              >{{
-                t(space.status === 'active' ? 'storage.makeReadOnly' : 'storage.makeActive')
-              }}</NButton
-            >
-            <p
-              v-if="store.spaceReason(selected.id, space.id)"
-              class="mt-2 text-xs text-lf-text-muted"
-            >
-              {{ store.spaceReason(selected.id, space.id) }}
-            </p>
-          </NCard>
+          <p class="mt-1 text-sm leading-6 text-lf-text-muted">{{ t('storageUi.description') }}</p>
         </div>
-      </NDrawerContent>
-    </NDrawer>
-    <NModal
-      :show="formKind !== null"
-      preset="card"
-      class="max-w-lg"
-      :title="
-        t(
-          formKind === 'connection'
-            ? 'storage.createConnection'
-            : formKind === 'space'
-              ? 'storage.createSpace'
-              : 'storage.authorization',
-        )
-      "
-      @update:show="
-        (value: boolean) => {
-          if (!value) closeForm()
-        }
-      "
-    >
-      <NAlert v-if="formError || store.writeErrors[writeKey]" type="error" class="mb-4">{{
-        formError || store.writeErrors[writeKey]
+        <div class="flex flex-wrap items-center gap-2">
+          <NButton :loading="store.connections.loading" @click="refresh">{{
+            t('storage.refreshStorage')
+          }}</NButton>
+          <NButton
+            v-if="scope.kind !== 'site' && store.canManage"
+            type="primary"
+            :disabled="!store.canCreateConnection"
+            @click="openForm('connection')"
+            >{{ t('storage.createConnection') }}</NButton
+          >
+        </div>
+      </header>
+      <NAlert v-if="store.runtime?.deployment_enabled === false" type="info" :bordered="false">{{
+        t('storageManagement.runtimeDisabled')
       }}</NAlert>
-      <NForm label-placement="top" @submit.prevent="submit">
-        <template v-if="formKind === 'authorization'">
-          <NFormItem :label="t('storageManagement.authorizationPurpose')"
-            ><NSelect
-              :value="authorizationWrite ? 'write' : 'read'"
-              :options="authorizationOptions"
-              @update:value="(value) => (authorizationWrite = value === 'write')"
-          /></NFormItem>
-          <p class="mb-3 text-sm text-lf-text-muted">
-            {{ t('storageManagement.authorizationPurposeHint') }}
-          </p>
-          <p class="mb-4 text-sm text-lf-text-muted">{{ t('storage.secretHint') }}</p>
-          <NFormItem :label="t('storage.accessKey')" required
-            ><NInput v-model:value="secrets.access_key_id" :input-props="{ autocomplete: 'off' }"
-          /></NFormItem>
-          <NFormItem :label="t('storage.secretKey')" required
-            ><NInput
-              v-model:value="secrets.secret_access_key"
-              type="password"
-              show-password-on="click"
-              :input-props="{ autocomplete: 'new-password' }"
-          /></NFormItem>
-          <NFormItem :label="t('storage.sessionToken')"
-            ><NInput
-              v-model:value="secrets.session_token"
-              type="password"
-              :input-props="{ autocomplete: 'new-password' }"
-          /></NFormItem>
-        </template>
-        <template v-else>
-          <NFormItem :label="t('storage.name')" required
-            ><NInput v-model:value="form.name"
-          /></NFormItem>
-          <template v-if="formKind === 'connection'">
-            <NFormItem :label="t('storage.endpoint')" required
-              ><NInput v-model:value="form.endpoint" placeholder="https://s3.example.com"
+      <NAlert v-if="store.runtime?.maintenance" type="info" :bordered="false">{{
+        t('storageManagement.runtimeMaintenance')
+      }}</NAlert>
+      <p
+        v-if="scope.kind !== 'site' && store.createConnectionReason"
+        class="text-sm text-lf-text-muted"
+      >
+        {{ t('storage.createConnection') }}：{{ store.createConnectionReason }}
+      </p>
+      <NAlert v-if="store.connections.error" type="error">{{ store.connections.error }}</NAlert>
+      <NAlert v-if="store.connections.stale" type="warning">{{ t('storage.stale') }}</NAlert>
+      <div
+        v-if="store.connections.loading && !store.connections.loaded"
+        class="lf-panel space-y-4 p-5"
+        aria-busy="true"
+      >
+        <NSkeleton text width="30%" /><NSkeleton text :repeat="3" />
+      </div>
+      <NEmpty
+        v-else-if="store.connections.loaded && !store.connections.items.length"
+        :description="t('storage.empty')"
+        class="lf-panel py-12"
+      >
+        <template #extra
+          ><p class="text-sm text-lf-text-muted">
+            {{
+              t(scope.kind === 'site' ? 'storageUi.emptySiteHint' : 'storageUi.emptyConnectionHint')
+            }}
+          </p></template
+        >
+      </NEmpty>
+      <div v-else class="space-y-4" data-testid="storage-connections">
+        <section
+          v-for="item in store.connections.items"
+          :key="item.id"
+          class="lf-panel min-w-0 p-4 sm:p-5"
+          :data-connection-id="item.id"
+        >
+          <div
+            class="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-lf-border-soft pb-4"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span
+                  class="rounded border border-lf-border-soft px-1.5 py-0.5 text-[11px] font-medium tracking-wide text-lf-text-muted"
+                  >{{
+                    item.driver === 's3'
+                      ? 'S3'
+                      : item.driver === 'local'
+                        ? 'Local'
+                        : t('storageUi.unknownDriver')
+                  }}</span
+                >
+                <h3
+                  class="min-w-0 text-sm font-semibold break-words text-lf-text-strong [overflow-wrap:anywhere]"
+                >
+                  {{ item.name }}
+                </h3>
+              </div>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <NTag size="small" :bordered="false">{{
+                  ['enabled', 'disabled'].includes(item.status)
+                    ? t(`storage.states.${item.status}`)
+                    : t('storage.unknown')
+                }}</NTag>
+                <StorageHealth :value="item.health" />
+                <span v-if="store.spaces[item.id]?.loaded" class="text-xs text-lf-text-muted">{{
+                  t('storageUi.spacesCount', { count: store.spaces[item.id]?.items.length ?? 0 })
+                }}</span>
+              </div>
+            </div>
+            <NButton size="small" secondary @click="showDetails(item.id, $event)">{{
+              t('storage.details')
+            }}</NButton>
+          </div>
+          <StorageSpaces
+            :connection-id="item.id"
+            compact
+            @inspect="(spaceId, event) => showDetails(item.id, event, spaceId)"
+            @create="createSpaceFromList(item.id)"
+          />
+        </section>
+      </div>
+      <p v-if="store.updatedAt" class="text-xs text-lf-text-muted">
+        {{
+          t('storage.updatedAt', {
+            time: formatDateTime(new Date(store.updatedAt).toISOString(), {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            }),
+          })
+        }}
+      </p>
+      <NDrawer
+        :show="selectedId !== null && !!selected"
+        :width="640"
+        placement="right"
+        class="max-w-full storage-manager-drawer"
+        @update:show="
+          (value: boolean) => {
+            if (!value) selectedId = null
+          }
+        "
+        @after-leave="restoreFocus"
+      >
+        <NDrawerContent :title="selected?.name" closable>
+          <template #header>
+            <div class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 pr-2">
+              <span
+                class="min-w-0 flex-1 text-base font-semibold break-words [overflow-wrap:anywhere]"
+                >{{ selected?.name }}</span
+              >
+              <NDropdown
+                trigger="click"
+                :options="moreActions"
+                placement="bottom-end"
+                @select="
+                  (key) => {
+                    if (key === 'revoke') revoke()
+                  }
+                "
+              >
+                <NButton
+                  quaternary
+                  size="small"
+                  :loading="selectedId !== null && !!store.busy[`revoke:${selectedId}`]"
+                  >{{ t('storageUi.moreActions') }}</NButton
+                >
+              </NDropdown>
+            </div>
+          </template>
+          <div v-if="selected" class="min-w-0 space-y-4">
+            <NAlert v-if="store.writeErrors[`connection:${selected.id}`]" type="warning">{{
+              store.writeErrors[`connection:${selected.id}`]
+            }}</NAlert>
+            <NAlert v-if="store.writeErrors[`revoke:${selected.id}`]" type="warning">{{
+              store.writeErrors[`revoke:${selected.id}`]
+            }}</NAlert>
+            <StorageTabs
+              v-model:value="detailTab"
+              :tabs="detailTabs"
+              :label="t('storage.details')"
+              keep-mounted
+            >
+              <template #spaces>
+                <div class="space-y-4 pt-2">
+                  <div class="flex flex-wrap items-center justify-between gap-3">
+                    <span class="text-sm text-lf-text-muted">{{
+                      selectedSpaces?.loaded
+                        ? t('storageUi.spacesCount', { count: selectedSpaces.items.length })
+                        : t('storage.spaces')
+                    }}</span>
+                    <NButton
+                      type="primary"
+                      size="small"
+                      :disabled="!store.connectionAllowed(selected.id, 'create_space')"
+                      @click="openForm('space')"
+                      >{{ t('storage.createSpace') }}</NButton
+                    >
+                  </div>
+                  <p
+                    v-if="store.connectionReason(selected.id, 'create_space')"
+                    class="text-xs leading-5 text-lf-text-muted"
+                  >
+                    {{ t('storage.createSpace') }}：{{
+                      store.connectionReason(selected.id, 'create_space')
+                    }}
+                  </p>
+                  <StorageSpaces
+                    :connection-id="selected.id"
+                    @change="(space) => changeSpace(space.id, space.status, space.name)"
+                  />
+                </div>
+              </template>
+              <template #connection>
+                <div class="space-y-6 pt-2">
+                  <dl class="grid min-w-0 grid-cols-1 gap-4 text-sm">
+                    <div>
+                      <dt class="mb-1 text-xs text-lf-text-muted">{{ t('storage.endpoint') }}</dt>
+                      <dd class="break-all">{{ selected.endpoint || '—' }}</dd>
+                    </div>
+                    <div>
+                      <dt class="mb-1 text-xs text-lf-text-muted">{{ t('storage.region') }}</dt>
+                      <dd>{{ selected.region || '—' }}</dd>
+                    </div>
+                    <div>
+                      <dt class="mb-1 text-xs text-lf-text-muted">
+                        {{ t('storage.lastChecked') }}
+                      </dt>
+                      <dd>
+                        {{
+                          selected.checked_at
+                            ? formatDateTime(selected.checked_at, {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              })
+                            : t('storage.neverChecked')
+                        }}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <StorageHealth :value="selected.health" /><NTag
+                      :bordered="false"
+                      size="small"
+                      >{{ t(selected.has_auth ? 'storage.hasAuth' : 'storage.noAuth') }}</NTag
+                    >
+                  </div>
+                  <section class="space-y-3 border-t border-lf-border-soft pt-5">
+                    <h3 class="text-sm font-semibold">{{ t('storage.authorization') }}</h3>
+                    <p class="text-sm leading-6 text-lf-text-muted">
+                      {{ t('storageUi.authorizationHint') }}
+                    </p>
+                    <NButton
+                      type="primary"
+                      :disabled="
+                        !store.connectionAllowed(selected.id, 'authorize_read') &&
+                        !store.connectionAllowed(selected.id, 'authorize_write')
+                      "
+                      @click="openForm('authorization')"
+                      >{{ t('storage.authorize') }}</NButton
+                    >
+                    <p
+                      v-for="item in blockedActions.filter((item) =>
+                        ['authorize_read', 'authorize_write', 'revoke_auth'].includes(item.action),
+                      )"
+                      :key="item.action"
+                      class="text-xs leading-5 text-lf-text-muted"
+                    >
+                      {{ t(actionLabels[item.action]) }}：{{ item.reason }}
+                    </p>
+                  </section>
+                  <section class="space-y-3 border-t border-lf-border-soft pt-5">
+                    <h3 class="text-sm font-semibold">{{ t('storageUi.connectionSettings') }}</h3>
+                    <p class="text-sm leading-6 text-lf-text-muted">
+                      {{ t('storageUi.connectionStateHint') }}
+                    </p>
+                    <NButton
+                      :disabled="
+                        !store.connectionAllowed(selected.id, 'set_status') ||
+                        !['enabled', 'disabled'].includes(selected.status)
+                      "
+                      @click="changeConnection"
+                      >{{
+                        t(selected.status === 'enabled' ? 'storage.disable' : 'storage.enable')
+                      }}</NButton
+                    >
+                    <p
+                      v-if="store.connectionReason(selected.id, 'set_status')"
+                      class="text-xs leading-5 text-lf-text-muted"
+                    >
+                      {{ t('storage.state') }}：{{
+                        store.connectionReason(selected.id, 'set_status')
+                      }}
+                    </p>
+                  </section>
+                </div>
+              </template>
+              <template #checks>
+                <div class="space-y-4 pt-2">
+                  <p class="text-sm leading-6 text-lf-text-muted">
+                    {{ t('storageUi.checkDescription') }}
+                  </p>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <NButton
+                      type="primary"
+                      :disabled="!store.connectionAllowed(selected.id, 'check_read')"
+                      :loading="selectedBusy"
+                      @click="complete(() => store.check(selected!.id), 'storage.checked')"
+                      >{{ t('storage.readCheck') }}</NButton
+                    >
+                    <NButton
+                      :disabled="
+                        !store.connectionAllowed(selected.id, 'check_write') ||
+                        !getStorageContractGate('writeCheck').available
+                      "
+                      @click="complete(() => store.check(selected!.id, true))"
+                      >{{ t('storage.writeCheck') }}</NButton
+                    >
+                    <NButton
+                      quaternary
+                      size="small"
+                      :loading="selectedChecks?.loading"
+                      @click="store.loadChecks(selected!.id)"
+                      >{{ t('storageUi.refreshChecks') }}</NButton
+                    >
+                  </div>
+                  <p
+                    v-for="item in blockedActions.filter((item) =>
+                      ['check_read', 'check_write'].includes(item.action),
+                    )"
+                    :key="item.action"
+                    class="text-xs leading-5 text-lf-text-muted"
+                  >
+                    {{ t(actionLabels[item.action]) }}：{{ item.reason }}
+                  </p>
+                  <p
+                    v-if="!getStorageContractGate('writeCheck').available"
+                    class="text-xs text-lf-text-muted"
+                  >
+                    {{ t('storage.writeCheckPending') }}
+                  </p>
+                  <NAlert v-if="selectedChecks?.error" type="warning">{{
+                    selectedChecks.error
+                  }}</NAlert>
+                  <p v-if="selectedChecks?.stale" class="text-xs leading-5 text-lf-text-muted">
+                    {{ t('storage.stale') }}
+                  </p>
+                  <NSkeleton
+                    v-if="selectedChecks?.loading && !selectedChecks.loaded"
+                    height="100px"
+                  />
+                  <NEmpty
+                    v-else-if="selectedChecks?.loaded && !selectedChecks.items.length"
+                    :description="t('storageManagement.checksEmpty')"
+                    class="py-8"
+                  />
+                  <div class="divide-y divide-lf-border-soft">
+                    <details
+                      v-for="check in selectedChecks?.items ?? []"
+                      :key="check.check_id"
+                      class="group py-4 first:pt-0"
+                    >
+                      <summary
+                        class="cursor-pointer rounded text-sm focus-visible:outline-2 focus-visible:outline-brand-500"
+                      >
+                        <span class="ml-1 font-medium"
+                          >#{{ check.check_id }} · {{ checkLabel('checkModes', check.mode) }}</span
+                        >
+                        <NTag
+                          class="ml-2"
+                          size="small"
+                          :bordered="false"
+                          :type="
+                            ['failed', 'unavailable', 'blocked'].includes(check.status)
+                              ? 'warning'
+                              : 'default'
+                          "
+                          >{{ checkLabel('checkStates', check.status) }}</NTag
+                        >
+                        <span class="mt-2 block text-xs text-lf-text-muted">{{
+                          formatDateTime(check.created_at, {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })
+                        }}</span>
+                      </summary>
+                      <div class="mt-4 space-y-3 border-l-2 border-lf-border-soft pl-3 text-sm">
+                        <NTag
+                          size="small"
+                          :bordered="false"
+                          :type="check.authorization_activated ? 'success' : 'default'"
+                          >{{
+                            t(
+                              check.authorization_activated
+                                ? 'storageManagement.authorizationActivated'
+                                : 'storageManagement.authorizationNotActivated',
+                            )
+                          }}</NTag
+                        >
+                        <p v-if="check.error_code">
+                          {{ storageTaskErrorMessage(check.error_code) }}
+                        </p>
+                        <ul class="space-y-2">
+                          <li v-for="result in check.results" :key="result.space_id">
+                            {{ t('storageManagement.spaceResult', { id: result.space_id }) }} ·
+                            {{ checkLabel('checkStates', result.status)
+                            }}<span v-if="result.error_code">
+                              · {{ storageTaskErrorMessage(result.error_code) }}</span
+                            >
+                          </li>
+                        </ul>
+                        <p class="text-xs leading-5 text-lf-text-muted">
+                          {{ checkLabel('cleanupStates', check.cleanup_status) }} ·
+                          {{ t('storageManagement.probeAccounted') }}:
+                          {{ formatStorageBytes(check.accounted_bytes) }}
+                        </p>
+                        <p class="text-xs leading-5 text-lf-text-muted">
+                          {{ t('storageUi.checkFacts') }}
+                        </p>
+                      </div>
+                    </details>
+                  </div>
+                  <NButton
+                    v-if="selectedChecks?.nextCursor"
+                    size="small"
+                    :disabled="selectedChecks.loading"
+                    @click="store.loadChecks(selected!.id, true)"
+                    >{{ t('storageManagement.loadMoreChecks') }}</NButton
+                  >
+                </div>
+              </template>
+            </StorageTabs>
+          </div>
+        </NDrawerContent>
+      </NDrawer>
+      <NModal
+        :show="formKind !== null"
+        preset="card"
+        class="max-w-lg"
+        :style="{ width: 'min(512px, calc(100vw - 32px))' }"
+        :title="
+          t(
+            formKind === 'connection'
+              ? 'storage.createConnection'
+              : formKind === 'space'
+                ? 'storage.createSpace'
+                : 'storage.authorization',
+          )
+        "
+        @update:show="
+          (value: boolean) => {
+            if (!value) closeForm()
+          }
+        "
+      >
+        <NAlert v-if="formError || store.writeErrors[writeKey]" type="error" class="mb-4">{{
+          formError || store.writeErrors[writeKey]
+        }}</NAlert>
+        <NForm label-placement="top" @submit.prevent="submit">
+          <template v-if="formKind === 'authorization'">
+            <NFormItem :label="t('storageManagement.authorizationPurpose')"
+              ><NSelect
+                :value="authorizationWrite ? 'write' : 'read'"
+                :options="authorizationOptions"
+                @update:value="(value) => (authorizationWrite = value === 'write')"
             /></NFormItem>
-            <NFormItem :label="t('storage.region')" required
-              ><NInput v-model:value="form.region"
+            <p class="mb-3 text-sm text-lf-text-muted">
+              {{ t('storageManagement.authorizationPurposeHint') }}
+            </p>
+            <p class="mb-4 text-sm text-lf-text-muted">{{ t('storage.secretHint') }}</p>
+            <NFormItem :label="t('storage.accessKey')" required
+              ><NInput v-model:value="secrets.access_key_id" :input-props="{ autocomplete: 'off' }"
             /></NFormItem>
-            <NFormItem :label="t('storage.pathStyle')"
-              ><NSwitch v-model:value="form.path_style"
+            <NFormItem :label="t('storage.secretKey')" required
+              ><NInput
+                v-model:value="secrets.secret_access_key"
+                type="password"
+                show-password-on="click"
+                :input-props="{ autocomplete: 'new-password' }"
+            /></NFormItem>
+            <NFormItem :label="t('storage.sessionToken')"
+              ><NInput
+                v-model:value="secrets.session_token"
+                type="password"
+                :input-props="{ autocomplete: 'new-password' }"
             /></NFormItem>
           </template>
           <template v-else>
-            <NFormItem :label="t('storage.bucket')" required
-              ><NInput v-model:value="form.bucket"
+            <NFormItem :label="t('storage.name')" required
+              ><NInput v-model:value="form.name"
             /></NFormItem>
-            <NFormItem :label="t('storage.prefix')"
-              ><NInput v-model:value="form.prefix"
-            /></NFormItem>
-            <NFormItem :label="t('storage.capacityBytes')" required
-              ><NInputNumber
-                :value="form.capacity_bytes"
-                :min="1"
-                :max="Number.MAX_SAFE_INTEGER"
-                :precision="0"
-                class="w-full"
-                @update:value="(value) => (form.capacity_bytes = value ?? 0)"
-            /></NFormItem>
+            <template v-if="formKind === 'connection'">
+              <NFormItem :label="t('storage.endpoint')" required
+                ><NInput v-model:value="form.endpoint" placeholder="https://s3.example.com"
+              /></NFormItem>
+              <NFormItem :label="t('storage.region')" required
+                ><NInput v-model:value="form.region"
+              /></NFormItem>
+              <NFormItem :label="t('storage.pathStyle')"
+                ><NSwitch v-model:value="form.path_style"
+              /></NFormItem>
+            </template>
+            <template v-else>
+              <NFormItem :label="t('storage.bucket')" required
+                ><NInput v-model:value="form.bucket"
+              /></NFormItem>
+              <NFormItem :label="t('storage.prefix')"
+                ><NInput v-model:value="form.prefix"
+              /></NFormItem>
+              <NFormItem :label="t('storageUi.quotaLabel')" required>
+                <StorageCapacityInput
+                  :value="form.capacity_bytes"
+                  :label="t('storageUi.quotaLabel')"
+                  @update:value="(value) => (form.capacity_bytes = value)"
+                />
+              </NFormItem>
+            </template>
           </template>
-        </template>
-      </NForm>
-      <p v-if="!formAllowed" class="mt-3 text-sm text-lf-text-muted">{{ formReason }}</p>
-      <template #footer
-        ><div class="flex justify-end gap-2">
-          <NButton @click="closeForm">{{ t('storage.cancel') }}</NButton
-          ><NButton
-            type="primary"
-            :loading="!!store.busy[writeKey]"
-            :disabled="!formAllowed || !!store.unknownWrites[writeKey]"
-            @click="submit"
-            >{{ t('storage.save') }}</NButton
-          >
-        </div></template
-      >
-    </NModal>
-  </section>
+        </NForm>
+        <p v-if="!formAllowed" class="mt-3 text-sm text-lf-text-muted">{{ formReason }}</p>
+        <template #footer
+          ><div class="flex justify-end gap-2">
+            <NButton @click="closeForm">{{ t('storage.cancel') }}</NButton
+            ><NButton
+              type="primary"
+              :loading="!!store.busy[writeKey]"
+              :disabled="!formAllowed || !formValid || !!store.unknownWrites[writeKey]"
+              @click="submit"
+              >{{ t('storage.save') }}</NButton
+            >
+          </div></template
+        >
+      </NModal>
+    </section>
+  </StorageAppearance>
 </template>
