@@ -1,4 +1,27 @@
 export default {
+  authorizationPurpose: '授权用途',
+  authorizeRead: '恢复只读授权',
+  authorizeWrite: '授权并写检查',
+  authorizationPurposeHint:
+    '只读授权用于恢复已有对象读取；写授权会执行写入检查。刷新不会改变已选用途。',
+  runtimeDisabled: '部署已关闭新建远端存储写入；已有数据和可用恢复操作仍按各自动作显示。',
+  deploymentSetup:
+    '管理员需在服务端配置 server.storage.enabled（或环境变量 LINGUAFLOW_STORAGE_ENABLED）启用所需能力，并重启服务使其生效。',
+  runtimeMaintenance: '存储正在维护，操作以当前服务端能力为准。',
+  modeRestricted: '当前部署不支持保存此政策模式。',
+  useSiteOnly: '改为仅站点存储',
+  siteOnlyHint: '同时将默认选择改为站点存储；确认后仍需点击保存。',
+  policyConflict:
+    '服务端政策已变化。当前草稿已保留，请重新载入或核对差异后采用当前基线，再点击保存。',
+  reloadPolicy: '重新载入已保存政策',
+  reviewPolicy: '核对差异',
+  adoptBaseline: '采用当前基线',
+  policyComparison:
+    '原基线：{before}；服务端当前值：{after}；保留草稿：{draft}。采用当前基线仅确认已核对差异，不会保存草稿。',
+  policyMaintenance: '存储处于维护状态，仍可保存当前部署允许的合法政策。',
+  policyConfiguration: '已保存政策的模式与默认选择需要核对，请明确调整后保存。',
+  savedPendingRefresh: '政策已保存，状态待刷新。不会自动再次提交。',
+  unsavedDraft: '有未保存草稿',
   accounted: '账本总占用',
   available: '可用配额',
   capacityHint:
