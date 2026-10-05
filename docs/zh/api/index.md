@@ -80,18 +80,18 @@ curl -s http://127.0.0.1:18080/api/v1/backends
 
 ### 6. 探测可用模型列表
 
-使用当场提供的凭据向服务商拉取模型列表（**不落库**），用于填写创建后端时的 `options.model`：
+使用当场提供的密钥向服务商拉取模型列表（**不落库**），用于填写创建后端时的 `options.model`：
 
 ```bash
 curl -s -X POST http://127.0.0.1:18080/api/v1/backends/models \
   -H "Content-Type: application/json" \
-  -d '{"type":"openai","api_key":"sk-...","base_url":""}'
+  -d '{"type":"openai","secret":"sk-...","base_url":""}'
 ```
 
 成功时返回 `items` 数组，每项含 `id`（可直接写入 `model`）与 `name`。`type` 为 `openai` / `anthropic` / `google`；`base_url` 可选。
 
 ::: tip 创建后端时
-`CreateBackendRequest` / `UpdateBackendRequest` 的 `options` 与其中的 `model` 均为 **必填**，不再有隐式默认模型名。
+`CreateBackendRequest` 的密钥与凭据二选一：提供 `secret` 会创建一份新凭据并绑定该后端，提供 `credential_id` 则绑定一份已有凭据（服务商与端点必须匹配）。`UpdateBackendRequest` 中两者同时提供会报错；都省略时保留现有凭据绑定。`options` 与其中的 `model` 仍为**必填**，且旧字段 `options.api_key` 已被移除。
 :::
 
 上传资源、创建作业等涉及 multipart 或较长请求体，建议直接对照 **Redoc** 中的对应接口与示例。
@@ -300,6 +300,77 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects/1/qa-recheck \
 | `segment_group_keys`| []string | 按章节分组键选段（仅 EPUB 等多章节资源，传 `meta.epub_file` 值）；优先级：分组键 > 段落 > 资源      |
 
 选中资源上存在运行中任务时跳过该资源并在响应的 `resources_skipped_busy` 中报告（含占用它的任务 ID），避免与作业写入互相覆盖。响应为统计摘要（`QaRecheckResult`）：重检段落/资源数、新增（`issues_new`）与清除（`issues_cleared`）问题数、继承裁决数（`dispositions_inherited`）、无译文/并发修改跳过数与按资源明细。字段全集见 Redoc 中 `QaRecheckRequest` / `QaRecheckResult`。
+
+### 15. 凭据管理（AI 密钥）
+
+后端的密钥以**凭据**形式加密存储，保存后不可读取明文。凭据支持版本化轮换：
+
+```bash
+# 列出自己的凭据（组织凭据经 /orgs/{orgId}/credentials 访问）
+curl -s http://127.0.0.1:18080/api/v1/credentials \
+  -H "Authorization: Bearer <token>"
+
+# 轮换：为新密钥创建一个新版本，新执行使用新版本，已接受任务继续用原版本
+curl -s -X POST http://127.0.0.1:18080/api/v1/credentials/{credentialId}/versions \
+  -H "Content-Type: application/json" \
+  -d '{"secret":"sk-new..."}'
+
+# 撤销某个版本（不可恢复；绑定该版本的后续执行会失败）
+curl -s -X POST http://127.0.0.1:18080/api/v1/credentials/{credentialId}/versions/{version}/revoke \
+  -H "Authorization: Bearer <token>"
+
+# 回收非当前且无任务引用的旧版本
+curl -s -X POST http://127.0.0.1:18080/api/v1/credentials/{credentialId}/collect \
+  -H "Authorization: Bearer <token>"
+```
+
+要点：
+
+- `GET` 类接口只返回凭据元数据（服务商、端点、版本状态），永不返回密钥本体
+- 轮换语义：每个版本接受后即被任务「钉住」，已接受的任务继续用原版本完成，不因轮换中断
+- 撤销版本影响所有仍绑定该版本的执行与恢复，操作前请确认没有在途任务
+
+产品侧操作见 [翻译配置 · 使用 · AI 后端](/zh/guide/translation-config#ai-后端)。
+
+### 16. 任务中心（跨项目任务列表）
+
+`GET /operations` 返回你有权限查看的跨项目任务（翻译与术语同步），按项目读权限过滤：
+
+```bash
+curl -s "http://localhost:8080/api/v1/operations?status=failed&limit=20" \
+  -H "Authorization: Bearer <token>"
+
+# 各状态计数与近 7 天失败数
+curl -s http://localhost:8080/api/v1/operations/summary \
+  -H "Authorization: Bearer <token>"
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `task_type` | 任务类型（`translation` / 术语同步）；`trigger_type` 过滤仅允许显式指定任务类型时使用 |
+| `project_id` | 限定项目；未授权或不存在的项目返回空列表（系统管理员无额外跨项目权限） |
+| `state` | `active`（默认）/ `terminal` / `all`；与 `status` 互斥 |
+| `status` | `pending` / `running` / `paused` / `completed` / `failed` / `cancelled` |
+| `updated_from` / `updated_before` | 更新时间区间 `[from, before)` |
+| `cursor` / `limit` | 版本化游标分页（`limit` 1–100，默认 50） |
+
+默认只返回活跃任务；组织成员可看到同项目其他成员创建的任务。轻量任务视图另有 `GET /jobs`（跨项目任务列表）与 `GET /jobs/summary`。任务响应**不再包含**队列位置字段；实例队列与限流数据收敛到管理端 runtime 摘要。产品侧见 [项目管理 · 任务中心](/zh/guide/projects#任务中心跨项目任务列表)。
+
+### 17. 用户资料与密码（服务器模式）
+
+```bash
+# 部分更新自己的资料：省略字段保留，空串清空，原子生效
+curl -s -X PUT http://localhost:8080/api/v1/users/me \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"display_name": "新昵称", "email": "new@example.com"}'
+
+# 修改密码（需提供当前密码；改密后现有会话不失效）
+curl -s -X PUT http://localhost:8080/api/v1/users/me/password \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"current_password": "...", "new_password": "..."}'
+```
+
+密码规则：至少 8 个 Unicode 字符且不超过 72 字节。`PUT /auth/logout` 只撤销当前登录用户自己的刷新令牌，重复提交幂等返回 204。产品侧入口见用户菜单的 **个人资料 / 安全设置**。
 
 ## 错误码
 

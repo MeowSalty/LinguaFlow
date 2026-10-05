@@ -42,22 +42,31 @@ chmod +x linguaflow
 
 ### 方式 B：Docker
 
+容器默认是服务器模式，启动前必须注入密钥与初始管理员（缺一即拒绝启动）：
+
 ```bash
 docker pull ghcr.io/meowsalty/linguaflow:latest
-docker run --rm -p 8080:8080 ghcr.io/meowsalty/linguaflow:latest
+docker run --rm -p 8080:8080 \
+  -e LINGUAFLOW_JWT_SECRET="$(openssl rand -base64 32)" \
+  -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="$(openssl rand -base64 32)" \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="changeme-please" \
+  ghcr.io/meowsalty/linguaflow:latest
 ```
 
-在浏览器打开 `http://localhost:8080`。
+在浏览器打开 `http://localhost:8080`，用上面的管理员账号登录。
 
 ::: warning Docker 与二进制行为不同
 
 |      | 二进制 / 源码双击      | Docker 默认                   |
 | ---- | ---------------------- | ----------------------------- |
-| 模式 | **本地模式**（免登录） | **服务器模式**（需注册/登录） |
+| 模式 | **本地模式**（免登录） | **服务器模式**（需登录）      |
 | 端口 | `18080`                | `8080`                        |
+| 密钥 | 自动生成               | 必须显式注入                  |
 | 适用 | 个人本机               | 容器部署、联调                |
 
-服务器模式仍在完善中，仅建议试用。详见 [使用模式](/zh/guide/modes)。
+服务器模式仍在完善中，仅建议试用。正式部署（含密钥保存与 Compose 示例）见 [安装部署](/zh/guide/installation)，模式差异见 [使用模式](/zh/guide/modes)。
 :::
 
 ### 方式 C：从源码构建
@@ -73,17 +82,20 @@ docker run --rm -p 8080:8080 ghcr.io/meowsalty/linguaflow:latest
 1. 打开侧边栏 **AI 后端**
 2. 点击 **添加后端**
 3. 选择提供商并填写：
-
    | 提供商        | 类型        | 示例模型            |
    | ------------- | ----------- | ------------------- |
    | OpenAI        | `openai`    | `gpt-4o-mini`       |
    | Anthropic     | `anthropic` | `claude-sonnet-4-5` |
    | Google Gemini | `google`    | `gemini-2.5-flash`  |
 
-4. 填入 **API Key**（必填）与 **模型**（必填）
-5. 推荐：点击 **探测模型**，用当前 Key / Base URL 拉取可用列表后选择模型 ID
+4. 填入 **密钥**（保存后不再回显）与 **模型**（必填）
+5. 推荐：点击 **探测模型**，用临时输入的密钥 / Base URL 拉取可用列表后选择模型 ID（探测用的密钥仅当次生效，不会保存）
 6. 如需代理或本地模型（Ollama、LM Studio、Azure 等），填写兼容的 **Base URL** 后再探测或手填模型
 7. 保存
+
+::: tip 密钥如何存储
+后端的密钥以**凭据**形式加密保存，界面上只能看到凭据编号与版本，永远无法再查看明文。多个后端可共享同一份凭据并按版本轮换；管理入口在 AI 后端页的 **管理凭据**。本地模式下密钥由自动生成的 keyring 文件加密，备份数据目录时请一并备份。
+:::
 
 ::: tip 本地模型
 OpenAI 类型可对接 OpenAI 兼容接口，例如 Ollama：`http://localhost:11434/v1`。部分网关仅接受流式请求时，在后端选项中开启 **流式请求**。

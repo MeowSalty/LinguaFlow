@@ -1,6 +1,6 @@
 # 管理员后台
 
-服务器模式下，LinguaFlow 提供一套管理员接口与界面，用于多用户管理、系统监控与操作审计。本地模式为单用户，无需管理员能力，本页内容不适用。
+服务器模式下，LinguaFlow 提供一套管理员接口与界面，用于多用户管理、系统设置、运行时监控与操作审计。本地模式为单用户，无需管理员能力，本页内容不适用。
 
 ::: tip 适用范围
 管理员后台仅在**服务器模式**（`linguaflow serve`）下可用。本地模式自动以 `local` 用户身份运行，不存在多用户场景。
@@ -10,9 +10,13 @@
 
 管理员的判定是用户表中的 `role` 字段为 `admin`。获得管理员身份的方式：
 
-- **启动时指定**：通过环境变量 `LINGUAFLOW_ADMIN_USERNAME` / `LINGUAFLOW_ADMIN_PASSWORD` 在首次启动时创建初始管理员账户（详见 [使用模式 · 管理员配置](/zh/guide/modes#管理员配置)）。
-- **自动提升**：未设置上述环境变量时，若 `registration.auto_admin` 为 `true`（默认），首个注册的用户自动成为管理员。
-- **既有管理员授权**：已登录的管理员可在用户管理中把其他用户的角色改为 `admin`。
+- **首次初始化** — 空实例首次启动时通过 `bootstrap.admin` 输入（环境变量 `LINGUAFLOW_BOOTSTRAP_ADMIN_*` 或部署文档）创建初始管理员；也可用 `linguaflow admin initialize` 命令显式初始化（详见 [使用模式 · 管理员配置](/zh/guide/modes#管理员配置)）。
+- **管理员追加** — 已初始化的实例可由维护命令 `linguaflow admin create` 追加管理员；已登录的管理员也可在用户管理中把其他用户的角色改为 `admin`。
+- **管理员找回** — 初始管理员密码丢失或账户被停用时，用 `linguaflow admin recover` 将已有账户恢复为活跃管理员、重置密码并吊销其刷新令牌。
+
+::: warning 注册不再自动产生管理员
+公开注册一律创建普通用户；旧版「首个注册用户自动成为管理员」（`registration.auto_admin`）行为已移除。
+:::
 
 ::: warning 末位管理员保护
 系统不允许移除最后一个活跃管理员账户。下列操作会被拒绝并返回 `409 conflict`：
@@ -34,26 +38,51 @@
 | 创建用户 | 直接创建账户（绕过注册流程），可指定 `role` 为 `user` 或 `admin` |
 | 更新用户 | 修改显示名、邮箱、角色、启用状态 |
 | 停用用户 | 软删除：置 `active=false`，账户无法再登录，但历史数据保留 |
-| 重置密码 | 为用户设置新密码（最少 8 位） |
+| 重置密码 | 为用户设置新密码（至少 8 个字符） |
 
-创建用户与重置密码时，密码长度至少 8 位，邮箱需包含 `@`。用户名重复会返回 `409 conflict`。
+创建用户与重置密码时，密码长度至少 8 个字符，邮箱需包含 `@`。用户名重复会返回 `409 conflict`。
 
 对应接口见本页 [API 速览](#api-速览)。
 
-## 系统统计
+## 系统设置
 
-`/admin/stats` 返回全平台的聚合指标，用于了解整体规模：
+管理端设置页（`/admin/settings`）当前提供一个**开放注册**开关：
 
-| 字段 | 含义 |
-| --- | --- |
-| `total_users` | 用户总数 |
-| `active_users` | 启用中的用户数 |
-| `total_projects` | 项目总数 |
-| `total_organizations` | 组织总数 |
-| `total_jobs` | 作业总数 |
-| `total_resources` | 资源文件总数 |
+- 开关开启后，注册页接受新用户注册；关闭时注册接口返回 403，注册页显示「注册已关闭」提示
+- 注册政策存储在数据库中，跨重启持久化；修改即时生效，无需重启服务
+- 首次初始化时的默认值由部署文档的 `bootstrap.registration_enabled` 决定（默认 `false`，详见 [配置文件与环境变量](/zh/guide/configuration#bootstrap-首次初始化顶层)）
 
-该接口为全局视角，不按用户 / 组织隔离；个人视角的用量（API 调用、Token 消耗等）走 `/stats/summary`。
+::: warning 与部署配置的关系
+此处的「系统设置」是数据库内的运行期政策，与 `server.yaml` 部署文档 / 环境变量是两套机制：部署配置在启动时加载，决定监听端口、数据库、密钥等基础设施行为；设置页面向可在线调整的运行期政策。初始化完成后，数据库中的注册政策**优先于** `bootstrap.registration_enabled`。
+:::
+
+## 运行时监控
+
+管理员后台提供 **运行时监控** 页，展示当前实例的实时运行状态：
+
+- **实例信息** — 实例 ID、启动时间、运行时长
+- **执行器（runner）** — 翻译与术语同步各一条：恢复队列深度与恢复错误数、任务队列容量与等待数、worker 容量、存活与占用数
+- **并发限流器** — 各类资源池的占用情况
+- **外部 HTTP 请求遥测** — 按 AI 服务商 / 操作 / 结果分类的请求次数与耗时统计，便于排查上游异常
+
+页面自动轮询刷新；数据短暂不可用时显示「陈旧数据」警告，而不是清空展示。此页数据仅管理员可见。
+
+## 服务重启与任务恢复
+
+服务器重启（升级、维护）后，中断的运行中任务会自动重置为待执行并从断点续跑，已完成的轮次与段落不重跑；恢复失败的任务会进入降级重试状态并在任务中心可见。管理端首页提供失败 / 暂停任务的**恢复列表**，可一键重新入队。
+
+## 凭据加密密钥轮换
+
+服务器模式数据库中的所有 AI 密钥都用**凭据加密密钥**（master key 或 keyring 文件）加密。怀疑泄露或定期治理时可按以下流程轮换（详见 [CLI 命令参考 · secrets](/zh/guide/cli#secrets-命令)）：
+
+1. **生成新 keyring** — 原先用单 master key 的部署先用 `secrets keyring init --from-master-key-env` 把现有密钥收入 keyring；已有 keyring 的直接 `secrets keyring rotate` 生成含旧密钥与新 active key 的新文件（不改数据库、不覆盖旧文件）
+2. **切换部署并重启** — 把 `LINGUAFLOW_CREDENTIALS_KEYRING_FILE` 指向新文件，移除旧 master key 输入，重启所有使用该数据库的服务进程；新写入用新密钥，旧数据仍可读
+3. **重加密存量数据** — `linguaflow admin credentials reencrypt --config server.yaml` 逐行重加密；中途失败可修复后重跑，已完成的行自动跳过
+4. **保留旧密钥** — 命令不会删除旧密钥；历史数据库备份仍依赖它们，请与新密钥一同归档
+
+::: danger 密钥丢失不可恢复
+凭据加密密钥一旦丢失，数据库中已保存的 AI 密钥将**永久无法解密**（任务执行需重新录入密钥）。请务必把密钥材料与数据库备份成对保存。
+:::
 
 ## 审计日志
 
@@ -104,19 +133,6 @@ LinguaFlow 区分两套活动视图：
 
 随着功能迭代，动作列表可能扩展。前端对未知 `action` 会原样显示字符串，因此集成外部监控时建议按前缀（如 `job.`、`segment.`）做宽松匹配，而非精确等于。
 
-## 系统设置
-
-`/admin/settings` 以扁平 `key → value`（均为字符串）的形式读写系统级配置，存储于数据库的 `system_settings` 表，用于跨重启持久化少量运行期参数。
-
-- `GET /admin/settings` —— 返回当前全部键值
-- `PATCH /admin/settings` —— 传入待更新的键值对，仅覆盖提供的键，未传入的键保持不变
-
-::: warning 与配置文件的关系
-此处的「系统设置」是数据库内的运行期参数，与 `linguaflow.yaml` / 环境变量是两套机制。YAML 与环境变量在启动时加载，决定监听端口、数据库、日志等基础设施行为；系统设置面向可在线调整的运行期参数。两者**不会**自动同步，请勿在此处期望修改端口或数据库连接。
-:::
-
-具体可用的设置键随版本演进，以 Redoc 与实际接口返回为准。
-
 ## API 速览
 
 管理员接口统一挂在 `/api/v1/admin/*` 下，均需 `Bearer Token` 且要求 `role=admin`，否则返回 `403 forbidden`。
@@ -131,13 +147,15 @@ LinguaFlow 区分两套活动视图：
 | `PUT` | `/admin/users/{userId}/password` | 重置密码 |
 | `GET` | `/admin/stats` | 全局统计 |
 | `GET` | `/admin/audit-logs` | 全局审计日志（`cursor` / `limit`） |
-| `GET` | `/admin/settings` | 读取系统设置 |
-| `PATCH` | `/admin/settings` | 更新系统设置 |
+| `GET` | `/admin/settings` | 读取注册开关等系统设置 |
+| `PATCH` | `/admin/settings` | 更新系统设置（如 `registration_enabled` 布尔开关） |
+| `GET` | `/admin/runtime/summary` | 运行时监控摘要（执行器、队列、限流器与外部请求遥测） |
 
 字段与响应结构的权威定义见 [OpenAPI 规范](/zh/api/#openapi-规范) 与 Redoc。
 
 ## 相关文档
 
-- [使用模式](/zh/guide/modes) — 服务器模式与初始管理员配置
-- [配置文件与环境变量](/zh/guide/configuration) — `registration.auto_admin` 等配置项
+- [使用模式](/zh/guide/modes) — 服务器模式部署、初始管理员与密钥
+- [配置文件与环境变量](/zh/guide/configuration) — 部署文档与 `bootstrap.*` 配置项
+- [CLI 命令参考](/zh/guide/cli) — `secrets` / `admin` 维护命令
 - [API 参考](/zh/api/) — 接口总览与 Redoc 入口
