@@ -5,7 +5,14 @@ import { ApiError } from '@/api/utils'
 import { changeSessionContext } from '@/api/session-context'
 import type { Operation } from '@/api/operations'
 
-const api = vi.hoisted(() => ({ list: vi.fn(), summary: vi.fn(), job: vi.fn(), sync: vi.fn() }))
+const api = vi.hoisted(() => ({
+  list: vi.fn(),
+  summary: vi.fn(),
+  job: vi.fn(),
+  sync: vi.fn(),
+  storage: vi.fn(),
+}))
+vi.mock('@/api/storage', () => ({ getStorageTask: api.storage }))
 vi.mock('@/api/operations', () => ({
   listOperations: api.list,
   fetchOperationsSummary: api.summary,
@@ -41,12 +48,27 @@ const task = (
             queue_size: null,
           },
         }
-      : { progress: { processed_segments: 50, total_segments: 100 } }),
+      : type === 'glossary_sync'
+        ? { progress: { processed_segments: 50, total_segments: 100 } }
+        : {
+            storage_kind: 'source_update',
+            phase: 'prepared',
+            cleanup_status: 'cleanup_pending',
+            error_code: '',
+            next_retry_at: null,
+          }),
   }) as Operation
-const counts = { pending: 0, running: 1, paused: 0, recent_failed: 0 }
+const counts = {
+  pending: 0,
+  running: 1,
+  paused: 0,
+  waiting_retry: 0,
+  needs_action: 0,
+  recent_failed: 0,
+}
 const summary = {
   total: counts,
-  by_type: { translation: counts, glossary_sync: counts },
+  by_type: { translation: counts, glossary_sync: counts, storage: counts },
   recent_failed_since: '2026-09-29T00:00:00.123456789Z',
   as_of: '2026-09-30T00:00:00Z',
 }
@@ -72,6 +94,12 @@ describe('operations coordinator', () => {
     api.summary.mockReset().mockResolvedValue(summary)
     api.job.mockReset().mockResolvedValue({ status: 'completed', project_id: 7 })
     api.sync.mockReset().mockResolvedValue({ status: 'completed' })
+    api.storage.mockReset().mockResolvedValue({
+      id: 1,
+      status: 'completed',
+      cleanup_status: 'done',
+      allowed_actions: [],
+    })
   })
   afterEach(() => {
     disposePinia(pinia)
@@ -359,5 +387,141 @@ describe('operations coordinator', () => {
     await refreshing
     expect(store.active.map((item) => item.task_id)).toEqual(['1'])
     expect(store.terminal.map((item) => item.task_id)).toEqual(['2'])
+  })
+
+  it('routes storage details to the scoped storage API and shares matching reads only', async () => {
+    const pending = deferred<{ id: number; status: string; cleanup_status: string }>()
+    api.storage.mockReturnValue(pending.promise)
+    const store = useOperationsStore()
+    const first = store.queryStorage(7, '42')
+    const matching = store.queryTask({ task_type: 'storage', project_id: 7, task_id: '42' })
+    const anotherProject = store.queryStorage(8, '42')
+    await Promise.resolve()
+    expect(api.storage).toHaveBeenCalledTimes(2)
+    expect(api.storage).toHaveBeenCalledWith(7, 42, { signal: expect.any(AbortSignal) })
+    expect(api.job).not.toHaveBeenCalled()
+    expect(api.sync).not.toHaveBeenCalled()
+    pending.resolve({ id: 42, status: 'needs_action', cleanup_status: 'blocked' })
+    await expect(first).resolves.toMatchObject({ status: 'needs_action' })
+    await Promise.all([matching, anotherProject])
+  })
+
+  it('rejects incomplete and unsafe storage locators before any transport starts', async () => {
+    const store = useOperationsStore()
+    await expect(store.queryTask({ task_type: 'storage', task_id: '1' })).rejects.toThrow(
+      'unsafe-id',
+    )
+    await expect(store.queryStorage(7, '9007199254740992')).rejects.toThrow('unsafe-id')
+    await expect(store.queryStorage(-7, '1')).rejects.toThrow('unsafe-id')
+    expect(api.storage).not.toHaveBeenCalled()
+    expect(api.job).not.toHaveBeenCalled()
+    expect(api.sync).not.toHaveBeenCalled()
+  })
+
+  it.each(['waiting_retry', 'needs_action'] as const)(
+    'keeps %s active after a discovery disappearance',
+    async (status) => {
+      const store = useOperationsStore()
+      api.list.mockResolvedValueOnce({ items: [task('1', 'storage', status)] })
+      await store.discover()
+      api.storage.mockResolvedValue({ id: 1, status, cleanup_status: 'blocked' })
+      await store.discover()
+      expect(store.active).toHaveLength(1)
+      expect(store.active[0]?.status).toBe(status)
+      expect(store.terminal).toHaveLength(0)
+    },
+  )
+
+  it.each(['cleanup_pending', 'running', 'blocked'] as const)(
+    'polls terminal %s cleanup every thirty seconds only while subscribed',
+    async (cleanup_status) => {
+      api.storage.mockResolvedValue({ id: 1, status: 'completed', cleanup_status })
+      const store = useOperationsStore()
+      const receive = vi.fn()
+      const close = store.subscribeTask(
+        { task_type: 'storage', project_id: 7, task_id: '1' },
+        receive,
+        vi.fn(),
+      )
+      await vi.advanceTimersByTimeAsync(0)
+      store.start()
+      await store.refresh()
+      await vi.advanceTimersByTimeAsync(29_999)
+      expect(api.storage).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(api.storage).toHaveBeenCalledTimes(2)
+      expect(receive).toHaveBeenCalledTimes(2)
+      close()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(api.storage).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it.each(['done'] as const)(
+    'stops terminal %s cleanup polling and still supports explicit reads',
+    async (cleanup_status) => {
+      api.storage.mockResolvedValue({ id: 1, status: 'completed', cleanup_status })
+      const store = useOperationsStore()
+      store.subscribeTask({ task_type: 'storage', project_id: 7, task_id: '1' }, vi.fn(), vi.fn())
+      await vi.advanceTimersByTimeAsync(0)
+      store.start()
+      await store.refresh()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(api.storage).toHaveBeenCalledTimes(1)
+      await store.queryStorage(7, '1')
+      expect(api.storage).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('pauses pending cleanup reads while hidden and refreshes on becoming visible', async () => {
+    api.storage.mockResolvedValue({ id: 1, status: 'completed', cleanup_status: 'cleanup_pending' })
+    const store = useOperationsStore()
+    store.subscribeTask({ task_type: 'storage', project_id: 7, task_id: '1' }, vi.fn(), vi.fn())
+    await vi.advanceTimersByTimeAsync(0)
+    store.start()
+    await store.refresh()
+    fakeDocument.hidden = true
+    fakeDocument.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(api.storage).toHaveBeenCalledTimes(1)
+    fakeDocument.hidden = false
+    fakeDocument.dispatchEvent(new Event('visibilitychange'))
+    await store.refresh()
+    expect(api.storage).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps failed terminal cleanup reads at low frequency alongside a running translation', async () => {
+    api.list.mockImplementation((query) =>
+      Promise.resolve({ items: query.state === 'active' ? [task('2')] : [] }),
+    )
+    api.storage
+      .mockResolvedValueOnce({ id: 1, status: 'completed', cleanup_status: 'cleanup_pending' })
+      .mockRejectedValue(new Error('offline'))
+    const store = useOperationsStore()
+    const fail = vi.fn()
+    store.subscribeTask({ task_type: 'storage', project_id: 7, task_id: '1' }, vi.fn(), fail)
+    await vi.advanceTimersByTimeAsync(0)
+    store.start()
+    await store.refresh()
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(api.storage).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(27_000)
+    expect(api.storage).toHaveBeenCalledTimes(2)
+    expect(fail).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not deliver storage reads from an earlier session', async () => {
+    const pending = deferred<{ id: number; status: string; cleanup_status: string }>()
+    api.storage.mockReturnValueOnce(pending.promise)
+    const store = useOperationsStore()
+    const receive = vi.fn(),
+      fail = vi.fn()
+    store.subscribeTask({ task_type: 'storage', project_id: 7, task_id: '1' }, receive, fail)
+    await Promise.resolve()
+    changeSessionContext('/api/v1', 2, true)
+    pending.resolve({ id: 1, status: 'completed', cleanup_status: 'done' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(receive).not.toHaveBeenCalled()
+    expect(fail).not.toHaveBeenCalled()
   })
 })

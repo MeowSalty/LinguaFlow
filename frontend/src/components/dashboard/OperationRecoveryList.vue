@@ -17,13 +17,15 @@ const taskLink = (task: Operation) => ({
   query: {
     task_type: task.task_type,
     task_id: task.task_id,
-    ...(task.task_type === 'glossary_sync' ? { project_id: String(task.project_id) } : {}),
+    ...(task.task_type !== 'translation' ? { project_id: String(task.project_id) } : {}),
   },
 })
 const tones = {
   pending: 'default',
   running: 'info',
   paused: 'warning',
+  waiting_retry: 'warning',
+  needs_action: 'warning',
   completed: 'success',
   failed: 'error',
   cancelled: 'default',

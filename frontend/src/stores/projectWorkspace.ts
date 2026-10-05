@@ -6,6 +6,11 @@ import { useProjectStore } from './project'
 import { useResourceStore } from './resource'
 import { useSegmentStore } from './segment'
 import { useJobStore } from './job'
+import { captureSession, assertSessionCurrent, isSessionCurrent } from '@/api/session-context'
+import { storageActionAllowed, type StorageProjectAction } from '@/utils/storage-contract'
+import { storageRequestError } from '@/api/storage-errors'
+import { useOrganizationsStore } from './organizations'
+import { hasWorkspaceDrafts } from '@/utils/workspace-draft-state'
 
 // ── 重新导出所有类型，保持向后兼容 ──
 export type {
@@ -76,6 +81,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   // ── 重新导出段落 Store 的响应式状态 ──
   const {
     segments,
+    contentWriteRevision,
     segmentsCursor,
     segmentsPrevCursor,
     loadingSegmentsUp,
@@ -172,7 +178,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     setPendingUploadItemStrategy,
     setAllCreatablePendingUploadItemsSelected,
     mergeLastUploadResult,
-    uploadResources,
     downloadResource,
     downloadResourceResult,
     toggleResourceSelection,
@@ -213,6 +218,92 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
 
   // ── 协调跨域操作 ──
 
+  const prepareStorageWrite = async (
+    projectId: number,
+    action: StorageProjectAction,
+  ): Promise<void> => {
+    const previous = project.value
+    if (
+      previous?.id !== projectId ||
+      projectError.value ||
+      loadingProject.value ||
+      !storageActionAllowed(previous, action)
+    )
+      throw storageRequestError({ status: 409 }, { error_code: 'storage_maintenance' })
+    const session = captureSession()
+    if (previous.owner_org_id) {
+      const organizations = useOrganizationsStore()
+      await organizations.refresh()
+      assertSessionCurrent(session)
+      if (organizations.error || !organizations.canWrite(previous.owner_org_id))
+        throw storageRequestError({ status: 403 })
+    }
+    await loadProject(projectId)
+    assertSessionCurrent(session)
+    if (
+      project.value?.id !== projectId ||
+      projectError.value ||
+      !storageActionAllowed(project.value, action) ||
+      project.value.storage_generation !== previous.storage_generation
+    )
+      throw storageRequestError({ status: 409 }, { error_code: 'storage_generation_conflict' })
+  }
+
+  const uploadResources = async (...args: Parameters<typeof resourceStore.uploadResources>) => {
+    await prepareStorageWrite(args[0], 'upload')
+    return resourceStore.uploadResources(...args)
+  }
+
+  const refreshAfterSourceUpdate = async (
+    projectId: number,
+    resourceId: number,
+    beforeSavedContent: () => Promise<boolean>,
+  ): Promise<'refreshed' | 'deferred' | 'failed'> => {
+    const session = captureSession()
+    const current = () => isSessionCurrent(session) && project.value?.id === projectId
+    if (!current()) return 'deferred'
+    try {
+      if (!(await beforeSavedContent()) || !current()) return 'deferred'
+      await Promise.all([loadProject(projectId), loadResourceTree(projectId)])
+      if (!current()) return 'deferred'
+      if (projectError.value || resourceTreeError.value) return 'failed'
+      if (activeResourceId.value !== resourceId) return 'refreshed'
+      const revision = contentWriteRevision.value
+      const canApply = () =>
+        current() &&
+        activeResourceId.value === resourceId &&
+        contentWriteRevision.value === revision &&
+        !hasWorkspaceDrafts(projectId, resourceId)
+      if (!canApply()) return 'deferred'
+      segmentStore.resetSearchResults()
+      segmentStore.lastSearchReplaceOperationId = null
+      if (isEpubResource.value) {
+        await segmentStore.loadSegmentGroups(projectId, resourceId, canApply)
+        if (!canApply()) return 'deferred'
+        if (segmentGroupsError.value) return 'failed'
+        if (!segmentGroups.value.some((group) => group.group_key === epubActiveGroupKey.value))
+          segmentStore.exitChapter()
+        const valid = new Set(segmentGroups.value.map((group) => group.group_key))
+        segmentStore.epubSelectedGroupKeys = new Set(
+          [...epubSelectedGroupKeys.value].filter((key) => valid.has(key)),
+        )
+      }
+      await segmentStore.loadSegments(
+        projectId,
+        resourceId,
+        false,
+        epubActiveGroupKey.value ?? undefined,
+        canApply,
+      )
+      if (!canApply()) return 'deferred'
+      if (segmentsError.value) return 'failed'
+      contentWriteRevision.value++
+      return 'refreshed'
+    } catch {
+      return current() ? 'failed' : 'deferred'
+    }
+  }
+
   /** 设置当前激活资源并清空段落 */
   const setActiveResource = (resourceId: number | null): void => {
     resourceStore.setActiveResource(resourceId, () => {
@@ -221,27 +312,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     })
   }
 
-  /** 替换资源并清空关联段落 */
-  const replaceResource = async (
-    projectId: number,
-    resourceId: number,
-    file: File,
-  ): Promise<void> => {
-    return resourceStore.replaceResource(projectId, resourceId, file, segmentStore.resetSegments)
-  }
-
-  /** 增量更新资源并清空关联段落 */
-  const incrementalUpdateResource = async (projectId: number, resourceId: number, file: File) => {
-    return resourceStore.incrementalUpdateResource(
-      projectId,
-      resourceId,
-      file,
-      segmentStore.resetSegments,
-    )
-  }
-
   /** 删除资源并清空关联段落 */
   const deleteResource = async (projectId: number, resourceId: number): Promise<void> => {
+    await prepareStorageWrite(projectId, 'delete')
     return resourceStore.deleteResource(projectId, resourceId, segmentStore.resetSegments)
   }
 
@@ -261,6 +334,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   }
 
   return {
+    prepareStorageWrite,
+    refreshAfterSourceUpdate,
+    contentWriteRevision,
     // 项目
     project,
     // 资源树
@@ -384,8 +460,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     setAllCreatablePendingUploadItemsSelected,
     mergeLastUploadResult,
     uploadResources,
-    replaceResource,
-    incrementalUpdateResource,
     deleteResource,
     updateSegment,
     setIssueDisposition,

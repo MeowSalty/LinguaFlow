@@ -40,6 +40,7 @@ export const setLocalMode = (value: boolean): void => {
   _isLocalMode = value
 }
 let unauthorized: (() => void) | null = null
+let unauthorizedGeneration = -1
 export const setUnauthorizedHandler = (handler: (() => void) | null): void => {
   unauthorized = handler
 }
@@ -76,6 +77,42 @@ export const refreshTokenOnce = async (): Promise<ApiSchemas['AuthSession']> => 
     })
   refreshFlight = { generation: context.authGeneration, promise }
   return promise
+}
+
+const notifyUnauthorized = (context: SessionSnapshot): void => {
+  assertSessionCurrent(context)
+  if (!unauthorized || unauthorizedGeneration === context.authGeneration) return
+  unauthorizedGeneration = context.authGeneration
+  unauthorized()
+}
+
+/** Shared fetch/XHR recovery: one token rotation and at most one transport replay. */
+export const recoverUnauthorizedResponse = async <T extends { status: number }>(
+  response: T,
+  context: SessionSnapshot,
+  replay: (accessToken: string) => Promise<T>,
+): Promise<T> => {
+  assertSessionCurrent(context)
+  if (response.status !== 401) return response
+  if (closing) throw new StaleSessionError()
+  if (_isLocalMode) {
+    notifyUnauthorized(context)
+    return response
+  }
+  let session: ApiSchemas['AuthSession']
+  try {
+    session = await refreshTokenOnce()
+  } catch (error) {
+    assertSessionCurrent(context)
+    if (error instanceof ApiError && (error.status === 400 || error.status === 401))
+      notifyUnauthorized(context)
+    throw error
+  }
+  assertSessionCurrent(context)
+  const retried = await replay(session.access_token)
+  assertSessionCurrent(context)
+  if (retried.status === 401) notifyUnauthorized(context)
+  return retried
 }
 
 export const logoutCurrentSession = async (): Promise<void> => {
@@ -144,30 +181,15 @@ export const createAuthMiddleware = (
       return bound
     },
     async onResponse({ response, request, schemaPath }) {
-      const context = contexts.get(request)
-      if (context) assertSessionCurrent(context)
+      const context = contexts.get(request) ?? captureSession()
+      assertSessionCurrent(context)
       if (closing && schemaPath !== '/ping' && schemaPath !== '/mode') throw new StaleSessionError()
       if (response.status !== 401 || AUTH_TOKEN_SKIP_PATHS.has(schemaPath)) return response
-      if (_isLocalMode) {
-        unauthorized?.()
-        return response
-      }
-      let session: ApiSchemas['AuthSession']
-      try {
-        session = await refreshTokenOnce()
-      } catch (error) {
-        if (context) assertSessionCurrent(context)
-        if (error instanceof ApiError && (error.status === 400 || error.status === 401))
-          unauthorized?.()
-        throw error
-      }
-      if (context) assertSessionCurrent(context)
-      const headers = new Headers(request.headers)
-      headers.set('Authorization', `Bearer ${session.access_token}`)
-      const retried = await fetch(new Request(retryRequests.get(request) ?? request, { headers }))
-      if (context) assertSessionCurrent(context)
-      if (retried.status === 401) unauthorized?.()
-      return retried
+      return recoverUnauthorizedResponse(response, context, (accessToken) => {
+        const headers = new Headers(request.headers)
+        headers.set('Authorization', `Bearer ${accessToken}`)
+        return fetch(new Request(retryRequests.get(request) ?? request, { headers }))
+      })
     },
   }
 }

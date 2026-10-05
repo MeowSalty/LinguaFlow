@@ -93,10 +93,10 @@ const load = async (): Promise<void> => {
     if (!current()) return
     permissionLoading.value = false
     unsubscribe = operations.subscribeTask(
-      locator,
+      { ...locator, task_type: 'glossary_sync' },
       (data) => {
         if (!current()) return
-        task.value = data as ApiSchemas['GlossarySyncTaskStatusResponse']
+        task.value = data
         error.value = null
         loading.value = false
       },

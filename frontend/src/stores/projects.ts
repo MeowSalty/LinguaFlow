@@ -8,8 +8,13 @@ import {
   deleteProject,
   fetchProjects,
   fetchOrgProjects,
+  fetchProject,
 } from '@/api/projects'
+import { storageActionAllowed, storageProjectWritable } from '@/utils/storage-contract'
+import { assertSessionCurrent, captureSession } from '@/api/session-context'
+import { storageRequestError } from '@/api/storage-errors'
 import { createScopedEntityState } from './scopedEntity'
+import { useOrganizationsStore } from './organizations'
 
 export type GlossaryFilter = 'all' | 'enabled' | 'disabled'
 export const useProjectsStore = defineStore('projects', () => {
@@ -45,8 +50,31 @@ export const useProjectsStore = defineStore('projects', () => {
   const glossaryEnabledCount = computed(
     () => state.items.value.filter((item) => item.glossary_enabled).length,
   )
+  const canDelete = (project: ApiSchemas['Project']) =>
+    state.canEdit(project) && storageActionAllowed(project, 'delete')
+  const removeProject = async (id: number) => {
+    const previous = state.items.value.find((item) => item.id === id)
+    if (!previous || !canDelete(previous)) throw storageRequestError({ status: 403 })
+    const session = captureSession()
+    if (previous.owner_org_id) {
+      const organizations = useOrganizationsStore()
+      await organizations.refresh()
+      assertSessionCurrent(session)
+      if (organizations.error || !organizations.canWrite(previous.owner_org_id))
+        throw storageRequestError({ status: 403 })
+    }
+    const current = await fetchProject(id)
+    assertSessionCurrent(session)
+    if (!canDelete(current) || current.storage_generation !== previous.storage_generation)
+      throw storageRequestError({ status: 409 }, { error_code: 'storage_generation_conflict' })
+    return state.remove(id)
+  }
   return {
     ...state,
+    canEdit: (project?: ApiSchemas['Project']) =>
+      state.canEdit(project) && (!project || storageProjectWritable(project)),
+    canDelete,
+    remove: removeProject,
     glossaryFilter,
     sortedItems,
     filteredItems,
@@ -59,7 +87,7 @@ export const useProjectsStore = defineStore('projects', () => {
     loadProjects: state.load,
     createProject: state.create,
     updateProject: state.update,
-    deleteProject: state.remove,
+    deleteProject: removeProject,
     isDeletingProject: (id: number) => state.deletingIds.value.includes(id),
     setGlossaryFilter: (value: GlossaryFilter) => {
       glossaryFilter.value = value

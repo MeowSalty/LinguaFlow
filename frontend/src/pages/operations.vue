@@ -10,6 +10,7 @@ import { formatDateTime } from '@/utils/datetime'
 import OperationCounts from '@/components/operations/OperationCounts.vue'
 import OperationList from '@/components/operations/OperationList.vue'
 import GlossaryTaskDetailDrawer from '@/components/operations/GlossaryTaskDetailDrawer.vue'
+import StorageTaskDetailDrawer from '@/components/operations/StorageTaskDetailDrawer.vue'
 
 const { t } = useI18n(),
   route = useRoute(),
@@ -19,7 +20,8 @@ const operations = useOperationsStore(),
   tracker = useGlobalJobTrackerStore()
 const invalid = ref<string | null>(null),
   advanced = ref(false),
-  syncLocator = shallowRef<OperationLocator | null>(null)
+  syncLocator = shallowRef<(OperationLocator & { task_type: 'glossary_sync' }) | null>(null),
+  storageLocator = shallowRef<(OperationLocator & { task_type: 'storage' }) | null>(null)
 let detailKey = ''
 const detach = operations.attachList()
 onScopeDispose(() => {
@@ -36,13 +38,22 @@ const parsed = computed(() => {
 const filters = computed(() => parsed.value?.filters ?? {})
 const options = (keys: string[]) =>
   keys.map((value) => ({ value, label: t(`operations.${value}`) }))
-const types = computed(() => options(['translation', 'glossary_sync']))
+const types = computed(() => options(['translation', 'glossary_sync', 'storage']))
 const states = computed(() => [
   ...['active', 'terminal', 'all'].map((value) => ({
     value: `state:${value}`,
     label: t(`operations.${value}`),
   })),
-  ...['pending', 'running', 'paused', 'completed', 'failed', 'cancelled'].map((value) => ({
+  ...[
+    'pending',
+    'running',
+    'paused',
+    'waiting_retry',
+    'needs_action',
+    'completed',
+    'failed',
+    'cancelled',
+  ].map((value) => ({
     value: `status:${value}`,
     label: t(`operations.${value}`),
   })),
@@ -94,6 +105,7 @@ const open = (operation: Operation): void => {
 }
 const closeSync = (): void => {
   syncLocator.value = null
+  storageLocator.value = null
   update({ task_id: undefined, job_id: undefined })
 }
 watch(
@@ -103,6 +115,7 @@ watch(
     if (!result) {
       invalid.value = t('operations.invalidLink')
       syncLocator.value = null
+      storageLocator.value = null
       tracker.closeDetail()
       detailKey = ''
       return
@@ -114,6 +127,7 @@ watch(
     detailKey = key
     tracker.closeDetail()
     syncLocator.value = null
+    storageLocator.value = null
     if (result.locator?.task_type === 'translation') {
       try {
         await tracker.openDetail(safeTaskNumber(result.locator.task_id), result.locator.project_id)
@@ -128,7 +142,11 @@ watch(
       } catch {
         invalid.value = t('operations.unsafeId')
       }
-    } else if (result.locator) syncLocator.value = result.locator
+    } else if (result.locator?.task_type === 'glossary_sync') {
+      syncLocator.value = { ...result.locator, task_type: 'glossary_sync' }
+    } else if (result.locator?.task_type === 'storage') {
+      storageLocator.value = { ...result.locator, task_type: 'storage' }
+    }
   },
   { immediate: true },
 )
@@ -225,5 +243,6 @@ watch(
       </div>
     </template>
     <GlossaryTaskDetailDrawer :locator="syncLocator" @close="closeSync" />
+    <StorageTaskDetailDrawer :locator="storageLocator" @close="closeSync" />
   </div>
 </template>

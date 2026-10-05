@@ -18,6 +18,7 @@ type Resource = ApiSchemas['Resource']
 
 const props = defineProps<{
   resource: Resource
+  manifestWritable?: boolean
   replacing?: boolean
   incrementalUpdating?: boolean
   downloading?: boolean
@@ -30,8 +31,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** 打开资源段落编辑（整行单击） */
   openSegments: [resource: Resource]
-  replace: [resource: Resource]
-  incrementalUpdate: [resource: Resource]
+  sourceUpdate: [resource: Resource]
+  storage: [resource: Resource]
   download: [resource: Resource]
   downloadTranslated: [resource: Resource]
   delete: [resource: Resource]
@@ -99,17 +100,13 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
     key: 'primaryDivider',
   },
   {
-    label: props.replacing
-      ? t('workspace.resource.actions.replacing')
-      : t('workspace.resource.actions.replace'),
-    key: 'replace',
+    label: t('sourceStorage.update'),
+    key: 'sourceUpdate',
     disabled: isBusy.value,
   },
   {
-    label: props.incrementalUpdating
-      ? t('workspace.resource.actions.incrementalUpdating')
-      : t('workspace.resource.actions.incrementalUpdate'),
-    key: 'incrementalUpdate',
+    label: t('sourceStorage.title'),
+    key: 'storage',
     disabled: isBusy.value,
   },
   {
@@ -131,7 +128,7 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
   {
     label: () => h('span', { class: 'text-lf-danger' }, t('common.delete')),
     key: 'delete',
-    disabled: isBusy.value,
+    disabled: isBusy.value || !props.manifestWritable,
   },
 ])
 
@@ -173,11 +170,11 @@ const handleDropdownSelect = (key: string) => {
     case 'openSegments':
       emit('openSegments', props.resource)
       break
-    case 'replace':
-      emit('replace', props.resource)
+    case 'sourceUpdate':
+      emit('sourceUpdate', props.resource)
       break
-    case 'incrementalUpdate':
-      emit('incrementalUpdate', props.resource)
+    case 'storage':
+      emit('storage', props.resource)
       break
     case 'download':
       emit('download', props.resource)

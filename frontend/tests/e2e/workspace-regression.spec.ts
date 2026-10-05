@@ -174,3 +174,55 @@ test('workspace resource editing saves a segment and records a successful recent
   ).toBeVisible()
   expect(state.errors).toEqual([])
 })
+
+test('workspace navigation protects drafts and save failure keeps the editor open', async ({
+  page,
+  isMobile,
+}) => {
+  const state = await regressionApp(page)
+  await page.goto('/projects/7?edit=71')
+  if (isMobile) await page.getByRole('button', { name: '编辑', exact: true }).click()
+  else {
+    await page.getByRole('cell', { name: 'Welcome to the workspace.', exact: true }).click()
+    await page.keyboard.press('Enter')
+  }
+  const translation = page.getByPlaceholder('译文', { exact: true }).filter({ visible: true })
+  await translation.fill('未保存的本地草稿')
+  await page.getByTitle('返回工作台', { exact: true }).click()
+  await expect(page.getByText('有未保存的译文或备注', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '取消', exact: true }).last().click()
+  await expect(page).toHaveURL(/edit=71/)
+  await expect(translation).toHaveValue('未保存的本地草稿')
+  await page.route('**/api/v1/projects/7/resources/71/segments/711', (route) =>
+    json(route, { title: 'Unavailable', status: 503 }, 503),
+  )
+  await page.getByTitle('返回工作台', { exact: true }).click()
+  await page.getByRole('button', { name: '保存并继续', exact: true }).click()
+  await expect(page.getByText('有未保存的译文或备注', { exact: true })).toBeHidden()
+  await expect(page).toHaveURL(/edit=71/)
+  await expect(translation).toHaveValue('未保存的本地草稿')
+  expect(state.segmentWrites).toEqual([])
+  await page.getByTitle('返回工作台', { exact: true }).click()
+  await page.getByRole('button', { name: '放弃并继续', exact: true }).click()
+  await expect(page).not.toHaveURL(/edit=71/)
+  expect(state.errors).toEqual([])
+})
+
+test('unknown storage state leaves DB editing accessible and blocks manifest uploads', async ({
+  page,
+}) => {
+  const state = await regressionApp(page)
+  await page.goto('/projects/7')
+  await expect(
+    page.getByText('当前存储状态尚未确认，暂不能上传、更新或删除文件；仍可查看资源和编辑译文。', {
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: '上传资源', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: '查看段落：welcome.txt', exact: true }).click()
+  await expect(page).toHaveURL(/edit=71/)
+  await expect(
+    page.getByText('Welcome to the workspace.', { exact: true }).filter({ visible: true }),
+  ).toBeVisible()
+  expect(state.errors).toEqual([])
+})

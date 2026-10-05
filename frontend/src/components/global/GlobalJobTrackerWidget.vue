@@ -16,6 +16,8 @@ const { t } = useI18n(),
   ui = useUiStore()
 const { trackerExpanded: expanded } = storeToRefs(preferences)
 const progress = (task: Operation): string => {
+  if (task.task_type === 'storage')
+    return t(`operations.storageTask.cleanup.${task.cleanup_status}`)
   if (task.task_type === 'glossary_sync')
     return t('operations.syncProgress', {
       processed: task.progress.processed_segments,
@@ -28,7 +30,9 @@ const activeCount = computed(() =>
   operations.summary
     ? operations.summary.total.running +
       operations.summary.total.pending +
-      operations.summary.total.paused
+      operations.summary.total.paused +
+      (operations.summary.total.waiting_retry ?? 0) +
+      (operations.summary.total.needs_action ?? 0)
     : null,
 )
 const displayed = computed(() =>

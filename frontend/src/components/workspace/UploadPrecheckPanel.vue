@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NCheckbox, NRadioButton, NRadioGroup, NTag } from 'naive-ui'
 
+import { getStorageContractGate } from '@/utils/storage-contract'
 import type { PendingUploadItem, PendingUploadStrategy } from '@/stores/projectWorkspace'
 
 const props = defineProps<{
@@ -19,6 +20,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const sourceUpdateGate = getStorageContractGate('sourceUpdate')
 
 const creatableItems = computed(() =>
   props.items.filter((item) => item.precheck.action === 'create'),
@@ -29,10 +31,7 @@ const conflictCount = computed(
   () => props.items.filter((item) => item.precheck.action === 'conflict').length,
 )
 const incrementalUpdateCount = computed(
-  () => props.items.filter((item) => item.strategy === 'incremental_update').length,
-)
-const replaceCount = computed(
-  () => props.items.filter((item) => item.strategy === 'replace').length,
+  () => props.items.filter((item) => item.strategy === 'source_update').length,
 )
 const duplicateCount = computed(
   () => props.items.filter((item) => item.precheck.action === 'duplicate').length,
@@ -89,13 +88,12 @@ const getResolutionHint = (item: PendingUploadItem): string => {
   if (item.precheck.action === 'duplicate') {
     return t('workspace.uploadPrecheck.strategies.skipHint')
   }
-  if (item.strategy === 'replace') {
-    return t('workspace.uploadPrecheck.strategies.replaceHint')
-  }
   if (item.strategy === 'skip') {
     return t('workspace.uploadPrecheck.strategies.skipHint')
   }
-  return t('workspace.uploadPrecheck.strategies.incrementalUpdateHint')
+  return t(
+    sourceUpdateGate.available ? 'sourceStorage.updateHint' : 'sourceStorage.sourceUpdateSkipped',
+  )
 }
 </script>
 
@@ -133,13 +131,7 @@ const getResolutionHint = (item: PendingUploadItem): string => {
               {{ incrementalUpdateCount }}
             </div>
             <div class="text-xs text-lf-info">
-              {{ t('workspace.uploadPrecheck.summary.incrementalUpdates') }}
-            </div>
-          </div>
-          <div class="rounded-lf-ctl bg-lf-brand-soft px-3 py-2">
-            <div class="text-lg font-bold tabular-nums text-brand-600">{{ replaceCount }}</div>
-            <div class="text-xs text-brand-600">
-              {{ t('workspace.uploadPrecheck.summary.replaces') }}
+              {{ t('sourceStorage.update') }}
             </div>
           </div>
           <div class="rounded-lf-ctl bg-lf-danger-soft px-3 py-2">
@@ -234,13 +226,14 @@ const getResolutionHint = (item: PendingUploadItem): string => {
                 "
               >
                 <div
-                  class="grid grid-cols-3 overflow-hidden rounded-lf-ctl border border-lf-border-soft bg-lf-surface"
+                  class="grid grid-cols-2 overflow-hidden rounded-lf-ctl border border-lf-border-soft bg-lf-surface"
                 >
-                  <NRadioButton value="incremental_update" class="text-center">
-                    {{ t('workspace.uploadPrecheck.strategies.incrementalUpdate') }}
-                  </NRadioButton>
-                  <NRadioButton value="replace" class="text-center">
-                    {{ t('workspace.uploadPrecheck.strategies.replace') }}
+                  <NRadioButton
+                    value="source_update"
+                    :disabled="!sourceUpdateGate.available"
+                    class="text-center"
+                  >
+                    {{ t('sourceStorage.update') }}
                   </NRadioButton>
                   <NRadioButton value="skip" class="text-center">
                     {{ t('workspace.uploadPrecheck.strategies.skip') }}

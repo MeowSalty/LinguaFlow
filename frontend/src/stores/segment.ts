@@ -11,6 +11,7 @@ import { fetchSegmentGroups, type ResourceSegmentGroup } from '@/api/epub'
 import type { ResourceSegmentQualityCode, SegmentMatchMode } from '@/api/projects'
 import { t } from '@/i18n'
 import { extractErrorMessage } from '@/utils/errors'
+import { assertSessionCurrent, captureSession, isSessionCurrent } from '@/api/session-context'
 import {
   collectSegmentSearchMatches,
   MAX_SEGMENT_SEARCH_MATCHES,
@@ -57,6 +58,8 @@ export const useSegmentStore = defineStore('segment', () => {
   const segmentsError = ref<string | null>(null)
   const editingSegmentIds = ref<number[]>([])
   const actionError = ref<string | null>(null)
+  const contentWriteRevision = ref(0)
+  let editingContextRevision = 0
 
   // ── 筛选器 ──
   const segmentSearch = ref('')
@@ -184,6 +187,7 @@ export const useSegmentStore = defineStore('segment', () => {
     resourceId: number,
     append = false,
     groupKey?: string,
+    accept: () => boolean = () => true,
   ): Promise<void> => {
     if (append && loadingSegments.value) return
     const requestId = ++segmentsRequestId
@@ -214,7 +218,7 @@ export const useSegmentStore = defineStore('segment', () => {
         limit: 50,
         ...(groupKey ? { group_key: groupKey } : {}),
       })
-      if (requestId !== segmentsRequestId) return
+      if (requestId !== segmentsRequestId || !accept()) return
       segments.value = append ? [...segments.value, ...response.items] : response.items
       segmentsCursor.value = response.next_cursor ?? null
       if (!append) {
@@ -522,11 +526,16 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentId: number,
     payload: SegmentUpdatePayload,
   ): Promise<Segment> => {
+    const session = captureSession()
+    const contextRevision = editingContextRevision
     editingSegmentIds.value = [...editingSegmentIds.value, segmentId]
     actionError.value = null
 
     try {
       const segment = await updateResourceSegmentRequest(projectId, resourceId, segmentId, payload)
+      assertSessionCurrent(session)
+      if (contextRevision !== editingContextRevision) return segment
+      contentWriteRevision.value++
       segments.value = segments.value.map((item) => (item.id === segment.id ? segment : item))
 
       // 刷新章节分组进度
@@ -534,10 +543,14 @@ export const useSegmentStore = defineStore('segment', () => {
 
       return segment
     } catch (error) {
+      assertSessionCurrent(session)
+      if (contextRevision !== editingContextRevision) throw error
       actionError.value = extractErrorMessage(error, t('api.errors.updateSegmentFailed'))
       throw error
     } finally {
-      editingSegmentIds.value = editingSegmentIds.value.filter((id) => id !== segmentId)
+      if (isSessionCurrent(session) && contextRevision === editingContextRevision) {
+        editingSegmentIds.value = editingSegmentIds.value.filter((id) => id !== segmentId)
+      }
     }
   }
 
@@ -569,14 +582,18 @@ export const useSegmentStore = defineStore('segment', () => {
   /**
    * 加载章节分组列表
    */
-  const loadSegmentGroups = async (projectId: number, resourceId: number): Promise<void> => {
+  const loadSegmentGroups = async (
+    projectId: number,
+    resourceId: number,
+    accept: () => boolean = () => true,
+  ): Promise<void> => {
     const requestId = ++segmentGroupsRequestId
     loadingSegmentGroups.value = true
     segmentGroupsError.value = null
 
     try {
       const response = await fetchSegmentGroups(projectId, resourceId)
-      if (requestId !== segmentGroupsRequestId) return
+      if (requestId !== segmentGroupsRequestId || !accept()) return
       segmentGroups.value = response.items
     } catch (error) {
       if (requestId !== segmentGroupsRequestId) return
@@ -657,6 +674,7 @@ export const useSegmentStore = defineStore('segment', () => {
    */
   const mergeSearchReplaceItems = (items: Segment[]): void => {
     if (items.length === 0) return
+    contentWriteRevision.value++
 
     const updates = new Map(items.map((item) => [item.id, item]))
     segments.value = segments.value
@@ -690,6 +708,8 @@ export const useSegmentStore = defineStore('segment', () => {
 
   /** 清空段落列表和游标（供跨域协调调用） */
   const resetSegments = (): void => {
+    editingContextRevision++
+    editingSegmentIds.value = []
     segmentsRequestId++
     segmentsWindowRequestId++
     loadingSegments.value = false
@@ -739,6 +759,7 @@ export const useSegmentStore = defineStore('segment', () => {
   }
 
   return {
+    contentWriteRevision,
     segments,
     segmentsCursor,
     segmentsTotal,

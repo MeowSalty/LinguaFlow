@@ -52,7 +52,9 @@ export const sanitizePreferences = (value: unknown): ScopedPreferences => {
     result.hiddenTerminalKeys = [
       ...new Set(
         data.hiddenTerminalKeys.filter(
-          (key) => typeof key === 'string' && /^(translation|glossary_sync):[1-9][0-9]*$/.test(key),
+          (key) =>
+            typeof key === 'string' &&
+            /^(translation|glossary_sync|storage):[1-9][0-9]*$/.test(key),
         ),
       ),
     ].slice(-500)

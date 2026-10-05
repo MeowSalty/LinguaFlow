@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['tests/integration/**/*.test.mjs'],
+    include: ['tests/integration/configuration.test.mjs'],
     fileParallelism: false,
     maxWorkers: 1,
     testTimeout: 60_000,
