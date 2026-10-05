@@ -53,6 +53,7 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 
 - 支持 OpenAI、Anthropic、Google Gemini
 - 兼容 Azure OpenAI、Ollama、LM Studio 等 OpenAI API 兼容服务
+- **凭据管理**：API 密钥加密存储、保存后不可回显，支持版本轮换与撤销；可按凭据探测可用模型列表
 - 统一思考强度（`thinking_level`）：最低 / 低 / 中 / 高档位与显式关闭，由适配层映射为各厂商原生参数
 - 超时可关闭：适配本地大模型或慢响应网关
 - 流式请求模式（`stream`），适配只接受 `stream:true` 的兼容网关，内部累积为完整响应后返回
@@ -72,6 +73,7 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 - 文件内段落分批并发（目录/资源之间按顺序处理）
 - 实时进度追踪，预估剩余时间
 - 任务可暂停 / 恢复：从轮次断点续跑，已完成译文不重跑；失败或取消的任务也可断点重试
+- **任务中心**：跨项目汇总翻译与术语同步任务，服务重启后运行中任务自动断点恢复
 
 ### EPUB / DOCX / HTML
 
@@ -132,8 +134,11 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 启动服务后访问 Web 界面，可视化管理翻译工作。本地模式默认嵌入前端静态资源；服务器模式下可选用 `--no-ui` 关闭嵌入式 Web UI，仅暴露 API 供第三方前端调用。
 
 - 项目、资源、作业、术语表的完整管理
+- 任务中心：跨项目任务列表、状态汇总与取消 / 重试；全局任务追踪挂件
 - 拖拽上传文件
 - 实时作业进度追踪（SSE 事件流，支持断线重连）
+- 账号中心：个人资料、安全设置（改密码）、偏好与团队（组织）管理
+- 管理员后台：用户管理、注册开关、运行时监控与审计日志
 - 暗色/亮色主题切换
 
 ### 命令行工具
@@ -169,10 +174,21 @@ linguaflow translate -i docs.md -o out.md --to zh --glossary-path terms.csv
 
 ### Docker
 
+容器默认服务器模式，启动前必须注入 JWT 签名密钥、凭据加密密钥与初始管理员（可用 `linguaflow secrets generate --stdout` 生成随机密钥）：
+
 ```bash
 docker pull ghcr.io/meowsalty/linguaflow:latest
-docker run -p 8080:8080 ghcr.io/meowsalty/linguaflow:latest
+docker run -d -p 8080:8080 -v linguaflow-data:/app/data \
+  -e LINGUAFLOW_JWT_SECRET="<32 字节随机值>" \
+  -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="<另一个独立随机值>" \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>" \
+  ghcr.io/meowsalty/linguaflow:latest
 ```
+
+> [!IMPORTANT]
+> 凭据加密密钥请长期保存、重建容器时注入同一份值——更换后数据库中已保存的 AI 密钥将无法解密。Compose 部署与密钥文件（`_FILE`）方式见[安装部署文档](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)。
 
 ### 从源码构建
 
@@ -201,7 +217,7 @@ task backend:local:build
 
 ### 首次使用
 
-1. **配置 AI 后端** — 在「AI 后端」页面添加你的 OpenAI/Anthropic/Google Gemini 账号
+1. **配置 AI 后端** — 在「AI 后端」页面添加你的 OpenAI/Anthropic/Google Gemini 账号（密钥加密保存，也可复用已有凭据）
 2. **创建项目** — 在「项目」页面创建新项目，设置源语言和目标语言
 3. **上传文件** — 进入项目工作区，拖拽上传源文件
 4. **创建作业** — 选择资源，创建翻译作业
@@ -212,16 +228,32 @@ task backend:local:build
 
 ### 启动服务器模式
 
-服务器模式支持多租户和权限管理。
+服务器模式支持多用户、组织协作与权限管理。
 
 > 半成品，还没做完，不建议使用
 
+与本地模式不同，服务器模式**不会自动生成密钥**，启动前需要：`kind: server` 部署文档、≥32 字节的 JWT 签名密钥、凭据加密密钥，以及首次初始化的管理员输入：
+
 ```bash
-./bin/linguaflow serve
+# 生成部署文档与密钥材料
+./bin/linguaflow init --kind server
+./bin/linguaflow secrets generate --output ./jwt-secret
+./bin/linguaflow secrets generate --output ./credentials-master-key
+
+# 预检配置，再注入密钥启动
+./bin/linguaflow config check --config server.yaml
+export LINGUAFLOW_JWT_SECRET_FILE=./jwt-secret
+export LINGUAFLOW_CREDENTIALS_MASTER_KEY_FILE=./credentials-master-key
+export LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
+export LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+export LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>"
+./bin/linguaflow serve --config server.yaml
 
 # 仅提供 API，关闭嵌入式 Web UI
-./bin/linguaflow serve --no-ui
+./bin/linguaflow serve --config server.yaml --no-ui
 ```
+
+完整步骤、环境变量与 Compose 示例见[安装部署](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)与[使用模式](https://meowsalty.github.io/LinguaFlow/zh/guide/modes)。
 
 ---
 

@@ -14,26 +14,26 @@
 在工作目录执行：
 
 ```bash
-linguaflow init
+linguaflow init --kind translation
 ```
 
 会生成：
 
 ```text
 ./
-├── linguaflow.yaml
+├── linguaflow.yaml        # kind: translation · version: 2
 ├── prompts/
 │   ├── default_translation.tmpl
 │   └── default_bootstrap.tmpl
 └── profiles/
-    └── default.yaml
+    └── default.yaml       # schema_version: 1
 ```
 
 ## 2. 填入 API Key
 
 编辑 `linguaflow.yaml`，至少保证：
 
-1. `backends` 中有一个启用的后端，且 `options.api_key` 与 `options.model` 均有效
+1. `backends` 中有一个启用的后端，且 `secret` 与 `options.model` 均有效
 2. `execution.rounds` 中有一轮 `mode: translate`，并引用该后端与默认提示词/策略
 
 推荐用环境变量，避免把密钥写进文件：
@@ -49,8 +49,8 @@ backends:
   openai-default:
     type: openai
     enabled: true
+    secret: ${OPENAI_API_KEY}   # 密钥独立于 options；不要写 options.api_key
     options:
-      api_key: ${OPENAI_API_KEY}
       model: gpt-4o-mini # 按账号实际可用模型修改
       # thinking_level: low  # 可选：off | minimal | low | medium | high；不设置 = 不传思考参数
 ```

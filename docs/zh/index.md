@@ -31,10 +31,13 @@ features:
     details: 项目术语表、自动提取与精简；长度异常、未译、源语残留等质检；可选 AI 裁决降噪后再人工审校。
   - icon: 🤖
     title: 你的模型，你的网关
-    details: OpenAI / Anthropic / Gemini，以及 Azure、Ollama、LM Studio 等兼容接口。可按凭据探测可用模型，统一配置思考强度；自定义提示词与多轮执行计划。
+    details: OpenAI / Anthropic / Gemini，以及 Azure、Ollama、LM Studio 等兼容接口。密钥加密存储、按版本轮换；可按凭据探测可用模型，统一配置思考强度，自定义提示词与多轮执行计划。
   - icon: 💻
     title: 本地优先，隐私可控
     details: 双击二进制即可启动本地模式，数据落在本机 SQLite。无需账号、无需把全文交给第三方 SaaS 平台。
+  - icon: 🌐
+    title: 团队协作（服务器模式 · 预览）
+    details: 多用户注册与登录、组织与成员角色、组织级资源共享；任务中心跨项目追踪全部翻译与术语任务，服务重启自动断点续跑。
   - icon: ⚡
     title: 批量与增量
     details: 整目录批量处理，文件内段落分批并发；实时进度与 ETA；任务可暂停续跑；增量更新保留已有译文，只处理新增或变更内容。
@@ -83,8 +86,15 @@ flowchart LR
 
 ```bash [Docker]
 docker pull ghcr.io/meowsalty/linguaflow:latest
-docker run -p 8080:8080 ghcr.io/meowsalty/linguaflow:latest
-# 访问 http://localhost:8080（容器默认服务器模式，见安装文档）
+# 容器默认服务器模式：启动前需注入 JWT 密钥、凭据加密密钥与初始管理员
+docker run -p 8080:8080 \
+  -e LINGUAFLOW_JWT_SECRET="<32 字节随机值>" \
+  -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="<另一个独立随机值>" \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
+  -e LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>" \
+  ghcr.io/meowsalty/linguaflow:latest
+# 访问 http://localhost:8080；完整示例见安装文档
 ```
 
 ```bash [CLI 直接翻译]
