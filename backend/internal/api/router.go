@@ -19,7 +19,6 @@ type healthResponse struct {
 func (s *Server) newRouter() http.Handler {
 	r := chi.NewRouter()
 	s.applyMiddleware(r)
-	r.Use(s.storageMaintenanceMiddleware)
 
 	r.Get("/health", s.handleHealth)
 	r.Get("/health/ready", s.handleReady)
@@ -29,7 +28,8 @@ func (s *Server) newRouter() http.Handler {
 
 	apiV1 := chi.NewRouter()
 	r.Mount("/api/v1", HandlerWithOptions(s, ChiServerOptions{
-		BaseRouter: apiV1,
+		BaseRouter:  apiV1,
+		Middlewares: []MiddlewareFunc{s.storageMaintenanceMiddleware},
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", err.Error())
 		},
