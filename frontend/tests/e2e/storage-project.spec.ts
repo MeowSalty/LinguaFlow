@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { json, mockApp } from './fixtures'
+import { storageRuntime } from '../storage-fixtures'
 
 const project = {
   id: 7,
@@ -40,6 +41,7 @@ const version = {
   size: 3,
 }
 const options = {
+  runtime: storageRuntime(),
   scope: 'user',
   owner_id: 1,
   policy: { mode: 'both', default_choice: 'user', generation: 0 },
@@ -72,6 +74,11 @@ async function setup(page: Page, member = false) {
   const writes: { path: string; body: unknown }[] = [],
     reads: string[] = []
   const current = { ...project, owner_org_id: member ? 8 : null }
+  const discovery = {
+    ...options,
+    runtime: storageRuntime(),
+    items: options.items.map((item) => ({ ...item })),
+  }
   let migrated = false,
     repaired = false
   await page.route('**/api/v1/**', async (route) => {
@@ -98,9 +105,10 @@ async function setup(page: Page, member = false) {
       return json(route, { items: [current] })
     if (path === '/projects/7') return json(route, current)
     if (path.endsWith('/storage/options') || path === '/storage/options')
-      return json(route, options)
+      return json(route, discovery)
     if (path === '/projects/7/storage')
       return json(route, {
+        runtime: discovery.runtime,
         project_id: 7,
         storage_generation: 0,
         storage_state: migrated ? 'migrating' : 'active',
@@ -149,7 +157,7 @@ async function setup(page: Page, member = false) {
       )
     return route.fallback()
   })
-  return { reads, writes }
+  return { reads, writes, discovery }
 }
 async function chooseTarget(page: Page) {
   await page.getByLabel('选择存储空间', { exact: true }).click()
@@ -235,6 +243,77 @@ test('migration from a read-only historical binding tracks the original cutover 
   })
 })
 
+for (const code of ['storage_deployment_disabled', 'byos_disabled'] as const) {
+  test(`E-T07 ${code} preserves the original migration through blocked reads and cutover recovery`, async ({
+    page,
+  }) => {
+    const { writes, discovery } = await setup(page)
+    const taskReads: number[] = []
+    let blocked = false
+    let phase = 'copy'
+    await page.route('**/api/v1/projects/7/storage/tasks/42', async (route) => {
+      taskReads.push(42)
+      if (blocked) return json(route, { error_code: code, task_id: 42 }, 409)
+      return json(route, {
+        ...task,
+        kind: 'migration',
+        status: 'running',
+        phase,
+        cleanup_status: 'blocked',
+        cleanup_error_code: 'storage_deployment_disabled',
+        expires_at: '2026-10-06T00:00:00Z',
+        allowed_actions: [],
+      })
+    })
+    await page.goto('/projects/7')
+    await page.getByText('项目存储', { exact: true }).click()
+    await page.getByText('迁移已有数据', { exact: true }).click()
+    await chooseTarget(page)
+    await page.getByRole('button', { name: '迁移已有数据', exact: true }).click()
+    await page.getByRole('button', { name: '确定', exact: true }).click()
+    await expect(page.getByText('任务 #42 · copy', { exact: true })).toBeVisible()
+    const original = structuredClone(writes.find((item) => item.path.endsWith('/migrations')))
+    expect(original?.body).toEqual({
+      space_id: 9,
+      expected_generation: 0,
+      idempotency_key: expect.any(String),
+    })
+    blocked = true
+    discovery.runtime = storageRuntime(false)
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('focus'))
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await expect(
+      page.getByText('站点尚未启用此操作所需的存储能力，请联系管理员。', { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText('任务 #42 · copy', { exact: true })).toBeVisible()
+    await expect(
+      page.getByText('当前绑定已不符合新政策，但这不代表原件丢失。可按当前许可迁移到其他空间。', {
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      page.getByText('站点尚未启用部分存储能力。既有文件仍可读取，可选目标以当前列表为准。', {
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      page.getByText('项目正在执行存储迁移，发布屏障仍有效；请查看原任务进度。', { exact: true }),
+    ).toBeVisible()
+    expect(writes).toEqual([original])
+    const beforeRecovery = taskReads.length
+    blocked = false
+    phase = 'cutover'
+    discovery.runtime = storageRuntime()
+    await page.getByRole('button', { name: '刷新 / 恢复原任务', exact: true }).click()
+    await expect(page.getByText('任务 #42 · cutover', { exact: true })).toBeVisible()
+    expect(taskReads.length).toBeGreaterThan(beforeRecovery)
+    expect(writes).toEqual([original])
+    expect(writes.some((item) => /retry|cancel|content/.test(item.path))).toBe(false)
+  })
+}
+
 test('maintenance beginning after confirmation opens prevents a binding write', async ({
   page,
 }) => {
@@ -243,6 +322,7 @@ test('maintenance beginning after confirmation opens prevents a binding write', 
   await page.route('**/api/v1/projects/7/storage', (route) =>
     maintenance
       ? json(route, {
+          runtime: storageRuntime(),
           project_id: 7,
           storage_generation: 1,
           storage_state: 'draining',
@@ -259,6 +339,61 @@ test('maintenance beginning after confirmation opens prevents a binding write', 
   await expect(page.getByText('确认将空项目绑定到所选空间？', { exact: true })).toBeVisible()
   maintenance = true
   await page.getByRole('button', { name: '确定', exact: true }).click()
-  await expect(page.getByText('存储状态已变化，请刷新后重新确认。', { exact: true })).toBeVisible()
+  // The conflict triggers a read refresh, which may clear its transient error before rendering.
+  // Assert the durable project barrier and the absence of both an action and a write instead.
+  await expect(
+    page.getByText('项目正在执行存储迁移，发布屏障仍有效；请查看原任务进度。', { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: '重新绑定空项目', exact: true })).toHaveCount(0)
+  expect(writes.filter((item) => item.path === '/projects/7/storage')).toHaveLength(0)
+})
+
+test('E-T05/E-T09 focus retains an unavailable selected target and emits no create until explicit recovery', async ({
+  page,
+}) => {
+  const { reads, writes, discovery } = await setup(page)
+  await page.goto('/projects')
+  await page.getByRole('button', { name: '新建项目', exact: true }).click()
+  await page.getByPlaceholder('例如：LinguaFlow 本地化').fill('Preserved choice')
+  await chooseTarget(page)
+  const create = page.getByRole('button', { name: '创建项目', exact: true })
+  await expect(create).toBeEnabled()
+  const before = reads.filter((path) => path === '/storage/options?scope=user').length
+  discovery.runtime = storageRuntime(false)
+  discovery.items = []
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('focus'))
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await expect(create).toBeDisabled()
+  await expect(page.getByText('已保留所选空间「合法目标」', { exact: false })).toBeVisible()
+  await expect
+    .poll(() => reads.filter((path) => path === '/storage/options?scope=user').length)
+    .toBe(before + 1)
+  expect(writes).toHaveLength(0)
+  discovery.items = options.items.map((item) => ({ ...item }))
+  await page.getByRole('button', { name: '刷新可用空间', exact: true }).click()
+  await expect(create).toBeEnabled()
+  expect(writes).toHaveLength(0)
+  await create.click()
+  await expect.poll(() => writes.filter((item) => item.path === '/projects').length).toBe(1)
+  expect(writes.find((item) => item.path === '/projects')?.body).toMatchObject({
+    storage_space_id: 9,
+  })
+})
+
+test('E-T09 runtime maintenance starting after confirmation blocks binding without a generation change', async ({
+  page,
+}) => {
+  const { writes, discovery } = await setup(page)
+  await page.goto('/projects/7')
+  await page.getByText('项目存储', { exact: true }).click()
+  await chooseTarget(page)
+  await page.getByRole('button', { name: '重新绑定空项目', exact: true }).click()
+  discovery.runtime = storageRuntime(true, true)
+  await page.getByRole('button', { name: '确定', exact: true }).click()
+  await expect(
+    page.getByText('存储服务正在维护，相关写入暂停；现有文件及译文仍可查看。', { exact: true }),
+  ).toBeVisible()
   expect(writes.filter((item) => item.path === '/projects/7/storage')).toHaveLength(0)
 })

@@ -52,7 +52,7 @@ export default {
   healthPermissionDenied: '权限不足',
   healthCryptoUnavailable: '授权解密不可用',
   preparationHint:
-    '当前可准备连接、配置空间和恢复已有授权。自有存储的目标发现、撤销与迁出流程尚未完整开放，配置成功不表示已可绑定项目。',
+    '连接与空间的管理能力取决于当前归属和服务端状态。用于项目时，请根据目标发现结果选择可用空间。',
   healthMissing: '原件缺失',
   healthCorrupt: '原件损坏',
   healthUnavailable: '存储不可用',
