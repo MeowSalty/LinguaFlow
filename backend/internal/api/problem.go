@@ -21,12 +21,18 @@ const (
 )
 
 type problemDetails struct {
-	Type     string `json:"type,omitempty"`
-	Title    string `json:"title"`
-	Status   int    `json:"status"`
-	Detail   string `json:"detail,omitempty"`
-	Instance string `json:"instance,omitempty"`
+	ErrorCode   string `json:"error_code,omitempty"`
+	TaskID      int    `json:"task_id,omitempty"`
+	OperationID string `json:"operation_id,omitempty"`
+	CheckID     int    `json:"check_id,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Title       string `json:"title"`
+	Status      int    `json:"status"`
+	Detail      string `json:"detail,omitempty"`
+	Instance    string `json:"instance,omitempty"`
 }
+
+type storageProblemIdentityKey struct{}
 
 // urnForTitle 把 Problem title 映射为 RFC 9457 URN 格式的 type。
 // 使用 kebab-case: snake_case 的 title 转为 urn:linguaflow:<kebab-case>。
@@ -143,13 +149,18 @@ func (s *Server) writeProblemWithType(w http.ResponseWriter, r *http.Request, st
 
 	w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(problemDetails{
-		Type:     ptype,
-		Title:    title,
-		Status:   status,
-		Detail:   detail,
-		Instance: requestID,
-	})
+	problem := problemDetails{
+		ErrorCode: title,
+		Type:      ptype,
+		Title:     title,
+		Status:    status,
+		Detail:    detail,
+		Instance:  requestID,
+	}
+	if identity, ok := r.Context().Value(storageProblemIdentityKey{}).(*service.StorageOperationError); ok {
+		problem.TaskID, problem.OperationID, problem.CheckID = identity.TaskID, identity.OperationID, identity.CheckID
+	}
+	_ = json.NewEncoder(w).Encode(problem)
 }
 
 // writeProblem 写入 RFC 7807 Problem 响应,type 由 title 自动派生为 URN。
@@ -220,6 +231,10 @@ func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err e
 }
 
 func (s *Server) writeProjectServiceError(w http.ResponseWriter, r *http.Request, err error) {
+	if code := service.StorageErrorCode(err); strings.HasPrefix(code, "storage_") && code != "storage_unavailable" {
+		s.writeStorageError(w, r, err)
+		return
+	}
 	switch {
 	case errors.Is(err, service.ErrForbidden):
 		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")

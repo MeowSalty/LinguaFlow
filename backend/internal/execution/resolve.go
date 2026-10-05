@@ -19,8 +19,8 @@ import (
 const SchemaVersion = 1
 const DefaultsVersion = 1
 
-// Resolve owns application defaults. Adapters supply already authorized assets,
-// actual template bodies, and stable credential bindings. No I/O occurs here.
+// Resolve 掌管应用层默认值。适配器负责提供已授权的资产、真实的模板内容
+// 与稳定的凭据绑定。此处不发生任何 I/O。
 func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
 	data, err := json.Marshal(in)
 	if err != nil {
@@ -68,8 +68,8 @@ func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
 		}
 		out.RubyRetry.Backend.Options = opts
 	}
-	// Recompute derived provenance when an authorized entry point narrows rounds.
-	// Retain any provenance for external assets supplied by that entry point.
+	// 当授权入口收窄轮次时，重新计算派生来源；
+	// 该入口提供的外部资产的来源信息保持不变。
 	sources := out.Sources[:0]
 	for _, item := range out.Sources {
 		if item.Kind != "profile" && item.Kind != "round" {
@@ -86,8 +86,8 @@ func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
 	return &out, nil
 }
 
-// resolveRoundSelection runs only for newly accepted execution inputs. Empty
-// lists are deliberate; a nil list means that the input omitted the selection.
+// resolveRoundSelection 仅对新接受的执行输入运行。空列表是有意为之；
+// nil 列表表示输入未提供该选择。
 func resolveRoundSelection(r *JobRoundSnapshot) {
 	switch r.Mode {
 	case "adjudicate":
@@ -130,8 +130,8 @@ func source(kind, id string, value any) AssetSource {
 	return AssetSource{Kind: kind, ID: id, Digest: hex.EncodeToString(digest[:])}
 }
 
-// ResolveBackendOptions keeps intentional upstream defaults absent, while
-// materializing every default currently chosen by our provider adapters.
+// ResolveBackendOptions 不填充上游有意留空的默认值，同时把我们
+// provider 适配器当前采用的每个默认值实体化。
 func ResolveBackendOptions(provider string, input map[string]any) (map[string]any, error) {
 	if provider != "openai" && provider != "anthropic" && provider != "google" {
 		return nil, errors.New("unsupported provider")
@@ -268,7 +268,7 @@ func number(v any) (float64, bool) {
 	return n, !math.IsNaN(n) && !math.IsInf(n, 0)
 }
 
-// ValidateSpec never fills defaults. Restoring an incomplete snapshot fails.
+// ValidateSpec 绝不填充默认值。恢复不完整的快照会直接失败。
 func ValidateSpec(s *ResolvedExecutionSpec) error {
 	if s == nil || s.SchemaVersion != SchemaVersion || s.DefaultsVersion != DefaultsVersion {
 		return errors.New("unsupported or missing execution snapshot version")
@@ -372,8 +372,17 @@ func ValidateSpec(s *ResolvedExecutionSpec) error {
 		default:
 			return fmt.Errorf("round[%d] unsupported mode", i)
 		}
-		if batch < 0 || words < 0 || (batch == 0 && words == 0) || concurrency < 1 || strings.TrimSpace(body) == "" || retry.MaxAttempts < 0 || retry.BackoffMs < 0 {
-			return fmt.Errorf("round[%d] incomplete execution parameters", i)
+		if err := ValidateBatchLimits(r.Mode, batch, words); err != nil {
+			return fmt.Errorf("round[%d].%s.%w", i, r.Mode, err)
+		}
+		if concurrency < 1 {
+			return fmt.Errorf("round[%d].%s.concurrency must be >= 1", i, r.Mode)
+		}
+		if strings.TrimSpace(body) == "" {
+			return fmt.Errorf("round[%d].%s missing template content", i, r.Mode)
+		}
+		if retry.MaxAttempts < 0 || retry.BackoffMs < 0 {
+			return fmt.Errorf("round[%d].%s.retry max_attempts and backoff_ms must be >= 0", i, r.Mode)
 		}
 		if err := validateBackend(r.Backend); err != nil {
 			return fmt.Errorf("round[%d]: %w", i, err)

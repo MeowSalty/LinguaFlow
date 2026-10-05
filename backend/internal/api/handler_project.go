@@ -12,7 +12,8 @@ import (
 )
 
 type createProjectRequest struct {
-	Name string `json:"name"`
+	StorageSpaceID *int   `json:"storage_space_id"`
+	Name           string `json:"name"`
 	// OwnerOrgID 已移除 — 组织项目通过专用路由创建
 	Config          map[string]any `json:"config"`
 	GlossaryEnabled *bool          `json:"glossary_enabled"`
@@ -29,20 +30,25 @@ type updateProjectRequest struct {
 }
 
 type projectResponse struct {
-	ID              int            `json:"id"`
-	Name            string         `json:"name"`
-	OwnerUserID     *int           `json:"owner_user_id,omitempty"`
-	OwnerOrgID      *int           `json:"owner_org_id,omitempty"`
-	Config          map[string]any `json:"config,omitempty"`
-	GlossaryEnabled bool           `json:"glossary_enabled"`
-	SourceLang      string         `json:"source_lang"`
-	TargetLang      string         `json:"target_lang"`
-	CreatedAt       string         `json:"created_at"`
-	UpdatedAt       string         `json:"updated_at"`
+	StorageSpaceID    *int           `json:"storage_space_id,omitempty"`
+	StorageGeneration int64          `json:"storage_generation"`
+	OutputGeneration  int64          `json:"output_generation"`
+	StorageState      string         `json:"storage_state"`
+	ID                int            `json:"id"`
+	Name              string         `json:"name"`
+	OwnerUserID       *int           `json:"owner_user_id,omitempty"`
+	OwnerOrgID        *int           `json:"owner_org_id,omitempty"`
+	Config            map[string]any `json:"config,omitempty"`
+	GlossaryEnabled   bool           `json:"glossary_enabled"`
+	SourceLang        string         `json:"source_lang"`
+	TargetLang        string         `json:"target_lang"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
 }
 
 func toProjectResponse(p *ent.Project) projectResponse {
 	return projectResponse{
+		StorageSpaceID: p.StorageSpaceID, StorageGeneration: p.StorageGeneration, OutputGeneration: p.OutputGeneration, StorageState: p.StorageState,
 		ID:              p.ID,
 		Name:            p.Name,
 		OwnerUserID:     p.OwnerUserID,
@@ -75,6 +81,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := s.projectSvc.CreateProject(r.Context(), authUser.User.ID, service.CreateProjectInput{
+		StorageSpaceID:  req.StorageSpaceID,
 		Name:            req.Name,
 		Config:          req.Config,
 		GlossaryEnabled: req.GlossaryEnabled,
@@ -108,6 +115,7 @@ func (s *Server) handleCreateOrgProject(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	p, err := s.projectSvc.CreateOrgProject(r.Context(), authUser.User.ID, orgID, service.CreateProjectInput{
+		StorageSpaceID:  req.StorageSpaceID,
 		Name:            req.Name,
 		Config:          req.Config,
 		GlossaryEnabled: req.GlossaryEnabled,

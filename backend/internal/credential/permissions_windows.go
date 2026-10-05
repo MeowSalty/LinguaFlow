@@ -25,8 +25,12 @@ func checkFilePermissions(f *os.File) error {
 		return err
 	}
 	defer runtime.KeepAlive(sd)
+	return checkSecurityDescriptor(sd, user.User.Sid, system)
+}
+
+func checkSecurityDescriptor(sd *windows.SECURITY_DESCRIPTOR, user, system *windows.SID) error {
 	privatePrincipal := func(sid *windows.SID) bool {
-		return sid != nil && sid.IsValid() && (sid.Equals(user.User.Sid) || sid.Equals(system))
+		return sid != nil && sid.IsValid() && (sid.Equals(user) || sid.Equals(system))
 	}
 	denied := func() error {
 		return fmt.Errorf("%w: owner and protected Windows ACL must restrict access to the current account and SYSTEM", os.ErrPermission)
@@ -49,7 +53,7 @@ func checkFilePermissions(f *os.File) error {
 	if err != nil {
 		return err
 	}
-	// An absent or NULL DACL grants everyone full control.
+	// 缺失或为 NULL 的 DACL 会向所有人授予完全控制权。
 	if dacl == nil {
 		return denied()
 	}
@@ -61,8 +65,8 @@ func checkFilePermissions(f *os.File) error {
 		if ace.Header.AceFlags&windows.INHERIT_ONLY_ACE != 0 || ace.Header.AceType == windows.ACCESS_DENIED_ACE_TYPE {
 			continue
 		}
-		// Only ordinary allow/deny ACEs are accepted. Conditional or object ACEs
-		// need a full authorization evaluation and must not bypass this policy.
+		// 只接受普通的允许/拒绝 ACE。条件 ACE 或对象 ACE 需要完整的授权评估，
+		// 绝不能绕过本策略。
 		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || uintptr(ace.Header.AceSize) < unsafe.Sizeof(*ace) {
 			return denied()
 		}
@@ -73,32 +77,6 @@ func checkFilePermissions(f *os.File) error {
 	return nil
 }
 
-func restrictFile(path string) error {
-	return restrictPath(path, "")
-}
-
-func restrictDirectory(path string) error {
-	return restrictPath(path, "OICI")
-}
-
-func restrictPath(path, inheritance string) error {
-	user, err := windows.GetCurrentProcessToken().GetTokenUser()
-	if err != nil {
-		return err
-	}
-	sd, err := windows.SecurityDescriptorFromString("D:P(A;" + inheritance + ";FA;;;SY)(A;" + inheritance + ";FA;;;" + user.User.Sid.String() + ")")
-	if err != nil {
-		return err
-	}
-	dacl, _, err := sd.DACL()
-	if err != nil {
-		return err
-	}
-	// Elevated tokens can otherwise default the owner to Administrators. Set
-	// the owner explicitly so generated files satisfy the same read policy.
-	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, user.User.Sid, nil, dacl, nil)
-}
-
-// NTFS journals hard-link publication; Unix directory handles need an explicit
-// sync, whereas Windows does not expose directory FlushFileBuffers semantics.
+// NTFS 会为硬链接发布记录日志；Unix 的目录句柄需要显式同步，
+// 而 Windows 不提供目录级 FlushFileBuffers 语义。
 func syncDirectory(string) error { return nil }

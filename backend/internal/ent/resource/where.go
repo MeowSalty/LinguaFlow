@@ -65,6 +65,21 @@ func UpdatedAt(v time.Time) predicate.Resource {
 	return predicate.Resource(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// CurrentSourceRevisionID applies equality check predicate on the "current_source_revision_id" field. It's identical to CurrentSourceRevisionIDEQ.
+func CurrentSourceRevisionID(v int) predicate.Resource {
+	return predicate.Resource(sql.FieldEQ(FieldCurrentSourceRevisionID, v))
+}
+
+// SourceGeneration applies equality check predicate on the "source_generation" field. It's identical to SourceGenerationEQ.
+func SourceGeneration(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldEQ(FieldSourceGeneration, v))
+}
+
+// TranslationGeneration applies equality check predicate on the "translation_generation" field. It's identical to TranslationGenerationEQ.
+func TranslationGeneration(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldEQ(FieldTranslationGeneration, v))
+}
+
 // Path applies equality check predicate on the "path" field. It's identical to PathEQ.
 func Path(v string) predicate.Resource {
 	return predicate.Resource(sql.FieldEQ(FieldPath, v))
@@ -168,6 +183,136 @@ func UpdatedAtLT(v time.Time) predicate.Resource {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.Resource {
 	return predicate.Resource(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// CurrentSourceRevisionIDEQ applies the EQ predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDEQ(v int) predicate.Resource {
+	return predicate.Resource(sql.FieldEQ(FieldCurrentSourceRevisionID, v))
+}
+
+// CurrentSourceRevisionIDNEQ applies the NEQ predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDNEQ(v int) predicate.Resource {
+	return predicate.Resource(sql.FieldNEQ(FieldCurrentSourceRevisionID, v))
+}
+
+// CurrentSourceRevisionIDIn applies the In predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDIn(vs ...int) predicate.Resource {
+	return predicate.Resource(sql.FieldIn(FieldCurrentSourceRevisionID, vs...))
+}
+
+// CurrentSourceRevisionIDNotIn applies the NotIn predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDNotIn(vs ...int) predicate.Resource {
+	return predicate.Resource(sql.FieldNotIn(FieldCurrentSourceRevisionID, vs...))
+}
+
+// CurrentSourceRevisionIDGT applies the GT predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDGT(v int) predicate.Resource {
+	return predicate.Resource(sql.FieldGT(FieldCurrentSourceRevisionID, v))
+}
+
+// CurrentSourceRevisionIDGTE applies the GTE predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDGTE(v int) predicate.Resource {
+	return predicate.Resource(sql.FieldGTE(FieldCurrentSourceRevisionID, v))
+}
+
+// CurrentSourceRevisionIDLT applies the LT predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDLT(v int) predicate.Resource {
+	return predicate.Resource(sql.FieldLT(FieldCurrentSourceRevisionID, v))
+}
+
+// CurrentSourceRevisionIDLTE applies the LTE predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDLTE(v int) predicate.Resource {
+	return predicate.Resource(sql.FieldLTE(FieldCurrentSourceRevisionID, v))
+}
+
+// CurrentSourceRevisionIDIsNil applies the IsNil predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDIsNil() predicate.Resource {
+	return predicate.Resource(sql.FieldIsNull(FieldCurrentSourceRevisionID))
+}
+
+// CurrentSourceRevisionIDNotNil applies the NotNil predicate on the "current_source_revision_id" field.
+func CurrentSourceRevisionIDNotNil() predicate.Resource {
+	return predicate.Resource(sql.FieldNotNull(FieldCurrentSourceRevisionID))
+}
+
+// SourceGenerationEQ applies the EQ predicate on the "source_generation" field.
+func SourceGenerationEQ(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldEQ(FieldSourceGeneration, v))
+}
+
+// SourceGenerationNEQ applies the NEQ predicate on the "source_generation" field.
+func SourceGenerationNEQ(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldNEQ(FieldSourceGeneration, v))
+}
+
+// SourceGenerationIn applies the In predicate on the "source_generation" field.
+func SourceGenerationIn(vs ...int64) predicate.Resource {
+	return predicate.Resource(sql.FieldIn(FieldSourceGeneration, vs...))
+}
+
+// SourceGenerationNotIn applies the NotIn predicate on the "source_generation" field.
+func SourceGenerationNotIn(vs ...int64) predicate.Resource {
+	return predicate.Resource(sql.FieldNotIn(FieldSourceGeneration, vs...))
+}
+
+// SourceGenerationGT applies the GT predicate on the "source_generation" field.
+func SourceGenerationGT(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldGT(FieldSourceGeneration, v))
+}
+
+// SourceGenerationGTE applies the GTE predicate on the "source_generation" field.
+func SourceGenerationGTE(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldGTE(FieldSourceGeneration, v))
+}
+
+// SourceGenerationLT applies the LT predicate on the "source_generation" field.
+func SourceGenerationLT(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldLT(FieldSourceGeneration, v))
+}
+
+// SourceGenerationLTE applies the LTE predicate on the "source_generation" field.
+func SourceGenerationLTE(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldLTE(FieldSourceGeneration, v))
+}
+
+// TranslationGenerationEQ applies the EQ predicate on the "translation_generation" field.
+func TranslationGenerationEQ(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldEQ(FieldTranslationGeneration, v))
+}
+
+// TranslationGenerationNEQ applies the NEQ predicate on the "translation_generation" field.
+func TranslationGenerationNEQ(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldNEQ(FieldTranslationGeneration, v))
+}
+
+// TranslationGenerationIn applies the In predicate on the "translation_generation" field.
+func TranslationGenerationIn(vs ...int64) predicate.Resource {
+	return predicate.Resource(sql.FieldIn(FieldTranslationGeneration, vs...))
+}
+
+// TranslationGenerationNotIn applies the NotIn predicate on the "translation_generation" field.
+func TranslationGenerationNotIn(vs ...int64) predicate.Resource {
+	return predicate.Resource(sql.FieldNotIn(FieldTranslationGeneration, vs...))
+}
+
+// TranslationGenerationGT applies the GT predicate on the "translation_generation" field.
+func TranslationGenerationGT(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldGT(FieldTranslationGeneration, v))
+}
+
+// TranslationGenerationGTE applies the GTE predicate on the "translation_generation" field.
+func TranslationGenerationGTE(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldGTE(FieldTranslationGeneration, v))
+}
+
+// TranslationGenerationLT applies the LT predicate on the "translation_generation" field.
+func TranslationGenerationLT(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldLT(FieldTranslationGeneration, v))
+}
+
+// TranslationGenerationLTE applies the LTE predicate on the "translation_generation" field.
+func TranslationGenerationLTE(v int64) predicate.Resource {
+	return predicate.Resource(sql.FieldLTE(FieldTranslationGeneration, v))
 }
 
 // PathEQ applies the EQ predicate on the "path" field.

@@ -15,6 +15,8 @@ const (
 	Label = "segment_revision"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
+	// FieldSourceGeneration holds the string denoting the source_generation field in the database.
+	FieldSourceGeneration = "source_generation"
 	// FieldSegmentID holds the string denoting the segment_id field in the database.
 	FieldSegmentID = "segment_id"
 	// FieldResourceID holds the string denoting the resource_id field in the database.
@@ -59,6 +61,7 @@ const (
 // Columns holds all SQL columns for segmentrevision fields.
 var Columns = []string{
 	FieldID,
+	FieldSourceGeneration,
 	FieldSegmentID,
 	FieldResourceID,
 	FieldOperationID,
@@ -86,6 +89,10 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultSourceGeneration holds the default value on creation for the "source_generation" field.
+	DefaultSourceGeneration int64
+	// SourceGenerationValidator is a validator for the "source_generation" field. It is called by the builders before save.
+	SourceGenerationValidator func(int64) error
 	// SegmentIDValidator is a validator for the "segment_id" field. It is called by the builders before save.
 	SegmentIDValidator func(int) error
 	// ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
@@ -179,6 +186,11 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// BySourceGeneration orders the results by the source_generation field.
+func BySourceGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceGeneration, opts...).ToFunc()
 }
 
 // BySegmentID orders the results by the segment_id field.

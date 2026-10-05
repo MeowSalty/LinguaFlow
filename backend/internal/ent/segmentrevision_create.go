@@ -22,6 +22,20 @@ type SegmentRevisionCreate struct {
 	hooks    []Hook
 }
 
+// SetSourceGeneration sets the "source_generation" field.
+func (_c *SegmentRevisionCreate) SetSourceGeneration(v int64) *SegmentRevisionCreate {
+	_c.mutation.SetSourceGeneration(v)
+	return _c
+}
+
+// SetNillableSourceGeneration sets the "source_generation" field if the given value is not nil.
+func (_c *SegmentRevisionCreate) SetNillableSourceGeneration(v *int64) *SegmentRevisionCreate {
+	if v != nil {
+		_c.SetSourceGeneration(*v)
+	}
+	return _c
+}
+
 // SetSegmentID sets the "segment_id" field.
 func (_c *SegmentRevisionCreate) SetSegmentID(v int) *SegmentRevisionCreate {
 	_c.mutation.SetSegmentID(v)
@@ -186,6 +200,10 @@ func (_c *SegmentRevisionCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *SegmentRevisionCreate) defaults() {
+	if _, ok := _c.mutation.SourceGeneration(); !ok {
+		v := segmentrevision.DefaultSourceGeneration
+		_c.mutation.SetSourceGeneration(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := segmentrevision.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -194,6 +212,14 @@ func (_c *SegmentRevisionCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *SegmentRevisionCreate) check() error {
+	if _, ok := _c.mutation.SourceGeneration(); !ok {
+		return &ValidationError{Name: "source_generation", err: errors.New(`ent: missing required field "SegmentRevision.source_generation"`)}
+	}
+	if v, ok := _c.mutation.SourceGeneration(); ok {
+		if err := segmentrevision.SourceGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "source_generation", err: fmt.Errorf(`ent: validator failed for field "SegmentRevision.source_generation": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.SegmentID(); !ok {
 		return &ValidationError{Name: "segment_id", err: errors.New(`ent: missing required field "SegmentRevision.segment_id"`)}
 	}
@@ -282,6 +308,10 @@ func (_c *SegmentRevisionCreate) createSpec() (*SegmentRevision, *sqlgraph.Creat
 		_node = &SegmentRevision{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(segmentrevision.Table, sqlgraph.NewFieldSpec(segmentrevision.FieldID, field.TypeInt))
 	)
+	if value, ok := _c.mutation.SourceGeneration(); ok {
+		_spec.SetField(segmentrevision.FieldSourceGeneration, field.TypeInt64, value)
+		_node.SourceGeneration = value
+	}
 	if value, ok := _c.mutation.ResourceID(); ok {
 		_spec.SetField(segmentrevision.FieldResourceID, field.TypeInt, value)
 		_node.ResourceID = value

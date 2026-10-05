@@ -84,7 +84,7 @@ func newAdminCredentialsCmd(rt *appCtx) *cobra.Command {
 	mode := "serve"
 	cmd := &cobra.Command{
 		Use: "reencrypt", Args: cobra.NoArgs,
-		Short: "将凭据版本逐行重新加密到部署 keyring 的 active key",
+		Short: "将 LLM 与存储授权逐行重新加密到部署 keyring 的 active key",
 		Long: `先把新 key 加入 keyring、切换 active_key_id，并重启使用该数据库的服务进程，再执行本命令。
 命令使用相同部署 keyring，逐行提交重新加密，可重复执行或在失败后继续。
 它不改变凭据版本、撤销状态或任务引用，不删除 key；请保留恢复当前数据和历史备份需要的旧 key。
@@ -114,12 +114,17 @@ func newAdminCredentialsCmd(rt *appCtx) *cobra.Command {
 			if err := credentials.ValidateKeys(cmd.Context()); err != nil {
 				return err
 			}
-			count, err := credentials.Reencrypt(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("credential re-encryption stopped after %d committed versions: %w", count, err)
+			count, llmErr := credentials.Reencrypt(cmd.Context())
+			storageCredentials := service.NewStorageConnectionService(client, keys, cfg.Storage, nil)
+			storageCount, storageFailed, storageErr := storageCredentials.Reencrypt(cmd.Context())
+			_, outputErr := fmt.Fprintf(cmd.OutOrStdout(), "Re-encrypted %d credential versions. Existing keys were retained.\nRe-encrypted %d storage authorization versions; %d unavailable or conflicted.\n", count, storageCount, storageFailed)
+			if llmErr != nil {
+				llmErr = fmt.Errorf("credential re-encryption stopped after %d committed versions: %w", count, llmErr)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Re-encrypted %d credential versions. Existing keys were retained.\n", count)
-			return err
+			if storageFailed > 0 {
+				storageErr = errors.Join(storageErr, fmt.Errorf("storage re-encryption left %d versions requiring attention", storageFailed))
+			}
+			return errors.Join(llmErr, storageErr, outputErr)
 		},
 	}
 	cmd.Flags().StringVar(&mode, "mode", "serve", "部署模式 serve 或 local")

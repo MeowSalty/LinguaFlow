@@ -55,7 +55,7 @@ func TestOperationsMixedOrderingFiltersAndCursor(t *testing.T) {
 			seedOperationSync(t, c, p.ID, actor.ID, status, at)
 		}
 	}
-	// Numeric IDs 10 and 2 must retain integer order; both source tables reuse IDs.
+	// 数值 ID 10 和 2 必须保持整数顺序；两张源表都复用 ID。
 	for range 6 {
 		seedQueryJob(t, c, p.ID, "pending", "manual", at)
 		seedOperationSync(t, c, p.ID, actor.ID, "pending", at)
@@ -136,7 +136,7 @@ func TestOperationsMixedOrderingFiltersAndCursor(t *testing.T) {
 			t.Fatalf("opts=%+v err=%v", opts, err)
 		}
 	}
-	// Omitted active and explicit active are the same filter; page size may change.
+	// 省略 active 与显式 active 是同一过滤条件；页大小可能改变。
 	if _, err := svc.List(ctx, actor.ID, OperationListOptions{AccessibleJobListOptions: AccessibleJobListOptions{State: "active", Limit: 2, Cursor: page.NextCursor}}); err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestOperationsCountsPermissionsAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary.Total != (OperationCounts{2, 1, 1, 4}) || summary.ByType.GlossarySync.Paused != 0 {
+	if summary.Total != (OperationCounts{Pending: 2, Running: 1, Paused: 1, RecentFailed: 4}) || summary.ByType.GlossarySync.Paused != 0 {
 		t.Fatalf("counts: %+v", summary)
 	}
 	only, err := svc.summaryAt(ctx, actor.ID, OperationSummaryOptions{TaskType: OperationTranslation}, now)
@@ -214,7 +214,7 @@ func TestOperationsQueriesAreBoundedAndIndexed(t *testing.T) {
 	if _, err := svc.List(context.Background(), actor.ID, OperationListOptions{AccessibleJobListOptions: AccessibleJobListOptions{Limit: 3}}); err != nil {
 		t.Fatal(err)
 	}
-	if len(recorder.queries) != 3 {
+	if len(recorder.queries) != 4 {
 		t.Fatalf("list queries: %v", recorder.queries)
 	}
 	for _, q := range recorder.queries {
@@ -228,7 +228,7 @@ func TestOperationsQueriesAreBoundedAndIndexed(t *testing.T) {
 	if _, err := svc.Summary(context.Background(), actor.ID, OperationSummaryOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if len(recorder.queries) != 2 {
+	if len(recorder.queries) != 3 {
 		t.Fatalf("summary queries: %v", recorder.queries)
 	}
 	if err := c.Schema.Create(context.Background()); err != nil {

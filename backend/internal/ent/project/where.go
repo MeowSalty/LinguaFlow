@@ -65,6 +65,31 @@ func UpdatedAt(v time.Time) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// StorageSpaceID applies equality check predicate on the "storage_space_id" field. It's identical to StorageSpaceIDEQ.
+func StorageSpaceID(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldStorageSpaceID, v))
+}
+
+// StorageGeneration applies equality check predicate on the "storage_generation" field. It's identical to StorageGenerationEQ.
+func StorageGeneration(v int64) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldStorageGeneration, v))
+}
+
+// OutputGeneration applies equality check predicate on the "output_generation" field. It's identical to OutputGenerationEQ.
+func OutputGeneration(v int64) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldOutputGeneration, v))
+}
+
+// StorageState applies equality check predicate on the "storage_state" field. It's identical to StorageStateEQ.
+func StorageState(v string) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldStorageState, v))
+}
+
+// StorageMigrationTaskID applies equality check predicate on the "storage_migration_task_id" field. It's identical to StorageMigrationTaskIDEQ.
+func StorageMigrationTaskID(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldStorageMigrationTaskID, v))
+}
+
 // Name applies equality check predicate on the "name" field. It's identical to NameEQ.
 func Name(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldName, v))
@@ -173,6 +198,251 @@ func UpdatedAtLT(v time.Time) predicate.Project {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.Project {
 	return predicate.Project(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// StorageSpaceIDEQ applies the EQ predicate on the "storage_space_id" field.
+func StorageSpaceIDEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldStorageSpaceID, v))
+}
+
+// StorageSpaceIDNEQ applies the NEQ predicate on the "storage_space_id" field.
+func StorageSpaceIDNEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldStorageSpaceID, v))
+}
+
+// StorageSpaceIDIn applies the In predicate on the "storage_space_id" field.
+func StorageSpaceIDIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldStorageSpaceID, vs...))
+}
+
+// StorageSpaceIDNotIn applies the NotIn predicate on the "storage_space_id" field.
+func StorageSpaceIDNotIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldStorageSpaceID, vs...))
+}
+
+// StorageSpaceIDGT applies the GT predicate on the "storage_space_id" field.
+func StorageSpaceIDGT(v int) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldStorageSpaceID, v))
+}
+
+// StorageSpaceIDGTE applies the GTE predicate on the "storage_space_id" field.
+func StorageSpaceIDGTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldStorageSpaceID, v))
+}
+
+// StorageSpaceIDLT applies the LT predicate on the "storage_space_id" field.
+func StorageSpaceIDLT(v int) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldStorageSpaceID, v))
+}
+
+// StorageSpaceIDLTE applies the LTE predicate on the "storage_space_id" field.
+func StorageSpaceIDLTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldStorageSpaceID, v))
+}
+
+// StorageSpaceIDIsNil applies the IsNil predicate on the "storage_space_id" field.
+func StorageSpaceIDIsNil() predicate.Project {
+	return predicate.Project(sql.FieldIsNull(FieldStorageSpaceID))
+}
+
+// StorageSpaceIDNotNil applies the NotNil predicate on the "storage_space_id" field.
+func StorageSpaceIDNotNil() predicate.Project {
+	return predicate.Project(sql.FieldNotNull(FieldStorageSpaceID))
+}
+
+// StorageGenerationEQ applies the EQ predicate on the "storage_generation" field.
+func StorageGenerationEQ(v int64) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldStorageGeneration, v))
+}
+
+// StorageGenerationNEQ applies the NEQ predicate on the "storage_generation" field.
+func StorageGenerationNEQ(v int64) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldStorageGeneration, v))
+}
+
+// StorageGenerationIn applies the In predicate on the "storage_generation" field.
+func StorageGenerationIn(vs ...int64) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldStorageGeneration, vs...))
+}
+
+// StorageGenerationNotIn applies the NotIn predicate on the "storage_generation" field.
+func StorageGenerationNotIn(vs ...int64) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldStorageGeneration, vs...))
+}
+
+// StorageGenerationGT applies the GT predicate on the "storage_generation" field.
+func StorageGenerationGT(v int64) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldStorageGeneration, v))
+}
+
+// StorageGenerationGTE applies the GTE predicate on the "storage_generation" field.
+func StorageGenerationGTE(v int64) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldStorageGeneration, v))
+}
+
+// StorageGenerationLT applies the LT predicate on the "storage_generation" field.
+func StorageGenerationLT(v int64) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldStorageGeneration, v))
+}
+
+// StorageGenerationLTE applies the LTE predicate on the "storage_generation" field.
+func StorageGenerationLTE(v int64) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldStorageGeneration, v))
+}
+
+// OutputGenerationEQ applies the EQ predicate on the "output_generation" field.
+func OutputGenerationEQ(v int64) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldOutputGeneration, v))
+}
+
+// OutputGenerationNEQ applies the NEQ predicate on the "output_generation" field.
+func OutputGenerationNEQ(v int64) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldOutputGeneration, v))
+}
+
+// OutputGenerationIn applies the In predicate on the "output_generation" field.
+func OutputGenerationIn(vs ...int64) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldOutputGeneration, vs...))
+}
+
+// OutputGenerationNotIn applies the NotIn predicate on the "output_generation" field.
+func OutputGenerationNotIn(vs ...int64) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldOutputGeneration, vs...))
+}
+
+// OutputGenerationGT applies the GT predicate on the "output_generation" field.
+func OutputGenerationGT(v int64) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldOutputGeneration, v))
+}
+
+// OutputGenerationGTE applies the GTE predicate on the "output_generation" field.
+func OutputGenerationGTE(v int64) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldOutputGeneration, v))
+}
+
+// OutputGenerationLT applies the LT predicate on the "output_generation" field.
+func OutputGenerationLT(v int64) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldOutputGeneration, v))
+}
+
+// OutputGenerationLTE applies the LTE predicate on the "output_generation" field.
+func OutputGenerationLTE(v int64) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldOutputGeneration, v))
+}
+
+// StorageStateEQ applies the EQ predicate on the "storage_state" field.
+func StorageStateEQ(v string) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldStorageState, v))
+}
+
+// StorageStateNEQ applies the NEQ predicate on the "storage_state" field.
+func StorageStateNEQ(v string) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldStorageState, v))
+}
+
+// StorageStateIn applies the In predicate on the "storage_state" field.
+func StorageStateIn(vs ...string) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldStorageState, vs...))
+}
+
+// StorageStateNotIn applies the NotIn predicate on the "storage_state" field.
+func StorageStateNotIn(vs ...string) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldStorageState, vs...))
+}
+
+// StorageStateGT applies the GT predicate on the "storage_state" field.
+func StorageStateGT(v string) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldStorageState, v))
+}
+
+// StorageStateGTE applies the GTE predicate on the "storage_state" field.
+func StorageStateGTE(v string) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldStorageState, v))
+}
+
+// StorageStateLT applies the LT predicate on the "storage_state" field.
+func StorageStateLT(v string) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldStorageState, v))
+}
+
+// StorageStateLTE applies the LTE predicate on the "storage_state" field.
+func StorageStateLTE(v string) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldStorageState, v))
+}
+
+// StorageStateContains applies the Contains predicate on the "storage_state" field.
+func StorageStateContains(v string) predicate.Project {
+	return predicate.Project(sql.FieldContains(FieldStorageState, v))
+}
+
+// StorageStateHasPrefix applies the HasPrefix predicate on the "storage_state" field.
+func StorageStateHasPrefix(v string) predicate.Project {
+	return predicate.Project(sql.FieldHasPrefix(FieldStorageState, v))
+}
+
+// StorageStateHasSuffix applies the HasSuffix predicate on the "storage_state" field.
+func StorageStateHasSuffix(v string) predicate.Project {
+	return predicate.Project(sql.FieldHasSuffix(FieldStorageState, v))
+}
+
+// StorageStateEqualFold applies the EqualFold predicate on the "storage_state" field.
+func StorageStateEqualFold(v string) predicate.Project {
+	return predicate.Project(sql.FieldEqualFold(FieldStorageState, v))
+}
+
+// StorageStateContainsFold applies the ContainsFold predicate on the "storage_state" field.
+func StorageStateContainsFold(v string) predicate.Project {
+	return predicate.Project(sql.FieldContainsFold(FieldStorageState, v))
+}
+
+// StorageMigrationTaskIDEQ applies the EQ predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldStorageMigrationTaskID, v))
+}
+
+// StorageMigrationTaskIDNEQ applies the NEQ predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDNEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldStorageMigrationTaskID, v))
+}
+
+// StorageMigrationTaskIDIn applies the In predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldStorageMigrationTaskID, vs...))
+}
+
+// StorageMigrationTaskIDNotIn applies the NotIn predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDNotIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldStorageMigrationTaskID, vs...))
+}
+
+// StorageMigrationTaskIDGT applies the GT predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDGT(v int) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldStorageMigrationTaskID, v))
+}
+
+// StorageMigrationTaskIDGTE applies the GTE predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDGTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldStorageMigrationTaskID, v))
+}
+
+// StorageMigrationTaskIDLT applies the LT predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDLT(v int) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldStorageMigrationTaskID, v))
+}
+
+// StorageMigrationTaskIDLTE applies the LTE predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDLTE(v int) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldStorageMigrationTaskID, v))
+}
+
+// StorageMigrationTaskIDIsNil applies the IsNil predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDIsNil() predicate.Project {
+	return predicate.Project(sql.FieldIsNull(FieldStorageMigrationTaskID))
+}
+
+// StorageMigrationTaskIDNotNil applies the NotNil predicate on the "storage_migration_task_id" field.
+func StorageMigrationTaskIDNotNil() predicate.Project {
+	return predicate.Project(sql.FieldNotNull(FieldStorageMigrationTaskID))
 }
 
 // NameEQ applies the EQ predicate on the "name" field.

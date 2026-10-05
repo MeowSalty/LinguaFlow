@@ -1,7 +1,22 @@
 Project:
   type: object
-  required: [id, name, source_lang, target_lang, glossary_enabled]
+  required: [id, name, source_lang, target_lang, glossary_enabled, storage_space_id, storage_generation, output_generation, storage_state]
   properties:
+    storage_space_id:
+      type: integer
+      nullable: true
+    storage_generation:
+      type: integer
+      format: int64
+      minimum: 0
+    output_generation:
+      type: integer
+      format: int64
+      minimum: 0
+    storage_state:
+      type: string
+      enum: [active, draining, migrating, legacy_migration, legacy_rollback]
+
     id:
       type: integer
     name:
@@ -41,6 +56,10 @@ CreateProjectRequest:
   type: object
   required: [name]
   properties:
+    storage_space_id:
+      type: integer
+      minimum: 1
+
     name:
       type: string
     config:

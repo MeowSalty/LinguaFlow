@@ -1,6 +1,5 @@
-// Package previewtoken provides stateless HMAC/JWT apply tokens for segment
-// translation previews. Tokens are signed with the server's JWT secret and
-// include all claims needed for conflict-safe apply.
+// Package previewtoken 提供用于分段翻译预览的无状态 HMAC/JWT apply 令牌。
+// 令牌使用服务器的 JWT 密钥签名，并携带冲突安全 apply 所需的全部声明。
 package previewtoken
 
 import (
@@ -24,50 +23,51 @@ const (
 	tokenIssuer = "linguaflow-preview"
 	tokenType   = "preview-apply"
 
-	// KindTranslate keeps the historical empty kind for translation previews.
+	// KindTranslate 沿用翻译预览历史上遗留的空字符串 kind。
 	KindTranslate = ""
-	// KindRevision marks a token issued by the revision preview flow.
+	// KindRevision 标记由修订预览流程签发的令牌。
 	KindRevision = "fix"
 )
 
-// ApplyClaims are the JWT claims embedded in a preview apply token.
+// ApplyClaims 是预览 apply 令牌中内嵌的 JWT 声明。
 type ApplyClaims struct {
 	jwt.RegisteredClaims
 
-	// Type is always "preview-apply" for domain isolation.
+	// Type 恒为 "preview-apply"，用于领域隔离。
 	Type string `json:"type"`
 
-	// Kind distinguishes the preview purpose for audit routing. Empty means
-	// "translate" translation preview; "fix" means revision preview. It does
-	// not change token verification or application semantics.
+	// Kind 区分预览用途，供审计路由使用。空值表示 "translate" 翻译预览；
+	// "fix" 表示修订预览。它不改变令牌校验与应用语义。
 	Kind string `json:"kd,omitempty"`
 
-	// ActorUserID is the user who requested the preview.
+	// ActorUserID 是请求预览的用户。
 	ActorUserID int `json:"uid"`
-	// ProjectID is the project containing the segment.
+	// ProjectID 是分段所属的项目。
 	ProjectID int `json:"pid"`
-	// ResourceID is the resource containing the segment.
-	ResourceID int `json:"rid"`
-	// SegmentID is the specific segment.
+	// ResourceID 是分段所属的资源。
+	ResourceID       int   `json:"rid"`
+	SourceRevisionID *int  `json:"srid,omitempty"`
+	SourceGeneration int64 `json:"sg"`
+	// SegmentID 是具体的分段。
 	SegmentID int `json:"sid"`
-	// ExecutionPlanID identifies the plan used for preview.
+	// ExecutionPlanID 标识预览所用的执行计划。
 	ExecutionPlanID int `json:"epid"`
 
-	// SourceHash is a hash of the source text at preview time.
+	// SourceHash 是预览时 source 文本的哈希。
 	SourceHash string `json:"sh"`
-	// PreviewSource is the source text used by the virtual preview document.
+	// PreviewSource 是虚拟预览文档使用的 source 文本。
 	PreviewSource string `json:"ps"`
-	// TargetHash is a hash of the preview target text (empty if no target).
+	// TargetHash 是预览 target 文本的哈希（无 target 时为空）。
 	TargetHash string `json:"th"`
 
-	// BaselineSource is the database source text at preview time.
+	// BaselineSource 是预览时数据库中的 source 文本。
 	BaselineSource string `json:"bs"`
-	// BaselineTarget is the nullable database target text at preview time.
+	// BaselineTarget 是预览时数据库中可空的 target 文本。
 	BaselineTarget *string `json:"bt,omitempty"`
-	// BaselineStatus is the database status at preview time.
+	// BaselineStatus 是预览时数据库中的状态。
 	BaselineStatus string `json:"bst"`
 
-	// FinalIssues are the quality issues determined by the preview run.
+	// FinalIssues 是预览运行确定的质检 issue。
 	FinalIssues []qa.QualityIssue `json:"fi,omitempty"`
 
 	// ResolvedCodes 是修订预览声明已修复的 issue code 集合（仅 KindRevision 令牌
@@ -75,12 +75,12 @@ type ApplyClaims struct {
 	// 集合从段落既有 issue 中剔除 pending 项。旧令牌无此字段时为空，退化为旧行为。
 	ResolvedCodes []string `json:"rc,omitempty"`
 
-	// QAConfig encodes the deterministic QA configuration used during preview
-	// so that apply can re-run deterministic QA if the user modified the target.
+	// QAConfig 编码预览期间使用的确定性 QA 配置，
+	// 用户改写 target 时 apply 可据此重跑确定性 QA。
 	QAConfig QAConfigClaims `json:"qc"`
 }
 
-// QAConfigClaims captures the deterministic QA configuration.
+// QAConfigClaims 捕获确定性 QA 配置。
 type QAConfigClaims struct {
 	Enabled        bool     `json:"enabled"`
 	Checks         []string `json:"checks,omitempty"`
@@ -92,18 +92,18 @@ type QAConfigClaims struct {
 	Format         string   `json:"fmt,omitempty"`
 }
 
-// Codec creates and validates preview apply tokens.
+// Codec 创建并校验预览 apply 令牌。
 type Codec struct {
 	secret []byte
 	ttl    time.Duration
 }
 
-// NewCodec creates a token codec with the given HMAC secret and TTL.
+// NewCodec 使用给定的 HMAC 密钥与 TTL 创建令牌编解码器。
 func NewCodec(secret string, ttl time.Duration) *Codec {
 	return &Codec{secret: []byte(secret), ttl: ttl}
 }
 
-// Encode creates a signed apply token from the given claims.
+// Encode 根据给定声明创建签名的 apply 令牌。
 func (c *Codec) Encode(claims ApplyClaims) (string, time.Time, error) {
 	now := timeutil.NowUTC()
 	exp := now.Add(c.ttl)
@@ -122,7 +122,7 @@ func (c *Codec) Encode(claims ApplyClaims) (string, time.Time, error) {
 	return signed, timeutil.Normalize(claims.ExpiresAt.Time), nil
 }
 
-// Decode verifies and parses the token, returning the claims.
+// Decode 校验并解析令牌，返回其中的声明。
 func (c *Codec) Decode(tokenStr string) (*ApplyClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &ApplyClaims{}, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -152,8 +152,8 @@ func (c *Codec) Decode(tokenStr string) (*ApplyClaims, error) {
 	return claims, nil
 }
 
-// VerifyOwnership checks that the token belongs to the given actor, project,
-// resource, and segment. Returns nil on success.
+// VerifyOwnership 检查令牌是否属于给定的用户、项目、资源与分段。
+// 成功时返回 nil。
 func VerifyOwnership(claims *ApplyClaims, actorUserID, projectID, resourceID, segmentID int) error {
 	if claims.ActorUserID != actorUserID {
 		return fmt.Errorf("%w: user mismatch", ErrTokenInvalid)

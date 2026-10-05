@@ -1,0 +1,1012 @@
+StoragePolicy:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "mode"
+    - "default_choice"
+    - "generation"
+    - "logical_limit_bytes"
+  properties:
+    mode:
+      type: "string"
+      enum:
+        - "site_only"
+        - "both"
+        - "user_required"
+    default_choice:
+      type: "string"
+      enum:
+        - "site"
+        - "user"
+    generation:
+      type: "integer"
+      format: "int64"
+      minimum: 0
+    logical_limit_bytes:
+      type: "integer"
+      format: "int64"
+      minimum: 1
+    configuration_needs_update:
+      type: "boolean"
+      readOnly: true
+      description: "Stored mode/default combination needs administrator correction; effective values are normalized."
+StorageTask:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "id"
+    - "operation_id"
+    - "kind"
+    - "status"
+    - "phase"
+    - "cleanup_status"
+    - "allowed_actions"
+    - "project_id"
+    - "created_at"
+    - "updated_at"
+    - "expires_at"
+  properties:
+    id:
+      type: "integer"
+    operation_id:
+      type: "string"
+    kind:
+      type: "string"
+    status:
+      type: "string"
+      enum:
+        - "pending"
+        - "running"
+        - "waiting_retry"
+        - "needs_action"
+        - "completed"
+        - "failed"
+        - "cancelled"
+    phase:
+      type: "string"
+    cleanup_status:
+      type: "string"
+      enum:
+        - "cleanup_pending"
+        - "running"
+        - "blocked"
+        - "done"
+    error_code:
+      type: "string"
+    next_retry_at:
+      type: "string"
+      format: "date-time"
+      nullable: true
+    allowed_actions:
+      type: "array"
+      items:
+        type: "string"
+    result_resource_id:
+      type: "integer"
+      nullable: true
+    result_revision_id:
+      type: "integer"
+      nullable: true
+    result_artifact_id:
+      type: "integer"
+      nullable: true
+    project_id:
+      type: "integer"
+      minimum: 0
+    created_at:
+      type: "string"
+      format: "date-time"
+    updated_at:
+      type: "string"
+      format: "date-time"
+    expires_at:
+      type: "string"
+      format: "date-time"
+      nullable: true
+    resource_id:
+      type: "integer"
+      minimum: 0
+      nullable: true
+    source_revision_id:
+      type: "integer"
+      minimum: 0
+      nullable: true
+    target_space_id:
+      type: "integer"
+      minimum: 0
+      nullable: true
+    expected_storage_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    expected_source_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    expected_translation_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    expected_location_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    input_size:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    input_sha256:
+      type: "string"
+    source_preview:
+      $ref: "#/SourceUpdatePreview"
+StorageIntent:
+  oneOf:
+    - $ref: "#/StorageUploadIntent"
+    - $ref: "#/StorageSourceUpdateIntent"
+    - $ref: "#/StorageRepairIntent"
+  discriminator:
+    propertyName: "kind"
+    mapping:
+      upload: "#/StorageUploadIntent"
+      source_update: "#/StorageSourceUpdateIntent"
+      repair: "#/StorageRepairIntent"
+StorageBindingRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "space_id"
+    - "expected_generation"
+  properties:
+    space_id:
+      type: "integer"
+      minimum: 1
+    expected_generation:
+      type: "integer"
+      format: "int64"
+      minimum: 0
+StorageConnectionRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "name"
+    - "endpoint"
+    - "region"
+  properties:
+    name:
+      type: "string"
+    scope:
+      type: "string"
+      enum:
+        - "user"
+        - "org"
+    owner_id:
+      type: "integer"
+    endpoint:
+      type: "string"
+      format: "uri"
+    region:
+      type: "string"
+    path_style:
+      type: "boolean"
+StorageSpaceRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "name"
+    - "bucket"
+    - "prefix"
+    - "capacity_bytes"
+  properties:
+    name:
+      type: "string"
+    bucket:
+      type: "string"
+    prefix:
+      type: "string"
+    capacity_bytes:
+      type: "integer"
+      format: "int64"
+      minimum: 1
+StorageAuthorizationRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "access_key_id"
+    - "secret_access_key"
+    - "expected_management_generation"
+    - "write_check"
+  properties:
+    access_key_id:
+      type: "string"
+      writeOnly: true
+    secret_access_key:
+      type: "string"
+      writeOnly: true
+    session_token:
+      type: "string"
+      writeOnly: true
+    write_check:
+      type: "boolean"
+    expected_management_generation:
+      type: "integer"
+      format: "int64"
+    expires_at:
+      type: "string"
+      format: "date-time"
+      nullable: true
+StorageConnection:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "id"
+    - "name"
+    - "scope"
+    - "owner_id"
+    - "driver"
+    - "endpoint"
+    - "region"
+    - "status"
+    - "health"
+    - "has_auth"
+    - "management_generation"
+    - "auth_generation"
+  properties:
+    id:
+      type: "integer"
+    name:
+      type: "string"
+    scope:
+      type: "string"
+    owner_id:
+      type: "integer"
+    driver:
+      type: "string"
+    endpoint:
+      type: "string"
+    region:
+      type: "string"
+    path_style:
+      type: "boolean"
+    status:
+      type: "string"
+    health:
+      type: "string"
+      enum:
+        - "unknown"
+        - "available"
+        - "degraded"
+        - "auth_required"
+        - "permission_denied"
+        - "crypto_unavailable"
+    has_auth:
+      type: "boolean"
+    management_generation:
+      type: "integer"
+      format: "int64"
+    auth_generation:
+      type: "integer"
+      format: "int64"
+    checked_at:
+      type: "string"
+      format: "date-time"
+      nullable: true
+    check_id:
+      type: "integer"
+      minimum: 0
+      nullable: true
+StorageSpace:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "id"
+    - "connection_id"
+    - "name"
+    - "status"
+    - "verified"
+    - "management_generation"
+    - "capacity_bytes"
+    - "reserved_bytes"
+    - "candidate_bytes"
+    - "live_bytes"
+    - "pending_delete_bytes"
+  properties:
+    id:
+      type: "integer"
+    connection_id:
+      type: "integer"
+    name:
+      type: "string"
+    scope:
+      type: "string"
+    owner_id:
+      type: "integer"
+    bucket:
+      type: "string"
+    prefix:
+      type: "string"
+    status:
+      type: "string"
+    verified:
+      type: "boolean"
+    versioned:
+      type: "boolean"
+    management_generation:
+      type: "integer"
+      format: "int64"
+    capacity_bytes:
+      type: "integer"
+      format: "int64"
+    reserved_bytes:
+      type: "integer"
+      format: "int64"
+    candidate_bytes:
+      type: "integer"
+      format: "int64"
+    live_bytes:
+      type: "integer"
+      format: "int64"
+    pending_delete_bytes:
+      type: "integer"
+      format: "int64"
+SourceUpdateCommit:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "task_id"
+    - "expected_source_generation"
+    - "expected_translation_generation"
+  properties:
+    task_id:
+      type: "integer"
+    expected_source_generation:
+      type: "integer"
+      format: "int64"
+    expected_translation_generation:
+      type: "integer"
+      format: "int64"
+SourceVersion:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "id"
+    - "verification_state"
+    - "format"
+    - "parser_version"
+    - "current"
+    - "location_generation"
+    - "health"
+  properties:
+    id:
+      type: "integer"
+    verification_state:
+      type: "string"
+      enum:
+        - "verified"
+        - "legacy_unverified"
+    format:
+      type: "string"
+    parser_version:
+      type: "string"
+    current:
+      type: "boolean"
+    size:
+      type: "integer"
+      format: "int64"
+      nullable: true
+    sha256:
+      type: "string"
+      nullable: true
+    location_generation:
+      type: "integer"
+      format: "int64"
+    health:
+      type: "string"
+ExportArtifact:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "id"
+    - "source_revision_id"
+    - "status"
+    - "rebuildable"
+    - "renderer_version"
+    - "filename"
+    - "deletion_task_id"
+  properties:
+    id:
+      type: "integer"
+    source_revision_id:
+      type: "integer"
+    status:
+      type: "string"
+      enum:
+        - "pending"
+        - "ready"
+        - "failed"
+        - "deleted"
+    rebuildable:
+      type: "boolean"
+    renderer_version:
+      type: "string"
+    filename:
+      type: "string"
+    deletion_task_id:
+      type: "integer"
+      minimum: 0
+      nullable: true
+StorageConnectionList:
+  type: "object"
+  required:
+    - "items"
+  properties:
+    items:
+      type: "array"
+      items:
+        $ref: "#/StorageConnection"
+StorageSpaceList:
+  type: "object"
+  required:
+    - "items"
+  properties:
+    items:
+      type: "array"
+      items:
+        $ref: "#/StorageSpace"
+StorageTaskList:
+  type: "object"
+  required:
+    - "items"
+  properties:
+    items:
+      type: "array"
+      items:
+        $ref: "#/StorageTask"
+SourceVersionList:
+  type: "object"
+  required:
+    - "items"
+  properties:
+    items:
+      type: "array"
+      items:
+        $ref: "#/SourceVersion"
+ExportArtifactList:
+  type: "object"
+  required:
+    - "items"
+  properties:
+    items:
+      type: "array"
+      items:
+        $ref: "#/ExportArtifact"
+SourceUpdatePreview:
+  type: "object"
+  required:
+    - "task_id"
+    - "source_generation"
+    - "translation_generation"
+    - "stats"
+    - "expires_at"
+  properties:
+    task_id:
+      type: "integer"
+    source_generation:
+      type: "integer"
+      format: "int64"
+    translation_generation:
+      type: "integer"
+      format: "int64"
+    stats:
+      $ref: "#/SourceUpdateStats"
+    expires_at:
+      type: "string"
+      format: "date-time"
+      nullable: true
+    baseline_trust:
+      type: "string"
+      enum:
+        - "verified"
+        - "legacy_unverified"
+    legacy_snapshot_available:
+      type: "boolean"
+    legacy_snapshot_expires_at:
+      type: "string"
+      format: "date-time"
+      nullable: true
+SourceUpdateStats:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "unchanged"
+    - "updated"
+    - "added"
+    - "deleted"
+  properties:
+    unchanged:
+      type: "integer"
+      minimum: 0
+    updated:
+      type: "integer"
+      minimum: 0
+    added:
+      type: "integer"
+      minimum: 0
+    deleted:
+      type: "integer"
+      minimum: 0
+StorageUploadIntent:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "idempotency_key"
+    - "size"
+    - "storage_generation"
+    - "kind"
+    - "path"
+  properties:
+    idempotency_key:
+      type: "string"
+      minLength: 1
+      maxLength: 200
+    size:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    storage_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    kind:
+      type: "string"
+      enum:
+        - "upload"
+    path:
+      type: "string"
+StorageSourceUpdateIntent:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "idempotency_key"
+    - "size"
+    - "storage_generation"
+    - "kind"
+    - "resource_id"
+    - "source_generation"
+    - "translation_generation"
+  properties:
+    idempotency_key:
+      type: "string"
+      minLength: 1
+      maxLength: 200
+    size:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    storage_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    kind:
+      type: "string"
+      enum:
+        - "source_update"
+    resource_id:
+      type: "integer"
+      minimum: 1
+    source_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    translation_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+StorageRepairIntent:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "idempotency_key"
+    - "size"
+    - "storage_generation"
+    - "kind"
+    - "resource_id"
+    - "source_revision_id"
+    - "location_generation"
+    - "target_space_id"
+  properties:
+    idempotency_key:
+      type: "string"
+      minLength: 1
+      maxLength: 200
+    size:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    storage_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    kind:
+      type: "string"
+      enum:
+        - "repair"
+    resource_id:
+      type: "integer"
+      minimum: 1
+    source_revision_id:
+      type: "integer"
+      minimum: 1
+    location_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    target_space_id:
+      type: "integer"
+      minimum: 1
+StorageConnectionStateRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "status"
+    - "expected_generation"
+  properties:
+    status:
+      type: "string"
+      enum:
+        - "enabled"
+        - "disabled"
+    expected_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+StorageSpaceStateRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "status"
+    - "expected_generation"
+  properties:
+    status:
+      type: "string"
+      enum:
+        - "active"
+        - "read_only"
+        - "disabled"
+    expected_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+StorageRevokeRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "expected_generation"
+  properties:
+    expected_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+StorageMigrationRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "space_id"
+    - "expected_generation"
+    - "idempotency_key"
+  properties:
+    space_id:
+      type: "integer"
+      minimum: 1
+    expected_generation:
+      type: "integer"
+      format: "int64"
+      minimum: 0
+    idempotency_key:
+      type: "string"
+      minLength: 1
+      maxLength: 200
+StorageOption:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "space_id"
+    - "name"
+    - "scope"
+    - "selectable"
+    - "reason_codes"
+  properties:
+    space_id:
+      type: "integer"
+      minimum: 0
+    name:
+      type: "string"
+    scope:
+      type: "string"
+      enum:
+        - "site"
+        - "user"
+        - "org"
+    selectable:
+      type: "boolean"
+    reason_codes:
+      type: "array"
+      items:
+        type: "string"
+        enum:
+          - "policy_disallowed"
+          - "selection_required"
+          - "byos_disabled"
+          - "storage_maintenance"
+          - "connection_disabled"
+          - "storage_auth_required"
+          - "storage_crypto_unavailable"
+          - "storage_permission_denied"
+          - "storage_unavailable"
+          - "space_unverified"
+          - "space_read_only"
+          - "space_disabled"
+          - "storage_quota_exceeded"
+          - "storage_operation_in_progress"
+          - "project_not_empty"
+StorageOptions:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "scope"
+    - "owner_id"
+    - "policy"
+    - "default_space_id"
+    - "default_unavailable_reason"
+    - "items"
+  properties:
+    scope:
+      type: "string"
+      enum:
+        - "user"
+        - "org"
+    owner_id:
+      type: "integer"
+      minimum: 0
+    policy:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "mode"
+        - "default_choice"
+        - "generation"
+      properties:
+        mode:
+          type: "string"
+          enum:
+            - "site_only"
+            - "both"
+            - "user_required"
+        default_choice:
+          type: "string"
+          enum:
+            - "site"
+            - "user"
+        generation:
+          type: "integer"
+          minimum: 0
+          format: "int64"
+    default_space_id:
+      type: "integer"
+      minimum: 0
+      nullable: true
+    default_unavailable_reason:
+      type: "string"
+      nullable: true
+      enum:
+        - "policy_disallowed"
+        - "selection_required"
+        - "byos_disabled"
+        - "storage_maintenance"
+        - "connection_disabled"
+        - "storage_auth_required"
+        - "storage_crypto_unavailable"
+        - "storage_permission_denied"
+        - "storage_unavailable"
+        - "space_unverified"
+        - "space_read_only"
+        - "space_disabled"
+        - "storage_quota_exceeded"
+        - "storage_operation_in_progress"
+        - "project_not_empty"
+    items:
+      type: "array"
+      items:
+        $ref: "#/StorageOption"
+    storage_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+ProjectStorageBinding:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "space_id"
+    - "name"
+    - "scope"
+    - "status"
+    - "historical"
+    - "owner_id"
+  properties:
+    space_id:
+      type: "integer"
+      minimum: 0
+    name:
+      type: "string"
+    scope:
+      type: "string"
+      enum:
+        - "site"
+        - "user"
+        - "org"
+    status:
+      type: "string"
+    historical:
+      type: "boolean"
+    owner_id:
+      type: "integer"
+      minimum: 0
+ProjectStorage:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "project_id"
+    - "storage_generation"
+    - "storage_state"
+    - "migration_task_id"
+    - "binding"
+    - "reason_codes"
+  properties:
+    project_id:
+      type: "integer"
+      minimum: 0
+    storage_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    storage_state:
+      type: "string"
+      enum:
+        - "active"
+        - "draining"
+        - "migrating"
+        - "legacy_migration"
+        - "legacy_rollback"
+    migration_task_id:
+      type: "integer"
+      minimum: 0
+      nullable: true
+    binding:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "space_id"
+        - "name"
+        - "scope"
+        - "status"
+        - "historical"
+        - "owner_id"
+      properties:
+        space_id:
+          type: "integer"
+          minimum: 0
+        name:
+          type: "string"
+        scope:
+          type: "string"
+          enum:
+            - "site"
+            - "user"
+            - "org"
+        status:
+          type: "string"
+        historical:
+          type: "boolean"
+        owner_id:
+          type: "integer"
+          minimum: 0
+      nullable: true
+    reason_codes:
+      type: "array"
+      items:
+        type: "string"
+        enum:
+          - "policy_disallowed"
+          - "selection_required"
+          - "byos_disabled"
+          - "storage_maintenance"
+          - "connection_disabled"
+          - "storage_auth_required"
+          - "storage_crypto_unavailable"
+          - "storage_permission_denied"
+          - "storage_unavailable"
+          - "space_unverified"
+          - "space_read_only"
+          - "space_disabled"
+          - "storage_quota_exceeded"
+          - "storage_operation_in_progress"
+          - "project_not_empty"
+StorageCheckSpaceResult:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "space_id"
+    - "status"
+  properties:
+    space_id:
+      type: "integer"
+      minimum: 0
+    status:
+      type: "string"
+    error_code:
+      type: "string"
+StorageCheck:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "check_id"
+    - "connection_id"
+    - "mode"
+    - "management_generation"
+    - "created_at"
+    - "completed_at"
+    - "status"
+    - "cleanup_status"
+    - "accounted_bytes"
+    - "authorization_activated"
+    - "results"
+  properties:
+    check_id:
+      type: "integer"
+      minimum: 0
+    connection_id:
+      type: "integer"
+      minimum: 0
+    mode:
+      type: "string"
+    management_generation:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    created_at:
+      type: "string"
+      format: "date-time"
+    completed_at:
+      type: "string"
+      format: "date-time"
+      nullable: true
+    status:
+      type: "string"
+    cleanup_status:
+      type: "string"
+      enum:
+        - "cleanup_pending"
+        - "running"
+        - "blocked"
+        - "done"
+    error_code:
+      type: "string"
+    accounted_bytes:
+      type: "integer"
+      minimum: 0
+      format: "int64"
+    authorization_activated:
+      type: "boolean"
+    results:
+      type: "array"
+      items:
+        $ref: "#/StorageCheckSpaceResult"
+StorageCheckList:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "items"
+  properties:
+    items:
+      type: "array"
+      items:
+        $ref: "#/StorageCheck"

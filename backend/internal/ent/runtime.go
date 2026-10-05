@@ -7,12 +7,17 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bloblocation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialversion"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/deletionentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/exportartifact"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
@@ -28,7 +33,20 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segmentrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sourcerevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageauthversion"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagebackup"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheck"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheckwrite"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagemigrationitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatch"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatchitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
@@ -115,6 +133,113 @@ func init() {
 	backendDescRateLimitPerMinute := backendFields[7].Descriptor()
 	// backend.DefaultRateLimitPerMinute holds the default value on creation for the rate_limit_per_minute field.
 	backend.DefaultRateLimitPerMinute = backendDescRateLimitPerMinute.Default.(int)
+	backuppinMixin := schema.BackupPin{}.Mixin()
+	backuppinMixinFields0 := backuppinMixin[0].Fields()
+	_ = backuppinMixinFields0
+	backuppinFields := schema.BackupPin{}.Fields()
+	_ = backuppinFields
+	// backuppinDescCreatedAt is the schema descriptor for created_at field.
+	backuppinDescCreatedAt := backuppinMixinFields0[0].Descriptor()
+	// backuppin.DefaultCreatedAt holds the default value on creation for the created_at field.
+	backuppin.DefaultCreatedAt = backuppinDescCreatedAt.Default.(func() time.Time)
+	// backuppinDescUpdatedAt is the schema descriptor for updated_at field.
+	backuppinDescUpdatedAt := backuppinMixinFields0[1].Descriptor()
+	// backuppin.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	backuppin.DefaultUpdatedAt = backuppinDescUpdatedAt.Default.(func() time.Time)
+	// backuppin.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	backuppin.UpdateDefaultUpdatedAt = backuppinDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// backuppinDescLocationID is the schema descriptor for location_id field.
+	backuppinDescLocationID := backuppinFields[0].Descriptor()
+	// backuppin.LocationIDValidator is a validator for the "location_id" field. It is called by the builders before save.
+	backuppin.LocationIDValidator = backuppinDescLocationID.Validators[0].(func(int) error)
+	// backuppinDescBackupID is the schema descriptor for backup_id field.
+	backuppinDescBackupID := backuppinFields[1].Descriptor()
+	// backuppin.BackupIDValidator is a validator for the "backup_id" field. It is called by the builders before save.
+	backuppin.BackupIDValidator = backuppinDescBackupID.Validators[0].(func(string) error)
+	blobMixin := schema.Blob{}.Mixin()
+	blobMixinFields0 := blobMixin[0].Fields()
+	_ = blobMixinFields0
+	blobFields := schema.Blob{}.Fields()
+	_ = blobFields
+	// blobDescCreatedAt is the schema descriptor for created_at field.
+	blobDescCreatedAt := blobMixinFields0[0].Descriptor()
+	// blob.DefaultCreatedAt holds the default value on creation for the created_at field.
+	blob.DefaultCreatedAt = blobDescCreatedAt.Default.(func() time.Time)
+	// blobDescUpdatedAt is the schema descriptor for updated_at field.
+	blobDescUpdatedAt := blobMixinFields0[1].Descriptor()
+	// blob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	blob.DefaultUpdatedAt = blobDescUpdatedAt.Default.(func() time.Time)
+	// blob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	blob.UpdateDefaultUpdatedAt = blobDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// blobDescIdentity is the schema descriptor for identity field.
+	blobDescIdentity := blobFields[0].Descriptor()
+	// blob.IdentityValidator is a validator for the "identity" field. It is called by the builders before save.
+	blob.IdentityValidator = blobDescIdentity.Validators[0].(func(string) error)
+	// blobDescProjectID is the schema descriptor for project_id field.
+	blobDescProjectID := blobFields[1].Descriptor()
+	// blob.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	blob.ProjectIDValidator = blobDescProjectID.Validators[0].(func(int) error)
+	// blobDescOwnerID is the schema descriptor for owner_id field.
+	blobDescOwnerID := blobFields[3].Descriptor()
+	// blob.DefaultOwnerID holds the default value on creation for the owner_id field.
+	blob.DefaultOwnerID = blobDescOwnerID.Default.(int)
+	// blob.OwnerIDValidator is a validator for the "owner_id" field. It is called by the builders before save.
+	blob.OwnerIDValidator = blobDescOwnerID.Validators[0].(func(int) error)
+	// blobDescSize is the schema descriptor for size field.
+	blobDescSize := blobFields[5].Descriptor()
+	// blob.SizeValidator is a validator for the "size" field. It is called by the builders before save.
+	blob.SizeValidator = blobDescSize.Validators[0].(func(int64) error)
+	// blobDescActiveLocationID is the schema descriptor for active_location_id field.
+	blobDescActiveLocationID := blobFields[8].Descriptor()
+	// blob.ActiveLocationIDValidator is a validator for the "active_location_id" field. It is called by the builders before save.
+	blob.ActiveLocationIDValidator = blobDescActiveLocationID.Validators[0].(func(int) error)
+	// blobDescLocationGeneration is the schema descriptor for location_generation field.
+	blobDescLocationGeneration := blobFields[9].Descriptor()
+	// blob.DefaultLocationGeneration holds the default value on creation for the location_generation field.
+	blob.DefaultLocationGeneration = blobDescLocationGeneration.Default.(int64)
+	// blob.LocationGenerationValidator is a validator for the "location_generation" field. It is called by the builders before save.
+	blob.LocationGenerationValidator = blobDescLocationGeneration.Validators[0].(func(int64) error)
+	bloblocationMixin := schema.BlobLocation{}.Mixin()
+	bloblocationMixinFields0 := bloblocationMixin[0].Fields()
+	_ = bloblocationMixinFields0
+	bloblocationFields := schema.BlobLocation{}.Fields()
+	_ = bloblocationFields
+	// bloblocationDescCreatedAt is the schema descriptor for created_at field.
+	bloblocationDescCreatedAt := bloblocationMixinFields0[0].Descriptor()
+	// bloblocation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	bloblocation.DefaultCreatedAt = bloblocationDescCreatedAt.Default.(func() time.Time)
+	// bloblocationDescUpdatedAt is the schema descriptor for updated_at field.
+	bloblocationDescUpdatedAt := bloblocationMixinFields0[1].Descriptor()
+	// bloblocation.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	bloblocation.DefaultUpdatedAt = bloblocationDescUpdatedAt.Default.(func() time.Time)
+	// bloblocation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	bloblocation.UpdateDefaultUpdatedAt = bloblocationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// bloblocationDescBlobID is the schema descriptor for blob_id field.
+	bloblocationDescBlobID := bloblocationFields[0].Descriptor()
+	// bloblocation.BlobIDValidator is a validator for the "blob_id" field. It is called by the builders before save.
+	bloblocation.BlobIDValidator = bloblocationDescBlobID.Validators[0].(func(int) error)
+	// bloblocationDescSpaceID is the schema descriptor for space_id field.
+	bloblocationDescSpaceID := bloblocationFields[1].Descriptor()
+	// bloblocation.SpaceIDValidator is a validator for the "space_id" field. It is called by the builders before save.
+	bloblocation.SpaceIDValidator = bloblocationDescSpaceID.Validators[0].(func(int) error)
+	// bloblocationDescObjectKey is the schema descriptor for object_key field.
+	bloblocationDescObjectKey := bloblocationFields[2].Descriptor()
+	// bloblocation.ObjectKeyValidator is a validator for the "object_key" field. It is called by the builders before save.
+	bloblocation.ObjectKeyValidator = bloblocationDescObjectKey.Validators[0].(func(string) error)
+	// bloblocationDescProviderVersion is the schema descriptor for provider_version field.
+	bloblocationDescProviderVersion := bloblocationFields[3].Descriptor()
+	// bloblocation.DefaultProviderVersion holds the default value on creation for the provider_version field.
+	bloblocation.DefaultProviderVersion = bloblocationDescProviderVersion.Default.(string)
+	// bloblocationDescDeleteMarker is the schema descriptor for delete_marker field.
+	bloblocationDescDeleteMarker := bloblocationFields[4].Descriptor()
+	// bloblocation.DefaultDeleteMarker holds the default value on creation for the delete_marker field.
+	bloblocation.DefaultDeleteMarker = bloblocationDescDeleteMarker.Default.(bool)
+	// bloblocationDescSize is the schema descriptor for size field.
+	bloblocationDescSize := bloblocationFields[5].Descriptor()
+	// bloblocation.DefaultSize holds the default value on creation for the size field.
+	bloblocation.DefaultSize = bloblocationDescSize.Default.(int64)
+	// bloblocation.SizeValidator is a validator for the "size" field. It is called by the builders before save.
+	bloblocation.SizeValidator = bloblocationDescSize.Validators[0].(func(int64) error)
 	bootstrapprompttemplateMixin := schema.BootstrapPromptTemplate{}.Mixin()
 	bootstrapprompttemplateMixinFields0 := bootstrapprompttemplateMixin[0].Fields()
 	_ = bootstrapprompttemplateMixinFields0
@@ -224,6 +349,51 @@ func init() {
 	credentialversionDescRevoked := credentialversionFields[6].Descriptor()
 	// credentialversion.DefaultRevoked holds the default value on creation for the revoked field.
 	credentialversion.DefaultRevoked = credentialversionDescRevoked.Default.(bool)
+	deletionentryMixin := schema.DeletionEntry{}.Mixin()
+	deletionentryMixinFields0 := deletionentryMixin[0].Fields()
+	_ = deletionentryMixinFields0
+	deletionentryFields := schema.DeletionEntry{}.Fields()
+	_ = deletionentryFields
+	// deletionentryDescCreatedAt is the schema descriptor for created_at field.
+	deletionentryDescCreatedAt := deletionentryMixinFields0[0].Descriptor()
+	// deletionentry.DefaultCreatedAt holds the default value on creation for the created_at field.
+	deletionentry.DefaultCreatedAt = deletionentryDescCreatedAt.Default.(func() time.Time)
+	// deletionentryDescUpdatedAt is the schema descriptor for updated_at field.
+	deletionentryDescUpdatedAt := deletionentryMixinFields0[1].Descriptor()
+	// deletionentry.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	deletionentry.DefaultUpdatedAt = deletionentryDescUpdatedAt.Default.(func() time.Time)
+	// deletionentry.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	deletionentry.UpdateDefaultUpdatedAt = deletionentryDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// deletionentryDescLocationID is the schema descriptor for location_id field.
+	deletionentryDescLocationID := deletionentryFields[1].Descriptor()
+	// deletionentry.LocationIDValidator is a validator for the "location_id" field. It is called by the builders before save.
+	deletionentry.LocationIDValidator = deletionentryDescLocationID.Validators[0].(func(int) error)
+	// deletionentryDescProjectID is the schema descriptor for project_id field.
+	deletionentryDescProjectID := deletionentryFields[2].Descriptor()
+	// deletionentry.DefaultProjectID holds the default value on creation for the project_id field.
+	deletionentry.DefaultProjectID = deletionentryDescProjectID.Default.(int)
+	// deletionentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	deletionentry.ProjectIDValidator = deletionentryDescProjectID.Validators[0].(func(int) error)
+	// deletionentryDescOwnerKind is the schema descriptor for owner_kind field.
+	deletionentryDescOwnerKind := deletionentryFields[3].Descriptor()
+	// deletionentry.DefaultOwnerKind holds the default value on creation for the owner_kind field.
+	deletionentry.DefaultOwnerKind = deletionentryDescOwnerKind.Default.(string)
+	// deletionentryDescOwnerID is the schema descriptor for owner_id field.
+	deletionentryDescOwnerID := deletionentryFields[4].Descriptor()
+	// deletionentry.DefaultOwnerID holds the default value on creation for the owner_id field.
+	deletionentry.DefaultOwnerID = deletionentryDescOwnerID.Default.(int)
+	// deletionentry.OwnerIDValidator is a validator for the "owner_id" field. It is called by the builders before save.
+	deletionentry.OwnerIDValidator = deletionentryDescOwnerID.Validators[0].(func(int) error)
+	// deletionentryDescAttempts is the schema descriptor for attempts field.
+	deletionentryDescAttempts := deletionentryFields[6].Descriptor()
+	// deletionentry.DefaultAttempts holds the default value on creation for the attempts field.
+	deletionentry.DefaultAttempts = deletionentryDescAttempts.Default.(int)
+	// deletionentry.AttemptsValidator is a validator for the "attempts" field. It is called by the builders before save.
+	deletionentry.AttemptsValidator = deletionentryDescAttempts.Validators[0].(func(int) error)
+	// deletionentryDescErrorCode is the schema descriptor for error_code field.
+	deletionentryDescErrorCode := deletionentryFields[7].Descriptor()
+	// deletionentry.DefaultErrorCode holds the default value on creation for the error_code field.
+	deletionentry.DefaultErrorCode = deletionentryDescErrorCode.Default.(string)
 	executionplantemplateMixin := schema.ExecutionPlanTemplate{}.Mixin()
 	executionplantemplateMixinFields0 := executionplantemplateMixin[0].Fields()
 	_ = executionplantemplateMixinFields0
@@ -304,6 +474,57 @@ func init() {
 	executionprofileDescOwnerOrgID := executionprofileFields[4].Descriptor()
 	// executionprofile.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	executionprofile.OwnerOrgIDValidator = executionprofileDescOwnerOrgID.Validators[0].(func(int) error)
+	exportartifactMixin := schema.ExportArtifact{}.Mixin()
+	exportartifactMixinFields0 := exportartifactMixin[0].Fields()
+	_ = exportartifactMixinFields0
+	exportartifactFields := schema.ExportArtifact{}.Fields()
+	_ = exportartifactFields
+	// exportartifactDescCreatedAt is the schema descriptor for created_at field.
+	exportartifactDescCreatedAt := exportartifactMixinFields0[0].Descriptor()
+	// exportartifact.DefaultCreatedAt holds the default value on creation for the created_at field.
+	exportartifact.DefaultCreatedAt = exportartifactDescCreatedAt.Default.(func() time.Time)
+	// exportartifactDescUpdatedAt is the schema descriptor for updated_at field.
+	exportartifactDescUpdatedAt := exportartifactMixinFields0[1].Descriptor()
+	// exportartifact.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	exportartifact.DefaultUpdatedAt = exportartifactDescUpdatedAt.Default.(func() time.Time)
+	// exportartifact.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	exportartifact.UpdateDefaultUpdatedAt = exportartifactDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// exportartifactDescProjectID is the schema descriptor for project_id field.
+	exportartifactDescProjectID := exportartifactFields[1].Descriptor()
+	// exportartifact.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	exportartifact.ProjectIDValidator = exportartifactDescProjectID.Validators[0].(func(int) error)
+	// exportartifactDescResourceID is the schema descriptor for resource_id field.
+	exportartifactDescResourceID := exportartifactFields[2].Descriptor()
+	// exportartifact.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
+	exportartifact.ResourceIDValidator = exportartifactDescResourceID.Validators[0].(func(int) error)
+	// exportartifactDescSourceRevisionID is the schema descriptor for source_revision_id field.
+	exportartifactDescSourceRevisionID := exportartifactFields[3].Descriptor()
+	// exportartifact.SourceRevisionIDValidator is a validator for the "source_revision_id" field. It is called by the builders before save.
+	exportartifact.SourceRevisionIDValidator = exportartifactDescSourceRevisionID.Validators[0].(func(int) error)
+	// exportartifactDescRendererVersion is the schema descriptor for renderer_version field.
+	exportartifactDescRendererVersion := exportartifactFields[6].Descriptor()
+	// exportartifact.RendererVersionValidator is a validator for the "renderer_version" field. It is called by the builders before save.
+	exportartifact.RendererVersionValidator = exportartifactDescRendererVersion.Validators[0].(func(string) error)
+	// exportartifactDescSourceGeneration is the schema descriptor for source_generation field.
+	exportartifactDescSourceGeneration := exportartifactFields[7].Descriptor()
+	// exportartifact.DefaultSourceGeneration holds the default value on creation for the source_generation field.
+	exportartifact.DefaultSourceGeneration = exportartifactDescSourceGeneration.Default.(int64)
+	// exportartifactDescTranslationGeneration is the schema descriptor for translation_generation field.
+	exportartifactDescTranslationGeneration := exportartifactFields[8].Descriptor()
+	// exportartifact.DefaultTranslationGeneration holds the default value on creation for the translation_generation field.
+	exportartifact.DefaultTranslationGeneration = exportartifactDescTranslationGeneration.Default.(int64)
+	// exportartifactDescOutputGeneration is the schema descriptor for output_generation field.
+	exportartifactDescOutputGeneration := exportartifactFields[9].Descriptor()
+	// exportartifact.DefaultOutputGeneration holds the default value on creation for the output_generation field.
+	exportartifact.DefaultOutputGeneration = exportartifactDescOutputGeneration.Default.(int64)
+	// exportartifactDescRebuildable is the schema descriptor for rebuildable field.
+	exportartifactDescRebuildable := exportartifactFields[11].Descriptor()
+	// exportartifact.DefaultRebuildable holds the default value on creation for the rebuildable field.
+	exportartifact.DefaultRebuildable = exportartifactDescRebuildable.Default.(bool)
+	// exportartifactDescFilename is the schema descriptor for filename field.
+	exportartifactDescFilename := exportartifactFields[12].Descriptor()
+	// exportartifact.FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
+	exportartifact.FilenameValidator = exportartifactDescFilename.Validators[0].(func(string) error)
 	glossaryentryMixin := schema.GlossaryEntry{}.Mixin()
 	glossaryentryMixinFields0 := glossaryentryMixin[0].Fields()
 	_ = glossaryentryMixinFields0
@@ -470,34 +691,44 @@ func init() {
 	jobresource.DefaultUpdatedAt = jobresourceDescUpdatedAt.Default.(func() time.Time)
 	// jobresource.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	jobresource.UpdateDefaultUpdatedAt = jobresourceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// jobresourceDescSourceRevisionID is the schema descriptor for source_revision_id field.
+	jobresourceDescSourceRevisionID := jobresourceFields[0].Descriptor()
+	// jobresource.SourceRevisionIDValidator is a validator for the "source_revision_id" field. It is called by the builders before save.
+	jobresource.SourceRevisionIDValidator = jobresourceDescSourceRevisionID.Validators[0].(func(int) error)
+	// jobresourceDescSourceGeneration is the schema descriptor for source_generation field.
+	jobresourceDescSourceGeneration := jobresourceFields[1].Descriptor()
+	// jobresource.DefaultSourceGeneration holds the default value on creation for the source_generation field.
+	jobresource.DefaultSourceGeneration = jobresourceDescSourceGeneration.Default.(int64)
+	// jobresource.SourceGenerationValidator is a validator for the "source_generation" field. It is called by the builders before save.
+	jobresource.SourceGenerationValidator = jobresourceDescSourceGeneration.Validators[0].(func(int64) error)
 	// jobresourceDescStatus is the schema descriptor for status field.
-	jobresourceDescStatus := jobresourceFields[0].Descriptor()
+	jobresourceDescStatus := jobresourceFields[2].Descriptor()
 	// jobresource.DefaultStatus holds the default value on creation for the status field.
 	jobresource.DefaultStatus = jobresourceDescStatus.Default.(string)
 	// jobresourceDescSegmentIds is the schema descriptor for segment_ids field.
-	jobresourceDescSegmentIds := jobresourceFields[1].Descriptor()
+	jobresourceDescSegmentIds := jobresourceFields[3].Descriptor()
 	// jobresource.DefaultSegmentIds holds the default value on creation for the segment_ids field.
 	jobresource.DefaultSegmentIds = jobresourceDescSegmentIds.Default.(func() []int)
 	// jobresourceDescSegmentCount is the schema descriptor for segment_count field.
-	jobresourceDescSegmentCount := jobresourceFields[2].Descriptor()
+	jobresourceDescSegmentCount := jobresourceFields[4].Descriptor()
 	// jobresource.DefaultSegmentCount holds the default value on creation for the segment_count field.
 	jobresource.DefaultSegmentCount = jobresourceDescSegmentCount.Default.(int)
 	// jobresource.SegmentCountValidator is a validator for the "segment_count" field. It is called by the builders before save.
 	jobresource.SegmentCountValidator = jobresourceDescSegmentCount.Validators[0].(func(int) error)
 	// jobresourceDescCompletedSegments is the schema descriptor for completed_segments field.
-	jobresourceDescCompletedSegments := jobresourceFields[3].Descriptor()
+	jobresourceDescCompletedSegments := jobresourceFields[5].Descriptor()
 	// jobresource.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
 	jobresource.DefaultCompletedSegments = jobresourceDescCompletedSegments.Default.(int)
 	// jobresource.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	jobresource.CompletedSegmentsValidator = jobresourceDescCompletedSegments.Validators[0].(func(int) error)
 	// jobresourceDescSkippedSegments is the schema descriptor for skipped_segments field.
-	jobresourceDescSkippedSegments := jobresourceFields[4].Descriptor()
+	jobresourceDescSkippedSegments := jobresourceFields[6].Descriptor()
 	// jobresource.DefaultSkippedSegments holds the default value on creation for the skipped_segments field.
 	jobresource.DefaultSkippedSegments = jobresourceDescSkippedSegments.Default.(int)
 	// jobresource.SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
 	jobresource.SkippedSegmentsValidator = jobresourceDescSkippedSegments.Validators[0].(func(int) error)
 	// jobresourceDescWorkWeight is the schema descriptor for work_weight field.
-	jobresourceDescWorkWeight := jobresourceFields[5].Descriptor()
+	jobresourceDescWorkWeight := jobresourceFields[7].Descriptor()
 	// jobresource.DefaultWorkWeight holds the default value on creation for the work_weight field.
 	jobresource.DefaultWorkWeight = jobresourceDescWorkWeight.Default.(int64)
 	// jobresource.WorkWeightValidator is a validator for the "work_weight" field. It is called by the builders before save.
@@ -612,32 +843,52 @@ func init() {
 	project.DefaultUpdatedAt = projectDescUpdatedAt.Default.(func() time.Time)
 	// project.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	project.UpdateDefaultUpdatedAt = projectDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// projectDescStorageSpaceID is the schema descriptor for storage_space_id field.
+	projectDescStorageSpaceID := projectFields[0].Descriptor()
+	// project.StorageSpaceIDValidator is a validator for the "storage_space_id" field. It is called by the builders before save.
+	project.StorageSpaceIDValidator = projectDescStorageSpaceID.Validators[0].(func(int) error)
+	// projectDescStorageGeneration is the schema descriptor for storage_generation field.
+	projectDescStorageGeneration := projectFields[1].Descriptor()
+	// project.DefaultStorageGeneration holds the default value on creation for the storage_generation field.
+	project.DefaultStorageGeneration = projectDescStorageGeneration.Default.(int64)
+	// project.StorageGenerationValidator is a validator for the "storage_generation" field. It is called by the builders before save.
+	project.StorageGenerationValidator = projectDescStorageGeneration.Validators[0].(func(int64) error)
+	// projectDescOutputGeneration is the schema descriptor for output_generation field.
+	projectDescOutputGeneration := projectFields[2].Descriptor()
+	// project.DefaultOutputGeneration holds the default value on creation for the output_generation field.
+	project.DefaultOutputGeneration = projectDescOutputGeneration.Default.(int64)
+	// project.OutputGenerationValidator is a validator for the "output_generation" field. It is called by the builders before save.
+	project.OutputGenerationValidator = projectDescOutputGeneration.Validators[0].(func(int64) error)
+	// projectDescStorageState is the schema descriptor for storage_state field.
+	projectDescStorageState := projectFields[3].Descriptor()
+	// project.DefaultStorageState holds the default value on creation for the storage_state field.
+	project.DefaultStorageState = projectDescStorageState.Default.(string)
 	// projectDescName is the schema descriptor for name field.
-	projectDescName := projectFields[0].Descriptor()
+	projectDescName := projectFields[5].Descriptor()
 	// project.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	project.NameValidator = projectDescName.Validators[0].(func(string) error)
 	// projectDescOwnerUserID is the schema descriptor for owner_user_id field.
-	projectDescOwnerUserID := projectFields[1].Descriptor()
+	projectDescOwnerUserID := projectFields[6].Descriptor()
 	// project.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
 	project.OwnerUserIDValidator = projectDescOwnerUserID.Validators[0].(func(int) error)
 	// projectDescOwnerOrgID is the schema descriptor for owner_org_id field.
-	projectDescOwnerOrgID := projectFields[2].Descriptor()
+	projectDescOwnerOrgID := projectFields[7].Descriptor()
 	// project.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	project.OwnerOrgIDValidator = projectDescOwnerOrgID.Validators[0].(func(int) error)
 	// projectDescConfig is the schema descriptor for config field.
-	projectDescConfig := projectFields[3].Descriptor()
+	projectDescConfig := projectFields[8].Descriptor()
 	// project.DefaultConfig holds the default value on creation for the config field.
 	project.DefaultConfig = projectDescConfig.Default.(func() map[string]interface{})
 	// projectDescGlossaryEnabled is the schema descriptor for glossary_enabled field.
-	projectDescGlossaryEnabled := projectFields[4].Descriptor()
+	projectDescGlossaryEnabled := projectFields[9].Descriptor()
 	// project.DefaultGlossaryEnabled holds the default value on creation for the glossary_enabled field.
 	project.DefaultGlossaryEnabled = projectDescGlossaryEnabled.Default.(bool)
 	// projectDescSourceLang is the schema descriptor for source_lang field.
-	projectDescSourceLang := projectFields[5].Descriptor()
+	projectDescSourceLang := projectFields[10].Descriptor()
 	// project.DefaultSourceLang holds the default value on creation for the source_lang field.
 	project.DefaultSourceLang = projectDescSourceLang.Default.(string)
 	// projectDescTargetLang is the schema descriptor for target_lang field.
-	projectDescTargetLang := projectFields[6].Descriptor()
+	projectDescTargetLang := projectFields[11].Descriptor()
 	// project.DefaultTargetLang holds the default value on creation for the target_lang field.
 	project.DefaultTargetLang = projectDescTargetLang.Default.(string)
 	pruneprompttemplateMixin := schema.PrunePromptTemplate{}.Mixin()
@@ -713,26 +964,42 @@ func init() {
 	resource.DefaultUpdatedAt = resourceDescUpdatedAt.Default.(func() time.Time)
 	// resource.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	resource.UpdateDefaultUpdatedAt = resourceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// resourceDescCurrentSourceRevisionID is the schema descriptor for current_source_revision_id field.
+	resourceDescCurrentSourceRevisionID := resourceFields[0].Descriptor()
+	// resource.CurrentSourceRevisionIDValidator is a validator for the "current_source_revision_id" field. It is called by the builders before save.
+	resource.CurrentSourceRevisionIDValidator = resourceDescCurrentSourceRevisionID.Validators[0].(func(int) error)
+	// resourceDescSourceGeneration is the schema descriptor for source_generation field.
+	resourceDescSourceGeneration := resourceFields[1].Descriptor()
+	// resource.DefaultSourceGeneration holds the default value on creation for the source_generation field.
+	resource.DefaultSourceGeneration = resourceDescSourceGeneration.Default.(int64)
+	// resource.SourceGenerationValidator is a validator for the "source_generation" field. It is called by the builders before save.
+	resource.SourceGenerationValidator = resourceDescSourceGeneration.Validators[0].(func(int64) error)
+	// resourceDescTranslationGeneration is the schema descriptor for translation_generation field.
+	resourceDescTranslationGeneration := resourceFields[2].Descriptor()
+	// resource.DefaultTranslationGeneration holds the default value on creation for the translation_generation field.
+	resource.DefaultTranslationGeneration = resourceDescTranslationGeneration.Default.(int64)
+	// resource.TranslationGenerationValidator is a validator for the "translation_generation" field. It is called by the builders before save.
+	resource.TranslationGenerationValidator = resourceDescTranslationGeneration.Validators[0].(func(int64) error)
 	// resourceDescPath is the schema descriptor for path field.
-	resourceDescPath := resourceFields[0].Descriptor()
+	resourceDescPath := resourceFields[3].Descriptor()
 	// resource.PathValidator is a validator for the "path" field. It is called by the builders before save.
 	resource.PathValidator = resourceDescPath.Validators[0].(func(string) error)
 	// resourceDescFormat is the schema descriptor for format field.
-	resourceDescFormat := resourceFields[1].Descriptor()
+	resourceDescFormat := resourceFields[4].Descriptor()
 	// resource.FormatValidator is a validator for the "format" field. It is called by the builders before save.
 	resource.FormatValidator = resourceDescFormat.Validators[0].(func(string) error)
 	// resourceDescStoragePath is the schema descriptor for storage_path field.
-	resourceDescStoragePath := resourceFields[2].Descriptor()
+	resourceDescStoragePath := resourceFields[5].Descriptor()
 	// resource.StoragePathValidator is a validator for the "storage_path" field. It is called by the builders before save.
 	resource.StoragePathValidator = resourceDescStoragePath.Validators[0].(func(string) error)
 	// resourceDescTotalSegments is the schema descriptor for total_segments field.
-	resourceDescTotalSegments := resourceFields[3].Descriptor()
+	resourceDescTotalSegments := resourceFields[6].Descriptor()
 	// resource.DefaultTotalSegments holds the default value on creation for the total_segments field.
 	resource.DefaultTotalSegments = resourceDescTotalSegments.Default.(int)
 	// resource.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
 	resource.TotalSegmentsValidator = resourceDescTotalSegments.Validators[0].(func(int) error)
 	// resourceDescProjectID is the schema descriptor for project_id field.
-	resourceDescProjectID := resourceFields[4].Descriptor()
+	resourceDescProjectID := resourceFields[7].Descriptor()
 	// resource.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	resource.ProjectIDValidator = resourceDescProjectID.Validators[0].(func(int) error)
 	sseeventFields := schema.SSEEvent{}.Fields()
@@ -778,26 +1045,634 @@ func init() {
 	segment.ResourceIDValidator = segmentDescResourceID.Validators[0].(func(int) error)
 	segmentrevisionFields := schema.SegmentRevision{}.Fields()
 	_ = segmentrevisionFields
+	// segmentrevisionDescSourceGeneration is the schema descriptor for source_generation field.
+	segmentrevisionDescSourceGeneration := segmentrevisionFields[0].Descriptor()
+	// segmentrevision.DefaultSourceGeneration holds the default value on creation for the source_generation field.
+	segmentrevision.DefaultSourceGeneration = segmentrevisionDescSourceGeneration.Default.(int64)
+	// segmentrevision.SourceGenerationValidator is a validator for the "source_generation" field. It is called by the builders before save.
+	segmentrevision.SourceGenerationValidator = segmentrevisionDescSourceGeneration.Validators[0].(func(int64) error)
 	// segmentrevisionDescSegmentID is the schema descriptor for segment_id field.
-	segmentrevisionDescSegmentID := segmentrevisionFields[0].Descriptor()
+	segmentrevisionDescSegmentID := segmentrevisionFields[1].Descriptor()
 	// segmentrevision.SegmentIDValidator is a validator for the "segment_id" field. It is called by the builders before save.
 	segmentrevision.SegmentIDValidator = segmentrevisionDescSegmentID.Validators[0].(func(int) error)
 	// segmentrevisionDescResourceID is the schema descriptor for resource_id field.
-	segmentrevisionDescResourceID := segmentrevisionFields[1].Descriptor()
+	segmentrevisionDescResourceID := segmentrevisionFields[2].Descriptor()
 	// segmentrevision.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
 	segmentrevision.ResourceIDValidator = segmentrevisionDescResourceID.Validators[0].(func(int) error)
 	// segmentrevisionDescOperationID is the schema descriptor for operation_id field.
-	segmentrevisionDescOperationID := segmentrevisionFields[2].Descriptor()
+	segmentrevisionDescOperationID := segmentrevisionFields[3].Descriptor()
 	// segmentrevision.OperationIDValidator is a validator for the "operation_id" field. It is called by the builders before save.
 	segmentrevision.OperationIDValidator = segmentrevisionDescOperationID.Validators[0].(func(string) error)
 	// segmentrevisionDescActorID is the schema descriptor for actor_id field.
-	segmentrevisionDescActorID := segmentrevisionFields[12].Descriptor()
+	segmentrevisionDescActorID := segmentrevisionFields[13].Descriptor()
 	// segmentrevision.ActorIDValidator is a validator for the "actor_id" field. It is called by the builders before save.
 	segmentrevision.ActorIDValidator = segmentrevisionDescActorID.Validators[0].(func(int) error)
 	// segmentrevisionDescCreatedAt is the schema descriptor for created_at field.
-	segmentrevisionDescCreatedAt := segmentrevisionFields[13].Descriptor()
+	segmentrevisionDescCreatedAt := segmentrevisionFields[14].Descriptor()
 	// segmentrevision.DefaultCreatedAt holds the default value on creation for the created_at field.
 	segmentrevision.DefaultCreatedAt = segmentrevisionDescCreatedAt.Default.(func() time.Time)
+	sourcerevisionMixin := schema.SourceRevision{}.Mixin()
+	sourcerevisionMixinFields0 := sourcerevisionMixin[0].Fields()
+	_ = sourcerevisionMixinFields0
+	sourcerevisionFields := schema.SourceRevision{}.Fields()
+	_ = sourcerevisionFields
+	// sourcerevisionDescCreatedAt is the schema descriptor for created_at field.
+	sourcerevisionDescCreatedAt := sourcerevisionMixinFields0[0].Descriptor()
+	// sourcerevision.DefaultCreatedAt holds the default value on creation for the created_at field.
+	sourcerevision.DefaultCreatedAt = sourcerevisionDescCreatedAt.Default.(func() time.Time)
+	// sourcerevisionDescUpdatedAt is the schema descriptor for updated_at field.
+	sourcerevisionDescUpdatedAt := sourcerevisionMixinFields0[1].Descriptor()
+	// sourcerevision.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	sourcerevision.DefaultUpdatedAt = sourcerevisionDescUpdatedAt.Default.(func() time.Time)
+	// sourcerevision.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	sourcerevision.UpdateDefaultUpdatedAt = sourcerevisionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// sourcerevisionDescResourceID is the schema descriptor for resource_id field.
+	sourcerevisionDescResourceID := sourcerevisionFields[0].Descriptor()
+	// sourcerevision.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
+	sourcerevision.ResourceIDValidator = sourcerevisionDescResourceID.Validators[0].(func(int) error)
+	// sourcerevisionDescProjectID is the schema descriptor for project_id field.
+	sourcerevisionDescProjectID := sourcerevisionFields[1].Descriptor()
+	// sourcerevision.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	sourcerevision.ProjectIDValidator = sourcerevisionDescProjectID.Validators[0].(func(int) error)
+	// sourcerevisionDescSourceBlobID is the schema descriptor for source_blob_id field.
+	sourcerevisionDescSourceBlobID := sourcerevisionFields[2].Descriptor()
+	// sourcerevision.SourceBlobIDValidator is a validator for the "source_blob_id" field. It is called by the builders before save.
+	sourcerevision.SourceBlobIDValidator = sourcerevisionDescSourceBlobID.Validators[0].(func(int) error)
+	// sourcerevisionDescFormat is the schema descriptor for format field.
+	sourcerevisionDescFormat := sourcerevisionFields[3].Descriptor()
+	// sourcerevision.FormatValidator is a validator for the "format" field. It is called by the builders before save.
+	sourcerevision.FormatValidator = sourcerevisionDescFormat.Validators[0].(func(string) error)
+	// sourcerevisionDescParserVersion is the schema descriptor for parser_version field.
+	sourcerevisionDescParserVersion := sourcerevisionFields[4].Descriptor()
+	// sourcerevision.ParserVersionValidator is a validator for the "parser_version" field. It is called by the builders before save.
+	sourcerevision.ParserVersionValidator = sourcerevisionDescParserVersion.Validators[0].(func(string) error)
+	// sourcerevisionDescSize is the schema descriptor for size field.
+	sourcerevisionDescSize := sourcerevisionFields[6].Descriptor()
+	// sourcerevision.SizeValidator is a validator for the "size" field. It is called by the builders before save.
+	sourcerevision.SizeValidator = sourcerevisionDescSize.Validators[0].(func(int64) error)
+	// sourcerevisionDescCurrent is the schema descriptor for current field.
+	sourcerevisionDescCurrent := sourcerevisionFields[9].Descriptor()
+	// sourcerevision.DefaultCurrent holds the default value on creation for the current field.
+	sourcerevision.DefaultCurrent = sourcerevisionDescCurrent.Default.(bool)
+	// sourcerevisionDescDeleted is the schema descriptor for deleted field.
+	sourcerevisionDescDeleted := sourcerevisionFields[10].Descriptor()
+	// sourcerevision.DefaultDeleted holds the default value on creation for the deleted field.
+	sourcerevision.DefaultDeleted = sourcerevisionDescDeleted.Default.(bool)
+	storageauthversionMixin := schema.StorageAuthVersion{}.Mixin()
+	storageauthversionMixinFields0 := storageauthversionMixin[0].Fields()
+	_ = storageauthversionMixinFields0
+	storageauthversionFields := schema.StorageAuthVersion{}.Fields()
+	_ = storageauthversionFields
+	// storageauthversionDescCreatedAt is the schema descriptor for created_at field.
+	storageauthversionDescCreatedAt := storageauthversionMixinFields0[0].Descriptor()
+	// storageauthversion.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storageauthversion.DefaultCreatedAt = storageauthversionDescCreatedAt.Default.(func() time.Time)
+	// storageauthversionDescUpdatedAt is the schema descriptor for updated_at field.
+	storageauthversionDescUpdatedAt := storageauthversionMixinFields0[1].Descriptor()
+	// storageauthversion.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storageauthversion.DefaultUpdatedAt = storageauthversionDescUpdatedAt.Default.(func() time.Time)
+	// storageauthversion.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storageauthversion.UpdateDefaultUpdatedAt = storageauthversionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storageauthversionDescConnectionID is the schema descriptor for connection_id field.
+	storageauthversionDescConnectionID := storageauthversionFields[0].Descriptor()
+	// storageauthversion.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
+	storageauthversion.ConnectionIDValidator = storageauthversionDescConnectionID.Validators[0].(func(int) error)
+	// storageauthversionDescGeneration is the schema descriptor for generation field.
+	storageauthversionDescGeneration := storageauthversionFields[1].Descriptor()
+	// storageauthversion.GenerationValidator is a validator for the "generation" field. It is called by the builders before save.
+	storageauthversion.GenerationValidator = storageauthversionDescGeneration.Validators[0].(func(int64) error)
+	// storageauthversionDescPayloadVersion is the schema descriptor for payload_version field.
+	storageauthversionDescPayloadVersion := storageauthversionFields[2].Descriptor()
+	// storageauthversion.DefaultPayloadVersion holds the default value on creation for the payload_version field.
+	storageauthversion.DefaultPayloadVersion = storageauthversionDescPayloadVersion.Default.(int)
+	// storageauthversionDescAadVersion is the schema descriptor for aad_version field.
+	storageauthversionDescAadVersion := storageauthversionFields[3].Descriptor()
+	// storageauthversion.DefaultAadVersion holds the default value on creation for the aad_version field.
+	storageauthversion.DefaultAadVersion = storageauthversionDescAadVersion.Default.(int)
+	// storageauthversionDescKeyID is the schema descriptor for key_id field.
+	storageauthversionDescKeyID := storageauthversionFields[4].Descriptor()
+	// storageauthversion.KeyIDValidator is a validator for the "key_id" field. It is called by the builders before save.
+	storageauthversion.KeyIDValidator = storageauthversionDescKeyID.Validators[0].(func(string) error)
+	storagebackupMixin := schema.StorageBackup{}.Mixin()
+	storagebackupMixinFields0 := storagebackupMixin[0].Fields()
+	_ = storagebackupMixinFields0
+	storagebackupFields := schema.StorageBackup{}.Fields()
+	_ = storagebackupFields
+	// storagebackupDescCreatedAt is the schema descriptor for created_at field.
+	storagebackupDescCreatedAt := storagebackupMixinFields0[0].Descriptor()
+	// storagebackup.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storagebackup.DefaultCreatedAt = storagebackupDescCreatedAt.Default.(func() time.Time)
+	// storagebackupDescUpdatedAt is the schema descriptor for updated_at field.
+	storagebackupDescUpdatedAt := storagebackupMixinFields0[1].Descriptor()
+	// storagebackup.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storagebackup.DefaultUpdatedAt = storagebackupDescUpdatedAt.Default.(func() time.Time)
+	// storagebackup.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storagebackup.UpdateDefaultUpdatedAt = storagebackupDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storagebackupDescIdentity is the schema descriptor for identity field.
+	storagebackupDescIdentity := storagebackupFields[0].Descriptor()
+	// storagebackup.IdentityValidator is a validator for the "identity" field. It is called by the builders before save.
+	storagebackup.IdentityValidator = storagebackupDescIdentity.Validators[0].(func(string) error)
+	storagecheckMixin := schema.StorageCheck{}.Mixin()
+	storagecheckMixinFields0 := storagecheckMixin[0].Fields()
+	_ = storagecheckMixinFields0
+	storagecheckFields := schema.StorageCheck{}.Fields()
+	_ = storagecheckFields
+	// storagecheckDescCreatedAt is the schema descriptor for created_at field.
+	storagecheckDescCreatedAt := storagecheckMixinFields0[0].Descriptor()
+	// storagecheck.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storagecheck.DefaultCreatedAt = storagecheckDescCreatedAt.Default.(func() time.Time)
+	// storagecheckDescUpdatedAt is the schema descriptor for updated_at field.
+	storagecheckDescUpdatedAt := storagecheckMixinFields0[1].Descriptor()
+	// storagecheck.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storagecheck.DefaultUpdatedAt = storagecheckDescUpdatedAt.Default.(func() time.Time)
+	// storagecheck.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storagecheck.UpdateDefaultUpdatedAt = storagecheckDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storagecheckDescConnectionID is the schema descriptor for connection_id field.
+	storagecheckDescConnectionID := storagecheckFields[0].Descriptor()
+	// storagecheck.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
+	storagecheck.ConnectionIDValidator = storagecheckDescConnectionID.Validators[0].(func(int) error)
+	// storagecheckDescActorID is the schema descriptor for actor_id field.
+	storagecheckDescActorID := storagecheckFields[1].Descriptor()
+	// storagecheck.ActorIDValidator is a validator for the "actor_id" field. It is called by the builders before save.
+	storagecheck.ActorIDValidator = storagecheckDescActorID.Validators[0].(func(int) error)
+	// storagecheckDescMode is the schema descriptor for mode field.
+	storagecheckDescMode := storagecheckFields[2].Descriptor()
+	// storagecheck.ModeValidator is a validator for the "mode" field. It is called by the builders before save.
+	storagecheck.ModeValidator = storagecheckDescMode.Validators[0].(func(string) error)
+	// storagecheckDescManagementGeneration is the schema descriptor for management_generation field.
+	storagecheckDescManagementGeneration := storagecheckFields[3].Descriptor()
+	// storagecheck.ManagementGenerationValidator is a validator for the "management_generation" field. It is called by the builders before save.
+	storagecheck.ManagementGenerationValidator = storagecheckDescManagementGeneration.Validators[0].(func(int64) error)
+	// storagecheckDescStatus is the schema descriptor for status field.
+	storagecheckDescStatus := storagecheckFields[4].Descriptor()
+	// storagecheck.DefaultStatus holds the default value on creation for the status field.
+	storagecheck.DefaultStatus = storagecheckDescStatus.Default.(string)
+	// storagecheckDescErrorCode is the schema descriptor for error_code field.
+	storagecheckDescErrorCode := storagecheckFields[5].Descriptor()
+	// storagecheck.DefaultErrorCode holds the default value on creation for the error_code field.
+	storagecheck.DefaultErrorCode = storagecheckDescErrorCode.Default.(string)
+	// storagecheckDescAuthorizationActivated is the schema descriptor for authorization_activated field.
+	storagecheckDescAuthorizationActivated := storagecheckFields[7].Descriptor()
+	// storagecheck.DefaultAuthorizationActivated holds the default value on creation for the authorization_activated field.
+	storagecheck.DefaultAuthorizationActivated = storagecheckDescAuthorizationActivated.Default.(bool)
+	storagecheckwriteFields := schema.StorageCheckWrite{}.Fields()
+	_ = storagecheckwriteFields
+	// storagecheckwriteDescCheckID is the schema descriptor for check_id field.
+	storagecheckwriteDescCheckID := storagecheckwriteFields[0].Descriptor()
+	// storagecheckwrite.CheckIDValidator is a validator for the "check_id" field. It is called by the builders before save.
+	storagecheckwrite.CheckIDValidator = storagecheckwriteDescCheckID.Validators[0].(func(int) error)
+	// storagecheckwriteDescWriteID is the schema descriptor for write_id field.
+	storagecheckwriteDescWriteID := storagecheckwriteFields[1].Descriptor()
+	// storagecheckwrite.WriteIDValidator is a validator for the "write_id" field. It is called by the builders before save.
+	storagecheckwrite.WriteIDValidator = storagecheckwriteDescWriteID.Validators[0].(func(int) error)
+	storageconnectionMixin := schema.StorageConnection{}.Mixin()
+	storageconnectionMixinFields0 := storageconnectionMixin[0].Fields()
+	_ = storageconnectionMixinFields0
+	storageconnectionFields := schema.StorageConnection{}.Fields()
+	_ = storageconnectionFields
+	// storageconnectionDescCreatedAt is the schema descriptor for created_at field.
+	storageconnectionDescCreatedAt := storageconnectionMixinFields0[0].Descriptor()
+	// storageconnection.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storageconnection.DefaultCreatedAt = storageconnectionDescCreatedAt.Default.(func() time.Time)
+	// storageconnectionDescUpdatedAt is the schema descriptor for updated_at field.
+	storageconnectionDescUpdatedAt := storageconnectionMixinFields0[1].Descriptor()
+	// storageconnection.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storageconnection.DefaultUpdatedAt = storageconnectionDescUpdatedAt.Default.(func() time.Time)
+	// storageconnection.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storageconnection.UpdateDefaultUpdatedAt = storageconnectionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storageconnectionDescName is the schema descriptor for name field.
+	storageconnectionDescName := storageconnectionFields[0].Descriptor()
+	// storageconnection.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	storageconnection.NameValidator = storageconnectionDescName.Validators[0].(func(string) error)
+	// storageconnectionDescOwnerID is the schema descriptor for owner_id field.
+	storageconnectionDescOwnerID := storageconnectionFields[3].Descriptor()
+	// storageconnection.DefaultOwnerID holds the default value on creation for the owner_id field.
+	storageconnection.DefaultOwnerID = storageconnectionDescOwnerID.Default.(int)
+	// storageconnection.OwnerIDValidator is a validator for the "owner_id" field. It is called by the builders before save.
+	storageconnection.OwnerIDValidator = storageconnectionDescOwnerID.Validators[0].(func(int) error)
+	// storageconnectionDescEndpoint is the schema descriptor for endpoint field.
+	storageconnectionDescEndpoint := storageconnectionFields[5].Descriptor()
+	// storageconnection.DefaultEndpoint holds the default value on creation for the endpoint field.
+	storageconnection.DefaultEndpoint = storageconnectionDescEndpoint.Default.(string)
+	// storageconnectionDescRegion is the schema descriptor for region field.
+	storageconnectionDescRegion := storageconnectionFields[6].Descriptor()
+	// storageconnection.DefaultRegion holds the default value on creation for the region field.
+	storageconnection.DefaultRegion = storageconnectionDescRegion.Default.(string)
+	// storageconnectionDescPathStyle is the schema descriptor for path_style field.
+	storageconnectionDescPathStyle := storageconnectionFields[7].Descriptor()
+	// storageconnection.DefaultPathStyle holds the default value on creation for the path_style field.
+	storageconnection.DefaultPathStyle = storageconnectionDescPathStyle.Default.(bool)
+	// storageconnectionDescActiveAuthGeneration is the schema descriptor for active_auth_generation field.
+	storageconnectionDescActiveAuthGeneration := storageconnectionFields[9].Descriptor()
+	// storageconnection.DefaultActiveAuthGeneration holds the default value on creation for the active_auth_generation field.
+	storageconnection.DefaultActiveAuthGeneration = storageconnectionDescActiveAuthGeneration.Default.(int64)
+	// storageconnection.ActiveAuthGenerationValidator is a validator for the "active_auth_generation" field. It is called by the builders before save.
+	storageconnection.ActiveAuthGenerationValidator = storageconnectionDescActiveAuthGeneration.Validators[0].(func(int64) error)
+	// storageconnectionDescManagementGeneration is the schema descriptor for management_generation field.
+	storageconnectionDescManagementGeneration := storageconnectionFields[10].Descriptor()
+	// storageconnection.DefaultManagementGeneration holds the default value on creation for the management_generation field.
+	storageconnection.DefaultManagementGeneration = storageconnectionDescManagementGeneration.Default.(int64)
+	// storageconnection.ManagementGenerationValidator is a validator for the "management_generation" field. It is called by the builders before save.
+	storageconnection.ManagementGenerationValidator = storageconnectionDescManagementGeneration.Validators[0].(func(int64) error)
+	// storageconnectionDescHealth is the schema descriptor for health field.
+	storageconnectionDescHealth := storageconnectionFields[12].Descriptor()
+	// storageconnection.DefaultHealth holds the default value on creation for the health field.
+	storageconnection.DefaultHealth = storageconnectionDescHealth.Default.(string)
+	storagemigrationitemMixin := schema.StorageMigrationItem{}.Mixin()
+	storagemigrationitemMixinFields0 := storagemigrationitemMixin[0].Fields()
+	_ = storagemigrationitemMixinFields0
+	storagemigrationitemFields := schema.StorageMigrationItem{}.Fields()
+	_ = storagemigrationitemFields
+	// storagemigrationitemDescCreatedAt is the schema descriptor for created_at field.
+	storagemigrationitemDescCreatedAt := storagemigrationitemMixinFields0[0].Descriptor()
+	// storagemigrationitem.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storagemigrationitem.DefaultCreatedAt = storagemigrationitemDescCreatedAt.Default.(func() time.Time)
+	// storagemigrationitemDescUpdatedAt is the schema descriptor for updated_at field.
+	storagemigrationitemDescUpdatedAt := storagemigrationitemMixinFields0[1].Descriptor()
+	// storagemigrationitem.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storagemigrationitem.DefaultUpdatedAt = storagemigrationitemDescUpdatedAt.Default.(func() time.Time)
+	// storagemigrationitem.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storagemigrationitem.UpdateDefaultUpdatedAt = storagemigrationitemDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storagemigrationitemDescTaskID is the schema descriptor for task_id field.
+	storagemigrationitemDescTaskID := storagemigrationitemFields[0].Descriptor()
+	// storagemigrationitem.TaskIDValidator is a validator for the "task_id" field. It is called by the builders before save.
+	storagemigrationitem.TaskIDValidator = storagemigrationitemDescTaskID.Validators[0].(func(int) error)
+	// storagemigrationitemDescBlobID is the schema descriptor for blob_id field.
+	storagemigrationitemDescBlobID := storagemigrationitemFields[1].Descriptor()
+	// storagemigrationitem.BlobIDValidator is a validator for the "blob_id" field. It is called by the builders before save.
+	storagemigrationitem.BlobIDValidator = storagemigrationitemDescBlobID.Validators[0].(func(int) error)
+	// storagemigrationitemDescSourceLocationID is the schema descriptor for source_location_id field.
+	storagemigrationitemDescSourceLocationID := storagemigrationitemFields[2].Descriptor()
+	// storagemigrationitem.SourceLocationIDValidator is a validator for the "source_location_id" field. It is called by the builders before save.
+	storagemigrationitem.SourceLocationIDValidator = storagemigrationitemDescSourceLocationID.Validators[0].(func(int) error)
+	// storagemigrationitemDescExpectedLocationGeneration is the schema descriptor for expected_location_generation field.
+	storagemigrationitemDescExpectedLocationGeneration := storagemigrationitemFields[4].Descriptor()
+	// storagemigrationitem.ExpectedLocationGenerationValidator is a validator for the "expected_location_generation" field. It is called by the builders before save.
+	storagemigrationitem.ExpectedLocationGenerationValidator = storagemigrationitemDescExpectedLocationGeneration.Validators[0].(func(int64) error)
+	storagereservationMixin := schema.StorageReservation{}.Mixin()
+	storagereservationMixinFields0 := storagereservationMixin[0].Fields()
+	_ = storagereservationMixinFields0
+	storagereservationFields := schema.StorageReservation{}.Fields()
+	_ = storagereservationFields
+	// storagereservationDescCreatedAt is the schema descriptor for created_at field.
+	storagereservationDescCreatedAt := storagereservationMixinFields0[0].Descriptor()
+	// storagereservation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storagereservation.DefaultCreatedAt = storagereservationDescCreatedAt.Default.(func() time.Time)
+	// storagereservationDescUpdatedAt is the schema descriptor for updated_at field.
+	storagereservationDescUpdatedAt := storagereservationMixinFields0[1].Descriptor()
+	// storagereservation.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storagereservation.DefaultUpdatedAt = storagereservationDescUpdatedAt.Default.(func() time.Time)
+	// storagereservation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storagereservation.UpdateDefaultUpdatedAt = storagereservationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storagereservationDescWriteID is the schema descriptor for write_id field.
+	storagereservationDescWriteID := storagereservationFields[0].Descriptor()
+	// storagereservation.WriteIDValidator is a validator for the "write_id" field. It is called by the builders before save.
+	storagereservation.WriteIDValidator = storagereservationDescWriteID.Validators[0].(func(int) error)
+	// storagereservationDescSpaceID is the schema descriptor for space_id field.
+	storagereservationDescSpaceID := storagereservationFields[1].Descriptor()
+	// storagereservation.SpaceIDValidator is a validator for the "space_id" field. It is called by the builders before save.
+	storagereservation.SpaceIDValidator = storagereservationDescSpaceID.Validators[0].(func(int) error)
+	// storagereservationDescBytes is the schema descriptor for bytes field.
+	storagereservationDescBytes := storagereservationFields[2].Descriptor()
+	// storagereservation.BytesValidator is a validator for the "bytes" field. It is called by the builders before save.
+	storagereservation.BytesValidator = storagereservationDescBytes.Validators[0].(func(int64) error)
+	storagespaceMixin := schema.StorageSpace{}.Mixin()
+	storagespaceMixinFields0 := storagespaceMixin[0].Fields()
+	_ = storagespaceMixinFields0
+	storagespaceFields := schema.StorageSpace{}.Fields()
+	_ = storagespaceFields
+	// storagespaceDescCreatedAt is the schema descriptor for created_at field.
+	storagespaceDescCreatedAt := storagespaceMixinFields0[0].Descriptor()
+	// storagespace.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storagespace.DefaultCreatedAt = storagespaceDescCreatedAt.Default.(func() time.Time)
+	// storagespaceDescUpdatedAt is the schema descriptor for updated_at field.
+	storagespaceDescUpdatedAt := storagespaceMixinFields0[1].Descriptor()
+	// storagespace.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storagespace.DefaultUpdatedAt = storagespaceDescUpdatedAt.Default.(func() time.Time)
+	// storagespace.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storagespace.UpdateDefaultUpdatedAt = storagespaceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storagespaceDescConnectionID is the schema descriptor for connection_id field.
+	storagespaceDescConnectionID := storagespaceFields[0].Descriptor()
+	// storagespace.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
+	storagespace.ConnectionIDValidator = storagespaceDescConnectionID.Validators[0].(func(int) error)
+	// storagespaceDescName is the schema descriptor for name field.
+	storagespaceDescName := storagespaceFields[1].Descriptor()
+	// storagespace.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	storagespace.NameValidator = storagespaceDescName.Validators[0].(func(string) error)
+	// storagespaceDescIdentity is the schema descriptor for identity field.
+	storagespaceDescIdentity := storagespaceFields[2].Descriptor()
+	// storagespace.IdentityValidator is a validator for the "identity" field. It is called by the builders before save.
+	storagespace.IdentityValidator = storagespaceDescIdentity.Validators[0].(func(string) error)
+	// storagespaceDescMarkerNonce is the schema descriptor for marker_nonce field.
+	storagespaceDescMarkerNonce := storagespaceFields[3].Descriptor()
+	// storagespace.MarkerNonceValidator is a validator for the "marker_nonce" field. It is called by the builders before save.
+	storagespace.MarkerNonceValidator = storagespaceDescMarkerNonce.Validators[0].(func(string) error)
+	// storagespaceDescBucket is the schema descriptor for bucket field.
+	storagespaceDescBucket := storagespaceFields[4].Descriptor()
+	// storagespace.DefaultBucket holds the default value on creation for the bucket field.
+	storagespace.DefaultBucket = storagespaceDescBucket.Default.(string)
+	// storagespaceDescPrefix is the schema descriptor for prefix field.
+	storagespaceDescPrefix := storagespaceFields[5].Descriptor()
+	// storagespace.DefaultPrefix holds the default value on creation for the prefix field.
+	storagespace.DefaultPrefix = storagespaceDescPrefix.Default.(string)
+	// storagespaceDescOwnerID is the schema descriptor for owner_id field.
+	storagespaceDescOwnerID := storagespaceFields[7].Descriptor()
+	// storagespace.DefaultOwnerID holds the default value on creation for the owner_id field.
+	storagespace.DefaultOwnerID = storagespaceDescOwnerID.Default.(int)
+	// storagespace.OwnerIDValidator is a validator for the "owner_id" field. It is called by the builders before save.
+	storagespace.OwnerIDValidator = storagespaceDescOwnerID.Validators[0].(func(int) error)
+	// storagespaceDescManagementGeneration is the schema descriptor for management_generation field.
+	storagespaceDescManagementGeneration := storagespaceFields[8].Descriptor()
+	// storagespace.DefaultManagementGeneration holds the default value on creation for the management_generation field.
+	storagespace.DefaultManagementGeneration = storagespaceDescManagementGeneration.Default.(int64)
+	// storagespace.ManagementGenerationValidator is a validator for the "management_generation" field. It is called by the builders before save.
+	storagespace.ManagementGenerationValidator = storagespaceDescManagementGeneration.Validators[0].(func(int64) error)
+	// storagespaceDescVerified is the schema descriptor for verified field.
+	storagespaceDescVerified := storagespaceFields[10].Descriptor()
+	// storagespace.DefaultVerified holds the default value on creation for the verified field.
+	storagespace.DefaultVerified = storagespaceDescVerified.Default.(bool)
+	// storagespaceDescVersioned is the schema descriptor for versioned field.
+	storagespaceDescVersioned := storagespaceFields[11].Descriptor()
+	// storagespace.DefaultVersioned holds the default value on creation for the versioned field.
+	storagespace.DefaultVersioned = storagespaceDescVersioned.Default.(bool)
+	// storagespaceDescCapacityBytes is the schema descriptor for capacity_bytes field.
+	storagespaceDescCapacityBytes := storagespaceFields[12].Descriptor()
+	// storagespace.DefaultCapacityBytes holds the default value on creation for the capacity_bytes field.
+	storagespace.DefaultCapacityBytes = storagespaceDescCapacityBytes.Default.(int64)
+	// storagespace.CapacityBytesValidator is a validator for the "capacity_bytes" field. It is called by the builders before save.
+	storagespace.CapacityBytesValidator = storagespaceDescCapacityBytes.Validators[0].(func(int64) error)
+	// storagespaceDescReservedBytes is the schema descriptor for reserved_bytes field.
+	storagespaceDescReservedBytes := storagespaceFields[13].Descriptor()
+	// storagespace.DefaultReservedBytes holds the default value on creation for the reserved_bytes field.
+	storagespace.DefaultReservedBytes = storagespaceDescReservedBytes.Default.(int64)
+	// storagespace.ReservedBytesValidator is a validator for the "reserved_bytes" field. It is called by the builders before save.
+	storagespace.ReservedBytesValidator = storagespaceDescReservedBytes.Validators[0].(func(int64) error)
+	// storagespaceDescCandidateBytes is the schema descriptor for candidate_bytes field.
+	storagespaceDescCandidateBytes := storagespaceFields[14].Descriptor()
+	// storagespace.DefaultCandidateBytes holds the default value on creation for the candidate_bytes field.
+	storagespace.DefaultCandidateBytes = storagespaceDescCandidateBytes.Default.(int64)
+	// storagespace.CandidateBytesValidator is a validator for the "candidate_bytes" field. It is called by the builders before save.
+	storagespace.CandidateBytesValidator = storagespaceDescCandidateBytes.Validators[0].(func(int64) error)
+	// storagespaceDescLiveBytes is the schema descriptor for live_bytes field.
+	storagespaceDescLiveBytes := storagespaceFields[15].Descriptor()
+	// storagespace.DefaultLiveBytes holds the default value on creation for the live_bytes field.
+	storagespace.DefaultLiveBytes = storagespaceDescLiveBytes.Default.(int64)
+	// storagespace.LiveBytesValidator is a validator for the "live_bytes" field. It is called by the builders before save.
+	storagespace.LiveBytesValidator = storagespaceDescLiveBytes.Validators[0].(func(int64) error)
+	// storagespaceDescPendingDeleteBytes is the schema descriptor for pending_delete_bytes field.
+	storagespaceDescPendingDeleteBytes := storagespaceFields[16].Descriptor()
+	// storagespace.DefaultPendingDeleteBytes holds the default value on creation for the pending_delete_bytes field.
+	storagespace.DefaultPendingDeleteBytes = storagespaceDescPendingDeleteBytes.Default.(int64)
+	// storagespace.PendingDeleteBytesValidator is a validator for the "pending_delete_bytes" field. It is called by the builders before save.
+	storagespace.PendingDeleteBytesValidator = storagespaceDescPendingDeleteBytes.Validators[0].(func(int64) error)
+	storagetaskMixin := schema.StorageTask{}.Mixin()
+	storagetaskMixinFields0 := storagetaskMixin[0].Fields()
+	_ = storagetaskMixinFields0
+	storagetaskFields := schema.StorageTask{}.Fields()
+	_ = storagetaskFields
+	// storagetaskDescCreatedAt is the schema descriptor for created_at field.
+	storagetaskDescCreatedAt := storagetaskMixinFields0[0].Descriptor()
+	// storagetask.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storagetask.DefaultCreatedAt = storagetaskDescCreatedAt.Default.(func() time.Time)
+	// storagetaskDescUpdatedAt is the schema descriptor for updated_at field.
+	storagetaskDescUpdatedAt := storagetaskMixinFields0[1].Descriptor()
+	// storagetask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storagetask.DefaultUpdatedAt = storagetaskDescUpdatedAt.Default.(func() time.Time)
+	// storagetask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storagetask.UpdateDefaultUpdatedAt = storagetaskDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storagetaskDescContractVersion is the schema descriptor for contract_version field.
+	storagetaskDescContractVersion := storagetaskFields[0].Descriptor()
+	// storagetask.DefaultContractVersion holds the default value on creation for the contract_version field.
+	storagetask.DefaultContractVersion = storagetaskDescContractVersion.Default.(int)
+	// storagetask.ContractVersionValidator is a validator for the "contract_version" field. It is called by the builders before save.
+	storagetask.ContractVersionValidator = storagetaskDescContractVersion.Validators[0].(func(int) error)
+	// storagetaskDescInputSize is the schema descriptor for input_size field.
+	storagetaskDescInputSize := storagetaskFields[1].Descriptor()
+	// storagetask.DefaultInputSize holds the default value on creation for the input_size field.
+	storagetask.DefaultInputSize = storagetaskDescInputSize.Default.(int64)
+	// storagetask.InputSizeValidator is a validator for the "input_size" field. It is called by the builders before save.
+	storagetask.InputSizeValidator = storagetaskDescInputSize.Validators[0].(func(int64) error)
+	// storagetaskDescInputSha256 is the schema descriptor for input_sha256 field.
+	storagetaskDescInputSha256 := storagetaskFields[2].Descriptor()
+	// storagetask.DefaultInputSha256 holds the default value on creation for the input_sha256 field.
+	storagetask.DefaultInputSha256 = storagetaskDescInputSha256.Default.(string)
+	// storagetaskDescLeaseToken is the schema descriptor for lease_token field.
+	storagetaskDescLeaseToken := storagetaskFields[7].Descriptor()
+	// storagetask.DefaultLeaseToken holds the default value on creation for the lease_token field.
+	storagetask.DefaultLeaseToken = storagetaskDescLeaseToken.Default.(string)
+	// storagetaskDescOperationID is the schema descriptor for operation_id field.
+	storagetaskDescOperationID := storagetaskFields[9].Descriptor()
+	// storagetask.OperationIDValidator is a validator for the "operation_id" field. It is called by the builders before save.
+	storagetask.OperationIDValidator = storagetaskDescOperationID.Validators[0].(func(string) error)
+	// storagetaskDescIdempotencyKey is the schema descriptor for idempotency_key field.
+	storagetaskDescIdempotencyKey := storagetaskFields[10].Descriptor()
+	// storagetask.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
+	storagetask.IdempotencyKeyValidator = storagetaskDescIdempotencyKey.Validators[0].(func(string) error)
+	// storagetaskDescRequestHash is the schema descriptor for request_hash field.
+	storagetaskDescRequestHash := storagetaskFields[11].Descriptor()
+	// storagetask.RequestHashValidator is a validator for the "request_hash" field. It is called by the builders before save.
+	storagetask.RequestHashValidator = storagetaskDescRequestHash.Validators[0].(func(string) error)
+	// storagetaskDescActorID is the schema descriptor for actor_id field.
+	storagetaskDescActorID := storagetaskFields[12].Descriptor()
+	// storagetask.DefaultActorID holds the default value on creation for the actor_id field.
+	storagetask.DefaultActorID = storagetaskDescActorID.Default.(int)
+	// storagetask.ActorIDValidator is a validator for the "actor_id" field. It is called by the builders before save.
+	storagetask.ActorIDValidator = storagetaskDescActorID.Validators[0].(func(int) error)
+	// storagetaskDescProjectID is the schema descriptor for project_id field.
+	storagetaskDescProjectID := storagetaskFields[13].Descriptor()
+	// storagetask.DefaultProjectID holds the default value on creation for the project_id field.
+	storagetask.DefaultProjectID = storagetaskDescProjectID.Default.(int)
+	// storagetask.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	storagetask.ProjectIDValidator = storagetaskDescProjectID.Validators[0].(func(int) error)
+	// storagetaskDescKind is the schema descriptor for kind field.
+	storagetaskDescKind := storagetaskFields[14].Descriptor()
+	// storagetask.KindValidator is a validator for the "kind" field. It is called by the builders before save.
+	storagetask.KindValidator = storagetaskDescKind.Validators[0].(func(string) error)
+	// storagetaskDescPhase is the schema descriptor for phase field.
+	storagetaskDescPhase := storagetaskFields[16].Descriptor()
+	// storagetask.DefaultPhase holds the default value on creation for the phase field.
+	storagetask.DefaultPhase = storagetaskDescPhase.Default.(string)
+	// storagetaskDescErrorCode is the schema descriptor for error_code field.
+	storagetaskDescErrorCode := storagetaskFields[18].Descriptor()
+	// storagetask.DefaultErrorCode holds the default value on creation for the error_code field.
+	storagetask.DefaultErrorCode = storagetaskDescErrorCode.Default.(string)
+	// storagetaskDescExpectedSourceGeneration is the schema descriptor for expected_source_generation field.
+	storagetaskDescExpectedSourceGeneration := storagetaskFields[25].Descriptor()
+	// storagetask.DefaultExpectedSourceGeneration holds the default value on creation for the expected_source_generation field.
+	storagetask.DefaultExpectedSourceGeneration = storagetaskDescExpectedSourceGeneration.Default.(int64)
+	// storagetaskDescExpectedTranslationGeneration is the schema descriptor for expected_translation_generation field.
+	storagetaskDescExpectedTranslationGeneration := storagetaskFields[26].Descriptor()
+	// storagetask.DefaultExpectedTranslationGeneration holds the default value on creation for the expected_translation_generation field.
+	storagetask.DefaultExpectedTranslationGeneration = storagetaskDescExpectedTranslationGeneration.Default.(int64)
+	// storagetaskDescExpectedStorageGeneration is the schema descriptor for expected_storage_generation field.
+	storagetaskDescExpectedStorageGeneration := storagetaskFields[27].Descriptor()
+	// storagetask.DefaultExpectedStorageGeneration holds the default value on creation for the expected_storage_generation field.
+	storagetask.DefaultExpectedStorageGeneration = storagetaskDescExpectedStorageGeneration.Default.(int64)
+	// storagetaskDescExpectedLocationGeneration is the schema descriptor for expected_location_generation field.
+	storagetaskDescExpectedLocationGeneration := storagetaskFields[28].Descriptor()
+	// storagetask.DefaultExpectedLocationGeneration holds the default value on creation for the expected_location_generation field.
+	storagetask.DefaultExpectedLocationGeneration = storagetaskDescExpectedLocationGeneration.Default.(int64)
+	// storagetaskDescAttempts is the schema descriptor for attempts field.
+	storagetaskDescAttempts := storagetaskFields[29].Descriptor()
+	// storagetask.DefaultAttempts holds the default value on creation for the attempts field.
+	storagetask.DefaultAttempts = storagetaskDescAttempts.Default.(int)
+	// storagetask.AttemptsValidator is a validator for the "attempts" field. It is called by the builders before save.
+	storagetask.AttemptsValidator = storagetaskDescAttempts.Validators[0].(func(int) error)
+	storageuploadbatchMixin := schema.StorageUploadBatch{}.Mixin()
+	storageuploadbatchMixinFields0 := storageuploadbatchMixin[0].Fields()
+	_ = storageuploadbatchMixinFields0
+	storageuploadbatchFields := schema.StorageUploadBatch{}.Fields()
+	_ = storageuploadbatchFields
+	// storageuploadbatchDescCreatedAt is the schema descriptor for created_at field.
+	storageuploadbatchDescCreatedAt := storageuploadbatchMixinFields0[0].Descriptor()
+	// storageuploadbatch.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storageuploadbatch.DefaultCreatedAt = storageuploadbatchDescCreatedAt.Default.(func() time.Time)
+	// storageuploadbatchDescUpdatedAt is the schema descriptor for updated_at field.
+	storageuploadbatchDescUpdatedAt := storageuploadbatchMixinFields0[1].Descriptor()
+	// storageuploadbatch.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storageuploadbatch.DefaultUpdatedAt = storageuploadbatchDescUpdatedAt.Default.(func() time.Time)
+	// storageuploadbatch.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storageuploadbatch.UpdateDefaultUpdatedAt = storageuploadbatchDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storageuploadbatchDescActorID is the schema descriptor for actor_id field.
+	storageuploadbatchDescActorID := storageuploadbatchFields[0].Descriptor()
+	// storageuploadbatch.ActorIDValidator is a validator for the "actor_id" field. It is called by the builders before save.
+	storageuploadbatch.ActorIDValidator = storageuploadbatchDescActorID.Validators[0].(func(int) error)
+	// storageuploadbatchDescProjectID is the schema descriptor for project_id field.
+	storageuploadbatchDescProjectID := storageuploadbatchFields[1].Descriptor()
+	// storageuploadbatch.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	storageuploadbatch.ProjectIDValidator = storageuploadbatchDescProjectID.Validators[0].(func(int) error)
+	// storageuploadbatchDescIdempotencyKey is the schema descriptor for idempotency_key field.
+	storageuploadbatchDescIdempotencyKey := storageuploadbatchFields[2].Descriptor()
+	// storageuploadbatch.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
+	storageuploadbatch.IdempotencyKeyValidator = storageuploadbatchDescIdempotencyKey.Validators[0].(func(string) error)
+	// storageuploadbatchDescOperationID is the schema descriptor for operation_id field.
+	storageuploadbatchDescOperationID := storageuploadbatchFields[3].Descriptor()
+	// storageuploadbatch.OperationIDValidator is a validator for the "operation_id" field. It is called by the builders before save.
+	storageuploadbatch.OperationIDValidator = storageuploadbatchDescOperationID.Validators[0].(func(string) error)
+	// storageuploadbatchDescContractVersion is the schema descriptor for contract_version field.
+	storageuploadbatchDescContractVersion := storageuploadbatchFields[4].Descriptor()
+	// storageuploadbatch.DefaultContractVersion holds the default value on creation for the contract_version field.
+	storageuploadbatch.DefaultContractVersion = storageuploadbatchDescContractVersion.Default.(int)
+	// storageuploadbatchDescManifestHash is the schema descriptor for manifest_hash field.
+	storageuploadbatchDescManifestHash := storageuploadbatchFields[5].Descriptor()
+	// storageuploadbatch.ManifestHashValidator is a validator for the "manifest_hash" field. It is called by the builders before save.
+	storageuploadbatch.ManifestHashValidator = storageuploadbatchDescManifestHash.Validators[0].(func(string) error)
+	// storageuploadbatchDescStatus is the schema descriptor for status field.
+	storageuploadbatchDescStatus := storageuploadbatchFields[7].Descriptor()
+	// storageuploadbatch.DefaultStatus holds the default value on creation for the status field.
+	storageuploadbatch.DefaultStatus = storageuploadbatchDescStatus.Default.(string)
+	// storageuploadbatchDescLeaseToken is the schema descriptor for lease_token field.
+	storageuploadbatchDescLeaseToken := storageuploadbatchFields[8].Descriptor()
+	// storageuploadbatch.DefaultLeaseToken holds the default value on creation for the lease_token field.
+	storageuploadbatch.DefaultLeaseToken = storageuploadbatchDescLeaseToken.Default.(string)
+	storageuploadbatchitemMixin := schema.StorageUploadBatchItem{}.Mixin()
+	storageuploadbatchitemMixinFields0 := storageuploadbatchitemMixin[0].Fields()
+	_ = storageuploadbatchitemMixinFields0
+	storageuploadbatchitemFields := schema.StorageUploadBatchItem{}.Fields()
+	_ = storageuploadbatchitemFields
+	// storageuploadbatchitemDescCreatedAt is the schema descriptor for created_at field.
+	storageuploadbatchitemDescCreatedAt := storageuploadbatchitemMixinFields0[0].Descriptor()
+	// storageuploadbatchitem.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storageuploadbatchitem.DefaultCreatedAt = storageuploadbatchitemDescCreatedAt.Default.(func() time.Time)
+	// storageuploadbatchitemDescUpdatedAt is the schema descriptor for updated_at field.
+	storageuploadbatchitemDescUpdatedAt := storageuploadbatchitemMixinFields0[1].Descriptor()
+	// storageuploadbatchitem.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storageuploadbatchitem.DefaultUpdatedAt = storageuploadbatchitemDescUpdatedAt.Default.(func() time.Time)
+	// storageuploadbatchitem.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storageuploadbatchitem.UpdateDefaultUpdatedAt = storageuploadbatchitemDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storageuploadbatchitemDescBatchID is the schema descriptor for batch_id field.
+	storageuploadbatchitemDescBatchID := storageuploadbatchitemFields[0].Descriptor()
+	// storageuploadbatchitem.BatchIDValidator is a validator for the "batch_id" field. It is called by the builders before save.
+	storageuploadbatchitem.BatchIDValidator = storageuploadbatchitemDescBatchID.Validators[0].(func(int) error)
+	// storageuploadbatchitemDescOrdinal is the schema descriptor for ordinal field.
+	storageuploadbatchitemDescOrdinal := storageuploadbatchitemFields[1].Descriptor()
+	// storageuploadbatchitem.OrdinalValidator is a validator for the "ordinal" field. It is called by the builders before save.
+	storageuploadbatchitem.OrdinalValidator = storageuploadbatchitemDescOrdinal.Validators[0].(func(int) error)
+	// storageuploadbatchitemDescSize is the schema descriptor for size field.
+	storageuploadbatchitemDescSize := storageuploadbatchitemFields[3].Descriptor()
+	// storageuploadbatchitem.SizeValidator is a validator for the "size" field. It is called by the builders before save.
+	storageuploadbatchitem.SizeValidator = storageuploadbatchitemDescSize.Validators[0].(func(int64) error)
+	// storageuploadbatchitemDescSha256 is the schema descriptor for sha256 field.
+	storageuploadbatchitemDescSha256 := storageuploadbatchitemFields[4].Descriptor()
+	// storageuploadbatchitem.Sha256Validator is a validator for the "sha256" field. It is called by the builders before save.
+	storageuploadbatchitem.Sha256Validator = storageuploadbatchitemDescSha256.Validators[0].(func(string) error)
+	// storageuploadbatchitemDescStatus is the schema descriptor for status field.
+	storageuploadbatchitemDescStatus := storageuploadbatchitemFields[6].Descriptor()
+	// storageuploadbatchitem.DefaultStatus holds the default value on creation for the status field.
+	storageuploadbatchitem.DefaultStatus = storageuploadbatchitemDescStatus.Default.(string)
+	// storageuploadbatchitemDescErrorCode is the schema descriptor for error_code field.
+	storageuploadbatchitemDescErrorCode := storageuploadbatchitemFields[7].Descriptor()
+	// storageuploadbatchitem.DefaultErrorCode holds the default value on creation for the error_code field.
+	storageuploadbatchitem.DefaultErrorCode = storageuploadbatchitemDescErrorCode.Default.(string)
+	storagewriteMixin := schema.StorageWrite{}.Mixin()
+	storagewriteMixinFields0 := storagewriteMixin[0].Fields()
+	_ = storagewriteMixinFields0
+	storagewriteFields := schema.StorageWrite{}.Fields()
+	_ = storagewriteFields
+	// storagewriteDescCreatedAt is the schema descriptor for created_at field.
+	storagewriteDescCreatedAt := storagewriteMixinFields0[0].Descriptor()
+	// storagewrite.DefaultCreatedAt holds the default value on creation for the created_at field.
+	storagewrite.DefaultCreatedAt = storagewriteDescCreatedAt.Default.(func() time.Time)
+	// storagewriteDescUpdatedAt is the schema descriptor for updated_at field.
+	storagewriteDescUpdatedAt := storagewriteMixinFields0[1].Descriptor()
+	// storagewrite.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	storagewrite.DefaultUpdatedAt = storagewriteDescUpdatedAt.Default.(func() time.Time)
+	// storagewrite.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	storagewrite.UpdateDefaultUpdatedAt = storagewriteDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// storagewriteDescTaskID is the schema descriptor for task_id field.
+	storagewriteDescTaskID := storagewriteFields[0].Descriptor()
+	// storagewrite.TaskIDValidator is a validator for the "task_id" field. It is called by the builders before save.
+	storagewrite.TaskIDValidator = storagewriteDescTaskID.Validators[0].(func(int) error)
+	// storagewriteDescSpaceID is the schema descriptor for space_id field.
+	storagewriteDescSpaceID := storagewriteFields[1].Descriptor()
+	// storagewrite.SpaceIDValidator is a validator for the "space_id" field. It is called by the builders before save.
+	storagewrite.SpaceIDValidator = storagewriteDescSpaceID.Validators[0].(func(int) error)
+	// storagewriteDescAttemptID is the schema descriptor for attempt_id field.
+	storagewriteDescAttemptID := storagewriteFields[3].Descriptor()
+	// storagewrite.AttemptIDValidator is a validator for the "attempt_id" field. It is called by the builders before save.
+	storagewrite.AttemptIDValidator = storagewriteDescAttemptID.Validators[0].(func(string) error)
+	// storagewriteDescObjectKey is the schema descriptor for object_key field.
+	storagewriteDescObjectKey := storagewriteFields[4].Descriptor()
+	// storagewrite.ObjectKeyValidator is a validator for the "object_key" field. It is called by the builders before save.
+	storagewrite.ObjectKeyValidator = storagewriteDescObjectKey.Validators[0].(func(string) error)
+	// storagewriteDescProviderVersion is the schema descriptor for provider_version field.
+	storagewriteDescProviderVersion := storagewriteFields[5].Descriptor()
+	// storagewrite.DefaultProviderVersion holds the default value on creation for the provider_version field.
+	storagewrite.DefaultProviderVersion = storagewriteDescProviderVersion.Default.(string)
+	// storagewriteDescMaxBytes is the schema descriptor for max_bytes field.
+	storagewriteDescMaxBytes := storagewriteFields[6].Descriptor()
+	// storagewrite.MaxBytesValidator is a validator for the "max_bytes" field. It is called by the builders before save.
+	storagewrite.MaxBytesValidator = storagewriteDescMaxBytes.Validators[0].(func(int64) error)
+	// storagewriteDescActualBytes is the schema descriptor for actual_bytes field.
+	storagewriteDescActualBytes := storagewriteFields[7].Descriptor()
+	// storagewrite.DefaultActualBytes holds the default value on creation for the actual_bytes field.
+	storagewrite.DefaultActualBytes = storagewriteDescActualBytes.Default.(int64)
+	// storagewrite.ActualBytesValidator is a validator for the "actual_bytes" field. It is called by the builders before save.
+	storagewrite.ActualBytesValidator = storagewriteDescActualBytes.Validators[0].(func(int64) error)
+	// storagewriteDescSha256 is the schema descriptor for sha256 field.
+	storagewriteDescSha256 := storagewriteFields[8].Descriptor()
+	// storagewrite.DefaultSha256 holds the default value on creation for the sha256 field.
+	storagewrite.DefaultSha256 = storagewriteDescSha256.Default.(string)
+	// storagewriteDescPhase is the schema descriptor for phase field.
+	storagewriteDescPhase := storagewriteFields[9].Descriptor()
+	// storagewrite.DefaultPhase holds the default value on creation for the phase field.
+	storagewrite.DefaultPhase = storagewriteDescPhase.Default.(string)
+	// storagewriteDescConnectionGeneration is the schema descriptor for connection_generation field.
+	storagewriteDescConnectionGeneration := storagewriteFields[10].Descriptor()
+	// storagewrite.DefaultConnectionGeneration holds the default value on creation for the connection_generation field.
+	storagewrite.DefaultConnectionGeneration = storagewriteDescConnectionGeneration.Default.(int64)
+	// storagewriteDescSpaceGeneration is the schema descriptor for space_generation field.
+	storagewriteDescSpaceGeneration := storagewriteFields[11].Descriptor()
+	// storagewrite.DefaultSpaceGeneration holds the default value on creation for the space_generation field.
+	storagewrite.DefaultSpaceGeneration = storagewriteDescSpaceGeneration.Default.(int64)
+	// storagewriteDescAuthGeneration is the schema descriptor for auth_generation field.
+	storagewriteDescAuthGeneration := storagewriteFields[12].Descriptor()
+	// storagewrite.DefaultAuthGeneration holds the default value on creation for the auth_generation field.
+	storagewrite.DefaultAuthGeneration = storagewriteDescAuthGeneration.Default.(int64)
+	// storagewriteDescOutcomeUnknown is the schema descriptor for outcome_unknown field.
+	storagewriteDescOutcomeUnknown := storagewriteFields[13].Descriptor()
+	// storagewrite.DefaultOutcomeUnknown holds the default value on creation for the outcome_unknown field.
+	storagewrite.DefaultOutcomeUnknown = storagewriteDescOutcomeUnknown.Default.(bool)
 	synctaskMixin := schema.SyncTask{}.Mixin()
 	synctaskMixinFields0 := synctaskMixin[0].Fields()
 	_ = synctaskMixinFields0

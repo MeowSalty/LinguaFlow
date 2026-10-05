@@ -28,7 +28,7 @@ import (
 const maxEPUBSize = 100 << 20
 
 // maxDecompressedEntrySize 引用共享的解压尺寸上限，用于需要全量读入内存的解析路径。
-// 原样直通的资产复制不走此限制。
+// 资产流式复制使用归档累计解压预算。
 const maxDecompressedEntrySize = ziputil.MaxDecompressedEntrySize
 
 // Parser 实现 EPUB 格式的解析和渲染。
@@ -41,12 +41,13 @@ func New() *Parser { return &Parser{} }
 func (*Parser) Extensions() []string { return []string{".epub"} }
 
 // Parse 将 EPUB 文件解析为 Document，包含按 spine 顺序排列的 Segment 列表。
-func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Document, error) {
+func (*Parser) Parse(ctx context.Context, r io.Reader, _ string) (*pipeline.Document, error) {
 	// 1. 打开 ZIP（优先零拷贝）
-	zipReader, err := ziputil.OpenZip(r, maxEPUBSize)
+	archive, err := ziputil.OpenArchiveContext(ctx, r, maxEPUBSize)
 	if err != nil {
 		return nil, fmt.Errorf("epub: open zip: %w", err)
 	}
+	zipReader := archive.Reader
 
 	// 2. DRM 检测
 	if err := checkDRM(zipReader); err != nil {
@@ -100,6 +101,9 @@ func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Docume
 	}
 
 	for _, item := range spine {
+		if err := archive.Err(); err != nil {
+			return nil, err
+		}
 		if !isXHTML(item.MediaType) {
 			slog.Debug("[epub:parse] skip non-XHTML", "id", item.ID, "href", item.Href, "mediaType", item.MediaType)
 			continue
@@ -107,6 +111,9 @@ func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Docume
 
 		xhtmlData, err := ziputil.ReadEntry(zipReader, item.Href, maxDecompressedEntrySize)
 		if err != nil {
+			if budgetErr := archive.Err(); budgetErr != nil {
+				return nil, budgetErr
+			}
 			// 大小超限意味着章节内容会丢失，用 Warn 暴露给运维；
 			// 其他读取错误（条目缺失等）保持 Debug，与历史行为一致。
 			if isSizeLimitErr(err) {
@@ -162,6 +169,9 @@ func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Docume
 	// 7. 处理不在 spine 中的 EPUB3 导航文件（如 navigation-documents.xhtml）
 	navFiles := findNavFiles(zipReader, opfPath)
 	for _, nav := range navFiles {
+		if err := archive.Err(); err != nil {
+			return nil, err
+		}
 		navHref := path.Clean(nav.Href)
 		if spineFileSet[navHref] {
 			// 已在 spine 中处理过，提取 TOC 标题
@@ -206,6 +216,9 @@ func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Docume
 		}
 	}
 	slog.Debug("[epub:parse] total segments", "count", len(segments))
+	if err := archive.Err(); err != nil {
+		return nil, err
+	}
 
 	return &pipeline.Document{
 		Segments: segments,
@@ -217,9 +230,9 @@ func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Docume
 //
 // 读取原始 EPUB，按 Segment 的 element_path 或 content_hash 定位块级元素，
 // 替换为译文后重新打包为 EPUB。保持 EPUB ZIP 规范合规（mimetype 在首位且不压缩）。
-func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error {
+func (*Parser) Render(ctx context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error {
 	// 1. 打开原始 EPUB（优先零拷贝）
-	zipReader, err := ziputil.OpenZip(original, maxEPUBSize)
+	zipReader, err := ziputil.OpenZipContext(ctx, original, maxEPUBSize)
 	if err != nil {
 		return fmt.Errorf("epub: open zip: %w", err)
 	}
@@ -246,7 +259,7 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 	}
 
 	// 4. 创建输出 ZIP
-	zipWriter := zip.NewWriter(w)
+	zipWriter := zip.NewWriter(ziputil.OutputWriter(ctx, w))
 
 	// 诊断日志：输出 segmentsByFile 和 spFiles 的 key 集合
 	slog.Debug("[epub:render] spFiles keys", "keys", mapKeys(spFiles))
@@ -263,6 +276,10 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 
 	var writeErr error
 	for _, file := range zipReader.File {
+		if err := ctx.Err(); err != nil {
+			writeErr = err
+			break
+		}
 		// mimetype 必须是第一个条目且不压缩（EPUB 规范要求）
 		if file.Name == "mimetype" {
 			if err := writeMimetype(zipWriter, file); err != nil {
@@ -301,7 +318,7 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 				break
 			}
 		} else {
-			// 非章节文件 → 原样复制（资产不经解析，不解压进内存，无炸弹风险）
+			// 非章节文件仍受归档累计解压量和输出预算约束。
 			if (inSpine || inNav) && !hasSegments {
 				slog.Debug("[epub:render] file has no segments", "path", filePath, "segmentsByFileKeys", mapStringKeys(segmentsByFile))
 			}

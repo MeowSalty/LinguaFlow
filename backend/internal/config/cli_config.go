@@ -22,8 +22,8 @@ type CLIConfigGlossary struct {
 	Save    bool   `yaml:"save"`
 }
 
-// CLIConfig is the translation document input, never a persisted execution
-// snapshot. Secrets are transferred to a process-local registry before resolve.
+// CLIConfig 是翻译文档的输入，绝不是持久化的执行快照。
+// 密钥会在 resolve 之前转移到进程本地注册表中。
 type CLIConfig struct {
 	Kind                     string                                 `yaml:"kind"`
 	Version                  int                                    `yaml:"version"`
@@ -109,8 +109,8 @@ type CLIInputs struct {
 	LogFormat        *string
 }
 
-// LoadCLIConfig is a convenience boundary for command callers. No path means
-// environment selection or builtins, never a directory search.
+// LoadCLIConfig 是面向命令调用方的便捷边界。路径为空表示按环境选择或使用
+// 内置配置，绝不会进行目录搜索。
 func LoadCLIConfig(path string) (*CLIConfig, error) {
 	in := CLIInputs{Environment: Environment()}
 	if path != "" {
@@ -119,9 +119,9 @@ func LoadCLIConfig(path string) (*CLIConfig, error) {
 	return ResolveCLIConfig(in)
 }
 
-// ResolveCLIConfig uses the same decoder and reference reader for embedded and
-// external documents. Defaults are seeded per typed input object before decode,
-// preserving explicit false, zero and empty lists.
+// ResolveCLIConfig 对内嵌文档与外部文档使用相同的解码器和引用读取器。
+// 默认值在解码前按各类型输入对象逐一注入，以保留显式给出的 false、
+// 零值与空列表。
 func ResolveCLIConfig(in CLIInputs) (*CLIConfig, error) {
 	cwd := in.WorkingDirectory
 	if cwd == "" {
@@ -414,8 +414,11 @@ func ValidateCLIConfig(cfg *CLIConfig) error {
 		default:
 			return fmt.Errorf("execution.rounds[%d] uses an unsupported CLI mode", i)
 		}
-		if batch < 0 || words < 0 || (batch == 0 && words == 0) || concurrency < 1 || retry.MaxAttempts < 0 || retry.BackoffMs < 0 {
-			return fmt.Errorf("execution.rounds[%d] has invalid batch, concurrency or retry settings", i)
+		if err := execution.ValidateBatchLimits(r.Mode, batch, words); err != nil {
+			return fmt.Errorf("execution.rounds[%d].%s.%w", i, r.Mode, err)
+		}
+		if concurrency < 1 || retry.MaxAttempts < 0 || retry.BackoffMs < 0 {
+			return fmt.Errorf("execution.rounds[%d] has invalid concurrency or retry settings", i)
 		}
 		if _, ok := cfg.Backends[r.Backend]; !ok {
 			return fmt.Errorf("execution.rounds[%d] references an unknown backend", i)
@@ -648,14 +651,14 @@ func validateTranslationType(node *yaml.Node, t reflect.Type, path string) error
 		if node.Tag != "!!float" && node.Tag != "!!int" {
 			return fmt.Errorf("%s must be a number", path)
 		}
-	case reflect.Interface: // Provider options have their own explicit validation during execution resolution.
+	case reflect.Interface: // Provider 选项在执行解析阶段有各自的显式校验。
 	default:
 		return fmt.Errorf("%s has an unsupported field type", path)
 	}
 	return nil
 }
 
-// readExternalFileBytes follows symlinks before checking containment.
+// readExternalFileBytes 在检查路径包含关系之前先解析符号链接。
 func readExternalFileBytes(ref, base string) ([]byte, error) {
 	if filepath.IsAbs(ref) {
 		return nil, errors.New("absolute references are not allowed")

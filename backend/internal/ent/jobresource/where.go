@@ -65,6 +65,16 @@ func UpdatedAt(v time.Time) predicate.JobResource {
 	return predicate.JobResource(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// SourceRevisionID applies equality check predicate on the "source_revision_id" field. It's identical to SourceRevisionIDEQ.
+func SourceRevisionID(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldSourceRevisionID, v))
+}
+
+// SourceGeneration applies equality check predicate on the "source_generation" field. It's identical to SourceGenerationEQ.
+func SourceGeneration(v int64) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldSourceGeneration, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.JobResource {
 	return predicate.JobResource(sql.FieldEQ(FieldStatus, v))
@@ -188,6 +198,96 @@ func UpdatedAtLT(v time.Time) predicate.JobResource {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.JobResource {
 	return predicate.JobResource(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// SourceRevisionIDEQ applies the EQ predicate on the "source_revision_id" field.
+func SourceRevisionIDEQ(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldSourceRevisionID, v))
+}
+
+// SourceRevisionIDNEQ applies the NEQ predicate on the "source_revision_id" field.
+func SourceRevisionIDNEQ(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNEQ(FieldSourceRevisionID, v))
+}
+
+// SourceRevisionIDIn applies the In predicate on the "source_revision_id" field.
+func SourceRevisionIDIn(vs ...int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldIn(FieldSourceRevisionID, vs...))
+}
+
+// SourceRevisionIDNotIn applies the NotIn predicate on the "source_revision_id" field.
+func SourceRevisionIDNotIn(vs ...int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotIn(FieldSourceRevisionID, vs...))
+}
+
+// SourceRevisionIDGT applies the GT predicate on the "source_revision_id" field.
+func SourceRevisionIDGT(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGT(FieldSourceRevisionID, v))
+}
+
+// SourceRevisionIDGTE applies the GTE predicate on the "source_revision_id" field.
+func SourceRevisionIDGTE(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGTE(FieldSourceRevisionID, v))
+}
+
+// SourceRevisionIDLT applies the LT predicate on the "source_revision_id" field.
+func SourceRevisionIDLT(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLT(FieldSourceRevisionID, v))
+}
+
+// SourceRevisionIDLTE applies the LTE predicate on the "source_revision_id" field.
+func SourceRevisionIDLTE(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLTE(FieldSourceRevisionID, v))
+}
+
+// SourceRevisionIDIsNil applies the IsNil predicate on the "source_revision_id" field.
+func SourceRevisionIDIsNil() predicate.JobResource {
+	return predicate.JobResource(sql.FieldIsNull(FieldSourceRevisionID))
+}
+
+// SourceRevisionIDNotNil applies the NotNil predicate on the "source_revision_id" field.
+func SourceRevisionIDNotNil() predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotNull(FieldSourceRevisionID))
+}
+
+// SourceGenerationEQ applies the EQ predicate on the "source_generation" field.
+func SourceGenerationEQ(v int64) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldSourceGeneration, v))
+}
+
+// SourceGenerationNEQ applies the NEQ predicate on the "source_generation" field.
+func SourceGenerationNEQ(v int64) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNEQ(FieldSourceGeneration, v))
+}
+
+// SourceGenerationIn applies the In predicate on the "source_generation" field.
+func SourceGenerationIn(vs ...int64) predicate.JobResource {
+	return predicate.JobResource(sql.FieldIn(FieldSourceGeneration, vs...))
+}
+
+// SourceGenerationNotIn applies the NotIn predicate on the "source_generation" field.
+func SourceGenerationNotIn(vs ...int64) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotIn(FieldSourceGeneration, vs...))
+}
+
+// SourceGenerationGT applies the GT predicate on the "source_generation" field.
+func SourceGenerationGT(v int64) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGT(FieldSourceGeneration, v))
+}
+
+// SourceGenerationGTE applies the GTE predicate on the "source_generation" field.
+func SourceGenerationGTE(v int64) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGTE(FieldSourceGeneration, v))
+}
+
+// SourceGenerationLT applies the LT predicate on the "source_generation" field.
+func SourceGenerationLT(v int64) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLT(FieldSourceGeneration, v))
+}
+
+// SourceGenerationLTE applies the LTE predicate on the "source_generation" field.
+func SourceGenerationLTE(v int64) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLTE(FieldSourceGeneration, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

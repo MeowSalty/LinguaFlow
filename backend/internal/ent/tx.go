@@ -16,6 +16,12 @@ type Tx struct {
 	ActivityLog *ActivityLogClient
 	// Backend is the client for interacting with the Backend builders.
 	Backend *BackendClient
+	// BackupPin is the client for interacting with the BackupPin builders.
+	BackupPin *BackupPinClient
+	// Blob is the client for interacting with the Blob builders.
+	Blob *BlobClient
+	// BlobLocation is the client for interacting with the BlobLocation builders.
+	BlobLocation *BlobLocationClient
 	// BootstrapPromptTemplate is the client for interacting with the BootstrapPromptTemplate builders.
 	BootstrapPromptTemplate *BootstrapPromptTemplateClient
 	// Credential is the client for interacting with the Credential builders.
@@ -24,10 +30,14 @@ type Tx struct {
 	CredentialJobReference *CredentialJobReferenceClient
 	// CredentialVersion is the client for interacting with the CredentialVersion builders.
 	CredentialVersion *CredentialVersionClient
+	// DeletionEntry is the client for interacting with the DeletionEntry builders.
+	DeletionEntry *DeletionEntryClient
 	// ExecutionPlanTemplate is the client for interacting with the ExecutionPlanTemplate builders.
 	ExecutionPlanTemplate *ExecutionPlanTemplateClient
 	// ExecutionProfile is the client for interacting with the ExecutionProfile builders.
 	ExecutionProfile *ExecutionProfileClient
+	// ExportArtifact is the client for interacting with the ExportArtifact builders.
+	ExportArtifact *ExportArtifactClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
 	// InstanceInitialization is the client for interacting with the InstanceInitialization builders.
@@ -58,6 +68,32 @@ type Tx struct {
 	Segment *SegmentClient
 	// SegmentRevision is the client for interacting with the SegmentRevision builders.
 	SegmentRevision *SegmentRevisionClient
+	// SourceRevision is the client for interacting with the SourceRevision builders.
+	SourceRevision *SourceRevisionClient
+	// StorageAuthVersion is the client for interacting with the StorageAuthVersion builders.
+	StorageAuthVersion *StorageAuthVersionClient
+	// StorageBackup is the client for interacting with the StorageBackup builders.
+	StorageBackup *StorageBackupClient
+	// StorageCheck is the client for interacting with the StorageCheck builders.
+	StorageCheck *StorageCheckClient
+	// StorageCheckWrite is the client for interacting with the StorageCheckWrite builders.
+	StorageCheckWrite *StorageCheckWriteClient
+	// StorageConnection is the client for interacting with the StorageConnection builders.
+	StorageConnection *StorageConnectionClient
+	// StorageMigrationItem is the client for interacting with the StorageMigrationItem builders.
+	StorageMigrationItem *StorageMigrationItemClient
+	// StorageReservation is the client for interacting with the StorageReservation builders.
+	StorageReservation *StorageReservationClient
+	// StorageSpace is the client for interacting with the StorageSpace builders.
+	StorageSpace *StorageSpaceClient
+	// StorageTask is the client for interacting with the StorageTask builders.
+	StorageTask *StorageTaskClient
+	// StorageUploadBatch is the client for interacting with the StorageUploadBatch builders.
+	StorageUploadBatch *StorageUploadBatchClient
+	// StorageUploadBatchItem is the client for interacting with the StorageUploadBatchItem builders.
+	StorageUploadBatchItem *StorageUploadBatchItemClient
+	// StorageWrite is the client for interacting with the StorageWrite builders.
+	StorageWrite *StorageWriteClient
 	// SyncTask is the client for interacting with the SyncTask builders.
 	SyncTask *SyncTaskClient
 	// SystemSetting is the client for interacting with the SystemSetting builders.
@@ -203,12 +239,17 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.ActivityLog = NewActivityLogClient(tx.config)
 	tx.Backend = NewBackendClient(tx.config)
+	tx.BackupPin = NewBackupPinClient(tx.config)
+	tx.Blob = NewBlobClient(tx.config)
+	tx.BlobLocation = NewBlobLocationClient(tx.config)
 	tx.BootstrapPromptTemplate = NewBootstrapPromptTemplateClient(tx.config)
 	tx.Credential = NewCredentialClient(tx.config)
 	tx.CredentialJobReference = NewCredentialJobReferenceClient(tx.config)
 	tx.CredentialVersion = NewCredentialVersionClient(tx.config)
+	tx.DeletionEntry = NewDeletionEntryClient(tx.config)
 	tx.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(tx.config)
 	tx.ExecutionProfile = NewExecutionProfileClient(tx.config)
+	tx.ExportArtifact = NewExportArtifactClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
 	tx.InstanceInitialization = NewInstanceInitializationClient(tx.config)
 	tx.Job = NewJobClient(tx.config)
@@ -224,6 +265,19 @@ func (tx *Tx) init() {
 	tx.SSEEvent = NewSSEEventClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
 	tx.SegmentRevision = NewSegmentRevisionClient(tx.config)
+	tx.SourceRevision = NewSourceRevisionClient(tx.config)
+	tx.StorageAuthVersion = NewStorageAuthVersionClient(tx.config)
+	tx.StorageBackup = NewStorageBackupClient(tx.config)
+	tx.StorageCheck = NewStorageCheckClient(tx.config)
+	tx.StorageCheckWrite = NewStorageCheckWriteClient(tx.config)
+	tx.StorageConnection = NewStorageConnectionClient(tx.config)
+	tx.StorageMigrationItem = NewStorageMigrationItemClient(tx.config)
+	tx.StorageReservation = NewStorageReservationClient(tx.config)
+	tx.StorageSpace = NewStorageSpaceClient(tx.config)
+	tx.StorageTask = NewStorageTaskClient(tx.config)
+	tx.StorageUploadBatch = NewStorageUploadBatchClient(tx.config)
+	tx.StorageUploadBatchItem = NewStorageUploadBatchItemClient(tx.config)
+	tx.StorageWrite = NewStorageWriteClient(tx.config)
 	tx.SyncTask = NewSyncTaskClient(tx.config)
 	tx.SystemSetting = NewSystemSettingClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)

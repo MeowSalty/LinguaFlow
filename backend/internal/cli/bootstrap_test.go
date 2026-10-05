@@ -59,6 +59,15 @@ func TestBootstrapServerLocalPreservesResolution(t *testing.T) {
 	if first != second || len(first) != 64 {
 		t.Fatal("persistent local secret changed")
 	}
+	if err := cleanup(); err != nil {
+		t.Fatalf("cleanup unstarted server: %v", err)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatalf("repeated cleanup: %v", err)
+	}
+	if _, err := ln.Accept(); !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("cleanup left listener open: %v", err)
+	}
 }
 
 func TestPrepareLocalSecretAtomicConcurrency(t *testing.T) {

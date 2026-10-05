@@ -14,12 +14,17 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bloblocation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialversion"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/deletionentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/exportartifact"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
@@ -34,7 +39,20 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segmentrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sourcerevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageauthversion"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagebackup"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheck"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheckwrite"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagemigrationitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatch"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatchitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
@@ -103,12 +121,17 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			activitylog.Table:               activitylog.ValidColumn,
 			backend.Table:                   backend.ValidColumn,
+			backuppin.Table:                 backuppin.ValidColumn,
+			blob.Table:                      blob.ValidColumn,
+			bloblocation.Table:              bloblocation.ValidColumn,
 			bootstrapprompttemplate.Table:   bootstrapprompttemplate.ValidColumn,
 			credential.Table:                credential.ValidColumn,
 			credentialjobreference.Table:    credentialjobreference.ValidColumn,
 			credentialversion.Table:         credentialversion.ValidColumn,
+			deletionentry.Table:             deletionentry.ValidColumn,
 			executionplantemplate.Table:     executionplantemplate.ValidColumn,
 			executionprofile.Table:          executionprofile.ValidColumn,
+			exportartifact.Table:            exportartifact.ValidColumn,
 			glossaryentry.Table:             glossaryentry.ValidColumn,
 			instanceinitialization.Table:    instanceinitialization.ValidColumn,
 			job.Table:                       job.ValidColumn,
@@ -124,6 +147,19 @@ func checkColumn(t, c string) error {
 			sseevent.Table:                  sseevent.ValidColumn,
 			segment.Table:                   segment.ValidColumn,
 			segmentrevision.Table:           segmentrevision.ValidColumn,
+			sourcerevision.Table:            sourcerevision.ValidColumn,
+			storageauthversion.Table:        storageauthversion.ValidColumn,
+			storagebackup.Table:             storagebackup.ValidColumn,
+			storagecheck.Table:              storagecheck.ValidColumn,
+			storagecheckwrite.Table:         storagecheckwrite.ValidColumn,
+			storageconnection.Table:         storageconnection.ValidColumn,
+			storagemigrationitem.Table:      storagemigrationitem.ValidColumn,
+			storagereservation.Table:        storagereservation.ValidColumn,
+			storagespace.Table:              storagespace.ValidColumn,
+			storagetask.Table:               storagetask.ValidColumn,
+			storageuploadbatch.Table:        storageuploadbatch.ValidColumn,
+			storageuploadbatchitem.Table:    storageuploadbatchitem.ValidColumn,
+			storagewrite.Table:              storagewrite.ValidColumn,
 			synctask.Table:                  synctask.ValidColumn,
 			systemsetting.Table:             systemsetting.ValidColumn,
 			tmentry.Table:                   tmentry.ValidColumn,

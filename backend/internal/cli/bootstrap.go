@@ -10,6 +10,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/api"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
@@ -20,8 +22,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
-// BootOptions supplies the completed, read-only resolution result. Tests may
-// inject a logger; production always constructs it from the resolved log input.
+// BootOptions 提供解析完成、只读的启动结果。测试可以注入 logger；
+// 生产环境始终基于解析出的日志输入构造。
 type BootOptions struct {
 	Resolved *config.ResolvedServer
 	Logger   *slog.Logger
@@ -93,11 +95,32 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 	if cfg.IsLocal() && resolved.AllowNetwork {
 		logger.Warn("local network access enabled: connecting clients have local administrator access")
 	}
-	return server, ln, cleanup, nil
+	// 接管 bootstrap 创建的所有资源，包括尚未启动的服务器。
+	// 特别是本地存储根目录：在 Windows 上目录句柄会保持打开，必须由这里关闭。
+	var cleanupOnce sync.Once
+	var cleanupErr error
+	shutdown := func() error {
+		cleanupOnce.Do(func() {
+			budget := cfg.ShutdownTimeout
+			if budget <= 0 {
+				budget = 10 * time.Second
+			}
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), budget)
+			defer cancel()
+			shutdownErr := server.Shutdown(shutdownCtx)
+			listenerErr := ln.Close()
+			if errors.Is(listenerErr, net.ErrClosed) {
+				listenerErr = nil
+			}
+			cleanupErr = errors.Join(shutdownErr, listenerErr, cleanup())
+		})
+		return cleanupErr
+	}
+	return server, ln, shutdown, nil
 }
 
-// prepareDatabase is shared with offline administrator maintenance. It performs
-// schema preparation only; callers explicitly choose initialization and secrets.
+// prepareDatabase 供离线管理员维护命令复用。它只做数据库 schema 准备；
+// 是否初始化实例、是否准备密钥由调用方显式决定。
 func prepareDatabase(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, func() error, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, nil, nil, fmt.Errorf("prepare data directory: %w", err)

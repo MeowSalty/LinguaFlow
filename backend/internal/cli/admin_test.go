@@ -13,6 +13,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageauth"
 	"gopkg.in/yaml.v3"
 )
 
@@ -92,6 +93,13 @@ func TestAdministratorCredentialReencryptCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := client.CredentialVersion.Query().OnlyX(ctx)
+	storageConnection := client.StorageConnection.Create().SetName("stored-cloud").SetDriver("s3").SetOwnerKind("user").SetOwnerID(admin.ID).SetEndpoint("https://s3.example").SetRegion("test").SetAuthSource("stored").SetActiveAuthGeneration(1).SaveX(ctx)
+	storageIdentity := storageauth.Identity{ConnectionID: storageConnection.ID, Scope: "user", OwnerID: admin.ID, Driver: "s3", Endpoint: storageConnection.Endpoint, AuthGeneration: 1}
+	storageCipher, err := storageauth.EncryptS3(oldKeys, storageIdentity, storageauth.S3Payload{Version: 1, AccessKeyID: "storage-access", SecretAccessKey: "storage-secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	storageBefore := client.StorageAuthVersion.Create().SetConnectionID(storageConnection.ID).SetGeneration(1).SetKeyID(storageCipher.KeyID).SetNonce(storageCipher.Nonce).SetCiphertext(storageCipher.Data).SetStatus("active").SaveX(ctx)
 	if err := cleanup(); err != nil {
 		t.Fatal(err)
 	}
@@ -112,16 +120,16 @@ func TestAdministratorCredentialReencryptCommand(t *testing.T) {
 		err := root.ExecuteContext(ctx)
 		return output.String(), err
 	}
-	// An incomplete keyring must fail before rewriting any version.
+	// 不完整的密钥环必须在重写任何版本之前先失败。
 	writeKeys("new", false)
 	if _, err := run(); err == nil {
 		t.Fatal("missing old key was accepted")
 	}
 	writeKeys("new", true)
-	if output, err := run(); err != nil || !strings.Contains(output, "Re-encrypted 1 credential versions") {
+	if output, err := run(); err != nil || !strings.Contains(output, "Re-encrypted 1 credential versions") || !strings.Contains(output, "Re-encrypted 1 storage authorization versions; 0 unavailable") {
 		t.Fatalf("command output=%s err=%v", output, err)
 	}
-	if output, err := run(); err != nil || !strings.Contains(output, "Re-encrypted 0 credential versions") {
+	if output, err := run(); err != nil || !strings.Contains(output, "Re-encrypted 0 credential versions") || !strings.Contains(output, "Re-encrypted 0 storage authorization versions; 0 unavailable") {
 		t.Fatalf("repeat output=%s err=%v", output, err)
 	}
 	_, client, cleanup, err = prepareDatabase(ctx, cfg)
@@ -130,6 +138,10 @@ func TestAdministratorCredentialReencryptCommand(t *testing.T) {
 	}
 	defer cleanup()
 	after := client.CredentialVersion.Query().OnlyX(ctx)
+	storageAfter := client.StorageAuthVersion.GetX(ctx, storageBefore.ID)
+	if storageAfter.KeyID != "new" || storageAfter.Generation != storageBefore.Generation || storageAfter.Status != storageBefore.Status || bytes.Equal(storageAfter.Nonce, storageBefore.Nonce) {
+		t.Fatal("storage reencryption changed authorization or did not rotate")
+	}
 	if after.KeyID != "new" || after.Version != before.Version || after.Revoked != before.Revoked || bytes.Equal(after.Nonce, before.Nonce) {
 		t.Fatal("command did not preserve binding or refresh encryption")
 	}

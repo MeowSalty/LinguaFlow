@@ -172,7 +172,7 @@ func segmentSearchCandidate(matcher segmatch.Matcher, field, matchMode, dialectN
 		return source
 	case "target":
 		return target
-	default: // "" / "both"
+	default: // "" / "both"（源或目标）
 		return segment.Or(source, target)
 	}
 }
@@ -187,7 +187,7 @@ func segmentSearchCandidateInstr(field, literal string) predicate.Segment {
 		return source
 	case "target":
 		return target
-	default: // "" / "both"
+	default: // "" / "both"（源或目标）
 		return segment.Or(source, target)
 	}
 }
@@ -234,7 +234,7 @@ func segmentSearchHit(matcher segmatch.Matcher, field string, seg *ent.Segment) 
 		return matcher.HasMatch(seg.SourceText)
 	case "target":
 		return seg.TargetText != nil && matcher.HasMatch(*seg.TargetText)
-	default: // "" / "both"
+	default: // "" / "both"（源或目标）
 		if matcher.HasMatch(seg.SourceText) {
 			return true
 		}
@@ -947,11 +947,22 @@ func (e *SegmentMarkupError) Error() string {
 func (e *SegmentMarkupError) Unwrap() error { return ErrSegmentMarkupInvalid }
 
 func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input ResourceSegmentUpdateInput) (*ent.Segment, error) {
+	if input.SourceText != nil {
+		return nil, ErrSourceReadOnly
+	}
 	res, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, true)
 	if err != nil {
 		return nil, err
 	}
-	current, err := s.client.Segment.Query().Where(segment.IDEQ(segmentID), segment.ResourceIDEQ(resourceID)).Only(ctx)
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := AdvanceTranslationGeneration(ctx, tx.Client(), resourceID, res.SourceGeneration); err != nil {
+		return nil, err
+	}
+	current, err := tx.Segment.Query().Where(segment.IDEQ(segmentID), segment.ResourceIDEQ(resourceID)).Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return nil, ErrSegmentNotFound
@@ -959,24 +970,13 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		return nil, err
 	}
 
-	update := s.client.Segment.UpdateOneID(current.ID)
+	update := tx.Segment.UpdateOneID(current.ID)
 	changed := false
-	sourceChanged := false
 	targetChanged := false
 	// QA 输入：source/target 取变更后的值（若未变更则用现状），供 targetChanged 时重算。
 	newSource := current.SourceText
 	var newTarget string
 
-	if input.SourceText != nil {
-		source := strings.TrimSpace(*input.SourceText)
-		if source == "" {
-			return nil, ErrInvalidInput
-		}
-		update.SetSourceText(source).SetStatus(SegmentStatusPending)
-		changed = true
-		sourceChanged = true
-		newSource = source
-	}
 	if input.TargetText != nil {
 		target := strings.TrimSpace(*input.TargetText)
 		if target == "" {
@@ -1009,20 +1009,13 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 	if !changed {
 		return nil, ErrInvalidInput
 	}
-	if sourceChanged && !targetChanged {
-		// 原文变更使旧译文失效：清空译文与审核信息。
-		// 必须在未显式设置 target_text 时执行，否则会与 SetTargetText
-		// 同时存在，触发 PostgreSQL "multiple assignments to same column" 错误。
-		update.ClearTargetText().ClearReviewedBy()
-	}
 
 	// quality_issues 统一处理（避免与 SetTargetText 同列多次赋值）：
 	//   - targetChanged：重跑零配置确定性 QA，与旧 issues 对账后用新结果覆盖；
-	//   - sourceChanged && !targetChanged：旧译文失效，无译文不跑 QA，清空旧 issues；
 	//   - 仅 comment 变更：不触碰 quality_issues，保持现状。
 	switch {
 	case targetChanged:
-		project, perr := s.client.Project.Get(ctx, projectID)
+		project, perr := tx.Project.Get(ctx, projectID)
 		var freshIssuesByIndex map[int][]qa.QualityIssue
 		if perr != nil {
 			s.logger.Warn("manual edit QA: load project failed", "projectID", projectID, "error", perr)
@@ -1047,8 +1040,6 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		} else {
 			update.ClearQualityIssues()
 		}
-	case sourceChanged:
-		update.ClearQualityIssues()
 	}
 
 	updated, err := update.Save(ctx)
@@ -1056,6 +1047,9 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		if ent.IsNotFound(err) {
 			return nil, ErrSegmentNotFound
 		}
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)

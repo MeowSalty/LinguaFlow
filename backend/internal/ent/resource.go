@@ -22,6 +22,12 @@ type Resource struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// CurrentSourceRevisionID holds the value of the "current_source_revision_id" field.
+	CurrentSourceRevisionID *int `json:"current_source_revision_id,omitempty"`
+	// SourceGeneration holds the value of the "source_generation" field.
+	SourceGeneration int64 `json:"source_generation,omitempty"`
+	// TranslationGeneration holds the value of the "translation_generation" field.
+	TranslationGeneration int64 `json:"translation_generation,omitempty"`
 	// 项目内规范化资源相对路径，如 ui/common.json
 	Path string `json:"path,omitempty"`
 	// 文件格式：srt, vtt, ass, json, md, txt
@@ -85,7 +91,7 @@ func (*Resource) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case resource.FieldID, resource.FieldTotalSegments, resource.FieldProjectID:
+		case resource.FieldID, resource.FieldCurrentSourceRevisionID, resource.FieldSourceGeneration, resource.FieldTranslationGeneration, resource.FieldTotalSegments, resource.FieldProjectID:
 			values[i] = new(sql.NullInt64)
 		case resource.FieldPath, resource.FieldFormat, resource.FieldStoragePath:
 			values[i] = new(sql.NullString)
@@ -123,6 +129,25 @@ func (_m *Resource) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case resource.FieldCurrentSourceRevisionID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field current_source_revision_id", values[i])
+			} else if value.Valid {
+				_m.CurrentSourceRevisionID = new(int)
+				*_m.CurrentSourceRevisionID = int(value.Int64)
+			}
+		case resource.FieldSourceGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field source_generation", values[i])
+			} else if value.Valid {
+				_m.SourceGeneration = value.Int64
+			}
+		case resource.FieldTranslationGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field translation_generation", values[i])
+			} else if value.Valid {
+				_m.TranslationGeneration = value.Int64
 			}
 		case resource.FieldPath:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -211,6 +236,17 @@ func (_m *Resource) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	if v := _m.CurrentSourceRevisionID; v != nil {
+		builder.WriteString("current_source_revision_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("source_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SourceGeneration))
+	builder.WriteString(", ")
+	builder.WriteString("translation_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TranslationGeneration))
 	builder.WriteString(", ")
 	builder.WriteString("path=")
 	builder.WriteString(_m.Path)
