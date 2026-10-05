@@ -25,6 +25,10 @@ import (
 
 const storageMarkerKey = ".linguaflow/space.json"
 
+// Probe payloads use generateUniqueID: eight random bytes encoded as 16 hex bytes.
+// Capacity discovery checks this minimum; marker writes reserve their exact size.
+const storageProbePayloadBytes int64 = 16
+
 func storageMarkerBytes(sp *ent.StorageSpace) []byte {
 	b, _ := json.Marshal(struct {
 		Version  int    `json:"version"`
@@ -156,12 +160,14 @@ func (s *StorageConnectionService) registerProbe(ctx context.Context, actor int,
 		if err != nil {
 			return err
 		}
-		if current.ManagementGeneration != c.ManagementGeneration || current.Status != storageconnection.StatusEnabled || space.ManagementGeneration != sp.ManagementGeneration || space.Status != storagespace.StatusActive {
+		if current.ManagementGeneration != c.ManagementGeneration || space.ManagementGeneration != sp.ManagementGeneration {
 			return ErrStorageConflict
 		}
+		if err = s.driverAdmission(current, space, true); err != nil {
+			return err
+		}
 		size := int64(len(data))
-		used := space.LiveBytes + space.CandidateBytes + space.PendingDeleteBytes + space.ReservedBytes
-		if used < 0 || size > space.CapacityBytes-used {
+		if size > storageAvailableBytes(space) {
 			return storage.ErrLimit
 		}
 		kind := "storage_probe"
@@ -257,6 +263,9 @@ func (s *StorageConnectionService) writeProbe(ctx context.Context, actor int, c 
 	if err = s.client.StorageWrite.UpdateOneID(w.ID).SetPhase("sending").SetOutcomeUnknown(true).Exec(ctx); err != nil {
 		return result, err
 	}
+	if err = storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpWrite, c)); err != nil {
+		return result, err
+	}
 	result, err = d.PutNew(ctx, key, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return result, err
@@ -276,6 +285,9 @@ func (s *StorageConnectionService) writeProbe(ctx context.Context, actor int, c 
 	}
 	// 在这条已登记的确切 key 上验证条件创建；前置条件被忽略即视为准入失败。
 	// 产生的所有版本都保留在这条 write 的日志中。
+	if err = storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpWrite, c)); err != nil {
+		return result, err
+	}
 	if _, err = d.PutNew(ctx, key, bytes.NewReader(data), int64(len(data))); !errors.Is(err, storage.ErrExists) {
 		if err == nil {
 			err = storage.ErrUnsupported
@@ -378,6 +390,9 @@ func (s *StorageConnectionService) cleanupProbe(ctx context.Context, w *ent.Stor
 		if o.Key != w.ObjectKey {
 			return storage.ErrInvalidKey
 		}
+		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpDelete, nil)); err != nil {
+			return err
+		}
 		if err := d.Delete(ctx, o); err != nil && !errors.Is(err, storage.ErrNotFound) {
 			return err
 		}
@@ -440,8 +455,8 @@ func (s *StorageConnectionService) recoveryDriver(ctx context.Context, w *ent.St
 		return nil, err
 	}
 	return &storageGuardedDriver{check: check, deleteCheck: func(ctx context.Context) (storage.Driver, error) {
-		if s.cfg.Maintenance {
-			return nil, ErrStorageMaintenance
+		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpDelete, nil)); err != nil {
+			return nil, err
 		}
 		return check(ctx, false)
 	}}, nil
@@ -459,6 +474,9 @@ func (s *StorageConnectionService) recoveryAttempt(ctx context.Context, w *ent.S
 	if c.AuthSource == storageconnection.AuthSourceDeployment || c.ActiveAuthGeneration > 0 {
 		d, _, err := s.activeDriver(ctx, sp.ID, write)
 		return d, err
+	}
+	if err = s.driverAdmission(c, sp, write); err != nil {
+		return nil, err
 	}
 	// 只要管理授权仍然有效，失败的候选就可以清理自身有界的尝试。
 	// 吊销与过期则永远是终态。

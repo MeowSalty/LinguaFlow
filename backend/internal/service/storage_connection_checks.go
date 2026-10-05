@@ -71,9 +71,6 @@ func (s *StorageConnectionService) runCheck(ctx context.Context, actor, id int, 
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(spaces) == 0 || len(spaces) > 100 {
-		return nil, nil, ErrInvalidInput
-	}
 	results := make([]StorageCheckSpaceResult, 0, len(spaces))
 	for _, space := range spaces {
 		status := "not_checked"

@@ -89,13 +89,18 @@ func (s *ResourceService) CreateExport(ctx context.Context, actor, projectID, re
 
 // prepared 状态的快照足以支持进程在 artifact 事务之前退出后恢复。
 // 其字节内容永远不会从不断变化的译文中重新截取。
-func (s *ResourceService) prepareExportArtifact(ctx context.Context, task *ent.StorageTask) (*ent.StorageTask, error) {
-	task, err := s.client.StorageTask.Get(ctx, task.ID)
+func (s *ResourceService) prepareExportArtifact(ctx context.Context, task *ent.StorageTask) (result *ent.StorageTask, err error) {
+	taskID := task.ID
+	defer func() { err = s.storage.recordDeploymentBlock(ctx, taskID, err) }()
+	task, err = s.client.StorageTask.Get(ctx, taskID)
 	if err != nil {
 		return nil, err
 	}
 	if task.ResultArtifactID != nil {
 		return task, nil
+	}
+	if err = s.storage.taskWriteAdmission(ctx, s.client, task); err != nil {
+		return nil, err
 	}
 	w, err := s.client.StorageWrite.Query().Where(storagewrite.TaskIDEQ(task.ID), storagewrite.PhaseEQ("prepared")).Only(ctx)
 	if ent.IsNotFound(err) && len(task.SourcePlan) > 0 {
@@ -181,8 +186,9 @@ func (s *ResourceService) decodeExportSnapshot(f *StorageFile) (*resourceSnapsho
 	return &snapshot, nil
 }
 
-func (s *ResourceService) finishExport(ctx context.Context, task *ent.StorageTask) error {
-	var err error
+func (s *ResourceService) finishExport(ctx context.Context, task *ent.StorageTask) (err error) {
+	taskID := task.ID
+	defer func() { err = s.storage.recordDeploymentBlock(ctx, taskID, err) }()
 	if task.ResultArtifactID == nil {
 		task, err = s.prepareExportArtifact(ctx, task)
 		if err != nil {
@@ -198,6 +204,9 @@ func (s *ResourceService) finishExport(ctx context.Context, task *ent.StorageTas
 	}
 	if artifact.Status == exportartifact.StatusDeleted {
 		return ErrStorageCancelled
+	}
+	if err = s.storage.taskWriteAdmission(ctx, s.client, task); err != nil {
+		return err
 	}
 	valid, err := s.ExportRebuildable(ctx, artifact)
 	if err != nil {

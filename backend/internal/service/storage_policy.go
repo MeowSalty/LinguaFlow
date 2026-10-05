@@ -20,12 +20,24 @@ import (
 
 const storagePolicyKey = "storage_policy"
 
+// StoragePolicyRequest contains only administrator-authored policy values.
+// Runtime capabilities are response metadata and must never enter persistence.
+type StoragePolicyRequest struct {
+	Mode              string `json:"mode"`
+	DefaultChoice     string `json:"default_choice"`
+	Generation        int64  `json:"generation"`
+	LogicalLimitBytes int64  `json:"logical_limit_bytes"`
+}
+
 type StoragePolicy struct {
-	Mode                     string `json:"mode"`
-	DefaultChoice            string `json:"default_choice"`
-	Generation               int64  `json:"generation"`
-	LogicalLimitBytes        int64  `json:"logical_limit_bytes"`
-	ConfigurationNeedsUpdate bool   `json:"configuration_needs_update,omitempty" readOnly:"true"`
+	Mode                     string         `json:"mode"`
+	DefaultChoice            string         `json:"default_choice"`
+	Generation               int64          `json:"generation"`
+	LogicalLimitBytes        int64          `json:"logical_limit_bytes"`
+	ConfigurationNeedsUpdate bool           `json:"configuration_needs_update,omitempty" readOnly:"true"`
+	Runtime                  StorageRuntime `json:"runtime" readOnly:"true"`
+	AllowedPolicyModes       []string       `json:"allowed_policy_modes" readOnly:"true"`
+	PolicyRestrictionCodes   []string       `json:"policy_restriction_codes" readOnly:"true"`
 }
 
 func storagePolicy(ctx context.Context, client *ent.Client) (StoragePolicy, error) {
@@ -56,11 +68,26 @@ func storagePolicy(ctx context.Context, client *ent.Client) (StoragePolicy, erro
 	return p, nil
 }
 func (s *StorageService) Policy(ctx context.Context) (StoragePolicy, error) {
-	return storagePolicy(ctx, s.client)
+	p, err := storagePolicy(ctx, s.client)
+	if err != nil {
+		return p, err
+	}
+	return s.projectPolicy(p), nil
 }
-func (s *StorageService) SetPolicy(ctx context.Context, actor int, p StoragePolicy) (StoragePolicy, error) {
-	// This read-only hint is derived from stored configuration, never persisted.
-	p.ConfigurationNeedsUpdate = false
+func (s *StorageService) projectPolicy(p StoragePolicy) StoragePolicy {
+	p.Runtime = s.Runtime()
+	p.AllowedPolicyModes = []string{"site_only"}
+	p.PolicyRestrictionCodes = []string{}
+	if p.Runtime.DeploymentEnabled {
+		p.AllowedPolicyModes = append(p.AllowedPolicyModes, "both", "user_required")
+	} else if p.Mode != "site_only" {
+		p.PolicyRestrictionCodes = append(p.PolicyRestrictionCodes, "storage_deployment_disabled")
+	}
+	return p
+}
+
+func (s *StorageService) SetPolicy(ctx context.Context, actor int, in StoragePolicyRequest) (StoragePolicy, error) {
+	p := StoragePolicy{Mode: in.Mode, DefaultChoice: in.DefaultChoice, Generation: in.Generation, LogicalLimitBytes: in.LogicalLimitBytes}
 	if p.Mode != "site_only" && p.Mode != "both" && p.Mode != "user_required" {
 		return p, ErrInvalidInput
 	}
@@ -78,9 +105,6 @@ func (s *StorageService) SetPolicy(ctx context.Context, actor int, p StoragePoli
 		if !ok {
 			return ErrForbidden
 		}
-		if !s.cfg.Enabled && p.Mode != "site_only" {
-			return ErrStoragePolicy
-		}
 		old, e := storagePolicy(ctx, tx)
 		if e != nil {
 			return e
@@ -88,8 +112,16 @@ func (s *StorageService) SetPolicy(ctx context.Context, actor int, p StoragePoli
 		if old.Generation != p.Generation {
 			return ErrStorageConflict
 		}
+		op := storageOpSaveSitePolicy
+		if p.Mode != "site_only" {
+			op = storageOpSaveUserPolicy
+		}
+		if e = storageAdmissionError(storageOperationReasons(s.Runtime(), op, nil)); e != nil {
+			return e
+		}
 		p.Generation++
-		b, e := json.Marshal(p)
+		in.Generation = p.Generation
+		b, e := json.Marshal(in)
 		if e != nil {
 			return e
 		}
@@ -109,7 +141,7 @@ func (s *StorageService) SetPolicy(ctx context.Context, actor int, p StoragePoli
 		}
 		return nil
 	})
-	return p, err
+	return s.projectPolicy(p), err
 }
 
 func (s *StorageService) allowedTarget(ctx context.Context, tx *ent.Client, p *ent.Project, id int) error {
@@ -131,6 +163,9 @@ func (s *StorageService) selectSpace(ctx context.Context, tx *ent.Client, p *ent
 		return 0, ErrStoragePolicy
 	}
 	if s.defaultSpaceID == 0 {
+		if err = storageAdmissionError(s.defaultStorageReasons()); err != nil {
+			return 0, err
+		}
 		return 0, ErrStoragePolicy
 	}
 	if err = s.allowedTarget(ctx, tx, p, s.defaultSpaceID); err != nil {

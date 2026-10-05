@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 )
 
 func interactiveStorageTask(kind string) bool {
@@ -28,44 +29,63 @@ func (s *StorageService) TaskActions(ctx context.Context, actor int, task *ent.S
 	if len(actions) == 0 {
 		return actions
 	}
-	p, err := s.client.Project.Get(ctx, task.ProjectID)
-	if err != nil {
-		return []string{}
+	valid := s.taskWriteAdmission(ctx, s.client, task) == nil
+	out := []string{}
+	for _, action := range actions {
+		if action == "cancel" || valid && (action != "retry" || s.taskRetryReady(ctx, s.client, task) == nil) {
+			out = append(out, action)
+		}
 	}
-	valid := p.StorageGeneration == task.ExpectedStorageGeneration
+	return out
+}
+
+// taskWriteAdmission is the shared current-state check for task actions,
+// retries and execution. It never resolves a driver or probes the provider.
+func (s *StorageService) taskWriteAdmission(ctx context.Context, client *ent.Client, task *ent.StorageTask) error {
+	if err := storageTerminalError(task); err != nil {
+		return err
+	}
+	p, err := client.Project.Get(ctx, task.ProjectID)
+	if err != nil {
+		return err
+	}
+	if p.StorageGeneration != task.ExpectedStorageGeneration {
+		return ErrStorageConflict
+	}
 	if task.Kind != "migration" && task.Kind != "repair" && p.StorageState != "active" {
-		valid = false
+		return ErrStorageMaintenance
 	}
 	if task.Kind == "source_update" && task.ResourceID != nil {
-		r, e := s.client.Resource.Get(ctx, *task.ResourceID)
-		if e != nil || r.SourceGeneration != task.ExpectedSourceGeneration || r.TranslationGeneration != task.ExpectedTranslationGeneration {
-			valid = false
+		r, err := client.Resource.Get(ctx, *task.ResourceID)
+		if err != nil {
+			return err
+		}
+		if r.SourceGeneration != task.ExpectedSourceGeneration || r.TranslationGeneration != task.ExpectedTranslationGeneration {
+			return ErrSourceRevisionConflict
 		}
 	}
-	if s.maintenance {
-		valid = false
+	if task.TargetSpaceID == nil {
+		return ErrStoragePolicy
 	}
-	if task.TargetSpaceID != nil {
-		var e error
-		if task.Kind == "repair" && task.SourceRevisionID != nil {
-			e = s.allowedRepairTarget(ctx, s.client, p, *task.SourceRevisionID, *task.TargetSpaceID, 0)
-		} else if task.Kind == "migration" {
-			e = s.validateStorageTarget(ctx, s.client, p, *task.TargetSpaceID, 0, false)
-		} else {
-			e = s.allowedExistingTarget(ctx, s.client, p, *task.TargetSpaceID, 0)
+	if task.Kind == "repair" {
+		if task.SourceRevisionID == nil {
+			return ErrInvalidInput
 		}
-		if e != nil {
-			valid = false
-		}
+		return s.allowedRepairTarget(ctx, client, p, *task.SourceRevisionID, *task.TargetSpaceID, 0)
 	}
-	if !valid {
-		out := []string{}
-		for _, action := range actions {
-			if action == "cancel" {
-				out = append(out, action)
-			}
-		}
-		return out
+	if task.Kind == "migration" {
+		return s.validateStorageTarget(ctx, client, p, *task.TargetSpaceID, 0, false)
 	}
-	return actions
+	return s.allowedExistingTarget(ctx, client, p, *task.TargetSpaceID, 0)
+}
+
+func (s *StorageService) taskRetryReady(ctx context.Context, client *ent.Client, task *ent.StorageTask) error {
+	writes, err := client.StorageWrite.Query().Where(storagewrite.TaskIDEQ(task.ID), storagewrite.PhaseNotIn("committed", "cleaned", "prepared")).Exist(ctx)
+	if err != nil {
+		return err
+	}
+	if writes {
+		return ErrStorageConflict
+	}
+	return nil
 }

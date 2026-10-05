@@ -9,9 +9,56 @@ info:
     时间区间默认按接口声明解释；任务更新时间筛选使用左闭右开区间。
     根路径 /metrics 为系统管理员认证的持久化数量兼容入口，保留原文本格式；
     实时运行监控使用 /api/v1/admin/runtime/summary。外部抓取方须携带管理员认证。
+    存储部署能力合同 E01：能力和管理动作是只读快照；部署拒绝使用
+    storage_deployment_disabled（409，无 Retry-After），政策违规保持 403。
+    旧 byos_disabled 原因仅保留枚举兼容；客户端须按具体操作重新发现能力。
 servers:
   - url: /api/v1
 paths:
+  /storage/capabilities:
+    get:
+      operationId: GetStorageCapabilities
+      summary: Discover storage management capabilities
+      description: Metadata-only discovery for an active authenticated account. User scope is always the current user and forbids organization_id; org scope requires a positive organization_id and organization owner/admin membership. Platform administrators do not bypass organization membership. Unknown, repeated and empty parameters are rejected. Disabled deployment returns a normal 200 response, even when no connections or spaces exist. Responses are private and must not be cached.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - user
+              - org
+        - name: organization_id
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Current subject management capabilities
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageCapabilities'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /storage/options:
     get:
       operationId: GetStorageOptions
@@ -264,7 +311,7 @@ paths:
     put:
       operationId: SetStoragePolicy
       summary: SetStoragePolicy
-      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      description: 完整保存政策；部署关闭仅支持 site_only，不支持的模式返回 storage_deployment_disabled（409）且不部分更新额度或代次。维护状态不收缩模式枚举。
       security:
         - bearerAuth: []
       requestBody:
@@ -272,7 +319,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StoragePolicy'
+              $ref: '#/components/schemas/StoragePolicyRequest'
       responses:
         '200':
           description: 操作结果
@@ -4546,7 +4593,7 @@ components:
       properties:
         error_code:
           type: string
-          description: Stable domain error code; required on storage domain failures.
+          description: Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Provider authorization, quota and availability retain their separate domain codes.
         task_id:
           type: integer
         operation_id:
@@ -7604,6 +7651,89 @@ components:
           type: integer
           description: 占用该资源的未完成任务 ID
       additionalProperties: false
+    StorageRuntime:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - deployment_enabled
+        - maintenance
+      description: Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate.
+      properties:
+        deployment_enabled:
+          type: boolean
+        maintenance:
+          type: boolean
+    StorageActionReasonCode:
+      type: string
+      enum:
+        - storage_maintenance
+        - storage_deployment_disabled
+        - storage_capability_unsupported
+        - connection_disabled
+        - storage_space_required
+        - storage_check_space_limit_exceeded
+        - space_disabled
+        - space_read_only
+        - storage_auth_required
+        - storage_crypto_unavailable
+        - storage_quota_exceeded
+        - storage_unavailable
+    StorageActionAvailability:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - allowed
+        - reason_codes
+      description: Metadata-only admission snapshot, not a guarantee of provider I/O success. Allowed actions have an empty reason array; denied actions have at least one stable reason.
+      properties:
+        allowed:
+          type: boolean
+        reason_codes:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/StorageActionReasonCode'
+    StorageCapabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - owner_id
+        - runtime
+        - management_actions
+      properties:
+        scope:
+          type: string
+          enum:
+            - user
+            - org
+        owner_id:
+          type: integer
+          minimum: 1
+        runtime:
+          $ref: '#/components/schemas/StorageRuntime'
+        management_actions:
+          type: object
+          readOnly: true
+          additionalProperties: false
+          required:
+            - create_connection
+          properties:
+            create_connection:
+              $ref: '#/components/schemas/StorageActionAvailability'
+      example:
+        scope: user
+        owner_id: 1
+        runtime:
+          deployment_enabled: false
+          maintenance: false
+        management_actions:
+          create_connection:
+            allowed: false
+            reason_codes:
+              - storage_deployment_disabled
     StorageOption:
       type: object
       additionalProperties: false
@@ -7635,6 +7765,7 @@ components:
               - policy_disallowed
               - selection_required
               - byos_disabled
+              - storage_deployment_disabled
               - storage_maintenance
               - connection_disabled
               - storage_auth_required
@@ -7657,7 +7788,10 @@ components:
         - default_space_id
         - default_unavailable_reason
         - items
+        - runtime
       properties:
+        runtime:
+          $ref: '#/components/schemas/StorageRuntime'
         scope:
           type: string
           enum:
@@ -7700,6 +7834,7 @@ components:
             - policy_disallowed
             - selection_required
             - byos_disabled
+            - storage_deployment_disabled
             - storage_maintenance
             - connection_disabled
             - storage_auth_required
@@ -7893,7 +8028,30 @@ components:
         - default_choice
         - generation
         - logical_limit_bytes
+        - runtime
+        - allowed_policy_modes
+        - policy_restriction_codes
       properties:
+        runtime:
+          $ref: '#/components/schemas/StorageRuntime'
+        allowed_policy_modes:
+          type: array
+          readOnly: true
+          items:
+            type: string
+            enum:
+              - site_only
+              - both
+              - user_required
+          description: Modes supported for a complete save by this deployment; maintenance does not narrow this list.
+        policy_restriction_codes:
+          type: array
+          readOnly: true
+          items:
+            type: string
+            enum:
+              - storage_deployment_disabled
+          description: Conflicts between the stored mode and deployment support, independent of target health.
         mode:
           type: string
           enum:
@@ -7917,6 +8075,74 @@ components:
           type: boolean
           readOnly: true
           description: Stored mode/default combination needs administrator correction; effective values are normalized.
+      example:
+        mode: both
+        default_choice: user
+        generation: 3
+        logical_limit_bytes: 107374182400
+        runtime:
+          deployment_enabled: false
+          maintenance: false
+        allowed_policy_modes:
+          - site_only
+        policy_restriction_codes:
+          - storage_deployment_disabled
+    StoragePolicyRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+        - default_choice
+        - generation
+        - logical_limit_bytes
+      description: Complete policy update. Deployment restrictions reject the whole save, including quota-only changes to an unsupported mode. Read-only response fields are rejected.
+      properties:
+        mode:
+          type: string
+          enum:
+            - site_only
+            - both
+            - user_required
+        default_choice:
+          type: string
+          enum:
+            - site
+            - user
+        generation:
+          type: integer
+          format: int64
+          minimum: 0
+        logical_limit_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+    StorageConnectionManagementActions:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - create_space
+        - authorize_read
+        - authorize_write
+        - check_read
+        - check_write
+        - revoke_auth
+        - set_status
+      properties:
+        create_space:
+          $ref: '#/components/schemas/StorageActionAvailability'
+        authorize_read:
+          $ref: '#/components/schemas/StorageActionAvailability'
+        authorize_write:
+          $ref: '#/components/schemas/StorageActionAvailability'
+        check_read:
+          $ref: '#/components/schemas/StorageActionAvailability'
+        check_write:
+          $ref: '#/components/schemas/StorageActionAvailability'
+        revoke_auth:
+          $ref: '#/components/schemas/StorageActionAvailability'
+        set_status:
+          $ref: '#/components/schemas/StorageActionAvailability'
     StorageConnection:
       type: object
       additionalProperties: false
@@ -7933,7 +8159,10 @@ components:
         - has_auth
         - management_generation
         - auth_generation
+        - management_actions
       properties:
+        management_actions:
+          $ref: '#/components/schemas/StorageConnectionManagementActions'
         id:
           type: integer
         name:
@@ -8026,6 +8255,15 @@ components:
           type: integer
           minimum: 0
           format: int64
+    StorageSpaceManagementActions:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - set_status
+      properties:
+        set_status:
+          $ref: '#/components/schemas/StorageActionAvailability'
     StorageSpace:
       type: object
       additionalProperties: false
@@ -8041,7 +8279,10 @@ components:
         - candidate_bytes
         - live_bytes
         - pending_delete_bytes
+        - management_actions
       properties:
+        management_actions:
+          $ref: '#/components/schemas/StorageSpaceManagementActions'
         id:
           type: integer
         connection_id:
@@ -8172,7 +8413,10 @@ components:
         - migration_task_id
         - binding
         - reason_codes
+        - runtime
       properties:
+        runtime:
+          $ref: '#/components/schemas/StorageRuntime'
         project_id:
           type: integer
           minimum: 0
@@ -8230,6 +8474,7 @@ components:
               - policy_disallowed
               - selection_required
               - byos_disabled
+              - storage_deployment_disabled
               - storage_maintenance
               - connection_disabled
               - storage_auth_required

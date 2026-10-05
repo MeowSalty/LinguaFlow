@@ -30,6 +30,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/localstore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/s3store"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/go-chi/chi/v5"
 )
 
 type storageClientEntry struct {
@@ -192,8 +193,37 @@ func (s *Server) storageMaintenanceMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if storageManagementOperation(r) {
+			// These handlers authorize the subject and object before applying
+			// the operation-specific maintenance rules in the storage service.
+			next.ServeHTTP(w, r)
+			return
+		}
 		s.writeStorageError(w, r, service.ErrStorageMaintenance)
 	})
+}
+
+// Called by the generated handler middleware after route matching. This closed
+// dispatch table does not infer write semantics from a URL prefix or a body.
+func storageManagementOperation(r *http.Request) bool {
+	ctx := chi.RouteContext(r.Context())
+	if ctx == nil {
+		return false
+	}
+	switch r.Method + " " + ctx.RoutePattern() {
+	case "PUT /api/v1/admin/storage/policy",
+		"POST /api/v1/storage/connections",
+		"POST /api/v1/orgs/{orgId}/storage/connections",
+		"POST /api/v1/storage/connections/{connectionId}/spaces",
+		"PATCH /api/v1/storage/connections/{connectionId}",
+		"PATCH /api/v1/storage/spaces/{spaceId}",
+		"POST /api/v1/storage/connections/{connectionId}/authorize",
+		"POST /api/v1/storage/connections/{connectionId}/check",
+		"POST /api/v1/storage/connections/{connectionId}/revoke":
+		return true
+	default:
+		return false
+	}
 }
 
 type legacyStorageDriver struct{ storage.Driver }

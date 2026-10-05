@@ -66,7 +66,8 @@ func (s *StorageService) StartMigration(ctx context.Context, actor, projectID, t
 	return s.client.StorageTask.Get(ctx, task.ID)
 }
 
-func (s *StorageService) ContinueMigration(ctx context.Context, id int) error {
+func (s *StorageService) ContinueMigration(ctx context.Context, id int) (err error) {
+	defer func() { err = s.recordDeploymentBlock(ctx, id, err) }()
 	task, err := s.client.StorageTask.Get(ctx, id)
 	if err != nil {
 		return err
@@ -79,6 +80,9 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) error {
 	}
 	if task.Status == storagetask.StatusCancelled {
 		return s.cancelMigration(ctx, task)
+	}
+	if err = s.taskWriteAdmission(ctx, s.client, task); err != nil {
+		return err
 	}
 	if task.Phase == "draining" {
 		writes, e := s.client.StorageWrite.Query().Where(storagewrite.HasTaskWith(storagetask.ProjectIDEQ(task.ProjectID), storagetask.IDNEQ(task.ID), storagetask.Not(storagetask.And(storagetask.KindEQ("repair"), storagetask.ExpectedStorageGenerationEQ(task.ExpectedStorageGeneration)))), storagewrite.PhaseNotIn("committed", "cleaned")).All(ctx)
@@ -98,6 +102,9 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) error {
 				return e
 			}
 			if e := storageTaskGate(ctx, tx, task); e != nil {
+				return e
+			}
+			if e := s.taskWriteAdmission(ctx, tx, task); e != nil {
 				return e
 			}
 			rows, e := tx.Blob.Query().Where(blob.ProjectIDEQ(task.ProjectID), blob.StatusEQ(blob.StatusReady)).All(ctx)
@@ -190,6 +197,9 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) error {
 				if e = storageTaskGate(ctx, tx, t); e != nil {
 					return e
 				}
+				if e = s.validateWriteTarget(ctx, tx, w); e != nil {
+					return e
+				}
 				if t.Phase != "copy" && t.Phase != "verify" {
 					return ErrStorageConflict
 				}
@@ -233,6 +243,9 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) error {
 				return e
 			}
 			if e = storageTaskGate(ctx, tx, t); e != nil {
+				return e
+			}
+			if e = s.taskWriteAdmission(ctx, tx, t); e != nil {
 				return e
 			}
 			if t.Phase != "copy" && t.Phase != "verify" {
@@ -374,10 +387,14 @@ func (s *StorageService) validateWriteTarget(ctx context.Context, tx *ent.Client
 	if err != nil {
 		return err
 	}
-	if sp.ManagementGeneration != w.SpaceGeneration || c.ManagementGeneration != w.ConnectionGeneration || string(sp.Status) != "active" || string(c.Status) != "enabled" {
+	if sp.ManagementGeneration != w.SpaceGeneration || c.ManagementGeneration != w.ConnectionGeneration {
 		return ErrStorageConflict
 	}
-	return nil
+	task, err := tx.StorageTask.Get(ctx, w.TaskID)
+	if err != nil {
+		return err
+	}
+	return s.taskWriteAdmission(ctx, tx, task)
 }
 
 func (s *StorageService) cancelMigration(ctx context.Context, task *ent.StorageTask) error {

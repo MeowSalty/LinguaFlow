@@ -1,3 +1,120 @@
+StorageRuntime:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [deployment_enabled, maintenance]
+  description: Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate.
+  properties:
+    deployment_enabled:
+      type: boolean
+    maintenance:
+      type: boolean
+StorageActionReasonCode:
+  type: string
+  enum:
+    - storage_maintenance
+    - storage_deployment_disabled
+    - storage_capability_unsupported
+    - connection_disabled
+    - storage_space_required
+    - storage_check_space_limit_exceeded
+    - space_disabled
+    - space_read_only
+    - storage_auth_required
+    - storage_crypto_unavailable
+    - storage_quota_exceeded
+    - storage_unavailable
+StorageActionAvailability:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [allowed, reason_codes]
+  description: Metadata-only admission snapshot, not a guarantee of provider I/O success. Allowed actions have an empty reason array; denied actions have at least one stable reason.
+  properties:
+    allowed:
+      type: boolean
+    reason_codes:
+      type: array
+      uniqueItems: true
+      items:
+        $ref: '#/StorageActionReasonCode'
+StorageConnectionManagementActions:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [create_space, authorize_read, authorize_write, check_read, check_write, revoke_auth, set_status]
+  properties:
+    create_space:
+      $ref: '#/StorageActionAvailability'
+    authorize_read:
+      $ref: '#/StorageActionAvailability'
+    authorize_write:
+      $ref: '#/StorageActionAvailability'
+    check_read:
+      $ref: '#/StorageActionAvailability'
+    check_write:
+      $ref: '#/StorageActionAvailability'
+    revoke_auth:
+      $ref: '#/StorageActionAvailability'
+    set_status:
+      $ref: '#/StorageActionAvailability'
+StorageSpaceManagementActions:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [set_status]
+  properties:
+    set_status:
+      $ref: '#/StorageActionAvailability'
+StorageCapabilities:
+  type: object
+  additionalProperties: false
+  required: [scope, owner_id, runtime, management_actions]
+  properties:
+    scope:
+      type: string
+      enum: [user, org]
+    owner_id:
+      type: integer
+      minimum: 1
+    runtime:
+      $ref: '#/StorageRuntime'
+    management_actions:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required: [create_connection]
+      properties:
+        create_connection:
+          $ref: '#/StorageActionAvailability'
+  example:
+    scope: user
+    owner_id: 1
+    runtime: {deployment_enabled: false, maintenance: false}
+    management_actions:
+      create_connection:
+        allowed: false
+        reason_codes: [storage_deployment_disabled]
+StoragePolicyRequest:
+  type: object
+  additionalProperties: false
+  required: [mode, default_choice, generation, logical_limit_bytes]
+  description: Complete policy update. Deployment restrictions reject the whole save, including quota-only changes to an unsupported mode. Read-only response fields are rejected.
+  properties:
+    mode:
+      type: string
+      enum: [site_only, both, user_required]
+    default_choice:
+      type: string
+      enum: [site, user]
+    generation:
+      type: integer
+      format: int64
+      minimum: 0
+    logical_limit_bytes:
+      type: integer
+      format: int64
+      minimum: 1
 StoragePolicy:
   type: "object"
   additionalProperties: false
@@ -6,7 +123,26 @@ StoragePolicy:
     - "default_choice"
     - "generation"
     - "logical_limit_bytes"
+    - "runtime"
+    - "allowed_policy_modes"
+    - "policy_restriction_codes"
   properties:
+    runtime:
+      $ref: '#/StorageRuntime'
+    allowed_policy_modes:
+      type: array
+      readOnly: true
+      items:
+        type: string
+        enum: [site_only, both, user_required]
+      description: Modes supported for a complete save by this deployment; maintenance does not narrow this list.
+    policy_restriction_codes:
+      type: array
+      readOnly: true
+      items:
+        type: string
+        enum: [storage_deployment_disabled]
+      description: Conflicts between the stored mode and deployment support, independent of target health.
     mode:
       type: "string"
       enum:
@@ -30,6 +166,14 @@ StoragePolicy:
       type: "boolean"
       readOnly: true
       description: "Stored mode/default combination needs administrator correction; effective values are normalized."
+  example:
+    mode: both
+    default_choice: user
+    generation: 3
+    logical_limit_bytes: 107374182400
+    runtime: {deployment_enabled: false, maintenance: false}
+    allowed_policy_modes: [site_only]
+    policy_restriction_codes: [storage_deployment_disabled]
 StorageTask:
   type: "object"
   additionalProperties: false
@@ -250,7 +394,10 @@ StorageConnection:
     - "has_auth"
     - "management_generation"
     - "auth_generation"
+    - "management_actions"
   properties:
+    management_actions:
+      $ref: '#/StorageConnectionManagementActions'
     id:
       type: "integer"
     name:
@@ -309,7 +456,10 @@ StorageSpace:
     - "candidate_bytes"
     - "live_bytes"
     - "pending_delete_bytes"
+    - "management_actions"
   properties:
+    management_actions:
+      $ref: '#/StorageSpaceManagementActions'
     id:
       type: "integer"
     connection_id:
@@ -736,6 +886,7 @@ StorageOption:
           - "policy_disallowed"
           - "selection_required"
           - "byos_disabled"
+          - "storage_deployment_disabled"
           - "storage_maintenance"
           - "connection_disabled"
           - "storage_auth_required"
@@ -758,7 +909,10 @@ StorageOptions:
     - "default_space_id"
     - "default_unavailable_reason"
     - "items"
+    - "runtime"
   properties:
+    runtime:
+      $ref: '#/StorageRuntime'
     scope:
       type: "string"
       enum:
@@ -801,6 +955,7 @@ StorageOptions:
         - "policy_disallowed"
         - "selection_required"
         - "byos_disabled"
+        - "storage_deployment_disabled"
         - "storage_maintenance"
         - "connection_disabled"
         - "storage_auth_required"
@@ -860,7 +1015,10 @@ ProjectStorage:
     - "migration_task_id"
     - "binding"
     - "reason_codes"
+    - "runtime"
   properties:
+    runtime:
+      $ref: '#/StorageRuntime'
     project_id:
       type: "integer"
       minimum: 0
@@ -918,6 +1076,7 @@ ProjectStorage:
           - "policy_disallowed"
           - "selection_required"
           - "byos_disabled"
+          - "storage_deployment_disabled"
           - "storage_maintenance"
           - "connection_disabled"
           - "storage_auth_required"

@@ -310,7 +310,7 @@ func TestStorageConnectionSpaceOverlapAndFeatureGate(t *testing.T) {
 		t.Fatalf("endpoint alias bypassed root overlap: %v", err)
 	}
 	s.cfg.Enabled = false
-	if _, err := s.Create(ctx, u.ID, CreateStorageConnectionInput{Name: "blocked", Scope: "user", OwnerID: u.ID, Endpoint: "https://other.example", Region: "test"}); !errors.Is(err, ErrStoragePolicy) {
+	if _, err := s.Create(ctx, u.ID, CreateStorageConnectionInput{Name: "blocked", Scope: "user", OwnerID: u.ID, Endpoint: "https://other.example", Region: "test"}); !errors.Is(err, ErrStorageDeploymentDisabled) {
 		t.Fatal("disabled remote feature accepted new connection")
 	}
 }
@@ -435,7 +435,7 @@ func TestStorageSiteExplicitCheckVerifiesWithoutPersistingCredentials(t *testing
 	if _, err = s.ResolveDriver(ctx, spaceID, false); err != nil {
 		t.Fatal("disabled feature blocked historical read")
 	}
-	if _, err = s.ResolveDriver(ctx, spaceID, true); !errors.Is(err, ErrStoragePolicy) {
+	if _, err = s.ResolveDriver(ctx, spaceID, true); !errors.Is(err, ErrStorageDeploymentDisabled) {
 		t.Fatalf("disabled feature admitted new write: %v", err)
 	}
 }

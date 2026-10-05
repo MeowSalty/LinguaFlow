@@ -52,6 +52,8 @@ func StorageErrorCode(err error) string {
 		return "repair_content_mismatch"
 	case errors.Is(err, ErrStorageMaintenance):
 		return "storage_maintenance"
+	case errors.Is(err, ErrStorageDeploymentDisabled):
+		return "storage_deployment_disabled"
 	case errors.Is(err, ErrStoragePolicy):
 		return "storage_policy_violation"
 	case errors.Is(err, ErrStorageTooLarge), errors.Is(err, storage.ErrPayloadTooLarge):

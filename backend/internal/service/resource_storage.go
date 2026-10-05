@@ -377,6 +377,9 @@ func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, project
 	if err = storageTerminalError(task); err != nil {
 		return nil, nil, err
 	}
+	if err = s.storage.taskWriteAdmission(ctx, s.client, task); err != nil {
+		return nil, nil, s.storage.recordDeploymentBlock(ctx, task.ID, err)
+	}
 	plan, err := decodeSourcePlan(task)
 	if err != nil {
 		return nil, nil, err
@@ -490,7 +493,7 @@ func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, project
 		return s.storage.finishTask(ctx, tx, task.ID)
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, s.storage.recordDeploymentBlock(ctx, task.ID, err)
 	}
 	done, err := s.client.StorageTask.Get(ctx, task.ID)
 	if err != nil {

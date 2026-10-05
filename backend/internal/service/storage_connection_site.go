@@ -78,8 +78,21 @@ func (s *StorageConnectionService) SetupSiteBackends(ctx context.Context) (int, 
 }
 
 func (s *StorageConnectionService) deploymentDriver(ctx context.Context, c *ent.StorageConnection, sp *ent.StorageSpace) (storage.Driver, error) {
+	payload, err := s.deploymentCredentials(c, sp)
+	if err != nil {
+		return nil, err
+	}
+	if s.factory == nil {
+		return nil, storage.ErrUnavailable
+	}
+	return s.factory(ctx, c, sp, payload)
+}
+
+// deploymentCredentials reads only parsed deployment configuration. Capability
+// discovery uses the same identity checks without constructing a provider client.
+func (s *StorageConnectionService) deploymentCredentials(c *ent.StorageConnection, sp *ent.StorageSpace) (storageauth.S3Payload, error) {
 	if c.OwnerKind != storageconnection.OwnerKindSite || c.AuthSource != storageconnection.AuthSourceDeployment || c.Driver != storageconnection.DriverS3 {
-		return nil, storage.ErrAuthRequired
+		return storageauth.S3Payload{}, storage.ErrAuthRequired
 	}
 	for _, backend := range s.cfg.Backends {
 		if backend.ID != c.BackendID {
@@ -87,32 +100,33 @@ func (s *StorageConnectionService) deploymentDriver(ctx context.Context, c *ent.
 		}
 		endpoint, err := storagenet.NormalizeEndpoint(backend.Endpoint)
 		if err != nil || endpoint != c.Endpoint || backend.Driver != "s3" || backend.Region != c.Region || backend.PathStyle != c.PathStyle || backend.Bucket != sp.Bucket || strings.TrimSuffix(backend.Prefix, "/") != sp.Prefix {
-			return nil, ErrStorageConflict
+			return storageauth.S3Payload{}, ErrStorageConflict
 		}
 		payload := storageauth.S3Payload{Version: storageauth.PayloadVersion, AccessKeyID: backend.AccessKeyID, SecretAccessKey: backend.SecretAccessKey, SessionToken: backend.SessionToken}
 		if err = payload.Validate(); err != nil {
-			return nil, storage.ErrAuthRequired
+			return storageauth.S3Payload{}, storage.ErrAuthRequired
 		}
-		if s.factory == nil {
-			return nil, storage.ErrUnavailable
-		}
-		return s.factory(ctx, c, sp, payload)
+		return payload, nil
 	}
-	return nil, storage.ErrAuthRequired
+	return storageauth.S3Payload{}, storage.ErrAuthRequired
 }
 
 // Check 校验当前部署或已生效的存储授权；只读检查绝不发送写入，
 // 也不会改变空间的管理访问模式。
 func (s *StorageConnectionService) check(ctx context.Context, actor, id int, write bool, expectedGeneration int64) (*StorageConnectionRecord, error) {
-	if write && (!s.cfg.Enabled || s.cfg.Maintenance) {
-		return nil, ErrStorageMaintenance
-	}
 	c, err := s.authorized(ctx, s.client, actor, id)
 	if err != nil {
 		return nil, err
 	}
 	if c.ManagementGeneration != expectedGeneration {
 		return nil, ErrStorageConflict
+	}
+	op := storageOpCheckRead
+	if write {
+		op = storageOpCheckWrite
+	}
+	if err = s.admitManagement(ctx, s.client, c, op); err != nil {
+		return nil, err
 	}
 	spaces, err := s.client.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(c.ID)).Limit(101).All(ctx)
 	if err != nil {
@@ -138,6 +152,9 @@ func (s *StorageConnectionService) check(ctx context.Context, actor, id int, wri
 	}
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		if err := s.requireOwner(ctx, tx, actor, string(c.OwnerKind), c.OwnerID); err != nil {
+			return err
+		}
+		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), op, c)); err != nil {
 			return err
 		}
 		n, err := tx.StorageConnection.Update().Where(storageconnection.IDEQ(c.ID), storageconnection.ManagementGenerationEQ(c.ManagementGeneration), storageconnection.ActiveAuthGenerationEQ(c.ActiveAuthGeneration), storageconnection.StatusEQ(storageconnection.StatusEnabled)).SetHealth("available").SetCheckedAt(time.Now().UTC()).Save(ctx)

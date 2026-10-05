@@ -88,6 +88,23 @@ func (s *StorageService) SetResolver(resolve func(context.Context, int, bool) (s
 }
 
 func (s *StorageService) driver(ctx context.Context, spaceID int, write bool) (storage.Driver, error) {
+	if _, err := s.resolveDriver(ctx, spaceID, write); err != nil {
+		return nil, err
+	}
+	check := func(ctx context.Context, write bool) (storage.Driver, error) {
+		return s.resolveDriver(ctx, spaceID, write)
+	}
+	return &storageGuardedDriver{check: check, deleteCheck: func(ctx context.Context) (storage.Driver, error) {
+		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpDelete, nil)); err != nil {
+			return nil, err
+		}
+		return check(ctx, false)
+	}}, nil
+}
+
+// Recheck at every driver call, including a PutNew through a previously resolved
+// read driver. Registered drivers and connection resolvers share this boundary.
+func (s *StorageService) resolveDriver(ctx context.Context, spaceID int, write bool) (storage.Driver, error) {
 	space, err := s.client.StorageSpace.Get(ctx, spaceID)
 	if err != nil {
 		return nil, err
@@ -96,10 +113,15 @@ func (s *StorageService) driver(ctx context.Context, spaceID int, write bool) (s
 	if err != nil {
 		return nil, err
 	}
+	if write {
+		if err = storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpWrite, conn)); err != nil {
+			return nil, err
+		}
+	}
 	if conn.Status != storageconnection.StatusEnabled || space.Status == storagespace.StatusDisabled {
 		return nil, storage.ErrPermission
 	}
-	if write && (s.maintenance || space.Status != storagespace.StatusActive) {
+	if write && space.Status != storagespace.StatusActive {
 		return nil, ErrStorageMaintenance
 	}
 	s.mu.Lock()
@@ -254,18 +276,15 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 				return e
 			}
 		}
-		space, e := tx.StorageSpace.Get(ctx, target)
-		if e != nil {
-			return e
-		}
-		if space.Status != storagespace.StatusActive {
-			return ErrStorageMaintenance
-		}
 		if in.Kind == "repair" {
 			if e = s.allowedRepairTarget(ctx, tx, current, in.SourceRevisionID, target, in.Size); e != nil {
 				return e
 			}
-		} else if in.Kind == "upload" || in.Kind == "source_update" {
+		} else if in.Kind == "migration" {
+			if e = s.validateStorageTarget(ctx, tx, current, target, 0, false); e != nil {
+				return e
+			}
+		} else {
 			if e = s.allowedExistingTarget(ctx, tx, current, target, in.Size); e != nil {
 				return e
 			}
@@ -321,6 +340,7 @@ func (f *StagedObject) Close() error {
 }
 
 func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.Reader, size int64) (out *StagedObject, err error) {
+	defer func() { err = s.recordDeploymentBlock(ctx, task.ID, err) }()
 	if size < 0 || size > s.writeLimit(task.Kind) {
 		return nil, ErrStorageTooLarge
 	}
@@ -393,7 +413,11 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 			if e = s.allowedRepairTarget(ctx, tx, p, *current.SourceRevisionID, *current.TargetSpaceID, size); e != nil {
 				return e
 			}
-		} else if current.Kind != "migration" {
+		} else if current.Kind == "migration" {
+			if e = s.validateStorageTarget(ctx, tx, p, *current.TargetSpaceID, size, false); e != nil {
+				return e
+			}
+		} else {
 			if e = s.allowedExistingTarget(ctx, tx, p, *current.TargetSpaceID, size); e != nil {
 				return e
 			}
@@ -503,6 +527,13 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 	if _, e = f.Seek(0, io.SeekStart); e != nil {
 		return nil, e
 	}
+	current, e := s.client.StorageTask.Get(ctx, task.ID)
+	if e != nil {
+		return nil, e
+	}
+	if e = s.taskWriteAdmission(ctx, s.client, current); e != nil {
+		return nil, e
+	}
 	if e = s.client.StorageWrite.UpdateOneID(write.ID).SetActualBytes(n).SetSha256(digest).SetPhase("receiving").SetOutcomeUnknown(true).Exec(ctx); e != nil {
 		return nil, e
 	}
@@ -539,6 +570,9 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 			return e
 		}
 		if e = storageTaskGate(ctx, tx, current); e != nil {
+			return e
+		}
+		if e = s.taskWriteAdmission(ctx, tx, current); e != nil {
 			return e
 		}
 		if e := tx.StorageWrite.UpdateOneID(write.ID).SetProviderVersion(obj.Version).SetPhase("prepared").SetOutcomeUnknown(false).Exec(ctx); e != nil {
@@ -622,7 +656,11 @@ func (s *StorageService) publish(ctx context.Context, tx *ent.Client, w *ent.Sto
 		if err = s.allowedRepairTarget(ctx, tx, p, *task.SourceRevisionID, w.SpaceID, 0); err != nil {
 			return nil, err
 		}
-	} else if task.Kind != "migration" {
+	} else if task.Kind == "migration" {
+		if err = s.validateStorageTarget(ctx, tx, p, w.SpaceID, 0, false); err != nil {
+			return nil, err
+		}
+	} else {
 		if err = s.allowedExistingTarget(ctx, tx, p, w.SpaceID, 0); err != nil {
 			return nil, err
 		}
