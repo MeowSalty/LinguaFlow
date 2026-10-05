@@ -578,7 +578,9 @@ onMounted(() => {
     <template v-else>
       <div class="mx-auto flex w-full max-w-275 flex-1 min-h-0 flex-col gap-4">
         <section class="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          >
             <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
               <NButton quaternary size="small" @click="router.push('/projects')">
                 <template #icon>
