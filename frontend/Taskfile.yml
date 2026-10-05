@@ -38,6 +38,12 @@ tasks:
   test:e2e:
     desc: 执行前端端到端测试
     cmds: ['pnpm exec playwright test {{.CLI_ARGS}}']
+  test:storage-visual:
+    desc: 对已运行的生产预览采集存储页面视觉证据（CLI_ARGS=before 或 after）
+    cmds: ['node --experimental-strip-types tests/e2e/capture-storage-visual.mjs {{.CLI_ARGS}}']
+  test:task-header-visual:
+    desc: 对已运行的生产预览检查全局任务顶栏与真实 200% 缩放并采集视觉证据
+    cmds: ['node --experimental-strip-types tests/e2e/capture-task-header-visual.mjs {{.CLI_ARGS}}']
   test:configuration-integration:
     desc: 使用 Vitest、独立后端与隔离数据库验证配置、凭据和真实任务链路
     cmds: ['pnpm exec vitest run --config vitest.integration.config.ts {{.CLI_ARGS}}']

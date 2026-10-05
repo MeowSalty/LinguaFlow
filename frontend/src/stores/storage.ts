@@ -86,6 +86,9 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
   let capabilitySequence = 0
   let controller = new AbortController()
   const spaceSequences = new Map<number, number>()
+  const spaceReads = new Map<number, { promise: Promise<boolean>; current: () => boolean }>()
+  let summaryRead: { promise: Promise<void>; current: () => boolean } | undefined
+  let spaceReadQueue = { active: 0, pending: [] as Array<() => void> }
   const checkSequences = new Map<number, number>()
   const writeSequences = new Map<number, number>()
   const canManage = computed(() => {
@@ -143,13 +146,26 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     ++capabilitySequence
     connections.value.loading = false
     connections.value.stale = connections.value.loaded
+    invalidateSpaceReads()
+    invalidateCheckReads()
+    if (capabilityStatus.value !== 'idle') capabilityStatus.value = 'stale'
+    markPolicyStale()
+  }
+  function invalidateSpaceReads() {
+    summaryRead = undefined
+    spaceReads.clear()
     for (const [id, state] of Object.entries(spaces.value)) {
       spaceSequences.set(Number(id), (spaceSequences.get(Number(id)) ?? 0) + 1)
       state.loading = false
       state.stale = state.loaded
     }
-    if (capabilityStatus.value !== 'idle') capabilityStatus.value = 'stale'
-    markPolicyStale()
+  }
+  function invalidateCheckReads() {
+    for (const [id, state] of Object.entries(checks.value)) {
+      checkSequences.set(Number(id), (checkSequences.get(Number(id)) ?? 0) + 1)
+      state.loading = false
+      state.stale = state.loaded
+    }
   }
   function markPolicyStale() {
     ++policySequence
@@ -176,6 +192,9 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     unknownWrites.value = {}
     denied.value = false
     spaceSequences.clear()
+    spaceReads.clear()
+    summaryRead = undefined
+    spaceReadQueue = { active: 0, pending: [] }
     checkSequences.clear()
     writeSequences.clear()
   }
@@ -203,6 +222,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
   function forgetConnection(id: number) {
     connections.value.items = connections.value.items.filter((item) => item.id !== id)
     delete spaces.value[id]
+    spaceReads.delete(id)
     delete checks.value[id]
     checkSequences.set(id, (checkSequences.get(id) ?? 0) + 1)
     spaceSequences.set(id, (spaceSequences.get(id) ?? 0) + 1)
@@ -213,6 +233,9 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       loseAccess()
       return false
     }
+    // A list refresh invalidates cached ledgers and history without eagerly reloading either.
+    invalidateSpaceReads()
+    invalidateCheckReads()
     // Reads remain available during slow probes. A completed mutation invalidates their sequence.
     const capabilityRead = scope.value.kind === 'site' ? Promise.resolve(true) : loadCapabilities()
     const context = currentContext(),
@@ -292,13 +315,17 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
       return false
     }
   }
-  async function loadSpaces(connectionId: number): Promise<boolean> {
+  function loadSpaces(connectionId: number, force = false): Promise<boolean> {
     if (
       busy.value[`connection:${connectionId}`] ||
       !ready.value ||
       !connections.value.items.some((item) => item.id === connectionId)
     )
-      return false
+      return Promise.resolve(false)
+    const pending = spaceReads.get(connectionId)
+    if (pending?.current()) return pending.promise
+    const cached = spaces.value[connectionId]
+    if (!force && cached?.loaded && !cached.stale && !cached.error) return Promise.resolve(true)
     const context = currentContext(),
       sequence = (spaceSequences.get(connectionId) ?? 0) + 1
     spaceSequences.set(connectionId, sequence)
@@ -307,6 +334,45 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     const state = spaces.value[connectionId]!
     state.loading = true
     state.error = null
+    const promise = scheduleSpaceRead(
+      () => readSpaces(connectionId, state, current),
+      current,
+    ).finally(() => {
+      if (spaceReads.get(connectionId)?.promise === promise) spaceReads.delete(connectionId)
+    })
+    spaceReads.set(connectionId, { promise, current })
+    return promise
+  }
+  function scheduleSpaceRead(
+    read: () => Promise<boolean>,
+    current: () => boolean,
+  ): Promise<boolean> {
+    const queue = spaceReadQueue
+    function drain() {
+      while (queue.active < 4 && queue.pending.length) queue.pending.shift()!()
+    }
+    return new Promise((resolve) => {
+      queue.pending.push(() => {
+        if (!current()) {
+          resolve(false)
+          return
+        }
+        queue.active++
+        void read()
+          .then(resolve, () => resolve(false))
+          .finally(() => {
+            queue.active--
+            drain()
+          })
+      })
+      drain()
+    })
+  }
+  async function readSpaces(
+    connectionId: number,
+    state: ReadState<Space>,
+    current: () => boolean,
+  ): Promise<boolean> {
     try {
       const response = await transport.listStorageSpaces(connectionId, {
         signal: controller.signal,
@@ -329,6 +395,28 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     } finally {
       if (current()) state.loading = false
     }
+  }
+  function loadSpaceSummaries(): Promise<void> {
+    if (!ready.value) return Promise.resolve()
+    if (summaryRead?.current()) return summaryRead.promise
+    const context = currentContext(),
+      sequence = listSequence
+    const current = () => context() && listSequence === sequence && ready.value
+    const ids = connections.value.items.map((item) => item.id)
+    let next = 0
+    async function worker() {
+      while (current() && next < ids.length) {
+        const id = ids[next++]!
+        await loadSpaces(id)
+      }
+    }
+    const promise = Promise.all(Array.from({ length: Math.min(4, ids.length) }, worker))
+      .then(() => undefined)
+      .finally(() => {
+        if (summaryRead?.promise === promise) summaryRead = undefined
+      })
+    summaryRead = { promise, current }
+    return promise
   }
   async function loadChecks(connectionId: number, append = false): Promise<boolean> {
     if (
@@ -446,6 +534,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     connections.value.loading = false
     if (connectionId !== undefined) {
       spaceSequences.set(connectionId, (spaceSequences.get(connectionId) ?? 0) + 1)
+      spaceReads.delete(connectionId)
       const state = spaces.value[connectionId]
       if (state) {
         state.loading = false
@@ -760,6 +849,7 @@ export function createStorageState(transport = api, isAdmin: () => boolean = () 
     setScope,
     load,
     loadSpaces,
+    loadSpaceSummaries,
     loadChecks,
     loadPolicy,
     loadCapabilities,

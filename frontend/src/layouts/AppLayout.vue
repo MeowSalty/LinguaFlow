@@ -273,7 +273,7 @@ const navigateTo = (path: string): void => {
     <!-- 主区 -->
     <div class="flex min-w-0 flex-1 flex-col">
       <header
-        class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-lf-border-soft bg-lf-surface px-4 sm:gap-3 sm:px-6"
+        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-lf-border-soft bg-lf-surface px-4 sm:gap-3 sm:px-6"
       >
         <!-- lg:hidden! 用 important 覆盖 naive-ui 注入的 .n-button display（分层样式斗不过未分层样式） -->
         <NButton
@@ -289,9 +289,9 @@ const navigateTo = (path: string): void => {
           </template>
         </NButton>
 
-        <div class="flex-1" />
+        <div class="min-w-0 flex-1 overflow-hidden" />
 
-        <div class="flex items-center gap-2 sm:gap-3">
+        <div class="flex shrink-0 items-center gap-2 sm:gap-3">
           <NDropdown
             v-if="locale.hasMultipleLocales"
             trigger="click"
@@ -299,8 +299,14 @@ const navigateTo = (path: string): void => {
             placement="bottom-end"
             @select="onSelectLocale"
           >
-            <NButton quaternary size="small">
-              {{ t('common.language') }}
+            <NButton
+              quaternary
+              size="small"
+              :aria-label="t('common.language')"
+              :title="t('common.language')"
+            >
+              <template #icon><IconCarbonLanguage aria-hidden="true" /></template>
+              <span class="hidden sm:inline">{{ t('common.language') }}</span>
             </NButton>
           </NDropdown>
           <NDropdown
@@ -317,9 +323,21 @@ const navigateTo = (path: string): void => {
               </template>
             </NButton>
           </NDropdown>
-          <NTag v-if="service.isLocal" size="small" type="success" :bordered="false">
-            {{ t('layout.localModeBadge') }}
-          </NTag>
+          <span
+            v-if="service.isLocal"
+            class="flex shrink-0 items-center text-lf-success"
+            :title="t('layout.localModeBadge')"
+            :aria-label="t('layout.localModeBadge')"
+            role="img"
+          >
+            <IconCarbonLaptop class="text-lg sm:hidden" aria-hidden="true" />
+            <span class="hidden sm:inline-flex"
+              ><NTag size="small" type="success" :bordered="false">{{
+                t('layout.localModeBadge')
+              }}</NTag></span
+            >
+          </span>
+          <GlobalJobTrackerWidget />
           <NDropdown
             v-if="auth.user"
             trigger="click"
@@ -391,7 +409,6 @@ const navigateTo = (path: string): void => {
       </NDrawerContent>
     </NDrawer>
 
-    <GlobalJobTrackerWidget />
     <GlobalJobDetailDrawer />
   </div>
 </template>

@@ -1,12 +1,12 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { storageConfirmationButtons } from '@/components/storage/confirmation'
 import {
   NAlert,
   NButton,
   NCard,
   NForm,
   NFormItem,
-  NInputNumber,
   NSelect,
   NSkeleton,
   useDialog,
@@ -15,6 +15,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import type { ApiSchemas } from '@/api/client-core'
 import { getStorageDiagnostics } from '@/api/storage'
+import { ApiError } from '@/api/utils'
 import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
 import {
   storageAccessDenied,
@@ -29,13 +30,26 @@ import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/datetime'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StorageManager from '@/components/storage/StorageManager.vue'
-import StorageCapacity from '@/components/storage/StorageCapacity.vue'
+import StorageCapacityInput from '@/components/storage/StorageCapacityInput.vue'
+import StorageDiagnostics from '@/components/storage/StorageDiagnostics.vue'
+import StorageTabs from '@/components/storage/StorageTabs.vue'
+import StorageAppearance from '@/components/storage/StorageAppearance.vue'
+import { formatStorageBytes } from '@/components/storage/capacity'
 
 const { t } = useI18n(),
   message = useMessage(),
   dialog = useDialog()
 const store = useStorageStore(),
   auth = useAuthStore()
+const activeTab = ref<'overview' | 'connections' | 'policy'>('overview')
+const tabs = computed(() => [
+  { name: 'overview', label: t('storageAdmin.overview') },
+  { name: 'connections', label: t('storageAdmin.connections') },
+  { name: 'policy', label: t('storageAdmin.policy') },
+])
+function changeTab(value: string) {
+  if (value === 'overview' || value === 'connections' || value === 'policy') activeTab.value = value
+}
 const draft = createStoragePolicyDraft()
 const { form, dirty, conflict } = draft
 const modeAllowed = computed(
@@ -46,6 +60,9 @@ const modeAllowed = computed(
 )
 const canSave = computed(
   () =>
+    auth.user?.role === 'admin' &&
+    store.scope.kind === 'site' &&
+    !store.denied &&
     !!draft.baseline.value &&
     !conflict.value &&
     modeAllowed.value &&
@@ -76,7 +93,29 @@ const choices = computed(() =>
 const diagnostics = shallowRef<ApiSchemas['StorageDiagnostics'] | null>(null)
 const diagnosticsError = ref<string | null>(null),
   diagnosticsLoading = ref(false)
-const cursor = ref<number | undefined>(undefined)
+const diagnosticCursors = ref<Array<number | undefined>>([undefined])
+const diagnosticPage = ref(0)
+const cursor = computed(() => diagnosticCursors.value[diagnosticPage.value])
+const diagnosticsStale = ref(false)
+const diagnosticsUpdatedAt = ref<string | null>(null)
+const names = computed(() => {
+  const result: Record<number, string> = {}
+  if (
+    auth.user?.role !== 'admin' ||
+    store.scope.kind !== 'site' ||
+    store.denied ||
+    !store.connections.loaded ||
+    store.connections.stale
+  )
+    return result
+  for (const connection of store.connections.items) {
+    const spaces = store.spaces[connection.id]
+    if (connection.scope !== 'site' || !spaces?.loaded || spaces.stale) continue
+    for (const space of spaces.items)
+      if (space.connection_id === connection.id) result[space.id] = space.name
+  }
+  return result
+})
 let sequence = 0,
   controller = new AbortController()
 let active = true
@@ -93,7 +132,7 @@ function reviewBaseline() {
     baseline = draft.baseline.value
   if (!latest || !baseline || !conflict.value) return
   const describe = (value: typeof latest) =>
-    `${t(`storage.modes.${value.mode}`)} / ${t(`storage.choices.${value.default_choice}`)} / ${value.logical_limit_bytes.toLocaleString()}`
+    `${t(`storage.modes.${value.mode}`)} / ${t(`storage.choices.${value.default_choice}`)} / ${formatStorageBytes(value.logical_limit_bytes)} (${t('storage.bytes', { value: value.logical_limit_bytes.toLocaleString() })})`
   const session = captureSession()
   dialog.warning({
     title: t('storageManagement.reviewPolicy'),
@@ -104,6 +143,7 @@ function reviewBaseline() {
     }),
     positiveText: t('storageManagement.adoptBaseline'),
     negativeText: t('storage.cancel'),
+    ...storageConfirmationButtons,
     onPositiveClick: () => {
       if (
         active &&
@@ -115,7 +155,18 @@ function reviewBaseline() {
     },
   })
 }
-async function loadDiagnostics(next?: number) {
+function clearDiagnostics() {
+  ++sequence
+  controller.abort()
+  diagnostics.value = null
+  diagnosticsError.value = null
+  diagnosticsLoading.value = false
+  diagnosticsStale.value = false
+  diagnosticsUpdatedAt.value = null
+  diagnosticCursors.value = [undefined]
+  diagnosticPage.value = 0
+}
+async function loadDiagnostics(next?: number, page = diagnosticPage.value) {
   if (auth.user?.role !== 'admin') return
   controller.abort()
   controller = new AbortController()
@@ -125,6 +176,7 @@ async function loadDiagnostics(next?: number) {
     request === sequence && isSessionCurrent(session) && auth.user?.role === 'admin'
   diagnosticsLoading.value = true
   diagnosticsError.value = null
+  diagnosticsStale.value = !!diagnostics.value
   try {
     const result = await getStorageDiagnostics(
       { cursor: next, limit: 50 },
@@ -132,16 +184,35 @@ async function loadDiagnostics(next?: number) {
     )
     if (current()) {
       diagnostics.value = result
-      cursor.value = next
+      // Commit navigation only after a successful read; failures preserve the previous page.
+      if (page > diagnosticPage.value)
+        diagnosticCursors.value = [...diagnosticCursors.value.slice(0, page), next]
+      diagnosticPage.value = page
+      diagnosticsStale.value = false
+      diagnosticsUpdatedAt.value = new Date().toISOString()
     }
   } catch (error) {
     if (current()) {
-      if (storageAccessDenied(error)) diagnostics.value = null
+      if (storageAccessDenied(error) || (error instanceof ApiError && error.status === 401))
+        clearDiagnostics()
       diagnosticsError.value = storageErrorMessage(error)
     }
   } finally {
     if (current()) diagnosticsLoading.value = false
   }
+}
+function previousDiagnosticsPage() {
+  if (diagnosticsLoading.value || diagnosticPage.value === 0) return
+  const page = diagnosticPage.value - 1
+  void loadDiagnostics(diagnosticCursors.value[page], page)
+}
+function nextDiagnosticsPage() {
+  if (diagnosticsLoading.value || diagnostics.value?.next_cursor === undefined) return
+  void loadDiagnostics(diagnostics.value.next_cursor, diagnosticPage.value + 1)
+}
+function refreshCurrentTab() {
+  if (activeTab.value === 'overview') void loadDiagnostics(cursor.value)
+  else if (activeTab.value === 'policy') void store.loadPolicy()
 }
 async function savePolicy() {
   const snapshot = draft.snapshot()
@@ -155,17 +226,38 @@ async function savePolicy() {
   }
 }
 const unsubscribeRefresh = subscribeStorageRefresh({
-  invalidate: store.markPolicyStale,
-  refresh: () => store.loadPolicy(),
+  invalidate: () => {
+    store.markPolicyStale()
+    ++sequence
+    controller.abort()
+    diagnosticsLoading.value = false
+    diagnosticsStale.value = !!diagnostics.value
+  },
+  refresh: async () => {
+    await Promise.all([
+      store.loadPolicy(),
+      ...(activeTab.value === 'overview' ? [loadDiagnostics(cursor.value)] : []),
+    ])
+  },
 })
+watch(activeTab, (tab) => {
+  if (
+    tab === 'overview' &&
+    !diagnosticsLoading.value &&
+    (!diagnostics.value || diagnosticsStale.value)
+  )
+    void loadDiagnostics(cursor.value)
+})
+watch(
+  () => store.denied,
+  (denied) => {
+    if (denied) clearDiagnostics()
+  },
+)
 watch(
   () => [sessionGeneration.value, auth.user?.role],
   () => {
-    ++sequence
-    controller.abort()
-    diagnostics.value = null
-    diagnosticsError.value = null
-    diagnosticsLoading.value = false
+    clearDiagnostics()
     draft.clear()
     if (auth.user?.role === 'admin') {
       store.setScope({ kind: 'site' })
@@ -184,215 +276,209 @@ onUnmounted(() => {
 })
 </script>
 <template>
-  <div class="lf-page lf-content-narrow">
-    <PageHeader :title="t('storage.adminTitle')" :subtitle="t('storage.adminSubtitle')" />
-    <NCard :title="t('storage.policy')" size="small">
-      <template #header-extra
-        ><NButton :loading="store.policyLoading" @click="store.loadPolicy">{{
-          t('storage.refresh')
-        }}</NButton></template
-      >
-      <NAlert v-if="store.policyError || store.writeErrors.policy" type="warning" class="mb-4">{{
-        store.policyError || store.writeErrors.policy
-      }}</NAlert>
-      <NAlert v-if="store.policySavedPendingRefresh" type="info" class="mb-4">{{
-        t('storageManagement.savedPendingRefresh')
-      }}</NAlert>
-      <NSkeleton v-if="store.policyLoading && !store.policy" height="180px" />
-      <NForm v-else-if="store.policy" label-placement="top" @submit.prevent="savePolicy">
-        <NAlert
-          v-if="store.policy.runtime?.deployment_enabled === false"
-          type="info"
-          class="mb-4"
-          >{{ t('storageManagement.deploymentSetup') }}</NAlert
-        >
-        <NAlert v-if="store.policy.runtime?.maintenance" type="info" class="mb-4">{{
-          t('storageManagement.policyMaintenance')
-        }}</NAlert>
-        <NAlert v-if="store.policy.configuration_needs_update" type="warning" class="mb-4">{{
-          t('storageManagement.policyConfiguration')
-        }}</NAlert>
-        <p
-          v-for="code in store.policy.policy_restriction_codes ?? []"
-          :key="code"
-          class="mb-3 text-sm text-lf-text-muted"
-        >
-          {{ storageTaskErrorMessage(code) }}
-        </p>
-        <NAlert v-if="!modeAllowed" type="warning" class="mb-4">
-          <p>{{ t('storageManagement.modeRestricted') }}</p>
+  <StorageAppearance>
+    <div class="lf-page lf-content-narrow min-w-0" data-testid="admin-storage-page">
+      <PageHeader :title="t('storage.adminTitle')" :subtitle="t('storageAdmin.description')">
+        <template #actions>
           <NButton
-            v-if="store.policy.allowed_policy_modes?.includes('site_only')"
-            class="mt-3"
-            :disabled="!!store.busy.policy"
-            @click="draft.chooseMode('site_only')"
-            >{{ t('storageManagement.useSiteOnly') }}</NButton
+            v-if="activeTab !== 'connections' && auth.user?.role === 'admin'"
+            :loading="activeTab === 'overview' ? diagnosticsLoading : store.policyLoading"
+            @click="refreshCurrentTab"
+            >{{ t('storage.refresh') }}</NButton
           >
-          <p class="mt-2 text-xs">{{ t('storageManagement.siteOnlyHint') }}</p>
-        </NAlert>
-        <NAlert v-if="conflict" type="warning" class="mb-4">
-          <p>{{ t('storageManagement.policyConflict') }}</p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <NButton @click="draft.reload">{{ t('storageManagement.reloadPolicy') }}</NButton
-            ><NButton @click="reviewBaseline">{{ t('storageManagement.reviewPolicy') }}</NButton>
-          </div>
-        </NAlert>
-        <div class="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-          <NFormItem :label="t('storage.policyMode')"
-            ><NSelect
-              :value="form.mode"
-              :options="modes"
-              :disabled="!!store.busy.policy"
-              @update:value="draft.chooseMode"
-          /></NFormItem>
-          <NFormItem :label="t('storage.policyDefault')"
-            ><NSelect
-              v-model:value="form.default_choice"
-              :options="choices"
-              :disabled="!!store.busy.policy"
-          /></NFormItem>
-        </div>
-        <NFormItem :label="t('storage.logicalLimit')"
-          ><NInputNumber
-            :value="form.logical_limit_bytes"
-            :disabled="!!store.busy.policy"
-            :min="1"
-            :max="Number.MAX_SAFE_INTEGER"
-            class="w-full"
-            @update:value="(value) => (form.logical_limit_bytes = value ?? 0)"
-        /></NFormItem>
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <p class="text-xs text-lf-text-muted">
-            {{ t('storage.policyHint')
-            }}<span v-if="dirty"> · {{ t('storageManagement.unsavedDraft') }}</span>
-          </p>
-          <NButton
-            type="primary"
-            attr-type="submit"
-            :loading="!!store.busy.policy"
-            :disabled="!canSave"
-            >{{ t('storage.save') }}</NButton
-          >
-        </div>
-      </NForm>
-    </NCard>
-    <StorageManager :scope="{ kind: 'site' }" />
-    <NCard :title="t('storage.diagnostics')" size="small">
-      <template #header-extra
-        ><NButton :loading="diagnosticsLoading" @click="loadDiagnostics(cursor)">{{
-          t('storage.refresh')
-        }}</NButton></template
+        </template>
+      </PageHeader>
+      <NAlert v-if="auth.user?.role !== 'admin'" type="warning">{{ t('storage.denied') }}</NAlert>
+      <StorageTabs
+        v-else
+        :value="activeTab"
+        :tabs="tabs"
+        :label="t('storage.adminTitle')"
+        @update:value="changeTab"
       >
-      <div class="space-y-4">
-        <p class="text-sm text-lf-text-muted">{{ t('storage.diagnosticsHint') }}</p>
-        <NAlert v-if="diagnosticsError" type="warning">{{ diagnosticsError }}</NAlert>
-        <NSkeleton v-if="diagnosticsLoading && !diagnostics" height="160px" />
-        <template v-if="diagnostics">
-          <dl class="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt class="text-lf-text-muted">{{ t('storage.temporary') }}</dt>
-              <dd>
-                {{ t('storage.bytes', { value: diagnostics.temporary_bytes.toLocaleString() }) }}
-              </dd>
-            </div>
-            <div>
-              <dt class="text-lf-text-muted">{{ t('storage.recoveryBacklog') }}</dt>
-              <dd>{{ diagnostics.recovery_backlog }}</dd>
-            </div>
-            <div v-if="diagnostics.oldest_intent_at">
-              <dt class="text-lf-text-muted">{{ t('storage.oldestIntent') }}</dt>
-              <dd>
-                {{
-                  formatDateTime(diagnostics.oldest_intent_at, {
+        <template #overview>
+          <div class="space-y-5" :aria-busy="diagnosticsLoading">
+            <NAlert v-if="diagnosticsError" type="warning">{{ diagnosticsError }}</NAlert>
+            <NAlert v-if="diagnosticsStale && diagnostics" type="info">
+              {{ t('storageAdmin.snapshotStale') }}
+            </NAlert>
+            <p v-if="diagnosticsUpdatedAt" class="text-xs text-lf-text-muted">
+              {{
+                t('storageAdmin.updatedAt', {
+                  time: formatDateTime(diagnosticsUpdatedAt, {
                     dateStyle: 'medium',
                     timeStyle: 'short',
-                  })
-                }}
-              </dd>
-            </div>
-            <div>
-              <dt class="text-lf-text-muted">{{ t('storage.latestBackup') }}</dt>
-              <dd>
-                {{
-                  diagnostics.latest_backup
-                    ? t(`storage.backupStates.${diagnostics.latest_backup.status}`)
-                    : t('storage.noBackup')
-                }}<span v-if="diagnostics.latest_backup">
-                  ·
-                  {{
-                    formatDateTime(diagnostics.latest_backup.created_at, {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })
-                  }}</span
-                >
-              </dd>
-            </div>
-          </dl>
-          <div v-if="Object.keys(diagnostics.blocked_cleanup_by_code).length">
-            <h3 class="mb-2 text-sm font-medium">{{ t('storage.blockedCleanup') }}</h3>
-            <p
-              v-for="(count, code) in diagnostics.blocked_cleanup_by_code"
-              :key="code"
-              class="text-xs"
-            >
-              {{ code }} · {{ count }}
-            </p>
-          </div>
-          <div v-if="Object.keys(diagnostics.migrations_by_phase).length">
-            <h3 class="mb-2 text-sm font-medium">{{ t('storage.migrationPhases') }}</h3>
-            <p
-              v-for="(count, phase) in diagnostics.migrations_by_phase"
-              :key="phase"
-              class="text-xs"
-            >
-              {{ phase }} · {{ count }}
-            </p>
-          </div>
-          <NCard
-            v-for="space in diagnostics.spaces"
-            :key="space.id"
-            :title="`${t('storage.selectSpace')} #${space.id}`"
-            size="small"
-          >
-            <StorageCapacity :space="space" />
-            <dl class="mt-3 grid grid-cols-3 gap-2 text-xs">
-              <div>
-                <dt>{{ t('storage.unchecked') }}</dt>
-                <dd>{{ space.unchecked_objects }}</dd>
-              </div>
-              <div>
-                <dt>{{ t('storage.missing') }}</dt>
-                <dd>{{ space.missing_objects }}</dd>
-              </div>
-              <div>
-                <dt>{{ t('storage.corrupt') }}</dt>
-                <dd>{{ space.corrupt_objects }}</dd>
-              </div>
-            </dl>
-            <p v-if="space.last_checked_at" class="mt-3 text-xs text-lf-text-subtle">
-              {{ t('storage.lastChecked') }} ·
-              {{
-                formatDateTime(space.last_checked_at, { dateStyle: 'medium', timeStyle: 'short' })
+                  }),
+                })
               }}
             </p>
-          </NCard>
-          <p class="text-xs text-lf-text-subtle">{{ t('storage.diagnosticPageHint') }}</p>
-          <div class="flex justify-end gap-2">
-            <NButton
-              v-if="cursor !== undefined"
-              :disabled="diagnosticsLoading"
-              @click="loadDiagnostics()"
-              >{{ t('storage.firstPage') }}</NButton
-            ><NButton
-              v-if="diagnostics.next_cursor !== undefined"
-              :disabled="diagnosticsLoading"
-              @click="loadDiagnostics(diagnostics.next_cursor)"
-              >{{ t('storage.nextPage') }}</NButton
-            >
+            <template v-if="diagnosticsLoading && !diagnostics">
+              <NSkeleton height="180px" />
+              <NSkeleton height="260px" />
+            </template>
+            <template v-if="diagnostics">
+              <StorageDiagnostics :diagnostics="diagnostics" :names="names" />
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <p class="max-w-md text-xs leading-5 text-lf-text-muted">
+                  {{ t('storageAdmin.pageHint') }}
+                </p>
+                <div class="flex flex-wrap items-center gap-2">
+                  <NButton
+                    :disabled="diagnosticsLoading || diagnosticPage === 0"
+                    @click="previousDiagnosticsPage"
+                    >{{ t('storageAdmin.previousPage') }}</NButton
+                  >
+                  <span class="px-1 text-xs tabular-nums text-lf-text-muted" aria-live="polite">{{
+                    t('storageAdmin.page', { page: diagnosticPage + 1 })
+                  }}</span>
+                  <NButton
+                    :disabled="diagnosticsLoading || diagnostics.next_cursor === undefined"
+                    @click="nextDiagnosticsPage"
+                    >{{ t('storageAdmin.nextPage') }}</NButton
+                  >
+                </div>
+              </div>
+            </template>
           </div>
         </template>
-      </div>
-    </NCard>
-  </div>
+        <template #connections>
+          <StorageManager :scope="{ kind: 'site' }" />
+        </template>
+        <template #policy>
+          <NCard :title="t('storageAdmin.policyTitle')" size="small">
+            <p class="mb-5 text-sm text-lf-text-muted">{{ t('storageAdmin.policyDescription') }}</p>
+            <NAlert
+              v-if="store.policyError || store.writeErrors.policy"
+              type="warning"
+              class="mb-4"
+              >{{ store.policyError || store.writeErrors.policy }}</NAlert
+            >
+            <NAlert v-if="store.policySavedPendingRefresh" type="info" class="mb-4">{{
+              t('storageManagement.savedPendingRefresh')
+            }}</NAlert>
+            <NAlert v-else-if="store.policyStale && store.policy" type="info" class="mb-4">{{
+              t('storageAdmin.policySnapshotStale')
+            }}</NAlert>
+            <NSkeleton v-if="store.policyLoading && !store.policy" height="280px" />
+            <NForm v-else-if="store.policy" label-placement="top" @submit.prevent="savePolicy">
+              <NAlert
+                v-if="store.policy.runtime?.deployment_enabled === false"
+                type="info"
+                class="mb-4"
+                >{{ t('storageManagement.deploymentSetup') }}</NAlert
+              >
+              <NAlert v-if="store.policy.runtime?.maintenance" type="info" class="mb-4">{{
+                t('storageManagement.policyMaintenance')
+              }}</NAlert>
+              <NAlert v-if="store.policy.configuration_needs_update" type="warning" class="mb-4">{{
+                t('storageManagement.policyConfiguration')
+              }}</NAlert>
+              <p
+                v-for="code in store.policy.policy_restriction_codes ?? []"
+                :key="code"
+                class="mb-3 text-sm text-lf-text-muted"
+              >
+                {{ storageTaskErrorMessage(code) }}
+              </p>
+              <NAlert v-if="!modeAllowed" type="warning" class="mb-4">
+                <p>{{ t('storageManagement.modeRestricted') }}</p>
+                <NButton
+                  v-if="store.policy.allowed_policy_modes?.includes('site_only')"
+                  class="mt-3"
+                  :disabled="!!store.busy.policy"
+                  @click="draft.chooseMode('site_only')"
+                  >{{ t('storageManagement.useSiteOnly') }}</NButton
+                >
+                <p class="mt-2 text-xs">{{ t('storageManagement.siteOnlyHint') }}</p>
+              </NAlert>
+              <NAlert v-if="conflict" type="warning" class="mb-4">
+                <p>{{ t('storageManagement.policyConflict') }}</p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <NButton :disabled="!!store.busy.policy" @click="draft.reload">{{
+                    t('storageManagement.reloadPolicy')
+                  }}</NButton>
+                  <NButton :disabled="!!store.busy.policy" @click="reviewBaseline">{{
+                    t('storageManagement.reviewPolicy')
+                  }}</NButton>
+                </div>
+              </NAlert>
+              <div class="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+                <NFormItem :label="t('storage.policyMode')">
+                  <NSelect
+                    :value="form.mode"
+                    :options="modes"
+                    :disabled="!!store.busy.policy"
+                    @update:value="draft.chooseMode"
+                  />
+                </NFormItem>
+                <NFormItem :label="t('storage.policyDefault')">
+                  <NSelect
+                    v-model:value="form.default_choice"
+                    :options="choices"
+                    :disabled="!!store.busy.policy"
+                  />
+                </NFormItem>
+              </div>
+              <NFormItem :label="t('storageAdmin.logicalLimit')">
+                <StorageCapacityInput
+                  :value="form.logical_limit_bytes"
+                  :disabled="!!store.busy.policy"
+                  :label="t('storageAdmin.logicalLimit')"
+                  @update:value="(value) => (form.logical_limit_bytes = value)"
+                />
+              </NFormItem>
+              <div class="policy-actions">
+                <p class="text-xs leading-5 text-lf-text-muted">
+                  {{ t('storage.policyHint') }}
+                  <span v-if="dirty" class="block mt-1 font-medium">{{
+                    t('storageManagement.unsavedDraft')
+                  }}</span>
+                </p>
+                <div class="flex shrink-0 flex-wrap gap-2">
+                  <NButton
+                    :disabled="(!dirty && !conflict) || !!store.busy.policy"
+                    @click="draft.reload"
+                    >{{ t('storageAdmin.cancelChanges') }}</NButton
+                  >
+                  <NButton
+                    type="primary"
+                    attr-type="submit"
+                    :loading="!!store.busy.policy"
+                    :disabled="!canSave || !dirty"
+                    >{{ t('storageAdmin.saveChanges') }}</NButton
+                  >
+                </div>
+              </div>
+            </NForm>
+            <p v-else-if="!store.policyError" class="text-sm text-lf-text-muted">
+              {{ t('storageAdmin.policyEmpty') }}
+            </p>
+          </NCard>
+        </template>
+      </StorageTabs>
+    </div>
+  </StorageAppearance>
 </template>
+
+<style scoped>
+.policy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--lf-border-soft);
+  padding-top: 20px;
+}
+.policy-actions > p {
+  flex: 1 1 250px;
+}
+@media (max-width: 479px) {
+  .policy-actions > div {
+    width: 100%;
+  }
+  .policy-actions > div > * {
+    flex: 1 1 auto;
+  }
+}
+</style>

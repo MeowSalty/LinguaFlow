@@ -617,3 +617,293 @@ describe('storage scope and concurrency', () => {
     expect(policy).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('storage space summaries', () => {
+  it('merges duplicate reads, reuses a fresh cache, and supports an explicit refresh', async () => {
+    const result = deferred<ApiSchemas['StorageSpaceList']>()
+    const read = vi.fn().mockReturnValueOnce(result.promise).mockResolvedValue({ items: [] })
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [connection()] }),
+      listStorageSpaces: read,
+    })
+    await store.load()
+    expect(read).not.toHaveBeenCalled()
+    const first = store.loadSpaces(1)
+    const second = store.loadSpaces(1)
+    expect(first).toBe(second)
+    result.resolve({ items: [] })
+    expect(await first).toBe(true)
+    await second
+    await store.loadSpaces(1)
+    await store.loadSpaceSummaries()
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(await store.loadSpaces(1, true)).toBe(true)
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it('limits a shared summary queue to four concurrent connections', async () => {
+    const releases = new Map<number, () => void>()
+    let active = 0
+    let peak = 0
+    const read = vi.fn().mockImplementation((id: number) => {
+      active++
+      peak = Math.max(peak, active)
+      return new Promise<ApiSchemas['StorageSpaceList']>((resolve) => {
+        releases.set(id, () => {
+          active--
+          resolve({ items: [] })
+        })
+      })
+    })
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({
+        items: Array.from({ length: 10 }, (_, index) => connection(index + 1)),
+      }),
+      listStorageSpaces: read,
+    })
+    await store.load()
+    const first = store.loadSpaceSummaries()
+    const second = store.loadSpaceSummaries()
+    expect(first).toBe(second)
+    expect(read).toHaveBeenCalledTimes(4)
+    for (let id = 1; id <= 10; id++) {
+      await vi.waitFor(() => expect(releases.has(id)).toBe(true))
+      releases.get(id)!()
+    }
+    await Promise.all([first, second])
+    expect(read).toHaveBeenCalledTimes(10)
+    expect(peak).toBe(4)
+    expect(Object.values(store.spaces.value).every((value) => value.loaded)).toBe(true)
+  })
+
+  it('invalidates space caches on list refresh while retaining the last readable ledger', async () => {
+    const read = vi.fn().mockResolvedValue({ items: [] })
+    const refresh = deferred<ApiSchemas['StorageConnectionList']>()
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [connection()] })
+      .mockReturnValue(refresh.promise)
+    const store = state({ listStorageConnections: list, listStorageSpaces: read })
+    await store.load()
+    await store.loadSpaceSummaries()
+    const loading = store.load()
+    expect(store.spaces.value[1]?.loaded).toBe(true)
+    expect(store.spaces.value[1]?.stale).toBe(true)
+    expect(await store.loadSpaces(1)).toBe(false)
+    refresh.resolve({ items: [connection()] })
+    await loading
+    await store.loadSpaceSummaries()
+    expect(read).toHaveBeenCalledTimes(2)
+    expect(store.spaces.value[1]?.stale).toBe(false)
+  })
+
+  it('shares the four-request limit with an explicitly opened connection', async () => {
+    const result = deferred<ApiSchemas['StorageSpaceList']>()
+    const read = vi.fn().mockReturnValue(result.promise)
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({
+        items: Array.from({ length: 6 }, (_, index) => connection(index + 1)),
+      }),
+      listStorageSpaces: read,
+    })
+    await store.load()
+    const summaries = store.loadSpaceSummaries()
+    const detail = store.loadSpaces(6)
+    expect(read).toHaveBeenCalledTimes(4)
+    expect(store.spaces.value[6]?.loading).toBe(true)
+    result.resolve({ items: [] })
+    await Promise.all([summaries, detail])
+    expect(read).toHaveBeenCalledTimes(6)
+    expect(store.spaces.value[6]?.loaded).toBe(true)
+  })
+
+  it('does not let an old read or its cleanup satisfy a refreshed request', async () => {
+    const old = deferred<ApiSchemas['StorageSpaceList']>()
+    const fresh = deferred<ApiSchemas['StorageSpaceList']>()
+    const read = vi.fn().mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise)
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [connection()] }),
+      listStorageSpaces: read,
+    })
+    await store.load()
+    const prior = store.loadSpaces(1)
+    await store.load()
+    const current = store.loadSpaces(1)
+    old.resolve({ items: [] })
+    expect(await prior).toBe(false)
+    expect(store.spaces.value[1]?.loading).toBe(true)
+    expect(store.loadSpaces(1)).toBe(current)
+    fresh.resolve({ items: [] })
+    expect(await current).toBe(true)
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it('clears shared reads across sessions and stops the previous queue', async () => {
+    const old = deferred<ApiSchemas['StorageSpaceList']>()
+    const read = vi.fn().mockReturnValue(old.promise)
+    const list = vi.fn().mockResolvedValue({
+      items: Array.from({ length: 6 }, (_, index) => connection(index + 1)),
+    })
+    const store = state({ listStorageConnections: list, listStorageSpaces: read })
+    await store.load()
+    const prior = store.loadSpaceSummaries()
+    expect(read).toHaveBeenCalledTimes(4)
+    changeSessionContext('/second-api', 2)
+    list.mockResolvedValue({ items: [connection(1, 'user', 2)] })
+    read.mockResolvedValue({ items: [] })
+    await store.load()
+    await store.loadSpaceSummaries()
+    expect(store.spaces.value[1]?.loaded).toBe(true)
+    old.resolve({ items: [] })
+    await prior
+    expect(read).toHaveBeenCalledTimes(5)
+    expect(Object.keys(store.spaces.value)).toEqual(['1'])
+  })
+
+  it('forgets only the denied connection and continues loading authorized summaries', async () => {
+    const read = vi
+      .fn()
+      .mockImplementation((id: number) =>
+        id === 1 ? Promise.reject(new ApiError('forbidden', 403)) : Promise.resolve({ items: [] }),
+      )
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [connection(1), connection(2)] }),
+      listStorageSpaces: read,
+    })
+    await store.load()
+    await store.loadSpaceSummaries()
+    expect(store.connections.value.items.map((value) => value.id)).toEqual([2])
+    expect(store.spaces.value[1]).toBeUndefined()
+    expect(store.spaces.value[2]?.loaded).toBe(true)
+    expect(await store.loadSpaces(1)).toBe(false)
+    expect(store.denied.value).toBe(false)
+  })
+
+  it('stops queued organization reads and clears metadata after demotion', async () => {
+    const result = deferred<ApiSchemas['StorageSpaceList']>()
+    const read = vi.fn().mockReturnValue(result.promise)
+    organizationRoles.value = { 7: 'admin' }
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({
+        items: Array.from({ length: 6 }, (_, index) => connection(index + 1, 'org', 7)),
+      }),
+      listStorageSpaces: read,
+    })
+    await store.load({ kind: 'org', id: 7 })
+    const reading = store.loadSpaceSummaries()
+    organizationRoles.value = { 7: 'member' }
+    invalidateOrganization(7)
+    result.resolve({ items: [] })
+    await reading
+    expect(read).toHaveBeenCalledTimes(4)
+    expect(store.spaces.value).toEqual({})
+    expect(store.connections.value.items).toEqual([])
+  })
+})
+
+describe('storage check history freshness', () => {
+  const fact = (id: number) =>
+    ({
+      check_id: id,
+      connection_id: 1,
+      status: 'completed',
+      authorization_activated: false,
+      cleanup_status: 'complete',
+    }) as ApiSchemas['StorageCheck']
+
+  it('retains a fresh history snapshot while other detail sections are read', async () => {
+    const read = vi.fn().mockResolvedValue({ items: [fact(1)] })
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [connection()] }),
+      listStorageChecks: read,
+      listStorageSpaces: vi.fn().mockResolvedValue({ items: [] }),
+    })
+    await store.load()
+    expect(read).not.toHaveBeenCalled()
+    await store.loadChecks(1)
+    await store.loadSpaces(1)
+    await store.loadSpaceSummaries()
+    expect(store.checks.value[1]).toMatchObject({
+      items: [fact(1)],
+      loaded: true,
+      stale: false,
+      loading: false,
+    })
+    expect(read).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['load', 'markStale'] as const)(
+    'marks cached history stale on %s and reloads only when explicitly requested',
+    async (refresh) => {
+      const read = vi
+        .fn()
+        .mockResolvedValueOnce({ items: [fact(1)] })
+        .mockResolvedValue({ items: [fact(2)] })
+      const store = state({
+        listStorageConnections: vi.fn().mockResolvedValue({ items: [connection()] }),
+        listStorageChecks: read,
+      })
+      await store.load()
+      await store.loadChecks(1)
+      await store[refresh]()
+      expect(store.checks.value[1]).toMatchObject({
+        items: [fact(1)],
+        loaded: true,
+        stale: true,
+        loading: false,
+      })
+      expect(read).toHaveBeenCalledTimes(1)
+      await store.loadChecks(1)
+      expect(store.checks.value[1]).toMatchObject({
+        items: [fact(2)],
+        loaded: true,
+        stale: false,
+        loading: false,
+      })
+      expect(read).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it.each(['load', 'markStale'] as const)(
+    'rejects a history response invalidated by %s without clearing the replacement loading state',
+    async (refresh) => {
+      const old = deferred<ApiSchemas['StorageCheckList']>()
+      const fresh = deferred<ApiSchemas['StorageCheckList']>()
+      const read = vi
+        .fn()
+        .mockResolvedValueOnce({ items: [fact(1)] })
+        .mockReturnValueOnce(old.promise)
+        .mockReturnValueOnce(fresh.promise)
+      const store = state({
+        listStorageConnections: vi.fn().mockResolvedValue({ items: [connection()] }),
+        listStorageChecks: read,
+      })
+      await store.load()
+      await store.loadChecks(1)
+      const oldRead = store.loadChecks(1)
+      expect(store.checks.value[1]?.loading).toBe(true)
+      await store[refresh]()
+      expect(store.checks.value[1]).toMatchObject({
+        items: [fact(1)],
+        loaded: true,
+        stale: true,
+        loading: false,
+      })
+      const freshRead = store.loadChecks(1)
+      old.resolve({ items: [fact(2)] })
+      expect(await oldRead).toBe(false)
+      expect(store.checks.value[1]).toMatchObject({
+        items: [fact(1)],
+        stale: true,
+        loading: true,
+      })
+      fresh.resolve({ items: [fact(3)] })
+      expect(await freshRead).toBe(true)
+      expect(store.checks.value[1]).toMatchObject({
+        items: [fact(3)],
+        stale: false,
+        loading: false,
+      })
+    },
+  )
+})

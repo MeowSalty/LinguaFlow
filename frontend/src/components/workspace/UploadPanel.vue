@@ -432,7 +432,7 @@ const PROGRESS_RAIL = 'var(--lf-border-soft)'
   >
     <div
       v-show="workspace.uploadTasks.length > 0 || hasResult"
-      class="fixed inset-x-0 bottom-0 z-40"
+      class="fixed inset-x-0 bottom-0 z-10"
     >
       <div
         class="mx-auto w-full max-w-4xl overflow-hidden rounded-t-lf-card border-t border-lf-border-soft bg-lf-surface/95 shadow-lg shadow-lf-shadow backdrop-blur-xl"

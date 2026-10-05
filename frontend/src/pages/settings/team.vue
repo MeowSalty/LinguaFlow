@@ -309,7 +309,7 @@ onUnmounted(() => {
       >
       <NAlert v-if="!canWrite" type="info">{{ t('team.readOnly') }}</NAlert>
       <NCard v-if="canWrite && orgId !== null" :title="t('storage.organization')" size="small">
-        <StorageManager :key="orgId" :scope="{ kind: 'org', id: orgId }" />
+        <StorageManager :key="orgId" :scope="{ kind: 'org', id: orgId }" embedded />
       </NCard>
       <NCard :title="t('team.resources')" size="small"
         ><div class="grid grid-cols-2 gap-3 sm:grid-cols-3">

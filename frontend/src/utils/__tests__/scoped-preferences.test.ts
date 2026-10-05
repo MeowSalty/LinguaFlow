@@ -8,6 +8,26 @@ import {
 
 afterEach(() => vi.unstubAllGlobals())
 describe('scoped preferences', () => {
+  it('ignores a legacy expanded tracker without discarding unrelated preferences', () => {
+    const previous = {
+      ...defaultPreferences(),
+      trackerExpanded: true,
+      defaultTaskState: 'terminal',
+      retainTerminal: false,
+      hiddenTerminalKeys: ['translation:42'],
+      selectedOrgId: 7,
+    }
+    const migrated = sanitizePreferences(previous)
+    expect(migrated).not.toHaveProperty('trackerExpanded')
+    expect(migrated).toMatchObject({
+      defaultTaskState: 'terminal',
+      retainTerminal: false,
+      hiddenTerminalKeys: ['translation:42'],
+      selectedOrgId: 7,
+    })
+    writeScopedPreferences('legacy-tracker', migrated)
+    expect(readScopedPreferences('legacy-tracker')).toEqual(migrated)
+  })
   it('recovers from malformed, legacy, and unsupported records', () => {
     vi.stubGlobal('localStorage', { getItem: () => '{invalid' })
     expect(readScopedPreferences('broken')).toEqual(defaultPreferences())
