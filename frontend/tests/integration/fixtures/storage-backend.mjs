@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import { readFileSync, readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
 import { mkdir, readFile, readdir, realpath, rename, writeFile } from 'node:fs/promises'
@@ -17,14 +20,42 @@ import {
   getStorageOptions,
 } from '@/api/storage'
 
-export const buildStorageBackend = buildConfigurationBackend
+export const buildStorageBackend = () => {
+  const frontend = fileURLToPath(new URL('../../../', import.meta.url))
+  const digest = createHash('sha256')
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const filename = path.join(directory, entry.name)
+      if (entry.isDirectory()) walk(filename)
+      else if (entry.isFile()) {
+        digest.update(path.relative(frontend, filename).replaceAll('\\', '/'))
+        digest.update('\0')
+        digest.update(readFileSync(filename))
+        digest.update('\0')
+      }
+    }
+  }
+  walk(path.join(frontend, 'src'))
+  return {
+    ...buildConfigurationBackend(),
+    frontendCommit: execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: frontend,
+      encoding: 'utf8',
+      windowsHide: true,
+    }).trim(),
+    frontendSourceSha256: digest.digest('hex'),
+    operatingSystem: process.platform,
+  }
+}
 export async function createStorageBackend(metadata, signal) {
   const backend = await createConfigurationBackend(
     {
       ...metadata,
       storageDriver: 'Local in isolated test directory',
       contractStatus:
-        'C01-C09 synchronized working-tree contract; Local evidence only, not S3/PostgreSQL deployment acceptance',
+        'C01-C09 and E01-E04 synchronized working-tree contract; Local evidence only, not S3/PostgreSQL deployment acceptance',
     },
     signal,
     { storage: true },
@@ -126,6 +157,15 @@ export async function createStorageBackend(metadata, signal) {
     await writeFile(configPath, JSON.stringify(config, null, 2))
     await backend.restart()
   }
+  const setDeploymentEnabled = async (enabled) => {
+    assert.equal(typeof enabled, 'boolean')
+    const configPath = await isolatedPath('server.yaml')
+    const config = JSON.parse(await readFile(configPath, 'utf8'))
+    config.server.storage.enabled = enabled
+    await writeFile(configPath, JSON.stringify(config, null, 2))
+    await backend.restart()
+    backend.recordObservation('Deployment configuration restart', { enabled })
+  }
   const dropCommitResponse = async (projectId, resourceId, payload) => {
     let forwardedRequests = 0
     let upstreamStatus
@@ -187,6 +227,7 @@ export async function createStorageBackend(metadata, signal) {
     terminalTask,
     removeOriginalObject,
     enablePromptCleanup,
+    setDeploymentEnabled,
     dropCommitResponse,
     get apiBase() {
       return backend.apiBase
