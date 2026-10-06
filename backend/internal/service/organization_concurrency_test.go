@@ -255,3 +255,38 @@ func TestOrganizationTransactionRetriesAreBounded(t *testing.T) {
 		t.Fatalf("cancelled retry=%v", err)
 	}
 }
+
+func TestOrganizationCancelledRollbackKeepsUncertainty(t *testing.T) {
+	f := newOrganizationFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.client.Organization.Use(func(next ent.Mutator) ent.Mutator {
+		return ent.MutateFunc(func(ctx context.Context, mutation ent.Mutation) (ent.Value, error) {
+			tx, err := mutation.(*ent.OrganizationMutation).Tx()
+			if err != nil {
+				return nil, err
+			}
+			tx.OnRollback(func(next ent.Rollbacker) ent.Rollbacker {
+				return ent.RollbackFunc(func(ctx context.Context, tx *ent.Tx) error {
+					// Force the cancellation race's ambiguous acknowledgement even
+					// when this test wins the race against automatic rollback.
+					return errors.Join(next.Rollback(ctx, tx), sql.ErrTxDone)
+				})
+			})
+			return next.Mutate(ctx, mutation)
+		})
+	})
+	attempts := 0
+	err := withOrganizationMutation(ctx, f.client, f.org.ID, func(*ent.Client) error {
+		attempts++
+		cancel()
+		return &pgconn.PgError{Code: "40001"}
+	})
+	var uncertain *organizationRollbackError
+	if !errors.Is(err, context.Canceled) || !errors.As(err, &uncertain) || !errors.Is(uncertain.rollback, sql.ErrTxDone) {
+		t.Fatalf("cancellation lost rollback uncertainty: %v", err)
+	}
+	if attempts != 1 || isOrganizationTransactionConflict(err) {
+		t.Fatalf("uncertain cancelled operation became retryable: attempts=%d err=%v", attempts, err)
+	}
+}
