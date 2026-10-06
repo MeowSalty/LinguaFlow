@@ -202,25 +202,21 @@ HTML 标签、链接等原文结构在译文中会被还原回来，但 QA 引�
 ```yaml
 qa:
   enabled: true            # 是否启用规则质检
+  auto_reject: false       # 检出 error 级问题的段落自动置为「已驳回」
   checks:                  # 留空（undefined）表示启用全部确定性 checker
     # - length_ratio
     # - untranslated
     # - duplicate
     # - ...
-  length:
-    enabled: true          # length_ratio 启用开关（旧字段，与 checks 名等价）
-    min_ratio: 0.5         # 最小长度比（译文/原文）
-    max_ratio: 2.5         # 最大长度比对
-    unit: char             # char 或 word
-  repetition:
-    enabled: true          # 相邻重复（duplicate）
-  untranslated:
-    enabled: true          # 未翻译
+  length_method: char_weight   # char_weight（CJK 字符 ×2、拉丁字符 ×1）或 word_count
+  length_ratio_min: 0.2        # 最小长度比（译文/原文），0 表示不检测
+  length_ratio_max: 3          # 最大长度比（译文/原文），0 表示不检测
 ```
 
 - `qa.checks` 为 `undefined`（CLI/界面未填写）→ 启用 **全部** 19 项 per-batch checker（文档级 `duplicate_source_divergence` 始终随引擎运行，不在此列）
 - `qa.checks` 为具体列表 → 仅启动名单中按 `Checker.Name()` 精确匹配的 checker；`ruby_restore_incomplete` / `ruby_tag_loss` 由翻译轮注音守恒产出，不属可选名
 - 列表为空数组时视为「等价于全部」并自动改回 `nil`
+- `qa.auto_reject` 开启后，检出 error 级问题的段落自动进入「已驳回」状态，无需人工逐条处理；`untranslated` 在源/目标语共用文字系统的语言对下降为 `warning`，不会触发自动驳回。字段详情见 [翻译配置 · 参考 · 质量检测](/zh/guide/translation-config-reference#质量检测qa)
 
 规则质检的 select-by-name（界面上的「全部启用 / 自定义选择」）是在配置编辑器里直接勾选具体检查项启用，详见 [翻译配置 · 使用](/zh/guide/translation-config#执行配置)。
 
