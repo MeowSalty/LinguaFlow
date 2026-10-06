@@ -51,6 +51,7 @@ func TestSettingsAuditFailureRollsBackPolicy(t *testing.T) {
 	ctx := context.Background()
 	c := testClient(t)
 	c.SystemSetting.Create().SetKey(SettingRegistrationEnabled).SetValue("true").SaveX(ctx)
+	c.SystemSetting.Create().SetKey(SettingTaskRetention).SetValue(`{"enabled":false,"retention_days":30,"revision":1}`).SaveX(ctx)
 	u := c.User.Create().SetUsername("admin").SetEmail("admin@test.invalid").SetPasswordHash("unused").SetRole(SystemRoleAdmin).SaveX(ctx)
 	failure := errors.New("audit unavailable")
 	c.ActivityLog.Use(func(ent.Mutator) ent.Mutator {

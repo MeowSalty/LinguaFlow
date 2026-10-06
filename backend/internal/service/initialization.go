@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -100,7 +101,7 @@ func (s *InitializationService) Initialize(ctx context.Context, mode string, inp
 	}
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		// 首次写入：唯一 ID 在两个引擎上串行化并发初始化者。
-		if _, err := tx.InstanceInitialization.Create().SetID(1).SetVersion(InitializationVersion).SetMode(wantMode).Save(ctx); err != nil {
+		if _, err := tx.InstanceInitialization.Create().SetID(1).SetVersion(InitializationVersion).SetDataVersion(CurrentDataVersion).SetMode(wantMode).Save(ctx); err != nil {
 			if ent.IsConstraintError(err) {
 				return errInitializationWonElsewhere
 			}
@@ -119,6 +120,13 @@ func (s *InitializationService) Initialize(ctx context.Context, mode string, inp
 			return inputErr
 		}
 		if _, err := tx.SystemSetting.Create().SetKey(SettingRegistrationEnabled).SetValue(strconv.FormatBool(input.RegistrationEnabled)).Save(ctx); err != nil {
+			return err
+		}
+		retention, err := json.Marshal(defaultTaskRetention())
+		if err != nil {
+			return err
+		}
+		if err := tx.SystemSetting.Create().SetKey(SettingTaskRetention).SetValue(string(retention)).Exec(ctx); err != nil {
 			return err
 		}
 		account, err := tx.User.Create().SetUsername(username).SetEmail(email).SetPasswordHash(passwordHash).SetRole(SystemRoleAdmin).SetActive(true).Save(ctx)
@@ -155,7 +163,9 @@ func (s *InitializationService) Validate(ctx context.Context, mode string) (*ent
 	if len(rows) != 1 || rows[0].ID != 1 || rows[0].Version != InitializationVersion || rows[0].Mode != wantMode {
 		return nil, fmt.Errorf("%w: unsupported initialization version or instance mode; use a separate data directory", ErrInstanceIncomplete)
 	}
-	if _, err := NewSettingsService(s.client).Get(ctx); err != nil {
+	// Initialization depends on its original registration policy and identity.
+	// Task retention faults are reported by that domain, not as lost ownership.
+	if _, err := NewSettingsService(s.client).RegistrationEnabled(ctx); err != nil {
 		return nil, err
 	}
 	if wantMode == instanceinitialization.ModeServe {

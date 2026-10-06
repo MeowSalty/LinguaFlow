@@ -275,7 +275,7 @@ func (s *OperationQueryService) List(ctx context.Context, actor int, opts Operat
 	if opts.TaskType == "" || opts.TaskType == OperationTranslation {
 		found, err := s.jobs(actor, opts.ProjectID, opts.TriggerType).
 			Where(operationQueryFilter(opts, OperationTranslation, cursor, &precisionErr)).
-			Select(job.FieldID, job.FieldProjectID, job.FieldStatus, job.FieldTriggerType, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldProgressTotal, job.FieldProgressCompleted, job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt).
+			Select(job.FieldID, job.FieldProjectID, job.FieldStatus, job.FieldTriggerType, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldProgressTotal, job.FieldProgressCompleted, job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt, job.FieldFinishedAt).
 			Order(ent.Desc(job.FieldUpdatedAt), ent.Desc(job.FieldID)).Limit(opts.Limit + 1).All(ctx)
 		if precisionErr != nil {
 			return nil, precisionErr
@@ -290,7 +290,7 @@ func (s *OperationQueryService) List(ctx context.Context, actor int, opts Operat
 	if opts.TaskType == "" || opts.TaskType == OperationGlossarySync {
 		found, err := s.syncTasks(actor, opts.ProjectID).
 			Where(operationQueryFilter(opts, OperationGlossarySync, cursor, &precisionErr)).
-			Select(synctask.FieldID, synctask.FieldProjectID, synctask.FieldStatus, synctask.FieldProcessedSegments, synctask.FieldTotalSegments, synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldStartedAt).
+			Select(synctask.FieldID, synctask.FieldProjectID, synctask.FieldStatus, synctask.FieldProcessedSegments, synctask.FieldTotalSegments, synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldStartedAt, synctask.FieldFinishedAt).
 			Order(ent.Desc(synctask.FieldUpdatedAt), ent.Desc(synctask.FieldID)).Limit(opts.Limit + 1).All(ctx)
 		if precisionErr != nil {
 			return nil, precisionErr

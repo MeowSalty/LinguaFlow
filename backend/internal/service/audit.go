@@ -182,6 +182,12 @@ func SanitizeActivityMetadata(action string, metadata map[string]any) map[string
 	out := map[string]any{}
 	var keys []string
 	switch {
+	case action == "job.history_deleted", action == "glossary.sync_task_history_deleted":
+		keys = []string{"task_kind", "task_id", "project_id", "previous_status", "source", "scan_id", "policy_revision"}
+	case action == "admin.task_retention.update":
+		keys = []string{"before_enabled", "before_retention_days", "before_revision", "after_enabled", "after_retention_days", "after_revision"}
+	case action == "admin.settings.update":
+		keys = []string{"before_registration_enabled", "after_registration_enabled"}
 	case strings.HasPrefix(action, "org."), strings.HasPrefix(action, "organization."):
 		keys = []string{"target_user_id", "user_id", "old_role", "new_role", "role"}
 	case action == "quick_translate":

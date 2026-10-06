@@ -8,6 +8,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 )
 
 // PrepareRecovery coordinates persisted execution state before any translation
@@ -26,29 +27,7 @@ func (s *JobService) PrepareRecovery(ctx context.Context) error {
 		}
 		for _, current := range rows {
 			afterID = current.ID
-			if current.Status == JobStatusRunning {
-				if err := s.client.Job.Update().
-					Where(job.IDEQ(current.ID), job.StatusEQ(JobStatusRunning)).
-					SetStatus(JobStatusPending).Exec(ctx); err != nil {
-					return err
-				}
-			}
-			if err := s.client.JobResource.Update().
-				Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusRunning)).
-				SetStatus(JobResourceStatusPending).Exec(ctx); err != nil {
-				return err
-			}
-			if err := s.client.JobRound.Update().Where(
-				jobround.JobIDEQ(current.ID),
-				jobround.HasJobResourceWith(jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)),
-				jobround.StatusIn(JobRoundStatusFailed, JobRoundStatusRunning, JobRoundStatusSkipped),
-			).SetStatus(JobRoundStatusPending).Exec(ctx); err != nil {
-				return err
-			}
-			if err := s.backfillJobRoundsForRecovery(ctx, current.ID); err != nil {
-				return err
-			}
-			if err := recomputeJobProgress(ctx, clientProgressStore{s.client}, current.ID); err != nil {
+			if err := s.prepareRecoveredJob(ctx, current.ID); err != nil {
 				return err
 			}
 		}
@@ -56,6 +35,42 @@ func (s *JobService) PrepareRecovery(ctx context.Context) error {
 			return nil
 		}
 	}
+}
+
+func (s *JobService) prepareRecoveredJob(ctx context.Context, id int) error {
+	guard, err := s.lifecycle.Lock(ctx, "translation", id)
+	if err != nil {
+		return err
+	}
+	defer guard.Release()
+	if guard.Active() {
+		return tasklife.ErrBusy
+	}
+	return withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+		count, err := client.Job.Update().Where(job.IDEQ(id), job.StatusIn(JobStatusPending, JobStatusRunning)).
+			SetStatus(JobStatusPending).ClearFinishedAt().ClearRetentionAnchorAt().Save(ctx)
+		if err != nil || count == 0 {
+			return err
+		}
+		if err := client.JobResource.Update().
+			Where(jobresource.HasJobWith(job.IDEQ(id)), jobresource.StatusEQ(JobResourceStatusRunning)).
+			SetStatus(JobResourceStatusPending).Exec(ctx); err != nil {
+			return err
+		}
+		if err := client.JobRound.Update().Where(
+			jobround.JobIDEQ(id),
+			jobround.HasJobResourceWith(jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)),
+			jobround.StatusIn(JobRoundStatusFailed, JobRoundStatusRunning, JobRoundStatusSkipped),
+		).SetStatus(JobRoundStatusPending).Exec(ctx); err != nil {
+			return err
+		}
+		txService := *s
+		txService.client = client
+		if err := txService.backfillJobRoundsForRecovery(ctx, id); err != nil {
+			return err
+		}
+		return recomputeJobProgress(ctx, clientProgressStore{client}, id)
+	})
 }
 
 // PendingTaskIDs is deliberately read-only: periodic discovery must never

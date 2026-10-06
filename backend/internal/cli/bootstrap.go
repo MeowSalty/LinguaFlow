@@ -119,7 +119,8 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 	return server, ln, shutdown, nil
 }
 
-// prepareDatabase 供离线管理员维护命令复用。它只做数据库 schema 准备；
+// prepareDatabase 供服务启动及管理员维护命令复用。
+// 自动迁移开启时更新表结构并补齐必要的系统数据，否则只校验数据版本。
 // 是否初始化实例、是否准备密钥由调用方显式决定。
 func prepareDatabase(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, func() error, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
@@ -135,12 +136,18 @@ func prepareDatabase(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *e
 			if err := migrationClient.Schema.Create(ctx); err != nil {
 				return err
 			}
-			return service.MigrateHistoryVisibility(ctx, migrationClient)
+			if err := service.MigrateHistoryVisibility(ctx, migrationClient); err != nil {
+				return err
+			}
+			return service.MigrateData(ctx, migrationClient)
 		})
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, fmt.Errorf("prepare database schema: %w", err)
 		}
+	} else if err = service.ValidateDataVersion(ctx, client); err != nil {
+		_ = cleanup()
+		return nil, nil, nil, err
 	}
 	return db, client, cleanup, nil
 }

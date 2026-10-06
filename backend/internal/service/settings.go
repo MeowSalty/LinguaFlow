@@ -5,26 +5,39 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
 const SettingRegistrationEnabled = "registration_enabled"
 
-var ErrSettingsUnavailable = errors.New("system settings unavailable")
+var (
+	ErrSettingsUnavailable = errors.New("system settings unavailable")
+	ErrSettingsConflict    = errors.New("settings_conflict")
+)
 
 type SystemSettings struct {
-	RegistrationEnabled bool `json:"registration_enabled"`
+	RegistrationEnabled bool                `json:"registration_enabled"`
+	TaskRetention       TaskRetentionPolicy `json:"task_retention"`
+}
+
+type SettingsPatch struct {
+	RegistrationEnabled *bool
+	TaskRetention       *TaskRetentionPatch
 }
 
 type RegistrationPolicy interface {
 	RegistrationEnabled(context.Context) (bool, error)
 }
 
-type SettingsService struct{ client *ent.Client }
+type SettingsService struct {
+	client                 *ent.Client
+	callbackMu             sync.RWMutex
+	onTaskRetentionChanged func()
+}
 
 func NewSettingsService(client *ent.Client) *SettingsService { return &SettingsService{client: client} }
 
@@ -41,37 +54,84 @@ func readSettings(ctx context.Context, client *ent.Client) (SystemSettings, erro
 	if err != nil {
 		return SystemSettings{}, err
 	}
-	filtered := rows[:0]
+	var settings SystemSettings
+	registrationFound, retentionFound := false, false
 	for _, row := range rows {
-		if row.Key != storagePolicyKey {
-			filtered = append(filtered, row)
+		switch row.Key {
+		case SettingRegistrationEnabled:
+			settings.RegistrationEnabled, err = parseRegistrationPolicy(row.Value)
+			registrationFound = true
+		case SettingTaskRetention:
+			settings.TaskRetention, err = parseTaskRetention(row.Value)
+			retentionFound = true
+		case storagePolicyKey:
+			continue
+		default:
+			return SystemSettings{}, errors.New("system settings contain unsupported keys")
+		}
+		if err != nil {
+			return SystemSettings{}, err
 		}
 	}
-	rows = filtered
-	if len(rows) != 1 || rows[0].Key != SettingRegistrationEnabled {
-		return SystemSettings{}, errors.New("system settings are missing or contain unsupported keys")
+	if !registrationFound || !retentionFound {
+		return SystemSettings{}, errors.New("required system settings are missing")
 	}
-	switch rows[0].Value {
+	return settings, nil
+}
+
+func parseRegistrationPolicy(value string) (bool, error) {
+	switch value {
 	case "true":
-		return SystemSettings{RegistrationEnabled: true}, nil
+		return true, nil
 	case "false":
-		return SystemSettings{}, nil
+		return false, nil
 	default:
-		return SystemSettings{}, errors.New("registration_enabled is not a canonical boolean")
+		return false, errors.New("registration_enabled is not a canonical boolean")
 	}
+}
+
+func readRegistrationPolicy(ctx context.Context, client *ent.Client) (bool, error) {
+	row, err := client.SystemSetting.Query().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).Only(ctx)
+	if err != nil {
+		return false, err
+	}
+	return parseRegistrationPolicy(row.Value)
 }
 
 func (s *SettingsService) RegistrationEnabled(ctx context.Context) (bool, error) {
-	settings, err := s.Get(ctx)
-	return settings.RegistrationEnabled, err
+	value, err := readRegistrationPolicy(ctx, s.client)
+	if err != nil {
+		return false, fmt.Errorf("%w: %w", ErrSettingsUnavailable, err)
+	}
+	return value, nil
 }
 
+// Update retains the registration-only contract of existing service callers.
 func (s *SettingsService) Update(ctx context.Context, actorID int, input SystemSettings) (SystemSettings, error) {
+	return s.Patch(ctx, actorID, SettingsPatch{RegistrationEnabled: &input.RegistrationEnabled})
+}
+
+func (s *SettingsService) Patch(ctx context.Context, actorID int, input SettingsPatch) (SystemSettings, error) {
+	if input.RegistrationEnabled == nil && input.TaskRetention == nil {
+		return SystemSettings{}, ErrInvalidInput
+	}
+	if input.TaskRetention != nil && !validTaskRetentionPatch(*input.TaskRetention) {
+		return SystemSettings{}, ErrInvalidInput
+	}
+	var result SystemSettings
+	var policyChanged bool
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
-		// 在读取现有策略的旧值或权限之前先将其锁定。
-		if _, err := tx.SystemSetting.Update().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).
-			SetDescription("Public registration policy").Save(ctx); err != nil {
-			return err
+		policyChanged = false
+		// All multi-domain updates lock registration before task retention.
+		if input.RegistrationEnabled != nil {
+			if err := lockSetting(ctx, tx, SettingRegistrationEnabled); err != nil {
+				return err
+			}
+		}
+		if input.TaskRetention != nil {
+			if err := lockTaskRetention(ctx, tx); err != nil {
+				return err
+			}
 		}
 		actor, err := tx.User.Query().Where(user.IDEQ(actorID), user.ActiveEQ(true), user.RoleEQ(SystemRoleAdmin)).Only(ctx)
 		if ent.IsNotFound(err) {
@@ -84,16 +144,46 @@ func (s *SettingsService) Update(ctx context.Context, actorID int, input SystemS
 		if err != nil {
 			return fmt.Errorf("%w: %w", ErrSettingsUnavailable, err)
 		}
-		if _, err := tx.SystemSetting.Update().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).
-			SetValue(strconv.FormatBool(input.RegistrationEnabled)).Save(ctx); err != nil {
-			return err
+		result = before
+		if input.TaskRetention != nil {
+			if before.TaskRetention.Revision != input.TaskRetention.ExpectedRevision {
+				return ErrSettingsConflict
+			}
+			policyChanged = before.TaskRetention.Enabled != input.TaskRetention.Enabled || before.TaskRetention.RetentionDays != input.TaskRetention.RetentionDays
+			if policyChanged && before.TaskRetention.Revision == MaxTaskRetentionRevision {
+				return ErrSettingsConflict
+			}
 		}
-		return tx.ActivityLog.Create().SetActorID(actor.ID).SetVisibilityScope(activitylog.VisibilityScopeUnknown).
-			SetAction("admin.settings.update").SetResourceType("system_settings").
-			SetMetadata(map[string]any{"before": before, "after": input}).Exec(ctx)
+		if input.RegistrationEnabled != nil && before.RegistrationEnabled != *input.RegistrationEnabled {
+			result.RegistrationEnabled = *input.RegistrationEnabled
+			if _, err := tx.SystemSetting.Update().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).SetValue(strconv.FormatBool(result.RegistrationEnabled)).Save(ctx); err != nil {
+				return err
+			}
+			if err := recordAuditEvent(ctx, tx, AuditEvent{ActorUserID: actor.ID, Action: "admin.settings.update", ResourceType: "system_settings", Metadata: map[string]any{"before_registration_enabled": before.RegistrationEnabled, "after_registration_enabled": result.RegistrationEnabled}}); err != nil {
+				return err
+			}
+		}
+		if policyChanged {
+			result.TaskRetention = TaskRetentionPolicy{Enabled: input.TaskRetention.Enabled, RetentionDays: input.TaskRetention.RetentionDays, Revision: before.TaskRetention.Revision + 1}
+			if err := saveTaskRetention(ctx, tx, result.TaskRetention); err != nil {
+				return err
+			}
+			if err := recordAuditEvent(ctx, tx, AuditEvent{ActorUserID: actor.ID, Action: "admin.task_retention.update", ResourceType: "system_settings", Metadata: taskRetentionAudit(before.TaskRetention, result.TaskRetention)}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return SystemSettings{}, err
 	}
-	return input, nil
+	if policyChanged {
+		s.callbackMu.RLock()
+		callback := s.onTaskRetentionChanged
+		s.callbackMu.RUnlock()
+		if callback != nil {
+			callback()
+		}
+	}
+	return result, nil
 }
