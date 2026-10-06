@@ -9692,10 +9692,13 @@ components:
       type: object
       required:
         - fallback_shrink
+        - prompt_template_id
       properties:
         prompt_template_id:
           type: integer
-          description: 翻译提示词模板 ID
+          description: |
+            翻译提示词模板 ID。必填：省略或 0 会被后端拒绝（不规范化）。
+            允许内置虚拟 ID -1（内置默认翻译提示词模板），其余须为当前作用域可见的模板 ID。
         batch_size:
           type: integer
           minimum: 0
@@ -9721,10 +9724,14 @@ components:
           $ref: '#/components/schemas/RetryConfig'
     ExtractRoundConfig:
       type: object
+      required:
+        - template_id
       properties:
         template_id:
           type: integer
-          description: 术语抽取提示词模板 ID（BootstrapPromptTemplate）
+          description: |
+            术语抽取提示词模板 ID（BootstrapPromptTemplate）。必填：省略或 0 会被后端拒绝（不规范化）。
+            允许内置虚拟 ID -1（内置默认引导提示词模板），其余须为当前作用域可见的模板 ID。
         batch_size:
           type: integer
           minimum: 0
