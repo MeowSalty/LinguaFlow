@@ -1,6 +1,6 @@
 # CLI 命令参考
 
-LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需的密钥生成、配置预检与管理员维护；另有独立二进制 `linguaflow-storage-migrate` 负责旧数据迁移与存储备份。
+LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需的密钥生成、配置预检与管理员维护；另有独立二进制 `linguaflow-storage-migrate`（旧存储迁移与备份）和 `linguaflow-migrate`（v0.13.0 历史数据一次性迁移）。
 
 ::: tip 只想马上译一个文件？
 先看 [快速开始 · CLI](/zh/guide/cli-quickstart)，本页为完整参数参考。配置文件字段见 [配置文件与环境变量](/zh/guide/configuration)。
@@ -19,6 +19,7 @@ LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需
 | `linguaflow secrets`   | 离线生成密钥材料（`generate` / `keyring init` / `keyring rotate`） |
 | `linguaflow admin`     | 管理员维护（`initialize` / `create` / `recover` / `credentials reencrypt`） |
 | `linguaflow-storage-migrate` | 存储迁移与备份（独立工具，`inventory` / `dry-run` / `apply` / `resume` / `rollback` / `backup`） |
+| `linguaflow-migrate`   | v0.13.0 历史数据一次性迁移（独立工具，`v013 postgres` / `v013 sqlite` / `v013 local`） |
 | `linguaflow version`   | 显示版本信息                                  |
 
 ## 全局参数
@@ -321,6 +322,48 @@ linguaflow-storage-migrate --config server.yaml --mode serve backup capture \
 ::: warning 写操作前置条件
 `apply` / `resume` / `rollback` 与所有 `backup` 动作都要求 `--offline`（服务停机、独占数据），且迁移写操作必须同时提供 `--backup-confirmed`。离线迁移要求默认站点空间是 `local` 驱动——先迁到本地空间，再在界面上把项目迁往 S3。`apply` 完成后按输出提示把后端的 legacy 根配置为清单中的 `LegacyRoot` 路径，再启动新服务。
 :::
+
+## linguaflow-migrate 命令
+
+v0.13.0 历史数据**一次性迁移**的独立工具（与主程序一同分发），把 v0.13.0 的 PostgreSQL / serve、SQLite / serve、SQLite / local 三种形态的数据迁到当前版本：转换历史任务快照、实例初始化状态与旧配置，并把旧明文 provider key 转成加密凭据；用户 ID、密码、角色与数据归属保持不变。正常 `linguaflow` 主程序不包含历史转换入口，迁移工具也不启动 HTTP 服务。
+
+::: warning 迁移前必读
+- 运行前**停止旧服务**与所有连接该数据目录的进程；PostgreSQL 务必先有可恢复的备份，SQLite 会由工具在切换时完整保留原目录作为备份
+- 默认**预演**（在数据库迁移锁与 SERIALIZABLE 事务内完成转换后回滚；预演会持锁，且可能消耗 PostgreSQL 序列值），加 `--apply` 才正式提交
+- 已经迁移、混合版本或无法可靠解释的数据会被拒绝，不会重置账户或猜测历史值
+- 不要把密码、DSN 或密钥内容写进命令参数，一律走环境变量或私有文件
+:::
+
+```bash
+linguaflow-migrate v013 postgres [--apply] [--data-dir PATH] [--keyring-file PATH]
+linguaflow-migrate v013 sqlite --mode serve|local --data-dir PATH [--apply] [--keyring-file PATH]
+linguaflow-migrate v013 local --data-dir PATH [--apply]
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `--data-dir` | 数据目录（优先于 `LINGUAFLOW_DATA_DIR`，默认当前目录下 `data`） |
+| `--mode` | 仅 SQLite 入口需要：`serve`（服务器模式库）/ `local`（本地模式库），不按数据库类型或路径猜测 |
+| `--apply` | 正式提交；省略时只预演 |
+| `--keyring-file` | 指定凭据 keyring 文件；与主密钥环境变量互斥 |
+
+密钥来源（详见工具 README）：
+
+- 提供 `LINGUAFLOW_CREDENTIALS_MASTER_KEY`（32 字节随机值的标准 Base64，或其 `_FILE` 变体）时迁移直接使用该主密钥，**迁移后启动服务必须提供同一密钥**
+- 否则使用 keyring 文件（`--keyring-file` / `LINGUAFLOW_CREDENTIALS_KEYRING_FILE`，默认 `<data-dir>/credentials-keyring.json`；已有文件必须有效，绝不自动覆盖）
+- JWT secret 可提供 `LINGUAFLOW_JWT_SECRET`（≥32 字节，或 `_FILE`），未提供时复用或创建 `<data-dir>/jwt-secret`
+
+不读取 `.env` 或部署文档（迁移前应取消 `LINGUAFLOW_SERVER_CONFIG`）；PostgreSQL 连接通过 `LINGUAFLOW_DATABASE_DSN`（或 `_FILE`，二者互斥）提供。正式迁移成功后会输出启动所需的文件路径与变量名，按提示连同数据库备份妥善保管密钥。
+
+通常不直接调用二进制，而是通过 backend Taskfile 任务（`CLI_ARGS=...` 写法兼容 PowerShell 包装器）：
+
+```bash
+task -t backend/Taskfile.yml migrate:build
+task -t backend/Taskfile.yml migrate:v013 'CLI_ARGS=--data-dir data'
+task -t backend/Taskfile.yml migrate:v013:apply 'CLI_ARGS=--data-dir data'
+```
+
+中断恢复、Windows 路径限制、备份与恢复规则等完整行为见工具自带文档 `backend/cmd/linguaflow-migrate/README.md`。
 
 ## version 命令
 
