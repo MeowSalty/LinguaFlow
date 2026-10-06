@@ -1,6 +1,6 @@
 # CLI 命令参考
 
-LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需的密钥生成、配置预检与管理员维护。
+LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需的密钥生成、配置预检与管理员维护；另有独立二进制 `linguaflow-storage-migrate` 负责旧数据迁移与存储备份。
 
 ::: tip 只想马上译一个文件？
 先看 [快速开始 · CLI](/zh/guide/cli-quickstart)，本页为完整参数参考。配置文件字段见 [配置文件与环境变量](/zh/guide/configuration)。
@@ -18,6 +18,7 @@ LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需
 | `linguaflow config`    | 只读预检部署配置（`check` / `explain`）       |
 | `linguaflow secrets`   | 离线生成密钥材料（`generate` / `keyring init` / `keyring rotate`） |
 | `linguaflow admin`     | 管理员维护（`initialize` / `create` / `recover` / `credentials reencrypt`） |
+| `linguaflow-storage-migrate` | 存储迁移与备份（独立工具，`inventory` / `dry-run` / `apply` / `resume` / `rollback` / `backup`） |
 | `linguaflow version`   | 显示版本信息                                  |
 
 ## 全局参数
@@ -252,7 +253,7 @@ JWT secret 与凭据加密密钥必须各自独立生成，不要共用一个值
 | `admin initialize` | 对空实例显式执行首次初始化（创建管理员与注册政策；`--username` / `--email` / `--password-file` 或 `--password-stdin`） |
 | `admin create` | 为已初始化实例追加一名管理员（参数同上；不含 `initialize`） |
 | `admin recover` | 找回管理员：将已有账户恢复为活跃管理员、重置密码并吊销其刷新令牌 |
-| `admin credentials reencrypt` | 凭据密钥轮换后重加密存量数据（配合 keyring 轮换使用） |
+| `admin credentials reencrypt` | 凭据密钥轮换后重加密存量数据（含 LLM 凭据与存储授权；配合 keyring 轮换使用） |
 
 ```bash
 # 首次初始化（与 serve 的 bootstrap.admin 输入等效，二选一即可）
@@ -271,6 +272,55 @@ linguaflow admin credentials reencrypt --config ./server.yaml
 ```
 
 密码输入保留空格、只移除末尾换行，不接受明文密码命令行参数。已初始化实例再次执行 `initialize` 只验证状态，不会覆盖政策、角色或密码。
+
+## linguaflow-storage-migrate 命令
+
+存储迁移与备份**独立工具**（与主程序一同分发，有意不挂在 `linguaflow` 命令树上），用于两类场景：
+
+- **旧数据迁移** — 把旧版文件存储（默认 `data_dir/jobs`）迁入新的对象存储体系，产品背景见 [存储管理](/zh/guide/storage)
+- **备份与恢复校验** — 对现有存储做离线一致性备份与恢复演练
+
+```bash
+# 只读清点：看看有多少旧文件要迁
+linguaflow-storage-migrate --config server.yaml --mode serve inventory
+
+# 演练：不写任何数据，输出迁移计划
+linguaflow-storage-migrate --config server.yaml --mode serve dry-run
+
+# 正式迁移（要求先备份，见下方 warning）
+linguaflow-storage-migrate --config server.yaml --mode serve apply \
+  --offline --backup-confirmed
+
+# 中断后续跑 / 回滚
+linguaflow-storage-migrate --config server.yaml --mode serve resume --offline --backup-confirmed
+linguaflow-storage-migrate --config server.yaml --mode serve rollback --offline --backup-confirmed
+
+# 离线一致性备份
+linguaflow-storage-migrate --config server.yaml --mode serve backup capture \
+  --offline --destination /backup/linguaflow
+```
+
+| 持久参数 | 默认值 | 描述 |
+| --- | --- | --- |
+| `--config` | `""` | 部署文档路径 |
+| `--mode` | `serve` | 部署模式：`serve` / `local` |
+| `--manifest` | `""` | 迁移清单文件路径（工具生成与续跑依据） |
+| `--legacy-root` | `<data_dir>/jobs` | 旧版文件存储根目录 |
+| `--offline` | `false` | 离线操作标记；写操作必填 |
+| `--backup-confirmed` | `false` | 确认已完成备份；写操作必填 |
+
+| 子命令 | 说明 |
+| --- | --- |
+| `inventory` | 只读清点旧文件，生成清单 |
+| `dry-run` | 只读演练，输出迁移计划但不落盘 |
+| `apply` | 正式迁移（写操作，需 `--offline --backup-confirmed`） |
+| `resume` | 从中断点续跑迁移 |
+| `rollback` | 回滚迁移 |
+| `backup manifest` / `backup capture` / `backup restore-check` | 生成备份清单 / 执行离线一致性备份（`--destination`，`--retention` 默认 30 天、上限 366 天）/ 只读校验恢复结果（要求目标部署处于维护态） |
+
+::: warning 写操作前置条件
+`apply` / `resume` / `rollback` 与所有 `backup` 动作都要求 `--offline`（服务停机、独占数据），且迁移写操作必须同时提供 `--backup-confirmed`。离线迁移要求默认站点空间是 `local` 驱动——先迁到本地空间，再在界面上把项目迁往 S3。`apply` 完成后按输出提示把后端的 legacy 根配置为清单中的 `LegacyRoot` 路径，再启动新服务。
+:::
 
 ## version 命令
 

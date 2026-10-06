@@ -372,6 +372,24 @@ curl -s -X PUT http://localhost:8080/api/v1/users/me/password \
 
 密码规则：至少 8 个 Unicode 字符且不超过 72 字节。`PUT /auth/logout` 只撤销当前登录用户自己的刷新令牌，重复提交幂等返回 204。产品侧入口见用户菜单的 **个人资料 / 安全设置**。
 
+### 18. 存储管理（连接 / 空间 / 项目绑定）
+
+```bash
+# 查询当前用户可执行的存储管理操作（部署未启用时也返回 200，按 reason 判断）
+curl -s http://localhost:8080/api/v1/storage/capabilities \
+  -H "Authorization: Bearer <token>"
+
+# 列出自己的存储连接（自有存储 BYOS；组织级在 /orgs/{orgId}/storage/connections）
+curl -s http://localhost:8080/api/v1/storage/connections \
+  -H "Authorization: Bearer <token>"
+
+# 查看项目当前存储绑定与代次
+curl -s http://localhost:8080/api/v1/projects/<projectId>/storage \
+  -H "Authorization: Bearer <token>"
+```
+
+存储域共约 30 个端点：能力发现（`GET /storage/capabilities`）、目标发现（`GET /storage/options`、`GET /projects/{projectId}/storage/options`）、连接与空间 CRUD 及授权 / 撤销 / 校验（凭据全部 `writeOnly`，响应只回 `has_auth`，永不回显）、项目绑定与迁移（`PUT /projects/{projectId}/storage`、`POST .../storage/migrations`）、持久化存储任务（`GET|POST /projects/{projectId}/storage/tasks`，创建返回 202，`idempotency_key` 重放命中原操作，进行中返回 409）、源文件版本 / 预览 / 提交与 legacy 快照、导出产物管理，以及管理端 `GET|PUT /admin/storage/policy`、`GET /admin/storage/diagnostics` 等。产品侧见 [存储管理](/zh/guide/storage)。
+
 ## 错误码
 
 | 状态码 | 说明                                       |
@@ -383,6 +401,7 @@ curl -s -X PUT http://localhost:8080/api/v1/users/me/password \
 | 403    | 无权限                                     |
 | 404    | 资源不存在                                 |
 | 409    | 冲突（如重复资源、状态前置校验不满足）     |
+| 413    | 负载超限（存储请求体超过大小上限）         |
 | 422    | 语义/校验错误                              |
 | 429    | 并发/限流（部分端点带 `Retry-After` 头）   |
 | 500    | 服务器内部错误                             |
@@ -417,6 +436,21 @@ EPUB 资源的译文必须是能嵌入 XHTML 的合法 XML 片段。两类接口
 `CancelJob` / `RetryJob` 增加了状态前置校验，不满足时返回 409 Conflict（`type: urn:linguaflow:conflict`）：取消非可取消状态的任务（「任务当前状态不可取消」）、重试未失败的任务（「任务未失败，无法重试」）、无可重试失败资源（「没有可重试的失败资源」）。
 :::
 
+### 存储错误与 error_code
+
+存储相关错误的 Problem 响应额外携带稳定的 `error_code` 字段，并视情况附 `task_id` / `operation_id` / `check_id` 供定位与重放：
+
+| `error_code` | 状态码 | 含义 |
+| --- | --- | --- |
+| `storage_quota_exceeded` | 409 | 空间配额耗尽 |
+| `storage_payload_too_large` | 413 | 请求负载超过大小上限（与配额耗尽是两回事） |
+| `storage_deployment_disabled` | 409 | 站点未启用存储（不带 `Retry-After`） |
+| `storage_maintenance` | 409 | 存储处于维护态，写入被拒绝 |
+| `storage_timeout` | 504 | 存储操作超时 |
+| `storage_operation_in_progress` | 409 | 同一 `idempotency_key` 的操作仍在进行中（幂等重放命中） |
+
+被拒绝的管理动作由服务端按操作准入给出稳定原因码（如 `storage_maintenance`、`connection_disabled`、`space_read_only`、`storage_auth_required`、`storage_crypto_unavailable`），客户端应按能力发现接口的快照渲染可用操作，而不是写死。
+
 ## OpenAPI 规范
 
 完整的 OpenAPI 3.0 规范文件：
@@ -431,5 +465,6 @@ EPUB 资源的译文必须是能嵌入 XHTML 的合法 XML 片段。两类接口
 ## 相关文档
 
 - [快速开始 · Web](/zh/guide/getting-started) — 界面流程
+- [存储管理](/zh/guide/storage) — 存储域的产品侧行为
 - [快速开始 · CLI](/zh/guide/cli-quickstart) — 不经过 HTTP 的批处理
 - [使用模式](/zh/guide/modes) — 本地 / 服务器与认证差异

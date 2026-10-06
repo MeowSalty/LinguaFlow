@@ -56,6 +56,12 @@
 此处的「系统设置」是数据库内的运行期政策，与 `server.yaml` 部署文档 / 环境变量是两套机制：部署配置在启动时加载，决定监听端口、数据库、密钥等基础设施行为；设置页面向可在线调整的运行期政策。初始化完成后，数据库中的注册政策**优先于** `bootstrap.registration_enabled`。
 :::
 
+## 存储管理
+
+管理员后台的 **存储管理** 页负责站点级对象存储：新建存储连接与空间、管理访问授权（密钥只写不回显）、执行只读 / 写入检测、启停连接与空间、查看容量与缺失 / 损坏对象等健康诊断，以及设定全站**存储政策**（仅站点托管 / 站点托管或自有存储 / 必须使用自有存储，含默认选择与逻辑容量上限）。
+
+页面与操作详见 [存储管理](/zh/guide/storage)；部署侧的 `server.storage.*` 配置见 [配置文件与环境变量](/zh/guide/configuration#server-storage-—-对象存储)。
+
 ## 运行时监控
 
 管理员后台提供 **运行时监控** 页，展示当前实例的实时运行状态：
@@ -149,6 +155,10 @@ LinguaFlow 区分两套活动视图：
 | `GET` | `/admin/audit-logs` | 全局审计日志（`cursor` / `limit`） |
 | `GET` | `/admin/settings` | 读取注册开关等系统设置 |
 | `PATCH` | `/admin/settings` | 更新系统设置（如 `registration_enabled` 布尔开关） |
+| `GET` | `/admin/storage/policy` | 读取站点存储政策（含可用政策模式与限制原因） |
+| `PUT` | `/admin/storage/policy` | 整体保存站点存储政策（`generation` 乐观锁） |
+| `GET` | `/admin/storage/diagnostics` | 存储只读诊断（容量、缺失 / 损坏对象、恢复积压等） |
+| `GET` | `/admin/storage/connections` | 列出站点级存储连接 |
 | `GET` | `/admin/runtime/summary` | 运行时监控摘要（执行器、队列、限流器与外部请求遥测） |
 
 字段与响应结构的权威定义见 [OpenAPI 规范](/zh/api/#openapi-规范) 与 Redoc。
@@ -156,6 +166,7 @@ LinguaFlow 区分两套活动视图：
 ## 相关文档
 
 - [使用模式](/zh/guide/modes) — 服务器模式部署、初始管理员与密钥
+- [存储管理](/zh/guide/storage) — 站点存储、政策与自有存储
 - [配置文件与环境变量](/zh/guide/configuration) — 部署文档与 `bootstrap.*` 配置项
 - [CLI 命令参考](/zh/guide/cli) — `secrets` / `admin` 维护命令
 - [API 参考](/zh/api/) — 接口总览与 Redoc 入口
