@@ -193,9 +193,10 @@ func (s *Server) storageMaintenanceMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if storageManagementOperation(r) {
+		if maintenanceAuthorizedOperation(r) {
 			// These handlers authorize the subject and object before applying
-			// the operation-specific maintenance rules in the storage service.
+			// maintenance rules. Reads and policy edits remain available;
+			// task history deletion applies its own transactional barrier.
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -205,13 +206,18 @@ func (s *Server) storageMaintenanceMiddleware(next http.Handler) http.Handler {
 
 // Called by the generated handler middleware after route matching. This closed
 // dispatch table does not infer write semantics from a URL prefix or a body.
-func storageManagementOperation(r *http.Request) bool {
+func maintenanceAuthorizedOperation(r *http.Request) bool {
 	ctx := chi.RouteContext(r.Context())
 	if ctx == nil {
 		return false
 	}
 	switch r.Method + " " + ctx.RoutePattern() {
-	case "PUT /api/v1/admin/storage/policy",
+	case "PATCH /api/v1/admin/settings",
+		"POST /api/v1/admin/task-retention/preview",
+		"POST /api/v1/operations/batch-delete",
+		"DELETE /api/v1/jobs/{jobId}",
+		"DELETE /api/v1/projects/{projectId}/sync-tasks/{taskId}",
+		"PUT /api/v1/admin/storage/policy",
 		"POST /api/v1/storage/connections",
 		"POST /api/v1/orgs/{orgId}/storage/connections",
 		"POST /api/v1/storage/connections/{connectionId}/spaces",

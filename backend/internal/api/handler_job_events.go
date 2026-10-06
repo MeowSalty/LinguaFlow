@@ -40,7 +40,11 @@ func (s *Server) handleListJobEvents(w http.ResponseWriter, r *http.Request) {
 			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "before_seq 必须是有效正整数")
 			return
 		}
-		events, nextBeforeSeq, hasMore := s.eventBroker.ListHistoryBefore(r.Context(), jobID, beforeSeq, limit)
+		events, nextBeforeSeq, hasMore, err := s.eventBroker.ListHistoryBefore(r.Context(), jobID, beforeSeq, limit)
+		if err != nil {
+			s.writeServiceError(w, r, err)
+			return
+		}
 		items := make([]JobEvent, 0, len(events))
 		for _, evt := range events {
 			items = append(items, jobEventFromEvent(evt))
@@ -60,7 +64,11 @@ func (s *Server) handleListJobEvents(w http.ResponseWriter, r *http.Request) {
 			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "after_seq 必须是有效非负整数")
 			return
 		}
-		events, nextAfterSeq, hasMore := s.eventBroker.ListHistory(r.Context(), jobID, afterSeq, limit)
+		events, nextAfterSeq, hasMore, err := s.eventBroker.ListHistory(r.Context(), jobID, afterSeq, limit)
+		if err != nil {
+			s.writeServiceError(w, r, err)
+			return
+		}
 		items := make([]JobEvent, 0, len(events))
 		for _, evt := range events {
 			items = append(items, jobEventFromEvent(evt))
@@ -74,7 +82,11 @@ func (s *Server) handleListJobEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	events, nextBeforeSeq, hasMore := s.eventBroker.ListHistoryBefore(r.Context(), jobID, 0, limit)
+	events, nextBeforeSeq, hasMore, err := s.eventBroker.ListHistoryBefore(r.Context(), jobID, 0, limit)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
 	items := make([]JobEvent, 0, len(events))
 	for _, evt := range events {
 		items = append(items, jobEventFromEvent(evt))

@@ -11,7 +11,9 @@ import (
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 )
 
 const (
@@ -182,6 +184,20 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) boo
 
 func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, event.ErrHistoryUnavailable):
+		s.writeProblem(w, r, http.StatusServiceUnavailable, "history_unavailable", "任务事件历史暂不可用")
+	case errors.Is(err, service.ErrTaskHistoryNotFound), errors.Is(err, service.ErrJobNotFound), errors.Is(err, service.ErrSyncTaskNotFound), errors.Is(err, service.ErrProjectNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "任务记录或项目不存在")
+	case errors.Is(err, service.ErrTaskNotTerminal):
+		s.writeProblem(w, r, http.StatusConflict, "task_not_terminal", "任务尚未结束，无法删除记录")
+	case errors.Is(err, tasklife.ErrBusy):
+		s.writeProblem(w, r, http.StatusConflict, "task_busy", "任务仍在执行或收尾，请稍后重试")
+	case errors.Is(err, service.ErrTaskCleanupDeferred):
+		s.writeProblem(w, r, http.StatusServiceUnavailable, "task_cleanup_deferred", "清理预算已用尽，任务记录尚未删除，请稍后重试")
+	case errors.Is(err, service.ErrSettingsConflict):
+		s.writeProblem(w, r, http.StatusConflict, "settings_conflict", "设置已被修改，请重新读取并核对当前草稿")
+	case errors.Is(err, service.ErrStorageMaintenance):
+		s.writeStorageError(w, r, err)
 	case errors.Is(err, service.ErrExecutionPlanNotFound), errors.Is(err, service.ErrExecutionProfileNotFound),
 		errors.Is(err, service.ErrTranslationPromptTemplateNotFound), errors.Is(err, service.ErrBootstrapPromptTemplateNotFound),
 		errors.Is(err, service.ErrPrunePromptTemplateNotFound):

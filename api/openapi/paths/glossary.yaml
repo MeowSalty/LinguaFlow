@@ -191,6 +191,32 @@ glossarySyncTaskStatus:
       schema:
         type: string
       description: 同步任务 ID
+  delete:
+    operationId: DeleteGlossarySyncTaskHistory
+    summary: 删除术语同步任务记录
+    description: |
+      同时校验任务项目归属与项目写权限。仅终态且所有执行写入已收尾时可删除。
+      删除执行记录，保留已经提交的术语和译文；非终态 task_not_terminal、收尾中 task_busy 均返回 409。
+      单项事务预算 5 秒，确认回滚后返回 503 task_cleanup_deferred；重复删除返回 404。
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 任务记录已删除
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
   get:
     operationId: GetGlossarySyncTaskStatus
     summary: 查询术语同步任务状态

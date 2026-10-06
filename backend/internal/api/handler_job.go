@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -81,6 +82,8 @@ type jobResponse struct {
 	ErrorMessage    *string               `json:"error_message,omitempty"`
 	Progress        jobProgressResponse   `json:"progress"`
 	StartedAt       *string               `json:"started_at,omitempty"`
+	FinishedAt      *string               `json:"finished_at"`
+	CanDelete       bool                  `json:"can_delete"`
 	CreatedAt       string                `json:"created_at"`
 	UpdatedAt       string                `json:"updated_at"`
 	JobResources    []jobResourceResponse `json:"job_resources,omitempty"`
@@ -125,7 +128,7 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	if s.dispatcher != nil {
 		s.dispatcher.Notify("translation")
 	}
-	writeJSON(w, http.StatusAccepted, toJobDetailResponse(created, s.queueInfoForJob(created.ID)))
+	writeJSON(w, http.StatusAccepted, s.toJobDetailResponse(r.Context(), authUser.User.ID, created, s.queueInfoForJob(created.ID)))
 }
 
 func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +157,7 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]jobResponse, 0, len(jobs))
 	for _, job := range jobs {
-		items = append(items, toJobListResponse(job, s.queueInfoForJob(job.ID)))
+		items = append(items, s.toJobListResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -174,7 +177,7 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(jobID)))
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(jobID)))
 }
 
 func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
@@ -192,12 +195,8 @@ func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	// 通知正在运行的 worker 立即停止
-	if s.dispatcher != nil {
-		s.dispatcher.CancelTask("translation", jobID)
-	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.cancel", ResourceType: "job", ResourceID: job.ID, Message: "取消任务"})
-	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
 }
 
 func (s *Server) handleRetryJob(w http.ResponseWriter, r *http.Request) {
@@ -219,7 +218,7 @@ func (s *Server) handleRetryJob(w http.ResponseWriter, r *http.Request) {
 	if s.dispatcher != nil {
 		s.dispatcher.Notify("translation")
 	}
-	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
 }
 
 // handlePauseJob 优雅暂停：running 任务先通知 worker 排空（在途 LLM 请求返回后
@@ -239,29 +238,8 @@ func (s *Server) handlePauseJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	if result.NeedsDrain {
-		// 通知 worker 优雅排空：安全点停止派发新批次，在途请求返回并持久化
-		// 后由 worker 置 paused。响应立即返回当前状态（running），前端可
-		// 通过轮询/SSE job_paused 事件观察到终态。
-		if s.dispatcher != nil && !s.dispatcher.PauseTask("translation", jobID) {
-			// gate 未命中：任务恰在请求处理期间转入终态（gate 已随
-			// processJob 退出注销）。复查最新状态——仍 running 属罕见竞态
-			// 窗口，返回 409 让客户端重试；已转入其他状态则如实返回当前
-			// 状态（暂停已无意义，或已由 worker 落 paused）。
-			latest, err := s.jobSvc.GetJob(r.Context(), authUser.User.ID, jobID)
-			if err != nil {
-				s.writeJobServiceError(w, r, err)
-				return
-			}
-			if latest.Status == service.JobStatusRunning {
-				s.writeProblem(w, r, http.StatusConflict, "conflict", "任务正在切换状态，请重试暂停")
-				return
-			}
-			result.Job = latest
-		}
-	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &result.Job.ProjectID, Action: "job.pause", ResourceType: "job", ResourceID: result.Job.ID, Message: "暂停任务"})
-	writeJSON(w, http.StatusOK, toJobDetailResponse(result.Job, s.queueInfoForJob(result.Job.ID)))
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, result.Job, s.queueInfoForJob(result.Job.ID)))
 }
 
 // handleResumeJob 从轮次断点恢复已暂停的任务：重置 running 资源与轮次为 pending
@@ -285,7 +263,7 @@ func (s *Server) handleResumeJob(w http.ResponseWriter, r *http.Request) {
 	if s.dispatcher != nil {
 		s.dispatcher.Notify("translation")
 	}
-	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
 }
 
 func sanitizeExecutionConfig(config map[string]any) map[string]any {
@@ -326,7 +304,7 @@ func maskBackendOptions(node map[string]any) {
 	}
 }
 
-func toJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
+func (s *Server) toJobListResponse(ctx context.Context, actorID int, row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
 	resp := jobResponse{
 		ID:              row.ID,
 		ProjectID:       row.ProjectID,
@@ -335,6 +313,8 @@ func toJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
 		ExecutionPlanID: row.ExecutionPlanID,
 		ErrorMessage:    row.ErrorMessage,
 		StartedAt:       timePtrToString(row.StartedAt),
+		FinishedAt:      timePtrToString(row.FinishedAt),
+		CanDelete:       s.canDeleteHistory(ctx, actorID, "translation", row.ID, row.ProjectID, row.Status),
 		CreatedAt:       timeutil.Format(row.CreatedAt),
 		UpdatedAt:       timeutil.Format(row.UpdatedAt),
 	}
@@ -345,8 +325,8 @@ func toJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
 	return resp
 }
 
-func toJobDetailResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
-	resp := toJobListResponse(row, queueInfo)
+func (s *Server) toJobDetailResponse(ctx context.Context, actorID int, row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
+	resp := s.toJobListResponse(ctx, actorID, row, queueInfo)
 	resp.ExecutionConfig = sanitizeExecutionConfig(row.ExecutionConfig)
 	if len(row.Edges.JobResources) > 0 {
 		resp.JobResources = make([]jobResourceResponse, 0, len(row.Edges.JobResources))

@@ -114,16 +114,16 @@ func (s *blockingStreamStore) block(ctx context.Context) {
 	<-ctx.Done()
 }
 
-func (s *blockingStreamStore) LatestSeq(ctx context.Context, _ int) (int64, bool) {
+func (s *blockingStreamStore) LatestSeq(ctx context.Context, _ int) (int64, bool, error) {
 	if s.blockLatest {
 		s.block(ctx)
 	}
-	return 0, false
+	return 0, false, ctx.Err()
 }
 
-func (s *blockingStreamStore) Replay(ctx context.Context, _ int, _ int64, _ int) []event.Event {
+func (s *blockingStreamStore) Replay(ctx context.Context, _ int, _ int64, _ int) ([]event.Event, error) {
 	s.block(ctx)
-	return nil
+	return nil, ctx.Err()
 }
 
 func TestHandlerJobStreamBlockedReplayClosesWithinRevocationDeadline(t *testing.T) {

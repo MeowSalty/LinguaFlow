@@ -63,6 +63,7 @@ func (s *Server) handleListAccessibleJobs(w http.ResponseWriter, r *http.Request
 			s.writeServiceError(w, r, err)
 			return
 		}
+		item.CanDelete = s.canDeleteHistory(r.Context(), actor.User.ID, "translation", row.ID, row.ProjectID, row.Status)
 		response.Items = append(response.Items, item)
 	}
 	if page.NextCursor != "" {
@@ -153,6 +154,7 @@ func toJobSummary(row *ent.Job) (JobSummary, error) {
 		CreatedAt:   timeutil.Normalize(row.CreatedAt),
 		UpdatedAt:   timeutil.Normalize(row.UpdatedAt),
 		StartedAt:   timeutil.NormalizePtr(row.StartedAt),
+		FinishedAt:  timeutil.NormalizePtr(row.FinishedAt),
 		Progress: JobSummaryProgress{
 			TotalResources:     row.ResourceCount,
 			CompletedResources: row.CompletedResources,

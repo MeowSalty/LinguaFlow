@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -68,9 +67,7 @@ type systemSettingsResponse struct {
 }
 
 type updateSystemSettingsRequest struct {
-	Settings *struct {
-		RegistrationEnabled *bool `json:"registration_enabled"`
-	} `json:"settings"`
+	Settings json.RawMessage `json:"settings"`
 }
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
@@ -280,18 +277,39 @@ func (s *Server) handleAdminUpdateSettings(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var req updateSystemSettingsRequest
-	defer r.Body.Close()
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil || req.Settings == nil || req.Settings.RegistrationEnabled == nil {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "settings.registration_enabled 必须是布尔值")
+	if !s.decodeStrictBody(w, r, &req) {
 		return
 	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "请求体必须是单个 JSON 对象")
+	var fields struct {
+		RegistrationEnabled json.RawMessage `json:"registration_enabled"`
+		TaskRetention       json.RawMessage `json:"task_retention"`
+	}
+	if err := decodeStrictObject(req.Settings, &fields); err != nil || len(fields.RegistrationEnabled) == 0 && len(fields.TaskRetention) == 0 {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "settings 必须包含受支持的配置字段")
 		return
 	}
-	settings, err := s.settingsService.Update(r.Context(), authUser.User.ID, service.SystemSettings{RegistrationEnabled: *req.Settings.RegistrationEnabled})
+	patch := service.SettingsPatch{}
+	if len(fields.RegistrationEnabled) > 0 {
+		var enabled *bool
+		if err := json.Unmarshal(fields.RegistrationEnabled, &enabled); err != nil || enabled == nil {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "registration_enabled 必须是布尔值")
+			return
+		}
+		patch.RegistrationEnabled = enabled
+	}
+	if len(fields.TaskRetention) > 0 {
+		var policy struct {
+			Enabled          *bool  `json:"enabled"`
+			RetentionDays    *int   `json:"retention_days"`
+			ExpectedRevision *int64 `json:"expected_revision"`
+		}
+		if err := decodeStrictObject(fields.TaskRetention, &policy); err != nil || policy.Enabled == nil || policy.RetentionDays == nil || policy.ExpectedRevision == nil {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "task_retention 必须完整包含 enabled、retention_days 和 expected_revision")
+			return
+		}
+		patch.TaskRetention = &service.TaskRetentionPatch{Enabled: *policy.Enabled, RetentionDays: *policy.RetentionDays, ExpectedRevision: *policy.ExpectedRevision}
+	}
+	settings, err := s.settingsService.Patch(r.Context(), authUser.User.ID, patch)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return

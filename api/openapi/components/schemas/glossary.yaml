@@ -174,8 +174,12 @@ GlossarySyncExecuteResponse:
 
 GlossarySyncTaskStatusResponse:
   type: object
-  required: [task_id, status, processed, total]
+  required: [task_id, status, processed, total, finished_at, can_delete]
   properties:
+    finished_at:
+      $ref: './task-retention.yaml#/TaskFinishedAt'
+    can_delete:
+      $ref: './task-retention.yaml#/TaskCanDelete'
     task_id:
       type: string
     status:

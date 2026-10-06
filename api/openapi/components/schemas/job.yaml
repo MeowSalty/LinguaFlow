@@ -152,8 +152,12 @@ JobResourceRound:
 
 Job:
   type: object
-  required: [id, project_id, execution_plan_id, status, trigger_type, progress, created_at, updated_at]
+  required: [id, project_id, execution_plan_id, status, trigger_type, progress, created_at, updated_at, finished_at, can_delete]
   properties:
+    finished_at:
+      $ref: './task-retention.yaml#/TaskFinishedAt'
+    can_delete:
+      $ref: './task-retention.yaml#/TaskCanDelete'
     id:
       type: integer
     project_id:
@@ -212,8 +216,12 @@ JobSummaryProgress:
 
 JobSummary:
   type: object
-  required: [id, project_id, project_name, status, trigger_type, progress, created_at, updated_at, started_at]
+  required: [id, project_id, project_name, status, trigger_type, progress, created_at, updated_at, started_at, finished_at, can_delete]
   properties:
+    finished_at:
+      $ref: './task-retention.yaml#/TaskFinishedAt'
+    can_delete:
+      $ref: './task-retention.yaml#/TaskCanDelete'
     id:
       type: integer
     project_id:
@@ -402,8 +410,10 @@ UsageStats:
       type: integer
     completed_jobs:
       type: integer
+      description: 当前保留记录范围内的完成任务数量；独立调用和 Token 用量不随历史删除减少。
     failed_jobs:
       type: integer
+      description: 当前保留记录范围内的失败任务数量。
 
 Activity:
   type: object
