@@ -3,13 +3,13 @@ import { NCollapse, NCollapseItem, NGrid, NGi, NInputNumber, NSwitch } from 'nai
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
+import type { ExecutionPlanFormRound } from '@/utils/execution-plan-config'
 
-type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type RetryConfig = ApiSchemas['RetryConfig']
 
 const props = withDefaults(
   defineProps<{
-    round: ExecutionRoundConfig
+    round: ExecutionPlanFormRound
     disabled?: boolean
   }>(),
   { disabled: false },

@@ -12,10 +12,10 @@ import {
   NTag,
 } from 'naive-ui'
 import { useRuntimeStore } from '@/stores/runtime'
-import { formatDateTime } from '@/utils/datetime'
+import { formatDateTime, formatDuration } from '@/utils/datetime'
 import type { RuntimeRunner } from '@/api/runtime'
 
-const { t, n } = useI18n()
+const { t, te, n } = useI18n()
 const runtime = useRuntimeStore()
 let release: (() => void) | undefined
 onMounted(() => {
@@ -23,9 +23,14 @@ onMounted(() => {
 })
 onUnmounted(() => release?.())
 
+// 枚举键按后端取值动态拼接，语言包未必跟得上新增值，兜底显示原始枚举。
+const tf = (key: string, fallback: string) => (te(key) ? t(key) : fallback)
 const numeric = (value: number | null | undefined) =>
   value == null ? t('runtime.unavailable') : n(value)
 const date = (value: string) => formatDateTime(value, { dateStyle: 'medium', timeStyle: 'medium' })
+// 缺失指标在视觉上退后，避免一排加粗的「不可用」与真实数值抢焦点。
+const valueClass = (value: number | null | undefined) =>
+  value == null ? 'font-normal text-lf-text-subtle' : 'font-semibold text-lf-text-strong'
 const runnerMetrics: { key: keyof RuntimeRunner; label: string }[] = [
   { key: 'recovered_total', label: 'recovered' },
   { key: 'recovery_errors_total', label: 'recoveryErrors' },
@@ -51,21 +56,19 @@ const runnerTone = (state: RuntimeRunner['state']) =>
 </script>
 
 <template>
-  <main class="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6" data-testid="runtime-page">
-    <header class="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-semibold text-lf-text-strong">{{ t('runtime.title') }}</h1>
-        <p class="mt-1 text-sm text-lf-text-muted">{{ t('runtime.description') }}</p>
-        <p class="mt-2 text-xs text-lf-text-subtle">{{ t('runtime.polling') }}</p>
-      </div>
-      <NButton
-        :loading="runtime.loading"
-        :disabled="!runtime.authorized || runtime.forbidden"
-        @click="runtime.refresh"
-      >
-        {{ t('runtime.refresh') }}
-      </NButton>
-    </header>
+  <main class="lf-page lf-content-narrow" data-testid="runtime-page">
+    <PageHeader :title="t('runtime.title')" :subtitle="t('runtime.description')">
+      <template #actions>
+        <NButton
+          secondary
+          :loading="runtime.loading"
+          :disabled="!runtime.authorized || runtime.forbidden"
+          @click="runtime.refresh"
+        >
+          {{ t('runtime.refresh') }}
+        </NButton>
+      </template>
+    </PageHeader>
 
     <NAlert v-if="!runtime.authorized || runtime.forbidden" type="error" role="alert">{{
       t('runtime.forbidden')
@@ -104,7 +107,7 @@ const runnerTone = (state: RuntimeRunner['state']) =>
             }}</time></NDescriptionsItem
           >
           <NDescriptionsItem :label="t('runtime.uptime')">{{
-            t('runtime.seconds', { value: numeric(runtime.snapshot.uptime_seconds) })
+            formatDuration(runtime.snapshot.uptime_seconds)
           }}</NDescriptionsItem>
         </NDescriptions>
       </NCard>
@@ -113,18 +116,21 @@ const runnerTone = (state: RuntimeRunner['state']) =>
         <NCard
           v-for="runner in runtime.snapshot.runners"
           :key="runner.task_type"
-          :title="t(`runtime.${runner.task_type}`)"
+          :title="tf(`runtime.${runner.task_type}`, runner.task_type)"
           size="small"
         >
           <template #header-extra
             ><NTag :type="runnerTone(runner.state)" size="small" :bordered="false">{{
-              t(`runtime.state.${runner.state}`)
+              tf(`runtime.state.${runner.state}`, runner.state)
             }}</NTag></template
           >
           <dl class="grid grid-cols-2 gap-4">
             <div v-for="metric in runnerMetrics" :key="metric.key">
               <dt class="text-xs text-lf-text-muted">{{ t(`runtime.${metric.label}`) }}</dt>
-              <dd class="mt-1 text-lg font-semibold tabular-nums text-lf-text-strong">
+              <dd
+                class="mt-1 text-lg tabular-nums"
+                :class="valueClass(runner[metric.key] as number | null)"
+              >
                 {{ numeric(runner[metric.key] as number | null) }}
               </dd>
             </div>
@@ -137,14 +143,20 @@ const runnerTone = (state: RuntimeRunner['state']) =>
         <template #header-extra
           ><NTag size="small" :bordered="false">{{
             runtime.snapshot.limiters
-              ? t(`runtime.state.${runtime.snapshot.limiters.state}`)
+              ? tf(
+                  `runtime.state.${runtime.snapshot.limiters.state}`,
+                  runtime.snapshot.limiters.state,
+                )
               : t('runtime.unavailable')
           }}</NTag></template
         >
-        <dl class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <p v-if="!runtime.snapshot.limiters" class="text-sm text-lf-text-subtle">
+          {{ t('runtime.noLimiterMetrics') }}
+        </p>
+        <dl v-else class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
           <div v-for="metric in limiterMetrics" :key="metric.label">
             <dt class="text-xs text-lf-text-muted">{{ t(`runtime.${metric.label}`) }}</dt>
-            <dd class="mt-1 text-lg font-semibold tabular-nums text-lf-text-strong">
+            <dd class="mt-1 text-lg tabular-nums" :class="valueClass(metric.value)">
               {{ numeric(metric.value) }}
             </dd>
           </div>
@@ -169,7 +181,9 @@ const runnerTone = (state: RuntimeRunner['state']) =>
         >
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h3 class="font-medium">
-              {{ request.provider }} · {{ t(`runtime.operations.${request.operation}`) }}
+              {{ request.provider }}
+              ·
+              {{ tf(`runtime.operations.${request.operation}`, request.operation) }}
             </h3>
             <div class="flex flex-wrap gap-4 text-sm tabular-nums">
               <span
@@ -183,25 +197,25 @@ const runnerTone = (state: RuntimeRunner['state']) =>
             </div>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full min-w-[460px] text-left text-sm">
+            <table class="w-full text-left text-sm">
               <caption class="sr-only">
                 {{
                   request.provider
                 }}
                 {{
-                  t(`runtime.operations.${request.operation}`)
+                  tf(`runtime.operations.${request.operation}`, request.operation)
                 }}
               </caption>
               <thead class="text-xs text-lf-text-muted">
                 <tr>
-                  <th scope="col" class="py-2 font-medium">{{ t('runtime.outcome') }}</th>
-                  <th scope="col" class="px-3 py-2 text-right font-medium">
+                  <th scope="col" class="py-2.5 font-medium">{{ t('runtime.outcome') }}</th>
+                  <th scope="col" class="px-2 py-2.5 text-right font-medium sm:px-3">
                     {{ t('runtime.finished') }}
                   </th>
-                  <th scope="col" class="px-3 py-2 text-right font-medium">
+                  <th scope="col" class="px-2 py-2.5 text-right font-medium sm:px-3">
                     {{ t('runtime.duration') }}
                   </th>
-                  <th scope="col" class="py-2 text-right font-medium">
+                  <th scope="col" class="py-2.5 text-right font-medium">
                     {{ t('runtime.durationCount') }}
                   </th>
                 </tr>
@@ -212,16 +226,16 @@ const runnerTone = (state: RuntimeRunner['state']) =>
                   :key="outcome.outcome"
                   class="border-t border-lf-border-soft"
                 >
-                  <th scope="row" class="py-3 font-normal">
-                    {{ t(`runtime.outcomes.${outcome.outcome}`) }}
+                  <th scope="row" class="py-2.5 font-normal sm:py-3">
+                    {{ tf(`runtime.outcomes.${outcome.outcome}`, outcome.outcome) }}
                   </th>
-                  <td class="px-3 py-3 text-right">
+                  <td class="px-2 py-2.5 text-right sm:px-3 sm:py-3">
                     {{ numeric(outcome.http_attempts_finished_total) }}
                   </td>
-                  <td class="px-3 py-3 text-right">
+                  <td class="px-2 py-2.5 text-right sm:px-3 sm:py-3">
                     {{ numeric(outcome.http_attempt_duration_seconds_sum) }}
                   </td>
-                  <td class="py-3 text-right">
+                  <td class="py-2.5 text-right sm:py-3">
                     {{ numeric(outcome.http_attempt_duration_seconds_count) }}
                   </td>
                 </tr>

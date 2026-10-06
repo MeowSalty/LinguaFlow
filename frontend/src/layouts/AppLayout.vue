@@ -358,7 +358,7 @@ const navigateTo = (path: string): void => {
 
       <!-- 宽度治理下放页面：普通页面根部用 .lf-content-narrow 保持居中窄栏；
            需要全宽的页面（如项目工作台）自行铺满 -->
-      <main class="flex-1 px-5 pt-7 pb-28 sm:px-8">
+      <main class="flex-1 px-5 py-7 sm:px-8">
         <NAlert v-if="auth.initializationError" type="warning" :bordered="false" class="mb-5">
           {{ auth.initializationError }}
           <NButton text class="ml-3" @click="auth.fetchCurrentUser().catch(() => undefined)">{{

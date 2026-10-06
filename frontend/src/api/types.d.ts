@@ -4988,8 +4988,11 @@ export interface components {
             jitter?: boolean;
         };
         TranslateRoundConfig: {
-            /** @description 翻译提示词模板 ID */
-            prompt_template_id?: number;
+            /**
+             * @description 翻译提示词模板 ID。必填：省略或 0 会被后端拒绝（不规范化）。
+             *     允许内置虚拟 ID -1（内置默认翻译提示词模板），其余须为当前作用域可见的模板 ID。
+             */
+            prompt_template_id: number;
             /** @description 待译段落数上限（不计上下文段）；0=不限制，与 max_words_per_batch 至少填一项 */
             batch_size?: number;
             /** @description 字词数上限（计入上下文段）；0=不限制，与 batch_size 至少填一项。纯行数模式（此项与 context.max_chars 均为 0）下上下文体积不受约束 */
@@ -5006,8 +5009,11 @@ export interface components {
             retry?: components["schemas"]["RetryConfig"];
         };
         ExtractRoundConfig: {
-            /** @description 术语抽取提示词模板 ID（BootstrapPromptTemplate） */
-            template_id?: number;
+            /**
+             * @description 术语抽取提示词模板 ID（BootstrapPromptTemplate）。必填：省略或 0 会被后端拒绝（不规范化）。
+             *     允许内置虚拟 ID -1（内置默认引导提示词模板），其余须为当前作用域可见的模板 ID。
+             */
+            template_id: number;
             /**
              * @description 段落数上限；0=不限制；与 max_words_per_batch 都为 0 时不分批，全部一次发送
              * @default 20
