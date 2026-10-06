@@ -21,7 +21,7 @@ func TestBrokerNormalizesBeforePersistenceAndBroadcast(t *testing.T) {
 	defer b.Unsubscribe(1, ch)
 	b.Publish(1, Event{JobID: 1, CreatedAt: local, Metadata: map[string]any{"user_date": "2026-09-29T12:30:05+08:00"}})
 	live := <-ch
-	replayed := b.Replay(context.Background(), 1, 0, 10)
+	replayed := replayForTest(t, b, context.Background(), 1, 0, 10)
 	history := rowsToEvents([]*ent.SSEEvent{{CreatedAt: local}})
 	if len(replayed) != 1 || len(history) != 1 {
 		t.Fatalf("unexpected replay/history sizes: %d/%d", len(replayed), len(history))
@@ -82,7 +82,7 @@ func TestBrokerUsesStorePrecisionForLiveAndReplay(t *testing.T) {
 				defer b.Unsubscribe(1, ch)
 				b.Publish(1, Event{JobID: 1, CreatedAt: local})
 				live := <-ch
-				replay := b.Replay(context.Background(), 1, 0, 10)
+				replay := replayForTest(t, b, context.Background(), 1, 0, 10)
 				want := local.UTC()
 				if driver == dialect.Postgres {
 					want = want.Truncate(time.Microsecond)

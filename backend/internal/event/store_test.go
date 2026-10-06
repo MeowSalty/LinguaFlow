@@ -6,6 +6,28 @@ import (
 	"testing"
 )
 
+func replayForTest(t *testing.T, store interface {
+	Replay(context.Context, int, int64, int) ([]Event, error)
+}, ctx context.Context, jobID int, afterSeq int64, limit int) []Event {
+	t.Helper()
+	rows, err := store.Replay(ctx, jobID, afterSeq, limit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rows
+}
+
+func latestSeqForTest(t *testing.T, store interface {
+	LatestSeq(context.Context, int) (int64, bool, error)
+}, ctx context.Context, jobID int) (int64, bool) {
+	t.Helper()
+	seq, found, err := store.LatestSeq(ctx, jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return seq, found
+}
+
 func TestRingBufferAppendAndReplay(t *testing.T) {
 	store := NewRingBufferStore(RingBufferConfig{Capacity: 16})
 
@@ -29,7 +51,7 @@ func TestRingBufferAppendAndReplay(t *testing.T) {
 		t.Fatalf("expected seq2=2, got %d", seq2)
 	}
 
-	events := store.Replay(context.Background(), 1, 0, 1000)
+	events := replayForTest(t, store, context.Background(), 1, 0, 1000)
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events, got %d", len(events))
 	}
@@ -50,19 +72,19 @@ func TestRingBufferOverflow(t *testing.T) {
 	}
 
 	// afterSeq=0 指向被淘汰的 seq 1，应返回 nil（缓存不完整）
-	events := store.Replay(context.Background(), 1, 0, 1000)
+	events := replayForTest(t, store, context.Background(), 1, 0, 1000)
 	if events != nil {
 		t.Fatalf("expected nil when afterSeq points to evicted event, got %d events", len(events))
 	}
 
 	// afterSeq=3 指向被淘汰的 seq 3（oldestSeq=4），应返回 nil
-	events = store.Replay(context.Background(), 1, 3, 1000)
+	events = replayForTest(t, store, context.Background(), 1, 3, 1000)
 	if events != nil {
 		t.Fatalf("expected nil when afterSeq=3 < oldestSeq=4, got %d events", len(events))
 	}
 
 	// afterSeq=4 指向 buffer 内的 seq 4，应返回 seq 5,6,7
-	events = store.Replay(context.Background(), 1, 4, 1000)
+	events = replayForTest(t, store, context.Background(), 1, 4, 1000)
 	if len(events) != 3 {
 		t.Fatalf("expected 3 events after seq 4, got %d", len(events))
 	}
@@ -75,7 +97,7 @@ func TestRingBufferOverflow(t *testing.T) {
 
 	// afterSeq=3 不会进入该分支，但 buffer 中 seq 4,5,6,7 全部 > 3
 	// 确认 afterSeq 恰好等于 oldestSeq-1 时也能正确返回 buffer 中的事件
-	events = store.Replay(context.Background(), 1, 3, 1000)
+	events = replayForTest(t, store, context.Background(), 1, 3, 1000)
 	if events != nil {
 		// 当前实现返回 nil（afterSeq < oldestSeq），这是预期行为
 		// 因为 seq 3 虽被淘汰但存在于 DB，需要 DB 回退才能保证完整性
@@ -85,7 +107,7 @@ func TestRingBufferOverflow(t *testing.T) {
 func TestRingBufferReplayEmpty(t *testing.T) {
 	store := NewRingBufferStore(DefaultRingBufferConfig())
 
-	events := store.Replay(context.Background(), 999, 0, 1000)
+	events := replayForTest(t, store, context.Background(), 999, 0, 1000)
 	if events != nil {
 		t.Fatalf("expected nil for empty buffer, got %v", events)
 	}
@@ -94,19 +116,19 @@ func TestRingBufferReplayEmpty(t *testing.T) {
 func TestRingBufferLatestSeq(t *testing.T) {
 	store := NewRingBufferStore(RingBufferConfig{Capacity: 4})
 
-	if seq, ok := store.LatestSeq(context.Background(), 1); ok {
+	if seq, ok := latestSeqForTest(t, store, context.Background(), 1); ok {
 		t.Fatalf("expected ok=false for empty buffer, got seq=%d", seq)
 	}
 
 	for i := 0; i < 7; i++ {
 		_, _ = store.Append(1, Event{Type: "ev", JobID: 1, Message: "msg"})
 	}
-	seq, ok := store.LatestSeq(context.Background(), 1)
+	seq, ok := latestSeqForTest(t, store, context.Background(), 1)
 	if !ok || seq != 7 {
 		t.Fatalf("expected latest seq=7, got seq=%d ok=%v", seq, ok)
 	}
 
-	if _, ok := store.LatestSeq(context.Background(), 2); ok {
+	if _, ok := latestSeqForTest(t, store, context.Background(), 2); ok {
 		t.Fatalf("expected ok=false for absent job buffer")
 	}
 }
@@ -117,7 +139,7 @@ func TestRingBufferPurge(t *testing.T) {
 	_, _ = store.Append(1, Event{Type: "a", JobID: 1, Message: "msg"})
 	store.Purge(1)
 
-	events := store.Replay(context.Background(), 1, 0, 1000)
+	events := replayForTest(t, store, context.Background(), 1, 0, 1000)
 	if events != nil {
 		t.Fatalf("expected nil after purge, got %v", events)
 	}
@@ -139,7 +161,7 @@ func TestRingBufferConcurrent(t *testing.T) {
 	wg.Wait()
 
 	for i := 0; i < 10; i++ {
-		events := store.Replay(context.Background(), i, 0, 1000)
+		events := replayForTest(t, store, context.Background(), i, 0, 1000)
 		if len(events) != 100 {
 			t.Errorf("job %d: expected 100 events, got %d", i, len(events))
 		}
@@ -154,7 +176,7 @@ func TestRingBufferReplayGap(t *testing.T) {
 	_, _ = store.Append(1, Event{Type: "c", JobID: 1, Message: "third"})
 
 	// Replay after seq 1 — should get seq 2 and 3
-	events := store.Replay(context.Background(), 1, 1, 1000)
+	events := replayForTest(t, store, context.Background(), 1, 1, 1000)
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events after seq 1, got %d", len(events))
 	}
@@ -166,7 +188,7 @@ func TestRingBufferReplayGap(t *testing.T) {
 	}
 
 	// Replay after seq 2 — should get seq 3
-	events = store.Replay(context.Background(), 1, 2, 1000)
+	events = replayForTest(t, store, context.Background(), 1, 2, 1000)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event after seq 2, got %d", len(events))
 	}
@@ -175,7 +197,7 @@ func TestRingBufferReplayGap(t *testing.T) {
 	}
 
 	// Replay after seq 3 — should get nothing
-	events = store.Replay(context.Background(), 1, 3, 1000)
+	events = replayForTest(t, store, context.Background(), 1, 3, 1000)
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events after seq 3, got %d", len(events))
 	}
@@ -191,7 +213,7 @@ func TestRingBufferOverflowAfterSeqAtOldest(t *testing.T) {
 	}
 
 	// afterSeq=4（等于 oldestSeq）→ 返回 seq 5,6,7
-	events := store.Replay(context.Background(), 1, 4, 1000)
+	events := replayForTest(t, store, context.Background(), 1, 4, 1000)
 	if len(events) != 3 {
 		t.Fatalf("expected 3 events, got %d", len(events))
 	}
@@ -202,7 +224,7 @@ func TestRingBufferOverflowAfterSeqAtOldest(t *testing.T) {
 	}
 
 	// afterSeq=6（等于最新 seq - 1）→ 返回 seq 7
-	events = store.Replay(context.Background(), 1, 6, 1000)
+	events = replayForTest(t, store, context.Background(), 1, 6, 1000)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -211,7 +233,7 @@ func TestRingBufferOverflowAfterSeqAtOldest(t *testing.T) {
 	}
 
 	// afterSeq=7（等于最新 seq）→ 返回空
-	events = store.Replay(context.Background(), 1, 7, 1000)
+	events = replayForTest(t, store, context.Background(), 1, 7, 1000)
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events, got %d", len(events))
 	}
@@ -226,7 +248,7 @@ func TestRingBufferNoOverflowWithLowAfterSeq(t *testing.T) {
 	_, _ = store.Append(1, Event{Type: "c", JobID: 1, Message: "third"})
 
 	// afterSeq=0 未溢出时应返回全部事件
-	events := store.Replay(context.Background(), 1, 0, 1000)
+	events := replayForTest(t, store, context.Background(), 1, 0, 1000)
 	if len(events) != 3 {
 		t.Fatalf("expected 3 events, got %d", len(events))
 	}
@@ -240,7 +262,7 @@ func TestRingBufferReplayLimit(t *testing.T) {
 	}
 
 	// limit=2 应只返回最早的 2 条匹配事件（seq 1,2），保持升序
-	events := store.Replay(context.Background(), 1, 0, 2)
+	events := replayForTest(t, store, context.Background(), 1, 0, 2)
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events with limit=2, got %d", len(events))
 	}
@@ -249,19 +271,19 @@ func TestRingBufferReplayLimit(t *testing.T) {
 	}
 
 	// limit 超过匹配数时返回全部
-	events = store.Replay(context.Background(), 1, 0, 100)
+	events = replayForTest(t, store, context.Background(), 1, 0, 100)
 	if len(events) != 5 {
 		t.Fatalf("expected 5 events with large limit, got %d", len(events))
 	}
 
 	// limit=0 表示无限制（向后兼容「全部」语义）
-	events = store.Replay(context.Background(), 1, 0, 0)
+	events = replayForTest(t, store, context.Background(), 1, 0, 0)
 	if len(events) != 5 {
 		t.Fatalf("expected 5 events with limit=0 (unlimited), got %d", len(events))
 	}
 
 	// limit 与 afterSeq 组合：afterSeq=2 → 匹配 seq 3,4,5，limit=2 取前 2 条
-	events = store.Replay(context.Background(), 1, 2, 2)
+	events = replayForTest(t, store, context.Background(), 1, 2, 2)
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events after seq 2 with limit=2, got %d", len(events))
 	}
