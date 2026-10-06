@@ -50,7 +50,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		t := rc.Translate
 		apiRC.Concurrency = t.Concurrency
 		translateCfg := TranslateRoundConfig{}
-		translateCfg.PromptTemplateId = &t.PromptTemplateID
+		translateCfg.PromptTemplateId = t.PromptTemplateID
 		translateCfg.BatchSize = &t.BatchSize
 		translateCfg.MaxWordsPerBatch = &t.MaxWordsPerBatch
 		if t.FallbackShrink > 0 {
@@ -66,7 +66,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		e := rc.Extract
 		apiRC.Concurrency = e.Concurrency
 		extractCfg := ExtractRoundConfig{}
-		extractCfg.TemplateId = &e.BootstrapTemplateID
+		extractCfg.TemplateId = e.BootstrapTemplateID
 		extractCfg.BatchSize = &e.BatchSize
 		if e.MaxWordsPerBatch > 0 {
 			mwpb := e.MaxWordsPerBatch
@@ -281,9 +281,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			translateCfg := &schema.TranslateRoundConfig{
 				Concurrency: ar.Concurrency,
 			}
-			if t.PromptTemplateId != nil {
-				translateCfg.PromptTemplateID = *t.PromptTemplateId
-			}
+			translateCfg.PromptTemplateID = t.PromptTemplateId
 			if t.BatchSize != nil {
 				translateCfg.BatchSize = *t.BatchSize
 			}
@@ -309,9 +307,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			extractCfg := &schema.ExtractRoundConfig{
 				Concurrency: ar.Concurrency,
 			}
-			if e.TemplateId != nil {
-				extractCfg.BootstrapTemplateID = *e.TemplateId
-			}
+			extractCfg.BootstrapTemplateID = e.TemplateId
 			if e.BatchSize != nil {
 				extractCfg.BatchSize = *e.BatchSize
 			}
