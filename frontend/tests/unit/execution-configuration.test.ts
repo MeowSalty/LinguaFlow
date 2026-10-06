@@ -266,6 +266,7 @@ describe('plan round presence and code constraints', () => {
       backend_id: 1,
       concurrency: 1,
       translate: {
+        prompt_template_id: 7,
         batch_size: 0,
         max_words_per_batch: 100,
         fallback_shrink: 1,
@@ -278,5 +279,32 @@ describe('plan round presence and code constraints', () => {
     expect(output.translate).toEqual(draft.translate)
     expect(output).not.toHaveProperty('revise')
     expect(output.translate).not.toBe(draft.translate)
+  })
+  it('throws when a spec-required template reference is left unselected', () => {
+    const translateRound: ExecutionRound = {
+      mode: 'translate',
+      backend_id: 1,
+      concurrency: 1,
+      translate: {
+        prompt_template_id: null as unknown as number,
+        batch_size: 10,
+        max_words_per_batch: 0,
+        fallback_shrink: 1,
+      },
+    }
+    expect(() => buildExecutionRoundInput(translateRound)).toThrow(
+      'Missing translate prompt template',
+    )
+    const extractRound: ExecutionRound = {
+      mode: 'extract',
+      backend_id: 1,
+      concurrency: 1,
+      extract: {
+        template_id: null as unknown as number,
+        batch_size: 20,
+        max_words_per_batch: 0,
+      },
+    }
+    expect(() => buildExecutionRoundInput(extractRound)).toThrow('Missing extract template')
   })
 })

@@ -10,6 +10,10 @@ import {
   setRoundCodes,
   validateRoundCodes,
 } from '@/utils/execution-plan-config'
+import type {
+  ExecutionPlanFormRound,
+  ExecutionPlanFormRubyRetry,
+} from '@/utils/execution-plan-config'
 import {
   getQualityCodeLabel,
   QUALITY_CODES,
@@ -20,7 +24,6 @@ import ConfigSectionPanel from './ConfigSectionPanel.vue'
 
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type TranslateRoundConfig = NonNullable<ExecutionRoundConfig['translate']>
-type ExtractRoundConfig = NonNullable<ExecutionRoundConfig['extract']>
 type AdjudicateRoundConfig = NonNullable<ExecutionRoundConfig['adjudicate']>
 type SemanticQARoundConfig = NonNullable<ExecutionRoundConfig['semantic_qa']>
 type ReviseRoundConfig = NonNullable<ExecutionRoundConfig['revise']>
@@ -28,7 +31,6 @@ type CorrectRoundConfig = NonNullable<ExecutionRoundConfig['correct']>
 type CorrectRuleConfig = NonNullable<CorrectRoundConfig['rules']>[number]
 type CorrectRuleName = CorrectRuleConfig['name']
 type RetryConfig = NonNullable<TranslateRoundConfig['retry']>
-type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 type RoundMode = ExecutionRoundConfig['mode']
 type AdjudicateCode = NonNullable<AdjudicateRoundConfig['adjudicate_codes']>[number]
 type SemanticQASegmentScope = SemanticQARoundConfig['segment_scope']
@@ -36,14 +38,16 @@ type SemanticQAIssueCode = NonNullable<SemanticQARoundConfig['issue_codes']>[num
 type ReviseSegmentScope = ReviseRoundConfig['segment_scope']
 type ReviseIssueCode = NonNullable<ReviseRoundConfig['issue_codes']>[number]
 
-type RoundModel = ExecutionRoundConfig
+type RoundModel = ExecutionPlanFormRound
+type FormTranslateConfig = NonNullable<RoundModel['translate']>
+type FormExtractConfig = NonNullable<RoundModel['extract']>
 
 // ─── 默认值 ──────────────────────────────────────────────────
 
 const DEFAULT_RETRY: RetryConfig = { max_attempts: 3, backoff_ms: 2000, jitter: true }
 
-const DEFAULT_TRANSLATE: TranslateRoundConfig = {
-  prompt_template_id: 0,
+const DEFAULT_TRANSLATE: FormTranslateConfig = {
+  prompt_template_id: null,
   batch_size: 10,
   max_words_per_batch: 0,
   fallback_shrink: 1,
@@ -51,8 +55,8 @@ const DEFAULT_TRANSLATE: TranslateRoundConfig = {
   retry: { ...DEFAULT_RETRY },
 }
 
-const DEFAULT_EXTRACT: ExtractRoundConfig = {
-  template_id: 0,
+const DEFAULT_EXTRACT: FormExtractConfig = {
+  template_id: null,
   batch_size: 20,
   max_words_per_batch: 0,
   max_terms_per_1000_chars: 25.0,
@@ -99,14 +103,14 @@ const DEFAULT_CORRECT: CorrectRoundConfig = {
 
 const DEFAULT_ROUND: RoundModel = {
   mode: 'translate',
-  backend_id: 0,
+  backend_id: null,
   concurrency: 3,
   translate: { ...DEFAULT_TRANSLATE },
 }
 
-const DEFAULT_RUBY_RETRY: ExecutionPlanRubyRetryConfig = {
+const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
   enabled: false,
-  backend_id: 0,
+  backend_id: null,
   max_attempts: 1,
 }
 
@@ -116,7 +120,7 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
 }
 
-function mergeTranslate(source?: Partial<TranslateRoundConfig>): TranslateRoundConfig {
+function mergeTranslate(source?: Partial<FormTranslateConfig>): FormTranslateConfig {
   if (!source) return deepClone(DEFAULT_TRANSLATE)
   return {
     prompt_template_id: source.prompt_template_id ?? DEFAULT_TRANSLATE.prompt_template_id,
@@ -134,7 +138,7 @@ function mergeTranslate(source?: Partial<TranslateRoundConfig>): TranslateRoundC
   }
 }
 
-function mergeExtract(source?: Partial<ExtractRoundConfig>): ExtractRoundConfig {
+function mergeExtract(source?: Partial<FormExtractConfig>): FormExtractConfig {
   if (!source) return deepClone(DEFAULT_EXTRACT)
   return {
     template_id: source.template_id ?? DEFAULT_EXTRACT.template_id,
@@ -212,7 +216,7 @@ function mergeCorrect(source?: Partial<CorrectRoundConfig>): CorrectRoundConfig 
   }
 }
 
-function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
+function mergeRound(source?: Partial<RoundModel>): RoundModel {
   if (!source) return deepClone(DEFAULT_ROUND)
   const mode = source.mode ?? 'translate'
   return {
@@ -244,9 +248,7 @@ function setNoBatch(
   }
 }
 
-function mergeRubyRetry(
-  source?: Partial<ExecutionPlanRubyRetryConfig>,
-): ExecutionPlanRubyRetryConfig {
+function mergeRubyRetry(source?: Partial<ExecutionPlanFormRubyRetry>): ExecutionPlanFormRubyRetry {
   if (!source) return deepClone(DEFAULT_RUBY_RETRY)
   return {
     enabled: source.enabled ?? DEFAULT_RUBY_RETRY.enabled,
@@ -259,8 +261,8 @@ function mergeRubyRetry(
 
 const props = withDefaults(
   defineProps<{
-    rounds: ExecutionRoundConfig[]
-    rubyRetry?: ExecutionPlanRubyRetryConfig
+    rounds: ExecutionPlanFormRound[]
+    rubyRetry?: ExecutionPlanFormRubyRetry
     backends: SelectOption[]
     promptTemplates: SelectOption[]
     bootstrapPromptTemplates: SelectOption[]
@@ -270,8 +272,8 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  'update:rounds': [value: ExecutionRoundConfig[]]
-  'update:rubyRetry': [value: ExecutionPlanRubyRetryConfig]
+  'update:rounds': [value: ExecutionPlanFormRound[]]
+  'update:rubyRetry': [value: ExecutionPlanFormRubyRetry]
 }>()
 
 // ─── 内部状态 ────────────────────────────────────────────────
@@ -279,7 +281,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const roundsModel = ref<RoundModel[]>(props.rounds.map((r) => mergeRound(r)))
-const rubyRetryModel = ref<ExecutionPlanRubyRetryConfig>(mergeRubyRetry(props.rubyRetry))
+const rubyRetryModel = ref<ExecutionPlanFormRubyRetry>(mergeRubyRetry(props.rubyRetry))
 
 let lastRoundsJson = JSON.stringify(props.rounds ?? [])
 let lastRubyRetryJson = JSON.stringify(props.rubyRetry ?? {})
@@ -659,6 +661,7 @@ const emitUpdate = (): void => {
         <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.promptTemplate') }}
+            <span class="text-lf-danger">*</span>
           </div>
           <NSelect
             v-model:value="round.translate.prompt_template_id"
@@ -753,6 +756,7 @@ const emitUpdate = (): void => {
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.extractTemplate') }}
+              <span class="text-lf-danger">*</span>
             </div>
             <NSelect
               v-model:value="round.extract.template_id"

@@ -28,7 +28,15 @@ import { fetchBootstrapPromptTemplates } from '@/api/bootstrap-prompt-templates'
 import { fetchExecutionProfiles } from '@/api/execution-profiles'
 import type { ApiSchemas } from '@/api/client'
 import ExecutionPlanEditor from '@/components/templates/ExecutionPlanEditor.vue'
-import { buildExecutionRoundInput, validateRoundCodes } from '@/utils/execution-plan-config'
+import {
+  buildExecutionRoundInput,
+  buildRubyRetryInput,
+  validateRoundCodes,
+} from '@/utils/execution-plan-config'
+import type {
+  ExecutionPlanFormRound,
+  ExecutionPlanFormRubyRetry,
+} from '@/utils/execution-plan-config'
 import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
 import { useEntityCrud } from '@/composables/useEntityCrud'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
@@ -38,7 +46,6 @@ import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
-type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 type CreateRequest = ApiSchemas['CreateExecutionPlanTemplateRequest']
 type UpdateRequest = ApiSchemas['UpdateExecutionPlanTemplateRequest']
 
@@ -46,18 +53,18 @@ interface FormModel {
   name: string
   description: string
   profile_id: number | null
-  ruby_retry: ExecutionPlanRubyRetryConfig
-  rounds: ExecutionRoundConfig[]
+  ruby_retry: ExecutionPlanFormRubyRetry
+  rounds: ExecutionPlanFormRound[]
 }
 
 // ── 默认值 ────────────────────────────────────────────────────
 
-const DEFAULT_ROUND: ExecutionRoundConfig = {
+const DEFAULT_ROUND: ExecutionPlanFormRound = {
   mode: 'translate',
-  backend_id: 0,
+  backend_id: null,
   concurrency: 3,
   translate: {
-    prompt_template_id: 0,
+    prompt_template_id: null,
     batch_size: 10,
     max_words_per_batch: 0,
     fallback_shrink: 1,
@@ -65,9 +72,9 @@ const DEFAULT_ROUND: ExecutionRoundConfig = {
   },
 }
 
-const DEFAULT_RUBY_RETRY: ExecutionPlanRubyRetryConfig = {
+const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
   enabled: false,
-  backend_id: 0,
+  backend_id: null,
   max_attempts: 1,
 }
 
@@ -265,6 +272,20 @@ const validateRounds = (): boolean => {
       message.error(t('executionPlanTemplates.validation.roundBackendRequired', { n: i + 1 }))
       return false
     }
+    if (
+      round.mode === 'translate' &&
+      round.translate &&
+      round.translate.prompt_template_id == null
+    ) {
+      message.error(t('executionPlanTemplates.validation.roundPromptRequired', { n: i + 1 }))
+      return false
+    }
+    if (round.mode === 'extract' && round.extract && round.extract.template_id == null) {
+      message.error(
+        t('executionPlanTemplates.validation.roundExtractTemplateRequired', { n: i + 1 }),
+      )
+      return false
+    }
     if (round.mode !== 'correct' && (!round.concurrency || round.concurrency < 1)) {
       message.error(t('executionPlanTemplates.validation.roundConcurrencyRequired', { n: i + 1 }))
       return false
@@ -354,7 +375,7 @@ const buildPayload = (): CreateRequest => {
   if (formModel.description.trim()) {
     payload.description = formModel.description.trim()
   }
-  payload.ruby_retry = deepClone(formModel.ruby_retry)
+  payload.ruby_retry = buildRubyRetryInput(formModel.ruby_retry)
   return payload
 }
 
@@ -368,12 +389,15 @@ const onSubmit = async (): Promise<void> => {
     generation === formGeneration &&
     drawerVisible.value
   if (!store.canEdit(editingItem.value ?? undefined) || submitting.value) return
+  // 只拦截"已选择但当前组织不可用"的依赖；未选择（null）由表单/轮次必填校验负责提示
   if (
     !dependenciesLoaded.value ||
-    !availableProfiles.value.some((item) => item.id === formModel.profile_id) ||
+    (formModel.profile_id != null &&
+      !availableProfiles.value.some((item) => item.id === formModel.profile_id)) ||
     formModel.rounds.some(
       (round) =>
         (round.mode !== 'correct' &&
+          round.backend_id != null &&
           !availableBackends.value.some((item) => item.id === round.backend_id)) ||
         (round.translate?.prompt_template_id != null &&
           !availablePrompts.value.some(
@@ -382,7 +406,7 @@ const onSubmit = async (): Promise<void> => {
         (round.extract?.template_id != null &&
           !availableBootstrap.value.some((item) => item.id === round.extract?.template_id)),
     ) ||
-    (formModel.ruby_retry.backend_id &&
+    (formModel.ruby_retry.backend_id != null &&
       !availableBackends.value.some((item) => item.id === formModel.ruby_retry.backend_id))
   ) {
     message.error(t('team.errors.dependencies'))
@@ -706,15 +730,16 @@ useStoreErrorToast(
 
         <NFormItem :label="t('executionPlanTemplates.form.profile')" path="profile_id">
           <div class="w-full">
+            <!-- 说明置于控件上方，让校验错误紧贴控件（NFormItem 的反馈区渲染在默认插槽之后） -->
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanTemplates.form.profileHint') }}
+            </div>
             <NSelect
               v-model:value="formModel.profile_id"
               :options="executionProfileOptions"
               :placeholder="t('executionPlanTemplates.form.profilePlaceholder')"
               :disabled="isSystemScope || submitting"
             />
-            <div class="mt-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanTemplates.form.profileHint') }}
-            </div>
           </div>
         </NFormItem>
 
