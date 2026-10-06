@@ -19,7 +19,9 @@ export function createScopedEntityState<T extends ScopedEntity, Create, Update>(
   create: (body: Create, orgId: number | null) => Promise<T>
   update: (id: number, body: Update, orgId: number | null) => Promise<T>
   remove: (id: number, orgId: number | null) => Promise<void>
+  accessDenied?: (error: unknown) => boolean
 }) {
+  const accessDenied = api.accessDenied ?? isAccessDenied
   const items = shallowRef<T[]>([])
   const orgId = ref<number | null>(null)
   const loading = ref(false)
@@ -118,7 +120,7 @@ export function createScopedEntityState<T extends ScopedEntity, Create, Update>(
         }
       } catch (cause) {
         if (current()) {
-          if (isAccessDenied(cause)) {
+          if (accessDenied(cause)) {
             items.value = []
             cache.delete(scope)
           }
@@ -169,7 +171,7 @@ export function createScopedEntityState<T extends ScopedEntity, Create, Update>(
       return value
     } catch (cause) {
       if (current()) {
-        if (isAccessDenied(cause)) {
+        if (accessDenied(cause)) {
           items.value = []
           cache.clear()
         }

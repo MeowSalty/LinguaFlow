@@ -80,6 +80,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/admin/storage': RouteRecordInfo<
+      '/admin/storage',
+      '/admin/storage',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/admin/users': RouteRecordInfo<
       '/admin/users',
       '/admin/users',
@@ -201,6 +208,7 @@ declare module 'vue-router/auto-routes' {
       | '/settings/preferences'
       | '/settings/profile'
       | '/settings/security'
+      | '/settings/storage'
       | '/settings/team'
     >,
     '/settings/': RouteRecordInfo<
@@ -227,6 +235,13 @@ declare module 'vue-router/auto-routes' {
     '/settings/security': RouteRecordInfo<
       '/settings/security',
       '/settings/security',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/settings/storage': RouteRecordInfo<
+      '/settings/storage',
+      '/settings/storage',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -304,6 +319,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/admin/settings.vue': {
       routes:
         | '/admin/settings'
+      views:
+        | never
+    }
+    'src/pages/admin/storage.vue': {
+      routes:
+        | '/admin/storage'
       views:
         | never
     }
@@ -411,6 +432,7 @@ declare module 'vue-router/auto-routes' {
         | '/settings/preferences'
         | '/settings/profile'
         | '/settings/security'
+        | '/settings/storage'
         | '/settings/team'
       views:
         | 'default'
@@ -436,6 +458,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/settings/security.vue': {
       routes:
         | '/settings/security'
+      views:
+        | never
+    }
+    'src/pages/settings/storage.vue': {
+      routes:
+        | '/settings/storage'
       views:
         | never
     }

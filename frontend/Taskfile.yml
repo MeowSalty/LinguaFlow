@@ -22,7 +22,7 @@ tasks:
     desc: 格式化前端源码、测试和配置
     cmds:
       - pnpm format
-      - pnpm exec oxfmt tests/ playwright.config.ts vitest.config.ts vitest.integration.config.ts Taskfile.yml docs/design/operations-center.md docs/design/operations-center-verification.md
+      - pnpm exec oxfmt tests/ playwright.config.ts vitest.config.ts vitest.integration.config.ts vitest.storage-integration.config.ts Taskfile.yml docs/design/operations-center.md docs/design/operations-center-verification.md docs/design/file-storage-architecture.md docs/design/file-storage-verification.md
   lint:
     desc: 执行前端代码检查
     cmds: [pnpm lint]
@@ -38,9 +38,18 @@ tasks:
   test:e2e:
     desc: 执行前端端到端测试
     cmds: ['pnpm exec playwright test {{.CLI_ARGS}}']
+  test:storage-visual:
+    desc: 对已运行的生产预览采集存储页面视觉证据（CLI_ARGS=before 或 after）
+    cmds: ['node --experimental-strip-types tests/e2e/capture-storage-visual.mjs {{.CLI_ARGS}}']
+  test:task-header-visual:
+    desc: 对已运行的生产预览检查全局任务顶栏与真实 200% 缩放并采集视觉证据
+    cmds: ['node --experimental-strip-types tests/e2e/capture-task-header-visual.mjs {{.CLI_ARGS}}']
   test:configuration-integration:
     desc: 使用 Vitest、独立后端与隔离数据库验证配置、凭据和真实任务链路
     cmds: ['pnpm exec vitest run --config vitest.integration.config.ts {{.CLI_ARGS}}']
+  test:storage-integration:
+    desc: 使用独立 Local 后端与隔离数据库验证文件存储真实传输及快照
+    cmds: ['pnpm exec vitest run --config vitest.storage-integration.config.ts {{.CLI_ARGS}}']
   test:startup:
     desc: 验证前端开发和生产环境启动
     deps: [build]

@@ -2,10 +2,13 @@
 import { NAlert, NButton, NIcon, NTabPane, NTabs } from 'naive-ui'
 import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 
 import { type ApiSchemas } from '@/api/client'
 import { batchReviewSegments } from '@/api/projects'
 import { captureSession, isSessionCurrent } from '@/api/session-context'
+import { getStorageTask } from '@/api/storage'
+import { storageErrorMessage } from '@/api/storage-errors'
 import { usePreferencesStore } from '@/stores/preferences'
 import ResourceExplorer from '@/components/workspace/ResourceExplorer.vue'
 import SelectionActionBar from '@/components/workspace/SelectionActionBar.vue'
@@ -21,12 +24,12 @@ import SegmentRevisionPreviewDrawer from '@/components/workspace/SegmentRevision
 import JobPanel from '@/components/workspace/JobPanel.vue'
 import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
 import QaRecheckDrawer from '@/components/workspace/QaRecheckDrawer.vue'
-import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
-import IncrementalResultModal from '@/components/workspace/IncrementalResultModal.vue'
+import ProjectStoragePanel from '@/components/storage/ProjectStoragePanel.vue'
+import ResourceStorageDrawer from '@/components/storage/ResourceStorageDrawer.vue'
+import SourceUpdateDrawer from '@/components/storage/SourceUpdateDrawer.vue'
 import ProjectFormDrawer from '@/components/projects/ProjectFormDrawer.vue'
 import { useGlossaryManagement, GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
 import { useJobActions } from '@/composables/useJobActions'
-import { useConflictHandling } from '@/composables/useConflictHandling'
 import { formatDate } from '@/composables/useWorkspaceUtils'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlossaryStore } from '@/stores/glossary'
@@ -34,7 +37,7 @@ import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
 
-type WorkspaceTab = 'resources' | 'jobs' | 'glossary'
+type WorkspaceTab = 'resources' | 'jobs' | 'glossary' | 'storage'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,6 +46,21 @@ const workspace = useProjectWorkspaceStore()
 const glossary = useGlossaryStore()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
 
+const resourceStorageVisible = ref(false)
+const sourceRecoveryTask = ref<ApiSchemas['StorageTask'] | null>(null)
+const sourceRecoveryVisible = ref(false)
+const sourceRecoveryError = ref<string | null>(null)
+const sourceRecoveryResource = computed(() => {
+  const resourceId = sourceRecoveryTask.value?.resource_id
+  const find = (node: ApiSchemas['ResourceTreeNode']): Resource | undefined => {
+    if (node.resource?.id === resourceId) return node.resource
+    for (const child of node.children ?? []) {
+      const result = find(child)
+      if (result) return result
+    }
+  }
+  return workspace.resourceTree ? find(workspace.resourceTree) : undefined
+})
 const activeTab = ref<WorkspaceTab>('resources')
 
 // ── 编辑视图态（query: edit=<resourceId>&chapter=<groupKey>）──
@@ -60,6 +78,18 @@ const enterEditor = (resourceId: number, chapterKey?: string): void => {
   void router.replace({ query })
 }
 const segmentPanelRef = ref<InstanceType<typeof SegmentPanel> | null>(null)
+const beforeSavedContent = async (): Promise<boolean> =>
+  segmentPanelRef.value?.confirmPendingDrafts() ?? true
+onBeforeRouteLeave(beforeSavedContent)
+onBeforeRouteUpdate(async (to, from) => {
+  if (
+    JSON.stringify(to.params) === JSON.stringify(from.params) &&
+    to.query.edit === from.query.edit &&
+    to.query.chapter === from.query.chapter
+  )
+    return true
+  return beforeSavedContent()
+})
 const segmentTranslationPreviewDrawerRef = ref<InstanceType<
   typeof SegmentTranslationPreviewDrawer
 > | null>(null)
@@ -105,6 +135,30 @@ const projectId = computed(() => {
   const parsed = Number(rawValue)
   return Number.isFinite(parsed) ? parsed : null
 })
+watch(
+  () => [projectId.value, route.query.source_task, workspace.project?.id] as const,
+  async ([id, raw, loadedId], _, onCleanup) => {
+    sourceRecoveryVisible.value = false
+    sourceRecoveryTask.value = null
+    sourceRecoveryError.value = null
+    const taskId = typeof raw === 'string' ? Number(raw) : NaN
+    if (!id || loadedId !== id || !Number.isSafeInteger(taskId) || taskId <= 0) return
+    const session = captureSession()
+    const controller = new AbortController()
+    onCleanup(() => controller.abort())
+    const current = () => !controller.signal.aborted && isSessionCurrent(session)
+    try {
+      const task = await getStorageTask(id, taskId, { signal: controller.signal })
+      if (!current()) return
+      if (task.project_id !== id || task.kind !== 'source_update' || !task.source_preview) return
+      sourceRecoveryTask.value = task
+      sourceRecoveryVisible.value = true
+    } catch (cause) {
+      if (current()) sourceRecoveryError.value = storageErrorMessage(cause)
+    }
+  },
+  { immediate: true },
+)
 
 // ── Composables ──
 const glossaryMgmt = useGlossaryManagement(projectId)
@@ -160,8 +214,6 @@ const handleGlossarySynced = async (): Promise<void> => {
   }
 }
 
-const conflictMgmt = useConflictHandling()
-
 // ── 工作区操作 ──
 const preferences = usePreferencesStore()
 let recordedProjectId: number | null = null
@@ -193,7 +245,6 @@ const reloadWorkspace = async (): Promise<void> => {
 // 进入编辑视图只做状态对齐（query 写入 → 深链 watcher 设 store），
 // 段落/章节数据由 SegmentPanel 的筛选 watcher 统一加载。
 const handleExplorerOpenSegments = (resource: Resource): void => {
-  workspace.setActiveResource(resource.id)
   enterEditor(resource.id)
 }
 
@@ -320,16 +371,19 @@ const handleBatchReview = async (action: 'approve' | 'reject'): Promise<void> =>
   if (!segmentIds || segmentIds.length === 0) return
 
   await batchReviewSegments(projectId.value, workspace.activeResourceId, segmentIds, action)
+  workspace.contentWriteRevision++
   await reloadSegments()
   segmentPanelRef.value?.clearSelectedSegments()
 }
 
-const handlePreviewTranslation = (segment: ApiSchemas['Segment']): void => {
+const handlePreviewTranslation = async (segment: ApiSchemas['Segment']): Promise<void> => {
+  if (!(await beforeSavedContent())) return
   if (!workspace.activeResourceId) return
   segmentTranslationPreviewDrawerRef.value?.open(segment, workspace.activeResourceId)
 }
 
-const handlePreviewRevision = (segment: ApiSchemas['Segment']): void => {
+const handlePreviewRevision = async (segment: ApiSchemas['Segment']): Promise<void> => {
+  if (!(await beforeSavedContent())) return
   if (!workspace.activeResourceId) return
   segmentRevisionPreviewDrawerRef.value?.open(segment, workspace.activeResourceId)
 }
@@ -339,6 +393,7 @@ const handlePreviewApplied = async (payload: {
   resourceId: number
 }): Promise<void> => {
   if (!projectId.value) return
+  workspace.contentWriteRevision++
 
   const refreshes: Promise<void>[] = [
     workspace.loadSegments(
@@ -361,7 +416,7 @@ const handlePreviewApplied = async (payload: {
 watch(
   () => route.query.tab,
   (tab) => {
-    if (tab === 'jobs' || tab === 'resources' || tab === 'glossary') {
+    if (tab === 'jobs' || tab === 'resources' || tab === 'glossary' || tab === 'storage') {
       activeTab.value = tab
     } else if (tab === 'segments') {
       // 旧链接兼容：段落编辑已从 Tab 拆出为独立编辑视图
@@ -441,6 +496,14 @@ watch(activeTab, (tab) => {
   void loadTabData(tab)
 })
 
+watch(projectId, () => {
+  workspace.reset()
+  glossary.reset()
+  recordedProjectId = null
+  loadedTabs.clear()
+  void reloadWorkspace()
+})
+
 onBeforeUnmount(() => {
   workspace.reset()
   glossary.reset()
@@ -501,6 +564,7 @@ onMounted(() => {
       <SegmentPanel
         ref="segmentPanelRef"
         :project-id="projectId"
+        @storage="resourceStorageVisible = true"
         @preview-translation="handlePreviewTranslation"
         @preview-revision="handlePreviewRevision"
         @refresh="reloadSegments"
@@ -623,12 +687,18 @@ onMounted(() => {
                   v-if="projectId"
                   :project-id="projectId"
                   @open-segments="handleExplorerOpenSegments"
-                  @conflict="conflictMgmt.handleExplorerConflict"
-                  @incremental-result="conflictMgmt.handleExplorerIncrementalResult"
+                  :before-saved-content="beforeSavedContent"
                 />
               </div>
             </NTabPane>
 
+            <NTabPane name="storage" :tab="t('sourceStorage.project')">
+              <ProjectStoragePanel
+                v-if="workspace.project"
+                :project="workspace.project"
+                @changed="projectId && workspace.loadProject(projectId)"
+              />
+            </NTabPane>
             <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
               <div class="h-full w-full overflow-y-auto pb-3 pt-2">
                 <JobPanel
@@ -653,6 +723,24 @@ onMounted(() => {
     </template>
 
     <!-- 创建任务抽屉 -->
+    <NAlert v-if="sourceRecoveryError" type="warning">{{ sourceRecoveryError }}</NAlert>
+    <SourceUpdateDrawer
+      v-if="projectId && sourceRecoveryTask && sourceRecoveryResource"
+      v-model:show="sourceRecoveryVisible"
+      :project-id="projectId"
+      :resource="sourceRecoveryResource"
+      :task="sourceRecoveryTask"
+      :before-saved-content="beforeSavedContent"
+    />
+    <ResourceStorageDrawer
+      v-if="projectId && workspace.activeResource"
+      v-model:show="resourceStorageVisible"
+      :project-id="projectId"
+      :resource="workspace.activeResource"
+      :project="workspace.project"
+      :before-saved-content="beforeSavedContent"
+      @changed="reloadWorkspace"
+    />
     <JobCreateDrawer
       v-model:show="jobMgmt.jobDrawerVisible.value"
       :form-ref="jobMgmt.jobFormRef.value"
@@ -715,30 +803,6 @@ onMounted(() => {
     />
 
     <!-- 冲突对话框 -->
-    <ConflictDialog
-      v-model:show="conflictMgmt.conflictDialogVisible.value"
-      :resource-name="conflictMgmt.conflictResource.value?.name ?? ''"
-      :loading="conflictMgmt.replacingResourceId.value !== null"
-      @replace="
-        conflictMgmt.handleConflictReplace(projectId!, reloadSegments, (id) =>
-          workspace.loadResourceTree(id),
-        )
-      "
-      @incremental="
-        conflictMgmt.handleConflictIncremental(projectId!, reloadSegments, (id) =>
-          workspace.loadResourceTree(id),
-        )
-      "
-    />
-
-    <!-- 增量结果弹窗 -->
-    <IncrementalResultModal
-      v-model:show="conflictMgmt.incrementalResultVisible.value"
-      :result="conflictMgmt.incrementalResult.value"
-      @confirm="conflictMgmt.confirmIncrementalResult()"
-    />
-
-    <!-- 术语表新增/编辑抽屉 -->
     <GlossaryDrawer
       v-model:show="glossaryMgmt.glossaryDrawerVisible.value"
       :is-edit-mode="glossaryMgmt.isGlossaryEditMode.value"

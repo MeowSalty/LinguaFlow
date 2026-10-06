@@ -8,6 +8,26 @@ import {
 
 afterEach(() => vi.unstubAllGlobals())
 describe('scoped preferences', () => {
+  it('ignores a legacy expanded tracker without discarding unrelated preferences', () => {
+    const previous = {
+      ...defaultPreferences(),
+      trackerExpanded: true,
+      defaultTaskState: 'terminal',
+      retainTerminal: false,
+      hiddenTerminalKeys: ['translation:42'],
+      selectedOrgId: 7,
+    }
+    const migrated = sanitizePreferences(previous)
+    expect(migrated).not.toHaveProperty('trackerExpanded')
+    expect(migrated).toMatchObject({
+      defaultTaskState: 'terminal',
+      retainTerminal: false,
+      hiddenTerminalKeys: ['translation:42'],
+      selectedOrgId: 7,
+    })
+    writeScopedPreferences('legacy-tracker', migrated)
+    expect(readScopedPreferences('legacy-tracker')).toEqual(migrated)
+  })
   it('recovers from malformed, legacy, and unsupported records', () => {
     vi.stubGlobal('localStorage', { getItem: () => '{invalid' })
     expect(readScopedPreferences('broken')).toEqual(defaultPreferences())
@@ -41,6 +61,7 @@ describe('scoped preferences', () => {
       hiddenTerminalKeys: [
         ...Array.from({ length: 520 }, (_, i) => `translation:${i + 1}`),
         'glossary_sync:1',
+        'storage:1',
         'translation:0',
         'whatever:9',
       ],
@@ -58,6 +79,7 @@ describe('scoped preferences', () => {
     expect(result.recentProjects[0]?.project_id).toBe(30)
     expect(result.hiddenTerminalKeys).toHaveLength(500)
     expect(result.hiddenTerminalKeys).toContain('glossary_sync:1')
+    expect(result.hiddenTerminalKeys).toContain('storage:1')
     expect(result.selectedOrgId).toBeNull()
   })
 })

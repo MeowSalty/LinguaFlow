@@ -11,7 +11,6 @@ import {
 export const usePreferencesStore = defineStore('preferences', () => {
   const defaultTaskState = ref<DefaultTaskState>('active')
   const retainTerminal = ref(true)
-  const trackerExpanded = ref(false)
   const quickTranslatePlanId = ref<number | null>(null)
   const hiddenTerminalKeys = ref<string[]>([])
   const recentProjects = ref<RecentProjectVisit[]>([])
@@ -25,7 +24,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
       const data = readScopedPreferences(getSessionScope())
       defaultTaskState.value = data.defaultTaskState
       retainTerminal.value = data.retainTerminal
-      trackerExpanded.value = data.trackerExpanded
       quickTranslatePlanId.value = data.quickTranslatePlanId
       hiddenTerminalKeys.value = data.hiddenTerminalKeys
       recentProjects.value = data.recentProjects
@@ -39,7 +37,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
     [
       defaultTaskState,
       retainTerminal,
-      trackerExpanded,
       quickTranslatePlanId,
       hiddenTerminalKeys,
       recentProjects,
@@ -51,7 +48,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
         version: 1,
         defaultTaskState: defaultTaskState.value,
         retainTerminal: retainTerminal.value,
-        trackerExpanded: trackerExpanded.value,
         quickTranslatePlanId: quickTranslatePlanId.value,
         hiddenTerminalKeys: hiddenTerminalKeys.value,
         recentProjects: recentProjects.value,
@@ -62,7 +58,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   )
 
   const hideTerminal = (key: string): void => {
-    if (!/^(translation|glossary_sync):[1-9][0-9]*$/.test(key)) return
+    if (!/^(translation|glossary_sync|storage):[1-9][0-9]*$/.test(key)) return
     hiddenTerminalKeys.value = [
       ...hiddenTerminalKeys.value.filter((item) => item !== key),
       key,
@@ -88,7 +84,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
   return {
     defaultTaskState,
     retainTerminal,
-    trackerExpanded,
     quickTranslatePlanId,
     hiddenTerminalKeys,
     recentProjects,

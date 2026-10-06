@@ -7,7 +7,6 @@ export interface ScopedPreferences {
   version: 1
   defaultTaskState: DefaultTaskState
   retainTerminal: boolean
-  trackerExpanded: boolean
   quickTranslatePlanId: number | null
   hiddenTerminalKeys: string[]
   recentProjects: RecentProjectVisit[]
@@ -18,7 +17,6 @@ export const defaultPreferences = (): ScopedPreferences => ({
   version: 1,
   defaultTaskState: 'active',
   retainTerminal: true,
-  trackerExpanded: false,
   quickTranslatePlanId: null,
   hiddenTerminalKeys: [],
   recentProjects: [],
@@ -41,7 +39,6 @@ export const sanitizePreferences = (value: unknown): ScopedPreferences => {
   )
     result.defaultTaskState = data.defaultTaskState
   if (typeof data.retainTerminal === 'boolean') result.retainTerminal = data.retainTerminal
-  if (typeof data.trackerExpanded === 'boolean') result.trackerExpanded = data.trackerExpanded
   if (
     typeof data.quickTranslatePlanId === 'number' &&
     Number.isSafeInteger(data.quickTranslatePlanId) &&
@@ -52,7 +49,9 @@ export const sanitizePreferences = (value: unknown): ScopedPreferences => {
     result.hiddenTerminalKeys = [
       ...new Set(
         data.hiddenTerminalKeys.filter(
-          (key) => typeof key === 'string' && /^(translation|glossary_sync):[1-9][0-9]*$/.test(key),
+          (key) =>
+            typeof key === 'string' &&
+            /^(translation|glossary_sync|storage):[1-9][0-9]*$/.test(key),
         ),
       ),
     ].slice(-500)

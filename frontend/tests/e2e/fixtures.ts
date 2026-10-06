@@ -67,10 +67,17 @@ export const runtimeSample = (id = 'instance-alpha'): ApiSchemas['RuntimeSummary
   ],
 })
 
-export const emptyCounts = { pending: 0, running: 0, paused: 0, recent_failed: 0 }
+export const emptyCounts = {
+  pending: 0,
+  running: 0,
+  paused: 0,
+  waiting_retry: 0,
+  needs_action: 0,
+  recent_failed: 0,
+}
 export const summaryFixture: ApiSchemas['OperationsSummaryResponse'] = {
   total: emptyCounts,
-  by_type: { translation: emptyCounts, glossary_sync: emptyCounts },
+  by_type: { translation: emptyCounts, glossary_sync: emptyCounts, storage: emptyCounts },
   recent_failed_since: '2026-09-29T00:01:00.123456789Z',
   as_of: '2026-09-30T00:01:00.123456789Z',
 }

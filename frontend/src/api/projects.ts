@@ -2,20 +2,34 @@ import { t } from '@/i18n'
 import { countUnicodeCodePoints, SEGMENT_SEARCH_MAX_LENGTH } from '@/utils/unicode'
 
 import type { ApiClient, ApiPaths, ApiSchemas } from './client-core'
-import { apiClient } from './client-core'
+import { apiClient, isLocalMode, recoverUnauthorizedResponse } from './client-core'
 import {
   buildFilesFormData,
   buildRequestFailureError,
   type DownloadFileResult,
-  getContentDispositionFilename,
+  ApiError,
 } from './utils'
-import { getAccessToken, readStoredApiBaseUrl } from './token-storage'
+import { getAccessToken } from './token-storage'
+import { captureSession, assertSessionCurrent, isSessionCurrent } from './session-context'
+import {
+  storageRequestError,
+  storageTransportFailure,
+  safeStorageProblem,
+  storageTaskErrorMessage,
+} from './storage-errors'
+import { storageDownloadResult } from './storage'
+import { requireStorageId, requireIdempotencyKey } from '@/utils/storage-contract'
 
 export interface UploadProgressCallbacks {
   /** 上传进度回调，percent 范围 0-100 */
   onProgress?: (percent: number) => void
   /** 文件发送完毕，服务端处理中 */
   onServerProcessing?: () => void
+}
+
+export interface UploadRequestOptions extends UploadProgressCallbacks {
+  idempotencyKey?: string
+  signal?: AbortSignal
 }
 
 export interface ResourceConflictError extends Error {
@@ -140,6 +154,7 @@ export const createProject = async (
   })
 
   if (!data) {
+    if (safeStorageProblem(error).error_code) throw storageRequestError(response, error)
     throw buildRequestFailureError(t('api.errors.createProjectFailed'), error, response)
   }
 
@@ -172,6 +187,7 @@ export const deleteProject = async (
   })
 
   if (error || response.status !== 204) {
+    if (safeStorageProblem(error).error_code) throw storageRequestError(response, error)
     throw buildRequestFailureError(t('api.errors.deleteProjectFailed'), error, response)
   }
 }
@@ -212,186 +228,187 @@ export const precheckProjectResources = async (
   paths: string[],
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['ResourcePrecheckBatchResponse']> => {
+  requireStorageId(projectId)
+  const session = captureSession()
   const formData = new FormData()
   for (const path of paths) {
     formData.append('paths', path)
   }
 
-  const { data, error, response } = await client.POST('/projects/{projectId}/resources/precheck', {
-    params: { path: { projectId } },
-    body: formData as unknown as {
-      paths: string[]
-    },
-  })
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.precheckResourcesFailed'), error, response)
+  const { data, response } = await client
+    .POST('/projects/{projectId}/resources/precheck', {
+      params: { path: { projectId } },
+      body: { paths },
+      bodySerializer: () => formData,
+    })
+    .catch((error: unknown) => {
+      assertSessionCurrent(session)
+      throw storageTransportFailure(error)
+    })
+  assertSessionCurrent(session)
+  if (!response.ok || !data) {
+    throw storageRequestError(response)
   }
 
   return data
 }
 
+// Keep the ordered batch, logical paths and key together in the calling session.
 export const uploadProjectResources = async (
   projectId: number,
   files: File[],
   paths?: string[],
   client: ApiClient = apiClient,
+  options: UploadRequestOptions = {},
 ): Promise<ApiSchemas['ResourceUploadBatchResponse']> => {
+  requireStorageId(projectId)
+  const key = requireIdempotencyKey(options.idempotencyKey ?? crypto.randomUUID())
+  const session = captureSession()
   const formData = buildFilesFormData(files, 'files')
   appendUploadPaths(formData, paths)
+  const { data, response, error } = await client
+    .POST('/projects/{projectId}/resources', {
+      params: { path: { projectId }, header: { 'Idempotency-Key': key } },
+      signal: AbortSignal.any([session.signal, ...(options.signal ? [options.signal] : [])]),
+      body: { files: files.map((file) => file.name), paths },
+      bodySerializer: () => formData,
+    })
+    .catch((error: unknown) => {
+      assertSessionCurrent(session)
+      throw storageTransportFailure(error)
+    })
+  assertSessionCurrent(session)
+  if (!response.ok || !data) throw storageRequestError(response, error)
+  return sanitizeUploadBatch(data, files.length)
+}
 
-  const { data, error, response } = await client.POST('/projects/{projectId}/resources', {
-    params: { path: { projectId } },
-    body: formData as unknown as NonNullable<
-      ApiPaths['/projects/{projectId}/resources']['post']['requestBody']
-    >['content']['multipart/form-data'],
+export const sanitizeUploadBatch = (
+  input: unknown,
+  count: number,
+): ApiSchemas['ResourceUploadBatchResponse'] => {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('items' in input) ||
+    !Array.isArray(input.items) ||
+    input.items.length !== count
+  )
+    throw storageRequestError()
+  const items = input.items.map((value: unknown) => {
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !('action' in value) ||
+      !('path' in value) ||
+      typeof value.path !== 'string' ||
+      !['created', 'conflict', 'failed'].includes(String(value.action))
+    )
+      throw storageRequestError()
+    const item = value as ApiSchemas['ResourceUploadFileResult']
+    const safe = safeStorageProblem(value)
+    return {
+      path: item.path,
+      action: item.action,
+      resource: item.resource,
+      existing_resource: item.existing_resource,
+      error_code: safe.error_code,
+      error:
+        item.error || item.action === 'failed'
+          ? storageTaskErrorMessage(safe.error_code)
+          : undefined,
+    }
   })
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.uploadResourcesFailed'), error, response)
+  return {
+    items,
+    ...('operation_id' in input ? { operation_id: safeStorageProblem(input).operation_id } : {}),
   }
-
-  return data
 }
 
 export const uploadProjectResourcesWithProgress = async (
   projectId: number,
   files: File[],
   paths?: string[],
-  callbacks?: UploadProgressCallbacks,
+  callbacks: UploadRequestOptions = {},
 ): Promise<ApiSchemas['ResourceUploadBatchResponse']> => {
-  const baseUrl = readStoredApiBaseUrl() ?? '/api/v1'
-  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-  const url = `${normalizedBaseUrl}/projects/${projectId}/resources`
+  requireStorageId(projectId)
+  const session = captureSession()
+  const key = requireIdempotencyKey(callbacks.idempotencyKey ?? crypto.randomUUID())
+  const signal = AbortSignal.any([session.signal, ...(callbacks.signal ? [callbacks.signal] : [])])
+  const url = session.baseUrl + '/projects/' + projectId + '/resources'
+  // Freeze the input before any authentication wait.
+  const batchFiles = [...files]
+  const batchPaths = paths ? [...paths] : undefined
 
-  const formData = buildFilesFormData(files, 'files')
-  appendUploadPaths(formData, paths)
-  const accessToken = getAccessToken()
-
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    let serverProcessingNotified = false
-
-    xhr.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable && callbacks?.onProgress) {
-        const percent = Math.round((event.loaded / event.total) * 100)
-        callbacks.onProgress(percent)
-        if (percent >= 100 && !serverProcessingNotified) {
-          serverProcessingNotified = true
-          callbacks?.onServerProcessing?.()
+  const send = (token: string | null): Promise<{ status: number; text: string }> =>
+    new Promise((resolve, reject) => {
+      signal.throwIfAborted()
+      assertSessionCurrent(session)
+      const formData = buildFilesFormData(batchFiles, 'files')
+      appendUploadPaths(formData, batchPaths)
+      const xhr = new XMLHttpRequest()
+      let settled = false
+      let processing = false
+      const finish = (result?: { status: number; text: string }, failure?: unknown) => {
+        if (settled) return
+        settled = true
+        signal.removeEventListener('abort', abort)
+        try {
+          assertSessionCurrent(session)
+          signal.throwIfAborted()
+          if (failure) reject(failure)
+          else if (result) resolve(result)
+        } catch (error) {
+          reject(error)
         }
       }
-    })
-
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText) as ApiSchemas['ResourceUploadBatchResponse']
-          resolve(data)
-        } catch {
-          reject(new Error(t('api.errors.uploadResourcesFailed')))
-        }
-      } else if (xhr.status === 409) {
-        try {
-          const conflictData = JSON.parse(xhr.responseText) as ApiSchemas['Problem']
-          const conflictError = new Error(
-            t('api.errors.uploadResourceConflict'),
-          ) as ResourceConflictError
-          Object.defineProperty(conflictError, 'isResourceConflict', {
-            value: true as const,
-            enumerable: false,
-          })
-          Object.defineProperty(conflictError, 'status', {
-            value: 409 as const,
-            enumerable: false,
-          })
-          Object.defineProperty(conflictError, 'conflictData', {
-            value: conflictData,
-            enumerable: false,
-          })
-          reject(conflictError)
-        } catch {
-          reject(
-            buildRequestFailureError(
-              t('api.errors.uploadResourcesFailed'),
-              undefined,
-              new Response(null, { status: xhr.status }),
-            ),
-          )
-        }
-      } else {
-        reject(
-          buildRequestFailureError(
-            t('api.errors.uploadResourcesFailed'),
-            undefined,
-            new Response(null, { status: xhr.status }),
-          ),
-        )
+      const abort = () => {
+        xhr.abort()
+        finish(undefined, signal.reason ?? new DOMException('Aborted', 'AbortError'))
       }
+      signal.addEventListener('abort', abort, { once: true })
+      xhr.upload.addEventListener('progress', (event) => {
+        if (settled || signal.aborted || !isSessionCurrent(session)) return
+        if (event.lengthComputable) {
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100))
+          callbacks.onProgress?.(percent)
+          if (percent === 100 && !processing) {
+            processing = true
+            callbacks.onServerProcessing?.()
+          }
+        }
+      })
+      xhr.addEventListener('load', () => finish({ status: xhr.status, text: xhr.responseText }))
+      xhr.addEventListener('error', () => finish(undefined, storageRequestError()))
+      xhr.addEventListener('abort', () =>
+        finish(undefined, new DOMException('Aborted', 'AbortError')),
+      )
+      xhr.open('POST', url)
+      if (token && !isLocalMode()) xhr.setRequestHeader('Authorization', 'Bearer ' + token)
+      xhr.setRequestHeader('Idempotency-Key', key)
+      xhr.send(formData)
     })
 
-    xhr.addEventListener('error', () => {
-      reject(buildRequestFailureError(t('api.errors.uploadResourcesFailed')))
-    })
-
-    xhr.addEventListener('abort', () => {
-      reject(buildRequestFailureError(t('api.errors.uploadResourcesFailed')))
-    })
-
-    xhr.open('POST', url)
-
-    if (accessToken) {
-      xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`)
-    }
-
-    xhr.send(formData)
+  const first = await send(getAccessToken())
+  const result = await recoverUnauthorizedResponse(first, session, send).catch((error: unknown) => {
+    assertSessionCurrent(session)
+    signal.throwIfAborted()
+    if (error instanceof Error && error.name === 'AbortError') throw error
+    throw storageRequestError(
+      error instanceof ApiError && error.status !== undefined
+        ? { status: error.status }
+        : undefined,
+    )
   })
-}
-
-export const replaceProjectResource = async (
-  projectId: number,
-  resourceId: number,
-  file: File,
-  client: ApiClient = apiClient,
-): Promise<ApiSchemas['Resource']> => {
-  const { data, error, response } = await client.PUT(
-    '/projects/{projectId}/resources/{resourceId}',
-    {
-      params: { path: { projectId, resourceId } },
-      body: buildFilesFormData([file], 'file') as unknown as NonNullable<
-        ApiPaths['/projects/{projectId}/resources/{resourceId}']['put']['requestBody']
-      >['content']['multipart/form-data'],
-    },
-  )
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.replaceResourceFailed'), error, response)
+  assertSessionCurrent(session)
+  signal.throwIfAborted()
+  if (result.status < 200 || result.status >= 300) throw storageRequestError(result, result.text)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(result.text)
+  } catch {
+    throw storageRequestError()
   }
-
-  return data
-}
-
-export const incrementalUpdateResource = async (
-  projectId: number,
-  resourceId: number,
-  file: File,
-  client: ApiClient = apiClient,
-): Promise<ApiSchemas['IncrementalUpdateResponse']> => {
-  const { data, error, response } = await client.POST(
-    '/projects/{projectId}/resources/{resourceId}',
-    {
-      params: { path: { projectId, resourceId } },
-      body: buildFilesFormData([file], 'file') as unknown as NonNullable<
-        ApiPaths['/projects/{projectId}/resources/{resourceId}']['post']['requestBody']
-      >['content']['multipart/form-data'],
-    },
-  )
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.incrementalUpdateFailed'), error, response)
-  }
-
-  return data
+  return sanitizeUploadBatch(parsed, batchFiles.length)
 }
 
 export const deleteProjectResource = async (
@@ -404,7 +421,7 @@ export const deleteProjectResource = async (
   })
 
   if (error || response.status !== 204) {
-    throw buildRequestFailureError(t('api.errors.deleteResourceFailed'), error, response)
+    throw storageRequestError(response, error)
   }
 }
 
@@ -413,43 +430,22 @@ export const downloadProjectResource = async (
   resourceId: number,
   client: ApiClient = apiClient,
 ): Promise<DownloadFileResult> => {
-  const { data, error, response } = await client.GET(
-    '/projects/{projectId}/resources/{resourceId}/download',
-    {
+  requireStorageId(projectId)
+  requireStorageId(resourceId)
+  const session = captureSession()
+  try {
+    const result = await client.GET('/projects/{projectId}/resources/{resourceId}/download', {
       params: { path: { projectId, resourceId } },
       parseAs: 'blob',
-    },
-  )
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.downloadResourceFailed'), error, response)
+    })
+    assertSessionCurrent(session)
+    const download = await storageDownloadResult(result)
+    assertSessionCurrent(session)
+    return download
+  } catch (error) {
+    assertSessionCurrent(session)
+    throw error instanceof ApiError && !error.problem ? error : storageTransportFailure(error)
   }
-
-  return {
-    blob: data as Blob,
-    filename: getContentDispositionFilename(response),
-  }
-}
-
-const buildDownloadTranslatedError = (
-  fallbackMessage: string,
-  error: unknown,
-  response?: Response,
-): DownloadTranslatedError => {
-  const failure = buildRequestFailureError(fallbackMessage, error, response)
-  const translatedError = failure as DownloadTranslatedError
-  const problem =
-    error && typeof error === 'object' && 'title' in error
-      ? (error as ApiSchemas['Problem'])
-      : undefined
-
-  Object.defineProperties(translatedError, {
-    isDownloadTranslatedError: { value: true, enumerable: false },
-    status: { value: response?.status ?? problem?.status ?? 0, enumerable: false },
-    problem: { value: problem, enumerable: false },
-  })
-
-  return translatedError
 }
 
 export const downloadResourceResult = async (
@@ -457,25 +453,27 @@ export const downloadResourceResult = async (
   resourceId: number,
   client: ApiClient = apiClient,
 ): Promise<DownloadFileResult> => {
-  const { data, error, response } = await client.GET(
-    '/projects/{projectId}/resources/{resourceId}/download-translated',
-    {
-      params: { path: { projectId, resourceId } },
-      parseAs: 'blob',
-    },
-  )
-
-  if (!data) {
-    throw buildDownloadTranslatedError(
-      t('api.errors.downloadResourceResultFailed'),
-      error,
-      response,
+  requireStorageId(projectId)
+  requireStorageId(resourceId)
+  const session = captureSession()
+  try {
+    const result = await client.GET(
+      '/projects/{projectId}/resources/{resourceId}/download-translated',
+      {
+        params: { path: { projectId, resourceId } },
+        parseAs: 'blob',
+      },
     )
-  }
-
-  return {
-    blob: data as Blob,
-    filename: getContentDispositionFilename(response),
+    assertSessionCurrent(session)
+    const download = await storageDownloadResult(result)
+    assertSessionCurrent(session)
+    return download
+  } catch (error) {
+    assertSessionCurrent(session)
+    const failure =
+      error instanceof ApiError && !error.problem ? error : storageTransportFailure(error)
+    Object.defineProperty(failure, 'isDownloadTranslatedError', { value: true, enumerable: false })
+    throw failure
   }
 }
 
@@ -889,6 +887,7 @@ export const createOrgProject = async (
   })
 
   if (!data) {
+    if (safeStorageProblem(error).error_code) throw storageRequestError(response, error)
     throw buildRequestFailureError(t('api.errors.createProjectFailed'), error, response)
   }
 

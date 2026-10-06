@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { once } from 'node:events'
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -12,7 +13,6 @@ const frontend = fileURLToPath(new URL('../../../', import.meta.url))
 const backend = path.resolve(
   process.env.LINGUAFLOW_TEST_BACKEND ?? path.join(frontend, '../../LinguaFlow-backend'),
 )
-const resultsRoot = path.join(frontend, 'tests/artifacts/configuration-integration')
 
 // Build once per suite; every test owns a separate server, database and upstream.
 export function buildConfigurationBackend() {
@@ -36,7 +36,20 @@ export function buildConfigurationBackend() {
       timeout: 120_000,
     })
   }
-  return { backendCommit, backend }
+  const digest = (file) => createHash('sha256').update(readFileSync(file)).digest('hex')
+  return {
+    backendCommit,
+    backend,
+    backendBinarySha256: digest(
+      path.join(
+        backend,
+        'backend/bin',
+        process.platform === 'win32' ? 'linguaflow.exe' : 'linguaflow',
+      ),
+    ),
+    backendContractSha256: digest(path.join(backend, 'api/openapi/openapi-3.0.yaml')),
+    frontendContractSha256: digest(path.join(frontend, '../api/openapi/openapi-3.0.yaml')),
+  }
 }
 
 async function restrictKeyring(file) {
@@ -64,9 +77,11 @@ async function restrictKeyring(file) {
   )
 }
 
-export async function createConfigurationBackend(metadata, signal) {
+export async function createConfigurationBackend(metadata, signal, options = {}) {
+  const category = options.storage ? 'storage-integration' : 'configuration-integration'
+  const resultsRoot = path.join(frontend, 'tests/artifacts', category)
   await mkdir(resultsRoot, { recursive: true })
-  const runDir = await mkdtemp(path.join(resultsRoot, 'configuration-integration-'))
+  const runDir = await mkdtemp(path.join(resultsRoot, `${category}-`))
   const report = {
     ...metadata,
     mode: 'serve',
@@ -88,6 +103,7 @@ export async function createConfigurationBackend(metadata, signal) {
   let serverOutput = ''
   let apiBase
   let adminToken
+  let authSession
   let endpoint
   let config
   let env
@@ -210,6 +226,8 @@ export async function createConfigurationBackend(metadata, signal) {
   })
   async function request(method, route, body, expected = 200, token = adminToken) {
     const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    if (method === 'POST' && /^\/projects\/\d+\/resources$/.test(route))
+      headers['Idempotency-Key'] = randomUUID()
     if (body !== undefined && !(body instanceof FormData))
       headers['Content-Type'] = 'application/json'
     const init = {
@@ -382,6 +400,19 @@ export async function createConfigurationBackend(metadata, signal) {
             jwt_secret: randomBytes(32).toString('hex'),
             credentials: { keyring_file: keyring },
             workers: { translation: { count: 2 }, sync: { count: 1 } },
+            ...(options.storage
+              ? {
+                  storage: {
+                    enabled: true,
+                    default_site_space: 'local',
+                    backends: [
+                      { id: 'local', driver: 'local', root: path.join(runDir, 'objects') },
+                    ],
+                    work_dir: path.join(runDir, 'storage-work'),
+                    cache_dir: path.join(runDir, 'storage-cache'),
+                  },
+                }
+              : {}),
           },
           log: { level: 'warn' },
           bootstrap: {
@@ -397,9 +428,14 @@ export async function createConfigurationBackend(metadata, signal) {
       Object.entries(process.env).filter(([key]) => !key.startsWith('LINGUAFLOW_')),
     )
     await launchBackend(config, env)
-    adminToken = (
-      await request('POST', '/auth/login', { username: 'integration-admin', password }, 200, null)
-    ).access_token
+    authSession = await request(
+      'POST',
+      '/auth/login',
+      { username: 'integration-admin', password },
+      200,
+      null,
+    )
+    adminToken = authSession.access_token
   }
   async function restart() {
     await stopBackend()
@@ -458,6 +494,7 @@ export async function createConfigurationBackend(metadata, signal) {
   }
   return {
     start,
+    runDir,
     restart,
     close,
     writeReport,
@@ -480,6 +517,16 @@ export async function createConfigurationBackend(metadata, signal) {
     upstreamErrors,
     get endpoint() {
       return endpoint
+    },
+    get apiBase() {
+      return apiBase
+    },
+    get authSession() {
+      return authSession
+    },
+    recordObservation(name, facts) {
+      report.observations ??= []
+      report.observations.push({ name, facts })
     },
   }
 }

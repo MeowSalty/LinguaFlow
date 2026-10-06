@@ -44,6 +44,10 @@ describe('operations URLs and identifiers', () => {
     { trigger_type: 'manual' },
     { task_type: 'glossary_sync', trigger_type: 'manual' },
     { task_type: 'glossary_sync', task_id: '1' },
+    { task_type: 'storage', task_id: '1' },
+    { task_type: 'storage', task_id: '9007199254740992', project_id: '7' },
+    { task_type: 'storage', task_id: '1', project_id: '7', job_id: '1' },
+    { task_type: 'storage', trigger_type: 'file_update' },
     { task_id: '1' },
     { task_type: 'translation', task_id: '1', job_id: '2' },
     { task_type: 'translation', state: ['active', 'terminal'] },
@@ -62,6 +66,23 @@ describe('operations URLs and identifiers', () => {
       parseOperationQuery({ updated_from: updated_before, updated_before: updated_from }),
     ).toThrow()
     expect(() => parseOperationQuery({ updated_from, updated_before: updated_from })).toThrow()
+  })
+  it('accepts complete storage links and preserves independent active statuses', () => {
+    for (const status of ['waiting_retry', 'needs_action']) {
+      const result = parseOperationQuery({
+        task_type: 'storage',
+        project_id: '7',
+        task_id: '42',
+        status,
+      })
+      expect(result.locator).toEqual({ task_type: 'storage', project_id: 7, task_id: '42' })
+      expect(result.filters.status).toBe(status)
+      expect(result.filters.state).toBeUndefined()
+    }
+    expect(operationLocation({ task_type: 'storage', project_id: 7, task_id: '42' })).toEqual({
+      path: '/operations',
+      query: { task_type: 'storage', project_id: 7, task_id: '42' },
+    })
   })
   it('sends only allowed dimensions to summaries', () => {
     expect(

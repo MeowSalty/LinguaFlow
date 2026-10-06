@@ -78,7 +78,7 @@ const openProjectWorkspace = (project: Project): void => {
 }
 
 const openDeleteConfirm = (project: Project): void => {
-  if (!projects.canEdit(project)) return
+  if (!projects.canDelete(project)) return
   deletingProject.value = project
   deleteConfirmVisible.value = true
 }

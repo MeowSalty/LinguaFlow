@@ -3,11 +3,17 @@ import {
   createApiClient,
   logoutCurrentSession,
   refreshTokenOnce,
+  recoverUnauthorizedResponse,
   setLocalMode,
   setUnauthorizedHandler,
   type ApiSchemas,
 } from '../client'
-import { changeSessionContext, invalidateSessionViews, StaleSessionError } from '../session-context'
+import {
+  captureSession,
+  changeSessionContext,
+  invalidateSessionViews,
+  StaleSessionError,
+} from '../session-context'
 import {
   clearAuthTokens,
   getAccessToken,
@@ -168,4 +174,85 @@ describe('authentication request coordination', () => {
     expect(getAccessToken()).toBe('access-new')
     expect(getRefreshToken()).toBe('refresh-new')
   })
+
+  it.each(
+    ['storage_deployment_disabled', 'byos_disabled'].flatMap((code) =>
+      [false, true].map((local) => ({ code, local })),
+    ),
+  )(
+    'preserves a $code 401 in local=$local without consuming the body or touching credentials',
+    async ({ code, local }) => {
+      setLocalMode(local)
+      const unauthorized = vi.fn()
+      setUnauthorizedHandler(unauthorized)
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+      const original = response({ error_code: code, task_id: 17 }, 401)
+      const replay = vi.fn()
+      const result = await recoverUnauthorizedResponse(original, captureSession(), replay)
+      expect(result).toBe(original)
+      expect(await result.json()).toEqual({ error_code: code, task_id: 17 })
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(replay).not.toHaveBeenCalled()
+      expect(unauthorized).not.toHaveBeenCalled()
+      expect(getAccessToken()).toBe('access-old')
+      expect(getRefreshToken()).toBe('refresh-old')
+    },
+  )
+
+  it.each(
+    ['storage_deployment_disabled', 'byos_disabled'].flatMap((code) =>
+      ['fetch', 'xhr'].map((transport) => ({ code, transport })),
+    ),
+  )(
+    'keeps $code after a genuine authentication replay on $transport without logging out',
+    async ({ code, transport }) => {
+      const unauthorized = vi.fn()
+      setUnauthorizedHandler(unauthorized)
+      const fetchMock = vi.fn().mockResolvedValue(response(nextSession))
+      vi.stubGlobal('fetch', fetchMock)
+      const original =
+        transport === 'fetch'
+          ? response({ error_code: 'unauthenticated' }, 401)
+          : { status: 401, text: JSON.stringify({ error_code: 'unauthenticated' }) }
+      const refused =
+        transport === 'fetch'
+          ? response({ error_code: code }, 401)
+          : { status: 401, text: JSON.stringify({ error_code: code }) }
+      const replay = vi.fn().mockResolvedValue(refused)
+      await expect(recoverUnauthorizedResponse(original, captureSession(), replay)).resolves.toBe(
+        refused,
+      )
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(replay).toHaveBeenCalledExactlyOnceWith('access-new')
+      expect(unauthorized).not.toHaveBeenCalled()
+      expect(getAccessToken()).toBe('access-new')
+    },
+  )
+
+  it.each([
+    'not-json',
+    'null',
+    '[]',
+    '{}',
+    '{"detail":"byos_disabled"}',
+    '{"error_code":"byos_disabled "}',
+    '{"error_code":"unauthenticated"}',
+  ])(
+    'retains genuine 401 rotation and final rejection for a non-deployment body %s',
+    async (text) => {
+      const unauthorized = vi.fn()
+      setUnauthorizedHandler(unauthorized)
+      const fetchMock = vi.fn().mockResolvedValue(response(nextSession))
+      vi.stubGlobal('fetch', fetchMock)
+      const original = { status: 401, text }
+      const replay = vi.fn().mockResolvedValue({ status: 401, text: '{}' })
+      await expect(
+        recoverUnauthorizedResponse(original, captureSession(), replay),
+      ).resolves.toEqual({ status: 401, text: '{}' })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(replay).toHaveBeenCalledExactlyOnceWith('access-new')
+      expect(unauthorized).toHaveBeenCalledTimes(1)
+    },
+  )
 })

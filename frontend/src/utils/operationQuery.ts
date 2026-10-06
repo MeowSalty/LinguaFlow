@@ -53,11 +53,13 @@ export const parseOperationQuery = (
     if (value !== undefined && !choices.includes(value as T)) throw new Error('invalid-query')
     return value as T | undefined
   }
-  const task_type = choice('task_type', ['translation', 'glossary_sync'] as const)
+  const task_type = choice('task_type', ['translation', 'glossary_sync', 'storage'] as const)
   const status = choice('status', [
     'pending',
     'running',
     'paused',
+    'waiting_retry',
+    'needs_action',
     'completed',
     'failed',
     'cancelled',
@@ -85,8 +87,9 @@ export const parseOperationQuery = (
   if (job_id && task_type && task_type !== 'translation') throw new Error('invalid-link')
   const id = task_id ?? job_id
   const type = job_id ? 'translation' : task_type
-  if (id && (!/^[1-9][0-9]*$/.test(id) || !type || (type === 'glossary_sync' && !project_id)))
+  if (id && (!/^[1-9][0-9]*$/.test(id) || !type || (type !== 'translation' && !project_id)))
     throw new Error('incomplete-link')
+  if (id && type === 'storage') safeTaskNumber(id)
   return {
     filters: {
       task_type,

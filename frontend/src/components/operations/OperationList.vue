@@ -15,18 +15,20 @@ const tone = (status: string): 'info' | 'warning' | 'success' | 'error' | 'defau
       ? 'success'
       : status === 'failed'
         ? 'error'
-        : status === 'paused' || status === 'pending'
+        : ['paused', 'pending', 'waiting_retry', 'needs_action'].includes(status)
           ? 'warning'
           : 'default'
 const progress = (item: Operation): string =>
-  item.task_type === 'glossary_sync'
-    ? t('operations.syncProgress', {
-        processed: item.progress.processed_segments,
-        total: item.progress.total_segments,
-      })
-    : item.progress.progress_completed == null || item.progress.progress_total == null
-      ? '—'
-      : `${item.progress.progress_completed} / ${item.progress.progress_total}`
+  item.task_type === 'storage'
+    ? t(`operations.storageTask.cleanup.${item.cleanup_status}`)
+    : item.task_type === 'glossary_sync'
+      ? t('operations.syncProgress', {
+          processed: item.progress.processed_segments,
+          total: item.progress.total_segments,
+        })
+      : item.progress.progress_completed == null || item.progress.progress_total == null
+        ? '—'
+        : `${item.progress.progress_completed} / ${item.progress.progress_total}`
 </script>
 <template>
   <div class="lf-panel overflow-hidden">

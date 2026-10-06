@@ -5,8 +5,24 @@ import team from './team'
 import configurationSettings from './configuration-settings'
 import configurationCredentials from './credentials'
 import configurationProfiles from './configuration-profiles'
+import storageErrors from './storage-errors'
+import storage from './storage'
+import sourceStorage from './source-storage'
+import storageManagement from './storage-management'
+import storageProject from './storage-project'
+import storageUi from './storage-ui'
+import storageAdmin from './storage-admin'
+import storageCapacity from './storage-capacity'
 
 const messages = {
+  storageUi,
+  storageAdmin,
+  storageCapacity,
+  storageManagement,
+  storageProject,
+  storage,
+  sourceStorage,
+  storageErrors,
   configurationSettings,
   configurationCredentials,
   configurationProfiles,

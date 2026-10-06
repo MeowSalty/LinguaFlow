@@ -1,4 +1,4 @@
-import { computed, reactive, ref, type Ref } from 'vue'
+import { computed, onScopeDispose, reactive, ref, watch, type Ref } from 'vue'
 import type { SelectOption } from 'naive-ui'
 import { NInput, useDialog, useMessage } from 'naive-ui'
 import { h } from 'vue'
@@ -7,6 +7,9 @@ import { type ApiSchemas } from '@/api/client'
 import { formatQualityIssueTooltip, type QualityIssue } from '@/composables/useQualityIssues'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
+import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
+import { useWorkspaceDraftGuard, type DraftSaveResult } from './useWorkspaceDraftGuard'
+import { registerWorkspaceDraftReader } from '@/utils/workspace-draft-state'
 
 export { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 
@@ -33,6 +36,122 @@ export function useSegmentEditing(
   })
   const inlineCommentVisible = ref<number | null>(null)
   const inlineCommentText = ref('')
+  let editBaseline: SegmentFormModel = { target_text: '', comment: '' }
+  let commentBaseline = ''
+  let editRevision = 0
+  let commentRevision = 0
+  let contextRevision = 0
+  let selectionRevision = 0
+  let disposed = false
+  let pendingSave: Promise<DraftSaveResult> | null = null
+  const captureEditingContext = () => {
+    const session = captureSession()
+    const project = projectId.value
+    const resource = activeResourceId.value
+    const revision = contextRevision
+    return () =>
+      !disposed &&
+      revision === contextRevision &&
+      isSessionCurrent(session) &&
+      projectId.value === project &&
+      activeResourceId.value === resource
+  }
+  const hasPendingDrafts = (): boolean =>
+    (inlineEditingSegmentId.value !== null &&
+      (inlineEditForm.target_text !== editBaseline.target_text ||
+        inlineEditForm.comment !== editBaseline.comment)) ||
+    (inlineCommentVisible.value !== null && inlineCommentText.value !== commentBaseline)
+  const discardPendingDrafts = (): void => {
+    editRevision++
+    commentRevision++
+    inlineEditingSegmentId.value = null
+    inlineCommentVisible.value = null
+    inlineEditForm.target_text = ''
+    inlineEditForm.comment = ''
+    inlineCommentText.value = ''
+  }
+  onScopeDispose(
+    registerWorkspaceDraftReader({
+      projectId: () => projectId.value,
+      resourceId: () => activeResourceId.value,
+      pending: hasPendingDrafts,
+    }),
+  )
+  const persistDrafts = async (): Promise<DraftSaveResult> => {
+    if (disposed) return 'stale'
+    if (!hasPendingDrafts()) {
+      discardPendingDrafts()
+      return 'saved'
+    }
+    const project = projectId.value
+    const resource = activeResourceId.value
+    if (!project || !resource) return 'stale'
+    const current = captureEditingContext()
+    const editId = inlineEditingSegmentId.value
+    const commentId = inlineCommentVisible.value
+    const editVersion = editRevision
+    const commentVersion = commentRevision
+    const form = { ...inlineEditForm }
+    const note = inlineCommentText.value
+    try {
+      if (
+        editId !== null &&
+        (form.target_text !== editBaseline.target_text || form.comment !== editBaseline.comment)
+      ) {
+        await workspace.updateSegment(project, resource, editId, {
+          ...(form.target_text !== editBaseline.target_text
+            ? { target_text: form.target_text }
+            : {}),
+          ...(form.comment !== editBaseline.comment ? { comment: form.comment } : {}),
+        })
+        if (!current() || editVersion !== editRevision) return 'stale'
+        editBaseline = form
+      }
+      if (commentId !== null && note !== commentBaseline) {
+        await workspace.updateSegment(project, resource, commentId, { comment: note })
+        if (!current() || commentVersion !== commentRevision) return 'stale'
+        commentBaseline = note
+      }
+      if (!current()) return 'stale'
+      if (hasPendingDrafts()) {
+        message.warning(t('sourceStorage.drafts.changedDuringSave'))
+        return 'failed'
+      }
+      discardPendingDrafts()
+      message.success(t('workspace.messages.segmentSaved'))
+      return 'saved'
+    } catch {
+      if (!current()) return 'stale'
+      message.error(workspace.actionError || t('workspace.messages.segmentSaveFailed'))
+      return 'failed'
+    }
+  }
+  const savePendingDrafts = (): Promise<DraftSaveResult> => {
+    if (!pendingSave) {
+      const saving = persistDrafts().finally(() => {
+        if (pendingSave === saving) pendingSave = null
+      })
+      pendingSave = saving
+    }
+    return pendingSave
+  }
+  const { confirmPendingDrafts } = useWorkspaceDraftGuard(() => ({
+    hasPendingDrafts,
+    savePendingDrafts,
+    discardPendingDrafts,
+  }))
+  const invalidateEditingContext = (): void => {
+    contextRevision++
+    selectionRevision++
+    pendingSave = null
+    discardPendingDrafts()
+  }
+  onScopeDispose(onSessionChange(invalidateEditingContext))
+  onScopeDispose(() => {
+    disposed = true
+    invalidateEditingContext()
+  })
+  watch([projectId, activeResourceId], invalidateEditingContext, { flush: 'sync' })
 
   // ── 过滤选项 ──
   const segmentStatusOptions = computed<SelectOption[]>(() => [
@@ -45,81 +164,56 @@ export function useSegmentEditing(
   ])
 
   // ── 方法 ──
-  const startInlineEdit = (segment: Segment): void => {
+  const startInlineEdit = async (segment: Segment): Promise<void> => {
+    if (inlineEditingSegmentId.value === segment.id) return
+    const current = captureEditingContext()
+    const selection = ++selectionRevision
+    if (!(await confirmPendingDrafts()) || !current() || selection !== selectionRevision) return
+    discardPendingDrafts()
     inlineEditingSegmentId.value = segment.id
     inlineEditForm.target_text = segment.target_text ?? ''
     inlineEditForm.comment = segment.review_comment ?? ''
+    editBaseline = { ...inlineEditForm }
   }
 
   const cancelInlineEdit = (): void => {
+    editRevision++
     inlineEditingSegmentId.value = null
     inlineEditForm.target_text = ''
     inlineEditForm.comment = ''
   }
 
-  const saveInlineEdit = async (segment: Segment): Promise<void> => {
-    if (!projectId.value || !activeResourceId.value) {
-      return
-    }
-
-    try {
-      await workspace.updateSegment(projectId.value, activeResourceId.value, segment.id, {
-        target_text: inlineEditForm.target_text || undefined,
-        comment: inlineEditForm.comment || undefined,
-      })
-      message.success(t('workspace.messages.segmentSaved'))
-      cancelInlineEdit()
-    } catch (error) {
-      console.error(error)
-      message.error(workspace.actionError || t('workspace.messages.segmentSaveFailed'))
-    }
+  const saveInlineEdit = async (_segment: Segment): Promise<void> => {
+    await savePendingDrafts()
   }
 
   const saveAndEditNext = async (segment: Segment, segments: Segment[]): Promise<void> => {
-    if (!projectId.value || !activeResourceId.value) {
-      return
-    }
-
-    try {
-      await workspace.updateSegment(projectId.value, activeResourceId.value, segment.id, {
-        target_text: inlineEditForm.target_text || undefined,
-        comment: inlineEditForm.comment || undefined,
-      })
-      message.success(t('workspace.messages.segmentSaved'))
-
+    const current = captureEditingContext()
+    const selection = selectionRevision
+    if ((await savePendingDrafts()) === 'saved' && current() && selection === selectionRevision) {
       const idx = segments.findIndex((s) => s.id === segment.id)
       const nextSegment = idx >= 0 ? segments[idx + 1] : undefined
       if (nextSegment) {
-        startInlineEdit(nextSegment)
+        await startInlineEdit(nextSegment)
       } else {
         cancelInlineEdit()
       }
-    } catch (error) {
-      console.error(error)
-      message.error(workspace.actionError || t('workspace.messages.segmentSaveFailed'))
     }
   }
 
-  const openInlineComment = (segment: Segment): void => {
+  const openInlineComment = async (segment: Segment): Promise<void> => {
+    if (inlineCommentVisible.value === segment.id) return
+    const current = captureEditingContext()
+    const selection = ++selectionRevision
+    if (!(await confirmPendingDrafts()) || !current() || selection !== selectionRevision) return
+    discardPendingDrafts()
     inlineCommentVisible.value = segment.id
     inlineCommentText.value = segment.review_comment ?? ''
+    commentBaseline = inlineCommentText.value
   }
 
-  const saveInlineComment = async (segment: Segment): Promise<void> => {
-    if (!projectId.value || !activeResourceId.value) {
-      return
-    }
-
-    try {
-      await workspace.updateSegment(projectId.value, activeResourceId.value, segment.id, {
-        comment: inlineCommentText.value || undefined,
-      })
-      inlineCommentVisible.value = null
-      message.success(t('workspace.messages.segmentSaved'))
-    } catch (error) {
-      console.error(error)
-      message.error(workspace.actionError || t('workspace.messages.segmentSaveFailed'))
-    }
+  const saveInlineComment = async (_segment: Segment): Promise<void> => {
+    await savePendingDrafts()
   }
 
   // ── 质量问题裁决 ──
@@ -192,6 +286,10 @@ export function useSegmentEditing(
   }
 
   return {
+    hasPendingDrafts,
+    savePendingDrafts,
+    discardPendingDrafts,
+    confirmPendingDrafts,
     // 状态
     inlineEditingSegmentId,
     inlineEditForm,

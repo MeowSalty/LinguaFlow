@@ -30,6 +30,7 @@ import {
   type OrganizationRole,
 } from '@/utils/organization-scope'
 import { formatDateTime } from '@/utils/datetime'
+import StorageManager from '@/components/storage/StorageManager.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -307,6 +308,9 @@ onUnmounted(() => {
         }}</NButton></NCard
       >
       <NAlert v-if="!canWrite" type="info">{{ t('team.readOnly') }}</NAlert>
+      <NCard v-if="canWrite && orgId !== null" :title="t('storage.organization')" size="small">
+        <StorageManager :key="orgId" :scope="{ kind: 'org', id: orgId }" embedded />
+      </NCard>
       <NCard :title="t('team.resources')" size="small"
         ><div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <NButton
