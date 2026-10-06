@@ -34,6 +34,7 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 | YAML        | `.yaml` `.yml`           |
 | TOML        | `.toml`                  |
 | 纯文本      | `.txt`                   |
+| XUnity Text | `.txt`（`key=value` 格式自动识别） |
 
 ---
 
@@ -291,11 +292,14 @@ export LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>"
 - [使用模式](https://meowsalty.github.io/LinguaFlow/zh/guide/modes)
 - [项目管理](https://meowsalty.github.io/LinguaFlow/zh/guide/projects)
 - [格式支持](https://meowsalty.github.io/LinguaFlow/zh/guide/formats)
+- [存储管理](https://meowsalty.github.io/LinguaFlow/zh/guide/storage)（服务器模式 · 预览）
 - [翻译配置 · 使用](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config)
 - [翻译配置 · 参考](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config-reference)
 - [术语表](https://meowsalty.github.io/LinguaFlow/zh/guide/glossary)
 - [翻译审校](https://meowsalty.github.io/LinguaFlow/zh/guide/review)
+- [管理员后台](https://meowsalty.github.io/LinguaFlow/zh/guide/admin)（服务器模式 · 预览）
 - [CLI 参考](https://meowsalty.github.io/LinguaFlow/zh/guide/cli)
+- [配置文件与环境变量](https://meowsalty.github.io/LinguaFlow/zh/guide/configuration)
 - [流水线与原理](https://meowsalty.github.io/LinguaFlow/zh/guide/pipeline)（含质量裁决、语义质检、单段试译）
 - [FAQ](https://meowsalty.github.io/LinguaFlow/zh/guide/faq)
 - [API 参考](https://meowsalty.github.io/LinguaFlow/zh/api/)

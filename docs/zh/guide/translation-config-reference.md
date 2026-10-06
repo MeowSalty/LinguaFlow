@@ -182,6 +182,12 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 ## 执行配置
 
+执行配置文件（`profiles/*.yaml`）必须声明 `schema_version: 1`，缺失或版本不符会直接报错：
+
+```yaml
+schema_version: 1
+```
+
 ### 分段（split）
 
 | 字段        | 类型   | 默认值      | 说明               |
@@ -208,10 +214,10 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 ### Ruby（ruby）
 
-| 字段             | 类型     | 默认值     | 说明                                 |
-| ---------------- | -------- | ---------- | ------------------------------------ |
-| `enabled`        | bool     | `false`    | 是否处理 `<ruby>`                    |
-| `preserve_kinds` | []string | 视内置策略 | `phonetic` / `semantic` / `creative` |
+| 字段             | 类型     | 默认值       | 说明                                 |
+| ---------------- | -------- | ------------ | ------------------------------------ |
+| `enabled`        | bool     | `true`       | 是否处理 `<ruby>`                    |
+| `preserve_kinds` | []string | `[creative]` | `phonetic` / `semantic` / `creative` |
 
 | 分类       | 说明               |
 | ---------- | ------------------ |
@@ -251,16 +257,18 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 ### 质量检测（qa）
 
-| 字段                   | 类型     | 默认值 | 说明                                                                                       |
-| ---------------------- | -------- | ------ | ------------------------------------------------------------------------------------------ |
-| `enabled`              | bool     | `true` | 总开关                                                                                     |
-| `checks`               | []string | `nil`  | 启用的确定性 checker 名称；`nil`/缺省 = 启用全部；空数组会被视为「等价于全部」并改回 `nil` |
-| `length.enabled`       | bool     | `true` | 长度比检测（与 `checks` 中的 `length_ratio` 名等价）                                       |
-| `length.min_ratio`     | float    | `0.5`  | 最小比                                                                                     |
-| `length.max_ratio`     | float    | `2.5`  | 最大比                                                                                     |
-| `length.unit`          | string   | `char` | `char` \| `word`                                                                           |
-| `repetition.enabled`   | bool     | `true` | 相邻重复（与 `checks` 中的 `duplicate` 名等价）                                            |
-| `untranslated.enabled` | bool     | `true` | 译文=原文，按语言对分级（与 `checks` 中的 `untranslated` 名等价）                        |
+| 字段               | 类型     | 默认值        | 说明                                                                                       |
+| ------------------ | -------- | ------------- | ------------------------------------------------------------------------------------------ |
+| `enabled`          | bool     | `false`       | 总开关（内置通用策略默认关闭，按需开启）                                                   |
+| `auto_reject`      | bool     | `false`       | 检出 error 级问题的段落自动置为「已驳回」；`untranslated` 在源/目标语共用文字系统的语言对下降为 `warning`，不触发自动驳回 |
+| `checks`           | []string | `nil`         | 启用的确定性 checker 名称；`nil`/缺省 = 启用全部；空数组会被视为「等价于全部」并改回 `nil` |
+| `length_method`    | string   | `char_weight` | `char_weight`（CJK 字符 ×2、拉丁字符 ×1）\| `word_count`（按词计数）                       |
+| `length_ratio_min` | float    | `0.2`         | 译文/原文最小长度比；`0` 表示不检测                                                        |
+| `length_ratio_max` | float    | `3`           | 译文/原文最大长度比；`0` 表示不检测                                                        |
+
+::: warning 旧嵌套写法已移除
+旧版的 `qa.length.*`（`enabled` / `min_ratio` / `max_ratio` / `unit`）、`qa.repetition.enabled`、`qa.untranslated.enabled` 等嵌套字段不再接受；改用上表的扁平字段，单个 checker 的启停统一通过 `checks` 名单控制。
+:::
 
 #### 可配置 checker 名称（`qa.checks`）
 
@@ -333,17 +341,12 @@ bootstrap:
   inline_conflict_strategy: "rewrite-local"
 
 qa:
-  enabled: true
+  enabled: false
+  auto_reject: false
   # checks:               # 留空（缺省）表示启用全部确定性 checker
-  length:
-    enabled: true
-    min_ratio: 0.5
-    max_ratio: 2.5
-    unit: char
-  repetition:
-    enabled: true
-  untranslated:
-    enabled: true
+  length_method: char_weight
+  length_ratio_min: 0.2
+  length_ratio_max: 3
 
 context:
   enabled: true
