@@ -198,6 +198,34 @@ func (_c *JobCreate) SetNillableStartedAt(v *time.Time) *JobCreate {
 	return _c
 }
 
+// SetFinishedAt sets the "finished_at" field.
+func (_c *JobCreate) SetFinishedAt(v time.Time) *JobCreate {
+	_c.mutation.SetFinishedAt(v)
+	return _c
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_c *JobCreate) SetNillableFinishedAt(v *time.Time) *JobCreate {
+	if v != nil {
+		_c.SetFinishedAt(*v)
+	}
+	return _c
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_c *JobCreate) SetRetentionAnchorAt(v time.Time) *JobCreate {
+	_c.mutation.SetRetentionAnchorAt(v)
+	return _c
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_c *JobCreate) SetNillableRetentionAnchorAt(v *time.Time) *JobCreate {
+	if v != nil {
+		_c.SetRetentionAnchorAt(*v)
+	}
+	return _c
+}
+
 // SetProject sets the "project" edge to the Project entity.
 func (_c *JobCreate) SetProject(v *Project) *JobCreate {
 	return _c.SetProjectID(v.ID)
@@ -512,6 +540,14 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.StartedAt(); ok {
 		_spec.SetField(job.FieldStartedAt, field.TypeTime, value)
 		_node.StartedAt = &value
+	}
+	if value, ok := _c.mutation.FinishedAt(); ok {
+		_spec.SetField(job.FieldFinishedAt, field.TypeTime, value)
+		_node.FinishedAt = &value
+	}
+	if value, ok := _c.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(job.FieldRetentionAnchorAt, field.TypeTime, value)
+		_node.RetentionAnchorAt = &value
 	}
 	if nodes := _c.mutation.ProjectIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

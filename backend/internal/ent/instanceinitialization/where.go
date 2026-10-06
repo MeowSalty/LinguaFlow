@@ -69,6 +69,11 @@ func Version(v int) predicate.InstanceInitialization {
 	return predicate.InstanceInitialization(sql.FieldEQ(FieldVersion, v))
 }
 
+// DataVersion applies equality check predicate on the "data_version" field. It's identical to DataVersionEQ.
+func DataVersion(v int) predicate.InstanceInitialization {
+	return predicate.InstanceInitialization(sql.FieldEQ(FieldDataVersion, v))
+}
+
 // LocalUserID applies equality check predicate on the "local_user_id" field. It's identical to LocalUserIDEQ.
 func LocalUserID(v int) predicate.InstanceInitialization {
 	return predicate.InstanceInitialization(sql.FieldEQ(FieldLocalUserID, v))
@@ -192,6 +197,46 @@ func VersionLT(v int) predicate.InstanceInitialization {
 // VersionLTE applies the LTE predicate on the "version" field.
 func VersionLTE(v int) predicate.InstanceInitialization {
 	return predicate.InstanceInitialization(sql.FieldLTE(FieldVersion, v))
+}
+
+// DataVersionEQ applies the EQ predicate on the "data_version" field.
+func DataVersionEQ(v int) predicate.InstanceInitialization {
+	return predicate.InstanceInitialization(sql.FieldEQ(FieldDataVersion, v))
+}
+
+// DataVersionNEQ applies the NEQ predicate on the "data_version" field.
+func DataVersionNEQ(v int) predicate.InstanceInitialization {
+	return predicate.InstanceInitialization(sql.FieldNEQ(FieldDataVersion, v))
+}
+
+// DataVersionIn applies the In predicate on the "data_version" field.
+func DataVersionIn(vs ...int) predicate.InstanceInitialization {
+	return predicate.InstanceInitialization(sql.FieldIn(FieldDataVersion, vs...))
+}
+
+// DataVersionNotIn applies the NotIn predicate on the "data_version" field.
+func DataVersionNotIn(vs ...int) predicate.InstanceInitialization {
+	return predicate.InstanceInitialization(sql.FieldNotIn(FieldDataVersion, vs...))
+}
+
+// DataVersionGT applies the GT predicate on the "data_version" field.
+func DataVersionGT(v int) predicate.InstanceInitialization {
+	return predicate.InstanceInitialization(sql.FieldGT(FieldDataVersion, v))
+}
+
+// DataVersionGTE applies the GTE predicate on the "data_version" field.
+func DataVersionGTE(v int) predicate.InstanceInitialization {
+	return predicate.InstanceInitialization(sql.FieldGTE(FieldDataVersion, v))
+}
+
+// DataVersionLT applies the LT predicate on the "data_version" field.
+func DataVersionLT(v int) predicate.InstanceInitialization {
+	return predicate.InstanceInitialization(sql.FieldLT(FieldDataVersion, v))
+}
+
+// DataVersionLTE applies the LTE predicate on the "data_version" field.
+func DataVersionLTE(v int) predicate.InstanceInitialization {
+	return predicate.InstanceInitialization(sql.FieldLTE(FieldDataVersion, v))
 }
 
 // ModeEQ applies the EQ predicate on the "mode" field.

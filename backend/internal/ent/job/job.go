@@ -42,6 +42,10 @@ const (
 	FieldErrorMessage = "error_message"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
 	FieldStartedAt = "started_at"
+	// FieldFinishedAt holds the string denoting the finished_at field in the database.
+	FieldFinishedAt = "finished_at"
+	// FieldRetentionAnchorAt holds the string denoting the retention_anchor_at field in the database.
+	FieldRetentionAnchorAt = "retention_anchor_at"
 	// EdgeProject holds the string denoting the project edge name in mutations.
 	EdgeProject = "project"
 	// EdgeCreatedBy holds the string denoting the created_by edge name in mutations.
@@ -117,6 +121,8 @@ var Columns = []string{
 	FieldProgressCompleted,
 	FieldErrorMessage,
 	FieldStartedAt,
+	FieldFinishedAt,
+	FieldRetentionAnchorAt,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "jobs"
@@ -250,6 +256,16 @@ func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 // ByStartedAt orders the results by the started_at field.
 func ByStartedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStartedAt, opts...).ToFunc()
+}
+
+// ByFinishedAt orders the results by the finished_at field.
+func ByFinishedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFinishedAt, opts...).ToFunc()
+}
+
+// ByRetentionAnchorAt orders the results by the retention_anchor_at field.
+func ByRetentionAnchorAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetentionAnchorAt, opts...).ToFunc()
 }
 
 // ByProjectField orders the results by project field.

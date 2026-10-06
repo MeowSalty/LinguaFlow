@@ -23,6 +23,8 @@ type InstanceInitialization struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// Version holds the value of the "version" field.
 	Version int `json:"version,omitempty"`
+	// 已原子完成的数据升级版本，与身份初始化版本独立
+	DataVersion int `json:"data_version,omitempty"`
 	// Mode holds the value of the "mode" field.
 	Mode instanceinitialization.Mode `json:"mode,omitempty"`
 	// LocalUserID holds the value of the "local_user_id" field.
@@ -35,7 +37,7 @@ func (*InstanceInitialization) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case instanceinitialization.FieldID, instanceinitialization.FieldVersion, instanceinitialization.FieldLocalUserID:
+		case instanceinitialization.FieldID, instanceinitialization.FieldVersion, instanceinitialization.FieldDataVersion, instanceinitialization.FieldLocalUserID:
 			values[i] = new(sql.NullInt64)
 		case instanceinitialization.FieldMode:
 			values[i] = new(sql.NullString)
@@ -79,6 +81,12 @@ func (_m *InstanceInitialization) assignValues(columns []string, values []any) e
 				return fmt.Errorf("unexpected type %T for field version", values[i])
 			} else if value.Valid {
 				_m.Version = int(value.Int64)
+			}
+		case instanceinitialization.FieldDataVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field data_version", values[i])
+			} else if value.Valid {
+				_m.DataVersion = int(value.Int64)
 			}
 		case instanceinitialization.FieldMode:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -137,6 +145,9 @@ func (_m *InstanceInitialization) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("version=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Version))
+	builder.WriteString(", ")
+	builder.WriteString("data_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.DataVersion))
 	builder.WriteString(", ")
 	builder.WriteString("mode=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Mode))

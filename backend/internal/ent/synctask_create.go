@@ -211,6 +211,34 @@ func (_c *SyncTaskCreate) SetNillableCancelledAt(v *time.Time) *SyncTaskCreate {
 	return _c
 }
 
+// SetFinishedAt sets the "finished_at" field.
+func (_c *SyncTaskCreate) SetFinishedAt(v time.Time) *SyncTaskCreate {
+	_c.mutation.SetFinishedAt(v)
+	return _c
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_c *SyncTaskCreate) SetNillableFinishedAt(v *time.Time) *SyncTaskCreate {
+	if v != nil {
+		_c.SetFinishedAt(*v)
+	}
+	return _c
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_c *SyncTaskCreate) SetRetentionAnchorAt(v time.Time) *SyncTaskCreate {
+	_c.mutation.SetRetentionAnchorAt(v)
+	return _c
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_c *SyncTaskCreate) SetNillableRetentionAnchorAt(v *time.Time) *SyncTaskCreate {
+	if v != nil {
+		_c.SetRetentionAnchorAt(*v)
+	}
+	return _c
+}
+
 // SetProject sets the "project" edge to the Project entity.
 func (_c *SyncTaskCreate) SetProject(v *Project) *SyncTaskCreate {
 	return _c.SetProjectID(v.ID)
@@ -481,6 +509,14 @@ func (_c *SyncTaskCreate) createSpec() (*SyncTask, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.CancelledAt(); ok {
 		_spec.SetField(synctask.FieldCancelledAt, field.TypeTime, value)
 		_node.CancelledAt = &value
+	}
+	if value, ok := _c.mutation.FinishedAt(); ok {
+		_spec.SetField(synctask.FieldFinishedAt, field.TypeTime, value)
+		_node.FinishedAt = &value
+	}
+	if value, ok := _c.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(synctask.FieldRetentionAnchorAt, field.TypeTime, value)
+		_node.RetentionAnchorAt = &value
 	}
 	if nodes := _c.mutation.ProjectIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

@@ -15,6 +15,7 @@ func (InstanceInitialization) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("id").Default(1).Min(1).Max(1).Immutable(),
 		field.Int("version").Positive().Immutable(),
+		field.Int("data_version").Default(0).NonNegative().Comment("已原子完成的数据升级版本，与身份初始化版本独立"),
 		field.Enum("mode").Values("serve", "local").Immutable(),
 		field.Int("local_user_id").Optional().Nillable().Positive(),
 	}

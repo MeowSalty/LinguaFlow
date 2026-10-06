@@ -13879,6 +13879,8 @@ type InstanceInitializationMutation struct {
 	updated_at       *time.Time
 	version          *int
 	addversion       *int
+	data_version     *int
+	adddata_version  *int
 	mode             *instanceinitialization.Mode
 	local_user_id    *int
 	addlocal_user_id *int
@@ -14120,6 +14122,62 @@ func (m *InstanceInitializationMutation) ResetVersion() {
 	m.addversion = nil
 }
 
+// SetDataVersion sets the "data_version" field.
+func (m *InstanceInitializationMutation) SetDataVersion(i int) {
+	m.data_version = &i
+	m.adddata_version = nil
+}
+
+// DataVersion returns the value of the "data_version" field in the mutation.
+func (m *InstanceInitializationMutation) DataVersion() (r int, exists bool) {
+	v := m.data_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDataVersion returns the old "data_version" field's value of the InstanceInitialization entity.
+// If the InstanceInitialization object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InstanceInitializationMutation) OldDataVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDataVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDataVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDataVersion: %w", err)
+	}
+	return oldValue.DataVersion, nil
+}
+
+// AddDataVersion adds i to the "data_version" field.
+func (m *InstanceInitializationMutation) AddDataVersion(i int) {
+	if m.adddata_version != nil {
+		*m.adddata_version += i
+	} else {
+		m.adddata_version = &i
+	}
+}
+
+// AddedDataVersion returns the value that was added to the "data_version" field in this mutation.
+func (m *InstanceInitializationMutation) AddedDataVersion() (r int, exists bool) {
+	v := m.adddata_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDataVersion resets all changes to the "data_version" field.
+func (m *InstanceInitializationMutation) ResetDataVersion() {
+	m.data_version = nil
+	m.adddata_version = nil
+}
+
 // SetMode sets the "mode" field.
 func (m *InstanceInitializationMutation) SetMode(i instanceinitialization.Mode) {
 	m.mode = &i
@@ -14260,7 +14318,7 @@ func (m *InstanceInitializationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *InstanceInitializationMutation) Fields() []string {
-	fields := make([]string, 0, 5)
+	fields := make([]string, 0, 6)
 	if m.created_at != nil {
 		fields = append(fields, instanceinitialization.FieldCreatedAt)
 	}
@@ -14269,6 +14327,9 @@ func (m *InstanceInitializationMutation) Fields() []string {
 	}
 	if m.version != nil {
 		fields = append(fields, instanceinitialization.FieldVersion)
+	}
+	if m.data_version != nil {
+		fields = append(fields, instanceinitialization.FieldDataVersion)
 	}
 	if m.mode != nil {
 		fields = append(fields, instanceinitialization.FieldMode)
@@ -14290,6 +14351,8 @@ func (m *InstanceInitializationMutation) Field(name string) (ent.Value, bool) {
 		return m.UpdatedAt()
 	case instanceinitialization.FieldVersion:
 		return m.Version()
+	case instanceinitialization.FieldDataVersion:
+		return m.DataVersion()
 	case instanceinitialization.FieldMode:
 		return m.Mode()
 	case instanceinitialization.FieldLocalUserID:
@@ -14309,6 +14372,8 @@ func (m *InstanceInitializationMutation) OldField(ctx context.Context, name stri
 		return m.OldUpdatedAt(ctx)
 	case instanceinitialization.FieldVersion:
 		return m.OldVersion(ctx)
+	case instanceinitialization.FieldDataVersion:
+		return m.OldDataVersion(ctx)
 	case instanceinitialization.FieldMode:
 		return m.OldMode(ctx)
 	case instanceinitialization.FieldLocalUserID:
@@ -14343,6 +14408,13 @@ func (m *InstanceInitializationMutation) SetField(name string, value ent.Value) 
 		}
 		m.SetVersion(v)
 		return nil
+	case instanceinitialization.FieldDataVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDataVersion(v)
+		return nil
 	case instanceinitialization.FieldMode:
 		v, ok := value.(instanceinitialization.Mode)
 		if !ok {
@@ -14368,6 +14440,9 @@ func (m *InstanceInitializationMutation) AddedFields() []string {
 	if m.addversion != nil {
 		fields = append(fields, instanceinitialization.FieldVersion)
 	}
+	if m.adddata_version != nil {
+		fields = append(fields, instanceinitialization.FieldDataVersion)
+	}
 	if m.addlocal_user_id != nil {
 		fields = append(fields, instanceinitialization.FieldLocalUserID)
 	}
@@ -14381,6 +14456,8 @@ func (m *InstanceInitializationMutation) AddedField(name string) (ent.Value, boo
 	switch name {
 	case instanceinitialization.FieldVersion:
 		return m.AddedVersion()
+	case instanceinitialization.FieldDataVersion:
+		return m.AddedDataVersion()
 	case instanceinitialization.FieldLocalUserID:
 		return m.AddedLocalUserID()
 	}
@@ -14398,6 +14475,13 @@ func (m *InstanceInitializationMutation) AddField(name string, value ent.Value) 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddVersion(v)
+		return nil
+	case instanceinitialization.FieldDataVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDataVersion(v)
 		return nil
 	case instanceinitialization.FieldLocalUserID:
 		v, ok := value.(int)
@@ -14450,6 +14534,9 @@ func (m *InstanceInitializationMutation) ResetField(name string) error {
 		return nil
 	case instanceinitialization.FieldVersion:
 		m.ResetVersion()
+		return nil
+	case instanceinitialization.FieldDataVersion:
+		m.ResetDataVersion()
 		return nil
 	case instanceinitialization.FieldMode:
 		m.ResetMode()
@@ -14534,6 +14621,8 @@ type JobMutation struct {
 	addprogress_completed        *int64
 	error_message                *string
 	started_at                   *time.Time
+	finished_at                  *time.Time
+	retention_anchor_at          *time.Time
 	clearedFields                map[string]struct{}
 	project                      *int
 	clearedproject               bool
@@ -15304,6 +15393,104 @@ func (m *JobMutation) ResetStartedAt() {
 	delete(m.clearedFields, job.FieldStartedAt)
 }
 
+// SetFinishedAt sets the "finished_at" field.
+func (m *JobMutation) SetFinishedAt(t time.Time) {
+	m.finished_at = &t
+}
+
+// FinishedAt returns the value of the "finished_at" field in the mutation.
+func (m *JobMutation) FinishedAt() (r time.Time, exists bool) {
+	v := m.finished_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFinishedAt returns the old "finished_at" field's value of the Job entity.
+// If the Job object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobMutation) OldFinishedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFinishedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFinishedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFinishedAt: %w", err)
+	}
+	return oldValue.FinishedAt, nil
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (m *JobMutation) ClearFinishedAt() {
+	m.finished_at = nil
+	m.clearedFields[job.FieldFinishedAt] = struct{}{}
+}
+
+// FinishedAtCleared returns if the "finished_at" field was cleared in this mutation.
+func (m *JobMutation) FinishedAtCleared() bool {
+	_, ok := m.clearedFields[job.FieldFinishedAt]
+	return ok
+}
+
+// ResetFinishedAt resets all changes to the "finished_at" field.
+func (m *JobMutation) ResetFinishedAt() {
+	m.finished_at = nil
+	delete(m.clearedFields, job.FieldFinishedAt)
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (m *JobMutation) SetRetentionAnchorAt(t time.Time) {
+	m.retention_anchor_at = &t
+}
+
+// RetentionAnchorAt returns the value of the "retention_anchor_at" field in the mutation.
+func (m *JobMutation) RetentionAnchorAt() (r time.Time, exists bool) {
+	v := m.retention_anchor_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRetentionAnchorAt returns the old "retention_anchor_at" field's value of the Job entity.
+// If the Job object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobMutation) OldRetentionAnchorAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRetentionAnchorAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRetentionAnchorAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRetentionAnchorAt: %w", err)
+	}
+	return oldValue.RetentionAnchorAt, nil
+}
+
+// ClearRetentionAnchorAt clears the value of the "retention_anchor_at" field.
+func (m *JobMutation) ClearRetentionAnchorAt() {
+	m.retention_anchor_at = nil
+	m.clearedFields[job.FieldRetentionAnchorAt] = struct{}{}
+}
+
+// RetentionAnchorAtCleared returns if the "retention_anchor_at" field was cleared in this mutation.
+func (m *JobMutation) RetentionAnchorAtCleared() bool {
+	_, ok := m.clearedFields[job.FieldRetentionAnchorAt]
+	return ok
+}
+
+// ResetRetentionAnchorAt resets all changes to the "retention_anchor_at" field.
+func (m *JobMutation) ResetRetentionAnchorAt() {
+	m.retention_anchor_at = nil
+	delete(m.clearedFields, job.FieldRetentionAnchorAt)
+}
+
 // ClearProject clears the "project" edge to the Project entity.
 func (m *JobMutation) ClearProject() {
 	m.clearedproject = true
@@ -15620,7 +15807,7 @@ func (m *JobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *JobMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 16)
 	if m.created_at != nil {
 		fields = append(fields, job.FieldCreatedAt)
 	}
@@ -15663,6 +15850,12 @@ func (m *JobMutation) Fields() []string {
 	if m.started_at != nil {
 		fields = append(fields, job.FieldStartedAt)
 	}
+	if m.finished_at != nil {
+		fields = append(fields, job.FieldFinishedAt)
+	}
+	if m.retention_anchor_at != nil {
+		fields = append(fields, job.FieldRetentionAnchorAt)
+	}
 	return fields
 }
 
@@ -15699,6 +15892,10 @@ func (m *JobMutation) Field(name string) (ent.Value, bool) {
 		return m.ErrorMessage()
 	case job.FieldStartedAt:
 		return m.StartedAt()
+	case job.FieldFinishedAt:
+		return m.FinishedAt()
+	case job.FieldRetentionAnchorAt:
+		return m.RetentionAnchorAt()
 	}
 	return nil, false
 }
@@ -15736,6 +15933,10 @@ func (m *JobMutation) OldField(ctx context.Context, name string) (ent.Value, err
 		return m.OldErrorMessage(ctx)
 	case job.FieldStartedAt:
 		return m.OldStartedAt(ctx)
+	case job.FieldFinishedAt:
+		return m.OldFinishedAt(ctx)
+	case job.FieldRetentionAnchorAt:
+		return m.OldRetentionAnchorAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown Job field %s", name)
 }
@@ -15842,6 +16043,20 @@ func (m *JobMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStartedAt(v)
+		return nil
+	case job.FieldFinishedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFinishedAt(v)
+		return nil
+	case job.FieldRetentionAnchorAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRetentionAnchorAt(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Job field %s", name)
@@ -15954,6 +16169,12 @@ func (m *JobMutation) ClearedFields() []string {
 	if m.FieldCleared(job.FieldStartedAt) {
 		fields = append(fields, job.FieldStartedAt)
 	}
+	if m.FieldCleared(job.FieldFinishedAt) {
+		fields = append(fields, job.FieldFinishedAt)
+	}
+	if m.FieldCleared(job.FieldRetentionAnchorAt) {
+		fields = append(fields, job.FieldRetentionAnchorAt)
+	}
 	return fields
 }
 
@@ -15973,6 +16194,12 @@ func (m *JobMutation) ClearField(name string) error {
 		return nil
 	case job.FieldStartedAt:
 		m.ClearStartedAt()
+		return nil
+	case job.FieldFinishedAt:
+		m.ClearFinishedAt()
+		return nil
+	case job.FieldRetentionAnchorAt:
+		m.ClearRetentionAnchorAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Job nullable field %s", name)
@@ -16023,6 +16250,12 @@ func (m *JobMutation) ResetField(name string) error {
 		return nil
 	case job.FieldStartedAt:
 		m.ResetStartedAt()
+		return nil
+	case job.FieldFinishedAt:
+		m.ResetFinishedAt()
+		return nil
+	case job.FieldRetentionAnchorAt:
+		m.ResetRetentionAnchorAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Job field %s", name)
@@ -45455,6 +45688,8 @@ type SyncTaskMutation struct {
 	result                *string
 	error                 *string
 	cancelled_at          *time.Time
+	finished_at           *time.Time
+	retention_anchor_at   *time.Time
 	clearedFields         map[string]struct{}
 	project               *int
 	clearedproject        bool
@@ -46345,6 +46580,104 @@ func (m *SyncTaskMutation) ResetCancelledAt() {
 	delete(m.clearedFields, synctask.FieldCancelledAt)
 }
 
+// SetFinishedAt sets the "finished_at" field.
+func (m *SyncTaskMutation) SetFinishedAt(t time.Time) {
+	m.finished_at = &t
+}
+
+// FinishedAt returns the value of the "finished_at" field in the mutation.
+func (m *SyncTaskMutation) FinishedAt() (r time.Time, exists bool) {
+	v := m.finished_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFinishedAt returns the old "finished_at" field's value of the SyncTask entity.
+// If the SyncTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskMutation) OldFinishedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFinishedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFinishedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFinishedAt: %w", err)
+	}
+	return oldValue.FinishedAt, nil
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (m *SyncTaskMutation) ClearFinishedAt() {
+	m.finished_at = nil
+	m.clearedFields[synctask.FieldFinishedAt] = struct{}{}
+}
+
+// FinishedAtCleared returns if the "finished_at" field was cleared in this mutation.
+func (m *SyncTaskMutation) FinishedAtCleared() bool {
+	_, ok := m.clearedFields[synctask.FieldFinishedAt]
+	return ok
+}
+
+// ResetFinishedAt resets all changes to the "finished_at" field.
+func (m *SyncTaskMutation) ResetFinishedAt() {
+	m.finished_at = nil
+	delete(m.clearedFields, synctask.FieldFinishedAt)
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (m *SyncTaskMutation) SetRetentionAnchorAt(t time.Time) {
+	m.retention_anchor_at = &t
+}
+
+// RetentionAnchorAt returns the value of the "retention_anchor_at" field in the mutation.
+func (m *SyncTaskMutation) RetentionAnchorAt() (r time.Time, exists bool) {
+	v := m.retention_anchor_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRetentionAnchorAt returns the old "retention_anchor_at" field's value of the SyncTask entity.
+// If the SyncTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskMutation) OldRetentionAnchorAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRetentionAnchorAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRetentionAnchorAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRetentionAnchorAt: %w", err)
+	}
+	return oldValue.RetentionAnchorAt, nil
+}
+
+// ClearRetentionAnchorAt clears the value of the "retention_anchor_at" field.
+func (m *SyncTaskMutation) ClearRetentionAnchorAt() {
+	m.retention_anchor_at = nil
+	m.clearedFields[synctask.FieldRetentionAnchorAt] = struct{}{}
+}
+
+// RetentionAnchorAtCleared returns if the "retention_anchor_at" field was cleared in this mutation.
+func (m *SyncTaskMutation) RetentionAnchorAtCleared() bool {
+	_, ok := m.clearedFields[synctask.FieldRetentionAnchorAt]
+	return ok
+}
+
+// ResetRetentionAnchorAt resets all changes to the "retention_anchor_at" field.
+func (m *SyncTaskMutation) ResetRetentionAnchorAt() {
+	m.retention_anchor_at = nil
+	delete(m.clearedFields, synctask.FieldRetentionAnchorAt)
+}
+
 // ClearProject clears the "project" edge to the Project entity.
 func (m *SyncTaskMutation) ClearProject() {
 	m.clearedproject = true
@@ -46473,7 +46806,7 @@ func (m *SyncTaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SyncTaskMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 20)
 	if m.created_at != nil {
 		fields = append(fields, synctask.FieldCreatedAt)
 	}
@@ -46528,6 +46861,12 @@ func (m *SyncTaskMutation) Fields() []string {
 	if m.cancelled_at != nil {
 		fields = append(fields, synctask.FieldCancelledAt)
 	}
+	if m.finished_at != nil {
+		fields = append(fields, synctask.FieldFinishedAt)
+	}
+	if m.retention_anchor_at != nil {
+		fields = append(fields, synctask.FieldRetentionAnchorAt)
+	}
 	return fields
 }
 
@@ -46572,6 +46911,10 @@ func (m *SyncTaskMutation) Field(name string) (ent.Value, bool) {
 		return m.Error()
 	case synctask.FieldCancelledAt:
 		return m.CancelledAt()
+	case synctask.FieldFinishedAt:
+		return m.FinishedAt()
+	case synctask.FieldRetentionAnchorAt:
+		return m.RetentionAnchorAt()
 	}
 	return nil, false
 }
@@ -46617,6 +46960,10 @@ func (m *SyncTaskMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldError(ctx)
 	case synctask.FieldCancelledAt:
 		return m.OldCancelledAt(ctx)
+	case synctask.FieldFinishedAt:
+		return m.OldFinishedAt(ctx)
+	case synctask.FieldRetentionAnchorAt:
+		return m.OldRetentionAnchorAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown SyncTask field %s", name)
 }
@@ -46752,6 +47099,20 @@ func (m *SyncTaskMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetCancelledAt(v)
 		return nil
+	case synctask.FieldFinishedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFinishedAt(v)
+		return nil
+	case synctask.FieldRetentionAnchorAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRetentionAnchorAt(v)
+		return nil
 	}
 	return fmt.Errorf("unknown SyncTask field %s", name)
 }
@@ -46845,6 +47206,12 @@ func (m *SyncTaskMutation) ClearedFields() []string {
 	if m.FieldCleared(synctask.FieldCancelledAt) {
 		fields = append(fields, synctask.FieldCancelledAt)
 	}
+	if m.FieldCleared(synctask.FieldFinishedAt) {
+		fields = append(fields, synctask.FieldFinishedAt)
+	}
+	if m.FieldCleared(synctask.FieldRetentionAnchorAt) {
+		fields = append(fields, synctask.FieldRetentionAnchorAt)
+	}
 	return fields
 }
 
@@ -46870,6 +47237,12 @@ func (m *SyncTaskMutation) ClearField(name string) error {
 		return nil
 	case synctask.FieldCancelledAt:
 		m.ClearCancelledAt()
+		return nil
+	case synctask.FieldFinishedAt:
+		m.ClearFinishedAt()
+		return nil
+	case synctask.FieldRetentionAnchorAt:
+		m.ClearRetentionAnchorAt()
 		return nil
 	}
 	return fmt.Errorf("unknown SyncTask nullable field %s", name)
@@ -46932,6 +47305,12 @@ func (m *SyncTaskMutation) ResetField(name string) error {
 		return nil
 	case synctask.FieldCancelledAt:
 		m.ResetCancelledAt()
+		return nil
+	case synctask.FieldFinishedAt:
+		m.ResetFinishedAt()
+		return nil
+	case synctask.FieldRetentionAnchorAt:
+		m.ResetRetentionAnchorAt()
 		return nil
 	}
 	return fmt.Errorf("unknown SyncTask field %s", name)

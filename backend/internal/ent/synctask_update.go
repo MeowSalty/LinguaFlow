@@ -313,6 +313,46 @@ func (_u *SyncTaskUpdate) ClearCancelledAt() *SyncTaskUpdate {
 	return _u
 }
 
+// SetFinishedAt sets the "finished_at" field.
+func (_u *SyncTaskUpdate) SetFinishedAt(v time.Time) *SyncTaskUpdate {
+	_u.mutation.SetFinishedAt(v)
+	return _u
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_u *SyncTaskUpdate) SetNillableFinishedAt(v *time.Time) *SyncTaskUpdate {
+	if v != nil {
+		_u.SetFinishedAt(*v)
+	}
+	return _u
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (_u *SyncTaskUpdate) ClearFinishedAt() *SyncTaskUpdate {
+	_u.mutation.ClearFinishedAt()
+	return _u
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_u *SyncTaskUpdate) SetRetentionAnchorAt(v time.Time) *SyncTaskUpdate {
+	_u.mutation.SetRetentionAnchorAt(v)
+	return _u
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_u *SyncTaskUpdate) SetNillableRetentionAnchorAt(v *time.Time) *SyncTaskUpdate {
+	if v != nil {
+		_u.SetRetentionAnchorAt(*v)
+	}
+	return _u
+}
+
+// ClearRetentionAnchorAt clears the value of the "retention_anchor_at" field.
+func (_u *SyncTaskUpdate) ClearRetentionAnchorAt() *SyncTaskUpdate {
+	_u.mutation.ClearRetentionAnchorAt()
+	return _u
+}
+
 // SetProject sets the "project" edge to the Project entity.
 func (_u *SyncTaskUpdate) SetProject(v *Project) *SyncTaskUpdate {
 	return _u.SetProjectID(v.ID)
@@ -534,6 +574,18 @@ func (_u *SyncTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.CancelledAtCleared() {
 		_spec.ClearField(synctask.FieldCancelledAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FinishedAt(); ok {
+		_spec.SetField(synctask.FieldFinishedAt, field.TypeTime, value)
+	}
+	if _u.mutation.FinishedAtCleared() {
+		_spec.ClearField(synctask.FieldFinishedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(synctask.FieldRetentionAnchorAt, field.TypeTime, value)
+	}
+	if _u.mutation.RetentionAnchorAtCleared() {
+		_spec.ClearField(synctask.FieldRetentionAnchorAt, field.TypeTime)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -924,6 +976,46 @@ func (_u *SyncTaskUpdateOne) ClearCancelledAt() *SyncTaskUpdateOne {
 	return _u
 }
 
+// SetFinishedAt sets the "finished_at" field.
+func (_u *SyncTaskUpdateOne) SetFinishedAt(v time.Time) *SyncTaskUpdateOne {
+	_u.mutation.SetFinishedAt(v)
+	return _u
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_u *SyncTaskUpdateOne) SetNillableFinishedAt(v *time.Time) *SyncTaskUpdateOne {
+	if v != nil {
+		_u.SetFinishedAt(*v)
+	}
+	return _u
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (_u *SyncTaskUpdateOne) ClearFinishedAt() *SyncTaskUpdateOne {
+	_u.mutation.ClearFinishedAt()
+	return _u
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_u *SyncTaskUpdateOne) SetRetentionAnchorAt(v time.Time) *SyncTaskUpdateOne {
+	_u.mutation.SetRetentionAnchorAt(v)
+	return _u
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_u *SyncTaskUpdateOne) SetNillableRetentionAnchorAt(v *time.Time) *SyncTaskUpdateOne {
+	if v != nil {
+		_u.SetRetentionAnchorAt(*v)
+	}
+	return _u
+}
+
+// ClearRetentionAnchorAt clears the value of the "retention_anchor_at" field.
+func (_u *SyncTaskUpdateOne) ClearRetentionAnchorAt() *SyncTaskUpdateOne {
+	_u.mutation.ClearRetentionAnchorAt()
+	return _u
+}
+
 // SetProject sets the "project" edge to the Project entity.
 func (_u *SyncTaskUpdateOne) SetProject(v *Project) *SyncTaskUpdateOne {
 	return _u.SetProjectID(v.ID)
@@ -1175,6 +1267,18 @@ func (_u *SyncTaskUpdateOne) sqlSave(ctx context.Context) (_node *SyncTask, err 
 	}
 	if _u.mutation.CancelledAtCleared() {
 		_spec.ClearField(synctask.FieldCancelledAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FinishedAt(); ok {
+		_spec.SetField(synctask.FieldFinishedAt, field.TypeTime, value)
+	}
+	if _u.mutation.FinishedAtCleared() {
+		_spec.ClearField(synctask.FieldFinishedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(synctask.FieldRetentionAnchorAt, field.TypeTime, value)
+	}
+	if _u.mutation.RetentionAnchorAtCleared() {
+		_spec.ClearField(synctask.FieldRetentionAnchorAt, field.TypeTime)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{

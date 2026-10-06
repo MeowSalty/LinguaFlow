@@ -522,6 +522,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "version", Type: field.TypeInt},
+		{Name: "data_version", Type: field.TypeInt, Default: 0},
 		{Name: "mode", Type: field.TypeEnum, Enums: []string{"serve", "local"}},
 		{Name: "local_user_id", Type: field.TypeInt, Nullable: true},
 	}
@@ -547,6 +548,8 @@ var (
 		{Name: "progress_completed", Type: field.TypeInt64, Default: 0},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+		{Name: "retention_anchor_at", Type: field.TypeTime, Nullable: true},
 		{Name: "project_id", Type: field.TypeInt},
 		{Name: "user_created_jobs", Type: field.TypeInt, Nullable: true},
 	}
@@ -558,13 +561,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "jobs_projects_jobs",
-				Columns:    []*schema.Column{JobsColumns[14]},
+				Columns:    []*schema.Column{JobsColumns[16]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "jobs_users_created_jobs",
-				Columns:    []*schema.Column{JobsColumns[15]},
+				Columns:    []*schema.Column{JobsColumns[17]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -573,7 +576,7 @@ var (
 			{
 				Name:    "job_project_id_id",
 				Unique:  false,
-				Columns: []*schema.Column{JobsColumns[14], JobsColumns[0]},
+				Columns: []*schema.Column{JobsColumns[16], JobsColumns[0]},
 			},
 			{
 				Name:    "job_updated_at_id",
@@ -584,6 +587,11 @@ var (
 				Name:    "job_status_updated_at_id",
 				Unique:  false,
 				Columns: []*schema.Column{JobsColumns[3], JobsColumns[2], JobsColumns[0]},
+			},
+			{
+				Name:    "job_status_retention_anchor_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{JobsColumns[3], JobsColumns[15], JobsColumns[0]},
 			},
 		},
 	}
@@ -624,6 +632,13 @@ var (
 				Columns:    []*schema.Column{JobResourcesColumns[16]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "jobresource_job_job_resources",
+				Unique:  false,
+				Columns: []*schema.Column{JobResourcesColumns[15]},
 			},
 		},
 	}
@@ -1498,6 +1513,8 @@ var (
 		{Name: "result", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "error", Type: field.TypeString, Nullable: true},
 		{Name: "cancelled_at", Type: field.TypeTime, Nullable: true},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+		{Name: "retention_anchor_at", Type: field.TypeTime, Nullable: true},
 		{Name: "entry_id", Type: field.TypeInt},
 		{Name: "project_id", Type: field.TypeInt},
 		{Name: "actor_user_id", Type: field.TypeInt},
@@ -1510,19 +1527,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "sync_tasks_glossary_entries_sync_tasks",
-				Columns:    []*schema.Column{SyncTasksColumns[16]},
+				Columns:    []*schema.Column{SyncTasksColumns[18]},
 				RefColumns: []*schema.Column{GlossaryEntriesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "sync_tasks_projects_sync_tasks",
-				Columns:    []*schema.Column{SyncTasksColumns[17]},
+				Columns:    []*schema.Column{SyncTasksColumns[19]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "sync_tasks_users_sync_tasks",
-				Columns:    []*schema.Column{SyncTasksColumns[18]},
+				Columns:    []*schema.Column{SyncTasksColumns[20]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1531,7 +1548,7 @@ var (
 			{
 				Name:    "synctask_project_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{SyncTasksColumns[17], SyncTasksColumns[10]},
+				Columns: []*schema.Column{SyncTasksColumns[19], SyncTasksColumns[10]},
 			},
 			{
 				Name:    "synctask_status_created_at",
@@ -1547,6 +1564,11 @@ var (
 				Name:    "synctask_status_updated_at_id",
 				Unique:  false,
 				Columns: []*schema.Column{SyncTasksColumns[10], SyncTasksColumns[2], SyncTasksColumns[0]},
+			},
+			{
+				Name:    "synctask_status_retention_anchor_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{SyncTasksColumns[10], SyncTasksColumns[17], SyncTasksColumns[0]},
 			},
 		},
 	}

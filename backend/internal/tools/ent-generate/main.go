@@ -30,7 +30,7 @@ func generate() error {
 		return err
 	}
 	defer os.RemoveAll(temporary)
-	if err := entc.Generate("./schema", &gen.Config{Target: temporary, Package: "github.com/MeowSalty/LinguaFlow/backend/internal/ent"}); err != nil {
+	if err := entc.Generate("./schema", &gen.Config{Target: temporary, Package: "github.com/MeowSalty/LinguaFlow/backend/internal/ent", Features: []gen.Feature{gen.FeatureExecQuery}}); err != nil {
 		return err
 	}
 	return filepath.WalkDir(temporary, func(path string, entry fs.DirEntry, walkErr error) error {

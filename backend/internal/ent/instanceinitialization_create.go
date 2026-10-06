@@ -54,6 +54,20 @@ func (_c *InstanceInitializationCreate) SetVersion(v int) *InstanceInitializatio
 	return _c
 }
 
+// SetDataVersion sets the "data_version" field.
+func (_c *InstanceInitializationCreate) SetDataVersion(v int) *InstanceInitializationCreate {
+	_c.mutation.SetDataVersion(v)
+	return _c
+}
+
+// SetNillableDataVersion sets the "data_version" field if the given value is not nil.
+func (_c *InstanceInitializationCreate) SetNillableDataVersion(v *int) *InstanceInitializationCreate {
+	if v != nil {
+		_c.SetDataVersion(*v)
+	}
+	return _c
+}
+
 // SetMode sets the "mode" field.
 func (_c *InstanceInitializationCreate) SetMode(v instanceinitialization.Mode) *InstanceInitializationCreate {
 	_c.mutation.SetMode(v)
@@ -131,6 +145,10 @@ func (_c *InstanceInitializationCreate) defaults() {
 		v := instanceinitialization.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.DataVersion(); !ok {
+		v := instanceinitialization.DefaultDataVersion
+		_c.mutation.SetDataVersion(v)
+	}
 	if _, ok := _c.mutation.ID(); !ok {
 		v := instanceinitialization.DefaultID
 		_c.mutation.SetID(v)
@@ -151,6 +169,14 @@ func (_c *InstanceInitializationCreate) check() error {
 	if v, ok := _c.mutation.Version(); ok {
 		if err := instanceinitialization.VersionValidator(v); err != nil {
 			return &ValidationError{Name: "version", err: fmt.Errorf(`ent: validator failed for field "InstanceInitialization.version": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.DataVersion(); !ok {
+		return &ValidationError{Name: "data_version", err: errors.New(`ent: missing required field "InstanceInitialization.data_version"`)}
+	}
+	if v, ok := _c.mutation.DataVersion(); ok {
+		if err := instanceinitialization.DataVersionValidator(v); err != nil {
+			return &ValidationError{Name: "data_version", err: fmt.Errorf(`ent: validator failed for field "InstanceInitialization.data_version": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Mode(); !ok {
@@ -214,6 +240,10 @@ func (_c *InstanceInitializationCreate) createSpec() (*InstanceInitialization, *
 	if value, ok := _c.mutation.Version(); ok {
 		_spec.SetField(instanceinitialization.FieldVersion, field.TypeInt, value)
 		_node.Version = value
+	}
+	if value, ok := _c.mutation.DataVersion(); ok {
+		_spec.SetField(instanceinitialization.FieldDataVersion, field.TypeInt, value)
+		_node.DataVersion = value
 	}
 	if value, ok := _c.mutation.Mode(); ok {
 		_spec.SetField(instanceinitialization.FieldMode, field.TypeEnum, value)
