@@ -374,7 +374,7 @@ context:
 
 | 字段                       | 类型   | 默认值 | 说明                     |
 | -------------------------- | ------ | ------ | ------------------------ |
-| `template_id`              | int    | —      | 术语抽取模板 ID          |
+| `template_id`              | int    | **必填** | 术语抽取模板 ID；省略或 `0` 会被后端拒绝，`-1` 表示内置默认模板 |
 | `batch_size`               | int    | `20`   | 每批段落上限；`0` 不限制 |
 | `max_words_per_batch`      | int    | —      | 每批字词上限             |
 | `max_terms_per_1000_chars` | float  | `25.0` | 抽取密度系数             |
@@ -387,7 +387,7 @@ context:
 
 | 字段                  | 类型   | 说明                                                                                                                       |
 | --------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `prompt_template_id`  | int    | 翻译提示词模板                                                                                                             |
+| `prompt_template_id`  | int    | 翻译提示词模板（**必填**：省略或 `0` 会被后端拒绝，`-1` 表示内置默认模板）                                                    |
 | `batch_size`          | int    | 待译段落数上限（**不计上下文段**）；`0` 不限制，与 `max_words_per_batch` 至少填一项                                        |
 | `max_words_per_batch` | int    | 字词数上限（**计入上下文段**）；`0` 不限制，与 `batch_size` 至少填一项。纯行数模式（此项与 `context.max_chars` 均为 0）下上下文体积不受约束 |
 | `fallback_shrink`     | float  | 池缩比系数（**必填**，合法域 (0, 1]）。`1.0` = 不缩（多池同尺寸重切）；`(0,1)` = 每池缩小，池 N 批次约束 = `floor(原始 × shrink^N)`。`0` 非法（不缩请用 `1.0`）；省略/零值会被后端拒绝（不规范化）。池数量由 `retry.max_attempts+1` 决定 |
@@ -458,7 +458,7 @@ LLM 修订轮次配置。系统提示词内置不可见、**不可覆盖**（无
 | `batch_size`          | int      | —              | 段落数上限；`0` 不限制，与 `max_words_per_batch` 至少填一项                                           |
 | `max_words_per_batch` | int      | —              | 字词数上限；`0` 不限制，与 `batch_size` 至少填一项                                                    |
 | `segment_scope`       | string   | `with_issues`  | 段落扫描范围（均要求 translated/edited 且译文非空）：`with_issues` / `with_issue_codes`              |
-| `issue_codes`         | []string | —              | 仅 `segment_scope=with_issue_codes` 时生效，须 ≥ 1 项，且 ⊆ 语义白名单                                |
+| `issue_codes`         | []string | —              | 仅 `segment_scope=with_issue_codes` 时生效，须 ⊆ 语义白名单；显式空数组 `[]` 表示不处理任何问题         |
 | `retry`               | object   | —              | 重试                                                                                                  |
 
 ::: warning revise 无 fallback_shrink
@@ -480,7 +480,7 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 
 `calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
 
-`segment_scope=with_issue_codes` 时必须选至少 1 个，且最终会与段落实有 `pending` 语义 issue 取交集——交集为空的段不进入修订。
+`segment_scope=with_issue_codes` 时按所选 code 过滤（显式空数组 `[]` 表示不修订任何问题），且最终会与段落实有 `pending` 语义 issue 取交集——交集为空的段不进入修订。
 
 ### semantic_qa
 
@@ -491,7 +491,7 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 | `batch_size`          | int      | —      | 段落数上限；`0` 不限制，与 `max_words_per_batch` 至少填一项                                                           |
 | `max_words_per_batch` | int      | —      | 字词数上限；`0` 不限制，与 `batch_size` 至少填一项                                                                    |
 | `segment_scope`       | string   | `all`  | 段落扫描范围：`all` / `with_issues` / `with_issue_codes`                                                              |
-| `issue_codes`         | []string | —      | 仅 `segment_scope=with_issue_codes` 时生效，须 ≥ 1 项；取值见下方                                                       |
+| `issue_codes`         | []string | —      | 仅 `segment_scope=with_issue_codes` 时生效，可为空数组（显式表示不处理任何问题）；取值见下方                            |
 | `retry`               | object   | —      | 重试                                                                                                                  |
 
 #### `segment_scope` 取值
@@ -502,7 +502,7 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 | `with_issues`       | 仅扫描带任意 issue 的段                                                                 |
 | `with_issue_codes`  | 仅扫描含 `issue_codes` 声明 code 的段（用于成本敏感的高价值子集，如 ja↔zh 假同源检测） |
 
-范围与任务级 `segment_ids` 取交集。`scope ≠ all` 时未扫到的段会保留其原有的语义 issue。`scope=with_issue_codes` 时必须选至少一个 code。
+范围与任务级 `segment_ids` 取交集。`scope ≠ all` 时未扫到的段会保留其原有的语义 issue。`scope=with_issue_codes` 时按所选 code 扫描（空数组等于不扫描任何段）。
 
 #### `issue_codes` 取值
 
@@ -543,10 +543,11 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 - `rounds` 非空；每轮有合法 `mode`
 - 对应 mode 必须带齐子配置对象（`correct` 的 `rules` 至少 1 条且 `name` 在白名单）
 - `backend_id` 仅 `correct` 轮可省略；其余 mode 必填
+- `translate` 轮 `prompt_template_id` 与 `extract` 轮 `template_id` **必填**（`-1` 表示内置默认模板；省略或 `0` 会被后端拒绝）
 - `concurrency` ≥ 1（`correct` 轮固定为 1）
 - `batch_size` 与 `max_words_per_batch` 在翻译/修订/裁决/语义质检中不能同时为 0（提取两者皆 0 表示一次全量）；`correct` 轮无批次字段
-- `semantic_qa.segment_scope=with_issue_codes` 时必须提供 ≥ 1 个 `issue_codes`
-- `revise.segment_scope=with_issue_codes` 时必须提供 ≥ 1 个 `issue_codes`，且全部 ⊆ 语义白名单
+- `semantic_qa.segment_scope=with_issue_codes` 时 `issue_codes` 须 ⊆ 语义白名单；空数组 `[]` 显式表示不扫描任何段
+- `revise.segment_scope=with_issue_codes` 时 `issue_codes` 全部 ⊆ 语义白名单；空数组 `[]` 显式表示不修订任何问题
 - `fallback_shrink` ∈ (0, 1] 且必填（**仅翻译轮**）；修订/裁决/语义质检轮无 `fallback_shrink`（省略或 `0` 会被后端拒绝）→ 以 `1.0` 表达不缩
 
 ### 执行计划模板顶层字段
@@ -556,6 +557,7 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 | 字段          | 类型 | 必填 | 说明                                                                                                   |
 | ------------- | ---- | ---- | ------------------------------------------------------------------------------------------------------ |
 | `profile_id`  | int  | 是   | 执行配置 ID；translate 与 revise 轮共用该策略的 protect/ruby/repair/QA 行为预设。允许内置负 ID（如 `-1`） |
+| `org_id`      | int  | 否   | 创建**组织共享**模板时指定目标组织（须为该组织 admin/owner）                                             |
 
 ---
 

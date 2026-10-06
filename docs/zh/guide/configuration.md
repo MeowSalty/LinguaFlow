@@ -611,6 +611,54 @@ bootstrap:
 
 两种来源**互斥**，同时提供会报错。单主密钥模式不在数据卷生成 keyring 文件；keyring 文件格式为 `{"version":1,"active_key_id":"...","keys":{"...":"BASE64 密钥"}}`，必须保持私有权限。轮换流程见 [管理员后台 · 凭据加密密钥轮换](/zh/guide/admin#凭据加密密钥轮换)。
 
+##### server.storage — 对象存储
+
+控制项目文件（源文件、译文、导出产物）的对象存储。产品侧说明见 [存储管理](/zh/guide/storage)。所有字段都有同名大写蛇形环境变量（如 `LINGUAFLOW_STORAGE_MAINTENANCE`；`backends` 数组可整段以 YAML 文本形式传给 `LINGUAFLOW_STORAGE_BACKENDS`）。
+
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `maintenance` | bool | `false` | 存储维护态：`true` 时所有存储写入被拒绝（返回 `storage_maintenance`）；启动时存在未完成的旧版迁移任务也会自动进入维护态 |
+| `backends` | []object | 未配置时隐含一个本地后端 | 存储后端列表，见下表 |
+| `default_site_space` | string | 未配置 backends 时为 `local` | 默认站点空间，必须指向某个已配置后端 |
+| `work_dir` | path | `<data_dir>/tmp` | 传输与处理用的工作目录 |
+| `cache_dir` | path | `<data_dir>/cache` | 内容缓存目录 |
+
+`backends` 每项字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 后端标识，必须唯一非空 |
+| `driver` | `local`（本地磁盘）或 `s3`（S3 兼容对象存储） |
+| `root` | **local 必填**：对象根目录；携带远程凭据字段会报错 |
+| `endpoint` / `bucket` / `region` / `access_key_id` / `secret_access_key` | **s3 必填**；endpoint 仅接受 HTTPS |
+| `prefix` / `path_style` / `session_token` | s3 可选：对象前缀、路径风格寻址、临时会话令牌 |
+| `access_key_id` 等密钥字段 | 建议用环境变量注入，避免写进部署文档 |
+
+```yaml
+server:
+  storage:
+    backends:
+      - id: local
+        driver: local
+        root: ./data/objects
+      - id: s3-main
+        driver: s3
+        endpoint: https://s3.example.com
+        bucket: linguaflow
+        region: us-east-1
+        prefix: prod/
+        path_style: false
+        # access_key_id / secret_access_key 建议经环境变量提供
+    default_site_space: local
+```
+
+::: warning 目录与容量约束
+- 各 local 后端的根目录之间、以及与 `work_dir` / `cache_dir` / 数据目录**不允许相互重叠**，启动时校验
+- `limits.*`（单文件 / 临时 / 输出 / 解压展开、元数据、缓存字节上限，归档条目数、分段数、并发数）与 `network.allowed_hosts` / `allowed_cidrs`、`retry_*`、`signed_url_ttl` 等时长数量项必须为正且相互满足大小关系（如 `signed_url_max_ttl ≤ deletion_grace`），否则启动报错——用 `linguaflow config check` 可在部署前验证
+
+完整键清单以 `linguaflow init --kind server` 生成的模板与 [CLI · config explain](/zh/guide/cli#config-命令) 输出为准。
+:::
+
 ##### bootstrap — 首次初始化（顶层）
 
 | 字段 | 类型 | 默认值 | 说明 |
