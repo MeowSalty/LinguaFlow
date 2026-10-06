@@ -65,14 +65,15 @@ func (r *runnerRuntime) recoveryFailed() {
 // Dispatcher owns independent runner lifecycles. Durable pending discovery
 // repairs missed notifications without resetting tasks already being executed.
 type Dispatcher struct {
-	logger    *slog.Logger
-	runners   []*runnerRuntime
-	workerCfg config.WorkerConfig
-	mu        sync.Mutex
-	started   bool
-	stopping  bool
-	cancel    context.CancelFunc
-	done      chan struct{}
+	logger          *slog.Logger
+	runners         []*runnerRuntime
+	workerCfg       config.WorkerConfig
+	mu              sync.Mutex
+	started         bool
+	stopping        bool
+	cancel          context.CancelFunc
+	done            chan struct{}
+	recoveryBarrier func(context.Context) error
 }
 
 func NewDispatcher(logger *slog.Logger, _ *ResourceMutex, workerCfg config.WorkerConfig, runners ...TaskRunner) *Dispatcher {
@@ -86,6 +87,17 @@ func NewDispatcher(logger *slog.Logger, _ *ResourceMutex, workerCfg config.Worke
 	return d
 }
 
+// SetRecoveryBarrier installs server preparation which must complete after all
+// runners recover and before any worker or pending discovery starts.
+// Configure it before Run. A failed callback is retried until shutdown.
+func (d *Dispatcher) SetRecoveryBarrier(barrier func(context.Context) error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.started && !d.stopping {
+		d.recoveryBarrier = barrier
+	}
+}
+
 // Run is single-use. Each runner finishes recovery preparation before starting
 // its consumers; recovered IDs are streamed only after those consumers start.
 func (d *Dispatcher) Run(ctx context.Context) error {
@@ -97,15 +109,27 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	d.started = true
 	runCtx, cancel := context.WithCancel(ctx)
 	d.cancel = cancel
+	barrier := d.recoveryBarrier
 	d.mu.Unlock()
 	defer cancel()
 
 	var wg sync.WaitGroup
+	var prepared chan struct{}
+	var recoveryReady chan struct{}
+	if barrier != nil {
+		prepared = make(chan struct{}, len(d.runners))
+		recoveryReady = make(chan struct{})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			d.finishRecovery(runCtx, prepared, recoveryReady, barrier)
+		}()
+	}
 	for _, runtime := range d.runners {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			d.runRunner(runCtx, runtime)
+			d.runRunner(runCtx, runtime, prepared, recoveryReady)
 		}()
 	}
 	<-runCtx.Done()
@@ -115,7 +139,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	return nil
 }
 
-func (d *Dispatcher) runRunner(ctx context.Context, runtime *runnerRuntime) {
+func (d *Dispatcher) runRunner(ctx context.Context, runtime *runnerRuntime, prepared chan<- struct{}, recoveryReady <-chan struct{}) {
 	defer runtime.setState("stopped")
 	for {
 		if ctx.Err() != nil {
@@ -137,6 +161,14 @@ func (d *Dispatcher) runRunner(ctx context.Context, runtime *runnerRuntime) {
 	}
 	if ctx.Err() != nil {
 		return
+	}
+	if prepared != nil {
+		prepared <- struct{}{}
+		select {
+		case <-ctx.Done():
+			return
+		case <-recoveryReady:
+		}
 	}
 	pool := NewWorkerPool(d.workerCount(runtime.runner.Type()), d.logger)
 	runtime.mu.Lock()
@@ -161,6 +193,27 @@ func (d *Dispatcher) runRunner(ctx context.Context, runtime *runnerRuntime) {
 			runtime.setState("running")
 		}
 		if !waitForDiscovery(ctx, runtime.notify) {
+			return
+		}
+	}
+}
+
+func (d *Dispatcher) finishRecovery(ctx context.Context, prepared <-chan struct{}, ready chan<- struct{}, barrier func(context.Context) error) {
+	for range d.runners {
+		select {
+		case <-ctx.Done():
+			return
+		case <-prepared:
+		}
+	}
+	for ctx.Err() == nil {
+		if err := barrier(ctx); err == nil {
+			close(ready)
+			return
+		} else if ctx.Err() == nil {
+			d.logger.Error("dispatcher recovery barrier failed", "err", err)
+		}
+		if !waitForDiscovery(ctx, nil) {
 			return
 		}
 	}

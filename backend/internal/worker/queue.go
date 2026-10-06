@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 )
 
 var ErrQueueClosed = errors.New("worker queue is closed")
@@ -54,19 +56,22 @@ type queueEntry struct {
 	execution Execution
 	state     queueState
 	cancel    context.CancelFunc
+	release   func()
 }
 
 // Queue bounds accepted, unclaimed work. Running work retains its identity for
 // deduplication until Done; cancelled waiting work immediately frees capacity.
 type Queue struct {
-	mu       sync.Mutex
-	capacity int
-	next     uint64
-	entries  map[int]*queueEntry
-	waiting  []*queueEntry
-	waiters  int
-	changed  chan struct{}
-	closed   bool
+	mu        sync.Mutex
+	capacity  int
+	next      uint64
+	entries   map[int]*queueEntry
+	waiting   []*queueEntry
+	waiters   int
+	changed   chan struct{}
+	closed    bool
+	lifecycle *tasklife.Coordinator
+	kind      string
 }
 
 func NewQueue(size int) *Queue {
@@ -74,6 +79,13 @@ func NewQueue(size int) *Queue {
 		size = 1
 	}
 	return &Queue{capacity: size, entries: make(map[int]*queueEntry), changed: make(chan struct{})}
+}
+
+// WithLifecycle must be configured before the queue is used.
+func (q *Queue) WithLifecycle(coordinator *tasklife.Coordinator, kind string) *Queue {
+	q.lifecycle = coordinator
+	q.kind = kind
+	return q
 }
 
 func (q *Queue) Enqueue(ctx context.Context, taskID int) error {
@@ -94,6 +106,11 @@ func (q *Queue) enqueueChecked(ctx context.Context, taskID int, check func(conte
 	if taskID <= 0 {
 		return false, ErrInvalidTaskID
 	}
+	guard, err := q.lifecycle.Lock(ctx, q.kind, taskID)
+	if err != nil {
+		return false, err
+	}
+	defer guard.Release()
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -106,8 +123,11 @@ func (q *Queue) enqueueChecked(ctx context.Context, taskID int, check func(conte
 		return false, nil
 	}
 	q.next++
-	entry := &queueEntry{execution: Execution{TaskID: taskID, Generation: q.next}, state: queueEnqueuing}
+	entry := &queueEntry{execution: Execution{TaskID: taskID, Generation: q.next}, state: queueEnqueuing, release: guard.Claim()}
 	q.entries[taskID] = entry
+	// Capacity and durable-state checks may take time. The claim fences deletion
+	// without holding the control guard or blocking cancellation.
+	guard.Release()
 	blocked := false
 	validated := check == nil
 	defer func() {
@@ -117,6 +137,7 @@ func (q *Queue) enqueueChecked(ctx context.Context, taskID int, check func(conte
 		if entry.state == queueEnqueuing && q.entries[taskID] == entry {
 			delete(q.entries, taskID)
 			entry.state = queueRetired
+			entry.release()
 		}
 		q.signalLocked()
 	}()
@@ -211,6 +232,7 @@ func (q *Queue) Done(execution Execution) {
 	entry.cancel()
 	entry.state = queueRetired
 	delete(q.entries, execution.TaskID)
+	entry.release()
 	q.signalLocked()
 }
 
@@ -263,6 +285,7 @@ func (q *Queue) cancelLocked(entry *queueEntry) {
 	}
 	entry.state = queueRetired
 	delete(q.entries, entry.execution.TaskID)
+	entry.release()
 	q.signalLocked()
 }
 
@@ -279,6 +302,7 @@ func (q *Queue) Close() {
 		} else {
 			entry.state = queueRetired
 			delete(q.entries, id)
+			entry.release()
 		}
 	}
 	q.waiting = nil
