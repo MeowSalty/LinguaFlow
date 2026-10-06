@@ -2103,6 +2103,7 @@ const messages = {
       profileRequired: '请选择执行策略',
       roundBackendRequired: '轮次 {n}：请选择 AI 后端',
       roundPromptRequired: '轮次 {n}：请选择提示词模板',
+      roundExtractTemplateRequired: '轮次 {n}：请选择术语抽取模板',
       roundBatchSizeRequired: '轮次 {n}：请设置批次大小',
       roundBatchConfigRequired: '轮次 {n}：批次大小和每批字词数至少填一项',
       roundConcurrencyRequired: '轮次 {n}：请设置并发数',
