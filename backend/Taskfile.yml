@@ -63,6 +63,60 @@ tasks:
     cmds:
       - go run ./cmd/linguaflow-storage-migrate rollback {{.CLI_ARGS}}
 
+  migrate:v013:
+    desc: 预演 v0.13.0 PostgreSQL 迁移并回滚
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 postgres {{.CLI_ARGS}}
+
+  migrate:v013:apply:
+    desc: 正式提交 v0.13.0 PostgreSQL 一次性迁移
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 postgres --apply {{.CLI_ARGS}}
+
+  migrate:v013:local:
+    desc: 预演 v0.13.0 SQLite local 数据目录迁移
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 local {{.CLI_ARGS}}
+
+  migrate:v013:local:apply:
+    desc: 迁移 v0.13.0 SQLite local 数据目录并保留原目录备份
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 local --apply {{.CLI_ARGS}}
+
+  migrate:v013:sqlite:
+    desc: 预演 SQLite 数据目录迁移（CLI_ARGS 显式指定 --mode serve 或 local）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 sqlite {{.CLI_ARGS}}
+
+  migrate:v013:sqlite:apply:
+    desc: 发布 SQLite 数据目录迁移并保留备份（显式指定 --mode）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 sqlite --apply {{.CLI_ARGS}}
+
+  migrate:build:
+    desc: 构建独立的一次性迁移程序（支持 GOOS、GOARCH 交叉编译）
+    dir: '{{.TASKFILE_DIR}}'
+    vars:
+      MIGRATE_BINARY: '{{default "bin/linguaflow-migrate" .MIGRATE_BINARY}}'
+      MIGRATE_GOOS: '{{default OS .GOOS}}'
+    env:
+      GOOS: '{{.MIGRATE_GOOS}}'
+      GOARCH: '{{default ARCH .GOARCH}}'
+    cmds:
+      - go build -o "{{.MIGRATE_BINARY}}{{if eq .MIGRATE_GOOS "windows"}}.exe{{end}}" ./cmd/linguaflow-migrate
+
+  check-dependencies:
+    desc: 验证正常服务构建不依赖历史迁移包
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test ./internal/migrationcli -run '^TestServiceDependenciesExcludeMigration$' -count=1
+
   deps:add:
     desc: 添加或更新显式指定的后端 Go 模块依赖
     dir: '{{.TASKFILE_DIR}}'
