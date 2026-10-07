@@ -745,6 +745,16 @@ func CapacityBytesLTE(v int64) predicate.StorageSpace {
 	return predicate.StorageSpace(sql.FieldLTE(FieldCapacityBytes, v))
 }
 
+// CapacityBytesIsNil applies the IsNil predicate on the "capacity_bytes" field.
+func CapacityBytesIsNil() predicate.StorageSpace {
+	return predicate.StorageSpace(sql.FieldIsNull(FieldCapacityBytes))
+}
+
+// CapacityBytesNotNil applies the NotNil predicate on the "capacity_bytes" field.
+func CapacityBytesNotNil() predicate.StorageSpace {
+	return predicate.StorageSpace(sql.FieldNotNull(FieldCapacityBytes))
+}
+
 // ReservedBytesEQ applies the EQ predicate on the "reserved_bytes" field.
 func ReservedBytesEQ(v int64) predicate.StorageSpace {
 	return predicate.StorageSpace(sql.FieldEQ(FieldReservedBytes, v))

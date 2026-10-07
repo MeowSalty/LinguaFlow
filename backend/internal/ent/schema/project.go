@@ -2,6 +2,8 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 )
@@ -51,4 +53,9 @@ func (Project) Edges() []ent.Edge {
 		edge.To("resources", Resource.Type),
 		edge.To("sync_tasks", SyncTask.Type),
 	}
+}
+
+// Database checks also cover atomic Add mutations, which skip field validators.
+func (Project) Annotations() []schema.Annotation {
+	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"project_storage_generation_safe": "storage_generation >= 0 AND storage_generation <= 9007199254740991", "project_output_generation_safe": "output_generation >= 0 AND output_generation <= 9007199254740991"}}}
 }

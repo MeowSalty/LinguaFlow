@@ -2,6 +2,8 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 )
@@ -26,4 +28,9 @@ func (Blob) Fields() []ent.Field {
 }
 func (Blob) Edges() []ent.Edge {
 	return []ent.Edge{edge.To("active_location", BlobLocation.Type).Field("active_location_id").Unique()}
+}
+
+// Database checks also cover atomic Add mutations, which skip field validators.
+func (Blob) Annotations() []schema.Annotation {
+	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"blob_location_generation_safe": "location_generation >= 0 AND location_generation <= 9007199254740991"}}}
 }

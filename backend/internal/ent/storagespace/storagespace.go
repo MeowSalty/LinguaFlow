@@ -131,8 +131,6 @@ var (
 	DefaultVerified bool
 	// DefaultVersioned holds the default value on creation for the "versioned" field.
 	DefaultVersioned bool
-	// DefaultCapacityBytes holds the default value on creation for the "capacity_bytes" field.
-	DefaultCapacityBytes int64
 	// CapacityBytesValidator is a validator for the "capacity_bytes" field. It is called by the builders before save.
 	CapacityBytesValidator func(int64) error
 	// DefaultReservedBytes holds the default value on creation for the "reserved_bytes" field.

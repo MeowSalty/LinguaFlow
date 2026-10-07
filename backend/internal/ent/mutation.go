@@ -38032,7 +38032,7 @@ func (m *StorageSpaceMutation) CapacityBytes() (r int64, exists bool) {
 // OldCapacityBytes returns the old "capacity_bytes" field's value of the StorageSpace entity.
 // If the StorageSpace object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *StorageSpaceMutation) OldCapacityBytes(ctx context.Context) (v int64, err error) {
+func (m *StorageSpaceMutation) OldCapacityBytes(ctx context.Context) (v *int64, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldCapacityBytes is only allowed on UpdateOne operations")
 	}
@@ -38064,10 +38064,24 @@ func (m *StorageSpaceMutation) AddedCapacityBytes() (r int64, exists bool) {
 	return *v, true
 }
 
+// ClearCapacityBytes clears the value of the "capacity_bytes" field.
+func (m *StorageSpaceMutation) ClearCapacityBytes() {
+	m.capacity_bytes = nil
+	m.addcapacity_bytes = nil
+	m.clearedFields[storagespace.FieldCapacityBytes] = struct{}{}
+}
+
+// CapacityBytesCleared returns if the "capacity_bytes" field was cleared in this mutation.
+func (m *StorageSpaceMutation) CapacityBytesCleared() bool {
+	_, ok := m.clearedFields[storagespace.FieldCapacityBytes]
+	return ok
+}
+
 // ResetCapacityBytes resets all changes to the "capacity_bytes" field.
 func (m *StorageSpaceMutation) ResetCapacityBytes() {
 	m.capacity_bytes = nil
 	m.addcapacity_bytes = nil
+	delete(m.clearedFields, storagespace.FieldCapacityBytes)
 }
 
 // SetReservedBytes sets the "reserved_bytes" field.
@@ -38764,7 +38778,11 @@ func (m *StorageSpaceMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *StorageSpaceMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(storagespace.FieldCapacityBytes) {
+		fields = append(fields, storagespace.FieldCapacityBytes)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -38777,6 +38795,11 @@ func (m *StorageSpaceMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *StorageSpaceMutation) ClearField(name string) error {
+	switch name {
+	case storagespace.FieldCapacityBytes:
+		m.ClearCapacityBytes()
+		return nil
+	}
 	return fmt.Errorf("unknown StorageSpace nullable field %s", name)
 }
 

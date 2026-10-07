@@ -1403,8 +1403,6 @@ func init() {
 	storagespace.DefaultVersioned = storagespaceDescVersioned.Default.(bool)
 	// storagespaceDescCapacityBytes is the schema descriptor for capacity_bytes field.
 	storagespaceDescCapacityBytes := storagespaceFields[12].Descriptor()
-	// storagespace.DefaultCapacityBytes holds the default value on creation for the capacity_bytes field.
-	storagespace.DefaultCapacityBytes = storagespaceDescCapacityBytes.Default.(int64)
 	// storagespace.CapacityBytesValidator is a validator for the "capacity_bytes" field. It is called by the builders before save.
 	storagespace.CapacityBytesValidator = storagespaceDescCapacityBytes.Validators[0].(func(int64) error)
 	// storagespaceDescReservedBytes is the schema descriptor for reserved_bytes field.
