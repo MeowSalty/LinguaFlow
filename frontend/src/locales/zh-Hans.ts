@@ -16,6 +16,7 @@ import storageProject from './storage-project'
 import storageUi from './storage-ui'
 import storageAdmin from './storage-admin'
 import storageCapacity from './storage-capacity'
+import storageDisk from './storage-disk'
 import storageQuota from './storage-quota'
 
 const messages = {
@@ -25,6 +26,7 @@ const messages = {
   storageUi,
   storageAdmin,
   storageCapacity,
+  storageDisk,
   storageQuota,
   storageManagement,
   storageProject,
