@@ -163,6 +163,17 @@ const manifestWritable = computed(
 const metadataWritable = computed(
   () => workspace.storageMetadataWritable && storageManifestWriteAllowed(workspace.project),
 )
+/**
+ * 上传前置判定：容忍快照被窗口聚焦/切页短暂置为失效的瞬态。
+ * 从外部拖入文件的瞬间恰好触发 focus 失效，若不等待会把「重新确认中」
+ * 误报成「存储状态尚未确认」。超时后按当前状态判定；真正写入前
+ * prepareStorageWrite 仍会强制重新校验。
+ */
+const ensureManifestWritable = async (timeoutMs = 2000): Promise<boolean> => {
+  if (manifestWritable.value) return true
+  await workspace.settleStorageSnapshot(timeoutMs)
+  return manifestWritable.value
+}
 const openSourceUpdate = (resource: Resource): void => {
   if (['previewing', 'submitting', 'tracking', 'unknown', 'blocked'].includes(sourceState.value)) {
     sourceDrawerVisible.value = true
@@ -266,7 +277,11 @@ const summarizeUploadName = (files: File[]): string =>
 
 const executeUploadItems = async (items: PendingUploadItem[], taskId: string): Promise<void> => {
   const context = captureContext()
-  if (!manifestWritable.value) throw new Error(t('sourceStorage.maintenanceUnknown'))
+  if (!(await ensureManifestWritable())) throw new Error(t('sourceStorage.maintenanceUnknown'))
+  if (!context.current()) {
+    workspace.removeUploadTask(taskId)
+    return
+  }
   const selectedItems = items.filter((item) => item.selected && item.strategy === 'create')
   const updateItems = items.filter((item) => item.selected && item.strategy === 'source_update')
   if (updateItems.some((item) => !item.precheck.existing_resource)) {
@@ -309,13 +324,14 @@ const executeUploadItems = async (items: PendingUploadItem[], taskId: string): P
 }
 
 /** 打开文件选择器，多选文件作为一个批次上传（与拖拽上传共用同一批处理流程） */
-const chooseUploadFiles = (): void => {
+const chooseUploadFiles = async (): Promise<void> => {
   const context = captureContext()
-  if (!manifestWritable.value) {
+  if (!(await ensureManifestWritable())) {
     message.warning(t('sourceStorage.maintenanceUnknown'))
     return
   }
   if (blockUploadIfInsecure()) return
+  if (!context.current()) return
   const input = document.createElement('input')
   input.type = 'file'
   input.multiple = true
@@ -339,14 +355,14 @@ const beginUpload = async (
     return
   }
 
-  if (!manifestWritable.value) {
+  if (!(await ensureManifestWritable())) {
     message.warning(t('sourceStorage.maintenanceUnknown'))
     return
   }
+  if (!context.current()) return
   if (files.length === 0) {
     return
   }
-
   const taskId = workspace.addUploadTask(displayName, files.length)
   workspace.updateUploadTaskStage(taskId, 'prechecking')
 
