@@ -6,6 +6,7 @@ import IconCarbonScreen from '~icons/carbon/screen'
 import IconCarbonSun from '~icons/carbon/sun'
 
 import AppLogo from '@/components/AppLogo.vue'
+import TaskHistoryDeleteDialog from '@/components/operations/TaskHistoryDeleteDialog.vue'
 import { APP_NAV_SECTIONS, type AppNavItem } from '@/layouts/navigation'
 import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
@@ -410,5 +411,6 @@ const navigateTo = (path: string): void => {
     </NDrawer>
 
     <GlobalJobDetailDrawer />
+    <TaskHistoryDeleteDialog />
   </div>
 </template>

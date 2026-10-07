@@ -16,6 +16,11 @@ import {
 import { useI18n } from 'vue-i18n'
 
 import { useGlossaryStore } from '@/stores/glossary'
+import { useTaskHistoryStore } from '@/stores/taskHistory'
+import { useTaskMutationsStore } from '@/stores/taskMutations'
+import { formatDateTime } from '@/utils/datetime'
+import { taskHistoryDeleteOption } from '@/utils/taskHistoryPresentation'
+import IconCarbonOverflowMenuVertical from '~icons/carbon/overflow-menu-vertical'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type SyncStep = 'impact' | 'executing' | 'result' | 'cancelled' | 'error'
@@ -28,6 +33,33 @@ type SyncExecuteResourceResult = NonNullable<
 
 const { t } = useI18n()
 const glossary = useGlossaryStore()
+const history = useTaskHistoryStore()
+const mutations = useTaskMutationsStore()
+const historyTarget = computed(() =>
+  glossary.syncTaskSnapshot && glossary.syncTaskId && glossary.syncTaskProjectId
+    ? {
+        kind: 'glossary_sync' as const,
+        id: glossary.syncTaskId,
+        project_id: glossary.syncTaskProjectId,
+        can_delete: glossary.syncTaskSnapshot.can_delete,
+        status: glossary.syncTaskSnapshot.status,
+      }
+    : null,
+)
+const mutationPending = computed(
+  () => !!historyTarget.value && mutations.isPending(historyTarget.value),
+)
+const requestDelete = (): void => {
+  if (historyTarget.value?.can_delete && !mutationPending.value)
+    history.requestDelete([historyTarget.value])
+}
+const deleteOptions = computed(() => [
+  taskHistoryDeleteOption(
+    historyTarget.value?.can_delete === true,
+    historyTarget.value?.status ?? '',
+    mutationPending.value,
+  ),
+])
 
 // ── Props / Emits ──
 const props = defineProps<{
@@ -169,7 +201,7 @@ const handleSubmitAll = (): void => {
 }
 
 const handleCancel = (): void => {
-  if (!props.projectId) return
+  if (!props.projectId || mutationPending.value) return
   void glossary.cancelSyncTask(props.projectId)
 }
 
@@ -188,6 +220,8 @@ const handleRetryImpact = (): void => {
 // 抽屉关闭时统一清理，并在有成功同步时通知刷新 segments
 watch(show, (visible) => {
   if (visible) return
+  // The parent close handler also clears the queue; deletion has already closed this view.
+  if (glossary.syncHistoryRemoved) return
 
   const needsRefresh = glossary.syncStep === 'result' || glossary.syncQueueSyncedAny
   glossary.closeSyncDialog()
@@ -225,6 +259,42 @@ onUnmounted(() => {
         <NStep :title="t('workspace.glossary.sync.stepExecute')" />
         <NStep :title="t('workspace.glossary.sync.stepResult')" />
       </NSteps>
+      <div
+        v-if="
+          glossary.syncTaskSnapshot &&
+          ['completed', 'failed', 'cancelled'].includes(glossary.syncTaskSnapshot.status)
+        "
+        class="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-lf-border-soft pb-3"
+      >
+        <dl class="text-sm">
+          <dt class="text-xs text-lf-text-muted">{{ t('taskHistory.finishedAt') }}</dt>
+          <dd class="mt-1 tabular-nums">
+            {{
+              glossary.syncTaskSnapshot.finished_at
+                ? formatDateTime(glossary.syncTaskSnapshot.finished_at, {
+                    dateStyle: 'short',
+                    timeStyle: 'medium',
+                  })
+                : t('taskHistory.finishedUnknown')
+            }}
+          </dd>
+        </dl>
+        <NDropdown
+          v-if="typeof historyTarget?.can_delete === 'boolean'"
+          trigger="click"
+          :options="deleteOptions"
+          @select="requestDelete"
+        >
+          <NButton
+            quaternary
+            :disabled="mutationPending"
+            :aria-label="t('taskHistory.more')"
+            data-task-history-trigger
+            :title="t('taskHistory.more')"
+            ><template #icon><IconCarbonOverflowMenuVertical /></template
+          ></NButton>
+        </NDropdown>
+      </div>
 
       <!-- 步骤 1: 影响分析 -->
       <div v-if="glossary.syncStep === 'impact'">
@@ -376,7 +446,13 @@ onUnmounted(() => {
         </div>
 
         <div class="flex justify-center">
-          <NButton type="error" ghost :loading="glossary.syncCancelling" @click="handleCancel">
+          <NButton
+            type="error"
+            ghost
+            :loading="glossary.syncCancelling"
+            :disabled="mutationPending"
+            @click="handleCancel"
+          >
             {{ t('workspace.glossary.sync.cancel') }}
           </NButton>
         </div>

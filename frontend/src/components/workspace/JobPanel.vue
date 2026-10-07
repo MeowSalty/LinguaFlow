@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, toRef } from 'vue'
+import { computed, ref, toRef, watch } from 'vue'
 import { NAlert, NButton, NDataTable, NEmpty, NIcon, NSelect, NSwitch } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -8,12 +8,16 @@ import { useJobColumns } from '@/composables/useJobColumns'
 import { useJobPolling } from '@/composables/useJobPolling'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import { useTaskHistoryStore } from '@/stores/taskHistory'
+import { useOperationsStore } from '@/stores/operations'
 
 type Job = ApiSchemas['Job']
 
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
 const globalTracker = useGlobalJobTrackerStore()
+const history = useTaskHistoryStore()
+const operations = useOperationsStore()
 
 const props = defineProps<{
   projectId: number | null
@@ -33,6 +37,17 @@ const { jobColumns, jobStatusOptions } = useJobColumns({
   retryJob: (job) => emit('retry', job),
   pauseJob: (job) => emit('pause', job),
   resumeJob: (job) => emit('resume', job),
+  deleteJob: (job) =>
+    history.requestDelete([
+      {
+        kind: 'translation',
+        id: String(job.id),
+        project_id: job.project_id,
+        project_name: workspace.project?.name,
+        can_delete: job.can_delete,
+        status: job.status,
+      },
+    ]),
 })
 
 // ── 自适应轮询：面板挂载时自动轮询运行中的任务 ──
@@ -41,6 +56,12 @@ const autoRefreshEnabled = ref(true)
 const detailDrawerOpen = computed(() => globalTracker.drawerJobId != null)
 const pollingEnabled = computed(() => autoRefreshEnabled.value && !detailDrawerOpen.value)
 const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingEnabled })
+watch(
+  () => operations.revision,
+  () => {
+    if (props.projectId) void workspace.loadJobs(props.projectId)
+  },
+)
 </script>
 
 <template>

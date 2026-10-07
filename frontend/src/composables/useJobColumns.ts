@@ -1,9 +1,12 @@
 import { computed, h, type VNode } from 'vue'
 import type { DataTableColumns, SelectOption } from 'naive-ui'
-import { NButton, NProgress, NSpace, NTag, NText } from 'naive-ui'
+import { NButton, NDropdown, NProgress, NSpace, NTag, NText } from 'naive-ui'
+import IconCarbonOverflowMenuVertical from '~icons/carbon/overflow-menu-vertical'
 
 import { type ApiSchemas } from '@/api/client'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import { useTaskMutationsStore } from '@/stores/taskMutations'
+import { taskHistoryDeleteOption } from '@/utils/taskHistoryPresentation'
 import { t } from '@/i18n'
 import {
   formatDate,
@@ -22,10 +25,12 @@ export interface JobColumnActions {
   retryJob: (job: Job) => void
   pauseJob: (job: Job) => void
   resumeJob: (job: Job) => void
+  deleteJob: (job: Job) => void
 }
 
 export function useJobColumns(actions: JobColumnActions) {
   const workspace = useProjectWorkspaceStore()
+  const mutations = useTaskMutationsStore()
 
   // ── 任务状态下拉选项 ──
   const jobStatusOptions = computed<SelectOption[]>(() => [
@@ -174,6 +179,11 @@ export function useJobColumns(actions: JobColumnActions) {
                 size: 'small',
                 quaternary: true,
                 loading: workspace.pausingJobIds.includes(row.id),
+                disabled: mutations.isPending({
+                  kind: 'translation',
+                  id: String(row.id),
+                  project_id: row.project_id,
+                }),
                 onClick: (event: MouseEvent) => {
                   event.stopPropagation()
                   actions.pauseJob(row)
@@ -192,6 +202,11 @@ export function useJobColumns(actions: JobColumnActions) {
                 size: 'small',
                 quaternary: true,
                 loading: workspace.resumingJobIds.includes(row.id),
+                disabled: mutations.isPending({
+                  kind: 'translation',
+                  id: String(row.id),
+                  project_id: row.project_id,
+                }),
                 onClick: (event: MouseEvent) => {
                   event.stopPropagation()
                   actions.resumeJob(row)
@@ -210,6 +225,11 @@ export function useJobColumns(actions: JobColumnActions) {
                 size: 'small',
                 quaternary: true,
                 loading: workspace.cancellingJobIds.includes(row.id),
+                disabled: mutations.isPending({
+                  kind: 'translation',
+                  id: String(row.id),
+                  project_id: row.project_id,
+                }),
                 onClick: (event: MouseEvent) => {
                   event.stopPropagation()
                   actions.cancelJob(row)
@@ -228,6 +248,11 @@ export function useJobColumns(actions: JobColumnActions) {
                 size: 'small',
                 quaternary: true,
                 loading: workspace.retryingJobIds.includes(row.id),
+                disabled: mutations.isPending({
+                  kind: 'translation',
+                  id: String(row.id),
+                  project_id: row.project_id,
+                }),
                 onClick: (event: MouseEvent) => {
                   event.stopPropagation()
                   actions.retryJob(row)
@@ -238,6 +263,36 @@ export function useJobColumns(actions: JobColumnActions) {
           )
         }
 
+        if (typeof row.can_delete === 'boolean')
+          buttons.push(
+            h(
+              NDropdown,
+              {
+                trigger: 'click',
+                options: [taskHistoryDeleteOption(row.can_delete, row.status)],
+                onSelect: () => actions.deleteJob(row),
+              },
+              {
+                default: () =>
+                  h(
+                    NButton,
+                    {
+                      size: 'small',
+                      quaternary: true,
+                      'aria-label': t('taskHistory.more'),
+                      'data-task-history-trigger': '',
+                      disabled: mutations.isPending({
+                        kind: 'translation',
+                        id: String(row.id),
+                        project_id: row.project_id,
+                      }),
+                      onClick: (event: MouseEvent) => event.stopPropagation(),
+                    },
+                    { icon: () => h(IconCarbonOverflowMenuVertical) },
+                  ),
+              },
+            ),
+          )
         return h(NSpace, { size: 4, wrap: false }, () => buttons)
       },
     },
