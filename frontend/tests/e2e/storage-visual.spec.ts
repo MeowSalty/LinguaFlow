@@ -60,7 +60,7 @@ test('administrator tabs retain policy bytes and drafts while diagnostics stay r
   await expect(page.getByText('诊断摘要', { exact: true })).toBeVisible()
   await expect(page.getByRole('progressbar')).toHaveCount(0)
   await storageAdminTab(page, '存储策略')
-  const quota = page.getByRole('textbox', { name: '逻辑配额', exact: true })
+  const quota = page.getByRole('textbox', { name: '每个用户或组织的内容配额', exact: true })
   await expect(quota).toHaveValue('100')
   await quota.fill('125')
   await storageAdminTab(page, '存储连接')
@@ -141,10 +141,14 @@ test('unknown capacity is distinct from zero and does not invent a usage percent
   state.spaces[1]!.candidate_bytes = 0
   state.spaces[1]!.live_bytes = 0
   state.spaces[1]!.pending_delete_bytes = 0
+  state.spaces[1]!.available_bytes = state.spaces[1]!.capacity_bytes
   await page.goto('/settings/storage')
   const unknown = page.locator('[data-storage-space-id="11"]')
   const zero = page.locator('[data-storage-space-id="12"]')
-  await expect(unknown.getByText('—', { exact: true })).toBeVisible()
+  await expect(unknown.getByText('—', { exact: true })).toHaveCount(2)
+  await expect(
+    unknown.getByText('配额信息暂不可用，请刷新后再操作。', { exact: true }),
+  ).toBeVisible()
   await expect(unknown.getByRole('progressbar')).toHaveCount(0)
   await expect(zero.getByText('0 B', { exact: true })).toBeVisible()
   await expect(zero.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
@@ -201,7 +205,14 @@ for (const width of [1440, 1024, 720, 390, 320]) {
       scenario: 'over-capacity',
     })
     await page.goto('/settings/storage')
-    await expect(page.getByText('登记占用已超过空间配额', { exact: true }).first()).toBeVisible()
+    const activeSettingsTab = page
+      .getByRole('navigation', { name: '设置', exact: true })
+      .getByRole('link', { name: '文件存储', exact: true })
+    await expect(activeSettingsTab).toHaveAttribute('aria-current', 'page')
+    await expect(activeSettingsTab).toBeInViewport({ ratio: 1 })
+    await expect(
+      page.getByText('登记占用已超额 1.44 GiB，后续新增额度预留会受限。', { exact: true }).first(),
+    ).toBeVisible()
     await noHorizontalOverflow(page)
     await page.getByRole('button', { name: '查看详情', exact: true }).first().click()
     const drawer = page.locator('.n-drawer:visible')
@@ -261,10 +272,10 @@ test('fractional bytes remain invalid and capacity unit changes never silently r
   await storageAdminTab(page, '存储策略')
   await page.locator('.n-base-selection').last().click()
   await page.locator('.n-base-select-option').filter({ hasText: /^B$/ }).click()
-  const quota = page.getByRole('textbox', { name: '逻辑配额', exact: true })
+  const quota = page.getByRole('textbox', { name: '每个用户或组织的内容配额', exact: true })
   await quota.fill('1.5')
   await expect(quota).toHaveAttribute('aria-invalid', 'true')
-  await expect(page.getByRole('button', { name: '保存更改', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '保存策略', exact: true })).toBeDisabled()
   await quota.fill('9007199254740991')
   await page.locator('.n-base-selection').last().click()
   await page.locator('.n-base-select-option').filter({ hasText: /^TiB$/ }).click()
