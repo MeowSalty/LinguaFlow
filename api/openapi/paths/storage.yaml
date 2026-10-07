@@ -1283,3 +1283,39 @@ legacySnapshot:
         $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: "../base.yaml#/components/responses/Problem"
+
+storageSpaceQuota:
+  parameters:
+    - name: spaceId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  put:
+    operationId: SetStorageSpaceQuota
+    summary: SetStorageSpaceQuota
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage.yaml#/StorageSpaceQuotaRequest'
+    responses:
+      '200':
+        description: 操作结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage.yaml#/StorageSpace'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

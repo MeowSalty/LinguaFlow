@@ -53,6 +53,8 @@ paths:
     $ref: './paths/storage.yaml#/checkStorage'
   /storage/connections/{connectionId}/revoke:
     $ref: './paths/storage.yaml#/revokeStorage'
+  /storage/spaces/{spaceId}/quota:
+    $ref: "./paths/storage.yaml#/storageSpaceQuota"
   /storage/spaces/{spaceId}:
     $ref: './paths/storage.yaml#/storageSpace'
   /projects/{projectId}/storage:

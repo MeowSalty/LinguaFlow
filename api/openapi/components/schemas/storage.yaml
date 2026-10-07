@@ -22,6 +22,8 @@ StorageActionReasonCode:
     - space_read_only
     - storage_auth_required
     - storage_crypto_unavailable
+    - storage_disk_insufficient
+    - storage_disk_probe_failed
     - storage_quota_exceeded
     - storage_unavailable
 StorageActionAvailability:
@@ -62,8 +64,10 @@ StorageSpaceManagementActions:
   type: object
   readOnly: true
   additionalProperties: false
-  required: [set_status]
+  required: [set_status, set_quota]
   properties:
+    set_quota:
+      $ref: "#/StorageActionAvailability"
     set_status:
       $ref: '#/StorageActionAvailability'
 StorageCapabilities:
@@ -98,7 +102,7 @@ StorageCapabilities:
 StoragePolicyRequest:
   type: object
   additionalProperties: false
-  required: [mode, default_choice, generation, logical_limit_bytes]
+  required: [mode, default_choice, generation, logical_limit_bytes, default_space_capacity_bytes]
   description: Complete policy update. Deployment restrictions reject the whole save, including quota-only changes to an unsupported mode. Read-only response fields are rejected.
   properties:
     mode:
@@ -110,10 +114,19 @@ StoragePolicyRequest:
     generation:
       type: integer
       format: int64
+      maximum: 9007199254740991
       minimum: 0
+    default_space_capacity_bytes:
+      type: integer
+      format: int64
+      maximum: 9007199254740991
+      nullable: true
+      minimum: 1
     logical_limit_bytes:
       type: integer
       format: int64
+      nullable: true
+      maximum: 9007199254740991
       minimum: 1
 StoragePolicy:
   type: "object"
@@ -123,6 +136,7 @@ StoragePolicy:
     - "default_choice"
     - "generation"
     - "logical_limit_bytes"
+    - "default_space_capacity_bytes"
     - "runtime"
     - "allowed_policy_modes"
     - "policy_restriction_codes"
@@ -157,10 +171,19 @@ StoragePolicy:
     generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
       minimum: 0
+    default_space_capacity_bytes:
+      type: integer
+      format: int64
+      maximum: 9007199254740991
+      nullable: true
+      minimum: 1
     logical_limit_bytes:
       type: "integer"
       format: "int64"
+      nullable: true
+      maximum: 9007199254740991
       minimum: 1
     configuration_needs_update:
       type: "boolean"
@@ -171,6 +194,7 @@ StoragePolicy:
     default_choice: user
     generation: 3
     logical_limit_bytes: 107374182400
+    default_space_capacity_bytes: null
     runtime: {deployment_enabled: false, maintenance: false}
     allowed_policy_modes: [site_only]
     policy_restriction_codes: [storage_deployment_disabled]
@@ -307,6 +331,7 @@ StorageBindingRequest:
     expected_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
       minimum: 0
 StorageConnectionRequest:
   type: "object"
@@ -350,6 +375,8 @@ StorageSpaceRequest:
     capacity_bytes:
       type: "integer"
       format: "int64"
+      nullable: true
+      maximum: 9007199254740991
       minimum: 1
 StorageAuthorizationRequest:
   type: "object"
@@ -374,6 +401,7 @@ StorageAuthorizationRequest:
     expected_management_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     expires_at:
       type: "string"
       format: "date-time"
@@ -430,9 +458,11 @@ StorageConnection:
     management_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     auth_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     checked_at:
       type: "string"
       format: "date-time"
@@ -452,12 +482,20 @@ StorageSpace:
     - "verified"
     - "management_generation"
     - "capacity_bytes"
+    - "available_bytes"
     - "reserved_bytes"
     - "candidate_bytes"
     - "live_bytes"
     - "pending_delete_bytes"
     - "management_actions"
   properties:
+    available_bytes:
+      type: integer
+      format: int64
+      nullable: true
+      minimum: 0
+      maximum: 9007199254740991
+      description: Business quota headroom, null for unlimited; not physical disk or bucket free space.
     management_actions:
       $ref: '#/StorageSpaceManagementActions'
     id:
@@ -483,21 +521,29 @@ StorageSpace:
     management_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     capacity_bytes:
       type: "integer"
       format: "int64"
+      nullable: true
+      maximum: 9007199254740991
+      minimum: 1
     reserved_bytes:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     candidate_bytes:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     live_bytes:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     pending_delete_bytes:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
 SourceUpdateCommit:
   type: "object"
   additionalProperties: false
@@ -511,9 +557,11 @@ SourceUpdateCommit:
     expected_source_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     expected_translation_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
 SourceVersion:
   type: "object"
   additionalProperties: false
@@ -549,6 +597,7 @@ SourceVersion:
     location_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     health:
       type: "string"
 ExportArtifact:
@@ -643,9 +692,11 @@ SourceUpdatePreview:
     source_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     translation_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
     stats:
       $ref: "#/SourceUpdateStats"
     expires_at:
@@ -850,6 +901,7 @@ StorageMigrationRequest:
     expected_generation:
       type: "integer"
       format: "int64"
+      maximum: 9007199254740991
       minimum: 0
     idempotency_key:
       type: "string"
@@ -1169,3 +1221,20 @@ StorageCheckList:
       type: "array"
       items:
         $ref: "#/StorageCheck"
+
+StorageSpaceQuotaRequest:
+  type: object
+  additionalProperties: false
+  required: [capacity_bytes, expected_generation]
+  properties:
+    capacity_bytes:
+      type: integer
+      format: int64
+      maximum: 9007199254740991
+      nullable: true
+      minimum: 1
+    expected_generation:
+      type: integer
+      format: int64
+      maximum: 9007199254740991
+      minimum: 0

@@ -1,7 +1,11 @@
 StorageDiagnostics:
   type: object
-  required: [spaces, temporary_bytes, recovery_backlog, blocked_cleanup_by_code, migrations_by_phase]
+  required: [disks, spaces, temporary_bytes, recovery_backlog, blocked_cleanup_by_code, migrations_by_phase]
   properties:
+    disks:
+      type: array
+      items:
+        $ref: "#/StorageDiskDiagnostic"
     spaces:
       type: array
       items:
@@ -64,3 +68,34 @@ StorageSpaceDiagnostics:
       description: 最近一次持久化的完整字节校验时间，不代表最近一次失败观测。
       type: string
       format: date-time
+
+StorageDiskDiagnostic:
+  type: object
+  description: Administrator-only local filesystem observations; roles identify configured directory purposes, never host paths. Remote bucket capacity is not inferred.
+  required: [roles, state, observed_at, total_bytes, available_bytes, minimum_free_bytes]
+  properties:
+    roles:
+      type: array
+      items:
+        type: string
+    state:
+      type: string
+      enum: [available, low, unknown]
+    observed_at:
+      type: string
+      format: date-time
+    total_bytes:
+      type: integer
+      format: int64
+      nullable: true
+      maximum: 9007199254740991
+    available_bytes:
+      type: integer
+      format: int64
+      nullable: true
+      maximum: 9007199254740991
+    minimum_free_bytes:
+      type: integer
+      format: int64
+      nullable: true
+      maximum: 9007199254740991

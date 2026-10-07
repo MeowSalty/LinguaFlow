@@ -762,6 +762,41 @@ paths:
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /storage/spaces/{spaceId}/quota:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    put:
+      operationId: SetStorageSpaceQuota
+      summary: SetStorageSpaceQuota
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageSpaceQuotaRequest'
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSpace'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /storage/spaces/{spaceId}:
     parameters:
       - name: spaceId
@@ -4884,7 +4919,7 @@ components:
       properties:
         error_code:
           type: string
-          description: Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Provider authorization, quota and availability retain their separate domain codes.
+          description: Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses storage_disk_probe_failed (503). Neither signals automatic retry. Provider authorization, quota and availability retain their separate domain codes.
         task_id:
           type: integer
         operation_id:
@@ -8202,6 +8237,8 @@ components:
         - space_read_only
         - storage_auth_required
         - storage_crypto_unavailable
+        - storage_disk_insufficient
+        - storage_disk_probe_failed
         - storage_quota_exceeded
         - storage_unavailable
     StorageActionAvailability:
@@ -8460,6 +8497,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StorageCheck'
+    StorageDiskDiagnostic:
+      type: object
+      description: Administrator-only local filesystem observations; roles identify configured directory purposes, never host paths. Remote bucket capacity is not inferred.
+      required:
+        - roles
+        - state
+        - observed_at
+        - total_bytes
+        - available_bytes
+        - minimum_free_bytes
+      properties:
+        roles:
+          type: array
+          items:
+            type: string
+        state:
+          type: string
+          enum:
+            - available
+            - low
+            - unknown
+        observed_at:
+          type: string
+          format: date-time
+        total_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          maximum: 9007199254740991
+        available_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          maximum: 9007199254740991
+        minimum_free_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          maximum: 9007199254740991
     StorageSpaceDiagnostics:
       type: object
       required:
@@ -8499,12 +8575,17 @@ components:
     StorageDiagnostics:
       type: object
       required:
+        - disks
         - spaces
         - temporary_bytes
         - recovery_backlog
         - blocked_cleanup_by_code
         - migrations_by_phase
       properties:
+        disks:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageDiskDiagnostic'
         spaces:
           type: array
           items:
@@ -8553,6 +8634,7 @@ components:
         - default_choice
         - generation
         - logical_limit_bytes
+        - default_space_capacity_bytes
         - runtime
         - allowed_policy_modes
         - policy_restriction_codes
@@ -8591,10 +8673,19 @@ components:
         generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
           minimum: 0
+        default_space_capacity_bytes:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          nullable: true
+          minimum: 1
         logical_limit_bytes:
           type: integer
           format: int64
+          nullable: true
+          maximum: 9007199254740991
           minimum: 1
         configuration_needs_update:
           type: boolean
@@ -8605,6 +8696,7 @@ components:
         default_choice: user
         generation: 3
         logical_limit_bytes: 107374182400
+        default_space_capacity_bytes: null
         runtime:
           deployment_enabled: false
           maintenance: false
@@ -8620,6 +8712,7 @@ components:
         - default_choice
         - generation
         - logical_limit_bytes
+        - default_space_capacity_bytes
       description: Complete policy update. Deployment restrictions reject the whole save, including quota-only changes to an unsupported mode. Read-only response fields are rejected.
       properties:
         mode:
@@ -8636,10 +8729,19 @@ components:
         generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
           minimum: 0
+        default_space_capacity_bytes:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          nullable: true
+          minimum: 1
         logical_limit_bytes:
           type: integer
           format: int64
+          nullable: true
+          maximum: 9007199254740991
           minimum: 1
     StorageConnectionManagementActions:
       type: object
@@ -8720,9 +8822,11 @@ components:
         management_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         auth_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         checked_at:
           type: string
           format: date-time
@@ -8786,7 +8890,10 @@ components:
       additionalProperties: false
       required:
         - set_status
+        - set_quota
       properties:
+        set_quota:
+          $ref: '#/components/schemas/StorageActionAvailability'
         set_status:
           $ref: '#/components/schemas/StorageActionAvailability'
     StorageSpace:
@@ -8800,12 +8907,20 @@ components:
         - verified
         - management_generation
         - capacity_bytes
+        - available_bytes
         - reserved_bytes
         - candidate_bytes
         - live_bytes
         - pending_delete_bytes
         - management_actions
       properties:
+        available_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+          maximum: 9007199254740991
+          description: Business quota headroom, null for unlimited; not physical disk or bucket free space.
         management_actions:
           $ref: '#/components/schemas/StorageSpaceManagementActions'
         id:
@@ -8831,21 +8946,29 @@ components:
         management_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         capacity_bytes:
           type: integer
           format: int64
+          nullable: true
+          maximum: 9007199254740991
+          minimum: 1
         reserved_bytes:
           type: integer
           format: int64
+          maximum: 9007199254740991
         candidate_bytes:
           type: integer
           format: int64
+          maximum: 9007199254740991
         live_bytes:
           type: integer
           format: int64
+          maximum: 9007199254740991
         pending_delete_bytes:
           type: integer
           format: int64
+          maximum: 9007199254740991
     StorageSpaceList:
       type: object
       required:
@@ -8873,6 +8996,8 @@ components:
         capacity_bytes:
           type: integer
           format: int64
+          nullable: true
+          maximum: 9007199254740991
           minimum: 1
     StorageAuthorizationRequest:
       type: object
@@ -8897,6 +9022,7 @@ components:
         expected_management_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         expires_at:
           type: string
           format: date-time
@@ -8911,6 +9037,24 @@ components:
           type: integer
           minimum: 0
           format: int64
+    StorageSpaceQuotaRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - capacity_bytes
+        - expected_generation
+      properties:
+        capacity_bytes:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          nullable: true
+          minimum: 1
+        expected_generation:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 0
     StorageSpaceStateRequest:
       type: object
       additionalProperties: false
@@ -9025,6 +9169,7 @@ components:
         expected_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
           minimum: 0
     StorageMigrationRequest:
       type: object
@@ -9040,6 +9185,7 @@ components:
         expected_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
           minimum: 0
         idempotency_key:
           type: string
@@ -9080,9 +9226,11 @@ components:
         source_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         translation_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         stats:
           $ref: '#/components/schemas/SourceUpdateStats'
         expires_at:
@@ -9373,6 +9521,7 @@ components:
         location_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         health:
           type: string
     SourceVersionList:
@@ -9397,9 +9546,11 @@ components:
         expected_source_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         expected_translation_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
     ExportArtifact:
       type: object
       additionalProperties: false
