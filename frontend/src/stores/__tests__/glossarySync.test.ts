@@ -70,12 +70,27 @@ describe('glossary task coordination', () => {
     fail(new Error('offline'))
     expect(store.syncStep).toBe('executing')
     expect(store.syncError).toBe('offline')
-    receive({ task_id: store.syncTaskId!, status: 'running', processed: 3, total: 10 })
+    receive({
+      task_id: store.syncTaskId!,
+      status: 'running',
+      processed: 3,
+      total: 10,
+      can_delete: false,
+      finished_at: null,
+    })
     expect(store.syncError).toBeNull()
     expect(store.syncProcessed).toBe(3)
-    receive({ task_id: store.syncTaskId!, status: 'completed', processed: 10, total: 10 })
+    receive({
+      task_id: store.syncTaskId!,
+      status: 'completed',
+      processed: 10,
+      total: 10,
+      can_delete: true,
+      finished_at: null,
+    })
     expect(store.syncStep).toBe('result')
-    expect(calls.stop).toHaveBeenCalledOnce()
+    expect(calls.stop).not.toHaveBeenCalled()
+    expect(calls.subscribe.mock.calls[0]?.[3]).toEqual({ terminalRecheckMs: 30_000 })
   })
 
   it('discards late task callbacks after a session switch and releases the subscription', async () => {
@@ -84,7 +99,14 @@ describe('glossary task coordination', () => {
     await store.submitSync(7, 'all')
     const oldReceive = receive
     changeSessionContext('https://other.example/api/v1', 1, true)
-    oldReceive({ task_id: '90071992547409930', status: 'completed', processed: 10, total: 10 })
+    oldReceive({
+      task_id: '90071992547409930',
+      status: 'completed',
+      processed: 10,
+      total: 10,
+      can_delete: true,
+      finished_at: null,
+    })
     expect(store.syncDialogVisible).toBe(false)
     expect(store.syncTaskId).toBeNull()
     expect(store.syncResult).toBeNull()
@@ -108,7 +130,7 @@ describe('glossary task coordination', () => {
     expect(store.syncTaskStatus).toBe('completed')
   })
 
-  it('closes revoked details and ignores a pending submission after the dialog closes', async () => {
+  it('clears only revoked task details and ignores a pending submission after the dialog closes', async () => {
     const store = useGlossaryStore()
     await store.openSyncDialog(7, 1, 'source', 'old', 'new')
     let resolve!: (value: unknown) => void
@@ -125,8 +147,27 @@ describe('glossary task coordination', () => {
     await store.openSyncDialog(7, 1, 'source', 'old', 'new')
     await store.submitSync(7, 'all')
     fail(new ApiError('removed', 403))
-    expect(store.syncDialogVisible).toBe(false)
+    expect(store.syncDialogVisible).toBe(true)
     expect(store.items).toEqual([])
-    expect(store.error).toBe('workbench.details.unavailable')
+    expect(store.syncTaskId).toBeNull()
+    expect(store.error).toBeNull()
+    expect(store.syncError).toBe('taskHistoryErrors.forbidden')
+  })
+  it('task 404 preserves glossary entries and pending queue rather than revoking the project', async () => {
+    const store = useGlossaryStore()
+    const entry = { id: 4, source: 'source', target: 'edited' } as ApiSchemas['GlossaryEntry']
+    store.items = [entry]
+    await store.openSyncQueue(7, [
+      { entryId: 4, source: 'source', oldTarget: 'old', newTarget: 'edited' },
+      { entryId: 5, source: 'next', oldTarget: 'old', newTarget: 'new' },
+    ])
+    await store.submitSync(7, 'all')
+    fail(new ApiError('missing', 404))
+    expect(store.items).toEqual([entry])
+    expect(store.syncQueueTotal).toBe(2)
+    expect(store.syncTaskId).toBeNull()
+    expect(store.syncResult).toBeNull()
+    expect(store.syncStep).toBe('error')
+    expect(store.syncError).toBe('taskHistoryErrors.notFound')
   })
 })

@@ -31,6 +31,8 @@ const task = (
     project_id: 7,
     project_name: 'Test project',
     status,
+    can_delete: type !== 'storage' && ['completed', 'failed', 'cancelled'].includes(status),
+    finished_at: null,
     created_at: '2026-09-30T00:00:00Z',
     updated_at: '2026-09-30T00:01:00Z',
     started_at: null,
@@ -120,6 +122,85 @@ describe('operations coordinator', () => {
       'glossary_sync:1',
     ])
     expect(store.discoveryComplete).toBe(true)
+  })
+  it('an older project read cannot overwrite a later capability projection from another view', () => {
+    const store = useOperationsStore()
+    const target = {
+      kind: 'translation' as const,
+      id: '1',
+      project_id: 7,
+      status: 'completed',
+      can_delete: false,
+    }
+    const old = store.beginCapabilityRead(),
+      fresh = store.beginCapabilityRead()
+    store.observeCapabilities([{ ...target, can_delete: true }], fresh)
+    store.observeCapabilities([target], old)
+    expect(store.getTaskCapability(target)?.can_delete).toBe(true)
+    store.observeCapabilities([{ ...target, status: 'running' }])
+    expect(store.getTaskCapability(target)).toMatchObject({ can_delete: false, status: 'running' })
+  })
+  it('removal invalidates earlier reads, closes target subscriptions and resets summary/cursor once', async () => {
+    const store = useOperationsStore()
+    api.list.mockResolvedValue({
+      items: [task('1', 'translation', 'completed')],
+      next_cursor: 'old-page',
+    })
+    await store.loadList()
+    await store.ensureSummary()
+    const late = deferred<{ status: string; project_id: number }>()
+    api.job.mockReturnValueOnce(late.promise)
+    const received = vi.fn(),
+      failed = vi.fn()
+    store.subscribeTask({ task_type: 'translation', task_id: '1' }, received, failed, {
+      terminalRecheckMs: 30_000,
+    })
+    store.invalidateTasks([{ kind: 'translation', id: '1', project_id: 7 }])
+    late.resolve({ status: 'completed', project_id: 7 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(received).not.toHaveBeenCalled()
+    expect(failed).not.toHaveBeenCalled()
+    expect(store.items).toEqual([])
+    expect(store.nextCursor).toBeUndefined()
+    expect(store.summary).toBeNull()
+    expect(store.revision).toBe(1)
+  })
+  it('rechecks visible terminal detail capability every thirty seconds and pauses when hidden', async () => {
+    const store = useOperationsStore(),
+      receive = vi.fn()
+    api.job.mockResolvedValue({
+      status: 'completed',
+      project_id: 7,
+      can_delete: false,
+      finished_at: null,
+    })
+    store.start()
+    const release = store.subscribeTask(
+      { task_type: 'translation', task_id: '1' },
+      receive,
+      vi.fn(),
+      { terminalRecheckMs: 30_000 },
+    )
+    await vi.advanceTimersByTimeAsync(29_999)
+    expect(receive).toHaveBeenCalledTimes(1)
+    api.job.mockResolvedValue({
+      status: 'completed',
+      project_id: 7,
+      can_delete: true,
+      finished_at: null,
+    })
+    await vi.advanceTimersByTimeAsync(1)
+    expect(receive).toHaveBeenLastCalledWith(expect.objectContaining({ can_delete: true }))
+    expect(receive).toHaveBeenCalledTimes(2)
+    fakeDocument.hidden = true
+    fakeDocument.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(receive).toHaveBeenCalledTimes(2)
+    fakeDocument.hidden = false
+    fakeDocument.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(receive).toHaveBeenCalledTimes(3)
+    release()
   })
 
   it('preserves the previous collection if a later page fails', async () => {

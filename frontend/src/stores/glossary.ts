@@ -17,6 +17,8 @@ import { t } from '@/i18n'
 import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
 import { ApiError, isAccessDenied } from '@/api/utils'
 import { useOperationsStore } from './operations'
+import { useTaskMutationsStore } from './taskMutations'
+import { taskHistoryErrorMessage, type TaskHistoryTarget } from '@/api/task-history'
 
 type GlossaryEntry = ApiSchemas['GlossaryEntry']
 type CreateGlossaryEntryPayload = ApiSchemas['CreateGlossaryEntryRequest']
@@ -37,6 +39,7 @@ export type GlossarySyncQueueItem = {
 
 export const useGlossaryStore = defineStore('glossary', () => {
   const operations = useOperationsStore()
+  const mutations = useTaskMutationsStore()
   const items = ref<GlossaryEntry[]>([])
 
   const loading = ref(false)
@@ -88,6 +91,8 @@ export const useGlossaryStore = defineStore('glossary', () => {
   const syncTotal = ref(0)
   const syncCancelling = ref(false)
   const syncTaskProjectId = ref<number | null>(null)
+  const syncTaskSnapshot = ref<SyncTaskStatusResponse | null>(null)
+  const syncHistoryRemoved = ref(false)
   let unsubscribeSync: (() => void) | null = null
   let syncSubscriptionGeneration = 0
   let entriesGeneration = 0
@@ -263,6 +268,8 @@ export const useGlossaryStore = defineStore('glossary', () => {
     newTarget: string,
   ): void => {
     syncImpactGeneration += 1
+    syncHistoryRemoved.value = false
+    syncTaskSnapshot.value = null
     syncStep.value = 'impact'
     syncEntryId.value = entryId
     syncSource.value = source
@@ -473,13 +480,13 @@ export const useGlossaryStore = defineStore('glossary', () => {
       (cause) => {
         if (generation !== syncSubscriptionGeneration || !isSessionCurrent(session)) return
         if (isAccessDenied(cause)) {
-          closeSyncDialog()
-          items.value = []
-          error.value = t('workbench.details.unavailable')
+          removeTaskHistories([{ kind: 'glossary_sync', id: taskId, project_id: projectId }], false)
+          syncError.value = taskHistoryErrorMessage(cause)
         } else
           syncError.value =
             cause instanceof Error ? cause.message : t('workspace.glossary.sync.networkError')
       },
+      { terminalRecheckMs: 30_000 },
     )
   }
 
@@ -490,19 +497,20 @@ export const useGlossaryStore = defineStore('glossary', () => {
   }
 
   const applySyncStatus = (status: SyncTaskStatusResponse, projectId: number): void => {
+    const transitioned = !SYNC_TERMINAL_STATUSES.includes(syncTaskStatus.value)
+    syncTaskSnapshot.value = status
     syncTaskStatus.value = status.status
     syncProcessed.value = status.processed
     syncTotal.value = status.total
     syncError.value = null
     if (!SYNC_TERMINAL_STATUSES.includes(status.status)) return
-    stopSyncPolling()
     if (status.status === 'completed') {
       syncResult.value = status.result ?? null
       syncStep.value = 'result'
-      void loadEntries(projectId)
+      if (transitioned) void loadEntries(projectId)
     } else if (status.status === 'cancelled') {
       syncStep.value = 'cancelled'
-      void loadEntries(projectId)
+      if (transitioned) void loadEntries(projectId)
     } else {
       syncError.value = status.error ?? t('workspace.glossary.sync.taskFailed')
       syncStep.value = 'error'
@@ -521,11 +529,14 @@ export const useGlossaryStore = defineStore('glossary', () => {
     syncCancelling.value = true
 
     try {
-      const response = await cancelGlossarySyncTask(projectId, taskId)
+      const response = await mutations.run(
+        [{ kind: 'glossary_sync', id: taskId, project_id: projectId }],
+        'cancel',
+        () => cancelGlossarySyncTask(projectId, taskId),
+      )
       if (!current()) return
       syncTaskStatus.value = response.status
       syncStep.value = 'cancelled'
-      stopSyncPolling()
       await operations.invalidate()
       if (!current()) return
       const latest = await operations.querySync(projectId, taskId, syncRequestController.signal)
@@ -533,9 +544,19 @@ export const useGlossaryStore = defineStore('glossary', () => {
     } catch (err) {
       if (!current()) return
       if (isAccessDenied(err)) {
-        closeSyncDialog()
-        items.value = []
-        error.value = t('workbench.details.unavailable')
+        try {
+          const latest = await operations.querySync(projectId, taskId, syncRequestController.signal)
+          if (current()) applySyncStatus(latest, projectId)
+        } catch (readError) {
+          if (current() && isAccessDenied(readError)) {
+            removeTaskHistories(
+              [{ kind: 'glossary_sync', id: taskId, project_id: projectId }],
+              false,
+            )
+            syncError.value = taskHistoryErrorMessage(readError)
+          }
+        }
+        if (current()) syncError.value = taskHistoryErrorMessage(err)
         return
       }
       if (err instanceof ApiError && err.status === 409) {
@@ -553,7 +574,39 @@ export const useGlossaryStore = defineStore('glossary', () => {
     }
   }
 
+  const removeTaskHistories = (targets: TaskHistoryTarget[], close = true): void => {
+    if (
+      !targets.some(
+        (target) =>
+          target.kind === 'glossary_sync' &&
+          target.id === syncTaskId.value &&
+          target.project_id === syncTaskProjectId.value,
+      )
+    )
+      return
+    syncRequestController.abort()
+    syncRequestController = new AbortController()
+    stopSyncPolling()
+    syncImpactGeneration++
+    syncTaskId.value = null
+    syncTaskProjectId.value = null
+    syncTaskSnapshot.value = null
+    syncStatusUrl.value = null
+    syncResult.value = null
+    syncProcessed.value = 0
+    syncTotal.value = 0
+    syncCancelling.value = false
+    syncError.value = t('taskHistoryErrors.notFound')
+    syncStep.value = 'error'
+    if (close) {
+      syncHistoryRemoved.value = true
+      syncDialogVisible.value = false
+    }
+  }
+
   const closeSyncDialog = (): void => {
+    syncHistoryRemoved.value = false
+    syncTaskSnapshot.value = null
     syncRequestController.abort()
     syncRequestController = new AbortController()
     stopSyncPolling()
@@ -645,6 +698,10 @@ export const useGlossaryStore = defineStore('glossary', () => {
     syncImpactData,
     syncSelectedResourceIds,
     syncTaskId,
+    syncTaskProjectId,
+    syncTaskSnapshot,
+    syncHistoryRemoved,
+    removeTaskHistories,
     syncStatusUrl,
     syncTaskStatus,
     syncProcessed,

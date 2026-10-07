@@ -20,6 +20,8 @@ import { ApiError, isAccessDenied } from '@/api/utils'
 import { t } from '@/i18n'
 import { extractErrorMessage } from '@/utils/errors'
 import { useOperationsStore } from './operations'
+import { useTaskMutationsStore } from './taskMutations'
+import { taskHistoryErrorMessage, type TaskHistoryTarget } from '@/api/task-history'
 
 type Job = ApiSchemas['Job']
 type CreateJobRequest = ApiSchemas['CreateJobRequest']
@@ -28,6 +30,8 @@ export type JobStatusFilter = Job['status'] | 'all'
 
 export const useJobStore = defineStore('job', () => {
   const operations = useOperationsStore()
+  const mutations = useTaskMutationsStore()
+  const historyGenerations = new Map<number, number>()
   const jobs = ref<Job[]>([])
   const jobsCursor = ref<string | null>(null)
   const loadingJobs = ref(false)
@@ -109,6 +113,7 @@ export const useJobStore = defineStore('job', () => {
     const key = JSON.stringify([projectId, status, cursor])
     if (listFlight?.key === key) return listFlight.promise
     const session = captureSession()
+    const capabilityStamp = operations.beginCapabilityRead()
     const generation = ++listGeneration
     const current = () =>
       !disposed &&
@@ -126,6 +131,16 @@ export const useJobStore = defineStore('job', () => {
           limit: 50,
         })
         if (!current()) return
+        operations.observeCapabilities(
+          response.items.map((item) => ({
+            kind: 'translation' as const,
+            id: String(item.id),
+            project_id: item.project_id,
+            status: item.status,
+            can_delete: item.can_delete,
+          })),
+          capabilityStamp,
+        )
         const items = append ? [...jobs.value, ...response.items] : response.items
         jobs.value = [...new Map(items.map((item) => [item.id, item])).values()]
         jobsCursor.value = response.next_cursor ?? null
@@ -151,6 +166,15 @@ export const useJobStore = defineStore('job', () => {
 
   const accept = (job: Job): void => {
     if (project !== null && job.project_id !== project) return
+    operations.observeCapabilities([
+      {
+        kind: 'translation',
+        id: String(job.id),
+        project_id: job.project_id,
+        status: job.status,
+        can_delete: job.can_delete,
+      },
+    ])
     invalidateList()
     const rest = jobs.value.filter((item) => item.id !== job.id)
     jobs.value =
@@ -159,9 +183,32 @@ export const useJobStore = defineStore('job', () => {
         : rest
   }
   const forget = (jobId: number): void => {
+    historyGenerations.set(jobId, (historyGenerations.get(jobId) ?? 0) + 1)
     invalidateList()
     jobs.value = jobs.value.filter((item) => item.id !== jobId)
     operations.forget({ task_type: 'translation', task_id: String(jobId) })
+  }
+  const removeHistories = (targets: TaskHistoryTarget[]): void => {
+    const ids = new Set(
+      targets.filter((target) => target.kind === 'translation').map((target) => target.id),
+    )
+    if (!ids.size) return
+    for (const id of ids) {
+      const number = Number(id)
+      historyGenerations.set(number, (historyGenerations.get(number) ?? 0) + 1)
+      mutationFlights.delete(number)
+    }
+    for (const pending of Object.values(pendingIds))
+      pending.value = pending.value.filter((id) => !ids.has(String(id)))
+    invalidateList()
+    jobs.value = jobs.value.filter((item) => !ids.has(String(item.id)))
+    jobsCursor.value = null
+    activePollingJobIds.value = new Set(
+      [...activePollingJobIds.value].filter((id) => !ids.has(String(id))),
+    )
+  }
+  const refreshHistory = async (): Promise<void> => {
+    if (project !== null) await loadJobs(project)
   }
   const invalidateOperations = (): void => {
     // A successful write is complete even if the independent refresh subsequently fails.
@@ -231,15 +278,26 @@ export const useJobStore = defineStore('job', () => {
     const session = captureSession()
     const generation = viewGeneration
     const projectId = jobs.value.find((item) => item.id === jobId)?.project_id ?? project
-    const current = () => !disposed && isSessionCurrent(session) && generation === viewGeneration
+    const history = historyGenerations.get(jobId) ?? 0
+    const current = () =>
+      !disposed &&
+      isSessionCurrent(session) &&
+      generation === viewGeneration &&
+      history === (historyGenerations.get(jobId) ?? 0)
     const ids = pendingIds[action]
     ids.value = [...ids.value, jobId]
     actionError.value = null
     const work = async (): Promise<Job> => {
       try {
-        const job = await requests[action](jobId)
+        if (projectId == null) throw new ApiError(t('operations.inaccessible'), 403)
+        const job = await mutations.run(
+          [{ kind: 'translation', id: String(jobId), project_id: projectId }],
+          action,
+          () => requests[action](jobId),
+        )
         assertSessionCurrent(session)
-        if (disposed) throw new StaleSessionError()
+        if (disposed || history !== (historyGenerations.get(jobId) ?? 0))
+          throw new StaleSessionError()
         if (current()) accept(job)
         invalidateOperations()
         return job
@@ -248,7 +306,11 @@ export const useJobStore = defineStore('job', () => {
           if (isAccessDenied(error)) forget(jobId)
           if (error instanceof ApiError && error.status === 409)
             await conflictRefresh(projectId, jobId)
-          if (current()) actionError.value = extractErrorMessage(error, t(errors[action]))
+          if (current())
+            actionError.value =
+              error instanceof ApiError && error.status === 409
+                ? taskHistoryErrorMessage(error)
+                : extractErrorMessage(error, t(errors[action]))
         }
         throw error
       } finally {
@@ -312,6 +374,8 @@ export const useJobStore = defineStore('job', () => {
     stopPolling,
     isPolling,
     loadJobs,
+    removeHistories,
+    refreshHistory,
     createJob,
     cancelJob,
     retryJob,

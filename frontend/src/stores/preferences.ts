@@ -67,6 +67,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const clearHiddenTerminals = (): void => {
     hiddenTerminalKeys.value = []
   }
+  const removeHiddenTerminals = (keys: string[]): void => {
+    const removed = new Set(keys)
+    hiddenTerminalKeys.value = hiddenTerminalKeys.value.filter((key) => !removed.has(key))
+  }
   const recordVisit = (projectId: number): void => {
     if (!getSessionScope() || !Number.isSafeInteger(projectId) || projectId < 1) return
     recentProjects.value = [
@@ -90,6 +94,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     selectedOrgId,
     hideTerminal,
     clearHiddenTerminals,
+    removeHiddenTerminals,
     recordVisit,
     pruneRecentProjects,
     setSelectedOrg,
