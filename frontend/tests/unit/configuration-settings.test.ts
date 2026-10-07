@@ -5,6 +5,7 @@ import { fetchAdminSettings, updateAdminSettings } from '@/api/admin'
 import { changeSessionContext } from '@/api/session-context'
 import { ApiError } from '@/api/utils'
 import type { ApiClient } from '@/api/client-core'
+import { TaskHistoryApiError } from '@/api/task-history'
 
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
 vi.mock('@/api/admin', () => ({
@@ -18,7 +19,11 @@ vi.mock('@/api/admin', () => ({
   fetchAdminSettings: vi.fn(),
   updateAdminSettings: vi.fn(),
 }))
-const settings = (enabled: boolean) => ({ settings: { registration_enabled: enabled } })
+const settings = (
+  enabled: boolean,
+  retention = { enabled: false, retention_days: 30, revision: 1 },
+) => ({ settings: { registration_enabled: enabled, task_retention: retention } })
+const registrationPatch = (enabled: boolean) => ({ settings: { registration_enabled: enabled } })
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => {
@@ -54,11 +59,11 @@ describe('confirmed registration policy', () => {
     await store.loadSettings()
     vi.mocked(updateAdminSettings).mockResolvedValueOnce(settings(true))
     expect(await store.saveSettings({ registration_enabled: true })).toBe(true)
-    expect(updateAdminSettings).toHaveBeenLastCalledWith(settings(true))
+    expect(updateAdminSettings).toHaveBeenLastCalledWith(registrationPatch(true))
     expect(store.settings).toEqual(settings(true).settings)
     vi.mocked(updateAdminSettings).mockResolvedValueOnce(settings(false))
     expect(await store.saveSettings({ registration_enabled: false })).toBe(true)
-    expect(updateAdminSettings).toHaveBeenLastCalledWith(settings(false))
+    expect(updateAdminSettings).toHaveBeenLastCalledWith(registrationPatch(false))
   })
   it('preserves the confirmed policy on refresh/save failure and serializes operations', async () => {
     const store = useAdminStore()
@@ -130,7 +135,63 @@ describe('registration policy API response validation', () => {
       get.mockResolvedValueOnce({ data: value })
       await expect(api.fetchAdminSettings(client)).rejects.toThrow()
       get.mockResolvedValueOnce({ data: value })
-      await expect(api.updateAdminSettings(settings(true), client)).rejects.toThrow()
+      await expect(api.updateAdminSettings(registrationPatch(true), client)).rejects.toThrow()
     }
+  })
+})
+
+describe('confirmed task retention policy', () => {
+  const patch = { enabled: true, retention_days: 7, expected_revision: 1 }
+  it('sends exactly the retention group and serializes both settings cards', async () => {
+    const store = useAdminStore()
+    vi.mocked(fetchAdminSettings).mockResolvedValue(settings(false))
+    await store.loadSettings()
+    const pending = deferred<ReturnType<typeof settings>>()
+    vi.mocked(updateAdminSettings).mockReturnValueOnce(pending.promise)
+    const save = store.saveTaskRetention(patch)
+    expect(updateAdminSettings).toHaveBeenCalledExactlyOnceWith({
+      settings: { task_retention: patch },
+    })
+    expect(await store.saveSettings({ registration_enabled: true })).toBe(false)
+    expect(await store.saveTaskRetention(patch)).toBe('failed')
+    pending.resolve(settings(false, { enabled: true, retention_days: 7, revision: 2 }))
+    expect(await save).toBe('saved')
+    expect(store.settings?.task_retention.revision).toBe(2)
+    expect(store.settings?.registration_enabled).toBe(false)
+  })
+  it('returns an explicit conflict and does not replay or discard the confirmed snapshot', async () => {
+    const store = useAdminStore()
+    vi.mocked(fetchAdminSettings).mockResolvedValue(settings(true))
+    await store.loadSettings()
+    vi.mocked(updateAdminSettings).mockRejectedValue(
+      new TaskHistoryApiError(409, 'settings_conflict'),
+    )
+    expect(await store.saveTaskRetention(patch)).toBe('conflict')
+    expect(updateAdminSettings).toHaveBeenCalledTimes(1)
+    expect(store.settings).toEqual(settings(true).settings)
+  })
+  it('ignores a late write from a prior session and older status policy revisions', async () => {
+    const store = useAdminStore()
+    vi.mocked(fetchAdminSettings).mockResolvedValue(settings(true))
+    await store.loadSettings()
+    store.acceptRetentionPolicy({ enabled: true, retention_days: 14, revision: 3 })
+    store.acceptRetentionPolicy({ enabled: false, retention_days: 30, revision: 2 })
+    expect(store.settings?.task_retention.revision).toBe(3)
+    const pending = deferred<ReturnType<typeof settings>>()
+    vi.mocked(updateAdminSettings).mockReturnValueOnce(pending.promise)
+    const save = store.saveTaskRetention({ ...patch, expected_revision: 3 })
+    changeSessionContext('https://settings-b.test/api/v1', 2)
+    pending.resolve(settings(true, { enabled: true, retention_days: 7, revision: 4 }))
+    expect(await save).toBe('stale')
+    expect(store.settings).toBeNull()
+  })
+  it('clears snapshots and reports denied access after a retention PATCH 403', async () => {
+    const store = useAdminStore()
+    vi.mocked(fetchAdminSettings).mockResolvedValue(settings(true))
+    await store.loadSettings()
+    vi.mocked(updateAdminSettings).mockRejectedValue(new TaskHistoryApiError(403))
+    expect(await store.saveTaskRetention(patch)).toBe('failed')
+    expect(store.settings).toBeNull()
+    expect(store.settingsAccessDenied).toBe(true)
   })
 })
