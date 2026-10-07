@@ -46,7 +46,7 @@ export default {
     terminalTasks: '已结束任务',
     allTasks: '全部任务',
     keepTerminal: '保留终态提醒',
-    keepTerminalHint: '在浮动任务入口保留最近结束的任务；完整历史可在任务中心查看。',
+    keepTerminalHint: '在浮动任务入口保留最近结束的任务；当前保留的任务历史可在任务中心查看。',
     preferenceHint: '任务偏好和最近访问按服务与账号保存于此浏览器。主题和语言适用于此浏览器。',
     resetHidden: '恢复已隐藏提醒',
     resetHiddenSuccess: '已恢复终态提醒',

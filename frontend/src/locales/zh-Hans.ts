@@ -1,4 +1,7 @@
 import operations from './operations'
+import taskHistory from './task-history'
+import taskHistoryErrors from './task-history-errors'
+import taskRetention from './task-retention'
 import runtime from './runtime'
 import workbench from './workbench'
 import team from './team'
@@ -15,6 +18,9 @@ import storageAdmin from './storage-admin'
 import storageCapacity from './storage-capacity'
 
 const messages = {
+  taskHistory,
+  taskHistoryErrors,
+  taskRetention,
   storageUi,
   storageAdmin,
   storageCapacity,
@@ -387,9 +393,9 @@ const messages = {
       },
     },
     jobStatus: {
-      title: '任务状态概览',
-      total: '总计 {count} 个任务',
-      successRate: '{percent}% 成功率',
+      title: '保留的翻译任务记录',
+      total: '已完成与失败共 {count} 条',
+      successRate: '完成占比 {percent}',
       completed: '已完成',
       failed: '失败',
     },

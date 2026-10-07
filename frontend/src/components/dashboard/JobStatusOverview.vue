@@ -48,7 +48,9 @@ const failedPercent = computed(() => {
         <div class="flex items-center justify-between text-xs text-lf-text-muted">
           <span>{{ t('dashboard.jobStatus.total', { count: n(totalJobs) }) }}</span>
           <span class="font-medium text-lf-text-strong">{{
-            t('dashboard.jobStatus.successRate', { percent: completedPercent })
+            t('dashboard.jobStatus.successRate', {
+              percent: totalJobs ? `${completedPercent}%` : '—',
+            })
           }}</span>
         </div>
         <StackedProgressBar

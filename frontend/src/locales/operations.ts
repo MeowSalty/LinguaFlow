@@ -71,7 +71,7 @@ export default {
   trackerReadError: '任务信息更新失败',
   trackerInitialError: '暂时无法加载任务，请重试。',
   hide: '隐藏此提醒',
-  clearCompleted: '清除已结束任务',
+  clearCompleted: '隐藏已结束任务',
   completedNotice: '任务 #{id} 已结束',
   authRetry: '重试连接',
   incomplete: '本轮活动发现不完整，已保留未确认任务。',
