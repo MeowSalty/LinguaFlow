@@ -1,59 +1,43 @@
-﻿<script setup lang="ts">
-import { computed, shallowRef, useId, watch } from 'vue'
-import { useThemeVars } from 'naive-ui'
+<script setup lang="ts">
+import { computed, useId } from 'vue'
+import { NInput, NSelect, useThemeVars } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import type { LimitedQuotaDraft } from '@/utils/storage-quota'
 import {
   parseStorageCapacity,
-  storageCapacityUnit,
   storageCapacityUnits,
   storageCapacityValue,
   type StorageCapacityUnit,
 } from './capacity'
 
-const props = defineProps<{ value: number; disabled?: boolean; label?: string }>()
-const emit = defineEmits<{ 'update:value': [value: number] }>()
+const props = defineProps<{ value: LimitedQuotaDraft; disabled?: boolean; label?: string }>()
+const emit = defineEmits<{ 'update:value': [value: LimitedQuotaDraft] }>()
 const { t } = useI18n()
 const themeVars = useThemeVars()
 const id = useId()
-const unit = shallowRef<StorageCapacityUnit>(storageCapacityUnit(props.value))
-const draft = shallowRef(storageCapacityValue(props.value, unit.value))
-const touched = shallowRef(false)
-const bytes = computed(() => parseStorageCapacity(draft.value, unit.value))
-const invalid = computed(() => touched.value && bytes.value === null)
+const bytes = computed(() => parseStorageCapacity(props.value.input, props.value.unit))
+const invalid = computed(() => bytes.value === null)
 const options = storageCapacityUnits.map((value) => ({ label: value, value }))
-let emittedValue: number | undefined
 
-watch(
-  () => props.value,
-  (value) => {
-    if (value === emittedValue) {
-      emittedValue = undefined
-      return
-    }
-    draft.value = storageCapacityValue(value, unit.value)
-    touched.value = false
-  },
-)
-
-function update(value: string) {
-  draft.value = value
-  touched.value = true
-  emittedValue = bytes.value ?? 0
-  emit('update:value', emittedValue)
+function update(input: string) {
+  if (!props.disabled) emit('update:value', { ...props.value, input })
 }
-function changeUnit(value: StorageCapacityUnit) {
+function changeUnit(unit: StorageCapacityUnit) {
+  if (props.disabled) return
   const original = bytes.value
-  unit.value = value
-  if (original !== null) draft.value = storageCapacityValue(original, value)
-  else update(draft.value)
+  emit('update:value', {
+    mode: 'limited',
+    unit,
+    input: original === null ? props.value.input : storageCapacityValue(original, unit),
+  })
 }
 </script>
 
 <template>
   <div class="w-full min-w-0">
     <div class="flex min-w-0 gap-2">
-      <n-input
-        :value="draft"
+      <NInput
+        :value="value.input"
         :disabled="disabled"
         :status="invalid ? 'error' : undefined"
         :placeholder="t('storageCapacity.inputPlaceholder')"
@@ -66,9 +50,9 @@ function changeUnit(value: StorageCapacityUnit) {
         }"
         @update:value="update"
       />
-      <n-select
+      <NSelect
         class="!w-24 shrink-0"
-        :value="unit"
+        :value="value.unit"
         :disabled="disabled"
         :options="options"
         :aria-label="t('storageCapacity.unit')"
@@ -78,18 +62,18 @@ function changeUnit(value: StorageCapacityUnit) {
     <p
       v-if="invalid"
       :id="`${id}-error`"
-      class="mt-1.5 text-xs"
+      class="mt-1.5 text-xs break-words"
       :style="{ color: themeVars.errorColor }"
       role="alert"
     >
       {{ t('storageCapacity.invalid') }}
     </p>
-    <p v-else :id="`${id}-exact`" class="mt-1.5 text-xs text-lf-text-muted tabular-nums">
-      {{
-        bytes === null
-          ? t('storageCapacity.inputHint')
-          : t('storageCapacity.exactBytes', { value: bytes.toLocaleString() })
-      }}
+    <p
+      v-else
+      :id="`${id}-exact`"
+      class="mt-1.5 text-xs text-lf-text-muted tabular-nums break-words"
+    >
+      {{ t('storageCapacity.exactBytes', { value: bytes!.toLocaleString() }) }}
     </p>
   </div>
 </template>
