@@ -9,7 +9,7 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -424,16 +424,47 @@ const cancelPrecheckedUpload = (): void => {
   workspace.clearPendingUploadItems()
 }
 
-// ── 拖拽上传 ──
+// ── 拖拽上传（window 级监听，整窗为投放区）──
 
-const handleDragOver = (event: DragEvent): void => {
-  event.preventDefault()
+let dragDepth = 0
+const isFileDrag = (event: DragEvent): boolean =>
+  Array.from(event.dataTransfer?.types ?? []).includes('Files')
+
+const handleWindowDragEnter = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  dragDepth += 1
   dragOver.value = true
 }
-
-const handleDragLeave = (): void => {
-  dragOver.value = false
+const handleWindowDragOver = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  event.preventDefault() // 允许在窗口任意位置释放，并阻止浏览器直接打开文件
 }
+const handleWindowDragLeave = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) dragOver.value = false
+}
+const handleWindowDrop = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  dragDepth = 0
+  dragOver.value = false
+  void handleDrop(event)
+}
+
+onMounted(() => {
+  window.addEventListener('dragenter', handleWindowDragEnter)
+  window.addEventListener('dragover', handleWindowDragOver)
+  window.addEventListener('dragleave', handleWindowDragLeave)
+  window.addEventListener('drop', handleWindowDrop)
+})
+onScopeDispose(() => {
+  window.removeEventListener('dragenter', handleWindowDragEnter)
+  window.removeEventListener('dragover', handleWindowDragOver)
+  window.removeEventListener('dragleave', handleWindowDragLeave)
+  window.removeEventListener('drop', handleWindowDrop)
+  dragDepth = 0
+})
 
 const handleDrop = async (event: DragEvent): Promise<void> => {
   const context = captureContext()
@@ -494,7 +525,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 </script>
 
 <template>
-  <div class="space-y-3" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
+  <div class="space-y-3">
     <div
       class="flex flex-wrap items-center gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2"
     >
@@ -596,29 +627,36 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       {{ workspace.resourceTreeError }}
     </NAlert>
 
-    <!-- 拖拽上传覆盖层 -->
-    <Transition
-      enter-active-class="transition-opacity duration-200"
-      leave-active-class="transition-opacity duration-200"
-      enter-from-class="opacity-0"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="dragOver"
-        class="flex items-center justify-center rounded-lf-card border-2 border-dashed border-brand-500/45 bg-lf-brand-soft/80 py-8"
+    <!-- 拖拽上传全屏覆盖层 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-opacity duration-200"
+        leave-active-class="transition-opacity duration-200"
+        enter-from-class="opacity-0"
+        leave-to-class="opacity-0"
       >
-        <div class="text-center">
+        <div
+          v-if="dragOver"
+          class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-lf-surface/70 backdrop-blur-sm"
+        >
           <div
-            class="mx-auto flex h-12 w-12 items-center justify-center rounded-lf-ctl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow"
+            class="flex flex-col items-center rounded-lf-card border-2 border-dashed border-brand-500/60 bg-lf-brand-soft px-14 py-10 text-center shadow-lf-shadow"
           >
-            <NIcon size="26"><IconCarbonUpload /></NIcon>
+            <div
+              class="flex h-14 w-14 items-center justify-center rounded-lf-ctl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow"
+            >
+              <NIcon size="30"><IconCarbonUpload /></NIcon>
+            </div>
+            <p class="mt-4 text-base font-semibold text-brand-700">
+              {{ t('workspace.explorer.releaseToUpload') }}
+            </p>
+            <p class="mt-1.5 text-sm text-lf-text-muted">
+              {{ t('workspace.explorer.releaseHint') }}
+            </p>
           </div>
-          <p class="mt-3 text-sm font-medium text-brand-700">
-            {{ t('workspace.explorer.dropToUpload') }}
-          </p>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
 
     <!-- 加载状态 -->
     <div
@@ -634,7 +672,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 
     <!-- 空状态 -->
     <div
-      v-else-if="isEmpty && !dragOver"
+      v-else-if="isEmpty"
       class="rounded-lf-card border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-8"
     >
       <NEmpty :description="t('workspace.explorer.emptyDirectory')">

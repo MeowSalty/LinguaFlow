@@ -534,7 +534,8 @@ const messages = {
     explorer: {
       rootLabel: '项目根目录',
       emptyDirectory: '当前目录为空，上传文件后即可开始翻译',
-      dropToUpload: '拖拽文件或文件夹到此处上传',
+      releaseToUpload: '松开鼠标，上传到当前目录',
+      releaseHint: '支持文件与文件夹，自动保留目录层级',
       dropHint: '也可以直接把文件或文件夹拖入此区域，系统会保留当前目录层级',
       backToParent: '返回上级',
       refreshDirectory: '刷新目录',
