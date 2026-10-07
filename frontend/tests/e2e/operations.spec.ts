@@ -163,7 +163,7 @@ test('sync member detail has no cancel and loses sensitive content after 403', a
   await expect(page.getByRole('button', { name: '取消任务', exact: true })).toHaveCount(0)
   state.forbidden = true
   await page.locator('.n-drawer').getByRole('button', { name: '刷新', exact: true }).click()
-  await expect(page.getByText('任务或项目已不可访问', { exact: true })).toBeVisible()
+  await expect(page.getByText('当前无权访问这条任务记录', { exact: true })).toBeVisible()
   await expect(page.getByText('已处理 15 / 80 段落', { exact: true })).toHaveCount(0)
 })
 
