@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import type { ApiSchemas } from '../../src/api/client-core'
 import { json, mockApp } from './fixtures.ts'
 import {
   connectionActions,
@@ -45,7 +46,7 @@ export async function mockStorageVisual(
     management_actions: connectionActions(),
   })
   const connections = [1, 2, 3].map(makeConnection)
-  const spaces = Array.from({ length: 7 }, (_, index) => ({
+  const spaces: ApiSchemas['StorageSpace'][] = Array.from({ length: 7 }, (_, index) => ({
     id: index + 11,
     connection_id: 1,
     name:
@@ -53,25 +54,37 @@ export async function mockStorageVisual(
         ? '待审核译文和多语言交付文件-LongUnbrokenTranslationDeliverables20261005'
         : ['项目原始文件', '', '历史交付归档', '参考文档', '术语库快照', '对照资料', '历史文件'][
             index
-          ],
+          ]!,
     bucket: 'linguaflow-project-assets-ap-southeast-1',
     prefix: `translation-projects/release-2026/space-${index + 1}/`,
     status: index === 2 ? 'read_only' : 'active',
     verified: index !== 3,
     management_generation: 3,
     management_actions: spaceActions(),
-    capacity_bytes: scenario === 'over-capacity' && index === 0 ? GiB : 10 * GiB,
-    reserved_bytes: scenario === 'unknown' && index === 0 ? undefined : 128 * 1024 ** 2,
+    capacity_bytes:
+      scenario === 'unlimited'
+        ? null
+        : scenario === 'over-capacity' && index === 0
+          ? GiB
+          : 10 * GiB,
+    available_bytes:
+      scenario === 'unlimited'
+        ? null
+        : scenario === 'over-capacity' && index === 0
+          ? 0
+          : 10 * GiB - (128 + 256 + 64) * 1024 ** 2 - 2 * GiB - index * 1000,
+    reserved_bytes: scenario === 'unknown' && index === 0 ? undefined! : 128 * 1024 ** 2,
     candidate_bytes: 256 * 1024 ** 2,
     live_bytes: 2 * GiB + index * 1000,
     pending_delete_bytes: 64 * 1024 ** 2,
   }))
-  const policy = {
+  const policy: ApiSchemas['StoragePolicy'] = {
     ...policyCapabilities(),
     mode: 'both',
     default_choice: 'site',
     generation: 6,
-    logical_limit_bytes: 100 * GiB,
+    logical_limit_bytes: scenario === 'unlimited' ? null : 100 * GiB,
+    default_space_capacity_bytes: null,
   }
   if (scenario === 'maintenance') {
     policy.runtime.maintenance = true
@@ -97,7 +110,36 @@ export async function mockStorageVisual(
       ],
     },
   ]
-  const state = { requests, connections, spaces, policy, failed: false, pending: false }
+  const disks: ApiSchemas['StorageDiskDiagnostic'][] =
+    scenario === 'empty'
+      ? []
+      : [
+          {
+            roles: ['work', 'objects'],
+            state:
+              scenario === 'disk-unknown'
+                ? 'unknown'
+                : scenario === 'disk-low'
+                  ? 'low'
+                  : 'available',
+            total_bytes: scenario === 'disk-unknown' ? null : 512 * GiB,
+            available_bytes:
+              scenario === 'disk-unknown' ? null : scenario === 'disk-low' ? 0 : 128 * GiB,
+            minimum_free_bytes: scenario === 'disk-unknown' ? null : 5 * GiB,
+            observed_at: '2026-10-05T01:59:00Z',
+          },
+        ]
+  const state = {
+    requests,
+    connections,
+    spaces,
+    policy,
+    disks: disks as typeof disks | undefined,
+    failed: false,
+    pending: false,
+    quotaResponse: 'ok' as 'ok' | 'conflict' | 'lost',
+    policyResponse: 'ok' as 'ok' | 'conflict' | 'lost',
+  }
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url())
     const path = url.pathname.replace('/api/v1', '')
@@ -119,9 +161,19 @@ export async function mockStorageVisual(
         ])
       return json(route, capability)
     }
-    if (path === '/admin/storage/policy') return json(route, policy)
+    if (path === '/admin/storage/policy') {
+      if (method === 'PUT') {
+        const body = route.request().postDataJSON()
+        if (state.policyResponse === 'conflict' || body.generation !== state.policy.generation)
+          return json(route, { error_code: 'storage_generation_conflict' }, 409)
+        state.policy = { ...state.policy, ...body, generation: state.policy.generation + 1 }
+        if (state.policyResponse === 'lost') return route.abort('connectionfailed')
+      }
+      return json(route, state.policy)
+    }
     if (path === '/admin/storage/diagnostics')
       return json(route, {
+        disks: state.disks,
         spaces:
           scenario === 'empty'
             ? []
@@ -161,7 +213,49 @@ export async function mockStorageVisual(
               : connections,
       })
     const connectionId = Number(path.match(/connections\/(\d+)/)?.[1] ?? 1)
-    if (path.endsWith('/spaces'))
+    if (path.endsWith('/quota') && method === 'PUT') {
+      const body = route.request().postDataJSON()
+      const space = spaces.find((item) => item.id === Number(path.match(/spaces\/(\d+)/)?.[1]))
+      if (!space) return json(route, {}, 404)
+      if (
+        state.quotaResponse === 'conflict' ||
+        body.expected_generation !== space.management_generation
+      )
+        return json(route, { error_code: 'storage_generation_conflict' }, 409)
+      space.capacity_bytes = body.capacity_bytes
+      space.available_bytes =
+        body.capacity_bytes === null
+          ? null
+          : Math.max(
+              0,
+              body.capacity_bytes -
+                space.reserved_bytes -
+                space.candidate_bytes -
+                space.live_bytes -
+                space.pending_delete_bytes,
+            )
+      space.management_generation++
+      if (state.quotaResponse === 'lost') return route.abort('connectionfailed')
+      return json(route, space)
+    }
+    if (path.endsWith('/spaces')) {
+      if (method === 'POST') {
+        const body = route.request().postDataJSON()
+        const space = {
+          ...spaces[0]!,
+          ...body,
+          id: 100 + spaces.length,
+          connection_id: connectionId,
+          management_generation: 0,
+          reserved_bytes: 0,
+          candidate_bytes: 0,
+          live_bytes: 0,
+          pending_delete_bytes: 0,
+          available_bytes: body.capacity_bytes,
+        }
+        spaces.push(space)
+        return json(route, space, 201)
+      }
       return json(route, {
         items:
           scenario === 'empty'
@@ -172,6 +266,7 @@ export async function mockStorageVisual(
                 ? [{ ...spaces[0], id: 21, connection_id: 2, name: '发布版本归档' }]
                 : [],
       })
+    }
     if (path.endsWith('/checks')) return json(route, { items: checks })
     if (path.endsWith('/check')) return json(route, { ...connections[0], check_id: 10 })
     return json(route, { title: 'Unexpected visual fixture route' }, 404)

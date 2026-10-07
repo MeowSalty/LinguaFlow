@@ -31,6 +31,21 @@ const connection = (id = 1, scope = 'user', ownerId = 1): ApiSchemas['StorageCon
   auth_generation: 2,
   management_actions: connectionActions(),
 })
+const quotaSpace = (capacity: number | null = 200, generation = 3): ApiSchemas['StorageSpace'] => ({
+  id: 11,
+  connection_id: 1,
+  name: 'Quota space',
+  status: 'active',
+  verified: true,
+  management_generation: generation,
+  management_actions: spaceActions(),
+  capacity_bytes: capacity,
+  reserved_bytes: 10,
+  candidate_bytes: 8,
+  live_bytes: 100,
+  pending_delete_bytes: 10,
+  available_bytes: capacity === null ? null : Math.max(capacity - 128, 0),
+})
 const deferred = <T>() => {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => (resolve = done))
@@ -65,6 +80,45 @@ beforeEach(() => {
 afterEach(() => scope.stop())
 
 describe('storage scope and concurrency', () => {
+  it('retains fresh site runtime actions when quota fields are missing, never reuses stale runtime', async () => {
+    const partial = {
+      ...policyCapabilities(),
+      mode: 'site_only',
+      default_choice: 'site',
+      generation: 1,
+      logical_limit_bytes: null,
+    }
+    const read = vi.fn().mockResolvedValue(partial)
+    const save = vi.fn()
+    const store = state(
+      {
+        getStoragePolicy: read,
+        setStoragePolicy: save,
+        listStorageConnections: vi.fn().mockResolvedValue({ items: [connection(1, 'site', 0)] }),
+        listStorageSpaces: vi.fn().mockResolvedValue({ items: [quotaSpace()] }),
+      },
+      true,
+    )
+    await store.load({ kind: 'site' })
+    expect(await store.loadPolicy()).toBe(false)
+    await store.loadSpaces(1)
+    expect(store.connectionAllowed(1, 'check_read')).toBe(true)
+    expect(store.spaceAllowed(1, 11, 'set_status')).toBe(true)
+    expect(store.policyStale.value).toBe(true)
+    await store.savePolicy({
+      mode: 'site_only',
+      default_choice: 'site',
+      generation: 1,
+      logical_limit_bytes: null,
+      default_space_capacity_bytes: null,
+    })
+    expect(save).not.toHaveBeenCalled()
+    store.markPolicyStale()
+    expect(store.spaceAllowed(1, 11, 'set_status')).toBe(false)
+    read.mockResolvedValue({ ...partial, runtime: undefined })
+    await store.loadPolicy()
+    expect(store.spaceAllowed(1, 11, 'set_status')).toBe(false)
+  })
   it('shows authorized connection metadata while capability discovery is still pending', async () => {
     const capability = deferred<ApiSchemas['StorageCapabilities']>()
     const store = state({
@@ -89,6 +143,7 @@ describe('storage scope and concurrency', () => {
       default_choice: 'user',
       generation: 2,
       logical_limit_bytes: 100,
+      default_space_capacity_bytes: null,
     }
     const read = vi
       .fn()
@@ -160,6 +215,7 @@ describe('storage scope and concurrency', () => {
       mode: 'site_only',
       default_choice: 'site',
       logical_limit_bytes: 100,
+      default_space_capacity_bytes: null,
       generation: 1,
     })
     expect(await reading).toBe(false)
@@ -283,6 +339,7 @@ describe('storage scope and concurrency', () => {
       default_choice: 'user',
       generation: 2,
       logical_limit_bytes: 100,
+      default_space_capacity_bytes: null,
     }
     const save = vi
       .fn()
@@ -300,11 +357,13 @@ describe('storage scope and concurrency', () => {
       mode: 'site_only',
       default_choice: 'site',
       logical_limit_bytes: 200,
+      default_space_capacity_bytes: null,
     })
     expect(save.mock.calls[0]?.[0]).toEqual({
       mode: 'site_only',
       default_choice: 'site',
       logical_limit_bytes: 200,
+      default_space_capacity_bytes: null,
       generation: 2,
     })
     expect(store.policy.value?.generation).toBe(3)
@@ -566,6 +625,7 @@ describe('storage scope and concurrency', () => {
       default_choice: 'site',
       generation: 2,
       logical_limit_bytes: 100,
+      default_space_capacity_bytes: null,
     }
     const result = deferred<ApiSchemas['StoragePolicy']>()
     const read = vi.fn().mockResolvedValue(original)
@@ -608,6 +668,7 @@ describe('storage scope and concurrency', () => {
       default_choice: 'site',
       generation: 2,
       logical_limit_bytes: 100,
+      default_space_capacity_bytes: null,
     })
     const store = state({ getStoragePolicy: policy }, true)
     expect(await store.loadPolicy()).toBe(false)
@@ -798,6 +859,235 @@ describe('storage space summaries', () => {
     expect(read).toHaveBeenCalledTimes(4)
     expect(store.spaces.value).toEqual({})
     expect(store.connections.value.items).toEqual([])
+  })
+})
+
+describe('space quota writes and unknown recovery', () => {
+  async function quotaState(overrides: Partial<typeof api> = {}) {
+    const read = vi.fn().mockResolvedValue({ items: [quotaSpace()] })
+    const save = vi.fn().mockResolvedValue(quotaSpace(100, 4))
+    const store = state({
+      listStorageConnections: vi.fn().mockResolvedValue({ items: [connection()] }),
+      listStorageSpaces: read,
+      setStorageSpaceQuota: save,
+      ...overrides,
+    })
+    await store.load()
+    await store.loadSpaces(1)
+    return { store, read, save }
+  }
+  it('allows lowering below all four accounts and retains the confirmed result against lower generations', async () => {
+    const { store, save, read } = await quotaState()
+    expect(
+      await store.setSpaceQuota(1, 11, { capacity_bytes: 100, expected_generation: 3 }),
+    ).toEqual({ status: 'success', value: quotaSpace(100, 4) })
+    expect(save.mock.calls[0]?.slice(0, 2)).toEqual([
+      11,
+      { capacity_bytes: 100, expected_generation: 3 },
+    ])
+    expect(store.spaces.value[1]?.items[0]).toMatchObject({
+      capacity_bytes: 100,
+      live_bytes: 100,
+      pending_delete_bytes: 10,
+      available_bytes: 0,
+    })
+    await store.load()
+    expect(await store.loadSpaces(1)).toBe(false)
+    expect(store.spaces.value[1]?.items[0]?.management_generation).toBe(4)
+    read.mockResolvedValue({ items: [quotaSpace(100, 4)] })
+    expect(await store.loadSpaces(1, true)).toBe(true)
+    expect(save).toHaveBeenCalledTimes(1)
+  })
+  it.each(['set_status', 'set_quota'] as const)(
+    'keeps %s independent from the other space action',
+    async (blocked) => {
+      const space = quotaSpace()
+      space.management_actions[blocked] = storageAction(false)
+      const { store, save } = await quotaState({
+        listStorageSpaces: vi.fn().mockResolvedValue({ items: [space] }),
+      })
+      expect(store.spaceAllowed(1, 11, blocked)).toBe(false)
+      expect(store.spaceAllowed(1, 11, blocked === 'set_status' ? 'set_quota' : 'set_status')).toBe(
+        true,
+      )
+      if (blocked === 'set_quota') {
+        await store.setSpaceQuota(1, 11, { capacity_bytes: null, expected_generation: 3 })
+        expect(save).not.toHaveBeenCalled()
+      }
+    },
+  )
+  it('rejects missing quota actions, incomplete ledgers, invalid quota values, and stale draft generations before transport', async () => {
+    const { store, save } = await quotaState()
+    for (const capacity of [undefined, 0, -1, NaN, Number.POSITIVE_INFINITY])
+      await store.setSpaceQuota(1, 11, {
+        capacity_bytes: capacity as number,
+        expected_generation: 3,
+      })
+    await store.setSpaceQuota(1, 11, { capacity_bytes: null, expected_generation: 2 })
+    delete (
+      store.spaces.value[1]!.items[0]!.management_actions as Partial<
+        ApiSchemas['StorageSpace']['management_actions']
+      >
+    ).set_quota
+    expect(store.spaceAllowed(1, 11, 'set_quota')).toBe(false)
+    await store.setSpaceQuota(1, 11, { capacity_bytes: null, expected_generation: 3 })
+    store.spaces.value[1]!.items[0] = { ...quotaSpace(), available_bytes: 999 }
+    expect(store.spaceAllowed(1, 11, 'set_quota')).toBe(false)
+    expect(save).not.toHaveBeenCalled()
+  })
+  it('retains attempted quota and baseline, reads without unlocking, and requires the newest review revision', async () => {
+    const save = vi.fn().mockRejectedValue(new TypeError('response lost'))
+    const { store, read } = await quotaState({ setStorageSpaceQuota: save })
+    expect(
+      await store.setSpaceQuota(1, 11, { capacity_bytes: null, expected_generation: 3 }),
+    ).toEqual({ status: 'unknown' })
+    const pending = store.quotaRecoveries.value[11]!
+    expect(pending).toMatchObject({
+      baseline: { capacity_bytes: 200, management_generation: 3 },
+      submitted: { capacity_bytes: null, expected_generation: 3 },
+      state: 'needs_read',
+    })
+    expect(store.connectionAllowed(1, 'revoke_auth')).toBe(true)
+    read.mockResolvedValue({ items: [quotaSpace(null, 4)] })
+    await store.load()
+    await store.loadSpaces(1)
+    const oldRevision = store.quotaRecoveries.value[11]!.reviewRevision
+    await store.loadSpaces(1, true)
+    expect(store.unknownWrites.value['connection:1']).toBe(true)
+    await store.setSpaceQuota(1, 11, { capacity_bytes: 100, expected_generation: 4 })
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(store.acknowledgeSpaceQuotaUnknown(11, pending.attemptId, oldRevision)).toBeNull()
+    expect(
+      store.acknowledgeSpaceQuotaUnknown(
+        11,
+        pending.attemptId,
+        store.quotaRecoveries.value[11]!.reviewRevision,
+      ),
+    ).toEqual(quotaSpace(null, 4))
+    expect(store.unknownWrites.value['connection:1']).toBeUndefined()
+    expect(store.spaceAllowed(1, 11, 'set_quota')).toBe(true)
+  })
+  it('keeps unknown locked after failed or incomplete reads and clears recovery on a service switch', async () => {
+    const { store, read } = await quotaState({
+      setStorageSpaceQuota: vi.fn().mockRejectedValue(new TypeError('lost')),
+    })
+    await store.setSpaceQuota(1, 11, { capacity_bytes: 100, expected_generation: 3 })
+    await store.load()
+    read.mockRejectedValue(new TypeError('read failed'))
+    await store.loadSpaces(1)
+    expect(store.quotaRecoveries.value[11]?.state).toBe('error')
+    read.mockResolvedValue({ items: [{ ...quotaSpace(), available_bytes: undefined }] })
+    await store.loadSpaces(1, true)
+    const pending = store.quotaRecoveries.value[11]!
+    expect(
+      store.acknowledgeSpaceQuotaUnknown(11, pending.attemptId, pending.reviewRevision),
+    ).toBeNull()
+    changeSessionContext('/different-service', 1, true)
+    expect(store.quotaRecoveries.value).toEqual({})
+    expect(store.unknownWrites.value).toEqual({})
+  })
+  it('shares a connection write lock while preserving emergency revocation and discarding superseded quota responses', async () => {
+    const result = deferred<ApiSchemas['StorageSpace']>()
+    const status = vi.fn()
+    const { store } = await quotaState({
+      setStorageSpaceQuota: vi.fn().mockReturnValue(result.promise),
+      setStorageSpaceState: status,
+      revokeStorageAuthorization: vi
+        .fn()
+        .mockResolvedValue({ ...connection(), management_generation: 5 }),
+    })
+    const pending = store.setSpaceQuota(1, 11, { capacity_bytes: 100, expected_generation: 3 })
+    await store.setSpaceState(1, 11, 'disabled')
+    expect(status).not.toHaveBeenCalled()
+    expect(store.connectionAllowed(1, 'revoke_auth')).toBe(true)
+    expect((await store.revoke(1)).status).toBe('success')
+    result.resolve(quotaSpace(100, 4))
+    expect(await pending).toEqual({ status: 'unknown' })
+    expect(store.quotaRecoveries.value[11]?.submitted.capacity_bytes).toBe(100)
+    expect(store.connections.value.items[0]?.management_generation).toBe(5)
+  })
+  it('discards a quota response after changing organization and does not retain its pending attempt', async () => {
+    const result = deferred<ApiSchemas['StorageSpace']>()
+    const { store } = await quotaState({
+      setStorageSpaceQuota: vi.fn().mockReturnValue(result.promise),
+    })
+    const pending = store.setSpaceQuota(1, 11, { capacity_bytes: 100, expected_generation: 3 })
+    store.setScope({ kind: 'org', id: 7 })
+    result.resolve(quotaSpace(100, 4))
+    expect(await pending).toEqual({ status: 'stale' })
+    expect(store.quotaRecoveries.value).toEqual({})
+  })
+  it('retains unknown evidence while quota permission is denied and only permits review after permission returns', async () => {
+    const { store, read } = await quotaState({
+      setStorageSpaceQuota: vi.fn().mockRejectedValue(new TypeError('lost')),
+    })
+    await store.setSpaceQuota(1, 11, { capacity_bytes: null, expected_generation: 3 })
+    const denied = quotaSpace(null, 4)
+    denied.management_actions.set_quota = storageAction(false)
+    read.mockResolvedValue({ items: [denied] })
+    await store.load()
+    await store.loadSpaces(1)
+    const pending = store.quotaRecoveries.value[11]!
+    expect(
+      store.acknowledgeSpaceQuotaUnknown(11, pending.attemptId, pending.reviewRevision),
+    ).toBeNull()
+    expect(store.quotaRecoveries.value[11]?.submitted.capacity_bytes).toBeNull()
+    read.mockResolvedValue({ items: [quotaSpace(null, 4)] })
+    await store.loadSpaces(1, true)
+    expect(
+      store.acknowledgeSpaceQuotaUnknown(
+        11,
+        pending.attemptId,
+        store.quotaRecoveries.value[11]!.reviewRevision,
+      ),
+    ).toEqual(quotaSpace(null, 4))
+  })
+  it('keeps all five policy fields for unknown recovery and only adopts a reviewed complete GET', async () => {
+    const baseline: ApiSchemas['StoragePolicy'] = {
+      ...policyCapabilities(),
+      mode: 'both',
+      default_choice: 'user',
+      generation: 2,
+      logical_limit_bytes: 100,
+      default_space_capacity_bytes: 200,
+    }
+    const read = vi.fn().mockResolvedValue(baseline),
+      save = vi.fn().mockRejectedValue(new TypeError('lost'))
+    const store = state({ getStoragePolicy: read, setStoragePolicy: save }, true)
+    store.setScope({ kind: 'site' })
+    await store.loadPolicy()
+    await store.savePolicy({
+      ...baseline,
+      logical_limit_bytes: null,
+      default_space_capacity_bytes: null,
+    })
+    expect(Object.keys(store.policyRecovery.value!.submitted).sort()).toEqual([
+      'default_choice',
+      'default_space_capacity_bytes',
+      'generation',
+      'logical_limit_bytes',
+      'mode',
+    ])
+    const latest = {
+      ...baseline,
+      generation: 3,
+      logical_limit_bytes: null,
+      default_space_capacity_bytes: null,
+    }
+    read.mockResolvedValue(latest)
+    await store.loadPolicy()
+    expect(store.policy.value).toEqual(baseline)
+    expect(store.unknownWrites.value.policy).toBe(true)
+    const revision = store.policyRecovery.value!.reviewRevision
+    await store.loadPolicy()
+    const pending = store.policyRecovery.value!
+    expect(store.acknowledgePolicyUnknown(pending.attemptId, revision)).toBeNull()
+    expect(store.acknowledgePolicyUnknown(pending.attemptId, pending.reviewRevision)).toEqual(
+      latest,
+    )
+    expect(store.policy.value).toEqual(latest)
+    expect(store.policyRecovery.value).toBeNull()
+    expect(save).toHaveBeenCalledTimes(1)
   })
 })
 
