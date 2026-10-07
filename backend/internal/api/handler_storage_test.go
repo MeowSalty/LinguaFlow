@@ -28,6 +28,8 @@ func storageAPIServer(t *testing.T) (*Server, *ent.Client, *ent.User, *ent.Proje
 	cfg := config.DefaultServerConfig()
 	cfg.DataDir = t.TempDir()
 	cfg.Storage.Enabled = true
+	cfg.Storage.Initialization.CapacityBytes = config.QuotaInput{Set: true}
+	cfg.Storage.Initialization.LogicalLimitBytes = config.QuotaInput{Set: true}
 	s.serverCfg = cfg
 	keys, err := credential.ParseKeyring([]byte(`{"version":1,"active_key_id":"storage","keys":{"storage":"` + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)) + `"}}`))
 	if err != nil {

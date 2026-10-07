@@ -44,6 +44,9 @@ func configurationConsumerServer(t *testing.T, mode string, edit func(*config.Se
 		t.Fatal(err)
 	}
 	cfg := config.DefaultServerConfig()
+	cfg.Mode = mode
+	cfg.Storage.Initialization.CapacityBytes = config.QuotaInput{Set: true}
+	cfg.Storage.Initialization.LogicalLimitBytes = config.QuotaInput{Set: true}
 	cfg.DataDir = t.TempDir()
 	cfg.JWTSecret = strings.Repeat("configuration-consumer-key", 2)
 	cfg.ShutdownTimeout = 2 * time.Second
