@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/diskspace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storageauth"
 	"strings"
@@ -34,6 +35,7 @@ func ValidateStorageIdempotencyKey(key string) error {
 
 // StorageErrorCode is the common, redacted directory for HTTP, tasks and batches.
 func StorageErrorCode(err error) string {
+	err = diskspace.Classify(err)
 	if err == nil {
 		return ""
 	}
@@ -58,6 +60,10 @@ func StorageErrorCode(err error) string {
 		return "storage_policy_violation"
 	case errors.Is(err, ErrStorageTooLarge), errors.Is(err, storage.ErrPayloadTooLarge):
 		return "storage_payload_too_large"
+	case errors.Is(err, storage.ErrDiskSpaceInsufficient):
+		return "storage_disk_insufficient"
+	case errors.Is(err, storage.ErrDiskSpaceUnknown):
+		return "storage_disk_probe_failed"
 	case errors.Is(err, storage.ErrLimit):
 		return "storage_quota_exceeded"
 	case errors.Is(err, storage.ErrNotFound):

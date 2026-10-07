@@ -95,6 +95,11 @@ func TestStorageContractDurableLeaseProtectsOtherProcessCleanup(t *testing.T) {
 	}
 	c.StorageTask.UpdateOneID(task.ID).SetStatus(storagetask.StatusCancelled).ExecX(ctx)
 	peer, e := NewStorageService(c, s.projects, t.TempDir())
+	if peer != nil {
+		if initErr := peer.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if e != nil {
 		t.Fatal(e)
 	}

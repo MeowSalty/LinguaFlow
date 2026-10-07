@@ -34,6 +34,7 @@ func (f *StorageFile) Seal(size int64) error {
 	if size < 0 || size > f.reserved {
 		return storage.ErrPayloadTooLarge
 	}
+	f.disk.Seal()
 	f.s.mu.Lock()
 	f.s.tempBytes -= f.reserved - size
 	f.reserved = size

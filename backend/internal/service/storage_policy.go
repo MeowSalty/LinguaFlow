@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -23,27 +24,29 @@ const storagePolicyKey = "storage_policy"
 // StoragePolicyRequest contains only administrator-authored policy values.
 // Runtime capabilities are response metadata and must never enter persistence.
 type StoragePolicyRequest struct {
-	Mode              string `json:"mode"`
-	DefaultChoice     string `json:"default_choice"`
-	Generation        int64  `json:"generation"`
-	LogicalLimitBytes int64  `json:"logical_limit_bytes"`
+	Mode                      string `json:"mode"`
+	DefaultChoice             string `json:"default_choice"`
+	Generation                int64  `json:"generation"`
+	LogicalLimitBytes         *int64 `json:"logical_limit_bytes"`
+	DefaultSpaceCapacityBytes *int64 `json:"default_space_capacity_bytes"`
 }
 
 type StoragePolicy struct {
-	Mode                     string         `json:"mode"`
-	DefaultChoice            string         `json:"default_choice"`
-	Generation               int64          `json:"generation"`
-	LogicalLimitBytes        int64          `json:"logical_limit_bytes"`
-	ConfigurationNeedsUpdate bool           `json:"configuration_needs_update,omitempty" readOnly:"true"`
-	Runtime                  StorageRuntime `json:"runtime" readOnly:"true"`
-	AllowedPolicyModes       []string       `json:"allowed_policy_modes" readOnly:"true"`
-	PolicyRestrictionCodes   []string       `json:"policy_restriction_codes" readOnly:"true"`
+	Mode                      string         `json:"mode"`
+	DefaultChoice             string         `json:"default_choice"`
+	Generation                int64          `json:"generation"`
+	LogicalLimitBytes         *int64         `json:"logical_limit_bytes"`
+	DefaultSpaceCapacityBytes *int64         `json:"default_space_capacity_bytes"`
+	ConfigurationNeedsUpdate  bool           `json:"configuration_needs_update,omitempty" readOnly:"true"`
+	Runtime                   StorageRuntime `json:"runtime" readOnly:"true"`
+	AllowedPolicyModes        []string       `json:"allowed_policy_modes" readOnly:"true"`
+	PolicyRestrictionCodes    []string       `json:"policy_restriction_codes" readOnly:"true"`
 }
 
 func storagePolicy(ctx context.Context, client *ent.Client) (StoragePolicy, error) {
 	row, err := client.SystemSetting.Query().Where(systemsetting.KeyEQ(storagePolicyKey)).Only(ctx)
 	if ent.IsNotFound(err) {
-		return StoragePolicy{Mode: "site_only", DefaultChoice: "site", LogicalLimitBytes: 100 << 30}, nil
+		return StoragePolicy{}, fmt.Errorf("%w: storage quota initialization is incomplete", ErrStoragePolicy)
 	}
 	if err != nil {
 		return StoragePolicy{}, err
@@ -51,6 +54,9 @@ func storagePolicy(ctx context.Context, client *ent.Client) (StoragePolicy, erro
 	var p StoragePolicy
 	if err = json.Unmarshal([]byte(row.Value), &p); err != nil {
 		return p, err
+	}
+	if !validStorageQuota(p.LogicalLimitBytes) || !validStorageQuota(p.DefaultSpaceCapacityBytes) || p.Generation < 0 || p.Generation > MaxStorageInteger {
+		return p, ErrStoragePolicy
 	}
 	p.ConfigurationNeedsUpdate = (p.Mode == "site_only" && p.DefaultChoice != "site") || (p.Mode == "user_required" && p.DefaultChoice != "user")
 	switch p.Mode {
@@ -87,14 +93,14 @@ func (s *StorageService) projectPolicy(p StoragePolicy) StoragePolicy {
 }
 
 func (s *StorageService) SetPolicy(ctx context.Context, actor int, in StoragePolicyRequest) (StoragePolicy, error) {
-	p := StoragePolicy{Mode: in.Mode, DefaultChoice: in.DefaultChoice, Generation: in.Generation, LogicalLimitBytes: in.LogicalLimitBytes}
+	p := StoragePolicy{Mode: in.Mode, DefaultChoice: in.DefaultChoice, Generation: in.Generation, LogicalLimitBytes: in.LogicalLimitBytes, DefaultSpaceCapacityBytes: in.DefaultSpaceCapacityBytes}
 	if p.Mode != "site_only" && p.Mode != "both" && p.Mode != "user_required" {
 		return p, ErrInvalidInput
 	}
 	if p.DefaultChoice != "site" && p.DefaultChoice != "user" {
 		return p, ErrInvalidInput
 	}
-	if p.LogicalLimitBytes <= 0 || p.Generation < 0 || (p.Mode == "site_only" && p.DefaultChoice != "site") || (p.Mode == "user_required" && p.DefaultChoice != "user") {
+	if !validStorageQuota(p.LogicalLimitBytes) || !validStorageQuota(p.DefaultSpaceCapacityBytes) || p.Generation < 0 || p.Generation >= MaxStorageInteger || (p.Mode == "site_only" && p.DefaultChoice != "site") || (p.Mode == "user_required" && p.DefaultChoice != "user") {
 		return p, ErrInvalidInput
 	}
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
@@ -139,7 +145,7 @@ func (s *StorageService) SetPolicy(ctx context.Context, actor int, in StoragePol
 		if n != 1 {
 			return ErrStorageConflict
 		}
-		return nil
+		return recordAuditEvent(ctx, tx, AuditEvent{ActorUserID: actor, Action: "admin.storage.policy.update", ResourceType: "storage_policy", Message: "Storage quota policy updated"})
 	})
 	return s.projectPolicy(p), err
 }
@@ -182,18 +188,9 @@ func (s *StorageService) InstallSiteSpace(ctx context.Context, backendID string,
 	}
 	var sp *ent.StorageSpace
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
-		conn, e := tx.StorageConnection.Query().Where(storageconnection.BackendIDEQ(backendID), storageconnection.OwnerKindEQ(storageconnection.OwnerKindSite)).Only(ctx)
-		if ent.IsNotFound(e) {
-			conn, e = tx.StorageConnection.Create().SetName(backendID).SetDriver(storageconnection.DriverLocal).SetBackendID(backendID).Save(ctx)
-		}
-		if e != nil {
-			return e
-		}
-		sp, e = tx.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(conn.ID)).Only(ctx)
-		if ent.IsNotFound(e) {
-			sp, e = tx.StorageSpace.Create().SetConnectionID(conn.ID).SetName(backendID).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetVerified(verified).Save(ctx)
-		}
-		return e
+		var err error
+		sp, err = installSiteSpace(ctx, tx, backendID, verified)
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -203,7 +200,32 @@ func (s *StorageService) InstallSiteSpace(ctx context.Context, backendID string,
 	return sp, nil
 }
 
+func installSiteSpace(ctx context.Context, tx *ent.Client, backendID string, verified bool) (*ent.StorageSpace, error) {
+	conn, err := tx.StorageConnection.Query().Where(storageconnection.BackendIDEQ(backendID), storageconnection.OwnerKindEQ(storageconnection.OwnerKindSite)).Only(ctx)
+	if ent.IsNotFound(err) {
+		conn, err = tx.StorageConnection.Create().SetName(backendID).SetDriver(storageconnection.DriverLocal).SetBackendID(backendID).Save(ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if conn.Driver != storageconnection.DriverLocal {
+		return nil, ErrStorageConflict
+	}
+	sp, err := tx.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(conn.ID)).Only(ctx)
+	if ent.IsNotFound(err) {
+		p, e := storagePolicy(ctx, tx)
+		if e != nil {
+			return nil, e
+		}
+		sp, err = tx.StorageSpace.Create().SetNillableCapacityBytes(p.DefaultSpaceCapacityBytes).SetConnectionID(conn.ID).SetName(backendID).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetVerified(verified).Save(ctx)
+	}
+	return sp, err
+}
+
 func (s *StorageService) Bind(ctx context.Context, actor, projectID, spaceID int, generation int64) error {
+	if !storageCanIncrement(generation) {
+		return ErrInvalidInput
+	}
 	return s.projects.mutateProject(ctx, actor, projectID, func(tx *ent.Client, p *ent.Project) error {
 		if p.StorageGeneration != generation {
 			return ErrStorageConflict
@@ -229,7 +251,7 @@ func (s *StorageService) Bind(ctx context.Context, actor, projectID, spaceID int
 }
 
 func (s *StorageService) logicalAdmission(ctx context.Context, tx *ent.Client, p *ent.Project, size int64) error {
-	if size < 0 {
+	if size < 0 || size > MaxStorageInteger {
 		return ErrInvalidInput
 	}
 	kind, owner := storageProjectOwner(p)
@@ -263,7 +285,10 @@ func (s *StorageService) logicalAdmission(ctx context.Context, tx *ent.Client, p
 	if len(totals) != 0 {
 		total = totals[0].Total
 	}
-	if size > policy.LogicalLimitBytes-total {
+	if total < 0 || total > MaxStorageInteger || size > MaxStorageInteger-total {
+		return ErrInvalidInput
+	}
+	if policy.LogicalLimitBytes != nil && size > *policy.LogicalLimitBytes-total {
 		return storage.ErrLimit
 	}
 	return nil

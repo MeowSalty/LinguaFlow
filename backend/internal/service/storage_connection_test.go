@@ -113,7 +113,7 @@ func storageConnectionFixture(t *testing.T) (context.Context, *ent.Client, *Stor
 	if err != nil {
 		t.Fatal(err)
 	}
-	sp, err := s.CreateSpace(ctx, u.ID, c.ID, CreateStorageSpaceInput{Name: "files", Bucket: "bucket", Prefix: "owned", CapacityBytes: 1 << 20})
+	sp, err := s.CreateSpace(ctx, u.ID, c.ID, CreateStorageSpaceInput{Name: "files", Bucket: "bucket", Prefix: "owned", CapacityBytes: storageTestQuota(1 << 20)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,6 +327,7 @@ func TestStorageSiteSetupIsOfflineAndRejectsLocationChanges(t *testing.T) {
 		calls.Add(1)
 		return nil, storage.ErrUnavailable
 	})
+	setStorageTestPolicy(t, client, `{"mode":"site_only","default_choice":"site","generation":0,"logical_limit_bytes":null,"default_space_capacity_bytes":null}`)
 	id, err := s.SetupSiteBackends(ctx)
 	if err != nil || id == 0 {
 		t.Fatalf("setup: %d %v", id, err)
@@ -414,6 +415,7 @@ func TestStorageSiteExplicitCheckVerifiesWithoutPersistingCredentials(t *testing
 		}
 		return d, nil
 	})
+	setStorageTestPolicy(t, client, `{"mode":"site_only","default_choice":"site","generation":0,"logical_limit_bytes":null,"default_space_capacity_bytes":null}`)
 	spaceID, err := s.SetupSiteBackends(ctx)
 	if err != nil {
 		t.Fatal(err)

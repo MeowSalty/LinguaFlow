@@ -16,6 +16,12 @@ import (
 // SetupSiteBackends 只对数据库中的部署身份做对账。启动期间绝不探测远程存储桶。
 // 新安装的 S3 空间必须先由管理员显式执行 Check，才有资格被项目绑定。
 func (s *StorageConnectionService) SetupSiteBackends(ctx context.Context) (int, error) {
+	var defaultID int
+	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error { var err error; defaultID, err = s.setupSiteBackends(ctx, tx); return err })
+	return defaultID, err
+}
+
+func (s *StorageConnectionService) setupSiteBackends(ctx context.Context, tx *ent.Client) (int, error) {
 	defaultID := 0
 	for _, backend := range s.cfg.Backends {
 		if backend.Driver != "s3" {
@@ -26,7 +32,7 @@ func (s *StorageConnectionService) SetupSiteBackends(ctx context.Context) (int, 
 			return 0, ErrInvalidInput
 		}
 		var sp *ent.StorageSpace
-		err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		err = func() error {
 			c, err := tx.StorageConnection.Query().Where(storageconnection.OwnerKindEQ(storageconnection.OwnerKindSite), storageconnection.BackendIDEQ(backend.ID)).Only(ctx)
 			if ent.IsNotFound(err) {
 				if !s.cfg.Enabled || s.cfg.Maintenance {
@@ -54,7 +60,11 @@ func (s *StorageConnectionService) SetupSiteBackends(ctx context.Context) (int, 
 						return ErrStorageConflict
 					}
 				}
-				sp, err = tx.StorageSpace.Create().SetConnectionID(c.ID).SetName(backend.ID).SetOwnerKind(storagespace.OwnerKindSite).SetOwnerID(0).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetBucket(backend.Bucket).SetPrefix(strings.TrimSuffix(backend.Prefix, "/")).SetCapacityBytes(s.cfg.Limits.CapacityBytes).Save(ctx)
+				policy, policyErr := storagePolicy(ctx, tx)
+				if policyErr != nil {
+					return policyErr
+				}
+				sp, err = tx.StorageSpace.Create().SetConnectionID(c.ID).SetName(backend.ID).SetOwnerKind(storagespace.OwnerKindSite).SetOwnerID(0).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetBucket(backend.Bucket).SetPrefix(strings.TrimSuffix(backend.Prefix, "/")).SetNillableCapacityBytes(policy.DefaultSpaceCapacityBytes).Save(ctx)
 			}
 			if err != nil {
 				return err
@@ -66,7 +76,7 @@ func (s *StorageConnectionService) SetupSiteBackends(ctx context.Context) (int, 
 				return ErrStorageConflict
 			}
 			return nil
-		})
+		}()
 		if err != nil {
 			return 0, err
 		}

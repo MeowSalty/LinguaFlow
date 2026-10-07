@@ -140,6 +140,10 @@ func storageAdmissionError(reasons []string) error {
 		return ErrStorageCrypto
 	case "connection_disabled", "space_disabled", "storage_permission_denied":
 		return storage.ErrPermission
+	case "storage_disk_insufficient":
+		return storage.ErrDiskSpaceInsufficient
+	case "storage_disk_probe_failed":
+		return storage.ErrDiskSpaceUnknown
 	case "storage_quota_exceeded":
 		return storage.ErrLimit
 	case "storage_operation_in_progress":

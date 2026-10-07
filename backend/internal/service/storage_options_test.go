@@ -33,6 +33,11 @@ func TestStorageOptionsPolicyAndOwnershipMatrix(t *testing.T) {
 	ctx := context.Background()
 	projects := NewProjectService(f.client, f.svc)
 	s, err := NewStorageService(f.client, projects, t.TempDir())
+	if s != nil {
+		if initErr := s.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +133,7 @@ func TestStorageOptionsDefaultUnavailableAndPolicyNormalization(t *testing.T) {
 	ctx, client, resources, p, owner, _ := storageLifecycleFixture(t)
 	s := resources.storage
 	client.User.UpdateOneID(owner.ID).SetRole(SystemRoleAdmin).ExecX(ctx)
-	client.SystemSetting.Create().SetKey(storagePolicyKey).SetValue(`{"mode":"site_only","default_choice":"user","generation":8,"logical_limit_bytes":1000}`).ExecX(ctx)
+	setStorageTestPolicy(t, client, `{"mode":"site_only","default_choice":"user","generation":8,"logical_limit_bytes":1000}`)
 	policy, err := s.Policy(ctx)
 	if err != nil || policy.DefaultChoice != "site" || !policy.ConfigurationNeedsUpdate {
 		t.Fatalf("effective policy: %+v %v", policy, err)
@@ -159,7 +164,7 @@ func TestStorageOptionsRecheckAuthenticationCapacityAndDeployment(t *testing.T) 
 	ctx, client, resources, p, owner, _ := storageLifecycleFixture(t)
 	s := resources.storage
 	s.cfg.Enabled = true
-	client.SystemSetting.Create().SetKey(storagePolicyKey).SetValue(`{"mode":"both","default_choice":"site","generation":0,"logical_limit_bytes":1000}`).ExecX(ctx)
+	setStorageTestPolicy(t, client, `{"mode":"both","default_choice":"site","generation":0,"logical_limit_bytes":1000}`)
 	sp := optionSpace(t, ctx, client, "user", owner.ID)
 	for _, tc := range []struct {
 		name   string
@@ -230,7 +235,7 @@ func TestStorageOptionsRepairUsesSelectedLocationAndHistoricalBinding(t *testing
 	s := resources.storage
 	s.cfg.Enabled = true
 	personal := optionSpace(t, ctx, client, "user", owner.ID)
-	client.SystemSetting.Create().SetKey(storagePolicyKey).SetValue(`{"mode":"user_required","default_choice":"user","generation":1,"logical_limit_bytes":1000}`).ExecX(ctx)
+	setStorageTestPolicy(t, client, `{"mode":"user_required","default_choice":"user","generation":1,"logical_limit_bytes":1000}`)
 	summary, err := s.ProjectStorage(ctx, owner.ID, p.ID)
 	if err != nil || summary.Binding == nil || !summary.Binding.Historical {
 		t.Fatalf("policy change lost historical binding: %+v %v", summary, err)

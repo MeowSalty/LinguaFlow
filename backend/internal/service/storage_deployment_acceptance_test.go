@@ -33,6 +33,11 @@ func TestStorageDeploymentPostgresCapacityAndLeaseConcurrency(t *testing.T) {
 	u := client.User.Create().SetUsername("postgres-storage").SetEmail("postgres-storage@example.test").SetPasswordHash("unused").SaveX(ctx)
 	projects := NewProjectService(client, NewUserService(client, nil))
 	s, err := NewStorageService(client, projects, t.TempDir())
+	if s != nil {
+		if initErr := s.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,6 +222,11 @@ func TestStorageDeploymentS3ReadonlyMigrationCutoverAndCleanup(t *testing.T) {
 	}
 	// Reconstruct service state at the durable cutover boundary, without in-memory locks.
 	resumed, err := NewStorageService(client, s.projects, t.TempDir())
+	if resumed != nil {
+		if initErr := resumed.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/diskspace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bloblocation"
@@ -47,35 +48,43 @@ type ObjectDriver interface {
 }
 
 type StorageService struct {
-	client               *ent.Client
-	projects             *ProjectService
-	resources            *ResourceService
-	cfg                  config.StorageConfig
-	mu                   sync.Mutex
-	transferMu           sync.Mutex
-	drivers              map[int]storage.Driver
-	resolve              func(context.Context, int, bool) (storage.Driver, error)
-	workDir              string
-	defaultSpaceID       int
-	maxFileBytes         int64
-	maxTempBytes         int64
-	tempBytes            int64
-	inFlight             map[int]bool
-	readers              map[int]int
-	slots                chan struct{}
-	ingressSlots         chan struct{}
-	maintenance          bool
-	deleteGrace          time.Duration
-	sourceRetention      time.Duration
-	dialect              string
-	legacySnapshotCursor int
+	client                    *ent.Client
+	projects                  *ProjectService
+	resources                 *ResourceService
+	cfg                       config.StorageConfig
+	mu                        sync.Mutex
+	transferMu                sync.Mutex
+	drivers                   map[int]storage.Driver
+	resolve                   func(context.Context, int, bool) (storage.Driver, error)
+	workDir                   string
+	disk                      *diskspace.Coordinator
+	diskDirectories           []string
+	diskDiagnosticDirectories []string
+	startupTemporary          map[string]int64
+	defaultSpaceID            int
+	maxFileBytes              int64
+	maxTempBytes              int64
+	tempBytes                 int64
+	inFlight                  map[int]bool
+	readers                   map[int]int
+	slots                     chan struct{}
+	ingressSlots              chan struct{}
+	maintenance               bool
+	deleteGrace               time.Duration
+	sourceRetention           time.Duration
+	dialect                   string
+	legacySnapshotCursor      int
 }
 
 func NewStorageService(client *ent.Client, projects *ProjectService, workDir string) (*StorageService, error) {
 	if err := os.MkdirAll(workDir, 0700); err != nil {
 		return nil, err
 	}
-	return &StorageService{client: client, projects: projects, cfg: config.DefaultStorageConfig(), drivers: map[int]storage.Driver{}, workDir: workDir, maxFileBytes: 100 << 20, maxTempBytes: 4 << 30, inFlight: map[int]bool{}, readers: map[int]int{}, slots: make(chan struct{}, 2), ingressSlots: make(chan struct{}, 2), deleteGrace: 24 * time.Hour, sourceRetention: 30 * 24 * time.Hour}, nil
+	disk, err := diskspace.New(diskspace.DefaultThreshold(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return &StorageService{client: client, projects: projects, cfg: config.DefaultStorageConfig(), drivers: map[int]storage.Driver{}, workDir: workDir, disk: disk, maxFileBytes: 100 << 20, maxTempBytes: 4 << 30, inFlight: map[int]bool{}, readers: map[int]int{}, slots: make(chan struct{}, 2), ingressSlots: make(chan struct{}, 2), deleteGrace: 24 * time.Hour, sourceRetention: 30 * 24 * time.Hour}, nil
 }
 
 func (s *StorageService) RegisterDriver(spaceID int, driver storage.Driver) {
@@ -289,6 +298,12 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 				return e
 			}
 		}
+		// Preserve completed/idempotent results above. A new intent checks its
+		// input and target object peak without holding physical capacity while
+		// waiting for content; Stage and each later copy reserve again.
+		if e = s.checkMaterialization(ctx, target, in.Size); e != nil {
+			return e
+		}
 		input := map[string]any{}
 		resolved, e := json.Marshal(in)
 		if e != nil {
@@ -346,13 +361,15 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.TransferTimeout)
 	defer cancel()
+	var diskReservation *diskspace.Reservation
+	defer func() { diskReservation.Release() }()
 	select {
 	case s.slots <- struct{}{}:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
 	s.mu.Lock()
-	if s.tempBytes+size > s.maxTempBytes {
+	if size > s.maxTempBytes-s.tempBytes {
 		s.mu.Unlock()
 		<-s.slots
 		return nil, storage.ErrPayloadTooLarge
@@ -380,6 +397,10 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 	// 不会被误判为空闲。
 	s.transferMu.Lock()
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		// A serialization retry has not started I/O. Retire the prior
+		// transaction attempt's physical reservation before planning again.
+		diskReservation.Release()
+		diskReservation = nil
 		current, e := tx.StorageTask.Get(ctx, task.ID)
 		if e != nil {
 			return e
@@ -442,9 +463,15 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 		if space.Status != storagespace.StatusActive || conn.Status != storageconnection.StatusEnabled {
 			return storage.ErrPermission
 		}
-		total := space.ReservedBytes + space.CandidateBytes + space.LiveBytes + space.PendingDeleteBytes
-		if size > space.CapacityBytes-total {
-			return storage.ErrLimit
+		if e = storageQuotaAdmission(space, size); e != nil {
+			return e
+		}
+		if e = s.checkMaterialization(ctx, space.ID, size); e != nil {
+			return e
+		}
+		diskReservation, e = s.reserveLocal(ctx, size)
+		if e != nil {
+			return e
 		}
 		n, e := tx.StorageSpace.Update().Where(storagespace.IDEQ(space.ID), storagespace.ReservedBytesEQ(space.ReservedBytes), storagespace.CandidateBytesEQ(space.CandidateBytes), storagespace.LiveBytesEQ(space.LiveBytes), storagespace.PendingDeleteBytesEQ(space.PendingDeleteBytes)).AddReservedBytes(size).Save(ctx)
 		if e != nil {
@@ -486,7 +513,7 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 		}
 	}()
 	h := sha256.New()
-	n, e := io.Copy(io.MultiWriter(f, h), io.LimitReader(&storageContextReader{ctx: ctx, r: r}, size+1))
+	n, e := io.Copy(io.MultiWriter(diskReservation.Writer(f), h), io.LimitReader(&storageContextReader{ctx: ctx, r: r}, size+1))
 	if e != nil {
 		return nil, e
 	}

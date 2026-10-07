@@ -244,6 +244,9 @@ func (s *StorageService) cleanWrite(ctx context.Context, w *ent.StorageWrite) er
 	if err = deleteWriteObjects(ctx, d, w); err != nil {
 		return err
 	}
+	if err = s.cleanupInput(w.AttemptID); err != nil {
+		return err
+	}
 	return withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		current, e := tx.StorageWrite.Get(ctx, w.ID)
 		if e != nil {
