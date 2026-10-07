@@ -49,6 +49,7 @@ const policyRequest = (policy, changes = {}) => ({
   default_choice: policy.default_choice,
   generation: policy.generation,
   logical_limit_bytes: policy.logical_limit_bytes,
+  default_space_capacity_bytes: policy.default_space_capacity_bytes,
   ...changes,
 })
 

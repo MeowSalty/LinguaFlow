@@ -405,9 +405,10 @@ export async function createConfigurationBackend(metadata, signal, options = {})
             jwt_secret: randomBytes(32).toString('hex'),
             credentials: { keyring_file: keyring },
             workers: { translation: { count: 2 }, sync: { count: 1 } },
-            ...(options.storage
-              ? {
-                  storage: {
+            storage: {
+              initialization: { capacity_bytes: null, logical_limit_bytes: null },
+              ...(options.storage
+                ? {
                     enabled: true,
                     default_site_space: 'local',
                     backends: [
@@ -415,9 +416,9 @@ export async function createConfigurationBackend(metadata, signal, options = {})
                     ],
                     work_dir: path.join(runDir, 'storage-work'),
                     cache_dir: path.join(runDir, 'storage-cache'),
-                  },
-                }
-              : {}),
+                  }
+                : {}),
+            },
           },
           log: { level: 'warn' },
           bootstrap: {

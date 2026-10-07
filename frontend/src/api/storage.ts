@@ -6,6 +6,7 @@ import {
   requireStorageId,
   requireStorageGeneration,
   requireIdempotencyKey,
+  requireStorageQuota,
 } from '@/utils/storage-contract'
 import { t } from '@/i18n'
 import { canManageOrganization, organizationRoles } from '@/utils/organization-scope'
@@ -89,11 +90,23 @@ export const setStoragePolicy = (
   options?: StorageRequestOptions,
 ) => {
   requireStorageGeneration(body.generation)
-  requireStorageId(body.logical_limit_bytes)
+  requireStorageQuota(body.logical_limit_bytes)
+  requireStorageQuota(body.default_space_capacity_bytes)
+  if (
+    !['site_only', 'both', 'user_required'].includes(body.mode) ||
+    !['site', 'user'].includes(body.default_choice)
+  )
+    throw storageRequestError({ status: 400 })
   return read(
     apiClient.PUT('/admin/storage/policy', {
       ...options,
-      body: pick(body, ['mode', 'default_choice', 'generation', 'logical_limit_bytes']),
+      body: pick(body, [
+        'mode',
+        'default_choice',
+        'generation',
+        'logical_limit_bytes',
+        'default_space_capacity_bytes',
+      ]),
     }),
   )
 }
@@ -163,7 +176,7 @@ export const createStorageSpace = (
   body: ApiSchemas['StorageSpaceRequest'],
   options?: StorageRequestOptions,
 ) => {
-  requireStorageId(body.capacity_bytes)
+  requireStorageQuota(body.capacity_bytes)
   return read(
     apiClient.POST('/storage/connections/{connectionId}/spaces', {
       ...options,
@@ -184,6 +197,21 @@ export const setStorageSpaceState = (
       ...options,
       params: { path: { spaceId: requireStorageId(spaceId) } },
       body: pick(body, ['status', 'expected_generation']),
+    }),
+  )
+}
+export const setStorageSpaceQuota = (
+  spaceId: number,
+  body: ApiSchemas['StorageSpaceQuotaRequest'],
+  options?: StorageRequestOptions,
+) => {
+  requireStorageGeneration(body.expected_generation)
+  requireStorageQuota(body.capacity_bytes)
+  return read(
+    apiClient.PUT('/storage/spaces/{spaceId}/quota', {
+      ...options,
+      params: { path: { spaceId: requireStorageId(spaceId) } },
+      body: pick(body, ['capacity_bytes', 'expected_generation']),
     }),
   )
 }

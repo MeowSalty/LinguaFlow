@@ -55,7 +55,7 @@ export async function createStorageBackend(metadata, signal) {
       ...metadata,
       storageDriver: 'Local in isolated test directory',
       contractStatus:
-        'C01-C09 and E01-E04 synchronized working-tree contract; Local evidence only, not S3/PostgreSQL deployment acceptance',
+        'C01-C09, E01-E04 and Q01-Q04 synchronized working-tree contract; Local evidence only, not S3/PostgreSQL deployment acceptance',
     },
     signal,
     { storage: true },

@@ -53,6 +53,8 @@ const codeMessages = {
   storage_crypto_unavailable: 'cryptoUnavailable',
   storage_unavailable: 'unavailable',
   storage_quota_exceeded: 'quotaExceeded',
+  storage_disk_insufficient: 'diskInsufficient',
+  storage_disk_probe_failed: 'diskProbeFailed',
   repair_content_mismatch: 'contentMismatch',
   source_revision_conflict: 'sourceConflict',
   storage_generation_conflict: 'generationConflict',
@@ -101,6 +103,7 @@ export const storageRequestError = (
     429: 'tooManyRequests',
     503: 'unavailable',
     504: 'resultUnknown',
+    507: 'diskInsufficient',
   } as const
   const key = messages[response?.status as keyof typeof messages]
   const message = problem.error_code

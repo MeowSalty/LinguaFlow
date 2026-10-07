@@ -22,7 +22,7 @@ import {
   uploadProjectResources,
   uploadProjectResourcesWithProgress,
 } from '@/api/projects'
-import { storageTaskErrorMessage } from '@/api/storage-errors'
+import { storageTaskErrorMessage, storageResultUnknown } from '@/api/storage-errors'
 import { getStorageContractGate, requireStorageGeneration } from '@/utils/storage-contract'
 
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
@@ -58,6 +58,75 @@ afterEach(() => {
 })
 
 describe('storage transport boundaries', () => {
+  it.each([
+    ['storage_disk_insufficient', 507, 'diskInsufficient'],
+    ['storage_disk_probe_failed', 503, 'diskProbeFailed'],
+  ] as const)(
+    'retains Fetch disk failure %s and refuses to download a Problem',
+    async (error_code, status, key) => {
+      fetchMock.mockImplementation(async (request) => {
+        requests.push(request as Request)
+        return json(
+          { error_code, task_id: 9, operation_id: 'original-op', detail: '/private/disk' },
+          status,
+        )
+      })
+      await expect(downloadExportArtifact(1, 9)).rejects.toMatchObject({
+        message: `storageErrors.${key}`,
+        task_id: 9,
+        operation_id: 'original-op',
+      })
+      expect(requests).toHaveLength(1)
+      const result = uploadProjectResources(
+        1,
+        [new File(['data'], 'a.txt')],
+        ['a.txt'],
+        undefined,
+        { idempotencyKey: 'original-batch' },
+      )
+      await expect(result).rejects.toMatchObject({
+        error_code,
+        task_id: 9,
+        operation_id: 'original-op',
+      })
+      expect(requests).toHaveLength(2)
+    },
+  )
+  it('keeps per-item disk errors and original batch operation identity', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json({
+        operation_id: 'batch-op',
+        items: [
+          {
+            path: 'a.txt',
+            action: 'failed',
+            error_code: 'storage_disk_insufficient',
+            error: '/private/disk',
+          },
+          {
+            path: 'b.txt',
+            action: 'failed',
+            error_code: 'storage_disk_probe_failed',
+            error: '/private/disk',
+          },
+        ],
+      }),
+    )
+    const result = await uploadProjectResources(
+      1,
+      [new File(['a'], 'a.txt'), new File(['b'], 'b.txt')],
+      ['a.txt', 'b.txt'],
+      undefined,
+      { idempotencyKey: 'batch-original' },
+    )
+    expect(result.operation_id).toBe('batch-op')
+    expect(result.items.map((item) => item.error)).toEqual([
+      'storageErrors.diskInsufficient',
+      'storageErrors.diskProbeFailed',
+    ])
+    expect(JSON.stringify(result)).not.toContain('/private/disk')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
   it.each(['create', 'org-create', 'delete'] as const)(
     'keeps %s policy refusal safe without replay',
     async (operation) => {
@@ -279,6 +348,27 @@ describe('XHR session and ordered batch recovery', () => {
     FakeXHR.instances = []
     vi.stubGlobal('XMLHttpRequest', FakeXHR)
   })
+  it.each([
+    ['storage_disk_insufficient', 507],
+    ['storage_disk_probe_failed', 503],
+  ] as const)(
+    'does not replay XHR disk failure %s or discard its task identity',
+    async (error_code, status) => {
+      const pending = uploadProjectResourcesWithProgress(
+        1,
+        [new File(['data'], 'a.txt')],
+        ['a.txt'],
+        { idempotencyKey: 'disk-original' },
+      )
+      FakeXHR.instances[0]!.respond(status, { error_code, task_id: 9, operation_id: 'original-op' })
+      const error = await pending.catch((cause: unknown) => cause)
+      expect(error).toMatchObject({ error_code, task_id: 9, operation_id: 'original-op' })
+      expect(storageResultUnknown(error)).toBe(true)
+      expect(FakeXHR.instances).toHaveLength(1)
+      expect(FakeXHR.instances[0]!.headers['Idempotency-Key']).toBe('disk-original')
+      expect(fetchMock).not.toHaveBeenCalled()
+    },
+  )
   it('replays the same batch once after an explicit 401 and keeps the original key', async () => {
     fetchMock.mockResolvedValueOnce(
       json({ access_token: 'rotated', refresh_token: 'rotated-refresh' }),

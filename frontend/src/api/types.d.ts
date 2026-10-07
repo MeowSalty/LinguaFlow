@@ -410,6 +410,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storage/spaces/{spaceId}/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * SetStorageSpaceQuota
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        put: operations["SetStorageSpaceQuota"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storage/spaces/{spaceId}": {
         parameters: {
             query?: never;
@@ -2809,7 +2831,7 @@ export interface components {
             items: components["schemas"]["TaskHistoryDeleteResult"][];
         };
         Problem: {
-            /** @description Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Provider authorization, quota and availability retain their separate domain codes. */
+            /** @description Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses storage_disk_probe_failed (503). Neither signals automatic retry. Provider authorization, quota and availability retain their separate domain codes. */
             error_code?: string;
             task_id?: number;
             operation_id?: string;
@@ -4332,7 +4354,7 @@ export interface components {
             maintenance: boolean;
         };
         /** @enum {string} */
-        StorageActionReasonCode: "storage_maintenance" | "storage_deployment_disabled" | "storage_capability_unsupported" | "connection_disabled" | "storage_space_required" | "storage_check_space_limit_exceeded" | "space_disabled" | "space_read_only" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_quota_exceeded" | "storage_unavailable";
+        StorageActionReasonCode: "storage_maintenance" | "storage_deployment_disabled" | "storage_capability_unsupported" | "connection_disabled" | "storage_space_required" | "storage_check_space_limit_exceeded" | "space_disabled" | "space_read_only" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_disk_insufficient" | "storage_disk_probe_failed" | "storage_quota_exceeded" | "storage_unavailable";
         /** @description Metadata-only admission snapshot, not a guarantee of provider I/O success. Allowed actions have an empty reason array; denied actions have at least one stable reason. */
         StorageActionAvailability: {
             allowed: boolean;
@@ -4420,6 +4442,20 @@ export interface components {
         StorageCheckList: {
             items: components["schemas"]["StorageCheck"][];
         };
+        /** @description Administrator-only local filesystem observations; roles identify configured directory purposes, never host paths. Remote bucket capacity is not inferred. */
+        StorageDiskDiagnostic: {
+            roles: string[];
+            /** @enum {string} */
+            state: "available" | "low" | "unknown";
+            /** Format: date-time */
+            observed_at: string;
+            /** Format: int64 */
+            total_bytes: number | null;
+            /** Format: int64 */
+            available_bytes: number | null;
+            /** Format: int64 */
+            minimum_free_bytes: number | null;
+        };
         StorageSpaceDiagnostics: {
             id: number;
             /** Format: int64 */
@@ -4440,6 +4476,7 @@ export interface components {
             last_checked_at?: string;
         };
         StorageDiagnostics: {
+            disks: components["schemas"]["StorageDiskDiagnostic"][];
             spaces: components["schemas"]["StorageSpaceDiagnostics"][];
             next_cursor?: number;
             /** Format: int64 */
@@ -4467,6 +4504,7 @@ export interface components {
          *       "default_choice": "user",
          *       "generation": 3,
          *       "logical_limit_bytes": 107374182400,
+         *       "default_space_capacity_bytes": null,
          *       "runtime": {
          *         "deployment_enabled": false,
          *         "maintenance": false
@@ -4492,7 +4530,9 @@ export interface components {
             /** Format: int64 */
             generation: number;
             /** Format: int64 */
-            logical_limit_bytes: number;
+            default_space_capacity_bytes: number | null;
+            /** Format: int64 */
+            logical_limit_bytes: number | null;
             /** @description Stored mode/default combination needs administrator correction; effective values are normalized. */
             readonly configuration_needs_update?: boolean;
         };
@@ -4505,7 +4545,9 @@ export interface components {
             /** Format: int64 */
             generation: number;
             /** Format: int64 */
-            logical_limit_bytes: number;
+            default_space_capacity_bytes: number | null;
+            /** Format: int64 */
+            logical_limit_bytes: number | null;
         };
         StorageConnectionManagementActions: {
             create_space: components["schemas"]["StorageActionAvailability"];
@@ -4558,9 +4600,15 @@ export interface components {
             expected_generation: number;
         };
         StorageSpaceManagementActions: {
+            set_quota: components["schemas"]["StorageActionAvailability"];
             set_status: components["schemas"]["StorageActionAvailability"];
         };
         StorageSpace: {
+            /**
+             * Format: int64
+             * @description Business quota headroom, null for unlimited; not physical disk or bucket free space.
+             */
+            available_bytes: number | null;
             management_actions: components["schemas"]["StorageSpaceManagementActions"];
             id: number;
             connection_id: number;
@@ -4575,7 +4623,7 @@ export interface components {
             /** Format: int64 */
             management_generation: number;
             /** Format: int64 */
-            capacity_bytes: number;
+            capacity_bytes: number | null;
             /** Format: int64 */
             reserved_bytes: number;
             /** Format: int64 */
@@ -4593,7 +4641,7 @@ export interface components {
             bucket: string;
             prefix: string;
             /** Format: int64 */
-            capacity_bytes: number;
+            capacity_bytes: number | null;
         };
         StorageAuthorizationRequest: {
             access_key_id: string;
@@ -4606,6 +4654,12 @@ export interface components {
             expires_at?: string | null;
         };
         StorageRevokeRequest: {
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        StorageSpaceQuotaRequest: {
+            /** Format: int64 */
+            capacity_bytes: number | null;
             /** Format: int64 */
             expected_generation: number;
         };
@@ -6352,6 +6406,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStorageSpaceQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageSpaceQuotaRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageSpace"];
                 };
             };
             400: components["responses"]["Problem"];

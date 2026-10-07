@@ -90,6 +90,7 @@ async function setup(page: Page, role = 'admin') {
               management_generation: 3,
               management_actions: spaceActions(),
               capacity_bytes: 10000,
+              available_bytes: 9360,
               reserved_bytes: 100,
               candidate_bytes: 200,
               live_bytes: 300,
@@ -120,10 +121,12 @@ async function setup(page: Page, role = 'admin') {
           default_choice: 'site',
           generation: 6,
           logical_limit_bytes: 10000,
+          default_space_capacity_bytes: null,
         })
       if (path.startsWith('/admin/storage/diagnostics'))
         return json(route, {
           spaces: [],
+          disks: [],
           temporary_bytes: 0,
           recovery_backlog: 2,
           blocked_cleanup_by_code: {},
