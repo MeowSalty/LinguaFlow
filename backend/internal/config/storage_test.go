@@ -16,6 +16,9 @@ func TestStorageDefaultsAndOfflineDiagnostics(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := r.Config.Storage
+	if c.Initialization.CapacityBytes.Set || c.Initialization.LogicalLimitBytes.Set || c.Disk.MinimumFree != "1%" {
+		t.Fatalf("initialization defaults must remain omitted: %+v", c)
+	}
 	if c.Enabled || c.Maintenance || c.Limits.MaxFileBytes != 100<<20 || c.Limits.MaxTempBytes != 4<<30 || c.Limits.MaxCacheBytes != 0 || c.RetryMaxAttempts != 8 || c.IntentTTL != 24*time.Hour {
 		t.Fatalf("incorrect storage defaults: %+v", c)
 	}
@@ -27,6 +30,91 @@ func TestStorageDefaultsAndOfflineDiagnostics(t *testing.T) {
 	}
 	if explainField(t, r, "server.storage.work_dir").Source != "derived from data_dir" {
 		t.Fatal("missing derived source")
+	}
+}
+
+func TestStorageInitializationQuotaInputs(t *testing.T) {
+	for _, key := range []string{"capacity_bytes", "logical_limit_bytes"} {
+		for _, value := range []string{"null", "1", "107374182401", "9007199254740991"} {
+			t.Run(key+"/"+value, func(t *testing.T) {
+				in := deploymentInputs(t)
+				withDocument(t, &in, "kind: server\nversion: 1\nserver:\n  storage:\n    initialization:\n      "+key+": "+value+"\n")
+				r, err := ResolveServerConfig(in)
+				if err != nil {
+					t.Fatal(err)
+				}
+				quota := r.Config.Storage.Initialization.CapacityBytes
+				if key == "logical_limit_bytes" {
+					quota = r.Config.Storage.Initialization.LogicalLimitBytes
+				}
+				if !quota.Set || (quota.Value == nil) != (value == "null") {
+					t.Fatalf("wrong quota: %+v", quota)
+				}
+				if f := explainField(t, r, "server.storage.initialization."+key); f.Effect != "initialization only" {
+					t.Fatalf("wrong effect: %+v", f)
+				}
+				in.Environment["LINGUAFLOW_STORAGE_INITIALIZATION_"+strings.ToUpper(key)] = "null"
+				r, err = ResolveServerConfig(in)
+				if err != nil {
+					t.Fatal(err)
+				}
+				quota = r.Config.Storage.Initialization.CapacityBytes
+				if key == "logical_limit_bytes" {
+					quota = r.Config.Storage.Initialization.LogicalLimitBytes
+				}
+				if !quota.Set || quota.Value != nil {
+					t.Fatal("explicit environment null did not override file")
+				}
+			})
+		}
+		for _, value := range []string{"", "0", "-1", "9007199254740992", "9223372036854775808", "1.5", "true", "\"null\"", "[]", "{}"} {
+			in := deploymentInputs(t)
+			withDocument(t, &in, "kind: server\nversion: 1\nserver:\n  storage:\n    initialization:\n      "+key+": "+value+"\n")
+			if _, err := ResolveServerConfig(in); err == nil {
+				t.Fatalf("accepted YAML %s=%q", key, value)
+			}
+		}
+		for _, value := range []string{"", "NULL", "Null", " null", "null ", "0", "-1", "+1", "1.0", "9007199254740992"} {
+			in := deploymentInputs(t)
+			in.Environment["LINGUAFLOW_STORAGE_INITIALIZATION_"+strings.ToUpper(key)] = value
+			if _, err := ResolveServerConfig(in); err == nil {
+				t.Fatalf("accepted environment %s=%q", key, value)
+			}
+		}
+	}
+}
+
+func TestRemovedStorageQuotaConfiguration(t *testing.T) {
+	in := deploymentInputs(t)
+	withDocument(t, &in, "kind: server\nversion: 1\nserver:\n  storage:\n    limits:\n      capacity_bytes: 107374182400\n")
+	if _, err := ResolveServerConfig(in); err == nil || !strings.Contains(err.Error(), "initialization.capacity_bytes") {
+		t.Fatalf("missing replacement guidance: %v", err)
+	}
+	in.ConfigPath = nil
+	in.Environment["LINGUAFLOW_STORAGE_LIMITS_CAPACITY_BYTES"] = ""
+	if _, err := ResolveServerConfig(in); err == nil || !strings.Contains(err.Error(), "LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES") {
+		t.Fatalf("missing environment guidance: %v", err)
+	}
+}
+
+func TestStorageDiskThresholdConfiguration(t *testing.T) {
+	for _, value := range []string{"1%", "0.5%", "1024"} {
+		in := deploymentInputs(t)
+		withDocument(t, &in, "kind: server\nversion: 1\nserver:\n  storage:\n    disk:\n      minimum_free: "+value+"\n")
+		r, err := ResolveServerConfig(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Config.Storage.Disk.MinimumFree != value {
+			t.Fatal("threshold changed")
+		}
+	}
+	for _, value := range []string{"", "0", "-1", "0%", "100%", "NaN%", "1e2", " 1%"} {
+		in := deploymentInputs(t)
+		in.Environment["LINGUAFLOW_STORAGE_DISK_MINIMUM_FREE"] = value
+		if _, err := ResolveServerConfig(in); err == nil {
+			t.Fatalf("accepted threshold %q", value)
+		}
 	}
 }
 

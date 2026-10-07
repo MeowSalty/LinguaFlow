@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // FieldInfo 是显式声明的部署输入契约。环境变量在此逐一列出，
 // 有意不做运行时结构体反射推断。
@@ -20,7 +23,7 @@ type serverField struct {
 
 func field[T any](key, env, kind, modes string, sensitive bool, target func(*ResolvedServer) *T) serverField {
 	effect := "restart"
-	if len(key) >= 10 && key[:10] == "bootstrap." {
+	if strings.HasPrefix(key, "bootstrap.") || strings.HasPrefix(key, "server.storage.initialization.") {
 		effect = "initialization only"
 	}
 	return serverField{FieldInfo: FieldInfo{key, env, kind, modes, sensitive, effect}, read: func(r *ResolvedServer) any { return *target(r) }, write: func(r *ResolvedServer, v any) { *target(r) = v.(T) }}
@@ -45,7 +48,9 @@ var serverFields = []serverField{
 	field("server.storage.limits.max_expanded_bytes", "LINGUAFLOW_STORAGE_LIMITS_MAX_EXPANDED_BYTES", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.Storage.Limits.MaxExpandedBytes }),
 	field("server.storage.limits.max_metadata_bytes", "LINGUAFLOW_STORAGE_LIMITS_MAX_METADATA_BYTES", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.Storage.Limits.MaxMetadataBytes }),
 	field("server.storage.limits.max_cache_bytes", "LINGUAFLOW_STORAGE_LIMITS_MAX_CACHE_BYTES", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.Storage.Limits.MaxCacheBytes }),
-	field("server.storage.limits.capacity_bytes", "LINGUAFLOW_STORAGE_LIMITS_CAPACITY_BYTES", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.Storage.Limits.CapacityBytes }),
+	field("server.storage.initialization.capacity_bytes", "LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES", "nullable_quota", "serve/local", false, func(r *ResolvedServer) *QuotaInput { return &r.Config.Storage.Initialization.CapacityBytes }),
+	field("server.storage.initialization.logical_limit_bytes", "LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES", "nullable_quota", "serve/local", false, func(r *ResolvedServer) *QuotaInput { return &r.Config.Storage.Initialization.LogicalLimitBytes }),
+	field("server.storage.disk.minimum_free", "LINGUAFLOW_STORAGE_DISK_MINIMUM_FREE", "disk_threshold", "serve/local", false, func(r *ResolvedServer) *string { return &r.Config.Storage.Disk.MinimumFree }),
 	field("server.storage.limits.max_archive_entries", "LINGUAFLOW_STORAGE_LIMITS_MAX_ARCHIVE_ENTRIES", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Storage.Limits.MaxArchiveEntries }),
 	field("server.storage.limits.max_segments", "LINGUAFLOW_STORAGE_LIMITS_MAX_SEGMENTS", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Storage.Limits.MaxSegments }),
 	field("server.storage.limits.max_concurrency", "LINGUAFLOW_STORAGE_LIMITS_MAX_CONCURRENCY", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Storage.Limits.MaxConcurrency }),
