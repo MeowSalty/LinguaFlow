@@ -114,7 +114,7 @@ func TestMigrateV013SQLiteServeRehearsalApplyAndStartup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Migration published", "Original directory backup:", "LINGUAFLOW_DATABASE_DRIVER=sqlite", "LINGUAFLOW_CREDENTIALS_KEYRING_FILE=", "LINGUAFLOW_JWT_SECRET_FILE="} {
+	for _, want := range []string{"Migration published", "Original directory backup:", "LINGUAFLOW_DATABASE_DRIVER=sqlite", "LINGUAFLOW_CREDENTIALS_KEYRING_FILE=", "LINGUAFLOW_JWT_SECRET_FILE=", "LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES", "LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("missing startup instruction %q: %s", want, output)
 		}
@@ -146,6 +146,8 @@ func TestMigrateV013SQLiteServeRehearsalApplyAndStartup(t *testing.T) {
 	ln.Close()
 	assertMigratedServiceStarts(t, dir, port, []string{
 		"LINGUAFLOW_DATABASE_DRIVER=sqlite",
+		"LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES=null",
+		"LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES=null",
 		"LINGUAFLOW_CREDENTIALS_KEYRING_FILE=" + filepath.Join(dir, "credentials-keyring.json"),
 		"LINGUAFLOW_JWT_SECRET_FILE=" + filepath.Join(dir, "jwt-secret"),
 		"LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=server-admin",

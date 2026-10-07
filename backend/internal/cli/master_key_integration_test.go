@@ -36,13 +36,15 @@ func masterKeyRuntimeInputs(t *testing.T, dir string) config.ServerInputs {
 		t.Fatal(err)
 	}
 	return config.ServerInputs{Mode: config.ModeServer, WorkingDirectory: dir, Environment: map[string]string{
-		"LINGUAFLOW_DATA_DIR":                 filepath.Join(dir, "data"),
-		"LINGUAFLOW_HOST":                     "127.0.0.1",
-		"LINGUAFLOW_PORT":                     strconv.Itoa(port),
-		"LINGUAFLOW_JWT_SECRET":               strings.Repeat("runtime-jwt-", 3),
-		"LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME": "admin",
-		"LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL":    "admin@test.invalid",
-		"LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD": "runtime-admin-password",
+		"LINGUAFLOW_DATA_DIR":                                   filepath.Join(dir, "data"),
+		"LINGUAFLOW_HOST":                                       "127.0.0.1",
+		"LINGUAFLOW_PORT":                                       strconv.Itoa(port),
+		"LINGUAFLOW_JWT_SECRET":                                 strings.Repeat("runtime-jwt-", 3),
+		"LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME":                   "admin",
+		"LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL":                      "admin@test.invalid",
+		"LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD":                   "runtime-admin-password",
+		"LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES":      "null",
+		"LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES": "null",
 	}}
 }
 

@@ -8,10 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	sqlschema "entgo.io/ent/dialect/sql/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
+	entmigrate "github.com/MeowSalty/LinguaFlow/backend/internal/ent/migrate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 )
@@ -68,7 +70,7 @@ func TestDeletedLegacyTombstoneIsObservedWithoutDeletingBytes(t *testing.T) {
 	}
 }
 
-func setup(t *testing.T) fixture {
+func setup(t *testing.T, legacyChecks ...bool) fixture {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -80,7 +82,19 @@ func setup(t *testing.T) fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := client.Schema.Create(ctx); err != nil {
+	tables := append([]*sqlschema.Table(nil), entmigrate.Tables...)
+	if len(legacyChecks) > 0 && legacyChecks[0] {
+		for i, table := range tables {
+			if table.Name == "resources" {
+				copied := sqlschema.Table{Name: table.Name, Schema: table.Schema, Columns: append([]*sqlschema.Column(nil), table.Columns...), Indexes: table.Indexes, PrimaryKey: table.PrimaryKey, ForeignKeys: table.ForeignKeys, Annotation: table.Annotation, Comment: table.Comment, View: table.View, Pos: table.Pos}
+				annotation := *table.Annotation
+				annotation.Checks = nil
+				copied.Annotation = &annotation
+				tables[i] = &copied
+			}
+		}
+	}
+	if err := entmigrate.Create(ctx, client.Schema, tables); err != nil {
 		t.Fatal(err)
 	}
 	user, err := client.User.Create().SetUsername("owner").SetEmail("owner@test.invalid").SetPasswordHash("test-hash").Save(ctx)
@@ -114,7 +128,7 @@ func setup(t *testing.T) fixture {
 	if _, err := client.JobResource.Create().SetJob(job).SetResource(resource).SetStatus("running").Save(ctx); err != nil {
 		t.Fatal(err)
 	}
-	migration, err := New(db, client, "sqlite", Options{LegacyRoot: root, DefaultRoot: filepath.Join(dir, "objects"), Offline: true, BackupConfirmed: true})
+	migration, err := New(db, client, "sqlite", Options{Local: true, LegacyRoot: root, DefaultRoot: filepath.Join(dir, "objects"), Offline: true, BackupConfirmed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +334,7 @@ func TestRollbackRejectsNewEditsAndRepairs(t *testing.T) {
 }
 
 func TestInventoryBeforeStorageSchemaAndRejectTraversal(t *testing.T) {
-	f := setup(t)
+	f := setup(t, true)
 	ctx := context.Background()
 	if err := f.client.Resource.UpdateOneID(f.resource.ID).SetStoragePath("../outside.txt").Exec(ctx); err != nil {
 		t.Fatal(err)

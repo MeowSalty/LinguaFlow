@@ -21,22 +21,24 @@ const ManifestVersion = 1
 const blockedJobError = "storage_migration_needs_action: legacy job input cannot be proven; create a new task from the current source"
 
 type Manifest struct {
-	Version          int                  `json:"version"`
-	OperationID      string               `json:"operation_id"`
-	CreatedAt        time.Time            `json:"created_at"`
-	Phase            string               `json:"phase"`
-	LegacyRoot       string               `json:"legacy_root"`
-	DefaultBackendID string               `json:"default_backend_id"`
-	DefaultRoot      string               `json:"default_root"`
-	LegacySpaceID    int                  `json:"legacy_space_id,omitempty"`
-	DefaultSpaceID   int                  `json:"default_space_id,omitempty"`
-	KnownBytes       int64                `json:"known_bytes"`
-	UnknownObjects   int                  `json:"unknown_objects"`
-	Entries          []Entry              `json:"entries"`
-	Projects         []ProjectCheckpoint  `json:"projects"`
-	Jobs             []JobCheckpoint      `json:"jobs"`
-	LegacyCleanup    []CleanupObservation `json:"legacy_cleanup,omitempty"`
-	Warnings         []string             `json:"warnings"`
+	CapacityBytes     *int64               `json:"capacity_bytes"`
+	LogicalLimitBytes *int64               `json:"logical_limit_bytes"`
+	Version           int                  `json:"version"`
+	OperationID       string               `json:"operation_id"`
+	CreatedAt         time.Time            `json:"created_at"`
+	Phase             string               `json:"phase"`
+	LegacyRoot        string               `json:"legacy_root"`
+	DefaultBackendID  string               `json:"default_backend_id"`
+	DefaultRoot       string               `json:"default_root"`
+	LegacySpaceID     int                  `json:"legacy_space_id,omitempty"`
+	DefaultSpaceID    int                  `json:"default_space_id,omitempty"`
+	KnownBytes        int64                `json:"known_bytes"`
+	UnknownObjects    int                  `json:"unknown_objects"`
+	Entries           []Entry              `json:"entries"`
+	Projects          []ProjectCheckpoint  `json:"projects"`
+	Jobs              []JobCheckpoint      `json:"jobs"`
+	LegacyCleanup     []CleanupObservation `json:"legacy_cleanup,omitempty"`
+	Warnings          []string             `json:"warnings"`
 }
 
 // CleanupObservation 是诊断证据，绝不是已授权的删除

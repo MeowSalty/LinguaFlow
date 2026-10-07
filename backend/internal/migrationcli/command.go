@@ -271,6 +271,9 @@ func printPostgresStartup(cmd *cobra.Command, dataDir, keyringFile, jwtFile stri
 }
 
 func printServeStartup(cmd *cobra.Command, driver, dataDir, keyringFile, jwtFile string) error {
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Before the first serve startup, explicitly choose both LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES and LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES: each must be a positive integer in bytes (at most 9007199254740991), or the lowercase value null for unlimited. Missing choices fail startup; existing persisted quotas are preserved."); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Start serve with the same database connection and data directory:\nLINGUAFLOW_DATABASE_DRIVER=%s\nLINGUAFLOW_DATA_DIR=%s\n", driver, dataDir); err != nil {
 		return err
 	}

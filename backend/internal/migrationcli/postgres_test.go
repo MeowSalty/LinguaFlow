@@ -261,7 +261,7 @@ func TestMigrateV013PostgresMasterKeyRehearsalApplyAndStartup(t *testing.T) {
 			}
 			port := ln.Addr().(*net.TCPAddr).Port
 			ln.Close()
-			startupEnvironment := []string{"LINGUAFLOW_DATABASE_DRIVER=postgres", "LINGUAFLOW_DATABASE_DSN=" + dsn}
+			startupEnvironment := []string{"LINGUAFLOW_DATABASE_DRIVER=postgres", "LINGUAFLOW_DATABASE_DSN=" + dsn, "LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES=null", "LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES=null"}
 			for name, value := range environment {
 				startupEnvironment = append(startupEnvironment, name+"="+value)
 			}

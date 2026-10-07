@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -16,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/localstore"
 )
@@ -28,6 +30,9 @@ func (m *Migrator) checkOffline(manifest *Manifest) error {
 	}
 	if err := manifest.validate(); err != nil {
 		return err
+	}
+	if !equalQuota(manifest.CapacityBytes, m.options.CapacityBytes) || !equalQuota(manifest.LogicalLimitBytes, m.options.LogicalLimitBytes) {
+		return errors.New("manifest quota choices differ from current policy; regenerate the preview")
 	}
 	if manifest.LegacyRoot != m.options.LegacyRoot || manifest.DefaultRoot != m.options.DefaultRoot || manifest.DefaultBackendID != m.options.DefaultBackendID {
 		return errors.New("manifest roots or default backend do not match current deployment inputs")
@@ -48,11 +53,12 @@ func migrationFingerprint(manifest *Manifest) string {
 		entries = append(entries, baseline{entry.ResourceID, entry.DatabaseDigest, entry.ObjectKey, entry.ObservedSHA256, entry.Verification, entry.ObservedSize, entry.SourceGeneration, entry.TranslationGeneration, entry.Rejected})
 	}
 	return digest(struct {
-		Root, DefaultRoot, Backend string
-		Entries                    []baseline
-		Projects                   []ProjectCheckpoint
-		Jobs                       []JobCheckpoint
-	}{manifest.LegacyRoot, manifest.DefaultRoot, manifest.DefaultBackendID, entries, baselineProjects(manifest.Projects), manifest.Jobs})
+		Root, DefaultRoot, Backend       string
+		CapacityBytes, LogicalLimitBytes *int64
+		Entries                          []baseline
+		Projects                         []ProjectCheckpoint
+		Jobs                             []JobCheckpoint
+	}{manifest.LegacyRoot, manifest.DefaultRoot, manifest.DefaultBackendID, manifest.CapacityBytes, manifest.LogicalLimitBytes, entries, baselineProjects(manifest.Projects), manifest.Jobs})
 }
 
 func baselineProjects(projects []ProjectCheckpoint) []ProjectCheckpoint {
@@ -156,6 +162,42 @@ func (m *Migrator) prepare(ctx context.Context, manifest *Manifest) error {
 		if !ent.IsNotFound(err) {
 			return err
 		}
+		row, policyErr := client.SystemSetting.Query().Where(systemsetting.KeyEQ("storage_policy")).Only(ctx)
+		if policyErr != nil && !ent.IsNotFound(policyErr) {
+			return policyErr
+		}
+		values := map[string]any{"mode": "site_only", "default_choice": "site", "generation": 0}
+		if row != nil {
+			decoder := json.NewDecoder(strings.NewReader(row.Value))
+			decoder.UseNumber()
+			if err := decoder.Decode(&values); err != nil {
+				return err
+			}
+		}
+		changed := row == nil
+		if _, ok := values["default_space_capacity_bytes"]; !ok {
+			values["default_space_capacity_bytes"] = m.options.CapacityBytes
+			changed = true
+		}
+		if _, ok := values["logical_limit_bytes"]; !ok {
+			values["logical_limit_bytes"] = m.options.LogicalLimitBytes
+			changed = true
+		}
+		if changed {
+			data, err := json.Marshal(values)
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				policyErr = client.SystemSetting.Create().SetKey("storage_policy").SetValue(string(data)).Exec(ctx)
+			} else {
+				policyErr = client.SystemSetting.UpdateOneID(row.ID).SetValue(string(data)).Exec(ctx)
+			}
+			if policyErr != nil {
+				return policyErr
+			}
+		}
+
 		legacy, err := m.ensureSpace(ctx, client, "legacy", true)
 		if err != nil {
 			return err
@@ -237,7 +279,7 @@ func (m *Migrator) ensureSpace(ctx context.Context, client *ent.Client, backendI
 	if err != nil {
 		return nil, err
 	}
-	create := client.StorageSpace.Create().SetConnectionID(connection.ID).SetName(backendID).SetIdentity(identity).SetMarkerNonce(nonce).SetVerified(legacy).SetCapacityBytes(m.options.CapacityBytes)
+	create := client.StorageSpace.Create().SetConnectionID(connection.ID).SetName(backendID).SetIdentity(identity).SetMarkerNonce(nonce).SetVerified(legacy).SetNillableCapacityBytes(m.options.CapacityBytes)
 	if legacy {
 		create.SetStatus(storagespace.StatusReadOnly)
 	}
@@ -444,3 +486,5 @@ func number(value any) int {
 }
 func equalID(a, b *int) bool        { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 func equalString(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
+
+func equalQuota(a, b *int64) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }

@@ -17,19 +17,24 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/localstore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/storeutil"
 )
 
 type Options struct {
-	LegacyRoot       string
-	DefaultRoot      string
-	DefaultBackendID string
-	MaxFileBytes     int64
-	CapacityBytes    int64
-	Offline          bool
-	BackupConfirmed  bool
+	LegacyRoot        string
+	DefaultRoot       string
+	DefaultBackendID  string
+	MaxFileBytes      int64
+	CapacityBytes     *int64
+	LogicalLimitBytes *int64
+	CapacitySet       bool
+	LogicalSet        bool
+	Local             bool
+	Offline           bool
+	BackupConfirmed   bool
 }
 
 type Migrator struct {
@@ -61,8 +66,44 @@ func New(db *sql.DB, client *ent.Client, dialect string, options Options) (*Migr
 	if options.MaxFileBytes <= 0 {
 		options.MaxFileBytes = 100 << 20
 	}
-	if options.CapacityBytes <= 0 {
-		options.CapacityBytes = 100 << 30
+	row, policyErr := client.SystemSetting.Query().Where(systemsetting.KeyEQ("storage_policy")).Only(context.Background())
+	if policyErr == nil {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(row.Value), &fields); err != nil {
+			return nil, err
+		}
+		if value, ok := fields["default_space_capacity_bytes"]; ok {
+			if err := json.Unmarshal(value, &options.CapacityBytes); err != nil {
+				return nil, err
+			}
+		} else if !options.Local && !options.CapacitySet {
+			return nil, errors.New("storage migration requires missing default space quota choice")
+		}
+		if value, ok := fields["logical_limit_bytes"]; ok {
+			if err := json.Unmarshal(value, &options.LogicalLimitBytes); err != nil {
+				return nil, err
+			}
+		} else if !options.Local && !options.LogicalSet {
+			return nil, errors.New("storage migration requires missing logical quota choice")
+		}
+	} else if ent.IsNotFound(policyErr) {
+		if !options.Local && (!options.CapacitySet || !options.LogicalSet) {
+			return nil, errors.New("storage migration requires both initialization quota choices for serve")
+		}
+		if !options.CapacitySet {
+			options.CapacityBytes = nil
+		}
+		if !options.LogicalSet {
+			options.LogicalLimitBytes = nil
+		}
+	} else {
+		return nil, policyErr
+	}
+
+	for _, n := range []*int64{options.CapacityBytes, options.LogicalLimitBytes} {
+		if n != nil && (*n <= 0 || *n > 1<<53-1) {
+			return nil, errors.New("invalid storage initialization quota")
+		}
 	}
 	if rootsOverlap(options.DefaultRoot, options.LegacyRoot) || options.DefaultBackendID == "legacy" {
 		return nil, errors.New("legacy root and default local storage must be separate, non-nested directories")
@@ -95,7 +136,7 @@ func (m *Migrator) Inventory(ctx context.Context) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	manifest := &Manifest{Version: ManifestVersion, OperationID: operation, CreatedAt: time.Now().UTC(), Phase: "inventoried", LegacyRoot: m.options.LegacyRoot, DefaultRoot: m.options.DefaultRoot, DefaultBackendID: m.options.DefaultBackendID,
+	manifest := &Manifest{Version: ManifestVersion, OperationID: operation, CreatedAt: time.Now().UTC(), Phase: "inventoried", LegacyRoot: m.options.LegacyRoot, DefaultRoot: m.options.DefaultRoot, DefaultBackendID: m.options.DefaultBackendID, CapacityBytes: m.options.CapacityBytes, LogicalLimitBytes: m.options.LogicalLimitBytes,
 		Warnings: []string{"Stop all service writers and back up the database and keyring before apply.", "Configure deployment backend legacy with the exact legacy_root; do not point it at objects.", "parser_version remains legacy_unknown; observed hashes cannot prove bytes were not replaced before inventory.", "Rollback reverses unchanged migration metadata only; restoring an old binary also requires its compatible database backup."}}
 	tx, err := m.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelSerializable})
 	if err != nil {
