@@ -50,6 +50,9 @@ tasks:
   test:storage-integration:
     desc: 使用独立 Local 后端与隔离数据库验证文件存储真实传输及快照
     cmds: ['pnpm exec vitest run --config vitest.storage-integration.config.ts {{.CLI_ARGS}}']
+  test:task-history-integration:
+    desc: 使用独立后端及隔离数据库验证任务保留、删除权限和真实浏览器收敛
+    cmds: ['pnpm exec vitest run --config vitest.task-history-integration.config.ts {{.CLI_ARGS}}']
   test:startup:
     desc: 验证前端开发和生产环境启动
     deps: [build]

@@ -78,7 +78,12 @@ async function restrictKeyring(file) {
 }
 
 export async function createConfigurationBackend(metadata, signal, options = {}) {
-  const category = options.storage ? 'storage-integration' : 'configuration-integration'
+  const category =
+    options.category === 'task-history-integration'
+      ? options.category
+      : options.storage
+        ? 'storage-integration'
+        : 'configuration-integration'
   const resultsRoot = path.join(frontend, 'tests/artifacts', category)
   await mkdir(resultsRoot, { recursive: true })
   const runDir = await mkdtemp(path.join(resultsRoot, `${category}-`))
@@ -224,7 +229,7 @@ export async function createConfigurationBackend(metadata, signal, options = {})
       res.end('Fixture protocol error')
     }
   })
-  async function request(method, route, body, expected = 200, token = adminToken) {
+  async function request(method, route, body, expected = 200, token = adminToken, timeout = 15000) {
     const headers = token ? { Authorization: `Bearer ${token}` } : {}
     if (method === 'POST' && /^\/projects\/\d+\/resources$/.test(route))
       headers['Idempotency-Key'] = randomUUID()
@@ -233,7 +238,7 @@ export async function createConfigurationBackend(metadata, signal, options = {})
     const init = {
       method,
       headers,
-      signal: AbortSignal.any([AbortSignal.timeout(15000), ...(signal ? [signal] : [])]),
+      signal: AbortSignal.any([AbortSignal.timeout(timeout), ...(signal ? [signal] : [])]),
     }
     if (body !== undefined) {
       assert.ok(method !== 'GET' && method !== 'HEAD', 'Read requests cannot carry a body')
@@ -441,6 +446,15 @@ export async function createConfigurationBackend(metadata, signal, options = {})
     await stopBackend()
     await launchBackend(config, env)
   }
+  // Fault injection callers must validate their isolated paths before editing any data.
+  async function withStopped(operation) {
+    await stopBackend()
+    try {
+      return await operation()
+    } finally {
+      await launchBackend(config, env)
+    }
+  }
   async function close() {
     for (const model of holds) release(model)
     try {
@@ -496,6 +510,7 @@ export async function createConfigurationBackend(metadata, signal, options = {})
     start,
     runDir,
     restart,
+    withStopped,
     close,
     writeReport,
     request,
