@@ -11,11 +11,13 @@ StorageDiagnostics:
       items:
         $ref: '#/StorageSpaceDiagnostics'
     next_cursor:
+      description: 下一页游标，取上一页最后一个空间 ID。仅在还有更多空间时返回，否则省略该字段。
       type: integer
     temporary_bytes:
       type: integer
       format: int64
     oldest_intent_at:
+      description: 最早一条未完结写入的创建时间。没有未完结写入时省略该字段。
       type: string
       format: date-time
     recovery_backlog:
@@ -29,6 +31,7 @@ StorageDiagnostics:
       additionalProperties:
         type: integer
     latest_backup:
+      description: 最近一次备份的摘要。尚无备份记录时省略该字段。
       type: object
       required: [id, status, created_at]
       properties:
