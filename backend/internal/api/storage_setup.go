@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/diskspace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
@@ -74,12 +75,77 @@ func (s *Server) initStorage(ctx context.Context, keys *credential.Keyring) erro
 		return err
 	}
 	s.storageSvc = store
+
+	threshold, err := diskspace.ParseThreshold(cfg.Disk.MinimumFree)
+	if err != nil {
+		return err
+	}
+	disk, err := diskspace.New(threshold, nil)
+	if err != nil {
+		return err
+	}
+	var requiredDirectories []string
+	if s.serverCfg.Database.Driver == config.DatabaseDriverSQLite {
+		dbPath := s.serverCfg.DatabasePath()
+		if s.serverCfg.Database.DSN != "" {
+			dbPath, _, _ = strings.Cut(s.serverCfg.Database.DSN, "?")
+			dbPath = strings.TrimPrefix(dbPath, "file:")
+		}
+		if dbPath != ":memory:" && !strings.Contains(s.serverCfg.Database.DSN, "mode=memory") {
+			requiredDirectories = append(requiredDirectories, filepath.Dir(dbPath))
+		}
+	}
+	if cfg.Limits.MaxCacheBytes > 0 {
+		if err = os.MkdirAll(cfg.CacheDir, 0700); err != nil {
+			return err
+		}
+		requiredDirectories = append(requiredDirectories, cfg.CacheDir)
+	}
+	store.SetDiskCoordinator(disk, requiredDirectories...)
+	if err = store.ReconcileLocalTemporary(ctx); err != nil {
+		return err
+	}
 	s.storageConnections = service.NewStorageConnectionService(s.entClient, keys, cfg, s.storageFactory(cfg))
 	store.SetResolver(s.storageConnections.ResolveDriver)
 	backends := cfg.Backends
 	if len(backends) == 0 {
 		backends = []config.StorageBackendConfig{{ID: "local", Driver: "local", Root: filepath.Join(s.serverCfg.DataDir, "objects")}}
 	}
+	localIdentities := map[string]string{}
+	var localRoots []string
+	for _, backend := range backends {
+		if backend.Driver != "local" {
+			continue
+		}
+		root, err := filepath.Abs(backend.Root)
+		if err != nil {
+			return err
+		}
+		for _, other := range backends {
+			if other.Driver != "local" || other.ID == backend.ID {
+				continue
+			}
+			otherRoot, err := filepath.Abs(other.Root)
+			if err != nil {
+				return err
+			}
+			if localRootsOverlap(root, otherRoot) {
+				return service.ErrStorageConflict
+			}
+		}
+		localRoots = append(localRoots, root)
+		identityRoot := filepath.Clean(root)
+		if runtime.GOOS == "windows" {
+			identityRoot = strings.ToLower(identityRoot)
+		}
+		digest := sha256.Sum256([]byte(identityRoot))
+		localIdentities[backend.ID] = "local-root:" + hex.EncodeToString(digest[:])
+	}
+	store.SetDiskDiagnosticDirectories(localRoots...)
+	if err = store.InitializeSiteStorage(ctx, s.serverCfg.IsLocal(), cfg, localIdentities); err != nil {
+		return err
+	}
+
 	defaultID := 0
 	for _, backend := range backends {
 		if backend.Driver != "local" {
@@ -116,9 +182,9 @@ func (s *Server) initStorage(ctx context.Context, keys *credential.Keyring) erro
 		}
 		var driver *localstore.Store
 		if backend.ID == "legacy" || cfg.Maintenance {
-			driver, err = localstore.OpenExisting(root)
+			driver, err = localstore.OpenExistingWithCoordinator(root, disk)
 		} else {
-			driver, err = localstore.New(root)
+			driver, err = localstore.NewWithCoordinator(root, disk)
 		}
 		if err != nil {
 			if cfg.Maintenance && (errors.Is(err, os.ErrNotExist) || errors.Is(err, storage.ErrNotFound)) {
@@ -149,9 +215,6 @@ func (s *Server) initStorage(ctx context.Context, keys *credential.Keyring) erro
 			}
 		}
 		if _, err = s.entClient.StorageConnection.Update().Where(storageconnection.IDEQ(space.ConnectionID), storageconnection.EndpointEQ("")).SetEndpoint(identity).Save(ctx); err != nil {
-			return err
-		}
-		if err = s.entClient.StorageSpace.UpdateOneID(space.ID).SetCapacityBytes(cfg.Limits.CapacityBytes).Exec(ctx); err != nil {
 			return err
 		}
 		if backend.ID != "legacy" && !cfg.Maintenance {
@@ -223,6 +286,7 @@ func maintenanceAuthorizedOperation(r *http.Request) bool {
 		"POST /api/v1/storage/connections/{connectionId}/spaces",
 		"PATCH /api/v1/storage/connections/{connectionId}",
 		"PATCH /api/v1/storage/spaces/{spaceId}",
+		"PUT /api/v1/storage/spaces/{spaceId}/quota",
 		"POST /api/v1/storage/connections/{connectionId}/authorize",
 		"POST /api/v1/storage/connections/{connectionId}/check",
 		"POST /api/v1/storage/connections/{connectionId}/revoke":

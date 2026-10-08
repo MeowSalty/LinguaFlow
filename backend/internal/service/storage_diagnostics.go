@@ -17,6 +17,7 @@ import (
 )
 
 type StorageDiagnostics struct {
+	Disks                []StorageDiskDiagnostic   `json:"disks"`
 	Spaces               []StorageSpaceDiagnostics `json:"spaces"`
 	NextCursor           *int                      `json:"next_cursor"`
 	TemporaryBytes       int64                     `json:"temporary_bytes"`
@@ -47,8 +48,8 @@ type StorageBackupDiagnostic struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Diagnostics 只读取已登记的元数据。它绝不解析驱动、探测存储、
-// 枚举目录，也不包含物理身份信息。
+// Diagnostics 在管理员鉴权后读取元数据并观测本地文件系统余量。
+// 不枚举对象、不探测远端存储，也不返回主机路径或物理身份。
 func (s *StorageService) Diagnostics(ctx context.Context, actor, afterSpaceID, limit int) (*StorageDiagnostics, error) {
 	admin, err := s.client.User.Query().Where(user.IDEQ(actor), user.ActiveEQ(true), user.RoleEQ(SystemRoleAdmin)).Exist(ctx)
 	if err != nil {
@@ -74,7 +75,7 @@ func (s *StorageService) Diagnostics(ctx context.Context, actor, afterSpaceID, l
 	}
 	defer transaction.Rollback()
 	client := transaction.Client()
-	result := &StorageDiagnostics{Spaces: make([]StorageSpaceDiagnostics, 0, limit), BlockedCleanupByCode: map[string]int{}, MigrationsByPhase: map[string]int{}}
+	result := &StorageDiagnostics{Disks: s.diskDiagnostics(ctx), Spaces: make([]StorageSpaceDiagnostics, 0, limit), BlockedCleanupByCode: map[string]int{}, MigrationsByPhase: map[string]int{}}
 	spaces, err := client.StorageSpace.Query().Where(storagespace.IDGT(afterSpaceID)).Select(storagespace.FieldID, storagespace.FieldReservedBytes, storagespace.FieldCandidateBytes, storagespace.FieldLiveBytes, storagespace.FieldPendingDeleteBytes).Order(ent.Asc(storagespace.FieldID)).Limit(limit + 1).All(ctx)
 	if err != nil {
 		return nil, err
@@ -192,7 +193,7 @@ func diagnosticCleanupCode(code string) string {
 	switch code {
 	case "storage_payload_too_large", "storage_timeout", "storage_intent_expired", "storage_idempotency_conflict", "storage_operation_in_progress", "storage_crypto_unavailable", "storage_policy_violation", "storage_deployment_disabled", "invalid_input", "storage_parse_failed":
 		return code
-	case "source_missing", "source_corrupt", "storage_permission_denied", "storage_auth_required", "storage_quota_exceeded", "storage_unavailable", "storage_generation_conflict", "storage_transfer_interrupted", "legacy_location_unverified", "storage_retry_exhausted", "storage_cancelled", "storage_maintenance", "storage_file_too_large", "repair_content_mismatch", "storage_invalid_key", "storage_capability_unsupported", "source_revision_conflict":
+	case "storage_disk_insufficient", "storage_disk_probe_failed", "source_missing", "source_corrupt", "storage_permission_denied", "storage_auth_required", "storage_quota_exceeded", "storage_unavailable", "storage_generation_conflict", "storage_transfer_interrupted", "legacy_location_unverified", "storage_retry_exhausted", "storage_cancelled", "storage_maintenance", "storage_file_too_large", "repair_content_mismatch", "storage_invalid_key", "storage_capability_unsupported", "source_revision_conflict":
 		return code
 	default:
 		return "other"
@@ -227,4 +228,62 @@ func (t *diagnosticTime) Scan(value any) error {
 		}
 	}
 	return fmt.Errorf("invalid diagnostic timestamp")
+}
+
+// StorageDiskDiagnostic intentionally excludes host paths and device identities.
+type StorageDiskDiagnostic struct {
+	Roles            []string  `json:"roles"`
+	State            string    `json:"state"`
+	ObservedAt       time.Time `json:"observed_at"`
+	TotalBytes       *int64    `json:"total_bytes"`
+	AvailableBytes   *int64    `json:"available_bytes"`
+	MinimumFreeBytes *int64    `json:"minimum_free_bytes"`
+}
+
+func (s *StorageService) diskDiagnostics(ctx context.Context) []StorageDiskDiagnostic {
+	result := []StorageDiskDiagnostic{}
+	if s.disk == nil {
+		return result
+	}
+	type directory struct{ path, role string }
+	dirs := []directory{{s.workDir, "work"}}
+	for _, path := range s.diskDirectories {
+		dirs = append(dirs, directory{path, "metadata_or_cache"})
+	}
+	for _, path := range s.diskDiagnosticDirectories {
+		dirs = append(dirs, directory{path, "objects"})
+	}
+	positions := map[string]int{}
+	for _, dir := range dirs {
+		item := StorageDiskDiagnostic{Roles: []string{dir.role}, State: "unknown", ObservedAt: time.Now().UTC()}
+		o, err := s.disk.Observe(ctx, dir.path)
+		if err != nil || o.TotalBytes > uint64(MaxStorageInteger) || o.AvailableBytes > uint64(MaxStorageInteger) {
+			result = append(result, item)
+			continue
+		}
+		if i, ok := positions[o.FilesystemID]; ok {
+			found := false
+			for _, role := range result[i].Roles {
+				if role == dir.role {
+					found = true
+				}
+			}
+			if !found {
+				result[i].Roles = append(result[i].Roles, dir.role)
+			}
+			continue
+		}
+		total, available, minimum := int64(o.TotalBytes), int64(o.AvailableBytes), int64(s.disk.ThresholdBytes(o.TotalBytes))
+		item.TotalBytes = &total
+		item.AvailableBytes = &available
+		item.MinimumFreeBytes = &minimum
+		item.ObservedAt = o.ObservedAt
+		item.State = "available"
+		if available < minimum {
+			item.State = "low"
+		}
+		positions[o.FilesystemID] = len(result)
+		result = append(result, item)
+	}
+	return result
 }

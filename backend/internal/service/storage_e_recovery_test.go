@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -25,6 +26,11 @@ import (
 func restartStorageE(t *testing.T, old *StorageService, cfg config.StorageConfig) *StorageService {
 	t.Helper()
 	next, err := NewStorageService(old.client, old.projects, old.workDir)
+	if next != nil {
+		if initErr := next.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +370,7 @@ func TestStorageERemoteMigrationToLocalStillChecksPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.cfg.Enabled = false
-	client.SystemSetting.Create().SetKey(storagePolicyKey).SetValue(`{"mode":"user_required","default_choice":"user","generation":9,"logical_limit_bytes":100000}`).ExecX(ctx)
+	setStorageTestPolicy(t, client, `{"mode":"user_required","default_choice":"user","generation":9,"logical_limit_bytes":100000}`)
 	if _, err := s.StartMigration(ctx, owner.ID, project.ID, target.ID, project.StorageGeneration, "blocked-move"); !errors.Is(err, ErrStoragePolicy) {
 		t.Fatalf("migration escape bypassed user_required: %v", err)
 	}
@@ -395,6 +401,11 @@ func TestStorageEDeploymentErrorSurvivesSanitizeAndDiagnostics(t *testing.T) {
 	}
 	client.User.UpdateOneID(owner.ID).SetRole(SystemRoleAdmin).ExecX(ctx)
 	s, err := NewStorageService(client, NewProjectService(client, NewUserService(client, nil)), t.TempDir())
+	if s != nil {
+		if initErr := s.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

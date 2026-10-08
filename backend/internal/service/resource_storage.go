@@ -46,11 +46,21 @@ func (s *ResourceService) ensureStorage(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	driver, err := localstore.New(filepath.Join(s.fileStore.Root(), "..", "objects"))
+	if err = st.InitializeSiteStorage(ctx, true, config.DefaultStorageConfig(), map[string]string{"local": ""}); err != nil {
+		return err
+	}
+	driver, err := localstore.NewWithCoordinator(filepath.Join(s.fileStore.Root(), "..", "objects"), st.disk)
 	if err != nil {
 		return err
 	}
-	if _, err = st.InstallSiteSpace(ctx, "local", driver); err != nil {
+	space, err := st.InstallSiteSpace(ctx, "local", driver)
+	if err != nil {
+		_ = driver.Close()
+		return err
+	}
+	connections := NewStorageConnectionService(s.client, nil, config.DefaultStorageConfig(), nil)
+	if err = connections.AdmitLocalSpace(ctx, space.ID, driver); err != nil {
+		_ = driver.Close()
 		return err
 	}
 	s.SetStorage(st)

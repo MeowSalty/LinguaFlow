@@ -14,6 +14,9 @@ import (
 )
 
 func (s *StorageService) StartMigration(ctx context.Context, actor, projectID, target int, generation int64, key string) (*ent.StorageTask, error) {
+	if generation < 0 || generation > MaxStorageInteger-2 {
+		return nil, ErrInvalidInput
+	}
 	task, err := s.Begin(ctx, actor, projectID, StorageIntent{Kind: "migration", IdempotencyKey: key, TargetSpaceID: target, StorageGeneration: generation})
 	if err != nil {
 		return nil, err

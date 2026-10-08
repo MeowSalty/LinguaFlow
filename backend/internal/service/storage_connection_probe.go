@@ -167,8 +167,8 @@ func (s *StorageConnectionService) registerProbe(ctx context.Context, actor int,
 			return err
 		}
 		size := int64(len(data))
-		if size > storageAvailableBytes(space) {
-			return storage.ErrLimit
+		if err = storageQuotaAdmission(space, size); err != nil {
+			return err
 		}
 		kind := "storage_probe"
 		if marker {

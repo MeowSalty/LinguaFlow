@@ -81,9 +81,16 @@ func (s *Server) decodeStorageJSON(w http.ResponseWriter, r *http.Request, out a
 			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求字段无效")
 			return false
 		}
-		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) && name != "expires_at" {
+		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) && !storageNullableField(name) {
 			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求字段不能为 null")
 			return false
+		}
+		if strings.HasSuffix(name, "generation") {
+			var generation int64
+			if err := json.Unmarshal(value, &generation); err != nil || generation < 0 || generation > service.MaxStorageInteger {
+				s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "代次超出允许范围")
+				return false
+			}
 		}
 		fields[name] = value
 	}
@@ -97,7 +104,7 @@ func (s *Server) decodeStorageJSON(w http.ResponseWriter, r *http.Request, out a
 	}
 	for _, name := range required {
 		v, ok := fields[name]
-		if !ok || bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+		if !ok || bytes.Equal(bytes.TrimSpace(v), []byte("null")) && !storageNullableField(name) {
 			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "缺少必填字段 "+name)
 			return false
 		}
@@ -129,6 +136,10 @@ func (s *Server) writeStorageError(w http.ResponseWriter, r *http.Request, err e
 		status, detail = http.StatusConflict, "存储授权或能力不满足要求"
 	case "storage_permission_denied", "storage_policy_violation":
 		status, detail = http.StatusForbidden, "存储权限或政策不允许该操作"
+	case "storage_disk_insufficient":
+		status, detail = http.StatusInsufficientStorage, "本地磁盘可用空间不足"
+	case "storage_disk_probe_failed":
+		status, detail = http.StatusServiceUnavailable, "无法确认本地磁盘可用空间"
 	case "storage_quota_exceeded":
 		status, detail = http.StatusConflict, "可用存储额度不足"
 	case "storage_payload_too_large":
@@ -197,7 +208,7 @@ func (s *Server) GetStoragePolicy(w http.ResponseWriter, r *http.Request) {
 func (s *Server) SetStoragePolicy(w http.ResponseWriter, r *http.Request) {
 	s.storageRequest(w, r, true, func(w http.ResponseWriter, r *http.Request, actor int) {
 		var p service.StoragePolicyRequest
-		if !s.decodeStorageJSON(w, r, &p, "mode", "default_choice", "generation", "logical_limit_bytes") {
+		if !s.decodeStorageJSON(w, r, &p, "mode", "default_choice", "generation", "logical_limit_bytes", "default_space_capacity_bytes") {
 			return
 		}
 		out, err := s.storageSvc.SetPolicy(r.Context(), actor, p)
@@ -276,7 +287,7 @@ func (s *Server) CreateStorageSpace(w http.ResponseWriter, r *http.Request, id i
 		if !s.decodeStorageJSON(w, r, &input, "name", "bucket", "prefix", "capacity_bytes") {
 			return
 		}
-		if input.CapacityBytes <= 0 {
+		if input.CapacityBytes != nil && (*input.CapacityBytes <= 0 || *input.CapacityBytes > 9007199254740991) {
 			s.writeStorageError(w, r, service.ErrInvalidInput)
 			return
 		}
@@ -646,5 +657,23 @@ func (s *Server) DownloadExportArtifact(w http.ResponseWriter, r *http.Request, 
 		w.Header().Set("Cache-Control", "private, no-store")
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.Copy(w, f)
+	})
+}
+
+func storageNullableField(name string) bool {
+	return name == "expires_at" || name == "capacity_bytes" || name == "logical_limit_bytes" || name == "default_space_capacity_bytes"
+}
+func (s *Server) SetStorageSpaceQuota(w http.ResponseWriter, r *http.Request, id int) {
+	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
+		var input StorageSpaceQuotaRequest
+		if !s.decodeStorageJSON(w, r, &input, "capacity_bytes", "expected_generation") {
+			return
+		}
+		row, err := s.storageConnections.SetSpaceQuota(r.Context(), actor, id, input.CapacityBytes, input.ExpectedGeneration)
+		if err != nil {
+			s.writeStorageError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, row)
 	})
 }

@@ -51,7 +51,7 @@ type CreateStorageSpaceInput struct {
 	Name          string `json:"name"`
 	Bucket        string `json:"bucket"`
 	Prefix        string `json:"prefix"`
-	CapacityBytes int64  `json:"capacity_bytes"`
+	CapacityBytes *int64 `json:"capacity_bytes"`
 }
 type AuthorizeStorageInput struct {
 	Payload                      storageauth.S3Payload `json:"-"`
@@ -77,6 +77,7 @@ type StorageConnectionRecord struct {
 	ManagementActions    StorageConnectionManagementActions `json:"management_actions"`
 }
 type StorageSpaceRecord struct {
+	AvailableBytes       *int64                        `json:"available_bytes"`
 	ID                   int                           `json:"id"`
 	ConnectionID         int                           `json:"connection_id"`
 	Name                 string                        `json:"name"`
@@ -88,7 +89,7 @@ type StorageSpaceRecord struct {
 	Verified             bool                          `json:"verified"`
 	Versioned            bool                          `json:"versioned"`
 	ManagementGeneration int64                         `json:"management_generation"`
-	CapacityBytes        int64                         `json:"capacity_bytes"`
+	CapacityBytes        *int64                        `json:"capacity_bytes"`
 	ReservedBytes        int64                         `json:"reserved_bytes"`
 	CandidateBytes       int64                         `json:"candidate_bytes"`
 	LiveBytes            int64                         `json:"live_bytes"`
@@ -204,13 +205,17 @@ func (s *StorageConnectionService) Spaces(ctx context.Context, actor, connection
 	}
 	out := make([]*StorageSpaceRecord, 0, len(rows))
 	for _, sp := range rows {
-		out = append(out, s.spaceRecord(sp))
+		record, err := s.spaceRecord(sp)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, record)
 	}
 	return out, nil
 }
 
 func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, connectionID int, in CreateStorageSpaceInput) (*StorageSpaceRecord, error) {
-	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 200 || in.Bucket == "" || len(in.Bucket) > 63 || strings.ContainsAny(in.Bucket, "/\\\x00 \t\r\n") || strings.ContainsAny(in.Prefix, "\\\x00\r\n") || strings.HasPrefix(in.Prefix, "/") || len(in.Prefix) > 512 || in.CapacityBytes < 0 {
+	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 200 || in.Bucket == "" || len(in.Bucket) > 63 || strings.ContainsAny(in.Bucket, "/\\\x00 \t\r\n") || strings.ContainsAny(in.Prefix, "\\\x00\r\n") || strings.HasPrefix(in.Prefix, "/") || len(in.Prefix) > 512 || !validStorageQuota(in.CapacityBytes) {
 		return nil, ErrInvalidInput
 	}
 	for _, part := range strings.Split(in.Prefix, "/") {
@@ -219,14 +224,7 @@ func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, conne
 		}
 	}
 	in.Prefix = strings.TrimSuffix(in.Prefix, "/")
-	if in.CapacityBytes == 0 {
-		in.CapacityBytes = s.cfg.Limits.CapacityBytes
-	}
-	if in.CapacityBytes > s.cfg.Limits.CapacityBytes {
-		return nil, storage.ErrLimit
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 	var out *ent.StorageSpace
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		c, err := s.authorized(ctx, tx, actor, connectionID)
@@ -247,17 +245,20 @@ func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, conne
 				return ErrStorageConflict
 			}
 		}
-		out, err = tx.StorageSpace.Create().SetConnectionID(c.ID).SetName(strings.TrimSpace(in.Name)).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetBucket(in.Bucket).SetPrefix(in.Prefix).SetOwnerKind(storagespace.OwnerKind(c.OwnerKind)).SetOwnerID(c.OwnerID).SetCapacityBytes(in.CapacityBytes).Save(ctx)
+		out, err = tx.StorageSpace.Create().SetConnectionID(c.ID).SetName(strings.TrimSpace(in.Name)).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetBucket(in.Bucket).SetPrefix(in.Prefix).SetOwnerKind(storagespace.OwnerKind(c.OwnerKind)).SetOwnerID(c.OwnerID).SetNillableCapacityBytes(in.CapacityBytes).Save(ctx)
 		if err != nil {
 			return err
 		}
 		// 使任何仍在校验旧空间集合的授权候选失效。
+		if !storageCanIncrement(c.ManagementGeneration) {
+			return ErrInvalidInput
+		}
 		return tx.StorageConnection.UpdateOneID(c.ID).AddManagementGeneration(1).Exec(ctx)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.spaceRecord(out), nil
+	return s.spaceRecord(out)
 }
 
 func storagePrefixesOverlap(a, b string) bool {
@@ -265,6 +266,9 @@ func storagePrefixesOverlap(a, b string) bool {
 }
 
 func (s *StorageConnectionService) SetStatus(ctx context.Context, actor, id int, status string, generation int64) (*StorageConnectionRecord, error) {
+	if !storageCanIncrement(generation) {
+		return nil, ErrInvalidInput
+	}
 	if status != "enabled" && status != "disabled" {
 		return nil, ErrInvalidInput
 	}
@@ -295,6 +299,9 @@ func (s *StorageConnectionService) SetStatus(ctx context.Context, actor, id int,
 }
 
 func (s *StorageConnectionService) SetSpaceStatus(ctx context.Context, actor, id int, status string, generation int64) (*StorageSpaceRecord, error) {
+	if !storageCanIncrement(generation) {
+		return nil, ErrInvalidInput
+	}
 	if status != "active" && status != "read_only" && status != "disabled" {
 		return nil, ErrInvalidInput
 	}
@@ -328,7 +335,7 @@ func (s *StorageConnectionService) SetSpaceStatus(ctx context.Context, actor, id
 	if err != nil {
 		return nil, err
 	}
-	return s.spaceRecord(sp), nil
+	return s.spaceRecord(sp)
 }
 
 func storageAuthIdentity(c *ent.StorageConnection, generation int64) storageauth.Identity {
@@ -375,6 +382,9 @@ func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int,
 		last, err := tx.StorageAuthVersion.Query().Where(storageauthversion.ConnectionIDEQ(id)).Order(ent.Desc(storageauthversion.FieldGeneration)).First(ctx)
 		var next int64 = 1
 		if err == nil {
+			if !storageCanIncrement(last.Generation) {
+				return ErrInvalidInput
+			}
 			next = last.Generation + 1
 		} else if !ent.IsNotFound(err) {
 			return err
@@ -435,6 +445,9 @@ func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int,
 		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), op, c)); err != nil {
 			return err
 		}
+		if !storageCanIncrement(c.ManagementGeneration) {
+			return ErrInvalidInput
+		}
 		n, err := tx.StorageConnection.Update().Where(storageconnection.IDEQ(c.ID), storageconnection.ManagementGenerationEQ(c.ManagementGeneration), storageconnection.ActiveAuthGenerationEQ(c.ActiveAuthGeneration), storageconnection.StatusEQ(storageconnection.StatusEnabled)).SetActiveAuthGeneration(candidate.Generation).AddManagementGeneration(1).SetHealth("available").SetCheckedAt(time.Now().UTC()).Save(ctx)
 		if err != nil {
 			return err
@@ -484,6 +497,9 @@ func (s *StorageConnectionService) retireCandidate(ctx context.Context, id int) 
 }
 
 func (s *StorageConnectionService) Revoke(ctx context.Context, actor, id int, generation int64) (*StorageConnectionRecord, error) {
+	if !storageCanIncrement(generation) {
+		return nil, ErrInvalidInput
+	}
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		c, err := s.authorized(ctx, tx, actor, id)
 		if err != nil {
@@ -566,7 +582,7 @@ func (s *StorageConnectionService) sanitize(err error) error {
 	if errors.Is(err, context.Canceled) {
 		return storage.ErrUnavailable
 	}
-	for _, safe := range []error{storage.ErrNotFound, storage.ErrCorrupt, storage.ErrPermission, storage.ErrAuthRequired, storage.ErrLimit, storage.ErrPayloadTooLarge, storage.ErrUnsupported, ErrStorageConflict, ErrStorageCrypto, ErrStorageMaintenance, ErrStorageDeploymentDisabled, ErrStoragePolicy, ErrForbidden, context.Canceled, context.DeadlineExceeded} {
+	for _, safe := range []error{storage.ErrNotFound, storage.ErrCorrupt, storage.ErrPermission, storage.ErrAuthRequired, storage.ErrLimit, storage.ErrDiskSpaceInsufficient, storage.ErrDiskSpaceUnknown, storage.ErrPayloadTooLarge, storage.ErrUnsupported, ErrStorageConflict, ErrStorageCrypto, ErrStorageMaintenance, ErrStorageDeploymentDisabled, ErrStoragePolicy, ErrForbidden, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, safe) {
 			return safe
 		}

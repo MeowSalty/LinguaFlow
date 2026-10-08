@@ -2,6 +2,8 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 )
@@ -24,7 +26,7 @@ func (StorageSpace) Fields() []ent.Field {
 		field.Enum("status").Values("active", "read_only", "disabled").Default("active"),
 		field.Bool("verified").Default(false),
 		field.Bool("versioned").Default(false),
-		field.Int64("capacity_bytes").Default(107374182400).NonNegative(),
+		field.Int64("capacity_bytes").Optional().Nillable().Positive(),
 		field.Int64("reserved_bytes").Default(0).NonNegative(),
 		field.Int64("candidate_bytes").Default(0).NonNegative(),
 		field.Int64("live_bytes").Default(0).NonNegative(),
@@ -33,4 +35,9 @@ func (StorageSpace) Fields() []ent.Field {
 }
 func (StorageSpace) Edges() []ent.Edge {
 	return []ent.Edge{edge.To("connection", StorageConnection.Type).Field("connection_id").Unique().Required()}
+}
+
+// Database checks also cover atomic Add mutations, which skip field validators.
+func (StorageSpace) Annotations() []schema.Annotation {
+	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"storage_space_management_generation_safe": "management_generation >= 0 AND management_generation <= 9007199254740991", "storage_space_reserved_bytes_safe": "reserved_bytes >= 0 AND reserved_bytes <= 9007199254740991", "storage_space_candidate_bytes_safe": "candidate_bytes >= 0 AND candidate_bytes <= 9007199254740991", "storage_space_live_bytes_safe": "live_bytes >= 0 AND live_bytes <= 9007199254740991", "storage_space_pending_delete_bytes_safe": "pending_delete_bytes >= 0 AND pending_delete_bytes <= 9007199254740991", "storage_space_total_safe": "reserved_bytes + candidate_bytes + live_bytes + pending_delete_bytes <= 9007199254740991", "storage_space_capacity_safe": "capacity_bytes IS NULL OR (capacity_bytes >= 1 AND capacity_bytes <= 9007199254740991)"}}}
 }

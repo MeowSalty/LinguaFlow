@@ -13,13 +13,22 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/diskspace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/storeutil"
 )
 
-type Store struct{ root *os.Root }
+type Store struct {
+	root      *os.Root
+	directory string
+	disk      *diskspace.Coordinator
+}
 
 func New(directory string) (*Store, error) {
+	return NewWithCoordinator(directory, nil)
+}
+
+func NewWithCoordinator(directory string, disk *diskspace.Coordinator) (*Store, error) {
 	if strings.TrimSpace(directory) == "" {
 		return nil, storage.ErrInvalidKey
 	}
@@ -30,12 +39,16 @@ func New(directory string) (*Store, error) {
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return nil, localError(err)
 	}
-	return OpenExisting(directory)
+	return OpenExistingWithCoordinator(directory, disk)
 }
 
 // OpenExisting 打开已存在的根目录，不创建目录。适用于只读清单
 // 以及显式的旧版 location 适配器。
 func OpenExisting(directory string) (*Store, error) {
+	return OpenExistingWithCoordinator(directory, nil)
+}
+
+func OpenExistingWithCoordinator(directory string, disk *diskspace.Coordinator) (*Store, error) {
 	if strings.TrimSpace(directory) == "" {
 		return nil, storage.ErrInvalidKey
 	}
@@ -59,10 +72,21 @@ func OpenExisting(directory string) (*Store, error) {
 	if err != nil {
 		return nil, localError(err)
 	}
-	return &Store{root: root}, nil
+	if disk == nil {
+		disk, err = diskspace.New(diskspace.DefaultThreshold(), nil)
+		if err != nil {
+			root.Close()
+			return nil, err
+		}
+	}
+	return &Store{root: root, directory: directory, disk: disk}, nil
 }
 
 func (s *Store) Close() error { return s.root.Close() }
+
+// PhysicalWriteDirectory exposes local peak planning without opening a driver
+// or querying a remote provider. It is an internal optional driver capability.
+func (s *Store) PhysicalWriteDirectory() string { return s.directory }
 
 func (s *Store) Capabilities(ctx context.Context) (storage.Capabilities, error) {
 	if err := ctx.Err(); err != nil {
@@ -82,6 +106,11 @@ func (s *Store) PutNew(ctx context.Context, key string, source io.Reader, size i
 	if err != nil {
 		return storage.Object{}, err
 	}
+	reservation, err := s.disk.Reserve(ctx, s.directory, size)
+	if err != nil {
+		return storage.Object{}, err
+	}
+	defer reservation.Release()
 	if err := s.checkPath(key, true); err != nil {
 		return storage.Object{}, err
 	}
@@ -112,7 +141,7 @@ func (s *Store) PutNew(ctx context.Context, key string, source io.Reader, size i
 		return storage.Object{}, err
 	}
 	hash := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(f, hash), reader); err != nil {
+	if _, err := io.Copy(io.MultiWriter(reservation.Writer(f), hash), reader); err != nil {
 		return storage.Object{}, localError(err)
 	}
 	if err := reader.Complete(); err != nil {
@@ -305,10 +334,11 @@ func stageKey(key string) string {
 }
 
 func localError(err error) error {
+	err = diskspace.Classify(err)
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded), errors.Is(err, storage.ErrLimit), errors.Is(err, storage.ErrPayloadTooLarge), errors.Is(err, storage.ErrCorrupt):
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded), errors.Is(err, storage.ErrLimit), errors.Is(err, storage.ErrPayloadTooLarge), errors.Is(err, storage.ErrCorrupt), errors.Is(err, storage.ErrDiskSpaceInsufficient), errors.Is(err, storage.ErrDiskSpaceUnknown):
 		return err
 	case errors.Is(err, os.ErrExist):
 		return storage.ErrExists

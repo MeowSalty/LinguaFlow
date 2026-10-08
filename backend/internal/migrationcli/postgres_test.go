@@ -92,7 +92,37 @@ func legacyPostgresFixture(t *testing.T) (*sql.DB, string) {
 		}
 	}
 	seedLegacyRunnableJob(t, db, true)
+	// Explicit fixture IDs preserve historical relationships, but PostgreSQL
+	// identity sequences do not advance on explicit inserts. Match the state
+	// of a database populated through normal application writes before migration.
+	for _, table := range legacyPostgresSeedTables {
+		statement := fmt.Sprintf(`SELECT setval(pg_get_serial_sequence('%s', 'id'), (SELECT MAX(id) FROM %s))`, table, table)
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("sync fixture identity sequence for %s: %v", table, err)
+		}
+	}
 	return db, dsn
+}
+
+var legacyPostgresSeedTables = []string{
+	"users", "backends", "projects", "system_settings", "execution_profiles",
+	"resources", "segments", "jobs", "job_resources", "job_rounds", "job_round_segments",
+}
+
+func TestLegacyPostgresFixtureIdentitySequences(t *testing.T) {
+	db, _ := legacyPostgresFixture(t)
+	for _, table := range legacyPostgresSeedTables {
+		t.Run(table, func(t *testing.T) {
+			var nextID, maxID int64
+			statement := fmt.Sprintf(`SELECT nextval(pg_get_serial_sequence('%s', 'id')), MAX(id) FROM %s`, table, table)
+			if err := db.QueryRow(statement).Scan(&nextID, &maxID); err != nil {
+				t.Fatal(err)
+			}
+			if nextID <= maxID {
+				t.Fatalf("next identity %d would overlap fixture IDs through %d", nextID, maxID)
+			}
+		})
+	}
 }
 
 func runMigrationCLI(t *testing.T, dsn, dir string, apply bool) (string, error) {
@@ -261,7 +291,7 @@ func TestMigrateV013PostgresMasterKeyRehearsalApplyAndStartup(t *testing.T) {
 			}
 			port := ln.Addr().(*net.TCPAddr).Port
 			ln.Close()
-			startupEnvironment := []string{"LINGUAFLOW_DATABASE_DRIVER=postgres", "LINGUAFLOW_DATABASE_DSN=" + dsn}
+			startupEnvironment := []string{"LINGUAFLOW_DATABASE_DRIVER=postgres", "LINGUAFLOW_DATABASE_DSN=" + dsn, "LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES=null", "LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES=null"}
 			for name, value := range environment {
 				startupEnvironment = append(startupEnvironment, name+"="+value)
 			}
@@ -349,6 +379,8 @@ func assertMigratedServeStarts(t *testing.T, dsn, dir string, port int) {
 		"LINGUAFLOW_DATABASE_DRIVER=postgres", "LINGUAFLOW_DATABASE_DSN=" + dsn,
 		"LINGUAFLOW_JWT_SECRET_FILE=" + filepath.Join(dir, "jwt-secret"),
 		"LINGUAFLOW_CREDENTIALS_KEYRING_FILE=" + filepath.Join(dir, "credentials-keyring.json"),
+		"LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES=null",
+		"LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES=null",
 	})
 }
 

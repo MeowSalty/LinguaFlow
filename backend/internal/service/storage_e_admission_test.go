@@ -79,13 +79,18 @@ func TestStorageEPolicyDeploymentMatrixAndRestart(t *testing.T) {
 					client.User.UpdateOneID(owner.ID).SetRole(SystemRoleAdmin).ExecX(ctx)
 					s := resources.storage
 					s.cfg.Enabled = true
-					request := StoragePolicyRequest{Mode: mode.mode, DefaultChoice: mode.choice, LogicalLimitBytes: 12345}
+					request := StoragePolicyRequest{Mode: mode.mode, DefaultChoice: mode.choice, LogicalLimitBytes: storageTestQuota(12345)}
 					saved, err := s.SetPolicy(ctx, owner.ID, request)
 					if err != nil {
 						t.Fatal(err)
 					}
 					before := client.SystemSetting.Query().Where(systemsetting.KeyEQ(storagePolicyKey)).OnlyX(ctx).Value
 					restarted, err := NewStorageService(client, s.projects, t.TempDir())
+					if restarted != nil {
+						if initErr := restarted.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+							t.Fatal(initErr)
+						}
+					}
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -93,7 +98,7 @@ func TestStorageEPolicyDeploymentMatrixAndRestart(t *testing.T) {
 					cfg.Enabled, cfg.Maintenance = enabled, maintenance
 					restarted.Configure(cfg, "sqlite", *project.StorageSpaceID)
 					got, err := restarted.Policy(ctx)
-					if err != nil || got.Mode != saved.Mode || got.DefaultChoice != saved.DefaultChoice || got.Generation != saved.Generation || got.LogicalLimitBytes != saved.LogicalLimitBytes || got.ConfigurationNeedsUpdate {
+					if err != nil || got.Mode != saved.Mode || got.DefaultChoice != saved.DefaultChoice || got.Generation != saved.Generation || !storageTestQuotaEqual(got.LogicalLimitBytes, saved.LogicalLimitBytes) || got.ConfigurationNeedsUpdate {
 						t.Fatalf("restart changed policy: %+v %v", got, err)
 					}
 					if got.Runtime != (StorageRuntime{DeploymentEnabled: enabled, Maintenance: maintenance}) {
@@ -131,7 +136,7 @@ func TestStorageEPolicyDeploymentMatrixAndRestart(t *testing.T) {
 					if bound.StorageGeneration != project.StorageGeneration || *bound.StorageSpaceID != *project.StorageSpaceID {
 						t.Fatal("restart or discovery rebound a historical project")
 					}
-					request.Generation, request.LogicalLimitBytes = saved.Generation, 67890
+					request.Generation, request.LogicalLimitBytes = saved.Generation, storageTestQuota(67890)
 					updated, err := restarted.SetPolicy(ctx, owner.ID, request)
 					if !enabled && mode.mode != "site_only" {
 						if !errors.Is(err, ErrStorageDeploymentDisabled) {
@@ -143,7 +148,7 @@ func TestStorageEPolicyDeploymentMatrixAndRestart(t *testing.T) {
 						request.Mode, request.DefaultChoice = "site_only", "site"
 						updated, err = restarted.SetPolicy(ctx, owner.ID, request)
 					}
-					if err != nil || updated.Generation != saved.Generation+1 || updated.LogicalLimitBytes != request.LogicalLimitBytes || updated.Runtime != got.Runtime {
+					if err != nil || updated.Generation != saved.Generation+1 || !storageTestQuotaEqual(updated.LogicalLimitBytes, request.LogicalLimitBytes) || updated.Runtime != got.Runtime {
 						t.Fatalf("legal save: %+v %v", updated, err)
 					}
 					persisted := client.SystemSetting.Query().Where(systemsetting.KeyEQ(storagePolicyKey)).OnlyX(ctx).Value
@@ -163,6 +168,11 @@ func TestStorageEOptionsAgreeWithRegisteredDrivers(t *testing.T) {
 	ctx := context.Background()
 	projects := NewProjectService(f.client, f.svc)
 	s, err := NewStorageService(f.client, projects, t.TempDir())
+	if s != nil {
+		if initErr := s.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +188,7 @@ func TestStorageEOptionsAgreeWithRegisteredDrivers(t *testing.T) {
 	for _, sp := range []*ent.StorageSpace{site, personal, organization} {
 		s.RegisterDriver(sp.ID, &connectionTestDriver{objects: map[string][]byte{}})
 	}
-	f.client.SystemSetting.Create().SetKey(storagePolicyKey).SetValue(`{"mode":"both","default_choice":"site","generation":7,"logical_limit_bytes":100000}`).ExecX(ctx)
+	setStorageTestPolicy(t, f.client, `{"mode":"both","default_choice":"site","generation":7,"logical_limit_bytes":100000}`)
 	for _, enabled := range []bool{true, false} {
 		for _, maintenance := range []bool{false, true} {
 			cfg := config.DefaultStorageConfig()

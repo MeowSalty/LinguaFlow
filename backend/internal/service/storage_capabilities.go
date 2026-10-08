@@ -35,6 +35,7 @@ type StorageConnectionManagementActions struct {
 }
 
 type StorageSpaceManagementActions struct {
+	SetQuota  StorageActionAvailability `json:"set_quota"`
 	SetStatus StorageActionAvailability `json:"set_status"`
 }
 
@@ -127,7 +128,8 @@ func (s *StorageConnectionService) managementReasons(c *ent.StorageConnection, f
 		}
 		// A write check must at least be able to reserve its bounded probe.
 		// Marker creation, when needed, performs the exact byte check at execution.
-		if write && storageAvailableBytes(sp) < storageProbePayloadBytes {
+		available, quotaErr := storageAvailableBytes(sp)
+		if write && (quotaErr != nil || (available != nil && *available < storageProbePayloadBytes)) {
 			reasons = append(reasons, "storage_quota_exceeded")
 		}
 	}
@@ -195,10 +197,16 @@ func (s *StorageConnectionService) connectionRecord(ctx context.Context, client 
 	return out, nil
 }
 
-func (s *StorageConnectionService) spaceRecord(sp *ent.StorageSpace) *StorageSpaceRecord {
+func (s *StorageConnectionService) spaceRecord(sp *ent.StorageSpace) (*StorageSpaceRecord, error) {
+	available, err := storageAvailableBytes(sp)
+	if err != nil {
+		return nil, err
+	}
 	out := storageSpaceRecord(sp)
+	out.AvailableBytes = available
+	out.ManagementActions.SetQuota = storageAvailability(nil)
 	out.ManagementActions.SetStatus = storageAvailability(storageOperationReasons(s.Runtime(), storageOpSetStatus, nil))
-	return out
+	return out, nil
 }
 
 func (s *StorageConnectionService) driverAdmission(c *ent.StorageConnection, sp *ent.StorageSpace, write bool) error {
@@ -216,20 +224,4 @@ func (s *StorageConnectionService) driverAdmission(c *ent.StorageConnection, sp 
 		reasons = append(reasons, "space_read_only")
 	}
 	return storageAdmissionError(reasons)
-}
-
-// Saturating subtraction also denies malformed or over-capacity ledgers without
-// overflowing when their individually valid counters sum beyond int64.
-func storageAvailableBytes(sp *ent.StorageSpace) int64 {
-	available := sp.CapacityBytes
-	if available <= 0 {
-		return 0
-	}
-	for _, used := range []int64{sp.ReservedBytes, sp.CandidateBytes, sp.LiveBytes, sp.PendingDeleteBytes} {
-		if used < 0 || used >= available {
-			return 0
-		}
-		available -= used
-	}
-	return available
 }

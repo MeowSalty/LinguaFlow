@@ -54,7 +54,7 @@ func TestStorageRetentionPreservesDurableConsumers(t *testing.T) {
 
 func TestStorageRetentionLogicalQuotaIsSharedAcrossOwnerProjects(t *testing.T) {
 	ctx, c, r, p, u, _ := storageLifecycleFixture(t)
-	c.SystemSetting.Create().SetKey(storagePolicyKey).SetValue(`{"mode":"site_only","default_choice":"site","logical_limit_bytes":5}`).ExecX(ctx)
+	setStorageTestPolicy(t, c, `{"mode":"site_only","default_choice":"site","logical_limit_bytes":5}`)
 	storageUpload(t, ctx, r, p, u, "one.txt", "one")
 	other, e := r.projects.CreateProject(ctx, u.ID, CreateProjectInput{Name: "other"})
 	if e != nil {

@@ -2,6 +2,8 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 )
 
@@ -26,4 +28,9 @@ func (StorageConnection) Fields() []ent.Field {
 		field.String("health").Default("unknown"),
 		field.Time("checked_at").Optional().Nillable(),
 	}
+}
+
+// Database checks also cover atomic Add mutations, which skip field validators.
+func (StorageConnection) Annotations() []schema.Annotation {
+	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"storage_connection_management_generation_safe": "management_generation >= 0 AND management_generation <= 9007199254740991", "storage_connection_active_auth_generation_safe": "active_auth_generation >= 0 AND active_auth_generation <= 9007199254740991"}}}
 }

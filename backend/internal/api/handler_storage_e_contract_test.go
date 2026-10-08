@@ -115,14 +115,14 @@ func TestStorageEPolicyResponseCannotBeWrittenBack(t *testing.T) {
 	assertStorageSchema(t, "StoragePolicy", read.Body.Bytes())
 	assertStorageEProblem(t, storageERequest(t, router, owner, "PUT", "/admin/storage/policy", read.Body.String()), 400, "invalid_input")
 	for _, field := range []string{`"runtime":{"deployment_enabled":true,"maintenance":false}`, `"allowed_policy_modes":["site_only"]`, `"policy_restriction_codes":[]`, `"configuration_needs_update":false`} {
-		body := `{"mode":"site_only","default_choice":"site","generation":0,"logical_limit_bytes":12345,` + field + `}`
+		body := `{"mode":"site_only","default_choice":"site","generation":0,"logical_limit_bytes":12345,"default_space_capacity_bytes":null,` + field + `}`
 		assertStorageEProblem(t, storageERequest(t, router, owner, "PUT", "/admin/storage/policy", body), 400, "invalid_input")
 	}
 	policy, err := s.storageSvc.Policy(context.Background())
 	if err != nil || policy.Generation != 0 {
 		t.Fatalf("rejected DTO changed policy: %+v %v", policy, err)
 	}
-	accepted := storageERequest(t, router, owner, "PUT", "/admin/storage/policy", `{"mode":"site_only","default_choice":"site","generation":0,"logical_limit_bytes":12345}`)
+	accepted := storageERequest(t, router, owner, "PUT", "/admin/storage/policy", `{"mode":"site_only","default_choice":"site","generation":0,"logical_limit_bytes":12345,"default_space_capacity_bytes":null}`)
 	if accepted.Code != 200 {
 		t.Fatalf("independent request DTO: %d %s", accepted.Code, accepted.Body)
 	}
@@ -202,7 +202,8 @@ func TestStorageEFullRouterManagementMaintenanceMatrix(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				space, err := connections.CreateSpace(ctx, owner.ID, conn.ID, service.CreateStorageSpaceInput{Name: "managed", Bucket: "test-bucket", Prefix: "existing", CapacityBytes: 1 << 20})
+				capacity := int64(1 << 20)
+				space, err := connections.CreateSpace(ctx, owner.ID, conn.ID, service.CreateStorageSpaceInput{Name: "managed", Bucket: "test-bucket", Prefix: "existing", CapacityBytes: &capacity})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -241,7 +242,7 @@ func TestStorageEFullRouterManagementMaintenanceMatrix(t *testing.T) {
 						t.Fatalf("runtime projection: %s %v", w.Body, err)
 					}
 				}
-				policy := storageERequest(t, router, owner, "PUT", "/admin/storage/policy", `{"mode":"site_only","default_choice":"site","generation":0,"logical_limit_bytes":12345}`)
+				policy := storageERequest(t, router, owner, "PUT", "/admin/storage/policy", `{"mode":"site_only","default_choice":"site","generation":0,"logical_limit_bytes":12345,"default_space_capacity_bytes":null}`)
 				if policy.Code != 200 {
 					t.Fatalf("maintenance blocked legal policy save: %d %s", policy.Code, policy.Body)
 				}

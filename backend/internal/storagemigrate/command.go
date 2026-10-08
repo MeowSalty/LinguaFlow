@@ -82,7 +82,7 @@ func NewCommand() *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			migration, err := New(db, client, cfg.Database.Driver, Options{LegacyRoot: oldRoot, DefaultRoot: defaultRoot, DefaultBackendID: backendID, MaxFileBytes: cfg.Storage.Limits.MaxFileBytes, CapacityBytes: cfg.Storage.Limits.CapacityBytes, Offline: offline, BackupConfirmed: backup})
+			migration, err := New(db, client, cfg.Database.Driver, Options{LegacyRoot: oldRoot, DefaultRoot: defaultRoot, DefaultBackendID: backendID, MaxFileBytes: cfg.Storage.Limits.MaxFileBytes, CapacityBytes: cfg.Storage.Initialization.CapacityBytes.Value, LogicalLimitBytes: cfg.Storage.Initialization.LogicalLimitBytes.Value, CapacitySet: cfg.Storage.Initialization.CapacityBytes.Set, LogicalSet: cfg.Storage.Initialization.LogicalLimitBytes.Set, Local: cfg.IsLocal(), Offline: offline, BackupConfirmed: backup})
 			if err != nil {
 				return err
 			}

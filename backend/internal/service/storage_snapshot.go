@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/diskspace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bloblocation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
@@ -28,11 +29,26 @@ type StorageFile struct {
 	s        *StorageService
 	reserved int64
 	once     sync.Once
+	disk     *diskspace.Reservation
+}
+
+func (f *StorageFile) Write(p []byte) (int, error) {
+	n, err := f.disk.Writer(f.File).Write(p)
+	if errors.Is(err, storage.ErrPayloadTooLarge) {
+		err = ErrStorageTooLarge
+	}
+	return n, err
+}
+
+// Avoid os.File.ReadFrom's optimized path, which bypasses the metered Write.
+func (f *StorageFile) ReadFrom(r io.Reader) (int64, error) {
+	return io.Copy(struct{ io.Writer }{f}, r)
 }
 
 func (f *StorageFile) Close() error {
 	var err error
 	f.once.Do(func() {
+		defer f.disk.Release()
 		name := f.Name()
 		err = f.File.Close()
 		remove := os.Remove(name)
@@ -46,21 +62,27 @@ func (f *StorageFile) Close() error {
 	return err
 }
 func (s *StorageService) temporary(size int64) (*StorageFile, error) {
+	disk, err := s.reserveLocal(context.Background(), size)
+	if err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	if size < 0 || size > s.maxTempBytes-s.tempBytes {
 		s.mu.Unlock()
+		disk.Release()
 		return nil, storage.ErrPayloadTooLarge
 	}
 	s.tempBytes += size
 	s.mu.Unlock()
 	f, e := os.CreateTemp(s.workDir, "read-*")
 	if e != nil {
+		disk.Release()
 		s.mu.Lock()
 		s.tempBytes -= size
 		s.mu.Unlock()
 		return nil, e
 	}
-	return &StorageFile{File: f, s: s, reserved: size}, nil
+	return &StorageFile{File: f, s: s, reserved: size, disk: disk}, nil
 }
 
 func (s *StorageService) materialize(ctx context.Context, space int, key, version string, size int64, digest string) (*StorageFile, error) {
@@ -214,7 +236,7 @@ func (s *ResourceService) captureSnapshot(ctx context.Context, actor, projectID,
 	return snapshot, nil
 }
 
-func (s *ResourceService) OriginalFile(ctx context.Context, actor, projectID, resourceID int) (*StorageFile, error) {
+func (s *ResourceService) OriginalFile(ctx context.Context, actor, projectID, resourceID int) (io.ReadCloser, error) {
 	if err := s.ensureStorage(ctx); err != nil {
 		return nil, err
 	}
@@ -229,7 +251,81 @@ func (s *ResourceService) OriginalFile(ctx context.Context, actor, projectID, re
 	if err != nil {
 		return nil, err
 	}
-	return s.storage.readBlob(ctx, rev.SourceBlobID)
+	return s.storage.originalBlob(ctx, rev.SourceBlobID)
+}
+
+// originalBlob can verify and rewind a local immutable object without a work
+// copy. The reader pin lasts until Close so cleanup cannot race the download.
+func (s *StorageService) originalBlob(ctx context.Context, blobID int) (io.ReadCloser, error) {
+	s.mu.Lock()
+	b, err := s.client.Blob.Get(ctx, blobID)
+	if err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	if b.ActiveLocationID == nil || b.Size == nil || b.Sha256 == nil {
+		s.mu.Unlock()
+		return nil, storage.ErrCorrupt
+	}
+	loc, err := s.client.BlobLocation.Get(ctx, *b.ActiveLocationID)
+	if err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	if loc.Status != bloblocation.StatusLive {
+		s.mu.Unlock()
+		return nil, storage.ErrNotFound
+	}
+	s.readers[loc.ID]++
+	s.mu.Unlock()
+	unpin := func() { s.mu.Lock(); s.readers[loc.ID]--; s.mu.Unlock() }
+	success := false
+	defer func() {
+		if !success {
+			unpin()
+		}
+	}()
+	d, err := s.driver(ctx, loc.SpaceID, false)
+	if err != nil {
+		return nil, err
+	}
+	r, err := d.Open(ctx, storage.Object{Key: loc.ObjectKey, Version: loc.ProviderVersion, Size: *b.Size, SHA256: *b.Sha256})
+	if err != nil {
+		return nil, err
+	}
+	seek, ok := r.(io.Seeker)
+	if !ok {
+		if err = r.Close(); err != nil {
+			return nil, err
+		}
+		return s.readBlob(ctx, blobID)
+	}
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(&storageContextReader{ctx: ctx, r: r}, *b.Size+1))
+	if err == nil && (n != *b.Size || hex.EncodeToString(h.Sum(nil)) != *b.Sha256) {
+		err = storage.ErrCorrupt
+	}
+	if err == nil {
+		_, err = seek.Seek(0, io.SeekStart)
+	}
+	if err != nil {
+		r.Close()
+		return nil, err
+	}
+	success = true
+	return &storagePinnedReader{ReadCloser: r, release: unpin}, nil
+}
+
+type storagePinnedReader struct {
+	io.ReadCloser
+	release func()
+	once    sync.Once
+}
+
+func (r *storagePinnedReader) Close() error {
+	var err error
+	r.once.Do(func() { err = r.ReadCloser.Close(); r.release() })
+	return err
 }
 
 func (s *ResourceService) renderSnapshot(ctx context.Context, snapshot *resourceSnapshot) (*StorageFile, error) {

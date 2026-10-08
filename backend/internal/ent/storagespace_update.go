@@ -182,6 +182,12 @@ func (_u *StorageSpaceUpdate) AddCapacityBytes(v int64) *StorageSpaceUpdate {
 	return _u
 }
 
+// ClearCapacityBytes clears the value of the "capacity_bytes" field.
+func (_u *StorageSpaceUpdate) ClearCapacityBytes() *StorageSpaceUpdate {
+	_u.mutation.ClearCapacityBytes()
+	return _u
+}
+
 // SetReservedBytes sets the "reserved_bytes" field.
 func (_u *StorageSpaceUpdate) SetReservedBytes(v int64) *StorageSpaceUpdate {
 	_u.mutation.ResetReservedBytes()
@@ -429,6 +435,9 @@ func (_u *StorageSpaceUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.AddedCapacityBytes(); ok {
 		_spec.AddField(storagespace.FieldCapacityBytes, field.TypeInt64, value)
 	}
+	if _u.mutation.CapacityBytesCleared() {
+		_spec.ClearField(storagespace.FieldCapacityBytes, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.ReservedBytes(); ok {
 		_spec.SetField(storagespace.FieldReservedBytes, field.TypeInt64, value)
 	}
@@ -652,6 +661,12 @@ func (_u *StorageSpaceUpdateOne) SetNillableCapacityBytes(v *int64) *StorageSpac
 // AddCapacityBytes adds value to the "capacity_bytes" field.
 func (_u *StorageSpaceUpdateOne) AddCapacityBytes(v int64) *StorageSpaceUpdateOne {
 	_u.mutation.AddCapacityBytes(v)
+	return _u
+}
+
+// ClearCapacityBytes clears the value of the "capacity_bytes" field.
+func (_u *StorageSpaceUpdateOne) ClearCapacityBytes() *StorageSpaceUpdateOne {
+	_u.mutation.ClearCapacityBytes()
 	return _u
 }
 
@@ -931,6 +946,9 @@ func (_u *StorageSpaceUpdateOne) sqlSave(ctx context.Context) (_node *StorageSpa
 	}
 	if value, ok := _u.mutation.AddedCapacityBytes(); ok {
 		_spec.AddField(storagespace.FieldCapacityBytes, field.TypeInt64, value)
+	}
+	if _u.mutation.CapacityBytesCleared() {
+		_spec.ClearField(storagespace.FieldCapacityBytes, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.ReservedBytes(); ok {
 		_spec.SetField(storagespace.FieldReservedBytes, field.TypeInt64, value)

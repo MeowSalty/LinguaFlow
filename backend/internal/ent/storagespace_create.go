@@ -335,10 +335,6 @@ func (_c *StorageSpaceCreate) defaults() {
 		v := storagespace.DefaultVersioned
 		_c.mutation.SetVersioned(v)
 	}
-	if _, ok := _c.mutation.CapacityBytes(); !ok {
-		v := storagespace.DefaultCapacityBytes
-		_c.mutation.SetCapacityBytes(v)
-	}
 	if _, ok := _c.mutation.ReservedBytes(); !ok {
 		v := storagespace.DefaultReservedBytes
 		_c.mutation.SetReservedBytes(v)
@@ -440,9 +436,6 @@ func (_c *StorageSpaceCreate) check() error {
 	}
 	if _, ok := _c.mutation.Versioned(); !ok {
 		return &ValidationError{Name: "versioned", err: errors.New(`ent: missing required field "StorageSpace.versioned"`)}
-	}
-	if _, ok := _c.mutation.CapacityBytes(); !ok {
-		return &ValidationError{Name: "capacity_bytes", err: errors.New(`ent: missing required field "StorageSpace.capacity_bytes"`)}
 	}
 	if v, ok := _c.mutation.CapacityBytes(); ok {
 		if err := storagespace.CapacityBytesValidator(v); err != nil {
@@ -564,7 +557,7 @@ func (_c *StorageSpaceCreate) createSpec() (*StorageSpace, *sqlgraph.CreateSpec)
 	}
 	if value, ok := _c.mutation.CapacityBytes(); ok {
 		_spec.SetField(storagespace.FieldCapacityBytes, field.TypeInt64, value)
-		_node.CapacityBytes = value
+		_node.CapacityBytes = &value
 	}
 	if value, ok := _c.mutation.ReservedBytes(); ok {
 		_spec.SetField(storagespace.FieldReservedBytes, field.TypeInt64, value)

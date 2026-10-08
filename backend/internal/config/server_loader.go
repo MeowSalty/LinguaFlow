@@ -62,6 +62,9 @@ type sourcedValue struct {
 }
 
 func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
+	if _, present := in.Environment["LINGUAFLOW_STORAGE_LIMITS_CAPACITY_BYTES"]; present {
+		return nil, fmt.Errorf("LINGUAFLOW_STORAGE_LIMITS_CAPACITY_BYTES has been removed; use LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES for initialization and the storage quota API for existing spaces")
+	}
 	if in.Mode == "serve" {
 		in.Mode = ModeServer
 	}
@@ -423,6 +426,9 @@ func decodeServerObject(node *yaml.Node, prefix, path string, env map[string]str
 			return fmt.Errorf("%s keys must be strings", prefix)
 		}
 		key := prefix + "." + k.Value
+		if key == "server.storage.limits.capacity_bytes" {
+			return fmt.Errorf("%s has been removed; use server.storage.initialization.capacity_bytes for initialization and the storage quota API for existing spaces", key)
+		}
 		if seen[key] {
 			return fmt.Errorf("duplicate field %s", key)
 		}
@@ -468,10 +474,27 @@ func decodeServerObject(node *yaml.Node, prefix, path string, env map[string]str
 }
 
 func parseYAMLField(f serverField, n *yaml.Node, env map[string]string) (any, error) {
+	if f.Type == "nullable_quota" {
+		if n.Kind != yaml.ScalarNode || (n.Tag != "!!null" && n.Tag != "!!int") {
+			return nil, fmt.Errorf("must be null or a positive decimal integer")
+		}
+		if n.Tag == "!!null" {
+			if n.Value == "" {
+				return nil, fmt.Errorf("empty quota is not supported; use explicit null")
+			}
+			return QuotaInput{Set: true}, nil
+		}
+		return parseQuotaInput(n.Value)
+	}
 	if n.Kind == yaml.AliasNode || n.Tag == "!!null" {
 		return nil, fmt.Errorf("aliases and null are not supported")
 	}
 	switch f.Type {
+	case "disk_threshold":
+		if n.Kind != yaml.ScalarNode || (n.Tag != "!!str" && n.Tag != "!!int") {
+			return nil, fmt.Errorf("must be positive integer bytes or a percentage")
+		}
+		return n.Value, nil
 	case "storage_backends":
 		return parseStorageBackends(n, env)
 	case "integer64":
@@ -556,6 +579,8 @@ func ExpandReferences(value string, env map[string]string) (string, error) {
 
 func parseEnvironmentValue(f serverField, s string) (any, error) {
 	switch f.Type {
+	case "nullable_quota":
+		return parseQuotaInput(s)
 	case "storage_backends":
 		return parseStorageBackendsEnvironment(s)
 	case "integer64":
@@ -608,13 +633,16 @@ func parseDuration(value string) (time.Duration, error) {
 
 func validValueType(kind string, v any) bool {
 	switch kind {
+	case "nullable_quota":
+		_, ok := v.(QuotaInput)
+		return ok
 	case "storage_backends":
 		_, ok := v.([]StorageBackendConfig)
 		return ok
 	case "integer64":
 		_, ok := v.(int64)
 		return ok
-	case "string", "path":
+	case "string", "path", "disk_threshold":
 		_, ok := v.(string)
 		return ok
 	case "integer":

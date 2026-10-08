@@ -314,8 +314,14 @@ func (s *StorageService) storageTargetReasons(ctx context.Context, client *ent.C
 		reasons = append(reasons, "space_disabled")
 	}
 	// Saturating subtraction avoids overflow and retains over-quota accounting.
-	available := storageAvailableBytes(sp)
-	if (size < 0 && available == 0) || size > available {
+	available, quotaErr := storageAvailableBytes(sp)
+	if quotaErr != nil {
+		return nil, quotaErr
+	}
+	if size > MaxStorageInteger {
+		return nil, ErrInvalidInput
+	}
+	if available != nil && ((size < 0 && *available == 0) || size > *available) {
 		reasons = append(reasons, "storage_quota_exceeded")
 	}
 	return normalizeStorageReasons(reasons), nil

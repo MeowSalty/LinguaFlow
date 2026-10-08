@@ -1290,7 +1290,7 @@ var (
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "read_only", "disabled"}, Default: "active"},
 		{Name: "verified", Type: field.TypeBool, Default: false},
 		{Name: "versioned", Type: field.TypeBool, Default: false},
-		{Name: "capacity_bytes", Type: field.TypeInt64, Default: 107374182400},
+		{Name: "capacity_bytes", Type: field.TypeInt64, Nullable: true},
 		{Name: "reserved_bytes", Type: field.TypeInt64, Default: 0},
 		{Name: "candidate_bytes", Type: field.TypeInt64, Default: 0},
 		{Name: "live_bytes", Type: field.TypeInt64, Default: 0},
@@ -1775,6 +1775,10 @@ func init() {
 	BackendsTable.ForeignKeys[2].RefTable = UsersTable
 	BackupPinsTable.ForeignKeys[0].RefTable = BlobLocationsTable
 	BlobsTable.ForeignKeys[0].RefTable = BlobLocationsTable
+	BlobsTable.Annotation = &entsql.Annotation{}
+	BlobsTable.Annotation.Checks = map[string]string{
+		"blob_location_generation_safe": "location_generation >= 0 AND location_generation <= 9007199254740991",
+	}
 	BlobLocationsTable.ForeignKeys[0].RefTable = BlobsTable
 	BlobLocationsTable.ForeignKeys[1].RefTable = StorageSpacesTable
 	BootstrapPromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
@@ -1803,16 +1807,35 @@ func init() {
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ProjectsTable.ForeignKeys[1].RefTable = UsersTable
+	ProjectsTable.Annotation = &entsql.Annotation{}
+	ProjectsTable.Annotation.Checks = map[string]string{
+		"project_output_generation_safe":  "output_generation >= 0 AND output_generation <= 9007199254740991",
+		"project_storage_generation_safe": "storage_generation >= 0 AND storage_generation <= 9007199254740991",
+	}
 	PrunePromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	PrunePromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
 	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
+	ResourcesTable.Annotation = &entsql.Annotation{}
+	ResourcesTable.Annotation.Checks = map[string]string{
+		"resource_source_generation_safe":      "source_generation >= 0 AND source_generation <= 9007199254740991",
+		"resource_translation_generation_safe": "translation_generation >= 0 AND translation_generation <= 9007199254740991",
+	}
 	SseEventsTable.ForeignKeys[0].RefTable = JobsTable
 	SegmentsTable.ForeignKeys[0].RefTable = ResourcesTable
 	SegmentsTable.ForeignKeys[1].RefTable = UsersTable
 	SegmentRevisionsTable.ForeignKeys[0].RefTable = SegmentsTable
 	SourceRevisionsTable.ForeignKeys[0].RefTable = BlobsTable
 	StorageAuthVersionsTable.ForeignKeys[0].RefTable = StorageConnectionsTable
+	StorageAuthVersionsTable.Annotation = &entsql.Annotation{}
+	StorageAuthVersionsTable.Annotation.Checks = map[string]string{
+		"storage_auth_version_generation_safe": "generation >= 0 AND generation <= 9007199254740991",
+	}
+	StorageConnectionsTable.Annotation = &entsql.Annotation{}
+	StorageConnectionsTable.Annotation.Checks = map[string]string{
+		"storage_connection_active_auth_generation_safe": "active_auth_generation >= 0 AND active_auth_generation <= 9007199254740991",
+		"storage_connection_management_generation_safe":  "management_generation >= 0 AND management_generation <= 9007199254740991",
+	}
 	StorageMigrationItemsTable.ForeignKeys[0].RefTable = StorageTasksTable
 	StorageMigrationItemsTable.ForeignKeys[1].RefTable = BlobsTable
 	StorageMigrationItemsTable.ForeignKeys[2].RefTable = BlobLocationsTable
@@ -1820,6 +1843,16 @@ func init() {
 	StorageReservationsTable.ForeignKeys[0].RefTable = StorageWritesTable
 	StorageReservationsTable.ForeignKeys[1].RefTable = StorageSpacesTable
 	StorageSpacesTable.ForeignKeys[0].RefTable = StorageConnectionsTable
+	StorageSpacesTable.Annotation = &entsql.Annotation{}
+	StorageSpacesTable.Annotation.Checks = map[string]string{
+		"storage_space_candidate_bytes_safe":       "candidate_bytes >= 0 AND candidate_bytes <= 9007199254740991",
+		"storage_space_capacity_safe":              "capacity_bytes IS NULL OR (capacity_bytes >= 1 AND capacity_bytes <= 9007199254740991)",
+		"storage_space_live_bytes_safe":            "live_bytes >= 0 AND live_bytes <= 9007199254740991",
+		"storage_space_management_generation_safe": "management_generation >= 0 AND management_generation <= 9007199254740991",
+		"storage_space_pending_delete_bytes_safe":  "pending_delete_bytes >= 0 AND pending_delete_bytes <= 9007199254740991",
+		"storage_space_reserved_bytes_safe":        "reserved_bytes >= 0 AND reserved_bytes <= 9007199254740991",
+		"storage_space_total_safe":                 "reserved_bytes + candidate_bytes + live_bytes + pending_delete_bytes <= 9007199254740991",
+	}
 	StorageWritesTable.ForeignKeys[0].RefTable = StorageTasksTable
 	StorageWritesTable.ForeignKeys[1].RefTable = StorageSpacesTable
 	StorageWritesTable.ForeignKeys[2].RefTable = BlobLocationsTable

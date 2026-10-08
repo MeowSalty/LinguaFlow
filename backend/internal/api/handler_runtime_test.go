@@ -120,6 +120,8 @@ func TestServerRuntimeLifecycle(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			c := newTestEntClient(t)
 			cfg := config.DefaultServerConfig()
+			cfg.Storage.Initialization.CapacityBytes = config.QuotaInput{Set: true}
+			cfg.Storage.Initialization.LogicalLimitBytes = config.QuotaInput{Set: true}
 			cfg.DataDir = t.TempDir()
 			cfg.ShutdownTimeout = 2 * time.Second
 			cfg.JWTSecret = strings.Repeat("runtime-test-key", 3)

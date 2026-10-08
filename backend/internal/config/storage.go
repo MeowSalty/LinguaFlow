@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/diskspace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storagenet"
 	"gopkg.in/yaml.v3"
 )
@@ -21,6 +23,8 @@ type StorageConfig struct {
 	WorkDir            string                 `yaml:"work_dir"`
 	CacheDir           string                 `yaml:"cache_dir"`
 	Limits             StorageLimits          `yaml:"limits"`
+	Initialization     StorageInitialization  `yaml:"initialization"`
+	Disk               StorageDiskConfig      `yaml:"disk"`
 	Network            StorageNetworkConfig   `yaml:"network"`
 	IntentTTL          time.Duration          `yaml:"intent_ttl"`
 	MetadataTimeout    time.Duration          `yaml:"metadata_timeout"`
@@ -65,7 +69,47 @@ type StorageLimits struct {
 	MaxMetadataBytes  int64 `yaml:"max_metadata_bytes"`
 	MaxConcurrency    int   `yaml:"max_concurrency"`
 	MaxCacheBytes     int64 `yaml:"max_cache_bytes"`
-	CapacityBytes     int64 `yaml:"capacity_bytes"`
+}
+
+const MaxQuotaBytes int64 = 9007199254740991
+
+// QuotaInput distinguishes an omitted initialization setting from explicit unlimited.
+type QuotaInput struct {
+	Set   bool
+	Value *int64
+}
+
+func (q QuotaInput) String() string {
+	if !q.Set {
+		return "not supplied"
+	}
+	if q.Value == nil {
+		return "null (unlimited)"
+	}
+	return strconv.FormatInt(*q.Value, 10)
+}
+
+type StorageInitialization struct {
+	CapacityBytes     QuotaInput `yaml:"capacity_bytes"`
+	LogicalLimitBytes QuotaInput `yaml:"logical_limit_bytes"`
+}
+
+type StorageDiskConfig struct {
+	MinimumFree string `yaml:"minimum_free"`
+}
+
+func parseQuotaInput(value string) (QuotaInput, error) {
+	if value == "null" {
+		return QuotaInput{Set: true}, nil
+	}
+	if value == "" || strings.Trim(value, "0123456789") != "" {
+		return QuotaInput{}, fmt.Errorf("must be null or a positive decimal integer no greater than %d", MaxQuotaBytes)
+	}
+	v, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || v <= 0 || v > MaxQuotaBytes {
+		return QuotaInput{}, fmt.Errorf("must be null or a positive decimal integer no greater than %d", MaxQuotaBytes)
+	}
+	return QuotaInput{Set: true, Value: &v}, nil
 }
 
 type StorageNetworkConfig struct {
@@ -76,7 +120,8 @@ type StorageNetworkConfig struct {
 func DefaultStorageConfig() StorageConfig {
 	return StorageConfig{
 		DefaultSiteSpace: "local",
-		Limits:           StorageLimits{MaxFileBytes: 100 << 20, MaxTempBytes: 4 << 30, MaxOutputBytes: 512 << 20, MaxExpandedBytes: 1 << 30, MaxArchiveEntries: 10000, MaxSegments: 100000, MaxMetadataBytes: 64 << 20, MaxConcurrency: 2, CapacityBytes: 100 << 30},
+		Limits:           StorageLimits{MaxFileBytes: 100 << 20, MaxTempBytes: 4 << 30, MaxOutputBytes: 512 << 20, MaxExpandedBytes: 1 << 30, MaxArchiveEntries: 10000, MaxSegments: 100000, MaxMetadataBytes: 64 << 20, MaxConcurrency: 2},
+		Disk:             StorageDiskConfig{MinimumFree: "1%"},
 		IntentTTL:        24 * time.Hour, MetadataTimeout: 30 * time.Second, TransferTimeout: 15 * time.Minute, IdleTimeout: 30 * time.Second,
 		RetryMaxAttempts: 8, RetryWindow: 30 * time.Minute, RetryBaseDelay: time.Second, RetryMaxDelay: time.Minute,
 		SignedURLTTL: 5 * time.Minute, SignedURLMaxTTL: 15 * time.Minute, SourceRetention: 30 * 24 * time.Hour,
@@ -89,6 +134,14 @@ func (c StorageConfig) NetworkPolicy(bucket string) storagenet.Policy {
 }
 
 func (c StorageConfig) Validate() error {
+	for key, q := range map[string]QuotaInput{"capacity_bytes": c.Initialization.CapacityBytes, "logical_limit_bytes": c.Initialization.LogicalLimitBytes} {
+		if q.Value != nil && (!q.Set || *q.Value <= 0 || *q.Value > MaxQuotaBytes) {
+			return fmt.Errorf("server.storage.initialization.%s must be null or a positive integer no greater than %d", key, MaxQuotaBytes)
+		}
+	}
+	if _, err := diskspace.ParseThreshold(c.Disk.MinimumFree); err != nil {
+		return fmt.Errorf("server.storage.disk.minimum_free: %w", err)
+	}
 	for key, value := range map[string]time.Duration{
 		"intent_ttl": c.IntentTTL, "metadata_timeout": c.MetadataTimeout, "transfer_timeout": c.TransferTimeout, "idle_timeout": c.IdleTimeout,
 		"retry_window": c.RetryWindow, "retry_base_delay": c.RetryBaseDelay, "retry_max_delay": c.RetryMaxDelay,
@@ -105,7 +158,7 @@ func (c StorageConfig) Validate() error {
 	if c.RetryMaxAttempts <= 0 || c.ReconcileBatchSize <= 0 {
 		return fmt.Errorf("server.storage retry and reconciliation counts must be positive")
 	}
-	for key, value := range map[string]int64{"max_file_bytes": c.Limits.MaxFileBytes, "max_temp_bytes": c.Limits.MaxTempBytes, "max_output_bytes": c.Limits.MaxOutputBytes, "max_expanded_bytes": c.Limits.MaxExpandedBytes, "max_metadata_bytes": c.Limits.MaxMetadataBytes, "capacity_bytes": c.Limits.CapacityBytes} {
+	for key, value := range map[string]int64{"max_file_bytes": c.Limits.MaxFileBytes, "max_temp_bytes": c.Limits.MaxTempBytes, "max_output_bytes": c.Limits.MaxOutputBytes, "max_expanded_bytes": c.Limits.MaxExpandedBytes, "max_metadata_bytes": c.Limits.MaxMetadataBytes} {
 		if value <= 0 {
 			return fmt.Errorf("server.storage.limits.%s must be positive", key)
 		}

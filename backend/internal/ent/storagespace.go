@@ -47,7 +47,7 @@ type StorageSpace struct {
 	// Versioned holds the value of the "versioned" field.
 	Versioned bool `json:"versioned,omitempty"`
 	// CapacityBytes holds the value of the "capacity_bytes" field.
-	CapacityBytes int64 `json:"capacity_bytes,omitempty"`
+	CapacityBytes *int64 `json:"capacity_bytes,omitempty"`
 	// ReservedBytes holds the value of the "reserved_bytes" field.
 	ReservedBytes int64 `json:"reserved_bytes,omitempty"`
 	// CandidateBytes holds the value of the "candidate_bytes" field.
@@ -204,7 +204,8 @@ func (_m *StorageSpace) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field capacity_bytes", values[i])
 			} else if value.Valid {
-				_m.CapacityBytes = value.Int64
+				_m.CapacityBytes = new(int64)
+				*_m.CapacityBytes = value.Int64
 			}
 		case storagespace.FieldReservedBytes:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -313,8 +314,10 @@ func (_m *StorageSpace) String() string {
 	builder.WriteString("versioned=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Versioned))
 	builder.WriteString(", ")
-	builder.WriteString("capacity_bytes=")
-	builder.WriteString(fmt.Sprintf("%v", _m.CapacityBytes))
+	if v := _m.CapacityBytes; v != nil {
+		builder.WriteString("capacity_bytes=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("reserved_bytes=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ReservedBytes))

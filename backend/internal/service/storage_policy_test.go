@@ -13,10 +13,15 @@ func TestStoragePolicyRequiresDeploymentEnablement(t *testing.T) {
 	client := testClient(t)
 	admin := client.User.Create().SetUsername("storage-policy-admin").SetEmail("storage-policy@example.test").SetPasswordHash("unused").SetRole(SystemRoleAdmin).SaveX(ctx)
 	service, err := NewStorageService(client, NewProjectService(client, NewUserService(client, nil)), t.TempDir())
+	if service != nil {
+		if initErr := service.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy := StoragePolicyRequest{Mode: "both", DefaultChoice: "site", LogicalLimitBytes: 100 << 30}
+	policy := StoragePolicyRequest{Mode: "both", DefaultChoice: "site", LogicalLimitBytes: storageTestQuota(100 << 30)}
 	for _, mode := range []string{"both", "user_required"} {
 		policy.Mode = mode
 		if mode == "user_required" {

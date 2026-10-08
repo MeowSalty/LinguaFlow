@@ -2,6 +2,8 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -29,4 +31,9 @@ func (StorageAuthVersion) Edges() []ent.Edge {
 }
 func (StorageAuthVersion) Indexes() []ent.Index {
 	return []ent.Index{index.Fields("connection_id", "generation").Unique()}
+}
+
+// Database checks also cover atomic Add mutations, which skip field validators.
+func (StorageAuthVersion) Annotations() []schema.Annotation {
+	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"storage_auth_version_generation_safe": "generation >= 0 AND generation <= 9007199254740991"}}}
 }

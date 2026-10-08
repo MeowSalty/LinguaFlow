@@ -23,6 +23,11 @@ func storageLifecycleFixture(t *testing.T) (context.Context, *ent.Client, *Resou
 	user := client.User.Create().SetUsername("files-owner").SetEmail("files@example.test").SetPasswordHash("unused").SaveX(ctx)
 	projects := NewProjectService(client, NewUserService(client, nil))
 	st, err := NewStorageService(client, projects, t.TempDir())
+	if st != nil {
+		if initErr := st.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

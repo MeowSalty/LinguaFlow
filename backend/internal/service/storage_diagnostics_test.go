@@ -37,6 +37,11 @@ func TestStorageDiagnosticsPaginationGlobalCountsAndRedaction(t *testing.T) {
 	c := testClient(t)
 	admin := c.User.Create().SetUsername("admin-diag").SetEmail("diag@example.test").SetPasswordHash("unused").SetRole(SystemRoleAdmin).SetActive(true).SaveX(ctx)
 	s, e := NewStorageService(c, NewProjectService(c, NewUserService(c, nil)), t.TempDir())
+	if s != nil {
+		if initErr := s.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -127,6 +132,11 @@ func TestStorageDiagnosticsAuthorizationValidationAndEmptyResult(t *testing.T) {
 	ctx := context.Background()
 	c := testClient(t)
 	s, e := NewStorageService(c, NewProjectService(c, NewUserService(c, nil)), t.TempDir())
+	if s != nil {
+		if initErr := s.EnsureStoragePolicy(context.Background(), true, false, nil, false, nil); initErr != nil {
+			t.Fatal(initErr)
+		}
+	}
 	if e != nil {
 		t.Fatal(e)
 	}
