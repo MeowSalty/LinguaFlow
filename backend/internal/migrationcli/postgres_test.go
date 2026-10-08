@@ -92,7 +92,37 @@ func legacyPostgresFixture(t *testing.T) (*sql.DB, string) {
 		}
 	}
 	seedLegacyRunnableJob(t, db, true)
+	// Explicit fixture IDs preserve historical relationships, but PostgreSQL
+	// identity sequences do not advance on explicit inserts. Match the state
+	// of a database populated through normal application writes before migration.
+	for _, table := range legacyPostgresSeedTables {
+		statement := fmt.Sprintf(`SELECT setval(pg_get_serial_sequence('%s', 'id'), (SELECT MAX(id) FROM %s))`, table, table)
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("sync fixture identity sequence for %s: %v", table, err)
+		}
+	}
 	return db, dsn
+}
+
+var legacyPostgresSeedTables = []string{
+	"users", "backends", "projects", "system_settings", "execution_profiles",
+	"resources", "segments", "jobs", "job_resources", "job_rounds", "job_round_segments",
+}
+
+func TestLegacyPostgresFixtureIdentitySequences(t *testing.T) {
+	db, _ := legacyPostgresFixture(t)
+	for _, table := range legacyPostgresSeedTables {
+		t.Run(table, func(t *testing.T) {
+			var nextID, maxID int64
+			statement := fmt.Sprintf(`SELECT nextval(pg_get_serial_sequence('%s', 'id')), MAX(id) FROM %s`, table, table)
+			if err := db.QueryRow(statement).Scan(&nextID, &maxID); err != nil {
+				t.Fatal(err)
+			}
+			if nextID <= maxID {
+				t.Fatalf("next identity %d would overlap fixture IDs through %d", nextID, maxID)
+			}
+		})
+	}
 }
 
 func runMigrationCLI(t *testing.T, dsn, dir string, apply bool) (string, error) {
