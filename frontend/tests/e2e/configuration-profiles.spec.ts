@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test'
 import {
   createProfileConfig,
   QA_CHECKS,
@@ -57,18 +57,16 @@ async function setup(
     if (path === '/execution-plan-templates') return json(route, { items: [plan] })
     if (path === '/backends')
       return json(route, {
-        items: [
-          {
-            id: 1,
-            name: '模型样本',
-            scope: 'user',
-            owner_user_id: 1,
-            type: 'openai',
-            options: { type: 'openai', model: 'test-model' },
-            has_secret: true,
-            credential: { id: 1, version: 1 },
-          },
-        ],
+        items: [1, 2].map((id) => ({
+          id,
+          name: id === 1 ? '模型样本' : '第二模型',
+          scope: 'user',
+          owner_user_id: 1,
+          type: 'openai',
+          options: { type: 'openai', model: 'test-model' },
+          has_secret: true,
+          credential: { id: 1, version: 1 },
+        })),
       })
     if (path === '/translation-prompt-templates')
       return json(route, {
@@ -82,11 +80,18 @@ async function setup(
           },
         ],
       })
+    if (path === '/bootstrap-prompt-templates')
+      return json(route, {
+        items: [
+          { id: 1, name: '术语提示词样本', scope: 'user', owner_user_id: 1, content: 'test' },
+        ],
+      })
     return route.fallback()
   })
   return {
     writes,
     profile,
+    plan,
     delay: (handler: (route: Route) => Promise<void>) => {
       delayWrite = handler
     },
@@ -97,6 +102,57 @@ async function openProfile(page: Page) {
   await page.goto('/execution-profiles')
   await page.getByRole('button', { name: '编辑', exact: true }).click()
   return page.locator('.n-drawer')
+}
+
+type InlineConfig = NonNullable<NonNullable<ExecutionRound['translate']>['inline_term_extraction']>
+const inlineDefaults: InlineConfig = {
+  enabled: false,
+  max_terms_per_1000_words: 3,
+  min_source_len: 2,
+  conflict_strategy: 'rewrite-local',
+}
+function translateRound(inline?: InlineConfig): ExecutionRound {
+  return {
+    mode: 'translate',
+    backend_id: 1,
+    concurrency: 2,
+    translate: {
+      prompt_template_id: 1,
+      batch_size: 7,
+      max_words_per_batch: 200,
+      fallback_shrink: 0.5,
+      segment_filter: { status_filter: 'skip_approved' },
+      retry: { max_attempts: 2, backoff_ms: 100, jitter: false },
+      ...(inline === undefined ? {} : { inline_term_extraction: { ...inline } }),
+    },
+  }
+}
+async function openPlan(page: Page) {
+  await page.goto('/execution-plan-templates')
+  await page.getByRole('button', { name: '编辑', exact: true }).click()
+  return page.locator('.n-drawer:visible')
+}
+async function showAdvanced(round: Locator) {
+  if (!(await round.getByLabel('最大重试次数', { exact: true }).isVisible()))
+    await round.getByText('高级配置', { exact: true }).click()
+  await expect(round.getByLabel('最大重试次数', { exact: true })).toBeVisible()
+}
+async function chooseOption(page: Page, select: Locator, label: string) {
+  await select.click()
+  await page.locator('.n-base-select-menu:visible').last().getByText(label, { exact: true }).click()
+}
+async function fillNumber(field: Locator, value: string) {
+  await field.fill(value)
+  await field.press('Tab')
+}
+async function chooseRoundMode(round: Locator, label: string) {
+  const radio = round.getByRole('radio', { name: label, exact: true })
+  await expect(radio).toBeEnabled()
+  await round
+    .locator('.n-radio__label')
+    .filter({ hasText: new RegExp(`^${label}$`) })
+    .click()
+  await expect(radio).toBeChecked()
 }
 
 test('new profile uses the new defaults and keeps QA checks omitted', async ({ page }) => {
@@ -111,6 +167,22 @@ test('new profile uses the new defaults and keeps QA checks omitted', async ({ p
   await drawer.getByRole('button', { name: '创建策略', exact: true }).click()
   await expect.poll(() => writes.length).toBe(1)
   expect(writes[0]!.body.config).toEqual(createProfileConfig())
+  expect(writes[0]!.body.config).not.toHaveProperty('glossary')
+})
+
+test('legacy profile glossary is ignored during editing and never submitted', async ({ page }) => {
+  const config = {
+    ...createProfileConfig(),
+    glossary: { bootstrap: { enabled: true, max_terms_per_1000_chars: 8 } },
+  }
+  const { writes } = await setup(page, config)
+  const drawer = await openProfile(page)
+  await expect(drawer.getByRole('switch', { name: '启用内联自举', exact: true })).toHaveCount(0)
+  await drawer.getByRole('switch', { name: '启用上下文窗口', exact: true }).click()
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.config).toEqual({ schema_version: 1, context: { enabled: false } })
+  expect(config.glossary.bootstrap.enabled).toBe(true)
 })
 
 test('editing an optional sparse response does not synthesize config fields', async ({ page }) => {
@@ -268,6 +340,220 @@ test('unsaved default QA selection remembers an explicit empty selection and tog
   await drawer.getByRole('button', { name: '保存', exact: true }).click()
   await expect.poll(() => writes.length).toBe(1)
   expect(writes[0]!.body.config).toEqual({ schema_version: 1, qa: { checks: [] } })
+})
+
+test('opening advanced settings does not create an omitted inline extraction object', async ({
+  page,
+}) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()])
+  const drawer = await openPlan(page)
+  const round = drawer.getByTestId('execution-round')
+  await showAdvanced(round)
+  await expect(round.getByRole('switch', { name: '翻译时提取术语', exact: true })).not.toBeChecked()
+  await expect(round.getByLabel('每千源文字词最大术语数', { exact: true })).toHaveCount(0)
+  await round.getByText('高级配置', { exact: true }).click()
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.rounds[0]!.translate).not.toHaveProperty('inline_term_extraction')
+})
+
+test('partial inline objects receive defaults while explicit disabled parameters round-trip', async ({
+  page,
+}) => {
+  const disabled: InlineConfig = {
+    enabled: false,
+    max_terms_per_1000_words: 0.123456789,
+    min_source_len: 4,
+    conflict_strategy: 'off',
+  }
+  const { writes } = await setup(page, createProfileConfig(), [
+    translateRound({}),
+    translateRound({ enabled: true }),
+    translateRound(disabled),
+  ])
+  const drawer = await openPlan(page)
+  const rounds = drawer.getByTestId('execution-round')
+  for (const round of await rounds.all()) await showAdvanced(round)
+  await expect(
+    rounds.nth(0).getByRole('switch', { name: '翻译时提取术语', exact: true }),
+  ).not.toBeChecked()
+  await expect(
+    rounds.nth(1).getByRole('switch', { name: '翻译时提取术语', exact: true }),
+  ).toBeChecked()
+  await expect(rounds.nth(2).getByLabel('每千源文字词最大术语数', { exact: true })).toHaveValue(
+    '0.123456789',
+  )
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.rounds.map((round) => round.translate?.inline_term_extraction)).toEqual([
+    inlineDefaults,
+    { ...inlineDefaults, enabled: true },
+    disabled,
+  ])
+})
+
+test('inline extraction toggles retain parameters and invalid disabled values block saving', async ({
+  page,
+}, testInfo) => {
+  const other = { ...inlineDefaults, enabled: true, max_terms_per_1000_words: 2.25 }
+  const { writes } = await setup(page, createProfileConfig(), [
+    translateRound(),
+    translateRound(other),
+  ])
+  const drawer = await openPlan(page)
+  const round = drawer.getByTestId('execution-round').first()
+  await showAdvanced(round)
+  const toggle = round.getByRole('switch', { name: '翻译时提取术语', exact: true })
+  await toggle.click()
+  const density = round.getByLabel('每千源文字词最大术语数', { exact: true })
+  const length = round.getByLabel('最短源术语长度', { exact: true })
+  await expect(density).toHaveValue('3')
+  await expect(length).toHaveValue('2')
+  await fillNumber(density, '7.5')
+  await fillNumber(length, '4')
+  await chooseOption(page, round.getByLabel('冲突处理', { exact: true }), '保留本批译文')
+  await toggle.click()
+  await expect(density).toHaveValue('7.5')
+  await expect(density).toBeEnabled()
+  await fillNumber(density, '0')
+  await expect(drawer.getByRole('button', { name: '保存', exact: true })).toBeDisabled()
+  await fillNumber(density, '7.5')
+  await fillNumber(length, '1.5')
+  await expect(drawer.getByRole('button', { name: '保存', exact: true })).toBeDisabled()
+  expect(writes).toHaveLength(0)
+  await fillNumber(length, '4')
+  await toggle.click()
+  await expect(density).toHaveValue('7.5')
+  await expect(length).toHaveValue('4')
+  await expect(round.getByLabel('冲突处理', { exact: true })).toContainText('保留本批译文')
+  await expect(round.getByTestId('inline-term-extraction-badge')).toBeVisible()
+  await expect(
+    round.locator('.fade-down-transition-enter-active, .fade-down-transition-leave-active'),
+  ).toHaveCount(0)
+  await round.getByTestId('inline-term-extraction').screenshot({
+    animations: 'disabled',
+    path: testInfo.outputPath('inline-term-extraction.png'),
+  })
+  await toggle.click()
+  await expect(round.getByTestId('inline-term-extraction-badge')).toHaveCount(0)
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.rounds.map((item) => item.translate?.inline_term_extraction)).toEqual([
+    { enabled: false, max_terms_per_1000_words: 7.5, min_source_len: 4, conflict_strategy: 'off' },
+    other,
+  ])
+})
+
+test('switching round modes restores complete drafts and submits only the active mode', async ({
+  page,
+}) => {
+  const original = translateRound({
+    enabled: true,
+    max_terms_per_1000_words: 7.5,
+    min_source_len: 4,
+    conflict_strategy: 'off',
+  })
+  const { writes } = await setup(page, createProfileConfig(), [original])
+  const drawer = await openPlan(page)
+  const round = drawer.getByTestId('execution-round')
+  await chooseRoundMode(round, '术语抽取')
+  await chooseOption(page, round.getByLabel('AI 后端', { exact: true }), '第二模型')
+  await fillNumber(round.getByLabel('并发数', { exact: true }), '5')
+  await chooseOption(page, round.getByLabel('术语抽取模板', { exact: true }), '术语提示词样本')
+  await fillNumber(round.getByLabel('术语最短源文长度', { exact: true }), '3')
+  await fillNumber(round.getByLabel('段落数上限', { exact: true }), '4')
+  await fillNumber(round.getByLabel('字词数上限', { exact: true }), '40')
+  await fillNumber(round.getByLabel('每千字术语抽取系数', { exact: true }), '13')
+  await showAdvanced(round)
+  await fillNumber(round.getByLabel('最大重试次数', { exact: true }), '4')
+  await fillNumber(round.getByLabel('重试退避间隔（毫秒）', { exact: true }), '400')
+  await expect(round.getByTestId('inline-term-extraction')).toHaveCount(0)
+
+  await chooseRoundMode(round, '翻译')
+  await showAdvanced(round)
+  await expect(round.getByLabel('AI 后端', { exact: true })).toContainText('模型样本')
+  await expect(round.getByLabel('并发数', { exact: true })).toHaveValue('2')
+  await expect(round.getByLabel('批次大小', { exact: true })).toHaveValue('7')
+  await expect(round.getByLabel('每千源文字词最大术语数', { exact: true })).toHaveValue('7.5')
+  await expect(round.getByLabel('最大重试次数', { exact: true })).toHaveValue('2')
+  await expect(round.getByLabel('重试退避间隔（毫秒）', { exact: true })).toHaveValue('100')
+  await expect(round.getByRole('switch', { name: '启用抖动', exact: true })).not.toBeChecked()
+
+  await chooseRoundMode(round, '术语抽取')
+  await showAdvanced(round)
+  await expect(round.getByLabel('AI 后端', { exact: true })).toContainText('第二模型')
+  for (const [label, value] of [
+    ['并发数', '5'],
+    ['术语最短源文长度', '3'],
+    ['段落数上限', '4'],
+    ['字词数上限', '40'],
+    ['每千字术语抽取系数', '13'],
+    ['最大重试次数', '4'],
+    ['重试退避间隔（毫秒）', '400'],
+  ] as const)
+    await expect(round.getByLabel(label, { exact: true })).toHaveValue(value)
+  await expect(round.getByLabel('术语抽取模板', { exact: true })).toContainText('术语提示词样本')
+  await chooseRoundMode(round, '翻译')
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.rounds).toEqual([original])
+  expect(writes[0]!.body.rounds[0]).not.toHaveProperty('extract')
+})
+
+test('reordering rounds keeps each dormant translate draft attached to its own round', async ({
+  page,
+}) => {
+  const first = translateRound({ ...inlineDefaults, enabled: true, max_terms_per_1000_words: 7.5 })
+  const second = translateRound({
+    ...inlineDefaults,
+    enabled: false,
+    max_terms_per_1000_words: 2.25,
+  })
+  const { writes } = await setup(page, createProfileConfig(), [first, second])
+  const drawer = await openPlan(page)
+  const rounds = drawer.getByTestId('execution-round')
+  await chooseRoundMode(rounds.nth(0), '术语抽取')
+  await chooseRoundMode(rounds.nth(1), '质量裁决')
+  await rounds.nth(0).getByRole('button', { name: '下移', exact: true }).click()
+  for (const round of await rounds.all()) {
+    await chooseRoundMode(round, '翻译')
+    await showAdvanced(round)
+  }
+  await expect(rounds.nth(0).getByLabel('每千源文字词最大术语数', { exact: true })).toHaveValue(
+    '2.25',
+  )
+  await expect(rounds.nth(1).getByLabel('每千源文字词最大术语数', { exact: true })).toHaveValue(
+    '7.5',
+  )
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.rounds).toEqual([second, first])
+})
+
+test('closing a plan drawer discards unsaved active and dormant mode drafts', async ({ page }) => {
+  const original = translateRound({
+    ...inlineDefaults,
+    enabled: true,
+    max_terms_per_1000_words: 7.5,
+  })
+  const { writes, plan } = await setup(page, createProfileConfig(), [original])
+  let drawer = await openPlan(page)
+  let round = drawer.getByTestId('execution-round')
+  await showAdvanced(round)
+  await fillNumber(round.getByLabel('每千源文字词最大术语数', { exact: true }), '99')
+  await chooseRoundMode(round, '术语抽取')
+  await fillNumber(round.getByLabel('术语最短源文长度', { exact: true }), '8')
+  await drawer.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(page.locator('.n-drawer:visible')).toHaveCount(0)
+  await page.getByRole('button', { name: '编辑', exact: true }).click()
+  drawer = page.locator('.n-drawer:visible')
+  round = drawer.getByTestId('execution-round')
+  await showAdvanced(round)
+  await expect(round.getByLabel('每千源文字词最大术语数', { exact: true })).toHaveValue('7.5')
+  await chooseRoundMode(round, '术语抽取')
+  await expect(round.getByLabel('术语最短源文长度', { exact: true })).toHaveValue('2')
+  expect(plan.rounds).toEqual([original])
+  expect(writes).toHaveLength(0)
 })
 
 test('unchanged plan arrays and absent scopes round-trip through the page', async ({ page }) => {

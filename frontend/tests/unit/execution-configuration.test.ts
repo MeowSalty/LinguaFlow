@@ -8,16 +8,237 @@ import {
 import {
   ADJUDICATE_CODES,
   buildExecutionRoundInput,
+  cloneExecutionPlanValue,
+  createExecutionPlanRound,
+  createInlineTermExtractionConfig,
   createRoundCodeSelection,
+  createRoundModeSelection,
+  mergeInlineTermExtractionConfig,
+  mergeTranslateRoundConfig,
+  planUsesTermExtraction,
   REVISE_CODES,
   roundCodes,
   SEMANTIC_QA_CODES,
   setRoundCodes,
   validateRoundCodes,
+  validateInlineTermExtractionConfig,
+  type ExecutionPlanFormRound,
+  type InlineTermExtractionConfig,
   type ExecutionRound,
 } from '../../src/utils/execution-plan-config'
 
+describe('inline term extraction configuration', () => {
+  function roundWith(value?: unknown): ExecutionPlanFormRound {
+    return {
+      ...createExecutionPlanRound(),
+      backend_id: 1,
+      translate: {
+        ...mergeTranslateRoundConfig(),
+        prompt_template_id: -1,
+        ...(value === undefined
+          ? {}
+          : { inline_term_extraction: value as InlineTermExtractionConfig }),
+      },
+    }
+  }
+
+  it('keeps omitted extraction absent through draft creation, reading and submission', () => {
+    expect(createExecutionPlanRound().translate).not.toHaveProperty('inline_term_extraction')
+    const source = roundWith()
+    const read = mergeTranslateRoundConfig(source.translate)
+    expect(read).not.toHaveProperty('inline_term_extraction')
+    expect(buildExecutionRoundInput({ ...source, translate: read }).translate).not.toHaveProperty(
+      'inline_term_extraction',
+    )
+    expect(source.translate).not.toHaveProperty('inline_term_extraction')
+  })
+
+  it.each([{}, { enabled: true }, { enabled: false }, { min_source_len: 5 }])(
+    'fills contract defaults for a present partial configuration %j',
+    (source) => {
+      const expected = { ...createInlineTermExtractionConfig(), ...source }
+      expect(validateInlineTermExtractionConfig(source)).toEqual([])
+      expect(mergeTranslateRoundConfig(roundWith(source).translate).inline_term_extraction).toEqual(
+        expected,
+      )
+      expect(buildExecutionRoundInput(roundWith(source)).translate?.inline_term_extraction).toEqual(
+        expected,
+      )
+    },
+  )
+
+  it('preserves disabled parameters, decimal precision and copy independence', () => {
+    const config = {
+      enabled: false,
+      max_terms_per_1000_words: 0.025,
+      min_source_len: 4,
+      conflict_strategy: 'off' as const,
+    }
+    const source = roundWith(config)
+    const copy = mergeTranslateRoundConfig(source.translate)
+    expect(copy.inline_term_extraction).toEqual(config)
+    expect(copy.inline_term_extraction).not.toBe(config)
+    const output = buildExecutionRoundInput({ ...source, translate: copy })
+    expect(output.translate?.inline_term_extraction).toEqual(config)
+    copy.inline_term_extraction!.enabled = true
+    copy.inline_term_extraction!.max_terms_per_1000_words = 8
+    expect(source.translate?.inline_term_extraction).toEqual(config)
+    expect(output.translate?.inline_term_extraction).toEqual(config)
+    const fresh = createInlineTermExtractionConfig()
+    fresh.min_source_len = 9
+    expect(createInlineTermExtractionConfig().min_source_len).toBe(2)
+  })
+
+  const invalid: [keyof InlineTermExtractionConfig, unknown][] = [
+    ['enabled', null],
+    ['enabled', 'false'],
+    ['enabled', 0],
+    ...[0, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, null, '3'].map(
+      (value): [keyof InlineTermExtractionConfig, unknown] => ['max_terms_per_1000_words', value],
+    ),
+    ...[0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, null, '2'].map(
+      (value): [keyof InlineTermExtractionConfig, unknown] => ['min_source_len', value],
+    ),
+    ['conflict_strategy', 'unknown'],
+    ['conflict_strategy', null],
+    ['conflict_strategy', false],
+  ]
+
+  it.each(invalid)(
+    'rejects an explicit invalid %s value %s even while disabled',
+    (field, value) => {
+      const config = { ...createInlineTermExtractionConfig(), [field]: value }
+      expect(validateInlineTermExtractionConfig(config)).toContain(field)
+      const read = mergeTranslateRoundConfig(roundWith(config).translate)
+      expect(read.inline_term_extraction?.[field]).toBe(value)
+      expect(() => buildExecutionRoundInput(roundWith(config))).toThrow(
+        'Invalid inline term extraction',
+      )
+      expect(() => buildExecutionRoundInput({ ...roundWith(), translate: read })).toThrow(
+        'Invalid inline term extraction',
+      )
+    },
+  )
+
+  it.each([null, false, [], 3])(
+    'rejects malformed configuration %j without defaulting it',
+    (value) => {
+      expect(validateInlineTermExtractionConfig(value)).toEqual(['config'])
+      const read = mergeTranslateRoundConfig(roundWith(value).translate)
+      expect(validateInlineTermExtractionConfig(read.inline_term_extraction)).toEqual(['config'])
+      expect(() => buildExecutionRoundInput({ ...roundWith(), translate: read })).toThrow()
+    },
+  )
+
+  it('only serializes known extraction properties', () => {
+    const config = { ...createInlineTermExtractionConfig(), old_field: 10 }
+    expect(mergeInlineTermExtractionConfig(config)).not.toHaveProperty('old_field')
+    expect(
+      buildExecutionRoundInput(roundWith(config)).translate?.inline_term_extraction,
+    ).not.toHaveProperty('old_field')
+  })
+
+  it('identifies extraction only in active modes', () => {
+    expect(planUsesTermExtraction(undefined)).toBe(false)
+    expect(planUsesTermExtraction([roundWith(), roundWith({ enabled: false })])).toBe(false)
+    expect(planUsesTermExtraction([roundWith({ enabled: true })])).toBe(true)
+    expect(planUsesTermExtraction([{ mode: 'extract', concurrency: 1 }])).toBe(true)
+    expect(planUsesTermExtraction([{ ...roundWith({ enabled: true }), mode: 'revise' }])).toBe(
+      false,
+    )
+  })
+})
+
+describe('round mode drafts', () => {
+  function createRound(source: Partial<ExecutionPlanFormRound> = {}): ExecutionPlanFormRound {
+    const mode = source.mode ?? 'translate'
+    const round: ExecutionPlanFormRound = {
+      mode,
+      backend_id: source.backend_id ?? 1,
+      concurrency: source.concurrency ?? 3,
+    }
+    if (mode === 'translate')
+      round.translate = mergeTranslateRoundConfig({ prompt_template_id: -1 })
+    if (mode === 'extract') round.extract = { template_id: -2, min_source_len: 2 }
+    if (mode === 'revise') round.revise = {}
+    if (mode === 'adjudicate') round.adjudicate = {}
+    return round
+  }
+
+  it('restores complete drafts by round identity after reordering and submits only the active mode', () => {
+    const choose = createRoundModeSelection(createRound)
+    const first = createRound()
+    first.translate!.inline_term_extraction = {
+      ...createInlineTermExtractionConfig(),
+      enabled: true,
+      max_terms_per_1000_words: 1.25,
+    }
+    const second = createRound()
+    second.translate!.inline_term_extraction = {
+      ...createInlineTermExtractionConfig(),
+      min_source_len: 7,
+    }
+    const originalFirst = cloneExecutionPlanValue(first)
+    const originalSecond = cloneExecutionPlanValue(second)
+    choose(first, 'extract')
+    first.backend_id = 8
+    first.concurrency = 2
+    first.extract!.min_source_len = 9
+    const reordered = [second, first]
+    choose(reordered[1]!, 'translate')
+    expect(first).toEqual(originalFirst)
+    expect(second).toEqual(originalSecond)
+    expect(buildExecutionRoundInput(first)).not.toHaveProperty('extract')
+    choose(first, 'extract')
+    expect(first).toMatchObject({ backend_id: 8, concurrency: 2, extract: { min_source_len: 9 } })
+    expect(first).not.toHaveProperty('translate')
+    expect(buildExecutionRoundInput(first)).not.toHaveProperty('translate')
+  })
+
+  it('keeps code selection drafts separate for each mode of the same round', () => {
+    const chooseMode = createRoundModeSelection(createRound)
+    const chooseCodes = createRoundCodeSelection()
+    const round = createRound({ mode: 'revise' })
+    round.revise!.issue_codes = ['grammar']
+    chooseCodes(round, 'default')
+    chooseMode(round, 'adjudicate')
+    round.adjudicate!.adjudicate_codes = ['source_residual']
+    chooseCodes(round, 'default')
+    chooseMode(round, 'revise')
+    chooseCodes(round, 'specified')
+    expect(roundCodes(round)).toEqual(['grammar'])
+    chooseMode(round, 'adjudicate')
+    chooseCodes(round, 'specified')
+    expect(roundCodes(round)).toEqual(['source_residual'])
+  })
+
+  it('does not share discarded drafts with a new editor or a newly loaded round', () => {
+    const choose = createRoundModeSelection(createRound)
+    const round = createRound()
+    round.translate!.inline_term_extraction = { enabled: true }
+    choose(round, 'extract')
+    const reloaded = cloneExecutionPlanValue(round)
+    choose(reloaded, 'translate')
+    expect(reloaded.translate).not.toHaveProperty('inline_term_extraction')
+    createRoundModeSelection(createRound)(round, 'translate')
+    expect(round.translate).not.toHaveProperty('inline_term_extraction')
+  })
+})
+
 describe('profile configuration contract', () => {
+  it('accepts profiles without glossary and discards historical bootstrap without migrating it', () => {
+    const current = createProfileConfig()
+    expect(readProfileConfig(current)).toEqual({ ok: true, config: current })
+    const historical = {
+      ...current,
+      glossary: { bootstrap: { enabled: true, max_terms_per_1000_chars: 20 } },
+    }
+    expect(readProfileConfig(historical)).toEqual({ ok: true, config: current })
+    expect(buildProfileConfigInput(historical)).not.toHaveProperty('glossary')
+    expect(buildProfileConfigInput(historical, historical)).not.toHaveProperty('glossary')
+    expect(createExecutionPlanRound().translate).not.toHaveProperty('inline_term_extraction')
+    expect(historical.glossary.bootstrap.enabled).toBe(true)
+  })
   it('creates independent version 1 drafts matching the domain defaults', () => {
     const draft = createProfileConfig()
     expect(draft).toEqual({
@@ -31,14 +252,6 @@ describe('profile configuration contract', () => {
         schema_aliases: true,
         placeholder_normalize: true,
         prompt_upgrade: true,
-      },
-      glossary: {
-        bootstrap: {
-          enabled: false,
-          max_terms_per_1000_chars: 3,
-          min_source_len: 2,
-          inline_conflict_strategy: 'rewrite-local',
-        },
       },
       context: { enabled: true, before: 1, after: 1, max_chars: 0 },
       qa: {
@@ -67,12 +280,6 @@ describe('profile configuration contract', () => {
     'repair.schema_aliases',
     'repair.placeholder_normalize',
     'repair.prompt_upgrade',
-    'glossary',
-    'glossary.bootstrap',
-    'glossary.bootstrap.enabled',
-    'glossary.bootstrap.max_terms_per_1000_chars',
-    'glossary.bootstrap.min_source_len',
-    'glossary.bootstrap.inline_conflict_strategy',
     'context',
     'context.enabled',
     'context.before',
@@ -120,8 +327,6 @@ describe('profile configuration contract', () => {
     ['qa.checks', ['unknown']],
     ['qa.length_method', 'unknown'],
     ['qa.length_ratio_max', Number.NaN],
-    ['glossary.bootstrap.min_source_len', 0],
-    ['glossary.bootstrap.inline_conflict_strategy', 'unknown'],
   ])('rejects invalid type, enum or range for %s', (path, value) => {
     expect(readProfileConfig(alter(path as string, value)).ok).toBe(false)
   })

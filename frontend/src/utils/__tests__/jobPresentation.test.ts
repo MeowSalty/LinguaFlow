@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import type { ApiSchemas } from '@/api/client'
 import {
   getDetailRoundSeconds,
+  getJobRoundSkipReason,
   getResourceRoundSummary,
   getRoundDisplayState,
   isJobEventAnomaly,
@@ -67,6 +68,59 @@ const failed = round(0, 'failed')
 const pending = round(1, 'pending')
 const running = round(2, 'running', { segment_completed: 7 })
 const completed = round(3, 'completed')
+
+for (const [label, value, expected] of [
+  ['disabled', false, 'glossary_disabled'],
+  ['enabled', true, null],
+  ['missing', undefined, null],
+  ['null', null, null],
+  ['string false', 'false', null],
+  ['zero', 0, null],
+  ['empty array', [], null],
+  ['empty object', {}, null],
+] as const) {
+  it(`extract skip respects the frozen glossary boolean: ${label}`, () => {
+    const snapshot = Object.freeze({ glossary_enabled: value })
+    const savedJob = job('completed', { execution_config: snapshot })
+    const skippedExtract = round(0, 'skipped', { mode: 'extract' })
+    expect(getJobRoundSkipReason(savedJob, skippedExtract)).toBe(expected)
+    expect(savedJob.execution_config).toBe(snapshot)
+    expect(savedJob.execution_config?.glossary_enabled).toBe(value)
+  })
+}
+
+it('missing and null task snapshots keep the generic skip reason', () => {
+  const skippedExtract = round(0, 'skipped', { mode: 'extract' })
+  expect(getJobRoundSkipReason({}, skippedExtract)).toBeNull()
+  expect(
+    getJobRoundSkipReason(
+      { execution_config: null as unknown as Job['execution_config'] },
+      skippedExtract,
+    ),
+  ).toBeNull()
+})
+
+for (const mode of ['translate', 'adjudicate', 'semantic_qa', 'revise', 'correct'] as const) {
+  it(`does not explain a skipped ${mode} round as disabled glossary`, () => {
+    expect(
+      getJobRoundSkipReason(
+        job('completed', { execution_config: { glossary_enabled: false } }),
+        round(0, 'skipped', { mode }),
+      ),
+    ).toBeNull()
+  })
+}
+
+for (const status of ['pending', 'running', 'completed', 'failed'] as const) {
+  it(`does not relabel an extract round with status ${status}`, () => {
+    expect(
+      getJobRoundSkipReason(
+        job('completed', { execution_config: { glossary_enabled: false } }),
+        round(0, status, { mode: 'extract' }),
+      ),
+    ).toBeNull()
+  })
+}
 
 for (const [name, row, status, expected] of [
   [
