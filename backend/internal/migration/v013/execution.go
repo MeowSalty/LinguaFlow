@@ -120,6 +120,8 @@ func (m *legacyExecutionMigrator) migrateJob(ctx context.Context, row *ent.Job) 
 		return false, errors.New("legacy snapshot requires saved languages and rounds")
 	}
 	// Decode a validated, version-fixed source before mapping to target v1.
+	// The removed glossary strategy is discarded; translation rounds start with
+	// inline term extraction disabled instead of inheriting that legacy toggle.
 	var snapshot execution.JobExecutionSnapshot
 	if err := transcode(old, &snapshot); err != nil {
 		return false, err

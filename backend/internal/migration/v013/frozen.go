@@ -86,6 +86,7 @@ func convertProfile(raw []byte) (execution.ProfileSpec, error) {
 	if old.Ruby.PreserveKinds == nil {
 		old.Ruby.PreserveKinds = []string{"phonetic", "semantic", "creative"}
 	}
+	// The current profile intentionally omits the removed glossary strategy.
 	if err := transcode(old, &out); err != nil {
 		return out, err
 	}
