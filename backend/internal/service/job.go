@@ -434,7 +434,7 @@ func (s *JobService) prepareExecutionSnapshot(
 	}
 	snapshot.SourceLang = projectRow.SourceLang
 	snapshot.TargetLang = projectRow.TargetLang
-	snapshot.GlossaryEnabled = jobGlossaryEnabled(projectRow.GlossaryEnabled, snapshot.Rounds)
+	snapshot.GlossaryEnabled = projectRow.GlossaryEnabled
 	resolved, err := execution.Resolve(*snapshot)
 	if err != nil {
 		return nil, nil, err
@@ -461,7 +461,7 @@ func (s *JobService) validateAndSnapshotWith(
 	}
 
 	// 计划级策略快照：在轮次循环前物化一次，为全管道（所有改写型轮次与
-	// 引擎级行为）供 protect/ruby 等七项行为预设。
+	// 引擎级行为）供 protect/ruby 等行为预设。
 	strategySnap, err := s.snapshotProfile(ctx, actorUserID, plan.ProfileID)
 	if err != nil {
 		return nil, fmt.Errorf("snapshot strategy profile: %w", err)
@@ -515,13 +515,14 @@ func (s *JobService) validateAndSnapshotWith(
 				Mode:    "translate",
 				Backend: *backendSnap,
 				Translate: &JobTranslateRoundSnapshot{
-					Prompt:           *promptSnap,
-					BatchSize:        t.BatchSize,
-					MaxWordsPerBatch: t.MaxWordsPerBatch,
-					Concurrency:      t.Concurrency,
-					FallbackShrink:   t.FallbackShrink,
-					SegmentFilter:    snapshotSegmentFilter(t.SegmentFilter, overrideSegmentFilter),
-					Retry:            t.Retry,
+					Prompt:               *promptSnap,
+					BatchSize:            t.BatchSize,
+					MaxWordsPerBatch:     t.MaxWordsPerBatch,
+					Concurrency:          t.Concurrency,
+					FallbackShrink:       t.FallbackShrink,
+					SegmentFilter:        snapshotSegmentFilter(t.SegmentFilter, overrideSegmentFilter),
+					InlineTermExtraction: t.InlineTermExtraction,
+					Retry:                t.Retry,
 				},
 			})
 
@@ -739,18 +740,6 @@ func (s *JobService) prepareExecutionSnapshotForActor(
 	return resolved, leases.release, nil
 }
 
-func jobGlossaryEnabled(projectEnabled bool, rounds []JobRoundSnapshot) bool {
-	if projectEnabled {
-		return true
-	}
-	for _, round := range rounds {
-		if round.Mode == "extract" {
-			return true
-		}
-	}
-	return false
-}
-
 // validateBackendAccess 检查后端对项目是否可访问。
 func (s *JobService) validateBackendAccess(
 	ctx context.Context,
@@ -880,7 +869,6 @@ func (s *JobService) snapshotProfile(ctx context.Context, userID, profileID int)
 		Protect:     tp.Config.Protect,
 		Postprocess: tp.Config.Postprocess,
 		Repair:      tp.Config.Repair,
-		Glossary:    tp.Config.Glossary,
 		Context:     tp.Config.Context,
 		Ruby:        tp.Config.Ruby,
 		QA:          tp.Config.QA,

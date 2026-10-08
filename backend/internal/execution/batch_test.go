@@ -72,7 +72,7 @@ func TestExtractSendAllSnapshotRoundTrip(t *testing.T) {
 	if err := ValidateSpec(&restored); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(restored.Rounds[0].Extract, in.Rounds[0].Extract) || !restored.GlossaryEnabled {
+	if !reflect.DeepEqual(restored.Rounds[0].Extract, in.Rounds[0].Extract) || restored.GlossaryEnabled != in.GlossaryEnabled {
 		t.Fatal("extract send-all configuration changed while freezing or restoring")
 	}
 	if !reflect.DeepEqual(restored.Sources, spec.Sources) || restored.Sources[len(restored.Sources)-1].Digest != source("round", "0", restored.Rounds[0]).Digest {

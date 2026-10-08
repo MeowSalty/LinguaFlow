@@ -35,6 +35,13 @@ func TestProfilePresenceSurvivesAPIAndDatabaseRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(created.Config, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fields["glossary"]; ok {
+		t.Fatal("profile response still contains round-level term extraction")
+	}
 	profile, err := execution.DecodeProfileJSON(created.Config, execution.DefaultProfile())
 	if err != nil {
 		t.Fatalf("API config cannot be read back: %v", err)

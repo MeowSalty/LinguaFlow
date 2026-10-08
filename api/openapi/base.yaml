@@ -538,6 +538,8 @@ components:
       $ref: './components/schemas/execution-profile.yaml#/UpdateExecutionProfileRequest'
     ExecutionPlanTemplate:
       $ref: './components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplate'
+    InlineTermExtractionConfig:
+      $ref: './components/schemas/execution-plan-template.yaml#/InlineTermExtractionConfig'
     AdminUserListResponse:
       $ref: './components/schemas/admin.yaml#/AdminUserListResponse'
     AdminCreateUserRequest:

@@ -57,9 +57,6 @@ func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
 			return nil, fmt.Errorf("round[%d]: %w", i, err)
 		}
 		r.Backend.Options = opts
-		if r.Mode == "extract" {
-			out.GlossaryEnabled = true
-		}
 	}
 	if out.RubyRetry != nil && out.RubyRetry.Enabled {
 		opts, err := ResolveBackendOptions(out.RubyRetry.Backend.Type, out.RubyRetry.Backend.Options)
@@ -285,7 +282,7 @@ func ValidateSpec(s *ResolvedExecutionSpec) error {
 	if s.Strategy.Context.Before < 0 || s.Strategy.Context.After < 0 || s.Strategy.Context.MaxChars < 0 {
 		return errors.New("invalid context window")
 	}
-	if err := ValidateProfile(ProfileSpec{SchemaVersion: SchemaVersion, Protect: s.Strategy.Protect, Postprocess: s.Strategy.Postprocess, Repair: s.Strategy.Repair, Glossary: s.Strategy.Glossary, Context: s.Strategy.Context, Ruby: s.Strategy.Ruby, QA: s.Strategy.QA}); err != nil {
+	if err := ValidateProfile(ProfileSpec{SchemaVersion: SchemaVersion, Protect: s.Strategy.Protect, Postprocess: s.Strategy.Postprocess, Repair: s.Strategy.Repair, Context: s.Strategy.Context, Ruby: s.Strategy.Ruby, QA: s.Strategy.QA}); err != nil {
 		return err
 	}
 	for i, r := range s.Rounds {
@@ -298,6 +295,9 @@ func ValidateSpec(s *ResolvedExecutionSpec) error {
 				return fmt.Errorf("round[%d] missing translate configuration", i)
 			}
 			t := r.Translate
+			if err := ValidateInlineTermExtraction(t.InlineTermExtraction); err != nil {
+				return fmt.Errorf("round[%d] %w", i, err)
+			}
 			batch, concurrency, body, retry = t.BatchSize, t.Concurrency, t.Prompt.Content, t.Retry
 			words = t.MaxWordsPerBatch
 			if t.FallbackShrink <= 0 || t.FallbackShrink > 1 {

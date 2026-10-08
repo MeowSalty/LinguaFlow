@@ -332,6 +332,9 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 				return fmt.Errorf("%w: rounds[%d].translate config required when mode=translate", ErrExecutionPlanConfigInvalid, i)
 			}
 			t := round.Translate
+			if err := execution.ValidateInlineTermExtraction(t.InlineTermExtraction); err != nil {
+				return fmt.Errorf("%w: rounds[%d].translate.%w", ErrExecutionPlanConfigInvalid, i, err)
+			}
 			if t.PromptTemplateID == 0 {
 				return fmt.Errorf("%w: rounds[%d].translate.prompt_template_id must not be zero", ErrExecutionPlanConfigInvalid, i)
 			}

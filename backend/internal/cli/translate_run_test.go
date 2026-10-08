@@ -197,8 +197,8 @@ func TestApplyTranslateFlagsChangeExecutableSemantics(t *testing.T) {
 			if resolved.Spec.Strategy.ProfileName != "alternate" {
 				t.Fatal("profile flag was not resolved")
 			}
-			if resolved.Spec.Strategy.Glossary.Bootstrap.Enabled != (mode == "inline") {
-				t.Fatal("inline bootstrap flag was not resolved")
+			if resolved.Spec.GlossaryEnabled != (mode != "off") {
+				t.Fatal("bootstrap flag did not explicitly enable the glossary when extracting terms")
 			}
 			if mode == "pre" && (len(resolved.Spec.Rounds) != 2 || resolved.Spec.Rounds[0].Mode != "extract" || resolved.Spec.Rounds[0].Extract.TemplateContent == "") {
 				t.Fatal("pre bootstrap did not create an executable extraction round")
@@ -206,6 +206,9 @@ func TestApplyTranslateFlagsChangeExecutableSemantics(t *testing.T) {
 			for _, r := range resolved.Spec.Rounds {
 				if r.Translate != nil && r.Translate.Prompt.Content != "custom prompt" {
 					t.Fatal("prompt override was not frozen")
+				}
+				if r.Translate != nil && (r.Translate.InlineTermExtraction == nil || r.Translate.InlineTermExtraction.Enabled != (mode == "inline")) {
+					t.Fatal("inline extraction flag was not resolved on the translation round")
 				}
 			}
 		})

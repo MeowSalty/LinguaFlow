@@ -15,12 +15,6 @@ repair:
   schema_aliases: true
   placeholder_normalize: true
   prompt_upgrade: true
-glossary:
-  bootstrap:
-    enabled: false
-    max_terms_per_1000_chars: 3.0
-    min_source_len: 2
-    inline_conflict_strategy: rewrite-local
 context:
   enabled: true
   before: 1

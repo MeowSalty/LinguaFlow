@@ -259,17 +259,17 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 		return nil, ErrQuickTranslateNoTranslate
 	}
 
-	// 7. Force glossary enabled when there is an extract round or inline
-	// glossary provided, so the engine actually applies them.
-	hasExtract := false
-	for _, rs := range snapshot.Rounds {
-		if rs.Mode == "extract" {
-			hasExtract = true
-			break
+	// 7. A project's glossary switch is authoritative. Without a project,
+	// explicit request entries and extraction rounds activate the memory glossary.
+	if projectRow == nil {
+		snapshot.GlossaryEnabled = len(in.Glossary) > 0
+		for _, rs := range snapshot.Rounds {
+			if rs.Mode == "extract" || (rs.Mode == "translate" && rs.Translate != nil &&
+				rs.Translate.InlineTermExtraction != nil && rs.Translate.InlineTermExtraction.Enabled) {
+				snapshot.GlossaryEnabled = true
+				break
+			}
 		}
-	}
-	if hasExtract || len(in.Glossary) > 0 {
-		snapshot.GlossaryEnabled = true
 	}
 
 	// 8. Build the runtime glossary. Guaranteed in-memory — never persisted.

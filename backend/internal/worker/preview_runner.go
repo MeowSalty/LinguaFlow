@@ -164,6 +164,13 @@ func (r *PreviewRunner) RunPreview(
 
 		round := snapshot.Rounds[roundIdx]
 		roundStart := time.Now()
+		if reason := eng.RoundSkipReason(roundIdx); reason != "" {
+			roundSummaries = append(roundSummaries, service.PreviewRoundSummary{
+				Index: roundIdx, Mode: round.Mode, Backend: round.Backend.Name, Status: "skipped",
+			})
+			r.logger.Info("preview round skipped", "round", roundIdx, "mode", round.Mode, "reason", reason)
+			continue
+		}
 
 		// 对 translate 轮次，基于当前内存状态重建全新 Document，让后续轮次
 		// 能看到 adjudicate/语义 QA 的结果，模拟 JobRunner 的“从 DB 重载”模式。

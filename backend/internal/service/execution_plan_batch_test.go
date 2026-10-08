@@ -76,7 +76,7 @@ func TestCreateManualJobPreservesExtractSendAllSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	extract := snapshot.Rounds[0].Extract
-	if extract.BatchSize != 0 || extract.MaxWordsPerBatch != 0 || extract.TemplateContent != originalTemplate || !snapshot.GlossaryEnabled {
+	if extract.BatchSize != 0 || extract.MaxWordsPerBatch != 0 || extract.TemplateContent != originalTemplate || snapshot.GlossaryEnabled != client.Project.GetX(ctx, projectID).GlossaryEnabled {
 		t.Fatal("created job did not preserve its send-all configuration and template")
 	}
 	if !snapshot.Rounds[0].Backend.Credential.Valid() || client.CredentialJobReference.Query().CountX(ctx) != 1 {

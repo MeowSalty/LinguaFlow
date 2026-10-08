@@ -29,6 +29,39 @@ TranslateSegmentFilterConfig:
         - skip_approved: 处理除 approved 外的所有状态（等同旧 overwrite_unapproved）
         - all: 处理所有状态的段落（等同旧 overwrite_all）
 
+InlineTermExtractionConfig:
+  type: object
+  description: |
+    翻译轮次的高级选项：在同一次模型请求中返回译文和新术语，供后续批次使用。
+    省略或 enabled=false 时不抽取新术语，仍按项目设置使用已有术语表。
+    关联项目时，项目 glossary_enabled 为总开关；false 时不应用术语表，也不执行内联提取，轮次配置仍然保存。
+    无项目的即时翻译按轮次配置和请求中的术语表决定是否启用术语功能。
+  properties:
+    enabled:
+      type: boolean
+      default: false
+      description: 是否在本翻译轮次的模型请求中同时抽取新术语；关联项目时还须启用项目术语表总开关
+    max_terms_per_1000_words:
+      type: number
+      format: double
+      minimum: 0
+      exclusiveMinimum: true
+      default: 3
+      description: 每 1000 源文字词的术语抽取上限系数；CJK 按字、其他文本按词计数，必须大于 0
+    min_source_len:
+      type: integer
+      minimum: 1
+      default: 2
+      description: 抽取术语源文的最短字符数（按 rune 计）
+    conflict_strategy:
+      type: string
+      enum: [off, rewrite-local]
+      default: rewrite-local
+      description: |
+        内联提取生效时，新术语与已确认术语冲突的处理方式。
+        rewrite-local：按已确认术语改写本批译文；off：仅关闭冲突改写，仍然抽取和合并新术语。
+  additionalProperties: false
+
 TranslateRoundConfig:
   type: object
   required: [fallback_shrink, prompt_template_id]
@@ -59,11 +92,16 @@ TranslateRoundConfig:
     segment_filter:
       $ref: '#/TranslateSegmentFilterConfig'
       description: 段落过滤配置；省略时默认 pending_only
+    inline_term_extraction:
+      $ref: '#/InlineTermExtractionConfig'
     retry:
       $ref: '#/RetryConfig'
 
 ExtractRoundConfig:
   type: object
+  description: |
+    独立术语抽取轮次配置。关联项目 glossary_enabled=false 时跳过本轮，轮次配置仍然保存。
+    无项目的即时翻译按轮次配置执行。
   required: [template_id]
   properties:
     template_id:
@@ -161,7 +199,7 @@ ReviseRoundConfig:
   description: |
     修订轮次配置。LLM 对已有译文做最小改动定点修订，修复段落上 pending 的语义 issue
     （误译、仿译、漏译等）。system prompt 内置不可见，无 prompt_template_id；
-    protect/ruby 及引擎级策略（repair/QA/glossary）经计划级策略引用（profile_id）
+    protect/ruby 及引擎级策略（repair/QA）经计划级策略引用（profile_id）
     贯穿所有改写型轮次，无需也不依赖计划内 translate 轮的存在。
     写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。
   properties:
@@ -303,8 +341,7 @@ ExecutionPlanTemplate:
       type: integer
       description: |
         策略模板 ID（ExecutionProfile 单表全局唯一；允许内置负 ID，如 -1 内置默认策略）。
-        计划级策略引用：为全管道（所有改写型轮次与引擎级行为）供
-        protect/ruby/postprocess/repair/glossary/context/qa 七项行为预设，
+        计划级策略引用：为全管道（所有改写型轮次与引擎级行为）提供策略预设，
         任务创建时整体冻结进执行快照。
     ruby_retry:
       $ref: '#/ExecutionPlanRubyRetryConfig'
@@ -343,7 +380,7 @@ CreateExecutionPlanTemplateRequest:
       type: string
     profile_id:
       type: integer
-      description: 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道供七项行为预设
+      description: 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道提供策略预设
     ruby_retry:
       $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:

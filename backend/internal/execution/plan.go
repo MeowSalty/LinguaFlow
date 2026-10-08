@@ -20,13 +20,14 @@ type TranslateSegmentFilterConfig struct {
 // TranslateRoundConfig 翻译轮次配置（翻译专用）。
 // 无 ProfileID：策略引用位于计划级（ExecutionPlanTemplate.profile_id），为全管道供行为预设。
 type TranslateRoundConfig struct {
-	PromptTemplateID int                           `json:"prompt_template_id"  yaml:"prompt_template_id"` // 引用 TranslationPromptTemplate
-	BatchSize        int                           `json:"batch_size"          yaml:"batch_size"`
-	MaxWordsPerBatch int                           `json:"max_words_per_batch" yaml:"max_words_per_batch"`
-	Concurrency      int                           `json:"concurrency"         yaml:"concurrency"`
-	FallbackShrink   float64                       `json:"fallback_shrink"     yaml:"fallback_shrink"`
-	SegmentFilter    *TranslateSegmentFilterConfig `json:"segment_filter,omitempty" yaml:"segment_filter,omitempty"`
-	Retry            RetryConfig                   `json:"retry"               yaml:"retry"`
+	PromptTemplateID     int                           `json:"prompt_template_id"  yaml:"prompt_template_id"` // 引用 TranslationPromptTemplate
+	BatchSize            int                           `json:"batch_size"          yaml:"batch_size"`
+	MaxWordsPerBatch     int                           `json:"max_words_per_batch" yaml:"max_words_per_batch"`
+	Concurrency          int                           `json:"concurrency"         yaml:"concurrency"`
+	FallbackShrink       float64                       `json:"fallback_shrink"     yaml:"fallback_shrink"`
+	SegmentFilter        *TranslateSegmentFilterConfig `json:"segment_filter,omitempty" yaml:"segment_filter,omitempty"`
+	InlineTermExtraction *InlineTermExtractionConfig   `json:"inline_term_extraction,omitempty" yaml:"inline_term_extraction,omitempty"`
+	Retry                RetryConfig                   `json:"retry"               yaml:"retry"`
 }
 
 // ExtractRoundConfig 术语抽取轮次配置。

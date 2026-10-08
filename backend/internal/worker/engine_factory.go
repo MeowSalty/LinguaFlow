@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
@@ -92,7 +91,7 @@ func (f *EngineFactory) BuildEngineWithConfig(
 		// correct 是纯本地轮，无 backend：跳过 backend 构建（Backend 留 nil）。
 		var b backend.Backend
 		var err error
-		if rs.Mode != "correct" {
+		if rs.Mode != "correct" && !(rs.Mode == "extract" && !cfg.Glossary.Enabled) {
 			b, err = f.buildBackend(ctx, rs.Backend)
 			if err != nil {
 				return nil, fmt.Errorf("round[%d] build backend: %w", i, err)
@@ -107,6 +106,9 @@ func (f *EngineFactory) BuildEngineWithConfig(
 				return nil, fmt.Errorf("round[%d]: mode=translate but translate config is nil", i)
 			}
 			round, err = buildTranslateRound(rs, snapshot.Strategy, b)
+			if !cfg.Glossary.Enabled && rs.Translate.InlineTermExtraction != nil && rs.Translate.InlineTermExtraction.Enabled {
+				f.logger.Info("inline term extraction disabled by glossary setting", "round", i, "reason", "glossary_disabled")
+			}
 		case "extract":
 			if rs.Extract == nil {
 				return nil, fmt.Errorf("round[%d]: mode=extract but extract config is nil", i)
@@ -279,7 +281,7 @@ func unwrapMetered(b backend.Backend) (*backend.MeteredBackend, bool) {
 }
 
 // BuildEngineConfig 是 JobRunner 与 PreviewRunner 共享的引擎配置构建器。
-// QA、repair、ruby、glossary 自举等计划级行为直接读快照顶层的 Strategy
+// QA、repair、ruby 等计划级行为直接读快照顶层的 Strategy
 // （由 service 层从计划引用的策略物化一次），不再扫描 translate 轮。
 func BuildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 	s := snapshot.Strategy
@@ -295,12 +297,6 @@ func BuildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 	cfg.Ruby = engine.RubyConfig{
 		Enabled:       s.Ruby.Enabled,
 		PreserveKinds: s.Ruby.PreserveKinds,
-	}
-	cfg.Glossary.Bootstrap = config.BootstrapConfig{
-		Enabled:                s.Glossary.Bootstrap.Enabled,
-		MaxTermsPer1000Chars:   s.Glossary.Bootstrap.MaxTermsPer1000Chars,
-		MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
-		InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
 	}
 	cfg.QA = service.QAConfigFromProfile(s.QA, snapshot.SourceLang, snapshot.TargetLang)
 	return cfg
@@ -347,7 +343,8 @@ func buildTranslateRound(rs service.JobRoundSnapshot, strategy service.StrategyS
 			After:    strategy.Context.After,
 			MaxChars: strategy.Context.MaxChars,
 		},
-		Postprocess: roundPostprocess,
+		Postprocess:          roundPostprocess,
+		InlineTermExtraction: t.InlineTermExtraction,
 	}, nil
 }
 

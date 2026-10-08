@@ -27,7 +27,9 @@ func TestFrozenExecutionGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(raw)
-	const expected = "15e71b335bc33192776ad6534e420fed7b23a70aa726c8e61e41f7212d60fa33"
+	// The target deliberately drops the legacy glossary strategy instead of
+	// inheriting its bootstrap setting into each translation round.
+	const expected = "3d6c34b43bc30b2fcf0a5c1b27f4e9d3063f8ff7f4dc5f7473e6453d03ae3aeb"
 	if hex.EncodeToString(digest[:]) != expected {
 		t.Fatalf("v0.13.0 to execution v1 golden changed: got %x; review compatibility rather than adopting current defaults", digest)
 	}

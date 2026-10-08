@@ -37,7 +37,7 @@ type ExecutionPlanTemplate struct {
 	OwnerUserID *int `json:"owner_user_id,omitempty"`
 	// OwnerOrgID holds the value of the "owner_org_id" field.
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
-	// 计划级策略引用（ExecutionProfile），为全管道供七项行为预设
+	// 计划级策略引用（ExecutionProfile），为全管道提供行为预设
 	ProfileID int `json:"profile_id,omitempty"`
 	// 注音对齐重试配置
 	RubyRetry execution.ExecutionPlanRubyRetryConfig `json:"ruby_retry,omitempty"`
