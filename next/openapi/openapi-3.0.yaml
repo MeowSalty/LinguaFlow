@@ -6800,7 +6800,7 @@ components:
         glossary_enabled:
           type: boolean
           default: false
-          description: 是否启用术语表
+          description: 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
         source_lang:
           type: string
         target_lang:
@@ -6836,7 +6836,7 @@ components:
         glossary_enabled:
           type: boolean
           default: false
-          description: 是否启用术语表
+          description: 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
         source_lang:
           type: string
         target_lang:
@@ -6852,7 +6852,7 @@ components:
           additionalProperties: true
         glossary_enabled:
           type: boolean
-          description: 是否启用术语表
+          description: 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
         source_lang:
           type: string
         target_lang:
@@ -7541,8 +7541,7 @@ components:
           type: integer
           description: |
             策略模板 ID（ExecutionProfile 单表全局唯一；允许内置负 ID，如 -1 内置默认策略）。
-            计划级策略引用：为全管道（所有改写型轮次与引擎级行为）供
-            protect/ruby/postprocess/repair/glossary/context/qa 七项行为预设，
+            计划级策略引用：为全管道（所有改写型轮次与引擎级行为）提供策略预设，
             任务创建时整体冻结进执行快照。
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
@@ -7557,6 +7556,40 @@ components:
         updated_at:
           type: string
           format: date-time
+    InlineTermExtractionConfig:
+      type: object
+      description: |
+        翻译轮次的高级选项：在同一次模型请求中返回译文和新术语，供后续批次使用。
+        省略或 enabled=false 时不抽取新术语，仍按项目设置使用已有术语表。
+        关联项目时，项目 glossary_enabled 为总开关；false 时不应用术语表，也不执行内联提取，轮次配置仍然保存。
+        无项目的即时翻译按轮次配置和请求中的术语表决定是否启用术语功能。
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否在本翻译轮次的模型请求中同时抽取新术语；关联项目时还须启用项目术语表总开关
+        max_terms_per_1000_words:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          default: 3
+          description: 每 1000 源文字词的术语抽取上限系数；CJK 按字、其他文本按词计数，必须大于 0
+        min_source_len:
+          type: integer
+          minimum: 1
+          default: 2
+          description: 抽取术语源文的最短字符数（按 rune 计）
+        conflict_strategy:
+          type: string
+          enum:
+            - 'off'
+            - rewrite-local
+          default: rewrite-local
+          description: |
+            内联提取生效时，新术语与已确认术语冲突的处理方式。
+            rewrite-local：按已确认术语改写本批译文；off：仅关闭冲突改写，仍然抽取和合并新术语。
+      additionalProperties: false
     AdminUserListResponse:
       type: object
       required:
@@ -7709,7 +7742,7 @@ components:
           type: string
         profile_id:
           type: integer
-          description: 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道供七项行为预设
+          description: 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道提供策略预设
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
@@ -7764,12 +7797,15 @@ components:
           type: integer
           nullable: true
           description: |
-            可选项目 ID。提供时仅复用项目的术语表与语言配置(若请求未显式覆盖),
+            可选项目 ID。提供时复用项目的语言配置(若请求未显式覆盖),
+            术语应用与抽取遵守项目 glossary_enabled 总开关；关闭时也不应用请求中的临时术语表。
             并校验 actor 对该项目的访问权;执行计划本身仍与项目无关,不因 project_id
-            改变授权路径。省略时为纯即时翻译,使用请求体内联术语表。
+            改变授权路径。省略时为纯即时翻译,按轮次配置和请求体术语表决定术语功能。
         glossary:
           type: array
-          description: 内联临时术语表(纯内存,翻译完即丢)。项目场景下叠加在项目术语表之上。
+          description: |
+            临时术语表(纯内存,翻译完即丢)。无项目时按请求应用；项目场景下仅在
+            glossary_enabled=true 时叠加在项目术语表之上，总开关关闭时不应用此列表。
           items:
             $ref: '#/components/schemas/QuickGlossaryEntry'
     QuickTranslateResponse:
@@ -7862,8 +7898,8 @@ components:
             - failed
             - skipped
           description: |
-            轮次执行结果。skipped 表示该轮因目标段状态不满足 segment_filter 而被跳过
-            （仅多轮计划的后续 translate 轮可能产生），其译文沿用上一轮结果。
+            轮次执行结果。skipped 表示翻译轮次因目标段状态不满足 segment_filter 而被跳过，
+            或独立抽取轮次因关联项目关闭术语表而被跳过；其译文沿用上一轮结果。
         duration_ms:
           type: integer
     QuickUsage:
@@ -10421,10 +10457,15 @@ components:
         segment_filter:
           $ref: '#/components/schemas/TranslateSegmentFilterConfig'
           description: 段落过滤配置；省略时默认 pending_only
+        inline_term_extraction:
+          $ref: '#/components/schemas/InlineTermExtractionConfig'
         retry:
           $ref: '#/components/schemas/RetryConfig'
     ExtractRoundConfig:
       type: object
+      description: |
+        独立术语抽取轮次配置。关联项目 glossary_enabled=false 时跳过本轮，轮次配置仍然保存。
+        无项目的即时翻译按轮次配置执行。
       required:
         - template_id
       properties:
@@ -10551,7 +10592,7 @@ components:
       description: |
         修订轮次配置。LLM 对已有译文做最小改动定点修订，修复段落上 pending 的语义 issue
         （误译、仿译、漏译等）。system prompt 内置不可见，无 prompt_template_id；
-        protect/ruby 及引擎级策略（repair/QA/glossary）经计划级策略引用（profile_id）
+        protect/ruby 及引擎级策略（repair/QA）经计划级策略引用（profile_id）
         贯穿所有改写型轮次，无需也不依赖计划内 translate 轮的存在。
         写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。
       properties:
@@ -10756,40 +10797,6 @@ components:
           type: boolean
         prompt_upgrade:
           type: boolean
-    ProfileBootstrapConfig:
-      type: object
-      required:
-        - enabled
-        - max_terms_per_1000_chars
-        - min_source_len
-        - inline_conflict_strategy
-      properties:
-        enabled:
-          type: boolean
-          default: false
-          description: 是否启用内联自举
-        max_terms_per_1000_chars:
-          type: number
-          format: double
-          minimum: 0
-          description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
-        min_source_len:
-          type: integer
-          minimum: 1
-          description: 内联自举术语源文最短字符数
-        inline_conflict_strategy:
-          type: string
-          enum:
-            - 'off'
-            - rewrite-local
-          description: 并发术语冲突处理策略
-    ProfileGlossaryConfig:
-      type: object
-      required:
-        - bootstrap
-      properties:
-        bootstrap:
-          $ref: '#/components/schemas/ProfileBootstrapConfig'
     ProfileContextConfig:
       type: object
       required:
@@ -10861,7 +10868,6 @@ components:
         - protect
         - postprocess
         - repair
-        - glossary
         - context
       properties:
         schema_version:
@@ -10877,8 +10883,6 @@ components:
           $ref: '#/components/schemas/ProfilePostprocessConfig'
         repair:
           $ref: '#/components/schemas/ProfileRepairConfig'
-        glossary:
-          $ref: '#/components/schemas/ProfileGlossaryConfig'
         context:
           $ref: '#/components/schemas/ProfileContextConfig'
         qa:
@@ -10936,35 +10940,6 @@ components:
           type: boolean
         prompt_upgrade:
           type: boolean
-      additionalProperties: false
-    ProfileBootstrapConfigInput:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-          default: false
-          description: 是否启用内联自举
-        max_terms_per_1000_chars:
-          type: number
-          format: double
-          minimum: 0
-          description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
-        min_source_len:
-          type: integer
-          minimum: 1
-          description: 内联自举术语源文最短字符数
-        inline_conflict_strategy:
-          type: string
-          enum:
-            - 'off'
-            - rewrite-local
-          description: 并发术语冲突处理策略
-      additionalProperties: false
-    ProfileGlossaryConfigInput:
-      type: object
-      properties:
-        bootstrap:
-          $ref: '#/components/schemas/ProfileBootstrapConfigInput'
       additionalProperties: false
     ProfileContextConfigInput:
       type: object
@@ -11041,8 +11016,6 @@ components:
           $ref: '#/components/schemas/ProfilePostprocessConfigInput'
         repair:
           $ref: '#/components/schemas/ProfileRepairConfigInput'
-        glossary:
-          $ref: '#/components/schemas/ProfileGlossaryConfigInput'
         context:
           $ref: '#/components/schemas/ProfileContextConfigInput'
         qa:
