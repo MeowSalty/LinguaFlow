@@ -17,6 +17,7 @@ import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
+import { planUsesTermExtraction } from '@/utils/execution-plan-config'
 
 import type { JobTargetMode } from '@/composables/useJobActions'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
@@ -31,21 +32,25 @@ const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
 
 const show = defineModel<boolean>('show', { default: false })
 
-const props = defineProps<{
-  formRef: FormInst | null
-  targetMode: JobTargetMode
-  targetResourceIds: number[]
-  targetSegmentIds: number[]
-  targetGroupKeys: string[]
-  executionPlanId: number | null
-  autoApprove: boolean
-  segmentFilter: SegmentFilter | undefined
-  formRules: FormRules
-  executionPlanOptions: Array<{ label: string; value: number }>
-  submitting: boolean
-  segmentCount: number
-  selectedPlanTemplate: ExecutionPlanTemplate | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    formRef: FormInst | null
+    targetMode: JobTargetMode
+    targetResourceIds: number[]
+    targetSegmentIds: number[]
+    targetGroupKeys: string[]
+    executionPlanId: number | null
+    autoApprove: boolean
+    segmentFilter: SegmentFilter | undefined
+    formRules: FormRules
+    executionPlanOptions: Array<{ label: string; value: number }>
+    submitting: boolean
+    segmentCount: number
+    selectedPlanTemplate: ExecutionPlanTemplate | null
+    projectGlossaryEnabled?: boolean
+  }>(),
+  { projectGlossaryEnabled: undefined },
+)
 
 const emit = defineEmits<{
   'update:executionPlanId': [value: number | null]
@@ -76,6 +81,11 @@ const segmentFilterOptions = [
 ]
 
 const overrideSegmentFilter = computed(() => props.segmentFilter !== undefined)
+const termExtractionDisabled = computed(
+  () =>
+    props.projectGlossaryEnabled === false &&
+    planUsesTermExtraction(props.selectedPlanTemplate?.rounds),
+)
 
 const handleToggleOverride = (enabled: boolean): void => {
   emit('update:segmentFilter', enabled ? 'pending_only' : undefined)
@@ -280,6 +290,9 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
             </li>
           </ul>
         </div>
+        <NAlert v-if="termExtractionDisabled" type="info" :bordered="false" class="mt-3">
+          {{ t('termExtraction.projectDisabled') }}
+        </NAlert>
       </div>
 
       <!-- 确认步骤摘要 -->

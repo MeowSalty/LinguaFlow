@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NButton, NFormItem, NSelect } from 'naive-ui'
+import { NAlert, NButton, NFormItem, NSelect } from 'naive-ui'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -7,16 +7,21 @@ import { previewResourceSegmentTranslation } from '@/api/projects'
 import type { ApiSchemas } from '@/api/client'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useSegmentPreviewDrawer } from '@/composables/useSegmentPreviewDrawer'
+import { planUsesTermExtraction } from '@/utils/execution-plan-config'
 
 import SegmentPreviewDrawerBase from './SegmentPreviewDrawerBase.vue'
 
 type Segment = ApiSchemas['Segment']
 type Preview = ApiSchemas['SegmentTranslationPreviewResponse']
 
-const props = defineProps<{
-  projectId: number | null
-  textRenderMode: 'plaintext' | 'html'
-}>()
+const props = withDefaults(
+  defineProps<{
+    projectId: number | null
+    projectGlossaryEnabled?: boolean
+    textRenderMode: 'plaintext' | 'html'
+  }>(),
+  { projectGlossaryEnabled: undefined },
+)
 
 const emit = defineEmits<{
   applied: [payload: { segment: Segment; resourceId: number }]
@@ -79,6 +84,14 @@ const applyButtonText = computed(() =>
     : t('workspace.segment.translationPreview.apply'),
 )
 
+const termExtractionDisabled = computed(
+  () =>
+    props.projectGlossaryEnabled === false &&
+    planUsesTermExtraction(
+      templatesStore.items.find((item) => item.id === selectedPlanId.value)?.rounds,
+    ),
+)
+
 defineExpose({ open })
 </script>
 
@@ -127,6 +140,9 @@ defineExpose({ open })
             @update:value="handlePlanChange"
           />
         </NFormItem>
+        <NAlert v-if="termExtractionDisabled" type="info" :bordered="false">
+          {{ t('termExtraction.projectDisabled') }}
+        </NAlert>
         <NButton
           type="primary"
           :loading="state === 'previewing'"

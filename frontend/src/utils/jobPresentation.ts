@@ -10,6 +10,17 @@ export type JobEventFilter = 'all' | 'anomalies'
 export const isJobTerminal = (status: Job['status']): boolean =>
   status === 'completed' || status === 'failed' || status === 'cancelled'
 
+/** Only the task's frozen boolean can explain an extraction round's historical skip. */
+export const getJobRoundSkipReason = (
+  job: Pick<Job, 'execution_config'>,
+  round: Pick<Round, 'mode' | 'status'>,
+): 'glossary_disabled' | null =>
+  round.mode === 'extract' &&
+  round.status === 'skipped' &&
+  job.execution_config?.glossary_enabled === false
+    ? 'glossary_disabled'
+    : null
+
 /** Preserve historical outcomes; only unfinished rounds inherit their parent's stop state. */
 export const getRoundDisplayState = (
   jobStatus: Job['status'],

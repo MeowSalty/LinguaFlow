@@ -245,7 +245,10 @@ const onSubmit = async (): Promise<void> => {
         </NFormItem>
 
         <NFormItem path="glossary_enabled" :label="t('projects.form.glossaryToggle')">
-          <NSwitch v-model:value="formModel.glossary_enabled" />
+          <div class="space-y-2">
+            <NSwitch v-model:value="formModel.glossary_enabled" />
+            <p class="text-xs text-lf-text-muted">{{ t('termExtraction.projectSwitchHint') }}</p>
+          </div>
         </NFormItem>
 
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
