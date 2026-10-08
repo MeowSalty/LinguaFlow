@@ -39,7 +39,7 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 	client := testClient(t)
 	user := createTestUser(t, client, "e2e-user")
 	project := createTestProject(t, client, "e2e-project", user.ID)
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
+	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client))))
 	// 真实 fileStore（临时目录）：DeleteResource 事务提交后会删除存储文件，
 	// 测试资源 storage 路径不存在时 os.Remove 返回 IsNotExist 被吞掉。
 	fs, err := filestore.NewLocal(t.TempDir())
@@ -48,7 +48,7 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 	}
 	return &e2eEnv{
 		client:  client,
-		jobs:    newJobRoundTestService(client, nil),
+		jobs:    newJobRoundTestService(t, client, nil),
 		res:     &ResourceService{client: client, projects: projects, fileStore: fs},
 		user:    user,
 		project: project,
@@ -90,6 +90,7 @@ func seedE2EJob(t *testing.T, env *e2eEnv, jobStatus string, progressTotal, prog
 		}
 		ers = append(ers, &e2eResource{res: res, jr: jr})
 	}
+	freezeExecutionTestJob(t, env.client, job)
 	return job, ers
 }
 
@@ -135,6 +136,7 @@ func seedE2ERound(t *testing.T, env *e2eEnv, jobID int, er *e2eResource, roundIn
 		}
 		ids = append(ids, seg.ID)
 	}
+	freezeExecutionTestJob(t, env.client, env.client.Job.GetX(ctx, jobID))
 	return row.ID, ids
 }
 

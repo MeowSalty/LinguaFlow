@@ -2,90 +2,27 @@ package cli
 
 import (
 	"context"
-	"strings"
-
-	"github.com/spf13/cobra"
-
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/spf13/cobra"
 )
 
-type serveOptions struct {
-	host           string
-	port           int
-	dataDir        string
-	autoMigrate    bool
-	autoMigrateSet bool
-	noUI           bool
-	noUISet        bool
-	jwtSecret      string
-	corsOrigins    string
-}
-
 func newServeCmd(rt *appCtx) *cobra.Command {
-	opts := serveOptions{}
 	cmd := &cobra.Command{
-		Use:   "serve",
-		Short: "启动 LinguaFlow Web Service",
-		Long: `启动 LinguaFlow Web Service。
-
-默认提供嵌入式 Web UI；使用 --no-ui 可关闭 UI，仅提供 API。
-
-数据库通过环境变量配置：
-  LINGUAFLOW_DATABASE_DRIVER                 sqlite（默认）或 postgres
-  LINGUAFLOW_DATABASE_DSN                    PostgreSQL 必填；SQLite 为空时使用 data_dir/linguaflow.db
-  LINGUAFLOW_DATABASE_MAX_OPEN_CONNS         最大打开连接数
-  LINGUAFLOW_DATABASE_MAX_IDLE_CONNS         最大空闲连接数
-  LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME      连接最大寿命（Go duration）
-  LINGUAFLOW_SERVE_UI                        是否提供 Web UI（true/1/yes，默认 true）`,
-		Example: `  linguaflow serve
-  linguaflow serve --host 127.0.0.1 --port 18080
-  linguaflow serve --no-ui
-  LINGUAFLOW_DATABASE_DRIVER=postgres LINGUAFLOW_DATABASE_DSN='postgres://localhost:5432/linguaflow?sslmode=disable' linguaflow serve`,
+		Use: "serve", Short: "启动 LinguaFlow Web Service", Args: cobra.NoArgs,
+		Long: "通过 kind: server, version: 1 部署文档、环境变量和显式 flags 启动服务。\n文件仅由 --config 或 LINGUAFLOW_SERVER_CONFIG 选择；不会自动读取 .env。\n必须配置 JWT secret，以及 credentials.master_key 或 credentials.keyring_file；首次实例需要 bootstrap.admin。\n使用 config explain --mode serve 查看最终脱敏配置和来源。",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			opts.autoMigrateSet = cmd.Flags().Changed("auto-migrate")
-			opts.noUISet = cmd.Flags().Changed("no-ui")
-			return runServe(cmd.Context(), rt, opts)
+			resolved, err := resolveDeployment(cmd, rt, config.ModeServer)
+			if err != nil {
+				return err
+			}
+			return runServe(cmd.Context(), resolved)
 		},
 	}
-
-	cmd.Flags().StringVar(&opts.host, "host", "", "覆盖 server.host")
-	cmd.Flags().IntVar(&opts.port, "port", 0, "覆盖 server.port")
-	cmd.Flags().StringVar(&opts.dataDir, "data-dir", "", "覆盖 server.data_dir")
-	cmd.Flags().BoolVar(&opts.autoMigrate, "auto-migrate", true, "覆盖 server.auto_migrate")
-	cmd.Flags().BoolVar(&opts.noUI, "no-ui", false, "关闭嵌入式 Web UI（仅提供 API）")
-	cmd.Flags().StringVar(&opts.jwtSecret, "jwt-secret", "", "覆盖 LINGUAFLOW_JWT_SECRET")
-	cmd.Flags().StringVar(&opts.corsOrigins, "cors-origins", "", "覆盖 LINGUAFLOW_CORS_ORIGINS（逗号分隔）")
+	addDeploymentFlags(cmd, false)
 	return cmd
 }
-
-func runServe(ctx context.Context, rt *appCtx, opts serveOptions) error {
-	server, ln, cleanup, err := bootstrapServer(ctx, BootOptions{
-		Logger: rt.logger,
-		Mode:   config.ModeServer,
-		Overrides: func(cfg *config.ServerConfig) {
-			if opts.host != "" {
-				cfg.Host = opts.host
-			}
-			if opts.port > 0 {
-				cfg.Port = opts.port
-			}
-			if opts.dataDir != "" {
-				cfg.DataDir = opts.dataDir
-			}
-			if opts.autoMigrateSet {
-				cfg.AutoMigrate = opts.autoMigrate
-			}
-			if opts.noUISet {
-				cfg.ServeUI = !opts.noUI
-			}
-			if opts.jwtSecret != "" {
-				cfg.JWTSecret = opts.jwtSecret
-			}
-			if opts.corsOrigins != "" {
-				cfg.CORS.AllowedOrigins = strings.Split(opts.corsOrigins, ",")
-			}
-		},
-	})
+func runServe(ctx context.Context, resolved *config.ResolvedServer) error {
+	server, ln, cleanup, err := bootstrapServer(ctx, BootOptions{Resolved: resolved})
 	if err != nil {
 		return err
 	}

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
+import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 
 import { quickTranslate } from '@/api/client'
 import type { ApiSchemas } from '@/api/client'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
+import { usePreferencesStore } from '@/stores/preferences'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useProjectsStore } from '@/stores/projects'
 import { useLanguageOptions } from '@/composables/useLanguageOptions'
@@ -12,7 +15,15 @@ import { formatTokens, batchStatusTimelineType } from '@/composables/useWorkspac
 import SegmentTranslationPreviewDiagnostic from '@/components/workspace/SegmentTranslationPreviewDiagnostic.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 const message = useMessage()
+const preferences = usePreferencesStore()
+const context = captureSession()
+let disposed = false
+const current = () => !disposed && isSessionCurrent(context)
+onScopeDispose(() => {
+  disposed = true
+})
 
 const planTemplates = useExecutionPlanTemplatesStore()
 const projects = useProjectsStore()
@@ -34,19 +45,52 @@ const hasTranslateRound = (plan: ApiSchemas['ExecutionPlanTemplate']): boolean =
 
 const translatablePlans = computed(() => planTemplates.items.filter(hasTranslateRound))
 
-const executionPlanOptions = computed(() =>
-  planTemplates.items.map((item) => ({
-    label: hasTranslateRound(item)
-      ? item.name
-      : `${item.name}${t('quickTranslate.planNoTranslateRound')}`,
-    value: item.id,
-    disabled: !hasTranslateRound(item),
-  })),
-)
+// 全部计划都不可用时收起列表，交给空状态给出指引；
+// 部分可用时，不可用项收进「不含翻译轮次」分组，由组标题说明灰显原因
+const executionPlanOptions = computed<SelectMixedOption[]>(() => {
+  if (!translatablePlans.value.length) return []
+  const usable = translatablePlans.value.map((item) => ({ label: item.name, value: item.id }))
+  const unusable = planTemplates.items
+    .filter((item) => !hasTranslateRound(item))
+    .map((item) => ({ label: item.name, value: item.id, disabled: true }))
+  if (!unusable.length) return usable
+  return [
+    ...usable,
+    {
+      type: 'group',
+      // 组标题自绘样式：naive 默认 0.93em/浅灰与普通选项区分度不足
+      label: () =>
+        h(
+          'span',
+          { class: 'text-xs text-lf-text-subtle' },
+          t('quickTranslate.planNoTranslateRound'),
+        ),
+      key: 'plan-group-untranslatable',
+      children: unusable,
+    },
+  ]
+})
 
 const projectOptions = computed(() =>
   projects.items.map((item) => ({ label: item.name, value: item.id })),
 )
+
+// 加载中先按正常态渲染，避免空列表闪现警示
+const planAvailability = computed<'ok' | 'empty' | 'noneTranslatable'>(() => {
+  if (planTemplates.loading) return 'ok'
+  if (!planTemplates.items.length) return 'empty'
+  if (!translatablePlans.value.length) return 'noneTranslatable'
+  return 'ok'
+})
+
+const planSelectStatus = computed(() => (planAvailability.value === 'ok' ? undefined : 'warning'))
+
+const planSelectPlaceholder = computed(() => {
+  if (planAvailability.value === 'empty') return t('quickTranslate.planEmptyPlaceholder')
+  if (planAvailability.value === 'noneTranslatable')
+    return t('quickTranslate.planNoneTranslatablePlaceholder')
+  return t('quickTranslate.executionPlanPlaceholder')
+})
 
 const selectedPlanTranslatable = computed(
   () =>
@@ -59,6 +103,16 @@ const selectedPlanTranslatable = computed(
 const canSubmit = computed(
   () => sourceText.value.trim().length > 0 && selectedPlanTranslatable.value && !submitting.value,
 )
+
+// 禁用按钮的悬停指引：按优先级给出第一个未满足的条件
+const submitBlockReason = computed<string | null>(() => {
+  if (submitting.value) return null
+  if (!sourceText.value.trim()) return t('quickTranslate.validation.sourceRequired')
+  if (selectedPlanTranslatable.value) return null
+  if (planAvailability.value === 'empty') return t('quickTranslate.executionPlanEmpty')
+  if (planAvailability.value === 'noneTranslatable') return t('quickTranslate.noTranslatablePlan')
+  return t('quickTranslate.validation.planRequired')
+})
 
 const qualityIssues = computed(() => result.value?.quality_issues ?? [])
 
@@ -87,7 +141,8 @@ const HighlightedTarget = computed(() => {
 })
 
 const applyExecutionPlanDefault = (): void => {
-  const storedId = Number(localStorage.getItem('linguaflow.quick_translate.plan_id'))
+  if (!current()) return
+  const storedId = preferences.quickTranslatePlanId
   const storedPlan = translatablePlans.value.find((item) => item.id === storedId)
   if (Number.isFinite(storedId) && storedPlan) {
     executionPlanId.value = storedPlan.id
@@ -100,7 +155,11 @@ const applyExecutionPlanDefault = (): void => {
 
 const onExecutionPlanChange = (id: number | null): void => {
   executionPlanId.value = id
-  if (id != null) localStorage.setItem('linguaflow.quick_translate.plan_id', String(id))
+  preferences.quickTranslatePlanId = id
+}
+
+const goToExecutionPlans = (): void => {
+  void router.push('/execution-plan-templates')
 }
 
 const onSwapLanguages = (): void => {
@@ -135,14 +194,16 @@ const onSubmit = async (): Promise<void> => {
       })
     if (glossaryEntries.length) payload.glossary = glossaryEntries
     const res = await quickTranslate(payload)
+    if (!current()) return
     result.value = res
     if (res.status === 'success') message.success(t('quickTranslate.messages.success'))
     else if (res.status === 'partial') message.warning(t('quickTranslate.messages.partial'))
     else message.error(t('quickTranslate.messages.failed'))
   } catch (err) {
+    if (!current()) return
     message.error(err instanceof Error ? err.message : t('quickTranslate.messages.failed'))
   } finally {
-    submitting.value = false
+    if (current()) submitting.value = false
   }
 }
 
@@ -150,8 +211,10 @@ const onCopy = async (): Promise<void> => {
   if (!result.value?.target_text) return
   try {
     await navigator.clipboard.writeText(result.value.target_text)
+    if (!current()) return
     message.success(t('quickTranslate.copySuccess'))
   } catch {
+    if (!current()) return
     message.error(t('quickTranslate.copyFailed'))
   }
 }
@@ -205,23 +268,27 @@ onMounted(() => {
             :value="executionPlanId"
             filterable
             :options="executionPlanOptions"
-            :placeholder="t('quickTranslate.executionPlanPlaceholder')"
+            :placeholder="planSelectPlaceholder"
+            :status="planSelectStatus"
             :loading="planTemplates.loading"
             @update:value="onExecutionPlanChange"
-          />
+          >
+            <template #empty>
+              <div class="flex flex-col items-center gap-2 px-4 py-2">
+                <p class="text-center text-xs text-lf-text-muted">
+                  {{
+                    planAvailability === 'empty'
+                      ? t('quickTranslate.executionPlanEmpty')
+                      : t('quickTranslate.noTranslatablePlan')
+                  }}
+                </p>
+                <NButton text type="primary" size="tiny" @click="goToExecutionPlans">
+                  {{ t('quickTranslate.goToExecutionPlans') }}
+                </NButton>
+              </div>
+            </template>
+          </NSelect>
         </div>
-        <p
-          v-if="!planTemplates.loading && executionPlanOptions.length === 0"
-          class="w-full text-xs text-lf-text-muted"
-        >
-          {{ t('quickTranslate.executionPlanEmpty') }}
-        </p>
-        <p
-          v-else-if="!planTemplates.loading && translatablePlans.length === 0"
-          class="w-full text-xs text-lf-text-muted"
-        >
-          {{ t('quickTranslate.noTranslatablePlan') }}
-        </p>
       </div>
 
       <!-- 原文输入 -->
@@ -231,7 +298,7 @@ onMounted(() => {
           type="textarea"
           :autosize="{ minRows: 6, maxRows: 14 }"
           :placeholder="t('quickTranslate.sourcePlaceholder')"
-          :aria-label="t('quickTranslate.sourceLabel')"
+          :input-props="{ 'aria-label': t('quickTranslate.sourceLabel') }"
         />
       </div>
 
@@ -313,16 +380,23 @@ onMounted(() => {
           <span class="text-xs text-lf-text-subtle tabular-nums">
             {{ t('quickTranslate.charCount', { count: sourceText.length }) }}
           </span>
-          <NButton
-            type="primary"
-            size="large"
-            :loading="submitting"
-            :disabled="!canSubmit"
-            @click="onSubmit"
-          >
-            <IconCarbonTranslate />
-            {{ submitting ? t('quickTranslate.submitting') : t('quickTranslate.submit') }}
-          </NButton>
+          <NTooltip :disabled="submitBlockReason == null">
+            <template #trigger>
+              <span class="inline-flex">
+                <NButton
+                  type="primary"
+                  size="large"
+                  :loading="submitting"
+                  :disabled="!canSubmit"
+                  @click="onSubmit"
+                >
+                  <IconCarbonTranslate />
+                  {{ submitting ? t('quickTranslate.submitting') : t('quickTranslate.submit') }}
+                </NButton>
+              </span>
+            </template>
+            {{ submitBlockReason }}
+          </NTooltip>
         </div>
       </div>
     </section>

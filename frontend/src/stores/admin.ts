@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onScopeDispose } from 'vue'
 
 import { type ApiSchemas } from '@/api/client'
 import {
@@ -14,10 +14,18 @@ import {
   updateAdminSettings,
 } from '@/api/admin'
 import { t } from '@/i18n'
+import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
+import { ApiError } from '@/api/utils'
+import {
+  TaskHistoryApiError,
+  taskHistoryErrorMessage,
+  validRetentionPolicy,
+} from '@/api/task-history'
 
 type SystemStats = ApiSchemas['SystemStats']
 type User = ApiSchemas['User']
 type Activity = ApiSchemas['Activity']
+type SystemSettings = ApiSchemas['SystemSettingsResponse']['settings']
 
 export const useAdminStore = defineStore('admin', () => {
   const stats = ref<SystemStats | null>(null)
@@ -37,10 +45,37 @@ export const useAdminStore = defineStore('admin', () => {
   const auditLogsLoading = ref(false)
   const auditLogsError = ref<string | null>(null)
 
-  const settings = ref<Record<string, string>>({})
+  const settings = ref<SystemSettings | null>(null)
   const settingsLoading = ref(false)
   const settingsError = ref<string | null>(null)
   const settingsSaving = ref(false)
+  const settingsSaveError = ref<string | null>(null)
+  const settingsAccessDenied = ref(false)
+  let settingsRequest = 0
+  let latestPolicy: ApiSchemas['TaskRetentionPolicy'] | null = null
+  const acceptRetentionPolicy = (policy: ApiSchemas['TaskRetentionPolicy']): void => {
+    if (!validRetentionPolicy(policy) || (latestPolicy && policy.revision < latestPolicy.revision))
+      return
+    latestPolicy = { ...policy }
+    if (settings.value) settings.value = { ...settings.value, task_retention: latestPolicy }
+  }
+  const acceptSettings = (value: SystemSettings): void => {
+    if (!latestPolicy || value.task_retention.revision >= latestPolicy.revision)
+      latestPolicy = { ...value.task_retention }
+    settings.value = { ...value, task_retention: latestPolicy }
+  }
+  const clearSettings = (denied = false): void => {
+    settingsRequest++
+    latestPolicy = null
+    settings.value = null
+    settingsLoading.value = false
+    settingsSaving.value = false
+    settingsError.value = null
+    settingsSaveError.value = null
+    settingsAccessDenied.value = denied
+  }
+
+  onScopeDispose(onSessionChange(() => clearSettings()))
 
   const creatingUser = ref(false)
   const updatingUser = ref(false)
@@ -192,29 +227,119 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  const loadSettings = async (): Promise<void> => {
+  const loadSettings = async (): Promise<boolean> => {
+    if (settingsLoading.value || settingsSaving.value) return false
+    const context = captureSession()
+    const request = ++settingsRequest
+    const current = () => request === settingsRequest && isSessionCurrent(context)
     settingsLoading.value = true
     settingsError.value = null
+    settingsSaveError.value = null
 
     try {
       const response = await fetchAdminSettings()
-      settings.value = response.settings ?? {}
+      if (!current()) return false
+      acceptSettings(response.settings)
+      settingsAccessDenied.value = false
+      settingsSaveError.value = null
+      return true
     } catch (error) {
-      settingsError.value =
-        error instanceof Error ? error.message : t('api.errors.fetchAdminSettingsFailed')
+      if (!current()) return false
+      const denied = error instanceof ApiError && [401, 403].includes(error.status ?? 0)
+      if (denied) clearSettings(true)
+      settingsError.value = denied
+        ? t('configurationSettings.accessDenied')
+        : settings.value
+          ? t('configurationSettings.refreshFailed')
+          : t('configurationSettings.loadFailed')
+      return false
     } finally {
-      settingsLoading.value = false
+      if (current()) settingsLoading.value = false
     }
   }
 
-  const saveSettings = async (newSettings: Record<string, string>): Promise<void> => {
+  const saveSettings = async (
+    newSettings: Pick<SystemSettings, 'registration_enabled'>,
+  ): Promise<boolean> => {
+    if (
+      settingsLoading.value ||
+      settingsSaving.value ||
+      !settings.value ||
+      typeof newSettings.registration_enabled !== 'boolean' ||
+      newSettings.registration_enabled === settings.value.registration_enabled
+    )
+      return false
+    const context = captureSession()
+    const request = ++settingsRequest
+    const current = () => request === settingsRequest && isSessionCurrent(context)
     settingsSaving.value = true
+    settingsSaveError.value = null
 
     try {
-      const response = await updateAdminSettings({ settings: newSettings })
-      settings.value = response.settings ?? {}
+      const response = await updateAdminSettings({
+        settings: { registration_enabled: newSettings.registration_enabled },
+      })
+      if (!current()) return false
+      acceptSettings(response.settings)
+      settingsError.value = null
+      return true
+    } catch (error) {
+      if (!current()) return false
+      const denied = error instanceof ApiError && [401, 403].includes(error.status ?? 0)
+      if (denied) clearSettings(true)
+      settingsSaveError.value = t(
+        denied ? 'configurationSettings.accessDenied' : 'configurationSettings.saveFailed',
+      )
+      return false
     } finally {
-      settingsSaving.value = false
+      if (current()) settingsSaving.value = false
+    }
+  }
+
+  const saveTaskRetention = async (
+    patch: ApiSchemas['TaskRetentionPatch'],
+  ): Promise<'saved' | 'conflict' | 'failed' | 'stale'> => {
+    if (
+      settingsLoading.value ||
+      settingsSaving.value ||
+      !settings.value ||
+      !validRetentionPolicy({ ...patch, revision: patch.expected_revision })
+    )
+      return 'failed'
+    const baseline = settings.value.task_retention
+    if (baseline.revision !== patch.expected_revision) return 'conflict'
+    if (baseline.enabled === patch.enabled && baseline.retention_days === patch.retention_days)
+      return 'saved'
+    const context = captureSession(),
+      request = ++settingsRequest
+    const current = () => request === settingsRequest && isSessionCurrent(context)
+    settingsSaving.value = true
+    settingsSaveError.value = null
+    try {
+      const response = await updateAdminSettings({
+        settings: {
+          task_retention: {
+            enabled: patch.enabled,
+            retention_days: patch.retention_days,
+            expected_revision: patch.expected_revision,
+          },
+        },
+      })
+      if (!current()) return 'stale'
+      acceptSettings(response.settings)
+      settingsError.value = null
+      return 'saved'
+    } catch (error) {
+      if (!current()) return 'stale'
+      if (error instanceof ApiError && [401, 403].includes(error.status ?? 0)) clearSettings(true)
+      settingsSaveError.value = taskHistoryErrorMessage(error)
+      return error instanceof ApiError &&
+        error.status === 409 &&
+        (!(error instanceof TaskHistoryApiError) || error.error_code === 'settings_conflict')
+        ? 'conflict'
+        : 'failed'
+    } finally {
+      if (current()) settingsSaving.value = false
     }
   }
 
@@ -249,6 +374,8 @@ export const useAdminStore = defineStore('admin', () => {
     settingsLoading,
     settingsError,
     settingsSaving,
+    settingsSaveError,
+    settingsAccessDenied,
     creatingUser,
     updatingUser,
     disablingUserIds,
@@ -262,6 +389,9 @@ export const useAdminStore = defineStore('admin', () => {
     loadAuditLogs,
     loadSettings,
     saveSettings,
+    saveTaskRetention,
+    acceptRetentionPolicy,
+    clearSettings,
     loadAll,
   }
 })

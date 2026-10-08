@@ -42,6 +42,10 @@ const (
 	FieldErrorMessage = "error_message"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
 	FieldStartedAt = "started_at"
+	// FieldFinishedAt holds the string denoting the finished_at field in the database.
+	FieldFinishedAt = "finished_at"
+	// FieldRetentionAnchorAt holds the string denoting the retention_anchor_at field in the database.
+	FieldRetentionAnchorAt = "retention_anchor_at"
 	// EdgeProject holds the string denoting the project edge name in mutations.
 	EdgeProject = "project"
 	// EdgeCreatedBy holds the string denoting the created_by edge name in mutations.
@@ -52,6 +56,8 @@ const (
 	EdgeJobRounds = "job_rounds"
 	// EdgeSseEvents holds the string denoting the sse_events edge name in mutations.
 	EdgeSseEvents = "sse_events"
+	// EdgeCredentialReferences holds the string denoting the credential_references edge name in mutations.
+	EdgeCredentialReferences = "credential_references"
 	// Table holds the table name of the job in the database.
 	Table = "jobs"
 	// ProjectTable is the table that holds the project relation/edge.
@@ -89,6 +95,13 @@ const (
 	SseEventsInverseTable = "sse_events"
 	// SseEventsColumn is the table column denoting the sse_events relation/edge.
 	SseEventsColumn = "job_id"
+	// CredentialReferencesTable is the table that holds the credential_references relation/edge.
+	CredentialReferencesTable = "credential_job_references"
+	// CredentialReferencesInverseTable is the table name for the CredentialJobReference entity.
+	// It exists in this package in order to avoid circular dependency with the "credentialjobreference" package.
+	CredentialReferencesInverseTable = "credential_job_references"
+	// CredentialReferencesColumn is the table column denoting the credential_references relation/edge.
+	CredentialReferencesColumn = "job_id"
 )
 
 // Columns holds all SQL columns for job fields.
@@ -108,6 +121,8 @@ var Columns = []string{
 	FieldProgressCompleted,
 	FieldErrorMessage,
 	FieldStartedAt,
+	FieldFinishedAt,
+	FieldRetentionAnchorAt,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "jobs"
@@ -243,6 +258,16 @@ func ByStartedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStartedAt, opts...).ToFunc()
 }
 
+// ByFinishedAt orders the results by the finished_at field.
+func ByFinishedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFinishedAt, opts...).ToFunc()
+}
+
+// ByRetentionAnchorAt orders the results by the retention_anchor_at field.
+func ByRetentionAnchorAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetentionAnchorAt, opts...).ToFunc()
+}
+
 // ByProjectField orders the results by project field.
 func ByProjectField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -298,6 +323,20 @@ func BySseEvents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newSseEventsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByCredentialReferencesCount orders the results by credential_references count.
+func ByCredentialReferencesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newCredentialReferencesStep(), opts...)
+	}
+}
+
+// ByCredentialReferences orders the results by credential_references terms.
+func ByCredentialReferences(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newCredentialReferencesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newProjectStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -331,5 +370,12 @@ func newSseEventsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(SseEventsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, SseEventsTable, SseEventsColumn),
+	)
+}
+func newCredentialReferencesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(CredentialReferencesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, CredentialReferencesTable, CredentialReferencesColumn),
 	)
 }

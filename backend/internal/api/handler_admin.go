@@ -1,13 +1,16 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type adminCreateUserRequest struct {
@@ -60,11 +63,11 @@ type adminAuditLogListResponse struct {
 }
 
 type systemSettingsResponse struct {
-	Settings map[string]string `json:"settings"`
+	Settings service.SystemSettings `json:"settings"`
 }
 
 type updateSystemSettingsRequest struct {
-	Settings map[string]string `json:"settings"`
+	Settings json.RawMessage `json:"settings"`
 }
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
@@ -236,28 +239,30 @@ func (s *Server) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request
 
 	items := make([]adminAuditLogItem, 0, len(result.Items))
 	for _, log := range result.Items {
-		item := adminAuditLogItem{
-			ID:           log.ID,
-			Action:       log.Action,
-			ResourceType: log.ResourceType,
-			Message:      log.Message,
-			Metadata:     log.Metadata,
-			CreatedAt:    log.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		}
-		if log.ResourceID != nil {
-			item.ResourceID = log.ResourceID
-		}
-		if log.Edges.Actor != nil {
-			actorID := log.Edges.Actor.ID
-			item.ActorID = &actorID
-		}
-		items = append(items, item)
+		items = append(items, toAdminAuditLogItem(log))
 	}
 	writeJSON(w, http.StatusOK, adminAuditLogListResponse{Items: items, Total: result.Total})
 }
 
+func toAdminAuditLogItem(log *ent.ActivityLog) adminAuditLogItem {
+	item := adminAuditLogItem{
+		ID:           log.ID,
+		Action:       log.Action,
+		ResourceType: log.ResourceType,
+		ResourceID:   log.ResourceID,
+		Message:      log.Message,
+		Metadata:     log.Metadata,
+		CreatedAt:    timeutil.Format(log.CreatedAt),
+	}
+	if log.Edges.Actor != nil {
+		actorID := log.Edges.Actor.ID
+		item.ActorID = &actorID
+	}
+	return item
+}
+
 func (s *Server) handleAdminGetSettings(w http.ResponseWriter, r *http.Request) {
-	settings, err := s.adminService.GetSettings(r.Context())
+	settings, err := s.settingsService.Get(r.Context())
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -266,15 +271,45 @@ func (s *Server) handleAdminGetSettings(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
 	var req updateSystemSettingsRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !s.decodeStrictBody(w, r, &req) {
 		return
 	}
-	if err := s.adminService.UpdateSettings(r.Context(), req.Settings); err != nil {
-		s.writeServiceError(w, r, err)
+	var fields struct {
+		RegistrationEnabled json.RawMessage `json:"registration_enabled"`
+		TaskRetention       json.RawMessage `json:"task_retention"`
+	}
+	if err := decodeStrictObject(req.Settings, &fields); err != nil || len(fields.RegistrationEnabled) == 0 && len(fields.TaskRetention) == 0 {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "settings 必须包含受支持的配置字段")
 		return
 	}
-	settings, err := s.adminService.GetSettings(r.Context())
+	patch := service.SettingsPatch{}
+	if len(fields.RegistrationEnabled) > 0 {
+		var enabled *bool
+		if err := json.Unmarshal(fields.RegistrationEnabled, &enabled); err != nil || enabled == nil {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "registration_enabled 必须是布尔值")
+			return
+		}
+		patch.RegistrationEnabled = enabled
+	}
+	if len(fields.TaskRetention) > 0 {
+		var policy struct {
+			Enabled          *bool  `json:"enabled"`
+			RetentionDays    *int   `json:"retention_days"`
+			ExpectedRevision *int64 `json:"expected_revision"`
+		}
+		if err := decodeStrictObject(fields.TaskRetention, &policy); err != nil || policy.Enabled == nil || policy.RetentionDays == nil || policy.ExpectedRevision == nil {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_request", "task_retention 必须完整包含 enabled、retention_days 和 expected_revision")
+			return
+		}
+		patch.TaskRetention = &service.TaskRetentionPatch{Enabled: *policy.Enabled, RetentionDays: *policy.RetentionDays, ExpectedRevision: *policy.ExpectedRevision}
+	}
+	settings, err := s.settingsService.Patch(r.Context(), authUser.User.ID, patch)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return

@@ -5,6 +5,20 @@ export type DownloadFileResult = {
   filename?: string
 }
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number,
+    public readonly problem?: { type?: string; title?: string; detail?: string; status?: number },
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+export const isAccessDenied = (error: unknown): boolean =>
+  error instanceof ApiError && (error.status === 403 || error.status === 404)
+
 export const buildRequestFailureError = (
   fallbackMessage: string,
   error?: unknown,
@@ -12,10 +26,10 @@ export const buildRequestFailureError = (
 ): Error => {
   // 检查是否是 Problem 对象 (RFC 7807 格式)
   if (error && typeof error === 'object' && 'title' in error) {
-    const problem = error as { title?: string; detail?: string; status?: number }
+    const problem = error as { type?: string; title?: string; detail?: string; status?: number }
     // 优先使用 detail，其次 title，最后使用 fallbackMessage
     const message = problem.detail || problem.title || fallbackMessage
-    return new Error(message)
+    return new ApiError(message, response?.status ?? problem.status, problem)
   }
 
   if (error instanceof Error) {
@@ -26,7 +40,7 @@ export const buildRequestFailureError = (
   const reason = status
     ? t('api.errors.serverReturned', { status })
     : t('api.errors.requestNotSent')
-  return new Error(`${fallbackMessage}（${reason}）`)
+  return new ApiError(`${fallbackMessage}（${reason}）`, status)
 }
 
 export const getContentDispositionFilename = (response?: Response): string | undefined => {

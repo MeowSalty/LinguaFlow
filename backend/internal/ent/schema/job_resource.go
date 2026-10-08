@@ -5,10 +5,15 @@ import (
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type JobResource struct {
 	ent.Schema
+}
+
+func (JobResource) Indexes() []ent.Index {
+	return []ent.Index{index.Edges("job")}
 }
 
 func (JobResource) Mixin() []ent.Mixin {
@@ -17,6 +22,8 @@ func (JobResource) Mixin() []ent.Mixin {
 
 func (JobResource) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("source_revision_id").Optional().Nillable().Positive(),
+		field.Int64("source_generation").Default(0).NonNegative(),
 		field.String("status").Default("pending").
 			Comment("pending, running, completed, failed, cancelled（paused 仅 Job 级；暂停时资源冻结在 running，恢复走 running→pending 重置）"),
 		field.JSON("segment_ids", []int{}).

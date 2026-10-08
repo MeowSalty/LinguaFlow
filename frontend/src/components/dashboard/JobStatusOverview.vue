@@ -37,14 +37,20 @@ const failedPercent = computed(() => {
       </div>
     </div>
 
-    <NEmpty v-else-if="stats.statsError" :description="stats.statsError" class="mt-8" />
+    <NEmpty
+      v-else-if="stats.statsError && !stats.stats"
+      :description="stats.statsError"
+      class="mt-8"
+    />
 
     <template v-else>
       <div class="mt-5">
         <div class="flex items-center justify-between text-xs text-lf-text-muted">
           <span>{{ t('dashboard.jobStatus.total', { count: n(totalJobs) }) }}</span>
           <span class="font-medium text-lf-text-strong">{{
-            t('dashboard.jobStatus.successRate', { percent: completedPercent })
+            t('dashboard.jobStatus.successRate', {
+              percent: totalJobs ? `${completedPercent}%` : '—',
+            })
           }}</span>
         </div>
         <StackedProgressBar

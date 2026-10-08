@@ -8,12 +8,22 @@ import ScopeFilterTabs from '@/components/common/ScopeFilterTabs.vue'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useProjectsStore, type GlossaryFilter } from '@/stores/projects'
 import { formatDateTime } from '@/utils/datetime'
+import { useOrganizationScope } from '@/composables/useOrganizationScope'
+import OrganizationScopeSelect from '@/components/organizations/OrganizationScopeSelect.vue'
+import { onOrganizationInvalidated } from '@/utils/organization-scope'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
 
 type Project = ApiSchemas['Project']
 
 const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
+const { orgId, canWrite, setScope } = useOrganizationScope((id) => {
+  if (route.path === '/projects') {
+    projects.setOrganization(id)
+    void projects.loadProjects(id)
+  }
+})
 const message = useMessage()
 const { t } = useI18n()
 
@@ -58,6 +68,7 @@ const openCreateDrawer = (): void => {
 }
 
 const openEditDrawer = (project: Project): void => {
+  if (!projects.canEdit(project)) return
   editingProject.value = project
   formDrawerVisible.value = true
 }
@@ -67,6 +78,7 @@ const openProjectWorkspace = (project: Project): void => {
 }
 
 const openDeleteConfirm = (project: Project): void => {
+  if (!projects.canDelete(project)) return
   deletingProject.value = project
   deleteConfirmVisible.value = true
 }
@@ -78,11 +90,14 @@ const closeDeleteConfirm = (): void => {
 
 const confirmDelete = async (): Promise<void> => {
   if (!deletingProject.value) return
+  const session = captureSession()
   try {
     await projects.deleteProject(deletingProject.value.id)
     message.success(t('projects.messages.deleteSuccess'))
     closeDeleteConfirm()
   } catch (error) {
+    if (!isSessionCurrent(session) || (error instanceof Error && error.name === 'AbortError'))
+      return
     console.error(error)
     message.error(projects.deleteError || t('projects.messages.deleteFailed'))
   }
@@ -90,7 +105,7 @@ const confirmDelete = async (): Promise<void> => {
 
 watch(isProjectListRoute, (isList) => {
   if (isList) {
-    projects.loadProjects()
+    projects.loadProjects(orgId.value)
   }
 })
 
@@ -99,7 +114,7 @@ onMounted(() => {
     return
   }
 
-  projects.loadProjects()
+  projects.loadProjects(orgId.value)
 
   if (route.query.create === '1') {
     openCreateDrawer()
@@ -112,6 +127,17 @@ useStoreErrorToast(
     projects.error = null
   },
 )
+watch(orgId, () => {
+  formDrawerVisible.value = false
+  deleteConfirmVisible.value = false
+})
+onOrganizationInvalidated((id) => {
+  if (id === orgId.value || id === editingProject.value?.owner_org_id) {
+    formDrawerVisible.value = false
+    deleteConfirmVisible.value = false
+    editingProject.value = null
+  }
+})
 </script>
 
 <template>
@@ -128,15 +154,16 @@ useStoreErrorToast(
     "
   >
     <template #actions>
-      <NButton secondary :loading="projects.loading" @click="projects.loadProjects">
+      <NButton secondary :loading="projects.loading" @click="projects.loadProjects(orgId)">
         {{ t('common.actions.refresh') }}
       </NButton>
-      <NButton type="primary" @click="openCreateDrawer">
+      <NButton v-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('projects.actions.create') }}
       </NButton>
     </template>
 
     <template #filters>
+      <OrganizationScopeSelect :value="orgId" @update:value="setScope" />
       <ScopeFilterTabs
         :tabs="filterTabs"
         :value="projects.glossaryFilter"
@@ -154,7 +181,7 @@ useStoreErrorToast(
       <NButton v-if="hasActiveFilters" secondary @click="projects.resetFilters">
         {{ t('projects.filters.reset') }}
       </NButton>
-      <NButton v-else type="primary" @click="openCreateDrawer">
+      <NButton v-else-if="canWrite" type="primary" @click="openCreateDrawer">
         {{ t('projects.actions.createFirst') }}
       </NButton>
     </template>
@@ -213,10 +240,22 @@ useStoreErrorToast(
               {{ t('projects.card.updatedAt') }} {{ cardDate(project) }}
             </span>
             <div class="flex items-center gap-2" @click.stop>
-              <NButton text type="primary" class="font-medium" @click="openEditDrawer(project)">
+              <NButton
+                v-if="projects.canEdit(project)"
+                text
+                type="primary"
+                class="font-medium"
+                @click="openEditDrawer(project)"
+              >
                 {{ t('common.actions.edit') }}
               </NButton>
-              <NButton text type="error" class="font-medium" @click="openDeleteConfirm(project)">
+              <NButton
+                v-if="projects.canEdit(project)"
+                text
+                type="error"
+                class="font-medium"
+                @click="openDeleteConfirm(project)"
+              >
                 {{ t('common.actions.delete') }}
               </NButton>
             </div>
@@ -235,7 +274,7 @@ useStoreErrorToast(
 
   <template v-if="isProjectListRoute">
     <!-- 新建/编辑项目抽屉 -->
-    <ProjectFormDrawer v-model:show="formDrawerVisible" :project="editingProject" />
+    <ProjectFormDrawer v-model:show="formDrawerVisible" :project="editingProject" :org-id="orgId" />
 
     <!-- 删除确认弹窗 -->
     <NModal

@@ -12,8 +12,8 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 )
 
 // ExecutionPlanTemplateCreate is the builder for creating a ExecutionPlanTemplate entity.
@@ -47,6 +47,20 @@ func (_c *ExecutionPlanTemplateCreate) SetUpdatedAt(v time.Time) *ExecutionPlanT
 func (_c *ExecutionPlanTemplateCreate) SetNillableUpdatedAt(v *time.Time) *ExecutionPlanTemplateCreate {
 	if v != nil {
 		_c.SetUpdatedAt(*v)
+	}
+	return _c
+}
+
+// SetSchemaVersion sets the "schema_version" field.
+func (_c *ExecutionPlanTemplateCreate) SetSchemaVersion(v int) *ExecutionPlanTemplateCreate {
+	_c.mutation.SetSchemaVersion(v)
+	return _c
+}
+
+// SetNillableSchemaVersion sets the "schema_version" field if the given value is not nil.
+func (_c *ExecutionPlanTemplateCreate) SetNillableSchemaVersion(v *int) *ExecutionPlanTemplateCreate {
+	if v != nil {
+		_c.SetSchemaVersion(*v)
 	}
 	return _c
 }
@@ -128,13 +142,13 @@ func (_c *ExecutionPlanTemplateCreate) SetNillableProfileID(v *int) *ExecutionPl
 }
 
 // SetRubyRetry sets the "ruby_retry" field.
-func (_c *ExecutionPlanTemplateCreate) SetRubyRetry(v schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateCreate {
+func (_c *ExecutionPlanTemplateCreate) SetRubyRetry(v execution.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateCreate {
 	_c.mutation.SetRubyRetry(v)
 	return _c
 }
 
 // SetNillableRubyRetry sets the "ruby_retry" field if the given value is not nil.
-func (_c *ExecutionPlanTemplateCreate) SetNillableRubyRetry(v *schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateCreate {
+func (_c *ExecutionPlanTemplateCreate) SetNillableRubyRetry(v *execution.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateCreate {
 	if v != nil {
 		_c.SetRubyRetry(*v)
 	}
@@ -142,7 +156,7 @@ func (_c *ExecutionPlanTemplateCreate) SetNillableRubyRetry(v *schema.ExecutionP
 }
 
 // SetRounds sets the "rounds" field.
-func (_c *ExecutionPlanTemplateCreate) SetRounds(v []schema.ExecutionRoundConfig) *ExecutionPlanTemplateCreate {
+func (_c *ExecutionPlanTemplateCreate) SetRounds(v []execution.ExecutionRoundConfig) *ExecutionPlanTemplateCreate {
 	_c.mutation.SetRounds(v)
 	return _c
 }
@@ -200,6 +214,10 @@ func (_c *ExecutionPlanTemplateCreate) defaults() {
 		v := executionplantemplate.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.SchemaVersion(); !ok {
+		v := executionplantemplate.DefaultSchemaVersion
+		_c.mutation.SetSchemaVersion(v)
+	}
 	if _, ok := _c.mutation.Description(); !ok {
 		v := executionplantemplate.DefaultDescription
 		_c.mutation.SetDescription(v)
@@ -221,6 +239,14 @@ func (_c *ExecutionPlanTemplateCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "ExecutionPlanTemplate.updated_at"`)}
+	}
+	if _, ok := _c.mutation.SchemaVersion(); !ok {
+		return &ValidationError{Name: "schema_version", err: errors.New(`ent: missing required field "ExecutionPlanTemplate.schema_version"`)}
+	}
+	if v, ok := _c.mutation.SchemaVersion(); ok {
+		if err := executionplantemplate.SchemaVersionValidator(v); err != nil {
+			return &ValidationError{Name: "schema_version", err: fmt.Errorf(`ent: validator failed for field "ExecutionPlanTemplate.schema_version": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "ExecutionPlanTemplate.name"`)}
@@ -285,6 +311,10 @@ func (_c *ExecutionPlanTemplateCreate) createSpec() (*ExecutionPlanTemplate, *sq
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(executionplantemplate.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.SchemaVersion(); ok {
+		_spec.SetField(executionplantemplate.FieldSchemaVersion, field.TypeInt, value)
+		_node.SchemaVersion = value
 	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(executionplantemplate.FieldName, field.TypeString, value)

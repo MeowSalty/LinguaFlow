@@ -4,170 +4,171 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 var (
-	ErrPrunePromptTemplateNotFound     = errors.New("prune prompt template not found")
-	ErrPrunePromptTemplateScopeInvalid = errors.New("prune prompt template scope invalid")
-	ErrPrunePromptTemplateInUse        = errors.New("prune prompt template is referenced by execution plan(s)")
+	ErrPrunePromptTemplateNotFound     = errors.New("prune_prompt_template not found")
+	ErrPrunePromptTemplateScopeInvalid = errors.New("prune_prompt_template scope invalid")
+	ErrPrunePromptTemplateInUse        = errors.New("prune_prompt_template is referenced by execution plan(s)")
 )
 
-// PrunePromptTemplateService 提供术语精简提示词模板的 CRUD 操作。
-type PrunePromptTemplateService struct {
-	client *ent.Client
-}
+// PrunePromptTemplateService manages personal and organization templates.
+type PrunePromptTemplateService struct{ client *ent.Client }
 
-// NewPrunePromptTemplateService 创建 PrunePromptTemplateService 实例。
 func NewPrunePromptTemplateService(client *ent.Client) *PrunePromptTemplateService {
 	return &PrunePromptTemplateService{client: client}
 }
 
-// CreatePrunePromptTemplateInput 创建术语精简提示词模板的输入参数。
 type CreatePrunePromptTemplateInput struct {
 	Name        string
 	Description string
-	Scope       string // user / org
-	OwnerUserID *int
-	OwnerOrgID  *int
+	OrgID       *int
 	Content     string
 }
-
-// UpdatePrunePromptTemplateInput 更新术语精简提示词模板的输入参数。
 type UpdatePrunePromptTemplateInput struct {
 	Name        *string
 	Description *string
 	Content     *string
 }
 
-// ListByUser 列出指定用户的所有术语精简提示词模板（包含内置模板）。
+// ListByUser preserves the existing personal plus builtin list.
 func (s *PrunePromptTemplateService) ListByUser(ctx context.Context, userID int) ([]*ent.PrunePromptTemplate, error) {
-	dbTemplates, err := s.client.PrunePromptTemplate.Query().
-		Where(
-			pruneprompttemplate.ScopeEQ("user"),
-			pruneprompttemplate.OwnerUserIDEQ(userID),
-		).
-		Order(ent.Asc(pruneprompttemplate.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list prune prompt templates: %w", err)
+	if userID <= 0 {
+		return nil, ErrInvalidInput
 	}
-	return append(templates.BuiltinPrunePromptTemplates(), dbTemplates...), nil
+	rows, err := s.client.PrunePromptTemplate.Query().Where(
+		pruneprompttemplate.ScopeEQ(ScopeUser), pruneprompttemplate.OwnerUserIDEQ(userID), pruneprompttemplate.OwnerOrgIDIsNil(),
+	).Order(ent.Asc(pruneprompttemplate.FieldID)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list prune_prompt_template: %w", err)
+	}
+	return append(templates.BuiltinPrunePromptTemplates(), rows...), nil
 }
 
-// ListByOrg 列出指定组织的所有术语精简提示词模板（包含内置模板）。
-func (s *PrunePromptTemplateService) ListByOrg(ctx context.Context, orgID int) ([]*ent.PrunePromptTemplate, error) {
-	dbTemplates, err := s.client.PrunePromptTemplate.Query().
-		Where(
-			pruneprompttemplate.ScopeEQ("org"),
-			pruneprompttemplate.OwnerOrgIDEQ(orgID),
-		).
-		Order(ent.Asc(pruneprompttemplate.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list prune prompt templates: %w", err)
+// ListByOrg returns only the requested organization's templates.
+func (s *PrunePromptTemplateService) ListByOrg(ctx context.Context, actorID, orgID int) ([]*ent.PrunePromptTemplate, error) {
+	if err := requireSharedOrganization(ctx, s.client, actorID, orgID, false); err != nil {
+		return nil, err
 	}
-	return append(templates.BuiltinPrunePromptTemplates(), dbTemplates...), nil
+	return s.client.PrunePromptTemplate.Query().Where(
+		pruneprompttemplate.ScopeEQ(ScopeOrg), pruneprompttemplate.OwnerOrgIDEQ(orgID), pruneprompttemplate.OwnerUserIDIsNil(),
+	).Order(ent.Asc(pruneprompttemplate.FieldID)).All(ctx)
 }
 
-// GetByID 根据 ID 获取术语精简提示词模板（支持内置模板）。
-func (s *PrunePromptTemplateService) GetByID(ctx context.Context, id int) (*ent.PrunePromptTemplate, error) {
+func (s *PrunePromptTemplateService) GetByID(ctx context.Context, actorID, id int) (*ent.PrunePromptTemplate, error) {
+	var row *ent.PrunePromptTemplate
 	if templates.IsBuiltinID(id) {
-		pt := templates.BuiltinPrunePromptTemplate(id)
-		if pt == nil {
+		row = templates.BuiltinPrunePromptTemplate(id)
+		if row == nil {
 			return nil, ErrPrunePromptTemplateNotFound
 		}
-		return pt, nil
-	}
-	pt, err := s.client.PrunePromptTemplate.Get(ctx, id)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrPrunePromptTemplateNotFound
+	} else {
+		var err error
+		row, err = s.client.PrunePromptTemplate.Get(ctx, id)
+		if err != nil {
+			return nil, sharedAccessError(err, ErrPrunePromptTemplateNotFound)
 		}
-		return nil, fmt.Errorf("query prune prompt template: %w", err)
 	}
-	return pt, nil
+	if err := checkSharedAccess(ctx, s.client, actorID, row.Scope, row.OwnerUserID, row.OwnerOrgID, false); err != nil {
+		return nil, sharedAccessError(err, ErrPrunePromptTemplateNotFound)
+	}
+	return row, nil
 }
 
-// Create 创建术语精简提示词模板。
-func (s *PrunePromptTemplateService) Create(ctx context.Context, input CreatePrunePromptTemplateInput) (*ent.PrunePromptTemplate, error) {
-	if input.Scope == "" {
-		input.Scope = "user"
+func (s *PrunePromptTemplateService) Create(ctx context.Context, actorID int, input CreatePrunePromptTemplateInput) (*ent.PrunePromptTemplate, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" || actorID <= 0 {
+		return nil, ErrInvalidInput
 	}
-	if input.Scope != "user" && input.Scope != "org" && input.Scope != "system" {
-		return nil, ErrPrunePromptTemplateScopeInvalid
-	}
-
-	create := s.client.PrunePromptTemplate.Create().
-		SetName(input.Name).
-		SetDescription(input.Description).
-		SetScope(input.Scope).
-		SetContent(input.Content)
-
-	if input.OwnerUserID != nil {
-		create.SetOwnerUserID(*input.OwnerUserID)
-	}
-	if input.OwnerOrgID != nil {
-		create.SetOwnerOrgID(*input.OwnerOrgID)
-	}
-
-	pt, err := create.Save(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("create prune prompt template: %w", err)
-	}
-	return pt, nil
-}
-
-// Update 更新术语精简提示词模板（内置模板不可修改）。
-func (s *PrunePromptTemplateService) Update(ctx context.Context, id int, input UpdatePrunePromptTemplateInput) (*ent.PrunePromptTemplate, error) {
-	if templates.IsBuiltinID(id) {
-		return nil, ErrPrunePromptTemplateNotFound
-	}
-	pt, err := s.GetByID(ctx, id)
+	var row *ent.PrunePromptTemplate
+	err := withSharedMutation(ctx, s.client, input.OrgID, func(client *ent.Client) error {
+		scope, err := sharedCreateScope(ctx, client, actorID, input.OrgID)
+		if err != nil {
+			return err
+		}
+		create := client.PrunePromptTemplate.Create().SetName(name).SetDescription(input.Description).SetScope(scope).SetContent(input.Content)
+		if input.OrgID == nil {
+			create.SetOwnerUserID(actorID)
+		} else {
+			create.SetOwnerOrgID(*input.OrgID)
+		}
+		row, err = create.Save(ctx)
+		if err != nil {
+			return err
+		}
+		return recordSharedAudit(ctx, client, actorID, input.OrgID, "prune_prompt_template", "create", row.ID)
+	})
 	if err != nil {
 		return nil, err
 	}
-	if pt.Scope == "system" {
-		return nil, ErrPrunePromptTemplateNotFound // 系统模板不可修改
-	}
-
-	update := s.client.PrunePromptTemplate.UpdateOneID(id)
-
-	if input.Name != nil {
-		update.SetName(*input.Name)
-	}
-	if input.Description != nil {
-		update.SetDescription(*input.Description)
-	}
-	if input.Content != nil {
-		update.SetContent(*input.Content)
-	}
-
-	updated, err := update.Save(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("update prune prompt template: %w", err)
-	}
-	return updated, nil
+	return row.Unwrap(), nil
 }
 
-// Delete 删除术语精简提示词模板（内置模板不可删除）。
-func (s *PrunePromptTemplateService) Delete(ctx context.Context, id int) error {
-	if templates.IsBuiltinID(id) {
-		return ErrPrunePromptTemplateNotFound
+func (s *PrunePromptTemplateService) Update(ctx context.Context, actorID, id int, input UpdatePrunePromptTemplateInput) (*ent.PrunePromptTemplate, error) {
+	original, err := s.GetByID(ctx, actorID, id)
+	if err != nil {
+		return nil, err
 	}
-	pt, err := s.GetByID(ctx, id)
+	var row *ent.PrunePromptTemplate
+	err = withSharedMutation(ctx, s.client, original.OwnerOrgID, func(client *ent.Client) error {
+		bound := &PrunePromptTemplateService{client: client}
+		current, err := bound.GetByID(ctx, actorID, id)
+		if err != nil {
+			return err
+		}
+		if err := checkSharedAccess(ctx, client, actorID, current.Scope, current.OwnerUserID, current.OwnerOrgID, true); err != nil {
+			return sharedAccessError(err, ErrPrunePromptTemplateNotFound)
+		}
+		update := client.PrunePromptTemplate.UpdateOneID(id)
+		if input.Name != nil {
+			name := strings.TrimSpace(*input.Name)
+			if name == "" {
+				return ErrInvalidInput
+			}
+			update.SetName(name)
+		}
+		if input.Description != nil {
+			update.SetDescription(*input.Description)
+		}
+		if input.Content != nil {
+			update.SetContent(*input.Content)
+		}
+		row, err = update.Save(ctx)
+		if err != nil {
+			return sharedAccessError(err, ErrPrunePromptTemplateNotFound)
+		}
+		return recordSharedAudit(ctx, client, actorID, current.OwnerOrgID, "prune_prompt_template", "update", row.ID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return row.Unwrap(), nil
+}
+
+func (s *PrunePromptTemplateService) Delete(ctx context.Context, actorID, id int) error {
+	original, err := s.GetByID(ctx, actorID, id)
 	if err != nil {
 		return err
 	}
-	if pt.Scope == "system" {
-		return ErrPrunePromptTemplateNotFound // 系统模板不可删除
-	}
+	return withSharedMutation(ctx, s.client, original.OwnerOrgID, func(client *ent.Client) error {
+		bound := &PrunePromptTemplateService{client: client}
+		current, err := bound.GetByID(ctx, actorID, id)
+		if err != nil {
+			return err
+		}
+		if err := checkSharedAccess(ctx, client, actorID, current.Scope, current.OwnerUserID, current.OwnerOrgID, true); err != nil {
+			return sharedAccessError(err, ErrPrunePromptTemplateNotFound)
+		}
 
-	// 术语精简提示词模板当前不被执行计划引用，预留检查逻辑。
-	// 若未来执行计划支持精简轮次，可在此检查引用关系。
-
-	return s.client.PrunePromptTemplate.DeleteOneID(id).Exec(ctx)
+		if err := client.PrunePromptTemplate.DeleteOneID(id).Exec(ctx); err != nil {
+			return sharedAccessError(err, ErrPrunePromptTemplateNotFound)
+		}
+		return recordSharedAudit(ctx, client, actorID, current.OwnerOrgID, "prune_prompt_template", "delete", id)
+	})
 }

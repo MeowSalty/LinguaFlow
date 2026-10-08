@@ -33,6 +33,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  storage: []
   previewTranslation: [segment: Segment]
   previewRevision: [segment: Segment]
   refresh: []
@@ -59,6 +60,10 @@ const {
   saveInlineComment,
   dismissIssue,
   reinstateIssue,
+  hasPendingDrafts,
+  savePendingDrafts,
+  discardPendingDrafts,
+  confirmPendingDrafts,
 } = useSegmentEditing(projectIdRef, activeResourceIdRef)
 
 // ── 文本渲染模式 ──
@@ -89,7 +94,19 @@ watch(
 defineExpose({
   selectedSegmentIds,
   clearSelectedSegments,
+  hasPendingDrafts,
+  savePendingDrafts,
+  discardPendingDrafts,
+  confirmPendingDrafts,
 })
+
+const protectBrowserUnload = (event: BeforeUnloadEvent): void => {
+  if (!hasPendingDrafts()) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+onMounted(() => window.addEventListener('beforeunload', protectBrowserUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', protectBrowserUnload))
 
 // ── 编辑视图路由：query.edit / query.chapter 由页面层写入与恢复 ──
 const exitEditor = (): void => {
@@ -110,9 +127,6 @@ const handleResourceChange = (value: number | null): void => {
   // 标志须在 setActiveResource 之前置位：其回调 resetEpubState 清 epubActiveGroupKey
   // 时就会触发章节同步 watcher
   suppressChapterRouteSync = true
-  workspace.setActiveResource(value)
-  workspace.exitChapter()
-
   const query = { ...route.query }
   if (value) {
     query.edit = String(value)
@@ -178,7 +192,9 @@ const handleCloseSearch = (): void => {
   } else {
     toggleSearch()
   }
-  void nextTick(() => { if (searchReturnFocus?.isConnected) searchReturnFocus.focus() })
+  void nextTick(() => {
+    if (searchReturnFocus?.isConnected) searchReturnFocus.focus()
+  })
 }
 
 const closeAllDrawers = (): void => {
@@ -242,12 +258,15 @@ watch(searchOpen, (open) => {
 const handleGlobalKeyDown = (e: KeyboardEvent): void => {
   if (e.isComposing || e.defaultPrevented) return
   const key = e.key.toLowerCase()
-  const replaceShortcut = (e.ctrlKey && !e.metaKey && key === 'h') || (e.metaKey && e.altKey && key === 'f')
+  const replaceShortcut =
+    (e.ctrlKey && !e.metaKey && key === 'h') || (e.metaKey && e.altKey && key === 'f')
   if (replaceShortcut || ((e.ctrlKey || e.metaKey) && !e.altKey && key === 'f')) {
     if (!workspace.activeResourceId) return
     e.preventDefault()
     handleSearchActivate()
-    void nextTick(() => replaceShortcut ? searchPanelRef.value?.openReplace() : searchPanelRef.value?.focusInput())
+    void nextTick(() =>
+      replaceShortcut ? searchPanelRef.value?.openReplace() : searchPanelRef.value?.focusInput(),
+    )
     return
   }
   if (e.key !== 'Escape' || !anyDrawerVisible.value) return
@@ -393,8 +412,13 @@ const segmentsCountLabel = computed(() => {
 })
 
 // ── 统一搜索替换面板的写入结果 ──
-const handleSearchReplaceApplied = (payload: { projectId: number; resourceId: number; items: Segment[] }): void => {
-  if (payload.projectId !== props.projectId || payload.resourceId !== workspace.activeResourceId) return
+const handleSearchReplaceApplied = (payload: {
+  projectId: number
+  resourceId: number
+  items: Segment[]
+}): void => {
+  if (payload.projectId !== props.projectId || payload.resourceId !== workspace.activeResourceId)
+    return
 
   // 直接合并接口返回的已更新段落，保留当前窗口、游标与滚动位置。
   const host = mainScrollRef.value
@@ -582,7 +606,7 @@ const handleUpdateInlineCommentText = (value: string): void => {
 }
 
 const handleCloseInlineComment = (): void => {
-  inlineCommentVisible.value = null
+  discardPendingDrafts()
 }
 </script>
 
@@ -594,6 +618,9 @@ const handleCloseInlineComment = (): void => {
     <div
       class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5"
     >
+      <NButton size="small" quaternary @click="emit('storage')">{{
+        t('sourceStorage.title')
+      }}</NButton>
       <NButton
         quaternary
         size="small"
@@ -606,7 +633,7 @@ const handleCloseInlineComment = (): void => {
       </NButton>
 
       <NSelect
-        v-model:value="workspace.activeResourceId"
+        :value="workspace.activeResourceId"
         clearable
         size="small"
         class="w-56! shrink-0"
@@ -885,6 +912,5 @@ const handleCloseInlineComment = (): void => {
         class="fixed inset-0 z-40 bg-black/40 pointer-events-none opacity-0 transition-opacity duration-200"
       />
     </Teleport>
-
   </div>
 </template>

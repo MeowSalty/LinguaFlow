@@ -2,17 +2,97 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	entbackend "github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	entschema "github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 )
+
+func TestPostgresTimeConnectionsAndPrecision(t *testing.T) {
+	dsn := os.Getenv("LINGUAFLOW_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("LINGUAFLOW_TEST_POSTGRES_DSN is not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cfg := config.DefaultServerConfig()
+	cfg.Database = config.DatabaseConfig{Driver: config.DatabaseDriverPostgres, DSN: dsn, MaxOpenConns: 3, MaxIdleConns: 3}
+	db, client, err := Open(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	connections := make([]*sql.Conn, 0, 3)
+	defer func() {
+		for _, conn := range connections {
+			_ = conn.Close()
+		}
+	}()
+	for range 3 {
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		connections = append(connections, conn)
+		var zone string
+		if err := conn.QueryRowContext(ctx, "SHOW timezone").Scan(&zone); err != nil || zone != "UTC" {
+			t.Fatalf("pooled connection timezone=%q error=%v", zone, err)
+		}
+	}
+	for _, conn := range connections {
+		if err := conn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	connections = nil
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	// A changed server/session representation must not leak into decoded instants.
+	if _, err := db.ExecContext(ctx, "SET TIME ZONE 'Asia/Kathmandu'"); err != nil {
+		t.Fatal(err)
+	}
+	driver := NewDriver(entsql.OpenDB(dialect.Postgres, db))
+	tx, err := driver.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if err := tx.Exec(ctx, "CREATE TEMP TABLE time_codec_probe (instant timestamptz) ON COMMIT DROP", []any{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	value := time.Date(2026, 9, 29, 18, 1, 2, 123456789, time.FixedZone("offset", -7*60*60))
+	if err := tx.Exec(ctx, "INSERT INTO time_codec_probe (instant) VALUES ($1)", []any{value}, nil); err != nil {
+		t.Fatal(err)
+	}
+	var rows entsql.Rows
+	if err := tx.Query(ctx, "SELECT instant, pg_typeof(instant)::text FROM time_codec_probe WHERE instant = $1", []any{value.UTC()}, &rows); err != nil {
+		t.Fatal(err)
+	}
+	if !rows.Next() {
+		_ = rows.Close()
+		t.Fatal("equal offset time did not match PostgreSQL microsecond storage")
+	}
+	var actual time.Time
+	var pgType string
+	err = rows.Scan(&actual, &pgType)
+	_ = rows.Close()
+	if err != nil || !actual.Equal(value.UTC().Truncate(time.Microsecond)) || actual.Location() != time.UTC || pgType != "timestamp with time zone" {
+		t.Fatalf("PostgreSQL time=%v type=%q error=%v", actual, pgType, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestPostgresMigrationLock(t *testing.T) {
 	dsn := os.Getenv("LINGUAFLOW_TEST_POSTGRES_DSN")
@@ -98,11 +178,20 @@ func TestPostgresIntegration(t *testing.T) {
 	if serverVersion < 160000 {
 		t.Fatalf("PostgreSQL version=%d want 16 or newer", serverVersion)
 	}
+	unlock, err := AcquireMigrationLock(ctx, db, config.DatabaseDriverPostgres)
+	if err != nil {
+		t.Fatalf("acquire migration lock: %v", err)
+	}
 	if err := client.Schema.Create(ctx); err != nil {
+		_ = unlock()
 		t.Fatalf("create schema: %v", err)
 	}
 	if err := client.Schema.Create(ctx); err != nil {
+		_ = unlock()
 		t.Fatalf("create schema a second time: %v", err)
+	}
+	if err := unlock(); err != nil {
+		t.Fatalf("release migration lock: %v", err)
 	}
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())

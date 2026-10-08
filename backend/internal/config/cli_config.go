@@ -1,120 +1,88 @@
 package config
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 	"gopkg.in/yaml.v3"
 )
 
-// ---------------------------------------------------------------------------
-// CLI 新配置结构体
-// ---------------------------------------------------------------------------
-
-// CLIConfigGlossary CLI 端的术语表本体配置。
-// 自举相关的配置分别放在 Profile（内联）和 Execution（独立）中。
 type CLIConfigGlossary struct {
 	Enabled bool   `yaml:"enabled"`
 	Path    string `yaml:"path"`
 	Save    bool   `yaml:"save"`
 }
 
-// CLIConfig 是 CLI 端的完整配置结构。
-// 与旧 Config 结构的区别：
-//   - Backends / PromptTemplates / TranslationProfiles 以 map 存储，execution.rounds 按名称引用
-//   - 不包含 ServerConfig（CLI 不需要 Web 服务器配置）
-//   - Glossary 为全局共享，不嵌入 profile
+// CLIConfig 是翻译文档的输入，绝不是持久化的执行快照。
+// 密钥会在 resolve 之前转移到进程本地注册表中。
 type CLIConfig struct {
-	// Version 配置格式版本号，当前固定为 1。
-	// 未来格式升级时用于自动迁移逻辑。
-	Version    int    `yaml:"version"`
-	SourceLang string `yaml:"source_lang"`
-	TargetLang string `yaml:"target_lang"`
-
+	Kind                     string                                 `yaml:"kind"`
+	Version                  int                                    `yaml:"version"`
+	SourceLang               string                                 `yaml:"source_lang"`
+	TargetLang               string                                 `yaml:"target_lang"`
 	Backends                 map[string]CLIConfigBackend            `yaml:"backends"`
 	PromptTemplates          map[string]CLIConfigPromptTemplate     `yaml:"translation_prompt_templates"`
 	BootstrapPromptTemplates map[string]CLIConfigBootstrapTemplate  `yaml:"bootstrap_prompt_templates"`
 	TranslationProfiles      map[string]CLIConfigTranslationProfile `yaml:"translation_profiles"`
 	Execution                CLIConfigExecution                     `yaml:"execution"`
-
-	// Glossary 全局术语表配置，所有轮次共享。
-	Glossary          CLIConfigGlossary `yaml:"glossary"`
-	TranslationMemory TMConfig          `yaml:"translation_memory"`
-	Plugins           PluginsConfig     `yaml:"plugins"`
-	Output            OutputConfig      `yaml:"output"`
-	Log               LogConfig         `yaml:"log"`
+	Glossary                 CLIConfigGlossary                      `yaml:"glossary"`
+	TranslationMemory        TMConfig                               `yaml:"translation_memory"`
+	Plugins                  PluginsConfig                          `yaml:"plugins"`
+	Output                   OutputConfig                           `yaml:"output"`
+	Log                      LogConfig                              `yaml:"log"`
 }
-
-// CLIConfigBackend 后端配置。
 type CLIConfigBackend struct {
 	Type               string         `yaml:"type"`
 	Enabled            bool           `yaml:"enabled"`
-	RateLimitPerMinute int            `yaml:"rate_limit_per_minute"` // 后端级限流（每分钟）；0 表示不限速
+	RateLimitPerMinute int            `yaml:"rate_limit_per_minute"`
+	Secret             string         `yaml:"secret"`
 	Options            map[string]any `yaml:"options"`
 }
-
-// CLIConfigPromptTemplate 翻译提示词模板配置。
 type CLIConfigPromptTemplate struct {
-	Content string `yaml:"content"` // 翻译提示词内联内容
-	File    string `yaml:"file"`    // 翻译提示词外部文件引用（与 Content 二选一）
+	Content string `yaml:"content"`
+	File    string `yaml:"file"`
 }
-
-// CLIConfigBootstrapTemplate 术语抽取提示词模板配置。
-type CLIConfigBootstrapTemplate struct {
-	Content string `yaml:"content"` // 术语抽取提示词内联内容
-	File    string `yaml:"file"`    // 术语抽取提示词外部文件引用（与 Content 二选一）
-}
-
-// CLIConfigTranslationProfile 翻译策略配置。
-// 注意：不包含 Glossary 字段。术语表使用 CLIConfig 全局的 Glossary 配置。
-// 多轮共享同一份术语表，避免术语表实例化冲突。
+type CLIConfigBootstrapTemplate = CLIConfigPromptTemplate
 type CLIConfigTranslationProfile struct {
-	Protect     ProtectConfig     `yaml:"protect"`
-	Postprocess PostprocessConfig `yaml:"postprocess"`
-	Repair      RepairConfig      `yaml:"repair"`
-	Bootstrap   BootstrapConfig   `yaml:"bootstrap"`
-	Context     ContextConfig     `yaml:"context"`
-	Ruby        RubyConfig        `yaml:"ruby"`
-	QA          QAConfig          `yaml:"qa"`
-
-	File string `yaml:"file"` // 外部文件引用（与内联字段二选一）
+	execution.ProfileSpec `yaml:",inline"`
+	File                  string `yaml:"file"`
 }
-
-// CLIConfigExecution 执行计划配置。
 type CLIConfigExecution struct {
-	// Profile 计划级策略名称，引用 translation_profiles key。
-	// 为空或未命中时回退内置默认策略（见 ResolveExecutionProfile）。
-	Profile string           `yaml:"profile"`
-	Rounds  []CLIConfigRound `yaml:"rounds"`
+	Profile   string              `yaml:"profile"`
+	Rounds    []CLIConfigRound    `yaml:"rounds"`
+	RubyRetry *CLIConfigRubyRetry `yaml:"ruby_retry,omitempty"`
 }
-
-// CLIConfigRound 单轮执行配置。
+type CLIConfigRubyRetry struct {
+	Enabled     bool   `yaml:"enabled"`
+	Backend     string `yaml:"backend"`
+	MaxAttempts int    `yaml:"max_attempts"`
+}
 type CLIConfigRound struct {
-	Mode      string                   `yaml:"mode"`    // "translate" | "extract" | "revise"
-	Backend   string                   `yaml:"backend"` // 引用 backends key
+	Mode      string                   `yaml:"mode"`
+	Backend   string                   `yaml:"backend"`
 	Translate *CLIConfigTranslateRound `yaml:"translate,omitempty"`
 	Extract   *CLIConfigExtractRound   `yaml:"extract,omitempty"`
 	Revise    *CLIConfigReviseRound    `yaml:"revise,omitempty"`
 }
-
-// CLIConfigTranslateRound 翻译轮次配置。
-// 策略引用位于 execution.profile（计划级），轮内不再携带 profile。
 type CLIConfigTranslateRound struct {
-	Prompt           string      `yaml:"prompt"` // 引用 translation_prompt_templates key
+	Prompt           string      `yaml:"prompt"`
 	BatchSize        int         `yaml:"batch_size"`
 	MaxWordsPerBatch int         `yaml:"max_words_per_batch"`
 	Concurrency      int         `yaml:"concurrency"`
 	FallbackShrink   float64     `yaml:"fallback_shrink"`
 	Retry            RetryConfig `yaml:"retry"`
 }
-
-// CLIConfigExtractRound 术语抽取轮次配置。
 type CLIConfigExtractRound struct {
-	Template             string      `yaml:"template"` // 引用 bootstrap_prompt_templates key
+	Template             string      `yaml:"template"`
 	BatchSize            int         `yaml:"batch_size"`
 	MaxWordsPerBatch     int         `yaml:"max_words_per_batch"`
 	Concurrency          int         `yaml:"concurrency"`
@@ -122,510 +90,594 @@ type CLIConfigExtractRound struct {
 	MinSourceLen         int         `yaml:"min_source_len"`
 	Retry                RetryConfig `yaml:"retry"`
 }
-
-// CLIConfigReviseRound LLM 修订轮次配置。
-// 字段语义与 ent/schema.ReviseRoundConfig 对齐；无 FallbackShrink（revise 不接缩批）。
 type CLIConfigReviseRound struct {
 	BatchSize        int         `yaml:"batch_size"`
 	MaxWordsPerBatch int         `yaml:"max_words_per_batch"`
 	Concurrency      int         `yaml:"concurrency"`
-	SegmentScope     string      `yaml:"segment_scope,omitempty"` // "with_issues"（默认）| "with_issue_codes"
-	IssueCodes       []string    `yaml:"issue_codes,omitempty"`   // 仅 with_issue_codes 生效
+	SegmentScope     string      `yaml:"segment_scope,omitempty"`
+	IssueCodes       []string    `yaml:"issue_codes,omitempty"`
 	Retry            RetryConfig `yaml:"retry"`
 }
 
-// ---------------------------------------------------------------------------
-// LoadCLIConfig
-// ---------------------------------------------------------------------------
-
-// LoadCLIConfig 从 path 读取 YAML 配置。
-//   - 若 path 为空，从内置模板生成默认 CLIConfig。
-func LoadCLIConfig(path string) (*CLIConfig, error) {
-	// ── 1. path 为空 → 从内置模板生成 ──
-	if path == "" {
-		return DefaultCLIConfigFromBuiltins(), nil
-	}
-
-	// ── 2. 读取 YAML 文件 ──
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w: %s", ErrConfigNotFound, path)
-		}
-		return nil, fmt.Errorf("config: read %s: %w", path, err)
-	}
-
-	// ── 3. 展开 ${ENV} 占位符 ──
-	expanded := expandEnv(raw)
-
-	// ── 4. 解析为 CLIConfig ──
-	cliCfg := &CLIConfig{}
-	if err := yaml.Unmarshal(expanded, cliCfg); err != nil {
-		return nil, fmt.Errorf("config: parse %s: %w", path, err)
-	}
-
-	// ── 5. 初始化 map ──
-	if cliCfg.Backends == nil {
-		cliCfg.Backends = make(map[string]CLIConfigBackend)
-	}
-	if cliCfg.PromptTemplates == nil {
-		cliCfg.PromptTemplates = make(map[string]CLIConfigPromptTemplate)
-	}
-	if cliCfg.BootstrapPromptTemplates == nil {
-		cliCfg.BootstrapPromptTemplates = make(map[string]CLIConfigBootstrapTemplate)
-	}
-	if cliCfg.TranslationProfiles == nil {
-		cliCfg.TranslationProfiles = make(map[string]CLIConfigTranslationProfile)
-	}
-
-	// ── 6. 解析外部文件引用 ──
-	configDir := filepath.Dir(path)
-	if err := resolveExternalReferences(cliCfg, configDir); err != nil {
-		return nil, fmt.Errorf("config: resolve external references: %w", err)
-	}
-
-	// ── 7. Version 校验 ──
-	switch cliCfg.Version {
-	case 0, 1:
-		// 正常
-	default:
-		return nil, fmt.Errorf("unsupported config version: %d", cliCfg.Version)
-	}
-
-	// ── 8. Rounds 校验 ──
-	if err := validateCLIConfigRounds(cliCfg); err != nil {
-		return nil, err
-	}
-
-	return cliCfg, nil
+type CLIInputs struct {
+	ConfigPath       *string
+	Environment      map[string]string
+	WorkingDirectory string
+	SourceLang       *string
+	TargetLang       *string
+	LogLevel         *string
+	LogFormat        *string
 }
 
-// ---------------------------------------------------------------------------
-// validateCLIConfigRounds — 执行轮次校验
-// ---------------------------------------------------------------------------
+// LoadCLIConfig 是面向命令调用方的便捷边界。路径为空表示按环境选择或使用
+// 内置配置，绝不会进行目录搜索。
+func LoadCLIConfig(path string) (*CLIConfig, error) {
+	in := CLIInputs{Environment: Environment()}
+	if path != "" {
+		in.ConfigPath = &path
+	}
+	return ResolveCLIConfig(in)
+}
 
-// validateCLIConfigRounds 校验 execution.rounds 的合法性。
-//   - 空 Mode 规范化为 "translate"（与 pipeline/engine 层默认行为一致）。
-//   - Mode 必须为 "translate"、"extract" 或 "revise"，拒绝拼写错误等无效值。
-//   - translate/revise 轮次必须包含对应子配置，extract 轮次必须包含 Extract 子配置。
-//   - BatchSize、Concurrency 等字段必须合法，不合法直接报错而非静默 fallback。
-func validateCLIConfigRounds(cfg *CLIConfig) error {
+// ResolveCLIConfig 对内嵌文档与外部文档使用相同的解码器和引用读取器。
+// 默认值在解码前按各类型输入对象逐一注入，以保留显式给出的 false、
+// 零值与空列表。
+func ResolveCLIConfig(in CLIInputs) (*CLIConfig, error) {
+	cwd := in.WorkingDirectory
+	if cwd == "" {
+		var err error
+		cwd, err = os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+	}
+	cwd, err := filepath.Abs(cwd)
+	if err != nil {
+		return nil, err
+	}
+	path, selected := in.Environment["LINGUAFLOW_TRANSLATION_CONFIG"]
+	if in.ConfigPath != nil {
+		path = *in.ConfigPath
+		selected = true
+	}
+	var data []byte
+	base := cwd
+	var readReference func(string) ([]byte, error)
+	if selected {
+		if strings.TrimSpace(path) == "" {
+			return nil, errors.New("translation config path must not be empty")
+		}
+		path = absolutePath(path, cwd)
+		base = filepath.Dir(path)
+		data, err = os.ReadFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%w: translation document does not exist", ErrConfigNotFound)
+		}
+		if err != nil {
+			return nil, errors.New("cannot read translation document")
+		}
+		readReference = func(ref string) ([]byte, error) { return readExternalFileBytes(ref, base) }
+	} else {
+		data = templates.DefaultConfigYAML()
+		readReference = func(ref string) ([]byte, error) {
+			ref = filepath.ToSlash(ref)
+			if !fs.ValidPath(ref) {
+				return nil, errors.New("reference must remain inside the configuration directory")
+			}
+			data, err := fs.ReadFile(templates.EmbeddedFS(), "default/"+ref)
+			if err != nil {
+				return nil, errors.New("cannot read embedded reference")
+			}
+			return data, nil
+		}
+	}
+	root, err := parseTranslationYAML(data)
+	if err != nil {
+		return nil, err
+	}
+	kind, version := mappingValue(root, "kind"), mappingValue(root, "version")
+	if kind == nil || kind.Tag != "!!str" || kind.Value != "translation" {
+		return nil, errors.New("translation document requires kind: translation")
+	}
+	if version == nil || version.Tag != "!!int" || version.Value != "2" {
+		return nil, errors.New("translation document requires version: 2")
+	}
+	if err := expandTranslationScalars(root, "", in.Environment); err != nil {
+		return nil, err
+	}
+	cfg := &CLIConfig{SourceLang: "auto", TargetLang: "zh", Glossary: CLIConfigGlossary{Path: "glossary.csv", Save: true}, Log: LogConfig{Level: "info", Format: "text"}}
+	if err := strictTranslationDecode(root, cfg, "translation"); err != nil {
+		return nil, err
+	}
+	if profile := mappingValue(mappingValue(root, "execution"), "profile"); profile != nil && strings.TrimSpace(profile.Value) == "" {
+		return nil, errors.New("execution.profile must not be empty when specified")
+	}
+	for name, b := range cfg.Backends {
+		node := mappingValue(mappingValue(root, "backends"), name)
+		if mappingValue(node, "enabled") == nil {
+			b.Enabled = true
+		}
+		if b.Options == nil {
+			b.Options = map[string]any{}
+		}
+		if _, exists := b.Options["api_key"]; exists {
+			return nil, fmt.Errorf("backends[%s].options.api_key is unsupported; use secret", name)
+		}
+		cfg.Backends[name] = b
+	}
+	for name, p := range cfg.PromptTemplates {
+		node := mappingValue(mappingValue(root, "translation_prompt_templates"), name)
+		if mappingValue(node, "content") != nil && mappingValue(node, "file") != nil {
+			return nil, fmt.Errorf("translation_prompt_templates[%s]: content and file are mutually exclusive", name)
+		}
+		p, err = resolveCLIPrompt(p, readReference)
+		if err != nil {
+			return nil, fmt.Errorf("translation_prompt_templates[%s]: %w", name, err)
+		}
+		cfg.PromptTemplates[name] = p
+	}
+	for name, p := range cfg.BootstrapPromptTemplates {
+		node := mappingValue(mappingValue(root, "bootstrap_prompt_templates"), name)
+		if mappingValue(node, "content") != nil && mappingValue(node, "file") != nil {
+			return nil, fmt.Errorf("bootstrap_prompt_templates[%s]: content and file are mutually exclusive", name)
+		}
+		p, err = resolveCLIPrompt(p, readReference)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap_prompt_templates[%s]: %w", name, err)
+		}
+		cfg.BootstrapPromptTemplates[name] = p
+	}
+	for name, p := range cfg.TranslationProfiles {
+		node := mappingValue(mappingValue(root, "translation_profiles"), name)
+		if p.File != "" {
+			if len(node.Content) != 2 {
+				return nil, fmt.Errorf("translation_profiles[%s]: file and inline fields are mutually exclusive", name)
+			}
+			raw, err := readReference(p.File)
+			if err != nil {
+				return nil, fmt.Errorf("translation_profiles[%s].file: %w", name, err)
+			}
+			node, err = parseTranslationYAML(raw)
+			if err != nil {
+				return nil, fmt.Errorf("translation_profiles[%s].file: %w", name, err)
+			}
+			if err := expandTranslationScalars(node, "profile", in.Environment); err != nil {
+				return nil, err
+			}
+		}
+		version := mappingValue(node, "schema_version")
+		if version == nil || version.Tag != "!!int" || version.Value != "1" {
+			return nil, fmt.Errorf("translation_profiles[%s] requires schema_version: 1", name)
+		}
+		resolved := execution.DefaultProfile()
+		if err := strictTranslationDecode(node, &resolved, "translation_profiles["+name+"]"); err != nil {
+			return nil, err
+		}
+		cfg.TranslationProfiles[name] = CLIConfigTranslationProfile{ProfileSpec: resolved}
+	}
+	if cfg.TranslationProfiles == nil {
+		cfg.TranslationProfiles = map[string]CLIConfigTranslationProfile{}
+	}
+	roundNodes := mappingValue(mappingValue(root, "execution"), "rounds")
 	for i := range cfg.Execution.Rounds {
 		r := &cfg.Execution.Rounds[i]
-
-		// 空 Mode 规范化为 "translate"
-		if r.Mode == "" {
-			r.Mode = "translate"
-		}
-
+		node := roundNodes.Content[i]
 		switch r.Mode {
 		case "translate":
 			if r.Translate == nil {
-				return fmt.Errorf("execution.rounds[%d]: mode=translate requires translate config", i)
+				return nil, fmt.Errorf("execution.rounds[%d] requires translate settings", i)
+			}
+			defaults := CLIConfigTranslateRound{BatchSize: 1, Concurrency: 4, FallbackShrink: 0.5, Retry: defaultCLIRetry()}
+			if err := strictTranslationDecode(mappingValue(node, "translate"), &defaults, fmt.Sprintf("execution.rounds[%d].translate", i)); err != nil {
+				return nil, err
+			}
+			if ref := mappingValue(mappingValue(node, "translate"), "prompt"); ref != nil && strings.TrimSpace(ref.Value) == "" {
+				return nil, fmt.Errorf("execution.rounds[%d].translate.prompt must not be empty when specified", i)
+			}
+			r.Translate = &defaults
+		case "extract":
+			if r.Extract == nil {
+				return nil, fmt.Errorf("execution.rounds[%d] requires extract settings", i)
+			}
+			defaults := CLIConfigExtractRound{BatchSize: 20, Concurrency: 2, MaxTermsPer1000Chars: 25, MinSourceLen: 2, Retry: defaultCLIRetry()}
+			if err := strictTranslationDecode(mappingValue(node, "extract"), &defaults, fmt.Sprintf("execution.rounds[%d].extract", i)); err != nil {
+				return nil, err
+			}
+			if ref := mappingValue(mappingValue(node, "extract"), "template"); ref != nil && strings.TrimSpace(ref.Value) == "" {
+				return nil, fmt.Errorf("execution.rounds[%d].extract.template must not be empty when specified", i)
+			}
+			r.Extract = &defaults
+		case "revise":
+			if r.Revise == nil {
+				return nil, fmt.Errorf("execution.rounds[%d] requires revise settings", i)
+			}
+			defaults := CLIConfigReviseRound{BatchSize: 10, Concurrency: 1, SegmentScope: "with_issues", Retry: defaultCLIRetry()}
+			if err := strictTranslationDecode(mappingValue(node, "revise"), &defaults, fmt.Sprintf("execution.rounds[%d].revise", i)); err != nil {
+				return nil, err
+			}
+			r.Revise = &defaults
+		default:
+			return nil, fmt.Errorf("execution.rounds[%d]: CLI supports translate, extract and revise modes", i)
+		}
+	}
+	if cfg.Execution.RubyRetry != nil {
+		ruby := CLIConfigRubyRetry{Enabled: true, MaxAttempts: 1}
+		if err := strictTranslationDecode(mappingValue(mappingValue(root, "execution"), "ruby_retry"), &ruby, "execution.ruby_retry"); err != nil {
+			return nil, err
+		}
+		cfg.Execution.RubyRetry = &ruby
+	}
+	if cfg.Glossary.Path != "" {
+		cfg.Glossary.Path = absolutePath(cfg.Glossary.Path, base)
+	}
+	if in.SourceLang != nil {
+		cfg.SourceLang = *in.SourceLang
+	}
+	if in.TargetLang != nil {
+		cfg.TargetLang = *in.TargetLang
+	}
+	if in.LogLevel != nil {
+		cfg.Log.Level = *in.LogLevel
+	}
+	if in.LogFormat != nil {
+		cfg.Log.Format = *in.LogFormat
+	}
+	if err := ValidateCLIConfig(cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func defaultCLIRetry() RetryConfig { return RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true} }
+
+func resolveCLIPrompt(p CLIConfigPromptTemplate, read func(string) ([]byte, error)) (CLIConfigPromptTemplate, error) {
+	if p.Content != "" && p.File != "" {
+		return p, errors.New("content and file are mutually exclusive")
+	}
+	if p.File != "" {
+		data, err := read(p.File)
+		if err != nil {
+			return p, err
+		}
+		p.Content = string(data)
+		p.File = ""
+	}
+	if p.Content == "" {
+		return p, errors.New("template content must not be empty")
+	}
+	return p, nil
+}
+
+func ResolveExecutionProfile(cfg *CLIConfig) (execution.ProfileSpec, error) {
+	p, ok := cfg.TranslationProfiles[cfg.Execution.Profile]
+	if !ok && cfg.Execution.Profile == "" {
+		return execution.DefaultProfile(), nil
+	}
+	if !ok {
+		return execution.ProfileSpec{}, errors.New("execution.profile does not reference an existing profile")
+	}
+	return p.ProfileSpec, nil
+}
+func BuiltinExecutionProfile() execution.ProfileSpec { return execution.DefaultProfile() }
+
+func ValidateCLIConfig(cfg *CLIConfig) error {
+	if cfg.Kind != "translation" || cfg.Version != 2 {
+		return errors.New("translation document requires kind: translation and version: 2")
+	}
+	if strings.TrimSpace(cfg.SourceLang) == "" || strings.TrimSpace(cfg.TargetLang) == "" {
+		return errors.New("source_lang and target_lang must not be empty")
+	}
+	if len(cfg.Execution.Rounds) == 0 {
+		return errors.New("execution.rounds must not be empty")
+	}
+	hasContentRound := false
+	for i, r := range cfg.Execution.Rounds {
+		var batch, words, concurrency int
+		var retry RetryConfig
+		count := 0
+		if r.Translate != nil {
+			count++
+		}
+		if r.Extract != nil {
+			count++
+		}
+		if r.Revise != nil {
+			count++
+		}
+		if count != 1 {
+			return fmt.Errorf("execution.rounds[%d] must contain exactly one matching mode configuration", i)
+		}
+		switch r.Mode {
+		case "translate":
+			hasContentRound = true
+			if r.Translate == nil {
+				return fmt.Errorf("execution.rounds[%d] is missing translate settings", i)
 			}
 			t := r.Translate
-			if t.BatchSize < 0 {
-				return fmt.Errorf("execution.rounds[%d].translate.batch_size must be >= 0", i)
-			}
-			if t.MaxWordsPerBatch < 0 {
-				return fmt.Errorf("execution.rounds[%d].translate.max_words_per_batch must be >= 0", i)
-			}
-			if t.BatchSize <= 0 && t.MaxWordsPerBatch <= 0 {
-				return fmt.Errorf("execution.rounds[%d].translate.batch_size and max_words_per_batch cannot both be 0", i)
-			}
-			if t.Concurrency < 1 {
-				return fmt.Errorf("execution.rounds[%d].translate.concurrency must be >= 1", i)
-			}
+			batch, words, concurrency, retry = t.BatchSize, t.MaxWordsPerBatch, t.Concurrency, t.Retry
 			if t.FallbackShrink <= 0 || t.FallbackShrink > 1 {
-				return fmt.Errorf("execution.rounds[%d].translate.fallback_shrink must be in (0, 1]", i)
+				return fmt.Errorf("execution.rounds[%d] fallback_shrink must be in (0,1]", i)
 			}
 		case "extract":
 			if r.Extract == nil {
-				return fmt.Errorf("execution.rounds[%d]: mode=extract requires extract config", i)
+				return fmt.Errorf("execution.rounds[%d] is missing extract settings", i)
 			}
-			e := r.Extract
-			if e.BatchSize < 0 {
-				return fmt.Errorf("execution.rounds[%d].extract.batch_size must be >= 0", i)
-			}
-			if e.MaxWordsPerBatch < 0 {
-				return fmt.Errorf("execution.rounds[%d].extract.max_words_per_batch must be >= 0", i)
-			}
-			if e.Concurrency < 1 {
-				return fmt.Errorf("execution.rounds[%d].extract.concurrency must be >= 1", i)
-			}
+			t := r.Extract
+			batch, words, concurrency, retry = t.BatchSize, t.MaxWordsPerBatch, t.Concurrency, t.Retry
 		case "revise":
+			hasContentRound = true
 			if r.Revise == nil {
-				return fmt.Errorf("execution.rounds[%d]: mode=revise requires revise config", i)
+				return fmt.Errorf("execution.rounds[%d] is missing revise settings", i)
 			}
-			v := r.Revise
-			if v.BatchSize < 0 {
-				return fmt.Errorf("execution.rounds[%d].revise.batch_size must be >= 0", i)
-			}
-			if v.MaxWordsPerBatch < 0 {
-				return fmt.Errorf("execution.rounds[%d].revise.max_words_per_batch must be >= 0", i)
-			}
-			if v.BatchSize <= 0 && v.MaxWordsPerBatch <= 0 {
-				return fmt.Errorf("execution.rounds[%d].revise.batch_size and max_words_per_batch cannot both be 0", i)
-			}
-			if v.Concurrency < 1 {
-				return fmt.Errorf("execution.rounds[%d].revise.concurrency must be >= 1", i)
-			}
-			switch v.SegmentScope {
-			case "", "with_issues", "with_issue_codes":
-				// 空 = with_issues（默认）
-			default:
-				return fmt.Errorf("execution.rounds[%d].revise.segment_scope must be \"with_issues\" or \"with_issue_codes\"", i)
-			}
-			if v.SegmentScope == "with_issue_codes" && len(v.IssueCodes) == 0 {
-				return fmt.Errorf("execution.rounds[%d].revise.issue_codes must contain at least one code when segment_scope is \"with_issue_codes\"", i)
-			}
+			t := r.Revise
+			batch, words, concurrency, retry = t.BatchSize, t.MaxWordsPerBatch, t.Concurrency, t.Retry
 		default:
-			return fmt.Errorf("execution.rounds[%d]: invalid mode %q, must be \"translate\", \"extract\" or \"revise\"", i, r.Mode)
+			return fmt.Errorf("execution.rounds[%d] uses an unsupported CLI mode", i)
 		}
+		if err := execution.ValidateBatchLimits(r.Mode, batch, words); err != nil {
+			return fmt.Errorf("execution.rounds[%d].%s.%w", i, r.Mode, err)
+		}
+		if concurrency < 1 || retry.MaxAttempts < 0 || retry.BackoffMs < 0 {
+			return fmt.Errorf("execution.rounds[%d] has invalid concurrency or retry settings", i)
+		}
+		if _, ok := cfg.Backends[r.Backend]; !ok {
+			return fmt.Errorf("execution.rounds[%d] references an unknown backend", i)
+		}
+	}
+	if !hasContentRound {
+		return errors.New("execution.rounds must include a translate or revise round")
+	}
+	if cfg.TranslationMemory.Enabled || cfg.TranslationMemory.Driver != "" || cfg.TranslationMemory.DSN != "" {
+		return errors.New("translation_memory settings are not supported in CLI mode")
+	}
+	if cfg.Plugins.Enabled || len(cfg.Plugins.Scripts) > 0 {
+		return errors.New("plugins settings are not supported in CLI mode")
+	}
+	if cfg.Output.Mode != "" || cfg.Output.PreserveExtension || cfg.Output.Incremental {
+		return errors.New("output settings are not supported in CLI mode; use --output")
+	}
+	for name, p := range cfg.TranslationProfiles {
+		if err := execution.ValidateProfile(p.ProfileSpec); err != nil {
+			return fmt.Errorf("translation_profiles[%s]: %w", name, err)
+		}
+		q := p.QA
+		defaultQA := execution.DefaultProfile().QA
+		if q.Enabled || q.AutoReject || len(q.Checks) > 0 ||
+			(q.LengthMethod != "" && q.LengthMethod != defaultQA.LengthMethod) ||
+			(q.LengthRatioMin != 0 && q.LengthRatioMin != defaultQA.LengthRatioMin) ||
+			(q.LengthRatioMax != 0 && q.LengthRatioMax != defaultQA.LengthRatioMax) {
+			return fmt.Errorf("translation_profiles[%s].qa is not supported in CLI mode", name)
+		}
+	}
+	for name, b := range cfg.Backends {
+		if _, ok := b.Options["api_key"]; ok {
+			return fmt.Errorf("backends[%s].options.api_key is unsupported; use secret", name)
+		}
+		if b.Type != "openai" && b.Type != "anthropic" && b.Type != "google" {
+			return fmt.Errorf("backends[%s].type is unsupported", name)
+		}
+		if b.RateLimitPerMinute < 0 {
+			return fmt.Errorf("backends[%s].rate_limit_per_minute must not be negative", name)
+		}
+		if _, err := execution.ResolveBackendOptions(b.Type, b.Options); err != nil {
+			return fmt.Errorf("backends[%s].options: %w", name, err)
+		}
+	}
+	if cfg.Log.Level != "debug" && cfg.Log.Level != "info" && cfg.Log.Level != "warn" && cfg.Log.Level != "error" {
+		return errors.New("log.level must be debug, info, warn or error")
+	}
+	if cfg.Log.Format != "text" && cfg.Log.Format != "json" {
+		return errors.New("log.format must be text or json")
 	}
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// execution.profile 解析
-// ---------------------------------------------------------------------------
-
-// ResolveExecutionProfile 解析执行计划的计划级策略配置。
-//   - execution.profile 非空且命中 translation_profiles：返回对应策略；
-//   - 为空或未命中（含拼写错误）：回退内置默认策略，保证 CLI 始终有可用策略。
-func ResolveExecutionProfile(cliCfg *CLIConfig) CLIConfigTranslationProfile {
-	if p, ok := cliCfg.TranslationProfiles[cliCfg.Execution.Profile]; ok {
-		return p
+func parseTranslationYAML(data []byte) (*yaml.Node, error) {
+	var doc, extra yaml.Node
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&doc); err != nil {
+		return nil, errors.New("invalid YAML document")
 	}
-	return BuiltinExecutionProfile()
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, errors.New("exactly one YAML document is required")
+	}
+	if len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil, errors.New("YAML document must be an object")
+	}
+	if err := validateTranslationTree(doc.Content[0], "document"); err != nil {
+		return nil, err
+	}
+	return doc.Content[0], nil
 }
-
-// BuiltinExecutionProfile 返回内置默认策略的 CLI 表示。
-// 数据源为 templates 包嵌入的 profiles/default.yaml（与 Web 端内置策略同源）。
-func BuiltinExecutionProfile() CLIConfigTranslationProfile {
-	c := templates.BuiltinExecutionProfiles()[0].Config
-	return CLIConfigTranslationProfile{
-		Protect: ProtectConfig{
-			Enabled: c.Protect.Enabled,
-			Rules:   append([]string(nil), c.Protect.Rules...),
-		},
-		Postprocess: PostprocessConfig{
-			Enabled:    c.Postprocess.Enabled,
-			TrimSpaces: c.Postprocess.TrimSpaces,
-		},
-		Repair: RepairConfig{
-			Enabled:              c.Repair.Enabled,
-			JSONStructural:       c.Repair.JSONStructural,
-			SchemaAliases:        c.Repair.SchemaAliases,
-			PlaceholderNormalize: c.Repair.PlaceholderNormalize,
-			PromptUpgrade:        c.Repair.PromptUpgrade,
-		},
-		Bootstrap: BootstrapConfig{
-			Enabled:                c.Glossary.Bootstrap.Enabled,
-			MaxTermsPer1000Chars:   c.Glossary.Bootstrap.MaxTermsPer1000Chars,
-			MinSourceLen:           c.Glossary.Bootstrap.MinSourceLen,
-			InlineConflictStrategy: c.Glossary.Bootstrap.InlineConflictStrategy,
-		},
-		Context: ContextConfig{
-			Enabled:  c.Context.Enabled,
-			Before:   c.Context.Before,
-			After:    c.Context.After,
-			MaxChars: c.Context.MaxChars,
-		},
-		Ruby: RubyConfig{
-			Enabled:       c.Ruby.Enabled,
-			PreserveKinds: append([]string(nil), c.Ruby.PreserveKinds...),
-		},
-		QA: QAConfig{
-			Enabled:        c.QA.Enabled,
-			AutoReject:     c.QA.AutoReject,
-			Checks:         append([]string(nil), c.QA.Checks...),
-			LengthMethod:   c.QA.LengthMethod,
-			LengthRatioMin: c.QA.LengthRatioMin,
-			LengthRatioMax: c.QA.LengthRatioMax,
-		},
+func validateTranslationTree(node *yaml.Node, path string) error {
+	if node.Kind == yaml.AliasNode || node.Tag == "!!null" {
+		return fmt.Errorf("%s: aliases and null are not supported", path)
 	}
+	if node.Kind == yaml.MappingNode {
+		seen := map[string]bool{}
+		for i := 0; i < len(node.Content); i += 2 {
+			key := node.Content[i]
+			if key.Tag != "!!str" {
+				return fmt.Errorf("%s: keys must be strings", path)
+			}
+			if seen[key.Value] {
+				return fmt.Errorf("%s: duplicate key %s", path, key.Value)
+			}
+			seen[key.Value] = true
+			if err := validateTranslationTree(node.Content[i+1], path+"."+key.Value); err != nil {
+				return err
+			}
+		}
+	} else if node.Kind == yaml.SequenceNode {
+		for i, child := range node.Content {
+			if err := validateTranslationTree(child, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
-
-// ---------------------------------------------------------------------------
-// resolveExternalReferences — 外部文件引用解析
-// ---------------------------------------------------------------------------
-
-// resolveExternalReferences 解析 prompt_templates 和 translation_profiles 中的 file 引用。
-//   - content 优先级高于 file；两者都为空时保留原样（使用内置默认值）。
-//   - file 路径必须是相对路径，禁止绝对路径。
-//   - 使用 filepath.Clean + 前缀校验，防止 ../ 路径遍历。
-//   - 解析后的路径必须在 configDir 或其子目录内。
-func resolveExternalReferences(cliCfg *CLIConfig, configDir string) error {
-	absConfigDir, err := filepath.Abs(configDir)
-	if err != nil {
-		return fmt.Errorf("resolve config dir: %w", err)
-	}
-
-	// ── translation_prompt_templates ──
-	for name, pt := range cliCfg.PromptTemplates {
-		if pt.Content == "" && pt.File != "" {
-			content, err := readExternalFile(pt.File, absConfigDir)
-			if err != nil {
-				return fmt.Errorf("translation_prompt_templates[%q].file: %w", name, err)
+func expandTranslationScalars(node *yaml.Node, path string, env map[string]string) error {
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i < len(node.Content); i += 2 {
+			key := node.Content[i].Value
+			next := path + "." + key
+			if key == "content" && (strings.HasPrefix(path, ".translation_prompt_templates.") || strings.HasPrefix(path, ".bootstrap_prompt_templates.")) {
+				continue
 			}
-			pt.Content = content
-			pt.File = ""
-		}
-		cliCfg.PromptTemplates[name] = pt
-	}
-
-	// ── bootstrap_prompt_templates ──
-	for name, bt := range cliCfg.BootstrapPromptTemplates {
-		if bt.Content == "" && bt.File != "" {
-			content, err := readExternalFile(bt.File, absConfigDir)
-			if err != nil {
-				return fmt.Errorf("bootstrap_prompt_templates[%q].file: %w", name, err)
+			if err := expandTranslationScalars(node.Content[i+1], next, env); err != nil {
+				return err
 			}
-			bt.Content = content
-			bt.File = ""
 		}
-		cliCfg.BootstrapPromptTemplates[name] = bt
+		return nil
 	}
-
-	// ── translation_profiles ──
-	for name, tp := range cliCfg.TranslationProfiles {
-		if tp.File == "" {
-			continue
+	if node.Kind == yaml.SequenceNode {
+		for _, child := range node.Content {
+			if err := expandTranslationScalars(child, path, env); err != nil {
+				return err
+			}
 		}
-		// 如果已有内联配置（protect/postprocess/repair 任一非零值），忽略 file
-		if hasInlineProfileConfig(tp) {
-			tp.File = ""
-			cliCfg.TranslationProfiles[name] = tp
-			continue
-		}
-		// 读取外部文件并解析为 profile 配置
-		raw, err := readExternalFileBytes(tp.File, absConfigDir)
+		return nil
+	}
+	if node.Tag == "!!str" {
+		value, err := ExpandReferences(node.Value, env)
 		if err != nil {
-			return fmt.Errorf("translation_profiles[%q].file: %w", name, err)
+			return fmt.Errorf("%s: %w", strings.TrimPrefix(path, "."), err)
 		}
-		var extProfile CLIConfigTranslationProfile
-		if err := yaml.Unmarshal(raw, &extProfile); err != nil {
-			return fmt.Errorf("translation_profiles[%q].file parse: %w", name, err)
-		}
-		extProfile.File = "" // 已解析，清除 file 引用
-		cliCfg.TranslationProfiles[name] = extProfile
+		node.Value = value
 	}
-
+	return nil
+}
+func mappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+func strictTranslationDecode(node *yaml.Node, dst any, path string) error {
+	if node == nil {
+		return fmt.Errorf("%s is required", path)
+	}
+	if err := validateTranslationType(node, reflect.TypeOf(dst).Elem(), path); err != nil {
+		return err
+	}
+	if err := node.Decode(dst); err != nil {
+		return fmt.Errorf("%s has an invalid value", path)
+	}
+	return nil
+}
+func yamlStructFields(t reflect.Type) map[string]reflect.Type {
+	fields := map[string]reflect.Type{}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.PkgPath != "" {
+			continue
+		}
+		tag := f.Tag.Get("yaml")
+		if tag == "-" {
+			continue
+		}
+		parts := strings.Split(tag, ",")
+		if len(parts) > 1 && parts[1] == "inline" {
+			for k, v := range yamlStructFields(f.Type) {
+				fields[k] = v
+			}
+			continue
+		}
+		name := parts[0]
+		if name == "" {
+			name = strings.ToLower(f.Name)
+		}
+		fields[name] = f.Type
+	}
+	return fields
+}
+func validateTranslationType(node *yaml.Node, t reflect.Type, path string) error {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		if node.Kind != yaml.MappingNode {
+			return fmt.Errorf("%s must be an object", path)
+		}
+		fields := yamlStructFields(t)
+		for i := 0; i < len(node.Content); i += 2 {
+			key := node.Content[i].Value
+			field, ok := fields[key]
+			if !ok {
+				return fmt.Errorf("%s: unknown field %s", path, key)
+			}
+			if err := validateTranslationType(node.Content[i+1], field, path+"."+key); err != nil {
+				return err
+			}
+		}
+	case reflect.Map:
+		if node.Kind != yaml.MappingNode {
+			return fmt.Errorf("%s must be an object", path)
+		}
+		for i := 0; i < len(node.Content); i += 2 {
+			if err := validateTranslationType(node.Content[i+1], t.Elem(), path+"."+node.Content[i].Value); err != nil {
+				return err
+			}
+		}
+	case reflect.Slice:
+		if node.Kind != yaml.SequenceNode {
+			return fmt.Errorf("%s must be an array", path)
+		}
+		for i, child := range node.Content {
+			if err := validateTranslationType(child, t.Elem(), fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	case reflect.String:
+		if node.Kind != yaml.ScalarNode || node.Tag != "!!str" {
+			return fmt.Errorf("%s must be a string", path)
+		}
+	case reflect.Bool:
+		if node.Tag != "!!bool" || (node.Value != "true" && node.Value != "false") {
+			return fmt.Errorf("%s must be true or false", path)
+		}
+	case reflect.Int, reflect.Int64:
+		if node.Tag != "!!int" {
+			return fmt.Errorf("%s must be an integer", path)
+		}
+	case reflect.Float32, reflect.Float64:
+		if node.Tag != "!!float" && node.Tag != "!!int" {
+			return fmt.Errorf("%s must be a number", path)
+		}
+	case reflect.Interface: // Provider 选项在执行解析阶段有各自的显式校验。
+	default:
+		return fmt.Errorf("%s has an unsupported field type", path)
+	}
 	return nil
 }
 
-// hasInlineProfileConfig 检查翻译策略是否有内联配置。
-func hasInlineProfileConfig(tp CLIConfigTranslationProfile) bool {
-	return len(tp.Protect.Rules) > 0 ||
-		tp.Postprocess.TrimSpaces ||
-		tp.Repair.Enabled
-}
-
-// readExternalFile 读取外部文件内容并返回字符串。
-// relPath 必须是相对路径，解析后必须在 configDir 内。
-func readExternalFile(relPath, configDir string) (string, error) {
-	data, err := readExternalFileBytes(relPath, configDir)
+// readExternalFileBytes 在检查路径包含关系之前先解析符号链接。
+func readExternalFileBytes(ref, base string) ([]byte, error) {
+	if filepath.IsAbs(ref) {
+		return nil, errors.New("absolute references are not allowed")
+	}
+	root, err := filepath.EvalSymlinks(base)
 	if err != nil {
-		return "", err
+		return nil, errors.New("cannot resolve configuration directory")
 	}
-	return string(data), nil
-}
-
-// readExternalFileBytes 读取外部文件内容并返回字节切片。
-// relPath 必须是相对路径，解析后必须在 configDir 内。
-func readExternalFileBytes(relPath, configDir string) ([]byte, error) {
-	// ── 安全检查：禁止绝对路径 ──
-	if filepath.IsAbs(relPath) {
-		return nil, fmt.Errorf("禁止绝对路径: %s", relPath)
-	}
-
-	// ── 解析并清理路径 ──
-	joined := filepath.Join(configDir, relPath)
-	absPath, err := filepath.Abs(joined)
+	path, err := filepath.EvalSymlinks(filepath.Join(root, ref))
 	if err != nil {
-		return nil, fmt.Errorf("解析路径：%w", err)
+		return nil, errors.New("cannot read referenced file")
 	}
-
-	// ── 安全检查：防止路径遍历 ──
-	cleanPath := filepath.Clean(absPath)
-	if !strings.HasPrefix(cleanPath, filepath.Clean(configDir)+string(filepath.Separator)) &&
-		cleanPath != filepath.Clean(configDir) {
-		return nil, fmt.Errorf("路径遍历禁止: %s 解析为 %s，不在配置目录 %s 内",
-			relPath, cleanPath, configDir)
+	relative, err := filepath.Rel(root, path)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return nil, errors.New("reference escapes the configuration directory")
 	}
-
-	// ── 读取文件 ──
-	data, err := os.ReadFile(cleanPath)
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("读取文件 %s: %w", cleanPath, err)
+		return nil, errors.New("cannot read referenced file")
 	}
 	return data, nil
-}
-
-// ---------------------------------------------------------------------------
-// DefaultCLIConfigFromBuiltins — 从内置模板生成默认 CLIConfig
-// ---------------------------------------------------------------------------
-
-// DefaultCLIConfigFromBuiltins 返回默认 CLIConfig。
-// 从内置带注释 YAML 模板解析，与 init 输出共用同一数据源。
-// file 引用指向嵌入 FS 中的模板文件，由 resolveEmbeddedReferences 解析。
-func DefaultCLIConfigFromBuiltins() *CLIConfig {
-	cliCfg := &CLIConfig{}
-	if err := yaml.Unmarshal(templates.DefaultConfigYAML(), cliCfg); err != nil {
-		// 模板损坏时回退到硬编码默认值
-		return defaultCLIConfig()
-	}
-
-	// 初始化 map
-	if cliCfg.Backends == nil {
-		cliCfg.Backends = make(map[string]CLIConfigBackend)
-	}
-	if cliCfg.PromptTemplates == nil {
-		cliCfg.PromptTemplates = make(map[string]CLIConfigPromptTemplate)
-	}
-	if cliCfg.BootstrapPromptTemplates == nil {
-		cliCfg.BootstrapPromptTemplates = make(map[string]CLIConfigBootstrapTemplate)
-	}
-	if cliCfg.TranslationProfiles == nil {
-		cliCfg.TranslationProfiles = make(map[string]CLIConfigTranslationProfile)
-	}
-
-	// 从嵌入 FS 解析 file 引用
-	if err := resolveEmbeddedReferences(cliCfg); err != nil {
-		return defaultCLIConfig()
-	}
-
-	return cliCfg
-}
-
-// resolveEmbeddedReferences 从嵌入 FS 解析 prompt_templates 和
-// translation_profiles 中的 file 引用。
-// 与 resolveExternalReferences 功能相同，但数据源是嵌入 FS 而非用户文件系统。
-func resolveEmbeddedReferences(cliCfg *CLIConfig) error {
-	fsys := templates.EmbeddedFS()
-
-	// ── translation_prompt_templates ──
-	for name, pt := range cliCfg.PromptTemplates {
-		if pt.Content == "" && pt.File != "" {
-			data, err := fs.ReadFile(fsys, "default/"+pt.File)
-			if err != nil {
-				return fmt.Errorf("embedded translation_prompt_templates[%q].file %q: %w", name, pt.File, err)
-			}
-			pt.Content = string(data)
-			pt.File = ""
-		}
-		cliCfg.PromptTemplates[name] = pt
-	}
-
-	// ── bootstrap_prompt_templates ──
-	for name, bt := range cliCfg.BootstrapPromptTemplates {
-		if bt.Content == "" && bt.File != "" {
-			data, err := fs.ReadFile(fsys, "default/"+bt.File)
-			if err != nil {
-				return fmt.Errorf("embedded bootstrap_prompt_templates[%q].file %q: %w", name, bt.File, err)
-			}
-			bt.Content = string(data)
-			bt.File = ""
-		}
-		cliCfg.BootstrapPromptTemplates[name] = bt
-	}
-
-	// ── translation_profiles ──
-	for name, tp := range cliCfg.TranslationProfiles {
-		if tp.File == "" {
-			continue
-		}
-		if hasInlineProfileConfig(tp) {
-			tp.File = ""
-			cliCfg.TranslationProfiles[name] = tp
-			continue
-		}
-		data, err := fs.ReadFile(fsys, "default/"+tp.File)
-		if err != nil {
-			return fmt.Errorf("embedded translation_profiles[%q].file %q: %w", name, tp.File, err)
-		}
-		var extProfile CLIConfigTranslationProfile
-		if err := yaml.Unmarshal(data, &extProfile); err != nil {
-			return fmt.Errorf("embedded translation_profiles[%q].file parse: %w", name, err)
-		}
-		extProfile.File = ""
-		cliCfg.TranslationProfiles[name] = extProfile
-	}
-
-	return nil
-}
-
-// defaultCLIConfig 返回一个硬编码的最小化默认 CLIConfig。
-// 当内置模板不可用时使用。
-func defaultCLIConfig() *CLIConfig {
-	return &CLIConfig{
-		Version:    1,
-		SourceLang: "auto",
-		TargetLang: "zh",
-		Backends: map[string]CLIConfigBackend{
-			"openai-default": {
-				Type:    "openai",
-				Enabled: true,
-				Options: map[string]any{
-					"api_key":         "${OPENAI_API_KEY}",
-					"base_url":        "https://api.openai.com/v1",
-					"model":           "gpt-4o-mini",
-					"temperature":     0.2,
-					"max_tokens":      0,
-					"timeout":         "60s",
-					"response_format": "json_schema",
-				},
-			},
-		},
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
-			"default": {}, // 空 content，使用内置默认值
-		},
-		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
-			"default": {}, // 空 content，使用内置默认值
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{
-			"default": {
-				Protect:     ProtectConfig{Enabled: true, Rules: []string{"code", "link", "placeholder", "xml"}},
-				Postprocess: PostprocessConfig{Enabled: true, TrimSpaces: true},
-				Repair: RepairConfig{
-					Enabled:              true,
-					JSONStructural:       true,
-					SchemaAliases:        true,
-					PlaceholderNormalize: true,
-					PromptUpgrade:        true,
-				},
-				Bootstrap: BootstrapConfig{
-					MaxTermsPer1000Chars:   3.0,
-					MinSourceLen:           2,
-					InlineConflictStrategy: "rewrite-local",
-				},
-				QA: QAConfig{Enabled: false},
-			},
-		},
-		Execution: CLIConfigExecution{
-			// 计划级策略引用：回退配置无内置模板可用，指向下方硬编码的 "default"。
-			Profile: "default",
-			Rounds: []CLIConfigRound{{
-				Mode:    "translate",
-				Backend: "openai-default",
-				Translate: &CLIConfigTranslateRound{
-					Prompt:         "default",
-					BatchSize:      1,
-					Concurrency:    4,
-					FallbackShrink: 0.5,
-					Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
-				},
-			}},
-		},
-		Glossary: CLIConfigGlossary{
-			Enabled: false,
-			Path:    "./glossary.csv",
-			Save:    true,
-		},
-		TranslationMemory: TMConfig{Enabled: false, Driver: "sqlite", DSN: "./.linguaflow/tm.db"},
-		Plugins:           PluginsConfig{Enabled: false},
-		Output:            OutputConfig{Mode: "overwrite", PreserveExtension: true},
-		Log:               LogConfig{Level: "info", Format: "text"},
-	}
 }

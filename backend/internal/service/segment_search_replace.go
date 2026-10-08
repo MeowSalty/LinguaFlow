@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service/segmatch"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // 搜索替换跳过原因。与 OpenAPI SearchReplaceSkippedItemReason 对齐。
@@ -232,6 +233,10 @@ func (s *SegmentService) ApplySearchReplace(ctx context.Context, actorUserID, pr
 	if err != nil {
 		return nil, fmt.Errorf("search-replace: begin transaction: %w", err)
 	}
+	defer tx.Rollback()
+	if err := AdvanceTranslationGeneration(ctx, tx.Client(), resourceID, res.SourceGeneration); err != nil {
+		return nil, err
+	}
 
 	// 候选集：segment_ids 非空则限定，否则资源全部段。apply 不应用 status/quality 过滤
 	//（这些仅服务预览展示；应用范围由 segment_ids 或全部段决定）。
@@ -323,6 +328,7 @@ func (s *SegmentService) ApplySearchReplace(ctx context.Context, actorUserID, pr
 			SetSegmentID(seg.ID).
 			SetResourceID(resourceID).
 			SetOperationID(operationID).
+			SetSourceGeneration(res.SourceGeneration).
 			SetKind(segmentrevision.KindReplace).
 			SetNillableBeforeTarget(seg.TargetText).
 			SetNillableAfterTarget(&newTargetCopy).
@@ -369,7 +375,8 @@ func (s *SegmentService) ApplySearchReplace(ctx context.Context, actorUserID, pr
 // 拒绝，用户就会被永久锁在当前状态里出不来。历史里的非法译文由导出预检与审校界面
 // 的 xml_tag_mismatch 负责暴露。
 func (s *SegmentService) UndoSearchReplace(ctx context.Context, actorUserID, projectID, resourceID int, operationID string) (*SearchReplaceUndoResult, error) {
-	if _, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, true); err != nil {
+	res, err := s.requireResourceAccess(ctx, actorUserID, projectID, resourceID, true)
+	if err != nil {
 		return nil, err
 	}
 
@@ -384,6 +391,11 @@ func (s *SegmentService) UndoSearchReplace(ctx context.Context, actorUserID, pro
 	if len(revs) == 0 {
 		return nil, ErrRevisionNotFound
 	}
+	for _, rev := range revs {
+		if rev.SourceGeneration != res.SourceGeneration {
+			return nil, ErrSourceRevisionConflict
+		}
+	}
 
 	segIDs := make([]int, 0, len(revs))
 	for _, rev := range revs {
@@ -393,6 +405,10 @@ func (s *SegmentService) UndoSearchReplace(ctx context.Context, actorUserID, pro
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("undo: begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	if err := AdvanceTranslationGeneration(ctx, tx.Client(), resourceID, res.SourceGeneration); err != nil {
+		return nil, err
 	}
 
 	segs, err := tx.Segment.Query().Where(segment.IDIn(segIDs...)).WithReviewedBy().All(ctx)
@@ -449,6 +465,7 @@ func (s *SegmentService) UndoSearchReplace(ctx context.Context, actorUserID, pro
 			SetSegmentID(seg.ID).
 			SetResourceID(resourceID).
 			SetOperationID(undoOperationID).
+			SetSourceGeneration(res.SourceGeneration).
 			SetKind(segmentrevision.KindReverse).
 			SetNillableBeforeTarget(seg.TargetText).
 			SetNillableAfterTarget(rev.BeforeTarget).
@@ -494,7 +511,7 @@ func (s *SegmentService) pruneResourceRevisions(ctx context.Context, resourceID 
 	if s.revisionRetention <= 0 {
 		return
 	}
-	cutoff := time.Now().Add(-s.revisionRetention)
+	cutoff := timeutil.NowUTC().Add(-s.revisionRetention)
 	if _, err := s.client.SegmentRevision.Delete().
 		Where(segmentrevision.ResourceIDEQ(resourceID), segmentrevision.CreatedAtLT(cutoff)).
 		Exec(ctx); err != nil {
@@ -541,8 +558,8 @@ func ptrIntEq(a, b *int) bool {
 	return *a == *b
 }
 
-// equalIssues 精确比较两批质量问题是否一致。按 qa.Fingerprint 建索引后逐一深度比较全字段
-// （含 disposition/decided_by/decided_at/note/span），因此用户在替换后对某 issue 改了裁决
+// equalIssues 精确比较两批质量问题是否一致。按 qa.Fingerprint 建索引后逐一比较全字段；
+// decided_at 按时间点比较，其余字段深度比较。因此用户在替换后对某 issue 改了裁决
 // 会被识别为发散，撤销会跳过该段而非覆盖裁决。不使用 JSON 字节比较——ent 编码往返可能不稳定。
 // 假设同段同指纹的 issue 唯一（qa 设计如此）；若出现重复指纹则保守判发散。
 func equalIssues(a, b []qa.QualityIssue) bool {
@@ -568,11 +585,24 @@ func equalIssues(a, b []qa.QualityIssue) bool {
 	}
 	for fp, ia := range ma {
 		ib, ok := mb[fp]
-		if !ok || !reflect.DeepEqual(ia, ib) {
+		if !ok || !equalIssueDecisionTime(ia.DecidedAt, ib.DecidedAt) {
+			return false
+		}
+		// 经过时区/JSON 往返后，裁决时间（DecidedAt）仍是同一时刻；
+		// 其余所有字段保持严格比较。
+		ia.DecidedAt, ib.DecidedAt = nil, nil
+		if !reflect.DeepEqual(ia, ib) {
 			return false
 		}
 	}
 	return true
+}
+
+func equalIssueDecisionTime(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
 }
 
 // newOperationID 生成带前缀的 operation 标识（crypto/rand 16 字节 hex）。
@@ -580,7 +610,7 @@ func newOperationID(prefix string) string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		// rand.Read 失败极罕见；退化到时间戳保证唯一性与非空。
-		return prefix + time.Now().UTC().Format("20060102150405.000000")
+		return prefix + timeutil.NowUTC().Format("20060102150405.000000")
 	}
 	return prefix + hex.EncodeToString(b)
 }

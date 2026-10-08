@@ -12,8 +12,26 @@ jobs:
   test:
     name: 发布前测试
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: linguaflow
+          POSTGRES_PASSWORD: linguaflow-test
+          POSTGRES_DB: linguaflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U linguaflow -d linguaflow_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v5
+
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.51.1'
 
       - uses: actions/setup-go@v6
         with:
@@ -21,8 +39,9 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: 运行测试
-        run: go test -race ./...
-        working-directory: backend
+        env:
+          LINGUAFLOW_TEST_POSTGRES_DSN: postgres://linguaflow:linguaflow-test@localhost:5432/linguaflow_test?sslmode=disable
+        run: task backend:test:race
 
   build:
     name: 构建发布二进制
@@ -46,6 +65,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.51.1'
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
@@ -64,17 +87,10 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: 安装前端依赖
-        run: pnpm install --frozen-lockfile
-        working-directory: frontend
-
-      - name: 构建前端
-        run: pnpm build
-        working-directory: frontend
+        run: task frontend:install -- --frozen-lockfile
 
       - name: 嵌入前端到后端
-        run: |
-          rm -rf backend/internal/web/dist
-          cp -r frontend/dist backend/internal/web/dist
+        run: task backend:web:embed
 
       - name: 构建二进制文件
         env:
@@ -86,9 +102,9 @@ jobs:
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           binary_name="linguaflow-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
           COMMIT=$(git rev-parse --short HEAD)
-          go build -ldflags="-s -w -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=${VERSION} -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=${COMMIT}" -o "bin/${binary_name}" ./cmd/linguaflow
+          task backend:build BACKEND_BINARY="bin/linguaflow-${GOOS}-${GOARCH}" VERSION="${VERSION}" COMMIT="${COMMIT}" BACKEND_LDFLAGS_EXTRA="-s -w"
+          cd backend
           sha256sum "bin/${binary_name}" > "bin/${binary_name}.sha256"
-        working-directory: backend
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v7

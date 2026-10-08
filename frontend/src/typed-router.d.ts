@@ -66,9 +66,23 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/admin/runtime': RouteRecordInfo<
+      '/admin/runtime',
+      '/admin/runtime',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/admin/settings': RouteRecordInfo<
       '/admin/settings',
       '/admin/settings',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/admin/storage': RouteRecordInfo<
+      '/admin/storage',
+      '/admin/storage',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -122,6 +136,20 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/operations': RouteRecordInfo<
+      '/operations',
+      '/operations',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/profile': RouteRecordInfo<
+      '/profile',
+      '/profile',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/projects': RouteRecordInfo<
       '/projects',
       '/projects',
@@ -157,9 +185,70 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/security': RouteRecordInfo<
+      '/security',
+      '/security',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/service': RouteRecordInfo<
       '/service',
       '/service',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/settings': RouteRecordInfo<
+      '/settings',
+      '/settings',
+      Record<never, never>,
+      Record<never, never>,
+      | '/settings/'
+      | '/settings/preferences'
+      | '/settings/profile'
+      | '/settings/security'
+      | '/settings/storage'
+      | '/settings/team'
+    >,
+    '/settings/': RouteRecordInfo<
+      '/settings/',
+      '/settings',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/settings/preferences': RouteRecordInfo<
+      '/settings/preferences',
+      '/settings/preferences',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/settings/profile': RouteRecordInfo<
+      '/settings/profile',
+      '/settings/profile',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/settings/security': RouteRecordInfo<
+      '/settings/security',
+      '/settings/security',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/settings/storage': RouteRecordInfo<
+      '/settings/storage',
+      '/settings/storage',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/settings/team': RouteRecordInfo<
+      '/settings/team',
+      '/settings/team',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -221,9 +310,21 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/admin/runtime.vue': {
+      routes:
+        | '/admin/runtime'
+      views:
+        | never
+    }
     'src/pages/admin/settings.vue': {
       routes:
         | '/admin/settings'
+      views:
+        | never
+    }
+    'src/pages/admin/storage.vue': {
+      routes:
+        | '/admin/storage'
       views:
         | never
     }
@@ -269,6 +370,18 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/operations.vue': {
+      routes:
+        | '/operations'
+      views:
+        | never
+    }
+    'src/pages/profile.vue': {
+      routes:
+        | '/profile'
+      views:
+        | never
+    }
     'src/pages/projects.vue': {
       routes:
         | '/projects'
@@ -300,9 +413,63 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/security.vue': {
+      routes:
+        | '/security'
+      views:
+        | never
+    }
     'src/pages/service.vue': {
       routes:
         | '/service'
+      views:
+        | never
+    }
+    'src/pages/settings.vue': {
+      routes:
+        | '/settings'
+        | '/settings/'
+        | '/settings/preferences'
+        | '/settings/profile'
+        | '/settings/security'
+        | '/settings/storage'
+        | '/settings/team'
+      views:
+        | 'default'
+    }
+    'src/pages/settings/index.vue': {
+      routes:
+        | '/settings/'
+      views:
+        | never
+    }
+    'src/pages/settings/preferences.vue': {
+      routes:
+        | '/settings/preferences'
+      views:
+        | never
+    }
+    'src/pages/settings/profile.vue': {
+      routes:
+        | '/settings/profile'
+      views:
+        | never
+    }
+    'src/pages/settings/security.vue': {
+      routes:
+        | '/settings/security'
+      views:
+        | never
+    }
+    'src/pages/settings/storage.vue': {
+      routes:
+        | '/settings/storage'
+      views:
+        | never
+    }
+    'src/pages/settings/team.vue': {
+      routes:
+        | '/settings/team'
       views:
         | never
     }

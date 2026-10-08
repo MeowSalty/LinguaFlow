@@ -1,0 +1,285 @@
+version: '3'
+
+# 保留依赖本地迁移源码、Compose 示例的辅助命令；CI 检出不需要此文件。
+includes:
+  local:
+    taskfile: ./Taskfile.local.yml
+    optional: true
+    flatten: true
+
+vars:
+  BACKEND_BINARY: '{{default "bin/linguaflow" .BACKEND_BINARY}}'
+  TARGET_GOOS: '{{default OS .GOOS}}'
+  BACKEND_EXE_EXT: '{{if eq .TARGET_GOOS "windows"}}.exe{{end}}'
+  BACKEND_LDFLAGS_EXTRA: '{{default "" .BACKEND_LDFLAGS_EXTRA}}'
+  GIT_VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  GIT_COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
+  VERSION: '{{default .GIT_VERSION .VERSION}}'
+  COMMIT: '{{default .GIT_COMMIT .COMMIT}}'
+  BACKEND_LDFLAGS: '{{default (printf "%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=%s" .BACKEND_LDFLAGS_EXTRA .VERSION .COMMIT) .BACKEND_LDFLAGS}}'
+
+tasks:
+  deps:tidy:
+    desc: 整理后端 Go 模块依赖
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go mod tidy
+
+  storage:backup:
+    desc: 独立存储备份工具（CLI_ARGS选择manifest/capture/restore-check；需 --offline）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate backup {{.CLI_ARGS}}
+
+  storage:inventory:
+    desc: 只读生成旧文件存储迁移清单（显式指定 --manifest）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate inventory {{.CLI_ARGS}}
+
+  storage:dry-run:
+    desc: 只读预演旧文件引用、摘要与定位核验
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate dry-run {{.CLI_ARGS}}
+
+  storage:apply:
+    desc: 停服备份后显式迁移旧文件元数据（需 --offline --backup-confirmed）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate apply {{.CLI_ARGS}}
+
+  storage:resume:
+    desc: 按持久清单恢复中断的旧文件元数据迁移
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate resume {{.CLI_ARGS}}
+
+  storage:rollback:
+    desc: 回滚尚未继续编辑或写入的旧文件迁移元数据（不回滚schema，不删除原件）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-storage-migrate rollback {{.CLI_ARGS}}
+
+  migrate:v013:
+    desc: 预演 v0.13.0 PostgreSQL 迁移并回滚
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 postgres {{.CLI_ARGS}}
+
+  migrate:v013:apply:
+    desc: 正式提交 v0.13.0 PostgreSQL 一次性迁移
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 postgres --apply {{.CLI_ARGS}}
+
+  migrate:v013:local:
+    desc: 预演 v0.13.0 SQLite local 数据目录迁移
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 local {{.CLI_ARGS}}
+
+  migrate:v013:local:apply:
+    desc: 迁移 v0.13.0 SQLite local 数据目录并保留原目录备份
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 local --apply {{.CLI_ARGS}}
+
+  migrate:v013:sqlite:
+    desc: 预演 SQLite 数据目录迁移（CLI_ARGS 显式指定 --mode serve 或 local）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 sqlite {{.CLI_ARGS}}
+
+  migrate:v013:sqlite:apply:
+    desc: 发布 SQLite 数据目录迁移并保留备份（显式指定 --mode）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow-migrate v013 sqlite --apply {{.CLI_ARGS}}
+
+  migrate:build:
+    desc: 构建独立的一次性迁移程序（支持 GOOS、GOARCH 交叉编译）
+    dir: '{{.TASKFILE_DIR}}'
+    vars:
+      MIGRATE_BINARY: '{{default "bin/linguaflow-migrate" .MIGRATE_BINARY}}'
+      MIGRATE_GOOS: '{{default OS .GOOS}}'
+    env:
+      GOOS: '{{.MIGRATE_GOOS}}'
+      GOARCH: '{{default ARCH .GOARCH}}'
+    cmds:
+      - go build -o "{{.MIGRATE_BINARY}}{{if eq .MIGRATE_GOOS "windows"}}.exe{{end}}" ./cmd/linguaflow-migrate
+
+  check-dependencies:
+    desc: 验证正常服务构建不依赖历史迁移包
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test ./internal/migrationcli -run '^TestServiceDependenciesExcludeMigration$' -count=1
+
+  deps:add:
+    desc: 添加或更新显式指定的后端 Go 模块依赖
+    dir: '{{.TASKFILE_DIR}}'
+    requires:
+      vars: [CLI_ARGS]
+    cmds:
+      - go get {{.CLI_ARGS}}
+
+  install:
+    desc: 下载后端 Go 模块依赖
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go mod download
+
+  dev:
+    desc: 启动后端开发服务器（自动生成并加载 .env；显式环境变量优先）
+    dir: '{{.TASKFILE_DIR}}'
+    deps:
+      - dev:setup
+    cmds:
+      - task: dev:serve
+
+  dev:setup:
+    desc: 初始化 backend/.env（仅缺失时生成；含 JWT、凭据密钥与初始管理员密码）
+    dir: '{{.TASKFILE_DIR}}'
+    status:
+      - test -f .env
+    cmds:
+      - |
+        set -e
+        jwt=$(go run ./cmd/linguaflow secrets generate --stdout)
+        master=$(go run ./cmd/linguaflow secrets generate --stdout)
+        password=$(go run ./cmd/linguaflow secrets generate --stdout)
+        cat > .env <<EOF
+        # 由 task backend:dev:setup 生成，仅在文件缺失时创建；已存在时不会覆盖。
+        # 含真实密钥且已被 .gitignore 忽略，切勿提交或分享。
+        # 显式设置的同名环境变量优先于本文件。
+        LINGUAFLOW_JWT_SECRET=$jwt
+        LINGUAFLOW_CREDENTIALS_MASTER_KEY=$master
+
+        # 首次启动时初始化管理员，仅初始化阶段读取；实例已初始化后可删除。
+        LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
+        LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+        LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD=$password
+
+        # 常用可选变量（取消注释即生效）：
+        # LINGUAFLOW_LOG_LEVEL=debug
+        # LINGUAFLOW_PORT=8080
+        EOF
+        echo "已生成 backend/.env：初始管理员用户名 admin，密码等密钥见该文件。"
+
+  dev:serve:
+    dir: '{{.TASKFILE_DIR}}'
+    dotenv: ['.env']
+    cmds:
+      - go run ./cmd/linguaflow serve {{.CLI_ARGS}}
+
+  local:dev:
+    desc: 以本地模式启动后端开发服务器
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow local {{.CLI_ARGS}}
+
+  build:
+    desc: 构建后端 CLI/服务程序（支持 GOOS、GOARCH 交叉编译）
+    dir: '{{.TASKFILE_DIR}}'
+    env:
+      GOOS: '{{.TARGET_GOOS}}'
+      GOARCH: '{{default ARCH .GOARCH}}'
+    cmds:
+      - go build -ldflags "{{.BACKEND_LDFLAGS}}" -o "{{.BACKEND_BINARY}}{{.BACKEND_EXE_EXT}}" ./cmd/linguaflow
+
+  run:
+    desc: 运行后端 CLI（例如 secrets、config、serve）
+    dir: '{{.TASKFILE_DIR}}'
+    silent: true
+    cmds:
+      - go run ./cmd/linguaflow {{.CLI_ARGS}}
+
+  docker:build:
+    desc: 从当前源码构建 API 镜像（不构建或嵌入前端）
+    dir: '{{.TASKFILE_DIR}}'
+    vars:
+      IMAGE: '{{default "linguaflow:development" .IMAGE}}'
+    cmds:
+      - docker build -f ../Dockerfile -t {{.IMAGE}} ..
+
+  test:
+    desc: 后端测试（可通过 CLI_ARGS 指定包或测试选项）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test {{default "./..." .CLI_ARGS}}
+
+  test:race:
+    desc: 后端竞态检测（可通过 CLI_ARGS 指定包或测试选项）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test -race {{default "./..." .CLI_ARGS}}
+
+  test:storage:deployment:
+    desc: 显式真实存储部署验收（缺少环境时逐项标记未验收；只清理测试独立命名空间）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test -v -count=1 -timeout=10m -run TestStorageDeployment ./internal/service ./internal/store/s3store
+
+  lint:
+    desc: 执行后端静态检查
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go vet {{default "./..." .CLI_ARGS}}
+
+  format:
+    desc: 格式化指定后端包（默认全部包）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go fmt {{default "./..." .CLI_ARGS}}
+
+  format:check:
+    desc: 检查后端 Go 代码格式（不修改文件）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - |
+        unformatted=$(gofmt -l .)
+        if [ -n "$unformatted" ]; then
+          echo "以下文件未正确格式化："
+          echo "$unformatted"
+          exit 1
+        fi
+
+  generate:
+    desc: 生成后端代码（OpenAPI、ent 等）
+    cmds:
+      - task: openapi:generate
+      - task: ent:generate
+
+  openapi:generate:
+    desc: 合并 API 规范并生成后端 OpenAPI Go 代码
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - task --dir "{{.TASKFILE_DIR}}/.." openapi:bundle
+      - go generate ./internal/api
+
+  ent:generate:
+    desc: 生成后端 ent 代码
+    dir: '{{.TASKFILE_DIR}}'
+    sources:
+      - go.mod
+      - go.sum
+      - internal/ent/generate.go
+      - internal/ent/schema/**/*.go
+      - internal/tools/ent-generate/**/*.go
+    cmds:
+      - go generate ./internal/ent
+
+  security:
+    desc: 执行 Go 依赖漏洞扫描
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  ent:check:
+    desc: 重新生成并检查 ent 代码是否已同步
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go generate ./internal/ent
+      - git diff --exit-code -- internal/ent go.mod go.sum

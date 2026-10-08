@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -20,12 +21,13 @@ import (
 // BackendQuery is the builder for querying Backend entities.
 type BackendQuery struct {
 	config
-	ctx           *QueryContext
-	order         []backend.OrderOption
-	inters        []Interceptor
-	predicates    []predicate.Backend
-	withOwnerUser *UserQuery
-	withOwnerOrg  *OrganizationQuery
+	ctx            *QueryContext
+	order          []backend.OrderOption
+	inters         []Interceptor
+	predicates     []predicate.Backend
+	withCredential *CredentialQuery
+	withOwnerUser  *UserQuery
+	withOwnerOrg   *OrganizationQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -60,6 +62,28 @@ func (_q *BackendQuery) Unique(unique bool) *BackendQuery {
 func (_q *BackendQuery) Order(o ...backend.OrderOption) *BackendQuery {
 	_q.order = append(_q.order, o...)
 	return _q
+}
+
+// QueryCredential chains the current query on the "credential" edge.
+func (_q *BackendQuery) QueryCredential() *CredentialQuery {
+	query := (&CredentialClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(backend.Table, backend.FieldID, selector),
+			sqlgraph.To(credential.Table, credential.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, backend.CredentialTable, backend.CredentialColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // QueryOwnerUser chains the current query on the "owner_user" edge.
@@ -293,17 +317,29 @@ func (_q *BackendQuery) Clone() *BackendQuery {
 		return nil
 	}
 	return &BackendQuery{
-		config:        _q.config,
-		ctx:           _q.ctx.Clone(),
-		order:         append([]backend.OrderOption{}, _q.order...),
-		inters:        append([]Interceptor{}, _q.inters...),
-		predicates:    append([]predicate.Backend{}, _q.predicates...),
-		withOwnerUser: _q.withOwnerUser.Clone(),
-		withOwnerOrg:  _q.withOwnerOrg.Clone(),
+		config:         _q.config,
+		ctx:            _q.ctx.Clone(),
+		order:          append([]backend.OrderOption{}, _q.order...),
+		inters:         append([]Interceptor{}, _q.inters...),
+		predicates:     append([]predicate.Backend{}, _q.predicates...),
+		withCredential: _q.withCredential.Clone(),
+		withOwnerUser:  _q.withOwnerUser.Clone(),
+		withOwnerOrg:   _q.withOwnerOrg.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
+}
+
+// WithCredential tells the query-builder to eager-load the nodes that are connected to
+// the "credential" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *BackendQuery) WithCredential(opts ...func(*CredentialQuery)) *BackendQuery {
+	query := (&CredentialClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withCredential = query
+	return _q
 }
 
 // WithOwnerUser tells the query-builder to eager-load the nodes that are connected to
@@ -406,7 +442,8 @@ func (_q *BackendQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Back
 	var (
 		nodes       = []*Backend{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [3]bool{
+			_q.withCredential != nil,
 			_q.withOwnerUser != nil,
 			_q.withOwnerOrg != nil,
 		}
@@ -429,6 +466,12 @@ func (_q *BackendQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Back
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := _q.withCredential; query != nil {
+		if err := _q.loadCredential(ctx, query, nodes, nil,
+			func(n *Backend, e *Credential) { n.Edges.Credential = e }); err != nil {
+			return nil, err
+		}
+	}
 	if query := _q.withOwnerUser; query != nil {
 		if err := _q.loadOwnerUser(ctx, query, nodes, nil,
 			func(n *Backend, e *User) { n.Edges.OwnerUser = e }); err != nil {
@@ -444,6 +487,38 @@ func (_q *BackendQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Back
 	return nodes, nil
 }
 
+func (_q *BackendQuery) loadCredential(ctx context.Context, query *CredentialQuery, nodes []*Backend, init func(*Backend), assign func(*Backend, *Credential)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*Backend)
+	for i := range nodes {
+		if nodes[i].CredentialID == nil {
+			continue
+		}
+		fk := *nodes[i].CredentialID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(credential.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "credential_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
 func (_q *BackendQuery) loadOwnerUser(ctx context.Context, query *UserQuery, nodes []*Backend, init func(*Backend), assign func(*Backend, *User)) error {
 	ids := make([]int, 0, len(nodes))
 	nodeids := make(map[int][]*Backend)
@@ -533,6 +608,9 @@ func (_q *BackendQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != backend.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withCredential != nil {
+			_spec.Node.AddColumnOnce(backend.FieldCredentialID)
 		}
 		if _q.withOwnerUser != nil {
 			_spec.Node.AddColumnOnce(backend.FieldOwnerUserID)

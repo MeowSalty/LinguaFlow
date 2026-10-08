@@ -114,15 +114,16 @@ func (s *QARecheckService) Recheck(ctx context.Context, actorUserID, projectID i
 	}
 
 	// 2. 加载执行策略并复核访问权（语义对齐 job.snapshotProfile）。
-	tp, err := s.profiles.GetByID(ctx, input.ProfileID)
+	tp, err := s.profiles.GetByID(ctx, actorUserID, input.ProfileID)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.profiles.CheckAccess(ctx, actorUserID, tp); err != nil {
 		return nil, err
 	}
-	tp.Config.NormalizeContext()
-	tp.Config.NormalizePreserveKinds()
+	if err := validateSharedReference(tp.Scope, tp.OwnerOrgID, EffectiveProjectOrgID(projectRow)); err != nil {
+		return nil, err
+	}
 	if !tp.Config.QA.Enabled {
 		return nil, ErrQAProfileDisabled
 	}
@@ -439,7 +440,7 @@ func (s *QARecheckService) recheckResource(
 		if end > len(withTarget) {
 			end = len(withTarget)
 		}
-		if err := s.recheckWriteBatch(ctx, withTarget[start:end], targetsByID, freshByIndex, &counters); err != nil {
+		if err := s.recheckWriteBatch(ctx, resRow, withTarget[start:end], targetsByID, freshByIndex, &counters); err != nil {
 			return counters, err
 		}
 	}
@@ -483,6 +484,7 @@ func (s *QARecheckService) loadCrossSegmentInputs(ctx context.Context, resourceI
 // 事务内禁止使用 s.client 查询（MaxOpenConns(1) 下会死锁，参照 segment_search_replace.go）。
 func (s *QARecheckService) recheckWriteBatch(
 	ctx context.Context,
+	res *ent.Resource,
 	batch []*ent.Segment,
 	targetsByID map[int]*string,
 	freshByIndex map[int][]qa.QualityIssue,
@@ -492,6 +494,11 @@ func (s *QARecheckService) recheckWriteBatch(
 	if err != nil {
 		return fmt.Errorf("qa recheck: begin transaction: %w", err)
 	}
+	defer tx.Rollback()
+	if err := GuardSourceGeneration(ctx, tx.Client(), res.ID, res.SourceGeneration); err != nil {
+		return err
+	}
+	advanced := false
 
 	batchIDs := make([]int, 0, len(batch))
 	for _, seg := range batch {
@@ -563,6 +570,12 @@ func (s *QARecheckService) recheckWriteBatch(
 			continue
 		}
 
+		if !advanced {
+			if err := AdvanceTranslationGeneration(ctx, tx.Client(), res.ID, res.SourceGeneration); err != nil {
+				return err
+			}
+			advanced = true
+		}
 		upd := tx.Segment.UpdateOneID(row.ID).Where(segment.TargetTextEQ(*loadedTarget))
 		if len(final) > 0 {
 			upd.SetQualityIssues(final)

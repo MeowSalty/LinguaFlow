@@ -11,6 +11,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
@@ -49,6 +50,7 @@ func restoreSegmentRuby(
 	roundIndex int,
 	repairOpt repair.Options,
 	rubyRetryAttempts int,
+	rubyTemplates prompt.RubyTemplates,
 ) rubyOutcome {
 	items := extractRubyItemsFromSeg(seg)
 	if len(items) == 0 {
@@ -79,16 +81,13 @@ func restoreSegmentRuby(
 	}
 
 	attempts := rubyRetryAttempts
-	if attempts <= 0 {
-		attempts = 1
-	}
 	// 仅当按 keepSet 过滤后仍有未对齐条目才进定向重试：被 kind 滤光的条目
 	// 重试也不会被还原，纯属浪费后端调用。注意此处刻意不按 Restorable 过滤——
 	// 双空 base 条目靠重试回填 TargetBase 后才能变为可还原。
 	if len(backends) > 0 && ctx.Err() == nil &&
 		len(filterItemsByKind(ruby.Unaligned(items), keepSet)) > 0 {
 		retryAlignSegmentDirected(ctx, seg, items, translation, keepSet, backends,
-			retryPolicy, logger, reporter, isTextMode, roundIndex, repairOpt, attempts)
+			retryPolicy, logger, reporter, isTextMode, roundIndex, repairOpt, attempts, rubyTemplates)
 	}
 
 	// 最终还原：以最后一次合并后的 items 为准
@@ -145,6 +144,7 @@ func retryAlignSegmentDirected(
 	roundIndex int,
 	repairOpt repair.Options,
 	attempts int,
+	rubyTemplates prompt.RubyTemplates,
 ) {
 	for attempt := 0; attempt < attempts; attempt++ {
 		missing := ruby.Unaligned(items)
@@ -155,9 +155,9 @@ func retryAlignSegmentDirected(
 		var sys, user string
 		var schema map[string]any
 		if isTextMode {
-			sys, user = buildDirectedAlignmentPromptText(seg, missing, translation)
+			sys, user = buildDirectedAlignmentPromptText(seg, missing, translation, rubyTemplates.Text)
 		} else {
-			sys, user, schema = buildDirectedAlignmentPrompt(seg, missing, translation)
+			sys, user, schema = buildDirectedAlignmentPrompt(seg, missing, translation, rubyTemplates.JSON)
 		}
 		req := backend.Request{
 			System:     sys,
@@ -322,18 +322,7 @@ func emitRubyAlignmentBatchEvent(
 
 // buildDirectedAlignmentPrompt 构建定向注音对齐的 system/user 消息和 JSON Schema。
 // 只下发仍未对齐的条目（missing，带 id/source_base/source_text），要求 LLM 回显 id。
-func buildDirectedAlignmentPrompt(seg *Segment, missing []ruby.Item, translation string) (string, string, map[string]any) {
-	sys := `你是注音对齐工具。给定原文、译文和尚未对齐的注音条目，确定每个条目在译文中对应的文本。
-
-规则：
-- "id" 必须回显输入条目的 id；无法在译文中找到对应文本的条目可省略 id。
-- "base" 必须是译文中实际出现的文本（不是原文基底），专有名词等未翻译的词除外。
-- "text" 是标注文本：phonetic/semantic 保留原文（不翻译），creative 需要翻译。
-- "kind" 是注音分类：
-  · phonetic（音注）：纯读音标注。
-  · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
-  · creative（创意注音）：基底与标注存在语义落差。
-- 仅输出 JSON，无额外文字。`
+func buildDirectedAlignmentPrompt(seg *Segment, missing []ruby.Item, translation, sys string) (string, string, map[string]any) {
 
 	// 取原文（优先 OriginalSource，去掉 ruby 标签；统一走 ruby.StripRubyTags，
 	// 连同 <rp> 等辅助标签一并清理，避免原文残留标签形态污染对齐 prompt）
@@ -395,19 +384,7 @@ func buildDirectedAlignmentPrompt(seg *Segment, missing []ruby.Item, translation
 // buildDirectedAlignmentPromptText 构建 text 模式的定向注音对齐提示词。
 // 用户消息列出仍未对齐的条目（id / source_base / source_text），
 // LLM 输出每行一条 "base | text | kind[ | id]"（id 可选）。
-func buildDirectedAlignmentPromptText(seg *Segment, missing []ruby.Item, translation string) (string, string) {
-	sys := `你是注音对齐工具。给定原文、译文和尚未对齐的注音条目，确定每个条目在译文中对应的文本。
-
-规则：
-- "base" 必须是译文中实际出现的文本（不是原文基底），专有名词等未翻译的词除外。
-- "text" 是标注文本：phonetic/semantic 保留原文（不翻译），creative 需要翻译。
-- "kind" 是注音分类：
-  · phonetic（音注）：纯读音标注。
-  · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
-  · creative（创意注音）：基底与标注存在语义落差。
-- 每行输出一条，格式为：base | text | kind | id
-  （id 可省略：无法在译文中找到对应文本的条目不输出 id）
-- 仅输出对齐结果，无额外文字。`
+func buildDirectedAlignmentPromptText(seg *Segment, missing []ruby.Item, translation, sys string) (string, string) {
 
 	source := seg.OriginalSource
 	if source == "" {

@@ -146,10 +146,10 @@ type WorkerConfig struct {
 // 一份——进程级实际在途量 ≈ 配额 × 并发任务数，进程级兜底仅 RssLimitMB。
 type PipelineConfig struct {
 	// MaxInflightWeightMB 在途工作配额上限（源文本字节，单位 MB，每任务口径）；
-	// <=0 用默认值 32。并发节流：控制同时入线的源文本总量，非硬性内存上限。
+	// 必须为正，缺省为 32。它控制并发入线源文本量，不是硬性内存上限。
 	MaxInflightWeightMB int `yaml:"max_inflight_weight_mb"`
 	// MaxInflightResources 在途资源数上限（每任务口径；兜住每资源句柄开销）；
-	// <=0 用默认值 8。
+	// 必须为正；缺省为 8。
 	MaxInflightResources int `yaml:"max_inflight_resources"`
 	// RssLimitMB 进程级 RSS 保险丝上限（MB）；0 = 关闭。
 	// 双水位：≥85% 暂停所有任务的新资源准入（只出不进），≤70% 恢复。
@@ -194,7 +194,7 @@ func DefaultWorkerConfig() WorkerConfig {
 
 // PreviewConfig 控制单段翻译预览（同步接口）的并发与生命周期。
 type PreviewConfig struct {
-	MaxConcurrency int           `yaml:"max_concurrency"` // 全局同时进行的预览数；<=0 时使用默认值 2
+	MaxConcurrency int           `yaml:"max_concurrency"` // 全局同时进行的预览数；必须为正，缺省为 2
 	Timeout        time.Duration `yaml:"timeout"`         // 单次预览执行超时
 	ApplyTokenTTL  time.Duration `yaml:"apply_token_ttl"` // apply_token 有效期
 }
@@ -212,22 +212,22 @@ func DefaultPreviewConfig() PreviewConfig {
 // 译文纯临时不落库，故无 apply_token_ttl。
 type QuickTranslateConfig struct {
 	// MaxConcurrency 为单 actor 同时进行的即时翻译并发上限（per-actor 信号量）；
-	// 全局并发上限 = MaxConcurrency × 4。<=0 时使用默认值 2，>32 时钳制为 32，
+	// 全局并发上限 = MaxConcurrency × 4。必须在 1–32 范围内，缺省为 2，
 	// 避免误配放大 AI 速率/成本预算。
 	MaxConcurrency int `yaml:"max_concurrency"`
 	// Timeout 为单次即时翻译执行超时（默认 5 分钟，对齐 Preview——二者复用同一套
-	// 多轮 LLM pipeline，含 429 指数退避，单轮 LLM 调用可能较慢）。<=0 用默认值，
-	// >MaxTimeout 钳制为 MaxTimeout，给服务器管理者一个硬安全阀。
+	// 多轮 LLM pipeline，含 429 指数退避，单轮 LLM 调用可能较慢）。必须为正，
+	// 超过 MaxTimeout 明确报错。
 	Timeout time.Duration `yaml:"timeout"`
 	// MaxTimeout 为 Timeout 的硬上限，防止运维或用户误配过长超时占满并发槽位。
-	// <=0 时使用默认值 30 分钟。
+	// 必须为正且不超过 30 分钟；缺省为 30 分钟。
 	MaxTimeout time.Duration `yaml:"max_timeout"`
 }
 
-// quickTranslateMaxConcurrencyUpper 钳制 per-actor 并发上限，避免误配放大全局负载。
+// quickTranslateMaxConcurrencyUpper 是 per-actor 并发绝对上限。
 const quickTranslateMaxConcurrencyUpper = 32
 
-// quickTranslateMaxTimeoutUpper 钳制 Timeout 与 MaxTimeout 的绝对上限，
+// quickTranslateMaxTimeoutUpper 是 Timeout 与 MaxTimeout 的绝对上限，
 // 防止误配过长超时长时间占用并发槽位与 handler goroutine。
 const quickTranslateMaxTimeoutUpper = 30 * time.Minute
 
@@ -243,14 +243,14 @@ func DefaultQuickTranslateConfig() QuickTranslateConfig {
 // SSEConfig 控制实时事件（SSE）回放与历史事件存储的行为。
 type SSEConfig struct {
 	// RingBufferCapacity 为每个 job 内存 ring buffer 的容量（用于 SSE 重连窗口补进）。
-	// <=0 用默认值 256。
+	// 必须为正；缺省为 256。
 	RingBufferCapacity int `yaml:"ring_buffer_capacity"`
 	// ReplayBatchSize 为 SSE 首次回放（历史补进）从 DB 拉取的每批事件数。
-	// <=0 用默认值 200。
+	// 必须为正；缺省为 200。
 	ReplayBatchSize int `yaml:"replay_batch_size"`
 	// MaxReplayEvents 为 SSE 单次连接历史回放的总量上限。
 	// 达到上限即停止回放，缺口交给前端通过 Last-Event-ID 续传或 REST 历史端点补全。
-	// <=0 用默认值（RingBufferCapacity 的 2 倍）。
+	// 必须为正；缺省按最终 RingBufferCapacity 的 2 倍派生。
 	MaxReplayEvents int `yaml:"max_replay_events"`
 }
 
@@ -282,17 +282,32 @@ type ServerConfig struct {
 	QuickTranslate    QuickTranslateConfig `yaml:"quick_translate"`
 	SSE               SSEConfig            `yaml:"sse"`
 	CORS              CORSConfig           `yaml:"cors"`
-	Registration      RegistrationConfig   `yaml:"registration"`
+	Credentials       CredentialsConfig    `yaml:"credentials"`
+	Storage           StorageConfig        `yaml:"storage"`
 	ServeUI           bool                 `yaml:"serve_ui"`
 }
 
-// RegistrationConfig 定义用户注册的初始默认值。
-//
-// 仅用于首次启动时初始化数据库中的 system_setting（registration_enabled），
-// 运行时以数据库为准，管理员可通过 API 热修改。修改此值对已初始化的实例无影响。
-type RegistrationConfig struct {
-	Enabled   bool `yaml:"enabled"`
-	AutoAdmin bool `yaml:"auto_admin"`
+// CredentialsConfig 标识部署侧持有的加密密钥。
+type CredentialsConfig struct {
+	KeyringFile string `yaml:"keyring_file"`
+}
+
+// BootstrapInput 仅由实例初始化事务消费。
+type BootstrapInput struct {
+	RegistrationEnabled bool
+	Admin               *BootstrapAdmin
+}
+
+type BootstrapAdmin struct {
+	Username string
+	Email    string
+	Password string
+}
+
+// RuntimeAddress 是实际绑定的地址，与请求的配置相互独立。
+type RuntimeAddress struct {
+	Host string
+	Port int
 }
 
 const (
@@ -370,15 +385,16 @@ func sqliteDSNWithForeignKeys(dsn string) string {
 	return dsn + separator + "_pragma=foreign_keys(1)"
 }
 
-// DefaultServerConfig 返回内置默认服务器配置。loader 在解析 yaml 前以此为基底合并。
+// DefaultServerConfig 返回纯部署默认值。它不包含可用 JWT secret；
+// loader 在合并显式输入后补派生默认，再进行只读校验。
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
+		Mode:              ModeServer,
 		Host:              "0.0.0.0",
 		Port:              8080,
 		ServiceName:       "linguaflow",
 		DataDir:           "./data",
 		AutoMigrate:       true,
-		JWTSecret:         "dev-insecure-secret-change-me",
 		JWTIssuer:         "linguaflow",
 		JWTExpiry:         15 * time.Minute,
 		RefreshExpiry:     30 * 24 * time.Hour,
@@ -390,63 +406,59 @@ func DefaultServerConfig() *ServerConfig {
 		Preview:           DefaultPreviewConfig(),
 		QuickTranslate:    DefaultQuickTranslateConfig(),
 		SSE:               DefaultSSEConfig(),
+		Storage:           DefaultStorageConfig(),
 		CORS: CORSConfig{
 			AllowedOrigins: []string{"*"},
-		},
-		Registration: RegistrationConfig{
-			Enabled:   true,
-			AutoAdmin: true,
 		},
 		ServeUI: true,
 	}
 }
 
-// ValidateServerConfig 检查服务器配置字段是否合法。loader 在合并后调用。
+// ValidateServerConfig 校验完整解析后的配置，且不做任何修改。
 func ValidateServerConfig(c *ServerConfig) error {
-	switch c.Mode {
-	case "", ModeServer:
-		c.Mode = ModeServer
-	case ModeLocal:
-		// ok
-	default:
-		return fmt.Errorf("server.mode must be one of %s|%s, got %q", ModeServer, ModeLocal, c.Mode)
+	return validateServerConfig(c, true)
+}
+
+func validateServerConfig(c *ServerConfig, requireSecret bool) error {
+	if c.Mode != ModeServer && c.Mode != ModeLocal {
+		return fmt.Errorf("server.mode must be one of %s|%s", ModeServer, ModeLocal)
 	}
-	if c.Host == "" {
-		c.Host = "0.0.0.0"
+	if strings.TrimSpace(c.Host) == "" {
+		return fmt.Errorf("server.host must not be empty")
 	}
 	if c.Port < 0 || c.Port > 65535 || (c.Port == 0 && !c.IsLocal()) {
-		c.Port = 8080
+		return fmt.Errorf("server.port must be between 1 and 65535 (local also accepts 0)")
 	}
-	if c.DataDir == "" {
-		c.DataDir = "./data"
-	}
-	if c.JWTSecret == "" {
-		c.JWTSecret = "dev-insecure-secret-change-me"
-	}
-	if c.JWTIssuer == "" {
-		c.JWTIssuer = "linguaflow"
-	}
-	if c.JWTExpiry <= 0 {
-		c.JWTExpiry = 15 * time.Minute
-	}
-	if c.RefreshExpiry <= 0 {
-		c.RefreshExpiry = 30 * 24 * time.Hour
-	}
-	if c.ShutdownTimeout <= 0 {
-		c.ShutdownTimeout = 10 * time.Second
-	}
-	if c.RevisionRetention <= 0 {
-		c.RevisionRetention = 90 * 24 * time.Hour
-	}
-	switch c.Database.Driver {
-	case DatabaseDriverSQLite:
-		// SQLite DSN 为空时由 DatabaseDSN 根据 data_dir 生成。
-	case DatabaseDriverPostgres:
-		if strings.TrimSpace(c.Database.DSN) == "" {
-			return fmt.Errorf("server.database.dsn is required for postgres")
+	for key, value := range map[string]string{"data_dir": c.DataDir, "jwt_issuer": c.JWTIssuer, "service_name": c.ServiceName} {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("server.%s must not be empty", key)
 		}
-	default:
-		return fmt.Errorf("server.database.driver must be one of %s|%s, got %q", DatabaseDriverSQLite, DatabaseDriverPostgres, c.Database.Driver)
+	}
+	if requireSecret && len(c.JWTSecret) < 32 {
+		return fmt.Errorf("server.jwt_secret must contain at least 32 bytes")
+	}
+	for key, value := range map[string]time.Duration{
+		"jwt_expiry": c.JWTExpiry, "refresh_token_expiry": c.RefreshExpiry, "shutdown_timeout": c.ShutdownTimeout,
+		"revision_retention": c.RevisionRetention, "preview.timeout": c.Preview.Timeout, "preview.apply_token_ttl": c.Preview.ApplyTokenTTL,
+		"quick_translate.timeout": c.QuickTranslate.Timeout, "quick_translate.max_timeout": c.QuickTranslate.MaxTimeout,
+	} {
+		if value <= 0 {
+			return fmt.Errorf("server.%s must be positive", key)
+		}
+	}
+	if c.Database.Driver != DatabaseDriverSQLite && c.Database.Driver != DatabaseDriverPostgres {
+		return fmt.Errorf("server.database.driver must be sqlite or postgres")
+	}
+	if c.IsLocal() && c.Database.Driver != DatabaseDriverSQLite {
+		return fmt.Errorf("server.database.driver is not configurable in local mode")
+	}
+	if c.Database.Driver == DatabaseDriverPostgres && strings.TrimSpace(c.Database.DSN) == "" {
+		return fmt.Errorf("server.database.dsn is required for postgres")
+	}
+	if c.Database.Driver == DatabaseDriverSQLite && c.Database.DSN != "" {
+		if err := validateSQLitePath(c.Database.DSN); err != nil {
+			return err
+		}
 	}
 	if c.Database.MaxOpenConns < 0 {
 		return fmt.Errorf("server.database.max_open_conns must not be negative")
@@ -454,78 +466,56 @@ func ValidateServerConfig(c *ServerConfig) error {
 	if c.Database.MaxIdleConns < 0 {
 		return fmt.Errorf("server.database.max_idle_conns must not be negative")
 	}
-	if c.Database.MaxOpenConns > 0 && c.Database.MaxIdleConns > c.Database.MaxOpenConns {
-		return fmt.Errorf("server.database.max_idle_conns must not exceed max_open_conns")
-	}
 	if c.Database.ConnMaxLifetime < 0 {
 		return fmt.Errorf("server.database.conn_max_lifetime must not be negative")
 	}
-	if len(c.CORS.AllowedOrigins) == 0 {
-		c.CORS.AllowedOrigins = []string{"*"}
+	if c.Database.MaxOpenConns > 0 && c.Database.MaxIdleConns > c.Database.MaxOpenConns {
+		return fmt.Errorf("server.database.max_idle_conns must not exceed max_open_conns")
 	}
-	if c.Workers.Translation.Count < 1 {
-		c.Workers.Translation.Count = 1
-	}
-	if c.Workers.Translation.QueueCapacity < 1 {
-		c.Workers.Translation.QueueCapacity = 1
-	}
-	if c.Workers.Sync.Count < 1 {
-		c.Workers.Sync.Count = 1
-	}
-	if c.Workers.Sync.QueueCapacity < 1 {
-		c.Workers.Sync.QueueCapacity = 1
-	}
-	// 流水线准入：<=0 或负值回退默认值（0 是显式关闭 RSS 保险丝的合法值，
-	// 仅对 RssLimitMB 例外——RssLimitMB < 0 视为非法并回退 0）。
-	if c.Pipeline.MaxInflightWeightMB <= 0 {
-		c.Pipeline.MaxInflightWeightMB = defaultMaxInflightWeightMB
-	}
-	if c.Pipeline.MaxInflightResources <= 0 {
-		c.Pipeline.MaxInflightResources = defaultMaxInflightResources
+	for key, value := range map[string]int{
+		"workers.translation.count": c.Workers.Translation.Count, "workers.translation.queue_capacity": c.Workers.Translation.QueueCapacity,
+		"workers.sync.count": c.Workers.Sync.Count, "workers.sync.queue_capacity": c.Workers.Sync.QueueCapacity,
+		"pipeline.max_inflight_weight_mb": c.Pipeline.MaxInflightWeightMB, "pipeline.max_inflight_resources": c.Pipeline.MaxInflightResources,
+		"preview.max_concurrency": c.Preview.MaxConcurrency, "quick_translate.max_concurrency": c.QuickTranslate.MaxConcurrency,
+		"sse.ring_buffer_capacity": c.SSE.RingBufferCapacity, "sse.replay_batch_size": c.SSE.ReplayBatchSize, "sse.max_replay_events": c.SSE.MaxReplayEvents,
+	} {
+		if value <= 0 {
+			return fmt.Errorf("server.%s must be positive", key)
+		}
 	}
 	if c.Pipeline.RssLimitMB < 0 {
-		c.Pipeline.RssLimitMB = 0
+		return fmt.Errorf("server.pipeline.rss_limit_mb must not be negative")
 	}
-	if c.Preview.MaxConcurrency <= 0 {
-		c.Preview.MaxConcurrency = DefaultPreviewConfig().MaxConcurrency
+	maxInt := int(^uint(0) >> 1)
+	if c.Workers.Translation.Count > maxInt/4 || c.Workers.Sync.Count > maxInt/8 {
+		return fmt.Errorf("server.workers counts exceed supported queue size arithmetic")
 	}
-	if c.Preview.Timeout <= 0 {
-		c.Preview.Timeout = DefaultPreviewConfig().Timeout
+	if c.SSE.RingBufferCapacity > maxInt/2 {
+		return fmt.Errorf("server.sse.ring_buffer_capacity exceeds supported replay size arithmetic")
 	}
-	if c.Preview.ApplyTokenTTL <= 0 {
-		c.Preview.ApplyTokenTTL = DefaultPreviewConfig().ApplyTokenTTL
-	}
-	if c.QuickTranslate.MaxConcurrency <= 0 {
-		c.QuickTranslate.MaxConcurrency = DefaultQuickTranslateConfig().MaxConcurrency
+	if uint64(c.Pipeline.MaxInflightWeightMB) > uint64(1<<63-1)/(1024*1024) || uint64(c.Pipeline.RssLimitMB) > uint64(1<<63-1)/(1024*1024) {
+		return fmt.Errorf("server.pipeline MB limits exceed supported byte size arithmetic")
 	}
 	if c.QuickTranslate.MaxConcurrency > quickTranslateMaxConcurrencyUpper {
-		c.QuickTranslate.MaxConcurrency = quickTranslateMaxConcurrencyUpper
-	}
-	// MaxTimeout 硬上限：先回填默认，再钳制到绝对上限。
-	if c.QuickTranslate.MaxTimeout <= 0 {
-		c.QuickTranslate.MaxTimeout = DefaultQuickTranslateConfig().MaxTimeout
+		return fmt.Errorf("server.quick_translate.max_concurrency must not exceed 32")
 	}
 	if c.QuickTranslate.MaxTimeout > quickTranslateMaxTimeoutUpper {
-		c.QuickTranslate.MaxTimeout = quickTranslateMaxTimeoutUpper
-	}
-	// Timeout：回填默认，再钳制到 MaxTimeout（管理者的运行时安全阀）。
-	if c.QuickTranslate.Timeout <= 0 {
-		c.QuickTranslate.Timeout = DefaultQuickTranslateConfig().Timeout
+		return fmt.Errorf("server.quick_translate.max_timeout must not exceed 30m")
 	}
 	if c.QuickTranslate.Timeout > c.QuickTranslate.MaxTimeout {
-		c.QuickTranslate.Timeout = c.QuickTranslate.MaxTimeout
+		return fmt.Errorf("server.quick_translate.timeout must not exceed max_timeout")
 	}
-	if c.SSE.RingBufferCapacity <= 0 {
-		c.SSE.RingBufferCapacity = DefaultSSEConfig().RingBufferCapacity
+	return c.Storage.Validate()
+}
+
+func validateSQLitePath(dsn string) error {
+	path, _, _ := strings.Cut(dsn, "?")
+	path = strings.TrimPrefix(path, "file:")
+	if path == ":memory:" || strings.Contains(dsn, "mode=memory") {
+		return nil
 	}
-	if c.SSE.ReplayBatchSize <= 0 {
-		c.SSE.ReplayBatchSize = DefaultSSEConfig().ReplayBatchSize
-	}
-	if c.SSE.MaxReplayEvents <= 0 {
-		c.SSE.MaxReplayEvents = c.SSE.RingBufferCapacity * 2
-	}
-	if c.RevisionRetention <= 0 {
-		c.RevisionRetention = 90 * 24 * time.Hour
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("server.database.dsn SQLite file path must be absolute")
 	}
 	return nil
 }

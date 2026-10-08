@@ -62,14 +62,21 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	if err != nil {
 		return nil, wrapGoogleError(err)
 	}
+	if resp == nil {
+		return nil, emptyResponseError(b, "", 0)
+	}
+	promptTokens := int64(0)
+	if resp.UsageMetadata != nil {
+		promptTokens = int64(resp.UsageMetadata.PromptTokenCount)
+	}
 	if len(resp.Candidates) == 0 {
-		return nil, emptyResponseError(b, "", int64(resp.UsageMetadata.PromptTokenCount))
+		return nil, emptyResponseError(b, "", promptTokens)
 	}
 	finishReason := resp.Candidates[0].FinishReason
 
 	text := resp.Text()
 	if text == "" {
-		return nil, emptyResponseError(b, string(finishReason), int64(resp.UsageMetadata.PromptTokenCount))
+		return nil, emptyResponseError(b, string(finishReason), promptTokens)
 	}
 
 	usage := backend.Usage{}
@@ -287,21 +294,24 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 		return nil, fmt.Errorf("google: %w", err)
 	}
 
-	t := backend.Int64Opt(opts, "timeout", 60)
+	t, err := backend.DurationOpt(opts, "timeout", 60*time.Second)
+	if err != nil || t < 0 {
+		return nil, errors.New("google: invalid timeout")
+	}
 	stream := backend.BoolOpt(opts, "stream", false)
 	headers := make(http.Header)
 	headers.Set("User-Agent", backend.ClientUserAgent())
 	headers.Set("X-Client-Name", backend.ClientName())
 	headers.Set("X-Client-Version", backend.ClientVersion())
 	cc := &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
+		APIKey:     apiKey,
+		Backend:    genai.BackendGeminiAPI,
+		HTTPClient: cfg.HTTPClient,
 	}
 	cc.HTTPOptions.Headers = headers
 	// 仅非流式设置 HTTPOptions.Timeout：流式下 SDK 会在 body 读完前 cancel。
 	if t > 0 && !stream {
-		timeout := time.Duration(t) * time.Second
-		cc.HTTPOptions.Timeout = &timeout
+		cc.HTTPOptions.Timeout = &t
 	}
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
 		cc.HTTPOptions.BaseURL = u
@@ -316,7 +326,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 		client:         client,
 		model:          model,
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
-		timeout:        time.Duration(t) * time.Second,
+		timeout:        t,
 		responseFormat: rf,
 		stream:         stream,
 		thinking:       thinking,
@@ -335,7 +345,7 @@ type modelLister struct {
 	client *genai.Client
 }
 
-func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
+func modelListerFactory(opts map[string]any, clients ...*http.Client) (backend.ModelLister, error) {
 	apiKey := backend.StringOpt(opts, "api_key", "")
 	if apiKey == "" {
 		return nil, errors.New("google: api_key is required")
@@ -347,6 +357,9 @@ func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
 	cc := &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
+	}
+	if len(clients) > 0 {
+		cc.HTTPClient = clients[0]
 	}
 	cc.HTTPOptions.Headers = headers
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {

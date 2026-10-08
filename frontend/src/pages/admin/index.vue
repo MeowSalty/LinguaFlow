@@ -71,6 +71,20 @@ const quickActions = computed<
   }>
 >(() => [
   {
+    title: t('storage.adminTitle'),
+    description: t('storage.adminSubtitle'),
+    icon: IconCarbonFolder,
+    path: '/admin/storage',
+    tone: 'bg-lf-brand-soft text-brand-600',
+  },
+  {
+    title: t('runtime.title'),
+    description: t('runtime.description'),
+    icon: IconCarbonUserOnline,
+    path: '/admin/runtime',
+    tone: 'bg-lf-info-soft text-lf-info',
+  },
+  {
     title: t('admin.users.title'),
     description: t('admin.users.description'),
     icon: IconCarbonUserMultiple,

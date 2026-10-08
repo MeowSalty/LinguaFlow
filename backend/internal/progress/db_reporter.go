@@ -12,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // segmentUpdate 记录一次 SegmentDone 事件的状态。
@@ -143,9 +144,13 @@ type DBReporter struct {
 	stageTotal int
 
 	// 定时器安全网
-	ticker *time.Ticker
-	done   chan struct{}
-	once   sync.Once
+	ticker       *time.Ticker
+	done         chan struct{}
+	once         sync.Once
+	tickerExited chan struct{}
+	sourceMu     sync.RWMutex
+	closed       bool
+	closeErr     error
 
 	// flush 函数，方便测试注入
 	flushFn func([]segmentUpdate) error
@@ -183,6 +188,7 @@ func NewDBReporter(opts DBReporterOptions) *DBReporter {
 		broker:        opts.Broker,
 		ticker:        time.NewTicker(tickerDur),
 		done:          make(chan struct{}),
+		tickerExited:  make(chan struct{}),
 	}
 
 	go r.runTicker()
@@ -202,6 +208,10 @@ func NewDBReporter(opts DBReporterOptions) *DBReporter {
 // roundRowID <= 0 退化为「无轮次行」：mapper 忽略、SegmentResolved 为 no-op，
 // 进度只累加 Job 计数器（单资源路径）。
 func (r *DBReporter) SwitchRound(roundRowID int, segmentID func(docIndex int) (dbID int, ok bool)) {
+	if !r.beginWrite() {
+		return
+	}
+	defer r.sourceMu.RUnlock()
 	r.flushWriteMu.Lock()
 	// flushLocked 与切轮共享同一写入生命周期锁：失败重排队完成前不能切走
 	// 当前轮，否则刚放回的 pending 无法被移入 stale。
@@ -240,6 +250,10 @@ func (r *DBReporter) SwitchRound(roundRowID int, segmentID func(docIndex int) (d
 // 重放安全）。只入缓冲不触发 flush——flush 由调用方的 BatchComplete 与
 // ticker 驱动，与 segment_completed 在同一事务推进。
 func (r *DBReporter) SegmentResolved(docIndex int) {
+	if !r.beginWrite() {
+		return
+	}
+	defer r.sourceMu.RUnlock()
 	r.flushMu.Lock()
 	defer r.flushMu.Unlock()
 
@@ -282,6 +296,10 @@ func (r *DBReporter) SegmentResolved(docIndex int) {
 // stage_done 的 SSE 文案，不喂养任何持久化计数器。
 // 单资源路径（无轮次行）：无行可对齐，无条件累加，基线 0。
 func (r *DBReporter) StageStart(name string, total int) {
+	if !r.beginWrite() {
+		return
+	}
+	defer r.sourceMu.RUnlock()
 	r.flushWriteMu.Lock()
 	defer r.flushWriteMu.Unlock()
 
@@ -333,7 +351,7 @@ func (r *DBReporter) StageStart(name string, total int) {
 	// 不喂养任何持久化计数器。
 	r.stageDone.Store(int64(baseline))
 
-	now := time.Now()
+	now := timeutil.NowUTC()
 	// 事务包裹 JobRound 行更新与 Job 的 progress_total 累加，避免单条失败
 	// 导致矩阵与计数器缓存偏离。
 	tx, err := r.client.Tx(ctx)
@@ -495,6 +513,10 @@ func (r *DBReporter) alignCheckpoints() {
 // 计数缓冲只在无轮次行的退化路径参与 Job.progress_completed 累加——
 // 有轮次行时进度增量由断点集合基数派生（见 flush）。
 func (r *DBReporter) SegmentDone() {
+	if !r.beginWrite() {
+		return
+	}
+	defer r.sourceMu.RUnlock()
 	cur := r.stageDone.Add(1)
 
 	r.flushMu.Lock()
@@ -504,11 +526,19 @@ func (r *DBReporter) SegmentDone() {
 
 // BatchComplete 批次完成时调用，立即触发缓冲区 flush。
 func (r *DBReporter) BatchComplete() {
+	if !r.beginWrite() {
+		return
+	}
+	defer r.sourceMu.RUnlock()
 	r.flush()
 }
 
 // StageDone 记录当前轮次完成。
 func (r *DBReporter) StageDone() {
+	if !r.beginWrite() {
+		return
+	}
+	defer r.sourceMu.RUnlock()
 	// 轮次结束时做一次最终 flush，确保所有进度写入 DB
 	r.flush()
 
@@ -521,20 +551,37 @@ func (r *DBReporter) StageDone() {
 	r.publishEvent("stage_done", stageName, fmt.Sprintf("轮次完成: %s (%d 段)", stageName, done))
 }
 
-// Close 释放资源，停止定时器，做最后一次 flush。
+// beginWrite admits a producer until Close starts. The read lock covers the
+// complete call, including synchronous persistence and event publication.
+func (r *DBReporter) beginWrite() bool {
+	r.sourceMu.RLock()
+	if r.closed {
+		r.sourceMu.RUnlock()
+		return false
+	}
+	return true
+}
+
+// Close joins producers and the ticker before the final flush. Once it returns,
+// callers may release execution ownership even when the final flush failed.
 func (r *DBReporter) Close() error {
-	var err error
 	r.once.Do(func() {
+		r.sourceMu.Lock()
+		r.closed = true
 		close(r.done)
 		r.ticker.Stop()
+		r.sourceMu.Unlock()
+		if r.tickerExited != nil {
+			<-r.tickerExited
+		}
 		// 最后一次 flush
-		err = r.flush()
+		r.closeErr = r.flush()
 		r.reportCheckpointResidue()
 
 		// Publish final event
 		r.publishEvent("stage_done", "", "资源处理完成")
 	})
-	return err
+	return r.closeErr
 }
 
 // reportCheckpointResidue 在关闭时点名两类未落库残留（DB 持续故障时可能发生），
@@ -582,6 +629,9 @@ func (r *DBReporter) reportCheckpointResidue() {
 
 // runTicker 后台定时器协程，按间隔调用 flush()。
 func (r *DBReporter) runTicker() {
+	if r.tickerExited != nil {
+		defer close(r.tickerExited)
+	}
 	for {
 		select {
 		case <-r.done:
@@ -793,12 +843,16 @@ func (r *DBReporter) publishEvent(eventType, stage, message string) {
 		Level:     "info",
 		Stage:     stage,
 		Message:   message,
-		CreatedAt: time.Now(),
+		CreatedAt: timeutil.NowUTC(),
 	})
 }
 
 // OnBatchEvent implements BatchObserver. Publishes batch events to the Broker.
 func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
+	if !r.beginWrite() {
+		return
+	}
+	defer r.sourceMu.RUnlock()
 	if r.broker == nil {
 		return
 	}
@@ -863,7 +917,7 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 		Stage:     batchEvent.Stage,
 		Message:   fmt.Sprintf("batch (%d segs): %s", batchEvent.SegmentCount, batchEvent.Status),
 		Metadata:  metadata,
-		CreatedAt: time.Now(),
+		CreatedAt: timeutil.NowUTC(),
 	})
 }
 
@@ -871,6 +925,10 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 // pool_advance 用 warn 级（仍有未解决段），pool_start 用 info 级。
 // shrink=1.0（不缩）时用"重切"措辞；shrink<1.0（缩比）时用"缩批/缩放"措辞。
 func (r *DBReporter) OnPoolEvent(poolEvent PoolEvent) {
+	if !r.beginWrite() {
+		return
+	}
+	defer r.sourceMu.RUnlock()
 	if r.broker == nil {
 		return
 	}
@@ -917,6 +975,6 @@ func (r *DBReporter) OnPoolEvent(poolEvent PoolEvent) {
 		Stage:     poolEvent.Mode,
 		Message:   message,
 		Metadata:  metadata,
-		CreatedAt: time.Now(),
+		CreatedAt: timeutil.NowUTC(),
 	})
 }

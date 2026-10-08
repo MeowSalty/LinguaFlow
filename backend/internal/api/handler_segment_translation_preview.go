@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 func (s *Server) handlePreviewResourceSegmentTranslation(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +36,10 @@ func (s *Server) handlePreviewResourceSegmentTranslation(w http.ResponseWriter, 
 		return
 	}
 
-	var req SegmentTranslationPreviewRequest
+	var req struct {
+		ExecutionPlanId int             `json:"execution_plan_id"`
+		SourceText      json.RawMessage `json:"source_text"`
+	}
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
@@ -46,9 +50,9 @@ func (s *Server) handlePreviewResourceSegmentTranslation(w http.ResponseWriter, 
 		SegmentID:       segmentID,
 		ExecutionPlanID: req.ExecutionPlanId,
 	}
-	if req.SourceText != nil {
-		input.SourceTextSet = true
-		input.SourceText = *req.SourceText
+	if len(req.SourceText) != 0 {
+		s.writeProblem(w, r, http.StatusBadRequest, "source_read_only", "文件原文只读，请通过更新原文件创建新版本")
+		return
 	}
 
 	result, err := s.previewSvc.RunPreview(r.Context(), input)
@@ -95,6 +99,10 @@ func (s *Server) handleApplyResourceSegmentTranslationPreview(w http.ResponseWri
 
 func (s *Server) writePreviewServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, service.ErrSourceReadOnly):
+		s.writeProblem(w, r, http.StatusBadRequest, "source_read_only", "文件原文只读，请通过更新原文件创建新版本")
+	case errors.Is(err, service.ErrSourceRevisionConflict):
+		s.writeProblem(w, r, http.StatusConflict, "source_revision_conflict", "原文件版本已变化，请重新预览")
 	case errors.Is(err, service.ErrPreviewBusy):
 		w.Header().Set("Retry-After", "1")
 		s.writeProblem(w, r, http.StatusTooManyRequests, "preview_busy", "预览并发已满，请稍后重试")
@@ -149,7 +157,7 @@ func toSegmentTranslationPreviewResponse(result *service.PreviewOutput) SegmentT
 	}
 	if result.ApplyToken != "" {
 		response.ApplyToken = &result.ApplyToken
-		expires := result.ApplyExpiresAt
+		expires := timeutil.Normalize(result.ApplyExpiresAt)
 		response.ApplyExpiresAt = &expires
 	}
 	if result.Snapshot != nil {
@@ -265,13 +273,13 @@ func toOpenAPIQualityIssue(issue qa.QualityIssue) QualityIssue {
 	}
 	result.Disposition = QualityIssueDisposition(issue.Disposition)
 	result.DecidedBy = issue.DecidedBy
-	result.DecidedAt = issue.DecidedAt
+	result.DecidedAt = timeutil.NormalizePtr(issue.DecidedAt)
 	result.Note = stringPtr(issue.Note)
 	return result
 }
 
 func toOpenAPISegment(row *ent.Segment) Segment {
-	result := Segment{Id: row.ID, SegmentIndex: row.SegmentIndex, SourceText: row.SourceText, Status: SegmentStatus(row.Status), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	result := Segment{Id: row.ID, SegmentIndex: row.SegmentIndex, SourceText: row.SourceText, Status: SegmentStatus(row.Status), CreatedAt: timeutil.Normalize(row.CreatedAt), UpdatedAt: timeutil.Normalize(row.UpdatedAt)}
 	if row.TargetText != nil {
 		value := *row.TargetText
 		result.TargetText = &value

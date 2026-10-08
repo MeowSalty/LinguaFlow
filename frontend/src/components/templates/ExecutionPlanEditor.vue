@@ -5,6 +5,16 @@ import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import {
+  createRoundCodeSelection,
+  roundCodes,
+  setRoundCodes,
+  validateRoundCodes,
+} from '@/utils/execution-plan-config'
+import type {
+  ExecutionPlanFormRound,
+  ExecutionPlanFormRubyRetry,
+} from '@/utils/execution-plan-config'
+import {
   getQualityCodeLabel,
   QUALITY_CODES,
   SEMANTIC_REPAIR_ISSUE_CODES,
@@ -14,7 +24,6 @@ import ConfigSectionPanel from './ConfigSectionPanel.vue'
 
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type TranslateRoundConfig = NonNullable<ExecutionRoundConfig['translate']>
-type ExtractRoundConfig = NonNullable<ExecutionRoundConfig['extract']>
 type AdjudicateRoundConfig = NonNullable<ExecutionRoundConfig['adjudicate']>
 type SemanticQARoundConfig = NonNullable<ExecutionRoundConfig['semantic_qa']>
 type ReviseRoundConfig = NonNullable<ExecutionRoundConfig['revise']>
@@ -22,7 +31,6 @@ type CorrectRoundConfig = NonNullable<ExecutionRoundConfig['correct']>
 type CorrectRuleConfig = NonNullable<CorrectRoundConfig['rules']>[number]
 type CorrectRuleName = CorrectRuleConfig['name']
 type RetryConfig = NonNullable<TranslateRoundConfig['retry']>
-type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 type RoundMode = ExecutionRoundConfig['mode']
 type AdjudicateCode = NonNullable<AdjudicateRoundConfig['adjudicate_codes']>[number]
 type SemanticQASegmentScope = SemanticQARoundConfig['segment_scope']
@@ -30,14 +38,16 @@ type SemanticQAIssueCode = NonNullable<SemanticQARoundConfig['issue_codes']>[num
 type ReviseSegmentScope = ReviseRoundConfig['segment_scope']
 type ReviseIssueCode = NonNullable<ReviseRoundConfig['issue_codes']>[number]
 
-type RoundModel = ExecutionRoundConfig
+type RoundModel = ExecutionPlanFormRound
+type FormTranslateConfig = NonNullable<RoundModel['translate']>
+type FormExtractConfig = NonNullable<RoundModel['extract']>
 
 // ─── 默认值 ──────────────────────────────────────────────────
 
 const DEFAULT_RETRY: RetryConfig = { max_attempts: 3, backoff_ms: 2000, jitter: true }
 
-const DEFAULT_TRANSLATE: TranslateRoundConfig = {
-  prompt_template_id: 0,
+const DEFAULT_TRANSLATE: FormTranslateConfig = {
+  prompt_template_id: null,
   batch_size: 10,
   max_words_per_batch: 0,
   fallback_shrink: 1,
@@ -45,8 +55,8 @@ const DEFAULT_TRANSLATE: TranslateRoundConfig = {
   retry: { ...DEFAULT_RETRY },
 }
 
-const DEFAULT_EXTRACT: ExtractRoundConfig = {
-  template_id: 0,
+const DEFAULT_EXTRACT: FormExtractConfig = {
+  template_id: null,
   batch_size: 20,
   max_words_per_batch: 0,
   max_terms_per_1000_chars: 25.0,
@@ -57,14 +67,14 @@ const DEFAULT_EXTRACT: ExtractRoundConfig = {
 const DEFAULT_ADJUDICATE: AdjudicateRoundConfig = {
   batch_size: 10,
   max_words_per_batch: 0,
-  adjudicate_codes: ['source_residual', 'punctuation_surplus'],
+  adjudicate_codes: undefined,
   retry: { ...DEFAULT_RETRY },
 }
 
 const DEFAULT_SEMANTIC_QA: SemanticQARoundConfig = {
   batch_size: 10,
   max_words_per_batch: 0,
-  segment_scope: 'all',
+  segment_scope: undefined,
   issue_codes: undefined,
   retry: { ...DEFAULT_RETRY },
 }
@@ -72,7 +82,7 @@ const DEFAULT_SEMANTIC_QA: SemanticQARoundConfig = {
 const DEFAULT_REVISE: ReviseRoundConfig = {
   batch_size: 10,
   max_words_per_batch: 0,
-  segment_scope: 'with_issues',
+  segment_scope: undefined,
   issue_codes: undefined,
   retry: { ...DEFAULT_RETRY },
 }
@@ -93,14 +103,14 @@ const DEFAULT_CORRECT: CorrectRoundConfig = {
 
 const DEFAULT_ROUND: RoundModel = {
   mode: 'translate',
-  backend_id: 0,
+  backend_id: null,
   concurrency: 3,
   translate: { ...DEFAULT_TRANSLATE },
 }
 
-const DEFAULT_RUBY_RETRY: ExecutionPlanRubyRetryConfig = {
+const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
   enabled: false,
-  backend_id: 0,
+  backend_id: null,
   max_attempts: 1,
 }
 
@@ -110,7 +120,7 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
 }
 
-function mergeTranslate(source?: Partial<TranslateRoundConfig>): TranslateRoundConfig {
+function mergeTranslate(source?: Partial<FormTranslateConfig>): FormTranslateConfig {
   if (!source) return deepClone(DEFAULT_TRANSLATE)
   return {
     prompt_template_id: source.prompt_template_id ?? DEFAULT_TRANSLATE.prompt_template_id,
@@ -128,7 +138,7 @@ function mergeTranslate(source?: Partial<TranslateRoundConfig>): TranslateRoundC
   }
 }
 
-function mergeExtract(source?: Partial<ExtractRoundConfig>): ExtractRoundConfig {
+function mergeExtract(source?: Partial<FormExtractConfig>): FormExtractConfig {
   if (!source) return deepClone(DEFAULT_EXTRACT)
   return {
     template_id: source.template_id ?? DEFAULT_EXTRACT.template_id,
@@ -151,9 +161,7 @@ function mergeAdjudicate(source?: Partial<AdjudicateRoundConfig>): AdjudicateRou
     batch_size: source.batch_size ?? DEFAULT_ADJUDICATE.batch_size,
     max_words_per_batch: source.max_words_per_batch ?? DEFAULT_ADJUDICATE.max_words_per_batch,
     adjudicate_codes:
-      source.adjudicate_codes && source.adjudicate_codes.length > 0
-        ? [...source.adjudicate_codes]
-        : [...(DEFAULT_ADJUDICATE.adjudicate_codes ?? [])],
+      source.adjudicate_codes == null ? source.adjudicate_codes : [...source.adjudicate_codes],
     retry: {
       max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
       backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
@@ -164,15 +172,12 @@ function mergeAdjudicate(source?: Partial<AdjudicateRoundConfig>): AdjudicateRou
 
 function mergeSemanticQA(source?: Partial<SemanticQARoundConfig>): SemanticQARoundConfig {
   if (!source) return deepClone(DEFAULT_SEMANTIC_QA)
-  const segmentScope = source.segment_scope ?? DEFAULT_SEMANTIC_QA.segment_scope
+  const segmentScope = source.segment_scope
   return {
     batch_size: source.batch_size ?? DEFAULT_SEMANTIC_QA.batch_size,
     max_words_per_batch: source.max_words_per_batch ?? DEFAULT_SEMANTIC_QA.max_words_per_batch,
     segment_scope: segmentScope,
-    issue_codes:
-      segmentScope === 'with_issue_codes' && source.issue_codes && source.issue_codes.length > 0
-        ? [...source.issue_codes]
-        : undefined,
+    issue_codes: source.issue_codes == null ? source.issue_codes : [...source.issue_codes],
     retry: {
       max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
       backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
@@ -183,15 +188,12 @@ function mergeSemanticQA(source?: Partial<SemanticQARoundConfig>): SemanticQARou
 
 function mergeRevise(source?: Partial<ReviseRoundConfig>): ReviseRoundConfig {
   if (!source) return deepClone(DEFAULT_REVISE)
-  const segmentScope = source.segment_scope ?? DEFAULT_REVISE.segment_scope
+  const segmentScope = source.segment_scope
   return {
     batch_size: source.batch_size ?? DEFAULT_REVISE.batch_size,
     max_words_per_batch: source.max_words_per_batch ?? DEFAULT_REVISE.max_words_per_batch,
     segment_scope: segmentScope,
-    issue_codes:
-      segmentScope === 'with_issue_codes' && source.issue_codes && source.issue_codes.length > 0
-        ? [...source.issue_codes]
-        : undefined,
+    issue_codes: source.issue_codes == null ? source.issue_codes : [...source.issue_codes],
     retry: {
       max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
       backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
@@ -214,7 +216,7 @@ function mergeCorrect(source?: Partial<CorrectRoundConfig>): CorrectRoundConfig 
   }
 }
 
-function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
+function mergeRound(source?: Partial<RoundModel>): RoundModel {
   if (!source) return deepClone(DEFAULT_ROUND)
   const mode = source.mode ?? 'translate'
   return {
@@ -246,9 +248,7 @@ function setNoBatch(
   }
 }
 
-function mergeRubyRetry(
-  source?: Partial<ExecutionPlanRubyRetryConfig>,
-): ExecutionPlanRubyRetryConfig {
+function mergeRubyRetry(source?: Partial<ExecutionPlanFormRubyRetry>): ExecutionPlanFormRubyRetry {
   if (!source) return deepClone(DEFAULT_RUBY_RETRY)
   return {
     enabled: source.enabled ?? DEFAULT_RUBY_RETRY.enabled,
@@ -261,8 +261,8 @@ function mergeRubyRetry(
 
 const props = withDefaults(
   defineProps<{
-    rounds: ExecutionRoundConfig[]
-    rubyRetry?: ExecutionPlanRubyRetryConfig
+    rounds: ExecutionPlanFormRound[]
+    rubyRetry?: ExecutionPlanFormRubyRetry
     backends: SelectOption[]
     promptTemplates: SelectOption[]
     bootstrapPromptTemplates: SelectOption[]
@@ -272,8 +272,8 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  'update:rounds': [value: ExecutionRoundConfig[]]
-  'update:rubyRetry': [value: ExecutionPlanRubyRetryConfig]
+  'update:rounds': [value: ExecutionPlanFormRound[]]
+  'update:rubyRetry': [value: ExecutionPlanFormRubyRetry]
 }>()
 
 // ─── 内部状态 ────────────────────────────────────────────────
@@ -281,7 +281,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const roundsModel = ref<RoundModel[]>(props.rounds.map((r) => mergeRound(r)))
-const rubyRetryModel = ref<ExecutionPlanRubyRetryConfig>(mergeRubyRetry(props.rubyRetry))
+const rubyRetryModel = ref<ExecutionPlanFormRubyRetry>(mergeRubyRetry(props.rubyRetry))
 
 let lastRoundsJson = JSON.stringify(props.rounds ?? [])
 let lastRubyRetryJson = JSON.stringify(props.rubyRetry ?? {})
@@ -418,24 +418,12 @@ const correctRuleHintMap: Record<CorrectRuleName, string> = {
   width_mix_normalize: t('executionPlanEditor.round.correctRuleWidthMixNormalizeHint'),
 }
 
+const chooseCodeMode = createRoundCodeSelection()
 const onSemanticQASegmentScopeChange = (round: RoundModel, scope: SemanticQASegmentScope): void => {
-  if (!round.semantic_qa) return
-  round.semantic_qa.segment_scope = scope
-  if (scope !== 'with_issue_codes') {
-    round.semantic_qa.issue_codes = undefined
-  } else if (!round.semantic_qa.issue_codes || round.semantic_qa.issue_codes.length === 0) {
-    round.semantic_qa.issue_codes = ['source_residual']
-  }
+  if (round.semantic_qa) round.semantic_qa.segment_scope = scope
 }
-
 const onReviseSegmentScopeChange = (round: RoundModel, scope: ReviseSegmentScope): void => {
-  if (!round.revise) return
-  round.revise.segment_scope = scope
-  if (scope !== 'with_issue_codes') {
-    round.revise.issue_codes = undefined
-  } else if (!round.revise.issue_codes || round.revise.issue_codes.length === 0) {
-    round.revise.issue_codes = ['mistranslation']
-  }
+  if (round.revise) round.revise.segment_scope = scope
 }
 
 const modeBadgeClass = (mode: RoundMode): string => {
@@ -501,6 +489,7 @@ const moveRound = (index: number, direction: -1 | 1): void => {
 }
 
 const emitUpdate = (): void => {
+  lastRoundsJson = JSON.stringify(roundsModel.value)
   emit('update:rounds', deepClone(roundsModel.value))
 }
 </script>
@@ -556,7 +545,11 @@ const emitUpdate = (): void => {
     </ConfigSectionPanel>
 
     <!-- 轮次列表 -->
-    <ConfigSectionPanel v-for="(round, index) in roundsModel" :key="index">
+    <ConfigSectionPanel
+      v-for="(round, index) in roundsModel"
+      data-testid="execution-round"
+      :key="index"
+    >
       <template #title>
         <div class="flex items-center gap-2">
           <span
@@ -668,6 +661,7 @@ const emitUpdate = (): void => {
         <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.promptTemplate') }}
+            <span class="text-lf-danger">*</span>
           </div>
           <NSelect
             v-model:value="round.translate.prompt_template_id"
@@ -762,6 +756,7 @@ const emitUpdate = (): void => {
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.extractTemplate') }}
+              <span class="text-lf-danger">*</span>
             </div>
             <NSelect
               v-model:value="round.extract.template_id"
@@ -909,17 +904,32 @@ const emitUpdate = (): void => {
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.adjudicateCodes') }}
           </div>
+          <NRadioGroup
+            :value="roundCodes(round) === undefined ? 'default' : 'specified'"
+            :disabled="disabled"
+            size="small"
+            class="mb-2"
+            @update:value="(value: 'default' | 'specified') => chooseCodeMode(round, value)"
+          >
+            <NRadioButton value="default">{{
+              t('configurationProfiles.defaultValue')
+            }}</NRadioButton>
+            <NRadioButton value="specified">{{
+              t('configurationProfiles.specified')
+            }}</NRadioButton>
+          </NRadioGroup>
           <NSelect
-            v-model:value="round.adjudicate.adjudicate_codes"
+            :value="round.adjudicate.adjudicate_codes ?? []"
+            @update:value="(value: string[]) => setRoundCodes(round, value)"
             :options="adjudicateCodeOptions"
             multiple
             size="small"
-            :disabled="disabled"
-            :placeholder="t('executionPlanEditor.round.adjudicateCodesPlaceholder')"
+            :disabled="disabled || roundCodes(round) === undefined"
+            :placeholder="t('configurationProfiles.chooseCodes')"
             class="w-full"
           />
           <div class="mt-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.adjudicateCodesHint') }}
+            {{ t('configurationProfiles.adjudicateHint') }}
           </div>
         </div>
 
@@ -939,7 +949,8 @@ const emitUpdate = (): void => {
             {{ t('executionPlanEditor.round.semanticQASegmentScope') }}
           </div>
           <NSelect
-            :value="round.semantic_qa.segment_scope"
+            :value="round.semantic_qa.segment_scope ?? 'all'"
+            :aria-label="t('executionPlanEditor.round.semanticQASegmentScope')"
             :options="semanticQASegmentScopeOptions"
             size="small"
             :disabled="disabled"
@@ -954,21 +965,41 @@ const emitUpdate = (): void => {
           </div>
         </div>
 
-        <div v-if="round.semantic_qa.segment_scope === 'with_issue_codes'">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.semanticQAIssueCodes') }}
           </div>
+          <NRadioGroup
+            :value="roundCodes(round) === undefined ? 'default' : 'specified'"
+            :disabled="disabled || round.semantic_qa.segment_scope !== 'with_issue_codes'"
+            size="small"
+            class="mb-2"
+            @update:value="(value: 'default' | 'specified') => chooseCodeMode(round, value)"
+          >
+            <NRadioButton value="default">{{
+              t('configurationProfiles.defaultValue')
+            }}</NRadioButton>
+            <NRadioButton value="specified">{{
+              t('configurationProfiles.specified')
+            }}</NRadioButton>
+          </NRadioGroup>
           <NSelect
-            v-model:value="round.semantic_qa.issue_codes"
+            :value="round.semantic_qa.issue_codes ?? []"
+            :aria-label="t('executionPlanEditor.round.semanticQAIssueCodes')"
+            @update:value="(value: string[]) => setRoundCodes(round, value)"
             :options="semanticQAIssueCodeOptions"
             multiple
             size="small"
-            :disabled="disabled"
+            :disabled="disabled || round.semantic_qa.segment_scope !== 'with_issue_codes'"
             :placeholder="t('executionPlanEditor.round.semanticQAIssueCodesPlaceholder')"
             class="w-full"
           />
           <div class="mt-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.semanticQAIssueCodesHint') }}
+            {{
+              round.semantic_qa.segment_scope === 'with_issue_codes'
+                ? t('executionPlanEditor.round.semanticQAIssueCodesHint')
+                : t('configurationProfiles.ignoredCodes')
+            }}
           </div>
         </div>
 
@@ -1023,7 +1054,8 @@ const emitUpdate = (): void => {
             {{ t('executionPlanEditor.round.reviseSegmentScope') }}
           </div>
           <NSelect
-            :value="round.revise.segment_scope"
+            :value="round.revise.segment_scope ?? 'with_issues'"
+            :aria-label="t('executionPlanEditor.round.reviseSegmentScope')"
             :options="reviseSegmentScopeOptions"
             size="small"
             :disabled="disabled"
@@ -1036,16 +1068,35 @@ const emitUpdate = (): void => {
           </div>
         </div>
 
-        <div v-if="round.revise.segment_scope === 'with_issue_codes'">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.reviseIssueCodes') }}
           </div>
+          <NRadioGroup
+            :value="roundCodes(round) === undefined ? 'default' : 'specified'"
+            :disabled="disabled"
+            size="small"
+            class="mb-2"
+            @update:value="(value: 'default' | 'specified') => chooseCodeMode(round, value)"
+          >
+            <NRadioButton value="default">{{
+              t('configurationProfiles.defaultValue')
+            }}</NRadioButton>
+            <NRadioButton value="specified">{{
+              t('configurationProfiles.specified')
+            }}</NRadioButton>
+          </NRadioGroup>
           <NSelect
-            v-model:value="round.revise.issue_codes"
+            :value="round.revise.issue_codes ?? []"
+            :aria-label="t('executionPlanEditor.round.reviseIssueCodes')"
+            @update:value="(value: string[]) => setRoundCodes(round, value)"
             :options="reviseIssueCodeOptions"
             multiple
             size="small"
-            :disabled="disabled"
+            :disabled="
+              disabled ||
+              (roundCodes(round) === undefined && round.revise.segment_scope !== 'with_issue_codes')
+            "
             :placeholder="t('executionPlanEditor.round.reviseIssueCodesPlaceholder')"
             class="w-full"
           />
@@ -1092,6 +1143,22 @@ const emitUpdate = (): void => {
         <RoundAdvancedSettings :round="round" :disabled="disabled" />
       </template>
 
+      <p v-if="validateRoundCodes(round)" role="alert" class="text-xs text-lf-danger">
+        {{
+          validateRoundCodes(round) === 'required'
+            ? t('configurationProfiles.codesRequired')
+            : t('configurationProfiles.invalidCodes')
+        }}
+      </p>
+      <p
+        v-else-if="
+          (round.mode === 'adjudicate' || round.mode === 'revise') &&
+          roundCodes(round)?.length === 0
+        "
+        class="text-xs text-lf-text-subtle"
+      >
+        {{ t('configurationProfiles.emptyCodes') }}
+      </p>
       <!-- 本地改写模式配置 -->
       <template v-if="round.mode === 'correct' && round.correct">
         <div class="rounded-lf-ctl border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">

@@ -5,15 +5,19 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'api/**'
+      - 'Taskfile.yml'
       - '.github/workflows/ci-backend.yml'
   pull_request:
     branches: [main, backend]
     paths:
       - 'backend/**'
+      - 'api/**'
+      - 'Taskfile.yml'
       - '.github/workflows/ci-backend.yml'
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -26,24 +30,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.51.1'
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
       - name: 检查 Go 代码格式
-        run: |
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then
-            echo "以下文件未正确格式化："
-            echo "$unformatted"
-            exit 1
-          fi
-        working-directory: backend
+        run: task backend:format:check
 
       - name: 运行 go vet 静态检查
-        run: go vet ./...
-        working-directory: backend
+        run: task backend:lint
 
   test:
     name: 自动化测试
@@ -65,6 +65,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.51.1'
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
@@ -73,8 +77,7 @@ jobs:
       - name: 运行测试（含竞态检测）
         env:
           LINGUAFLOW_TEST_POSTGRES_DSN: postgres://linguaflow:linguaflow-test@localhost:5432/linguaflow_test?sslmode=disable
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
-        working-directory: backend
+        run: task backend:test:race -- -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: 上传覆盖率报告
         uses: actions/upload-artifact@v7
@@ -93,30 +96,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.51.1'
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      - name: 缓存 Go 编译产物
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-build-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('backend/go.sum') }}
-          restore-keys: |
-            go-build-${{ matrix.goos }}-${{ matrix.goarch }}-
-
       - name: 构建二进制文件
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: |
-          ext=""
-          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
-          go build -o bin/linguaflow${ext} ./cmd/linguaflow
-        working-directory: backend
+        run: task backend:build
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v7
@@ -130,22 +123,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.51.1'
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      - name: 缓存 Go 工具二进制
-        id: go-bin-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/go/bin
-          key: go-bin-${{ runner.os }}-${{ runner.arch }}-govulncheck
-
-      - name: 安装 govulncheck
-        if: steps.go-bin-cache.outputs.cache-hit != 'true'
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
       - name: 运行漏洞扫描
-        run: govulncheck ./...
-        working-directory: backend
+        run: task backend:security

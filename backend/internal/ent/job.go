@@ -48,6 +48,10 @@ type Job struct {
 	ErrorMessage *string `json:"error_message,omitempty"`
 	// 任务开始执行的时间，MarkJobRunning 时写入
 	StartedAt *time.Time `json:"started_at,omitempty"`
+	// 最终执行首次进入终态的真实 UTC 时间；旧记录可以未知
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	// 历史保留计时起点；旧终态记录安全收尾后只初始化一次
+	RetentionAnchorAt *time.Time `json:"retention_anchor_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the JobQuery when eager-loading is set.
 	Edges             JobEdges `json:"edges"`
@@ -67,9 +71,11 @@ type JobEdges struct {
 	JobRounds []*JobRound `json:"job_rounds,omitempty"`
 	// SseEvents holds the value of the sse_events edge.
 	SseEvents []*SSEEvent `json:"sse_events,omitempty"`
+	// CredentialReferences holds the value of the credential_references edge.
+	CredentialReferences []*CredentialJobReference `json:"credential_references,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [5]bool
+	loadedTypes [6]bool
 }
 
 // ProjectOrErr returns the Project value or an error if the edge
@@ -121,6 +127,15 @@ func (e JobEdges) SseEventsOrErr() ([]*SSEEvent, error) {
 	return nil, &NotLoadedError{edge: "sse_events"}
 }
 
+// CredentialReferencesOrErr returns the CredentialReferences value or an error if the edge
+// was not loaded in eager-loading.
+func (e JobEdges) CredentialReferencesOrErr() ([]*CredentialJobReference, error) {
+	if e.loadedTypes[5] {
+		return e.CredentialReferences, nil
+	}
+	return nil, &NotLoadedError{edge: "credential_references"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*Job) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -132,7 +147,7 @@ func (*Job) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case job.FieldStatus, job.FieldTriggerType, job.FieldErrorMessage:
 			values[i] = new(sql.NullString)
-		case job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt:
+		case job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt, job.FieldFinishedAt, job.FieldRetentionAnchorAt:
 			values[i] = new(sql.NullTime)
 		case job.ForeignKeys[0]: // user_created_jobs
 			values[i] = new(sql.NullInt64)
@@ -245,6 +260,20 @@ func (_m *Job) assignValues(columns []string, values []any) error {
 				_m.StartedAt = new(time.Time)
 				*_m.StartedAt = value.Time
 			}
+		case job.FieldFinishedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field finished_at", values[i])
+			} else if value.Valid {
+				_m.FinishedAt = new(time.Time)
+				*_m.FinishedAt = value.Time
+			}
+		case job.FieldRetentionAnchorAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field retention_anchor_at", values[i])
+			} else if value.Valid {
+				_m.RetentionAnchorAt = new(time.Time)
+				*_m.RetentionAnchorAt = value.Time
+			}
 		case job.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field user_created_jobs", value)
@@ -288,6 +317,11 @@ func (_m *Job) QueryJobRounds() *JobRoundQuery {
 // QuerySseEvents queries the "sse_events" edge of the Job entity.
 func (_m *Job) QuerySseEvents() *SSEEventQuery {
 	return NewJobClient(_m.config).QuerySseEvents(_m)
+}
+
+// QueryCredentialReferences queries the "credential_references" edge of the Job entity.
+func (_m *Job) QueryCredentialReferences() *CredentialJobReferenceQuery {
+	return NewJobClient(_m.config).QueryCredentialReferences(_m)
 }
 
 // Update returns a builder for updating this Job.
@@ -356,6 +390,16 @@ func (_m *Job) String() string {
 	builder.WriteString(", ")
 	if v := _m.StartedAt; v != nil {
 		builder.WriteString("started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.FinishedAt; v != nil {
+		builder.WriteString("finished_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.RetentionAnchorAt; v != nil {
+		builder.WriteString("retention_anchor_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteByte(')')

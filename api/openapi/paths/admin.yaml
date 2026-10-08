@@ -1,3 +1,31 @@
+adminRuntimeSummary:
+  get:
+    operationId: AdminGetRuntimeSummary
+    summary: 当前实例运行容量与负载
+    description: |
+      仅当前系统管理员可读，组织角色不授予访问权；本地模式使用真实管理员身份。
+      不接受任何查询参数（认证使用 Authorization header）。未认证 401、无系统权限 403、非法查询 400。
+      collector 缺失返回 503 Problem，单 runner 恢复失败返回 200 和 degraded。
+      指标来自进程内存，不读写业务数量表。组件内部一致，跨组件近同时采样。
+      instance_id 每次 Server 运行随机生成；重启累计清零，不可拼接不同实例增量。
+      不含租户、任务、backend、模型、URL、凭据、路径或原始错误。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 当前实例快照
+        headers:
+          Cache-Control:
+            schema:
+              type: string
+              enum: [no-store]
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/runtime.yaml#/RuntimeSummary'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
 adminUsers:
   get:
     operationId: AdminListUsers
@@ -163,6 +191,7 @@ adminSettings:
   get:
     operationId: AdminGetSettings
     summary: 获取系统配置
+    description: 返回数据库权威政策。设置缺失、损坏或读取故障返回 503。
     security:
       - bearerAuth: []
     responses:
@@ -177,6 +206,11 @@ adminSettings:
   patch:
     operationId: AdminUpdateSettings
     summary: 更新系统配置
+    description: |
+      settings 至少提交一个支持字段，未提交字段保持不变；拒绝未知字段、null 和错误类型。
+      task_retention 必须完整提交 enabled、retention_days 和 expected_revision，禁止提交 revision。
+      同时修改多个政策时全部提交或全部回滚。版本不一致返回 409 settings_conflict。
+      政策值没有变化时不递增版本、不重复记录审计；保存后无需重启，维护期间仍可修改政策。
     security:
       - bearerAuth: []
     requestBody:

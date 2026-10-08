@@ -45,6 +45,18 @@ func (SyncTask) Fields() []ent.Field {
 			Default(0).
 			NonNegative().
 			Comment("已处理的段落数"),
+		field.Int("checkpoint_version").
+			Default(0).
+			NonNegative().
+			Comment("批次检查点版本，0 表示历史未验证记录"),
+		field.Int("next_segment_index").
+			Default(0).
+			NonNegative().
+			Comment("固定段落 ID 列表的下一处理位置"),
+		field.Time("started_at").
+			Optional().
+			Nillable().
+			Comment("首次成功认领时间，历史记录可以未知"),
 		field.String("status").
 			NotEmpty().
 			Default("pending").
@@ -63,6 +75,8 @@ func (SyncTask) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("取消时间"),
+		field.Time("finished_at").Optional().Nillable().Comment("首次进入终态的真实 UTC 时间；旧记录可以未知"),
+		field.Time("retention_anchor_at").Optional().Nillable().Comment("历史保留计时起点；旧终态记录安全收尾后只初始化一次"),
 	}
 }
 
@@ -92,5 +106,8 @@ func (SyncTask) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("project_id", "status"),
 		index.Fields("status", "created_at"),
+		index.Fields("updated_at", "id"),
+		index.Fields("status", "updated_at", "id"),
+		index.Fields("status", "retention_anchor_at", "id"),
 	}
 }

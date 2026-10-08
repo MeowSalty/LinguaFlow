@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // contentDisposition 生成符合 RFC 6266/RFC 5987 的 attachment 头部：
@@ -75,21 +77,25 @@ func asciiFallback(s string) string {
 const maxResourceUploadFiles = 50
 
 type resourceResponse struct {
-	ID                 int    `json:"id"`
-	Path               string `json:"path"`
-	Name               string `json:"name"`
-	Directory          string `json:"directory"`
-	Format             string `json:"format"`
-	TotalSegments      int    `json:"total_segments"`
-	TranslatedSegments int    `json:"translated_segments"`
-	ApprovedSegments   int    `json:"approved_segments"`
-	CreatedAt          string `json:"created_at"`
-	UpdatedAt          string `json:"updated_at"`
+	CurrentSourceRevisionID *int   `json:"current_source_revision_id,omitempty"`
+	SourceGeneration        int64  `json:"source_generation"`
+	TranslationGeneration   int64  `json:"translation_generation"`
+	ID                      int    `json:"id"`
+	Path                    string `json:"path"`
+	Name                    string `json:"name"`
+	Directory               string `json:"directory"`
+	Format                  string `json:"format"`
+	TotalSegments           int    `json:"total_segments"`
+	TranslatedSegments      int    `json:"translated_segments"`
+	ApprovedSegments        int    `json:"approved_segments"`
+	CreatedAt               string `json:"created_at"`
+	UpdatedAt               string `json:"updated_at"`
 }
 
 func toResourceResponse(r *ent.Resource, translated, approved int) resourceResponse {
 	pathValue := resourceResponsePath(r)
 	return resourceResponse{
+		CurrentSourceRevisionID: r.CurrentSourceRevisionID, SourceGeneration: r.SourceGeneration, TranslationGeneration: r.TranslationGeneration,
 		ID:                 r.ID,
 		Path:               pathValue,
 		Name:               resourceResponseName(pathValue),
@@ -98,8 +104,8 @@ func toResourceResponse(r *ent.Resource, translated, approved int) resourceRespo
 		TotalSegments:      r.TotalSegments,
 		TranslatedSegments: translated,
 		ApprovedSegments:   approved,
-		CreatedAt:          r.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:          r.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:          timeutil.Format(r.CreatedAt),
+		UpdatedAt:          timeutil.Format(r.UpdatedAt),
 	}
 }
 
@@ -107,6 +113,7 @@ func toResourceResponse(r *ent.Resource, translated, approved int) resourceRespo
 func toGeneratedResource(r *ent.Resource, translated, approved int) Resource {
 	pathValue := resourceResponsePath(r)
 	return Resource{
+		CurrentSourceRevisionId: r.CurrentSourceRevisionID, SourceGeneration: r.SourceGeneration, TranslationGeneration: r.TranslationGeneration,
 		Id:                 r.ID,
 		Path:               pathValue,
 		Name:               resourceResponseName(pathValue),
@@ -115,8 +122,8 @@ func toGeneratedResource(r *ent.Resource, translated, approved int) Resource {
 		TotalSegments:      r.TotalSegments,
 		TranslatedSegments: translated,
 		ApprovedSegments:   approved,
-		CreatedAt:          r.CreatedAt,
-		UpdatedAt:          r.UpdatedAt,
+		CreatedAt:          timeutil.Normalize(r.CreatedAt),
+		UpdatedAt:          timeutil.Normalize(r.UpdatedAt),
 	}
 }
 
@@ -161,12 +168,18 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+	form, cleanup, err := s.parseResourceMultipart(w, r, maxResourceUploadFiles)
+	if err != nil {
+		s.writeResourceMultipartError(w, r, err)
 		return
 	}
+	defer cleanup()
 
-	files := r.MultipartForm.File["files"]
+	key, validKey := s.storageIdempotency(w, r)
+	if !validKey {
+		return
+	}
+	files := form.File["files"]
 	if len(files) == 0 {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "至少上传一个文件")
 		return
@@ -176,7 +189,7 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	paths := r.MultipartForm.Value["paths"]
+	paths := form.Value["paths"]
 	if len(paths) > 0 && len(paths) != len(files) {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "paths 数量必须与 files 数量一致")
 		return
@@ -194,10 +207,11 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 			return
 		}
 		uploaded = append(uploaded, service.UploadedFile{
-			Filename: header.Filename,
-			Path:     candidatePath,
-			Size:     header.Size,
-			Reader:   opened,
+			IdempotencyKey: key,
+			Filename:       header.Filename,
+			Path:           candidatePath,
+			Size:           header.Size,
+			Reader:         opened,
 		})
 	}
 
@@ -210,64 +224,12 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		}
 	}()
 
-	results, err := s.resourceSvc.UploadResources(r.Context(), authUser.User.ID, projectID, uploaded)
+	result, err := s.resourceSvc.UploadResourceBatch(r.Context(), authUser.User.ID, projectID, key, uploaded)
 	if err != nil {
-		s.writeResourceServiceError(w, r, err)
+		s.writeStorageError(w, r, err)
 		return
 	}
-
-	resourceIDs := make([]int, 0)
-	for _, result := range results {
-		switch result.Action {
-		case "created":
-			if result.Resource != nil {
-				resourceIDs = append(resourceIDs, result.Resource.ID)
-			}
-		case "conflict":
-			if result.ExistingResource != nil {
-				resourceIDs = append(resourceIDs, result.ExistingResource.ID)
-			}
-		}
-	}
-	progressMap, _ := s.resourceSvc.ListResourcesProgress(r.Context(), resourceIDs)
-
-	respItems := make([]ResourceUploadFileResult, 0, len(results))
-	for _, result := range results {
-		item := ResourceUploadFileResult{
-			Path: result.Path,
-		}
-		switch result.Action {
-		case "created":
-			item.Action = ResourceUploadFileResultActionCreated
-			if result.Resource != nil {
-				p := progressMap[result.Resource.ID]
-				translated, approved := 0, 0
-				if p != nil {
-					translated, approved = p.Translated, p.Approved
-				}
-				gr := toGeneratedResource(result.Resource, translated, approved)
-				item.Resource = &gr
-			}
-		case "conflict":
-			item.Action = ResourceUploadFileResultActionConflict
-			if result.ExistingResource != nil {
-				p := progressMap[result.ExistingResource.ID]
-				translated, approved := 0, 0
-				if p != nil {
-					translated, approved = p.Translated, p.Approved
-				}
-				gr := toGeneratedResource(result.ExistingResource, translated, approved)
-				item.ExistingResource = &gr
-			}
-		case "failed":
-			item.Action = ResourceUploadFileResultActionFailed
-			if result.Error != "" {
-				item.Error = &result.Error
-			}
-		}
-		respItems = append(respItems, item)
-	}
-	writeJSON(w, http.StatusOK, ResourceUploadBatchResponse{Items: respItems})
+	writeJSON(w, http.StatusOK, result)
 }
 
 // handlePrecheckProjectResources 处理资源上传预检。
@@ -283,12 +245,14 @@ func (s *Server) handlePrecheckProjectResources(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "表单解析失败")
+	form, cleanup, err := s.parseResourceMultipart(w, r, 0)
+	if err != nil {
+		s.writeResourceMultipartError(w, r, err)
 		return
 	}
+	defer cleanup()
 
-	paths := r.MultipartForm.Value["paths"]
+	paths := form.Value["paths"]
 	if len(paths) == 0 {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "至少提供一个路径")
 		return
@@ -488,12 +452,14 @@ func (s *Server) handleUpdateResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+	form, cleanup, err := s.parseResourceMultipart(w, r, 1)
+	if err != nil {
+		s.writeResourceMultipartError(w, r, err)
 		return
 	}
+	defer cleanup()
 
-	fileHeader, fileFieldOK := r.MultipartForm.File["file"]
+	fileHeader, fileFieldOK := form.File["file"]
 	if !fileFieldOK || len(fileHeader) == 0 {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请上传一个文件")
 		return
@@ -507,7 +473,7 @@ func (s *Server) handleUpdateResource(w http.ResponseWriter, r *http.Request) {
 	}
 	defer opened.Close()
 
-	res, err := s.resourceSvc.UpdateResource(r.Context(), authUser.User.ID, projectID, resourceID, service.UploadedFile{
+	res, err := s.resourceSvc.UpdateResource(r.Context(), authUser.User.ID, projectID, resourceID, service.UploadedFile{ExpectedSourceGeneration: parseStorageGeneration(r.FormValue("expected_source_generation")), ExpectedTranslationGeneration: parseStorageGeneration(r.FormValue("expected_translation_generation")), PreviewTaskID: parseStorageTaskID(r.FormValue("preview_task_id")),
 		Filename: header.Filename,
 		Size:     header.Size,
 		Reader:   opened,
@@ -572,20 +538,16 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if res.Resource.StoragePath == "" {
-		s.writeProblem(w, r, http.StatusNotFound, "file_not_found", "资源文件不存在")
+	f, err := s.resourceSvc.OriginalFile(r.Context(), authUser.User.ID, projectID, resourceID)
+	if err != nil {
+		s.writeResourceServiceError(w, r, err)
 		return
 	}
-
-	absolutePath, absErr := s.resourceSvc.Absolute(res.Resource.StoragePath)
-	if absErr != nil {
-		s.writeServiceError(w, r, absErr)
-		return
-	}
-
+	defer f.Close()
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", contentDisposition(filepath.Base(absolutePath)))
-	http.ServeFile(w, r, absolutePath)
+	w.Header().Set("Content-Disposition", contentDisposition(filepath.Base(res.Resource.Path)))
+	_, _ = io.Copy(w, f)
+
 }
 
 // handleIncrementalUpdateResource 处理增量更新资源文件。
@@ -604,15 +566,16 @@ func (s *Server) handleIncrementalUpdateResource(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		s.logResourceMultipartDebug(r, "parse incremental update multipart form failed", "err", err)
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+	form, cleanup, err := s.parseResourceMultipart(w, r, 1)
+	if err != nil {
+		s.writeResourceMultipartError(w, r, err)
 		return
 	}
+	defer cleanup()
 
 	s.logResourceMultipartDebug(r, "parsed incremental update multipart form")
 
-	fileHeader, fileFieldOK := r.MultipartForm.File["file"]
+	fileHeader, fileFieldOK := form.File["file"]
 	if !fileFieldOK || len(fileHeader) == 0 {
 		s.logResourceMultipartDebug(r, "incremental update multipart form missing file field", "file_field_exists", fileFieldOK, "file_field_count", len(fileHeader))
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请上传一个文件")
@@ -629,7 +592,7 @@ func (s *Server) handleIncrementalUpdateResource(w http.ResponseWriter, r *http.
 	}
 	defer opened.Close()
 
-	res, stats, err := s.resourceSvc.IncrementalUpdateResource(r.Context(), authUser.User.ID, projectID, resourceID, service.UploadedFile{
+	res, stats, err := s.resourceSvc.IncrementalUpdateResource(r.Context(), authUser.User.ID, projectID, resourceID, service.UploadedFile{ExpectedSourceGeneration: parseStorageGeneration(r.FormValue("expected_source_generation")), ExpectedTranslationGeneration: parseStorageGeneration(r.FormValue("expected_translation_generation")), PreviewTaskID: parseStorageTaskID(r.FormValue("preview_task_id")),
 		Filename: header.Filename,
 		Size:     header.Size,
 		Reader:   opened,
@@ -723,26 +686,14 @@ func summarizeMultipartFileFields(files map[string][]*multipart.FileHeader) []st
 
 // writeResourceServiceError 写入资源服务的错误响应。
 func (s *Server) writeResourceServiceError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case err == nil:
+	if err == nil {
 		return
-	case errors.Is(err, service.ErrProjectNotFound):
-		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")
-	case errors.Is(err, service.ErrResourceNotFound):
-		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
-	case errors.Is(err, service.ErrResourceAlreadyExists):
-		s.writeProblem(w, r, http.StatusConflict, "conflict", "项目中已存在同路径资源")
-	case errors.Is(err, service.ErrResourcePathInvalid):
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_resource_path", "资源路径不合法")
-	case errors.Is(err, service.ErrForbidden):
-		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
-	case errors.Is(err, service.ErrUnsupportedFormat):
-		s.writeProblem(w, r, http.StatusBadRequest, "unsupported_format", err.Error())
-	case errors.Is(err, service.ErrParseFailed):
-		s.writeProblem(w, r, http.StatusBadRequest, "parse_failed", err.Error())
-	default:
-		s.writeServiceError(w, r, err)
 	}
+	if errors.Is(err, service.ErrResourceAlreadyExists) {
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "项目中已存在同路径资源")
+		return
+	}
+	s.writeStorageError(w, r, err)
 }
 
 // safeZipResourceEntryName 根据资源路径生成安全的 ZIP 条目名称。
@@ -847,4 +798,19 @@ func targetMarkupProblemDetail(defects []parser.TargetDefect) string {
 		len(defects), strings.Join(ids, "、"), more,
 		first.SegmentID, first.Location, first.Reason,
 	)
+}
+
+func parseStorageGeneration(value string) *int64 {
+	v, e := strconv.ParseInt(value, 10, 64)
+	if e != nil || v < 0 {
+		return nil
+	}
+	return &v
+}
+func parseStorageTaskID(value string) int {
+	v, e := strconv.Atoi(value)
+	if e != nil {
+		return 0
+	}
+	return v
 }

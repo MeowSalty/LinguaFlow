@@ -68,6 +68,10 @@ func (s *Server) handleQuickTranslate(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) writeQuickTranslateServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, service.ErrExecutionPlanConfigInvalid):
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_config", "执行计划引用的配置不存在或在当前范围不可用")
+	case errors.Is(err, service.ErrExecutionProfileNotFound), errors.Is(err, service.ErrTranslationPromptTemplateNotFound), errors.Is(err, service.ErrBootstrapPromptTemplateNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "配置不存在或不可访问")
 	case errors.Is(err, service.ErrQuickTranslateBusy):
 		w.Header().Set("Retry-After", "1")
 		s.writeProblem(w, r, http.StatusServiceUnavailable, "quick_translate_busy", "即时翻译并发已满,请稍后重试")

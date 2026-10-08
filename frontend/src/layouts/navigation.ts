@@ -11,6 +11,7 @@ import IconCarbonFlow from '~icons/carbon/flow'
 import IconCarbonPlan from '~icons/carbon/plan'
 import IconCarbonTextVerticalAlignment from '~icons/carbon/text-vertical-alignment'
 import IconCarbonSecurity from '~icons/carbon/security'
+import IconCarbonTask from '~icons/carbon/task'
 
 export interface AppNavItem {
   /** 目标路由路径；'/' 仅在精确匹配时视为激活 */
@@ -33,6 +34,7 @@ export const APP_NAV_SECTIONS: AppNavSection[] = [
     labelKey: null,
     items: [
       { path: '/', labelKey: 'nav.dashboard', icon: IconCarbonDashboard },
+      { path: '/operations', labelKey: 'operations.title', icon: IconCarbonTask },
       { path: '/projects', labelKey: 'nav.projects', icon: IconCarbonFolder },
       { path: '/backends', labelKey: 'nav.backends', icon: IconCarbonServerProxy },
       { path: '/stats', labelKey: 'nav.stats', icon: IconCarbonChartBar },

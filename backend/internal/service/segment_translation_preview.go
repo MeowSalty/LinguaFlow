@@ -29,19 +29,19 @@ var (
 	ErrPreviewTargetBlank  = errors.New("preview: target text must be non-blank")
 )
 
-// PreviewInput is the input for a single segment translation preview.
+// PreviewInput 是单段翻译预览的输入。
 type PreviewInput struct {
 	ActorUserID     int
 	ProjectID       int
 	ResourceID      int
 	SegmentID       int
 	ExecutionPlanID int
-	SourceText      string // optional override; empty means use DB value
-	SourceTextSet   bool   // distinguishes omitted source_text from blank input
+	SourceText      string // 仅为调用方保留；不接受改写 source
+	SourceTextSet   bool   // 区分“未提供 source_text”与“显式传入空白 source_text”
 }
 
-// PreviewBaseline captures the database state of the target segment at the
-// start of the preview so that the apply step can detect conflicts.
+// PreviewBaseline 记录预览开始时目标分段在数据库中的状态，
+// 供 apply 步骤检测冲突。
 type PreviewBaseline struct {
 	ResourceID    int
 	SourceText    string
@@ -50,7 +50,7 @@ type PreviewBaseline struct {
 	QualityIssues []qa.QualityIssue
 }
 
-// PreviewRoundSummary is a high-level summary of one round's execution.
+// PreviewRoundSummary 是单轮执行的高层摘要。
 type PreviewRoundSummary struct {
 	Index    int
 	Mode     string
@@ -59,7 +59,7 @@ type PreviewRoundSummary struct {
 	Duration time.Duration
 }
 
-// PreviewResult is the concrete result type produced by a preview run.
+// PreviewResult 是预览运行产出的具体结果类型。
 type PreviewResult struct {
 	Status        string // "success" | "partial" | "failed"
 	SegmentID     int
@@ -74,8 +74,8 @@ type PreviewResult struct {
 	Warnings      []string
 }
 
-// PreviewRunner is the interface for executing a single segment preview.
-// Implemented by worker.PreviewRunner.
+// PreviewRunner 是执行单段预览的接口。
+// 由 worker.PreviewRunner 实现。
 type PreviewRunner interface {
 	RunPreview(
 		ctx context.Context,
@@ -88,7 +88,7 @@ type PreviewRunner interface {
 	) (*PreviewResult, error)
 }
 
-// PreviewOutput is the output of a single segment translation preview.
+// PreviewOutput 是单段翻译预览的输出。
 type PreviewOutput struct {
 	Status         string // "success" | "partial" | "failed"
 	SegmentID      int
@@ -104,14 +104,14 @@ type PreviewOutput struct {
 	BatchEvents    []progress.BatchEvent
 }
 
-// UsageSummary summarizes API usage for a preview run.
+// UsageSummary 汇总一次预览运行的 API 用量。
 type UsageSummary struct {
 	APICalls     int64
 	InputTokens  int64
 	OutputTokens int64
 }
 
-// PreviewService orchestrates single segment translation previews.
+// PreviewService 编排单段翻译预览流程。
 type PreviewService struct {
 	logger        *slog.Logger
 	client        *ent.Client
@@ -124,8 +124,7 @@ type PreviewService struct {
 	timeout       time.Duration
 }
 
-// NewPreviewSemaphore creates the concurrency gate shared by translation and
-// revision previews.
+// NewPreviewSemaphore 创建由翻译预览与修订预览共享的并发闸门。
 func NewPreviewSemaphore(maxConcurrency int) chan struct{} {
 	if maxConcurrency <= 0 {
 		maxConcurrency = 2
@@ -133,7 +132,7 @@ func NewPreviewSemaphore(maxConcurrency int) chan struct{} {
 	return make(chan struct{}, maxConcurrency)
 }
 
-// NewPreviewService creates a PreviewService using a private concurrency gate.
+// NewPreviewService 创建使用私有并发闸门的 PreviewService。
 func NewPreviewService(
 	logger *slog.Logger,
 	client *ent.Client,
@@ -149,8 +148,7 @@ func NewPreviewService(
 	return NewPreviewServiceWithSemaphore(logger, client, projects, jobs, audit, previewRunner, jwtSecret, tokenTTL, maxConcurrency, timeout, nil)
 }
 
-// NewPreviewServiceWithSemaphore creates a PreviewService with an optionally
-// shared concurrency gate.
+// NewPreviewServiceWithSemaphore 创建 PreviewService，可选用共享的并发闸门。
 func NewPreviewServiceWithSemaphore(
 	logger *slog.Logger,
 	client *ent.Client,
@@ -189,32 +187,31 @@ func NewPreviewServiceWithSemaphore(
 	}
 }
 
-// RunPreview validates input, executes the preview, records usage, and returns
-// the result with an optional apply token.
+// RunPreview 校验输入、执行预览、记录用量，并返回结果与可选的 apply 令牌。
 func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*PreviewOutput, error) {
-	// Acquire semaphore slot.
+	if input.SourceTextSet || input.SourceText != "" {
+		return nil, ErrSourceReadOnly
+	}
+	// 占用一个信号量槽位。
 	select {
 	case s.semaphore <- struct{}{}:
 	default:
 		return nil, ErrPreviewBusy
 	}
 	defer func() { <-s.semaphore }()
-	if input.SourceTextSet && strings.TrimSpace(input.SourceText) == "" {
-		return nil, ErrInvalidInput
-	}
 
-	// Apply preview timeout.
+	// 为预览应用超时限制。
 	previewCtx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	// 1. Validate project write access.
+	// 1. 校验项目写入权限。
 	projectRow, err := s.projects.requireProjectAccess(previewCtx, input.ActorUserID, input.ProjectID, true)
 	if err != nil {
 		return nil, fmt.Errorf("preview: project access: %w", err)
 	}
 
-	// 2. Validate resource and segment ownership.
-	segRow, err := s.client.Segment.Query().
+	// 2. 校验资源与分段的归属。
+	_, err = s.client.Segment.Query().
 		Where(segment.IDEQ(input.SegmentID), segment.ResourceIDEQ(input.ResourceID)).
 		Only(previewCtx)
 	if err != nil {
@@ -229,14 +226,15 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 		return nil, ErrResourceNotFound
 	}
 
-	// 3. Load, validate, and freeze the same execution snapshot used by jobs.
-	snapshot, err := s.jobs.prepareExecutionSnapshot(previewCtx, input.ActorUserID, projectRow, input.ExecutionPlanID, "")
+	// 3. 加载、校验并冻结与任务（job）相同的执行快照。
+	snapshot, release, err := s.jobs.prepareExecutionSnapshot(previewCtx, input.ActorUserID, projectRow, input.ExecutionPlanID, "")
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
-	// 5. Preview forces explicit target segment; ignore plan segment filter and auto approve.
-	// Reject plans without a translate round.
+	// 5. 预览强制指定目标分段：忽略计划的分段过滤与自动批准。
+	// 没有翻译轮次的计划直接拒绝。
 	hasTranslate := false
 	for _, rs := range snapshot.Rounds {
 		if rs.Mode == "translate" {
@@ -251,7 +249,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 	snapshot.AutoApprove = false
 	snapshot.ExplicitSegmentSelection = true
 
-	// 6. Load all resource segments ordered by segment_index.
+	// 6. 按 segment_index 顺序加载资源的全部分段。
 	allSegments, err := s.client.Segment.Query().
 		Where(segment.ResourceIDEQ(input.ResourceID)).
 		Order(segment.BySegmentIndex(), segment.ByID()).
@@ -260,7 +258,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 		return nil, fmt.Errorf("preview: load segments: %w", err)
 	}
 
-	// Find the target segment's index in the ordered list.
+	// 在有序列表中定位目标分段的下标。
 	targetSegmentIdx := -1
 	for i, seg := range allSegments {
 		if seg.ID == input.SegmentID {
@@ -272,13 +270,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 		return nil, ErrSegmentNotFound
 	}
 
-	// 7. Determine source override.
-	sourceOverride := input.SourceText
-	if sourceOverride == segRow.SourceText {
-		sourceOverride = "" // no change needed
-	}
-
-	// 8. Execute preview.
+	// 8. 执行预览。
 	result, err := s.previewRunner.RunPreview(
 		previewCtx,
 		snapshot,
@@ -286,13 +278,13 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 		resRow,
 		allSegments,
 		targetSegmentIdx,
-		sourceOverride,
+		"",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("preview: execute: %w", err)
 	}
 
-	// 9. Record usage (best-effort, even on errors).
+	// 9. 记录用量（尽力而为，即使出错也继续）。
 	usageMetrics := aggregateMetrics(result.Metrics)
 	if usageMetrics.APICalls > 0 {
 		usageCtx, usageCancel := context.WithTimeout(context.WithoutCancel(previewCtx), 5*time.Second)
@@ -303,7 +295,11 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 		usageCancel()
 	}
 
-	// 10. Build apply token if we have a target.
+	// 10. 若已有目标译文，则构建 apply 令牌。
+	if err := previewCtx.Err(); err != nil {
+		return nil, fmt.Errorf("preview: execution deadline: %w", err)
+	}
+
 	var applyToken string
 	var applyExpiresAt time.Time
 	if result.TargetText != "" {
@@ -311,20 +307,22 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 		sourceHash := sha256Hex(result.SourceText)
 		qaCfg := qaConfigFromSnapshot(snapshot, resRow.Format)
 		claims := previewtoken.ApplyClaims{
-			ActorUserID:     input.ActorUserID,
-			ProjectID:       input.ProjectID,
-			ResourceID:      input.ResourceID,
-			SegmentID:       input.SegmentID,
-			ExecutionPlanID: input.ExecutionPlanID,
-			Kind:            previewtoken.KindTranslate,
-			SourceHash:      sourceHash,
-			PreviewSource:   result.SourceText,
-			TargetHash:      targetHash,
-			BaselineSource:  result.Baseline.SourceText,
-			BaselineTarget:  result.Baseline.TargetText,
-			BaselineStatus:  result.Baseline.Status,
-			FinalIssues:     result.QualityIssues,
-			QAConfig:        qaCfg,
+			ActorUserID:      input.ActorUserID,
+			ProjectID:        input.ProjectID,
+			ResourceID:       input.ResourceID,
+			SourceRevisionID: resRow.CurrentSourceRevisionID,
+			SourceGeneration: resRow.SourceGeneration,
+			SegmentID:        input.SegmentID,
+			ExecutionPlanID:  input.ExecutionPlanID,
+			Kind:             previewtoken.KindTranslate,
+			SourceHash:       sourceHash,
+			PreviewSource:    result.SourceText,
+			TargetHash:       targetHash,
+			BaselineSource:   result.Baseline.SourceText,
+			BaselineTarget:   result.Baseline.TargetText,
+			BaselineStatus:   result.Baseline.Status,
+			FinalIssues:      result.QualityIssues,
+			QAConfig:         qaCfg,
 		}
 		applyToken, applyExpiresAt, err = s.tokenCodec.Encode(claims)
 		if err != nil {
@@ -332,7 +330,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 		}
 	}
 
-	// 11. Preserve complete batch diagnostics for the HTTP adapter.
+	// 11. 为 HTTP 适配层保留完整的批次诊断信息。
 	events := result.Collector.Events()
 
 	return &PreviewOutput{
@@ -355,8 +353,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 	}, nil
 }
 
-// ApplyPreview applies a preview translation result to the database using a
-// conditional CAS update.
+// ApplyPreview 通过条件式 CAS 更新，把预览翻译结果写入数据库。
 func (s *PreviewService) ApplyPreview(
 	ctx context.Context,
 	actorUserID, projectID, resourceID, segmentID int,
@@ -367,7 +364,7 @@ func (s *PreviewService) ApplyPreview(
 		return nil, ErrPreviewTargetBlank
 	}
 
-	// 1. Decode and verify token.
+	// 1. 解码并校验令牌。
 	claims, err := s.tokenCodec.Decode(applyToken)
 	if err != nil {
 		if errors.Is(err, previewtoken.ErrTokenExpired) {
@@ -376,19 +373,22 @@ func (s *PreviewService) ApplyPreview(
 		return nil, ErrPreviewTokenInvalid
 	}
 
-	// 2. Verify ownership.
+	// 2. 校验归属。
 	if err := previewtoken.VerifyOwnership(claims, actorUserID, projectID, resourceID, segmentID); err != nil {
 		return nil, ErrPreviewTokenInvalid
 	}
 	if claims.SourceHash != sha256Hex(claims.PreviewSource) {
 		return nil, ErrPreviewTokenInvalid
 	}
+	if claims.PreviewSource != claims.BaselineSource {
+		return nil, ErrSourceReadOnly
+	}
 	projectRow, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Load the current segment to check baseline.
+	// 3. 加载当前分段以核对基线。
 	currentSeg, err := s.client.Segment.Query().
 		Where(segment.IDEQ(segmentID), segment.ResourceIDEQ(resourceID)).
 		Only(ctx)
@@ -396,7 +396,7 @@ func (s *PreviewService) ApplyPreview(
 		return nil, ErrSegmentNotFound
 	}
 
-	// 4. Check baseline: source, nullable target, status must match.
+	// 4. 核对基线：source、可空的 target、status 都必须一致。
 	baselineSource := claims.BaselineSource
 	baselineTarget := claims.BaselineTarget
 	baselineStatus := claims.BaselineStatus
@@ -426,8 +426,11 @@ func (s *PreviewService) ApplyPreview(
 			return nil, &SegmentMarkupError{Err: verr}
 		}
 	}
+	if resRow.SourceGeneration != claims.SourceGeneration || !ptrIntEq(resRow.CurrentSourceRevisionID, claims.SourceRevisionID) {
+		return nil, ErrSourceRevisionConflict
+	}
 
-	// 5. Determine final issues.
+	// 5. 确定最终的质检 issue。
 	targetChanged := sha256Hex(targetText) != claims.TargetHash
 	var finalIssues []qa.QualityIssue
 	if !targetChanged {
@@ -456,8 +459,7 @@ func (s *PreviewService) ApplyPreview(
 			fresh = qa.IssuesFor(currentSeg.SegmentIndex, allIssues)
 			qaRan = true
 
-			// Re-run duplicate-source-divergence only when it was enabled by
-			// the frozen deterministic QA configuration.
+			// 仅当冻结的确定性 QA 配置启用了同文异译检查时，才重跑该项。
 			if duplicateSourceDivergenceEnabledForClaims(claims.QAConfig) {
 				s.rerunDuplicateSourceDivergence(ctx, resourceID, segmentID, currentSeg.SegmentIndex, claims.PreviewSource, targetText, &fresh)
 			}
@@ -472,9 +474,17 @@ func (s *PreviewService) ApplyPreview(
 		// else：翻译预览 + QA 未启用 → finalIssues 为 nil → 清空（既有行为，保持不变）。
 	}
 
-	// 6. CAS update.
-	// Use a conditional update matching the baseline.
-	update := s.client.Segment.Update().
+	// 6. CAS 更新。
+	// 使用与基线匹配的条件更新。
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := AdvanceTranslationGeneration(ctx, tx.Client(), resourceID, claims.SourceGeneration); err != nil {
+		return nil, err
+	}
+	update := tx.Segment.Update().
 		Where(
 			segment.IDEQ(segmentID),
 			segment.ResourceIDEQ(resourceID),
@@ -488,7 +498,6 @@ func (s *PreviewService) ApplyPreview(
 	}
 
 	update = update.
-		SetSourceText(claims.PreviewSource).
 		SetTargetText(targetText).
 		SetStatus(SegmentStatusEdited).
 		SetReviewedByID(actorUserID).
@@ -511,6 +520,9 @@ func (s *PreviewService) ApplyPreview(
 	if rowsAffected == 0 {
 		return nil, ErrPreviewConflict
 	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 
 	action := "resource.segment.translation_preview.apply"
 	message := fmt.Sprintf("Applied preview translation to segment %d", segmentID)
@@ -530,20 +542,18 @@ func (s *PreviewService) ApplyPreview(
 	auditEvent := AuditEvent{
 		ActorUserID:  actorUserID,
 		ProjectID:    &projectID,
-		ResourceID:   resourceID,
+		ResourceID:   segmentID,
 		Action:       action,
 		ResourceType: "segment",
 		Message:      message,
 		Metadata:     metadata,
 	}
-	if projectRow.OwnerOrgID != nil {
-		auditEvent.OrgID = projectRow.OwnerOrgID
-	}
+	auditEvent.OrgID = EffectiveProjectOrgID(projectRow)
 	if s.audit != nil {
 		_ = s.audit.Record(ctx, auditEvent)
 	}
 
-	// 8. Return refreshed segment.
+	// 8. 返回刷新后的分段。
 	return s.client.Segment.Query().
 		Where(segment.IDEQ(segmentID)).
 		WithReviewedBy().
@@ -553,6 +563,7 @@ func (s *PreviewService) ApplyPreview(
 
 func (s *PreviewService) recordUsage(ctx context.Context, input PreviewInput, projectRow *ent.Project, metrics backend.MeterMetrics) error {
 	usage := s.client.UsageRecord.Create().
+		SetVisibilityScope("project").
 		SetProjectID(input.ProjectID).
 		SetSource("preview").
 		SetSegmentCount(1).
@@ -563,8 +574,8 @@ func (s *PreviewService) recordUsage(ctx context.Context, input PreviewInput, pr
 	if input.ActorUserID > 0 {
 		usage.SetUserID(input.ActorUserID)
 	}
-	if projectRow.OwnerOrgID != nil {
-		usage.SetOrganizationID(*projectRow.OwnerOrgID)
+	if orgID := EffectiveProjectOrgID(projectRow); orgID != nil {
+		usage.SetOrganizationID(*orgID)
 	}
 	return usage.Exec(ctx)
 }
@@ -613,9 +624,8 @@ func duplicateSourceDivergenceEnabledForClaims(cfg previewtoken.QAConfigClaims) 
 	return cfg.Enabled && qa.DuplicateSourceDivergenceEnabled(cfg.Checks)
 }
 
-// rerunDuplicateSourceDivergence recomputes duplicate-source-divergence issues
-// for the whole resource snapshot, overriding the target segment's source/target
-// with the preview values, and merges only the target segment's resulting issues.
+// rerunDuplicateSourceDivergence 对整个资源快照重算同文异译 issue：
+// 用预览值覆盖目标分段的 source/target，且只合并目标分段产生的 issue。
 func (s *PreviewService) rerunDuplicateSourceDivergence(
 	ctx context.Context,
 	resourceID, segmentID, targetSegmentIndex int,

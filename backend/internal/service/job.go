@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 	"log/slog"
 	"math"
+	"slices"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
@@ -17,11 +21,15 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 const (
@@ -73,6 +81,18 @@ type JobService struct {
 	profiles                   *ExecutionProfileService
 	store                      *filestore.LocalStore
 	broker                     *event.Broker
+	lifecycle                  *tasklife.Coordinator
+	cancelTask                 func(int)
+	pauseTask                  func(int) bool
+}
+
+// SetLifecycle is configured before serving requests or starting workers.
+func (s *JobService) SetLifecycle(coordinator *tasklife.Coordinator) { s.lifecycle = coordinator }
+
+// SetTaskControl keeps execution notifications inside the same control guard
+// as the corresponding durable state transition.
+func (s *JobService) SetTaskControl(cancel func(int), pause func(int) bool) {
+	s.cancelTask, s.pauseTask = cancel, pause
 }
 
 // CreateJobInput 创建任务的输入参数。
@@ -129,28 +149,10 @@ type JobExecution struct {
 // --- 快照类型定义 ---
 
 // JobExecutionSnapshot 任务执行快照，创建时生成，不可变。
-type JobExecutionSnapshot struct {
-	ExecutionPlanID   int    `json:"execution_plan_id"`
-	ExecutionPlanName string `json:"execution_plan_name"`
-	// Strategy 计划级策略快照：来自计划引用的 ExecutionProfile（profile_id），
-	// 为全管道（所有改写型轮次与引擎级行为）供 protect/ruby 等七项行为预设。
-	Strategy                 StrategySnapshot                `json:"strategy"`
-	Rounds                   []JobRoundSnapshot              `json:"rounds"`
-	SourceLang               string                          `json:"source_lang"`
-	TargetLang               string                          `json:"target_lang"`
-	GlossaryEnabled          bool                            `json:"glossary_enabled"`
-	TMEnabled                bool                            `json:"tm_enabled,omitempty"`
-	AutoApprove              bool                            `json:"auto_approve,omitempty"`
-	ExplicitSegmentSelection bool                            `json:"explicit_segment_selection,omitempty"`
-	RubyRetry                *ExecutionPlanRubyRetrySnapshot `json:"ruby_retry,omitempty"`
-}
+type JobExecutionSnapshot = execution.JobExecutionSnapshot
 
 // ExecutionPlanRubyRetrySnapshot 注音对齐重试快照。
-type ExecutionPlanRubyRetrySnapshot struct {
-	Enabled     bool            `json:"enabled"`
-	Backend     BackendSnapshot `json:"backend"`
-	MaxAttempts int             `json:"max_attempts,omitempty"`
-}
+type ExecutionPlanRubyRetrySnapshot = execution.ExecutionPlanRubyRetrySnapshot
 
 // NormalizeRubyRetryAttempts 规范化 ruby_retry.max_attempts：<=0 返回 1。
 func NormalizeRubyRetryAttempts(n int) int {
@@ -161,91 +163,40 @@ func NormalizeRubyRetryAttempts(n int) int {
 }
 
 // JobRoundSnapshot 单轮的完整执行快照。
-type JobRoundSnapshot struct {
-	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa" | "revise" | "correct"
-	Backend    BackendSnapshot             `json:"backend"`
-	Translate  *JobTranslateRoundSnapshot  `json:"translate,omitempty"`
-	Extract    *JobExtractRoundSnapshot    `json:"extract,omitempty"`
-	Adjudicate *JobAdjudicateRoundSnapshot `json:"adjudicate,omitempty"`
-	SemanticQA *JobSemanticQARoundSnapshot `json:"semantic_qa,omitempty"`
-	Revise     *JobReviseRoundSnapshot     `json:"revise,omitempty"`
-	Correct    *JobCorrectRoundSnapshot    `json:"correct,omitempty"`
-}
+type JobRoundSnapshot = execution.JobRoundSnapshot
 
 // JobTranslateRoundSnapshot 翻译轮次快照。
 // 无 Strategy 字段：策略快照位于 JobExecutionSnapshot.Strategy（计划级引用物化一次）。
-type JobTranslateRoundSnapshot struct {
-	Prompt           PromptSnapshot         `json:"prompt"`
-	BatchSize        int                    `json:"batch_size"`
-	MaxWordsPerBatch int                    `json:"max_words_per_batch"`
-	Concurrency      int                    `json:"concurrency"`
-	FallbackShrink   float64                `json:"fallback_shrink"`
-	SegmentFilter    *SegmentFilterSnapshot `json:"segment_filter,omitempty"`
-	Retry            schema.RetryConfig     `json:"retry"`
-}
+type JobTranslateRoundSnapshot = execution.JobTranslateRoundSnapshot
 
 // JobExtractRoundSnapshot 术语抽取轮次快照。
 // NOTE: 无 FallbackShrink 字段——extract 不需要缩批（仅 translate 实现）。
 // 若未来需要，在此结构体加 FallbackShrink float64，并在 prepareExecutionSnapshot 赋值。
-type JobExtractRoundSnapshot struct {
-	TemplateContent      string             `json:"template_content"` // 从 BootstrapPromptTemplate.Content 快照
-	BatchSize            int                `json:"batch_size"`
-	MaxWordsPerBatch     int                `json:"max_words_per_batch"`
-	Concurrency          int                `json:"concurrency"`
-	MaxTermsPer1000Chars float64            `json:"max_terms_per_1000_chars"`
-	MinSourceLen         int                `json:"min_source_len"`
-	Retry                schema.RetryConfig `json:"retry"`
-}
+type JobExtractRoundSnapshot = execution.JobExtractRoundSnapshot
 
 // JobAdjudicateRoundSnapshot 质量裁决轮次快照（无 prompt 字段，内置不可见）。
 // NOTE: 无 FallbackShrink 字段——adjudicate 不需要缩批（仅 translate 实现）。
 // 若未来需要，在此结构体加 FallbackShrink float64，并在 validateAndSnapshotWith 赋值。
-type JobAdjudicateRoundSnapshot struct {
-	BatchSize        int                `json:"batch_size"`
-	MaxWordsPerBatch int                `json:"max_words_per_batch"`
-	Concurrency      int                `json:"concurrency"`
-	AdjudicateCodes  []string           `json:"adjudicate_codes,omitempty"`
-	Retry            schema.RetryConfig `json:"retry"`
-}
+type JobAdjudicateRoundSnapshot = execution.JobAdjudicateRoundSnapshot
 
 // JobSemanticQARoundSnapshot 语义质检轮次快照（无 prompt 字段，内置不可见）。
 // NOTE: 无 FallbackShrink 字段——semantic_qa 不需要缩批（仅 translate 实现）。
 // 若未来需要，在此结构体加 FallbackShrink float64，并在 snapshotSemanticQARound 赋值。
-type JobSemanticQARoundSnapshot struct {
-	BatchSize        int                `json:"batch_size"`
-	MaxWordsPerBatch int                `json:"max_words_per_batch"`
-	Concurrency      int                `json:"concurrency"`
-	SegmentScope     string             `json:"segment_scope,omitempty"` // 物化后的 scope（空 → "all"）
-	IssueCodes       []string           `json:"issue_codes,omitempty"`   // 仅 with_issue_codes 有效
-	Retry            schema.RetryConfig `json:"retry"`
-}
+type JobSemanticQARoundSnapshot = execution.JobSemanticQARoundSnapshot
 
 // JobReviseRoundSnapshot LLM 修订轮次快照（无 prompt 字段，内置不可见）。
 // NOTE: 无 FallbackShrink 字段——revise 不需要缩批（仅 translate 实现）。
 // 若未来需要，在此结构体加 FallbackShrink float64，并在 snapshotReviseRound 赋值。
-type JobReviseRoundSnapshot struct {
-	BatchSize        int                `json:"batch_size"`
-	MaxWordsPerBatch int                `json:"max_words_per_batch"`
-	Concurrency      int                `json:"concurrency"`
-	SegmentScope     string             `json:"segment_scope,omitempty"` // 物化后的 scope（空 → "with_issues"）
-	IssueCodes       []string           `json:"issue_codes,omitempty"`   // with_issues 为空时物化为完整语义白名单
-	Retry            schema.RetryConfig `json:"retry"`
-}
+type JobReviseRoundSnapshot = execution.JobReviseRoundSnapshot
 
 // JobCorrectRoundSnapshot 本地改写轮次快照（纯本地、不调 LLM，无 prompt/backend 字段）。
 // NOTE: 无 FallbackShrink — correct 不接缩批（与 extract/adjudicate/semantic_qa 一致）。
 // NOTE: 无 Retry — schema 层 CorrectRoundConfig 无 Retry（纯本地、无外部 I/O、无重试语义）。
 // NOTE: 无 Enabled — 是否执行由轮次是否出现在 rounds 数组决定（与其他轮次一致）。
-type JobCorrectRoundSnapshot struct {
-	Rules       []JobCorrectRuleSnapshot `json:"rules,omitempty"`
-	Concurrency int                      `json:"concurrency"`
-}
+type JobCorrectRoundSnapshot = execution.JobCorrectRoundSnapshot
 
 // JobCorrectRuleSnapshot 单条本地改写规则快照。
-type JobCorrectRuleSnapshot struct {
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
-}
+type JobCorrectRuleSnapshot = execution.JobCorrectRuleSnapshot
 
 func snapshotCorrectRound(c *schema.CorrectRoundConfig) *JobCorrectRoundSnapshot {
 	rules := make([]JobCorrectRuleSnapshot, 0, len(c.Rules))
@@ -263,14 +214,14 @@ func snapshotReviseRound(r *schema.ReviseRoundConfig) *JobReviseRoundSnapshot {
 	if scope == "" {
 		scope = "with_issues"
 	}
-	issueCodes := append([]string(nil), r.IssueCodes...)
-	if scope == "with_issues" {
-		// 规范约定 issue_codes 仅 with_issue_codes 生效；with_issues 一律物化为
-		// 完整语义白名单。执行链（ReviseHandler）只有 codes 维度、无 scope 维度，
-		// 若保留用户误填的子集会被当作过滤条件，漏掉其余 pending 语义 issue。
+	issueCodes := slices.Clone(r.IssueCodes)
+	if scope == "with_issues" && (issueCodes == nil || len(issueCodes) > 0) {
+		// with_issues 下省略列表或提供非空子集均使用完整语义白名单，
+		// 显式空数组保留为不处理任何问题。执行链只消费冻结后的 codes。
 		issueCodes = append([]string(nil), qa.SemanticQACodes()...)
 	}
 	return &JobReviseRoundSnapshot{
+		TemplateContent:  templates.EmbeddedReviseTemplate(),
 		BatchSize:        r.BatchSize,
 		MaxWordsPerBatch: r.MaxWordsPerBatch,
 		Concurrency:      r.Concurrency,
@@ -286,6 +237,7 @@ func snapshotSemanticQARound(s *schema.SemanticQARoundConfig) *JobSemanticQARoun
 		scope = "all"
 	}
 	return &JobSemanticQARoundSnapshot{
+		TemplateContent:  templates.EmbeddedSemanticQATemplate(),
 		BatchSize:        s.BatchSize,
 		MaxWordsPerBatch: s.MaxWordsPerBatch,
 		Concurrency:      s.Concurrency,
@@ -296,47 +248,19 @@ func snapshotSemanticQARound(s *schema.SemanticQARoundConfig) *JobSemanticQARoun
 }
 
 // SegmentFilterSnapshot 翻译轮次段落过滤快照。
-type SegmentFilterSnapshot struct {
-	StatusFilter string `json:"status_filter"`        // "pending_only" | "skip_approved" | "all"
-	Overridden   bool   `json:"overridden,omitempty"` // true 表示由任务创建时显式覆盖
-}
+type SegmentFilterSnapshot = execution.SegmentFilterSnapshot
 
 // BackendSnapshot 后端配置快照。
-type BackendSnapshot struct {
-	ID                 int            `json:"id"`
-	Scope              string         `json:"scope"`
-	Name               string         `json:"name"`
-	Type               string         `json:"type"`
-	Options            map[string]any `json:"options"`
-	RateLimitPerMinute int            `json:"rate_limit_per_minute"`
-}
+type BackendSnapshot = execution.BackendSnapshot
 
 // PromptSnapshot 翻译提示词模板快照。
-type PromptSnapshot struct {
-	TemplateID   *int   `json:"template_id,omitempty"`
-	TemplateName string `json:"template_name"`
-	Content      string `json:"content"`
-}
+type PromptSnapshot = execution.PromptSnapshot
 
 // BootstrapPromptSnapshot 术语抽取提示词模板快照。
-type BootstrapPromptSnapshot struct {
-	TemplateID   *int   `json:"template_id,omitempty"`
-	TemplateName string `json:"template_name"`
-	Content      string `json:"content"`
-}
+type BootstrapPromptSnapshot = execution.BootstrapPromptSnapshot
 
 // StrategySnapshot 策略模板快照。
-type StrategySnapshot struct {
-	ProfileID   *int                            `json:"profile_id,omitempty"`
-	ProfileName string                          `json:"profile_name"`
-	Protect     schema.ProfileProtectConfig     `json:"protect"`
-	Postprocess schema.ProfilePostprocessConfig `json:"postprocess"`
-	Repair      schema.ProfileRepairConfig      `json:"repair"`
-	Glossary    schema.ProfileGlossaryConfig    `json:"glossary"`
-	Context     schema.ProfileContextConfig     `json:"context"`
-	Ruby        schema.ProfileRubyConfig        `json:"ruby"`
-	QA          schema.ProfileQAConfig          `json:"qa"`
-}
+type StrategySnapshot = execution.StrategySnapshot
 
 // --- CRUD 方法 ---
 
@@ -349,10 +273,11 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	}
 
 	// 2. 加载、校验执行计划并生成不可变快照。
-	snapshot, err := s.prepareExecutionSnapshot(ctx, actorUserID, projectRow, input.ExecutionPlanID, input.SegmentFilter)
+	snapshot, release, err := s.prepareExecutionSnapshot(ctx, actorUserID, projectRow, input.ExecutionPlanID, input.SegmentFilter)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 	snapshot.AutoApprove = input.AutoApprove
 	snapshot.ExplicitSegmentSelection = len(input.SegmentGroupKeys) == 0 && len(input.SegmentIDs) > 0
 
@@ -362,6 +287,14 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	}
 
 	// 5. 解析任务选择
+	sourceRows, err := s.client.Resource.Query().Where(resource.ProjectIDEQ(projectID)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sources := make(map[int]*ent.Resource, len(sourceRows))
+	for _, row := range sourceRows {
+		sources[row.ID] = row
+	}
 	selection, err := resolveJobSelection(ctx, s.client, projectID, input)
 	if err != nil {
 		return nil, err
@@ -425,9 +358,18 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	for _, resourceID := range resourceIDs {
 		segmentIDs := append([]int(nil), selection[resourceID]...)
 		sort.Ints(segmentIDs)
+		source := sources[resourceID]
+		if source == nil {
+			return nil, ErrSourceRevisionConflict
+		}
+		if err := GuardSourceGeneration(ctx, tx.Client(), resourceID, source.SourceGeneration); err != nil {
+			return nil, err
+		}
 		jr, err := tx.JobResource.Create().
 			SetJobID(created.ID).
 			SetResourceID(resourceID).
+			SetSourceGeneration(source.SourceGeneration).
+			SetNillableSourceRevisionID(source.CurrentSourceRevisionID).
 			SetStatus(JobResourceStatusPending).
 			SetSegmentIds(segmentIDs).
 			SetSegmentCount(len(segmentIDs)).
@@ -451,6 +393,11 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 		}
 	}
 
+	if credentials := s.backends.Credentials(); credentials != nil {
+		if err := credentials.RetainJob(ctx, tx, created.ID, snapshot.Bindings()); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -461,27 +408,39 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 
 // --- 快照方法 ---
 
-// prepareExecutionSnapshot loads an execution plan and freezes every runtime
-// dependency used by jobs and synchronous previews at request creation time.
+// prepareExecutionSnapshot 加载执行计划，并在请求创建时冻结
+// job 与同步预览所用的每一项运行时依赖。
 func (s *JobService) prepareExecutionSnapshot(
 	ctx context.Context,
 	actorUserID int,
 	projectRow *ent.Project,
 	executionPlanID int,
 	overrideSegmentFilter string,
-) (*JobExecutionSnapshot, error) {
+) (*JobExecutionSnapshot, func(), error) {
+	ctx, leases := withExecutionLeases(ctx)
+	successful := false
+	defer func() {
+		if !successful {
+			leases.release()
+		}
+	}()
 	plan, err := s.executionPlans.GetByID(ctx, actorUserID, executionPlanID)
 	if err != nil {
-		return nil, fmt.Errorf("execution plan: %w", err)
+		return nil, nil, fmt.Errorf("execution plan: %w", err)
 	}
 	snapshot, err := s.validateAndSnapshot(ctx, actorUserID, projectRow, plan, overrideSegmentFilter)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	snapshot.SourceLang = projectRow.SourceLang
 	snapshot.TargetLang = projectRow.TargetLang
 	snapshot.GlossaryEnabled = jobGlossaryEnabled(projectRow.GlossaryEnabled, snapshot.Rounds)
-	return snapshot, nil
+	resolved, err := execution.Resolve(*snapshot)
+	if err != nil {
+		return nil, nil, err
+	}
+	successful = true
+	return resolved, leases.release, nil
 }
 
 // validateAndSnapshotWith 校验执行计划中的每轮配置并生成完整快照，backend 可访问性由 check 注入，
@@ -494,6 +453,8 @@ func (s *JobService) validateAndSnapshotWith(
 	check func(backendID int) error,
 ) (*JobExecutionSnapshot, error) {
 	snapshot := &JobExecutionSnapshot{
+		SchemaVersion: execution.SchemaVersion, DefaultsVersion: execution.DefaultsVersion,
+		RubyTemplates:     execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate},
 		ExecutionPlanID:   plan.ID,
 		ExecutionPlanName: plan.Name,
 		Rounds:            make([]JobRoundSnapshot, 0, len(plan.Rounds)),
@@ -540,7 +501,7 @@ func (s *JobService) validateAndSnapshotWith(
 			t := round.Translate
 
 			// 快照提示词模板
-			promptSnap, err := s.snapshotPromptTemplate(ctx, t.PromptTemplateID)
+			promptSnap, err := s.snapshotPromptTemplate(ctx, actorUserID, t.PromptTemplateID)
 			if err != nil {
 				return nil, fmt.Errorf("rounds[%d] snapshot prompt: %w", i, err)
 			}
@@ -571,7 +532,7 @@ func (s *JobService) validateAndSnapshotWith(
 			e := round.Extract
 
 			// 快照自举提示词模板
-			bootstrapSnap, err := s.snapshotBootstrapTemplate(ctx, e.BootstrapTemplateID)
+			bootstrapSnap, err := s.snapshotBootstrapTemplate(ctx, actorUserID, e.BootstrapTemplateID)
 			if err != nil {
 				return nil, fmt.Errorf("rounds[%d] snapshot bootstrap template: %w", i, err)
 			}
@@ -600,13 +561,14 @@ func (s *JobService) validateAndSnapshotWith(
 			}
 			a := round.Adjudicate
 			codes := a.AdjudicateCodes
-			if len(codes) == 0 {
+			if codes == nil {
 				codes = qa.DefaultAdjudicateCodes()
 			}
 			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 				Mode:    "adjudicate",
 				Backend: *backendSnap,
 				Adjudicate: &JobAdjudicateRoundSnapshot{
+					TemplateContent:  templates.EmbeddedAdjudicationTemplate(),
 					BatchSize:        a.BatchSize,
 					MaxWordsPerBatch: a.MaxWordsPerBatch,
 					Concurrency:      a.Concurrency,
@@ -700,6 +662,9 @@ func (s *JobService) validateAndSnapshot(
 	plan *ent.ExecutionPlanTemplate,
 	overrideSegmentFilter string,
 ) (*JobExecutionSnapshot, error) {
+	if err := s.validateSnapshotReferences(ctx, actorUserID, projectRow, plan); err != nil {
+		return nil, err
+	}
 	return s.validateAndSnapshotWith(ctx, actorUserID, plan, overrideSegmentFilter, func(backendID int) error {
 		return s.validateBackendAccess(ctx, projectRow, backendID)
 	})
@@ -734,10 +699,20 @@ func (s *JobService) prepareExecutionSnapshotForActor(
 	overrideSegmentFilter, sourceLang, targetLang string,
 	glossaryEnabled bool,
 	projectRow *ent.Project,
-) (*JobExecutionSnapshot, error) {
+) (*JobExecutionSnapshot, func(), error) {
+	ctx, leases := withExecutionLeases(ctx)
+	successful := false
+	defer func() {
+		if !successful {
+			leases.release()
+		}
+	}()
 	plan, err := s.executionPlans.GetByID(ctx, actorUserID, executionPlanID)
 	if err != nil {
-		return nil, fmt.Errorf("execution plan: %w", err)
+		return nil, nil, fmt.Errorf("execution plan: %w", err)
+	}
+	if err := s.validateSnapshotReferences(ctx, actorUserID, projectRow, plan); err != nil {
+		return nil, nil, err
 	}
 	var check func(backendID int) error
 	if projectRow != nil {
@@ -751,12 +726,17 @@ func (s *JobService) prepareExecutionSnapshotForActor(
 	}
 	snapshot, err := s.validateAndSnapshotWith(ctx, actorUserID, plan, overrideSegmentFilter, check)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	snapshot.SourceLang = sourceLang
 	snapshot.TargetLang = targetLang
 	snapshot.GlossaryEnabled = glossaryEnabled
-	return snapshot, nil
+	resolved, err := execution.Resolve(*snapshot)
+	if err != nil {
+		return nil, nil, err
+	}
+	successful = true
+	return resolved, leases.release, nil
 }
 
 func jobGlossaryEnabled(projectEnabled bool, rounds []JobRoundSnapshot) bool {
@@ -822,19 +802,40 @@ func (s *JobService) snapshotBackend(ctx context.Context, backendID int) (*Backe
 		}
 		return nil, err
 	}
+	credentials := s.backends.Credentials()
+	if credentials == nil {
+		return nil, credential.ErrUnavailable
+	}
+	binding, release, err := credentials.AcquireBackend(ctx, backendID)
+	if err != nil {
+		return nil, err
+	}
+	if leases, ok := ctx.Value(executionLeaseKey{}).(*executionLeaseScope); ok {
+		leases.releases = append(leases.releases, release)
+	} else {
+		defer release()
+	}
+	options, err := execution.ResolveBackendOptions(string(b.BackendType), b.Options)
+	if err != nil {
+		return nil, err
+	}
+	if err := credentials.Check(ctx, binding, backendID, string(b.BackendType), options["base_url"].(string)); err != nil {
+		return nil, err
+	}
 	return &BackendSnapshot{
+		Credential:         binding,
 		ID:                 b.ID,
 		Scope:              b.Scope,
 		Name:               b.Name,
 		Type:               string(b.BackendType),
-		Options:            cloneMap(b.Options),
+		Options:            options,
 		RateLimitPerMinute: b.RateLimitPerMinute,
 	}, nil
 }
 
 // snapshotPromptTemplate 快照翻译提示词模板。
-func (s *JobService) snapshotPromptTemplate(ctx context.Context, templateID int) (*PromptSnapshot, error) {
-	pt, err := s.translationPromptTemplates.GetByID(ctx, templateID)
+func (s *JobService) snapshotPromptTemplate(ctx context.Context, actorUserID, templateID int) (*PromptSnapshot, error) {
+	pt, err := s.translationPromptTemplates.GetByID(ctx, actorUserID, templateID)
 	if err != nil {
 		return nil, err
 	}
@@ -847,8 +848,8 @@ func (s *JobService) snapshotPromptTemplate(ctx context.Context, templateID int)
 }
 
 // snapshotBootstrapTemplate 快照术语抽取提示词模板。
-func (s *JobService) snapshotBootstrapTemplate(ctx context.Context, templateID int) (*BootstrapPromptSnapshot, error) {
-	pt, err := s.bootstrapPromptTemplates.GetByID(ctx, templateID)
+func (s *JobService) snapshotBootstrapTemplate(ctx context.Context, actorUserID, templateID int) (*BootstrapPromptSnapshot, error) {
+	pt, err := s.bootstrapPromptTemplates.GetByID(ctx, actorUserID, templateID)
 	if err != nil {
 		return nil, err
 	}
@@ -864,15 +865,14 @@ func (s *JobService) snapshotBootstrapTemplate(ctx context.Context, templateID i
 // CheckAccess 复核访问权（与轮次 backend 的 check 注入对齐——计划创建后属主或
 // 组织资格可能已变更），内置策略（scope=system 虚拟实体）对全体放行。
 func (s *JobService) snapshotProfile(ctx context.Context, userID, profileID int) (*StrategySnapshot, error) {
-	tp, err := s.profiles.GetByID(ctx, profileID)
+	tp, err := s.profiles.GetByID(ctx, userID, profileID)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.profiles.CheckAccess(ctx, userID, tp); err != nil {
 		return nil, err
 	}
-	tp.Config.NormalizeContext()
-	tp.Config.NormalizePreserveKinds()
+
 	id := tp.ID
 	return &StrategySnapshot{
 		ProfileID:   &id,
@@ -926,6 +926,7 @@ func NormalizeShrink(v float64) float64 {
 func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 	jobs, err := s.client.Job.Query().
 		Where(job.StatusIn(JobStatusPending, JobStatusRunning)).
+		WithJobResources().
 		Order(ent.Asc(job.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -933,59 +934,106 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 	}
 	ids := make([]int, 0, len(jobs))
 	for _, current := range jobs {
-		ids = append(ids, current.ID)
-		if current.Status == JobStatusRunning {
-			if err := s.client.Job.UpdateOneID(current.ID).SetStatus(JobStatusPending).Exec(ctx); err != nil {
-				return nil, err
-			}
-		}
-		if err := s.client.JobResource.Update().
-			Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusRunning)).
-			SetStatus(JobResourceStatusPending).
-			Exec(ctx); err != nil {
+		recovered, err := s.recoverLegacyJob(ctx, current.ID)
+		if err != nil {
 			return nil, err
 		}
-		// 轮次行 failed|running|skipped→pending（条件更新）：保留 segment_total/
-		// segment_completed 与 job_round_segments 断点关联行，恢复后从断点继续。
-		// segment_completed 是断点集合的派生缓存（DBReporter 独占写入），重置后
-		// 重跑以断点集合为基线继续推进（StageStart 锚定集合基数），计数不回退。
-		// skipped 是「当时无段可处理」的时点判断——重启期间用户可经段落
-		// 编辑 API 把段置回 pending 使其失效，重置后空段检查自然重新判定；
-		// failed 来自 MarkJobRoundFailed 与 MarkJobResourceFailed 两写间隙的
-		// 崩溃窗口（轮落 failed 而资源留 running），runner 重跑时本就会重新
-		// 执行 failed 轮（只跳过 completed|skipped），重置集与其对齐避免
-		// 矩阵永久失真（与 RetryJob 的重置集一致）。
-		// 按「将被重跑的资源」收窄：completed/failed/cancelled 资源（恢复时
-		// running→pending 之外的终态）的轮不重置，避免固化永不执行的孤儿行
-		//（completed 资源不会被恢复重跑）。
-		if err := s.client.JobRound.Update().
-			Where(
-				jobround.HasJobWith(job.IDEQ(current.ID)),
-				jobround.HasJobResourceWith(jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)),
-				jobround.StatusIn(JobRoundStatusFailed, JobRoundStatusRunning, JobRoundStatusSkipped),
-			).
-			SetStatus(JobRoundStatusPending).
-			Exec(ctx); err != nil {
-			return nil, err
-		}
-		// 升级回填：迁移前创建的任务可能没有任何轮次行（pre-migration job），
-		// 依据执行快照补建 resource×round pending 矩阵。
-		if err := s.backfillJobRoundsForRecovery(ctx, current.ID); err != nil {
-			slog.Warn("recover: backfill job rounds failed", "job_id", current.ID, "err", err)
-		}
-		// 从矩阵重算进度计数器（无条件求和）：这是防止恢复重跑重复累加的正确性路径。
-		if err := recomputeJobProgress(ctx, clientProgressStore{s.client}, current.ID); err != nil {
-			slog.Warn("recover: recompute job progress failed", "job_id", current.ID, "err", err)
+		if recovered {
+			ids = append(ids, current.ID)
 		}
 	}
 	return ids, nil
 }
 
-// backfillJobRoundsForRecovery 为没有任何 JobRound 行的任务补建 resource×round
-// pending 矩阵（升级回填）。轮次模式取自任务执行快照的 Rounds；快照缺失或无
-// 轮次（更早期存量任务）时，退化为每资源一条 round_index=0 的 pending 轮
-// （mode=translate），保证矩阵非空、进度分母可被 DBReporter 首次揭示。
-// 解析/建行失败时返回错误（由调用方记录日志并继续恢复流程）。
+func (s *JobService) recoverLegacyJob(ctx context.Context, id int) (bool, error) {
+	guard, err := s.lifecycle.Lock(ctx, "translation", id)
+	if err != nil {
+		return false, err
+	}
+	defer guard.Release()
+	if guard.Active() {
+		return false, tasklife.ErrBusy
+	}
+	current, err := s.client.Job.Query().Where(job.IDEQ(id)).WithJobResources().Only(ctx)
+	if ent.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if current.Status != JobStatusPending && current.Status != JobStatusRunning {
+		return false, nil
+	}
+	var sourceErr error
+	for _, item := range current.Edges.JobResources {
+		if item.Status != JobResourceStatusPending && item.Status != JobResourceStatusRunning {
+			continue
+		}
+		if sourceErr = ValidateJobResourceSource(ctx, s.client, item); sourceErr != nil {
+			break
+		}
+	}
+	if sourceErr != nil {
+		if !errors.Is(sourceErr, ErrSourceRevisionConflict) {
+			return false, sourceErr
+		}
+		return false, s.failRecoveryJob(ctx, current.ID, "source_revision_conflict: source changed before recovery")
+	}
+	if err := s.checkExecutionPolicies(ctx, current); err != nil {
+		return false, s.failRecoveryJob(ctx, current.ID, "execution recovery refused: "+err.Error())
+	}
+	if err := s.client.Job.UpdateOneID(current.ID).Where(job.StatusIn(JobStatusPending, JobStatusRunning)).SetStatus(JobStatusPending).ClearFinishedAt().ClearRetentionAnchorAt().Exec(ctx); err != nil {
+		return false, err
+	}
+	if err := s.client.JobResource.Update().
+		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusRunning)).
+		SetStatus(JobResourceStatusPending).
+		Exec(ctx); err != nil {
+		return false, err
+	}
+	// 轮次行 failed|running|skipped→pending（条件更新）：保留 segment_total/
+	// segment_completed 与 job_round_segments 断点关联行，恢复后从断点继续。
+	// segment_completed 是断点集合的派生缓存（DBReporter 独占写入），重置后
+	// 重跑以断点集合为基线继续推进（StageStart 锚定集合基数），计数不回退。
+	// skipped 是「当时无段可处理」的时点判断——重启期间用户可经段落
+	// 编辑 API 把段置回 pending 使其失效，重置后空段检查自然重新判定；
+	// failed 来自 MarkJobRoundFailed 与 MarkJobResourceFailed 两写间隙的
+	// 崩溃窗口（轮落 failed 而资源留 running），runner 重跑时本就会重新
+	// 执行 failed 轮（只跳过 completed|skipped），重置集与其对齐避免
+	// 矩阵永久失真（与 RetryJob 的重置集一致）。
+	// 按「将被重跑的资源」收窄：completed/failed/cancelled 资源（恢复时
+	// running→pending 之外的终态）的轮不重置，避免固化永不执行的孤儿行
+	//（completed 资源不会被恢复重跑）。
+	if err := s.client.JobRound.Update().
+		Where(
+			jobround.HasJobWith(job.IDEQ(current.ID)),
+			jobround.HasJobResourceWith(jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)),
+			jobround.StatusIn(JobRoundStatusFailed, JobRoundStatusRunning, JobRoundStatusSkipped),
+		).
+		SetStatus(JobRoundStatusPending).
+		Exec(ctx); err != nil {
+		return false, err
+	}
+	// 仅从经过校验的当前格式快照重建矩阵。
+	if err := s.backfillJobRoundsForRecovery(ctx, current.ID); err != nil {
+		return false, err
+	}
+	// 从矩阵重算进度计数器（无条件求和）：这是防止恢复重跑重复累加的正确性路径。
+	if err := recomputeJobProgress(ctx, clientProgressStore{s.client}, current.ID); err != nil {
+		slog.Warn("recover: recompute job progress failed", "job_id", current.ID, "err", err)
+	}
+	return true, nil
+}
+
+// Called under the lifecycle guard, only for a newly failed recovery attempt.
+func (s *JobService) failRecoveryJob(ctx context.Context, id int, message string) error {
+	now := timeutil.NowUTC()
+	return s.client.Job.Update().Where(job.IDEQ(id), job.StatusIn(JobStatusPending, JobStatusRunning)).
+		SetStatus(JobStatusFailed).SetErrorMessage(message).SetFinishedAt(now).SetRetentionAnchorAt(now).Exec(ctx)
+}
+
+// backfillJobRoundsForRecovery 仅从完整、经过校验的快照重建缺失的矩阵。
+// 它绝不解释缺失或过时的格式。
 func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int) error {
 	count, err := s.client.JobRound.Query().
 		Where(jobround.JobIDEQ(jobID)).
@@ -1009,7 +1057,7 @@ func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int
 	if len(resources) == 0 {
 		return nil
 	}
-	// 优先按执行快照的轮次物化；无快照/无轮次时退化为单 translate 轮。
+	// 缺失或不受支持的快照绝不被解释为默认轮次。
 	type backfillRound struct {
 		index int
 		mode  string
@@ -1017,15 +1065,12 @@ func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int
 	rounds := make([]backfillRound, 0, 1)
 	snapshot, err := GetSnapshot(jobRow)
 	if err != nil {
-		slog.Warn("recover: parse execution snapshot failed, falling back to single round", "job_id", jobID, "err", err)
+		return err
 	}
 	if snapshot != nil && len(snapshot.Rounds) > 0 {
 		for i, rd := range snapshot.Rounds {
 			rounds = append(rounds, backfillRound{index: i, mode: rd.Mode})
 		}
-	} else {
-		slog.Warn("recover: job has no rounds in execution snapshot, backfilling single translate round", "job_id", jobID)
-		rounds = append(rounds, backfillRound{index: 0, mode: "translate"})
 	}
 	builders := make([]*ent.JobRoundCreate, 0, len(resources)*len(rounds))
 	for _, jr := range resources {
@@ -1180,7 +1225,7 @@ func (s *JobService) MarkJobRoundRunning(ctx context.Context, jobID, roundRowID 
 			jobround.StatusIn(JobRoundStatusPending, JobRoundStatusSkipped),
 		).
 		SetStatus(JobRoundStatusRunning).
-		SetStartedAt(time.Now()).
+		SetStartedAt(timeutil.NowUTC()).
 		ClearFinishedAt().
 		ClearErrorMessage().
 		Save(ctx)
@@ -1261,7 +1306,7 @@ func (s *JobService) markJobRoundTerminal(ctx context.Context, roundRowID int, f
 			jobround.StatusIn(fromStatuses...),
 		).
 		SetStatus(targetStatus).
-		SetFinishedAt(time.Now())
+		SetFinishedAt(timeutil.NowUTC())
 	n, err := update.Save(ctx)
 	if err != nil {
 		return err
@@ -1298,7 +1343,7 @@ func (s *JobService) MarkJobRoundFailed(ctx context.Context, roundRowID int, fai
 		).
 		SetStatus(JobRoundStatusFailed).
 		SetErrorMessage(message).
-		SetFinishedAt(time.Now()).
+		SetFinishedAt(timeutil.NowUTC()).
 		Save(ctx)
 	return err
 }
@@ -1361,11 +1406,17 @@ func (s *JobService) LoadJobExecution(ctx context.Context, jobID int) (*JobExecu
 }
 
 func (s *JobService) MarkJobRunning(ctx context.Context, jobID int) error {
+	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
+	if err != nil {
+		return err
+	}
+	defer guard.Release()
 	// 条件更新：任务在入队后、执行前被并发暂停/取消时不命中（0 行受影响），
 	// 返回 ErrJobNotRunnable 供 processJob 在派发资源前中止。
 	n, err := s.client.Job.Update().
 		Where(job.IDEQ(jobID), job.StatusIn(JobStatusPending, JobStatusRunning)).
 		SetStatus(JobStatusRunning).
+		ClearFinishedAt().ClearRetentionAnchorAt().
 		Save(ctx)
 	if err != nil {
 		return err
@@ -1377,7 +1428,7 @@ func (s *JobService) MarkJobRunning(ctx context.Context, jobID int) error {
 	return nil
 }
 
-// publishEvent publishes a lifecycle event to the Broker. No-op if broker is nil.
+// publishEvent 向 Broker 发布生命周期事件。broker 为 nil 时不执行任何操作。
 func (s *JobService) publishEvent(jobID int, eventType, level, stage, message string) {
 	if s.broker == nil {
 		return
@@ -1388,13 +1439,13 @@ func (s *JobService) publishEvent(jobID int, eventType, level, stage, message st
 		Level:     level,
 		Stage:     stage,
 		Message:   message,
-		CreatedAt: time.Now(),
+		CreatedAt: timeutil.NowUTC(),
 	})
 }
 
 // MarkJobStarted 记录任务开始时间。
 func (s *JobService) MarkJobStarted(ctx context.Context, jobID int) error {
-	now := time.Now()
+	now := timeutil.NowUTC()
 	return s.client.Job.UpdateOneID(jobID).
 		SetStartedAt(now).
 		Exec(ctx)
@@ -1402,7 +1453,7 @@ func (s *JobService) MarkJobStarted(ctx context.Context, jobID int) error {
 
 // MarkJobResourceStarted 记录资源开始时间。
 func (s *JobService) MarkJobResourceStarted(ctx context.Context, jobResourceID int) error {
-	now := time.Now()
+	now := timeutil.NowUTC()
 	return s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStartedAt(now).
 		Exec(ctx)
@@ -1444,6 +1495,19 @@ func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobRes
 	defer func() {
 		_ = tx.Rollback()
 	}()
+	current, err := tx.JobResource.Get(ctx, jobResourceID)
+	if err != nil {
+		return err
+	}
+	if current.Status == JobResourceStatusPending || current.Status == JobResourceStatusRunning {
+		if err := guardJobResourceSource(ctx, tx.Client(), current); err != nil {
+			_ = tx.Rollback()
+			if errors.Is(err, ErrSourceRevisionConflict) {
+				return s.MarkJobResourceFailed(ctx, jobID, jobResourceID, err)
+			}
+			return err
+		}
+	}
 	update := tx.JobResource.Update().
 		Where(
 			jobresource.IDEQ(jobResourceID),
@@ -1494,7 +1558,7 @@ func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobRes
 				jobround.IDEQ(round.ID),
 				jobround.StatusEQ(JobRoundStatusRunning),
 			).
-			SetFinishedAt(time.Now())
+			SetFinishedAt(timeutil.NowUTC())
 		if round.SegmentCompleted >= round.SegmentTotal {
 			updateRound = updateRound.SetStatus(JobRoundStatusCompleted)
 		} else {
@@ -1557,6 +1621,11 @@ func (s *JobService) MarkJobResourceCancelled(ctx context.Context, jobID, jobRes
 }
 
 func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
+	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer guard.Release()
 	current, err := s.GetJob(ctx, actorUserID, jobID)
 	if err != nil {
 		return nil, err
@@ -1565,27 +1634,50 @@ func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*en
 	if current.Status != JobStatusPending && current.Status != JobStatusRunning && current.Status != JobStatusPaused {
 		return nil, ErrJobNotCancellable
 	}
-	if err := s.client.JobResource.Update().
-		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)).
-		SetStatus(JobResourceStatusCancelled).
-		Exec(ctx); err != nil {
+	apply := func(client *ent.Client) error {
+		// Existing job controls are available to project readers, including
+		// organization members. Fence revocation and project mutations without
+		// raising this permission to the project-editing administrator role.
+		if _, err := client.Project.Update().Where(project.IDEQ(current.ProjectID)).SetUpdatedAt(timeutil.NowUTC()).Save(ctx); err != nil {
+			return err
+		}
+		projects := NewProjectService(client, NewUserService(client, nil))
+		if _, err := projects.requireProjectAccess(ctx, actorUserID, current.ProjectID, false); err != nil {
+			return err
+		}
+		now := timeutil.NowUTC()
+		count, err := client.Job.Update().
+			Where(job.IDEQ(current.ID), job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPaused)).
+			SetStatus(JobStatusCancelled).SetFinishedAt(now).SetRetentionAnchorAt(now).Save(ctx)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			return ErrJobNotCancellable
+		}
+		return client.JobResource.Update().
+			Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)).
+			SetStatus(JobResourceStatusCancelled).
+			Exec(ctx)
+	}
+	if orgID := EffectiveProjectOrgID(current.Edges.Project); orgID != nil {
+		err = withOrganizationMutation(ctx, s.client, *orgID, apply)
+	} else {
+		err = withOrganizationTransaction(ctx, s.client, apply)
+	}
+	if err != nil {
 		return nil, err
 	}
-	if err := s.client.Job.UpdateOneID(current.ID).
-		SetStatus(JobStatusCancelled).
-		Exec(ctx); err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrJobNotFound
-		}
-		return nil, err
+	if s.cancelTask != nil {
+		s.cancelTask(jobID)
 	}
 	s.publishEvent(jobID, "job_cancelled", "info", "", "任务已取消")
 	return s.GetJob(ctx, actorUserID, current.ID)
 }
 
-// PauseResult PauseJob 的结果。NeedsDrain=true 表示任务正在运行、状态未变：
-// 由 API 层通知 worker 优雅排空（在途 LLM 请求返回并持久化后，worker 调用
-// MarkJobPaused 落 paused 终态）。
+// PauseResult PauseJob 的结果。NeedsDrain=true 表示任务仍在排空：服务已在
+// 生命周期 guard 内通知 worker，调用方不应重复通知。worker 在持久化完成后
+// 调用 MarkJobPaused；未注入任务控制器的离线调用只返回所需动作。
 type PauseResult struct {
 	Job        *ent.Job
 	NeedsDrain bool
@@ -1596,6 +1688,11 @@ type PauseResult struct {
 //   - running：不改状态，返回 NeedsDrain=true 交由 worker 排空后落终态；
 //   - 终态（completed/failed/cancelled/paused）：ErrJobNotPausable。
 func (s *JobService) PauseJob(ctx context.Context, actorUserID, jobID int) (PauseResult, error) {
+	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
+	if err != nil {
+		return PauseResult{}, err
+	}
+	defer guard.Release()
 	current, err := s.GetJob(ctx, actorUserID, jobID)
 	if err != nil {
 		return PauseResult{}, err
@@ -1606,6 +1703,7 @@ func (s *JobService) PauseJob(ctx context.Context, actorUserID, jobID int) (Paus
 		n, err := s.client.Job.Update().
 			Where(job.IDEQ(current.ID), job.StatusEQ(JobStatusPending)).
 			SetStatus(JobStatusPaused).
+			ClearFinishedAt().ClearRetentionAnchorAt().
 			Save(ctx)
 		if err != nil {
 			return PauseResult{}, err
@@ -1622,6 +1720,9 @@ func (s *JobService) PauseJob(ctx context.Context, actorUserID, jobID int) (Paus
 	case JobStatusRunning:
 		// running 任务状态不变：worker 排空（在途请求返回并持久化）后调用
 		// MarkJobPaused 落 paused，前端经轮询/SSE job_paused 观察终态。
+		if s.pauseTask != nil && !s.pauseTask(jobID) {
+			return PauseResult{}, ErrJobNotPausable
+		}
 		return PauseResult{Job: current, NeedsDrain: true}, nil
 	default:
 		// completed/failed/cancelled/paused 为不可暂停状态。
@@ -1632,9 +1733,15 @@ func (s *JobService) PauseJob(ctx context.Context, actorUserID, jobID int) (Paus
 // MarkJobPaused 由 worker 在暂停排空后调用：条件翻转 running→paused 并发布
 // job_paused 事件。已被并发取消/暂停时未命中（0 行受影响），良性 no-op。
 func (s *JobService) MarkJobPaused(ctx context.Context, jobID int) error {
+	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
+	if err != nil {
+		return err
+	}
+	defer guard.Release()
 	n, err := s.client.Job.Update().
 		Where(job.IDEQ(jobID), job.StatusEQ(JobStatusRunning)).
 		SetStatus(JobStatusPaused).
+		ClearFinishedAt().ClearRetentionAnchorAt().
 		Save(ctx)
 	if err != nil {
 		return err
@@ -1652,12 +1759,23 @@ func (s *JobService) MarkJobPaused(ctx context.Context, jobID int) error {
 // 断点关联行）——任务 paused→pending，随后从矩阵重算进度计数器（无条件求和）。
 // 重置绝不清理断点数据，保证恢复后从断点继续、求和保持正确。
 func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
+	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer guard.Release()
 	current, err := s.GetJob(ctx, actorUserID, jobID)
 	if err != nil {
 		return nil, err
 	}
 	if current.Status != JobStatusPaused {
 		return nil, ErrJobNotResumable
+	}
+	if guard.Active() {
+		return nil, tasklife.ErrBusy
+	}
+	if err := s.checkExecutionPolicies(ctx, current); err != nil {
+		return nil, err
 	}
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -1669,6 +1787,14 @@ func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*en
 			_ = tx.Rollback()
 		}
 	}()
+	for _, item := range current.Edges.JobResources {
+		if item.Status != JobResourceStatusPending && item.Status != JobResourceStatusRunning {
+			continue
+		}
+		if err := guardJobResourceSource(ctx, tx.Client(), item); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.JobResource.Update().
 		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusRunning)).
 		SetStatus(JobResourceStatusPending).
@@ -1701,6 +1827,7 @@ func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*en
 	n, err := tx.Job.Update().
 		Where(job.IDEQ(current.ID), job.StatusEQ(JobStatusPaused)).
 		SetStatus(JobStatusPending).
+		ClearFinishedAt().ClearRetentionAnchorAt().
 		Save(ctx)
 	if err != nil {
 		return nil, err
@@ -1720,6 +1847,11 @@ func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*en
 }
 
 func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
+	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer guard.Release()
 	current, err := s.GetJob(ctx, actorUserID, jobID)
 	if err != nil {
 		return nil, err
@@ -1727,6 +1859,9 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 	// failed/cancelled 任务可重试；对 completed 任务重试会把它重新入队空耗 worker。
 	if current.Status != JobStatusFailed && current.Status != JobStatusCancelled {
 		return nil, ErrJobNotRetryable
+	}
+	if guard.Active() {
+		return nil, tasklife.ErrBusy
 	}
 	// 必须存在 failed/cancelled 资源才有可重试的对象，从本次读取的资源实时计数。
 	retryableResources := 0
@@ -1737,6 +1872,22 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 	}
 	if retryableResources == 0 {
 		return nil, ErrJobNoFailedResource
+	}
+	if err := s.checkExecutionPolicies(ctx, current); err != nil {
+		return nil, err
+	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	for _, item := range current.Edges.JobResources {
+		if item.Status != JobResourceStatusFailed && item.Status != JobResourceStatusCancelled {
+			continue
+		}
+		if err := guardJobResourceSource(ctx, tx.Client(), item); err != nil {
+			return nil, err
+		}
 	}
 	// 轮次行 failed|running|skipped→pending（条件更新）：保留 segment_total/
 	// segment_completed 与 job_round_segments 断点关联行；completed 轮不动，重跑时
@@ -1749,7 +1900,7 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 	// 按「将被重跑的资源」收窄：failed/cancelled 资源之外的轮次行（如
 	// completed 资源的轮）不重置，避免误翻造成矩阵与资源状态矛盾。
 	// 必须先于下方资源重置执行：过滤依赖重置前的 failed/cancelled 资源状态。
-	if err := s.client.JobRound.Update().
+	if err := tx.JobRound.Update().
 		Where(
 			jobround.HasJobWith(job.IDEQ(current.ID)),
 			jobround.HasJobResourceWith(jobresource.StatusIn(JobResourceStatusFailed, JobResourceStatusCancelled)),
@@ -1759,7 +1910,7 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 		Exec(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.client.JobResource.Update().
+	if err := tx.JobResource.Update().
 		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusIn(JobResourceStatusFailed, JobResourceStatusCancelled)).
 		SetStatus(JobResourceStatusPending).
 		SetSkippedSegments(0).
@@ -1768,24 +1919,34 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 		Exec(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.client.Job.UpdateOneID(current.ID).
+	n, err := tx.Job.Update().Where(job.IDEQ(current.ID), job.StatusEQ(current.Status)).
 		SetStatus(JobStatusPending).
+		ClearFinishedAt().ClearRetentionAnchorAt().
 		SetFailedResources(0).
 		ClearErrorMessage().
-		Exec(ctx); err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrJobNotFound
-		}
+		Save(ctx)
+	if err != nil {
 		return nil, err
 	}
+	if n != 1 {
+		return nil, ErrJobNotRetryable
+	}
 	// 从矩阵重算进度计数器（无条件求和）：reset 保留计数，求和天然一致。
-	if err := recomputeJobProgress(ctx, clientProgressStore{s.client}, current.ID); err != nil {
+	if err := recomputeJobProgress(ctx, txProgressStore{tx}, current.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.GetJob(ctx, actorUserID, current.ID)
 }
 
 func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
+	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
+	if err != nil {
+		return err
+	}
+	defer guard.Release()
 	current, err := s.client.Job.Query().
 		Where(job.IDEQ(jobID)).
 		WithJobResources().
@@ -1846,6 +2007,10 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		return err
 	}
 	status := deriveJobStatus(len(current.Edges.JobResources), pendingCount, runningCount, completed, failed, cancelled)
+	wasTerminal := isJobTerminal(current.Status)
+	if wasTerminal {
+		status = current.Status
+	}
 	// [DEBUG] 诊断：记录最终决定的作业状态
 	slog.Debug("reconcile job derived status",
 		"job_id", jobID,
@@ -1854,17 +2019,23 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		"total_resources", len(current.Edges.JobResources),
 	)
 
-	update := s.client.Job.UpdateOneID(jobID).
+	update := s.client.Job.UpdateOneID(jobID).Where(job.StatusEQ(current.Status)).
 		SetStatus(status).
 		SetResourceCount(len(current.Edges.JobResources)).
 		SetCompletedResources(completed).
 		SetFailedResources(failed).
 		SetProgressTotal(progressTotal).
 		SetProgressCompleted(progressCompleted)
-	if firstFailure != nil && status == JobStatusFailed {
-		update.SetErrorMessage(*firstFailure)
-	} else {
-		update.ClearErrorMessage()
+	if !wasTerminal && isJobTerminal(status) {
+		now := timeutil.NowUTC()
+		update.SetFinishedAt(now).SetRetentionAnchorAt(now)
+	}
+	if !wasTerminal {
+		if firstFailure != nil && status == JobStatusFailed {
+			update.SetErrorMessage(*firstFailure)
+		} else {
+			update.ClearErrorMessage()
+		}
 	}
 	if err := update.Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
@@ -1872,8 +2043,11 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 		}
 		return err
 	}
+	if wasTerminal {
+		return nil
+	}
 
-	// Publish lifecycle events based on derived status.
+	// 依据派生的状态发布生命周期事件。
 	switch status {
 	case JobStatusCompleted:
 		s.publishEvent(jobID, "job_completed", "info", "", "任务完成")
@@ -1900,6 +2074,10 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 	}
 
 	return nil
+}
+
+func isJobTerminal(status string) bool {
+	return status == JobStatusCompleted || status == JobStatusFailed || status == JobStatusCancelled
 }
 
 func deriveJobStatus(total, pendingCount, runningCount, completed, failed, cancelled int) string {
@@ -2008,8 +2186,8 @@ func defaultProjectConfig(projectRow *ent.Project) map[string]any {
 
 // GetSnapshot 从 Job 的 ExecutionConfig 字段解析快照。
 func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
-	if job.ExecutionConfig == nil {
-		return nil, nil
+	if job == nil || len(job.ExecutionConfig) == 0 {
+		return nil, errors.New("missing execution snapshot")
 	}
 	raw, err := json.Marshal(job.ExecutionConfig)
 	if err != nil {
@@ -2018,6 +2196,9 @@ func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
 	var snap JobExecutionSnapshot
 	if err := json.Unmarshal(raw, &snap); err != nil {
 		return nil, fmt.Errorf("unmarshal snapshot: %w", err)
+	}
+	if err := execution.ValidateSpec(&snap); err != nil {
+		return nil, err
 	}
 	return &snap, nil
 }

@@ -1,0 +1,77 @@
+version: '3'
+
+tasks:
+  install:
+    desc: 安装前端依赖
+    cmds: ['pnpm install {{.CLI_ARGS}}']
+  openapi:generate:
+    desc: 读取已同步的 OpenAPI bundle，仅生成前端 TypeScript 类型
+    deps: [openapi:verify]
+    cmds:
+      - pnpm exec openapi-typescript ../api/openapi/openapi-3.0.yaml --default-non-nullable false -o src/api/types.d.ts
+  openapi:verify:
+    desc: 校验 OpenAPI 源文件与已同步 bundle 的类型合同一致
+    cmds: [pnpm exec vitest run tests/unit/openapi-contract.test.ts]
+  dev:
+    desc: 启动前端开发服务器
+    cmds: [pnpm dev --host 127.0.0.1]
+  preview:
+    desc: 预览前端生产构建
+    cmds: [pnpm preview --host 127.0.0.1 --port 4173]
+  format:
+    desc: 格式化前端源码、测试和配置
+    cmds:
+      - pnpm format
+      - pnpm exec oxfmt tests/ playwright.config.ts vitest.config.ts vitest.integration.config.ts vitest.storage-integration.config.ts Taskfile.yml docs/design/operations-center.md docs/design/operations-center-verification.md docs/design/file-storage-architecture.md docs/design/file-storage-verification.md
+  lint:
+    desc: 执行前端代码检查
+    cmds: [pnpm lint]
+  type-check:
+    desc: 执行前端 TypeScript 类型检查
+    cmds: [pnpm type-check]
+  build:
+    desc: 构建前端应用
+    cmds: [pnpm build]
+  test:
+    desc: 执行前端单元测试
+    cmds: ['pnpm exec vitest run {{.CLI_ARGS}}']
+  test:e2e:
+    desc: 执行前端端到端测试
+    cmds: ['pnpm exec playwright test {{.CLI_ARGS}}']
+  test:storage-visual:
+    desc: 对已运行的生产预览采集存储页面视觉证据（CLI_ARGS=before 或 after）
+    cmds: ['node --experimental-strip-types tests/e2e/capture-storage-visual.mjs {{.CLI_ARGS}}']
+  test:storage-quota-visual:
+    desc: 对已运行生产预览采集配额、磁盘与真实 200% 缩放视觉证据
+    cmds: ['node --experimental-strip-types tests/e2e/capture-storage-quota.mjs {{.CLI_ARGS}}']
+  test:task-header-visual:
+    desc: 对已运行的生产预览检查全局任务顶栏与真实 200% 缩放并采集视觉证据
+    cmds: ['node --experimental-strip-types tests/e2e/capture-task-header-visual.mjs {{.CLI_ARGS}}']
+  test:configuration-integration:
+    desc: 使用 Vitest、独立后端与隔离数据库验证配置、凭据和真实任务链路
+    cmds: ['pnpm exec vitest run --config vitest.integration.config.ts {{.CLI_ARGS}}']
+  test:storage-integration:
+    desc: 使用独立 Local 后端与隔离数据库验证文件存储真实传输及快照
+    cmds: ['pnpm exec vitest run --config vitest.storage-integration.config.ts {{.CLI_ARGS}}']
+  test:task-history-integration:
+    desc: 使用独立后端及隔离数据库验证任务保留、删除权限和真实浏览器收敛
+    cmds: ['pnpm exec vitest run --config vitest.task-history-integration.config.ts {{.CLI_ARGS}}']
+  test:startup:
+    desc: 验证前端开发和生产环境启动
+    deps: [build]
+    cmds: ['pnpm exec playwright test --config=playwright.startup.config.ts {{.CLI_ARGS}}']
+  test:serve-dev:
+    desc: 为启动测试运行开发服务器
+    cmds: [pnpm exec vite --host 127.0.0.1 --port 5187 --strictPort]
+  test:serve-preview:
+    desc: 为启动测试运行生产预览服务器
+    cmds: [pnpm exec vite preview --host 127.0.0.1 --port 4187 --strictPort]
+  format:files:
+    desc: 格式化指定的前端文件
+    cmds: ['pnpm exec oxfmt {{.CLI_ARGS}}']
+  test:install-browser:
+    desc: 安装 Playwright Chromium 测试浏览器
+    cmds: [pnpm exec playwright install chromium]
+  test:dependencies:
+    desc: 安装前端测试依赖
+    cmds: [pnpm add -D vitest @playwright/test]

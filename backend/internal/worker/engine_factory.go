@@ -9,12 +9,14 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 )
 
 // EngineFactory builds an engine.Engine from a JobExecutionSnapshot using the
@@ -24,25 +26,39 @@ import (
 type EngineFactory struct {
 	logger      *slog.Logger
 	limiterPool *backend.LimiterPool
+	httpClients telemetry.HTTPClientFactory
+	reader      credential.Reader
+	checker     credential.Checker
+	build       backend.Factory
 }
 
-func NewEngineFactory(logger *slog.Logger, limiterPool *backend.LimiterPool) *EngineFactory {
+func NewEngineFactory(logger *slog.Logger, limiterPool *backend.LimiterPool, clients ...telemetry.HTTPClientFactory) *EngineFactory {
+	return NewEngineFactoryWithCredentials(logger, limiterPool, nil, nil, clients...)
+}
+
+func NewEngineFactoryWithCredentials(logger *slog.Logger, limiterPool *backend.LimiterPool, reader credential.Reader, checker credential.Checker, clients ...telemetry.HTTPClientFactory) *EngineFactory {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &EngineFactory{logger: logger, limiterPool: limiterPool}
+	f := &EngineFactory{logger: logger, limiterPool: limiterPool, reader: reader, checker: checker, build: backend.Build}
+	if len(clients) > 0 {
+		f.httpClients = clients[0]
+	}
+	return f
 }
 
 // BuildEngine constructs a fully configured engine.Engine from a snapshot.
-// Each round's backend is wrapped with a MeteredBackend (innermost) and a
-// RateLimitedBackend (outer). The caller owns the returned Engine and must
-// Close it.
+// Backends use attempt-level credential guards, metering, current rate limits,
+// and an outer validity check. The caller owns and must Close the Engine.
 func (f *EngineFactory) BuildEngine(
 	ctx context.Context,
 	snapshot *service.JobExecutionSnapshot,
 	resources engine.RuntimeResources,
 	reporter progress.Reporter,
 ) (*engine.Engine, error) {
+	if err := execution.ValidateSpec(snapshot); err != nil {
+		return nil, err
+	}
 	return f.BuildEngineWithConfig(ctx, snapshot, BuildEngineConfig(snapshot), resources, reporter)
 }
 
@@ -56,29 +72,32 @@ func (f *EngineFactory) BuildEngineWithConfig(
 	resources engine.RuntimeResources,
 	reporter progress.Reporter,
 ) (*engine.Engine, error) {
+	if err := execution.ValidateSpec(snapshot); err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, fmt.Errorf("engine configuration is required")
+	}
+	var owned []backend.Backend
+	success := false
+	defer func() {
+		if !success {
+			for _, b := range owned {
+				_ = b.Close()
+			}
+		}
+	}()
 	var rounds []engine.Round
 	for i, rs := range snapshot.Rounds {
 		// correct 是纯本地轮，无 backend：跳过 backend 构建（Backend 留 nil）。
 		var b backend.Backend
 		var err error
 		if rs.Mode != "correct" {
-			bCfg := backend.Config{
-				Name:    rs.Backend.Name,
-				Type:    rs.Backend.Type,
-				Enabled: true,
-				Options: rs.Backend.Options,
-			}
-			b, err = backend.Build(bCfg)
+			b, err = f.buildBackend(ctx, rs.Backend)
 			if err != nil {
 				return nil, fmt.Errorf("round[%d] build backend: %w", i, err)
 			}
-
-			b = backend.NewMeteredBackend(b)
-
-			if f.limiterPool != nil && rs.Backend.RateLimitPerMinute > 0 {
-				limiter := f.limiterPool.Get(rs.Backend.ID, rs.Backend.RateLimitPerMinute)
-				b = backend.NewRateLimitedBackend(b, limiter)
-			}
+			owned = append(owned, b)
 		}
 
 		var round engine.Round
@@ -126,34 +145,74 @@ func (f *EngineFactory) BuildEngineWithConfig(
 	var rubyRetryBackends []backend.Backend
 	rubyRetryAttempts := 0
 	if snapshot.RubyRetry != nil && snapshot.RubyRetry.Enabled {
-		rrCfg := backend.Config{
-			Name:    snapshot.RubyRetry.Backend.Name,
-			Type:    snapshot.RubyRetry.Backend.Type,
-			Enabled: true,
-			Options: snapshot.RubyRetry.Backend.Options,
-		}
-		rrBackend, err := backend.Build(rrCfg)
+		rrBackend, err := f.buildBackend(ctx, snapshot.RubyRetry.Backend)
 		if err != nil {
 			return nil, fmt.Errorf("ruby retry backend: %w", err)
 		}
-		rrBackend = backend.NewMeteredBackend(rrBackend)
-		if f.limiterPool != nil && snapshot.RubyRetry.Backend.RateLimitPerMinute > 0 {
-			limiter := f.limiterPool.Get(snapshot.RubyRetry.Backend.ID, snapshot.RubyRetry.Backend.RateLimitPerMinute)
-			rrBackend = backend.NewRateLimitedBackend(rrBackend, limiter)
-		}
+		owned = append(owned, rrBackend)
 		rubyRetryBackends = []backend.Backend{rrBackend}
-		rubyRetryAttempts = service.NormalizeRubyRetryAttempts(snapshot.RubyRetry.MaxAttempts)
+		rubyRetryAttempts = snapshot.RubyRetry.MaxAttempts
 	}
 
-	return engine.NewWithOptions(engine.Options{
-		Rounds:            rounds,
-		RubyRetryBackends: rubyRetryBackends,
-		RubyRetryAttempts: rubyRetryAttempts,
-		Config:            cfg,
-		Logger:            f.logger,
-		Resources:         resources,
-		Reporter:          reporter,
+	e, err := engine.NewWithOptions(engine.Options{
+		Rounds:                rounds,
+		RubyRetryBackends:     rubyRetryBackends,
+		RubyRetryAttempts:     rubyRetryAttempts,
+		RubyTemplates:         prompt.RubyTemplates{JSON: snapshot.RubyTemplates.JSON, Text: snapshot.RubyTemplates.Text},
+		RetryReminderTemplate: snapshot.RetryReminderTemplate,
+		Config:                cfg,
+		Logger:                f.logger,
+		Resources:             resources,
+		Reporter:              reporter,
 	})
+	if err != nil {
+		return nil, err
+	}
+	success = true
+	return e, nil
+}
+
+func (f *EngineFactory) buildBackend(ctx context.Context, snapshot service.BackendSnapshot) (backend.Backend, error) {
+	if f.reader == nil || f.checker == nil {
+		return nil, credential.ErrUnavailable
+	}
+	endpoint, _ := snapshot.Options["base_url"].(string)
+	check := func(ctx context.Context) error {
+		return f.checker.Check(ctx, snapshot.Credential, snapshot.ID, snapshot.Type, endpoint)
+	}
+	if err := check(ctx); err != nil {
+		return nil, err
+	}
+	secret, err := f.reader.Resolve(ctx, snapshot.Credential, snapshot.Type, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	options := make(map[string]any, len(snapshot.Options)+1)
+	for k, v := range snapshot.Options {
+		options[k] = v
+	}
+	options["api_key"] = secret
+	client, err := credential.GuardClient(telemetry.ClientFor(f.httpClients, snapshot.Type, "generate"), f.checker, snapshot.Credential, snapshot.ID, snapshot.Type, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	b, err := f.build(backend.Config{Name: snapshot.Name, Type: snapshot.Type, Enabled: true, Options: options, HTTPClient: client})
+	if err != nil {
+		return nil, err
+	}
+	b = backend.NewMeteredBackend(b)
+	if f.limiterPool != nil {
+		limiter, err := f.limiterPool.Lookup(snapshot.ID)
+		if err != nil {
+			_ = b.Close()
+			if policyErr := check(ctx); policyErr != nil {
+				return nil, policyErr
+			}
+			return nil, err
+		}
+		b = backend.NewRateLimitedBackend(b, limiter)
+	}
+	return backend.NewPolicyBackend(b, check), nil
 }
 
 // CollectMeterMetrics extracts MeterMetrics from every MeteredBackend in the
@@ -213,6 +272,9 @@ func unwrapMetered(b backend.Backend) (*backend.MeteredBackend, bool) {
 	if rl, ok := b.(*backend.RateLimitedBackend); ok {
 		return unwrapMetered(rl.Backend())
 	}
+	if guarded, ok := b.(*backend.PolicyBackend); ok {
+		return unwrapMetered(guarded.Backend())
+	}
 	return nil, false
 }
 
@@ -267,7 +329,7 @@ func buildTranslateRound(rs service.JobRoundSnapshot, strategy service.StrategyS
 		BatchSize:        t.BatchSize,
 		MaxWordsPerBatch: t.MaxWordsPerBatch,
 		Concurrency:      t.Concurrency,
-		FallbackShrink:   service.NormalizeShrink(t.FallbackShrink),
+		FallbackShrink:   t.FallbackShrink,
 		Retry: backend.RetryPolicy{
 			MaxAttempts: t.Retry.MaxAttempts,
 			Backoff:     time.Duration(t.Retry.BackoffMs) * time.Millisecond,
@@ -317,7 +379,7 @@ func buildExtractRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.R
 
 func buildAdjudicateRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
 	a := rs.Adjudicate
-	renderer, err := prompt.NewAdjudicationRenderer(templates.EmbeddedAdjudicationTemplate())
+	renderer, err := prompt.NewAdjudicationRenderer(a.TemplateContent)
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build adjudication renderer: %w", err)
 	}
@@ -341,7 +403,7 @@ func buildAdjudicateRound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 
 func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
 	s := rs.SemanticQA
-	renderer, err := prompt.NewSemanticQARenderer(templates.EmbeddedSemanticQATemplate())
+	renderer, err := prompt.NewSemanticQARenderer(s.TemplateContent)
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build semantic_qa renderer: %w", err)
 	}
@@ -369,7 +431,7 @@ func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 // ReviseHandler 降级原文直发。
 func buildReviseRound(rs service.JobRoundSnapshot, strategy service.StrategySnapshot, b backend.Backend) (engine.Round, error) {
 	r := rs.Revise
-	renderer, err := prompt.NewReviseRenderer(templates.EmbeddedReviseTemplate())
+	renderer, err := prompt.NewReviseRenderer(r.TemplateContent)
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build revise renderer: %w", err)
 	}

@@ -51,6 +51,20 @@ func (_c *UsageRecordCreate) SetNillableUpdatedAt(v *time.Time) *UsageRecordCrea
 	return _c
 }
 
+// SetVisibilityScope sets the "visibility_scope" field.
+func (_c *UsageRecordCreate) SetVisibilityScope(v usagerecord.VisibilityScope) *UsageRecordCreate {
+	_c.mutation.SetVisibilityScope(v)
+	return _c
+}
+
+// SetNillableVisibilityScope sets the "visibility_scope" field if the given value is not nil.
+func (_c *UsageRecordCreate) SetNillableVisibilityScope(v *usagerecord.VisibilityScope) *UsageRecordCreate {
+	if v != nil {
+		_c.SetVisibilityScope(*v)
+	}
+	return _c
+}
+
 // SetSource sets the "source" field.
 func (_c *UsageRecordCreate) SetSource(v string) *UsageRecordCreate {
 	_c.mutation.SetSource(v)
@@ -235,6 +249,10 @@ func (_c *UsageRecordCreate) defaults() {
 		v := usagerecord.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.VisibilityScope(); !ok {
+		v := usagerecord.DefaultVisibilityScope
+		_c.mutation.SetVisibilityScope(v)
+	}
 	if _, ok := _c.mutation.Source(); !ok {
 		v := usagerecord.DefaultSource
 		_c.mutation.SetSource(v)
@@ -264,6 +282,14 @@ func (_c *UsageRecordCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "UsageRecord.updated_at"`)}
+	}
+	if _, ok := _c.mutation.VisibilityScope(); !ok {
+		return &ValidationError{Name: "visibility_scope", err: errors.New(`ent: missing required field "UsageRecord.visibility_scope"`)}
+	}
+	if v, ok := _c.mutation.VisibilityScope(); ok {
+		if err := usagerecord.VisibilityScopeValidator(v); err != nil {
+			return &ValidationError{Name: "visibility_scope", err: fmt.Errorf(`ent: validator failed for field "UsageRecord.visibility_scope": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Source(); !ok {
 		return &ValidationError{Name: "source", err: errors.New(`ent: missing required field "UsageRecord.source"`)}
@@ -333,6 +359,10 @@ func (_c *UsageRecordCreate) createSpec() (*UsageRecord, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(usagerecord.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.VisibilityScope(); ok {
+		_spec.SetField(usagerecord.FieldVisibilityScope, field.TypeEnum, value)
+		_node.VisibilityScope = value
 	}
 	if value, ok := _c.mutation.Source(); ok {
 		_spec.SetField(usagerecord.FieldSource, field.TypeString, value)

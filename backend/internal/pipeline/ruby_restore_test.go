@@ -8,9 +8,49 @@ import (
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
+
+func TestRestoreRubyUsesFrozenTemplatesAndExplicitAttempts(t *testing.T) {
+	for _, textMode := range []bool{false, true} {
+		for _, attempts := range []int{0, 1} {
+			name := "json"
+			response := `{"ruby_output":[{"id":"1","base":"I","text":"wǒ","kind":"phonetic"}]}`
+			if textMode {
+				name = "text"
+				response = "I | wǒ | phonetic | 1"
+			}
+			t.Run(name+string(rune('0'+attempts)), func(t *testing.T) {
+				seg := newRubyTestSeg("我", "I", []ruby.Item{{ID: "1", SourceBase: "我", SourceText: "wǒ"}})
+				fb := &fakeBackend{name: "frozen", responses: []string{response}}
+				frozen := prompt.RubyTemplates{JSON: "archived JSON alignment template", Text: "archived text alignment template"}
+				restoreSegmentRuby(context.Background(), seg, nil, []backend.Backend{fb}, backend.RetryPolicy{}, slog.Default(), nil, textMode, 0, repair.Options{}, attempts, frozen)
+				if len(fb.requests) != attempts {
+					t.Fatalf("calls=%d, want explicit attempts %d", len(fb.requests), attempts)
+				}
+				if attempts == 0 {
+					return
+				}
+				want := frozen.JSON
+				if textMode {
+					want = frozen.Text
+				}
+				if fb.requests[0].System != want {
+					t.Fatalf("system=%q, want frozen %q", fb.requests[0].System, want)
+				}
+				if seg.Target != "<ruby>I<rt>wǒ</rt></ruby>" {
+					t.Fatalf("alignment result=%q", seg.Target)
+				}
+			})
+		}
+	}
+}
+
+func testRubyTemplates() prompt.RubyTemplates {
+	return prompt.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate}
+}
 
 // newRubyTestSeg 构造带 ruby_items 元数据的测试段落。
 func newRubyTestSeg(source, target string, items []ruby.Item) *Segment {
@@ -155,7 +195,7 @@ func TestFilterByKinds(t *testing.T) {
 func restoreRubySeg(t *testing.T, seg *Segment, backends []backend.Backend, attempts int) rubyOutcome {
 	t.Helper()
 	return restoreSegmentRuby(context.Background(), seg, kindSet(nil),
-		backends, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, attempts)
+		backends, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, attempts, testRubyTemplates())
 }
 
 // TestRestoreSegmentRuby_DirectedRetry_DisabledNoTrigger rubyRetryAttempts=0 且 backends 为空：
@@ -276,7 +316,7 @@ func TestRestoreSegmentRuby_DirectedRetry_EmitsTruncationSignal(t *testing.T) {
 	}
 
 	restoreSegmentRuby(context.Background(), seg, kindSet(nil), []backend.Backend{fb},
-		backend.RetryPolicy{}, quietLogger(), rec, false, 0, defaultRepairOpts(), 1)
+		backend.RetryPolicy{}, quietLogger(), rec, false, 0, defaultRepairOpts(), 1, testRubyTemplates())
 
 	if len(rec.events) != 1 {
 		t.Fatalf("emitted %d batch events, want 1", len(rec.events))
@@ -395,7 +435,7 @@ func TestRestoreSegmentRuby_KeepSetNilKeepsAll(t *testing.T) {
 	}
 	seg := newRubyTestSeg("我想", "I want", items)
 	outcome := restoreSegmentRuby(context.Background(), seg, nil,
-		nil, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, 0)
+		nil, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, 0, testRubyTemplates())
 
 	if outcome.Restored != 2 || outcome.Want != 2 {
 		t.Fatalf("outcome = %+v, want Restored=2 Want=2（nil 不过滤，kind 不参与口径）", outcome)
@@ -418,7 +458,7 @@ func TestRestoreSegmentRuby_EmptyKeepSetFiltersTyped(t *testing.T) {
 		`{"ruby_output":[{"id":"1","base":"I","text":"wǒ","kind":"phonetic"}]}`,
 	}}
 	outcome := restoreSegmentRuby(context.Background(), seg, map[string]bool{},
-		[]backend.Backend{fb}, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, 2)
+		[]backend.Backend{fb}, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, 2, testRubyTemplates())
 
 	if len(fb.requests) != 0 {
 		t.Fatalf("expected 0 backend calls (all filtered, no retry), got %d", len(fb.requests))
@@ -441,7 +481,7 @@ func TestRestoreSegmentRuby_FilteredKindSkipsRetry(t *testing.T) {
 	seg := newRubyTestSeg("我想", "I want", items)
 	fb := &fakeBackend{name: "ruby-fake"}
 	outcome := restoreSegmentRuby(context.Background(), seg, map[string]bool{"phonetic": true},
-		[]backend.Backend{fb}, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, 3)
+		[]backend.Backend{fb}, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, 3, testRubyTemplates())
 
 	if len(fb.requests) != 0 {
 		t.Fatalf("filtered-out unaligned item must not trigger retry, got %d calls", len(fb.requests))
@@ -542,7 +582,7 @@ func TestRestoreSegmentRuby_ConservationOutcome(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			seg := newRubyTestSeg("我想", tc.target, tc.items)
 			outcome := restoreSegmentRuby(context.Background(), seg, kindSet(tc.preserveKinds),
-				nil, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, 0)
+				nil, backend.RetryPolicy{}, slog.Default(), nil, false, 0, repair.Options{}, 0, testRubyTemplates())
 
 			if outcome.Restored != tc.wantRestored || outcome.Want != tc.wantWant {
 				t.Fatalf("outcome = %+v, want Restored=%d Want=%d", outcome, tc.wantRestored, tc.wantWant)

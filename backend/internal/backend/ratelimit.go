@@ -35,6 +35,12 @@ func IsRetryable(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
+	// Runtime credential/Backend policy failures remain terminal even when a
+	// provider SDK wraps them. They are not transient upstream network failures.
+	var permanent interface{ Permanent() bool }
+	if errors.As(err, &permanent) && permanent.Permanent() {
+		return false
+	}
 	// 空响应类错误：上游返回 HTTP 200 但无可用内容（典型是内容过滤/安全拦截/空补全）。
 	// 重试基本无效，交给上层转入 shrink/fallback 路径，而非退避重试刷屏。
 	var emptyErr *EmptyResponseError
@@ -236,9 +242,19 @@ func (r *tokenBucket) Close() {
 }
 
 func (r *tokenBucket) Wait(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case <-r.done:
+		return ErrLimiterClosed
+	default:
+	}
 	select {
 	case <-r.tokens:
 		return nil
+	case <-r.done:
+		return ErrLimiterClosed
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -246,8 +262,8 @@ func (r *tokenBucket) Wait(ctx context.Context) error {
 
 type nopLimiter struct{}
 
-func (nopLimiter) Wait(context.Context) error { return nil }
-func (nopLimiter) Close()                     {}
+func (nopLimiter) Wait(ctx context.Context) error { return ctx.Err() }
+func (nopLimiter) Close()                         {}
 
 // RateLimitedBackend 包装一个 Backend，在每次 Translate 前先通过限流器。
 // 用于按后端实例独立限流，与 Stage 级全局限流器互补。

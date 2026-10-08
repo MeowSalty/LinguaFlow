@@ -66,10 +66,14 @@ func TestExecutionPlanCreate_ProfileIDValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	plans := NewExecutionPlanService(client, users, NewExecutionProfileService(client, users))
+	backendRow, err := client.Backend.Create().SetName("plan-backend").SetScope(ScopeUser).SetOwnerUserID(user.ID).SetBackendType(entbackend.BackendTypeOpenai).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	ownProfile, err := client.ExecutionProfile.Create().
+	ownProfile, err := client.ExecutionProfile.Create().SetConfig(schema.DefaultProfileConfig()).
 		SetName("own-profile").
 		SetScope("user").
 		SetOwnerUserID(user.ID).
@@ -85,7 +89,7 @@ func TestExecutionPlanCreate_ProfileIDValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create other user: %v", err)
 	}
-	otherProfile, err := client.ExecutionProfile.Create().
+	otherProfile, err := client.ExecutionProfile.Create().SetConfig(schema.DefaultProfileConfig()).
 		SetName("other-profile").
 		SetScope("user").
 		SetOwnerUserID(otherUser.ID).
@@ -95,10 +99,8 @@ func TestExecutionPlanCreate_ProfileIDValidation(t *testing.T) {
 	}
 
 	input := CreateExecutionPlanTemplateInput{
-		Name:        "p",
-		Scope:       ScopeUser,
-		OwnerUserID: &user.ID,
-		Rounds:      []schema.ExecutionRoundConfig{validTranslateRound(1)},
+		Name:   "p",
+		Rounds: []schema.ExecutionRoundConfig{validTranslateRound(backendRow.ID)},
 	}
 
 	t.Run("profile_id 缺省为零值时拒绝", func(t *testing.T) {
@@ -171,10 +173,14 @@ func TestExecutionPlanUpdate_ProfileID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	plans := NewExecutionPlanService(client, users, NewExecutionProfileService(client, users))
+	backendRow, err := client.Backend.Create().SetName("plan-backend").SetScope(ScopeUser).SetOwnerUserID(user.ID).SetBackendType(entbackend.BackendTypeOpenai).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	profileRow, err := client.ExecutionProfile.Create().
+	profileRow, err := client.ExecutionProfile.Create().SetConfig(schema.DefaultProfileConfig()).
 		SetName("custom-profile").
 		SetScope("user").
 		SetOwnerUserID(user.ID).
@@ -184,11 +190,9 @@ func TestExecutionPlanUpdate_ProfileID(t *testing.T) {
 	}
 
 	plan, err := plans.Create(ctx, user.ID, CreateExecutionPlanTemplateInput{
-		Name:        "p",
-		Scope:       ScopeUser,
-		OwnerUserID: &user.ID,
-		ProfileID:   templates.BuiltinExecutionProfileID,
-		Rounds:      []schema.ExecutionRoundConfig{validTranslateRound(1)},
+		Name:      "p",
+		ProfileID: templates.BuiltinExecutionProfileID,
+		Rounds:    []schema.ExecutionRoundConfig{validTranslateRound(backendRow.ID)},
 	})
 	if err != nil {
 		t.Fatalf("create plan: %v", err)
@@ -202,7 +206,7 @@ func TestExecutionPlanUpdate_ProfileID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create other user: %v", err)
 	}
-	otherProfile, err := client.ExecutionProfile.Create().
+	otherProfile, err := client.ExecutionProfile.Create().SetConfig(schema.DefaultProfileConfig()).
 		SetName("other-update-profile").
 		SetScope("user").
 		SetOwnerUserID(otherUser.ID).
@@ -284,8 +288,8 @@ func TestValidateAndSnapshotWith_MaterializesPlanLevelStrategy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
-	backends := NewBackendService(client, users, nil)
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
+	backends := newExecutionTestBackendService(t, client, users)
 	backendRow, err := client.Backend.Create().
 		SetName("strategy-backend").
 		SetBackendType(entbackend.BackendType("openai")).
@@ -297,6 +301,7 @@ func TestValidateAndSnapshotWith_MaterializesPlanLevelStrategy(t *testing.T) {
 		t.Fatalf("create backend: %v", err)
 	}
 	jobs := NewJobService(client, nil, nil, backends, NewTranslationPromptTemplateService(client), NewBootstrapPromptTemplateService(client), NewExecutionProfileService(client, users), nil, nil)
+	backendRow = bindExecutionTestBackend(t, client, backendRow)
 
 	newPlan := func(profileID int, rounds []schema.ExecutionRoundConfig) *ent.ExecutionPlanTemplate {
 		return &ent.ExecutionPlanTemplate{
@@ -365,7 +370,7 @@ func TestValidateAndSnapshotWith_MaterializesPlanLevelStrategy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create other user: %v", err)
 		}
-		otherProfile, err := client.ExecutionProfile.Create().
+		otherProfile, err := client.ExecutionProfile.Create().SetConfig(schema.DefaultProfileConfig()).
 			SetName("other-snapshot-profile").
 			SetScope("user").
 			SetOwnerUserID(otherUser.ID).
@@ -403,10 +408,10 @@ func TestExecutionProfileDelete_ReferencedByPlanRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create other user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	profiles := NewExecutionProfileService(client, users)
 
-	referenced, err := client.ExecutionProfile.Create().
+	referenced, err := client.ExecutionProfile.Create().SetConfig(schema.DefaultProfileConfig()).
 		SetName("referenced-profile").
 		SetScope("user").
 		SetOwnerUserID(user.ID).
@@ -414,7 +419,7 @@ func TestExecutionProfileDelete_ReferencedByPlanRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create referenced profile: %v", err)
 	}
-	unreferenced, err := client.ExecutionProfile.Create().
+	unreferenced, err := client.ExecutionProfile.Create().SetConfig(schema.DefaultProfileConfig()).
 		SetName("free-profile").
 		SetScope("user").
 		SetOwnerUserID(user.ID).
@@ -462,7 +467,7 @@ func TestExecutionProfileDelete_ReferencedByPlanRejected(t *testing.T) {
 		}
 	})
 
-	t.Run("org 策略非成员按不存在处理、成员可删除", func(t *testing.T) {
+	t.Run("org 策略非成员不可读、member不可删除、admin可删除", func(t *testing.T) {
 		orgRow, err := client.Organization.Create().
 			SetName("profile-delete-org").
 			SetSlug("profile-delete-org").
@@ -470,7 +475,7 @@ func TestExecutionProfileDelete_ReferencedByPlanRejected(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create org: %v", err)
 		}
-		orgProfile, err := client.ExecutionProfile.Create().
+		orgProfile, err := client.ExecutionProfile.Create().SetConfig(schema.DefaultProfileConfig()).
 			SetName("org-delete-profile").
 			SetScope("org").
 			SetOwnerOrgID(orgRow.ID).
@@ -489,7 +494,12 @@ func TestExecutionProfileDelete_ReferencedByPlanRejected(t *testing.T) {
 			Save(ctx); err != nil {
 			t.Fatalf("create membership: %v", err)
 		}
-		// 组织 member 及以上成员可删除未被引用的 org 策略
+		if err := profiles.Delete(ctx, otherUser.ID, orgProfile.ID); !errors.Is(err, ErrForbidden) {
+			t.Fatalf("member delete=%v want ErrForbidden", err)
+		}
+		if _, err := client.OrgMembership.Update().SetRole(OrgRoleAdmin).Save(ctx); err != nil {
+			t.Fatal(err)
+		}
 		if err := profiles.Delete(ctx, otherUser.ID, orgProfile.ID); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

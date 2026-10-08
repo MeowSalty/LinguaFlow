@@ -34,11 +34,11 @@ import (
 
 // ---- 测试环境与种子辅助 ----
 
-// newJobRoundTestService 构造仅注入 client/projects/broker 的 JobService，
-// 与 job_cancel_retry_state_test.go 的做法一致，绕过 NewJobService 的完整依赖树。
-func newJobRoundTestService(client *ent.Client, broker *event.Broker) *JobService {
-	projects := NewProjectService(client, NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client))))
-	return &JobService{client: client, projects: projects, broker: broker}
+// newJobRoundTestService 注入状态机及恢复时所需的凭据检查服务。
+func newJobRoundTestService(t *testing.T, client *ent.Client, broker *event.Broker) *JobService {
+	t.Helper()
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
+	return &JobService{client: client, projects: NewProjectService(client, users), broker: broker, backends: newExecutionTestBackendService(t, client, users)}
 }
 
 // jobRoundTestEnv 轮次矩阵测试的最小环境：内存库 + 属主用户 + 项目 + 服务。
@@ -56,7 +56,7 @@ func newJobRoundTestEnv(t *testing.T, broker *event.Broker) *jobRoundTestEnv {
 	project := createTestProject(t, client, "round-project", user.ID)
 	return &jobRoundTestEnv{
 		client:  client,
-		svc:     newJobRoundTestService(client, broker),
+		svc:     newJobRoundTestService(t, client, broker),
 		user:    user,
 		project: project,
 	}
@@ -144,6 +144,7 @@ func seedJobWithRounds(t *testing.T, env *jobRoundTestEnv, jobStatus string, pro
 		}
 		roundRows = append(roundRows, row)
 	}
+	freezeExecutionTestJob(t, env.client, job)
 	return job, jrs, roundRows
 }
 
@@ -799,10 +800,9 @@ func TestRecoverPendingJobs_NoDoubleAccumulation(t *testing.T) {
 	assertJobProgress(t, after, 150, 120)
 }
 
-// TestRecoverPendingJobs_LegacyBackfill 覆盖无矩阵历史行（旧版任务）的回填：
-// 恢复后该资源必须存在至少一条 pending 轮次行。
-// 注意：回填的精确形态（模式、segment_total 取值）以生产实现为准，此处只做宽松断言。
-func TestRecoverPendingJobs_LegacyBackfill(t *testing.T) {
+// TestRecoverPendingJobs_BackfillFromFrozenSpec covers a crash after the valid
+// snapshot was persisted but before its round matrix was created.
+func TestRecoverPendingJobs_BackfillFromFrozenSpec(t *testing.T) {
 	env := newJobRoundTestEnv(t, nil)
 	ctx := context.Background()
 	job, jrs, _ := seedJobWithRounds(t, env, JobStatusRunning, 0, 0, []jobResourceSpec{
@@ -827,8 +827,8 @@ func TestRecoverPendingJobs_LegacyBackfill(t *testing.T) {
 		t.Errorf("resource status = %q, want %q", jrAfter.Status, JobResourceStatusPending)
 	}
 	rounds := loadResourceRounds(t, env.client, jrs[0].ID)
-	if len(rounds) == 0 {
-		t.Fatal("legacy job backfill: expected at least one JobRound row, got 0")
+	if len(rounds) != 1 || rounds[0].Mode != "translate" {
+		t.Fatalf("round matrix was not rebuilt from the frozen spec: %+v", rounds)
 	}
 	for _, r := range rounds {
 		if r.Status != JobRoundStatusPending {

@@ -174,8 +174,12 @@ GlossarySyncExecuteResponse:
 
 GlossarySyncTaskStatusResponse:
   type: object
-  required: [task_id, status, processed, total]
+  required: [task_id, status, processed, total, finished_at, can_delete]
   properties:
+    finished_at:
+      $ref: './task-retention.yaml#/TaskFinishedAt'
+    can_delete:
+      $ref: './task-retention.yaml#/TaskCanDelete'
     task_id:
       type: string
     status:
@@ -189,7 +193,7 @@ GlossarySyncTaskStatusResponse:
       description: 待处理的段落总数
     result:
       type: object
-      description: 任务完成后的结果摘要（仅 status=completed 时存在）
+      description: 已提交批次的累计结果；运行、取消或失败时也可返回，取消不撤销已提交修改。
       properties:
         total_updated:
           type: integer

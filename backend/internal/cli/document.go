@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,13 +16,18 @@ type FileJob struct {
 
 // atomicFile 实现原子写入：先写临时文件，Close 时 rename 到目标路径。
 type atomicFile struct {
-	tmp    *os.File
-	target string
+	tmp      *os.File
+	target   string
+	finished bool
 }
 
 func (a *atomicFile) Write(p []byte) (int, error) { return a.tmp.Write(p) }
 
 func (a *atomicFile) Close() error {
+	if a.finished {
+		return nil
+	}
+	a.finished = true
 	tmpName := a.tmp.Name()
 	if err := a.tmp.Close(); err != nil {
 		_ = os.Remove(tmpName)
@@ -34,9 +40,17 @@ func (a *atomicFile) Close() error {
 	return nil
 }
 
+func (a *atomicFile) Abort() error {
+	if a.finished {
+		return nil
+	}
+	a.finished = true
+	return errors.Join(a.tmp.Close(), os.Remove(a.tmp.Name()))
+}
+
 // createAtomicWriter 创建一个原子写入器。
 // 先写临时文件，Close 时 rename 到目标路径。
-func createAtomicWriter(path string) (io.WriteCloser, error) {
+func createAtomicWriter(path string) (*atomicFile, error) {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("cli: mkdir %s: %w", dir, err)

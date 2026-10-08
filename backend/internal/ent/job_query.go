@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -24,16 +25,17 @@ import (
 // JobQuery is the builder for querying Job entities.
 type JobQuery struct {
 	config
-	ctx              *QueryContext
-	order            []job.OrderOption
-	inters           []Interceptor
-	predicates       []predicate.Job
-	withProject      *ProjectQuery
-	withCreatedBy    *UserQuery
-	withJobResources *JobResourceQuery
-	withJobRounds    *JobRoundQuery
-	withSseEvents    *SSEEventQuery
-	withFKs          bool
+	ctx                      *QueryContext
+	order                    []job.OrderOption
+	inters                   []Interceptor
+	predicates               []predicate.Job
+	withProject              *ProjectQuery
+	withCreatedBy            *UserQuery
+	withJobResources         *JobResourceQuery
+	withJobRounds            *JobRoundQuery
+	withSseEvents            *SSEEventQuery
+	withCredentialReferences *CredentialJobReferenceQuery
+	withFKs                  bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -173,6 +175,28 @@ func (_q *JobQuery) QuerySseEvents() *SSEEventQuery {
 			sqlgraph.From(job.Table, job.FieldID, selector),
 			sqlgraph.To(sseevent.Table, sseevent.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, job.SseEventsTable, job.SseEventsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryCredentialReferences chains the current query on the "credential_references" edge.
+func (_q *JobQuery) QueryCredentialReferences() *CredentialJobReferenceQuery {
+	query := (&CredentialJobReferenceClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(job.Table, job.FieldID, selector),
+			sqlgraph.To(credentialjobreference.Table, credentialjobreference.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, job.CredentialReferencesTable, job.CredentialReferencesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -367,16 +391,17 @@ func (_q *JobQuery) Clone() *JobQuery {
 		return nil
 	}
 	return &JobQuery{
-		config:           _q.config,
-		ctx:              _q.ctx.Clone(),
-		order:            append([]job.OrderOption{}, _q.order...),
-		inters:           append([]Interceptor{}, _q.inters...),
-		predicates:       append([]predicate.Job{}, _q.predicates...),
-		withProject:      _q.withProject.Clone(),
-		withCreatedBy:    _q.withCreatedBy.Clone(),
-		withJobResources: _q.withJobResources.Clone(),
-		withJobRounds:    _q.withJobRounds.Clone(),
-		withSseEvents:    _q.withSseEvents.Clone(),
+		config:                   _q.config,
+		ctx:                      _q.ctx.Clone(),
+		order:                    append([]job.OrderOption{}, _q.order...),
+		inters:                   append([]Interceptor{}, _q.inters...),
+		predicates:               append([]predicate.Job{}, _q.predicates...),
+		withProject:              _q.withProject.Clone(),
+		withCreatedBy:            _q.withCreatedBy.Clone(),
+		withJobResources:         _q.withJobResources.Clone(),
+		withJobRounds:            _q.withJobRounds.Clone(),
+		withSseEvents:            _q.withSseEvents.Clone(),
+		withCredentialReferences: _q.withCredentialReferences.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -435,6 +460,17 @@ func (_q *JobQuery) WithSseEvents(opts ...func(*SSEEventQuery)) *JobQuery {
 		opt(query)
 	}
 	_q.withSseEvents = query
+	return _q
+}
+
+// WithCredentialReferences tells the query-builder to eager-load the nodes that are connected to
+// the "credential_references" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *JobQuery) WithCredentialReferences(opts ...func(*CredentialJobReferenceQuery)) *JobQuery {
+	query := (&CredentialJobReferenceClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withCredentialReferences = query
 	return _q
 }
 
@@ -517,12 +553,13 @@ func (_q *JobQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Job, err
 		nodes       = []*Job{}
 		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
-		loadedTypes = [5]bool{
+		loadedTypes = [6]bool{
 			_q.withProject != nil,
 			_q.withCreatedBy != nil,
 			_q.withJobResources != nil,
 			_q.withJobRounds != nil,
 			_q.withSseEvents != nil,
+			_q.withCredentialReferences != nil,
 		}
 	)
 	if _q.withCreatedBy != nil {
@@ -579,6 +616,15 @@ func (_q *JobQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Job, err
 		if err := _q.loadSseEvents(ctx, query, nodes,
 			func(n *Job) { n.Edges.SseEvents = []*SSEEvent{} },
 			func(n *Job, e *SSEEvent) { n.Edges.SseEvents = append(n.Edges.SseEvents, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withCredentialReferences; query != nil {
+		if err := _q.loadCredentialReferences(ctx, query, nodes,
+			func(n *Job) { n.Edges.CredentialReferences = []*CredentialJobReference{} },
+			func(n *Job, e *CredentialJobReference) {
+				n.Edges.CredentialReferences = append(n.Edges.CredentialReferences, e)
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -722,6 +768,36 @@ func (_q *JobQuery) loadSseEvents(ctx context.Context, query *SSEEventQuery, nod
 	}
 	query.Where(predicate.SSEEvent(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(job.SseEventsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.JobID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "job_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *JobQuery) loadCredentialReferences(ctx context.Context, query *CredentialJobReferenceQuery, nodes []*Job, init func(*Job), assign func(*Job, *CredentialJobReference)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Job)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(credentialjobreference.FieldJobID)
+	}
+	query.Where(predicate.CredentialJobReference(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(job.CredentialReferencesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

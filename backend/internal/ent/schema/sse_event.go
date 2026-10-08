@@ -1,7 +1,7 @@
 package schema
 
 import (
-	"time"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
@@ -22,7 +22,7 @@ func (SSEEvent) Fields() []ent.Field {
 		field.String("stage").Optional(),
 		field.String("message"),
 		field.JSON("metadata", map[string]any{}).Optional(),
-		field.Time("created_at").Default(time.Now).Immutable(),
+		field.Time("created_at").Default(timeutil.NowUTC).Immutable(),
 	}
 }
 

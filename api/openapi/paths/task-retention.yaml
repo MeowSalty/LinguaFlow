@@ -1,0 +1,95 @@
+preview:
+  post:
+    operationId: PreviewTaskRetention
+    summary: 预览任务历史保留影响
+    description: |
+      仅活跃系统管理员可读取全站汇总，不返回任务正文或项目名称。此 POST 完全只读。
+      自动清理关闭或维护期间也可预览；预览不是删除凭证，提交与扫描会重新校验。
+      总预算 5 秒，未完成的计数为 null 并返回 partial；数据库查询错误返回错误，不冒充零影响。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [retention_days]
+            properties:
+              retention_days:
+                type: integer
+                minimum: 1
+                maximum: 3650
+    responses:
+      '200':
+        description: 当前汇总与预计影响
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/task-retention.yaml#/TaskRetentionPreview'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+status:
+  get:
+    operationId: GetTaskRetentionStatus
+    summary: 获取任务历史清理运行状态
+    description: 仅系统管理员可读。运行摘要属于本进程，重启后 last_scan 和 backlog 为 null；政策来自数据库。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 已保存政策版本及本进程运行摘要
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/task-retention.yaml#/TaskRetentionStatus'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+batchDelete:
+  post:
+    operationId: BatchDeleteTaskHistory
+    summary: 批量删除显式选择的任务记录
+    description: |
+      最多提交 100 个显式任务引用，不支持所有任务或筛选式删除。按 (kind,id,project_id) 去重并逐项鉴权。
+      结构错误整体返回 400；结构合法返回逐项结果，各项独立事务，已成功项不因其他项失败回滚。
+      project_id 必须与任务实际项目匹配；响应只回显输入标识和结果，不泄露其他项目数据。
+      总预算 30 秒、单项最多 5 秒，未处理或已确认超时回滚的项为 deferred。
+      删除执行历史和日志，保留原文、译文和独立用量事实；StorageTask 不接受此删除操作。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/task-retention.yaml#/TaskHistoryBatchDeleteRequest'
+    responses:
+      '200':
+        description: 去重后的逐项结果，保持首次提交顺序
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/task-retention.yaml#/TaskHistoryBatchDeleteResponse'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

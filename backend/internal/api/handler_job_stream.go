@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -33,14 +34,32 @@ func (s *Server) StreamJobEvents(w http.ResponseWriter, r *http.Request, jobId J
 }
 
 func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request, jobID int) {
+	s.handleJobStreamWithInterval(w, r, jobID, 5*time.Second)
+}
+
+func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Request, jobID int, checkInterval time.Duration) {
 	authUser, err := s.resolveAuthUser(r)
 	if err != nil {
 		s.writeAuthProblem(w, r, err)
 		return
 	}
+	guard, err := s.taskLifecycle.Lock(r.Context(), "translation", jobID)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
 	if err := s.jobSvc.CheckJobAccess(r.Context(), authUser.User.ID, jobID); err != nil {
+		guard.Release()
 		s.writeJobServiceError(w, r, err)
 		return
+	}
+	ch := s.eventBroker.Subscribe(jobID)
+	guard.Release()
+	defer s.eventBroker.Unsubscribe(jobID, ch)
+	checkAccess := func() bool {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		return s.jobSvc.CheckJobAccess(ctx, authUser.User.ID, jobID) == nil
 	}
 
 	flusher, ok := w.(http.Flusher)
@@ -55,10 +74,12 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request, jobID i
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 
-	ch := s.eventBroker.Subscribe(jobID)
-	defer s.eventBroker.Unsubscribe(jobID, ch)
-
-	fmt.Fprintf(w, ": connected\n\n")
+	controller := http.NewResponseController(w)
+	// Bound a slow client's write so it cannot indefinitely defer authorization checks.
+	_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if _, err := fmt.Fprintf(w, ": connected\n\n"); err != nil {
+		return
+	}
 	flusher.Flush()
 
 	// 从 ring buffer 回放历史事件
@@ -82,7 +103,13 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request, jobID i
 	// 新连接（无 Last-Event-ID）：SSE 只负责「实时 + 最近窗口补进」，历史全量走 REST。
 	// 将回放起点前移到最近 maxReplay 条，避免从 seq 0 升序重放最旧事件。
 	if afterSeq == 0 {
-		if latest, ok := s.eventBroker.LatestSeq(r.Context(), jobID); ok && latest > int64(maxReplay) {
+		lookupCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		latest, ok, lookupErr := s.eventBroker.LatestSeq(lookupCtx, jobID)
+		cancel()
+		if lookupErr != nil || !checkAccess() {
+			return
+		}
+		if ok && latest > int64(maxReplay) {
 			afterSeq = latest - int64(maxReplay)
 		}
 	}
@@ -98,7 +125,12 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request, jobID i
 		if thisBatch > remaining {
 			thisBatch = remaining
 		}
-		batch := s.eventBroker.Replay(r.Context(), jobID, afterSeq, thisBatch)
+		replayCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		batch, replayErr := s.eventBroker.Replay(replayCtx, jobID, afterSeq, thisBatch)
+		cancel()
+		if replayErr != nil || !checkAccess() {
+			return
+		}
 		if len(batch) == 0 {
 			break
 		}
@@ -107,13 +139,19 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request, jobID i
 				// 客户端断开，早停
 				return
 			}
+			if !checkAccess() {
+				return
+			}
 			lastSeq = evt.Seq
 			afterSeq = evt.Seq
 			data, err := json.Marshal(evt)
 			if err != nil {
 				continue
 			}
-			fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", evt.Seq, sseEventTypeReplacer.Replace(evt.Type), string(data))
+			_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", evt.Seq, sseEventTypeReplacer.Replace(evt.Type), string(data)); err != nil {
+				return
+			}
 		}
 		replayed += len(batch)
 		flusher.Flush()
@@ -122,6 +160,8 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request, jobID i
 		}
 	}
 
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-r.Context().Done():
@@ -133,15 +173,27 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request, jobID i
 			if evt.Seq <= lastSeq {
 				continue
 			}
+			if !checkAccess() {
+				return
+			}
 			lastSeq = evt.Seq
 			data, err := json.Marshal(evt)
 			if err != nil {
 				continue
 			}
-			fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", lastSeq, sseEventTypeReplacer.Replace(evt.Type), string(data))
+			_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", lastSeq, sseEventTypeReplacer.Replace(evt.Type), string(data)); err != nil {
+				return
+			}
 			flusher.Flush()
-		case <-time.After(30 * time.Second):
-			fmt.Fprintf(w, ": keepalive %d\n\n", time.Now().Unix())
+		case <-ticker.C:
+			if !checkAccess() {
+				return
+			}
+			_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if _, err := fmt.Fprintf(w, ": keepalive %d\n\n", time.Now().Unix()); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}

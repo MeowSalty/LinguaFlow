@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 
-import type { ApiClient, ApiPaths, ApiSchemas } from './client'
-import { apiClient } from './client'
+import type { ApiClient, ApiPaths, ApiSchemas } from './client-core'
+import { apiClient } from './client-core'
 import { buildRequestFailureError } from './utils'
 
 type GlossaryEntry = ApiSchemas['GlossaryEntry']
@@ -183,9 +183,11 @@ export const getGlossarySyncTaskStatus = async (
   projectId: number,
   taskId: string,
   client: ApiClient = apiClient,
+  options?: { signal?: AbortSignal },
 ): Promise<SyncTaskStatusResponse> => {
   const { data, error, response } = await client.GET('/projects/{projectId}/sync-tasks/{taskId}', {
     params: { path: { projectId, taskId } },
+    signal: options?.signal,
   })
 
   if (!data) {

@@ -12,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // AdjudicateHandler 实现 RoundHandler，对已标出问题的段落做 AI 裁决，剔除误报。
@@ -64,9 +65,6 @@ func (h *AdjudicateHandler) emitBatchOutcome(evt progress.BatchEvent) {
 }
 
 func (h *AdjudicateHandler) adjudicateCodes() []string {
-	if len(h.AdjudicateCodes) == 0 {
-		return qa.DefaultAdjudicateCodes()
-	}
 	return h.AdjudicateCodes
 }
 
@@ -405,7 +403,7 @@ func applyVerdicts(
 	if len(issues) == 0 {
 		return nil, 0
 	}
-	now := time.Now().UTC()
+	now := timeutil.NowUTC()
 	issueCounts := make(map[string]int, len(codes))
 	for _, iss := range issues {
 		if _, adjudicable := codes[iss.Code]; adjudicable && !iss.Dismissed() {

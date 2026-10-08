@@ -24,6 +24,8 @@ type UsageRecord struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// VisibilityScope holds the value of the "visibility_scope" field.
+	VisibilityScope usagerecord.VisibilityScope `json:"visibility_scope,omitempty"`
 	// Source holds the value of the "source" field.
 	Source string `json:"source,omitempty"`
 	// APICalls holds the value of the "api_calls" field.
@@ -98,7 +100,7 @@ func (*UsageRecord) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case usagerecord.FieldID, usagerecord.FieldAPICalls, usagerecord.FieldInputTokens, usagerecord.FieldOutputTokens, usagerecord.FieldSegmentCount:
 			values[i] = new(sql.NullInt64)
-		case usagerecord.FieldSource, usagerecord.FieldNote:
+		case usagerecord.FieldVisibilityScope, usagerecord.FieldSource, usagerecord.FieldNote:
 			values[i] = new(sql.NullString)
 		case usagerecord.FieldCreatedAt, usagerecord.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -140,6 +142,12 @@ func (_m *UsageRecord) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case usagerecord.FieldVisibilityScope:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field visibility_scope", values[i])
+			} else if value.Valid {
+				_m.VisibilityScope = usagerecord.VisibilityScope(value.String)
 			}
 		case usagerecord.FieldSource:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -254,6 +262,9 @@ func (_m *UsageRecord) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("visibility_scope=")
+	builder.WriteString(fmt.Sprintf("%v", _m.VisibilityScope))
 	builder.WriteString(", ")
 	builder.WriteString("source=")
 	builder.WriteString(_m.Source)

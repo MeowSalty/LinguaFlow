@@ -4,6 +4,896 @@
  */
 
 export interface paths {
+    "/admin/task-retention/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 预览任务历史保留影响
+         * @description 仅活跃系统管理员可读取全站汇总，不返回任务正文或项目名称。此 POST 完全只读。
+         *     自动清理关闭或维护期间也可预览；预览不是删除凭证，提交与扫描会重新校验。
+         *     总预算 5 秒，未完成的计数为 null 并返回 partial；数据库查询错误返回错误，不冒充零影响。
+         */
+        post: operations["PreviewTaskRetention"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/task-retention/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取任务历史清理运行状态
+         * @description 仅系统管理员可读。运行摘要属于本进程，重启后 last_scan 和 backlog 为 null；政策来自数据库。
+         */
+        get: operations["GetTaskRetentionStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/batch-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 批量删除显式选择的任务记录
+         * @description 最多提交 100 个显式任务引用，不支持所有任务或筛选式删除。按 (kind,id,project_id) 去重并逐项鉴权。
+         *     结构错误整体返回 400；结构合法返回逐项结果，各项独立事务，已成功项不因其他项失败回滚。
+         *     project_id 必须与任务实际项目匹配；响应只回显输入标识和结果，不泄露其他项目数据。
+         *     总预算 30 秒、单项最多 5 秒，未处理或已确认超时回滚的项为 deferred。
+         *     删除执行历史和日志，保留原文、译文和独立用量事实；StorageTask 不接受此删除操作。
+         */
+        post: operations["BatchDeleteTaskHistory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover storage management capabilities
+         * @description Metadata-only discovery for an active authenticated account. User scope is always the current user and forbids organization_id; org scope requires a positive organization_id and organization owner/admin membership. Platform administrators do not bypass organization membership. Unknown, repeated and empty parameters are rejected. Disabled deployment returns a normal 200 response, even when no connections or spaces exist. Responses are private and must not be cached.
+         */
+        get: operations["GetStorageCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Discover eligible project creation targets */
+        get: operations["GetStorageOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        /** Discover bind, migrate or repair targets */
+        get: operations["GetProjectStorageOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        /** Recent durable connection checks ordered by descending ID */
+        get: operations["ListStorageChecks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/checks/{checkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+                checkId: number;
+            };
+            cookie?: never;
+        };
+        /** Read durable verification and cleanup facts */
+        get: operations["GetStorageCheck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}/legacy-snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        /** Download protected legacy business data before source replacement */
+        get: operations["DownloadLegacySourceSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/storage/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查看存储容量、恢复积压与备份状态
+         * @description 仅平台管理员。只聚合平台登记的数据库事实与临时盘预留，不探测远端、扫描对象桶或产生写入；cursor 是上一页末空间 ID。
+         */
+        get: operations["GetStorageDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/storage/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GetStoragePolicy
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["GetStoragePolicy"];
+        /**
+         * SetStoragePolicy
+         * @description 完整保存政策；部署关闭仅支持 site_only，不支持的模式返回 storage_deployment_disabled（409）且不部分更新额度或代次。维护状态不收缩模式枚举。
+         */
+        put: operations["SetStoragePolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/storage/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configured site storage connections */
+        get: operations["ListSiteStorageConnections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ListStorageConnections
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListStorageConnections"];
+        put?: never;
+        /**
+         * CreateStorageConnection
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateStorageConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/storage/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListOrgStorageConnections
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListOrgStorageConnections"];
+        put?: never;
+        /**
+         * CreateOrgStorageConnection
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateOrgStorageConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * SetStorageConnectionState
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        patch: operations["SetStorageConnectionState"];
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/spaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListStorageConnectionSpaces
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListStorageConnectionSpaces"];
+        put?: never;
+        /**
+         * CreateStorageSpace
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateStorageSpace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * AuthorizeStorage
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["AuthorizeStorage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify the connection and its managed spaces
+         * @description Read checks never write; explicit write checks persist and clean exact probe objects. Requires connection ownership or site administrator access.
+         */
+        post: operations["CheckStorageConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/connections/{connectionId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * RevokeStorageAuthorization
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["RevokeStorageAuthorization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/spaces/{spaceId}/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * SetStorageSpaceQuota
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        put: operations["SetStorageSpaceQuota"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/spaces/{spaceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * SetStorageSpaceState
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        patch: operations["SetStorageSpaceState"];
+        trace?: never;
+    };
+    "/projects/{projectId}/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * GetProjectStorage
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["GetProjectStorage"];
+        /**
+         * BindProjectStorage
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        put: operations["BindProjectStorage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * MigrateProjectStorage
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["MigrateProjectStorage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListStorageTasks
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListStorageTasks"];
+        put?: never;
+        /**
+         * CreateStorageIntent
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateStorageIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * GetStorageTask
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["GetStorageTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * ReceiveStorageContent
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        put: operations["ReceiveStorageContent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * CancelStorageTask
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CancelStorageTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/storage/tasks/{taskId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * RetryStorageTask
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["RetryStorageTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListSourceVersions
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListSourceVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/source-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * PreviewSourceUpdate
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["PreviewSourceUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/source-commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * CommitSourceUpdate
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CommitSourceUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * ListExportArtifacts
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["ListExportArtifacts"];
+        put?: never;
+        /**
+         * CreateExportArtifact
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["CreateExportArtifact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/exports/{artifactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * DeleteExportArtifact
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        delete: operations["DeleteExportArtifact"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/exports/{artifactId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * DownloadExportArtifact
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        get: operations["DownloadExportArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/exports/{artifactId}/rebuild": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * RebuildExportArtifact
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        post: operations["RebuildExportArtifact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出当前用户凭据 */
+        get: operations["ListUserCredentials"];
+        put?: never;
+        /** 创建用户凭据 */
+        post: operations["CreateUserCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 列出组织凭据
+         * @description 仅组织管理员可管理凭据。
+         */
+        get: operations["ListOrgCredentials"];
+        put?: never;
+        /** 创建组织凭据 */
+        post: operations["CreateOrgCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/credentials/{credentialId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        /** 列出凭据版本 */
+        get: operations["ListCredentialVersions"];
+        put?: never;
+        /**
+         * 轮换凭据版本
+         * @description 创建新版本并设置为当前；现存任务仍使用原版本。
+         */
+        post: operations["RotateCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/credentials/{credentialId}/versions/{version}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+                version: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 撤销凭据版本
+         * @description 撤销固定版本；所有共享 Backend 与现存执行的后续调用、恢复均被拒绝。
+         */
+        post: operations["RevokeCredentialVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/credentials/{credentialId}/collect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 回收凭据版本
+         * @description 由运行中的服务显式回收非当前且无 Job 引用、无执行 lease 的版本；所有现存任务均保留引用直至删除。
+         */
+        post: operations["CollectCredentialVersions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ping": {
         parameters: {
             query?: never;
@@ -53,7 +943,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 注册用户并签发会话 */
+        /**
+         * 注册用户并签发会话
+         * @description 新密码须满足至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；不符合时返回 400。公开注册仅创建普通用户。数据库政策关闭注册时返回 403，政策缺失、损坏或读取故障返回 503。
+         */
         post: operations["RegisterAuth"];
         delete?: never;
         options?: never;
@@ -104,7 +997,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 登出并撤销刷新令牌 */
+        /**
+         * 登出并撤销刷新令牌
+         * @description 只撤销当前认证用户提交的 refresh token，不影响其他会话。本人已撤销的 token 再次提交返回 204；
+         *     他人的 token（包括已撤销的 token）返回 403 且不修改。未知 token 保持 401 token-invalid 错误，
+         *     响应不包含 token 所属信息。数据库中仍存在的本人过期 refresh token 也可撤销。
+         *     已签发的 access token 在到期前仍可能有效，不承诺全设备退出或即时撤销 access token。
+         *     调用方在协调刷新后必须使用最新的 access 和 refresh token 重新构建登出请求。
+         */
         post: operations["LogoutAuth"];
         delete?: never;
         options?: never;
@@ -119,9 +1019,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 获取当前用户 */
+        /**
+         * 获取当前用户
+         * @description 服务器模式要求 bearer 认证；本地模式沿用免 bearer 的本地用户身份。
+         */
         get: operations["GetCurrentUser"];
-        /** 更新当前用户资料 */
+        /**
+         * 更新当前用户资料
+         * @description 省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400，邮箱冲突返回 409；失败不部分更新。
+         *     服务器模式要求 bearer 认证；本地模式仍允许通过本地身份调用，页面只读不代表后端禁止写入。
+         */
         put: operations["UpdateCurrentUser"];
         post?: never;
         delete?: never;
@@ -138,7 +1045,13 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 修改当前用户密码 */
+        /**
+         * 修改当前用户密码
+         * @description 只更新密码，已有 access/refresh token 继续沿用各自有效期。
+         *     缺失、空值、非法类型或新密码长度不合法返回 400；非空旧密码错误返回专用
+         *     urn:linguaflow:current-password-mismatch Problem（400），不会被当作认证失效。
+         *     401 仅表示请求认证缺失或失效。本地模式沿用现有本地身份授权，页面不提供密码表单。
+         */
         put: operations["ChangeCurrentUserPassword"];
         post?: never;
         delete?: never;
@@ -157,7 +1070,10 @@ export interface paths {
         /** 列出当前用户所属组织 */
         get: operations["ListOrganizations"];
         put?: never;
-        /** 创建组织 */
+        /**
+         * 创建组织
+         * @description 创建组织及首位 owner 原子提交。name 与 slug 分别全局唯一，冲突为 409 organization_name_exists 或 organization_slug_exists。
+         */
         post: operations["CreateOrganization"];
         delete?: never;
         options?: never;
@@ -176,7 +1092,10 @@ export interface paths {
         };
         /** 获取组织详情 */
         get: operations["GetOrganization"];
-        /** 更新组织信息 */
+        /**
+         * 更新组织信息
+         * @description 仅 owner/admin 可更新；name 与 slug 必填且各自唯一。可选资料省略保留、空串清空、null 拒绝。名称及 slug 冲突与创建采用相同的专用 409 Problem。
+         */
         put: operations["UpdateOrganization"];
         post?: never;
         delete?: never;
@@ -197,7 +1116,10 @@ export interface paths {
         /** 获取组织成员列表 */
         get: operations["ListOrganizationMembers"];
         put?: never;
-        /** 添加组织成员 */
+        /**
+         * 添加组织成员
+         * @description 精确用户名添加已有账号并立即生效。admin 仅能添加 member，owner 可添加任意角色；重复成员返回 409 membership_exists。
+         */
         post: operations["AddOrganizationMember"];
         delete?: never;
         options?: never;
@@ -216,10 +1138,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 修改组织成员角色 */
+        /**
+         * 修改组织成员角色
+         * @description 仅 owner 可修改，非法或缺失角色返回 400；最后 owner 不得降级，返回 409 owner_required。校验与修改在数据库锁保护的同一事务中执行。
+         */
         put: operations["UpdateOrganizationMember"];
         post?: never;
-        /** 移除组织成员 */
+        /**
+         * 移除成员或主动退出组织
+         * @description 本人可退出，必须保留至少一位 owner；owner 可移除他人，admin 仅能移除 member。最后 owner 冲突为 409 owner_required；不存在目标成员为 404，非成员再次退出为 403。成功返回 204，不删除账号或组织项目。
+         */
         delete: operations["DeleteOrganizationMember"];
         options?: never;
         head?: never;
@@ -255,7 +1183,7 @@ export interface paths {
         put?: never;
         /**
          * 探测可用模型列表
-         * @description 使用调用方当场提供的 api_key（及可选 base_url）向对应 AI 服务拉取可用模型列表，
+         * @description 使用调用方当场提供的 secret（及可选 base_url）向对应 AI 服务拉取可用模型列表，
          *     用于新建/编辑后端时填充 model 字段。凭据不落库，与后端归属无关。
          */
         post: operations["ListBackendModels"];
@@ -405,6 +1333,8 @@ export interface paths {
          *     - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
          *     - 项目内资源唯一性以规范化 path 判断，而不是 filename
          *     - 冲突或失败的文件不会阻断其他文件的上传，每个文件独立返回处理结果
+         *     - 首项发布前固定完整有序批次及完整文件摘要；同键换序、删项、改路径或改字节返回 409
+         *     - 原键重放保留原条目成功或失败；仅重传失败子批次需要新键
          */
         post: operations["UploadProjectResources"];
         delete?: never;
@@ -473,12 +1403,16 @@ export interface paths {
         };
         /** 获取资源详情 */
         get: operations["GetResource"];
-        /** 更新资源文件 */
+        /**
+         * 更新资源文件
+         * @description 先确认源文件差异预览，再提交预览任务 ID 及源、译文预期代次。缺少条件或代次过期返回冲突；提交使用预览中已经验证的候选文件。
+         */
         put: operations["UpdateResource"];
         /**
          * 增量更新资源文件
-         * @description 上传新版本文件，系统自动对比段落变化：
-         *     - 相同源文本的段落保留已有译文
+         * @description 先创建源文件差异预览，再携带预览任务及源、译文预期代次确认。缺少条件或代次过期返回冲突。
+         *     系统按已确认的候选文件对比段落变化：
+         *     - 唯一且无歧义的相同源文本段落保留已有译文
          *     - 源文本变化的段落重置为待翻译
          *     - 新增段落状态为待翻译
          *     - 不再存在的段落将被删除
@@ -1002,6 +1936,7 @@ export interface paths {
          *     仅在 target 发生变更时有意义。
          *     支持 resource_ids 参数限定分析范围。
          *     采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+         *     要求项目读取权限；非法或非正整数 ID、非法资源范围返回 400，未认证 401，无权限 403。
          */
         post: operations["AnalyzeGlossarySyncImpact"];
         delete?: never;
@@ -1027,6 +1962,9 @@ export interface paths {
          * @description 提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
          *     返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
          *     替换后的段落状态将被设置为 edited，需要人工复核。
+         *     要求项目写权限（个人所有者或组织 owner/admin），组织 member 仅可读取。
+         *     持久化成功即返回 202，内存投递失败由后台有界补投，不改报提交失败。
+         *     非法 ID 或资源范围 400，未认证 401，无写权限 403；不承诺网络重试幂等创建。
          */
         post: operations["ExecuteGlossarySyncUpdate"];
         delete?: never;
@@ -1049,12 +1987,20 @@ export interface paths {
         /**
          * 查询术语同步任务状态
          * @description 查询同步更新任务的执行进度和结果。
-         *     前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+         *     要求项目读取权限，仅打开详情时按需轮询；终态停止轮询。
+         *     非法或非正整数 ID 返回 400，未认证 401，无项目权限 403；已授权项目中任务不存在或不匹配返回 404。
+         *     result 为累计已提交结果，取消或失败不撤销已经完成的替换。
          */
         get: operations["GetGlossarySyncTaskStatus"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 删除术语同步任务记录
+         * @description 同时校验任务项目归属与项目写权限。仅终态且所有执行写入已收尾时可删除。
+         *     删除执行记录，保留已经提交的术语和译文；非终态 task_not_terminal、收尾中 task_busy 均返回 409。
+         *     单项事务预算 5 秒，确认回滚后返回 503 task_cleanup_deferred；重复删除返回 404。
+         */
+        delete: operations["DeleteGlossarySyncTaskHistory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1076,7 +2022,9 @@ export interface paths {
         /**
          * 取消术语同步任务
          * @description 取消正在执行或等待执行的同步任务。
-         *     pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+         *     要求项目写权限（个人所有者或组织 owner/admin）；非法或非正整数 ID 400，未认证 401，无权限 403，任务不存在或不匹配 404。
+         *     取消与批次提交串行协调；成功响应后不再提交新修改，之前提交的结果保留。
+         *     重复取消幂等返回当前状态；completed/failed 返回 409 Problem。没有暂停、恢复或原任务重试能力。
          */
         post: operations["CancelGlossarySyncTask"];
         delete?: never;
@@ -1152,6 +2100,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出当前用户可访问的跨项目翻译任务
+         * @description 按项目读取权限查询，包含组织项目内其他成员创建的任务。
+         *     未指定 state 或 status 时默认查询 pending、running、paused。
+         *     state 与 status 互斥。project_id 不存在或无读取权限时返回空列表。
+         *     按 updated_at DESC、id DESC 排序；cursor 是不透明游标，仅用于原筛选条件的续页。
+         *     任务更新会改变排序，本接口不提供跨请求快照；轮询应从首页重新查询并按 ID 去重，
+         *     不能将单页中缺少某任务解释为任务已结束。
+         *     limit 缺省为 50，最大为 100；未知、重复或空查询参数返回 400。
+         */
+        get: operations["ListAccessibleJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取当前用户可访问任务的数量摘要
+         * @description 只支持 project_id 和 trigger_type 筛选，不接受状态、时间或分页参数。
+         *     未知、重复或空查询参数返回 400。
+         *     活动状态数量不受时间限制。recent_failed 统计当前为 failed 且 updated_at 位于
+         *     [recent_failed_since, as_of) 内的任务，窗口为连续 7×24 小时，不是失败事件次数。
+         *     项目读取权限与 GET /jobs 一致；无权或不存在的项目返回全部为零的计数。
+         */
+        get: operations["GetJobsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 按项目权限发现翻译、术语同步与存储任务
+         * @description 只读投影，不新增通用任务实体。默认返回三类活动任务，组织成员可看到同项目其他成员的任务。
+         *     未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限。
+         *     state 默认 active，与 status 互斥；同步没有 paused。trigger_type 仅允许显式 task_type=translation。
+         *     存储任务的 waiting_retry、needs_action 属于活动状态；其实际可控制动作以存储任务详情为准。
+         *     updated_at 区间为 [updated_from, updated_before)，按 updated_at DESC, task_type DESC, 整数 task_id DESC 排序。
+         *     独立版本化游标绑定规范化筛选（不含 limit）；不可使用 Job 游标。每页重新鉴权，不提供跨请求快照。
+         *     刷新从第一页开始并处理全部续页，客户端以 (task_type,task_id) 去重，单页缺失不代表任务结束。
+         *     未知、重复、空或非法参数均返回 400。开始时间未知为 null，不返回 ETA、配置、段落或资源 ID 数组、错误正文和全实例队列。
+         */
+        get: operations["ListOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取三类任务的独立数量摘要
+         * @description 只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。
+         *     未知、重复、空或非法参数返回 400。权限与列表一致，无权项目返回零。
+         *     by_type 固定返回三类，未选类型计零，同步和存储 paused 恒为零；total 为逐字段求和。
+         *     waiting_retry、needs_action 分开统计，翻译与术语同步的这两个计数恒为零。
+         *     recent_failed 只数当前 failed 且 updated_at 位于 [recent_failed_since,as_of) 的记录，窗口为连续七天。
+         *     活动数不受时间限制；不受分页影响，不代表历史失败事件次数。
+         */
+        get: operations["GetOperationsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{jobId}": {
         parameters: {
             query?: never;
@@ -1165,7 +2215,14 @@ export interface paths {
         get: operations["GetJob"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 删除翻译任务记录
+         * @description 要求项目写权限。仅 completed、failed、cancelled 且执行与事件写入均已收尾时可删除。
+         *     删除记录、执行详情和日志，保留项目原文、译文及独立用量事实；不能撤销。
+         *     非终态返回 409 task_not_terminal，仍在收尾返回 409 task_busy，维护/恢复屏障沿用领域错误。
+         *     单项事务预算 5 秒，确认回滚后返回 503 task_cleanup_deferred；已不存在返回 404。
+         */
+        delete: operations["DeleteJobHistory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1210,6 +2267,7 @@ export interface paths {
          *     已完成的轮次与已翻译段落直接跳过，从当前进度断点继续。
          *     例外：显式选段（segment_ids 手动选择）的任务，首个翻译轮
          *     会重译所有选中段落。
+         *     上一轮执行仍在收尾时返回 409 task_busy；重试清空结束时间并重新计算保留周期。
          */
         post: operations["RetryJob"];
         delete?: never;
@@ -1254,7 +2312,7 @@ export interface paths {
         put?: never;
         /**
          * 恢复已暂停的任务
-         * @description 从轮次断点恢复已暂停的任务。
+         * @description 从轮次断点恢复已暂停的任务；上一轮执行仍在收尾时返回 409 task_busy。
          */
         post: operations["ResumeJob"];
         delete?: never;
@@ -1275,6 +2333,7 @@ export interface paths {
         /**
          * 订阅任务实时事件流 (SSE)
          * @description 以 Server-Sent Events 推送任务实时事件。
+         *     任务历史删除后关闭已有订阅，新订阅返回 404；回放数据库不可用时结束连接，不伪报完整历史。
          *
          *     - 认证：除 bearerAuth 外，原生 EventSource 无法设置自定义请求头，
          *       可改用 `access_token` 查询参数携带访问令牌。
@@ -1320,7 +2379,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的执行计划模板 */
+        /**
+         * 列出当前用户的执行计划模板
+         * @description 不传 org_id 时返回个人及当前所属组织的计划；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListExecutionPlanTemplates"];
         put?: never;
         /** 创建执行计划模板 */
@@ -1359,7 +2421,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的翻译提示词模板 */
+        /**
+         * 列出当前用户的翻译提示词模板
+         * @description 不传 org_id 时返回个人和系统模板；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListPromptTemplates"];
         put?: never;
         /** 创建翻译提示词模板 */
@@ -1398,7 +2463,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的术语抽取提示词模板 */
+        /**
+         * 列出当前用户的术语抽取提示词模板
+         * @description 不传 org_id 时返回个人和系统模板；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListBootstrapPromptTemplates"];
         put?: never;
         /** 创建术语抽取提示词模板 */
@@ -1437,7 +2505,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的术语精简提示词模板 */
+        /**
+         * 列出当前用户的术语精简提示词模板
+         * @description 不传 org_id 时返回个人和系统模板；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListPrunePromptTemplates"];
         put?: never;
         /** 创建术语精简提示词模板 */
@@ -1476,7 +2547,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的执行策略配置 */
+        /**
+         * 列出当前用户的执行策略配置
+         * @description 不传 org_id 时返回个人和系统配置；显式 org_id 时仅返回该组织对象，要求当前成员资格。拒绝未知、重复、空值和非法查询参数。
+         */
         get: operations["ListExecutionProfiles"];
         put?: never;
         /** 创建执行策略配置 */
@@ -1579,6 +2653,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/runtime/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 当前实例运行容量与负载
+         * @description 仅当前系统管理员可读，组织角色不授予访问权；本地模式使用真实管理员身份。
+         *     不接受任何查询参数（认证使用 Authorization header）。未认证 401、无系统权限 403、非法查询 400。
+         *     collector 缺失返回 503 Problem，单 runner 恢复失败返回 200 和 degraded。
+         *     指标来自进程内存，不读写业务数量表。组件内部一致，跨组件近同时采样。
+         *     instance_id 每次 Server 运行随机生成；重启累计清零，不可拼接不同实例增量。
+         *     不含租户、任务、backend、模型、URL、凭据、路径或原始错误。
+         */
+        get: operations["AdminGetRuntimeSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/audit-logs": {
         parameters: {
             query?: never;
@@ -1603,14 +2702,23 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 获取系统配置 */
+        /**
+         * 获取系统配置
+         * @description 返回数据库权威政策。设置缺失、损坏或读取故障返回 503。
+         */
         get: operations["AdminGetSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** 更新系统配置 */
+        /**
+         * 更新系统配置
+         * @description settings 至少提交一个支持字段，未提交字段保持不变；拒绝未知字段、null 和错误类型。
+         *     task_retention 必须完整提交 enabled、retention_days 和 expected_revision，禁止提交 revision。
+         *     同时修改多个政策时全部提交或全部回滚。版本不一致返回 409 settings_conflict。
+         *     政策值没有变化时不递增版本、不重复记录审计；保存后无需重启，维护期间仍可修改政策。
+         */
         patch: operations["AdminUpdateSettings"];
         trace?: never;
     };
@@ -1634,6 +2742,8 @@ export interface paths {
     "/activity": {
         parameters: {
             query?: {
+                /** @description 仅查询指定组织的活动；正整数，不存在返回 404，非成员返回 403。拒绝未知、重复或空查询参数。 */
+                org_id?: number;
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -1672,7 +2782,60 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        TaskRetentionPolicy: {
+            /** @default false */
+            enabled: boolean;
+            /**
+             * @description 完整 24 小时天数；关闭时仍保存该值，两类任务及全部终态使用同一周期。
+             * @default 30
+             */
+            retention_days: number;
+            /** Format: int64 */
+            readonly revision: number;
+        };
+        TaskRetentionPatch: {
+            enabled: boolean;
+            retention_days: number;
+            /** Format: int64 */
+            expected_revision: number;
+        };
+        TaskRetentionPreview: {
+            /** Format: int64 */
+            policy_revision: number;
+            retention_days: number;
+            /** Format: date-time */
+            as_of: string;
+            /** Format: date-time */
+            cutoff: string;
+            partial: boolean;
+            incomplete_reasons: string[];
+            by_type: {
+                translation: components["schemas"]["RetentionTypePreview"];
+                glossary_sync: components["schemas"]["RetentionTypePreview"];
+            };
+        };
+        TaskRetentionStatus: {
+            task_retention: components["schemas"]["TaskRetentionPolicy"];
+            /** Format: int64 */
+            policy_revision: number;
+            /** @enum {string} */
+            state: "disabled" | "idle" | "running" | "blocked" | "error";
+            reason_codes: string[];
+            last_scan: components["schemas"]["RetentionScanSummary"] | null;
+            backlog: boolean | null;
+        };
+        TaskHistoryBatchDeleteRequest: {
+            items: components["schemas"]["TaskHistoryTarget"][];
+        };
+        TaskHistoryBatchDeleteResponse: {
+            items: components["schemas"]["TaskHistoryDeleteResult"][];
+        };
         Problem: {
+            /** @description Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses storage_disk_probe_failed (503). Neither signals automatic retry. Provider authorization, quota and availability retain their separate domain codes. */
+            error_code?: string;
+            task_id?: number;
+            operation_id?: string;
+            check_id?: number;
             type?: string;
             title: string;
             status: number;
@@ -1699,6 +2862,7 @@ export interface components {
         };
         RegisterRequest: {
             username: string;
+            /** @description 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。 */
             password: string;
             /** Format: email */
             email: string;
@@ -1706,12 +2870,14 @@ export interface components {
         };
         LoginRequest: {
             username: string;
+            /** @description 原样验证密码，不施加注册或改密时的新密码长度规则，以兼容历史密码。 */
             password: string;
         };
         RefreshRequest: {
             refresh_token: string;
         };
         LogoutRequest: {
+            /** @description 当前认证用户本人持有的 refresh token；只撤销此 token，不影响其他会话。 */
             refresh_token: string;
         };
         AuthSession: {
@@ -1724,22 +2890,38 @@ export interface components {
             refresh_expires_at: string;
             user: components["schemas"]["User"];
         };
+        /**
+         * @description 仅更新提供的字段，省略字段保持原值；空对象返回当前资料且不修改更新时间。
+         *     字段不可为 null，用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
+         */
         UpdateCurrentUserRequest: {
+            /** @description 去除首尾空白；空字符串允许清空显示名。 */
             display_name?: string;
-            /** Format: email */
+            /**
+             * Format: email
+             * @description 去除首尾空白并转小写后校验单个纯邮箱地址；拒绝空值、内部空白、显示名及地址包装。
+             */
             email?: string;
         };
         ChangePasswordRequest: {
+            /** @description 原样验证当前密码，不去除空白，不施加新密码的长度规则。 */
             current_password: string;
+            /** @description 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。 */
             new_password: string;
         };
         Organization: {
+            /**
+             * @description 当前请求者在此组织的角色，与系统角色无关。
+             * @enum {string}
+             */
+            readonly current_user_role: "owner" | "admin" | "member";
             id: number;
             name: string;
             slug: string;
             display_name?: string;
             description?: string;
         };
+        /** @description name 去除首尾空白，slug 按身份规则规范化，两者必填且各自全局唯一。可选字段省略时更新保留、创建使用空值，空串清空，不接受 null。 */
         OrganizationRequest: {
             name: string;
             slug: string;
@@ -1759,10 +2941,16 @@ export interface components {
             items: components["schemas"]["OrganizationMember"][];
         };
         AddOrganizationMemberRequest: {
+            /** @description 精确匹配已有账号用户名；不发送邀请。 */
             username: string;
-            /** @enum {string} */
+            /**
+             * @description 省略时为 member；admin 仅能添加 member，owner 可授予任意合法角色，显式空值或 null 无效。
+             * @default member
+             * @enum {string}
+             */
             role?: "owner" | "admin" | "member";
         };
+        /** @description 仅 owner 可修改角色，必须至少保留一位 owner；省略、空值及 null 均无效。 */
         UpdateOrganizationMemberRequest: {
             /** @enum {string} */
             role: "owner" | "admin" | "member";
@@ -1816,10 +3004,17 @@ export interface components {
             output_tokens: number;
             segment_count: number;
             usage_records: number;
+            /** @description 当前保留记录范围内的完成任务数量；独立调用和 Token 用量不随历史删除减少。 */
             completed_jobs: number;
+            /** @description 当前保留记录范围内的失败任务数量。 */
             failed_jobs: number;
         };
         Resource: {
+            current_source_revision_id: number | null;
+            /** Format: int64 */
+            source_generation: number;
+            /** Format: int64 */
+            translation_generation: number;
             id: number;
             /** @description 项目内规范化资源相对路径，使用 / 分隔，例如 ui/common.json */
             path: string;
@@ -1853,8 +3048,8 @@ export interface components {
         ResourceTreeResponse: {
             root: components["schemas"]["ResourceTreeNode"];
         };
+        /** @description 文件原文只读；提交 source_text 返回 source_read_only，原文变更须创建新源版本。 */
         ResourceSegmentUpdateRequest: {
-            source_text?: string;
             target_text?: string;
             comment?: string;
         };
@@ -1902,6 +3097,7 @@ export interface components {
             changes: components["schemas"]["IncrementalUpdateChanges"];
         };
         ResourceUploadFileResult: {
+            error_code?: string;
             /** @description 资源项目内规范化相对路径 */
             path: string;
             /**
@@ -1917,6 +3113,7 @@ export interface components {
             error?: string;
         };
         ResourceUploadBatchResponse: {
+            operation_id?: string;
             items: components["schemas"]["ResourceUploadFileResult"][];
         };
         ResourcePrecheckFileResult: {
@@ -1948,14 +3145,10 @@ export interface components {
         ResourceSegmentGroupListResponse: {
             items: components["schemas"]["ResourceSegmentGroup"][];
         };
+        /** @description 使用当前文件原文预览；提交 source_text 返回 source_read_only。 */
         SegmentTranslationPreviewRequest: {
             /** @description 执行计划模板 ID；计划中必须至少包含一个 translate 轮次 */
             execution_plan_id: number;
-            /**
-             * @description 可选：编辑器中尚未保存的原文。省略时使用数据库原文；传入时必须为非空白文本，
-             *     将作为本次预览的原文（模拟一次原文变更后执行计划）。
-             */
-            source_text?: string;
         };
         SegmentTranslationPreviewResponse: {
             /**
@@ -2139,17 +3332,17 @@ export interface components {
             replace_with: string;
             match_mode?: components["schemas"]["SegmentMatchMode"];
             /** @default true */
-            case_sensitive: boolean;
+            case_sensitive?: boolean;
             /**
              * @description 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查
              * @default false
              */
-            whole_word: boolean;
+            whole_word?: boolean;
             /**
              * @description 返回样本上限
              * @default 20
              */
-            max_results: number;
+            max_results?: number;
             /** @enum {string} */
             status?: "pending" | "translated" | "edited" | "approved" | "rejected";
             /** @enum {string} */
@@ -2174,12 +3367,12 @@ export interface components {
             replace_with: string;
             match_mode?: components["schemas"]["SegmentMatchMode"];
             /** @default true */
-            case_sensitive: boolean;
+            case_sensitive?: boolean;
             /**
              * @description 整词匹配：命中前后不得紧邻字母或数字（按 Unicode 字母/数字判定的词边界）；对 substring 与 regex 模式均生效，开启后在模式命中的基础上追加边界检查；须与预览请求一致才能命中相同段落
              * @default false
              */
-            whole_word: boolean;
+            whole_word?: boolean;
             /** @description 可选，仅应用这些段落；省略=对该资源所有当前命中段落应用 */
             segment_ids?: number[];
         };
@@ -2227,7 +3420,7 @@ export interface components {
              * @description 翻译完成后是否自动审批通过所有段落
              * @default false
              */
-            auto_approve: boolean;
+            auto_approve?: boolean;
             execution_config?: {
                 [key: string]: unknown;
             };
@@ -2291,6 +3484,8 @@ export interface components {
             finished_at?: string | null;
         };
         Job: {
+            finished_at: components["schemas"]["TaskFinishedAt"];
+            can_delete: components["schemas"]["TaskCanDelete"];
             id: number;
             project_id: number;
             created_by?: {
@@ -2333,14 +3528,52 @@ export interface components {
              * @description 已完成工作量（单位=段落×轮，随轮次推进单调递增）
              */
             progress_completed: number;
-            /** @description 在队列中的位置（1-based），null 表示不在队列中 */
+            /** @description 暂不可用，省略或为 null；不暴露全实例队列位置。 */
             queue_position?: number | null;
-            /** @description 当前队列中的任务总数 */
+            /** @description 暂不可用，省略或为 null；不暴露全实例队列人数。 */
             queue_size?: number | null;
         };
         JobListResponse: {
             items: components["schemas"]["Job"][];
             next_cursor?: string;
+        };
+        JobSummary: {
+            finished_at: components["schemas"]["TaskFinishedAt"];
+            can_delete: components["schemas"]["TaskCanDelete"];
+            id: number;
+            project_id: number;
+            project_name: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            /** @enum {string} */
+            trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
+            progress: components["schemas"]["JobSummaryProgress"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+        };
+        /** @description 与 JobProgress 使用相同的计数口径；本阶段队列位置和队列总数固定为 null，不暴露实例级队列负载 */
+        JobSummaryProgress: components["schemas"]["JobProgress"] & {
+            queue_position: number | null;
+            queue_size: number | null;
+        };
+        JobSummaryListResponse: {
+            items: components["schemas"]["JobSummary"][];
+            next_cursor?: string;
+        };
+        JobsSummaryResponse: {
+            pending: number;
+            running: number;
+            paused: number;
+            /** @description 当前失败且最近 7 天内更新的任务数；重试后不再计入 */
+            recent_failed: number;
+            /** Format: date-time */
+            recent_failed_since: string;
+            /** Format: date-time */
+            as_of: string;
         };
         JobEvent: {
             type: string;
@@ -2370,6 +3603,10 @@ export interface components {
             next_before_seq?: number;
         };
         Activity: {
+            /** @description 当前有效的组织归属，不从操作者身份推导。 */
+            organization_id?: number;
+            /** @description 活动所属的仍存在的项目。 */
+            project_id?: number;
             id: number;
             action: string;
             resource_type: string;
@@ -2389,6 +3626,9 @@ export interface components {
             next_cursor?: string;
         };
         Backend: {
+            credential: components["schemas"]["CredentialBinding"];
+            /** @description 已有独立存储的凭据；不保证版本尚未被撤销。读取永不返回真实 secret。 */
+            has_secret: boolean;
             id: number;
             /** @enum {string} */
             scope: "user" | "org";
@@ -2400,14 +3640,17 @@ export interface components {
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
              */
-            rate_limit_per_minute: number;
+            rate_limit_per_minute?: number;
             owner_user_id?: number;
             owner_org_id?: number;
         };
         BackendListResponse: {
             items: components["schemas"]["Backend"][];
         };
+        /** @description secret 与 credential_id 必须提供一个；凭据必须属于相同用户或组织，且 provider 与 endpoint 匹配。 */
         CreateBackendRequest: {
+            secret?: string;
+            credential_id?: number;
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
@@ -2416,9 +3659,12 @@ export interface components {
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
              */
-            rate_limit_per_minute: number;
+            rate_limit_per_minute?: number;
         };
+        /** @description secret 与 credential_id 不能同时提供。都省略时保留现有凭据；提供 secret 创建新凭据对象并重新绑定，不修改共享凭据。改变 provider 或 endpoint 必须同时提供匹配的新绑定。轮换共享凭据使用凭据 versions 接口。 */
         UpdateBackendRequest: {
+            secret?: string;
+            credential_id?: number;
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
@@ -2427,7 +3673,7 @@ export interface components {
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
              */
-            rate_limit_per_minute: number;
+            rate_limit_per_minute?: number;
         };
         /** @description 凭用户输入的凭据探测可用模型列表（不落库） */
         ListBackendModelsRequest: {
@@ -2437,7 +3683,7 @@ export interface components {
              */
             type: "openai" | "anthropic" | "google";
             /** @description AI 服务 API 密钥 */
-            api_key: string;
+            secret: string;
             /** @description 自定义 API 端点 URL，留空使用默认值 */
             base_url?: string;
         };
@@ -2452,6 +3698,13 @@ export interface components {
             items: components["schemas"]["BackendModel"][];
         };
         Project: {
+            storage_space_id: number | null;
+            /** Format: int64 */
+            storage_generation: number;
+            /** Format: int64 */
+            output_generation: number;
+            /** @enum {string} */
+            storage_state: "active" | "draining" | "migrating" | "legacy_migration" | "legacy_rollback";
             id: number;
             name: string;
             owner_user_id?: number;
@@ -2475,6 +3728,7 @@ export interface components {
             items: components["schemas"]["Project"][];
         };
         CreateProjectRequest: {
+            storage_space_id?: number;
             name: string;
             config?: {
                 [key: string]: unknown;
@@ -2483,7 +3737,7 @@ export interface components {
              * @description 是否启用术语表
              * @default false
              */
-            glossary_enabled: boolean;
+            glossary_enabled?: boolean;
             source_lang?: string;
             target_lang?: string;
         };
@@ -2519,11 +3773,11 @@ export interface components {
             source: string;
             target: string;
             /** @default false */
-            case_sensitive: boolean;
+            case_sensitive?: boolean;
             /** @default false */
-            forbidden: boolean;
+            forbidden?: boolean;
             /** @default true */
-            mandatory: boolean;
+            mandatory?: boolean;
             notes?: string;
         };
         UpdateGlossaryEntryRequest: {
@@ -2575,6 +3829,8 @@ export interface components {
             status_url: string;
         };
         GlossarySyncTaskStatusResponse: {
+            finished_at: components["schemas"]["TaskFinishedAt"];
+            can_delete: components["schemas"]["TaskCanDelete"];
             task_id: string;
             /** @enum {string} */
             status: "pending" | "running" | "completed" | "failed" | "cancelled";
@@ -2582,7 +3838,7 @@ export interface components {
             processed: number;
             /** @description 待处理的段落总数 */
             total: number;
-            /** @description 任务完成后的结果摘要（仅 status=completed 时存在） */
+            /** @description 已提交批次的累计结果；运行、取消或失败时也可返回，取消不撤销已提交修改。 */
             result?: {
                 total_updated?: number;
                 total_skipped?: number;
@@ -2682,7 +3938,9 @@ export interface components {
         TranslationPromptTemplateListResponse: {
             items: components["schemas"]["TranslationPromptTemplate"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreateTranslationPromptTemplateRequest: {
+            org_id?: number;
             name: string;
             description?: string;
             /** @description 翻译提示词内容。 */
@@ -2711,7 +3969,9 @@ export interface components {
         BootstrapPromptTemplateListResponse: {
             items: components["schemas"]["BootstrapPromptTemplate"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreateBootstrapPromptTemplateRequest: {
+            org_id?: number;
             name: string;
             description?: string;
             /** @description 术语抽取提示词内容。 */
@@ -2740,7 +4000,9 @@ export interface components {
         PrunePromptTemplateListResponse: {
             items: components["schemas"]["PrunePromptTemplate"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreatePrunePromptTemplateRequest: {
+            org_id?: number;
             name: string;
             description?: string;
             /** @description 术语精简提示词内容。 */
@@ -2768,15 +4030,17 @@ export interface components {
         ExecutionProfileListResponse: {
             items: components["schemas"]["ExecutionProfile"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreateExecutionProfileRequest: {
+            org_id?: number;
             name: string;
             description?: string;
-            config?: components["schemas"]["ExecutionProfileConfig"];
+            config?: components["schemas"]["ExecutionProfileConfigInput"];
         };
         UpdateExecutionProfileRequest: {
             name?: string;
             description?: string;
-            config?: components["schemas"]["ExecutionProfileConfig"];
+            config?: components["schemas"]["ExecutionProfileConfigInput"];
         };
         ExecutionPlanTemplate: {
             id: number;
@@ -2813,7 +4077,7 @@ export interface components {
              * @default user
              * @enum {string}
              */
-            role: "user" | "admin";
+            role?: "user" | "admin";
         };
         AdminUpdateUserRequest: {
             display_name?: string;
@@ -2831,6 +4095,7 @@ export interface components {
             active_users: number;
             total_projects: number;
             total_organizations: number;
+            /** @description 当前保留的翻译任务记录数量，会随历史删除减少，不是永久累计任务数。 */
             total_jobs: number;
             total_resources: number;
         };
@@ -2839,19 +4104,24 @@ export interface components {
             total: number;
         };
         SystemSettingsResponse: {
-            settings?: {
-                [key: string]: string;
+            settings: {
+                task_retention: components["schemas"]["TaskRetentionPolicy"];
+                /** @description 是否允许公开注册；公开注册账户始终为普通用户。 */
+                registration_enabled: boolean;
             };
         };
         UpdateSystemSettingsRequest: {
-            settings?: {
-                [key: string]: string;
+            settings: {
+                task_retention?: components["schemas"]["TaskRetentionPatch"];
+                registration_enabled?: boolean;
             };
         };
         ExecutionPlanTemplateListResponse: {
             items: components["schemas"]["ExecutionPlanTemplate"][];
         };
+        /** @description 省略 org_id 创建个人对象；指定组织时必须为 admin/owner。归属不可更新，组织共享依赖只允许同组织或系统对象。 */
         CreateExecutionPlanTemplateRequest: {
+            org_id?: number;
             name: string;
             description?: string;
             /** @description 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道供七项行为预设 */
@@ -2874,12 +4144,12 @@ export interface components {
              * @description 源语言;省略或 "auto" 表示自动检测
              * @default auto
              */
-            source_lang: string;
+            source_lang?: string;
             /**
              * @description 目标语言
              * @default zh
              */
-            target_lang: string;
+            target_lang?: string;
             /**
              * @description 执行计划模板 ID。执行计划模板统一为用户/org 级(ExecutionPlanTemplate
              *     无 project 关联),无论是否提供 project_id,用的都是同一套模板;
@@ -2920,11 +4190,11 @@ export interface components {
             source: string;
             target: string;
             /** @default false */
-            case_sensitive: boolean;
+            case_sensitive?: boolean;
             /** @default false */
-            forbidden: boolean;
+            forbidden?: boolean;
             /** @default true */
-            mandatory: boolean;
+            mandatory?: boolean;
             notes?: string;
         };
         QuickRoundSummary: {
@@ -2998,6 +4268,623 @@ export interface components {
             active_job_id: number;
         };
         /**
+         * Format: int64
+         * @description 已完成全量统计的数量；未完成或未知为 null，不能把样本当作全站数量。
+         */
+        RetentionCount: number | null;
+        /** @description 已到期终态按屏障、忙碌、预计可删的优先级互斥归类。 */
+        RetentionExpiredCounts: {
+            blocked: components["schemas"]["RetentionCount"];
+            busy: components["schemas"]["RetentionCount"];
+            deletable: components["schemas"]["RetentionCount"];
+        };
+        /** @description 终态保留计时来源，属于独立维度，不能与到期分类重复相加。 */
+        RetentionTimingSources: {
+            finished_at: components["schemas"]["RetentionCount"];
+            legacy_anchor: components["schemas"]["RetentionCount"];
+            missing_anchor: components["schemas"]["RetentionCount"];
+        };
+        /** @description 仅终态，按保留计时起点到 as_of 的 UTC 年龄统计；边界为 [0,1)、[1,7)、[7,30)、[30,90)、[90,+∞) 个 24 小时天，缺少锚点为 unknown。 */
+        RetentionTerminalAge: {
+            lt_1d: components["schemas"]["RetentionCount"];
+            days_1_6: components["schemas"]["RetentionCount"];
+            days_7_29: components["schemas"]["RetentionCount"];
+            days_30_89: components["schemas"]["RetentionCount"];
+            days_90_plus: components["schemas"]["RetentionCount"];
+            unknown: components["schemas"]["RetentionCount"];
+        };
+        /** @description 预计可删任务关联行数，不代表磁盘释放字节；不读取正文。 */
+        RetentionDependencies: {
+            sse_events: components["schemas"]["RetentionCount"];
+            job_resources: components["schemas"]["RetentionCount"];
+            job_rounds: components["schemas"]["RetentionCount"];
+            job_round_segments: components["schemas"]["RetentionCount"];
+            credential_job_references: components["schemas"]["RetentionCount"];
+        };
+        RetentionTypePreview: {
+            active: components["schemas"]["RetentionCount"];
+            terminal: components["schemas"]["RetentionCount"];
+            missing_anchor: components["schemas"]["RetentionCount"];
+            not_expired: components["schemas"]["RetentionCount"];
+            expired: components["schemas"]["RetentionExpiredCounts"];
+            timing_sources: components["schemas"]["RetentionTimingSources"];
+            terminal_age: components["schemas"]["RetentionTerminalAge"];
+            deletable_dependencies: components["schemas"]["RetentionDependencies"];
+        };
+        RetentionScanSummary: {
+            scan_id: string;
+            /** Format: int64 */
+            policy_revision: number;
+            /** Format: date-time */
+            as_of: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            finished_at: string;
+            /** Format: int64 */
+            duration_ms: number;
+            candidates: number;
+            deleted: number;
+            skipped: {
+                [key: string]: number;
+            };
+            error_code: string;
+            /** @description 是否已经遍历完本次固定候选域。 */
+            completed: boolean;
+            legacy_anchor_count: components["schemas"]["RetentionCount"];
+            missing_anchor_count: components["schemas"]["RetentionCount"];
+        };
+        TaskHistoryTarget: {
+            /** @enum {string} */
+            kind: "translation" | "glossary_sync";
+            id: string;
+            project_id: number;
+        };
+        TaskHistoryDeleteResult: {
+            /** @enum {string} */
+            kind: "translation" | "glossary_sync";
+            id: string;
+            project_id: number;
+            /** @enum {string} */
+            status: "deleted" | "not_found" | "forbidden" | "not_terminal" | "busy" | "blocked" | "deferred" | "failed";
+        };
+        /** @description Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate. */
+        StorageRuntime: {
+            deployment_enabled: boolean;
+            maintenance: boolean;
+        };
+        /** @enum {string} */
+        StorageActionReasonCode: "storage_maintenance" | "storage_deployment_disabled" | "storage_capability_unsupported" | "connection_disabled" | "storage_space_required" | "storage_check_space_limit_exceeded" | "space_disabled" | "space_read_only" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_disk_insufficient" | "storage_disk_probe_failed" | "storage_quota_exceeded" | "storage_unavailable";
+        /** @description Metadata-only admission snapshot, not a guarantee of provider I/O success. Allowed actions have an empty reason array; denied actions have at least one stable reason. */
+        StorageActionAvailability: {
+            allowed: boolean;
+            reason_codes: components["schemas"]["StorageActionReasonCode"][];
+        };
+        /**
+         * @example {
+         *       "scope": "user",
+         *       "owner_id": 1,
+         *       "runtime": {
+         *         "deployment_enabled": false,
+         *         "maintenance": false
+         *       },
+         *       "management_actions": {
+         *         "create_connection": {
+         *           "allowed": false,
+         *           "reason_codes": [
+         *             "storage_deployment_disabled"
+         *           ]
+         *         }
+         *       }
+         *     }
+         */
+        StorageCapabilities: {
+            /** @enum {string} */
+            scope: "user" | "org";
+            owner_id: number;
+            runtime: components["schemas"]["StorageRuntime"];
+            readonly management_actions: {
+                create_connection: components["schemas"]["StorageActionAvailability"];
+            };
+        };
+        StorageOption: {
+            space_id: number;
+            name: string;
+            /** @enum {string} */
+            scope: "site" | "user" | "org";
+            selectable: boolean;
+            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
+        };
+        StorageOptions: {
+            runtime: components["schemas"]["StorageRuntime"];
+            /** @enum {string} */
+            scope: "user" | "org";
+            owner_id: number;
+            policy: {
+                /** @enum {string} */
+                mode: "site_only" | "both" | "user_required";
+                /** @enum {string} */
+                default_choice: "site" | "user";
+                /** Format: int64 */
+                generation: number;
+            };
+            default_space_id: number | null;
+            /** @enum {string|null} */
+            default_unavailable_reason: "policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty" | null;
+            items: components["schemas"]["StorageOption"][];
+            /** Format: int64 */
+            storage_generation?: number;
+        };
+        StorageCheckSpaceResult: {
+            space_id: number;
+            status: string;
+            error_code?: string;
+        };
+        StorageCheck: {
+            check_id: number;
+            connection_id: number;
+            mode: string;
+            /** Format: int64 */
+            management_generation: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at: string | null;
+            status: string;
+            /** @enum {string} */
+            cleanup_status: "cleanup_pending" | "running" | "blocked" | "done";
+            error_code?: string;
+            /** Format: int64 */
+            accounted_bytes: number;
+            authorization_activated: boolean;
+            results: components["schemas"]["StorageCheckSpaceResult"][];
+        };
+        StorageCheckList: {
+            items: components["schemas"]["StorageCheck"][];
+        };
+        /** @description Administrator-only local filesystem observations; roles identify configured directory purposes, never host paths. Remote bucket capacity is not inferred. */
+        StorageDiskDiagnostic: {
+            roles: string[];
+            /** @enum {string} */
+            state: "available" | "low" | "unknown";
+            /** Format: date-time */
+            observed_at: string;
+            /** Format: int64 */
+            total_bytes: number | null;
+            /** Format: int64 */
+            available_bytes: number | null;
+            /** Format: int64 */
+            minimum_free_bytes: number | null;
+        };
+        StorageSpaceDiagnostics: {
+            id: number;
+            /** Format: int64 */
+            reserved_bytes: number;
+            /** Format: int64 */
+            candidate_bytes: number;
+            /** Format: int64 */
+            live_bytes: number;
+            /** Format: int64 */
+            pending_delete_bytes: number;
+            unchecked_objects: number;
+            missing_objects: number;
+            corrupt_objects: number;
+            /**
+             * Format: date-time
+             * @description 最近一次持久化的完整字节校验时间，不代表最近一次失败观测。
+             */
+            last_checked_at?: string;
+        };
+        StorageDiagnostics: {
+            disks: components["schemas"]["StorageDiskDiagnostic"][];
+            spaces: components["schemas"]["StorageSpaceDiagnostics"][];
+            next_cursor?: number;
+            /** Format: int64 */
+            temporary_bytes: number;
+            /** Format: date-time */
+            oldest_intent_at?: string;
+            recovery_backlog: number;
+            blocked_cleanup_by_code: {
+                [key: string]: number;
+            };
+            migrations_by_phase: {
+                [key: string]: number;
+            };
+            latest_backup?: {
+                id: number;
+                /** @enum {string} */
+                status: "complete" | "metadata_only" | "incomplete";
+                /** Format: date-time */
+                created_at: string;
+            };
+        };
+        /**
+         * @example {
+         *       "mode": "both",
+         *       "default_choice": "user",
+         *       "generation": 3,
+         *       "logical_limit_bytes": 107374182400,
+         *       "default_space_capacity_bytes": null,
+         *       "runtime": {
+         *         "deployment_enabled": false,
+         *         "maintenance": false
+         *       },
+         *       "allowed_policy_modes": [
+         *         "site_only"
+         *       ],
+         *       "policy_restriction_codes": [
+         *         "storage_deployment_disabled"
+         *       ]
+         *     }
+         */
+        StoragePolicy: {
+            runtime: components["schemas"]["StorageRuntime"];
+            /** @description Modes supported for a complete save by this deployment; maintenance does not narrow this list. */
+            readonly allowed_policy_modes: ("site_only" | "both" | "user_required")[];
+            /** @description Conflicts between the stored mode and deployment support, independent of target health. */
+            readonly policy_restriction_codes: "storage_deployment_disabled"[];
+            /** @enum {string} */
+            mode: "site_only" | "both" | "user_required";
+            /** @enum {string} */
+            default_choice: "site" | "user";
+            /** Format: int64 */
+            generation: number;
+            /** Format: int64 */
+            default_space_capacity_bytes: number | null;
+            /** Format: int64 */
+            logical_limit_bytes: number | null;
+            /** @description Stored mode/default combination needs administrator correction; effective values are normalized. */
+            readonly configuration_needs_update?: boolean;
+        };
+        /** @description Complete policy update. Deployment restrictions reject the whole save, including quota-only changes to an unsupported mode. Read-only response fields are rejected. */
+        StoragePolicyRequest: {
+            /** @enum {string} */
+            mode: "site_only" | "both" | "user_required";
+            /** @enum {string} */
+            default_choice: "site" | "user";
+            /** Format: int64 */
+            generation: number;
+            /** Format: int64 */
+            default_space_capacity_bytes: number | null;
+            /** Format: int64 */
+            logical_limit_bytes: number | null;
+        };
+        StorageConnectionManagementActions: {
+            create_space: components["schemas"]["StorageActionAvailability"];
+            authorize_read: components["schemas"]["StorageActionAvailability"];
+            authorize_write: components["schemas"]["StorageActionAvailability"];
+            check_read: components["schemas"]["StorageActionAvailability"];
+            check_write: components["schemas"]["StorageActionAvailability"];
+            revoke_auth: components["schemas"]["StorageActionAvailability"];
+            set_status: components["schemas"]["StorageActionAvailability"];
+        };
+        StorageConnection: {
+            management_actions: components["schemas"]["StorageConnectionManagementActions"];
+            id: number;
+            name: string;
+            scope: string;
+            owner_id: number;
+            driver: string;
+            endpoint: string;
+            region: string;
+            path_style?: boolean;
+            status: string;
+            /** @enum {string} */
+            health: "unknown" | "available" | "degraded" | "auth_required" | "permission_denied" | "crypto_unavailable";
+            has_auth: boolean;
+            /** Format: int64 */
+            management_generation: number;
+            /** Format: int64 */
+            auth_generation: number;
+            /** Format: date-time */
+            checked_at?: string | null;
+            check_id?: number | null;
+        };
+        StorageConnectionList: {
+            items: components["schemas"]["StorageConnection"][];
+        };
+        StorageConnectionRequest: {
+            name: string;
+            /** @enum {string} */
+            scope?: "user" | "org";
+            owner_id?: number;
+            /** Format: uri */
+            endpoint: string;
+            region: string;
+            path_style?: boolean;
+        };
+        StorageConnectionStateRequest: {
+            /** @enum {string} */
+            status: "enabled" | "disabled";
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        StorageSpaceManagementActions: {
+            set_quota: components["schemas"]["StorageActionAvailability"];
+            set_status: components["schemas"]["StorageActionAvailability"];
+        };
+        StorageSpace: {
+            /**
+             * Format: int64
+             * @description Business quota headroom, null for unlimited; not physical disk or bucket free space.
+             */
+            available_bytes: number | null;
+            management_actions: components["schemas"]["StorageSpaceManagementActions"];
+            id: number;
+            connection_id: number;
+            name: string;
+            scope?: string;
+            owner_id?: number;
+            bucket?: string;
+            prefix?: string;
+            status: string;
+            verified: boolean;
+            versioned?: boolean;
+            /** Format: int64 */
+            management_generation: number;
+            /** Format: int64 */
+            capacity_bytes: number | null;
+            /** Format: int64 */
+            reserved_bytes: number;
+            /** Format: int64 */
+            candidate_bytes: number;
+            /** Format: int64 */
+            live_bytes: number;
+            /** Format: int64 */
+            pending_delete_bytes: number;
+        };
+        StorageSpaceList: {
+            items: components["schemas"]["StorageSpace"][];
+        };
+        StorageSpaceRequest: {
+            name: string;
+            bucket: string;
+            prefix: string;
+            /** Format: int64 */
+            capacity_bytes: number | null;
+        };
+        StorageAuthorizationRequest: {
+            access_key_id: string;
+            secret_access_key: string;
+            session_token?: string;
+            write_check: boolean;
+            /** Format: int64 */
+            expected_management_generation: number;
+            /** Format: date-time */
+            expires_at?: string | null;
+        };
+        StorageRevokeRequest: {
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        StorageSpaceQuotaRequest: {
+            /** Format: int64 */
+            capacity_bytes: number | null;
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        StorageSpaceStateRequest: {
+            /** @enum {string} */
+            status: "active" | "read_only" | "disabled";
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        ProjectStorage: {
+            runtime: components["schemas"]["StorageRuntime"];
+            project_id: number;
+            /** Format: int64 */
+            storage_generation: number;
+            /** @enum {string} */
+            storage_state: "active" | "draining" | "migrating" | "legacy_migration" | "legacy_rollback";
+            migration_task_id: number | null;
+            binding: {
+                space_id: number;
+                name: string;
+                /** @enum {string} */
+                scope: "site" | "user" | "org";
+                status: string;
+                historical: boolean;
+                owner_id: number;
+            } | null;
+            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
+        };
+        StorageBindingRequest: {
+            space_id: number;
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        StorageMigrationRequest: {
+            space_id: number;
+            /** Format: int64 */
+            expected_generation: number;
+            idempotency_key: string;
+        };
+        SourceUpdateStats: {
+            unchanged: number;
+            updated: number;
+            added: number;
+            deleted: number;
+        };
+        SourceUpdatePreview: {
+            task_id: number;
+            /** Format: int64 */
+            source_generation: number;
+            /** Format: int64 */
+            translation_generation: number;
+            stats: components["schemas"]["SourceUpdateStats"];
+            /** Format: date-time */
+            expires_at: string | null;
+            /** @enum {string} */
+            baseline_trust?: "verified" | "legacy_unverified";
+            legacy_snapshot_available?: boolean;
+            /** Format: date-time */
+            legacy_snapshot_expires_at?: string | null;
+        };
+        StorageTask: {
+            id: number;
+            operation_id: string;
+            kind: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
+            phase: string;
+            /** @enum {string} */
+            cleanup_status: "cleanup_pending" | "running" | "blocked" | "done";
+            error_code?: string;
+            /** Format: date-time */
+            next_retry_at?: string | null;
+            allowed_actions: string[];
+            result_resource_id?: number | null;
+            result_revision_id?: number | null;
+            result_artifact_id?: number | null;
+            project_id: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            expires_at: string | null;
+            resource_id?: number | null;
+            source_revision_id?: number | null;
+            target_space_id?: number | null;
+            /** Format: int64 */
+            expected_storage_generation?: number;
+            /** Format: int64 */
+            expected_source_generation?: number;
+            /** Format: int64 */
+            expected_translation_generation?: number;
+            /** Format: int64 */
+            expected_location_generation?: number;
+            /** Format: int64 */
+            input_size?: number;
+            input_sha256?: string;
+            source_preview?: components["schemas"]["SourceUpdatePreview"];
+        };
+        StorageTaskList: {
+            items: components["schemas"]["StorageTask"][];
+        };
+        StorageUploadIntent: {
+            idempotency_key: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            storage_generation: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "upload";
+            path: string;
+        };
+        StorageSourceUpdateIntent: {
+            idempotency_key: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            storage_generation: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "source_update";
+            resource_id: number;
+            /** Format: int64 */
+            source_generation: number;
+            /** Format: int64 */
+            translation_generation: number;
+        };
+        StorageRepairIntent: {
+            idempotency_key: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            storage_generation: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "repair";
+            resource_id: number;
+            source_revision_id: number;
+            /** Format: int64 */
+            location_generation: number;
+            target_space_id: number;
+        };
+        StorageIntent: components["schemas"]["StorageUploadIntent"] | components["schemas"]["StorageSourceUpdateIntent"] | components["schemas"]["StorageRepairIntent"];
+        SourceVersion: {
+            id: number;
+            /** @enum {string} */
+            verification_state: "verified" | "legacy_unverified";
+            format: string;
+            parser_version: string;
+            current: boolean;
+            /** Format: int64 */
+            size?: number | null;
+            sha256?: string | null;
+            /** Format: int64 */
+            location_generation: number;
+            health: string;
+        };
+        SourceVersionList: {
+            items: components["schemas"]["SourceVersion"][];
+        };
+        SourceUpdateCommit: {
+            task_id: number;
+            /** Format: int64 */
+            expected_source_generation: number;
+            /** Format: int64 */
+            expected_translation_generation: number;
+        };
+        ExportArtifact: {
+            id: number;
+            source_revision_id: number;
+            /** @enum {string} */
+            status: "pending" | "ready" | "failed" | "deleted";
+            rebuildable: boolean;
+            renderer_version: string;
+            filename: string;
+            deletion_task_id: number | null;
+        };
+        ExportArtifactList: {
+            items: components["schemas"]["ExportArtifact"][];
+        };
+        Credential: {
+            id: number;
+            /** @enum {string} */
+            scope: "user" | "org";
+            owner_id: number;
+            /** @enum {string} */
+            provider: "openai" | "anthropic" | "google";
+            /** @description 不可变的规范化 base URL；版本密钥仅可发送到其范围内。 */
+            endpoint: string;
+            current_version: number;
+        };
+        CredentialList: {
+            items: components["schemas"]["Credential"][];
+        };
+        CreateCredentialRequest: {
+            /** @enum {string} */
+            provider: "openai" | "anthropic" | "google";
+            /** @description 留空使用 provider 的明确默认端点。 */
+            endpoint?: string;
+            secret: string;
+        };
+        CredentialVersion: {
+            version: number;
+            revoked: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        CredentialVersionList: {
+            items: components["schemas"]["CredentialVersion"][];
+        };
+        RotateCredentialRequest: {
+            secret: string;
+        };
+        CredentialBinding: {
+            id: number;
+            version: number;
+        };
+        /**
          * @description 响应格式：
          *     - json_schema: 强制结构化 JSON 输出（推荐）
          *     - json_object: 自由 JSON 对象
@@ -3026,8 +4913,6 @@ export interface components {
              * @enum {string}
              */
             type: "openai";
-            /** @description AI 服务 API 密钥 */
-            api_key: string;
             /**
              * @description 自定义API端点URL。留空使用默认值。
              *     可用于指向 Azure OpenAI / Ollama / LM Studio / 自定义网关等兼容服务。
@@ -3039,12 +4924,12 @@ export interface components {
              * @description 最大生成 token 数。0 表示不限制。
              * @default 0
              */
-            max_tokens: number;
+            max_tokens?: number;
             /**
              * @description 请求超时时间（秒）。0 表示不限制。
              * @default 60
              */
-            timeout: number;
+            timeout?: number;
             response_format?: components["schemas"]["ResponseFormat"];
             /**
              * Format: double
@@ -3068,7 +4953,7 @@ export interface components {
              *     适用于只接受 stream:true 的兼容网关。默认 false。
              * @default false
              */
-            stream: boolean;
+            stream?: boolean;
             /**
              * @description 思考强度档位（统一语义）。不设置=开关关闭，不传 reasoning_effort（沿用模型/网关默认）；
              *     off=显式关闭（reasoning_effort "none"）；minimal/low/medium/high 映射为对应档位。
@@ -3082,8 +4967,6 @@ export interface components {
              * @enum {string}
              */
             type: "anthropic";
-            /** @description AI 服务 API 密钥 */
-            api_key: string;
             /** @description 自定义API端点URL。留空使用默认值。 */
             base_url?: string;
             /** @description 模型名称（必填）。须为 Anthropic 实际可用的模型 ID。 */
@@ -3092,12 +4975,12 @@ export interface components {
              * @description 最大生成 token 数。Anthropic 必填，默认 8192。
              * @default 8192
              */
-            max_tokens: number;
+            max_tokens?: number;
             /**
              * @description 请求超时时间（秒）。0 表示不限制。
              * @default 60
              */
-            timeout: number;
+            timeout?: number;
             response_format?: components["schemas"]["ResponseFormat"];
             /**
              * Format: double
@@ -3121,13 +5004,13 @@ export interface components {
              *     可显著降低重复翻译任务的token消耗和延迟。
              * @default true
              */
-            enable_prompt_cache: boolean;
+            enable_prompt_cache?: boolean;
             /**
              * @description 设为 true 时以流式发起请求并在内部累积为完整响应后返回，
              *     适用于只接受 stream:true 的兼容网关。默认 false。
              * @default false
              */
-            stream: boolean;
+            stream?: boolean;
             /**
              * @description 思考强度档位（统一语义）。不设置=开关关闭，不传 thinking。
              *     仅 minimal/low/medium/high 时跳过 temperature/top_p（API 拒绝非默认采样参数）；
@@ -3147,8 +5030,6 @@ export interface components {
              * @enum {string}
              */
             type: "google";
-            /** @description AI 服务 API 密钥 */
-            api_key: string;
             /** @description 自定义API端点URL。留空使用默认值。 */
             base_url?: string;
             /** @description 模型名称（必填）。须为 Google Gemini 实际可用的模型 ID。 */
@@ -3157,12 +5038,12 @@ export interface components {
              * @description 最大生成 token 数。默认 8192。
              * @default 8192
              */
-            max_tokens: number;
+            max_tokens?: number;
             /**
              * @description 请求超时时间（秒）。0 表示不限制。
              * @default 60
              */
-            timeout: number;
+            timeout?: number;
             response_format?: components["schemas"]["ResponseFormat"];
             /**
              * Format: double
@@ -3185,7 +5066,7 @@ export interface components {
              *     适用于只接受 stream:true 的兼容网关。默认 false。
              * @default false
              */
-            stream: boolean;
+            stream?: boolean;
             /**
              * @description 思考强度档位（统一语义）。不设置=开关关闭，不传 ThinkingConfig（沿用模型默认）；
              *     off=显式关闭（协议无 ThinkingLevel 关闭档，映射为 thinkingBudget 0）；
@@ -3244,11 +5125,116 @@ export interface components {
             resource_path: string;
             affected_count: number;
         };
+        /**
+         * Format: date-time
+         * @description 最后一次执行的真实结束时间；活动任务或旧任务结束时间无法确认时为 null，重试清空。
+         */
+        TaskFinishedAt: string | null;
+        /** @description 当前身份、状态、执行收尾及屏障的即时投影；不替代删除请求的再次校验。 */
+        TaskCanDelete: boolean;
         GlossarySyncExecuteResourceResult: {
             resource_id: number;
             resource_path: string;
             updated_count: number;
             skipped_count: number;
+        };
+        OperationBase: {
+            finished_at: components["schemas"]["TaskFinishedAt"];
+            can_delete: components["schemas"]["TaskCanDelete"];
+            task_id: string;
+            project_id: number;
+            project_name: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "paused" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** @description 类型能力，不是当前状态或用户权限许可；执行时必须再次鉴权。 */
+            supported_actions: ("view" | "pause" | "resume" | "cancel" | "retry" | "delete")[];
+        };
+        TranslationOperation: components["schemas"]["OperationBase"] & {
+            /** @enum {string} */
+            task_type: "translation";
+            /** @enum {string} */
+            status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            /** @enum {string} */
+            trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
+            progress: components["schemas"]["JobSummaryProgress"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            task_type: "translation";
+        };
+        GlossarySyncOperation: components["schemas"]["OperationBase"] & {
+            /** @enum {string} */
+            task_type: "glossary_sync";
+            /** @enum {string} */
+            status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+            supported_actions?: ("view" | "cancel" | "delete")[];
+            progress: {
+                /** @description 已检查并提交的段落数，包含安全跳过项。 */
+                processed_segments: number;
+                total_segments: number;
+            };
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            task_type: "glossary_sync";
+        };
+        /** @description 存储任务承担恢复与物理清理证据；本功能不可删除，can_delete 始终为 false，finished_at 为 null。 */
+        StorageOperation: components["schemas"]["OperationBase"] & {
+            /** @enum {string} */
+            task_type: "storage";
+            storage_kind: string;
+            /** @enum {string} */
+            status?: "pending" | "running" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
+            phase: string;
+            /** @enum {string} */
+            cleanup_status: "cleanup_pending" | "running" | "blocked" | "done";
+            /** @description 脱敏的稳定领域错误码；空字符串表示无错误。 */
+            error_code: string;
+            /** Format: date-time */
+            next_retry_at: string | null;
+            /** @description 类型能力；当前阶段能否控制以存储任务详情的 allowed_actions 为准。 */
+            supported_actions?: ("view" | "cancel" | "retry")[];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            task_type: "storage";
+        };
+        OperationSummary: components["schemas"]["TranslationOperation"] | components["schemas"]["GlossarySyncOperation"] | components["schemas"]["StorageOperation"];
+        OperationListResponse: {
+            items: components["schemas"]["OperationSummary"][];
+            next_cursor?: string;
+        };
+        OperationCounts: {
+            pending: number;
+            running: number;
+            paused: number;
+            recent_failed: number;
+            waiting_retry: number;
+            needs_action: number;
+        };
+        OperationsSummaryResponse: {
+            total: components["schemas"]["OperationCounts"];
+            by_type: {
+                translation: components["schemas"]["OperationCounts"];
+                glossary_sync: components["schemas"]["OperationCounts"];
+                storage: components["schemas"]["OperationCounts"];
+            };
+            /** Format: date-time */
+            recent_failed_since: string;
+            /** Format: date-time */
+            as_of: string;
         };
         /** @enum {string} */
         ExecutionPlanTemplateScope: "user" | "org" | "system";
@@ -3264,7 +5250,7 @@ export interface components {
              * @description 注音对齐重试轮数（仅 enabled=true 时生效）
              * @default 1
              */
-            max_attempts: number;
+            max_attempts?: number;
         };
         /** @description 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。 */
         TranslateSegmentFilterConfig: {
@@ -3275,7 +5261,7 @@ export interface components {
              * @default pending_only
              * @enum {string}
              */
-            status_filter: "pending_only" | "skip_approved" | "all";
+            status_filter?: "pending_only" | "skip_approved" | "all";
         };
         RetryConfig: {
             /**
@@ -3283,15 +5269,18 @@ export interface components {
              *     在途重试预算内部封顶 min(max_attempts,3)，不单独暴露。
              * @default 3
              */
-            max_attempts: number;
+            max_attempts?: number;
             /** @default 2000 */
-            backoff_ms: number;
+            backoff_ms?: number;
             /** @default true */
-            jitter: boolean;
+            jitter?: boolean;
         };
         TranslateRoundConfig: {
-            /** @description 翻译提示词模板 ID */
-            prompt_template_id?: number;
+            /**
+             * @description 翻译提示词模板 ID。必填：省略或 0 会被后端拒绝（不规范化）。
+             *     允许内置虚拟 ID -1（内置默认翻译提示词模板），其余须为当前作用域可见的模板 ID。
+             */
+            prompt_template_id: number;
             /** @description 待译段落数上限（不计上下文段）；0=不限制，与 max_words_per_batch 至少填一项 */
             batch_size?: number;
             /** @description 字词数上限（计入上下文段）；0=不限制，与 batch_size 至少填一项。纯行数模式（此项与 context.max_chars 均为 0）下上下文体积不受约束 */
@@ -3308,25 +5297,28 @@ export interface components {
             retry?: components["schemas"]["RetryConfig"];
         };
         ExtractRoundConfig: {
-            /** @description 术语抽取提示词模板 ID（BootstrapPromptTemplate） */
-            template_id?: number;
             /**
-             * @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项；两者都为 0 时不分批，全部一次发送
+             * @description 术语抽取提示词模板 ID（BootstrapPromptTemplate）。必填：省略或 0 会被后端拒绝（不规范化）。
+             *     允许内置虚拟 ID -1（内置默认引导提示词模板），其余须为当前作用域可见的模板 ID。
+             */
+            template_id: number;
+            /**
+             * @description 段落数上限；0=不限制；与 max_words_per_batch 都为 0 时不分批，全部一次发送
              * @default 20
              */
-            batch_size: number;
-            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项；两者都为 0 时不分批，全部一次发送 */
+            batch_size?: number;
+            /** @description 字词数上限；0=不限制；与 batch_size 都为 0 时不分批，全部一次发送 */
             max_words_per_batch?: number;
             /**
              * @description 每 1000 字词的术语抽取上限系数
              * @default 25
              */
-            max_terms_per_1000_chars: number;
+            max_terms_per_1000_chars?: number;
             /**
              * @description 术语源文最短字符数
              * @default 2
              */
-            min_source_len: number;
+            min_source_len?: number;
             retry?: components["schemas"]["RetryConfig"];
         };
         /** @description 质量裁决轮次配置。裁决 system prompt 内置不可见，无 prompt_template_id。 */
@@ -3336,7 +5328,7 @@ export interface components {
             /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
             max_words_per_batch?: number;
             /**
-             * @description 可裁决的质量问题 code 子集。空或不传时默认 ["source_residual", "punctuation_surplus"]。
+             * @description 可裁决的质量问题 code 子集。不传时默认 ["source_residual", "punctuation_surplus"]；显式空数组表示不处理任何问题。
              *     duplicate 为硬规则，不可裁决（需同批多段输入，无单段裁决语义）。
              *     untranslated 可裁决：源语与目标语共用文字系统时，同形译文（专有名词、纯汉字标题、原样保留的英文片段）在确定性层面与真正的原文回传不可区分，需 LLM 判断是否为有意保留。
              */
@@ -3358,7 +5350,7 @@ export interface components {
              * @default all
              * @enum {string}
              */
-            segment_scope: "all" | "with_issues" | "with_issue_codes";
+            segment_scope?: "all" | "with_issues" | "with_issue_codes";
             /**
              * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
              *     允许全部 issue code（规则 + 语义皆可作筛选键）。
@@ -3386,10 +5378,11 @@ export interface components {
              * @default with_issues
              * @enum {string}
              */
-            segment_scope: "with_issues" | "with_issue_codes";
+            segment_scope?: "with_issues" | "with_issue_codes";
             /**
-             * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要修复的语义 issue code
+             * @description segment_scope=with_issue_codes 时必须列出至少一个要修复的语义 issue code
              *     （子集语义白名单，与 semantic_qa 轮的全量 code 筛选键不同）。
+             *     with_issues 下省略此字段表示全部语义问题，显式空数组表示不修订任何问题。
              */
             issue_codes?: ("calque" | "term_fidelity" | "naturalness" | "mistranslation" | "omission" | "addition" | "grammar" | "register")[];
             retry?: components["schemas"]["RetryConfig"];
@@ -3406,7 +5399,7 @@ export interface components {
              */
             name: "punctuation_missing_wrap" | "punctuation_wrap_loss_wrap" | "width_mix_normalize";
             /** @default true */
-            enabled: boolean;
+            enabled?: boolean;
         };
         /**
          * @description 本地改写轮次配置（纯本地、不调 LLM）。机械修复 QA 报出的高频安全问题子集。
@@ -3457,12 +5450,10 @@ export interface components {
             /**
              * @description 保留的注音分类列表
              * @default [
-             *       "phonetic",
-             *       "semantic",
              *       "creative"
              *     ]
              */
-            preserve_kinds: ("phonetic" | "semantic" | "creative")[];
+            preserve_kinds?: ("phonetic" | "semantic" | "creative")[];
         };
         ProfilePostprocessConfig: {
             enabled: boolean;
@@ -3529,7 +5520,7 @@ export interface components {
              * @description error 级别问题自动 reject；untranslated 例外——源语与目标语共用文字系统时降为 warning，该类"译文与原文相同"的段落不会被自动 reject
              * @default false
              */
-            auto_reject: boolean;
+            auto_reject?: boolean;
             /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、script_mismatch、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
             checks?: string[];
             /**
@@ -3537,21 +5528,26 @@ export interface components {
              * @default char_weight
              * @enum {string}
              */
-            length_method: "char_weight" | "word_count";
+            length_method?: "char_weight" | "word_count";
             /**
              * Format: double
              * @description 译文/原文最短长度比，0 表示不检测
-             * @default 0
+             * @default 0.2
              */
-            length_ratio_min: number;
+            length_ratio_min?: number;
             /**
              * Format: double
              * @description 译文/原文最长长度比，0 表示不检测
-             * @default 0
+             * @default 3
              */
-            length_ratio_max: number;
+            length_ratio_max?: number;
         };
         ExecutionProfileConfig: {
+            /**
+             * @default 1
+             * @enum {integer}
+             */
+            schema_version: 1;
             protect: components["schemas"]["ProfileProtectConfig"];
             ruby?: components["schemas"]["ProfileRubyConfig"];
             postprocess: components["schemas"]["ProfilePostprocessConfig"];
@@ -3559,6 +5555,182 @@ export interface components {
             glossary: components["schemas"]["ProfileGlossaryConfig"];
             context: components["schemas"]["ProfileContextConfig"];
             qa?: components["schemas"]["ProfileQAConfig"];
+        };
+        ProfileProtectConfigInput: {
+            enabled?: boolean;
+            rules?: ("code" | "link" | "placeholder" | "xml")[];
+        };
+        ProfileRubyConfigInput: {
+            enabled?: boolean;
+            /**
+             * @description 保留的注音分类列表
+             * @default [
+             *       "creative"
+             *     ]
+             */
+            preserve_kinds?: ("phonetic" | "semantic" | "creative")[];
+        };
+        ProfilePostprocessConfigInput: {
+            enabled?: boolean;
+            trim_spaces?: boolean;
+        };
+        ProfileRepairConfigInput: {
+            enabled?: boolean;
+            json_structural?: boolean;
+            schema_aliases?: boolean;
+            placeholder_normalize?: boolean;
+            prompt_upgrade?: boolean;
+        };
+        ProfileBootstrapConfigInput: {
+            /**
+             * @description 是否启用内联自举
+             * @default false
+             */
+            enabled?: boolean;
+            /**
+             * Format: double
+             * @description 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
+             */
+            max_terms_per_1000_chars?: number;
+            /** @description 内联自举术语源文最短字符数 */
+            min_source_len?: number;
+            /**
+             * @description 并发术语冲突处理策略
+             * @enum {string}
+             */
+            inline_conflict_strategy?: "off" | "rewrite-local";
+        };
+        ProfileGlossaryConfigInput: {
+            bootstrap?: components["schemas"]["ProfileBootstrapConfigInput"];
+        };
+        ProfileContextConfigInput: {
+            /**
+             * @description 是否启用上下文窗口
+             * @default true
+             */
+            enabled?: boolean;
+            /**
+             * @description 上下文取前 N 段
+             * @default 1
+             */
+            before?: number;
+            /**
+             * @description 上下文取后 N 段
+             * @default 1
+             */
+            after?: number;
+            /**
+             * @description 每个上下文段落的字符数上限（按 rune 计，超限截断并补省略号）；0 表示不限制
+             * @default 0
+             */
+            max_chars?: number;
+        };
+        ProfileQAConfigInput: {
+            /**
+             * @description 是否启用翻译质量检测
+             * @default false
+             */
+            enabled?: boolean;
+            /**
+             * @description error 级别问题自动 reject；untranslated 例外——源语与目标语共用文字系统时降为 warning，该类"译文与原文相同"的段落不会被自动 reject
+             * @default false
+             */
+            auto_reject?: boolean;
+            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、punctuation_missing、punctuation_surplus、punctuation_wrap_loss、whitespace_irregular、repeated_space、width_mix、script_mismatch、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
+            checks?: string[];
+            /**
+             * @description 长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词
+             * @default char_weight
+             * @enum {string}
+             */
+            length_method?: "char_weight" | "word_count";
+            /**
+             * Format: double
+             * @description 译文/原文最短长度比，0 表示不检测
+             * @default 0.2
+             */
+            length_ratio_min?: number;
+            /**
+             * Format: double
+             * @description 译文/原文最长长度比，0 表示不检测
+             * @default 3
+             */
+            length_ratio_max?: number;
+        };
+        ExecutionProfileConfigInput: {
+            /**
+             * @default 1
+             * @enum {integer}
+             */
+            schema_version?: 1;
+            protect?: components["schemas"]["ProfileProtectConfigInput"];
+            ruby?: components["schemas"]["ProfileRubyConfigInput"];
+            postprocess?: components["schemas"]["ProfilePostprocessConfigInput"];
+            repair?: components["schemas"]["ProfileRepairConfigInput"];
+            glossary?: components["schemas"]["ProfileGlossaryConfigInput"];
+            context?: components["schemas"]["ProfileContextConfigInput"];
+            qa?: components["schemas"]["ProfileQAConfigInput"];
+        };
+        NullableGauge: number | null;
+        RuntimeRunner: {
+            /** @enum {string} */
+            task_type: "translation" | "glossary_sync";
+            /** @enum {string} */
+            state: "starting" | "recovering" | "running" | "degraded" | "stopping" | "stopped";
+            /** Format: int64 */
+            recovered_total: number;
+            /** Format: int64 */
+            recovery_errors_total: number;
+            queue_capacity: components["schemas"]["NullableGauge"];
+            queue_waiting: components["schemas"]["NullableGauge"];
+            enqueue_waiters: components["schemas"]["NullableGauge"];
+            worker_capacity: components["schemas"]["NullableGauge"];
+            workers_alive: components["schemas"]["NullableGauge"];
+            workers_busy: components["schemas"]["NullableGauge"];
+        };
+        RuntimeLimiters: {
+            /** @enum {string} */
+            state: "uninitialized" | "ready" | "stopped";
+            active_limiters: number;
+            waiters: number;
+            wait_duration_seconds_sum: number;
+            /** Format: int64 */
+            wait_duration_seconds_count: number;
+            /** Format: int64 */
+            wait_cancelled_total: number;
+        } | null;
+        RuntimeHTTPOutcome: {
+            /** @enum {string} */
+            outcome: "success" | "http_error" | "transport_error" | "timeout" | "cancelled";
+            /** Format: int64 */
+            http_attempts_finished_total: number;
+            http_attempt_duration_seconds_sum: number;
+            /** Format: int64 */
+            http_attempt_duration_seconds_count: number;
+        };
+        RuntimeExternalRequests: {
+            /** @enum {string} */
+            provider: "openai" | "anthropic" | "google" | "other";
+            /** @enum {string} */
+            operation: "generate" | "list_models";
+            /** Format: int64 */
+            http_attempts_inflight: number;
+            /** Format: int64 */
+            http_attempts_total: number;
+            outcomes: components["schemas"]["RuntimeHTTPOutcome"][];
+        };
+        RuntimeSummary: {
+            instance_id: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            as_of: string;
+            uptime_seconds: number;
+            /** @enum {string} */
+            scope: "instance";
+            runners: components["schemas"]["RuntimeRunner"][];
+            limiters: components["schemas"]["RuntimeLimiters"];
+            external_requests: components["schemas"]["RuntimeExternalRequests"][];
         };
     };
     responses: {
@@ -3590,6 +5762,9 @@ export interface components {
         Limit: number;
         AfterSeq: number;
         BeforeSeq: number;
+        jobProjectFilter: number;
+        jobTriggerFilter: "manual" | "file_update" | "glossary_change" | "web_edit";
+        taskType: "translation" | "glossary_sync" | "storage";
     };
     requestBodies: never;
     headers: never;
@@ -3597,6 +5772,1383 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    PreviewTaskRetention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    retention_days: number;
+                };
+            };
+        };
+        responses: {
+            /** @description 当前汇总与预计影响 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRetentionPreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetTaskRetentionStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已保存政策版本及本进程运行摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRetentionStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    BatchDeleteTaskHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskHistoryBatchDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description 去重后的逐项结果，保持首次提交顺序 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskHistoryBatchDeleteResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStorageCapabilities: {
+        parameters: {
+            query: {
+                scope: "user" | "org";
+                organization_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current subject management capabilities */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageCapabilities"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStorageOptions: {
+        parameters: {
+            query: {
+                scope: "user" | "org";
+                organization_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discover eligible project creation targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageOptions"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetProjectStorageOptions: {
+        parameters: {
+            query: {
+                purpose: "bind" | "migrate" | "repair";
+                source_revision_id?: number;
+            };
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discover bind, migrate or repair targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageOptions"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStorageChecks: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent durable connection checks ordered by descending ID */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageCheckList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStorageCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+                checkId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read durable verification and cleanup facts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageCheck"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DownloadLegacySourceSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Download protected legacy business data before source replacement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStorageDiagnostics: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 只读存储诊断 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageDiagnostics"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStoragePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoragePolicy"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStoragePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoragePolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoragePolicy"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListSiteStorageConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deployment connections visible to administrators */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnectionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStorageConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnectionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateStorageConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOrgStorageConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnectionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateOrgStorageConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStorageConnectionState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageConnectionStateRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStorageConnectionSpaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageSpaceList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateStorageSpace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageSpaceRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageSpace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    AuthorizeStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CheckStorageConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    write_check: boolean;
+                    /** Format: int64 */
+                    expected_generation: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Verified connection metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    RevokeStorageAuthorization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStorageSpaceQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageSpaceQuotaRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageSpace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStorageSpaceState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageSpaceStateRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageSpace"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetProjectStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStorage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    BindProjectStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    MigrateProjectStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageMigrationRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStorageTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTaskList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateStorageIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageIntent"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStorageTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ReceiveStorageContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CancelStorageTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    RetryStorageTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListSourceVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceVersionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    PreviewSourceUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceUpdatePreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CommitSourceUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceUpdateCommit"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListExportArtifacts: {
+        parameters: {
+            query?: {
+                include_deleted?: boolean;
+            };
+            header?: never;
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportArtifactList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateExportArtifact: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                projectId: number;
+                resourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteExportArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DownloadExportArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    RebuildExportArtifact: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                projectId: number;
+                artifactId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 操作结果 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageTask"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListUserCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前用户拥有的凭据元数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateUserCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建凭据和首个加密版本 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOrgCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 组织凭据元数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateOrgCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建组织凭据 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListCredentialVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 版本元数据，不返回密钥或密文 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialVersionList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RotateCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotateCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description 新版本绑定 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialBinding"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RevokeCredentialVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已撤销（幂等） */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CollectCredentialVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已删除版本数 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        deleted_versions: number;
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     Ping: {
         parameters: {
             query?: never;
@@ -3661,6 +7213,10 @@ export interface operations {
                     "application/json": components["schemas"]["AuthSession"];
                 };
             };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -3727,13 +7283,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已登出 */
+            /** @description 提交的本人 refresh token 已撤销，或此前已撤销。 */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -3755,6 +7314,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
+            401: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -3780,6 +7340,9 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -3803,6 +7366,16 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 参数不合法，或旧密码不匹配（type 为 urn:linguaflow:current-password-mismatch）。 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -4419,7 +7992,9 @@ export interface operations {
     UploadProjectResources: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
             path: {
                 projectId: components["parameters"]["ProjectId"];
             };
@@ -4537,6 +8112,12 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
+                    /** @description 已确认的源文件差异预览任务 ID；提交使用该任务持久保存的候选内容。 */
+                    preview_task_id: number;
+                    /** Format: int64 */
+                    expected_source_generation: number;
+                    /** Format: int64 */
+                    expected_translation_generation: number;
                     /** Format: binary */
                     file: string;
                 };
@@ -4568,6 +8149,12 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
+                    /** @description 已确认的源文件差异预览任务 ID；提交使用该任务持久保存的候选内容。 */
+                    preview_task_id: number;
+                    /** Format: int64 */
+                    expected_source_generation: number;
+                    /** Format: int64 */
+                    expected_translation_generation: number;
                     /** Format: binary */
                     file: string;
                 };
@@ -5400,13 +8987,36 @@ export interface operations {
                     "application/json": components["schemas"]["GlossarySyncTaskStatusResponse"];
                 };
             };
-            /** @description 任务不存在 */
-            404: {
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteGlossarySyncTaskHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务记录已删除 */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -5432,13 +9042,7 @@ export interface operations {
                     "application/json": components["schemas"]["GlossarySyncTaskCancelResponse"];
                 };
             };
-            /** @description 任务已完成或已失败，无法取消 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -5551,6 +9155,121 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    ListAccessibleJobs: {
+        parameters: {
+            query?: {
+                /** @description active 包含 pending/running/paused；terminal 包含 completed/failed/cancelled；与 status 互斥 */
+                state?: "active" | "terminal" | "all";
+                /** @description 精确单状态筛选，与 state 互斥 */
+                status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+                project_id?: components["parameters"]["jobProjectFilter"];
+                trigger_type?: components["parameters"]["jobTriggerFilter"];
+                /** @description 更新时间下界（包含），RFC3339；与 updated_before 同传时必须更早 */
+                updated_from?: string;
+                /** @description 更新时间上界（不包含），RFC3339 */
+                updated_before?: string;
+                /** @description 上一页返回的不透明 next_cursor，不兼容项目任务列表的数字游标 */
+                cursor?: string;
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 轻量任务列表；队列位置与队列总数在本阶段固定为 null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobSummaryListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetJobsSummary: {
+        parameters: {
+            query?: {
+                project_id?: components["parameters"]["jobProjectFilter"];
+                trigger_type?: components["parameters"]["jobTriggerFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 独立于分页的任务数量摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsSummaryResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOperations: {
+        parameters: {
+            query?: {
+                task_type?: components["parameters"]["taskType"];
+                project_id?: components["parameters"]["jobProjectFilter"];
+                trigger_type?: components["parameters"]["jobTriggerFilter"];
+                state?: "active" | "terminal" | "all";
+                status?: "pending" | "running" | "paused" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
+                updated_from?: string;
+                updated_before?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 轻量任务分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetOperationsSummary: {
+        parameters: {
+            query?: {
+                task_type?: components["parameters"]["taskType"];
+                project_id?: components["parameters"]["jobProjectFilter"];
+                trigger_type?: components["parameters"]["jobTriggerFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 数量摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSummaryResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     GetJob: {
         parameters: {
             query?: never;
@@ -5571,6 +9290,33 @@ export interface operations {
                     "application/json": components["schemas"]["Job"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteJobHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务记录已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -5723,7 +9469,10 @@ export interface operations {
     };
     ListExecutionPlanTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5840,7 +9589,10 @@ export interface operations {
     };
     ListPromptTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5957,7 +9709,10 @@ export interface operations {
     };
     ListBootstrapPromptTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6074,7 +9829,10 @@ export interface operations {
     };
     ListPrunePromptTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6191,7 +9949,10 @@ export interface operations {
     };
     ListExecutionProfiles: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 组织不存在返回 404，非成员返回 403。 */
+                org_id?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6475,6 +10236,28 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    AdminGetRuntimeSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前实例快照 */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeSummary"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     AdminListAuditLogs: {
         parameters: {
             query?: {
@@ -6569,6 +10352,8 @@ export interface operations {
     ListActivity: {
         parameters: {
             query?: {
+                /** @description 仅查询指定组织的活动；正整数，不存在返回 404，非成员返回 403。拒绝未知、重复或空查询参数。 */
+                org_id?: number;
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };

@@ -22,13 +22,14 @@ func (s *Server) newRouter() http.Handler {
 
 	r.Get("/health", s.handleHealth)
 	r.Get("/health/ready", s.handleReady)
-	r.Get("/metrics", s.handleMetrics)
+	r.With(s.requireAdmin).Get("/metrics", s.handleMetrics)
 	r.Get("/api/docs", s.handleDocs)
 	r.Get("/api/openapi.json", s.handleOpenAPISpec)
 
 	apiV1 := chi.NewRouter()
 	r.Mount("/api/v1", HandlerWithOptions(s, ChiServerOptions{
-		BaseRouter: apiV1,
+		BaseRouter:  apiV1,
+		Middlewares: []MiddlewareFunc{s.storageMaintenanceMiddleware},
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", err.Error())
 		},

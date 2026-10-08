@@ -46,3 +46,24 @@ export const formatRelativeTime = (
 
   return d(date, 'short')
 }
+
+/**
+ * 将秒数格式化为人性化时长：1 分钟内显示秒，1 小时内显示分钟，
+ * 1 天内显示「H 小时 M 分钟」，更长显示「D 天 H 小时」。
+ */
+export const formatDuration = (value: number): string => {
+  const { t } = i18n.global
+
+  if (value < 60) return t('runtime.durationSeconds', { value })
+  if (value < 3600) return t('runtime.durationMinutes', { value: Math.floor(value / 60) })
+  if (value < 86400) {
+    return t('runtime.durationHoursMinutes', {
+      hours: Math.floor(value / 3600),
+      minutes: Math.floor((value % 3600) / 60),
+    })
+  }
+  return t('runtime.durationDaysHours', {
+    days: Math.floor(value / 86400),
+    hours: Math.floor((value % 86400) / 3600),
+  })
+}

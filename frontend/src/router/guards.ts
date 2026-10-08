@@ -23,11 +23,22 @@ const ROUTE_TITLES: Record<string, string> = {
   '/login': 'login.title',
   '/projects': 'nav.projects',
   '/projects/[projectId]': 'nav.projects',
+  '/profile': 'account.profile.title',
   '/prompt-templates': 'nav.promptTemplates',
   '/prune-prompt-templates': 'nav.prunePromptTemplates',
   '/register': 'register.title',
+  '/security': 'account.security.title',
   '/service': 'service.title',
   '/stats': 'nav.stats',
+  '/operations': 'operations.title',
+  '/settings/': 'workbench.settings.title',
+  '/settings/profile': 'workbench.settings.profile',
+  '/settings/security': 'workbench.settings.security',
+  '/settings/preferences': 'workbench.settings.preferences',
+  '/settings/storage': 'storage.title',
+  '/admin/storage': 'storage.adminTitle',
+  '/settings/team': 'workbench.settings.team',
+  '/admin/runtime': 'runtime.title',
   '/tools/epub-rotate': 'nav.epubRotate',
   '/[...all]': 'notFound.title',
 }
@@ -58,6 +69,9 @@ export const installRouterGuards = (router: Router): void => {
 
     const isPublic = to.meta.public === true || PUBLIC_PATHS.has(to.path)
     const forceService = to.query.force === '1'
+
+    if (service.isLocal && to.path === '/settings/team') return { path: '/settings/profile' }
+    if (to.path.startsWith('/admin') && auth.user?.role !== 'admin') return { path: '/' }
 
     if (service.isLocal) {
       if (AUTH_ENTRY_PATHS.has(to.path)) {

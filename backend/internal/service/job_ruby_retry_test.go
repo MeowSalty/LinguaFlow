@@ -88,8 +88,8 @@ func TestRubyRetrySnapshot_BackendIDZeroFallsBackToTranslateBackend(t *testing.T
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
-	backends := NewBackendService(client, users, nil)
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
+	backends := newExecutionTestBackendService(t, client, users)
 	backendRow, err := client.Backend.Create().
 		SetName("main-translate-backend").
 		SetBackendType(entbackend.BackendType("openai")).
@@ -101,6 +101,7 @@ func TestRubyRetrySnapshot_BackendIDZeroFallsBackToTranslateBackend(t *testing.T
 		t.Fatalf("create backend: %v", err)
 	}
 	jobs := NewJobService(client, nil, nil, backends, NewTranslationPromptTemplateService(client), NewBootstrapPromptTemplateService(client), NewExecutionProfileService(client, users), nil, nil)
+	backendRow = bindExecutionTestBackend(t, client, backendRow)
 
 	newPlan := func(rr schema.ExecutionPlanRubyRetryConfig, rounds []schema.ExecutionRoundConfig) *ent.ExecutionPlanTemplate {
 		return &ent.ExecutionPlanTemplate{
@@ -180,6 +181,7 @@ func TestRubyRetrySnapshot_BackendIDZeroFallsBackToTranslateBackend(t *testing.T
 		if err != nil {
 			t.Fatalf("create ruby backend: %v", err)
 		}
+		rrBackend = bindExecutionTestBackend(t, client, rrBackend)
 		snap, err := jobs.validateAndSnapshotWith(ctx, user.ID, newPlan(
 			schema.ExecutionPlanRubyRetryConfig{Enabled: true, BackendID: rrBackend.ID, MaxAttempts: 3},
 			[]schema.ExecutionRoundConfig{validTranslateRound(backendRow.ID)},

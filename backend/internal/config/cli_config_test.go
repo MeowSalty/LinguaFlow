@@ -1,952 +1,307 @@
 package config
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-// writeTempFile 在 t.TempDir() 下创建文件并写入内容，返回绝对路径。
-func writeTempFile(t *testing.T, name, content string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("writeTempFile: %v", err)
-	}
-	return path
-}
-
-// ---------------------------------------------------------------------------
-// Test 1: LoadCLIConfig("") 从嵌入模板生成默认配置
-// ---------------------------------------------------------------------------
-
-func TestLoadCLIConfig_Default(t *testing.T) {
-	cfg, err := LoadCLIConfig("")
-	if err != nil {
-		t.Fatalf("LoadCLIConfig(\"\") error: %v", err)
-	}
-
-	// ── 验证 backends ──
-	be, ok := cfg.Backends["openai-default"]
-	if !ok {
-		t.Fatal("expected backend \"openai-default\" in Backends map")
-	}
-	if be.Type != "openai" {
-		t.Errorf("backend type = %q, want %q", be.Type, "openai")
-	}
-
-	// ── 验证 prompt_templates（file 引用应被 resolveEmbeddedReferences 解析为 content）──
-	pt, ok := cfg.PromptTemplates["通用提示词"]
-	if !ok {
-		t.Fatal("expected prompt_template \"通用提示词\" in PromptTemplates map")
-	}
-	if pt.Content == "" {
-		t.Error("prompt content should be resolved from embedded file, got empty")
-	}
-	if pt.File != "" {
-		t.Errorf("prompt file should be cleared after resolution, got %q", pt.File)
-	}
-
-	// ── 验证 translation_profiles（file 引用应被解析）──
-	prof, ok := cfg.TranslationProfiles["通用策略"]
-	if !ok {
-		t.Fatalf("expected profile \"通用策略\" in TranslationProfiles map; keys: %v", mapKeys(cfg.TranslationProfiles))
-	}
-	if !prof.Repair.Enabled {
-		t.Error("expected repair.enabled = true")
-	}
-
-	// ── 验证 execution rounds ──
-	if len(cfg.Execution.Rounds) != 1 {
-		t.Fatalf("execution rounds = %d, want 1", len(cfg.Execution.Rounds))
-	}
-	r := cfg.Execution.Rounds[0]
-	if r.Mode != "translate" {
-		t.Errorf("round mode = %q, want %q", r.Mode, "translate")
-	}
-	if r.Backend != "openai-default" {
-		t.Errorf("round backend = %q, want %q", r.Backend, "openai-default")
-	}
-	if r.Translate == nil {
-		t.Fatal("expected translate config to be non-nil")
-	}
-	if r.Translate.Prompt != "通用提示词" {
-		t.Errorf("round translate.prompt = %q, want %q", r.Translate.Prompt, "通用提示词")
-	}
-	if cfg.Execution.Profile != "通用策略" {
-		t.Errorf("execution.profile = %q, want %q", cfg.Execution.Profile, "通用策略")
-	}
-	if r.Translate.Retry.Jitter != true {
-		t.Error("expected translate.retry.jitter = true")
-	}
-
-	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
-	if cfg.Glossary.Path != "./glossary.csv" {
-		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./glossary.csv")
-	}
-	if !cfg.Glossary.Save {
-		t.Error("expected glossary.save = true in default config")
-	}
-}
-
-// TestDefaultCLIConfig_Fallback 验证 defaultCLIConfig() 回退路径的基本完整性。
-func TestDefaultCLIConfig_Fallback(t *testing.T) {
-	cfg := defaultCLIConfig()
-	if cfg.Version != 1 {
-		t.Errorf("version = %d, want 1", cfg.Version)
-	}
-	if _, ok := cfg.Backends["openai-default"]; !ok {
-		t.Error("expected fallback backend \"openai-default\"")
-	}
-
-	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
-	if !cfg.Glossary.Save {
-		t.Error("expected glossary.save = true in default config")
-	}
-	if cfg.Glossary.Path != "./glossary.csv" {
-		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./glossary.csv")
-	}
-
-	// ── 验证 TranslationProfiles 默认 Bootstrap 配置 ──
-	defProf, ok := cfg.TranslationProfiles["default"]
-	if !ok {
-		t.Fatal("expected profile \"default\" in fallback config")
-	}
-	if defProf.Bootstrap.MaxTermsPer1000Chars != 3.0 {
-		t.Errorf("profile bootstrap.max_terms_per_1000_chars = %v, want 3.0", defProf.Bootstrap.MaxTermsPer1000Chars)
-	}
-	if defProf.Bootstrap.InlineConflictStrategy != "rewrite-local" {
-		t.Errorf("profile bootstrap.inline_conflict_strategy = %q, want %q",
-			defProf.Bootstrap.InlineConflictStrategy, "rewrite-local")
-	}
-
-	// ── 验证 Execution.Rounds 默认配置 ──
-	if len(cfg.Execution.Rounds) != 1 {
-		t.Fatalf("execution rounds = %d, want 1", len(cfg.Execution.Rounds))
-	}
-	r := cfg.Execution.Rounds[0]
-	if r.Mode != "translate" {
-		t.Errorf("round mode = %q, want %q", r.Mode, "translate")
-	}
-	if r.Translate == nil {
-		t.Fatal("expected translate config to be non-nil")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Test 2: LoadCLIConfig 新格式 YAML
-// ---------------------------------------------------------------------------
-
-func TestLoadCLIConfig_NewFormat(t *testing.T) {
-	yaml := `
-version: 1
-source_lang: en
-target_lang: ja
-backends:
-  gpt4:
-    type: openai
-    enabled: true
-    options:
-      model: gpt-4o
-translation_prompt_templates:
-  tech:
-    content: "You are a technical translator."
-translation_profiles:
-  subtitle:
-    repair:
-      enabled: true
-glossary:
-  enabled: true
-  path: ./terms.csv
-  save: true
-execution:
-  profile: subtitle
-  rounds:
-    - mode: translate
-      name: "首轮"
-      backend: gpt4
-      translate:
-        prompt: tech
-        batch_size: 5
-        concurrency: 2
-        fallback_shrink: 0.5
-`
-	path := writeTempFile(t, "new-format.yaml", yaml)
-
-	cfg, err := LoadCLIConfig(path)
-	if err != nil {
-		t.Fatalf("LoadCLIConfig(new-format) error: %v", err)
-	}
-
-	if cfg.SourceLang != "en" {
-		t.Errorf("source_lang = %q, want %q", cfg.SourceLang, "en")
-	}
-	if cfg.TargetLang != "ja" {
-		t.Errorf("target_lang = %q, want %q", cfg.TargetLang, "ja")
-	}
-
-	be, ok := cfg.Backends["gpt4"]
-	if !ok {
-		t.Fatal("expected backend \"gpt4\"")
-	}
-	if be.Type != "openai" {
-		t.Errorf("backend type = %q, want %q", be.Type, "openai")
-	}
-
-	pt, ok := cfg.PromptTemplates["tech"]
-	if !ok {
-		t.Fatal("expected prompt_template \"tech\"")
-	}
-	if pt.Content != "You are a technical translator." {
-		t.Errorf("prompt content = %q", pt.Content)
-	}
-
-	_, ok = cfg.TranslationProfiles["subtitle"]
-	if !ok {
-		t.Fatal("expected profile \"subtitle\"")
-	}
-	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
-	if !cfg.Glossary.Enabled {
-		t.Error("expected glossary.enabled = true")
-	}
-	if cfg.Glossary.Path != "./terms.csv" {
-		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./terms.csv")
-	}
-	if !cfg.Glossary.Save {
-		t.Error("expected glossary.save = true")
-	}
-
-	if len(cfg.Execution.Rounds) != 1 {
-		t.Fatalf("rounds = %d, want 1", len(cfg.Execution.Rounds))
-	}
-	r := cfg.Execution.Rounds[0]
-	if r.Mode != "translate" {
-		t.Errorf("round mode = %q, want %q", r.Mode, "translate")
-	}
-	if r.Backend != "gpt4" {
-		t.Errorf("round backend = %q, want %q", r.Backend, "gpt4")
-	}
-	if r.Translate == nil {
-		t.Fatal("expected translate config to be non-nil")
-	}
-	if r.Translate.Prompt != "tech" {
-		t.Errorf("translate.prompt = %q, want %q", r.Translate.Prompt, "tech")
-	}
-	if cfg.Execution.Profile != "subtitle" {
-		t.Errorf("execution.profile = %q, want %q", cfg.Execution.Profile, "subtitle")
-	}
-	if r.Translate.BatchSize != 5 {
-		t.Errorf("translate.batch_size = %d, want 5", r.Translate.BatchSize)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Test 3: resolveExternalReferences 路径安全
-// ---------------------------------------------------------------------------
-
-func TestResolveExternalReferences_PathTraversal(t *testing.T) {
-	configDir := t.TempDir()
-
-	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
-			"evil": {
-				File: "../../../etc/passwd",
-			},
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
-	}
-
-	err := resolveExternalReferences(cfg, configDir)
-	if err == nil {
-		t.Fatal("expected error for path traversal, got nil")
-	}
-	if !strings.Contains(err.Error(), "禁止") && !strings.Contains(err.Error(), "遍历") {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-func TestResolveExternalReferences_AbsolutePath(t *testing.T) {
-	configDir := t.TempDir()
-
-	// 构造一个跨平台的绝对路径（filepath.IsAbs 在当前 OS 上必然返回 true）
-	absPath, err := filepath.Abs(filepath.Join(configDir, "..", "outside.yaml"))
-	if err != nil {
-		t.Fatalf("filepath.Abs: %v", err)
-	}
-
-	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
-			"evil": {
-				File: absPath,
-			},
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
-	}
-
-	err = resolveExternalReferences(cfg, configDir)
-	if err == nil {
-		t.Fatal("expected error for absolute path, got nil")
-	}
-	// 绝对路径应返回 "绝对路径" 错误
-	if !strings.Contains(err.Error(), "绝对路径") {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-// TestResolveExternalReferences_ProfilePathTraversal 验证 translation_profiles 的路径安全。
-func TestResolveExternalReferences_ProfilePathTraversal(t *testing.T) {
-	configDir := t.TempDir()
-
-	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{
-			"evil": {
-				File: "../../secret.yaml",
-			},
-		},
-	}
-
-	err := resolveExternalReferences(cfg, configDir)
-	if err == nil {
-		t.Fatal("expected error for profile path traversal, got nil")
-	}
-}
-
-// TestResolveExternalReferences_ValidFile 验证合法外部文件引用正常读取。
-func TestResolveExternalReferences_ValidFile(t *testing.T) {
-	dir := t.TempDir()
-	promptFile := filepath.Join(dir, "prompt.txt")
-	if err := os.WriteFile(promptFile, []byte("外部提示词内容"), 0o644); err != nil {
-		t.Fatalf("write prompt file: %v", err)
-	}
-
-	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
-			"external": {
-				File: "prompt.txt",
-			},
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
-	}
-
-	err := resolveExternalReferences(cfg, dir)
-	if err != nil {
-		t.Fatalf("resolveExternalReferences error: %v", err)
-	}
-
-	pt := cfg.PromptTemplates["external"]
-	if pt.Content != "外部提示词内容" {
-		t.Errorf("content = %q, want %q", pt.Content, "外部提示词内容")
-	}
-	if pt.File != "" {
-		t.Errorf("file should be cleared after resolution, got %q", pt.File)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Test: Bootstrap 模板字段解析
-// ---------------------------------------------------------------------------
-
-// TestLoadCLIConfig_BootstrapContentInline 验证 bootstrap 内联字段正确解析。
-func TestLoadCLIConfig_BootstrapContentInline(t *testing.T) {
-	yamlContent := `
-version: 1
+const minimalTranslation = `kind: translation
+version: 2
 source_lang: en
 target_lang: zh
-backends:
-  gpt4:
-    type: openai
-    enabled: true
-    options:
-      model: gpt-4o
-translation_prompt_templates:
-  tech:
-    content: "You are a technical translator."
-bootstrap_prompt_templates:
-  tech-terms:
-    content: "Extract domain terms from the text."
-translation_profiles:
-  default:
-execution:
-  rounds:
-    - mode: translate
-      name: "首轮"
-      backend: gpt4
-      translate:
-        prompt: tech
-        batch_size: 1
-        concurrency: 1
-        fallback_shrink: 0.5
-`
-	path := writeTempFile(t, "bootstrap-inline.yaml", yamlContent)
-
-	cfg, err := LoadCLIConfig(path)
-	if err != nil {
-		t.Fatalf("LoadCLIConfig error: %v", err)
-	}
-
-	pt, ok := cfg.PromptTemplates["tech"]
-	if !ok {
-		t.Fatal("expected prompt_template \"tech\"")
-	}
-	if pt.Content != "You are a technical translator." {
-		t.Errorf("content = %q", pt.Content)
-	}
-	bt, ok := cfg.BootstrapPromptTemplates["tech-terms"]
-	if !ok {
-		t.Fatal("expected bootstrap_prompt_template \"tech-terms\"")
-	}
-	if bt.Content != "Extract domain terms from the text." {
-		t.Errorf("bootstrap content = %q, want %q", bt.Content, "Extract domain terms from the text.")
-	}
-}
-
-// TestResolveExternalReferences_BootstrapFile 验证 bootstrap 外部引用正确解析。
-func TestResolveExternalReferences_BootstrapFile(t *testing.T) {
-	dir := t.TempDir()
-	bootstrapFile := filepath.Join(dir, "bootstrap.txt")
-	if err := os.WriteFile(bootstrapFile, []byte("Bootstrap 提示词内容"), 0o644); err != nil {
-		t.Fatalf("write bootstrap file: %v", err)
-	}
-
-	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
-			"tech": {
-				Content: "翻译提示词",
-			},
-		},
-		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
-			"tech-bootstrap": {
-				File: "bootstrap.txt",
-			},
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
-	}
-
-	err := resolveExternalReferences(cfg, dir)
-	if err != nil {
-		t.Fatalf("resolveExternalReferences error: %v", err)
-	}
-
-	bt := cfg.BootstrapPromptTemplates["tech-bootstrap"]
-	if bt.Content != "Bootstrap 提示词内容" {
-		t.Errorf("bootstrap content = %q, want %q", bt.Content, "Bootstrap 提示词内容")
-	}
-	if bt.File != "" {
-		t.Errorf("bootstrap file should be cleared after resolution, got %q", bt.File)
-	}
-	// 翻译模板不受影响
-	pt := cfg.PromptTemplates["tech"]
-	if pt.Content != "翻译提示词" {
-		t.Errorf("content = %q, want %q", pt.Content, "翻译提示词")
-	}
-}
-
-// TestResolveExternalReferences_BootstrapPathTraversal 验证 bootstrap_file 的路径安全。
-func TestResolveExternalReferences_BootstrapPathTraversal(t *testing.T) {
-	configDir := t.TempDir()
-
-	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{},
-		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
-			"evil": {
-				File: "../../../etc/passwd",
-			},
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
-	}
-
-	err := resolveExternalReferences(cfg, configDir)
-	if err == nil {
-		t.Fatal("expected error for bootstrap_file path traversal, got nil")
-	}
-	if !strings.Contains(err.Error(), "禁止") && !strings.Contains(err.Error(), "遍历") {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-// TestResolveExternalReferences_BootstrapAbsolutePath 验证 bootstrap_file 禁止绝对路径。
-func TestResolveExternalReferences_BootstrapAbsolutePath(t *testing.T) {
-	configDir := t.TempDir()
-
-	absPath, err := filepath.Abs(filepath.Join(configDir, "..", "outside.yaml"))
-	if err != nil {
-		t.Fatalf("filepath.Abs: %v", err)
-	}
-
-	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{},
-		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
-			"evil": {
-				File: absPath,
-			},
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
-	}
-
-	err = resolveExternalReferences(cfg, configDir)
-	if err == nil {
-		t.Fatal("expected error for bootstrap_file absolute path, got nil")
-	}
-	if !strings.Contains(err.Error(), "绝对路径") {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-// TestLoadCLIConfig_Default_BootstrapContent 验证默认配置从嵌入模板解析 bootstrap 模板。
-func TestLoadCLIConfig_Default_BootstrapContent(t *testing.T) {
-	cfg, err := LoadCLIConfig("")
-	if err != nil {
-		t.Fatalf("LoadCLIConfig(\"\") error: %v", err)
-	}
-
-	bt, ok := cfg.BootstrapPromptTemplates["通用术语抽取"]
-	if !ok {
-		t.Fatal("expected bootstrap_prompt_template \"通用术语抽取\" in BootstrapPromptTemplates map")
-	}
-	// 内置模板应从嵌入 FS 解析 file 为 content
-	if bt.Content == "" {
-		t.Error("bootstrap content should be resolved from embedded file, got empty")
-	}
-	if bt.File != "" {
-		t.Errorf("bootstrap file should be cleared after resolution, got %q", bt.File)
-	}
-}
-
-// TestLoadCLIConfig_BootstrapContentPriority 验证 bootstrap content 优先于 file。
-func TestLoadCLIConfig_BootstrapContentPriority(t *testing.T) {
-	dir := t.TempDir()
-	bootstrapFile := filepath.Join(dir, "bootstrap.txt")
-	if err := os.WriteFile(bootstrapFile, []byte("来自文件的 bootstrap"), 0o644); err != nil {
-		t.Fatalf("write bootstrap file: %v", err)
-	}
-
-	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
-			"tech": {
-				Content: "翻译提示词",
-			},
-		},
-		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
-			"tech-bootstrap": {
-				Content: "来自内联的 bootstrap",
-				File:    "bootstrap.txt",
-			},
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
-	}
-
-	err := resolveExternalReferences(cfg, dir)
-	if err != nil {
-		t.Fatalf("resolveExternalReferences error: %v", err)
-	}
-
-	bt := cfg.BootstrapPromptTemplates["tech-bootstrap"]
-	// content 已有值时，不应被 file 覆盖
-	if bt.Content != "来自内联的 bootstrap" {
-		t.Errorf("bootstrap content = %q, want %q (inline should take priority)", bt.Content, "来自内联的 bootstrap")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Test 6: Version 校验
-// ---------------------------------------------------------------------------
-
-func TestLoadCLIConfig_UnsupportedVersion(t *testing.T) {
-	yaml := `
-version: 99
-source_lang: auto
-target_lang: zh
-`
-	path := writeTempFile(t, "bad-version.yaml", yaml)
-
-	_, err := LoadCLIConfig(path)
-	if err == nil {
-		t.Fatal("expected error for unsupported version, got nil")
-	}
-	if !strings.Contains(err.Error(), "unsupported config version") {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// 额外覆盖
-// ---------------------------------------------------------------------------
-
-// TestLoadCLIConfig_FileNotFound 验证文件不存在时返回 ErrConfigNotFound。
-func TestLoadCLIConfig_FileNotFound(t *testing.T) {
-	_, err := LoadCLIConfig("/nonexistent/path/linguaflow.yaml")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "file not found") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-// TestLoadCLIConfig_EnvExpansion 验证 ${ENV} 占位符展开。
-func TestLoadCLIConfig_EnvExpansion(t *testing.T) {
-	t.Setenv("TEST_API_KEY", "sk-test-12345")
-
-	yaml := `
-version: 1
 backends:
   test:
     type: openai
-    enabled: true
+    secret: ${KEY}
     options:
-      api_key: ${TEST_API_KEY}
+      model: test-model
 execution:
   rounds:
     - mode: translate
-      name: "test"
       backend: test
-      translate:
-        prompt: default
-        batch_size: 1
-        concurrency: 1
-        fallback_shrink: 0.5
+      translate: {}
 `
-	path := writeTempFile(t, "env-expand.yaml", yaml)
 
-	cfg, err := LoadCLIConfig(path)
+func translationInput(t *testing.T, document string) CLIInputs {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "translation.yaml")
+	if err := os.WriteFile(path, []byte(document), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return CLIInputs{ConfigPath: &path, WorkingDirectory: dir, Environment: map[string]string{"KEY": "private-key"}}
+}
+func TestTranslationBuiltinsUseStrictReferencePipeline(t *testing.T) {
+	in := CLIInputs{WorkingDirectory: t.TempDir(), Environment: map[string]string{"OPENAI_API_KEY": "test-secret"}}
+	cfg, err := ResolveCLIConfig(in)
 	if err != nil {
-		t.Fatalf("LoadCLIConfig error: %v", err)
+		t.Fatal(err)
 	}
-
-	be := cfg.Backends["test"]
-	if be.Options["api_key"] != "sk-test-12345" {
-		t.Errorf("api_key = %v, want %q", be.Options["api_key"], "sk-test-12345")
+	if cfg.Kind != "translation" || cfg.Version != 2 || cfg.Backends["openai-default"].Secret != "test-secret" {
+		t.Fatal("builtin pipeline did not resolve new contract")
+	}
+	profile, err := ResolveExecutionProfile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(profile, execution.DefaultProfile()) {
+		t.Fatalf("builtin profile diverges from domain defaults: %+v", profile)
+	}
+	if cfg.PromptTemplates["通用提示词"].File != "" || cfg.PromptTemplates["通用提示词"].Content == "" || cfg.BootstrapPromptTemplates["通用术语抽取"].Content == "" {
+		t.Fatal("builtin references were not materialized")
+	}
+	delete(in.Environment, "OPENAI_API_KEY")
+	if _, err := ResolveCLIConfig(in); err == nil || !strings.Contains(err.Error(), "OPENAI_API_KEY") {
+		t.Fatalf("missing key was ignored: %v", err)
 	}
 }
-
-// TestReadExternalFileBytes_Security 验证 readExternalFileBytes 的安全检查。
-func TestReadExternalFileBytes_Security(t *testing.T) {
-	configDir := t.TempDir()
-
-	t.Run("absolute path rejected", func(t *testing.T) {
-		_, err := readExternalFileBytes("/etc/passwd", configDir)
-		if err == nil {
-			t.Fatal("expected error for absolute path")
-		}
-	})
-
-	t.Run("path traversal rejected", func(t *testing.T) {
-		_, err := readExternalFileBytes("../../../etc/passwd", configDir)
-		if err == nil {
-			t.Fatal("expected error for path traversal")
-		}
-	})
-
-	t.Run("valid relative path", func(t *testing.T) {
-		// 在 configDir 下创建文件
-		subDir := filepath.Join(configDir, "prompts")
-		if err := os.MkdirAll(subDir, 0o755); err != nil {
-			t.Fatalf("mkdir: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(subDir, "test.txt"), []byte("hello"), 0o644); err != nil {
-			t.Fatalf("write: %v", err)
-		}
-
-		data, err := readExternalFileBytes("prompts/test.txt", configDir)
+func TestGeneratedAndBuiltinTranslationHaveSameValues(t *testing.T) {
+	dir := t.TempDir()
+	err := fs.WalkDir(templates.EmbeddedFS(), "default", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			return err
 		}
-		if string(data) != "hello" {
-			t.Errorf("data = %q, want %q", string(data), "hello")
+		if entry.IsDir() {
+			return nil
 		}
+		if path != "default/linguaflow.yaml" && path != "default/profiles/default.yaml" && !strings.HasPrefix(path, "default/prompts/") {
+			return nil
+		}
+		target := filepath.Join(dir, strings.TrimPrefix(path, "default/"))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		data, err := fs.ReadFile(templates.EmbeddedFS(), path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o600)
 	})
-}
-
-// ---------------------------------------------------------------------------
-// Test: ResolveExecutionProfile（execution.profile 计划级策略解析）
-// ---------------------------------------------------------------------------
-
-func TestResolveExecutionProfile(t *testing.T) {
-	named := CLIConfigTranslationProfile{
-		Repair: RepairConfig{Enabled: true},
-		Ruby:   RubyConfig{Enabled: true, PreserveKinds: []string{"phonetic"}},
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	t.Run("named profile resolves", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution:           CLIConfigExecution{Profile: "custom"},
-			TranslationProfiles: map[string]CLIConfigTranslationProfile{"custom": named},
-		}
-		got := ResolveExecutionProfile(cfg)
-		if !got.Repair.Enabled || !got.Ruby.Enabled || len(got.Ruby.PreserveKinds) != 1 {
-			t.Errorf("ResolveExecutionProfile = %+v，want 命中名为 custom 的策略", got)
-		}
-	})
-
-	t.Run("empty profile falls back to builtin", func(t *testing.T) {
-		cfg := &CLIConfig{
-			TranslationProfiles: map[string]CLIConfigTranslationProfile{},
-		}
-		got := ResolveExecutionProfile(cfg)
-		want := BuiltinExecutionProfile()
-		if got.Ruby.Enabled != want.Ruby.Enabled || got.Repair.Enabled != want.Repair.Enabled ||
-			len(got.Protect.Rules) != len(want.Protect.Rules) {
-			t.Errorf("空 profile 应回退内置默认策略，got %+v want %+v", got, want)
-		}
-	})
-
-	t.Run("unknown profile falls back to builtin", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution:           CLIConfigExecution{Profile: "no-such-profile"},
-			TranslationProfiles: map[string]CLIConfigTranslationProfile{"custom": named},
-		}
-		got := ResolveExecutionProfile(cfg)
-		want := BuiltinExecutionProfile()
-		if len(got.Protect.Rules) != len(want.Protect.Rules) {
-			t.Errorf("未命中 profile 应回退内置默认策略，got %+v", got)
-		}
-	})
-}
-
-// TestBuiltinExecutionProfile 验证内置默认策略从嵌入资源正确物化。
-func TestBuiltinExecutionProfile(t *testing.T) {
-	builtin := BuiltinExecutionProfile()
-	if len(builtin.Protect.Rules) == 0 {
-		t.Fatal("builtin profile should carry protect rules")
+	in := CLIInputs{WorkingDirectory: dir, Environment: map[string]string{"OPENAI_API_KEY": "test-secret"}}
+	builtin, err := ResolveCLIConfig(in)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !builtin.Postprocess.Enabled {
-		t.Error("builtin profile postprocess should be enabled by default")
+	path := filepath.Join(dir, "linguaflow.yaml")
+	in.ConfigPath = &path
+	file, err := ResolveCLIConfig(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(builtin, file) {
+		t.Fatal("generated document differs from builtins")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Test: validateCLIConfigRounds
-// ---------------------------------------------------------------------------
-
-func TestValidateCLIConfigRounds(t *testing.T) {
-	t.Run("empty mode normalized to translate", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{
-					{
-						Mode:    "",
-						Backend: "default",
-						Translate: &CLIConfigTranslateRound{
-							Prompt:         "default",
-							BatchSize:      1,
-							Concurrency:    1,
-							FallbackShrink: 0.5,
-						},
-					},
-				},
-			},
+func TestTranslationPresenceAndDefaults(t *testing.T) {
+	in := translationInput(t, minimalTranslation+`translation_profiles:
+  custom:
+    schema_version: 1
+    context:
+      enabled: false
+      before: 0
+      after: 0
+    ruby:
+      enabled: false
+      preserve_kinds: []
+`)
+	cfg, err := ResolveCLIConfig(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := cfg.TranslationProfiles["custom"]
+	if p.Context.Enabled || p.Context.Before != 0 || p.Context.After != 0 || p.Ruby.Enabled || p.Ruby.PreserveKinds == nil || len(p.Ruby.PreserveKinds) != 0 {
+		t.Fatalf("explicit zero values lost: %+v", p)
+	}
+	if !p.Protect.Enabled || !p.Repair.PromptUpgrade {
+		t.Fatal("omitted fields did not use domain defaults")
+	}
+	tr := cfg.Execution.Rounds[0].Translate
+	if tr.BatchSize != 1 || tr.Concurrency != 4 || tr.Retry.MaxAttempts != 3 || !cfg.Backends["test"].Enabled {
+		t.Fatal("typed object defaults missing")
+	}
+	in = translationInput(t, strings.Replace(minimalTranslation, "translate: {}", "translate:\n        retry:\n          max_attempts: 0\n          jitter: false", 1))
+	cfg, err = ResolveCLIConfig(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Execution.Rounds[0].Translate.Retry.MaxAttempts != 0 || cfg.Execution.Rounds[0].Translate.Retry.Jitter {
+		t.Fatal("explicit retry zero/false overwritten")
+	}
+}
+func TestTranslationStrictSchema(t *testing.T) {
+	cases := []struct{ name, doc, want string }{
+		{"old", strings.Replace(minimalTranslation, "version: 2", "version: 1", 1), "version"},
+		{"missing version", strings.Replace(minimalTranslation, "version: 2\n", "", 1), "version"},
+		{"wrong kind", strings.Replace(minimalTranslation, "kind: translation", "kind: server", 1), "kind"},
+		{"unknown", minimalTranslation + "unknown: true\n", "unknown"},
+		{"duplicate", minimalTranslation + "version: 2\n", "duplicate"},
+		{"null", strings.Replace(minimalTranslation, "translate: {}", "translate: null", 1), "null"},
+		{"bool", strings.Replace(minimalTranslation, "type: openai", "type: openai\n    enabled: yes", 1), "true or false"},
+		{"number to string", strings.Replace(minimalTranslation, "target_lang: zh", "target_lang: 1", 1), "string"},
+		{"unrecognized mode", strings.Replace(minimalTranslation, "mode: translate", "mode: correct", 1), "supports"},
+		{"missing mode", strings.Replace(minimalTranslation, "- mode: translate", "- backend: test", 1), "duplicate"},
+		{"two documents", minimalTranslation + "---\nkind: translation\n", "exactly one"},
+		{"legacy secret", strings.Replace(minimalTranslation, "model: test-model", "model: test-model\n      api_key: private", 1), "api_key"},
+		{"unknown option", strings.Replace(minimalTranslation, "model: test-model", "model: test-model\n      unknown: true", 1), "unsupported"},
+		{"zero concurrency", strings.Replace(minimalTranslation, "translate: {}", "translate:\n        concurrency: 0", 1), "invalid"},
+		{"missing profile version", minimalTranslation + "translation_profiles:\n  custom:\n    context:\n      enabled: false\n", "schema_version"},
+		{"old bootstrap", minimalTranslation + "translation_profiles:\n  custom:\n    schema_version: 1\n    bootstrap:\n      enabled: true\n", "unknown"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ResolveCLIConfig(translationInput(t, tt.doc))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error=%v want=%s", err, tt.want)
+			}
+		})
+	}
+}
+func TestUnsupportedCLICapabilitiesAreErrors(t *testing.T) {
+	for _, extra := range []string{"translation_memory:\n  enabled: true\n", "translation_memory:\n  driver: sqlite\n", "plugins:\n  scripts: [x.lua]\n", "output:\n  mode: overwrite\n", "translation_profiles:\n  custom:\n    schema_version: 1\n    qa:\n      enabled: true\n"} {
+		if _, err := ResolveCLIConfig(translationInput(t, minimalTranslation+extra)); err == nil {
+			t.Fatalf("unsupported setting accepted: %s", extra)
 		}
-		if err := validateCLIConfigRounds(cfg); err != nil {
-			t.Fatalf("unexpected error: %v", err)
+	}
+}
+func TestTranslationReferencesAreScalarAndPromptBodiesAreLiteral(t *testing.T) {
+	in := translationInput(t, minimalTranslation+`translation_prompt_templates:
+  literal:
+    content: |
+      Preserve ${NOT_AN_ENVIRONMENT_VARIABLE}.
+`)
+	secret := "private: value\nserver:\n  port: 9\n\"quote\""
+	in.Environment["KEY"] = secret
+	cfg, err := ResolveCLIConfig(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Backends["test"].Secret != secret || !strings.Contains(cfg.PromptTemplates["literal"].Content, "${NOT_AN_ENVIRONMENT_VARIABLE}") {
+		t.Fatal("scalar or prompt body changed")
+	}
+	delete(in.Environment, "KEY")
+	if _, err := ResolveCLIConfig(in); err == nil || !strings.Contains(err.Error(), "KEY") {
+		t.Fatalf("missing reference=%v", err)
+	}
+}
+func TestExternalProfileUsesDomainDefaultsAndStrictSchema(t *testing.T) {
+	in := translationInput(t, minimalTranslation+"translation_profiles:\n  custom:\n    file: profile.yaml\n")
+	file := filepath.Join(in.WorkingDirectory, "profile.yaml")
+	if err := os.WriteFile(file, []byte("schema_version: 1\ncontext:\n  enabled: false\n  before: 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := ResolveCLIConfig(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := cfg.TranslationProfiles["custom"]
+	if p.Context.Enabled || p.Context.Before != 0 || p.Context.After != 1 || !p.Protect.Enabled {
+		t.Fatalf("external defaults/presence=%+v", p)
+	}
+	if err := os.WriteFile(file, []byte("schema_version: 1\nrepair:\n  partial: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveCLIConfig(in); err == nil {
+		t.Fatal("ignored obsolete external field")
+	}
+}
+func TestReferencesRejectMixingAndEscape(t *testing.T) {
+	for _, extra := range []string{
+		"translation_prompt_templates:\n  custom:\n    content: body\n    file: ''\n",
+		"translation_profiles:\n  custom:\n    file: profile.yaml\n    schema_version: 1\n",
+	} {
+		if _, err := ResolveCLIConfig(translationInput(t, minimalTranslation+extra)); err == nil {
+			t.Fatal("mixed reference accepted")
 		}
-		if cfg.Execution.Rounds[0].Mode != "translate" {
-			t.Errorf("mode = %q, want %q", cfg.Execution.Rounds[0].Mode, "translate")
-		}
-	})
-
-	t.Run("invalid mode rejected", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{
-					{
-						Mode:    "translat",
-						Backend: "default",
-					},
-				},
-			},
-		}
-		err := validateCLIConfigRounds(cfg)
-		if err == nil {
-			t.Fatal("expected error for invalid mode")
-		}
-		if !strings.Contains(err.Error(), "invalid mode") {
-			t.Errorf("error = %q, want contains %q", err, "invalid mode")
-		}
-	})
-
-	t.Run("translate round without translate config rejected", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{
-					{
-						Mode:    "translate",
-						Backend: "default",
-					},
-				},
-			},
-		}
-		err := validateCLIConfigRounds(cfg)
-		if err == nil {
-			t.Fatal("expected error for missing translate config")
-		}
-		if !strings.Contains(err.Error(), "requires translate config") {
-			t.Errorf("error = %q, want contains %q", err, "requires translate config")
-		}
-	})
-
-	t.Run("extract round without extract config rejected", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{
-					{
-						Mode:    "extract",
-						Backend: "default",
-					},
-				},
-			},
-		}
-		err := validateCLIConfigRounds(cfg)
-		if err == nil {
-			t.Fatal("expected error for missing extract config")
-		}
-		if !strings.Contains(err.Error(), "requires extract config") {
-			t.Errorf("error = %q, want contains %q", err, "requires extract config")
-		}
-	})
-
-	t.Run("valid translate round passes", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{
-					{
-						Mode:    "translate",
-						Backend: "default",
-						Translate: &CLIConfigTranslateRound{
-							Prompt:         "default",
-							BatchSize:      1,
-							Concurrency:    1,
-							FallbackShrink: 0.5,
-						},
-					},
-				},
-			},
-		}
-		if err := validateCLIConfigRounds(cfg); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("valid extract round passes", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{
-					{
-						Mode:    "extract",
-						Backend: "default",
-						Extract: &CLIConfigExtractRound{
-							Template:    "default",
-							BatchSize:   20,
-							Concurrency: 1,
-						},
-					},
-				},
-			},
-		}
-		if err := validateCLIConfigRounds(cfg); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("valid revise round passes", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{
-					{
-						Mode:    "revise",
-						Backend: "default",
-						Revise: &CLIConfigReviseRound{
-							BatchSize:   10,
-							Concurrency: 2,
-						},
-					},
-				},
-			},
-		}
-		if err := validateCLIConfigRounds(cfg); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("revise round without revise config rejected", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{{Mode: "revise", Backend: "default"}},
-			},
-		}
-		err := validateCLIConfigRounds(cfg)
-		if err == nil {
-			t.Fatal("expected error for missing revise config")
-		}
-		if !strings.Contains(err.Error(), "requires revise config") {
-			t.Errorf("error = %q, want contains %q", err, "requires revise config")
-		}
-	})
-
-	t.Run("revise invalid segment_scope rejected", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{
-					{
-						Mode:    "revise",
-						Backend: "default",
-						Revise: &CLIConfigReviseRound{
-							BatchSize:    10,
-							Concurrency:  1,
-							SegmentScope: "bogus",
-						},
-					},
-				},
-			},
-		}
-		err := validateCLIConfigRounds(cfg)
-		if err == nil {
-			t.Fatal("expected error for invalid segment_scope")
-		}
-		if !strings.Contains(err.Error(), "segment_scope") {
-			t.Errorf("error = %q, want contains %q", err, "segment_scope")
-		}
-	})
-
-	t.Run("revise with_issue_codes requires issue_codes", func(t *testing.T) {
-		cfg := &CLIConfig{
-			Execution: CLIConfigExecution{
-				Rounds: []CLIConfigRound{
-					{
-						Mode:    "revise",
-						Backend: "default",
-						Revise: &CLIConfigReviseRound{
-							BatchSize:    10,
-							Concurrency:  1,
-							SegmentScope: "with_issue_codes",
-						},
-					},
-				},
-			},
-		}
-		err := validateCLIConfigRounds(cfg)
-		if err == nil {
-			t.Fatal("expected error for with_issue_codes without issue_codes")
-		}
-		if !strings.Contains(err.Error(), "issue_codes") {
-			t.Errorf("error = %q, want contains %q", err, "issue_codes")
-		}
-	})
+	}
+	dir := t.TempDir()
+	outside := filepath.Join(dir, "outside")
+	base := filepath.Join(dir, "config")
+	if err := os.Mkdir(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(outside, []byte("private"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readExternalFileBytes("../outside", base); err == nil {
+		t.Fatal("directory escape accepted")
+	}
+	if _, err := readExternalFileBytes(outside, base); err == nil {
+		t.Fatal("absolute reference accepted")
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if _, err := readExternalFileBytes("link", base); err == nil {
+		t.Fatal("symlink escape accepted")
+	}
+}
+func TestTranslationPathSelectionAndFinalOverrides(t *testing.T) {
+	in := translationInput(t, minimalTranslation)
+	path := *in.ConfigPath
+	in.ConfigPath = nil
+	in.Environment["LINGUAFLOW_TRANSLATION_CONFIG"] = "translation.yaml"
+	cfg, err := ResolveCLIConfig(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Glossary.Path != filepath.Join(in.WorkingDirectory, "glossary.csv") {
+		t.Fatalf("document path base=%s", cfg.Glossary.Path)
+	}
+	missing := "missing.yaml"
+	in.ConfigPath = &missing
+	if _, err := ResolveCLIConfig(in); !errors.Is(err, ErrConfigNotFound) {
+		t.Fatalf("missing path fell back: %v", err)
+	}
+	in.ConfigPath = &path
+	from, level := "ja", "debug"
+	in.SourceLang = &from
+	in.LogLevel = &level
+	cfg, err = ResolveCLIConfig(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SourceLang != "ja" || cfg.Log.Level != "debug" {
+		t.Fatal("final input override missing")
+	}
+	empty := ""
+	in.ConfigPath = &empty
+	if _, err := ResolveCLIConfig(in); err == nil {
+		t.Fatal("explicit empty config path accepted")
+	}
+}
+func TestUnknownProfileDoesNotFallback(t *testing.T) {
+	cfg, err := ResolveCLIConfig(translationInput(t, minimalTranslation))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Execution.Profile = "misspelled"
+	if _, err := ResolveExecutionProfile(cfg); err == nil {
+		t.Fatal("unknown profile silently fell back")
+	}
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-func mapKeys[M ~map[string]V, V any](m M) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+func TestExplicitEmptyTranslationReferencesAreRejected(t *testing.T) {
+	for name, document := range map[string]string{
+		"profile": strings.Replace(minimalTranslation, "execution:\n", "execution:\n  profile: ''\n", 1),
+		"prompt":  strings.Replace(minimalTranslation, "translate: {}", "translate: {prompt: ''}", 1),
+		"extract": minimalTranslation + "    - mode: extract\n      backend: test\n      extract: {template: ''}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ResolveCLIConfig(translationInput(t, document)); err == nil {
+				t.Fatal("explicit empty reference silently used defaults")
+			}
+		})
 	}
-	return keys
 }

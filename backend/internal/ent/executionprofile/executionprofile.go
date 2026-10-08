@@ -7,7 +7,6 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 )
 
 const (
@@ -93,8 +92,6 @@ var (
 	OwnerUserIDValidator func(int) error
 	// OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	OwnerOrgIDValidator func(int) error
-	// DefaultConfig holds the default value on creation for the "config" field.
-	DefaultConfig schema.ExecutionProfileConfigData
 )
 
 // OrderOption defines the ordering options for the ExecutionProfile queries.

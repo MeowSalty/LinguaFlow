@@ -9,15 +9,18 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
@@ -111,6 +114,7 @@ type GlossaryPruneService struct {
 	glossary       *GlossaryService
 	pruneTemplates *PrunePromptTemplateService
 	limiterPool    *backend.LimiterPool
+	httpClients    telemetry.HTTPClientFactory
 	logger         *slog.Logger
 }
 
@@ -123,11 +127,12 @@ func NewGlossaryPruneService(
 	pruneTemplates *PrunePromptTemplateService,
 	limiterPool *backend.LimiterPool,
 	logger *slog.Logger,
+	clients ...telemetry.HTTPClientFactory,
 ) *GlossaryPruneService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &GlossaryPruneService{
+	s := &GlossaryPruneService{
 		client:         client,
 		projects:       projects,
 		backends:       backends,
@@ -136,6 +141,10 @@ func NewGlossaryPruneService(
 		limiterPool:    limiterPool,
 		logger:         logger,
 	}
+	if len(clients) > 0 {
+		s.httpClients = clients[0]
+	}
+	return s
 }
 
 // defaultPruneRepairOptions 返回精简场景的默认修复选项。
@@ -215,8 +224,11 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	if templateID == 0 {
 		templateID = templates.BuiltinPrunePromptTemplateID
 	}
-	tmpl, err := s.pruneTemplates.GetByID(ctx, templateID)
+	tmpl, err := s.pruneTemplates.GetByID(ctx, actorUserID, templateID)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateSharedReference(tmpl.Scope, tmpl.OwnerOrgID, EffectiveProjectOrgID(projectRow)); err != nil {
 		return nil, err
 	}
 
@@ -232,9 +244,35 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	if err := s.validateBackendForProject(ctx, projectRow, backendRecord); err != nil {
 		return nil, err
 	}
+	credentials := s.backends.Credentials()
+	if credentials == nil {
+		return nil, credential.ErrUnavailable
+	}
+	binding, release, err := credentials.AcquireBackend(ctx, backendID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	runtimeOptions, err := execution.ResolveBackendOptions(backendRecord.Type, backendRecord.Options)
+	if err != nil {
+		return nil, err
+	}
+	endpoint, _ := runtimeOptions["base_url"].(string)
+	secret, err := credentials.Resolve(ctx, binding, backendRecord.Type, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	runtimeOptions["api_key"] = secret
+	check := func(ctx context.Context) error {
+		return credentials.Check(ctx, binding, backendID, backendRecord.Type, endpoint)
+	}
+	client, err := credential.GuardClient(telemetry.ClientFor(s.httpClients, backendRecord.Type, "generate"), credentials, binding, backendID, backendRecord.Type, endpoint)
+	if err != nil {
+		return nil, err
+	}
 
 	// response_format → Protocol（text / json_loose / json_strict）
-	responseMode := responseModeFromBackendOptions(backendRecord.Options)
+	responseMode := responseModeFromBackendOptions(runtimeOptions)
 	proto := prompt.ProtocolFromResponseMode(responseMode)
 	isTextMode := proto.IsText()
 
@@ -258,20 +296,28 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	}
 
 	b, err := backend.Build(backend.Config{
-		Name:    backendRecord.Name,
-		Type:    backendRecord.Type,
-		Enabled: true,
-		Options: backendRecord.Options,
+		Name:       backendRecord.Name,
+		Type:       backendRecord.Type,
+		Enabled:    true,
+		Options:    runtimeOptions,
+		HTTPClient: client,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("prune: build backend: %w", err)
 	}
 	defer b.Close()
 
-	if s.limiterPool != nil && backendRecord.RateLimitPerMinute > 0 {
-		limiter := s.limiterPool.Get(backendRecord.ID, backendRecord.RateLimitPerMinute)
+	if s.limiterPool != nil {
+		limiter, err := s.limiterPool.Lookup(backendRecord.ID)
+		if err != nil {
+			if policyErr := check(ctx); policyErr != nil {
+				return nil, policyErr
+			}
+			return nil, fmt.Errorf("prune: rate limit policy: %w", err)
+		}
 		b = backend.NewRateLimitedBackend(b, limiter)
 	}
+	b = backend.NewPolicyBackend(b, check)
 
 	start := time.Now()
 

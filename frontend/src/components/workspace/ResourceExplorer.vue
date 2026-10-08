@@ -9,39 +9,65 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import { computed, ref } from 'vue'
+import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
 import { isDownloadTranslatedError } from '@/api/projects'
+import { storageErrorMessage } from '@/api/storage-errors'
+import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
 import DirectoryView from '@/components/workspace/DirectoryView.vue'
 import ResourceBreadcrumb from '@/components/workspace/ResourceBreadcrumb.vue'
 import UploadPrecheckPanel from '@/components/workspace/UploadPrecheckPanel.vue'
-import {
-  useProjectWorkspaceStore,
-  type PendingUploadItem,
-  type ReplaceUploadResult,
-} from '@/stores/projectWorkspace'
+import { useProjectWorkspaceStore, type PendingUploadItem } from '@/stores/projectWorkspace'
 import { isCapabilityBlocked } from '@/utils/secureContext'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
+import SourceUpdateDrawer from '@/components/storage/SourceUpdateDrawer.vue'
+import ResourceStorageDrawer from '@/components/storage/ResourceStorageDrawer.vue'
+import { storageManifestWriteAllowed } from '@/utils/storage-contract'
+import { useConflictHandling } from '@/composables/useConflictHandling'
 
 type Resource = ApiSchemas['Resource']
-type IncrementalUpdateResponse = ApiSchemas['IncrementalUpdateResponse']
 
 const props = defineProps<{
   projectId: number
+  beforeSavedContent?: () => Promise<boolean>
 }>()
 
 const emit = defineEmits<{
   openSegments: [resource: Resource]
-  conflict: [resource: Resource, file: File]
-  incrementalResult: [result: IncrementalUpdateResponse]
 }>()
 
 const message = useMessage()
 const dialog = useDialog()
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
+const sourceQueue = useConflictHandling()
+const sourceFile = ref<File | null>(null)
+const sourceState = ref('idle')
+const queueActive = ref(false)
+const onSourceState = (state: string) => {
+  sourceState.value = state
+  if (queueActive.value && ['failed', 'cancelled', 'expired'].includes(state))
+    sourceQueue.settle('failed')
+}
+const openQueuedSource = () => {
+  if (['previewing', 'submitting', 'tracking', 'unknown', 'blocked'].includes(sourceState.value)) {
+    sourceDrawerVisible.value = true
+    return
+  }
+  sourceQueue.openNext()
+  if (!sourceQueue.conflictResource.value) return
+  queueActive.value = true
+  sourceResource.value = sourceQueue.conflictResource.value
+  sourceFile.value = sourceQueue.conflictFile.value
+  sourceDrawerVisible.value = true
+}
+const skipQueuedSource = () => {
+  sourceQueue.settle('skipped')
+  sourceDrawerVisible.value = false
+  queueActive.value = false
+}
 
 // ── 安全上下文：非 HTTPS 环境下拦截文件上传 ──
 
@@ -62,6 +88,35 @@ const dragOver = ref(false)
 const uploadPrecheckVisible = ref(false)
 const uploadConfirming = ref(false)
 const pendingUploadTaskId = ref<string | null>(null)
+let contextRevision = 0
+const captureContext = () => {
+  const projectId = props.projectId
+  const revision = contextRevision
+  const session = captureSession()
+  return {
+    projectId,
+    current: () =>
+      revision === contextRevision && projectId === props.projectId && isSessionCurrent(session),
+  }
+}
+watch(
+  () => [props.projectId, sessionGeneration.value],
+  () => {
+    contextRevision++
+    uploadPrecheckVisible.value = false
+    uploadConfirming.value = false
+    pendingUploadTaskId.value = null
+    sourceDrawerVisible.value = false
+    storageDrawerVisible.value = false
+    sourceResource.value = null
+    storageResource.value = null
+    sourceQueue.resetConflictState()
+    sourceFile.value = null
+    queueActive.value = false
+  },
+  { flush: 'sync' },
+)
+onScopeDispose(() => contextRevision++)
 
 // ── 计算属性 ──
 
@@ -98,57 +153,47 @@ const handleRefreshDirectory = async (): Promise<void> => {
 
 // ── 资源操作 ──
 
-const chooseReplacementFile = (resourceId: number): void => {
-  if (blockUploadIfInsecure()) return
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.onchange = () => {
-    const file = input.files?.[0]
-    if (file) {
-      void doReplace(resourceId, file)
-    }
-  }
-  input.click()
+const sourceResource = ref<Resource | null>(null)
+const sourceDrawerVisible = ref(false)
+const storageResource = ref<Resource | null>(null)
+const storageDrawerVisible = ref(false)
+const manifestWritable = computed(
+  () => workspace.storageContentWritable && storageManifestWriteAllowed(workspace.project),
+)
+const metadataWritable = computed(
+  () => workspace.storageMetadataWritable && storageManifestWriteAllowed(workspace.project),
+)
+/**
+ * 上传前置判定：容忍快照被窗口聚焦/切页短暂置为失效的瞬态。
+ * 从外部拖入文件的瞬间恰好触发 focus 失效，若不等待会把「重新确认中」
+ * 误报成「存储状态尚未确认」。超时后按当前状态判定；真正写入前
+ * prepareStorageWrite 仍会强制重新校验。
+ */
+const ensureManifestWritable = async (timeoutMs = 2000): Promise<boolean> => {
+  if (manifestWritable.value) return true
+  await workspace.settleStorageSnapshot(timeoutMs)
+  return manifestWritable.value
 }
-
-const doReplace = async (resourceId: number, file: File): Promise<void> => {
-  try {
-    await workspace.replaceResource(props.projectId, resourceId, file)
-    message.success(t('workspace.messages.replaceSuccess'))
-    await workspace.loadResourceTree(props.projectId)
-  } catch (error) {
-    console.error(error)
-    message.error(workspace.actionError || t('workspace.messages.replaceFailed'))
+const openSourceUpdate = (resource: Resource): void => {
+  if (['previewing', 'submitting', 'tracking', 'unknown', 'blocked'].includes(sourceState.value)) {
+    sourceDrawerVisible.value = true
+    return
   }
+  queueActive.value = false
+  sourceFile.value = null
+  sourceResource.value = resource
+  sourceDrawerVisible.value = true
 }
-
-const chooseIncrementalUpdateFile = (resourceId: number): void => {
-  if (blockUploadIfInsecure()) return
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.onchange = () => {
-    const file = input.files?.[0]
-    if (file) {
-      void doIncrementalUpdate(resourceId, file)
-    }
-  }
-  input.click()
-}
-
-const doIncrementalUpdate = async (resourceId: number, file: File): Promise<void> => {
-  try {
-    const result = await workspace.incrementalUpdateResource(props.projectId, resourceId, file)
-    emit('incrementalResult', result)
-    await workspace.loadResourceTree(props.projectId)
-  } catch (error) {
-    console.error(error)
-    message.error(workspace.actionError || t('workspace.messages.incrementalUpdateFailed'))
-  }
+const openResourceStorage = (resource: Resource): void => {
+  storageResource.value = resource
+  storageDrawerVisible.value = true
 }
 
 const downloadResource = async (resource: Resource): Promise<void> => {
+  const context = captureContext()
   try {
-    const file = await workspace.downloadResource(props.projectId, resource.id)
+    const file = await workspace.downloadResource(context.projectId, resource.id)
+    if (!context.current()) return
     const url = URL.createObjectURL(file.blob)
     const anchor = document.createElement('a')
     anchor.href = url
@@ -156,14 +201,19 @@ const downloadResource = async (resource: Resource): Promise<void> => {
     anchor.click()
     URL.revokeObjectURL(url)
   } catch (error) {
+    if (!context.current()) return
     console.error(error)
     message.error(workspace.actionError || t('workspace.messages.downloadFailed'))
   }
 }
 
 const downloadResourceResult = async (resource: Resource): Promise<void> => {
+  const context = captureContext()
+  if (props.beforeSavedContent && !(await props.beforeSavedContent())) return
+  if (!context.current()) return
   try {
-    const file = await workspace.downloadResourceResult(props.projectId, resource.id)
+    const file = await workspace.downloadResourceResult(context.projectId, resource.id)
+    if (!context.current()) return
     const url = URL.createObjectURL(file.blob)
     const anchor = document.createElement('a')
     anchor.href = url
@@ -171,13 +221,14 @@ const downloadResourceResult = async (resource: Resource): Promise<void> => {
     anchor.click()
     URL.revokeObjectURL(url)
   } catch (error) {
+    if (!context.current()) return
     console.error(error)
     // 409 = 无已翻译段落，或译文标签结构预检失败（detail 含缺陷段落编号与原因），
     // 信息量超出瞬时 toast 的可读范围，改用对话框完整展示
     if (isDownloadTranslatedError(error) && error.status === 409) {
       dialog.error({
         title: t('api.errors.downloadTranslatedFailed'),
-        content: error.problem?.detail || t('api.errors.downloadResourceResultEmpty'),
+        content: storageErrorMessage(error),
         positiveText: t('common.close'),
       })
       return
@@ -187,11 +238,20 @@ const downloadResourceResult = async (resource: Resource): Promise<void> => {
 }
 
 const deleteResource = async (resource: Resource): Promise<void> => {
+  const context = captureContext()
+  if (!metadataWritable.value) {
+    message.warning(t('sourceStorage.maintenanceUnknown'))
+    return
+  }
+  if (props.beforeSavedContent && !(await props.beforeSavedContent())) return
+  if (!context.current()) return
   try {
-    await workspace.deleteResource(props.projectId, resource.id)
+    await workspace.deleteResource(context.projectId, resource.id)
+    if (!context.current()) return
     message.success(t('workspace.messages.deleteResourceSuccess'))
     await workspace.loadResourceTree(props.projectId)
   } catch (error) {
+    if (!context.current()) return
     console.error(error)
     message.error(workspace.actionError || t('workspace.messages.deleteResourceFailed'))
   }
@@ -215,109 +275,68 @@ const computeUploadPaths = (files: File[], directoryPrefix: string): string[] | 
 const summarizeUploadName = (files: File[]): string =>
   files.length === 1 ? files[0]!.name : t('workspace.upload.batchName', { count: files.length })
 
-const executeIncrementalUploadItems = async (
-  items: PendingUploadItem[],
-): Promise<import('@/stores/projectWorkspace').IncrementalUploadResult[]> => {
-  const results: import('@/stores/projectWorkspace').IncrementalUploadResult[] = []
-
-  for (const item of items) {
-    const resourceId = item.precheck.existing_resource?.id
-    if (!resourceId) {
-      results.push({ item, error: t('workspace.uploadResult.details.missingExistingResource') })
-      continue
-    }
-
-    try {
-      const result = await workspace.incrementalUpdateResource(
-        props.projectId,
-        resourceId,
-        item.file,
-      )
-      results.push({ item, result })
-    } catch (error) {
-      results.push({
-        item,
-        error:
-          error instanceof Error ? error.message : t('workspace.messages.incrementalUpdateFailed'),
-      })
-    }
-  }
-
-  return results
-}
-
-const executeReplaceUploadItems = async (
-  items: PendingUploadItem[],
-): Promise<ReplaceUploadResult[]> => {
-  const results: ReplaceUploadResult[] = []
-
-  for (const item of items) {
-    const resourceId = item.precheck.existing_resource?.id
-    if (!resourceId) {
-      results.push({ item, error: t('workspace.uploadResult.details.missingExistingResource') })
-      continue
-    }
-
-    try {
-      await workspace.replaceResource(props.projectId, resourceId, item.file)
-      results.push({ item, result: true })
-    } catch (error) {
-      results.push({
-        item,
-        error: error instanceof Error ? error.message : t('workspace.messages.replaceFailed'),
-      })
-    }
-  }
-
-  return results
-}
-
 const executeUploadItems = async (items: PendingUploadItem[], taskId: string): Promise<void> => {
+  const context = captureContext()
+  if (!(await ensureManifestWritable())) throw new Error(t('sourceStorage.maintenanceUnknown'))
+  if (!context.current()) {
+    workspace.removeUploadTask(taskId)
+    return
+  }
   const selectedItems = items.filter((item) => item.selected && item.strategy === 'create')
-  const incrementalItems = items.filter((item) => item.strategy === 'incremental_update')
-  const replaceItems = items.filter((item) => item.strategy === 'replace')
-  const skippedItems = items.filter((item) => item.strategy === 'skip')
-
+  const updateItems = items.filter((item) => item.selected && item.strategy === 'source_update')
+  if (updateItems.some((item) => !item.precheck.existing_resource)) {
+    throw new Error(t('sourceStorage.batchChanged'))
+  }
+  const skippedItems = items.filter((item) => item.strategy === 'skip' || !item.selected)
   workspace.updateUploadTaskStage(taskId, 'uploading')
-  await workspace.uploadResources(
-    props.projectId,
+  const result = await workspace.uploadResources(
+    context.projectId,
     selectedItems.map((item) => item.file),
     selectedItems.map((item) => item.path),
     taskId,
     skippedItems,
   )
-
-  if (incrementalItems.length > 0 || replaceItems.length > 0) {
-    workspace.updateUploadTaskStage(taskId, 'processing')
+  if (!context.current()) return
+  for (const item of updateItems) {
+    const resource = item.precheck.existing_resource
+    if (resource) sourceQueue.handleExplorerConflict(resource, item.file)
   }
-  const incrementalResults = await executeIncrementalUploadItems(incrementalItems)
-  const replaceResults = await executeReplaceUploadItems(replaceItems)
-  const mergedResult = workspace.mergeLastUploadResult(incrementalResults, replaceResults)
-
-  await workspace.loadResourceTree(props.projectId)
-  if (mergedResult.summary.failed === mergedResult.summary.total) {
-    workspace.updateUploadTaskStage(taskId, 'error', undefined, mergedResult.summary)
+  await workspace.loadResourceTree(context.projectId)
+  if (!context.current()) return
+  if (result.summary.failed === result.summary.total && result.summary.total > 0) {
+    workspace.updateUploadTaskStage(taskId, 'error', undefined, result.summary)
     message.error(t('workspace.messages.uploadFailed'))
   } else if (
-    mergedResult.summary.failed > 0 ||
-    mergedResult.summary.conflicts > 0 ||
-    mergedResult.summary.skipped > 0
+    result.summary.failed > 0 ||
+    result.summary.conflicts > 0 ||
+    result.summary.skipped > 0
   ) {
-    workspace.updateUploadTaskStage(taskId, 'partial', undefined, mergedResult.summary)
-    message.warning(t('workspace.messages.uploadPartialSuccess', { ...mergedResult.summary }))
-  } else {
-    workspace.updateUploadTaskStage(taskId, 'complete', undefined, mergedResult.summary)
+    workspace.updateUploadTaskStage(taskId, 'partial', undefined, result.summary)
+    message.warning(t('workspace.messages.uploadPartialSuccess', { ...result.summary }))
+  } else if (updateItems.length === 0) {
+    workspace.updateUploadTaskStage(taskId, 'complete', undefined, result.summary)
     message.success(t('workspace.messages.uploadSuccess'))
+  }
+  if (updateItems.length > 0) {
+    workspace.updateUploadTaskStage(taskId, 'partial', t('sourceStorage.queueOpen'), result.summary)
+    openQueuedSource()
   }
 }
 
 /** 打开文件选择器，多选文件作为一个批次上传（与拖拽上传共用同一批处理流程） */
-const chooseUploadFiles = (): void => {
+const chooseUploadFiles = async (): Promise<void> => {
+  const context = captureContext()
+  if (!(await ensureManifestWritable())) {
+    message.warning(t('sourceStorage.maintenanceUnknown'))
+    return
+  }
   if (blockUploadIfInsecure()) return
+  if (!context.current()) return
   const input = document.createElement('input')
   input.type = 'file'
   input.multiple = true
   input.onchange = () => {
+    if (!context.current()) return
     const files = Array.from(input.files ?? [])
     if (files.length === 0) return
     const paths = computeUploadPaths(files, workspace.currentPath)
@@ -331,19 +350,25 @@ const beginUpload = async (
   paths: string[] | undefined,
   displayName: string,
 ): Promise<void> => {
+  const context = captureContext()
   if (blockUploadIfInsecure()) {
     return
   }
 
+  if (!(await ensureManifestWritable())) {
+    message.warning(t('sourceStorage.maintenanceUnknown'))
+    return
+  }
+  if (!context.current()) return
   if (files.length === 0) {
     return
   }
-
   const taskId = workspace.addUploadTask(displayName, files.length)
   workspace.updateUploadTaskStage(taskId, 'prechecking')
 
   try {
-    const items = await workspace.precheckUploadResources(props.projectId, files, paths)
+    const items = await workspace.precheckUploadResources(context.projectId, files, paths)
+    if (!context.current()) return
     workspace.setPendingUploadItems(items)
 
     if (items.some((item) => item.precheck.action !== 'create')) {
@@ -354,6 +379,7 @@ const beginUpload = async (
 
     await executeUploadItems(items, taskId)
   } catch (error) {
+    if (!context.current()) return
     console.error(error)
     message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
     workspace.updateUploadTaskStage(
@@ -365,6 +391,8 @@ const beginUpload = async (
 }
 
 const confirmPrecheckedUpload = async (): Promise<void> => {
+  if (uploadConfirming.value) return
+  const context = captureContext()
   const taskId = pendingUploadTaskId.value
   if (!taskId) {
     return
@@ -373,18 +401,21 @@ const confirmPrecheckedUpload = async (): Promise<void> => {
   uploadConfirming.value = true
   try {
     await executeUploadItems(workspace.pendingUploadItems, taskId)
+    if (!context.current()) return
     uploadPrecheckVisible.value = false
     pendingUploadTaskId.value = null
     workspace.clearPendingUploadItems()
   } catch (error) {
+    if (!context.current()) return
     console.error(error)
     message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
   } finally {
-    uploadConfirming.value = false
+    if (context.current()) uploadConfirming.value = false
   }
 }
 
 const cancelPrecheckedUpload = (): void => {
+  if (uploadConfirming.value) return
   if (pendingUploadTaskId.value) {
     workspace.removeUploadTask(pendingUploadTaskId.value)
   }
@@ -393,18 +424,51 @@ const cancelPrecheckedUpload = (): void => {
   workspace.clearPendingUploadItems()
 }
 
-// ── 拖拽上传 ──
+// ── 拖拽上传（window 级监听，整窗为投放区）──
 
-const handleDragOver = (event: DragEvent): void => {
-  event.preventDefault()
+let dragDepth = 0
+const isFileDrag = (event: DragEvent): boolean =>
+  Array.from(event.dataTransfer?.types ?? []).includes('Files')
+
+const handleWindowDragEnter = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  dragDepth += 1
   dragOver.value = true
 }
-
-const handleDragLeave = (): void => {
+const handleWindowDragOver = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  event.preventDefault() // 允许在窗口任意位置释放，并阻止浏览器直接打开文件
+}
+const handleWindowDragLeave = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) dragOver.value = false
+}
+const handleWindowDrop = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  dragDepth = 0
   dragOver.value = false
+  void handleDrop(event)
 }
 
+onMounted(() => {
+  window.addEventListener('dragenter', handleWindowDragEnter)
+  window.addEventListener('dragover', handleWindowDragOver)
+  window.addEventListener('dragleave', handleWindowDragLeave)
+  window.addEventListener('drop', handleWindowDrop)
+})
+onScopeDispose(() => {
+  window.removeEventListener('dragenter', handleWindowDragEnter)
+  window.removeEventListener('dragover', handleWindowDragOver)
+  window.removeEventListener('dragleave', handleWindowDragLeave)
+  window.removeEventListener('drop', handleWindowDrop)
+  dragDepth = 0
+})
+
 const handleDrop = async (event: DragEvent): Promise<void> => {
+  const context = captureContext()
+  const currentPrefix = workspace.currentPath
   event.preventDefault()
   dragOver.value = false
 
@@ -445,13 +509,13 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
     }
   }
   await Promise.all(promises)
+  if (!context.current()) return
 
   if (collectedFiles.length === 0) {
     return
   }
 
   const files = collectedFiles.map((item) => item.file)
-  const currentPrefix = workspace.currentPath
   const paths = collectedFiles.map((item) =>
     currentPrefix ? `${currentPrefix}/${item.relativePath}` : item.relativePath,
   )
@@ -461,7 +525,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 </script>
 
 <template>
-  <div class="space-y-3" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
+  <div class="space-y-3">
     <div
       class="flex flex-wrap items-center gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2"
     >
@@ -506,6 +570,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
           size="small"
           strong
           :loading="workspace.hasActiveUploads"
+          :disabled="!manifestWritable"
           @click="chooseUploadFiles"
         >
           <template #icon>
@@ -516,34 +581,82 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       </div>
     </div>
 
+    <NAlert v-if="!manifestWritable" type="info" :bordered="false">{{
+      t('sourceStorage.maintenanceUnknown')
+    }}</NAlert>
+    <SourceUpdateDrawer
+      v-if="sourceResource"
+      v-model:show="sourceDrawerVisible"
+      :project-id="projectId"
+      :resource="sourceResource"
+      :file="sourceFile"
+      :before-saved-content="beforeSavedContent"
+      @state="onSourceState"
+      @completed="queueActive && sourceQueue.settle('completed')"
+    />
+    <NAlert v-if="sourceQueue.queue.value.length" type="info" :bordered="false">
+      {{ t('sourceStorage.queue', sourceQueue.summary.value) }}
+      <div class="mt-2 flex gap-2">
+        <NButton
+          v-if="sourceQueue.summary.value.pending > 0"
+          :disabled="sourceDrawerVisible"
+          @click="openQueuedSource"
+          >{{ t('sourceStorage.queueOpen') }}</NButton
+        >
+        <NButton
+          v-if="
+            queueActive &&
+            !['previewing', 'submitting', 'tracking', 'unknown', 'completed'].includes(sourceState)
+          "
+          @click="skipQueuedSource"
+          >{{ t('sourceStorage.queueSkip') }}</NButton
+        >
+      </div>
+    </NAlert>
+    <ResourceStorageDrawer
+      v-if="storageResource"
+      v-model:show="storageDrawerVisible"
+      :project-id="projectId"
+      :project="workspace.project"
+      :resource="storageResource"
+      :before-saved-content="beforeSavedContent"
+      @changed="handleRefreshDirectory"
+    />
     <!-- 错误提示 -->
     <NAlert v-if="workspace.resourceTreeError" type="error" :bordered="false">
       {{ workspace.resourceTreeError }}
     </NAlert>
 
-    <!-- 拖拽上传覆盖层 -->
-    <Transition
-      enter-active-class="transition-opacity duration-200"
-      leave-active-class="transition-opacity duration-200"
-      enter-from-class="opacity-0"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="dragOver"
-        class="flex items-center justify-center rounded-lf-card border-2 border-dashed border-brand-500/45 bg-lf-brand-soft/80 py-8"
+    <!-- 拖拽上传全屏覆盖层 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-opacity duration-200"
+        leave-active-class="transition-opacity duration-200"
+        enter-from-class="opacity-0"
+        leave-to-class="opacity-0"
       >
-        <div class="text-center">
+        <div
+          v-if="dragOver"
+          class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-lf-surface/70 backdrop-blur-sm"
+        >
           <div
-            class="mx-auto flex h-12 w-12 items-center justify-center rounded-lf-ctl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow"
+            class="flex flex-col items-center rounded-lf-card border-2 border-dashed border-brand-500/60 bg-lf-brand-soft px-14 py-10 text-center shadow-lf-shadow"
           >
-            <NIcon size="26"><IconCarbonUpload /></NIcon>
+            <div
+              class="flex h-14 w-14 items-center justify-center rounded-lf-ctl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow"
+            >
+              <NIcon size="30"><IconCarbonUpload /></NIcon>
+            </div>
+            <p class="mt-4 text-base font-semibold text-brand-700">
+              {{ t('workspace.explorer.releaseToUpload') }}
+            </p>
+            <p class="mt-1.5 text-sm text-lf-text-muted">
+              {{ t('workspace.explorer.releaseHint') }}
+            </p>
           </div>
-          <p class="mt-3 text-sm font-medium text-brand-700">
-            {{ t('workspace.explorer.dropToUpload') }}
-          </p>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
 
     <!-- 加载状态 -->
     <div
@@ -559,7 +672,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 
     <!-- 空状态 -->
     <div
-      v-else-if="isEmpty && !dragOver"
+      v-else-if="isEmpty"
       class="rounded-lf-card border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-8"
     >
       <NEmpty :description="t('workspace.explorer.emptyDirectory')">
@@ -568,7 +681,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
             <p class="max-w-md text-center text-xs leading-5 text-lf-text-subtle">
               {{ t('workspace.explorer.dropHint') }}
             </p>
-            <NButton type="primary" @click="chooseUploadFiles">
+            <NButton type="primary" :disabled="!manifestWritable" @click="chooseUploadFiles">
               <template #icon>
                 <NIcon><IconCarbonUpload /></NIcon>
               </template>
@@ -591,8 +704,9 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       :deleting-resource-ids="workspace.deletingResourceIds"
       @navigate="handleNavigate"
       @open-segments="(r) => emit('openSegments', r)"
-      @replace="(r) => chooseReplacementFile(r.id)"
-      @incremental-update="(r) => chooseIncrementalUpdateFile(r.id)"
+      :manifest-writable="metadataWritable"
+      @source-update="openSourceUpdate"
+      @storage="openResourceStorage"
       @download="(r) => void downloadResource(r)"
       @download-translated="(r) => void downloadResourceResult(r)"
       @delete="(r) => void deleteResource(r)"

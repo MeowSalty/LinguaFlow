@@ -2,9 +2,12 @@ package event
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // Event represents a single SSE event published to subscribers.
@@ -34,12 +37,14 @@ type Broker struct {
 // the events durably (e.g. EntEventStore).
 type Historian interface {
 	// ListPage returns up to limit events with seq > afterSeq, ascending.
-	ListPage(ctx context.Context, jobID int, afterSeq int64, limit int) (events []Event, nextAfterSeq int64, hasMore bool)
+	ListPage(ctx context.Context, jobID int, afterSeq int64, limit int) (events []Event, nextAfterSeq int64, hasMore bool, err error)
 	// ListPageBefore returns up to limit events with seq < beforeSeq,
 	// ascending, for backward (toward older) pagination. beforeSeq <= 0
 	// returns the most recent events (initial latest page).
-	ListPageBefore(ctx context.Context, jobID int, beforeSeq int64, limit int) (events []Event, nextBeforeSeq int64, hasMore bool)
+	ListPageBefore(ctx context.Context, jobID int, beforeSeq int64, limit int) (events []Event, nextBeforeSeq int64, hasMore bool, err error)
 }
+
+var ErrHistoryUnavailable = errors.New("durable event history unavailable")
 
 // NewBroker creates a new Broker instance.
 // If store is nil, events are broadcast without persistence (no replay support).
@@ -75,12 +80,29 @@ func (b *Broker) Unsubscribe(jobID int, ch chan Event) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if subs, ok := b.subscribers[jobID]; ok {
+		if _, exists := subs[ch]; !exists {
+			return
+		}
 		delete(subs, ch)
+		close(ch)
 		if len(subs) == 0 {
 			delete(b.subscribers, jobID)
 		}
 	}
-	close(ch)
+}
+
+// CloseJob ends every subscription after history deletion and drops the replay
+// window. The caller holds the task lifecycle guard through this cleanup so
+// registration cannot escape between the database commit and this operation.
+// Concurrent disconnects and repeated cleanup are safe.
+func (b *Broker) CloseJob(jobID int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for ch := range b.subscribers[jobID] {
+		close(ch)
+	}
+	delete(b.subscribers, jobID)
+	b.Purge(jobID)
 }
 
 // Publish sends an event to all subscribers of the given job ID.
@@ -88,6 +110,10 @@ func (b *Broker) Unsubscribe(jobID int, ch chan Event) {
 // If persistence fails, the event is still broadcast in degraded mode (memory-only).
 // Non-blocking: if a subscriber's buffer is full, the event is dropped for that subscriber.
 func (b *Broker) Publish(jobID int, evt Event) {
+	evt.CreatedAt = timeutil.Normalize(evt.CreatedAt)
+	if normalizer, ok := b.store.(interface{ NormalizeTime(time.Time) time.Time }); ok {
+		evt.CreatedAt = normalizer.NormalizeTime(evt.CreatedAt)
+	}
 	if b.store != nil {
 		seq, err := b.store.Append(jobID, evt)
 		if err != nil {
@@ -113,9 +139,9 @@ func (b *Broker) Publish(jobID int, evt Event) {
 // given job, ordered ascending by seq. If limit <= 0, all matching events are
 // returned. Returns nil if no store is configured or no events match.
 // The ctx cancels the underlying query on client disconnect.
-func (b *Broker) Replay(ctx context.Context, jobID int, afterSeq int64, limit int) []Event {
+func (b *Broker) Replay(ctx context.Context, jobID int, afterSeq int64, limit int) ([]Event, error) {
 	if b.store == nil {
-		return nil
+		return nil, nil
 	}
 	return b.store.Replay(ctx, jobID, afterSeq, limit)
 }
@@ -124,9 +150,9 @@ func (b *Broker) Replay(ctx context.Context, jobID int, afterSeq int64, limit in
 // the backing DB directly (not the reconnection ring buffer), so it is suitable
 // for REST endpoints that must list complete historical events. Returns
 // hasMore=false when no Historian is configured.
-func (b *Broker) ListHistory(ctx context.Context, jobID int, afterSeq int64, limit int) ([]Event, int64, bool) {
+func (b *Broker) ListHistory(ctx context.Context, jobID int, afterSeq int64, limit int) ([]Event, int64, bool, error) {
 	if b.historian == nil {
-		return nil, 0, false
+		return nil, 0, false, ErrHistoryUnavailable
 	}
 	return b.historian.ListPage(ctx, jobID, afterSeq, limit)
 }
@@ -134,9 +160,9 @@ func (b *Broker) ListHistory(ctx context.Context, jobID int, afterSeq int64, lim
 // ListHistoryBefore returns a backward page (toward older events) from the
 // durable history. beforeSeq <= 0 returns the most recent events. Returns
 // hasMore=false when no Historian is configured.
-func (b *Broker) ListHistoryBefore(ctx context.Context, jobID int, beforeSeq int64, limit int) ([]Event, int64, bool) {
+func (b *Broker) ListHistoryBefore(ctx context.Context, jobID int, beforeSeq int64, limit int) ([]Event, int64, bool, error) {
 	if b.historian == nil {
-		return nil, 0, false
+		return nil, 0, false, ErrHistoryUnavailable
 	}
 	return b.historian.ListPageBefore(ctx, jobID, beforeSeq, limit)
 }
@@ -144,15 +170,15 @@ func (b *Broker) ListHistoryBefore(ctx context.Context, jobID int, beforeSeq int
 // LatestSeq returns the highest seq stored for the given job, and false when
 // no store is configured or the job has no events. Used to compute the
 // recent-window replay start for fresh SSE connections.
-func (b *Broker) LatestSeq(ctx context.Context, jobID int) (int64, bool) {
+func (b *Broker) LatestSeq(ctx context.Context, jobID int) (int64, bool, error) {
 	if b.store == nil {
-		return 0, false
+		return 0, false, nil
 	}
 	return b.store.LatestSeq(ctx, jobID)
 }
 
-// Purge removes all persisted events for the given job from the underlying store.
-// Should be called when a job reaches a terminal state to prevent unbounded memory growth.
+// Purge releases the store's replay window. HybridStore retains durable history;
+// deleting persistent events belongs to the task history transaction.
 func (b *Broker) Purge(jobID int) {
 	if b.store != nil {
 		b.store.Purge(jobID)

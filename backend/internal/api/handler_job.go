@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
 
@@ -80,6 +82,8 @@ type jobResponse struct {
 	ErrorMessage    *string               `json:"error_message,omitempty"`
 	Progress        jobProgressResponse   `json:"progress"`
 	StartedAt       *string               `json:"started_at,omitempty"`
+	FinishedAt      *string               `json:"finished_at"`
+	CanDelete       bool                  `json:"can_delete"`
 	CreatedAt       string                `json:"created_at"`
 	UpdatedAt       string                `json:"updated_at"`
 	JobResources    []jobResourceResponse `json:"job_resources,omitempty"`
@@ -88,14 +92,8 @@ type jobResponse struct {
 // queueInfoForJob returns queue position info for a job, or nil if queue is
 // unavailable or the job is not currently queued.
 func (s *Server) queueInfoForJob(jobID int) *worker.QueueInfo {
-	if s.dispatcher == nil {
-		return nil
-	}
-	info := s.dispatcher.QueuePosition("translation", jobID)
-	if info == nil || info.Position < 0 {
-		return nil
-	}
-	return info
+	// Instance queue data belongs only to the protected runtime summary.
+	return nil
 }
 
 func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
@@ -126,14 +124,11 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.create", ResourceType: "job", ResourceID: created.ID, Message: "创建任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &created.ProjectID, Action: "job.create", ResourceType: "job", ResourceID: created.ID, Message: "创建任务"})
 	if s.dispatcher != nil {
-		if err := s.dispatcher.Enqueue(r.Context(), "translation", created.ID); err != nil {
-			s.writeServiceError(w, r, err)
-			return
-		}
+		s.dispatcher.Notify("translation")
 	}
-	writeJSON(w, http.StatusAccepted, toJobDetailResponse(created, s.queueInfoForJob(created.ID)))
+	writeJSON(w, http.StatusAccepted, s.toJobDetailResponse(r.Context(), authUser.User.ID, created, s.queueInfoForJob(created.ID)))
 }
 
 func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +157,7 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]jobResponse, 0, len(jobs))
 	for _, job := range jobs {
-		items = append(items, toJobListResponse(job, s.queueInfoForJob(job.ID)))
+		items = append(items, s.toJobListResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -182,7 +177,7 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(jobID)))
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(jobID)))
 }
 
 func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
@@ -200,12 +195,8 @@ func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	// 通知正在运行的 worker 立即停止
-	if s.dispatcher != nil {
-		s.dispatcher.CancelTask("translation", jobID)
-	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.cancel", ResourceType: "job", ResourceID: job.ID, Message: "取消任务"})
-	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.cancel", ResourceType: "job", ResourceID: job.ID, Message: "取消任务"})
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
 }
 
 func (s *Server) handleRetryJob(w http.ResponseWriter, r *http.Request) {
@@ -223,14 +214,11 @@ func (s *Server) handleRetryJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.retry", ResourceType: "job", ResourceID: job.ID, Message: "重试任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.retry", ResourceType: "job", ResourceID: job.ID, Message: "重试任务"})
 	if s.dispatcher != nil {
-		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
-			s.writeServiceError(w, r, err)
-			return
-		}
+		s.dispatcher.Notify("translation")
 	}
-	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
 }
 
 // handlePauseJob 优雅暂停：running 任务先通知 worker 排空（在途 LLM 请求返回后
@@ -250,29 +238,8 @@ func (s *Server) handlePauseJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	if result.NeedsDrain {
-		// 通知 worker 优雅排空：安全点停止派发新批次，在途请求返回并持久化
-		// 后由 worker 置 paused。响应立即返回当前状态（running），前端可
-		// 通过轮询/SSE job_paused 事件观察到终态。
-		if s.dispatcher != nil && !s.dispatcher.PauseTask("translation", jobID) {
-			// gate 未命中：任务恰在请求处理期间转入终态（gate 已随
-			// processJob 退出注销）。复查最新状态——仍 running 属罕见竞态
-			// 窗口，返回 409 让客户端重试；已转入其他状态则如实返回当前
-			// 状态（暂停已无意义，或已由 worker 落 paused）。
-			latest, err := s.jobSvc.GetJob(r.Context(), authUser.User.ID, jobID)
-			if err != nil {
-				s.writeJobServiceError(w, r, err)
-				return
-			}
-			if latest.Status == service.JobStatusRunning {
-				s.writeProblem(w, r, http.StatusConflict, "conflict", "任务正在切换状态，请重试暂停")
-				return
-			}
-			result.Job = latest
-		}
-	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.pause", ResourceType: "job", ResourceID: result.Job.ID, Message: "暂停任务"})
-	writeJSON(w, http.StatusOK, toJobDetailResponse(result.Job, s.queueInfoForJob(result.Job.ID)))
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &result.Job.ProjectID, Action: "job.pause", ResourceType: "job", ResourceID: result.Job.ID, Message: "暂停任务"})
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, result.Job, s.queueInfoForJob(result.Job.ID)))
 }
 
 // handleResumeJob 从轮次断点恢复已暂停的任务：重置 running 资源与轮次为 pending
@@ -292,14 +259,11 @@ func (s *Server) handleResumeJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.resume", ResourceType: "job", ResourceID: job.ID, Message: "恢复任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.resume", ResourceType: "job", ResourceID: job.ID, Message: "恢复任务"})
 	if s.dispatcher != nil {
-		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
-			s.writeServiceError(w, r, err)
-			return
-		}
+		s.dispatcher.Notify("translation")
 	}
-	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
+	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
 }
 
 func sanitizeExecutionConfig(config map[string]any) map[string]any {
@@ -340,7 +304,7 @@ func maskBackendOptions(node map[string]any) {
 	}
 }
 
-func toJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
+func (s *Server) toJobListResponse(ctx context.Context, actorID int, row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
 	resp := jobResponse{
 		ID:              row.ID,
 		ProjectID:       row.ProjectID,
@@ -349,8 +313,10 @@ func toJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
 		ExecutionPlanID: row.ExecutionPlanID,
 		ErrorMessage:    row.ErrorMessage,
 		StartedAt:       timePtrToString(row.StartedAt),
-		CreatedAt:       row.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:       row.UpdatedAt.Format(timeRFC3339),
+		FinishedAt:      timePtrToString(row.FinishedAt),
+		CanDelete:       s.canDeleteHistory(ctx, actorID, "translation", row.ID, row.ProjectID, row.Status),
+		CreatedAt:       timeutil.Format(row.CreatedAt),
+		UpdatedAt:       timeutil.Format(row.UpdatedAt),
 	}
 	if row.Edges.CreatedBy != nil {
 		resp.CreatedBy = &userBriefResponse{ID: row.Edges.CreatedBy.ID, Username: row.Edges.CreatedBy.Username}
@@ -359,8 +325,8 @@ func toJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
 	return resp
 }
 
-func toJobDetailResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
-	resp := toJobListResponse(row, queueInfo)
+func (s *Server) toJobDetailResponse(ctx context.Context, actorID int, row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
+	resp := s.toJobListResponse(ctx, actorID, row, queueInfo)
 	resp.ExecutionConfig = sanitizeExecutionConfig(row.ExecutionConfig)
 	if len(row.Edges.JobResources) > 0 {
 		resp.JobResources = make([]jobResourceResponse, 0, len(row.Edges.JobResources))
@@ -381,10 +347,8 @@ func buildProgressResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobProgres
 		ProgressTotal:      &progressTotal,
 		ProgressCompleted:  &progressCompleted,
 	}
-	if queueInfo != nil {
-		progress.QueuePosition = &queueInfo.Position
-		progress.QueueSize = &queueInfo.Size
-	}
+	// These deprecated fields stay unavailable even for callers holding an
+	// instance queue snapshot; ordinary job responses have project scope.
 	return progress
 }
 
@@ -400,8 +364,8 @@ func toJobResourceResponse(row *ent.JobResource) jobResourceResponse {
 		ErrorMessage:      row.ErrorMessage,
 		WarningMessage:    row.WarningMessage,
 		StartedAt:         timePtrToString(row.StartedAt),
-		CreatedAt:         row.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:         row.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:         timeutil.Format(row.CreatedAt),
+		UpdatedAt:         timeutil.Format(row.UpdatedAt),
 	}
 	// rounds 数组：未 eager-load 时为空（列表视图）；详情视图由
 	// service 层 WithRounds 预载。

@@ -23,7 +23,7 @@ func adjudicateReproDoc() *Document {
 
 func adjudicateReproRound(t *testing.T, fb *fakeBackend, rep *recordingPoolObserver, maxAttempts int) Round {
 	t.Helper()
-	h := &AdjudicateHandler{
+	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
 		Backend:   fb,
 		Renderer:  newAdjudicationRenderer(t),
 		BatchSize: 10,

@@ -6,6 +6,8 @@ RegisterRequest:
       type: string
     password:
       type: string
+      minLength: 8
+      description: 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。
     email:
       type: string
       format: email
@@ -20,6 +22,7 @@ LoginRequest:
       type: string
     password:
       type: string
+      description: 原样验证密码，不施加注册或改密时的新密码长度规则，以兼容历史密码。
 
 RefreshRequest:
   type: object
@@ -30,10 +33,12 @@ RefreshRequest:
 
 LogoutRequest:
   type: object
+  additionalProperties: false
   required: [refresh_token]
   properties:
     refresh_token:
       type: string
+      description: 当前认证用户本人持有的 refresh token；只撤销此 token，不影响其他会话。
 
 AuthSession:
   type: object

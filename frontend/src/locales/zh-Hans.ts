@@ -1,4 +1,45 @@
+import operations from './operations'
+import taskHistory from './task-history'
+import taskHistoryErrors from './task-history-errors'
+import taskRetention from './task-retention'
+import runtime from './runtime'
+import workbench from './workbench'
+import team from './team'
+import configurationSettings from './configuration-settings'
+import configurationCredentials from './credentials'
+import configurationProfiles from './configuration-profiles'
+import storageErrors from './storage-errors'
+import storage from './storage'
+import sourceStorage from './source-storage'
+import storageManagement from './storage-management'
+import storageProject from './storage-project'
+import storageUi from './storage-ui'
+import storageAdmin from './storage-admin'
+import storageCapacity from './storage-capacity'
+import storageDisk from './storage-disk'
+import storageQuota from './storage-quota'
+
 const messages = {
+  taskHistory,
+  taskHistoryErrors,
+  taskRetention,
+  storageUi,
+  storageAdmin,
+  storageCapacity,
+  storageDisk,
+  storageQuota,
+  storageManagement,
+  storageProject,
+  storage,
+  sourceStorage,
+  storageErrors,
+  configurationSettings,
+  configurationCredentials,
+  configurationProfiles,
+  operations,
+  runtime,
+  workbench,
+  team,
   common: {
     appName: 'LinguaFlow',
     language: '语言',
@@ -97,7 +138,10 @@ const messages = {
     executionPlanPlaceholder: '选择执行计划',
     executionPlanEmpty: '暂无可用执行计划，请先在「执行计划」中创建',
     noTranslatablePlan: '现有执行计划均不含翻译轮次，请先在「执行计划」中配置翻译轮次',
-    planNoTranslateRound: '（不含翻译轮次）',
+    planNoTranslateRound: '不含翻译轮次',
+    planEmptyPlaceholder: '暂无可用执行计划',
+    planNoneTranslatablePlaceholder: '计划均无翻译轮次',
+    goToExecutionPlans: '前往「执行计划」',
     advancedToggle: '高级选项',
     projectLabel: '项目（可选）',
     projectPlaceholder: '复用项目术语表与语言配置',
@@ -143,6 +187,8 @@ const messages = {
       expand: '展开侧栏',
     },
     userMenu: {
+      profile: '个人资料',
+      security: '安全设置',
       switchService: '切换服务器',
       connectRemoteService: '连接远程服务',
       logout: '退出登录',
@@ -150,6 +196,53 @@ const messages = {
     messages: {
       logoutSuccess: '已退出登录',
       logoutFailed: '退出登录失败，请重试',
+    },
+  },
+  account: {
+    profile: {
+      title: '个人资料',
+      description: '管理你的显示名和邮箱地址',
+      form: {
+        username: '用户名',
+        email: '邮箱',
+        emailPlaceholder: "you{'@'}example.com",
+        displayName: '显示名（可选）',
+        displayNamePlaceholder: '留空则使用用户名',
+        submit: '保存资料',
+      },
+      validation: {
+        emailRequired: '请输入邮箱',
+        emailInvalid: '请输入合法的邮箱地址',
+      },
+      messages: {
+        updateSuccess: '个人资料已更新',
+        updateFailed: '更新个人资料失败',
+      },
+    },
+    security: {
+      title: '安全设置',
+      description: '修改登录密码，保护账号安全',
+      form: {
+        currentPassword: '当前密码',
+        currentPasswordPlaceholder: '请输入当前密码',
+        newPassword: '新密码',
+        newPasswordPlaceholder: '至少 8 位',
+        confirmPassword: '确认新密码',
+        confirmPasswordPlaceholder: '再次输入新密码',
+        submit: '修改密码',
+      },
+      validation: {
+        currentPasswordRequired: '请输入当前密码',
+        newPasswordRequired: '请输入新密码',
+        passwordMinLength: '密码至少 8 位',
+        confirmPasswordRequired: '请再次输入新密码',
+        passwordMismatch: '两次输入的密码不一致',
+      },
+      messages: {
+        changeSuccess: '密码已修改',
+        changeFailed: '修改密码失败',
+        localModeUnavailable: '本地模式不支持修改密码',
+      },
     },
   },
   appBootstrap: {
@@ -304,9 +397,9 @@ const messages = {
       },
     },
     jobStatus: {
-      title: '任务状态概览',
-      total: '总计 {count} 个任务',
-      successRate: '{percent}% 成功率',
+      title: '保留的翻译任务记录',
+      total: '已完成与失败共 {count} 条',
+      successRate: '完成占比 {percent}',
       completed: '已完成',
       failed: '失败',
     },
@@ -441,7 +534,8 @@ const messages = {
     explorer: {
       rootLabel: '项目根目录',
       emptyDirectory: '当前目录为空，上传文件后即可开始翻译',
-      dropToUpload: '拖拽文件或文件夹到此处上传',
+      releaseToUpload: '松开鼠标，上传到当前目录',
+      releaseHint: '支持文件与文件夹，自动保留目录层级',
       dropHint: '也可以直接把文件或文件夹拖入此区域，系统会保留当前目录层级',
       backToParent: '返回上级',
       refreshDirectory: '刷新目录',
@@ -2020,6 +2114,7 @@ const messages = {
       profileRequired: '请选择执行策略',
       roundBackendRequired: '轮次 {n}：请选择 AI 后端',
       roundPromptRequired: '轮次 {n}：请选择提示词模板',
+      roundExtractTemplateRequired: '轮次 {n}：请选择术语抽取模板',
       roundBatchSizeRequired: '轮次 {n}：请设置批次大小',
       roundBatchConfigRequired: '轮次 {n}：批次大小和每批字词数至少填一项',
       roundConcurrencyRequired: '轮次 {n}：请设置并发数',
@@ -2398,6 +2493,8 @@ const messages = {
       registerFailed: '注册失败',
       refreshSessionFailed: '刷新会话失败',
       fetchCurrentUserFailed: '获取当前用户失败',
+      updateCurrentUserFailed: '更新个人资料失败',
+      changeCurrentUserPasswordFailed: '修改密码失败',
       fetchStatsFailed: '获取用量统计失败',
       fetchActivityFailed: '获取活动日志失败',
       fetchProjectsFailed: '获取项目列表失败',

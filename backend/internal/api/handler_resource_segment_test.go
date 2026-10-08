@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -53,6 +54,24 @@ func srProblemTitle(t *testing.T, rec *httptest.ResponseRecorder) string {
 	}
 	title, _ := body["title"].(string)
 	return title
+}
+
+func TestFileSourceFieldsAreRejected(t *testing.T) {
+	s, _, actor := srTestServer(t)
+	for name, handler := range map[string]http.HandlerFunc{"edit": s.handleUpdateResourceSegment, "preview": s.handlePreviewResourceSegmentTranslation} {
+		for _, source := range []any{"changed", "", nil} {
+			t.Run(name+"/"+fmt.Sprint(source), func(t *testing.T) {
+				body := map[string]any{"source_text": source}
+				if name == "preview" {
+					body["execution_plan_id"] = 1
+				}
+				rec := srRequest(s, http.MethodPost, body, actor, handler, map[string]string{"projectId": "1", "resourceId": "1", "segmentId": "1"})
+				if rec.Code != http.StatusBadRequest || srProblemTitle(t, rec) != "source_read_only" {
+					t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+				}
+			})
+		}
+	}
 }
 
 func TestHandler_ListResourceSegmentsOpenAPIParameterError(t *testing.T) {

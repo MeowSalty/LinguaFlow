@@ -11,7 +11,9 @@ import (
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 )
 
 const (
@@ -21,12 +23,18 @@ const (
 )
 
 type problemDetails struct {
-	Type     string `json:"type,omitempty"`
-	Title    string `json:"title"`
-	Status   int    `json:"status"`
-	Detail   string `json:"detail,omitempty"`
-	Instance string `json:"instance,omitempty"`
+	ErrorCode   string `json:"error_code,omitempty"`
+	TaskID      int    `json:"task_id,omitempty"`
+	OperationID string `json:"operation_id,omitempty"`
+	CheckID     int    `json:"check_id,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Title       string `json:"title"`
+	Status      int    `json:"status"`
+	Detail      string `json:"detail,omitempty"`
+	Instance    string `json:"instance,omitempty"`
 }
+
+type storageProblemIdentityKey struct{}
 
 // urnForTitle 把 Problem title 映射为 RFC 9457 URN 格式的 type。
 // 使用 kebab-case: snake_case 的 title 转为 urn:linguaflow:<kebab-case>。
@@ -143,13 +151,18 @@ func (s *Server) writeProblemWithType(w http.ResponseWriter, r *http.Request, st
 
 	w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(problemDetails{
-		Type:     ptype,
-		Title:    title,
-		Status:   status,
-		Detail:   detail,
-		Instance: requestID,
-	})
+	problem := problemDetails{
+		ErrorCode: title,
+		Type:      ptype,
+		Title:     title,
+		Status:    status,
+		Detail:    detail,
+		Instance:  requestID,
+	}
+	if identity, ok := r.Context().Value(storageProblemIdentityKey{}).(*service.StorageOperationError); ok {
+		problem.TaskID, problem.OperationID, problem.CheckID = identity.TaskID, identity.OperationID, identity.CheckID
+	}
+	_ = json.NewEncoder(w).Encode(problem)
 }
 
 // writeProblem 写入 RFC 7807 Problem 响应,type 由 title 自动派生为 URN。
@@ -171,10 +184,44 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) boo
 
 func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, event.ErrHistoryUnavailable):
+		s.writeProblem(w, r, http.StatusServiceUnavailable, "history_unavailable", "任务事件历史暂不可用")
+	case errors.Is(err, service.ErrTaskHistoryNotFound), errors.Is(err, service.ErrJobNotFound), errors.Is(err, service.ErrSyncTaskNotFound), errors.Is(err, service.ErrProjectNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "任务记录或项目不存在")
+	case errors.Is(err, service.ErrTaskNotTerminal):
+		s.writeProblem(w, r, http.StatusConflict, "task_not_terminal", "任务尚未结束，无法删除记录")
+	case errors.Is(err, tasklife.ErrBusy):
+		s.writeProblem(w, r, http.StatusConflict, "task_busy", "任务仍在执行或收尾，请稍后重试")
+	case errors.Is(err, service.ErrTaskCleanupDeferred):
+		s.writeProblem(w, r, http.StatusServiceUnavailable, "task_cleanup_deferred", "清理预算已用尽，任务记录尚未删除，请稍后重试")
+	case errors.Is(err, service.ErrSettingsConflict):
+		s.writeProblem(w, r, http.StatusConflict, "settings_conflict", "设置已被修改，请重新读取并核对当前草稿")
+	case errors.Is(err, service.ErrStorageMaintenance):
+		s.writeStorageError(w, r, err)
+	case errors.Is(err, service.ErrExecutionPlanNotFound), errors.Is(err, service.ErrExecutionProfileNotFound),
+		errors.Is(err, service.ErrTranslationPromptTemplateNotFound), errors.Is(err, service.ErrBootstrapPromptTemplateNotFound),
+		errors.Is(err, service.ErrPrunePromptTemplateNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "配置不存在或不可访问")
+	case errors.Is(err, service.ErrExecutionPlanConfigInvalid):
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_config", err.Error())
+	case errors.Is(err, service.ErrOrganizationNameExists):
+		s.writeProblem(w, r, http.StatusConflict, "organization_name_exists", "组织名称已存在")
+	case errors.Is(err, service.ErrOrganizationSlugExists):
+		s.writeProblem(w, r, http.StatusConflict, "organization_slug_exists", "组织 slug 已存在")
+	case errors.Is(err, service.ErrMembershipExists):
+		s.writeProblem(w, r, http.StatusConflict, "membership_exists", "组织成员已存在")
+	case errors.Is(err, service.ErrOwnerRequired):
+		s.writeProblem(w, r, http.StatusConflict, "owner_required", "组织必须保留至少一位 owner")
+	case errors.Is(err, service.ErrOrganizationNotFound), errors.Is(err, service.ErrMembershipNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
+	case errors.Is(err, service.ErrCurrentPasswordMismatch):
+		s.writeProblemWithType(w, r, http.StatusBadRequest, urnPrefix+"current-password-mismatch", "current_password_mismatch", "当前密码不正确")
 	case errors.Is(err, service.ErrInvalidInput):
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	case errors.Is(err, service.ErrInvalidCredentials):
 		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"invalid-credentials", "unauthorized", "用户名或密码错误")
+	case errors.Is(err, service.ErrSettingsUnavailable):
+		s.writeProblemWithType(w, r, http.StatusServiceUnavailable, urnPrefix+"settings-unavailable", "unavailable", "系统设置暂不可用")
 	case errors.Is(err, service.ErrTokenExpired):
 		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"token-expired", "unauthorized", "Token 已过期，请重新登录")
 	case errors.Is(err, service.ErrTokenInvalid):
@@ -200,6 +247,10 @@ func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err e
 }
 
 func (s *Server) writeProjectServiceError(w http.ResponseWriter, r *http.Request, err error) {
+	if code := service.StorageErrorCode(err); strings.HasPrefix(code, "storage_") && code != "storage_unavailable" {
+		s.writeStorageError(w, r, err)
+		return
+	}
 	switch {
 	case errors.Is(err, service.ErrForbidden):
 		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")

@@ -101,6 +101,48 @@ func (_c *SyncTaskCreate) SetNillableProcessedSegments(v *int) *SyncTaskCreate {
 	return _c
 }
 
+// SetCheckpointVersion sets the "checkpoint_version" field.
+func (_c *SyncTaskCreate) SetCheckpointVersion(v int) *SyncTaskCreate {
+	_c.mutation.SetCheckpointVersion(v)
+	return _c
+}
+
+// SetNillableCheckpointVersion sets the "checkpoint_version" field if the given value is not nil.
+func (_c *SyncTaskCreate) SetNillableCheckpointVersion(v *int) *SyncTaskCreate {
+	if v != nil {
+		_c.SetCheckpointVersion(*v)
+	}
+	return _c
+}
+
+// SetNextSegmentIndex sets the "next_segment_index" field.
+func (_c *SyncTaskCreate) SetNextSegmentIndex(v int) *SyncTaskCreate {
+	_c.mutation.SetNextSegmentIndex(v)
+	return _c
+}
+
+// SetNillableNextSegmentIndex sets the "next_segment_index" field if the given value is not nil.
+func (_c *SyncTaskCreate) SetNillableNextSegmentIndex(v *int) *SyncTaskCreate {
+	if v != nil {
+		_c.SetNextSegmentIndex(*v)
+	}
+	return _c
+}
+
+// SetStartedAt sets the "started_at" field.
+func (_c *SyncTaskCreate) SetStartedAt(v time.Time) *SyncTaskCreate {
+	_c.mutation.SetStartedAt(v)
+	return _c
+}
+
+// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
+func (_c *SyncTaskCreate) SetNillableStartedAt(v *time.Time) *SyncTaskCreate {
+	if v != nil {
+		_c.SetStartedAt(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *SyncTaskCreate) SetStatus(v string) *SyncTaskCreate {
 	_c.mutation.SetStatus(v)
@@ -165,6 +207,34 @@ func (_c *SyncTaskCreate) SetCancelledAt(v time.Time) *SyncTaskCreate {
 func (_c *SyncTaskCreate) SetNillableCancelledAt(v *time.Time) *SyncTaskCreate {
 	if v != nil {
 		_c.SetCancelledAt(*v)
+	}
+	return _c
+}
+
+// SetFinishedAt sets the "finished_at" field.
+func (_c *SyncTaskCreate) SetFinishedAt(v time.Time) *SyncTaskCreate {
+	_c.mutation.SetFinishedAt(v)
+	return _c
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_c *SyncTaskCreate) SetNillableFinishedAt(v *time.Time) *SyncTaskCreate {
+	if v != nil {
+		_c.SetFinishedAt(*v)
+	}
+	return _c
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_c *SyncTaskCreate) SetRetentionAnchorAt(v time.Time) *SyncTaskCreate {
+	_c.mutation.SetRetentionAnchorAt(v)
+	return _c
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_c *SyncTaskCreate) SetNillableRetentionAnchorAt(v *time.Time) *SyncTaskCreate {
+	if v != nil {
+		_c.SetRetentionAnchorAt(*v)
 	}
 	return _c
 }
@@ -237,6 +307,14 @@ func (_c *SyncTaskCreate) defaults() {
 		v := synctask.DefaultProcessedSegments
 		_c.mutation.SetProcessedSegments(v)
 	}
+	if _, ok := _c.mutation.CheckpointVersion(); !ok {
+		v := synctask.DefaultCheckpointVersion
+		_c.mutation.SetCheckpointVersion(v)
+	}
+	if _, ok := _c.mutation.NextSegmentIndex(); !ok {
+		v := synctask.DefaultNextSegmentIndex
+		_c.mutation.SetNextSegmentIndex(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := synctask.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -305,6 +383,22 @@ func (_c *SyncTaskCreate) check() error {
 	if v, ok := _c.mutation.ProcessedSegments(); ok {
 		if err := synctask.ProcessedSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "processed_segments", err: fmt.Errorf(`ent: validator failed for field "SyncTask.processed_segments": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CheckpointVersion(); !ok {
+		return &ValidationError{Name: "checkpoint_version", err: errors.New(`ent: missing required field "SyncTask.checkpoint_version"`)}
+	}
+	if v, ok := _c.mutation.CheckpointVersion(); ok {
+		if err := synctask.CheckpointVersionValidator(v); err != nil {
+			return &ValidationError{Name: "checkpoint_version", err: fmt.Errorf(`ent: validator failed for field "SyncTask.checkpoint_version": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.NextSegmentIndex(); !ok {
+		return &ValidationError{Name: "next_segment_index", err: errors.New(`ent: missing required field "SyncTask.next_segment_index"`)}
+	}
+	if v, ok := _c.mutation.NextSegmentIndex(); ok {
+		if err := synctask.NextSegmentIndexValidator(v); err != nil {
+			return &ValidationError{Name: "next_segment_index", err: fmt.Errorf(`ent: validator failed for field "SyncTask.next_segment_index": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
@@ -380,6 +474,18 @@ func (_c *SyncTaskCreate) createSpec() (*SyncTask, *sqlgraph.CreateSpec) {
 		_spec.SetField(synctask.FieldProcessedSegments, field.TypeInt, value)
 		_node.ProcessedSegments = value
 	}
+	if value, ok := _c.mutation.CheckpointVersion(); ok {
+		_spec.SetField(synctask.FieldCheckpointVersion, field.TypeInt, value)
+		_node.CheckpointVersion = value
+	}
+	if value, ok := _c.mutation.NextSegmentIndex(); ok {
+		_spec.SetField(synctask.FieldNextSegmentIndex, field.TypeInt, value)
+		_node.NextSegmentIndex = value
+	}
+	if value, ok := _c.mutation.StartedAt(); ok {
+		_spec.SetField(synctask.FieldStartedAt, field.TypeTime, value)
+		_node.StartedAt = &value
+	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(synctask.FieldStatus, field.TypeString, value)
 		_node.Status = value
@@ -403,6 +509,14 @@ func (_c *SyncTaskCreate) createSpec() (*SyncTask, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.CancelledAt(); ok {
 		_spec.SetField(synctask.FieldCancelledAt, field.TypeTime, value)
 		_node.CancelledAt = &value
+	}
+	if value, ok := _c.mutation.FinishedAt(); ok {
+		_spec.SetField(synctask.FieldFinishedAt, field.TypeTime, value)
+		_node.FinishedAt = &value
+	}
+	if value, ok := _c.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(synctask.FieldRetentionAnchorAt, field.TypeTime, value)
+		_node.RetentionAnchorAt = &value
 	}
 	if nodes := _c.mutation.ProjectIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

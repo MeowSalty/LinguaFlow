@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 
-import type { ApiClient, ApiSchemas } from './client'
-import { apiClient } from './client'
+import type { ApiClient, ApiSchemas } from './client-core'
+import { apiClient } from './client-core'
 import { buildRequestFailureError } from './utils'
 
 type TranslationPromptTemplate = ApiSchemas['TranslationPromptTemplate']
@@ -10,8 +10,13 @@ type UpdateTranslationPromptTemplateRequest = ApiSchemas['UpdateTranslationPromp
 
 export const fetchPromptTemplates = async (
   client: ApiClient = apiClient,
+  orgId?: number,
+  signal?: AbortSignal,
 ): Promise<ApiSchemas['TranslationPromptTemplateListResponse']> => {
-  const { data, error, response } = await client.GET('/translation-prompt-templates')
+  const { data, error, response } = await client.GET('/translation-prompt-templates', {
+    params: { query: orgId === undefined ? undefined : { org_id: orgId } },
+    signal,
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.fetchPromptTemplatesFailed'), error, response)

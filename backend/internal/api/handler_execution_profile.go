@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -9,7 +10,9 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // ---- 辅助函数 ----
@@ -19,15 +22,6 @@ func toAPIPreserveKinds(kinds []string) []ProfileRubyConfigPreserveKinds {
 	result := make([]ProfileRubyConfigPreserveKinds, len(kinds))
 	for i, k := range kinds {
 		result[i] = ProfileRubyConfigPreserveKinds(k)
-	}
-	return result
-}
-
-// fromAPIPreserveKinds 将 API 类型 []ProfileRubyConfigPreserveKinds 转换为 []string。
-func fromAPIPreserveKinds(kinds []ProfileRubyConfigPreserveKinds) []string {
-	result := make([]string, len(kinds))
-	for i, k := range kinds {
-		result[i] = string(k)
 	}
 	return result
 }
@@ -59,10 +53,10 @@ func entExecutionProfileToResponse(t *ent.ExecutionProfile) ExecutionProfile {
 		resp.OwnerOrgId = t.OwnerOrgID
 	}
 	if !t.CreatedAt.IsZero() {
-		resp.CreatedAt = &t.CreatedAt
+		resp.CreatedAt = timeutil.NormalizePtr(&t.CreatedAt)
 	}
 	if !t.UpdatedAt.IsZero() {
-		resp.UpdatedAt = &t.UpdatedAt
+		resp.UpdatedAt = timeutil.NormalizePtr(&t.UpdatedAt)
 	}
 	return resp
 }
@@ -90,11 +84,12 @@ func profileConfigToResponse(c *schema.ExecutionProfileConfigData) ExecutionProf
 		LengthRatioMax: &c.QA.LengthRatioMax,
 	}
 	if c.QA.Checks != nil {
-		checks := append([]string(nil), c.QA.Checks...)
+		checks := append([]string{}, c.QA.Checks...)
 		qaConfig.Checks = &checks
 	}
 
 	return ExecutionProfileConfig{
+		SchemaVersion: ExecutionProfileConfigSchemaVersion(c.SchemaVersion),
 		Protect: ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   &rules,
@@ -129,143 +124,6 @@ func profileConfigToResponse(c *schema.ExecutionProfileConfigData) ExecutionProf
 	}
 }
 
-// parseProfileConfig 从 API 请求解析配置。
-func parseProfileConfig(c *ExecutionProfileConfig) *schema.ExecutionProfileConfigData {
-	if c == nil {
-		return nil
-	}
-
-	var rules []string
-	if c.Protect.Rules != nil {
-		rules = make([]string, len(*c.Protect.Rules))
-		for i, r := range *c.Protect.Rules {
-			rules[i] = string(r)
-		}
-	}
-
-	ruby := schema.ProfileRubyConfig{}
-	if c.Ruby != nil {
-		ruby.Enabled = c.Ruby.Enabled
-		if c.Ruby.PreserveKinds != nil {
-			ruby.PreserveKinds = fromAPIPreserveKinds(*c.Ruby.PreserveKinds)
-		}
-	}
-
-	qa := schema.ProfileQAConfig{}
-	if c.Qa != nil {
-		qa.Enabled = c.Qa.Enabled
-		if c.Qa.AutoReject != nil {
-			qa.AutoReject = *c.Qa.AutoReject
-		}
-		if c.Qa.Checks != nil {
-			qa.Checks = append([]string(nil), (*c.Qa.Checks)...)
-		}
-		if c.Qa.LengthMethod != nil {
-			qa.LengthMethod = string(*c.Qa.LengthMethod)
-		}
-		if c.Qa.LengthRatioMin != nil {
-			qa.LengthRatioMin = *c.Qa.LengthRatioMin
-		}
-		if c.Qa.LengthRatioMax != nil {
-			qa.LengthRatioMax = *c.Qa.LengthRatioMax
-		}
-	}
-
-	return &schema.ExecutionProfileConfigData{
-		Protect: schema.ProfileProtectConfig{
-			Enabled: c.Protect.Enabled,
-			Rules:   rules,
-		},
-		Ruby: ruby,
-		Postprocess: schema.ProfilePostprocessConfig{
-			Enabled:    c.Postprocess.Enabled,
-			TrimSpaces: c.Postprocess.TrimSpaces,
-		},
-		Repair: schema.ProfileRepairConfig{
-			Enabled:              c.Repair.Enabled,
-			JSONStructural:       c.Repair.JsonStructural,
-			SchemaAliases:        c.Repair.SchemaAliases,
-			PlaceholderNormalize: c.Repair.PlaceholderNormalize,
-			PromptUpgrade:        c.Repair.PromptUpgrade,
-		},
-		Glossary: schema.ProfileGlossaryConfig{
-			Bootstrap: schema.ProfileBootstrapConfig{
-				Enabled:                c.Glossary.Bootstrap.Enabled,
-				MaxTermsPer1000Chars:   c.Glossary.Bootstrap.MaxTermsPer1000Chars,
-				MinSourceLen:           c.Glossary.Bootstrap.MinSourceLen,
-				InlineConflictStrategy: string(c.Glossary.Bootstrap.InlineConflictStrategy),
-			},
-		},
-		Context: schema.ProfileContextConfig{
-			Enabled:  c.Context.Enabled,
-			Before:   c.Context.Before,
-			After:    c.Context.After,
-			MaxChars: c.Context.MaxChars,
-		},
-		QA: qa,
-	}
-}
-
-// mergeProfileConfig 将请求中的部分配置合并到现有配置上。
-// 仅覆盖请求中显式提供的字段，未指定的字段保留现有值。
-func mergeProfileConfig(existing *schema.ExecutionProfileConfigData, incoming *ExecutionProfileConfig) *schema.ExecutionProfileConfigData {
-	merged := *existing
-
-	if incoming.Protect.Rules != nil {
-		rules := make([]string, len(*incoming.Protect.Rules))
-		for i, r := range *incoming.Protect.Rules {
-			rules[i] = string(r)
-		}
-		merged.Protect.Rules = rules
-	}
-	if incoming.Ruby != nil {
-		merged.Ruby.Enabled = incoming.Ruby.Enabled
-		if incoming.Ruby.PreserveKinds != nil {
-			merged.Ruby.PreserveKinds = fromAPIPreserveKinds(*incoming.Ruby.PreserveKinds)
-		}
-	}
-
-	merged.Postprocess.Enabled = incoming.Postprocess.Enabled
-	merged.Postprocess.TrimSpaces = incoming.Postprocess.TrimSpaces
-
-	merged.Repair.Enabled = incoming.Repair.Enabled
-	merged.Repair.JSONStructural = incoming.Repair.JsonStructural
-	merged.Repair.SchemaAliases = incoming.Repair.SchemaAliases
-	merged.Repair.PlaceholderNormalize = incoming.Repair.PlaceholderNormalize
-	merged.Repair.PromptUpgrade = incoming.Repair.PromptUpgrade
-
-	merged.Glossary.Bootstrap.Enabled = incoming.Glossary.Bootstrap.Enabled
-	merged.Glossary.Bootstrap.MaxTermsPer1000Chars = incoming.Glossary.Bootstrap.MaxTermsPer1000Chars
-	merged.Glossary.Bootstrap.MinSourceLen = incoming.Glossary.Bootstrap.MinSourceLen
-	merged.Glossary.Bootstrap.InlineConflictStrategy = string(incoming.Glossary.Bootstrap.InlineConflictStrategy)
-
-	merged.Context.Enabled = incoming.Context.Enabled
-	merged.Context.Before = incoming.Context.Before
-	merged.Context.After = incoming.Context.After
-	merged.Context.MaxChars = incoming.Context.MaxChars
-
-	if incoming.Qa != nil {
-		merged.QA.Enabled = incoming.Qa.Enabled
-		if incoming.Qa.AutoReject != nil {
-			merged.QA.AutoReject = *incoming.Qa.AutoReject
-		}
-		if incoming.Qa.Checks != nil {
-			merged.QA.Checks = append([]string(nil), (*incoming.Qa.Checks)...)
-		}
-		if incoming.Qa.LengthMethod != nil {
-			merged.QA.LengthMethod = string(*incoming.Qa.LengthMethod)
-		}
-		if incoming.Qa.LengthRatioMin != nil {
-			merged.QA.LengthRatioMin = *incoming.Qa.LengthRatioMin
-		}
-		if incoming.Qa.LengthRatioMax != nil {
-			merged.QA.LengthRatioMax = *incoming.Qa.LengthRatioMax
-		}
-	}
-
-	return &merged
-}
-
 // ---- Handler 方法 ----
 
 // handleListExecutionProfiles 列出当前用户的执行策略配置。
@@ -276,7 +134,17 @@ func (s *Server) handleListExecutionProfiles(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	profiles, err := s.executionProfileSvc.ListByUser(r.Context(), authUser.User.ID)
+	orgID, ok := s.parseSharedOrgQuery(w, r)
+	if !ok {
+		return
+	}
+	var profiles []*ent.ExecutionProfile
+	var err error
+	if orgID == nil {
+		profiles, err = s.executionProfileSvc.ListByUser(r.Context(), authUser.User.ID)
+	} else {
+		profiles, err = s.executionProfileSvc.ListByOrg(r.Context(), authUser.User.ID, *orgID)
+	}
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -298,8 +166,13 @@ func (s *Server) handleCreateExecutionProfile(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var req CreateExecutionProfileRequest
-	if !s.decodeJSON(w, r, &req) {
+	var req struct {
+		Name        string          `json:"name"`
+		Description *string         `json:"description"`
+		OrgId       *int            `json:"org_id"`
+		Config      json.RawMessage `json:"config"`
+	}
+	if !s.decodeSharedJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
@@ -308,18 +181,22 @@ func (s *Server) handleCreateExecutionProfile(w http.ResponseWriter, r *http.Req
 	}
 
 	input := service.CreateExecutionProfileInput{
-		Name:        req.Name,
-		Scope:       "user",
-		OwnerUserID: &authUser.User.ID,
+		Name:  req.Name,
+		OrgID: req.OrgId,
 	}
 	if req.Description != nil {
 		input.Description = *req.Description
 	}
 	if req.Config != nil {
-		input.Config = parseProfileConfig(req.Config)
+		parsed, err := execution.DecodeProfileJSON(req.Config, execution.DefaultProfile())
+		if err != nil {
+			s.writeProblem(w, r, http.StatusBadRequest, "validation_error", err.Error())
+			return
+		}
+		input.Config = &parsed
 	}
 
-	tp, err := s.executionProfileSvc.Create(r.Context(), input)
+	tp, err := s.executionProfileSvc.Create(r.Context(), authUser.User.ID, input)
 	if err != nil {
 		if errors.Is(err, service.ErrExecutionProfileConfigInvalid) {
 			s.writeProblem(w, r, http.StatusBadRequest, "validation_error", err.Error())
@@ -333,12 +210,18 @@ func (s *Server) handleCreateExecutionProfile(w http.ResponseWriter, r *http.Req
 
 // handleGetExecutionProfile 获取执行策略配置详情。
 func (s *Server) handleGetExecutionProfile(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parseExecutionProfileID(w, r)
 	if !ok {
 		return
 	}
 
-	tp, err := s.executionProfileSvc.GetByID(r.Context(), id)
+	tp, err := s.executionProfileSvc.GetByID(r.Context(), authUser.User.ID, id)
 	if err != nil {
 		if err == service.ErrExecutionProfileNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
@@ -352,13 +235,23 @@ func (s *Server) handleGetExecutionProfile(w http.ResponseWriter, r *http.Reques
 
 // handleUpdateExecutionProfile 更新执行策略配置。
 func (s *Server) handleUpdateExecutionProfile(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parseExecutionProfileID(w, r)
 	if !ok {
 		return
 	}
 
-	var req UpdateExecutionProfileRequest
-	if !s.decodeJSON(w, r, &req) {
+	var req struct {
+		Name        *string         `json:"name"`
+		Description *string         `json:"description"`
+		Config      json.RawMessage `json:"config"`
+	}
+	if !s.decodeSharedJSON(w, r, &req) {
 		return
 	}
 
@@ -368,7 +261,7 @@ func (s *Server) handleUpdateExecutionProfile(w http.ResponseWriter, r *http.Req
 	}
 	if req.Config != nil {
 		// 获取现有配置，将请求中的字段合并上去，避免未指定字段被零值覆盖。
-		existing, err := s.executionProfileSvc.GetByID(r.Context(), id)
+		existing, err := s.executionProfileSvc.GetByID(r.Context(), authUser.User.ID, id)
 		if err != nil {
 			if err == service.ErrExecutionProfileNotFound {
 				s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
@@ -377,10 +270,15 @@ func (s *Server) handleUpdateExecutionProfile(w http.ResponseWriter, r *http.Req
 			s.writeServiceError(w, r, err)
 			return
 		}
-		input.Config = mergeProfileConfig(&existing.Config, req.Config)
+		parsed, err := execution.DecodeProfileJSON(req.Config, existing.Config)
+		if err != nil {
+			s.writeProblem(w, r, http.StatusBadRequest, "validation_error", err.Error())
+			return
+		}
+		input.Config = &parsed
 	}
 
-	tp, err := s.executionProfileSvc.Update(r.Context(), id, input)
+	tp, err := s.executionProfileSvc.Update(r.Context(), authUser.User.ID, id, input)
 	if err != nil {
 		if err == service.ErrExecutionProfileNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")

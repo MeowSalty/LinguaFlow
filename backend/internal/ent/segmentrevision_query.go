@@ -298,12 +298,12 @@ func (_q *SegmentRevisionQuery) WithSegment(opts ...func(*SegmentQuery)) *Segmen
 // Example:
 //
 //	var v []struct {
-//		SegmentID int `json:"segment_id,omitempty"`
+//		SourceGeneration int64 `json:"source_generation,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.SegmentRevision.Query().
-//		GroupBy(segmentrevision.FieldSegmentID).
+//		GroupBy(segmentrevision.FieldSourceGeneration).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *SegmentRevisionQuery) GroupBy(field string, fields ...string) *SegmentRevisionGroupBy {
@@ -321,11 +321,11 @@ func (_q *SegmentRevisionQuery) GroupBy(field string, fields ...string) *Segment
 // Example:
 //
 //	var v []struct {
-//		SegmentID int `json:"segment_id,omitempty"`
+//		SourceGeneration int64 `json:"source_generation,omitempty"`
 //	}
 //
 //	client.SegmentRevision.Query().
-//		Select(segmentrevision.FieldSegmentID).
+//		Select(segmentrevision.FieldSourceGeneration).
 //		Scan(ctx, &v)
 func (_q *SegmentRevisionQuery) Select(fields ...string) *SegmentRevisionSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

@@ -37,6 +37,20 @@ func (_u *UsageRecordUpdate) SetUpdatedAt(v time.Time) *UsageRecordUpdate {
 	return _u
 }
 
+// SetVisibilityScope sets the "visibility_scope" field.
+func (_u *UsageRecordUpdate) SetVisibilityScope(v usagerecord.VisibilityScope) *UsageRecordUpdate {
+	_u.mutation.SetVisibilityScope(v)
+	return _u
+}
+
+// SetNillableVisibilityScope sets the "visibility_scope" field if the given value is not nil.
+func (_u *UsageRecordUpdate) SetNillableVisibilityScope(v *usagerecord.VisibilityScope) *UsageRecordUpdate {
+	if v != nil {
+		_u.SetVisibilityScope(*v)
+	}
+	return _u
+}
+
 // SetSource sets the "source" field.
 func (_u *UsageRecordUpdate) SetSource(v string) *UsageRecordUpdate {
 	_u.mutation.SetSource(v)
@@ -273,6 +287,11 @@ func (_u *UsageRecordUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *UsageRecordUpdate) check() error {
+	if v, ok := _u.mutation.VisibilityScope(); ok {
+		if err := usagerecord.VisibilityScopeValidator(v); err != nil {
+			return &ValidationError{Name: "visibility_scope", err: fmt.Errorf(`ent: validator failed for field "UsageRecord.visibility_scope": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.APICalls(); ok {
 		if err := usagerecord.APICallsValidator(v); err != nil {
 			return &ValidationError{Name: "api_calls", err: fmt.Errorf(`ent: validator failed for field "UsageRecord.api_calls": %w`, err)}
@@ -310,6 +329,9 @@ func (_u *UsageRecordUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(usagerecord.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.VisibilityScope(); ok {
+		_spec.SetField(usagerecord.FieldVisibilityScope, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.Source(); ok {
 		_spec.SetField(usagerecord.FieldSource, field.TypeString, value)
@@ -454,6 +476,20 @@ type UsageRecordUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *UsageRecordUpdateOne) SetUpdatedAt(v time.Time) *UsageRecordUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetVisibilityScope sets the "visibility_scope" field.
+func (_u *UsageRecordUpdateOne) SetVisibilityScope(v usagerecord.VisibilityScope) *UsageRecordUpdateOne {
+	_u.mutation.SetVisibilityScope(v)
+	return _u
+}
+
+// SetNillableVisibilityScope sets the "visibility_scope" field if the given value is not nil.
+func (_u *UsageRecordUpdateOne) SetNillableVisibilityScope(v *usagerecord.VisibilityScope) *UsageRecordUpdateOne {
+	if v != nil {
+		_u.SetVisibilityScope(*v)
+	}
 	return _u
 }
 
@@ -706,6 +742,11 @@ func (_u *UsageRecordUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *UsageRecordUpdateOne) check() error {
+	if v, ok := _u.mutation.VisibilityScope(); ok {
+		if err := usagerecord.VisibilityScopeValidator(v); err != nil {
+			return &ValidationError{Name: "visibility_scope", err: fmt.Errorf(`ent: validator failed for field "UsageRecord.visibility_scope": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.APICalls(); ok {
 		if err := usagerecord.APICallsValidator(v); err != nil {
 			return &ValidationError{Name: "api_calls", err: fmt.Errorf(`ent: validator failed for field "UsageRecord.api_calls": %w`, err)}
@@ -760,6 +801,9 @@ func (_u *UsageRecordUpdateOne) sqlSave(ctx context.Context) (_node *UsageRecord
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(usagerecord.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.VisibilityScope(); ok {
+		_spec.SetField(usagerecord.FieldVisibilityScope, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.Source(); ok {
 		_spec.SetField(usagerecord.FieldSource, field.TypeString, value)

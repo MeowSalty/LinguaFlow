@@ -120,7 +120,7 @@ func TestBuildTranslateAndReviseRoundsUseTopLevelStrategy(t *testing.T) {
 	}
 	reviseSnap := service.JobRoundSnapshot{
 		Mode:   "revise",
-		Revise: &service.JobReviseRoundSnapshot{},
+		Revise: &service.JobReviseRoundSnapshot{TemplateContent: templates.EmbeddedReviseTemplate()},
 	}
 
 	tr, err := buildTranslateRound(translateSnap, strategy, nil)
@@ -165,7 +165,7 @@ func TestBuildRoundsZeroValueStrategyDegrades(t *testing.T) {
 	}
 	reviseSnap := service.JobRoundSnapshot{
 		Mode:   "revise",
-		Revise: &service.JobReviseRoundSnapshot{},
+		Revise: &service.JobReviseRoundSnapshot{TemplateContent: templates.EmbeddedReviseTemplate()},
 	}
 
 	tr, err := buildTranslateRound(translateSnap, strategy, nil)
@@ -227,6 +227,8 @@ func TestFactoryWiresTopLevelStrategyToBothRounds(t *testing.T) {
 	}
 
 	factory := NewEngineFactory(slog.Default(), nil)
+	configureFakeFactory(factory)
+	snapshot = completeWorkerSnapshot(t, snapshot)
 	eng, err := factory.BuildEngine(context.Background(), snapshot, engine.RuntimeResources{}, preview.NewMemoryCollector())
 	if err != nil {
 		t.Fatalf("BuildEngine: %v", err)

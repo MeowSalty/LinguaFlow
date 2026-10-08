@@ -38,6 +38,12 @@ type SyncTask struct {
 	TotalSegments int `json:"total_segments,omitempty"`
 	// 已处理的段落数
 	ProcessedSegments int `json:"processed_segments,omitempty"`
+	// 批次检查点版本，0 表示历史未验证记录
+	CheckpointVersion int `json:"checkpoint_version,omitempty"`
+	// 固定段落 ID 列表的下一处理位置
+	NextSegmentIndex int `json:"next_segment_index,omitempty"`
+	// 首次成功认领时间，历史记录可以未知
+	StartedAt *time.Time `json:"started_at,omitempty"`
 	// 任务状态: pending, running, completed, failed, cancelled
 	Status string `json:"status,omitempty"`
 	// JSON 序列化的段落 ID 列表
@@ -50,6 +56,10 @@ type SyncTask struct {
 	Error string `json:"error,omitempty"`
 	// 取消时间
 	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
+	// 首次进入终态的真实 UTC 时间；旧记录可以未知
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	// 历史保留计时起点；旧终态记录安全收尾后只初始化一次
+	RetentionAnchorAt *time.Time `json:"retention_anchor_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SyncTaskQuery when eager-loading is set.
 	Edges        SyncTaskEdges `json:"edges"`
@@ -107,11 +117,11 @@ func (*SyncTask) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case synctask.FieldID, synctask.FieldProjectID, synctask.FieldEntryID, synctask.FieldActorUserID, synctask.FieldTotalSegments, synctask.FieldProcessedSegments:
+		case synctask.FieldID, synctask.FieldProjectID, synctask.FieldEntryID, synctask.FieldActorUserID, synctask.FieldTotalSegments, synctask.FieldProcessedSegments, synctask.FieldCheckpointVersion, synctask.FieldNextSegmentIndex:
 			values[i] = new(sql.NullInt64)
 		case synctask.FieldOldTarget, synctask.FieldNewTarget, synctask.FieldStatus, synctask.FieldSegmentIds, synctask.FieldResourceIds, synctask.FieldResult, synctask.FieldError:
 			values[i] = new(sql.NullString)
-		case synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldCancelledAt:
+		case synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldStartedAt, synctask.FieldCancelledAt, synctask.FieldFinishedAt, synctask.FieldRetentionAnchorAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -188,6 +198,25 @@ func (_m *SyncTask) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ProcessedSegments = int(value.Int64)
 			}
+		case synctask.FieldCheckpointVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field checkpoint_version", values[i])
+			} else if value.Valid {
+				_m.CheckpointVersion = int(value.Int64)
+			}
+		case synctask.FieldNextSegmentIndex:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field next_segment_index", values[i])
+			} else if value.Valid {
+				_m.NextSegmentIndex = int(value.Int64)
+			}
+		case synctask.FieldStartedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field started_at", values[i])
+			} else if value.Valid {
+				_m.StartedAt = new(time.Time)
+				*_m.StartedAt = value.Time
+			}
 		case synctask.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
@@ -224,6 +253,20 @@ func (_m *SyncTask) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.CancelledAt = new(time.Time)
 				*_m.CancelledAt = value.Time
+			}
+		case synctask.FieldFinishedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field finished_at", values[i])
+			} else if value.Valid {
+				_m.FinishedAt = new(time.Time)
+				*_m.FinishedAt = value.Time
+			}
+		case synctask.FieldRetentionAnchorAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field retention_anchor_at", values[i])
+			} else if value.Valid {
+				_m.RetentionAnchorAt = new(time.Time)
+				*_m.RetentionAnchorAt = value.Time
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -303,6 +346,17 @@ func (_m *SyncTask) String() string {
 	builder.WriteString("processed_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ProcessedSegments))
 	builder.WriteString(", ")
+	builder.WriteString("checkpoint_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CheckpointVersion))
+	builder.WriteString(", ")
+	builder.WriteString("next_segment_index=")
+	builder.WriteString(fmt.Sprintf("%v", _m.NextSegmentIndex))
+	builder.WriteString(", ")
+	if v := _m.StartedAt; v != nil {
+		builder.WriteString("started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
 	builder.WriteString(", ")
@@ -320,6 +374,16 @@ func (_m *SyncTask) String() string {
 	builder.WriteString(", ")
 	if v := _m.CancelledAt; v != nil {
 		builder.WriteString("cancelled_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.FinishedAt; v != nil {
+		builder.WriteString("finished_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.RetentionAnchorAt; v != nil {
+		builder.WriteString("retention_anchor_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteByte(')')

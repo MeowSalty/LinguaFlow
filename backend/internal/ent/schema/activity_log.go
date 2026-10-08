@@ -16,6 +16,7 @@ func (ActivityLog) Mixin() []ent.Mixin {
 
 func (ActivityLog) Fields() []ent.Field {
 	return []ent.Field{
+		field.Enum("visibility_scope").Values("legacy", "unknown", "personal", "organization", "project").Default("legacy"),
 		field.String("action").NotEmpty(),
 		field.String("resource_type").NotEmpty(),
 		field.Int("resource_id").Optional().Nillable().Positive(),

@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
@@ -35,7 +36,7 @@ func srTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	db.SetMaxOpenConns(1)
-	driver := entsql.OpenDB(dialect.SQLite, db)
+	driver := database.NewDriver(entsql.OpenDB(dialect.SQLite, db))
 	client := ent.NewClient(ent.Driver(driver))
 	if err := client.Schema.Create(context.Background()); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -43,7 +44,7 @@ func srTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	t.Cleanup(func() { _ = client.Close(); _ = db.Close() })
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	users := service.NewUserService(client, service.NewAuthService(client, service.AuthConfig{}, service.NewAdminService(client)))
+	users := service.NewUserService(client, service.NewAuthService(client, service.AuthConfig{}, service.NewSettingsService(client)))
 	projects := service.NewProjectService(client, users)
 	segmentSvc := service.NewSegmentService(client, projects, dialect.SQLite, 90*24*time.Hour, logger)
 	auditSvc := service.NewAuditService(client, users, projects)

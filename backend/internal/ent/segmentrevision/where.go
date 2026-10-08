@@ -55,6 +55,11 @@ func IDLTE(id int) predicate.SegmentRevision {
 	return predicate.SegmentRevision(sql.FieldLTE(FieldID, id))
 }
 
+// SourceGeneration applies equality check predicate on the "source_generation" field. It's identical to SourceGenerationEQ.
+func SourceGeneration(v int64) predicate.SegmentRevision {
+	return predicate.SegmentRevision(sql.FieldEQ(FieldSourceGeneration, v))
+}
+
 // SegmentID applies equality check predicate on the "segment_id" field. It's identical to SegmentIDEQ.
 func SegmentID(v int) predicate.SegmentRevision {
 	return predicate.SegmentRevision(sql.FieldEQ(FieldSegmentID, v))
@@ -98,6 +103,46 @@ func ActorID(v int) predicate.SegmentRevision {
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.SegmentRevision {
 	return predicate.SegmentRevision(sql.FieldEQ(FieldCreatedAt, v))
+}
+
+// SourceGenerationEQ applies the EQ predicate on the "source_generation" field.
+func SourceGenerationEQ(v int64) predicate.SegmentRevision {
+	return predicate.SegmentRevision(sql.FieldEQ(FieldSourceGeneration, v))
+}
+
+// SourceGenerationNEQ applies the NEQ predicate on the "source_generation" field.
+func SourceGenerationNEQ(v int64) predicate.SegmentRevision {
+	return predicate.SegmentRevision(sql.FieldNEQ(FieldSourceGeneration, v))
+}
+
+// SourceGenerationIn applies the In predicate on the "source_generation" field.
+func SourceGenerationIn(vs ...int64) predicate.SegmentRevision {
+	return predicate.SegmentRevision(sql.FieldIn(FieldSourceGeneration, vs...))
+}
+
+// SourceGenerationNotIn applies the NotIn predicate on the "source_generation" field.
+func SourceGenerationNotIn(vs ...int64) predicate.SegmentRevision {
+	return predicate.SegmentRevision(sql.FieldNotIn(FieldSourceGeneration, vs...))
+}
+
+// SourceGenerationGT applies the GT predicate on the "source_generation" field.
+func SourceGenerationGT(v int64) predicate.SegmentRevision {
+	return predicate.SegmentRevision(sql.FieldGT(FieldSourceGeneration, v))
+}
+
+// SourceGenerationGTE applies the GTE predicate on the "source_generation" field.
+func SourceGenerationGTE(v int64) predicate.SegmentRevision {
+	return predicate.SegmentRevision(sql.FieldGTE(FieldSourceGeneration, v))
+}
+
+// SourceGenerationLT applies the LT predicate on the "source_generation" field.
+func SourceGenerationLT(v int64) predicate.SegmentRevision {
+	return predicate.SegmentRevision(sql.FieldLT(FieldSourceGeneration, v))
+}
+
+// SourceGenerationLTE applies the LTE predicate on the "source_generation" field.
+func SourceGenerationLTE(v int64) predicate.SegmentRevision {
+	return predicate.SegmentRevision(sql.FieldLTE(FieldSourceGeneration, v))
 }
 
 // SegmentIDEQ applies the EQ predicate on the "segment_id" field.

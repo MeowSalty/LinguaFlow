@@ -1,0 +1,18 @@
+export default {
+  title: '公开注册',
+  description: '控制新的用户是否可以自行注册账号。',
+  registrationEnabled: '允许公开注册',
+  effect: '保存后影响后续注册请求；重启不会重置此设置。',
+  unconfirmed: '尚未读取到当前注册政策，暂时无法修改。',
+  loadFailed: '读取注册政策失败，请重试。',
+  refreshFailed: '刷新失败，已保留当前草稿和上次确认的政策。',
+  saveFailed: '保存失败，已保留当前草稿，请重试。',
+  saveSuccess: '注册政策已保存',
+  accessDenied: '无法访问系统设置，请检查管理员权限。',
+  unsaved: '有未保存的修改',
+  discardTitle: '丢弃修改并刷新？',
+  discardContent: '读取成功后将替换当前草稿；如果刷新失败，草稿会保留。',
+  discardConfirm: '丢弃修改并刷新',
+  registrationClosed: '注册已关闭，请联系管理员。',
+  registrationUnavailable: '服务暂时不可用，请稍后重试。',
+}

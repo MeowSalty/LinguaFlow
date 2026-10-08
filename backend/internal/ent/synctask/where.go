@@ -100,6 +100,21 @@ func ProcessedSegments(v int) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldEQ(FieldProcessedSegments, v))
 }
 
+// CheckpointVersion applies equality check predicate on the "checkpoint_version" field. It's identical to CheckpointVersionEQ.
+func CheckpointVersion(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldCheckpointVersion, v))
+}
+
+// NextSegmentIndex applies equality check predicate on the "next_segment_index" field. It's identical to NextSegmentIndexEQ.
+func NextSegmentIndex(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldNextSegmentIndex, v))
+}
+
+// StartedAt applies equality check predicate on the "started_at" field. It's identical to StartedAtEQ.
+func StartedAt(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldStartedAt, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldEQ(FieldStatus, v))
@@ -128,6 +143,16 @@ func Error(v string) predicate.SyncTask {
 // CancelledAt applies equality check predicate on the "cancelled_at" field. It's identical to CancelledAtEQ.
 func CancelledAt(v time.Time) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldEQ(FieldCancelledAt, v))
+}
+
+// FinishedAt applies equality check predicate on the "finished_at" field. It's identical to FinishedAtEQ.
+func FinishedAt(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldFinishedAt, v))
+}
+
+// RetentionAnchorAt applies equality check predicate on the "retention_anchor_at" field. It's identical to RetentionAnchorAtEQ.
+func RetentionAnchorAt(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldRetentionAnchorAt, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -478,6 +503,136 @@ func ProcessedSegmentsLT(v int) predicate.SyncTask {
 // ProcessedSegmentsLTE applies the LTE predicate on the "processed_segments" field.
 func ProcessedSegmentsLTE(v int) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldLTE(FieldProcessedSegments, v))
+}
+
+// CheckpointVersionEQ applies the EQ predicate on the "checkpoint_version" field.
+func CheckpointVersionEQ(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldCheckpointVersion, v))
+}
+
+// CheckpointVersionNEQ applies the NEQ predicate on the "checkpoint_version" field.
+func CheckpointVersionNEQ(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNEQ(FieldCheckpointVersion, v))
+}
+
+// CheckpointVersionIn applies the In predicate on the "checkpoint_version" field.
+func CheckpointVersionIn(vs ...int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIn(FieldCheckpointVersion, vs...))
+}
+
+// CheckpointVersionNotIn applies the NotIn predicate on the "checkpoint_version" field.
+func CheckpointVersionNotIn(vs ...int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotIn(FieldCheckpointVersion, vs...))
+}
+
+// CheckpointVersionGT applies the GT predicate on the "checkpoint_version" field.
+func CheckpointVersionGT(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGT(FieldCheckpointVersion, v))
+}
+
+// CheckpointVersionGTE applies the GTE predicate on the "checkpoint_version" field.
+func CheckpointVersionGTE(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGTE(FieldCheckpointVersion, v))
+}
+
+// CheckpointVersionLT applies the LT predicate on the "checkpoint_version" field.
+func CheckpointVersionLT(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLT(FieldCheckpointVersion, v))
+}
+
+// CheckpointVersionLTE applies the LTE predicate on the "checkpoint_version" field.
+func CheckpointVersionLTE(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLTE(FieldCheckpointVersion, v))
+}
+
+// NextSegmentIndexEQ applies the EQ predicate on the "next_segment_index" field.
+func NextSegmentIndexEQ(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldNextSegmentIndex, v))
+}
+
+// NextSegmentIndexNEQ applies the NEQ predicate on the "next_segment_index" field.
+func NextSegmentIndexNEQ(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNEQ(FieldNextSegmentIndex, v))
+}
+
+// NextSegmentIndexIn applies the In predicate on the "next_segment_index" field.
+func NextSegmentIndexIn(vs ...int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIn(FieldNextSegmentIndex, vs...))
+}
+
+// NextSegmentIndexNotIn applies the NotIn predicate on the "next_segment_index" field.
+func NextSegmentIndexNotIn(vs ...int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotIn(FieldNextSegmentIndex, vs...))
+}
+
+// NextSegmentIndexGT applies the GT predicate on the "next_segment_index" field.
+func NextSegmentIndexGT(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGT(FieldNextSegmentIndex, v))
+}
+
+// NextSegmentIndexGTE applies the GTE predicate on the "next_segment_index" field.
+func NextSegmentIndexGTE(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGTE(FieldNextSegmentIndex, v))
+}
+
+// NextSegmentIndexLT applies the LT predicate on the "next_segment_index" field.
+func NextSegmentIndexLT(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLT(FieldNextSegmentIndex, v))
+}
+
+// NextSegmentIndexLTE applies the LTE predicate on the "next_segment_index" field.
+func NextSegmentIndexLTE(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLTE(FieldNextSegmentIndex, v))
+}
+
+// StartedAtEQ applies the EQ predicate on the "started_at" field.
+func StartedAtEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldStartedAt, v))
+}
+
+// StartedAtNEQ applies the NEQ predicate on the "started_at" field.
+func StartedAtNEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNEQ(FieldStartedAt, v))
+}
+
+// StartedAtIn applies the In predicate on the "started_at" field.
+func StartedAtIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIn(FieldStartedAt, vs...))
+}
+
+// StartedAtNotIn applies the NotIn predicate on the "started_at" field.
+func StartedAtNotIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotIn(FieldStartedAt, vs...))
+}
+
+// StartedAtGT applies the GT predicate on the "started_at" field.
+func StartedAtGT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGT(FieldStartedAt, v))
+}
+
+// StartedAtGTE applies the GTE predicate on the "started_at" field.
+func StartedAtGTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGTE(FieldStartedAt, v))
+}
+
+// StartedAtLT applies the LT predicate on the "started_at" field.
+func StartedAtLT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLT(FieldStartedAt, v))
+}
+
+// StartedAtLTE applies the LTE predicate on the "started_at" field.
+func StartedAtLTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLTE(FieldStartedAt, v))
+}
+
+// StartedAtIsNil applies the IsNil predicate on the "started_at" field.
+func StartedAtIsNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIsNull(FieldStartedAt))
+}
+
+// StartedAtNotNil applies the NotNil predicate on the "started_at" field.
+func StartedAtNotNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotNull(FieldStartedAt))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.
@@ -873,6 +1028,106 @@ func CancelledAtIsNil() predicate.SyncTask {
 // CancelledAtNotNil applies the NotNil predicate on the "cancelled_at" field.
 func CancelledAtNotNil() predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldNotNull(FieldCancelledAt))
+}
+
+// FinishedAtEQ applies the EQ predicate on the "finished_at" field.
+func FinishedAtEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldFinishedAt, v))
+}
+
+// FinishedAtNEQ applies the NEQ predicate on the "finished_at" field.
+func FinishedAtNEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNEQ(FieldFinishedAt, v))
+}
+
+// FinishedAtIn applies the In predicate on the "finished_at" field.
+func FinishedAtIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIn(FieldFinishedAt, vs...))
+}
+
+// FinishedAtNotIn applies the NotIn predicate on the "finished_at" field.
+func FinishedAtNotIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotIn(FieldFinishedAt, vs...))
+}
+
+// FinishedAtGT applies the GT predicate on the "finished_at" field.
+func FinishedAtGT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGT(FieldFinishedAt, v))
+}
+
+// FinishedAtGTE applies the GTE predicate on the "finished_at" field.
+func FinishedAtGTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGTE(FieldFinishedAt, v))
+}
+
+// FinishedAtLT applies the LT predicate on the "finished_at" field.
+func FinishedAtLT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLT(FieldFinishedAt, v))
+}
+
+// FinishedAtLTE applies the LTE predicate on the "finished_at" field.
+func FinishedAtLTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLTE(FieldFinishedAt, v))
+}
+
+// FinishedAtIsNil applies the IsNil predicate on the "finished_at" field.
+func FinishedAtIsNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIsNull(FieldFinishedAt))
+}
+
+// FinishedAtNotNil applies the NotNil predicate on the "finished_at" field.
+func FinishedAtNotNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotNull(FieldFinishedAt))
+}
+
+// RetentionAnchorAtEQ applies the EQ predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtNEQ applies the NEQ predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtNEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNEQ(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtIn applies the In predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIn(FieldRetentionAnchorAt, vs...))
+}
+
+// RetentionAnchorAtNotIn applies the NotIn predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtNotIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotIn(FieldRetentionAnchorAt, vs...))
+}
+
+// RetentionAnchorAtGT applies the GT predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtGT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGT(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtGTE applies the GTE predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtGTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGTE(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtLT applies the LT predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtLT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLT(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtLTE applies the LTE predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtLTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLTE(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtIsNil applies the IsNil predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtIsNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIsNull(FieldRetentionAnchorAt))
+}
+
+// RetentionAnchorAtNotNil applies the NotNil predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtNotNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotNull(FieldRetentionAnchorAt))
 }
 
 // HasProject applies the HasEdge predicate on the "project" edge.

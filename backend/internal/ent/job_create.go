@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -197,6 +198,34 @@ func (_c *JobCreate) SetNillableStartedAt(v *time.Time) *JobCreate {
 	return _c
 }
 
+// SetFinishedAt sets the "finished_at" field.
+func (_c *JobCreate) SetFinishedAt(v time.Time) *JobCreate {
+	_c.mutation.SetFinishedAt(v)
+	return _c
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_c *JobCreate) SetNillableFinishedAt(v *time.Time) *JobCreate {
+	if v != nil {
+		_c.SetFinishedAt(*v)
+	}
+	return _c
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_c *JobCreate) SetRetentionAnchorAt(v time.Time) *JobCreate {
+	_c.mutation.SetRetentionAnchorAt(v)
+	return _c
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_c *JobCreate) SetNillableRetentionAnchorAt(v *time.Time) *JobCreate {
+	if v != nil {
+		_c.SetRetentionAnchorAt(*v)
+	}
+	return _c
+}
+
 // SetProject sets the "project" edge to the Project entity.
 func (_c *JobCreate) SetProject(v *Project) *JobCreate {
 	return _c.SetProjectID(v.ID)
@@ -264,6 +293,21 @@ func (_c *JobCreate) AddSseEvents(v ...*SSEEvent) *JobCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddSseEventIDs(ids...)
+}
+
+// AddCredentialReferenceIDs adds the "credential_references" edge to the CredentialJobReference entity by IDs.
+func (_c *JobCreate) AddCredentialReferenceIDs(ids ...int) *JobCreate {
+	_c.mutation.AddCredentialReferenceIDs(ids...)
+	return _c
+}
+
+// AddCredentialReferences adds the "credential_references" edges to the CredentialJobReference entity.
+func (_c *JobCreate) AddCredentialReferences(v ...*CredentialJobReference) *JobCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddCredentialReferenceIDs(ids...)
 }
 
 // Mutation returns the JobMutation object of the builder.
@@ -497,6 +541,14 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 		_spec.SetField(job.FieldStartedAt, field.TypeTime, value)
 		_node.StartedAt = &value
 	}
+	if value, ok := _c.mutation.FinishedAt(); ok {
+		_spec.SetField(job.FieldFinishedAt, field.TypeTime, value)
+		_node.FinishedAt = &value
+	}
+	if value, ok := _c.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(job.FieldRetentionAnchorAt, field.TypeTime, value)
+		_node.RetentionAnchorAt = &value
+	}
 	if nodes := _c.mutation.ProjectIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -572,6 +624,22 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.CredentialReferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

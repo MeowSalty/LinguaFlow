@@ -24,6 +24,16 @@ type Project struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// StorageSpaceID holds the value of the "storage_space_id" field.
+	StorageSpaceID *int `json:"storage_space_id,omitempty"`
+	// StorageGeneration holds the value of the "storage_generation" field.
+	StorageGeneration int64 `json:"storage_generation,omitempty"`
+	// OutputGeneration holds the value of the "output_generation" field.
+	OutputGeneration int64 `json:"output_generation,omitempty"`
+	// StorageState holds the value of the "storage_state" field.
+	StorageState string `json:"storage_state,omitempty"`
+	// StorageMigrationTaskID holds the value of the "storage_migration_task_id" field.
+	StorageMigrationTaskID *int `json:"storage_migration_task_id,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
 	// OwnerUserID holds the value of the "owner_user_id" field.
@@ -163,9 +173,9 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case project.FieldGlossaryEnabled:
 			values[i] = new(sql.NullBool)
-		case project.FieldID, project.FieldOwnerUserID, project.FieldOwnerOrgID:
+		case project.FieldID, project.FieldStorageSpaceID, project.FieldStorageGeneration, project.FieldOutputGeneration, project.FieldStorageMigrationTaskID, project.FieldOwnerUserID, project.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
-		case project.FieldName, project.FieldSourceLang, project.FieldTargetLang:
+		case project.FieldStorageState, project.FieldName, project.FieldSourceLang, project.FieldTargetLang:
 			values[i] = new(sql.NullString)
 		case project.FieldCreatedAt, project.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -201,6 +211,38 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case project.FieldStorageSpaceID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field storage_space_id", values[i])
+			} else if value.Valid {
+				_m.StorageSpaceID = new(int)
+				*_m.StorageSpaceID = int(value.Int64)
+			}
+		case project.FieldStorageGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field storage_generation", values[i])
+			} else if value.Valid {
+				_m.StorageGeneration = value.Int64
+			}
+		case project.FieldOutputGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field output_generation", values[i])
+			} else if value.Valid {
+				_m.OutputGeneration = value.Int64
+			}
+		case project.FieldStorageState:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field storage_state", values[i])
+			} else if value.Valid {
+				_m.StorageState = value.String
+			}
+		case project.FieldStorageMigrationTaskID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field storage_migration_task_id", values[i])
+			} else if value.Valid {
+				_m.StorageMigrationTaskID = new(int)
+				*_m.StorageMigrationTaskID = int(value.Int64)
 			}
 		case project.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -334,6 +376,25 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	if v := _m.StorageSpaceID; v != nil {
+		builder.WriteString("storage_space_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("storage_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StorageGeneration))
+	builder.WriteString(", ")
+	builder.WriteString("output_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OutputGeneration))
+	builder.WriteString(", ")
+	builder.WriteString("storage_state=")
+	builder.WriteString(_m.StorageState)
+	builder.WriteString(", ")
+	if v := _m.StorageMigrationTaskID; v != nil {
+		builder.WriteString("storage_migration_task_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)

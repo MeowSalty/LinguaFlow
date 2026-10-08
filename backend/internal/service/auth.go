@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -18,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 const (
@@ -26,13 +28,14 @@ const (
 )
 
 var (
-	ErrInvalidCredentials  = errors.New("invalid credentials")
-	ErrTokenInvalid        = errors.New("token invalid")
-	ErrTokenExpired        = errors.New("token expired")
-	ErrRefreshTokenRevoked = errors.New("refresh token revoked")
-	ErrUserExists          = errors.New("user already exists")
-	ErrUserInactive        = errors.New("user inactive")
-	ErrInvalidInput        = errors.New("invalid input")
+	ErrInvalidCredentials      = errors.New("invalid credentials")
+	ErrTokenInvalid            = errors.New("token invalid")
+	ErrTokenExpired            = errors.New("token expired")
+	ErrRefreshTokenRevoked     = errors.New("refresh token revoked")
+	ErrUserExists              = errors.New("user already exists")
+	ErrUserInactive            = errors.New("user inactive")
+	ErrInvalidInput            = errors.New("invalid input")
+	ErrCurrentPasswordMismatch = errors.New("current password mismatch")
 )
 
 type AuthConfig struct {
@@ -56,16 +59,16 @@ type AuthService struct {
 	cfg      AuthConfig
 	now      func() time.Time
 	rand     io.Reader
-	adminSvc *AdminService
+	settings RegistrationPolicy
 }
 
-func NewAuthService(client *ent.Client, cfg AuthConfig, adminSvc *AdminService) *AuthService {
+func NewAuthService(client *ent.Client, cfg AuthConfig, settings RegistrationPolicy) *AuthService {
 	return &AuthService{
 		client:   client,
 		cfg:      cfg,
-		now:      time.Now,
+		now:      timeutil.NowUTC,
 		rand:     crand.Reader,
-		adminSvc: adminSvc,
+		settings: settings,
 	}
 }
 
@@ -97,29 +100,31 @@ type Session struct {
 }
 
 func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Session, error) {
-	if s.adminSvc == nil {
-		return nil, fmt.Errorf("auth service not initialized: admin service is required")
+	if s.settings == nil {
+		return nil, ErrSettingsUnavailable
 	}
-	if !s.adminSvc.IsRegistrationEnabled(ctx) {
+	enabled, err := s.settings.RegistrationEnabled(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrSettingsUnavailable, err)
+	}
+	if !enabled {
 		return nil, ErrRegistrationClosed
 	}
 
 	username := normalizeIdentity(input.Username)
 	email := normalizeIdentity(input.Email)
-	if username == "" || email == "" || len(input.Password) < 8 {
+	if username == "" || email == "" {
 		return nil, ErrInvalidInput
 	}
 	if !strings.Contains(email, "@") {
 		return nil, ErrInvalidInput
 	}
+	if err := validateNewPassword(input.Password); err != nil {
+		return nil, err
+	}
 	passwordHash, err := hashPassword(input.Password)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
-	}
-
-	role := SystemRoleUser
-	if s.adminSvc.ShouldAutoAdmin(ctx) {
-		role = SystemRoleAdmin
 	}
 
 	createdUser, err := s.client.User.Create().
@@ -127,7 +132,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Sessi
 		SetPasswordHash(passwordHash).
 		SetEmail(email).
 		SetDisplayName(strings.TrimSpace(input.DisplayName)).
-		SetRole(role).
+		SetRole(SystemRoleUser).
 		SetActive(true).
 		Save(ctx)
 	if err != nil {
@@ -168,7 +173,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ses
 		}
 		return nil, err
 	}
-	now := s.now()
+	now := timeutil.Normalize(s.now())
 	if tokenRecord.RevokedAt != nil {
 		return nil, ErrRefreshTokenRevoked
 	}
@@ -181,19 +186,28 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ses
 	return s.issueSession(ctx, tokenRecord.Edges.User, tokenRecord)
 }
 
-func (s *AuthService) Logout(ctx context.Context, rawRefreshToken string) error {
+func (s *AuthService) Logout(ctx context.Context, actorUserID int, rawRefreshToken string) error {
 	hashed := hash.Full(strings.TrimSpace(rawRefreshToken))
-	storedToken, err := s.client.RefreshToken.Query().Where(refreshtoken.TokenHashEQ(hashed)).Only(ctx)
+	storedToken, err := s.client.RefreshToken.Query().
+		Where(refreshtoken.TokenHashEQ(hashed)).
+		WithUser(func(query *ent.UserQuery) { query.Select(user.FieldID) }).
+		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return ErrTokenInvalid
 		}
 		return err
 	}
+	if storedToken.Edges.User == nil {
+		return ErrTokenInvalid
+	}
+	if storedToken.Edges.User.ID != actorUserID {
+		return ErrForbidden
+	}
 	if storedToken.RevokedAt != nil {
 		return nil
 	}
-	return s.client.RefreshToken.UpdateOneID(storedToken.ID).SetRevokedAt(s.now()).Exec(ctx)
+	return s.client.RefreshToken.UpdateOneID(storedToken.ID).SetRevokedAt(timeutil.Normalize(s.now())).Exec(ctx)
 }
 
 func (s *AuthService) ParseAccessToken(rawToken string) (*AccessTokenClaims, error) {
@@ -235,15 +249,18 @@ func (s *AuthService) ResolveUserFromAccessToken(ctx context.Context, rawToken s
 }
 
 func (s *AuthService) ChangePassword(ctx context.Context, userID int, currentPassword, newPassword string) error {
-	if len(newPassword) < 8 {
+	if currentPassword == "" {
 		return ErrInvalidInput
+	}
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
 	}
 	account, err := s.client.User.Get(ctx, userID)
 	if err != nil {
 		return err
 	}
 	if err := comparePassword(account.PasswordHash, currentPassword); err != nil {
-		return ErrInvalidCredentials
+		return ErrCurrentPasswordMismatch
 	}
 	passwordHash, err := hashPassword(newPassword)
 	if err != nil {
@@ -263,7 +280,7 @@ func (s *AuthService) issueSession(ctx context.Context, account *ent.User, revok
 		}
 	}()
 
-	now := s.now()
+	now := timeutil.Normalize(s.now())
 	if revokeToken != nil && revokeToken.RevokedAt == nil {
 		if err = tx.RefreshToken.UpdateOneID(revokeToken.ID).SetRevokedAt(now).Exec(ctx); err != nil {
 			return nil, err
@@ -274,14 +291,25 @@ func (s *AuthService) issueSession(ctx context.Context, account *ent.User, revok
 		return nil, err
 	}
 	refreshExpiry := now.Add(s.cfg.RefreshTokenTTL)
-	if _, err = tx.RefreshToken.Create().
+	createdRefresh, err := tx.RefreshToken.Create().
 		SetTokenHash(hash.Full(refreshRaw)).
 		SetExpiresAt(refreshExpiry).
 		SetUserID(account.ID).
-		Save(ctx); err != nil {
+		Save(ctx)
+	if err != nil {
 		return nil, err
 	}
-	accessExpiry := now.Add(s.cfg.AccessTokenTTL)
+	// Create retains input timestamps in memory; read the stored value so the
+	// response reflects native database precision (microseconds on PostgreSQL).
+	persistedRefresh, err := tx.RefreshToken.Query().
+		Where(refreshtoken.IDEQ(createdRefresh.ID)).
+		Select(refreshtoken.FieldID, refreshtoken.FieldExpiresAt).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+	refreshExpiry = timeutil.Normalize(persistedRefresh.ExpiresAt)
+	accessExpiry := timeutil.Normalize(jwt.NewNumericDate(now.Add(s.cfg.AccessTokenTTL)).Time)
 	accessToken, err := s.signAccessToken(account, accessExpiry)
 	if err != nil {
 		return nil, err
@@ -299,7 +327,7 @@ func (s *AuthService) issueSession(ctx context.Context, account *ent.User, revok
 }
 
 func (s *AuthService) signAccessToken(account *ent.User, expiresAt time.Time) (string, error) {
-	now := s.now()
+	now := timeutil.Normalize(s.now())
 	claims := AccessTokenClaims{
 		UserID:   account.ID,
 		Username: account.Username,
@@ -325,6 +353,13 @@ func (s *AuthService) generateOpaqueToken() (string, error) {
 
 func normalizeIdentity(v string) string {
 	return strings.ToLower(strings.TrimSpace(v))
+}
+
+func validateNewPassword(raw string) error {
+	if utf8.RuneCountInString(raw) < 8 || len(raw) > 72 {
+		return ErrInvalidInput
+	}
+	return nil
 }
 
 func hashPassword(raw string) (string, error) {

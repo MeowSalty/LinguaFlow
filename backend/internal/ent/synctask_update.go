@@ -149,6 +149,68 @@ func (_u *SyncTaskUpdate) AddProcessedSegments(v int) *SyncTaskUpdate {
 	return _u
 }
 
+// SetCheckpointVersion sets the "checkpoint_version" field.
+func (_u *SyncTaskUpdate) SetCheckpointVersion(v int) *SyncTaskUpdate {
+	_u.mutation.ResetCheckpointVersion()
+	_u.mutation.SetCheckpointVersion(v)
+	return _u
+}
+
+// SetNillableCheckpointVersion sets the "checkpoint_version" field if the given value is not nil.
+func (_u *SyncTaskUpdate) SetNillableCheckpointVersion(v *int) *SyncTaskUpdate {
+	if v != nil {
+		_u.SetCheckpointVersion(*v)
+	}
+	return _u
+}
+
+// AddCheckpointVersion adds value to the "checkpoint_version" field.
+func (_u *SyncTaskUpdate) AddCheckpointVersion(v int) *SyncTaskUpdate {
+	_u.mutation.AddCheckpointVersion(v)
+	return _u
+}
+
+// SetNextSegmentIndex sets the "next_segment_index" field.
+func (_u *SyncTaskUpdate) SetNextSegmentIndex(v int) *SyncTaskUpdate {
+	_u.mutation.ResetNextSegmentIndex()
+	_u.mutation.SetNextSegmentIndex(v)
+	return _u
+}
+
+// SetNillableNextSegmentIndex sets the "next_segment_index" field if the given value is not nil.
+func (_u *SyncTaskUpdate) SetNillableNextSegmentIndex(v *int) *SyncTaskUpdate {
+	if v != nil {
+		_u.SetNextSegmentIndex(*v)
+	}
+	return _u
+}
+
+// AddNextSegmentIndex adds value to the "next_segment_index" field.
+func (_u *SyncTaskUpdate) AddNextSegmentIndex(v int) *SyncTaskUpdate {
+	_u.mutation.AddNextSegmentIndex(v)
+	return _u
+}
+
+// SetStartedAt sets the "started_at" field.
+func (_u *SyncTaskUpdate) SetStartedAt(v time.Time) *SyncTaskUpdate {
+	_u.mutation.SetStartedAt(v)
+	return _u
+}
+
+// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
+func (_u *SyncTaskUpdate) SetNillableStartedAt(v *time.Time) *SyncTaskUpdate {
+	if v != nil {
+		_u.SetStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (_u *SyncTaskUpdate) ClearStartedAt() *SyncTaskUpdate {
+	_u.mutation.ClearStartedAt()
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *SyncTaskUpdate) SetStatus(v string) *SyncTaskUpdate {
 	_u.mutation.SetStatus(v)
@@ -248,6 +310,46 @@ func (_u *SyncTaskUpdate) SetNillableCancelledAt(v *time.Time) *SyncTaskUpdate {
 // ClearCancelledAt clears the value of the "cancelled_at" field.
 func (_u *SyncTaskUpdate) ClearCancelledAt() *SyncTaskUpdate {
 	_u.mutation.ClearCancelledAt()
+	return _u
+}
+
+// SetFinishedAt sets the "finished_at" field.
+func (_u *SyncTaskUpdate) SetFinishedAt(v time.Time) *SyncTaskUpdate {
+	_u.mutation.SetFinishedAt(v)
+	return _u
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_u *SyncTaskUpdate) SetNillableFinishedAt(v *time.Time) *SyncTaskUpdate {
+	if v != nil {
+		_u.SetFinishedAt(*v)
+	}
+	return _u
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (_u *SyncTaskUpdate) ClearFinishedAt() *SyncTaskUpdate {
+	_u.mutation.ClearFinishedAt()
+	return _u
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_u *SyncTaskUpdate) SetRetentionAnchorAt(v time.Time) *SyncTaskUpdate {
+	_u.mutation.SetRetentionAnchorAt(v)
+	return _u
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_u *SyncTaskUpdate) SetNillableRetentionAnchorAt(v *time.Time) *SyncTaskUpdate {
+	if v != nil {
+		_u.SetRetentionAnchorAt(*v)
+	}
+	return _u
+}
+
+// ClearRetentionAnchorAt clears the value of the "retention_anchor_at" field.
+func (_u *SyncTaskUpdate) ClearRetentionAnchorAt() *SyncTaskUpdate {
+	_u.mutation.ClearRetentionAnchorAt()
 	return _u
 }
 
@@ -368,6 +470,16 @@ func (_u *SyncTaskUpdate) check() error {
 			return &ValidationError{Name: "processed_segments", err: fmt.Errorf(`ent: validator failed for field "SyncTask.processed_segments": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.CheckpointVersion(); ok {
+		if err := synctask.CheckpointVersionValidator(v); err != nil {
+			return &ValidationError{Name: "checkpoint_version", err: fmt.Errorf(`ent: validator failed for field "SyncTask.checkpoint_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.NextSegmentIndex(); ok {
+		if err := synctask.NextSegmentIndexValidator(v); err != nil {
+			return &ValidationError{Name: "next_segment_index", err: fmt.Errorf(`ent: validator failed for field "SyncTask.next_segment_index": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := synctask.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "SyncTask.status": %w`, err)}
@@ -418,6 +530,24 @@ func (_u *SyncTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedProcessedSegments(); ok {
 		_spec.AddField(synctask.FieldProcessedSegments, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.CheckpointVersion(); ok {
+		_spec.SetField(synctask.FieldCheckpointVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCheckpointVersion(); ok {
+		_spec.AddField(synctask.FieldCheckpointVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.NextSegmentIndex(); ok {
+		_spec.SetField(synctask.FieldNextSegmentIndex, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedNextSegmentIndex(); ok {
+		_spec.AddField(synctask.FieldNextSegmentIndex, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StartedAt(); ok {
+		_spec.SetField(synctask.FieldStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartedAtCleared() {
+		_spec.ClearField(synctask.FieldStartedAt, field.TypeTime)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(synctask.FieldStatus, field.TypeString, value)
 	}
@@ -444,6 +574,18 @@ func (_u *SyncTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.CancelledAtCleared() {
 		_spec.ClearField(synctask.FieldCancelledAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FinishedAt(); ok {
+		_spec.SetField(synctask.FieldFinishedAt, field.TypeTime, value)
+	}
+	if _u.mutation.FinishedAtCleared() {
+		_spec.ClearField(synctask.FieldFinishedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(synctask.FieldRetentionAnchorAt, field.TypeTime, value)
+	}
+	if _u.mutation.RetentionAnchorAtCleared() {
+		_spec.ClearField(synctask.FieldRetentionAnchorAt, field.TypeTime)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -670,6 +812,68 @@ func (_u *SyncTaskUpdateOne) AddProcessedSegments(v int) *SyncTaskUpdateOne {
 	return _u
 }
 
+// SetCheckpointVersion sets the "checkpoint_version" field.
+func (_u *SyncTaskUpdateOne) SetCheckpointVersion(v int) *SyncTaskUpdateOne {
+	_u.mutation.ResetCheckpointVersion()
+	_u.mutation.SetCheckpointVersion(v)
+	return _u
+}
+
+// SetNillableCheckpointVersion sets the "checkpoint_version" field if the given value is not nil.
+func (_u *SyncTaskUpdateOne) SetNillableCheckpointVersion(v *int) *SyncTaskUpdateOne {
+	if v != nil {
+		_u.SetCheckpointVersion(*v)
+	}
+	return _u
+}
+
+// AddCheckpointVersion adds value to the "checkpoint_version" field.
+func (_u *SyncTaskUpdateOne) AddCheckpointVersion(v int) *SyncTaskUpdateOne {
+	_u.mutation.AddCheckpointVersion(v)
+	return _u
+}
+
+// SetNextSegmentIndex sets the "next_segment_index" field.
+func (_u *SyncTaskUpdateOne) SetNextSegmentIndex(v int) *SyncTaskUpdateOne {
+	_u.mutation.ResetNextSegmentIndex()
+	_u.mutation.SetNextSegmentIndex(v)
+	return _u
+}
+
+// SetNillableNextSegmentIndex sets the "next_segment_index" field if the given value is not nil.
+func (_u *SyncTaskUpdateOne) SetNillableNextSegmentIndex(v *int) *SyncTaskUpdateOne {
+	if v != nil {
+		_u.SetNextSegmentIndex(*v)
+	}
+	return _u
+}
+
+// AddNextSegmentIndex adds value to the "next_segment_index" field.
+func (_u *SyncTaskUpdateOne) AddNextSegmentIndex(v int) *SyncTaskUpdateOne {
+	_u.mutation.AddNextSegmentIndex(v)
+	return _u
+}
+
+// SetStartedAt sets the "started_at" field.
+func (_u *SyncTaskUpdateOne) SetStartedAt(v time.Time) *SyncTaskUpdateOne {
+	_u.mutation.SetStartedAt(v)
+	return _u
+}
+
+// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
+func (_u *SyncTaskUpdateOne) SetNillableStartedAt(v *time.Time) *SyncTaskUpdateOne {
+	if v != nil {
+		_u.SetStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (_u *SyncTaskUpdateOne) ClearStartedAt() *SyncTaskUpdateOne {
+	_u.mutation.ClearStartedAt()
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *SyncTaskUpdateOne) SetStatus(v string) *SyncTaskUpdateOne {
 	_u.mutation.SetStatus(v)
@@ -769,6 +973,46 @@ func (_u *SyncTaskUpdateOne) SetNillableCancelledAt(v *time.Time) *SyncTaskUpdat
 // ClearCancelledAt clears the value of the "cancelled_at" field.
 func (_u *SyncTaskUpdateOne) ClearCancelledAt() *SyncTaskUpdateOne {
 	_u.mutation.ClearCancelledAt()
+	return _u
+}
+
+// SetFinishedAt sets the "finished_at" field.
+func (_u *SyncTaskUpdateOne) SetFinishedAt(v time.Time) *SyncTaskUpdateOne {
+	_u.mutation.SetFinishedAt(v)
+	return _u
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_u *SyncTaskUpdateOne) SetNillableFinishedAt(v *time.Time) *SyncTaskUpdateOne {
+	if v != nil {
+		_u.SetFinishedAt(*v)
+	}
+	return _u
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (_u *SyncTaskUpdateOne) ClearFinishedAt() *SyncTaskUpdateOne {
+	_u.mutation.ClearFinishedAt()
+	return _u
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_u *SyncTaskUpdateOne) SetRetentionAnchorAt(v time.Time) *SyncTaskUpdateOne {
+	_u.mutation.SetRetentionAnchorAt(v)
+	return _u
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_u *SyncTaskUpdateOne) SetNillableRetentionAnchorAt(v *time.Time) *SyncTaskUpdateOne {
+	if v != nil {
+		_u.SetRetentionAnchorAt(*v)
+	}
+	return _u
+}
+
+// ClearRetentionAnchorAt clears the value of the "retention_anchor_at" field.
+func (_u *SyncTaskUpdateOne) ClearRetentionAnchorAt() *SyncTaskUpdateOne {
+	_u.mutation.ClearRetentionAnchorAt()
 	return _u
 }
 
@@ -902,6 +1146,16 @@ func (_u *SyncTaskUpdateOne) check() error {
 			return &ValidationError{Name: "processed_segments", err: fmt.Errorf(`ent: validator failed for field "SyncTask.processed_segments": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.CheckpointVersion(); ok {
+		if err := synctask.CheckpointVersionValidator(v); err != nil {
+			return &ValidationError{Name: "checkpoint_version", err: fmt.Errorf(`ent: validator failed for field "SyncTask.checkpoint_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.NextSegmentIndex(); ok {
+		if err := synctask.NextSegmentIndexValidator(v); err != nil {
+			return &ValidationError{Name: "next_segment_index", err: fmt.Errorf(`ent: validator failed for field "SyncTask.next_segment_index": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := synctask.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "SyncTask.status": %w`, err)}
@@ -969,6 +1223,24 @@ func (_u *SyncTaskUpdateOne) sqlSave(ctx context.Context) (_node *SyncTask, err 
 	if value, ok := _u.mutation.AddedProcessedSegments(); ok {
 		_spec.AddField(synctask.FieldProcessedSegments, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.CheckpointVersion(); ok {
+		_spec.SetField(synctask.FieldCheckpointVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCheckpointVersion(); ok {
+		_spec.AddField(synctask.FieldCheckpointVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.NextSegmentIndex(); ok {
+		_spec.SetField(synctask.FieldNextSegmentIndex, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedNextSegmentIndex(); ok {
+		_spec.AddField(synctask.FieldNextSegmentIndex, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StartedAt(); ok {
+		_spec.SetField(synctask.FieldStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartedAtCleared() {
+		_spec.ClearField(synctask.FieldStartedAt, field.TypeTime)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(synctask.FieldStatus, field.TypeString, value)
 	}
@@ -995,6 +1267,18 @@ func (_u *SyncTaskUpdateOne) sqlSave(ctx context.Context) (_node *SyncTask, err 
 	}
 	if _u.mutation.CancelledAtCleared() {
 		_spec.ClearField(synctask.FieldCancelledAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FinishedAt(); ok {
+		_spec.SetField(synctask.FieldFinishedAt, field.TypeTime, value)
+	}
+	if _u.mutation.FinishedAtCleared() {
+		_spec.ClearField(synctask.FieldFinishedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(synctask.FieldRetentionAnchorAt, field.TypeTime, value)
+	}
+	if _u.mutation.RetentionAnchorAtCleared() {
+		_spec.ClearField(synctask.FieldRetentionAnchorAt, field.TypeTime)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{

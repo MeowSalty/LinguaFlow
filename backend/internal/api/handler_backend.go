@@ -10,10 +10,13 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
 type createBackendRequest struct {
+	Secret             *string        `json:"secret"`
+	CredentialID       *int           `json:"credential_id"`
 	Name               string         `json:"name"`
 	Type               string         `json:"type"`
 	Options            BackendOptions `json:"options"`
@@ -21,6 +24,8 @@ type createBackendRequest struct {
 }
 
 type updateBackendRequest struct {
+	Secret             *string        `json:"secret"`
+	CredentialID       *int           `json:"credential_id"`
 	Name               string         `json:"name"`
 	Type               string         `json:"type"`
 	Options            BackendOptions `json:"options"`
@@ -40,18 +45,22 @@ func backendOptionsToMap(opts BackendOptions) (map[string]any, error) {
 }
 
 type backendResponse struct {
-	ID                 int            `json:"id"`
-	Scope              string         `json:"scope"`
-	Name               string         `json:"name"`
-	Type               string         `json:"type"`
-	Options            map[string]any `json:"options,omitempty"`
-	RateLimitPerMinute int            `json:"rate_limit_per_minute"`
-	OwnerUserID        *int           `json:"owner_user_id,omitempty"`
-	OwnerOrgID         *int           `json:"owner_org_id,omitempty"`
+	Credential         credential.Binding `json:"credential"`
+	HasSecret          bool               `json:"has_secret"`
+	ID                 int                `json:"id"`
+	Scope              string             `json:"scope"`
+	Name               string             `json:"name"`
+	Type               string             `json:"type"`
+	Options            map[string]any     `json:"options,omitempty"`
+	RateLimitPerMinute int                `json:"rate_limit_per_minute"`
+	OwnerUserID        *int               `json:"owner_user_id,omitempty"`
+	OwnerOrgID         *int               `json:"owner_org_id,omitempty"`
 }
 
 func toBackendResponse(record *service.BackendRecord, showOptions bool) backendResponse {
 	resp := backendResponse{
+		Credential:         record.Credential,
+		HasSecret:          record.HasSecret,
 		ID:                 record.ID,
 		Scope:              record.Scope,
 		Name:               record.Name,
@@ -94,6 +103,7 @@ func (s *Server) handleCreateUserBackend(w http.ResponseWriter, r *http.Request)
 		Scope:       service.ScopeUser,
 		OwnerUserID: &userID,
 		BackendInput: service.BackendInput{
+			Secret: req.Secret, CredentialID: req.CredentialID,
 			Name:    req.Name,
 			Type:    req.Type,
 			Options: optionsMap,
@@ -144,6 +154,7 @@ func (s *Server) handleUpdateUserBackend(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	input := service.BackendInput{
+		Secret: req.Secret, CredentialID: req.CredentialID,
 		Name:    req.Name,
 		Type:    req.Type,
 		Options: optionsMap,
@@ -204,6 +215,7 @@ func (s *Server) handleCreateOrgBackend(w http.ResponseWriter, r *http.Request) 
 		Scope:      service.ScopeOrg,
 		OwnerOrgID: &orgID,
 		BackendInput: service.BackendInput{
+			Secret: req.Secret, CredentialID: req.CredentialID,
 			Name:    req.Name,
 			Type:    req.Type,
 			Options: optionsMap,
@@ -266,6 +278,7 @@ func (s *Server) handleUpdateOrgBackend(w http.ResponseWriter, r *http.Request) 
 	}
 	// Update 内部通过 requireOwnership 验证 org 管理员权限
 	input := service.BackendInput{
+		Secret: req.Secret, CredentialID: req.CredentialID,
 		Name:    req.Name,
 		Type:    req.Type,
 		Options: optionsMap,
@@ -313,6 +326,14 @@ func (s *Server) writeBackendServiceError(w http.ResponseWriter, r *http.Request
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "后端来源无效")
 	case errors.Is(err, service.ErrInvalidInput):
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
+	case errors.Is(err, credential.ErrInvalid), errors.Is(err, credential.ErrEndpoint):
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_credential", "凭据字段或绑定端点不合法")
+	case errors.Is(err, credential.ErrOwnership):
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "凭据归属不匹配")
+	case errors.Is(err, credential.ErrUnavailable):
+		s.writeProblem(w, r, http.StatusBadRequest, "credential_unavailable", "缺少有效凭据引用；创建时提供 secret 或 credential_id")
+	case errors.Is(err, credential.ErrRevoked):
+		s.writeProblem(w, r, http.StatusConflict, "credential_revoked", "凭据版本已撤销，请显式轮换后创建新执行")
 	default:
 		s.writeServiceError(w, r, err)
 	}
@@ -320,7 +341,7 @@ func (s *Server) writeBackendServiceError(w http.ResponseWriter, r *http.Request
 
 type listBackendModelsRequest struct {
 	Type    string `json:"type"`
-	APIKey  string `json:"api_key"`
+	Secret  string `json:"secret"`
 	BaseURL string `json:"base_url"`
 }
 
@@ -333,11 +354,11 @@ func (s *Server) handleListBackendModels(w http.ResponseWriter, r *http.Request)
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	if strings.TrimSpace(req.APIKey) == "" {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "api_key 不能为空")
+	if strings.TrimSpace(req.Secret) == "" {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "secret 不能为空")
 		return
 	}
-	opts := map[string]any{"api_key": strings.TrimSpace(req.APIKey)}
+	opts := map[string]any{"api_key": req.Secret}
 	if strings.TrimSpace(req.BaseURL) != "" {
 		opts["base_url"] = strings.TrimSpace(req.BaseURL)
 	}
@@ -371,7 +392,7 @@ func (s *Server) writeBackendModelListError(w http.ResponseWriter, r *http.Reque
 			// 将上游 4xx 错误统一映射为 400，避免与前端全局鉴权 401 拦截器冲突
 			// 同时在响应体中保留原始状态码和错误信息
 			if code >= 400 && code < 500 {
-				msg := fmt.Sprintf("拉取模型列表失败 (上游返回 %d: %s)", code, se.Err.Error())
+				msg := fmt.Sprintf("拉取模型列表失败 (上游返回 %d)", code)
 				s.writeProblem(w, r, http.StatusBadRequest, "upstream_error", msg)
 				return
 			}

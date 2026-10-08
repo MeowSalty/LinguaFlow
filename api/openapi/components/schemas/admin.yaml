@@ -64,6 +64,7 @@ SystemStats:
       type: integer
     total_jobs:
       type: integer
+      description: 当前保留的翻译任务记录数量，会随历史删除减少，不是永久累计任务数。
     total_resources:
       type: integer
 
@@ -80,16 +81,31 @@ AdminAuditLogListResponse:
 
 SystemSettingsResponse:
   type: object
+  additionalProperties: false
+  required: [settings]
   properties:
     settings:
       type: object
-      additionalProperties:
-        type: string
+      additionalProperties: false
+      required: [registration_enabled, task_retention]
+      properties:
+        task_retention:
+          $ref: './task-retention.yaml#/TaskRetentionPolicy'
+        registration_enabled:
+          type: boolean
+          description: 是否允许公开注册；公开注册账户始终为普通用户。
 
 UpdateSystemSettingsRequest:
   type: object
+  additionalProperties: false
+  required: [settings]
   properties:
     settings:
       type: object
-      additionalProperties:
-        type: string
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        task_retention:
+          $ref: './task-retention.yaml#/TaskRetentionPatch'
+        registration_enabled:
+          type: boolean

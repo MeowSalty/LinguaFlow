@@ -163,6 +163,33 @@ func TestFactory_InvalidThinkingLevel(t *testing.T) {
 	}
 }
 
+func TestFrozenThinkingBudgetOverridesCurrentCalculation(t *testing.T) {
+	for _, level := range []string{"high", "off", ""} {
+		t.Run(level, func(t *testing.T) {
+			opts := map[string]any{"api_key": "key", "model": "claude", "max_tokens": 8192, "thinking_budget_tokens": 1536}
+			if level != "" {
+				opts["thinking_level"] = level
+			}
+			created, err := factory(backend.Config{Options: opts})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer created.Close()
+			params, _, err := created.(*Backend).buildParams(backend.Request{User: "hello"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if level == "high" {
+				if params.Thinking.OfEnabled == nil || params.Thinking.OfEnabled.BudgetTokens != 1536 {
+					t.Fatalf("frozen budget lost: %+v", params.Thinking)
+				}
+			} else if params.Thinking.OfEnabled != nil {
+				t.Fatal("budget must not implicitly enable thinking")
+			}
+		})
+	}
+}
+
 // TestResponseFromMessage_TruncatedSignal 验证截断（stop_reason=max_tokens）一等化：
 // 非空文本/tool input → 正常返回 Response 且 Truncated=true（不再报错丢弃）；
 // 空内容 → EmptyResponseError（不可重试，携带 stop reason）。

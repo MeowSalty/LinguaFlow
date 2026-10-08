@@ -2,9 +2,9 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type authRequestRegister struct {
@@ -97,11 +97,12 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	if _, ok := authUserFromContext(r.Context()); !ok {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	if err := s.authService.Logout(r.Context(), req.RefreshToken); err != nil {
+	if err := s.authService.Logout(r.Context(), authUser.User.ID, req.RefreshToken); err != nil {
 		s.writeServiceError(w, r, err)
 		return
 	}
@@ -113,8 +114,8 @@ func newAuthSessionResponse(session *service.Session) authSessionResponse {
 		AccessToken:      session.AccessToken,
 		RefreshToken:     session.RefreshToken,
 		TokenType:        "Bearer",
-		ExpiresAt:        session.AccessExpiresAt.UTC().Format(time.RFC3339),
-		RefreshExpiresAt: session.RefreshExpiresAt.UTC().Format(time.RFC3339),
+		ExpiresAt:        timeutil.Format(session.AccessExpiresAt),
+		RefreshExpiresAt: timeutil.Format(session.RefreshExpiresAt),
 		User: authUserResponse{
 			ID:          session.User.ID,
 			Username:    session.User.Username,

@@ -1,7 +1,7 @@
 package schema
 
 import (
-	"time"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
@@ -23,13 +23,14 @@ const (
 	SegmentRevisionStatusRejected   = "rejected"
 )
 
-// SegmentRevision stores the before and after snapshots for a segment change.
+// SegmentRevision 保存分段变更前后的快照。
 type SegmentRevision struct {
 	ent.Schema
 }
 
 func (SegmentRevision) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int64("source_generation").Default(0).NonNegative(),
 		field.Int("segment_id").Positive(),
 		field.Int("resource_id").Positive(),
 		field.String("operation_id").NotEmpty(),
@@ -58,7 +59,7 @@ func (SegmentRevision) Fields() []ent.Field {
 		field.JSON("before_issues", []qa.QualityIssue{}).Optional(),
 		field.JSON("after_issues", []qa.QualityIssue{}).Optional(),
 		field.Int("actor_id").Positive(),
-		field.Time("created_at").Default(time.Now).Immutable(),
+		field.Time("created_at").Default(timeutil.NowUTC).Immutable(),
 	}
 }
 

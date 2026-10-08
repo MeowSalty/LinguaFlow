@@ -9,6 +9,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -92,8 +93,8 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 		SourceText:    row.SourceText,
 		Status:        string(row.Status),
 		ReviewComment: row.ReviewComment,
-		CreatedAt:     row.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:     row.UpdatedAt.Format(timeRFC3339),
+		CreatedAt:     timeutil.Format(row.CreatedAt),
+		UpdatedAt:     timeutil.Format(row.UpdatedAt),
 	}
 	if row.TargetText != nil {
 		resp.TargetText = *row.TargetText
@@ -159,7 +160,7 @@ func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 			s.writeReviewServiceError(w, r, err)
 			return
 		}
-		_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.approve", ResourceType: "segment", ResourceID: segmentID, Message: "审批通过段落"})
+		_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &projectID, Action: "segment.approve", ResourceType: "segment", ResourceID: segmentID, Message: "审批通过段落"})
 		writeJSON(w, http.StatusOK, toSegmentResponse(updated))
 
 	case "reject":
@@ -172,7 +173,7 @@ func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 			s.writeReviewServiceError(w, r, err)
 			return
 		}
-		_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.reject", ResourceType: "segment", ResourceID: segmentID, Message: "审批拒绝段落"})
+		_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &projectID, Action: "segment.reject", ResourceType: "segment", ResourceID: segmentID, Message: "审批拒绝段落"})
 		writeJSON(w, http.StatusOK, toSegmentResponse(updated))
 
 	default:
@@ -228,15 +229,14 @@ func (s *Server) handleSetIssueDisposition(w http.ResponseWriter, r *http.Reques
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{
 		ActorUserID:  authUser.User.ID,
+		ProjectID:    &projectID,
 		Action:       "segment.issue_disposition",
 		ResourceType: "segment",
 		ResourceID:   segmentID,
 		Message:      "裁决质量问题",
 		Metadata: map[string]any{
-			"code":         req.Code,
-			"matched_text": req.MatchedText,
-			"disposition":  disposition,
-			"note":         note,
+			"code":        req.Code,
+			"disposition": disposition,
 		},
 	})
 	writeJSON(w, http.StatusOK, toSegmentResponse(updated))
@@ -282,7 +282,7 @@ func (s *Server) handleBatchReviewSegments(w http.ResponseWriter, r *http.Reques
 	for _, row := range updated {
 		items = append(items, toSegmentResponse(row))
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.batch_review", ResourceType: "resource", ResourceID: resourceID, Message: "批量审核段落"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &projectID, Action: "segment.batch_review", ResourceType: "resource", ResourceID: resourceID, Message: "批量审核段落"})
 	writeJSON(w, http.StatusOK, batchReviewResponse{Items: items})
 }
 
@@ -308,7 +308,7 @@ func (s *Server) handleApproveAllResourceSegments(w http.ResponseWriter, r *http
 		return
 	}
 
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.approve_all", ResourceType: "resource", ResourceID: resourceID, Message: "批准所有段落"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &projectID, Action: "segment.approve_all", ResourceType: "resource", ResourceID: resourceID, Message: "批准所有段落"})
 	writeJSON(w, http.StatusOK, approveAllResponse{ApprovedCount: count})
 }
 
@@ -334,6 +334,6 @@ func (s *Server) handleRetranslateRejected(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.retranslate_rejected", ResourceType: "resource", ResourceID: resourceID, Message: "重置被拒绝段落"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &projectID, Action: "segment.retranslate_rejected", ResourceType: "resource", ResourceID: resourceID, Message: "重置被拒绝段落"})
 	writeJSON(w, http.StatusOK, retranslateResponse{ResetCount: count})
 }

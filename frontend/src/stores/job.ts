@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-
+import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import {
   type ApiSchemas,
   cancelJob as cancelJobRequest,
@@ -10,21 +9,29 @@ import {
   resumeJob as resumeJobRequest,
   retryJob as retryJobRequest,
 } from '@/api/client'
+import {
+  assertSessionCurrent,
+  captureSession,
+  isSessionCurrent,
+  onSessionChange,
+  StaleSessionError,
+} from '@/api/session-context'
+import { ApiError, isAccessDenied } from '@/api/utils'
 import { t } from '@/i18n'
 import { extractErrorMessage } from '@/utils/errors'
+import { useOperationsStore } from './operations'
+import { useTaskMutationsStore } from './taskMutations'
+import { taskHistoryErrorMessage, type TaskHistoryTarget } from '@/api/task-history'
 
 type Job = ApiSchemas['Job']
 type CreateJobRequest = ApiSchemas['CreateJobRequest']
-
+type JobAction = 'cancel' | 'retry' | 'pause' | 'resume'
 export type JobStatusFilter = Job['status'] | 'all'
 
-const upsertById = <T extends { id: number }>(items: T[], item: T): T[] => [
-  item,
-  ...items.filter((current) => current.id !== item.id),
-]
-
 export const useJobStore = defineStore('job', () => {
-  // ── 任务状态 ──
+  const operations = useOperationsStore()
+  const mutations = useTaskMutationsStore()
+  const historyGenerations = new Map<number, number>()
   const jobs = ref<Job[]>([])
   const jobsCursor = ref<string | null>(null)
   const loadingJobs = ref(false)
@@ -35,131 +42,321 @@ export const useJobStore = defineStore('job', () => {
   const pausingJobIds = ref<number[]>([])
   const resumingJobIds = ref<number[]>([])
   const actionError = ref<string | null>(null)
-
-  // ── 轮询状态 ──
   const activePollingJobIds = ref<Set<number>>(new Set())
-
-  // ── 筛选器 ──
   const jobStatusFilter = ref<JobStatusFilter>('all')
+  let project: number | null = null
+  let viewGeneration = 0
+  let listGeneration = 0
+  let disposed = false
+  let listFlight: { key: string; promise: Promise<void> } | null = null
+  let createFlight: Promise<Job> | null = null
+  const mutationFlights = new Map<number, { action: JobAction; promise: Promise<Job> }>()
+  const pendingIds: Record<JobAction, Ref<number[]>> = {
+    cancel: cancellingJobIds,
+    retry: retryingJobIds,
+    pause: pausingJobIds,
+    resume: resumingJobIds,
+  }
+  const requests = {
+    cancel: cancelJobRequest,
+    retry: retryJobRequest,
+    pause: pauseJobRequest,
+    resume: resumeJobRequest,
+  }
+  const errors = {
+    cancel: 'api.errors.cancelJobFailed',
+    retry: 'api.errors.retryJobFailed',
+    pause: 'api.errors.pauseJobFailed',
+    resume: 'api.errors.resumeJobFailed',
+  }
 
-  // ── Actions ──
+  const invalidateList = (): void => {
+    listGeneration++
+    listFlight = null
+    loadingJobs.value = false
+  }
+  const clearActions = (): void => {
+    createFlight = null
+    mutationFlights.clear()
+    creatingJob.value = false
+    for (const ids of Object.values(pendingIds)) ids.value = []
+    actionError.value = null
+  }
+  const activateProject = (projectId: number): void => {
+    if (project === projectId) return
+    project = projectId
+    viewGeneration++
+    invalidateList()
+    jobs.value = []
+    jobsCursor.value = null
+    jobsError.value = null
+    clearActions()
+    activePollingJobIds.value = new Set()
+  }
+  watch(
+    jobStatusFilter,
+    () => {
+      invalidateList()
+      jobs.value = []
+      jobsCursor.value = null
+      jobsError.value = null
+    },
+    { flush: 'sync' },
+  )
 
-  const loadJobs = async (projectId: number, append = false): Promise<void> => {
+  const loadJobs = (projectId: number, append = false): Promise<void> => {
+    if (disposed) return Promise.resolve()
+    activateProject(projectId)
+    const status = jobStatusFilter.value
+    const cursor = append ? jobsCursor.value : null
+    if (append && !cursor) return Promise.resolve()
+    const key = JSON.stringify([projectId, status, cursor])
+    if (listFlight?.key === key) return listFlight.promise
+    const session = captureSession()
+    const capabilityStamp = operations.beginCapabilityRead()
+    const generation = ++listGeneration
+    const current = () =>
+      !disposed &&
+      isSessionCurrent(session) &&
+      generation === listGeneration &&
+      project === projectId &&
+      jobStatusFilter.value === status
     loadingJobs.value = true
     jobsError.value = null
-
-    try {
-      const response = await fetchJobs(projectId, {
-        status: jobStatusFilter.value === 'all' ? undefined : jobStatusFilter.value,
-        cursor: append ? (jobsCursor.value ?? undefined) : undefined,
-        limit: 50,
-      })
-      jobs.value = append ? [...jobs.value, ...response.items] : response.items
-      jobsCursor.value = response.next_cursor ?? null
-    } catch (error) {
-      jobsError.value = extractErrorMessage(error, t('api.errors.fetchJobsFailed'))
-    } finally {
-      loadingJobs.value = false
+    const work = async (): Promise<void> => {
+      try {
+        const response = await fetchJobs(projectId, {
+          status: status === 'all' ? undefined : status,
+          cursor: cursor ?? undefined,
+          limit: 50,
+        })
+        if (!current()) return
+        operations.observeCapabilities(
+          response.items.map((item) => ({
+            kind: 'translation' as const,
+            id: String(item.id),
+            project_id: item.project_id,
+            status: item.status,
+            can_delete: item.can_delete,
+          })),
+          capabilityStamp,
+        )
+        const items = append ? [...jobs.value, ...response.items] : response.items
+        jobs.value = [...new Map(items.map((item) => [item.id, item])).values()]
+        jobsCursor.value = response.next_cursor ?? null
+      } catch (error) {
+        if (!current()) return
+        if (isAccessDenied(error)) {
+          jobs.value = []
+          jobsCursor.value = null
+          operations.removeProject(projectId)
+        }
+        jobsError.value = extractErrorMessage(error, t('api.errors.fetchJobsFailed'))
+      } finally {
+        if (current()) {
+          loadingJobs.value = false
+          listFlight = null
+        }
+      }
     }
+    const promise = work()
+    listFlight = { key, promise }
+    return promise
   }
 
-  const createJob = async (projectId: number, payload: CreateJobRequest): Promise<Job> => {
+  const accept = (job: Job): void => {
+    if (project !== null && job.project_id !== project) return
+    operations.observeCapabilities([
+      {
+        kind: 'translation',
+        id: String(job.id),
+        project_id: job.project_id,
+        status: job.status,
+        can_delete: job.can_delete,
+      },
+    ])
+    invalidateList()
+    const rest = jobs.value.filter((item) => item.id !== job.id)
+    jobs.value =
+      jobStatusFilter.value === 'all' || job.status === jobStatusFilter.value
+        ? [job, ...rest]
+        : rest
+  }
+  const forget = (jobId: number): void => {
+    historyGenerations.set(jobId, (historyGenerations.get(jobId) ?? 0) + 1)
+    invalidateList()
+    jobs.value = jobs.value.filter((item) => item.id !== jobId)
+    operations.forget({ task_type: 'translation', task_id: String(jobId) })
+  }
+  const removeHistories = (targets: TaskHistoryTarget[]): void => {
+    const ids = new Set(
+      targets.filter((target) => target.kind === 'translation').map((target) => target.id),
+    )
+    if (!ids.size) return
+    for (const id of ids) {
+      const number = Number(id)
+      historyGenerations.set(number, (historyGenerations.get(number) ?? 0) + 1)
+      mutationFlights.delete(number)
+    }
+    for (const pending of Object.values(pendingIds))
+      pending.value = pending.value.filter((id) => !ids.has(String(id)))
+    invalidateList()
+    jobs.value = jobs.value.filter((item) => !ids.has(String(item.id)))
+    jobsCursor.value = null
+    activePollingJobIds.value = new Set(
+      [...activePollingJobIds.value].filter((id) => !ids.has(String(id))),
+    )
+  }
+  const refreshHistory = async (): Promise<void> => {
+    if (project !== null) await loadJobs(project)
+  }
+  const invalidateOperations = (): void => {
+    // A successful write is complete even if the independent refresh subsequently fails.
+    void operations.invalidate().catch(() => {})
+  }
+  const conflictRefresh = async (projectId: number | null, jobId?: number): Promise<void> => {
+    const session = captureSession()
+    const generation = viewGeneration
+    const current = () => !disposed && isSessionCurrent(session) && generation === viewGeneration
+    if (jobId !== undefined) {
+      try {
+        const fresh = await operations.queryTranslation(String(jobId))
+        if (current()) accept(fresh)
+      } catch (error) {
+        if (current() && isAccessDenied(error)) forget(jobId)
+      }
+    }
+    if (current() && projectId !== null) await loadJobs(projectId)
+  }
+
+  const createJob = (projectId: number, payload: CreateJobRequest): Promise<Job> => {
+    if (disposed) return Promise.reject(new StaleSessionError())
+    activateProject(projectId)
+    if (createFlight) return createFlight
+    const session = captureSession()
+    const generation = viewGeneration
+    const current = () => !disposed && isSessionCurrent(session) && generation === viewGeneration
     creatingJob.value = true
     actionError.value = null
-
-    try {
-      const job = await createJobRequest(projectId, payload)
-      jobs.value = upsertById(jobs.value, job)
-      return job
-    } catch (error) {
-      actionError.value = extractErrorMessage(error, t('api.errors.createJobFailed'))
-      throw error
-    } finally {
-      creatingJob.value = false
+    const work = async (): Promise<Job> => {
+      try {
+        const job = await createJobRequest(projectId, payload)
+        assertSessionCurrent(session)
+        if (disposed) throw new StaleSessionError()
+        if (current()) accept(job)
+        invalidateOperations()
+        return job
+      } catch (error) {
+        if (current()) {
+          if (isAccessDenied(error)) {
+            jobs.value = []
+            operations.removeProject(projectId)
+          }
+          if (error instanceof ApiError && error.status === 409) await conflictRefresh(projectId)
+          if (current())
+            actionError.value = extractErrorMessage(error, t('api.errors.createJobFailed'))
+        }
+        throw error
+      } finally {
+        if (current()) {
+          creatingJob.value = false
+          createFlight = null
+        }
+      }
     }
+    createFlight = work()
+    return createFlight
   }
 
+  const mutate = (action: JobAction, jobId: number): Promise<Job> => {
+    if (disposed) return Promise.reject(new StaleSessionError())
+    const pending = mutationFlights.get(jobId)
+    if (pending)
+      return pending.action === action
+        ? pending.promise
+        : Promise.reject(new ApiError(t('workbench.details.conflict'), 409))
+    const session = captureSession()
+    const generation = viewGeneration
+    const projectId = jobs.value.find((item) => item.id === jobId)?.project_id ?? project
+    const history = historyGenerations.get(jobId) ?? 0
+    const current = () =>
+      !disposed &&
+      isSessionCurrent(session) &&
+      generation === viewGeneration &&
+      history === (historyGenerations.get(jobId) ?? 0)
+    const ids = pendingIds[action]
+    ids.value = [...ids.value, jobId]
+    actionError.value = null
+    const work = async (): Promise<Job> => {
+      try {
+        if (projectId == null) throw new ApiError(t('operations.inaccessible'), 403)
+        const job = await mutations.run(
+          [{ kind: 'translation', id: String(jobId), project_id: projectId }],
+          action,
+          () => requests[action](jobId),
+        )
+        assertSessionCurrent(session)
+        if (disposed || history !== (historyGenerations.get(jobId) ?? 0))
+          throw new StaleSessionError()
+        if (current()) accept(job)
+        invalidateOperations()
+        return job
+      } catch (error) {
+        if (current()) {
+          if (isAccessDenied(error)) forget(jobId)
+          if (error instanceof ApiError && error.status === 409)
+            await conflictRefresh(projectId, jobId)
+          if (current())
+            actionError.value =
+              error instanceof ApiError && error.status === 409
+                ? taskHistoryErrorMessage(error)
+                : extractErrorMessage(error, t(errors[action]))
+        }
+        throw error
+      } finally {
+        if (current()) {
+          ids.value = ids.value.filter((id) => id !== jobId)
+          mutationFlights.delete(jobId)
+        }
+      }
+    }
+    const promise = work()
+    mutationFlights.set(jobId, { action, promise })
+    return promise
+  }
   const cancelJob = async (jobId: number): Promise<void> => {
-    cancellingJobIds.value = [...cancellingJobIds.value, jobId]
-    actionError.value = null
-
-    try {
-      const job = await cancelJobRequest(jobId)
-      jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
-    } catch (error) {
-      actionError.value = extractErrorMessage(error, t('api.errors.cancelJobFailed'))
-      throw error
-    } finally {
-      cancellingJobIds.value = cancellingJobIds.value.filter((id) => id !== jobId)
-    }
+    await mutate('cancel', jobId)
   }
-
   const retryJob = async (jobId: number): Promise<void> => {
-    retryingJobIds.value = [...retryingJobIds.value, jobId]
-    actionError.value = null
-
-    try {
-      const job = await retryJobRequest(jobId)
-      jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
-    } catch (error) {
-      actionError.value = extractErrorMessage(error, t('api.errors.retryJobFailed'))
-      throw error
-    } finally {
-      retryingJobIds.value = retryingJobIds.value.filter((id) => id !== jobId)
-    }
+    await mutate('retry', jobId)
   }
-
-  const pauseJob = async (jobId: number): Promise<void> => {
-    pausingJobIds.value = [...pausingJobIds.value, jobId]
-    actionError.value = null
-
-    try {
-      const job = await pauseJobRequest(jobId)
-      jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
-    } catch (error) {
-      actionError.value = extractErrorMessage(error, t('api.errors.pauseJobFailed'))
-      throw error
-    } finally {
-      pausingJobIds.value = pausingJobIds.value.filter((id) => id !== jobId)
-    }
-  }
-
+  const pauseJob = (jobId: number): Promise<Job> => mutate('pause', jobId)
   const resumeJob = async (jobId: number): Promise<void> => {
-    resumingJobIds.value = [...resumingJobIds.value, jobId]
-    actionError.value = null
-
-    try {
-      const job = await resumeJobRequest(jobId)
-      jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
-    } catch (error) {
-      actionError.value = extractErrorMessage(error, t('api.errors.resumeJobFailed'))
-      throw error
-    } finally {
-      resumingJobIds.value = resumingJobIds.value.filter((id) => id !== jobId)
-    }
+    await mutate('resume', jobId)
   }
-
-  // ── 轮询控制 ──
   const startPolling = (jobId: number): void => {
     activePollingJobIds.value = new Set([...activePollingJobIds.value, jobId])
   }
-
   const stopPolling = (jobId: number): void => {
-    const next = new Set(activePollingJobIds.value)
-    next.delete(jobId)
-    activePollingJobIds.value = next
+    activePollingJobIds.value = new Set([...activePollingJobIds.value].filter((id) => id !== jobId))
   }
-
   const isPolling = (jobId: number): boolean => activePollingJobIds.value.has(jobId)
-
   const reset = (): void => {
+    viewGeneration++
+    invalidateList()
+    project = null
     jobs.value = []
     jobsCursor.value = null
     jobsError.value = null
     jobStatusFilter.value = 'all'
-    actionError.value = null
+    clearActions()
     activePollingJobIds.value = new Set()
   }
+  onScopeDispose(onSessionChange(reset))
+  onScopeDispose(() => {
+    disposed = true
+    reset()
+  })
 
   return {
     jobs,
@@ -177,6 +374,8 @@ export const useJobStore = defineStore('job', () => {
     stopPolling,
     isPolling,
     loadJobs,
+    removeHistories,
+    refreshHistory,
     createJob,
     cancelJob,
     retryJob,

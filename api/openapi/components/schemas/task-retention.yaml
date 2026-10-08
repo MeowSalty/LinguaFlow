@@ -1,0 +1,291 @@
+TaskFinishedAt:
+  type: string
+  format: date-time
+  nullable: true
+  readOnly: true
+  x-omitempty: false
+  description: 最后一次执行的真实结束时间；活动任务或旧任务结束时间无法确认时为 null，重试清空。
+
+TaskCanDelete:
+  type: boolean
+  readOnly: true
+  x-go-type-skip-optional-pointer: true
+  x-omitempty: false
+  description: 当前身份、状态、执行收尾及屏障的即时投影；不替代删除请求的再次校验。
+
+TaskRetentionPolicy:
+  type: object
+  additionalProperties: false
+  required: [enabled, retention_days, revision]
+  properties:
+    enabled:
+      type: boolean
+      default: false
+    retention_days:
+      type: integer
+      minimum: 1
+      maximum: 3650
+      default: 30
+      description: 完整 24 小时天数；关闭时仍保存该值，两类任务及全部终态使用同一周期。
+    revision:
+      type: integer
+      format: int64
+      minimum: 1
+      maximum: 9007199254740991
+      readOnly: true
+
+TaskRetentionPatch:
+  type: object
+  additionalProperties: false
+  required: [enabled, retention_days, expected_revision]
+  properties:
+    enabled:
+      type: boolean
+    retention_days:
+      type: integer
+      minimum: 1
+      maximum: 3650
+    expected_revision:
+      type: integer
+      format: int64
+      minimum: 1
+      maximum: 9007199254740991
+
+TaskHistoryTarget:
+  type: object
+  additionalProperties: false
+  required: [kind, id, project_id]
+  properties:
+    kind:
+      type: string
+      enum: [translation, glossary_sync]
+    id:
+      type: string
+      pattern: '^[1-9][0-9]*$'
+    project_id:
+      type: integer
+      minimum: 1
+
+TaskHistoryBatchDeleteRequest:
+  type: object
+  additionalProperties: false
+  required: [items]
+  properties:
+    items:
+      type: array
+      minItems: 1
+      maxItems: 100
+      items:
+        $ref: '#/TaskHistoryTarget'
+
+TaskHistoryDeleteResult:
+  type: object
+  required: [kind, id, project_id, status]
+  properties:
+    kind:
+      type: string
+      enum: [translation, glossary_sync]
+    id:
+      type: string
+      pattern: '^[1-9][0-9]*$'
+    project_id:
+      type: integer
+      minimum: 1
+    status:
+      type: string
+      enum: [deleted, not_found, forbidden, not_terminal, busy, blocked, deferred, failed]
+
+TaskHistoryBatchDeleteResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/TaskHistoryDeleteResult'
+
+RetentionCount:
+  type: integer
+  format: int64
+  minimum: 0
+  nullable: true
+  description: 已完成全量统计的数量；未完成或未知为 null，不能把样本当作全站数量。
+
+RetentionExpiredCounts:
+  type: object
+  required: [blocked, busy, deletable]
+  description: 已到期终态按屏障、忙碌、预计可删的优先级互斥归类。
+  properties:
+    blocked:
+      $ref: '#/RetentionCount'
+    busy:
+      $ref: '#/RetentionCount'
+    deletable:
+      $ref: '#/RetentionCount'
+
+RetentionTimingSources:
+  type: object
+  required: [finished_at, legacy_anchor, missing_anchor]
+  description: 终态保留计时来源，属于独立维度，不能与到期分类重复相加。
+  properties:
+    finished_at:
+      $ref: '#/RetentionCount'
+    legacy_anchor:
+      $ref: '#/RetentionCount'
+    missing_anchor:
+      $ref: '#/RetentionCount'
+
+RetentionTerminalAge:
+  type: object
+  required: [lt_1d, days_1_6, days_7_29, days_30_89, days_90_plus, unknown]
+  description: 仅终态，按保留计时起点到 as_of 的 UTC 年龄统计；边界为 [0,1)、[1,7)、[7,30)、[30,90)、[90,+∞) 个 24 小时天，缺少锚点为 unknown。
+  properties:
+    lt_1d:
+      $ref: '#/RetentionCount'
+    days_1_6:
+      $ref: '#/RetentionCount'
+    days_7_29:
+      $ref: '#/RetentionCount'
+    days_30_89:
+      $ref: '#/RetentionCount'
+    days_90_plus:
+      $ref: '#/RetentionCount'
+    unknown:
+      $ref: '#/RetentionCount'
+
+RetentionDependencies:
+  type: object
+  required: [sse_events, job_resources, job_rounds, job_round_segments, credential_job_references]
+  description: 预计可删任务关联行数，不代表磁盘释放字节；不读取正文。
+  properties:
+    sse_events:
+      $ref: '#/RetentionCount'
+    job_resources:
+      $ref: '#/RetentionCount'
+    job_rounds:
+      $ref: '#/RetentionCount'
+    job_round_segments:
+      $ref: '#/RetentionCount'
+    credential_job_references:
+      $ref: '#/RetentionCount'
+
+RetentionTypePreview:
+  type: object
+  required: [active, terminal, missing_anchor, not_expired, expired, timing_sources, terminal_age, deletable_dependencies]
+  properties:
+    active:
+      $ref: '#/RetentionCount'
+    terminal:
+      $ref: '#/RetentionCount'
+    missing_anchor:
+      $ref: '#/RetentionCount'
+    not_expired:
+      $ref: '#/RetentionCount'
+    expired:
+      $ref: '#/RetentionExpiredCounts'
+    timing_sources:
+      $ref: '#/RetentionTimingSources'
+    terminal_age:
+      $ref: '#/RetentionTerminalAge'
+    deletable_dependencies:
+      $ref: '#/RetentionDependencies'
+
+TaskRetentionPreview:
+  type: object
+  required: [policy_revision, retention_days, as_of, cutoff, partial, incomplete_reasons, by_type]
+  properties:
+    policy_revision:
+      type: integer
+      format: int64
+    retention_days:
+      type: integer
+      minimum: 1
+      maximum: 3650
+    as_of:
+      type: string
+      format: date-time
+    cutoff:
+      type: string
+      format: date-time
+    partial:
+      type: boolean
+    incomplete_reasons:
+      type: array
+      items:
+        type: string
+    by_type:
+      type: object
+      required: [translation, glossary_sync]
+      properties:
+        translation:
+          $ref: '#/RetentionTypePreview'
+        glossary_sync:
+          $ref: '#/RetentionTypePreview'
+
+RetentionScanSummary:
+  type: object
+  required: [scan_id, policy_revision, as_of, started_at, finished_at, duration_ms, candidates, deleted, skipped, error_code, completed, legacy_anchor_count, missing_anchor_count]
+  properties:
+    scan_id:
+      type: string
+    policy_revision:
+      type: integer
+      format: int64
+    as_of:
+      type: string
+      format: date-time
+    started_at:
+      type: string
+      format: date-time
+    finished_at:
+      type: string
+      format: date-time
+    duration_ms:
+      type: integer
+      format: int64
+      minimum: 0
+    candidates:
+      type: integer
+      minimum: 0
+    deleted:
+      type: integer
+      minimum: 0
+    skipped:
+      type: object
+      additionalProperties:
+        type: integer
+        minimum: 0
+    error_code:
+      type: string
+    completed:
+      type: boolean
+      description: 是否已经遍历完本次固定候选域。
+    legacy_anchor_count:
+      $ref: '#/RetentionCount'
+    missing_anchor_count:
+      $ref: '#/RetentionCount'
+
+TaskRetentionStatus:
+  type: object
+  required: [task_retention, policy_revision, state, reason_codes, last_scan, backlog]
+  properties:
+    task_retention:
+      $ref: '#/TaskRetentionPolicy'
+    policy_revision:
+      type: integer
+      format: int64
+    state:
+      type: string
+      enum: [disabled, idle, running, blocked, error]
+    reason_codes:
+      type: array
+      items:
+        type: string
+    last_scan:
+      type: object
+      nullable: true
+      allOf:
+        - $ref: '#/RetentionScanSummary'
+    backlog:
+      type: boolean
+      nullable: true

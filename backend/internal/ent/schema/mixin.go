@@ -1,7 +1,7 @@
 package schema
 
 import (
-	"time"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
@@ -14,7 +14,7 @@ type TimeMixin struct {
 
 func (TimeMixin) Fields() []ent.Field {
 	return []ent.Field{
-		field.Time("created_at").Default(time.Now).Immutable(),
-		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
+		field.Time("created_at").Default(timeutil.NowUTC).Immutable(),
+		field.Time("updated_at").Default(timeutil.NowUTC).UpdateDefault(timeutil.NowUTC),
 	}
 }

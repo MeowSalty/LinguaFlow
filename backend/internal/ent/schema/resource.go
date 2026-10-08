@@ -2,6 +2,8 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -17,6 +19,9 @@ func (Resource) Mixin() []ent.Mixin {
 
 func (Resource) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("current_source_revision_id").Optional().Nillable().Positive(),
+		field.Int64("source_generation").Default(0).NonNegative(),
+		field.Int64("translation_generation").Default(0).NonNegative(),
 		field.String("path").NotEmpty().
 			Comment("项目内规范化资源相对路径，如 ui/common.json"),
 		field.String("format").NotEmpty().
@@ -45,4 +50,9 @@ func (Resource) Edges() []ent.Edge {
 		edge.To("segments", Segment.Type),
 		edge.To("job_resources", JobResource.Type),
 	}
+}
+
+// Database checks also cover atomic Add mutations, which skip field validators.
+func (Resource) Annotations() []schema.Annotation {
+	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"resource_source_generation_safe": "source_generation >= 0 AND source_generation <= 9007199254740991", "resource_translation_generation_safe": "translation_generation >= 0 AND translation_generation <= 9007199254740991"}}}
 }

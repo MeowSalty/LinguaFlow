@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref } from 'vue'
 
 import {
   type ApiSchemas,
@@ -10,11 +10,15 @@ import {
   executeGlossarySync,
   exportGlossaryCSV as exportGlossaryCSVRequest,
   fetchGlossaryEntries,
-  getGlossarySyncTaskStatus,
   importGlossaryCSV as importGlossaryCSVRequest,
   updateGlossaryEntry as updateGlossaryEntryRequest,
 } from '@/api/client'
 import { t } from '@/i18n'
+import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
+import { ApiError, isAccessDenied } from '@/api/utils'
+import { useOperationsStore } from './operations'
+import { useTaskMutationsStore } from './taskMutations'
+import { taskHistoryErrorMessage, type TaskHistoryTarget } from '@/api/task-history'
 
 type GlossaryEntry = ApiSchemas['GlossaryEntry']
 type CreateGlossaryEntryPayload = ApiSchemas['CreateGlossaryEntryRequest']
@@ -34,6 +38,8 @@ export type GlossarySyncQueueItem = {
 }
 
 export const useGlossaryStore = defineStore('glossary', () => {
+  const operations = useOperationsStore()
+  const mutations = useTaskMutationsStore()
   const items = ref<GlossaryEntry[]>([])
 
   const loading = ref(false)
@@ -69,6 +75,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
   const syncQueueSyncedAny = ref(false) // 队列中是否至少有一次成功同步
   const syncAdvancing = ref(false) // 队列推进中（防连点重入）
   let syncImpactGeneration = 0 // impact 请求代数，丢弃过期响应
+  let syncRequestController = new AbortController()
 
   // 影响分析
   const syncImpactLoading = ref(false) // 影响分析加载中
@@ -82,8 +89,13 @@ export const useGlossaryStore = defineStore('glossary', () => {
   const syncTaskStatus = ref<SyncTaskStatusResponse['status']>('pending')
   const syncProcessed = ref(0)
   const syncTotal = ref(0)
-  const syncPollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
-  const syncPollingFailCount = ref(0) // 连续轮询失败计数
+  const syncCancelling = ref(false)
+  const syncTaskProjectId = ref<number | null>(null)
+  const syncTaskSnapshot = ref<SyncTaskStatusResponse | null>(null)
+  const syncHistoryRemoved = ref(false)
+  let unsubscribeSync: (() => void) | null = null
+  let syncSubscriptionGeneration = 0
+  let entriesGeneration = 0
 
   // 结果
   const syncResult = ref<SyncTaskStatusResponse['result'] | null>(null)
@@ -120,17 +132,23 @@ export const useGlossaryStore = defineStore('glossary', () => {
   const syncSelectedResourceCount = computed(() => syncSelectedResourceIds.value.length)
 
   const loadEntries = async (projectId: number): Promise<void> => {
+    const session = captureSession()
+    const generation = ++entriesGeneration
+    const current = () => isSessionCurrent(session) && generation === entriesGeneration
     loading.value = true
     error.value = null
 
     try {
       const response = await fetchGlossaryEntries(projectId)
+      if (!current()) return
       items.value = response.items
     } catch (loadError) {
+      if (!current()) return
+      if (isAccessDenied(loadError)) items.value = []
       error.value =
         loadError instanceof Error ? loadError.message : t('api.errors.fetchGlossaryFailed')
     } finally {
-      loading.value = false
+      if (current()) loading.value = false
     }
   }
 
@@ -234,22 +252,11 @@ export const useGlossaryStore = defineStore('glossary', () => {
 
   // ── 同步辅助函数 ──
 
-  const SYNC_POLL_INTERVAL = 500 // 500ms
-  const SYNC_MAX_POLL_FAILURES = 10 // 连续失败上限
   const SYNC_TERMINAL_STATUSES: SyncTaskStatusResponse['status'][] = [
     'completed',
     'failed',
     'cancelled',
   ]
-
-  /**
-   * 从 status_url 中解析 projectId。
-   * status_url 格式示例: /api/projects/123/sync-tasks/xxx
-   */
-  const extractProjectIdFromStatusUrl = (statusUrl: string): number | null => {
-    const match = statusUrl.match(/\/projects\/(\d+)\//)
-    return match ? Number(match[1]) : null
-  }
 
   // ── 同步方法 ──
 
@@ -261,6 +268,8 @@ export const useGlossaryStore = defineStore('glossary', () => {
     newTarget: string,
   ): void => {
     syncImpactGeneration += 1
+    syncHistoryRemoved.value = false
+    syncTaskSnapshot.value = null
     syncStep.value = 'impact'
     syncEntryId.value = entryId
     syncSource.value = source
@@ -273,11 +282,11 @@ export const useGlossaryStore = defineStore('glossary', () => {
     syncResult.value = null
     syncError.value = null
     syncTaskId.value = null
+    syncTaskProjectId.value = null
     syncStatusUrl.value = null
     syncTaskStatus.value = 'pending'
     syncProcessed.value = 0
     syncTotal.value = 0
-    syncPollingFailCount.value = 0
   }
 
   /**
@@ -371,6 +380,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
 
   const loadSyncImpact = async (projectId: number): Promise<void> => {
     if (!syncEntryId.value) return
+    const session = captureSession()
 
     const entryId = syncEntryId.value
     const oldTarget = syncOldTarget.value
@@ -385,33 +395,47 @@ export const useGlossaryStore = defineStore('glossary', () => {
         old_target: oldTarget,
         new_target: newTarget,
       })
-      if (generation !== syncImpactGeneration || syncEntryId.value !== entryId) {
+      if (
+        !isSessionCurrent(session) ||
+        generation !== syncImpactGeneration ||
+        syncEntryId.value !== entryId
+      ) {
         return
       }
       syncImpactData.value = data
       // 默认全选所有资源
       syncSelectedResourceIds.value = data.resources.map((r) => r.resource_id)
     } catch (err) {
-      if (generation !== syncImpactGeneration || syncEntryId.value !== entryId) {
+      if (
+        !isSessionCurrent(session) ||
+        generation !== syncImpactGeneration ||
+        syncEntryId.value !== entryId
+      ) {
         return
       }
       syncImpactError.value =
         err instanceof Error ? err.message : t('workspace.glossary.sync.impactLoadFailed')
     } finally {
-      if (generation === syncImpactGeneration) {
+      if (isSessionCurrent(session) && generation === syncImpactGeneration) {
         syncImpactLoading.value = false
       }
     }
   }
 
   const submitSync = async (projectId: number, mode: 'all' | 'selected'): Promise<void> => {
-    if (!syncEntryId.value) return
+    if (!syncEntryId.value || syncStep.value === 'executing') return
+    if (mode === 'selected' && syncSelectedResourceIds.value.length === 0) {
+      syncImpactError.value = t('workbench.details.selectResources')
+      return
+    }
+    const session = captureSession()
+    const entryId = syncEntryId.value
+    const generation = syncImpactGeneration
 
     syncStep.value = 'executing'
     syncProcessed.value = 0
     syncTotal.value = 0
     syncError.value = null
-    syncPollingFailCount.value = 0
 
     try {
       const payload: SyncExecuteRequest = {
@@ -422,14 +446,18 @@ export const useGlossaryStore = defineStore('glossary', () => {
           : {}),
       }
 
-      const response = await executeGlossarySync(projectId, syncEntryId.value, payload)
+      const response = await executeGlossarySync(projectId, entryId, payload)
+      if (!isSessionCurrent(session) || generation !== syncImpactGeneration) return
       syncTaskId.value = response.task_id
+      syncTaskProjectId.value = projectId
       syncStatusUrl.value = response.status_url
       syncTaskStatus.value = response.status
 
-      // 开始轮询
+      // Subscribe to the one shared scheduler; no dialog-local timer.
       startSyncPolling()
+      void operations.invalidate()
     } catch (err) {
+      if (!isSessionCurrent(session) || generation !== syncImpactGeneration) return
       syncError.value =
         err instanceof Error ? err.message : t('workspace.glossary.sync.executeFailed')
       syncStep.value = 'error'
@@ -438,79 +466,149 @@ export const useGlossaryStore = defineStore('glossary', () => {
 
   const startSyncPolling = (): void => {
     stopSyncPolling()
-    syncPollingFailCount.value = 0
-
-    syncPollingTimer.value = setInterval(async () => {
-      if (!syncStatusUrl.value || !syncTaskId.value) {
-        stopSyncPolling()
-        return
-      }
-
-      try {
-        const projectId = extractProjectIdFromStatusUrl(syncStatusUrl.value)
-        if (projectId === null) {
-          stopSyncPolling()
-          return
-        }
-
-        const status = await getGlossarySyncTaskStatus(projectId, syncTaskId.value)
-        syncTaskStatus.value = status.status
-        syncProcessed.value = status.processed
-        syncTotal.value = status.total
-        syncPollingFailCount.value = 0
-
-        if (SYNC_TERMINAL_STATUSES.includes(status.status)) {
-          stopSyncPolling()
-
-          if (status.status === 'completed') {
-            syncResult.value = status.result ?? null
-            syncStep.value = 'result'
-            const pid = extractProjectIdFromStatusUrl(syncStatusUrl.value)
-            if (pid) await loadEntries(pid)
-          } else if (status.status === 'cancelled') {
-            syncStep.value = 'cancelled'
-            const pid = extractProjectIdFromStatusUrl(syncStatusUrl.value)
-            if (pid) await loadEntries(pid)
-          } else if (status.status === 'failed') {
-            syncError.value = status.error ?? t('workspace.glossary.sync.taskFailed')
-            syncStep.value = 'error'
-          }
-        }
-      } catch (err) {
-        syncPollingFailCount.value++
-        console.warn(
-          `Sync task polling error (${syncPollingFailCount.value}/${SYNC_MAX_POLL_FAILURES}):`,
-          err,
-        )
-
-        if (syncPollingFailCount.value >= SYNC_MAX_POLL_FAILURES) {
-          stopSyncPolling()
-          syncError.value = t('workspace.glossary.sync.networkError')
-          syncStep.value = 'error'
-        }
-      }
-    }, SYNC_POLL_INTERVAL)
+    const projectId = syncTaskProjectId.value
+    const taskId = syncTaskId.value
+    if (!projectId || !taskId || !syncDialogVisible.value) return
+    const session = captureSession()
+    const generation = syncSubscriptionGeneration
+    unsubscribeSync = operations.subscribeTask(
+      { task_type: 'glossary_sync', task_id: taskId, project_id: projectId },
+      (data) => {
+        if (generation !== syncSubscriptionGeneration || !isSessionCurrent(session)) return
+        applySyncStatus(data as SyncTaskStatusResponse, projectId)
+      },
+      (cause) => {
+        if (generation !== syncSubscriptionGeneration || !isSessionCurrent(session)) return
+        if (isAccessDenied(cause)) {
+          removeTaskHistories([{ kind: 'glossary_sync', id: taskId, project_id: projectId }], false)
+          syncError.value = taskHistoryErrorMessage(cause)
+        } else
+          syncError.value =
+            cause instanceof Error ? cause.message : t('workspace.glossary.sync.networkError')
+      },
+      { terminalRecheckMs: 30_000 },
+    )
   }
 
   const stopSyncPolling = (): void => {
-    if (syncPollingTimer.value) {
-      clearInterval(syncPollingTimer.value)
-      syncPollingTimer.value = null
+    syncSubscriptionGeneration++
+    unsubscribeSync?.()
+    unsubscribeSync = null
+  }
+
+  const applySyncStatus = (status: SyncTaskStatusResponse, projectId: number): void => {
+    const transitioned = !SYNC_TERMINAL_STATUSES.includes(syncTaskStatus.value)
+    syncTaskSnapshot.value = status
+    syncTaskStatus.value = status.status
+    syncProcessed.value = status.processed
+    syncTotal.value = status.total
+    syncError.value = null
+    if (!SYNC_TERMINAL_STATUSES.includes(status.status)) return
+    if (status.status === 'completed') {
+      syncResult.value = status.result ?? null
+      syncStep.value = 'result'
+      if (transitioned) void loadEntries(projectId)
+    } else if (status.status === 'cancelled') {
+      syncStep.value = 'cancelled'
+      if (transitioned) void loadEntries(projectId)
+    } else {
+      syncError.value = status.error ?? t('workspace.glossary.sync.taskFailed')
+      syncStep.value = 'error'
     }
   }
 
   const cancelSyncTask = async (projectId: number): Promise<void> => {
-    if (!syncTaskId.value) return
+    if (!syncTaskId.value || syncCancelling.value) return
+    const session = captureSession()
+    const taskId = syncTaskId.value
+    const generation = syncImpactGeneration
+    const current = () =>
+      isSessionCurrent(session) &&
+      generation === syncImpactGeneration &&
+      taskId === syncTaskId.value
+    syncCancelling.value = true
 
     try {
-      await cancelGlossarySyncTask(projectId, syncTaskId.value)
-      // 取消成功后等待轮询检测到 cancelled 状态
+      const response = await mutations.run(
+        [{ kind: 'glossary_sync', id: taskId, project_id: projectId }],
+        'cancel',
+        () => cancelGlossarySyncTask(projectId, taskId),
+      )
+      if (!current()) return
+      syncTaskStatus.value = response.status
+      syncStep.value = 'cancelled'
+      await operations.invalidate()
+      if (!current()) return
+      const latest = await operations.querySync(projectId, taskId, syncRequestController.signal)
+      if (current()) applySyncStatus(latest, projectId)
     } catch (err) {
-      console.warn('Cancel sync task failed:', err)
+      if (!current()) return
+      if (isAccessDenied(err)) {
+        try {
+          const latest = await operations.querySync(projectId, taskId, syncRequestController.signal)
+          if (current()) applySyncStatus(latest, projectId)
+        } catch (readError) {
+          if (current() && isAccessDenied(readError)) {
+            removeTaskHistories(
+              [{ kind: 'glossary_sync', id: taskId, project_id: projectId }],
+              false,
+            )
+            syncError.value = taskHistoryErrorMessage(readError)
+          }
+        }
+        if (current()) syncError.value = taskHistoryErrorMessage(err)
+        return
+      }
+      if (err instanceof ApiError && err.status === 409) {
+        try {
+          const latest = await operations.querySync(projectId, taskId, syncRequestController.signal)
+          if (current()) applySyncStatus(latest, projectId)
+        } catch (refreshError) {
+          if (current())
+            syncError.value =
+              refreshError instanceof Error ? refreshError.message : t('operations.loadFailed')
+        }
+      } else syncError.value = err instanceof Error ? err.message : t('operations.loadFailed')
+    } finally {
+      if (current()) syncCancelling.value = false
+    }
+  }
+
+  const removeTaskHistories = (targets: TaskHistoryTarget[], close = true): void => {
+    if (
+      !targets.some(
+        (target) =>
+          target.kind === 'glossary_sync' &&
+          target.id === syncTaskId.value &&
+          target.project_id === syncTaskProjectId.value,
+      )
+    )
+      return
+    syncRequestController.abort()
+    syncRequestController = new AbortController()
+    stopSyncPolling()
+    syncImpactGeneration++
+    syncTaskId.value = null
+    syncTaskProjectId.value = null
+    syncTaskSnapshot.value = null
+    syncStatusUrl.value = null
+    syncResult.value = null
+    syncProcessed.value = 0
+    syncTotal.value = 0
+    syncCancelling.value = false
+    syncError.value = t('taskHistoryErrors.notFound')
+    syncStep.value = 'error'
+    if (close) {
+      syncHistoryRemoved.value = true
+      syncDialogVisible.value = false
     }
   }
 
   const closeSyncDialog = (): void => {
+    syncHistoryRemoved.value = false
+    syncTaskSnapshot.value = null
+    syncRequestController.abort()
+    syncRequestController = new AbortController()
     stopSyncPolling()
     syncDialogVisible.value = false
     syncStep.value = 'impact'
@@ -523,11 +621,12 @@ export const useGlossaryStore = defineStore('glossary', () => {
     syncImpactError.value = null
     syncSelectedResourceIds.value = []
     syncTaskId.value = null
+    syncTaskProjectId.value = null
     syncStatusUrl.value = null
     syncTaskStatus.value = 'pending'
     syncProcessed.value = 0
     syncTotal.value = 0
-    syncPollingFailCount.value = 0
+    syncCancelling.value = false
     syncResult.value = null
     syncError.value = null
     syncQueue.value = []
@@ -539,6 +638,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
   }
 
   const reset = (): void => {
+    entriesGeneration++
     items.value = []
     loading.value = false
     creating.value = false
@@ -554,6 +654,11 @@ export const useGlossaryStore = defineStore('glossary', () => {
     searchQuery.value = ''
     closeSyncDialog()
   }
+  onScopeDispose(onSessionChange(reset))
+  onScopeDispose(() => {
+    stopSyncPolling()
+    syncRequestController.abort()
+  })
 
   return {
     items,
@@ -593,10 +698,15 @@ export const useGlossaryStore = defineStore('glossary', () => {
     syncImpactData,
     syncSelectedResourceIds,
     syncTaskId,
+    syncTaskProjectId,
+    syncTaskSnapshot,
+    syncHistoryRemoved,
+    removeTaskHistories,
     syncStatusUrl,
     syncTaskStatus,
     syncProcessed,
     syncTotal,
+    syncCancelling,
     syncProgress,
     syncResult,
     syncError,

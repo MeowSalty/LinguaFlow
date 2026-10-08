@@ -2,9 +2,11 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type usageStatsResponse struct {
@@ -18,15 +20,17 @@ type usageStatsResponse struct {
 }
 
 type activityResponse struct {
-	ID           int            `json:"id"`
-	Action       string         `json:"action"`
-	ResourceType string         `json:"resource_type"`
-	ResourceID   *int           `json:"resource_id,omitempty"`
-	Message      string         `json:"message,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
-	Actor        *userResponse  `json:"actor,omitempty"`
-	CreatedAt    string         `json:"created_at"`
-	UpdatedAt    string         `json:"updated_at"`
+	ID             int            `json:"id"`
+	OrganizationID *int           `json:"organization_id,omitempty"`
+	ProjectID      *int           `json:"project_id,omitempty"`
+	Action         string         `json:"action"`
+	ResourceType   string         `json:"resource_type"`
+	ResourceID     *int           `json:"resource_id,omitempty"`
+	Message        string         `json:"message,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+	Actor          *userResponse  `json:"actor,omitempty"`
+	CreatedAt      string         `json:"created_at"`
+	UpdatedAt      string         `json:"updated_at"`
 }
 
 type activityListResponse struct {
@@ -54,11 +58,23 @@ func (s *Server) handleListActivity(w http.ResponseWriter, r *http.Request) {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
+	if !s.validateJobQueryParameters(w, r, "cursor", "limit", "org_id") {
+		return
+	}
+	var orgIDs []int
+	if raw, present := r.URL.Query()["org_id"]; present {
+		id, err := strconv.Atoi(raw[0])
+		if err != nil || id <= 0 {
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "org_id 必须是正整数")
+			return
+		}
+		orgIDs = []int{id}
+	}
 	pageReq, ok := s.parseCursorPagination(w, r, 50, 100)
 	if !ok {
 		return
 	}
-	page, err := s.auditSvc.ListActivity(r.Context(), authUser.User.ID, pageReq.AfterID, pageReq.Limit)
+	page, err := s.auditSvc.ListActivity(r.Context(), authUser.User.ID, pageReq.AfterID, pageReq.Limit, orgIDs...)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -89,9 +105,17 @@ func toActivityResponse(row *ent.ActivityLog) activityResponse {
 		ResourceType: row.ResourceType,
 		ResourceID:   row.ResourceID,
 		Message:      row.Message,
-		Metadata:     row.Metadata,
-		CreatedAt:    row.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:    row.UpdatedAt.Format(timeRFC3339),
+		Metadata:     service.SanitizeActivityMetadata(row.Action, row.Metadata),
+		CreatedAt:    timeutil.Format(row.CreatedAt),
+		UpdatedAt:    timeutil.Format(row.UpdatedAt),
+	}
+	if row.Edges.Project != nil {
+		id := row.Edges.Project.ID
+		resp.ProjectID = &id
+		resp.OrganizationID = service.EffectiveProjectOrgID(row.Edges.Project)
+	} else if row.Edges.Organization != nil {
+		id := row.Edges.Organization.ID
+		resp.OrganizationID = &id
 	}
 	if row.Edges.Actor != nil {
 		actor := toUserResponse(row.Edges.Actor)

@@ -12,11 +12,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/preview"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/previewtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 var (
@@ -148,8 +150,8 @@ func NewRevisionPreviewService(
 	}
 }
 
-// RunRevisionPreview validates the segment and execution plan, runs one revise
-// round against an in-memory resource snapshot, and issues an apply token.
+// RunRevisionPreview 校验分段与执行计划，基于内存中的资源快照执行一轮
+// 修订（revise），并签发 apply 令牌。
 func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input RevisionPreviewInput) (*RevisionPreviewOutput, error) {
 	select {
 	case s.semaphore <- struct{}{}:
@@ -205,10 +207,11 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 		return nil, ErrRevisionNoIssues
 	}
 
-	snapshot, err := s.jobs.prepareExecutionSnapshot(previewCtx, input.ActorUserID, projectRow, input.ExecutionPlanID, "")
+	snapshot, release, err := s.jobs.prepareExecutionSnapshot(previewCtx, input.ActorUserID, projectRow, input.ExecutionPlanID, "")
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
 	revisionRound, synthesized, err := revisionRoundFromSnapshot(snapshot, fixIssues)
 	if err != nil {
@@ -218,6 +221,11 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 	executionSnapshot.Rounds = []JobRoundSnapshot{revisionRound}
 	executionSnapshot.AutoApprove = false
 	executionSnapshot.ExplicitSegmentSelection = true
+	resolved, err := execution.Resolve(executionSnapshot)
+	if err != nil {
+		return nil, fmt.Errorf("revision preview: resolve execution: %w", err)
+	}
+	executionSnapshot = *resolved
 
 	allSegments, err := s.client.Segment.Query().
 		Where(segment.ResourceIDEQ(input.ResourceID)).
@@ -272,6 +280,9 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 	}
 
 	var applyToken string
+	if err := previewCtx.Err(); err != nil {
+		return nil, fmt.Errorf("revision preview: execution deadline: %w", err)
+	}
 	var applyExpiresAt time.Time
 	// failed 与 partial 轮的 TargetText 都可能是回退的原译文（非空）：渲染失败经
 	// preserveResult 写回原文、重试耗尽落入 unresolved 不回调、no-op 修订被批处理
@@ -279,19 +290,21 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 	// 清空 review_comment，因此除状态外还必须确认译文发生了实质变化。
 	if result.TargetText != "" && result.Status != "failed" && sha256Hex(result.TargetText) != sha256Hex(*segRow.TargetText) {
 		claims := previewtoken.ApplyClaims{
-			ActorUserID:     input.ActorUserID,
-			ProjectID:       input.ProjectID,
-			ResourceID:      input.ResourceID,
-			SegmentID:       input.SegmentID,
-			ExecutionPlanID: input.ExecutionPlanID,
-			Kind:            previewtoken.KindRevision,
-			SourceHash:      sha256Hex(segRow.SourceText),
-			PreviewSource:   segRow.SourceText,
-			TargetHash:      sha256Hex(result.TargetText),
-			BaselineSource:  segRow.SourceText,
-			BaselineTarget:  segRow.TargetText,
-			BaselineStatus:  string(segRow.Status),
-			FinalIssues:     result.QualityIssues,
+			ActorUserID:      input.ActorUserID,
+			ProjectID:        input.ProjectID,
+			ResourceID:       input.ResourceID,
+			SourceRevisionID: resRow.CurrentSourceRevisionID,
+			SourceGeneration: resRow.SourceGeneration,
+			SegmentID:        input.SegmentID,
+			ExecutionPlanID:  input.ExecutionPlanID,
+			Kind:             previewtoken.KindRevision,
+			SourceHash:       sha256Hex(segRow.SourceText),
+			PreviewSource:    segRow.SourceText,
+			TargetHash:       sha256Hex(result.TargetText),
+			BaselineSource:   segRow.SourceText,
+			BaselineTarget:   segRow.TargetText,
+			BaselineStatus:   string(segRow.Status),
+			FinalIssues:      result.QualityIssues,
 			// 声明已修复的 code 集合与喂给 LLM 的修复目标同源（均为请求交集收窄
 			// 后的 Revise.IssueCodes），apply 改写文本时按同一契约剔除命中 pending。
 			ResolvedCodes: revisionRound.Revise.IssueCodes,
@@ -327,6 +340,7 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 
 func (s *RevisionPreviewService) recordUsage(ctx context.Context, input PreviewInput, projectRow *ent.Project, metrics backend.MeterMetrics) error {
 	usage := s.client.UsageRecord.Create().
+		SetVisibilityScope("project").
 		SetProjectID(input.ProjectID).
 		SetSource("preview").
 		SetSegmentCount(1).
@@ -337,8 +351,8 @@ func (s *RevisionPreviewService) recordUsage(ctx context.Context, input PreviewI
 	if input.ActorUserID > 0 {
 		usage.SetUserID(input.ActorUserID)
 	}
-	if projectRow.OwnerOrgID != nil {
-		usage.SetOrganizationID(*projectRow.OwnerOrgID)
+	if orgID := EffectiveProjectOrgID(projectRow); orgID != nil {
+		usage.SetOrganizationID(*orgID)
 	}
 	return usage.Exec(ctx)
 }
@@ -372,6 +386,7 @@ func revisionRoundFromSnapshot(snapshot *JobExecutionSnapshot, fixIssues []qa.Qu
 			Concurrency:      1,
 			SegmentScope:     "with_issues",
 			IssueCodes:       append([]string(nil), codes...),
+			TemplateContent:  templates.EmbeddedReviseTemplate(),
 			Retry:            schema.RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
 		}
 		return JobRoundSnapshot{

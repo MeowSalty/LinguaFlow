@@ -8,7 +8,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -18,12 +17,6 @@ var (
 	ErrAdminSelfDeletion  = errors.New("admin cannot disable self")
 	ErrLastAdmin          = errors.New("cannot remove the last active admin")
 	ErrRegistrationClosed = errors.New("registration is disabled")
-)
-
-const (
-	SettingRegistrationEnabled = "registration_enabled"
-	SettingDefaultUserRole     = "default_user_role"
-	SettingAutoAdmin           = "auto_admin"
 )
 
 type AdminService struct {
@@ -327,113 +320,4 @@ func (s *AdminService) ListAuditLogs(ctx context.Context, params ListAuditLogsPa
 	}
 
 	return &PaginatedAuditLogs{Items: items, Total: total}, nil
-}
-
-func (s *AdminService) GetSettings(ctx context.Context) (map[string]string, error) {
-	settings, err := s.client.SystemSetting.Query().All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make(map[string]string, len(settings))
-	for _, setting := range settings {
-		result[setting.Key] = setting.Value
-	}
-	return result, nil
-}
-
-func (s *AdminService) UpdateSettings(ctx context.Context, settings map[string]string) error {
-	for key, value := range settings {
-		existing, err := s.client.SystemSetting.Query().Where(systemsetting.KeyEQ(key)).Only(ctx)
-		if err != nil {
-			if ent.IsNotFound(err) {
-				_, err = s.client.SystemSetting.Create().
-					SetKey(key).
-					SetValue(value).
-					Save(ctx)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			return err
-		}
-		if err := s.client.SystemSetting.UpdateOneID(existing.ID).SetValue(value).Exec(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *AdminService) GetSetting(ctx context.Context, key string) (string, error) {
-	setting, err := s.client.SystemSetting.Query().Where(systemsetting.KeyEQ(key)).Only(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	return setting.Value, nil
-}
-
-func (s *AdminService) HasAnyAdmin(ctx context.Context) (bool, error) {
-	count, err := s.client.User.Query().Where(user.RoleEQ(SystemRoleAdmin)).Count(ctx)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
-// EnsureAdminRole ensures the given user has admin role.
-func (s *AdminService) EnsureAdminRole(ctx context.Context, userID int) error {
-	return s.client.User.UpdateOneID(userID).SetRole(SystemRoleAdmin).Exec(ctx)
-}
-
-// InitializeSettings seeds default system settings from YAML config values
-// when the settings table is empty. Called once at startup.
-func (s *AdminService) InitializeSettings(ctx context.Context, defaults map[string]string) error {
-	for key, value := range defaults {
-		existing, err := s.client.SystemSetting.Query().Where(systemsetting.KeyEQ(key)).Only(ctx)
-		if err != nil {
-			if !ent.IsNotFound(err) {
-				return err
-			}
-			// Not found — create with default value.
-			if _, err := s.client.SystemSetting.Create().SetKey(key).SetValue(value).Save(ctx); err != nil {
-				return err
-			}
-			continue
-		}
-		_ = existing // Already exists, keep the DB value (admin may have changed it).
-	}
-	return nil
-}
-
-// IsRegistrationEnabled reads the registration_enabled setting from the database.
-// Returns true if the setting is missing or set to "true".
-func (s *AdminService) IsRegistrationEnabled(ctx context.Context) bool {
-	val, err := s.GetSetting(ctx, SettingRegistrationEnabled)
-	if err != nil {
-		return true // Fail open: allow registration on error.
-	}
-	if val == "" {
-		return true // Default: enabled.
-	}
-	return val == "true"
-}
-
-// ShouldAutoAdmin reads the auto_admin setting from the database.
-// Returns true if no admin exists and the setting is "true" or missing.
-func (s *AdminService) ShouldAutoAdmin(ctx context.Context) bool {
-	hasAdmin, err := s.HasAnyAdmin(ctx)
-	if err != nil || hasAdmin {
-		return false
-	}
-	val, err := s.GetSetting(ctx, SettingAutoAdmin)
-	if err != nil {
-		return true // Fail open: auto-promote on error.
-	}
-	if val == "" {
-		return true // Default: enabled.
-	}
-	return val == "true"
 }

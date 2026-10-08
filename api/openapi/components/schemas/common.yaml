@@ -24,6 +24,22 @@ Problem:
   type: object
   required: [title, status]
   properties:
+    error_code:
+      type: string
+      description: >-
+        Stable domain error code; required on storage domain failures. Storage deployment
+        rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry),
+        maintenance uses storage_maintenance (409), policy restrictions use
+        storage_policy_violation (403), and actor authorization uses forbidden (403).
+        Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses
+        storage_disk_probe_failed (503). Neither signals automatic retry.
+        Provider authorization, quota and availability retain their separate domain codes.
+    task_id:
+      type: integer
+    operation_id:
+      type: string
+    check_id:
+      type: integer
     type:
       type: string
     title:

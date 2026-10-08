@@ -10,6 +10,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // HandlerExecutionPlan 执行计划模板 handler。
@@ -49,7 +50,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		t := rc.Translate
 		apiRC.Concurrency = t.Concurrency
 		translateCfg := TranslateRoundConfig{}
-		translateCfg.PromptTemplateId = &t.PromptTemplateID
+		translateCfg.PromptTemplateId = t.PromptTemplateID
 		translateCfg.BatchSize = &t.BatchSize
 		translateCfg.MaxWordsPerBatch = &t.MaxWordsPerBatch
 		if t.FallbackShrink > 0 {
@@ -65,7 +66,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		e := rc.Extract
 		apiRC.Concurrency = e.Concurrency
 		extractCfg := ExtractRoundConfig{}
-		extractCfg.TemplateId = &e.BootstrapTemplateID
+		extractCfg.TemplateId = e.BootstrapTemplateID
 		extractCfg.BatchSize = &e.BatchSize
 		if e.MaxWordsPerBatch > 0 {
 			mwpb := e.MaxWordsPerBatch
@@ -96,7 +97,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			mwpb := a.MaxWordsPerBatch
 			adjudicateCfg.MaxWordsPerBatch = &mwpb
 		}
-		if len(a.AdjudicateCodes) > 0 {
+		if a.AdjudicateCodes != nil {
 			codes := make([]AdjudicateRoundConfigAdjudicateCodes, 0, len(a.AdjudicateCodes))
 			for _, c := range a.AdjudicateCodes {
 				codes = append(codes, AdjudicateRoundConfigAdjudicateCodes(c))
@@ -124,7 +125,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			ss := SemanticQARoundConfigSegmentScope(s.SegmentScope)
 			semanticQACfg.SegmentScope = &ss
 		}
-		if len(s.IssueCodes) > 0 {
+		if s.IssueCodes != nil {
 			codes := make([]SemanticQARoundConfigIssueCodes, 0, len(s.IssueCodes))
 			for _, c := range s.IssueCodes {
 				codes = append(codes, SemanticQARoundConfigIssueCodes(c))
@@ -152,7 +153,7 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			ss := ReviseRoundConfigSegmentScope(r.SegmentScope)
 			reviseCfg.SegmentScope = &ss
 		}
-		if len(r.IssueCodes) > 0 {
+		if r.IssueCodes != nil {
 			codes := make([]ReviseRoundConfigIssueCodes, 0, len(r.IssueCodes))
 			for _, c := range r.IssueCodes {
 				codes = append(codes, ReviseRoundConfigIssueCodes(c))
@@ -215,10 +216,10 @@ func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlan
 		resp.OwnerOrgId = t.OwnerOrgID
 	}
 	if !t.CreatedAt.IsZero() {
-		resp.CreatedAt = &t.CreatedAt
+		resp.CreatedAt = timeutil.NormalizePtr(&t.CreatedAt)
 	}
 	if !t.UpdatedAt.IsZero() {
-		resp.UpdatedAt = &t.UpdatedAt
+		resp.UpdatedAt = timeutil.NormalizePtr(&t.UpdatedAt)
 	}
 	// 注音对齐重试配置
 	if t.RubyRetry.Enabled {
@@ -280,9 +281,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			translateCfg := &schema.TranslateRoundConfig{
 				Concurrency: ar.Concurrency,
 			}
-			if t.PromptTemplateId != nil {
-				translateCfg.PromptTemplateID = *t.PromptTemplateId
-			}
+			translateCfg.PromptTemplateID = t.PromptTemplateId
 			if t.BatchSize != nil {
 				translateCfg.BatchSize = *t.BatchSize
 			}
@@ -308,9 +307,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			extractCfg := &schema.ExtractRoundConfig{
 				Concurrency: ar.Concurrency,
 			}
-			if e.TemplateId != nil {
-				extractCfg.BootstrapTemplateID = *e.TemplateId
-			}
+			extractCfg.BootstrapTemplateID = e.TemplateId
 			if e.BatchSize != nil {
 				extractCfg.BatchSize = *e.BatchSize
 			}
@@ -471,9 +468,19 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 
 // handleListExecutionPlanTemplates 列出当前用户可访问的执行计划模板。
 func (h *HandlerExecutionPlan) handleList(w http.ResponseWriter, r *http.Request, userID int) {
-	templates, err := h.executionPlans.ListByUser(r.Context(), userID)
+	orgID, ok := h.server.parseSharedOrgQuery(w, r)
+	if !ok {
+		return
+	}
+	var templates []*ent.ExecutionPlanTemplate
+	var err error
+	if orgID == nil {
+		templates, err = h.executionPlans.ListByUser(r.Context(), userID)
+	} else {
+		templates, err = h.executionPlans.ListByOrg(r.Context(), userID, *orgID)
+	}
 	if err != nil {
-		h.server.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "查询执行计划模板失败")
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	items := make([]ExecutionPlanTemplate, 0, len(templates))
@@ -486,7 +493,7 @@ func (h *HandlerExecutionPlan) handleList(w http.ResponseWriter, r *http.Request
 // handleCreate 创建执行计划模板。
 func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Request, userID int) {
 	var req CreateExecutionPlanTemplateRequest
-	if !h.server.decodeJSON(w, r, &req) {
+	if !h.server.decodeSharedJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
@@ -495,12 +502,11 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 	}
 
 	input := service.CreateExecutionPlanTemplateInput{
-		Name:        req.Name,
-		Scope:       "user",
-		OwnerUserID: &userID,
-		ProfileID:   req.ProfileId,
-		RubyRetry:   parseRubyRetryConfig(req.RubyRetry),
-		Rounds:      toExecutionPlanRoundsAPI(req.Rounds),
+		Name:      req.Name,
+		OrgID:     req.OrgId,
+		ProfileID: req.ProfileId,
+		RubyRetry: parseRubyRetryConfig(req.RubyRetry),
+		Rounds:    toExecutionPlanRoundsAPI(req.Rounds),
 	}
 	if req.Description != nil {
 		input.Description = *req.Description
@@ -527,7 +533,7 @@ func (h *HandlerExecutionPlan) handleGet(w http.ResponseWriter, r *http.Request,
 // handleUpdate 更新执行计划模板。
 func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Request, userID, planID int) {
 	var req UpdateExecutionPlanTemplateRequest
-	if !h.server.decodeJSON(w, r, &req) {
+	if !h.server.decodeSharedJSON(w, r, &req) {
 		return
 	}
 

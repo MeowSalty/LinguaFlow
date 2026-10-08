@@ -1,24 +1,30 @@
 version: '3'
 
+includes:
+  frontend:
+    taskfile: ./frontend/Taskfile.yml
+    dir: ./frontend
+  backend:
+    taskfile: ./backend/Taskfile.yml
+    dir: ./backend
+
 vars:
   FRONTEND_DIR: frontend
   BACKEND_DIR: backend
   DOCS_DIR: docs
   OPENAPI_ENTRY: api/openapi/base.yaml
   OPENAPI_SCHEMA: api/openapi/openapi-3.0.yaml
-  FRONTEND_OPENAPI_TYPES: src/api/types.d.ts
-  BACKEND_BINARY: bin/linguaflow
-  VERSION:
-    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
-  COMMIT:
-    sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
-  BACKEND_LDFLAGS: '-X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version={{.VERSION}} -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit={{.COMMIT}}'
 
 tasks:
   default:
     desc: 查看可用任务列表
     cmds:
       - task --list
+
+  ci:lint:
+    desc: 检查 GitHub Actions 工作流语法和表达式
+    cmds:
+      - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 {{.CLI_ARGS}}
 
   openapi:bundle:
     desc: 合并多文件 OpenAPI 规范为单文件
@@ -34,98 +40,28 @@ tasks:
     desc: 生成前端和后端 OpenAPI 代码
     deps:
       - openapi:bundle
-      - frontend:openapi:generate
-      - backend:openapi:generate
-
-  frontend:install:
-    desc: 安装前端依赖
-    dir: '{{.FRONTEND_DIR}}'
     cmds:
-      - pnpm install
+      - task: frontend:openapi:generate
+      - task: backend:openapi:generate
 
-  frontend:dev:
-    desc: 启动前端开发服务器
-    dir: '{{.FRONTEND_DIR}}'
+  openapi:lint:
+    desc: 验证 OpenAPI 规范
+    deps: [openapi:bundle]
     cmds:
-      - pnpm dev
+      - pnpm --package=@redocly/cli dlx redocly lint {{.OPENAPI_SCHEMA}}
 
-  frontend:build:
-    desc: 构建前端应用
-    deps:
-      - frontend:openapi:generate
-    dir: '{{.FRONTEND_DIR}}'
+  openapi:check:
+    desc: 重新生成并检查 OpenAPI bundle 与前后端生成代码是否已同步
     cmds:
-      - pnpm build
-
-  frontend:type-check:
-    desc: 执行前端 TypeScript 类型检查
-    deps:
-      - frontend:openapi:generate
-    dir: '{{.FRONTEND_DIR}}'
-    cmds:
-      - pnpm type-check
-
-  frontend:lint:
-    desc: 执行前端代码检查
-    dir: '{{.FRONTEND_DIR}}'
-    cmds:
-      - pnpm lint
-
-  frontend:format:
-    desc: 格式化前端源码
-    dir: '{{.FRONTEND_DIR}}'
-    cmds:
-      - pnpm format
-
-  frontend:openapi:generate:
-    desc: 使用 openapi-typescript 生成前端 OpenAPI TypeScript 定义
-    deps:
-      - openapi:bundle
-    dir: '{{.FRONTEND_DIR}}'
-    sources:
-      - '../{{.OPENAPI_SCHEMA}}'
-    generates:
-      - '{{.FRONTEND_OPENAPI_TYPES}}'
-    cmds:
-      - pnpm exec openapi-typescript ../{{.OPENAPI_SCHEMA}} -o {{.FRONTEND_OPENAPI_TYPES}}
-
-  backend:install:
-    desc: 下载后端 Go 模块依赖
-    dir: '{{.BACKEND_DIR}}'
-    cmds:
-      - go mod download
-
-  backend:dev:
-    desc: 启动后端开发服务器
-    dir: '{{.BACKEND_DIR}}'
-    cmds:
-      - go run ./cmd/linguaflow serve
-
-  backend:local:dev:
-    desc: 以本地模式启动后端开发服务器
-    dir: '{{.BACKEND_DIR}}'
-    cmds:
-      - go run ./cmd/linguaflow local
-
-  backend:build:
-    desc: 构建后端 CLI/服务程序
-    dir: '{{.BACKEND_DIR}}'
-    cmds:
-      - cmd: go build -ldflags "{{.BACKEND_LDFLAGS}}" -o {{.BACKEND_BINARY}}.exe ./cmd/linguaflow
-        platforms: [windows]
-      - cmd: go build -ldflags "{{.BACKEND_LDFLAGS}}" -o {{.BACKEND_BINARY}} ./cmd/linguaflow
-        platforms: [linux, darwin]
+      - task: openapi:generate
+      - git diff --exit-code -- api/openapi/openapi-3.0.yaml frontend/src/api/types.d.ts backend/internal/api/openapi.gen.go backend/go.mod backend/go.sum
 
   backend:local:build:
     desc: 构建含嵌入前端的本地模式二进制
     deps:
       - backend:web:embed
-    dir: '{{.BACKEND_DIR}}'
     cmds:
-      - cmd: go build -ldflags "{{.BACKEND_LDFLAGS}}" -o {{.BACKEND_BINARY}}.exe ./cmd/linguaflow
-        platforms: [windows]
-      - cmd: go build -ldflags "{{.BACKEND_LDFLAGS}}" -o {{.BACKEND_BINARY}} ./cmd/linguaflow
-        platforms: [linux, darwin]
+      - task: backend:build
 
   backend:web:embed:
     desc: 将前端构建产物嵌入后端
@@ -136,58 +72,6 @@ tasks:
         platforms: [linux, darwin]
       - cmd: powershell -Command "if (Test-Path '{{.BACKEND_DIR}}/internal/web/dist') { Remove-Item -Recurse -Force '{{.BACKEND_DIR}}/internal/web/dist' }; Copy-Item -Recurse '{{.FRONTEND_DIR}}/dist' '{{.BACKEND_DIR}}/internal/web/dist'"
         platforms: [windows]
-
-  backend:test:
-    desc: 执行后端测试
-    dir: '{{.BACKEND_DIR}}'
-    cmds:
-      - go test ./...
-
-  backend:test:race:
-    desc: 执行后端竞态检测测试
-    dir: '{{.BACKEND_DIR}}'
-    cmds:
-      - go test -race ./...
-
-  backend:lint:
-    desc: 执行后端静态检查
-    dir: '{{.BACKEND_DIR}}'
-    cmds:
-      - go vet ./...
-
-  backend:format:
-    desc: 格式化后端 Go 源码
-    dir: '{{.BACKEND_DIR}}'
-    cmds:
-      - go fmt ./...
-
-  backend:generate:
-    desc: 生成后端代码（OpenAPI、ent 等）
-    deps:
-      - backend:openapi:generate
-      - backend:ent:generate
-
-  backend:openapi:generate:
-    desc: 生成后端 OpenAPI Go 代码
-    deps:
-      - openapi:bundle
-    dir: '{{.BACKEND_DIR}}'
-    sources:
-      - '../{{.OPENAPI_SCHEMA}}'
-      - 'internal/api/openapi_generate.go'
-    generates:
-      - 'internal/api/openapi.gen.go'
-    cmds:
-      - go generate ./internal/api
-
-  backend:ent:generate:
-    desc: 生成后端 ent 代码
-    dir: '{{.BACKEND_DIR}}'
-    sources:
-      - 'internal/ent/generate.go'
-      - 'internal/ent/schema/**/*.go'
-    cmds:
-      - go generate ./internal/ent
 
   docs:install:
     desc: 安装文档依赖

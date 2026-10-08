@@ -2,9 +2,99 @@ openapi: 3.0.3
 info:
   title: LinguaFlow Web Service API
   version: 0.1.0
+  description: |
+    平台时间点使用 UTC。所有 date-time 响应（包括 SSE 事件）使用 RFC3339 的 Z 后缀，
+    保留有效小数秒；输入接受带时区偏移的 RFC3339，并按实际时间点解释。
+    SQLite 保留纳秒精度，PostgreSQL 保留微秒精度。空值和字段省略规则由各字段定义。
+    时间区间默认按接口声明解释；任务更新时间筛选使用左闭右开区间。
+    根路径 /metrics 为系统管理员认证的持久化数量兼容入口，保留原文本格式；
+    实时运行监控使用 /api/v1/admin/runtime/summary。外部抓取方须携带管理员认证。
+    存储部署能力合同 E01：能力和管理动作是只读快照；部署拒绝使用
+    storage_deployment_disabled（409，无 Retry-After），政策违规保持 403。
+    旧 byos_disabled 原因仅保留枚举兼容；客户端须按具体操作重新发现能力。
 servers:
   - url: /api/v1
 paths:
+  /admin/task-retention/preview:
+    $ref: './paths/task-retention.yaml#/preview'
+  /admin/task-retention/status:
+    $ref: './paths/task-retention.yaml#/status'
+  /operations/batch-delete:
+    $ref: './paths/task-retention.yaml#/batchDelete'
+  /storage/capabilities:
+    $ref: './paths/storage.yaml#/storageCapabilities'
+  /storage/options:
+    $ref: './paths/storage.yaml#/storageOptions'
+  /projects/{projectId}/storage/options:
+    $ref: './paths/storage.yaml#/projectStorageOptions'
+  /storage/connections/{connectionId}/checks:
+    $ref: './paths/storage.yaml#/storageChecks'
+  /storage/connections/{connectionId}/checks/{checkId}:
+    $ref: './paths/storage.yaml#/storageCheck'
+  /projects/{projectId}/storage/tasks/{taskId}/legacy-snapshot:
+    $ref: './paths/storage.yaml#/legacySnapshot'
+  /admin/storage/diagnostics:
+    $ref: './paths/storage.yaml#/storageDiagnostics'
+  /admin/storage/policy:
+    $ref: './paths/storage.yaml#/storagePolicy'
+  /admin/storage/connections:
+    $ref: './paths/storage.yaml#/siteStorageConnections'
+  /storage/connections:
+    $ref: './paths/storage.yaml#/storageConnections'
+  /orgs/{orgId}/storage/connections:
+    $ref: './paths/storage.yaml#/orgStorageConnections'
+  /storage/connections/{connectionId}:
+    $ref: './paths/storage.yaml#/storageConnection'
+  /storage/connections/{connectionId}/spaces:
+    $ref: './paths/storage.yaml#/connectionSpaces'
+  /storage/connections/{connectionId}/authorize:
+    $ref: './paths/storage.yaml#/authorizeStorage'
+  /storage/connections/{connectionId}/check:
+    $ref: './paths/storage.yaml#/checkStorage'
+  /storage/connections/{connectionId}/revoke:
+    $ref: './paths/storage.yaml#/revokeStorage'
+  /storage/spaces/{spaceId}/quota:
+    $ref: "./paths/storage.yaml#/storageSpaceQuota"
+  /storage/spaces/{spaceId}:
+    $ref: './paths/storage.yaml#/storageSpace'
+  /projects/{projectId}/storage:
+    $ref: './paths/storage.yaml#/projectStorage'
+  /projects/{projectId}/storage/migrations:
+    $ref: './paths/storage.yaml#/storageMigrations'
+  /projects/{projectId}/storage/tasks:
+    $ref: './paths/storage.yaml#/storageTasks'
+  /projects/{projectId}/storage/tasks/{taskId}:
+    $ref: './paths/storage.yaml#/storageTask'
+  /projects/{projectId}/storage/tasks/{taskId}/content:
+    $ref: './paths/storage.yaml#/storageTaskContent'
+  /projects/{projectId}/storage/tasks/{taskId}/cancel:
+    $ref: './paths/storage.yaml#/cancelStorageTask'
+  /projects/{projectId}/storage/tasks/{taskId}/retry:
+    $ref: './paths/storage.yaml#/retryStorageTask'
+  /projects/{projectId}/resources/{resourceId}/versions:
+    $ref: './paths/storage.yaml#/sourceVersions'
+  /projects/{projectId}/resources/{resourceId}/source-preview:
+    $ref: './paths/storage.yaml#/sourcePreview'
+  /projects/{projectId}/resources/{resourceId}/source-commit:
+    $ref: './paths/storage.yaml#/sourceCommit'
+  /projects/{projectId}/resources/{resourceId}/exports:
+    $ref: './paths/storage.yaml#/sourceExports'
+  /projects/{projectId}/exports/{artifactId}:
+    $ref: './paths/storage.yaml#/exportArtifact'
+  /projects/{projectId}/exports/{artifactId}/download:
+    $ref: './paths/storage.yaml#/exportDownload'
+  /projects/{projectId}/exports/{artifactId}/rebuild:
+    $ref: './paths/storage.yaml#/exportRebuild'
+  /credentials:
+    $ref: './paths/credentials.yaml#/userCredentials'
+  /orgs/{orgId}/credentials:
+    $ref: './paths/credentials.yaml#/orgCredentials'
+  /credentials/{credentialId}/versions:
+    $ref: './paths/credentials.yaml#/credentialVersions'
+  /credentials/{credentialId}/versions/{version}/revoke:
+    $ref: './paths/credentials.yaml#/credentialVersionRevoke'
+  /credentials/{credentialId}/collect:
+    $ref: './paths/credentials.yaml#/credentialCollect'
   /ping:
     $ref: './paths/system.yaml#/ping'
   /mode:
@@ -109,6 +199,14 @@ paths:
     $ref: './paths/glossary.yaml#/glossaryPruneApply'
   /projects/{projectId}/jobs:
     $ref: './paths/jobs.yaml#/projectJobs'
+  /jobs:
+    $ref: './paths/jobs.yaml#/accessibleJobs'
+  /jobs/summary:
+    $ref: './paths/jobs.yaml#/jobsSummary'
+  /operations:
+    $ref: './paths/operations.yaml#/operations'
+  /operations/summary:
+    $ref: './paths/operations.yaml#/operationsSummary'
   /jobs/{jobId}:
    $ref: './paths/jobs.yaml#/jobById'
   /jobs/{jobId}/cancel:
@@ -151,6 +249,8 @@ paths:
     $ref: './paths/admin.yaml#/adminUserPassword'
   /admin/stats:
     $ref: './paths/admin.yaml#/adminStats'
+  /admin/runtime/summary:
+    $ref: './paths/admin.yaml#/adminRuntimeSummary'
   /admin/audit-logs:
     $ref: './paths/admin.yaml#/adminAuditLogs'
   /admin/settings:
@@ -204,6 +304,18 @@ components:
     Problem:
       $ref: './components/responses.yaml#/Problem'
   schemas:
+    TaskRetentionPolicy:
+      $ref: './components/schemas/task-retention.yaml#/TaskRetentionPolicy'
+    TaskRetentionPatch:
+      $ref: './components/schemas/task-retention.yaml#/TaskRetentionPatch'
+    TaskRetentionPreview:
+      $ref: './components/schemas/task-retention.yaml#/TaskRetentionPreview'
+    TaskRetentionStatus:
+      $ref: './components/schemas/task-retention.yaml#/TaskRetentionStatus'
+    TaskHistoryBatchDeleteRequest:
+      $ref: './components/schemas/task-retention.yaml#/TaskHistoryBatchDeleteRequest'
+    TaskHistoryBatchDeleteResponse:
+      $ref: './components/schemas/task-retention.yaml#/TaskHistoryBatchDeleteResponse'
     Problem:
       $ref: './components/schemas/common.yaml#/Problem'
     HealthResponse:
@@ -318,6 +430,14 @@ components:
       $ref: './components/schemas/job.yaml#/JobProgress'
     JobListResponse:
       $ref: './components/schemas/job.yaml#/JobListResponse'
+    JobSummary:
+      $ref: './components/schemas/job.yaml#/JobSummary'
+    JobSummaryProgress:
+      $ref: './components/schemas/job.yaml#/JobSummaryProgress'
+    JobSummaryListResponse:
+      $ref: './components/schemas/job.yaml#/JobSummaryListResponse'
+    JobsSummaryResponse:
+      $ref: './components/schemas/job.yaml#/JobsSummaryResponse'
     JobEvent:
       $ref: './components/schemas/job.yaml#/JobEvent'
     JobEventListResponse:

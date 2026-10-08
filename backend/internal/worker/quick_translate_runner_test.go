@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sync"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -16,7 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
-const fakeBackendType = "quicktest"
+const fakeBackendType = "openai"
 
 // fakeBackend 是测试用后端，输出由 currentFake 动态控制。
 type fakeBackend struct {
@@ -36,25 +35,17 @@ func (f *fakeBackend) Translate(_ context.Context, _ backend.Request) (*backend.
 
 func (f *fakeBackend) Close() error { return nil }
 
-var registerFake sync.Once
-
 // currentFake 被工厂捕获，测试可动态改写 text/err 控制本轮输出。
 var currentFake = &fakeBackend{}
 
 func ensureFakeBackend(t *testing.T) {
 	t.Helper()
-	registerFake.Do(func() {
-		backend.Register(fakeBackendType, func(cfg backend.Config) (backend.Backend, error) {
-			currentFake.name = cfg.Name
-			return currentFake, nil
-		})
-	})
 }
 
 // translateSnapshot 构造一个最小化的单 translate 轮快照。
 func translateSnapshot(t *testing.T) *service.JobExecutionSnapshot {
 	t.Helper()
-	return &service.JobExecutionSnapshot{
+	return completeWorkerSnapshot(t, &service.JobExecutionSnapshot{
 		ExecutionPlanID:   1,
 		ExecutionPlanName: "test",
 		SourceLang:        "en",
@@ -78,12 +69,14 @@ func translateSnapshot(t *testing.T) *service.JobExecutionSnapshot {
 				},
 			},
 		}},
-	}
+	})
 }
 
 func newQuickRunner(t *testing.T) *QuickTranslateRunner {
 	t.Helper()
-	return NewQuickTranslateRunner(slog.Default(), nil, nil)
+	r := NewQuickTranslateRunner(slog.Default(), nil, nil)
+	configureFakeFactory(r.factory)
+	return r
 }
 
 func TestQuickTranslateRun_NoRounds_ReturnsError(t *testing.T) {
@@ -182,7 +175,7 @@ func TestQuickTranslateRun_BackendError_ReturnsFailed(t *testing.T) {
 // semantic_qa 轮 MaxAttempts=0 → transientBudget=1 → 单次失败即 unresolved。
 func translateSemanticQASnapshot(t *testing.T) *service.JobExecutionSnapshot {
 	t.Helper()
-	return &service.JobExecutionSnapshot{
+	return completeWorkerSnapshot(t, &service.JobExecutionSnapshot{
 		ExecutionPlanID:   1,
 		ExecutionPlanName: "test",
 		SourceLang:        "en",
@@ -225,7 +218,7 @@ func translateSemanticQASnapshot(t *testing.T) *service.JobExecutionSnapshot {
 				},
 			},
 		},
-	}
+	})
 }
 
 // TestQuickTranslateRun_SemanticQAParseFailureReturnsPartial 验证 semantic_qa 轮解析失败

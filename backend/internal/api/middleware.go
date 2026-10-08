@@ -21,18 +21,22 @@ func (s *Server) applyMiddleware(r *chi.Mux) {
 	allowedOrigins := s.serverCfg.CORS.AllowedOrigins
 	if s.isLocal() {
 		allowedOrigins = []string{
-			"http://127.0.0.1:" + fmt.Sprintf("%d", s.serverCfg.Port),
-			"http://localhost:" + fmt.Sprintf("%d", s.serverCfg.Port),
-			"http://127.0.0.1",
-			"http://localhost",
+			"http://127.0.0.1:" + fmt.Sprintf("%d", s.runtimeAddress.Port),
+			"http://localhost:" + fmt.Sprintf("%d", s.runtimeAddress.Port),
+			"http://[::1]:" + fmt.Sprintf("%d", s.runtimeAddress.Port),
 		}
 	}
 
+	// cors 把空列表视为 '*'；而完全不挂载本中间件时，浏览器只能发起
+	// 普通的同源请求——这正是显式配置空策略的意图。
+	if len(allowedOrigins) == 0 {
+		return
+	}
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
-		ExposedHeaders:   []string{"X-Request-ID"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "Idempotency-Key"},
+		ExposedHeaders:   []string{"X-Request-ID", "Content-Disposition"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))

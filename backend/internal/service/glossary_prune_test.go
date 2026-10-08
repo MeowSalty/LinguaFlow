@@ -3,15 +3,22 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
 
+	_ "github.com/MeowSalty/LinguaFlow/backend/internal/backend/openai"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -27,7 +34,7 @@ func testClient(t *testing.T) *ent.Client {
 	}
 	// :memory: 数据库是连接私有的；限制单连接确保事务与普通查询共享同一实例。
 	db.SetMaxOpenConns(1)
-	driver := entsql.OpenDB(dialect.SQLite, db)
+	driver := database.NewDriver(entsql.OpenDB(dialect.SQLite, db))
 	client := ent.NewClient(ent.Driver(driver))
 	if err := client.Schema.Create(context.Background()); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -247,7 +254,7 @@ func TestResponseModeFromBackendOptions(t *testing.T) {
 
 func newTestPruneService(t *testing.T) (*GlossaryPruneService, *ent.Client) {
 	client := testClient(t)
-	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
+	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewSettingsService(client)))
 	projects := NewProjectService(client, users)
 	glossarySvc := NewGlossaryService(client, projects)
 	svc := NewGlossaryPruneService(client, projects, NewBackendService(client, users, nil), glossarySvc, NewPrunePromptTemplateService(client), nil, discardLogger())
@@ -379,6 +386,49 @@ func TestPreview_ContextCanceled(t *testing.T) {
 	// 应返回项目访问检查的 context.Canceled 或 ErrPruneLLMCallFailed 包装的 context.Canceled
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("want context.Canceled, got %v", err)
+	}
+}
+
+func TestPrunePreviewResolvesSeparateCredentialsAndRejectsRevocation(t *testing.T) {
+	ctx, client, u, credentials, backends := credentialTestServices(t)
+	var calls atomic.Int64
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Header.Get("Authorization") != "Bearer prune-secret" {
+			t.Error("prune credential was not injected")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "prune", "object": "chat.completion", "choices": []any{map[string]any{"index": 0, "message": map[string]any{"role": "assistant", "content": `{"glossary":[{"source":"Term","target":"术语","notes":""}]}`}, "finish_reason": "stop"}}})
+	}))
+	defer upstream.Close()
+	secret := "prune-secret"
+	back, err := backends.Create(ctx, CreateBackendInput{Scope: ScopeUser, OwnerUserID: &u.ID, BackendInput: BackendInput{Name: "prune", Type: "openai", Secret: &secret, Options: map[string]any{"model": "prune-model", "base_url": upstream.URL, "response_format": "none"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	users := NewUserService(client, nil)
+	projects := NewProjectService(client, users)
+	svc := NewGlossaryPruneService(client, projects, backends, NewGlossaryService(client, projects), NewPrunePromptTemplateService(client), nil, discardLogger())
+	p := createTestProject(t, client, "credential-prune", u.ID)
+	seedGlossaryEntries(t, client, p.ID, []GlossaryEntryInput{{Source: "Term", Target: "术语"}})
+	preview, err := svc.Preview(ctx, u.ID, p.ID, back.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ToKeep != 1 {
+		t.Fatalf("preview=%+v", preview)
+	}
+	if err := credentials.Revoke(ctx, u.ID, back.Credential); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Preview(ctx, u.ID, p.ID, back.ID, 0); !errors.Is(err, credential.ErrRevoked) {
+		t.Fatalf("revoked preview=%v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("upstream calls=%d", calls.Load())
+	}
+	if _, ok := client.Backend.GetX(ctx, back.ID).Options["api_key"]; ok {
+		t.Fatal("runtime injection mutated backend options")
 	}
 }
 

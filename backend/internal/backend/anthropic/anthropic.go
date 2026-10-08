@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
@@ -43,6 +44,7 @@ type Backend struct {
 	topP              *float64
 	stream            bool
 	thinking          backend.Thinking
+	thinkingBudget    *int64
 }
 
 func (b *Backend) Name() string {
@@ -148,9 +150,18 @@ func (b *Backend) buildParams(req backend.Request) (sdk.MessageNewParams, bool, 
 	// 显式 off 时 thinking 已禁用，API 不再拒绝采样参数，temperature/top_p 正常传递。
 	switch {
 	case b.thinking.Active():
-		budget, err := anthropicThinkingBudget(b.thinking.Level, maxTok)
-		if err != nil {
-			return sdk.MessageNewParams{}, false, err
+		var budget int64
+		if b.thinkingBudget != nil {
+			budget = *b.thinkingBudget
+			if budget < 1024 || budget >= maxTok {
+				return sdk.MessageNewParams{}, false, errors.New("anthropic: invalid resolved thinking budget")
+			}
+		} else {
+			var err error
+			budget, err = anthropicThinkingBudget(b.thinking.Level, maxTok)
+			if err != nil {
+				return sdk.MessageNewParams{}, false, err
+			}
 		}
 		params.Thinking = sdk.ThinkingConfigParamOfEnabled(budget)
 	default:
@@ -346,6 +357,9 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(u))
 	}
+	if cfg.HTTPClient != nil {
+		clientOpts = append(clientOpts, option.WithHTTPClient(cfg.HTTPClient))
+	}
 	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
 	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone:
@@ -366,8 +380,13 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 		stream:            backend.BoolOpt(opts, "stream", false),
 		thinking:          thinking,
 	}
-	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
-		b.timeout = time.Duration(t) * time.Second
+	if _, ok := opts["thinking_budget_tokens"]; ok {
+		budget := backend.Int64Opt(opts, "thinking_budget_tokens", 0)
+		b.thinkingBudget = &budget
+	}
+	b.timeout, err = backend.DurationOpt(opts, "timeout", 60*time.Second)
+	if err != nil || b.timeout < 0 {
+		return nil, errors.New("anthropic: invalid timeout")
 	}
 	if v, ok := opts["temperature"].(float64); ok {
 		b.temperature = &v
@@ -383,7 +402,7 @@ type modelLister struct {
 	client sdk.Client
 }
 
-func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
+func modelListerFactory(opts map[string]any, clients ...*http.Client) (backend.ModelLister, error) {
 	apiKey := backend.StringOpt(opts, "api_key", "")
 	if apiKey == "" {
 		return nil, errors.New("anthropic: api_key is required")
@@ -396,6 +415,9 @@ func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
 	}
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(u))
+	}
+	if len(clients) > 0 && clients[0] != nil {
+		clientOpts = append(clientOpts, option.WithHTTPClient(clients[0]))
 	}
 	return &modelLister{client: sdk.NewClient(clientOpts...)}, nil
 }

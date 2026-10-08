@@ -18,18 +18,33 @@ User:
 
 UpdateCurrentUserRequest:
   type: object
+  additionalProperties: false
+  description: |
+    仅更新提供的字段，省略字段保持原值；空对象返回当前资料且不修改更新时间。
+    字段不可为 null，用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
   properties:
     display_name:
       type: string
+      nullable: false
+      description: 去除首尾空白；空字符串允许清空显示名。
     email:
       type: string
       format: email
+      nullable: false
+      description: 去除首尾空白并转小写后校验单个纯邮箱地址；拒绝空值、内部空白、显示名及地址包装。
 
 ChangePasswordRequest:
   type: object
+  additionalProperties: false
   required: [current_password, new_password]
   properties:
     current_password:
       type: string
+      nullable: false
+      minLength: 1
+      description: 原样验证当前密码，不去除空白，不施加新密码的长度规则。
     new_password:
       type: string
+      nullable: false
+      minLength: 8
+      description: 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。

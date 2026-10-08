@@ -137,6 +137,13 @@ func renderTestSetup(t *testing.T, paragraphs []string) (*ResourceService, *ent.
 		t.Fatalf("filestore.NewLocal: %v", err)
 	}
 	svc := NewResourceService(client, NewProjectService(client, nil), store)
+	if err := svc.ensureStorage(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+	if err := svc.storage.Bind(ctx, user.ID, project.ID, svc.storage.defaultSpaceID, project.StorageGeneration); err != nil {
+		t.Fatal(err)
+	}
 
 	epubBytes := buildTestEPUB(t, paragraphs)
 	results, err := svc.UploadResources(ctx, user.ID, project.ID, []UploadedFile{{

@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/credentialjobreference"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -253,6 +254,46 @@ func (_u *JobUpdate) ClearStartedAt() *JobUpdate {
 	return _u
 }
 
+// SetFinishedAt sets the "finished_at" field.
+func (_u *JobUpdate) SetFinishedAt(v time.Time) *JobUpdate {
+	_u.mutation.SetFinishedAt(v)
+	return _u
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableFinishedAt(v *time.Time) *JobUpdate {
+	if v != nil {
+		_u.SetFinishedAt(*v)
+	}
+	return _u
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (_u *JobUpdate) ClearFinishedAt() *JobUpdate {
+	_u.mutation.ClearFinishedAt()
+	return _u
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_u *JobUpdate) SetRetentionAnchorAt(v time.Time) *JobUpdate {
+	_u.mutation.SetRetentionAnchorAt(v)
+	return _u
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableRetentionAnchorAt(v *time.Time) *JobUpdate {
+	if v != nil {
+		_u.SetRetentionAnchorAt(*v)
+	}
+	return _u
+}
+
+// ClearRetentionAnchorAt clears the value of the "retention_anchor_at" field.
+func (_u *JobUpdate) ClearRetentionAnchorAt() *JobUpdate {
+	_u.mutation.ClearRetentionAnchorAt()
+	return _u
+}
+
 // SetProject sets the "project" edge to the Project entity.
 func (_u *JobUpdate) SetProject(v *Project) *JobUpdate {
 	return _u.SetProjectID(v.ID)
@@ -320,6 +361,21 @@ func (_u *JobUpdate) AddSseEvents(v ...*SSEEvent) *JobUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddSseEventIDs(ids...)
+}
+
+// AddCredentialReferenceIDs adds the "credential_references" edge to the CredentialJobReference entity by IDs.
+func (_u *JobUpdate) AddCredentialReferenceIDs(ids ...int) *JobUpdate {
+	_u.mutation.AddCredentialReferenceIDs(ids...)
+	return _u
+}
+
+// AddCredentialReferences adds the "credential_references" edges to the CredentialJobReference entity.
+func (_u *JobUpdate) AddCredentialReferences(v ...*CredentialJobReference) *JobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCredentialReferenceIDs(ids...)
 }
 
 // Mutation returns the JobMutation object of the builder.
@@ -400,6 +456,27 @@ func (_u *JobUpdate) RemoveSseEvents(v ...*SSEEvent) *JobUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveSseEventIDs(ids...)
+}
+
+// ClearCredentialReferences clears all "credential_references" edges to the CredentialJobReference entity.
+func (_u *JobUpdate) ClearCredentialReferences() *JobUpdate {
+	_u.mutation.ClearCredentialReferences()
+	return _u
+}
+
+// RemoveCredentialReferenceIDs removes the "credential_references" edge to CredentialJobReference entities by IDs.
+func (_u *JobUpdate) RemoveCredentialReferenceIDs(ids ...int) *JobUpdate {
+	_u.mutation.RemoveCredentialReferenceIDs(ids...)
+	return _u
+}
+
+// RemoveCredentialReferences removes "credential_references" edges to CredentialJobReference entities.
+func (_u *JobUpdate) RemoveCredentialReferences(v ...*CredentialJobReference) *JobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCredentialReferenceIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -552,6 +629,18 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.StartedAtCleared() {
 		_spec.ClearField(job.FieldStartedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FinishedAt(); ok {
+		_spec.SetField(job.FieldFinishedAt, field.TypeTime, value)
+	}
+	if _u.mutation.FinishedAtCleared() {
+		_spec.ClearField(job.FieldFinishedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(job.FieldRetentionAnchorAt, field.TypeTime, value)
+	}
+	if _u.mutation.RetentionAnchorAtCleared() {
+		_spec.ClearField(job.FieldRetentionAnchorAt, field.TypeTime)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -739,6 +828,51 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.CredentialReferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCredentialReferencesIDs(); len(nodes) > 0 && !_u.mutation.CredentialReferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CredentialReferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -986,6 +1120,46 @@ func (_u *JobUpdateOne) ClearStartedAt() *JobUpdateOne {
 	return _u
 }
 
+// SetFinishedAt sets the "finished_at" field.
+func (_u *JobUpdateOne) SetFinishedAt(v time.Time) *JobUpdateOne {
+	_u.mutation.SetFinishedAt(v)
+	return _u
+}
+
+// SetNillableFinishedAt sets the "finished_at" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableFinishedAt(v *time.Time) *JobUpdateOne {
+	if v != nil {
+		_u.SetFinishedAt(*v)
+	}
+	return _u
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (_u *JobUpdateOne) ClearFinishedAt() *JobUpdateOne {
+	_u.mutation.ClearFinishedAt()
+	return _u
+}
+
+// SetRetentionAnchorAt sets the "retention_anchor_at" field.
+func (_u *JobUpdateOne) SetRetentionAnchorAt(v time.Time) *JobUpdateOne {
+	_u.mutation.SetRetentionAnchorAt(v)
+	return _u
+}
+
+// SetNillableRetentionAnchorAt sets the "retention_anchor_at" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableRetentionAnchorAt(v *time.Time) *JobUpdateOne {
+	if v != nil {
+		_u.SetRetentionAnchorAt(*v)
+	}
+	return _u
+}
+
+// ClearRetentionAnchorAt clears the value of the "retention_anchor_at" field.
+func (_u *JobUpdateOne) ClearRetentionAnchorAt() *JobUpdateOne {
+	_u.mutation.ClearRetentionAnchorAt()
+	return _u
+}
+
 // SetProject sets the "project" edge to the Project entity.
 func (_u *JobUpdateOne) SetProject(v *Project) *JobUpdateOne {
 	return _u.SetProjectID(v.ID)
@@ -1053,6 +1227,21 @@ func (_u *JobUpdateOne) AddSseEvents(v ...*SSEEvent) *JobUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.AddSseEventIDs(ids...)
+}
+
+// AddCredentialReferenceIDs adds the "credential_references" edge to the CredentialJobReference entity by IDs.
+func (_u *JobUpdateOne) AddCredentialReferenceIDs(ids ...int) *JobUpdateOne {
+	_u.mutation.AddCredentialReferenceIDs(ids...)
+	return _u
+}
+
+// AddCredentialReferences adds the "credential_references" edges to the CredentialJobReference entity.
+func (_u *JobUpdateOne) AddCredentialReferences(v ...*CredentialJobReference) *JobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCredentialReferenceIDs(ids...)
 }
 
 // Mutation returns the JobMutation object of the builder.
@@ -1133,6 +1322,27 @@ func (_u *JobUpdateOne) RemoveSseEvents(v ...*SSEEvent) *JobUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveSseEventIDs(ids...)
+}
+
+// ClearCredentialReferences clears all "credential_references" edges to the CredentialJobReference entity.
+func (_u *JobUpdateOne) ClearCredentialReferences() *JobUpdateOne {
+	_u.mutation.ClearCredentialReferences()
+	return _u
+}
+
+// RemoveCredentialReferenceIDs removes the "credential_references" edge to CredentialJobReference entities by IDs.
+func (_u *JobUpdateOne) RemoveCredentialReferenceIDs(ids ...int) *JobUpdateOne {
+	_u.mutation.RemoveCredentialReferenceIDs(ids...)
+	return _u
+}
+
+// RemoveCredentialReferences removes "credential_references" edges to CredentialJobReference entities.
+func (_u *JobUpdateOne) RemoveCredentialReferences(v ...*CredentialJobReference) *JobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCredentialReferenceIDs(ids...)
 }
 
 // Where appends a list predicates to the JobUpdate builder.
@@ -1315,6 +1525,18 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	}
 	if _u.mutation.StartedAtCleared() {
 		_spec.ClearField(job.FieldStartedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FinishedAt(); ok {
+		_spec.SetField(job.FieldFinishedAt, field.TypeTime, value)
+	}
+	if _u.mutation.FinishedAtCleared() {
+		_spec.ClearField(job.FieldFinishedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RetentionAnchorAt(); ok {
+		_spec.SetField(job.FieldRetentionAnchorAt, field.TypeTime, value)
+	}
+	if _u.mutation.RetentionAnchorAtCleared() {
+		_spec.ClearField(job.FieldRetentionAnchorAt, field.TypeTime)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1502,6 +1724,51 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.CredentialReferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCredentialReferencesIDs(); len(nodes) > 0 && !_u.mutation.CredentialReferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CredentialReferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.CredentialReferencesTable,
+			Columns: []string{job.CredentialReferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(credentialjobreference.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

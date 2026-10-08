@@ -6,11 +6,15 @@ import IconCarbonScreen from '~icons/carbon/screen'
 import IconCarbonSun from '~icons/carbon/sun'
 
 import AppLogo from '@/components/AppLogo.vue'
+import TaskHistoryDeleteDialog from '@/components/operations/TaskHistoryDeleteDialog.vue'
 import { APP_NAV_SECTIONS, type AppNavItem } from '@/layouts/navigation'
 import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
 import { useServiceStore } from '@/stores/service'
 import { useThemeStore, type ThemeMode } from '@/stores/theme'
+import { getDefaultTokenStorage } from '@/api/token-storage'
+import { invalidateSessionViews } from '@/api/session-context'
+import { onOrganizationInvalidated } from '@/utils/organization-scope'
 
 const router = useRouter()
 const route = useRoute()
@@ -20,15 +24,22 @@ const service = useServiceStore()
 const theme = useThemeStore()
 const message = useMessage()
 const { t } = useI18n()
+onOrganizationInvalidated(() => {
+  invalidateSessionViews()
+})
+watch(
+  () => auth.user?.role,
+  (role) => {
+    if (role !== 'admin' && route.path.startsWith('/admin')) void router.replace('/')
+  },
+)
 
 const SIDEBAR_STORAGE_KEY = 'linguaflow.sidebar.collapsed'
 
-const sidebarCollapsed = ref(
-  typeof window !== 'undefined' && window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1',
-)
+const sidebarCollapsed = ref(getDefaultTokenStorage().getItem(SIDEBAR_STORAGE_KEY) === '1')
 
 watch(sidebarCollapsed, (collapsed) => {
-  window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0')
+  getDefaultTokenStorage().setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0')
 })
 
 const displayName = computed(() => {
@@ -85,9 +96,14 @@ const userOptions = computed<DropdownOption[]>(() => {
         ]),
     },
     { type: 'divider', key: 'divider-1' },
+    { label: t('layout.userMenu.profile'), key: 'profile' },
+    { label: t('layout.userMenu.security'), key: 'security' },
+    { label: t('workbench.settings.preferences'), key: 'preferences' },
+    ...(!service.isLocal ? [{ label: t('workbench.settings.team'), key: 'team' }] : []),
+    { type: 'divider', key: 'divider-2' },
     { label: t('nav.changelog'), key: 'changelog' },
     { label: t('nav.about'), key: 'about' },
-    { type: 'divider', key: 'divider-2' },
+    { type: 'divider', key: 'divider-3' },
   ]
 
   if (service.isLocal) {
@@ -135,7 +151,8 @@ const onSelectUserAction = async (key: string | number) => {
       await router.push({ path: '/login' })
     } catch (error) {
       console.error(error)
-      message.error(t('layout.messages.logoutFailed'))
+      message.warning(t('operations.logoutUnconfirmed'))
+      await router.push({ path: '/login' })
     }
   } else if (key === 'switch-service') {
     const query = service.isLocal ? { force: '1' } : {}
@@ -144,6 +161,14 @@ const onSelectUserAction = async (key: string | number) => {
     await router.push({ path: '/changelog' })
   } else if (key === 'about') {
     await router.push({ path: '/about' })
+  } else if (key === 'profile') {
+    await router.push({ path: '/settings/profile' })
+  } else if (key === 'security') {
+    await router.push({ path: '/settings/security' })
+  } else if (key === 'preferences') {
+    await router.push({ path: '/settings/preferences' })
+  } else if (key === 'team') {
+    await router.push({ path: '/settings/team' })
   }
 }
 
@@ -249,7 +274,7 @@ const navigateTo = (path: string): void => {
     <!-- 主区 -->
     <div class="flex min-w-0 flex-1 flex-col">
       <header
-        class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-lf-border-soft bg-lf-surface px-4 sm:gap-3 sm:px-6"
+        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-lf-border-soft bg-lf-surface px-4 sm:gap-3 sm:px-6"
       >
         <!-- lg:hidden! 用 important 覆盖 naive-ui 注入的 .n-button display（分层样式斗不过未分层样式） -->
         <NButton
@@ -265,9 +290,9 @@ const navigateTo = (path: string): void => {
           </template>
         </NButton>
 
-        <div class="flex-1" />
+        <div class="min-w-0 flex-1 overflow-hidden" />
 
-        <div class="flex items-center gap-2 sm:gap-3">
+        <div class="flex shrink-0 items-center gap-2 sm:gap-3">
           <NDropdown
             v-if="locale.hasMultipleLocales"
             trigger="click"
@@ -275,8 +300,14 @@ const navigateTo = (path: string): void => {
             placement="bottom-end"
             @select="onSelectLocale"
           >
-            <NButton quaternary size="small">
-              {{ t('common.language') }}
+            <NButton
+              quaternary
+              size="small"
+              :aria-label="t('common.language')"
+              :title="t('common.language')"
+            >
+              <template #icon><IconCarbonLanguage aria-hidden="true" /></template>
+              <span class="hidden sm:inline">{{ t('common.language') }}</span>
             </NButton>
           </NDropdown>
           <NDropdown
@@ -293,9 +324,21 @@ const navigateTo = (path: string): void => {
               </template>
             </NButton>
           </NDropdown>
-          <NTag v-if="service.isLocal" size="small" type="success" :bordered="false">
-            {{ t('layout.localModeBadge') }}
-          </NTag>
+          <span
+            v-if="service.isLocal"
+            class="flex shrink-0 items-center text-lf-success"
+            :title="t('layout.localModeBadge')"
+            :aria-label="t('layout.localModeBadge')"
+            role="img"
+          >
+            <IconCarbonLaptop class="text-lg sm:hidden" aria-hidden="true" />
+            <span class="hidden sm:inline-flex"
+              ><NTag size="small" type="success" :bordered="false">{{
+                t('layout.localModeBadge')
+              }}</NTag></span
+            >
+          </span>
+          <GlobalJobTrackerWidget />
           <NDropdown
             v-if="auth.user"
             trigger="click"
@@ -317,6 +360,12 @@ const navigateTo = (path: string): void => {
       <!-- 宽度治理下放页面：普通页面根部用 .lf-content-narrow 保持居中窄栏；
            需要全宽的页面（如项目工作台）自行铺满 -->
       <main class="flex-1 px-5 py-7 sm:px-8">
+        <NAlert v-if="auth.initializationError" type="warning" :bordered="false" class="mb-5">
+          {{ auth.initializationError }}
+          <NButton text class="ml-3" @click="auth.fetchCurrentUser().catch(() => undefined)">{{
+            t('operations.authRetry')
+          }}</NButton>
+        </NAlert>
         <slot />
       </main>
     </div>
@@ -361,7 +410,7 @@ const navigateTo = (path: string): void => {
       </NDrawerContent>
     </NDrawer>
 
-    <GlobalJobTrackerWidget />
     <GlobalJobDetailDrawer />
+    <TaskHistoryDeleteDialog />
   </div>
 </template>

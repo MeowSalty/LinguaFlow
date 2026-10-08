@@ -9,6 +9,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 // ---- 辅助函数 ----
@@ -42,10 +43,10 @@ func entPrunePromptTemplateToResponse(t *ent.PrunePromptTemplate) PrunePromptTem
 		resp.OwnerOrgId = t.OwnerOrgID
 	}
 	if !t.CreatedAt.IsZero() {
-		resp.CreatedAt = &t.CreatedAt
+		resp.CreatedAt = timeutil.NormalizePtr(&t.CreatedAt)
 	}
 	if !t.UpdatedAt.IsZero() {
-		resp.UpdatedAt = &t.UpdatedAt
+		resp.UpdatedAt = timeutil.NormalizePtr(&t.UpdatedAt)
 	}
 	return resp
 }
@@ -60,7 +61,17 @@ func (s *Server) handleListPrunePromptTemplates(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	templates, err := s.prunePromptTemplateSvc.ListByUser(r.Context(), authUser.User.ID)
+	orgID, ok := s.parseSharedOrgQuery(w, r)
+	if !ok {
+		return
+	}
+	var templates []*ent.PrunePromptTemplate
+	var err error
+	if orgID == nil {
+		templates, err = s.prunePromptTemplateSvc.ListByUser(r.Context(), authUser.User.ID)
+	} else {
+		templates, err = s.prunePromptTemplateSvc.ListByOrg(r.Context(), authUser.User.ID, *orgID)
+	}
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -83,7 +94,7 @@ func (s *Server) handleCreatePrunePromptTemplate(w http.ResponseWriter, r *http.
 	}
 
 	var req CreatePrunePromptTemplateRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !s.decodeSharedJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
@@ -92,9 +103,8 @@ func (s *Server) handleCreatePrunePromptTemplate(w http.ResponseWriter, r *http.
 	}
 
 	input := service.CreatePrunePromptTemplateInput{
-		Name:        req.Name,
-		Scope:       "user",
-		OwnerUserID: &authUser.User.ID,
+		Name:  req.Name,
+		OrgID: req.OrgId,
 	}
 	if req.Description != nil {
 		input.Description = *req.Description
@@ -103,7 +113,7 @@ func (s *Server) handleCreatePrunePromptTemplate(w http.ResponseWriter, r *http.
 		input.Content = *req.Content
 	}
 
-	pt, err := s.prunePromptTemplateSvc.Create(r.Context(), input)
+	pt, err := s.prunePromptTemplateSvc.Create(r.Context(), authUser.User.ID, input)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -113,12 +123,18 @@ func (s *Server) handleCreatePrunePromptTemplate(w http.ResponseWriter, r *http.
 
 // handleGetPrunePromptTemplate 获取术语精简提示词模板详情。
 func (s *Server) handleGetPrunePromptTemplate(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parsePrunePromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
-	pt, err := s.prunePromptTemplateSvc.GetByID(r.Context(), id)
+	pt, err := s.prunePromptTemplateSvc.GetByID(r.Context(), authUser.User.ID, id)
 	if err != nil {
 		if err == service.ErrPrunePromptTemplateNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "术语精简提示词模板不存在")
@@ -132,13 +148,19 @@ func (s *Server) handleGetPrunePromptTemplate(w http.ResponseWriter, r *http.Req
 
 // handleUpdatePrunePromptTemplate 更新术语精简提示词模板。
 func (s *Server) handleUpdatePrunePromptTemplate(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parsePrunePromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
 	var req UpdatePrunePromptTemplateRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !s.decodeSharedJSON(w, r, &req) {
 		return
 	}
 
@@ -148,7 +170,7 @@ func (s *Server) handleUpdatePrunePromptTemplate(w http.ResponseWriter, r *http.
 		Content:     req.Content,
 	}
 
-	pt, err := s.prunePromptTemplateSvc.Update(r.Context(), id, input)
+	pt, err := s.prunePromptTemplateSvc.Update(r.Context(), authUser.User.ID, id, input)
 	if err != nil {
 		if err == service.ErrPrunePromptTemplateNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "术语精简提示词模板不存在")
@@ -162,19 +184,25 @@ func (s *Server) handleUpdatePrunePromptTemplate(w http.ResponseWriter, r *http.
 
 // handleDeletePrunePromptTemplate 删除术语精简提示词模板。
 func (s *Server) handleDeletePrunePromptTemplate(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+
 	id, ok := s.parsePrunePromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
-	err := s.prunePromptTemplateSvc.Delete(r.Context(), id)
+	err := s.prunePromptTemplateSvc.Delete(r.Context(), authUser.User.ID, id)
 	if err != nil {
 		if err == service.ErrPrunePromptTemplateNotFound {
 			s.writeProblem(w, r, http.StatusNotFound, "not_found", "术语精简提示词模板不存在")
 			return
 		}
 		if errors.Is(err, service.ErrPrunePromptTemplateInUse) {
-			s.writeProblem(w, r, http.StatusConflict, "conflict", err.Error())
+			s.writeProblem(w, r, http.StatusConflict, "conflict", "该模板正被执行计划引用，无法删除")
 			return
 		}
 		s.writeServiceError(w, r, err)

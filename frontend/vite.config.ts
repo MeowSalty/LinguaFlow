@@ -35,6 +35,9 @@ export default defineConfig({
         }),
       ],
       dts: 'src/components.d.ts',
+      // Keep declarations available while parallel transforms discover their component imports.
+      // Repeated prune/rewrite cycles can overlap file reads and writes on Windows.
+      syncMode: 'append',
     }),
     Icons({
       autoInstall: true,

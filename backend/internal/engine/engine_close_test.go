@@ -10,8 +10,9 @@ import (
 
 // closeTrackingBackend 记录 Close 是否被调用。
 type closeTrackingBackend struct {
-	name   string
-	closed bool
+	name       string
+	closed     bool
+	closeCount int
 }
 
 func (b *closeTrackingBackend) Name() string { return b.name }
@@ -22,7 +23,23 @@ func (b *closeTrackingBackend) Translate(context.Context, backend.Request) (*bac
 
 func (b *closeTrackingBackend) Close() error {
 	b.closed = true
+	b.closeCount++
 	return nil
+}
+
+func TestEngineCloseOwnsRubyRetryBackends(t *testing.T) {
+	shared := &closeTrackingBackend{name: "shared"}
+	ruby := &closeTrackingBackend{name: "ruby"}
+	e := &Engine{
+		rounds:            []pipeline.Round{{Handler: &pipeline.TranslateHandler{Backend: shared}}},
+		rubyRetryBackends: []backend.Backend{ruby, shared, nil, ruby},
+	}
+	if err := e.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if shared.closeCount != 1 || ruby.closeCount != 1 {
+		t.Fatalf("close counts: shared=%d ruby=%d", shared.closeCount, ruby.closeCount)
+	}
 }
 
 // TestEngineCloseClosesReviseHandlerBackend 防止回归：Engine.Close 的类型分支

@@ -131,6 +131,7 @@ glossarySyncImpact:
       仅在 target 发生变更时有意义。
       支持 resource_ids 参数限定分析范围。
       采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+      要求项目读取权限；非法或非正整数 ID、非法资源范围返回 400，未认证 401，无权限 403。
     security:
       - bearerAuth: []
     requestBody:
@@ -160,6 +161,9 @@ glossarySyncExecute:
       提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
       返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
       替换后的段落状态将被设置为 edited，需要人工复核。
+      要求项目写权限（个人所有者或组织 owner/admin），组织 member 仅可读取。
+      持久化成功即返回 202，内存投递失败由后台有界补投，不改报提交失败。
+      非法 ID 或资源范围 400，未认证 401，无写权限 403；不承诺网络重试幂等创建。
     security:
       - bearerAuth: []
     requestBody:
@@ -187,12 +191,40 @@ glossarySyncTaskStatus:
       schema:
         type: string
       description: 同步任务 ID
+  delete:
+    operationId: DeleteGlossarySyncTaskHistory
+    summary: 删除术语同步任务记录
+    description: |
+      同时校验任务项目归属与项目写权限。仅终态且所有执行写入已收尾时可删除。
+      删除执行记录，保留已经提交的术语和译文；非终态 task_not_terminal、收尾中 task_busy 均返回 409。
+      单项事务预算 5 秒，确认回滚后返回 503 task_cleanup_deferred；重复删除返回 404。
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 任务记录已删除
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
   get:
     operationId: GetGlossarySyncTaskStatus
     summary: 查询术语同步任务状态
     description: |
       查询同步更新任务的执行进度和结果。
-      前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+      要求项目读取权限，仅打开详情时按需轮询；终态停止轮询。
+      非法或非正整数 ID 返回 400，未认证 401，无项目权限 403；已授权项目中任务不存在或不匹配返回 404。
+      result 为累计已提交结果，取消或失败不撤销已经完成的替换。
     security:
       - bearerAuth: []
     responses:
@@ -203,7 +235,7 @@ glossarySyncTaskStatus:
             schema:
               $ref: '../components/schemas/glossary.yaml#/GlossarySyncTaskStatusResponse'
       '404':
-        description: 任务不存在
+        $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
@@ -221,7 +253,9 @@ glossarySyncTaskCancel:
     summary: 取消术语同步任务
     description: |
       取消正在执行或等待执行的同步任务。
-      pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+      要求项目写权限（个人所有者或组织 owner/admin）；非法或非正整数 ID 400，未认证 401，无权限 403，任务不存在或不匹配 404。
+      取消与批次提交串行协调；成功响应后不再提交新修改，之前提交的结果保留。
+      重复取消幂等返回当前状态；completed/failed 返回 409 Problem。没有暂停、恢复或原任务重试能力。
     security:
       - bearerAuth: []
     responses:
@@ -232,7 +266,7 @@ glossarySyncTaskCancel:
             schema:
               $ref: '../components/schemas/glossary.yaml#/GlossarySyncTaskCancelResponse'
       '409':
-        description: 任务已完成或已失败，无法取消
+        $ref: '../base.yaml#/components/responses/Problem'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 

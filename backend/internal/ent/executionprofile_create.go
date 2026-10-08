@@ -12,8 +12,8 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 )
 
 // ExecutionProfileCreate is the builder for creating a ExecutionProfile entity.
@@ -114,16 +114,8 @@ func (_c *ExecutionProfileCreate) SetNillableOwnerOrgID(v *int) *ExecutionProfil
 }
 
 // SetConfig sets the "config" field.
-func (_c *ExecutionProfileCreate) SetConfig(v schema.ExecutionProfileConfigData) *ExecutionProfileCreate {
+func (_c *ExecutionProfileCreate) SetConfig(v execution.ProfileSpec) *ExecutionProfileCreate {
 	_c.mutation.SetConfig(v)
-	return _c
-}
-
-// SetNillableConfig sets the "config" field if the given value is not nil.
-func (_c *ExecutionProfileCreate) SetNillableConfig(v *schema.ExecutionProfileConfigData) *ExecutionProfileCreate {
-	if v != nil {
-		_c.SetConfig(*v)
-	}
 	return _c
 }
 
@@ -187,10 +179,6 @@ func (_c *ExecutionProfileCreate) defaults() {
 	if _, ok := _c.mutation.Scope(); !ok {
 		v := executionprofile.DefaultScope
 		_c.mutation.SetScope(v)
-	}
-	if _, ok := _c.mutation.Config(); !ok {
-		v := executionprofile.DefaultConfig
-		_c.mutation.SetConfig(v)
 	}
 }
 
