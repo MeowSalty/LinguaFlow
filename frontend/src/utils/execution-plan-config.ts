@@ -26,6 +26,145 @@ export type ExecutionPlanFormRubyRetry = Omit<ExecutionPlanRubyRetry, 'backend_i
   backend_id?: number | null
 }
 
+export type InlineTermExtractionConfig = ApiSchemas['InlineTermExtractionConfig']
+export type InlineTermExtractionError = keyof InlineTermExtractionConfig | 'config'
+type FormTranslateConfig = NonNullable<ExecutionPlanFormRound['translate']>
+
+/** Clone form values without turning invalid numbers into null before validation. */
+export function cloneExecutionPlanValue<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => cloneExecutionPlanValue(item)) as T
+  if (value !== null && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, cloneExecutionPlanValue(item)]),
+    ) as T
+  return value
+}
+
+export function createInlineTermExtractionConfig(): Required<InlineTermExtractionConfig> {
+  return {
+    enabled: false,
+    max_terms_per_1000_words: 3,
+    min_source_len: 2,
+    conflict_strategy: 'rewrite-local',
+  }
+}
+
+/** Fill only missing properties. Explicit invalid values remain visible to validation. */
+export function mergeInlineTermExtractionConfig(
+  source: InlineTermExtractionConfig,
+): InlineTermExtractionConfig {
+  if (source === null || typeof source !== 'object' || Array.isArray(source)) return source
+  const defaults = createInlineTermExtractionConfig()
+  return {
+    enabled: source.enabled === undefined ? defaults.enabled : source.enabled,
+    max_terms_per_1000_words:
+      source.max_terms_per_1000_words === undefined
+        ? defaults.max_terms_per_1000_words
+        : source.max_terms_per_1000_words,
+    min_source_len:
+      source.min_source_len === undefined ? defaults.min_source_len : source.min_source_len,
+    conflict_strategy:
+      source.conflict_strategy === undefined
+        ? defaults.conflict_strategy
+        : source.conflict_strategy,
+  }
+}
+
+export function validateInlineTermExtractionConfig(value: unknown): InlineTermExtractionError[] {
+  if (value === undefined) return []
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return ['config']
+  const config = value as Record<string, unknown>
+  const errors: InlineTermExtractionError[] = []
+  if (config.enabled !== undefined && typeof config.enabled !== 'boolean') errors.push('enabled')
+  const density = config.max_terms_per_1000_words
+  if (
+    density !== undefined &&
+    (typeof density !== 'number' || !Number.isFinite(density) || density <= 0)
+  )
+    errors.push('max_terms_per_1000_words')
+  const minLength = config.min_source_len
+  if (
+    minLength !== undefined &&
+    (typeof minLength !== 'number' || !Number.isInteger(minLength) || minLength < 1)
+  )
+    errors.push('min_source_len')
+  if (
+    config.conflict_strategy !== undefined &&
+    config.conflict_strategy !== 'off' &&
+    config.conflict_strategy !== 'rewrite-local'
+  )
+    errors.push('conflict_strategy')
+  return errors
+}
+
+export function mergeTranslateRoundConfig(
+  source?: Partial<FormTranslateConfig>,
+): FormTranslateConfig {
+  return {
+    prompt_template_id: source?.prompt_template_id ?? null,
+    batch_size: source?.batch_size ?? 10,
+    max_words_per_batch: source?.max_words_per_batch ?? 0,
+    fallback_shrink: source?.fallback_shrink ?? 1,
+    segment_filter: { status_filter: source?.segment_filter?.status_filter ?? 'pending_only' },
+    retry: {
+      max_attempts: source?.retry?.max_attempts ?? 3,
+      backoff_ms: source?.retry?.backoff_ms ?? 2000,
+      jitter: source?.retry?.jitter ?? true,
+    },
+    ...(source?.inline_term_extraction === undefined
+      ? {}
+      : { inline_term_extraction: mergeInlineTermExtractionConfig(source.inline_term_extraction) }),
+  }
+}
+
+export function createExecutionPlanRound(): ExecutionPlanFormRound {
+  return {
+    mode: 'translate',
+    backend_id: null,
+    concurrency: 3,
+    translate: mergeTranslateRoundConfig(),
+  }
+}
+
+export function planUsesTermExtraction(
+  rounds: readonly ExecutionPlanFormRound[] | undefined,
+): boolean {
+  return Boolean(
+    rounds?.some(
+      (round) =>
+        round.mode === 'extract' ||
+        (round.mode === 'translate' && round.translate?.inline_term_extraction?.enabled === true),
+    ),
+  )
+}
+
+/** Drafts are private to an editor and follow a round through reorder and mode changes. */
+export function createRoundModeSelection(
+  createRound: (source?: Partial<ExecutionPlanFormRound>) => ExecutionPlanFormRound,
+) {
+  const drafts = new WeakMap<
+    ExecutionPlanFormRound,
+    Map<ExecutionRound['mode'], ExecutionPlanFormRound>
+  >()
+  return (round: ExecutionPlanFormRound, mode: ExecutionRound['mode']): void => {
+    if (round.mode === mode) return
+    const saved = drafts.get(round) ?? new Map<ExecutionRound['mode'], ExecutionPlanFormRound>()
+    saved.set(round.mode, cloneExecutionPlanValue(round))
+    drafts.set(round, saved)
+    const next = cloneExecutionPlanValue(
+      saved.get(mode) ??
+        createRound({ mode, backend_id: round.backend_id, concurrency: round.concurrency }),
+    )
+    delete round.translate
+    delete round.extract
+    delete round.adjudicate
+    delete round.semantic_qa
+    delete round.revise
+    delete round.correct
+    Object.assign(round, next)
+  }
+}
+
 export const ADJUDICATE_CODES = [
   'source_residual',
   'length_ratio',
@@ -91,13 +230,19 @@ export function setRoundCodes(round: ExecutionPlanFormRound, codes: string[] | u
 
 /** Presence lives in the DTO; this cache only remembers the user's unsubmitted specified draft. */
 export function createRoundCodeSelection() {
-  const specified = new WeakMap<ExecutionPlanFormRound, string[]>()
+  const specified = new WeakMap<ExecutionPlanFormRound, Partial<Record<CodeRound, string[]>>>()
   return (round: ExecutionPlanFormRound, mode: 'default' | 'specified'): void => {
+    if (round.mode !== 'adjudicate' && round.mode !== 'semantic_qa' && round.mode !== 'revise')
+      return
+    const drafts = specified.get(round) ?? {}
     if (mode === 'default') {
       const codes = roundCodes(round)
-      if (Array.isArray(codes)) specified.set(round, [...codes])
+      if (Array.isArray(codes)) {
+        drafts[round.mode] = [...codes]
+        specified.set(round, drafts)
+      }
       setRoundCodes(round, undefined)
-    } else setRoundCodes(round, [...(specified.get(round) ?? roundCodes(round) ?? [])])
+    } else setRoundCodes(round, [...(drafts[round.mode] ?? roundCodes(round) ?? [])])
   }
 }
 
@@ -143,11 +288,20 @@ export function buildExecutionRoundInput(round: ExecutionPlanFormRound): Executi
   // backend_id 未选择（null）时省略；prompt/template 规范必填（省略/0 被后端拒绝），
   // 未选择由表单校验拦截，此处为与轮次代码校验同级的兜底
   if (round.mode !== 'correct' && round.backend_id != null) result.backend_id = round.backend_id
+  // Wire objects omit undefined properties; validate extraction before JSON can coerce numbers.
   const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
   if (round.mode === 'translate' && round.translate) {
-    const { prompt_template_id, ...translate } = clone(round.translate)
+    if (validateInlineTermExtractionConfig(round.translate.inline_term_extraction).length)
+      throw new Error('Invalid inline term extraction configuration')
+    const { prompt_template_id, inline_term_extraction, ...translate } = clone(round.translate)
     if (prompt_template_id == null) throw new Error('Missing translate prompt template')
-    result.translate = { ...translate, prompt_template_id }
+    result.translate = {
+      ...translate,
+      prompt_template_id,
+      ...(inline_term_extraction === undefined
+        ? {}
+        : { inline_term_extraction: mergeInlineTermExtractionConfig(inline_term_extraction) }),
+    }
   }
   if (round.mode === 'extract' && round.extract) {
     const { template_id, ...extract } = clone(round.extract)

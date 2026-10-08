@@ -78,14 +78,6 @@ const protectRuleOptions = computed(() => [
   { label: t('profileConfigEditor.protect.ruleOptions.xml'), value: 'xml' },
 ])
 
-const inlineConflictStrategyOptions = computed(() => [
-  { label: t('profileConfigEditor.glossary.conflictStrategyOptions.off'), value: 'off' },
-  {
-    label: t('profileConfigEditor.glossary.conflictStrategyOptions.rewriteLocal'),
-    value: 'rewrite-local',
-  },
-])
-
 const rubyPreserveKindsOptions = computed(() => [
   { label: t('profileConfigEditor.ruby.preserveKindsPhonetic'), value: 'phonetic' },
   { label: t('profileConfigEditor.ruby.preserveKindsSemantic'), value: 'semantic' },
@@ -312,63 +304,6 @@ defineExpose({ lengthRatioError, configError })
           v-model:value="configModel.repair.prompt_upgrade"
           size="small"
           :disabled="disabled"
-        />
-      </div>
-    </ConfigSectionPanel>
-
-    <!-- 术语表 -->
-    <ConfigSectionPanel
-      :title="t('profileConfigEditor.glossary.title')"
-      :description="t('profileConfigEditor.glossary.description')"
-      :enabled="configModel.glossary.bootstrap.enabled"
-    >
-      <template #actions>
-        <NSwitch
-          v-model:value="configModel.glossary.bootstrap.enabled"
-          size="small"
-          :disabled="disabled"
-          :aria-label="t('profileConfigEditor.glossary.bootstrapEnabled')"
-        />
-      </template>
-
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.glossary.bootstrapMaxTerms') }}
-          </div>
-          <NInputNumber
-            v-model:value="configModel.glossary.bootstrap.max_terms_per_1000_chars"
-            :min="0"
-            :step="0.1"
-            size="small"
-            :disabled="disabled"
-            class="w-full"
-          />
-        </div>
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.glossary.bootstrapMinSourceLen') }}
-          </div>
-          <NInputNumber
-            v-model:value="configModel.glossary.bootstrap.min_source_len"
-            :min="1"
-            :step="1"
-            size="small"
-            :disabled="disabled"
-            class="w-full"
-          />
-        </div>
-      </div>
-      <div>
-        <div class="mb-1 text-xs text-lf-text-subtle">
-          {{ t('profileConfigEditor.glossary.bootstrapConflictStrategy') }}
-        </div>
-        <NSelect
-          v-model:value="configModel.glossary.bootstrap.inline_conflict_strategy"
-          :options="inlineConflictStrategyOptions"
-          size="small"
-          :disabled="disabled"
-          class="w-full"
         />
       </div>
     </ConfigSectionPanel>

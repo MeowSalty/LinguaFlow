@@ -144,9 +144,9 @@ const messages = {
     goToExecutionPlans: '前往「执行计划」',
     advancedToggle: '高级选项',
     projectLabel: '项目（可选）',
-    projectPlaceholder: '复用项目术语表与语言配置',
+    projectPlaceholder: '复用项目语言配置与术语设置',
     glossaryTitle: '内联术语表',
-    glossaryHint: '仅保存在内存中，翻译结束后即丢弃；选择项目时叠加在项目术语表之上',
+    glossaryHint: '仅用于本次翻译，不写入项目术语表；关联项目时，须启用项目术语表才会应用',
     glossaryAdd: '添加术语',
     glossarySourcePlaceholder: '源术语',
     glossaryTargetPlaceholder: '目标术语',
@@ -179,6 +179,14 @@ const messages = {
       sourceRequired: '请输入原文',
       planRequired: '请选择执行计划',
     },
+  },
+  termExtraction: {
+    projectDisabled: '项目未启用术语表，本次不提取术语',
+    projectSwitchHint:
+      '控制项目翻译中的术语应用与提取。关闭后不使用已有术语、不在翻译时提取新术语，并跳过独立术语抽取轮次；已有条目和轮次配置仍然保留。',
+    quickProjectDisabled:
+      '项目未启用术语表，本次不使用已有或临时术语，也不提取新术语。临时输入仍然保留。',
+    skippedGlossaryDisabled: '已跳过：项目术语表已关闭',
   },
   layout: {
     localModeBadge: '本地模式',
@@ -1940,7 +1948,6 @@ const messages = {
       ruby: '注音',
       repair: '修复',
       postprocess: '后处理',
-      glossary: '术语表',
       context: '上下文',
       qa: '质检',
     },
@@ -2007,18 +2014,6 @@ const messages = {
       schemaAliases: 'Schema 别名映射',
       placeholderNormalize: '占位符归一化',
       promptUpgrade: 'Prompt 升级重试',
-    },
-    glossary: {
-      title: '术语表',
-      description: '翻译前从源文内联抽取术语并注入提示词',
-      bootstrapEnabled: '启用内联自举',
-      bootstrapMaxTerms: '每千字符最大术语数',
-      bootstrapMinSourceLen: '最短源术语长度',
-      bootstrapConflictStrategy: '冲突策略',
-      conflictStrategyOptions: {
-        off: '关闭',
-        rewriteLocal: '以术语表为准',
-      },
     },
     context: {
       title: '上下文窗口',
@@ -2106,7 +2101,7 @@ const messages = {
       profile: '执行策略',
       profilePlaceholder: '选择计划引用的执行策略',
       profileHint:
-        '计划级策略引用：为全部改写型轮次与引擎级行为提供保护/注音/后处理/修复/术语表/上下文/质检预设，任务创建时冻结进执行快照',
+        '计划级策略引用：为全部改写型轮次与引擎级行为提供保护/注音/后处理/修复/上下文/质检预设，任务创建时冻结进执行快照',
       rounds: '执行轮次',
     },
     validation: {
@@ -2122,6 +2117,8 @@ const messages = {
       roundReviseIssueCodesRequired: '轮次 {n}：修订轮按问题代码筛选时至少选择一个问题代码',
       roundFallbackShrinkRequired: '轮次 {n}：缩放因子需在 0 到 1 之间（不含 0）',
       roundCorrectRulesRequired: '轮次 {n}：本地改写至少启用一条规则',
+      roundInlineTermExtractionInvalid:
+        '轮次 {n}：请检查高级配置中的术语提取参数，关闭提取时也需填写有效值',
     },
     messages: {
       createSuccess: '执行计划已创建',
@@ -2171,6 +2168,26 @@ const messages = {
       fallbackShrinkPlaceholder: '取值范围 0 < x ≤ 1',
       fallbackShrinkHint: '1 = 不缩放，小于 1 表示每池逐级缩小',
       advancedConfig: '高级配置',
+      inlineTermExtraction: {
+        title: '翻译时提取术语',
+        description:
+          '在本轮翻译的同一次模型请求中提取并补充新术语。关联项目时，需启用项目术语表；关闭此选项仍可使用已有术语。自定义翻译模板需支持术语提取。',
+        enabledBadge: '提取术语',
+        maxTerms: '每千源文字词最大术语数',
+        maxTermsHint:
+          '中日韩文本按字、其他文本按词计数，允许正小数；每批按源文量换算提取预算，至少为 1 条。',
+        minSourceLen: '最短源术语长度',
+        conflictStrategy: '冲突处理',
+        conflictOff: '保留本批译文',
+        conflictRewrite: '按已有术语统一译文',
+        validation: {
+          config: '术语提取配置格式无效，请重新配置',
+          enabled: '请选择有效的术语提取开关状态',
+          maxTerms: '请输入大于 0 的有限数值',
+          minSourceLen: '请输入至少为 1 的整数，按 Unicode 字符计数',
+          conflictStrategy: '请选择有效的冲突处理方式',
+        },
+      },
       retryMaxAttempts: '最大重试次数',
       retryBackoffMs: '重试退避间隔（毫秒）',
       retryJitter: '启用抖动',

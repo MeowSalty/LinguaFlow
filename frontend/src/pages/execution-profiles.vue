@@ -130,7 +130,6 @@ const hasFeatures = (item: ExecutionProfile): boolean =>
     item.config?.ruby?.enabled ||
     item.config?.repair?.enabled ||
     item.config?.postprocess?.enabled ||
-    item.config?.glossary?.bootstrap?.enabled ||
     item.config?.context?.enabled ||
     item.config?.qa?.enabled,
   )
@@ -400,9 +399,6 @@ useStoreErrorToast(
           </NTag>
           <NTag v-if="item.config?.postprocess?.enabled" size="small" :bordered="false">
             {{ t('executionProfiles.feature.postprocess') }}
-          </NTag>
-          <NTag v-if="item.config?.glossary?.bootstrap?.enabled" size="small" :bordered="false">
-            {{ t('executionProfiles.feature.glossary') }}
           </NTag>
           <NTag v-if="item.config?.context?.enabled" size="small" :bordered="false">
             {{ t('executionProfiles.feature.context') }}

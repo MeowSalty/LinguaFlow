@@ -40,14 +40,6 @@ export function createProfileConfig(): ProfileConfig {
       placeholder_normalize: true,
       prompt_upgrade: true,
     },
-    glossary: {
-      bootstrap: {
-        enabled: false,
-        max_terms_per_1000_chars: 3,
-        min_source_len: 2,
-        inline_conflict_strategy: 'rewrite-local',
-      },
-    },
     context: { enabled: true, before: 1, after: 1, max_chars: 0 },
     qa: {
       enabled: false,
@@ -98,18 +90,6 @@ const schema = object({
     schema_aliases: bool,
     placeholder_normalize: bool,
     prompt_upgrade: bool,
-  }),
-  glossary: object({
-    bootstrap: object({
-      enabled: bool,
-      max_terms_per_1000_chars: number(0),
-      min_source_len: number(1, true),
-      inline_conflict_strategy: {
-        kind: 'string',
-        values: ['off', 'rewrite-local'],
-        required: true,
-      },
-    }),
   }),
   context: object({
     enabled: bool,
