@@ -106,14 +106,6 @@ func profileConfigToResponse(c *schema.ExecutionProfileConfigData) ExecutionProf
 			PlaceholderNormalize: c.Repair.PlaceholderNormalize,
 			PromptUpgrade:        c.Repair.PromptUpgrade,
 		},
-		Glossary: ProfileGlossaryConfig{
-			Bootstrap: ProfileBootstrapConfig{
-				Enabled:                c.Glossary.Bootstrap.Enabled,
-				MaxTermsPer1000Chars:   c.Glossary.Bootstrap.MaxTermsPer1000Chars,
-				MinSourceLen:           c.Glossary.Bootstrap.MinSourceLen,
-				InlineConflictStrategy: ProfileBootstrapConfigInlineConflictStrategy(c.Glossary.Bootstrap.InlineConflictStrategy),
-			},
-		},
 		Context: ProfileContextConfig{
 			Enabled:  c.Context.Enabled,
 			Before:   c.Context.Before,

@@ -31,7 +31,7 @@ Project:
     glossary_enabled:
       type: boolean
       default: false
-      description: 是否启用术语表
+      description: 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
     source_lang:
       type: string
     target_lang:
@@ -68,7 +68,7 @@ CreateProjectRequest:
     glossary_enabled:
       type: boolean
       default: false
-      description: 是否启用术语表
+      description: 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
     source_lang:
       type: string
     target_lang:
@@ -85,7 +85,7 @@ UpdateProjectRequest:
       additionalProperties: true
     glossary_enabled:
       type: boolean
-      description: 是否启用术语表
+      description: 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
     source_lang:
       type: string
     target_lang:

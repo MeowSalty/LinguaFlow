@@ -9,6 +9,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
@@ -55,6 +56,15 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		translateCfg.MaxWordsPerBatch = &t.MaxWordsPerBatch
 		if t.FallbackShrink > 0 {
 			translateCfg.FallbackShrink = float32(t.FallbackShrink)
+		}
+		if inline := t.InlineTermExtraction; inline != nil {
+			strategy := InlineTermExtractionConfigConflictStrategy(inline.ConflictStrategy)
+			translateCfg.InlineTermExtraction = &InlineTermExtractionConfig{
+				Enabled:              &inline.Enabled,
+				MaxTermsPer1000Words: &inline.MaxTermsPer1000Words,
+				MinSourceLen:         &inline.MinSourceLen,
+				ConflictStrategy:     &strategy,
+			}
 		}
 		if t.Retry.MaxAttempts > 0 || t.Retry.BackoffMs > 0 || t.Retry.Jitter {
 			retry := toRetryConfigAPI(t.Retry)
@@ -289,6 +299,22 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 				translateCfg.MaxWordsPerBatch = *t.MaxWordsPerBatch
 			}
 			translateCfg.FallbackShrink = float64(t.FallbackShrink)
+			if input := t.InlineTermExtraction; input != nil {
+				inline := execution.DefaultInlineTermExtraction()
+				if input.Enabled != nil {
+					inline.Enabled = *input.Enabled
+				}
+				if input.MaxTermsPer1000Words != nil {
+					inline.MaxTermsPer1000Words = *input.MaxTermsPer1000Words
+				}
+				if input.MinSourceLen != nil {
+					inline.MinSourceLen = *input.MinSourceLen
+				}
+				if input.ConflictStrategy != nil {
+					inline.ConflictStrategy = string(*input.ConflictStrategy)
+				}
+				translateCfg.InlineTermExtraction = &inline
+			}
 			if t.Retry != nil {
 				if t.Retry.MaxAttempts != nil {
 					translateCfg.Retry.MaxAttempts = *t.Retry.MaxAttempts
