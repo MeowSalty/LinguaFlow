@@ -379,6 +379,8 @@ func assertMigratedServeStarts(t *testing.T, dsn, dir string, port int) {
 		"LINGUAFLOW_DATABASE_DRIVER=postgres", "LINGUAFLOW_DATABASE_DSN=" + dsn,
 		"LINGUAFLOW_JWT_SECRET_FILE=" + filepath.Join(dir, "jwt-secret"),
 		"LINGUAFLOW_CREDENTIALS_KEYRING_FILE=" + filepath.Join(dir, "credentials-keyring.json"),
+		"LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES=null",
+		"LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES=null",
 	})
 }
 
