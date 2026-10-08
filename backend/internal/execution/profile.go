@@ -9,7 +9,6 @@ type ProfileSpec struct {
 	Protect       ProfileProtectConfig     `json:"protect"     yaml:"protect"`
 	Postprocess   ProfilePostprocessConfig `json:"postprocess" yaml:"postprocess"`
 	Repair        ProfileRepairConfig      `json:"repair"      yaml:"repair"`
-	Glossary      ProfileGlossaryConfig    `json:"glossary"    yaml:"glossary"`
 	Context       ProfileContextConfig     `json:"context"     yaml:"context"`
 	Ruby          ProfileRubyConfig        `json:"ruby"        yaml:"ruby"`
 	QA            ProfileQAConfig          `json:"qa"          yaml:"qa"`
@@ -40,19 +39,6 @@ type ProfileRepairConfig struct {
 	SchemaAliases        bool `json:"schema_aliases"        yaml:"schema_aliases"`
 	PlaceholderNormalize bool `json:"placeholder_normalize" yaml:"placeholder_normalize"`
 	PromptUpgrade        bool `json:"prompt_upgrade"        yaml:"prompt_upgrade"`
-}
-
-// ProfileGlossaryConfig 术语表配置。
-type ProfileGlossaryConfig struct {
-	Bootstrap ProfileBootstrapConfig `json:"bootstrap" yaml:"bootstrap"`
-}
-
-// ProfileBootstrapConfig 术语自举配置（仅内联自举相关）。
-type ProfileBootstrapConfig struct {
-	Enabled                bool    `json:"enabled"                  yaml:"enabled"`
-	MaxTermsPer1000Chars   float64 `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
-	MinSourceLen           int     `json:"min_source_len"           yaml:"min_source_len"`
-	InlineConflictStrategy string  `json:"inline_conflict_strategy" yaml:"inline_conflict_strategy"`
 }
 
 // ProfileContextConfig 上下文窗口配置。
@@ -92,14 +78,6 @@ func DefaultProfile() ProfileSpec {
 			SchemaAliases:        true,
 			PlaceholderNormalize: true,
 			PromptUpgrade:        true,
-		},
-		Glossary: ProfileGlossaryConfig{
-			Bootstrap: ProfileBootstrapConfig{
-				Enabled:                false,
-				MaxTermsPer1000Chars:   3.0,
-				MinSourceLen:           2,
-				InlineConflictStrategy: "rewrite-local",
-			},
 		},
 		Context: ProfileContextConfig{
 			Enabled:  true,

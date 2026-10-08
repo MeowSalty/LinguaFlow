@@ -10,6 +10,7 @@ import (
 type ExecutionRoundConfig = execution.ExecutionRoundConfig
 type TranslateSegmentFilterConfig = execution.TranslateSegmentFilterConfig
 type TranslateRoundConfig = execution.TranslateRoundConfig
+type InlineTermExtractionConfig = execution.InlineTermExtractionConfig
 type ExtractRoundConfig = execution.ExtractRoundConfig
 type AdjudicateRoundConfig = execution.AdjudicateRoundConfig
 type SemanticQARoundConfig = execution.SemanticQARoundConfig
@@ -41,7 +42,7 @@ func (ExecutionPlanTemplate) Fields() []ent.Field {
 		// import templates，故字面量）。带 Default 使 SQLite 对存量行执行
 		// ALTER TABLE ADD COLUMN NOT NULL 时回填到合法的内置策略而非迁移失败。
 		field.Int("profile_id").Default(-1).
-			Comment("计划级策略引用（ExecutionProfile），为全管道供七项行为预设"),
+			Comment("计划级策略引用（ExecutionProfile），为全管道提供行为预设"),
 		field.JSON("ruby_retry", ExecutionPlanRubyRetryConfig{}).
 			Optional().
 			Comment("注音对齐重试配置"),

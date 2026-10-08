@@ -117,13 +117,6 @@ func ValidateProfile(p ProfileSpec) error {
 			return errors.New("unsupported protection rule")
 		}
 	}
-	b := p.Glossary.Bootstrap
-	if b.MaxTermsPer1000Chars < 0 || b.MinSourceLen < 0 {
-		return errors.New("invalid glossary bootstrap limits")
-	}
-	if b.Enabled && b.InlineConflictStrategy != "off" && b.InlineConflictStrategy != "rewrite-local" {
-		return errors.New("invalid glossary conflict strategy")
-	}
 	if p.QA.Enabled {
 		if p.QA.LengthRatioMin < 0 || p.QA.LengthRatioMax < 0 {
 			return errors.New("QA ratios cannot be negative")
