@@ -16,7 +16,7 @@ LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（�
 | 要求                  | 最低版本 |
 | --------------------- | -------- |
 | Go（从源码构建）      | 1.26.8+  |
-| Node.js（从源码构建） | 20+      |
+| Node.js(从源码构建) | `^20.19.0` 或 `>=22.12.0` |
 | pnpm（从源码构建）    | 最新版   |
 | Docker（容器部署）    | 20+      |
 
@@ -271,10 +271,10 @@ task frontend:install
 ### 构建
 
 ```bash
-task backend:build
+task backend:local:build
 ```
 
-构建产物位于 `bin/linguaflow`。
+该任务会先构建前端并嵌入到二进制,产物位于 `bin/linguaflow`(含嵌入式 Web UI)。仅需后端二进制、不要内嵌前端时用 `task backend:build`。
 
 ### 开发模式
 
