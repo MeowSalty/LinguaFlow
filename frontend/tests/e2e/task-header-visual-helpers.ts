@@ -151,7 +151,7 @@ export async function openAndCheckTaskPanel(page: Page) {
   expect(scrolling.top).toBeGreaterThan(0)
   await expect(list.getByRole('button', { name: /保留的已完成任务/ })).toBeInViewport()
   await panel.getByRole('button', { name: '查看全部', exact: true }).click({ trial: true })
-  await assertUnobscured(panel.getByRole('button', { name: '清除已结束任务', exact: true }))
+  await assertUnobscured(panel.getByRole('button', { name: '隐藏已结束任务', exact: true }))
   await list.evaluate((element) => {
     element.scrollTop = 0
   })
