@@ -20,6 +20,8 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldVersion holds the string denoting the version field in the database.
 	FieldVersion = "version"
+	// FieldDataVersion holds the string denoting the data_version field in the database.
+	FieldDataVersion = "data_version"
 	// FieldMode holds the string denoting the mode field in the database.
 	FieldMode = "mode"
 	// FieldLocalUserID holds the string denoting the local_user_id field in the database.
@@ -34,6 +36,7 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldVersion,
+	FieldDataVersion,
 	FieldMode,
 	FieldLocalUserID,
 }
@@ -57,6 +60,10 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// VersionValidator is a validator for the "version" field. It is called by the builders before save.
 	VersionValidator func(int) error
+	// DefaultDataVersion holds the default value on creation for the "data_version" field.
+	DefaultDataVersion int
+	// DataVersionValidator is a validator for the "data_version" field. It is called by the builders before save.
+	DataVersionValidator func(int) error
 	// LocalUserIDValidator is a validator for the "local_user_id" field. It is called by the builders before save.
 	LocalUserIDValidator func(int) error
 	// DefaultID holds the default value on creation for the "id" field.
@@ -109,6 +116,11 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByVersion orders the results by the version field.
 func ByVersion(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldVersion, opts...).ToFunc()
+}
+
+// ByDataVersion orders the results by the data_version field.
+func ByDataVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDataVersion, opts...).ToFunc()
 }
 
 // ByMode orders the results by the mode field.

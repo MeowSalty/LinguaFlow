@@ -22,6 +22,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
@@ -38,6 +39,9 @@ type Server struct {
 	authService                  *service.AuthService
 	adminService                 *service.AdminService
 	settingsService              *service.SettingsService
+	taskLifecycle                *tasklife.Coordinator
+	taskHistory                  *service.TaskHistoryService
+	taskHistoryDone              chan struct{}
 	runtimeAddress               config.RuntimeAddress
 	userService                  *service.UserService
 	backendSvc                   *service.BackendService
@@ -178,12 +182,19 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	}
 	s.jobStore = jobStore
 	s.jobSvc = service.NewJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.translationPromptTemplateSvc, s.bootstrapPromptTemplateSvc, s.executionProfileSvc, jobStore, s.eventBroker)
+	s.taskLifecycle = &tasklife.Coordinator{}
+	s.jobSvc.SetLifecycle(s.taskLifecycle)
 	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc, s)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc, database.DialectFor(cfg.Database.Driver), cfg.RevisionRetention, logger)
 	s.statsSvc = service.NewStatsService(client, s.projectSvc)
 	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	s.glossarySyncSvc = service.NewGlossarySyncService(client, s.glossarySvc, s.projectSvc, s.auditSvc, logger)
+	s.glossarySyncSvc.SetLifecycle(s.taskLifecycle)
+	s.taskHistory = service.NewTaskHistoryService(client, s.projectSvc, s.taskLifecycle, s.eventBroker)
+	s.taskHistory.SetMaintenance(s.storageMaintenance)
+	s.taskHistory.SetLogger(logger)
+	s.settingsService.OnTaskRetentionChanged(s.taskHistory.Wake)
 	s.glossaryPruneSvc = service.NewGlossaryPruneService(client, s.projectSvc, s.backendSvc, s.glossarySvc, s.prunePromptTemplateSvc, limiterPool, logger, s.httpClients)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
 	if err := s.initStorage(context.Background(), keys); err != nil {
@@ -237,8 +248,8 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	// 创建 ResourceMutex
 	s.resMutex = worker.NewResourceMutex()
 
-	translationQueue := worker.NewQueue(cfg.Workers.Translation.QueueCapacity)
-	syncQueue := worker.NewQueue(cfg.Workers.Sync.QueueCapacity)
+	translationQueue := worker.NewQueue(cfg.Workers.Translation.QueueCapacity).WithLifecycle(s.taskLifecycle, service.OperationTranslation)
+	syncQueue := worker.NewQueue(cfg.Workers.Sync.QueueCapacity).WithLifecycle(s.taskLifecycle, service.OperationGlossarySync)
 
 	// RSS 保险丝：进程级双水位准入闸门（0 = 关闭）。仅是准入控制，
 	// 不改变任务状态；触发时资源排队、在途请求继续。
@@ -258,6 +269,9 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 
 	// 创建 Dispatcher
 	s.dispatcher = worker.NewDispatcher(logger, s.resMutex, cfg.Workers, translationRunner, syncTaskRunner)
+	s.dispatcher.SetRecoveryBarrier(s.taskHistory.Prepare)
+	s.jobSvc.SetTaskControl(func(id int) { s.dispatcher.CancelTask("translation", id) }, func(id int) bool { return s.dispatcher.PauseTask("translation", id) })
+	s.glossarySyncSvc.SetTaskControl(func(id int) { s.dispatcher.CancelTask("sync", id) })
 
 	s.httpServer = &http.Server{
 		Addr:              cfg.Address(),
@@ -278,10 +292,17 @@ func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 	s.runStarted = true
 	runCtx, cancel := context.WithCancel(ctx)
 	s.runCancel = cancel
+	s.taskHistoryDone = make(chan struct{})
 	s.httpServer.BaseContext = func(net.Listener) context.Context { return runCtx }
 	s.runMu.Unlock()
 	defer cancel()
 	s.startStorage(runCtx)
+	go func() {
+		defer close(s.taskHistoryDone)
+		if s.taskHistory != nil {
+			s.taskHistory.Run(runCtx)
+		}
+	}()
 	serveErr := make(chan error, 1)
 
 	// 启动 Dispatcher（内部执行 Recover + WorkerPool）
@@ -332,6 +353,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		go func() {
 			defer cancelCleanup()
 			s.ready.Store(false)
+			if s.taskHistory != nil {
+				s.taskHistory.Stop()
+			}
 			s.runMu.Lock()
 			if s.runCancel != nil {
 				s.runCancel()
@@ -343,7 +367,22 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			if s.httpClients != nil {
 				s.httpClients.Shutdown()
 			}
-			results := make(chan error, 4)
+			results := make(chan error, 5)
+			go func() {
+				s.runMu.Lock()
+				historyDone := s.taskHistoryDone
+				s.runMu.Unlock()
+				if historyDone == nil {
+					results <- nil
+					return
+				}
+				select {
+				case <-historyDone:
+					results <- nil
+				case <-cleanupCtx.Done():
+					results <- cleanupCtx.Err()
+				}
+			}()
 			go func() { results <- s.waitStorage(cleanupCtx) }()
 			go func() {
 				if s.dispatcher != nil {
@@ -370,7 +409,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 					results <- nil
 				}
 			}()
-			for range 4 {
+			for range 5 {
 				select {
 				case err := <-results:
 					s.shutdownErr = errors.Join(s.shutdownErr, err)
@@ -395,6 +434,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) checkReadiness(ctx context.Context) error {
 	if !s.ready.Load() {
 		return errors.New("server is not accepting requests")
+	}
+	if s.taskHistory != nil && !s.taskHistory.Ready() && !s.storageMaintenance() {
+		return errors.New("task recovery and history preparation are incomplete")
 	}
 	if s.db == nil {
 		return errors.New("database is not configured")

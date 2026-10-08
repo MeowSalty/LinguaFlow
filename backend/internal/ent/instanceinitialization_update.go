@@ -34,6 +34,27 @@ func (_u *InstanceInitializationUpdate) SetUpdatedAt(v time.Time) *InstanceIniti
 	return _u
 }
 
+// SetDataVersion sets the "data_version" field.
+func (_u *InstanceInitializationUpdate) SetDataVersion(v int) *InstanceInitializationUpdate {
+	_u.mutation.ResetDataVersion()
+	_u.mutation.SetDataVersion(v)
+	return _u
+}
+
+// SetNillableDataVersion sets the "data_version" field if the given value is not nil.
+func (_u *InstanceInitializationUpdate) SetNillableDataVersion(v *int) *InstanceInitializationUpdate {
+	if v != nil {
+		_u.SetDataVersion(*v)
+	}
+	return _u
+}
+
+// AddDataVersion adds value to the "data_version" field.
+func (_u *InstanceInitializationUpdate) AddDataVersion(v int) *InstanceInitializationUpdate {
+	_u.mutation.AddDataVersion(v)
+	return _u
+}
+
 // SetLocalUserID sets the "local_user_id" field.
 func (_u *InstanceInitializationUpdate) SetLocalUserID(v int) *InstanceInitializationUpdate {
 	_u.mutation.ResetLocalUserID()
@@ -104,6 +125,11 @@ func (_u *InstanceInitializationUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *InstanceInitializationUpdate) check() error {
+	if v, ok := _u.mutation.DataVersion(); ok {
+		if err := instanceinitialization.DataVersionValidator(v); err != nil {
+			return &ValidationError{Name: "data_version", err: fmt.Errorf(`ent: validator failed for field "InstanceInitialization.data_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.LocalUserID(); ok {
 		if err := instanceinitialization.LocalUserIDValidator(v); err != nil {
 			return &ValidationError{Name: "local_user_id", err: fmt.Errorf(`ent: validator failed for field "InstanceInitialization.local_user_id": %w`, err)}
@@ -126,6 +152,12 @@ func (_u *InstanceInitializationUpdate) sqlSave(ctx context.Context) (_node int,
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(instanceinitialization.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.DataVersion(); ok {
+		_spec.SetField(instanceinitialization.FieldDataVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDataVersion(); ok {
+		_spec.AddField(instanceinitialization.FieldDataVersion, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.LocalUserID(); ok {
 		_spec.SetField(instanceinitialization.FieldLocalUserID, field.TypeInt, value)
@@ -159,6 +191,27 @@ type InstanceInitializationUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *InstanceInitializationUpdateOne) SetUpdatedAt(v time.Time) *InstanceInitializationUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetDataVersion sets the "data_version" field.
+func (_u *InstanceInitializationUpdateOne) SetDataVersion(v int) *InstanceInitializationUpdateOne {
+	_u.mutation.ResetDataVersion()
+	_u.mutation.SetDataVersion(v)
+	return _u
+}
+
+// SetNillableDataVersion sets the "data_version" field if the given value is not nil.
+func (_u *InstanceInitializationUpdateOne) SetNillableDataVersion(v *int) *InstanceInitializationUpdateOne {
+	if v != nil {
+		_u.SetDataVersion(*v)
+	}
+	return _u
+}
+
+// AddDataVersion adds value to the "data_version" field.
+func (_u *InstanceInitializationUpdateOne) AddDataVersion(v int) *InstanceInitializationUpdateOne {
+	_u.mutation.AddDataVersion(v)
 	return _u
 }
 
@@ -245,6 +298,11 @@ func (_u *InstanceInitializationUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *InstanceInitializationUpdateOne) check() error {
+	if v, ok := _u.mutation.DataVersion(); ok {
+		if err := instanceinitialization.DataVersionValidator(v); err != nil {
+			return &ValidationError{Name: "data_version", err: fmt.Errorf(`ent: validator failed for field "InstanceInitialization.data_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.LocalUserID(); ok {
 		if err := instanceinitialization.LocalUserIDValidator(v); err != nil {
 			return &ValidationError{Name: "local_user_id", err: fmt.Errorf(`ent: validator failed for field "InstanceInitialization.local_user_id": %w`, err)}
@@ -284,6 +342,12 @@ func (_u *InstanceInitializationUpdateOne) sqlSave(ctx context.Context) (_node *
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(instanceinitialization.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.DataVersion(); ok {
+		_spec.SetField(instanceinitialization.FieldDataVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedDataVersion(); ok {
+		_spec.AddField(instanceinitialization.FieldDataVersion, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.LocalUserID(); ok {
 		_spec.SetField(instanceinitialization.FieldLocalUserID, field.TypeInt, value)

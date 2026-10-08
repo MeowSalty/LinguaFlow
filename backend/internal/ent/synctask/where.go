@@ -145,6 +145,16 @@ func CancelledAt(v time.Time) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldEQ(FieldCancelledAt, v))
 }
 
+// FinishedAt applies equality check predicate on the "finished_at" field. It's identical to FinishedAtEQ.
+func FinishedAt(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldFinishedAt, v))
+}
+
+// RetentionAnchorAt applies equality check predicate on the "retention_anchor_at" field. It's identical to RetentionAnchorAtEQ.
+func RetentionAnchorAt(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldRetentionAnchorAt, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldEQ(FieldCreatedAt, v))
@@ -1018,6 +1028,106 @@ func CancelledAtIsNil() predicate.SyncTask {
 // CancelledAtNotNil applies the NotNil predicate on the "cancelled_at" field.
 func CancelledAtNotNil() predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldNotNull(FieldCancelledAt))
+}
+
+// FinishedAtEQ applies the EQ predicate on the "finished_at" field.
+func FinishedAtEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldFinishedAt, v))
+}
+
+// FinishedAtNEQ applies the NEQ predicate on the "finished_at" field.
+func FinishedAtNEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNEQ(FieldFinishedAt, v))
+}
+
+// FinishedAtIn applies the In predicate on the "finished_at" field.
+func FinishedAtIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIn(FieldFinishedAt, vs...))
+}
+
+// FinishedAtNotIn applies the NotIn predicate on the "finished_at" field.
+func FinishedAtNotIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotIn(FieldFinishedAt, vs...))
+}
+
+// FinishedAtGT applies the GT predicate on the "finished_at" field.
+func FinishedAtGT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGT(FieldFinishedAt, v))
+}
+
+// FinishedAtGTE applies the GTE predicate on the "finished_at" field.
+func FinishedAtGTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGTE(FieldFinishedAt, v))
+}
+
+// FinishedAtLT applies the LT predicate on the "finished_at" field.
+func FinishedAtLT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLT(FieldFinishedAt, v))
+}
+
+// FinishedAtLTE applies the LTE predicate on the "finished_at" field.
+func FinishedAtLTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLTE(FieldFinishedAt, v))
+}
+
+// FinishedAtIsNil applies the IsNil predicate on the "finished_at" field.
+func FinishedAtIsNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIsNull(FieldFinishedAt))
+}
+
+// FinishedAtNotNil applies the NotNil predicate on the "finished_at" field.
+func FinishedAtNotNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotNull(FieldFinishedAt))
+}
+
+// RetentionAnchorAtEQ applies the EQ predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtNEQ applies the NEQ predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtNEQ(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNEQ(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtIn applies the In predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIn(FieldRetentionAnchorAt, vs...))
+}
+
+// RetentionAnchorAtNotIn applies the NotIn predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtNotIn(vs ...time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotIn(FieldRetentionAnchorAt, vs...))
+}
+
+// RetentionAnchorAtGT applies the GT predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtGT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGT(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtGTE applies the GTE predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtGTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGTE(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtLT applies the LT predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtLT(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLT(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtLTE applies the LTE predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtLTE(v time.Time) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLTE(FieldRetentionAnchorAt, v))
+}
+
+// RetentionAnchorAtIsNil applies the IsNil predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtIsNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIsNull(FieldRetentionAnchorAt))
+}
+
+// RetentionAnchorAtNotNil applies the NotNil predicate on the "retention_anchor_at" field.
+func RetentionAnchorAtNotNil() predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotNull(FieldRetentionAnchorAt))
 }
 
 // HasProject applies the HasEdge predicate on the "project" edge.

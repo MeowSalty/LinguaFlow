@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
@@ -145,6 +146,11 @@ func (s *GlossarySyncService) CancelSyncTask(ctx context.Context, actorUserID, p
 	if actorUserID <= 0 || projectID <= 0 || taskID <= 0 {
 		return nil, ErrInvalidInput
 	}
+	guard, err := s.lifecycle.Lock(ctx, "glossary_sync", taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer guard.Release()
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return nil, err
 	}
@@ -153,6 +159,9 @@ func (s *GlossarySyncService) CancelSyncTask(ctx context.Context, actorUserID, p
 		return nil, err
 	}
 	if current.Status == SyncTaskStatusCancelled {
+		if s.cancelTask != nil {
+			s.cancelTask(taskID)
+		}
 		return current, nil
 	}
 	if current.Status == SyncTaskStatusCompleted || current.Status == SyncTaskStatusFailed {
@@ -162,9 +171,10 @@ func (s *GlossarySyncService) CancelSyncTask(ctx context.Context, actorUserID, p
 	err = s.projects.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, _ *ent.Project) error {
 		// 这条 UPDATE 与每个批次的首条 UPDATE 竞争同一任务行。
 		// SQLite 获取写锁；PostgreSQL 串行化该行更新。
+		now := timeutil.NowUTC()
 		_, err := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.ProjectIDEQ(projectID),
 			synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).
-			SetStatus(SyncTaskStatusCancelled).SetCancelledAt(timeutil.NowUTC()).Save(ctx)
+			SetStatus(SyncTaskStatusCancelled).SetCancelledAt(now).SetFinishedAt(now).SetRetentionAnchorAt(now).Save(ctx)
 		if err != nil {
 			return err
 		}
@@ -177,6 +187,9 @@ func (s *GlossarySyncService) CancelSyncTask(ctx context.Context, actorUserID, p
 		}
 		return nil
 	})
+	if err == nil && s.cancelTask != nil {
+		s.cancelTask(taskID)
+	}
 	return task, err
 }
 
@@ -280,7 +293,9 @@ func prepareSyncTask(ctx context.Context, client *ent.Client, task *ent.SyncTask
 		}
 	}
 	if _, _, _, err := decodeSyncCheckpoint(task); err != nil {
-		return client.SyncTask.UpdateOneID(task.ID).SetStatus(SyncTaskStatusFailed).SetError(syncRecoveryFailure).Save(ctx)
+		now := timeutil.NowUTC()
+		return client.SyncTask.UpdateOneID(task.ID).Where(synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).
+			SetStatus(SyncTaskStatusFailed).SetError(syncRecoveryFailure).SetFinishedAt(now).SetRetentionAnchorAt(now).Save(ctx)
 	}
 	return task, nil
 }
@@ -300,26 +315,36 @@ func (s *GlossarySyncService) PrepareRecovery(ctx context.Context) error {
 		}
 		for _, snapshot := range rows {
 			id := snapshot.ID
-			err := withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
-				// Recovery 在执行之前运行。保留已初始化 pending 行的
-				// 时间戳，使重复的启动迁移不产生副作用。
-				count, err := client.SyncTask.Update().Where(synctask.IDEQ(id), synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).AddProcessedSegments(0).SetUpdatedAt(snapshot.UpdatedAt).Save(ctx)
-				if err != nil || count == 0 {
-					return err
-				}
-				task, err := client.SyncTask.Get(ctx, id)
+			err := func() error {
+				guard, err := s.lifecycle.Lock(ctx, "glossary_sync", id)
 				if err != nil {
 					return err
 				}
-				task, err = prepareSyncTask(ctx, client, task)
-				if err != nil {
-					return err
+				defer guard.Release()
+				if guard.Active() {
+					return tasklife.ErrBusy
 				}
-				if task.Status == SyncTaskStatusRunning {
-					return client.SyncTask.UpdateOneID(id).SetStatus(SyncTaskStatusPending).Exec(ctx)
-				}
-				return nil
-			})
+				return withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+					// Recovery 在执行之前运行。保留已初始化 pending 行的
+					// 时间戳，使重复的启动迁移不产生副作用。
+					count, err := client.SyncTask.Update().Where(synctask.IDEQ(id), synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).AddProcessedSegments(0).ClearFinishedAt().ClearRetentionAnchorAt().SetUpdatedAt(snapshot.UpdatedAt).Save(ctx)
+					if err != nil || count == 0 {
+						return err
+					}
+					task, err := client.SyncTask.Get(ctx, id)
+					if err != nil {
+						return err
+					}
+					task, err = prepareSyncTask(ctx, client, task)
+					if err != nil {
+						return err
+					}
+					if task.Status == SyncTaskStatusRunning {
+						return client.SyncTask.UpdateOneID(id).SetStatus(SyncTaskStatusPending).Exec(ctx)
+					}
+					return nil
+				})
+			}()
 			if err != nil {
 				return fmt.Errorf("prepare sync task %d: %w", id, err)
 			}
@@ -367,33 +392,40 @@ func (s *GlossarySyncService) CleanupExpiredTasks(context.Context) error { retur
 // 终态队列元素均无害；关闭时保留可恢复的检查点。
 func (s *GlossarySyncService) ExecuteSyncTask(ctx context.Context, taskID int) error {
 	claimed := false
-	err := withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
-		claimed = false
-		count, err := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.StatusEQ(SyncTaskStatusPending)).AddProcessedSegments(0).Save(ctx)
-		if err != nil || count == 0 {
-			return err
-		}
-		task, err := client.SyncTask.Get(ctx, taskID)
+	err := func() error {
+		guard, err := s.lifecycle.Lock(ctx, "glossary_sync", taskID)
 		if err != nil {
 			return err
 		}
-		task, err = prepareSyncTask(ctx, client, task)
-		if err != nil {
-			return err
-		}
-		if task.Status != SyncTaskStatusPending {
+		defer guard.Release()
+		return withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+			claimed = false
+			count, err := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.StatusEQ(SyncTaskStatusPending)).AddProcessedSegments(0).Save(ctx)
+			if err != nil || count == 0 {
+				return err
+			}
+			task, err := client.SyncTask.Get(ctx, taskID)
+			if err != nil {
+				return err
+			}
+			task, err = prepareSyncTask(ctx, client, task)
+			if err != nil {
+				return err
+			}
+			if task.Status != SyncTaskStatusPending {
+				return nil
+			}
+			update := client.SyncTask.UpdateOneID(taskID).Where(synctask.StatusEQ(SyncTaskStatusPending)).SetStatus(SyncTaskStatusRunning).ClearFinishedAt().ClearRetentionAnchorAt()
+			if task.StartedAt == nil {
+				update.SetStartedAt(timeutil.NowUTC())
+			}
+			if err := update.Exec(ctx); err != nil {
+				return err
+			}
+			claimed = true
 			return nil
-		}
-		update := client.SyncTask.UpdateOneID(taskID).Where(synctask.StatusEQ(SyncTaskStatusPending)).SetStatus(SyncTaskStatusRunning)
-		if task.StartedAt == nil {
-			update.SetStartedAt(timeutil.NowUTC())
-		}
-		if err := update.Exec(ctx); err != nil {
-			return err
-		}
-		claimed = true
-		return nil
-	})
+		})
+	}()
 	if err != nil {
 		return err
 	}
@@ -415,8 +447,13 @@ func (s *GlossarySyncService) ExecuteSyncTask(ctx context.Context, taskID int) e
 }
 
 func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) (bool, error) {
+	guard, err := s.lifecycle.Lock(ctx, "glossary_sync", taskID)
+	if err != nil {
+		return false, err
+	}
+	defer guard.Release()
 	done := false
-	err := withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+	err = withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
 		done = false
 		// 首条语句在任何快照读取之前获取写锁。因此已提交的
 		// 取消会阻止其后所有段落写入。
@@ -533,7 +570,8 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 			SetProcessedSegments(end).SetNextSegmentIndex(end).SetResult(stored)
 		done = end == len(ids)
 		if done {
-			update.SetStatus(SyncTaskStatusCompleted)
+			now := timeutil.NowUTC()
+			update.SetStatus(SyncTaskStatusCompleted).SetFinishedAt(now).SetRetentionAnchorAt(now)
 		}
 		if err := update.Exec(ctx); err != nil {
 			return err
@@ -574,10 +612,16 @@ func (s *GlossarySyncService) FailSyncTask(ctx context.Context, taskID int, caus
 	if ctx.Err() != nil || errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
 		return cause
 	}
+	guard, err := s.lifecycle.Lock(ctx, "glossary_sync", taskID)
+	if err != nil {
+		return err
+	}
+	defer guard.Release()
 	s.logger.Error("sync task failed", "task_id", taskID, "error", cause)
-	err := withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+	err = withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+		now := timeutil.NowUTC()
 		_, err := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).
-			SetStatus(SyncTaskStatusFailed).SetError(cause.Error()).Save(ctx)
+			SetStatus(SyncTaskStatusFailed).SetError(cause.Error()).SetFinishedAt(now).SetRetentionAnchorAt(now).Save(ctx)
 		return err
 	})
 	if err != nil {

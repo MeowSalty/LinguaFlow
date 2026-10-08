@@ -152,18 +152,18 @@ func TestConfigurationConsumersSSERingCapacity(t *testing.T) {
 			for i := 0; i < count; i++ {
 				configurationPublish(s, job.ID, "ring-event")
 			}
-			history, _, more := s.eventBroker.ListHistory(context.Background(), job.ID, 0, count+1)
-			if len(history) != count || more {
+			history, _, more, err := s.eventBroker.ListHistory(context.Background(), job.ID, 0, count+1)
+			if err != nil || len(history) != count || more {
 				t.Fatalf("ring eviction lost durable history: %+v", history)
 			}
 			// Remove only durable rows so the following probes can only be served
 			// by the production ring. The exact overflow boundary proves capacity.
 			s.entClient.SSEEvent.Delete().ExecX(context.Background())
 			oldest := int64(count - capacity + 1)
-			if got := s.eventBroker.Replay(context.Background(), job.ID, oldest, count); len(got) != capacity-1 || got[0].Seq != oldest+1 || got[len(got)-1].Seq != int64(count) {
+			if got, err := s.eventBroker.Replay(context.Background(), job.ID, oldest, count); err != nil || len(got) != capacity-1 || got[0].Seq != oldest+1 || got[len(got)-1].Seq != int64(count) {
 				t.Fatalf("configured ring capacity %d: %+v", capacity, got)
 			}
-			if got := s.eventBroker.Replay(context.Background(), job.ID, oldest-1, count); len(got) != 0 {
+			if got, err := s.eventBroker.Replay(context.Background(), job.ID, oldest-1, count); err != nil || len(got) != 0 {
 				t.Fatalf("overflow must require durable fallback: %+v", got)
 			}
 		})
@@ -221,8 +221,8 @@ func TestConfigurationConsumersSSEReplayAndSubscription(t *testing.T) {
 		t.Fatalf("replay batches and live subscription: got %v want %v", w.chunks, want)
 	}
 	s.eventBroker.Purge(job.ID)
-	history, _, more := s.eventBroker.ListHistory(context.Background(), job.ID, 0, 20)
-	if len(history) != 8 || more {
+	history, _, more, err := s.eventBroker.ListHistory(context.Background(), job.ID, 0, 20)
+	if err != nil || len(history) != 8 || more {
 		t.Fatalf("stream window or purge lost durable history: %+v", history)
 	}
 }

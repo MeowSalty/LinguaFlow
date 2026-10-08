@@ -148,18 +148,66 @@ func TestBrokerLatestSeq(t *testing.T) {
 	store := NewRingBufferStore(DefaultRingBufferConfig())
 	b := NewBroker(store)
 
-	if _, ok := b.LatestSeq(t.Context(), 1); ok {
+	if _, ok := latestSeqForTest(t, b, t.Context(), 1); ok {
 		t.Fatal("expected ok=false when store has no events")
 	}
 	b.Publish(1, Event{Type: "ev", JobID: 1, Message: "msg"})
 	b.Publish(1, Event{Type: "ev", JobID: 1, Message: "msg"})
-	seq, ok := b.LatestSeq(t.Context(), 1)
+	seq, ok := latestSeqForTest(t, b, t.Context(), 1)
 	if !ok || seq != 2 {
 		t.Fatalf("expected latest seq=2, got seq=%d ok=%v", seq, ok)
 	}
 
 	empty := NewBroker(nil)
-	if _, ok := empty.LatestSeq(t.Context(), 1); ok {
+	if _, ok := latestSeqForTest(t, empty, t.Context(), 1); ok {
 		t.Fatal("expected ok=false when no store is configured")
+	}
+}
+
+func TestBrokerCloseJobRacesDisconnectAndIsIdempotent(t *testing.T) {
+	store := NewRingBufferStore(DefaultRingBufferConfig())
+	b := NewBroker(store)
+	channels := make([]chan Event, 100)
+	for i := range channels {
+		channels[i] = b.Subscribe(1)
+	}
+	other := b.Subscribe(2)
+	defer b.Unsubscribe(2, other)
+	b.Publish(1, Event{JobID: 1, Type: "retained"})
+	b.Publish(2, Event{JobID: 2, Type: "other"})
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for _, ch := range channels {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			b.Unsubscribe(1, ch)
+			b.Unsubscribe(1, ch)
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		b.CloseJob(1)
+		b.CloseJob(1)
+	}()
+	close(start)
+	wg.Wait()
+	for _, ch := range channels {
+		for range ch {
+		}
+	}
+	if got := replayForTest(t, b, t.Context(), 1, 0, 100); len(got) != 0 {
+		t.Fatalf("deleted job replay survived: %+v", got)
+	}
+	if got := replayForTest(t, b, t.Context(), 2, 0, 100); len(got) != 1 {
+		t.Fatalf("other job history changed: %+v", got)
+	}
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if len(b.subscribers[1]) != 0 || len(b.subscribers[2]) != 1 {
+		t.Fatal("close affected the wrong subscriptions")
 	}
 }

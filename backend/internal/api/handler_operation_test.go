@@ -38,14 +38,14 @@ func TestOperationsHTTPProjectionAndLegacyCompatibility(t *testing.T) {
 	if err != nil || translation.TaskId != fmt.Sprint(j.ID) || translation.TaskType != "translation" {
 		t.Fatalf("translation=%+v %v", translation, err)
 	}
-	if translation.StartedAt != nil || translation.Progress.QueueSize != nil || len(translation.SupportedActions) != 5 {
+	if translation.StartedAt != nil || translation.Progress.QueueSize != nil || len(translation.SupportedActions) != 6 {
 		t.Fatalf("translation fields=%+v", translation)
 	}
 	second := jobQueryRequest(router, "/api/v1/operations?limit=1&cursor="+url.QueryEscape(*page.NextCursor), token)
 	assertP4ResponseSchema(t, "/operations", second)
 	page = jobQueryDecode[OperationListResponse](t, second)
 	item, err := page.Items[0].AsGlossarySyncOperation()
-	if err != nil || item.TaskId != fmt.Sprint(sync.ID) || item.Progress.ProcessedSegments != 4 || len(item.SupportedActions) != 2 {
+	if err != nil || item.TaskId != fmt.Sprint(sync.ID) || item.Progress.ProcessedSegments != 4 || len(item.SupportedActions) != 3 {
 		t.Fatalf("sync=%+v %v", item, err)
 	}
 	for _, secret := range []string{"private-", "segment_ids", "resource_ids", "trigger_type", "execution_config"} {

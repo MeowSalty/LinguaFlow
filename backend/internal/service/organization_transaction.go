@@ -40,6 +40,12 @@ func withOrganizationTransaction(ctx context.Context, client *ent.Client, mutate
 			return err
 		}
 		err := organizationTransactionAttempt(ctx, client, mutate)
+		if err != nil && ctx.Err() != nil {
+			// Cancellation may let database/sql start automatic rollback before
+			// our explicit Rollback. Preserve any uncertain rollback diagnostic,
+			// while reporting cancellation and never retrying the operation.
+			return errors.Join(ctx.Err(), err)
+		}
 		if err == nil || !isOrganizationTransactionConflict(err) || attempt == organizationMutationAttempts-1 {
 			return err
 		}

@@ -43,6 +43,8 @@ func (Job) Fields() []ent.Field {
 			Comment("任务级错误信息"),
 		field.Time("started_at").Optional().Nillable().
 			Comment("任务开始执行的时间，MarkJobRunning 时写入"),
+		field.Time("finished_at").Optional().Nillable().Comment("最终执行首次进入终态的真实 UTC 时间；旧记录可以未知"),
+		field.Time("retention_anchor_at").Optional().Nillable().Comment("历史保留计时起点；旧终态记录安全收尾后只初始化一次"),
 	}
 }
 
@@ -72,5 +74,6 @@ func (Job) Indexes() []ent.Index {
 		index.Fields("project_id", "id"),
 		index.Fields("updated_at", "id"),
 		index.Fields("status", "updated_at", "id"),
+		index.Fields("status", "retention_anchor_at", "id"),
 	}
 }

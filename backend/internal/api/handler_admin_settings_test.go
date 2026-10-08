@@ -17,6 +17,7 @@ func TestAdminSettingsBooleanContract(t *testing.T) {
 	ctx := context.Background()
 	u = c.User.UpdateOneID(u.ID).SetRole(service.SystemRoleAdmin).SaveX(ctx)
 	c.SystemSetting.Create().SetKey(service.SettingRegistrationEnabled).SetValue("true").SaveX(ctx)
+	c.SystemSetting.Create().SetKey(service.SettingTaskRetention).SetValue(`{"enabled":false,"retention_days":30,"revision":1}`).SaveX(ctx)
 	s.settingsService = service.NewSettingsService(c)
 	for _, body := range []string{`{}`, `null`, `{"settings":null}`, `{"settings":{}}`, `{"settings":{"registration_enabled":null}}`, `{"settings":{"registration_enabled":"false"}}`, `{"settings":{"registration_enabled":false,"auto_admin":true}}`, `{"settings":{"registration_enabled":false},"extra":1}`, `{"settings":{"registration_enabled":false}} {}`} {
 		w := httptest.NewRecorder()

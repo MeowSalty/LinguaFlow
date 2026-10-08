@@ -15,6 +15,12 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /admin/task-retention/preview:
+    $ref: './paths/task-retention.yaml#/preview'
+  /admin/task-retention/status:
+    $ref: './paths/task-retention.yaml#/status'
+  /operations/batch-delete:
+    $ref: './paths/task-retention.yaml#/batchDelete'
   /storage/capabilities:
     $ref: './paths/storage.yaml#/storageCapabilities'
   /storage/options:
@@ -296,6 +302,18 @@ components:
     Problem:
       $ref: './components/responses.yaml#/Problem'
   schemas:
+    TaskRetentionPolicy:
+      $ref: './components/schemas/task-retention.yaml#/TaskRetentionPolicy'
+    TaskRetentionPatch:
+      $ref: './components/schemas/task-retention.yaml#/TaskRetentionPatch'
+    TaskRetentionPreview:
+      $ref: './components/schemas/task-retention.yaml#/TaskRetentionPreview'
+    TaskRetentionStatus:
+      $ref: './components/schemas/task-retention.yaml#/TaskRetentionStatus'
+    TaskHistoryBatchDeleteRequest:
+      $ref: './components/schemas/task-retention.yaml#/TaskHistoryBatchDeleteRequest'
+    TaskHistoryBatchDeleteResponse:
+      $ref: './components/schemas/task-retention.yaml#/TaskHistoryBatchDeleteResponse'
     Problem:
       $ref: './components/schemas/common.yaml#/Problem'
     HealthResponse:

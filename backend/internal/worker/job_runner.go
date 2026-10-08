@@ -479,7 +479,11 @@ func (r *JobRunner) processJobResource(
 		Logger:        r.logger,
 		Broker:        r.eventBroker,
 	})
-	defer reporter.Close()
+	defer func() {
+		if err := reporter.Close(); err != nil {
+			r.logger.Error("job progress final flush failed", "job_id", exec.Job.ID, "job_resource_id", item.ID, "err", err)
+		}
+	}()
 
 	res, err := item.Edges.ResourceOrErr()
 	if err != nil {

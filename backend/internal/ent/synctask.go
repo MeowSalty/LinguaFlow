@@ -56,6 +56,10 @@ type SyncTask struct {
 	Error string `json:"error,omitempty"`
 	// 取消时间
 	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
+	// 首次进入终态的真实 UTC 时间；旧记录可以未知
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	// 历史保留计时起点；旧终态记录安全收尾后只初始化一次
+	RetentionAnchorAt *time.Time `json:"retention_anchor_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SyncTaskQuery when eager-loading is set.
 	Edges        SyncTaskEdges `json:"edges"`
@@ -117,7 +121,7 @@ func (*SyncTask) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case synctask.FieldOldTarget, synctask.FieldNewTarget, synctask.FieldStatus, synctask.FieldSegmentIds, synctask.FieldResourceIds, synctask.FieldResult, synctask.FieldError:
 			values[i] = new(sql.NullString)
-		case synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldStartedAt, synctask.FieldCancelledAt:
+		case synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldStartedAt, synctask.FieldCancelledAt, synctask.FieldFinishedAt, synctask.FieldRetentionAnchorAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -250,6 +254,20 @@ func (_m *SyncTask) assignValues(columns []string, values []any) error {
 				_m.CancelledAt = new(time.Time)
 				*_m.CancelledAt = value.Time
 			}
+		case synctask.FieldFinishedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field finished_at", values[i])
+			} else if value.Valid {
+				_m.FinishedAt = new(time.Time)
+				*_m.FinishedAt = value.Time
+			}
+		case synctask.FieldRetentionAnchorAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field retention_anchor_at", values[i])
+			} else if value.Valid {
+				_m.RetentionAnchorAt = new(time.Time)
+				*_m.RetentionAnchorAt = value.Time
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -356,6 +374,16 @@ func (_m *SyncTask) String() string {
 	builder.WriteString(", ")
 	if v := _m.CancelledAt; v != nil {
 		builder.WriteString("cancelled_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.FinishedAt; v != nil {
+		builder.WriteString("finished_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.RetentionAnchorAt; v != nil {
+		builder.WriteString("retention_anchor_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteByte(')')

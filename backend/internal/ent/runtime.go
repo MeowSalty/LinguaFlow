@@ -587,8 +587,14 @@ func init() {
 	instanceinitializationDescVersion := instanceinitializationFields[1].Descriptor()
 	// instanceinitialization.VersionValidator is a validator for the "version" field. It is called by the builders before save.
 	instanceinitialization.VersionValidator = instanceinitializationDescVersion.Validators[0].(func(int) error)
+	// instanceinitializationDescDataVersion is the schema descriptor for data_version field.
+	instanceinitializationDescDataVersion := instanceinitializationFields[2].Descriptor()
+	// instanceinitialization.DefaultDataVersion holds the default value on creation for the data_version field.
+	instanceinitialization.DefaultDataVersion = instanceinitializationDescDataVersion.Default.(int)
+	// instanceinitialization.DataVersionValidator is a validator for the "data_version" field. It is called by the builders before save.
+	instanceinitialization.DataVersionValidator = instanceinitializationDescDataVersion.Validators[0].(func(int) error)
 	// instanceinitializationDescLocalUserID is the schema descriptor for local_user_id field.
-	instanceinitializationDescLocalUserID := instanceinitializationFields[3].Descriptor()
+	instanceinitializationDescLocalUserID := instanceinitializationFields[4].Descriptor()
 	// instanceinitialization.LocalUserIDValidator is a validator for the "local_user_id" field. It is called by the builders before save.
 	instanceinitialization.LocalUserIDValidator = instanceinitializationDescLocalUserID.Validators[0].(func(int) error)
 	// instanceinitializationDescID is the schema descriptor for id field.

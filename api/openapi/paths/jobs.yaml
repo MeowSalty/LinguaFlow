@@ -150,6 +150,33 @@ projectJobs:
 jobById:
   parameters:
     - $ref: '../base.yaml#/components/parameters/JobId'
+  delete:
+    operationId: DeleteJobHistory
+    summary: 删除翻译任务记录
+    description: |
+      要求项目写权限。仅 completed、failed、cancelled 且执行与事件写入均已收尾时可删除。
+      删除记录、执行详情和日志，保留项目原文、译文及独立用量事实；不能撤销。
+      非终态返回 409 task_not_terminal，仍在收尾返回 409 task_busy，维护/恢复屏障沿用领域错误。
+      单项事务预算 5 秒，确认回滚后返回 503 task_cleanup_deferred；已不存在返回 404。
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 任务记录已删除
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
   get:
     operationId: GetJob
     summary: 获取任务详情
@@ -196,6 +223,7 @@ jobRetry:
       已完成的轮次与已翻译段落直接跳过，从当前进度断点继续。
       例外：显式选段（segment_ids 手动选择）的任务，首个翻译轮
       会重译所有选中段落。
+      上一轮执行仍在收尾时返回 409 task_busy；重试清空结束时间并重新计算保留周期。
     security:
       - bearerAuth: []
     responses:
@@ -235,7 +263,7 @@ jobResume:
   post:
     operationId: ResumeJob
     summary: 恢复已暂停的任务
-    description: 从轮次断点恢复已暂停的任务。
+    description: 从轮次断点恢复已暂停的任务；上一轮执行仍在收尾时返回 409 task_busy。
     security:
       - bearerAuth: []
     responses:
@@ -256,6 +284,7 @@ jobStream:
     summary: 订阅任务实时事件流 (SSE)
     description: |
       以 Server-Sent Events 推送任务实时事件。
+      任务历史删除后关闭已有订阅，新订阅返回 404；回放数据库不可用时结束连接，不伪报完整历史。
 
       - 认证：除 bearerAuth 外，原生 EventSource 无法设置自定义请求头，
         可改用 `access_token` 查询参数携带访问令牌。

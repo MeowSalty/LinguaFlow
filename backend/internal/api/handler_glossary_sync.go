@@ -78,7 +78,9 @@ func (s *Server) handleGetGlossarySyncTaskStatus(w http.ResponseWriter, r *http.
 		return
 	}
 
-	writeJSON(w, http.StatusOK, convertSyncTaskToStatusResponse(task))
+	response := convertSyncTaskToStatusResponse(task)
+	response.CanDelete = s.canDeleteHistory(r.Context(), authUser.User.ID, "glossary_sync", task.ID, task.ProjectID, task.Status)
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) handleCancelGlossarySyncTask(w http.ResponseWriter, r *http.Request, projectId int, taskId string) {
@@ -98,9 +100,6 @@ func (s *Server) handleCancelGlossarySyncTask(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		s.writeGlossarySyncServiceError(w, r, err)
 		return
-	}
-	if s.dispatcher != nil {
-		s.dispatcher.CancelTask("sync", taskID)
 	}
 
 	writeJSON(w, http.StatusOK, convertSyncTaskToCancelResponse(task))
@@ -137,6 +136,7 @@ func convertSyncTaskToStatusResponse(task *ent.SyncTask) GlossarySyncTaskStatusR
 		Processed:   task.ProcessedSegments,
 		Total:       task.TotalSegments,
 		CancelledAt: timeutil.NormalizePtr(task.CancelledAt),
+		FinishedAt:  timeutil.NormalizePtr(task.FinishedAt),
 		Error:       nilIfEmpty(task.Error),
 	}
 

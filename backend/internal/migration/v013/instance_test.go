@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
@@ -134,9 +135,33 @@ func TestLegacyMigrationPreservesRegistrationBehavior(t *testing.T) {
 			if _, err := migrateLegacyTestTransaction(ctx, client, credentialTestKeyring(t, "key", "key")); err != nil {
 				t.Fatal(err)
 			}
-			settings, err := service.NewSettingsService(client).Get(ctx)
+			settingsService := service.NewSettingsService(client)
+			// The frozen v0.13 converter establishes its original registration
+			// policy. New policy domains are installed by the current data upgrade
+			// during prepareDatabase, not by changing the historical converter.
+			enabled, err := settingsService.RegistrationEnabled(ctx)
+			if err != nil || enabled != tc.enabled {
+				t.Fatalf("frozen registration policy changed: %v %v", enabled, err)
+			}
+			registration := client.SystemSetting.Query().Where(systemsetting.KeyEQ(service.SettingRegistrationEnabled)).OnlyX(ctx)
+			if err := service.ValidateDataVersion(ctx, client); !errors.Is(err, service.ErrDataMigrationRequired) {
+				t.Fatalf("frozen output did not request current data upgrade: %v", err)
+			}
+			if err := service.MigrateData(ctx, client); err != nil {
+				t.Fatalf("upgrade converted instance to current data version: %v", err)
+			}
+			settings, err := settingsService.Get(ctx)
 			if err != nil || settings.RegistrationEnabled != tc.enabled {
 				t.Fatalf("registration policy changed: %+v %v", settings, err)
+			}
+			if settings.TaskRetention != (service.TaskRetentionPolicy{Enabled: false, RetentionDays: 30, Revision: 1}) {
+				t.Fatalf("current migration did not install the disabled default: %+v", settings.TaskRetention)
+			}
+			if err := service.ValidateDataVersion(ctx, client); err != nil {
+				t.Fatalf("current data migration not marked complete: %v", err)
+			}
+			if after := client.SystemSetting.GetX(ctx, registration.ID); after.Value != registration.Value || !after.UpdatedAt.Equal(registration.UpdatedAt) {
+				t.Fatal("current data upgrade rewrote migrated registration policy")
 			}
 		})
 	}

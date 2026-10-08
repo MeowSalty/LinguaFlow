@@ -102,7 +102,7 @@ func (s *JobService) ListAccessibleJobs(ctx context.Context, actorUserID int, op
 		job.FieldID, job.FieldProjectID, job.FieldStatus, job.FieldTriggerType,
 		job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources,
 		job.FieldProgressTotal, job.FieldProgressCompleted,
-		job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt,
+		job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt, job.FieldFinishedAt,
 	)
 	rows, err := q.WithProject(func(pq *ent.ProjectQuery) {
 		pq.Select(project.FieldID, project.FieldName)

@@ -39,9 +39,10 @@ func (r *flushRecorder) lastUpdates() []segmentUpdate {
 func newTestReporter(tickerDur time.Duration) (*DBReporter, *flushRecorder) {
 	rec := &flushRecorder{}
 	r := &DBReporter{
-		logger: slog.Default(),
-		ticker: time.NewTicker(tickerDur),
-		done:   make(chan struct{}),
+		logger:       slog.Default(),
+		ticker:       time.NewTicker(tickerDur),
+		done:         make(chan struct{}),
+		tickerExited: make(chan struct{}),
 	}
 	r.flushFn = rec.record
 	go r.runTicker()

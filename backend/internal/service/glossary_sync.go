@@ -10,6 +10,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 )
 
 // SyncTask 状态常量
@@ -39,7 +40,15 @@ type GlossarySyncService struct {
 	projects    *ProjectService
 	auditSvc    *AuditService
 	logger      *slog.Logger
+	lifecycle   *tasklife.Coordinator
+	cancelTask  func(int)
 }
+
+func (s *GlossarySyncService) SetLifecycle(coordinator *tasklife.Coordinator) {
+	s.lifecycle = coordinator
+}
+
+func (s *GlossarySyncService) SetTaskControl(cancel func(int)) { s.cancelTask = cancel }
 
 // NewGlossarySyncService 创建新的 GlossarySyncService
 func NewGlossarySyncService(

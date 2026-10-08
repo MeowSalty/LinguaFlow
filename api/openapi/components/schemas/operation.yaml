@@ -23,8 +23,12 @@ OperationSummary:
 
 OperationBase:
   type: object
-  required: [task_id, project_id, project_name, status, created_at, updated_at, started_at, supported_actions]
+  required: [task_id, project_id, project_name, status, created_at, updated_at, started_at, finished_at, can_delete, supported_actions]
   properties:
+    finished_at:
+      $ref: './task-retention.yaml#/TaskFinishedAt'
+    can_delete:
+      $ref: './task-retention.yaml#/TaskCanDelete'
     task_id:
       type: string
       pattern: '^[1-9][0-9]*$'
@@ -51,7 +55,7 @@ OperationBase:
       description: 类型能力，不是当前状态或用户权限许可；执行时必须再次鉴权。
       items:
         type: string
-        enum: [view, pause, resume, cancel, retry]
+        enum: [view, pause, resume, cancel, retry, delete]
 
 TranslationOperation:
   allOf:
@@ -87,7 +91,7 @@ GlossarySyncOperation:
           type: array
           items:
             type: string
-            enum: [view, cancel]
+            enum: [view, cancel, delete]
         progress:
           type: object
           required: [processed_segments, total_segments]
@@ -101,6 +105,7 @@ GlossarySyncOperation:
               minimum: 0
 
 StorageOperation:
+  description: 存储任务承担恢复与物理清理证据；本功能不可删除，can_delete 始终为 false，finished_at 为 null。
   allOf:
     - $ref: '#/OperationBase'
     - type: object

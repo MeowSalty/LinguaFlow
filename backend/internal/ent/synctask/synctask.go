@@ -50,6 +50,10 @@ const (
 	FieldError = "error"
 	// FieldCancelledAt holds the string denoting the cancelled_at field in the database.
 	FieldCancelledAt = "cancelled_at"
+	// FieldFinishedAt holds the string denoting the finished_at field in the database.
+	FieldFinishedAt = "finished_at"
+	// FieldRetentionAnchorAt holds the string denoting the retention_anchor_at field in the database.
+	FieldRetentionAnchorAt = "retention_anchor_at"
 	// EdgeProject holds the string denoting the project edge name in mutations.
 	EdgeProject = "project"
 	// EdgeEntry holds the string denoting the entry edge name in mutations.
@@ -102,6 +106,8 @@ var Columns = []string{
 	FieldResult,
 	FieldError,
 	FieldCancelledAt,
+	FieldFinishedAt,
+	FieldRetentionAnchorAt,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -247,6 +253,16 @@ func ByError(opts ...sql.OrderTermOption) OrderOption {
 // ByCancelledAt orders the results by the cancelled_at field.
 func ByCancelledAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCancelledAt, opts...).ToFunc()
+}
+
+// ByFinishedAt orders the results by the finished_at field.
+func ByFinishedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFinishedAt, opts...).ToFunc()
+}
+
+// ByRetentionAnchorAt orders the results by the retention_anchor_at field.
+func ByRetentionAnchorAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetentionAnchorAt, opts...).ToFunc()
 }
 
 // ByProjectField orders the results by project field.

@@ -15,6 +15,27 @@ import (
 // parameters alike. Use NewDriver for every ent client, including test clients.
 type TimeDriver struct{ dialect.Driver }
 
+type contextSQL interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func (d *TimeDriver) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	driver, ok := d.Driver.(contextSQL)
+	if !ok {
+		return nil, fmt.Errorf("database driver does not support ExecContext")
+	}
+	return driver.ExecContext(ctx, query, timeArgs(d.Dialect(), args).([]any)...)
+}
+
+func (d *TimeDriver) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	driver, ok := d.Driver.(contextSQL)
+	if !ok {
+		return nil, fmt.Errorf("database driver does not support QueryContext")
+	}
+	return driver.QueryContext(ctx, query, timeArgs(d.Dialect(), args).([]any)...)
+}
+
 func NewDriver(driver dialect.Driver) *TimeDriver { return &TimeDriver{Driver: driver} }
 
 func (d *TimeDriver) Exec(ctx context.Context, query string, args, v any) error {
@@ -34,6 +55,17 @@ func (d *TimeDriver) Tx(ctx context.Context) (dialect.Tx, error) {
 }
 
 func (d *TimeDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (dialect.Tx, error) {
+	if joined, _ := ctx.Value(joinedRollbackKey{}).(bool); joined {
+		pool, ok := d.Driver.(interface{ DB() *sql.DB })
+		if !ok {
+			return nil, fmt.Errorf("database driver does not expose a pool for joined rollback")
+		}
+		tx, err := beginJoinedTransaction(ctx, pool.DB(), opts)
+		if err != nil {
+			return nil, err
+		}
+		return &timeTx{Tx: tx, dialect: d.Dialect()}, nil
+	}
 	opener, ok := d.Driver.(interface {
 		BeginTx(context.Context, *sql.TxOptions) (dialect.Tx, error)
 	})
@@ -50,6 +82,22 @@ func (d *TimeDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (dialect.
 type timeTx struct {
 	dialect.Tx
 	dialect string
+}
+
+func (t *timeTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	tx, ok := t.Tx.(contextSQL)
+	if !ok {
+		return nil, fmt.Errorf("database transaction does not support ExecContext")
+	}
+	return tx.ExecContext(ctx, query, timeArgs(t.dialect, args).([]any)...)
+}
+
+func (t *timeTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	tx, ok := t.Tx.(contextSQL)
+	if !ok {
+		return nil, fmt.Errorf("database transaction does not support QueryContext")
+	}
+	return tx.QueryContext(ctx, query, timeArgs(t.dialect, args).([]any)...)
 }
 
 func (t *timeTx) Exec(ctx context.Context, query string, args, v any) error {

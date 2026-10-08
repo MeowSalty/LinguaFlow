@@ -43,10 +43,19 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 		s.writeAuthProblem(w, r, err)
 		return
 	}
+	guard, err := s.taskLifecycle.Lock(r.Context(), "translation", jobID)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
 	if err := s.jobSvc.CheckJobAccess(r.Context(), authUser.User.ID, jobID); err != nil {
+		guard.Release()
 		s.writeJobServiceError(w, r, err)
 		return
 	}
+	ch := s.eventBroker.Subscribe(jobID)
+	guard.Release()
+	defer s.eventBroker.Unsubscribe(jobID, ch)
 	checkAccess := func() bool {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
@@ -64,9 +73,6 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-
-	ch := s.eventBroker.Subscribe(jobID)
-	defer s.eventBroker.Unsubscribe(jobID, ch)
 
 	controller := http.NewResponseController(w)
 	// Bound a slow client's write so it cannot indefinitely defer authorization checks.
@@ -98,8 +104,7 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 	// 将回放起点前移到最近 maxReplay 条，避免从 seq 0 升序重放最旧事件。
 	if afterSeq == 0 {
 		lookupCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		latest, ok := s.eventBroker.LatestSeq(lookupCtx, jobID)
-		lookupErr := lookupCtx.Err()
+		latest, ok, lookupErr := s.eventBroker.LatestSeq(lookupCtx, jobID)
 		cancel()
 		if lookupErr != nil || !checkAccess() {
 			return
@@ -121,8 +126,7 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 			thisBatch = remaining
 		}
 		replayCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		batch := s.eventBroker.Replay(replayCtx, jobID, afterSeq, thisBatch)
-		replayErr := replayCtx.Err()
+		batch, replayErr := s.eventBroker.Replay(replayCtx, jobID, afterSeq, thisBatch)
 		cancel()
 		if replayErr != nil || !checkAccess() {
 			return
