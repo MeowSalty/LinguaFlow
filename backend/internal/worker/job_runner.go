@@ -651,6 +651,21 @@ func (r *JobRunner) processJobResource(
 			if rowStatus == service.JobRoundStatusCompleted || rowStatus == service.JobRoundStatusSkipped {
 				continue // 断点续传：已完成/跳过轮不再执行
 			}
+		}
+
+		if reason := eng.RoundSkipReason(roundIdx); reason != "" {
+			if roundRowID > 0 {
+				if err := r.jobs.MarkJobRoundSkipped(ctx, roundRowID); err != nil {
+					_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+					return nil
+				}
+			}
+			r.logger.Info("job round skipped", "job_id", job.ID, "resource_id", res.ID,
+				"round", roundIdx, "mode", round.Mode, "reason", reason)
+			continue
+		}
+
+		if roundRowID > 0 {
 			// pending→running 条件更新：progress_total 分母只在该转换时累加
 			//（DBReporter.StageStart 的累加条件由 MarkJobRoundRunning 的
 			// 条件更新语义保证——仅 pending/skipped 可转 running）。

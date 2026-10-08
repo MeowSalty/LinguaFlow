@@ -111,6 +111,13 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 
 		round := in.Snapshot.Rounds[roundIdx]
 		roundStart := time.Now()
+		if reason := eng.RoundSkipReason(roundIdx); reason != "" {
+			roundSummaries = append(roundSummaries, service.PreviewRoundSummary{
+				Index: roundIdx, Mode: round.Mode, Backend: round.Backend.Name, Status: "skipped",
+			})
+			r.logger.Info("quick translate round skipped", "round", roundIdx, "mode", round.Mode, "reason", reason)
+			continue
+		}
 
 		// 从当前内存状态重建 Document（使裁决/语义 QA 结果对后续轮次可见）。
 		if roundIdx > 0 {

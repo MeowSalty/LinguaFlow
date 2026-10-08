@@ -3,6 +3,7 @@ package engine
 import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -43,10 +44,11 @@ type TranslateRoundConfig struct {
 	Repair       *repair.Config
 	ResponseMode string
 
-	ProtectRules      []string
-	RubyEnabled       bool
-	RubyPreserveKinds []string
-	Postprocess       *pipeline.PostprocessConfig
+	ProtectRules         []string
+	RubyEnabled          bool
+	RubyPreserveKinds    []string
+	Postprocess          *pipeline.PostprocessConfig
+	InlineTermExtraction *execution.InlineTermExtractionConfig
 }
 
 // ExtractRoundConfig 术语抽取轮次的特有配置。

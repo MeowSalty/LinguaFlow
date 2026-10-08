@@ -42,11 +42,14 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		if mode == "" {
 			mode = pipeline.RoundModeTranslate
 		}
-		if r.Backend == nil && mode != pipeline.RoundModeCorrect {
+		if r.Backend == nil && mode != pipeline.RoundModeCorrect && !(mode == pipeline.RoundModeExtract && !opts.Config.Glossary.Enabled) {
 			return nil, fmt.Errorf("engine: round %d has no backend", i)
 		}
 	}
 	glos := opts.Resources.Glossary
+	if !opts.Config.Glossary.Enabled {
+		glos = glossary.Nop{}
+	}
 	if glos == nil {
 		var err error
 		glos, err = glossary.New(opts.Config.Glossary.Enabled, opts.Config.Glossary.Path)
@@ -62,21 +65,12 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	roundConfigs := buildRoundConfigs(opts.Rounds, opts.Config)
 	rubyRetryBackends := opts.RubyRetryBackends
 
-	inlineBootstrap := opts.Config.Glossary.Enabled && opts.Config.Glossary.Bootstrap.Enabled
-	maxTermsPer1000 := opts.Config.Glossary.Bootstrap.MaxTermsPer1000Chars
-	minSourceLen := opts.Config.Glossary.Bootstrap.MinSourceLen
-	inlineConflictStr := opts.Config.Glossary.Bootstrap.InlineConflictStrategy
-
 	rounds, err := buildPipelineRounds(
 		roundConfigs,
 		glos,
 		translationMemory,
 		rubyRetryBackends,
 		opts.Config.Repair,
-		inlineBootstrap,
-		maxTermsPer1000,
-		minSourceLen,
-		inlineConflictStr,
 		opts.Logger,
 		opts.Reporter,
 		opts.RubyRetryAttempts,
