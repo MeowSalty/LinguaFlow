@@ -581,7 +581,7 @@ bootstrap:
 | 字段 | 类型 | 默认值 | 说明 |
 | ----------------- | -------- | ------ | ------------------------------------------------------------------------------------------------------------- |
 | `max_concurrency` | int | `2` | 单用户同时进行的即时翻译并发上限（per-actor 信号量）；**全局并发 = 此值 × 4** |
-| `timeout` | duration | `5m` | 单次即时翻译执行超时。`>max_timeout` 钳制 |
+| `timeout` | duration | `5m` | 单次即时翻译执行超时;`timeout > max_timeout` 会在启动时报错(不静默钳制) |
 | `max_timeout` | duration | `30m` | `timeout` 的硬上限（管理员安全阀，防误配占满并发槽位） |
 
 ::: tip 并发如何受约束
@@ -596,7 +596,7 @@ bootstrap:
 | ---------------------- | ---- | ----------------- | ------------------------------------------------------------------------------------------------- |
 | `ring_buffer_capacity` | int | `256` | 每个 job 的内存 ring buffer 容量，用于 SSE 重连窗口补进 |
 | `replay_batch_size` | int | `200` | SSE 首次历史回放（补进）从 DB 拉取的每批事件数 |
-| `max_replay_events` | int | `0`（=容量 × 2） | SSE 单次连接历史回放总量上限；`<=0` 用 `ring_buffer_capacity × 2` |
+| `max_replay_events` | int | 省略时取 `ring_buffer_capacity × 2` | SSE 单次连接历史回放总量上限;**省略该键**才取 `ring_buffer_capacity × 2`,一旦显式提供就必须为正数(写 `0` 或负数会报错) |
 
 ::: info 新连接只补最近窗口
 一个全新的 SSE 连接（无 `Last-Event-ID`）只会从「最近 `max_replay_events` 条」开始补进，而非从 `seq 0` 全量回放。更早的历史由前端通过 [REST 历史端点](/zh/api/#_9-任务事件历史-分页) 分页拉取，保证大作业也能秒开。
@@ -617,11 +617,24 @@ bootstrap:
 
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
+| `enabled` | bool | `false` | 是否启用对象存储部署能力（`LINGUAFLOW_STORAGE_ENABLED`）。关闭时存储政策只能是「仅站点托管」，相关操作返回 `storage_deployment_disabled` |
 | `maintenance` | bool | `false` | 存储维护态：`true` 时所有存储写入被拒绝（返回 `storage_maintenance`）；启动时存在未完成的旧版迁移任务也会自动进入维护态 |
 | `backends` | []object | 未配置时隐含一个本地后端 | 存储后端列表，见下表 |
 | `default_site_space` | string | 未配置 backends 时为 `local` | 默认站点空间，必须指向某个已配置后端 |
 | `work_dir` | path | `<data_dir>/tmp` | 传输与处理用的工作目录 |
 | `cache_dir` | path | `<data_dir>/cache` | 内容缓存目录 |
+| `initialization.capacity_bytes` | 配额 | 未设置(=不限额) | 首次初始化 / 迁移时回填的**新站点空间默认配额**;`null` 表示不限额,正整数上限 `9007199254740991`(2^53−1)。**离线迁移**在 serve 模式下要求两个配额都已显式配置(见 [存储管理 · 旧数据迁移](/zh/guide/storage)) |
+| `initialization.logical_limit_bytes` | 配额 | 未设置(=不限额) | 首次初始化 / 迁移时回填的**每个用户或组织的逻辑配额**(跨项目合计);取值同上。**离线迁移**在 serve 模式下要求两个配额都已显式配置 |
+| `disk.minimum_free` | string | `1%` | 本地磁盘**保护余量**:可用空间低于它即拒绝新写入(返回 `storage_disk_insufficient`)。可写字节数,也可写小于 100 的百分数(含小数,如 `1%`、`2.5%`) |
+| `limits.*` | object | 见下 | 单文件 / 临时 / 输出 / 解压展开、归档条目数、分段数、元数据、缓存与并发上限 |
+| `network.allowed_hosts` / `network.allowed_cidrs` | []string | 空 | 出站存储网络的允许主机 / CIDR |
+| `intent_ttl` | duration | `24h` | 存储操作意图的有效期 |
+| `metadata_timeout` / `idle_timeout` | duration | `30s` / `30s` | 元数据请求 / 空闲连接超时 |
+| `transfer_timeout` | duration | `15m` | 单次传输超时 |
+| `retry_max_attempts` / `retry_window` / `retry_base_delay` / `retry_max_delay` | int / duration | `8` / `30m` / `1s` / `1m` | 存储操作重试策略 |
+| `signed_url_ttl` / `signed_url_max_ttl` | duration | `5m` / `15m` | 签名 URL 有效期与硬上限(须满足 `signed_url_ttl ≤ signed_url_max_ttl ≤ deletion_grace`) |
+| `source_retention` / `deletion_grace` | duration | `30d` / `24h` | 源文件保留期 / 删除宽限期 |
+| `reconcile_interval` / `reconcile_batch_size` | duration / int | `1m` / `100` | 存储对账节奏与批量大小 |
 
 `backends` 每项字段：
 
@@ -633,6 +646,20 @@ bootstrap:
 | `endpoint` / `bucket` / `region` / `access_key_id` / `secret_access_key` | **s3 必填**；endpoint 仅接受 HTTPS |
 | `prefix` / `path_style` / `session_token` | s3 可选：对象前缀、路径风格寻址、临时会话令牌 |
 | `access_key_id` 等密钥字段 | 建议用环境变量注入，避免写进部署文档 |
+
+`limits` 详细字段:
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `max_file_bytes` | `100 MiB` | 单文件上限 |
+| `max_temp_bytes` | `4 GiB` | 临时容量上限(须 ≥ 单文件 / 输出 / 元数据上限) |
+| `max_output_bytes` | `512 MiB` | 导出产物上限 |
+| `max_expanded_bytes` | `1 GiB` | 归档解压展开上限 |
+| `max_archive_entries` | `10000` | 归档条目数上限 |
+| `max_segments` | `100000` | 分段上限 |
+| `max_metadata_bytes` | `64 MiB` | 元数据 / 快照上限 |
+| `max_concurrency` | `2` | 存储操作并发上限 |
+| `max_cache_bytes` | `0`(不启用) | 内容缓存字节上限 |
 
 ```yaml
 server:
@@ -653,10 +680,14 @@ server:
 ```
 
 ::: warning 目录与容量约束
-- 各 local 后端的根目录之间、以及与 `work_dir` / `cache_dir` / 数据目录**不允许相互重叠**，启动时校验
-- `limits.*`（单文件 / 临时 / 输出 / 解压展开、元数据、缓存字节上限，归档条目数、分段数、并发数）与 `network.allowed_hosts` / `allowed_cidrs`、`retry_*`、`signed_url_ttl` 等时长数量项必须为正且相互满足大小关系（如 `signed_url_max_ttl ≤ deletion_grace`），否则启动报错——用 `linguaflow config check` 可在部署前验证
+- 各 local 后端的根目录之间**不允许相互重叠**,启动时校验(`work_dir` / `cache_dir` 默认落在数据目录下,不参与该重叠校验)
+- `limits.*`(单文件 / 临时 / 输出 / 解压展开、元数据、缓存字节上限,归档条目数、分段数、并发数)与 `network.allowed_hosts` / `allowed_cidrs`、`retry_*`、`signed_url_ttl` 等时长数量项必须为正且相互满足大小关系(如 `signed_url_max_ttl ≤ deletion_grace`),否则启动报错——用 `linguaflow config check` 可在部署前验证
 
 完整键清单以 `linguaflow init --kind server` 生成的模板与 [CLI · config explain](/zh/guide/cli#config-命令) 输出为准。
+:::
+
+::: warning 已废弃的 `limits.capacity_bytes`
+旧键 `server.storage.limits.capacity_bytes`(及环境变量 `LINGUAFLOW_STORAGE_LIMITS_CAPACITY_BYTES`)已被移除:新站点空间的初始化配额改用 `server.storage.initialization.capacity_bytes`,已有空间配额改由界面或 `PUT /storage/spaces/{spaceId}/quota` 调整。沿用旧键会直接启动失败。
 :::
 
 ##### bootstrap — 首次初始化（顶层）
