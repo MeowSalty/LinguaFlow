@@ -2,10 +2,16 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
+import IconCarbonOverflowMenuVertical from '~icons/carbon/overflow-menu-vertical'
 import { type ApiSchemas, cancelGlossarySyncTask, fetchProject } from '@/api/client'
 import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
 import { ApiError, isAccessDenied } from '@/api/utils'
 import { useOperationsStore } from '@/stores/operations'
+import { useTaskHistoryStore } from '@/stores/taskHistory'
+import { useTaskMutationsStore } from '@/stores/taskMutations'
+import { taskHistoryKey, taskHistoryErrorMessage } from '@/api/task-history'
+import { formatDateTime } from '@/utils/datetime'
+import { taskHistoryDeleteOption } from '@/utils/taskHistoryPresentation'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 import { useOrganizationsStore } from '@/stores/organizations'
@@ -19,6 +25,8 @@ const { t } = useI18n()
 const router = useRouter()
 const message = useMessage()
 const operations = useOperationsStore()
+const history = useTaskHistoryStore()
+const mutations = useTaskMutationsStore()
 const auth = useAuthStore()
 const service = useServiceStore()
 const organizations = useOrganizationsStore()
@@ -28,6 +36,29 @@ const loading = ref(false)
 const permissionLoading = ref(false)
 const error = ref<string | null>(null)
 const cancelling = ref(false)
+const target = computed(() =>
+  props.locator?.project_id && task.value
+    ? {
+        kind: 'glossary_sync' as const,
+        id: props.locator.task_id,
+        project_id: props.locator.project_id,
+        project_name: project.value?.name,
+        can_delete: task.value.can_delete,
+        status: task.value.status,
+      }
+    : null,
+)
+const mutationPending = computed(() => !!target.value && mutations.isPending(target.value))
+const deleteOptions = computed(() => [
+  taskHistoryDeleteOption(
+    task.value?.can_delete === true,
+    task.value?.status ?? '',
+    mutationPending.value,
+  ),
+])
+const requestDelete = (): void => {
+  if (target.value?.can_delete && !mutationPending.value) history.requestDelete([target.value])
+}
 let generation = 0
 let unsubscribe: (() => void) | null = null
 let drawerController = new AbortController()
@@ -61,17 +92,20 @@ const progress = computed(() =>
     ? Math.min(100, Math.round((task.value.processed / task.value.total) * 100))
     : null,
 )
-const fail = (cause: unknown): void => {
+const fail = (cause: unknown, projectDenied = false): void => {
   loading.value = false
-  error.value = isAccessDenied(cause)
-    ? t('workbench.details.unavailable')
-    : cause instanceof Error
-      ? cause.message
-      : t('operations.loadFailed')
+  error.value =
+    cause instanceof ApiError && cause.status === 404
+      ? t('taskHistory.missing')
+      : isAccessDenied(cause)
+        ? t('taskHistory.inaccessible')
+        : cause instanceof Error
+          ? cause.message
+          : t('operations.loadFailed')
   if (isAccessDenied(cause)) {
     generation++
     task.value = null
-    project.value = null
+    if (projectDenied) project.value = null
     stop()
     if (props.locator) operations.forget(props.locator)
   }
@@ -103,9 +137,10 @@ const load = async (): Promise<void> => {
       (cause) => {
         if (current()) fail(cause)
       },
+      { terminalRecheckMs: 30000 },
     )
   } catch (cause) {
-    if (current()) fail(cause)
+    if (current()) fail(cause, true)
   } finally {
     if (current()) permissionLoading.value = false
   }
@@ -135,34 +170,47 @@ const refresh = async (): Promise<void> => {
 }
 const cancel = async (): Promise<void> => {
   const locator = props.locator
-  if (!locator?.project_id || !canCancel.value || cancelling.value) return
+  if (
+    !locator?.project_id ||
+    !canCancel.value ||
+    cancelling.value ||
+    mutationPending.value ||
+    !target.value
+  )
+    return
+  const submittedTarget = { ...target.value }
   const snapshot = captureSession()
   const request = generation
   const current = () => request === generation && isSessionCurrent(snapshot)
   cancelling.value = true
   try {
-    const latest = await operations.querySync(
-      locator.project_id,
-      locator.task_id,
-      drawerController.signal,
-    )
-    if (!current()) return
-    task.value = latest
-    if (!['pending', 'running'].includes(latest.status)) {
-      message.info(t('workbench.details.conflict'))
-      return
-    }
-    const response = await cancelGlossarySyncTask(locator.project_id, locator.task_id)
-    if (!isSessionCurrent(snapshot)) return
-    void operations.invalidate()
-    if (!current()) return
-    task.value = { ...latest, status: response.status }
-    await refresh()
+    await mutations.run([submittedTarget], 'cancel', async () => {
+      const latest = await operations.querySync(
+        submittedTarget.project_id,
+        locator.task_id,
+        drawerController.signal,
+      )
+      if (!current()) return
+      task.value = latest
+      if (!['pending', 'running'].includes(latest.status)) {
+        message.info(t('workbench.details.conflict'))
+        return
+      }
+      const response = await cancelGlossarySyncTask(submittedTarget.project_id, locator.task_id)
+      if (!isSessionCurrent(snapshot)) return
+      void operations.invalidate()
+      if (!current()) return
+      task.value = { ...latest, status: response.status }
+      await refresh()
+    })
   } catch (cause) {
     if (!current()) return
     if (cause instanceof ApiError && cause.status === 409) {
       await refresh()
       if (current()) message.warning(t('workbench.details.conflict'))
+    } else if (cause instanceof ApiError && cause.status === 403) {
+      await refresh()
+      if (current()) message.warning(taskHistoryErrorMessage(cause))
     } else fail(cause)
   } finally {
     if (current()) cancelling.value = false
@@ -172,6 +220,19 @@ const close = (): void => {
   clear()
   emit('close')
 }
+watch(
+  () => history.removalRevision,
+  () => {
+    const locator = props.locator
+    if (!locator?.project_id) return
+    const key = taskHistoryKey({
+      kind: 'glossary_sync',
+      id: locator.task_id,
+      project_id: locator.project_id,
+    })
+    if (history.lastRemoved.some((item) => taskHistoryKey(item) === key)) close()
+  },
+)
 const restoreFocus = (): void => {
   if (focusBeforeOpen?.isConnected) focusBeforeOpen.focus()
 }
@@ -258,6 +319,16 @@ onBeforeUnmount(() => {
           <p class="text-xs leading-5 text-lf-text-muted">
             {{ t('workbench.details.progressHint') }}
           </p>
+          <dl class="text-sm">
+            <dt class="text-xs text-lf-text-muted">{{ t('taskHistory.finishedAt') }}</dt>
+            <dd class="mt-1 tabular-nums">
+              {{
+                task.finished_at
+                  ? formatDateTime(task.finished_at, { dateStyle: 'short', timeStyle: 'medium' })
+                  : t('taskHistory.finishedUnknown')
+              }}
+            </dd>
+          </dl>
           <NAlert v-if="task.error" type="error">{{ task.error }}</NAlert>
           <div
             v-if="task.result"
@@ -284,10 +355,27 @@ onBeforeUnmount(() => {
             v-if="canCancel"
             type="error"
             :loading="cancelling"
-            :disabled="!!error"
+            :disabled="!!error || mutationPending"
             @click="cancel"
             >{{ t('workbench.details.cancellation') }}</NButton
           >
+          <NDropdown
+            v-if="typeof task?.can_delete === 'boolean'"
+            trigger="click"
+            :options="deleteOptions"
+            @select="requestDelete"
+          >
+            <NButton
+              :disabled="cancelling || mutationPending || !!error"
+              :aria-label="t('taskHistory.more')"
+              data-task-history-trigger
+              :title="t('taskHistory.more')"
+              ><template #icon><IconCarbonOverflowMenuVertical /></template
+            ></NButton>
+          </NDropdown>
+          <NButton v-if="!task && project" @click="goToGlossary">{{
+            t('taskHistory.project')
+          }}</NButton>
           <NButton v-if="task?.status === 'failed'" @click="goToGlossary">{{
             t('workbench.details.reanalyze')
           }}</NButton>

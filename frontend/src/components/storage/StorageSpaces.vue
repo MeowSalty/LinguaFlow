@@ -5,12 +5,14 @@ import { useI18n } from 'vue-i18n'
 import type { ApiSchemas } from '@/api/client-core'
 import { useStorageStore } from '@/stores/storage'
 import StorageCapacity from './StorageCapacity.vue'
+import { hasSpaceManagementActions } from '@/utils/storage-availability'
 
 const props = defineProps<{ connectionId: number; compact?: boolean }>()
 const emit = defineEmits<{
   create: []
   inspect: [spaceId: number, event: MouseEvent]
   change: [space: ApiSchemas['StorageSpace']]
+  quota: [space: ApiSchemas['StorageSpace']]
 }>()
 const { t } = useI18n()
 const store = useStorageStore()
@@ -103,22 +105,52 @@ watch(
           <StorageCapacity :space="space" :compact="compact" />
         </div>
         <div v-if="!compact" class="mt-3 space-y-2">
-          <NButton
-            size="small"
-            :disabled="
-              !store.spaceAllowed(connectionId, space.id) ||
-              state?.stale ||
-              !['active', 'read_only', 'disabled'].includes(space.status)
-            "
-            @click="emit('change', space)"
-          >
-            {{ t(space.status === 'active' ? 'storage.makeReadOnly' : 'storage.makeActive') }}
-          </NButton>
+          <div class="flex flex-wrap gap-2">
+            <NButton
+              size="small"
+              :disabled="
+                !store.spaceAllowed(connectionId, space.id) ||
+                state?.stale ||
+                !['active', 'read_only', 'disabled'].includes(space.status)
+              "
+              @click="emit('change', space)"
+            >
+              {{ t(space.status === 'active' ? 'storage.makeReadOnly' : 'storage.makeActive') }}
+            </NButton>
+            <NButton
+              size="small"
+              :disabled="
+                !hasSpaceManagementActions(space, 'set_quota') ||
+                !space.management_actions.set_quota.allowed ||
+                (!store.quotaRecoveries[space.id] &&
+                  !store.spaceAllowed(connectionId, space.id, 'set_quota'))
+              "
+              @click="emit('quota', space)"
+              >{{
+                t(
+                  store.quotaRecoveries[space.id]
+                    ? 'storageQuota.pendingReview'
+                    : 'storageQuota.adjust',
+                )
+              }}</NButton
+            >
+          </div>
           <p
             v-if="store.spaceReason(connectionId, space.id)"
             class="text-xs leading-5 text-lf-text-muted"
           >
             {{ store.spaceReason(connectionId, space.id) }}
+          </p>
+          <p
+            v-if="
+              !store.quotaRecoveries[space.id] &&
+              store.spaceReason(connectionId, space.id, 'set_quota')
+            "
+            class="text-xs leading-5 text-lf-text-muted"
+          >
+            {{ t('storageQuota.adjust') }}：{{
+              store.spaceReason(connectionId, space.id, 'set_quota')
+            }}
           </p>
         </div>
       </article>

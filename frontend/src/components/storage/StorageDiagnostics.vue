@@ -7,10 +7,12 @@ import { storageTaskErrorMessage } from '@/api/storage-errors'
 import { formatDateTime } from '@/utils/datetime'
 import { capacityTotals, formatStorageBytes } from './capacity'
 import StorageCapacity from './StorageCapacity.vue'
+import StorageDiskDiagnostics from './StorageDiskDiagnostics.vue'
 
 const props = defineProps<{
   diagnostics: ApiSchemas['StorageDiagnostics']
   names: Record<number, string>
+  stale?: boolean
 }>()
 const { t, te } = useI18n()
 const themeVars = useThemeVars()
@@ -123,6 +125,8 @@ watch(
       </div>
     </NCard>
 
+    <StorageDiskDiagnostics :disks="diagnostics.disks" :stale="stale" />
+
     <section aria-labelledby="diagnostic-spaces-title">
       <div class="mb-4">
         <h2 id="diagnostic-spaces-title" class="text-base font-semibold text-lf-text-strong">
@@ -227,7 +231,7 @@ watch(
               </tr>
               <tr v-if="expanded.includes(space.id)" class="diagnostic-details">
                 <td :id="`diagnostic-details-${space.id}`" colspan="4">
-                  <StorageCapacity :space="space" :details-only="true" />
+                  <StorageCapacity :space="space" :details-only="true" ledger-only />
                   <p class="mt-3 text-xs text-lf-text-muted">
                     {{ t('storageAdmin.observationsHint') }}
                   </p>

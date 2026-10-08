@@ -48,7 +48,13 @@ function deferred<T>() {
   })
   return { promise, resolve, reject }
 }
-const job = (id = 12, project = 7) => ({ id, project_id: project, status: 'running' })
+const job = (id = 12, project = 7) => ({
+  id,
+  project_id: project,
+  status: 'running',
+  can_delete: false,
+  finished_at: null,
+})
 const event = (id = 12, seq = 5) => ({
   job_id: id,
   seq,
@@ -153,12 +159,14 @@ describe('translation detail authorization and response ordering', () => {
     const opening = tracker.openDetail(12)
     subscriptions[0]!.receive(job())
     await opening
-    mocks.listJobEvents.mockRejectedValueOnce(new ApiError('temporary history failure', 503))
+    mocks.listJobEvents.mockRejectedValueOnce(
+      new ApiError('temporary history failure', 503, { title: 'history_unavailable' }),
+    )
     await expect(tracker.loadOlder()).resolves.toBeUndefined()
     subscriptions[0]!.receive(job())
     expect(tracker.detailJob?.id).toBe(12)
     expect(tracker.getJobEvents()).toEqual([event()])
-    expect(tracker.detailError).toBe('temporary history failure')
+    expect(tracker.detailError).toBe('taskHistoryErrors.historyUnavailable')
     expect(tracker.loadingOlder).toBe(false)
     mocks.listJobEvents.mockResolvedValueOnce({ items: [event(12, 4)] })
     await tracker.loadOlder()

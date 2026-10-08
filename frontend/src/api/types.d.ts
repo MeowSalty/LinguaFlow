@@ -4,6 +4,72 @@
  */
 
 export interface paths {
+    "/admin/task-retention/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 预览任务历史保留影响
+         * @description 仅活跃系统管理员可读取全站汇总，不返回任务正文或项目名称。此 POST 完全只读。
+         *     自动清理关闭或维护期间也可预览；预览不是删除凭证，提交与扫描会重新校验。
+         *     总预算 5 秒，未完成的计数为 null 并返回 partial；数据库查询错误返回错误，不冒充零影响。
+         */
+        post: operations["PreviewTaskRetention"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/task-retention/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取任务历史清理运行状态
+         * @description 仅系统管理员可读。运行摘要属于本进程，重启后 last_scan 和 backlog 为 null；政策来自数据库。
+         */
+        get: operations["GetTaskRetentionStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/batch-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 批量删除显式选择的任务记录
+         * @description 最多提交 100 个显式任务引用，不支持所有任务或筛选式删除。按 (kind,id,project_id) 去重并逐项鉴权。
+         *     结构错误整体返回 400；结构合法返回逐项结果，各项独立事务，已成功项不因其他项失败回滚。
+         *     project_id 必须与任务实际项目匹配；响应只回显输入标识和结果，不泄露其他项目数据。
+         *     总预算 30 秒、单项最多 5 秒，未处理或已确认超时回滚的项为 deferred。
+         *     删除执行历史和日志，保留原文、译文和独立用量事实；StorageTask 不接受此删除操作。
+         */
+        post: operations["BatchDeleteTaskHistory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storage/capabilities": {
         parameters: {
             query?: never;
@@ -338,6 +404,28 @@ export interface paths {
          * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
          */
         post: operations["RevokeStorageAuthorization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/spaces/{spaceId}/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * SetStorageSpaceQuota
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         */
+        put: operations["SetStorageSpaceQuota"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1906,7 +1994,13 @@ export interface paths {
         get: operations["GetGlossarySyncTaskStatus"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 删除术语同步任务记录
+         * @description 同时校验任务项目归属与项目写权限。仅终态且所有执行写入已收尾时可删除。
+         *     删除执行记录，保留已经提交的术语和译文；非终态 task_not_terminal、收尾中 task_busy 均返回 409。
+         *     单项事务预算 5 秒，确认回滚后返回 503 task_cleanup_deferred；重复删除返回 404。
+         */
+        delete: operations["DeleteGlossarySyncTaskHistory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2121,7 +2215,14 @@ export interface paths {
         get: operations["GetJob"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 删除翻译任务记录
+         * @description 要求项目写权限。仅 completed、failed、cancelled 且执行与事件写入均已收尾时可删除。
+         *     删除记录、执行详情和日志，保留项目原文、译文及独立用量事实；不能撤销。
+         *     非终态返回 409 task_not_terminal，仍在收尾返回 409 task_busy，维护/恢复屏障沿用领域错误。
+         *     单项事务预算 5 秒，确认回滚后返回 503 task_cleanup_deferred；已不存在返回 404。
+         */
+        delete: operations["DeleteJobHistory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2166,6 +2267,7 @@ export interface paths {
          *     已完成的轮次与已翻译段落直接跳过，从当前进度断点继续。
          *     例外：显式选段（segment_ids 手动选择）的任务，首个翻译轮
          *     会重译所有选中段落。
+         *     上一轮执行仍在收尾时返回 409 task_busy；重试清空结束时间并重新计算保留周期。
          */
         post: operations["RetryJob"];
         delete?: never;
@@ -2210,7 +2312,7 @@ export interface paths {
         put?: never;
         /**
          * 恢复已暂停的任务
-         * @description 从轮次断点恢复已暂停的任务。
+         * @description 从轮次断点恢复已暂停的任务；上一轮执行仍在收尾时返回 409 task_busy。
          */
         post: operations["ResumeJob"];
         delete?: never;
@@ -2231,6 +2333,7 @@ export interface paths {
         /**
          * 订阅任务实时事件流 (SSE)
          * @description 以 Server-Sent Events 推送任务实时事件。
+         *     任务历史删除后关闭已有订阅，新订阅返回 404；回放数据库不可用时结束连接，不伪报完整历史。
          *
          *     - 认证：除 bearerAuth 外，原生 EventSource 无法设置自定义请求头，
          *       可改用 `access_token` 查询参数携带访问令牌。
@@ -2611,7 +2714,10 @@ export interface paths {
         head?: never;
         /**
          * 更新系统配置
-         * @description 原子更新布尔政策并记录操作者及非敏感变更；拒绝未知字段、null 和字符串布尔值。
+         * @description settings 至少提交一个支持字段，未提交字段保持不变；拒绝未知字段、null 和错误类型。
+         *     task_retention 必须完整提交 enabled、retention_days 和 expected_revision，禁止提交 revision。
+         *     同时修改多个政策时全部提交或全部回滚。版本不一致返回 409 settings_conflict。
+         *     政策值没有变化时不递增版本、不重复记录审计；保存后无需重启，维护期间仍可修改政策。
          */
         patch: operations["AdminUpdateSettings"];
         trace?: never;
@@ -2676,8 +2782,56 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        TaskRetentionPolicy: {
+            /** @default false */
+            enabled: boolean;
+            /**
+             * @description 完整 24 小时天数；关闭时仍保存该值，两类任务及全部终态使用同一周期。
+             * @default 30
+             */
+            retention_days: number;
+            /** Format: int64 */
+            readonly revision: number;
+        };
+        TaskRetentionPatch: {
+            enabled: boolean;
+            retention_days: number;
+            /** Format: int64 */
+            expected_revision: number;
+        };
+        TaskRetentionPreview: {
+            /** Format: int64 */
+            policy_revision: number;
+            retention_days: number;
+            /** Format: date-time */
+            as_of: string;
+            /** Format: date-time */
+            cutoff: string;
+            partial: boolean;
+            incomplete_reasons: string[];
+            by_type: {
+                translation: components["schemas"]["RetentionTypePreview"];
+                glossary_sync: components["schemas"]["RetentionTypePreview"];
+            };
+        };
+        TaskRetentionStatus: {
+            task_retention: components["schemas"]["TaskRetentionPolicy"];
+            /** Format: int64 */
+            policy_revision: number;
+            /** @enum {string} */
+            state: "disabled" | "idle" | "running" | "blocked" | "error";
+            reason_codes: string[];
+            last_scan: components["schemas"]["RetentionScanSummary"] | null;
+            backlog: boolean | null;
+        };
+        TaskHistoryBatchDeleteRequest: {
+            items: components["schemas"]["TaskHistoryTarget"][];
+        };
+        TaskHistoryBatchDeleteResponse: {
+            items: components["schemas"]["TaskHistoryDeleteResult"][];
+        };
         Problem: {
-            /** @description Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Provider authorization, quota and availability retain their separate domain codes. */
+            /** @description Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses storage_disk_probe_failed (503). Neither signals automatic retry. Provider authorization, quota and availability retain their separate domain codes. */
             error_code?: string;
             task_id?: number;
             operation_id?: string;
@@ -2850,7 +3004,9 @@ export interface components {
             output_tokens: number;
             segment_count: number;
             usage_records: number;
+            /** @description 当前保留记录范围内的完成任务数量；独立调用和 Token 用量不随历史删除减少。 */
             completed_jobs: number;
+            /** @description 当前保留记录范围内的失败任务数量。 */
             failed_jobs: number;
         };
         Resource: {
@@ -3328,6 +3484,8 @@ export interface components {
             finished_at?: string | null;
         };
         Job: {
+            finished_at: components["schemas"]["TaskFinishedAt"];
+            can_delete: components["schemas"]["TaskCanDelete"];
             id: number;
             project_id: number;
             created_by?: {
@@ -3380,6 +3538,8 @@ export interface components {
             next_cursor?: string;
         };
         JobSummary: {
+            finished_at: components["schemas"]["TaskFinishedAt"];
+            can_delete: components["schemas"]["TaskCanDelete"];
             id: number;
             project_id: number;
             project_name: string;
@@ -3669,6 +3829,8 @@ export interface components {
             status_url: string;
         };
         GlossarySyncTaskStatusResponse: {
+            finished_at: components["schemas"]["TaskFinishedAt"];
+            can_delete: components["schemas"]["TaskCanDelete"];
             task_id: string;
             /** @enum {string} */
             status: "pending" | "running" | "completed" | "failed" | "cancelled";
@@ -3933,6 +4095,7 @@ export interface components {
             active_users: number;
             total_projects: number;
             total_organizations: number;
+            /** @description 当前保留的翻译任务记录数量，会随历史删除减少，不是永久累计任务数。 */
             total_jobs: number;
             total_resources: number;
         };
@@ -3942,13 +4105,15 @@ export interface components {
         };
         SystemSettingsResponse: {
             settings: {
+                task_retention: components["schemas"]["TaskRetentionPolicy"];
                 /** @description 是否允许公开注册；公开注册账户始终为普通用户。 */
                 registration_enabled: boolean;
             };
         };
         UpdateSystemSettingsRequest: {
             settings: {
-                registration_enabled: boolean;
+                task_retention?: components["schemas"]["TaskRetentionPatch"];
+                registration_enabled?: boolean;
             };
         };
         ExecutionPlanTemplateListResponse: {
@@ -4102,13 +4267,94 @@ export interface components {
             /** @description 占用该资源的未完成任务 ID */
             active_job_id: number;
         };
+        /**
+         * Format: int64
+         * @description 已完成全量统计的数量；未完成或未知为 null，不能把样本当作全站数量。
+         */
+        RetentionCount: number | null;
+        /** @description 已到期终态按屏障、忙碌、预计可删的优先级互斥归类。 */
+        RetentionExpiredCounts: {
+            blocked: components["schemas"]["RetentionCount"];
+            busy: components["schemas"]["RetentionCount"];
+            deletable: components["schemas"]["RetentionCount"];
+        };
+        /** @description 终态保留计时来源，属于独立维度，不能与到期分类重复相加。 */
+        RetentionTimingSources: {
+            finished_at: components["schemas"]["RetentionCount"];
+            legacy_anchor: components["schemas"]["RetentionCount"];
+            missing_anchor: components["schemas"]["RetentionCount"];
+        };
+        /** @description 仅终态，按保留计时起点到 as_of 的 UTC 年龄统计；边界为 [0,1)、[1,7)、[7,30)、[30,90)、[90,+∞) 个 24 小时天，缺少锚点为 unknown。 */
+        RetentionTerminalAge: {
+            lt_1d: components["schemas"]["RetentionCount"];
+            days_1_6: components["schemas"]["RetentionCount"];
+            days_7_29: components["schemas"]["RetentionCount"];
+            days_30_89: components["schemas"]["RetentionCount"];
+            days_90_plus: components["schemas"]["RetentionCount"];
+            unknown: components["schemas"]["RetentionCount"];
+        };
+        /** @description 预计可删任务关联行数，不代表磁盘释放字节；不读取正文。 */
+        RetentionDependencies: {
+            sse_events: components["schemas"]["RetentionCount"];
+            job_resources: components["schemas"]["RetentionCount"];
+            job_rounds: components["schemas"]["RetentionCount"];
+            job_round_segments: components["schemas"]["RetentionCount"];
+            credential_job_references: components["schemas"]["RetentionCount"];
+        };
+        RetentionTypePreview: {
+            active: components["schemas"]["RetentionCount"];
+            terminal: components["schemas"]["RetentionCount"];
+            missing_anchor: components["schemas"]["RetentionCount"];
+            not_expired: components["schemas"]["RetentionCount"];
+            expired: components["schemas"]["RetentionExpiredCounts"];
+            timing_sources: components["schemas"]["RetentionTimingSources"];
+            terminal_age: components["schemas"]["RetentionTerminalAge"];
+            deletable_dependencies: components["schemas"]["RetentionDependencies"];
+        };
+        RetentionScanSummary: {
+            scan_id: string;
+            /** Format: int64 */
+            policy_revision: number;
+            /** Format: date-time */
+            as_of: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            finished_at: string;
+            /** Format: int64 */
+            duration_ms: number;
+            candidates: number;
+            deleted: number;
+            skipped: {
+                [key: string]: number;
+            };
+            error_code: string;
+            /** @description 是否已经遍历完本次固定候选域。 */
+            completed: boolean;
+            legacy_anchor_count: components["schemas"]["RetentionCount"];
+            missing_anchor_count: components["schemas"]["RetentionCount"];
+        };
+        TaskHistoryTarget: {
+            /** @enum {string} */
+            kind: "translation" | "glossary_sync";
+            id: string;
+            project_id: number;
+        };
+        TaskHistoryDeleteResult: {
+            /** @enum {string} */
+            kind: "translation" | "glossary_sync";
+            id: string;
+            project_id: number;
+            /** @enum {string} */
+            status: "deleted" | "not_found" | "forbidden" | "not_terminal" | "busy" | "blocked" | "deferred" | "failed";
+        };
         /** @description Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate. */
         StorageRuntime: {
             deployment_enabled: boolean;
             maintenance: boolean;
         };
         /** @enum {string} */
-        StorageActionReasonCode: "storage_maintenance" | "storage_deployment_disabled" | "storage_capability_unsupported" | "connection_disabled" | "storage_space_required" | "storage_check_space_limit_exceeded" | "space_disabled" | "space_read_only" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_quota_exceeded" | "storage_unavailable";
+        StorageActionReasonCode: "storage_maintenance" | "storage_deployment_disabled" | "storage_capability_unsupported" | "connection_disabled" | "storage_space_required" | "storage_check_space_limit_exceeded" | "space_disabled" | "space_read_only" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_disk_insufficient" | "storage_disk_probe_failed" | "storage_quota_exceeded" | "storage_unavailable";
         /** @description Metadata-only admission snapshot, not a guarantee of provider I/O success. Allowed actions have an empty reason array; denied actions have at least one stable reason. */
         StorageActionAvailability: {
             allowed: boolean;
@@ -4196,6 +4442,20 @@ export interface components {
         StorageCheckList: {
             items: components["schemas"]["StorageCheck"][];
         };
+        /** @description Administrator-only local filesystem observations; roles identify configured directory purposes, never host paths. Remote bucket capacity is not inferred. */
+        StorageDiskDiagnostic: {
+            roles: string[];
+            /** @enum {string} */
+            state: "available" | "low" | "unknown";
+            /** Format: date-time */
+            observed_at: string;
+            /** Format: int64 */
+            total_bytes: number | null;
+            /** Format: int64 */
+            available_bytes: number | null;
+            /** Format: int64 */
+            minimum_free_bytes: number | null;
+        };
         StorageSpaceDiagnostics: {
             id: number;
             /** Format: int64 */
@@ -4216,6 +4476,7 @@ export interface components {
             last_checked_at?: string;
         };
         StorageDiagnostics: {
+            disks: components["schemas"]["StorageDiskDiagnostic"][];
             spaces: components["schemas"]["StorageSpaceDiagnostics"][];
             next_cursor?: number;
             /** Format: int64 */
@@ -4243,6 +4504,7 @@ export interface components {
          *       "default_choice": "user",
          *       "generation": 3,
          *       "logical_limit_bytes": 107374182400,
+         *       "default_space_capacity_bytes": null,
          *       "runtime": {
          *         "deployment_enabled": false,
          *         "maintenance": false
@@ -4268,7 +4530,9 @@ export interface components {
             /** Format: int64 */
             generation: number;
             /** Format: int64 */
-            logical_limit_bytes: number;
+            default_space_capacity_bytes: number | null;
+            /** Format: int64 */
+            logical_limit_bytes: number | null;
             /** @description Stored mode/default combination needs administrator correction; effective values are normalized. */
             readonly configuration_needs_update?: boolean;
         };
@@ -4281,7 +4545,9 @@ export interface components {
             /** Format: int64 */
             generation: number;
             /** Format: int64 */
-            logical_limit_bytes: number;
+            default_space_capacity_bytes: number | null;
+            /** Format: int64 */
+            logical_limit_bytes: number | null;
         };
         StorageConnectionManagementActions: {
             create_space: components["schemas"]["StorageActionAvailability"];
@@ -4334,9 +4600,15 @@ export interface components {
             expected_generation: number;
         };
         StorageSpaceManagementActions: {
+            set_quota: components["schemas"]["StorageActionAvailability"];
             set_status: components["schemas"]["StorageActionAvailability"];
         };
         StorageSpace: {
+            /**
+             * Format: int64
+             * @description Business quota headroom, null for unlimited; not physical disk or bucket free space.
+             */
+            available_bytes: number | null;
             management_actions: components["schemas"]["StorageSpaceManagementActions"];
             id: number;
             connection_id: number;
@@ -4351,7 +4623,7 @@ export interface components {
             /** Format: int64 */
             management_generation: number;
             /** Format: int64 */
-            capacity_bytes: number;
+            capacity_bytes: number | null;
             /** Format: int64 */
             reserved_bytes: number;
             /** Format: int64 */
@@ -4369,7 +4641,7 @@ export interface components {
             bucket: string;
             prefix: string;
             /** Format: int64 */
-            capacity_bytes: number;
+            capacity_bytes: number | null;
         };
         StorageAuthorizationRequest: {
             access_key_id: string;
@@ -4382,6 +4654,12 @@ export interface components {
             expires_at?: string | null;
         };
         StorageRevokeRequest: {
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        StorageSpaceQuotaRequest: {
+            /** Format: int64 */
+            capacity_bytes: number | null;
             /** Format: int64 */
             expected_generation: number;
         };
@@ -4847,6 +5125,13 @@ export interface components {
             resource_path: string;
             affected_count: number;
         };
+        /**
+         * Format: date-time
+         * @description 最后一次执行的真实结束时间；活动任务或旧任务结束时间无法确认时为 null，重试清空。
+         */
+        TaskFinishedAt: string | null;
+        /** @description 当前身份、状态、执行收尾及屏障的即时投影；不替代删除请求的再次校验。 */
+        TaskCanDelete: boolean;
         GlossarySyncExecuteResourceResult: {
             resource_id: number;
             resource_path: string;
@@ -4854,6 +5139,8 @@ export interface components {
             skipped_count: number;
         };
         OperationBase: {
+            finished_at: components["schemas"]["TaskFinishedAt"];
+            can_delete: components["schemas"]["TaskCanDelete"];
             task_id: string;
             project_id: number;
             project_name: string;
@@ -4866,7 +5153,7 @@ export interface components {
             /** Format: date-time */
             started_at: string | null;
             /** @description 类型能力，不是当前状态或用户权限许可；执行时必须再次鉴权。 */
-            supported_actions: ("view" | "pause" | "resume" | "cancel" | "retry")[];
+            supported_actions: ("view" | "pause" | "resume" | "cancel" | "retry" | "delete")[];
         };
         TranslationOperation: components["schemas"]["OperationBase"] & {
             /** @enum {string} */
@@ -4888,7 +5175,7 @@ export interface components {
             task_type: "glossary_sync";
             /** @enum {string} */
             status?: "pending" | "running" | "completed" | "failed" | "cancelled";
-            supported_actions?: ("view" | "cancel")[];
+            supported_actions?: ("view" | "cancel" | "delete")[];
             progress: {
                 /** @description 已检查并提交的段落数，包含安全跳过项。 */
                 processed_segments: number;
@@ -4901,6 +5188,7 @@ export interface components {
              */
             task_type: "glossary_sync";
         };
+        /** @description 存储任务承担恢复与物理清理证据；本功能不可删除，can_delete 始终为 false，finished_at 为 null。 */
         StorageOperation: components["schemas"]["OperationBase"] & {
             /** @enum {string} */
             task_type: "storage";
@@ -5484,6 +5772,88 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    PreviewTaskRetention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    retention_days: number;
+                };
+            };
+        };
+        responses: {
+            /** @description 当前汇总与预计影响 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRetentionPreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetTaskRetentionStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已保存政策版本及本进程运行摘要 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRetentionStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    BatchDeleteTaskHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskHistoryBatchDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description 去重后的逐项结果，保持首次提交顺序 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskHistoryBatchDeleteResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     GetStorageCapabilities: {
         parameters: {
             query: {
@@ -6036,6 +6406,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StorageConnection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStorageSpaceQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageSpaceQuotaRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageSpace"];
                 };
             };
             400: components["responses"]["Problem"];
@@ -8591,6 +8991,35 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    DeleteGlossarySyncTaskHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务记录已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     CancelGlossarySyncTask: {
         parameters: {
             query?: never;
@@ -8861,6 +9290,33 @@ export interface operations {
                     "application/json": components["schemas"]["Job"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteJobHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务记录已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

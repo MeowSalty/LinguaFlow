@@ -9,7 +9,7 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -163,6 +163,17 @@ const manifestWritable = computed(
 const metadataWritable = computed(
   () => workspace.storageMetadataWritable && storageManifestWriteAllowed(workspace.project),
 )
+/**
+ * 上传前置判定：容忍快照被窗口聚焦/切页短暂置为失效的瞬态。
+ * 从外部拖入文件的瞬间恰好触发 focus 失效，若不等待会把「重新确认中」
+ * 误报成「存储状态尚未确认」。超时后按当前状态判定；真正写入前
+ * prepareStorageWrite 仍会强制重新校验。
+ */
+const ensureManifestWritable = async (timeoutMs = 2000): Promise<boolean> => {
+  if (manifestWritable.value) return true
+  await workspace.settleStorageSnapshot(timeoutMs)
+  return manifestWritable.value
+}
 const openSourceUpdate = (resource: Resource): void => {
   if (['previewing', 'submitting', 'tracking', 'unknown', 'blocked'].includes(sourceState.value)) {
     sourceDrawerVisible.value = true
@@ -266,7 +277,11 @@ const summarizeUploadName = (files: File[]): string =>
 
 const executeUploadItems = async (items: PendingUploadItem[], taskId: string): Promise<void> => {
   const context = captureContext()
-  if (!manifestWritable.value) throw new Error(t('sourceStorage.maintenanceUnknown'))
+  if (!(await ensureManifestWritable())) throw new Error(t('sourceStorage.maintenanceUnknown'))
+  if (!context.current()) {
+    workspace.removeUploadTask(taskId)
+    return
+  }
   const selectedItems = items.filter((item) => item.selected && item.strategy === 'create')
   const updateItems = items.filter((item) => item.selected && item.strategy === 'source_update')
   if (updateItems.some((item) => !item.precheck.existing_resource)) {
@@ -309,13 +324,14 @@ const executeUploadItems = async (items: PendingUploadItem[], taskId: string): P
 }
 
 /** 打开文件选择器，多选文件作为一个批次上传（与拖拽上传共用同一批处理流程） */
-const chooseUploadFiles = (): void => {
+const chooseUploadFiles = async (): Promise<void> => {
   const context = captureContext()
-  if (!manifestWritable.value) {
+  if (!(await ensureManifestWritable())) {
     message.warning(t('sourceStorage.maintenanceUnknown'))
     return
   }
   if (blockUploadIfInsecure()) return
+  if (!context.current()) return
   const input = document.createElement('input')
   input.type = 'file'
   input.multiple = true
@@ -339,14 +355,14 @@ const beginUpload = async (
     return
   }
 
-  if (!manifestWritable.value) {
+  if (!(await ensureManifestWritable())) {
     message.warning(t('sourceStorage.maintenanceUnknown'))
     return
   }
+  if (!context.current()) return
   if (files.length === 0) {
     return
   }
-
   const taskId = workspace.addUploadTask(displayName, files.length)
   workspace.updateUploadTaskStage(taskId, 'prechecking')
 
@@ -408,16 +424,47 @@ const cancelPrecheckedUpload = (): void => {
   workspace.clearPendingUploadItems()
 }
 
-// ── 拖拽上传 ──
+// ── 拖拽上传（window 级监听，整窗为投放区）──
 
-const handleDragOver = (event: DragEvent): void => {
-  event.preventDefault()
+let dragDepth = 0
+const isFileDrag = (event: DragEvent): boolean =>
+  Array.from(event.dataTransfer?.types ?? []).includes('Files')
+
+const handleWindowDragEnter = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  dragDepth += 1
   dragOver.value = true
 }
-
-const handleDragLeave = (): void => {
-  dragOver.value = false
+const handleWindowDragOver = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  event.preventDefault() // 允许在窗口任意位置释放，并阻止浏览器直接打开文件
 }
+const handleWindowDragLeave = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) dragOver.value = false
+}
+const handleWindowDrop = (event: DragEvent): void => {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  dragDepth = 0
+  dragOver.value = false
+  void handleDrop(event)
+}
+
+onMounted(() => {
+  window.addEventListener('dragenter', handleWindowDragEnter)
+  window.addEventListener('dragover', handleWindowDragOver)
+  window.addEventListener('dragleave', handleWindowDragLeave)
+  window.addEventListener('drop', handleWindowDrop)
+})
+onScopeDispose(() => {
+  window.removeEventListener('dragenter', handleWindowDragEnter)
+  window.removeEventListener('dragover', handleWindowDragOver)
+  window.removeEventListener('dragleave', handleWindowDragLeave)
+  window.removeEventListener('drop', handleWindowDrop)
+  dragDepth = 0
+})
 
 const handleDrop = async (event: DragEvent): Promise<void> => {
   const context = captureContext()
@@ -478,7 +525,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 </script>
 
 <template>
-  <div class="space-y-3" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
+  <div class="space-y-3">
     <div
       class="flex flex-wrap items-center gap-2.5 rounded-lf-card border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2"
     >
@@ -580,29 +627,36 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       {{ workspace.resourceTreeError }}
     </NAlert>
 
-    <!-- 拖拽上传覆盖层 -->
-    <Transition
-      enter-active-class="transition-opacity duration-200"
-      leave-active-class="transition-opacity duration-200"
-      enter-from-class="opacity-0"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="dragOver"
-        class="flex items-center justify-center rounded-lf-card border-2 border-dashed border-brand-500/45 bg-lf-brand-soft/80 py-8"
+    <!-- 拖拽上传全屏覆盖层 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-opacity duration-200"
+        leave-active-class="transition-opacity duration-200"
+        enter-from-class="opacity-0"
+        leave-to-class="opacity-0"
       >
-        <div class="text-center">
+        <div
+          v-if="dragOver"
+          class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-lf-surface/70 backdrop-blur-sm"
+        >
           <div
-            class="mx-auto flex h-12 w-12 items-center justify-center rounded-lf-ctl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow"
+            class="flex flex-col items-center rounded-lf-card border-2 border-dashed border-brand-500/60 bg-lf-brand-soft px-14 py-10 text-center shadow-lf-shadow"
           >
-            <NIcon size="26"><IconCarbonUpload /></NIcon>
+            <div
+              class="flex h-14 w-14 items-center justify-center rounded-lf-ctl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow"
+            >
+              <NIcon size="30"><IconCarbonUpload /></NIcon>
+            </div>
+            <p class="mt-4 text-base font-semibold text-brand-700">
+              {{ t('workspace.explorer.releaseToUpload') }}
+            </p>
+            <p class="mt-1.5 text-sm text-lf-text-muted">
+              {{ t('workspace.explorer.releaseHint') }}
+            </p>
           </div>
-          <p class="mt-3 text-sm font-medium text-brand-700">
-            {{ t('workspace.explorer.dropToUpload') }}
-          </p>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
 
     <!-- 加载状态 -->
     <div
@@ -618,7 +672,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 
     <!-- 空状态 -->
     <div
-      v-else-if="isEmpty && !dragOver"
+      v-else-if="isEmpty"
       class="rounded-lf-card border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-8"
     >
       <NEmpty :description="t('workspace.explorer.emptyDirectory')">

@@ -2,15 +2,32 @@
 import { computed } from 'vue'
 import { useThemeVars } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import { capacityTotals, formatStorageBytes, type CapacityLedger } from './capacity'
+import {
+  capacityTotals,
+  formatStorageBytes,
+  formatStorageQuota,
+  type CapacityLedger,
+} from './capacity'
 
-const props = defineProps<{ space: CapacityLedger; compact?: boolean; detailsOnly?: boolean }>()
+const props = defineProps<{
+  space: CapacityLedger
+  compact?: boolean
+  detailsOnly?: boolean
+  ledgerOnly?: boolean
+}>()
 const { t } = useI18n()
 const themeVars = useThemeVars()
 const totals = computed(() => capacityTotals(props.space))
+const quotaKnown = computed(() => totals.value && totals.value.quotaState !== 'unknown')
+const quotaLabel = computed(() =>
+  quotaKnown.value
+    ? formatStorageQuota(props.space.capacity_bytes, t('storageCapacity.unlimited'))
+    : t('storageCapacity.unknown'),
+)
 const percentage = computed(() => {
   const capacity = props.space.capacity_bytes
-  return totals.value &&
+  return !props.ledgerOnly &&
+    totals.value?.quotaState === 'finite' &&
     typeof capacity === 'number' &&
     Number.isSafeInteger(capacity) &&
     capacity > 0
@@ -23,8 +40,23 @@ const rows = computed(() => [
   { label: 'storageCapacity.live', value: props.space.live_bytes },
   { label: 'storageCapacity.pendingDelete', value: props.space.pending_delete_bytes },
   { label: 'storageCapacity.accounted', value: totals.value?.accounted },
-  { label: 'storageCapacity.quota', value: props.space.capacity_bytes },
-  { label: 'storageCapacity.available', value: totals.value?.available },
+  ...(!props.ledgerOnly
+    ? [
+        {
+          label: 'storageCapacity.quota',
+          value: props.space.capacity_bytes,
+          text: quotaLabel.value,
+        },
+        {
+          label: 'storageCapacity.available',
+          value: totals.value?.available,
+          text:
+            totals.value?.quotaState === 'unlimited'
+              ? t('storageCapacity.unlimited')
+              : formatStorageBytes(totals.value?.available),
+        },
+      ]
+    : []),
 ])
 function exactBytes(value: number | undefined | null) {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
@@ -37,11 +69,15 @@ function exactBytes(value: number | undefined | null) {
   <div class="min-w-0 text-sm">
     <template v-if="!detailsOnly">
       <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span class="text-xs text-lf-text-muted">{{ t('storageCapacity.summary') }}</span>
+        <span class="text-xs text-lf-text-muted">{{
+          t(ledgerOnly ? 'storageCapacity.accounted' : 'storageCapacity.summary')
+        }}</span>
         <span class="inline-flex flex-wrap gap-x-1.5 font-medium tabular-nums">
           <span class="whitespace-nowrap">{{ formatStorageBytes(totals?.accounted) }}</span>
-          <span class="text-lf-text-muted">/</span>
-          <span class="whitespace-nowrap">{{ formatStorageBytes(space.capacity_bytes) }}</span>
+          <template v-if="!ledgerOnly">
+            <span class="text-lf-text-muted">/</span>
+            <span>{{ quotaLabel }}</span>
+          </template>
         </span>
       </div>
       <div
@@ -65,7 +101,10 @@ function exactBytes(value: number | undefined | null) {
         class="mt-1 text-xs"
         :style="{ color: themeVars.errorColor }"
       >
-        {{ t('storageCapacity.exceeded') }}
+        {{ t('storageCapacity.exceededBy', { value: formatStorageBytes(totals?.exceeded) }) }}
+      </p>
+      <p v-if="!ledgerOnly && !quotaKnown" class="mt-1 text-xs text-lf-text-muted">
+        {{ t('storageCapacity.unavailable') }}
       </p>
     </template>
     <details v-if="!compact" :open="detailsOnly" :class="{ 'mt-3': !detailsOnly }">
@@ -80,10 +119,17 @@ function exactBytes(value: number | undefined | null) {
         >
           <dt class="text-lf-text-muted">{{ t(row.label) }}</dt>
           <dd class="ml-auto text-right tabular-nums">
-            <span class="whitespace-nowrap font-medium">{{ formatStorageBytes(row.value) }}</span>
+            <span class="font-medium">{{
+              'text' in row ? row.text : formatStorageBytes(row.value)
+            }}</span>
             <span
-              v-if="formatStorageBytes(row.value) !== '—'"
-              class="ml-2 inline-block whitespace-nowrap text-xs text-lf-text-muted"
+              v-if="
+                formatStorageBytes(row.value) !== '—' &&
+                (ledgerOnly ||
+                  !['storageCapacity.quota', 'storageCapacity.available'].includes(row.label) ||
+                  quotaKnown)
+              "
+              class="ml-2 inline-block break-words text-xs text-lf-text-muted"
             >
               {{ exactBytes(row.value) }}
             </span>

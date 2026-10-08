@@ -15,6 +15,12 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const operations = useOperationsStore()
+watch(
+  () => stats.revision,
+  () => {
+    void stats.loadStats()
+  },
+)
 const orgId = computed(() => parseOrganizationId(route.query.org_id))
 const refresh = async (): Promise<void> => {
   await Promise.all([stats.loadAll(), operations.ensureSummary(true)])

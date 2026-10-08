@@ -30,11 +30,12 @@ import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/datetime'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StorageManager from '@/components/storage/StorageManager.vue'
-import StorageCapacityInput from '@/components/storage/StorageCapacityInput.vue'
+import StorageQuotaInput from '@/components/storage/StorageQuotaInput.vue'
 import StorageDiagnostics from '@/components/storage/StorageDiagnostics.vue'
 import StorageTabs from '@/components/storage/StorageTabs.vue'
 import StorageAppearance from '@/components/storage/StorageAppearance.vue'
-import { formatStorageBytes } from '@/components/storage/capacity'
+import { formatStorageQuota } from '@/components/storage/capacity'
+import { resolveQuota, type QuotaDraft } from '@/utils/storage-quota'
 
 const { t } = useI18n(),
   message = useMessage(),
@@ -70,8 +71,7 @@ const canSave = computed(
     !store.policyLoading &&
     !store.busy.policy &&
     !store.unknownWrites.policy &&
-    Number.isSafeInteger(form.logical_limit_bytes) &&
-    form.logical_limit_bytes > 0 &&
+    draft.valid.value &&
     (form.mode !== 'site_only' || form.default_choice === 'site') &&
     (form.mode !== 'user_required' || form.default_choice === 'user'),
 )
@@ -119,27 +119,81 @@ const names = computed(() => {
 let sequence = 0,
   controller = new AbortController()
 let active = true
-watch(
-  () => store.policy,
-  (value) => {
-    if (value) draft.receive(value)
+let recoveryAttempt: number | null = null
+function synchronizeDraft() {
+  const recovery = store.policyRecovery
+  if (recovery) {
+    if (recoveryAttempt !== recovery.attemptId || !draft.baseline.value) {
+      draft.restore(recovery.baseline, recovery.submitted, recovery.latest)
+      recoveryAttempt = recovery.attemptId
+    } else if (recovery.latest) draft.server.value = recovery.latest
+  } else {
+    recoveryAttempt = null
+    if (store.policy) draft.receive(store.policy)
     else draft.clear()
-  },
-  { immediate: true },
-)
+  }
+}
+watch(() => [store.policy, store.policyRecovery], synchronizeDraft, { immediate: true })
+function describeQuota(value: number | null | undefined) {
+  const formatted = formatStorageQuota(value, t('storageCapacity.unlimited'))
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+    ? `${formatted} (${t('storage.bytes', { value: value.toLocaleString() })})`
+    : formatted === '—'
+      ? t('storageCapacity.unavailable')
+      : formatted
+}
+function describePolicy(value: ApiSchemas['StoragePolicyRequest']) {
+  return `${t('storage.policyMode')}：${t(`storage.modes.${value.mode}`)}；${t('storage.policyDefault')}：${t(`storage.choices.${value.default_choice}`)}；${t('storageAdmin.logicalLimit')}：${describeQuota(value.logical_limit_bytes)}；${t('storageAdmin.defaultSpaceCapacity')}：${describeQuota(value.default_space_capacity_bytes)}；${t('storageAdmin.policyGeneration', { value: value.generation })}`
+}
+function describeQuotaDraft(value: QuotaDraft) {
+  const result = resolveQuota(value)
+  return result.ok
+    ? describeQuota(result.value)
+    : value.mode === 'limited'
+      ? `${value.input || '—'} ${value.unit} (${t('storageAdmin.invalidDraft')})`
+      : t('storageCapacity.selectMode')
+}
+function describeCurrentDraft() {
+  return `${t('storage.policyMode')}：${t(`storage.modes.${form.mode}`)}；${t('storage.policyDefault')}：${t(`storage.choices.${form.default_choice}`)}；${t('storageAdmin.logicalLimit')}：${describeQuotaDraft(form.logical_limit_bytes)}；${t('storageAdmin.defaultSpaceCapacity')}：${describeQuotaDraft(form.default_space_capacity_bytes)}`
+}
+function reviewUnknown(loadLatest: boolean) {
+  const recovery = store.policyRecovery
+  if (!recovery || recovery.state !== 'ready' || !recovery.latest) return
+  const session = captureSession()
+  const { attemptId, reviewRevision } = recovery
+  dialog.warning({
+    title: t('storageAdmin.reviewUnknownTitle'),
+    content: t(loadLatest ? 'storageAdmin.confirmLoadLatest' : 'storageAdmin.confirmKeepDraft'),
+    positiveText: t('storageAdmin.confirmReviewed'),
+    negativeText: t('storage.cancel'),
+    ...storageConfirmationButtons,
+    onPositiveClick: () => {
+      if (
+        !active ||
+        !isSessionCurrent(session) ||
+        auth.user?.role !== 'admin' ||
+        store.scope.kind !== 'site' ||
+        store.denied
+      )
+        return
+      const latest = store.acknowledgePolicyUnknown(attemptId, reviewRevision)
+      if (!latest) return
+      if (loadLatest) draft.accept(latest)
+      else draft.adoptBaseline(latest)
+    },
+  })
+}
 function reviewBaseline() {
   const latest = draft.server.value,
     baseline = draft.baseline.value
   if (!latest || !baseline || !conflict.value) return
-  const describe = (value: typeof latest) =>
-    `${t(`storage.modes.${value.mode}`)} / ${t(`storage.choices.${value.default_choice}`)} / ${formatStorageBytes(value.logical_limit_bytes)} (${t('storage.bytes', { value: value.logical_limit_bytes.toLocaleString() })})`
   const session = captureSession()
   dialog.warning({
     title: t('storageManagement.reviewPolicy'),
     content: t('storageManagement.policyComparison', {
-      before: describe(baseline),
-      after: describe(latest),
-      draft: describe({ ...latest, ...form }),
+      before: describePolicy(baseline),
+      after: describePolicy(latest),
+      draft: describeCurrentDraft(),
     }),
     positiveText: t('storageManagement.adoptBaseline'),
     negativeText: t('storage.cancel'),
@@ -149,6 +203,9 @@ function reviewBaseline() {
         active &&
         isSessionCurrent(session) &&
         auth.user?.role === 'admin' &&
+        store.scope.kind === 'site' &&
+        !store.denied &&
+        !store.unknownWrites.policy &&
         draft.server.value === latest
       )
         draft.adoptBaseline()
@@ -261,6 +318,7 @@ watch(
     draft.clear()
     if (auth.user?.role === 'admin') {
       store.setScope({ kind: 'site' })
+      synchronizeDraft()
       void store.loadPolicy()
       void loadDiagnostics()
     } else store.invalidate()
@@ -290,6 +348,7 @@ onUnmounted(() => {
       </PageHeader>
       <NAlert v-if="auth.user?.role !== 'admin'" type="warning">{{ t('storage.denied') }}</NAlert>
       <StorageTabs
+        :keep-mounted="['policy']"
         v-else
         :value="activeTab"
         :tabs="tabs"
@@ -317,7 +376,11 @@ onUnmounted(() => {
               <NSkeleton height="260px" />
             </template>
             <template v-if="diagnostics">
-              <StorageDiagnostics :diagnostics="diagnostics" :names="names" />
+              <StorageDiagnostics
+                :diagnostics="diagnostics"
+                :names="names"
+                :stale="diagnosticsStale"
+              />
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <p class="max-w-md text-xs leading-5 text-lf-text-muted">
                   {{ t('storageAdmin.pageHint') }}
@@ -359,6 +422,54 @@ onUnmounted(() => {
             <NAlert v-else-if="store.policyStale && store.policy" type="info" class="mb-4">{{
               t('storageAdmin.policySnapshotStale')
             }}</NAlert>
+            <NAlert
+              v-if="store.policyRecovery"
+              type="warning"
+              class="mb-4"
+              data-testid="policy-unknown-review"
+            >
+              <p>{{ t('storageAdmin.policyUnknown') }}</p>
+              <dl class="mt-3 space-y-3 text-xs leading-5 break-words">
+                <div>
+                  <dt class="font-medium">{{ t('storageAdmin.originalPolicy') }}</dt>
+                  <dd>{{ describePolicy(store.policyRecovery.baseline) }}</dd>
+                </div>
+                <div>
+                  <dt class="font-medium">{{ t('storageAdmin.submittedPolicy') }}</dt>
+                  <dd>{{ describePolicy(store.policyRecovery.submitted) }}</dd>
+                </div>
+                <div>
+                  <dt class="font-medium">{{ t('storageAdmin.latestPolicy') }}</dt>
+                  <dd>
+                    {{
+                      store.policyRecovery.latest
+                        ? describePolicy(store.policyRecovery.latest)
+                        : t('storageAdmin.latestPolicyUnavailable')
+                    }}
+                  </dd>
+                </div>
+              </dl>
+              <p v-if="store.policyRecovery.state === 'error'" class="mt-3 text-xs">
+                {{ t('storageAdmin.reviewReadFailed') }}
+              </p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <NButton
+                  :loading="store.policyRecovery.state === 'loading'"
+                  @click="store.loadPolicy()"
+                  >{{ t('storageAdmin.readLatestPolicy') }}</NButton
+                >
+                <NButton
+                  :disabled="store.policyRecovery.state !== 'ready'"
+                  @click="reviewUnknown(false)"
+                  >{{ t('storageAdmin.reviewKeepDraft') }}</NButton
+                >
+                <NButton
+                  :disabled="store.policyRecovery.state !== 'ready'"
+                  @click="reviewUnknown(true)"
+                  >{{ t('storageAdmin.reviewLoadLatest') }}</NButton
+                >
+              </div>
+            </NAlert>
             <NSkeleton v-if="store.policyLoading && !store.policy" height="280px" />
             <NForm v-else-if="store.policy" label-placement="top" @submit.prevent="savePolicy">
               <NAlert
@@ -385,16 +496,16 @@ onUnmounted(() => {
                 <NButton
                   v-if="store.policy.allowed_policy_modes?.includes('site_only')"
                   class="mt-3"
-                  :disabled="!!store.busy.policy"
+                  :disabled="!!store.busy.policy || !!store.unknownWrites.policy"
                   @click="draft.chooseMode('site_only')"
                   >{{ t('storageManagement.useSiteOnly') }}</NButton
                 >
                 <p class="mt-2 text-xs">{{ t('storageManagement.siteOnlyHint') }}</p>
               </NAlert>
-              <NAlert v-if="conflict" type="warning" class="mb-4">
+              <NAlert v-if="conflict && !store.policyRecovery" type="warning" class="mb-4">
                 <p>{{ t('storageManagement.policyConflict') }}</p>
                 <div class="mt-3 flex flex-wrap gap-2">
-                  <NButton :disabled="!!store.busy.policy" @click="draft.reload">{{
+                  <NButton :disabled="!!store.busy.policy" @click="draft.reload()">{{
                     t('storageManagement.reloadPolicy')
                   }}</NButton>
                   <NButton :disabled="!!store.busy.policy" @click="reviewBaseline">{{
@@ -407,7 +518,7 @@ onUnmounted(() => {
                   <NSelect
                     :value="form.mode"
                     :options="modes"
-                    :disabled="!!store.busy.policy"
+                    :disabled="!!store.busy.policy || !!store.unknownWrites.policy"
                     @update:value="draft.chooseMode"
                   />
                 </NFormItem>
@@ -415,18 +526,34 @@ onUnmounted(() => {
                   <NSelect
                     v-model:value="form.default_choice"
                     :options="choices"
-                    :disabled="!!store.busy.policy"
+                    :disabled="!!store.busy.policy || !!store.unknownWrites.policy"
                   />
                 </NFormItem>
               </div>
               <NFormItem :label="t('storageAdmin.logicalLimit')">
-                <StorageCapacityInput
+                <StorageQuotaInput
                   :value="form.logical_limit_bytes"
-                  :disabled="!!store.busy.policy"
+                  :disabled="!!store.busy.policy || !!store.unknownWrites.policy"
                   :label="t('storageAdmin.logicalLimit')"
                   @update:value="(value) => (form.logical_limit_bytes = value)"
                 />
               </NFormItem>
+              <p class="-mt-2 mb-5 text-xs leading-5 text-lf-text-muted">
+                {{ t('storageAdmin.logicalLimitHint') }}<br />{{
+                  t('storageAdmin.logicalLimitImpact')
+                }}
+              </p>
+              <NFormItem :label="t('storageAdmin.defaultSpaceCapacity')">
+                <StorageQuotaInput
+                  :value="form.default_space_capacity_bytes"
+                  :disabled="!!store.busy.policy || !!store.unknownWrites.policy"
+                  :label="t('storageAdmin.defaultSpaceCapacity')"
+                  @update:value="(value) => (form.default_space_capacity_bytes = value)"
+                />
+              </NFormItem>
+              <p class="-mt-2 mb-5 text-xs leading-5 text-lf-text-muted">
+                {{ t('storageAdmin.defaultSpaceCapacityHint') }}
+              </p>
               <div class="policy-actions">
                 <p class="text-xs leading-5 text-lf-text-muted">
                   {{ t('storage.policyHint') }}
@@ -436,8 +563,10 @@ onUnmounted(() => {
                 </p>
                 <div class="flex shrink-0 flex-wrap gap-2">
                   <NButton
-                    :disabled="(!dirty && !conflict) || !!store.busy.policy"
-                    @click="draft.reload"
+                    :disabled="
+                      (!dirty && !conflict) || !!store.busy.policy || !!store.unknownWrites.policy
+                    "
+                    @click="draft.reload()"
                     >{{ t('storageAdmin.cancelChanges') }}</NButton
                   >
                   <NButton

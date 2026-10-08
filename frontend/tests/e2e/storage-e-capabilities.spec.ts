@@ -56,6 +56,7 @@ async function setup(page: Page, role = 'admin') {
     verified: true,
     management_generation: 3,
     capacity_bytes: 10000,
+    available_bytes: 9980,
     reserved_bytes: 0,
     candidate_bytes: 0,
     live_bytes: 20,
@@ -78,6 +79,7 @@ async function setup(page: Page, role = 'admin') {
       default_choice: 'user',
       generation: 6,
       logical_limit_bytes: 10000,
+      default_space_capacity_bytes: null,
     } as ApiSchemas['StoragePolicy'],
     policyReadStatus: 200,
     onPolicyPut: null as
@@ -132,6 +134,7 @@ async function setup(page: Page, role = 'admin') {
     if (path === '/admin/storage/diagnostics')
       return json(route, {
         spaces: [],
+        disks: [],
         temporary_bytes: 0,
         recovery_backlog: 0,
         blocked_cleanup_by_code: {},
@@ -193,9 +196,9 @@ const policyCard = (page: Page) =>
     .filter({ has: page.locator('.n-card-header__main', { hasText: '策略与配额' }) })
     .first()
 const quota = (page: Page) =>
-  policyCard(page).getByRole('textbox', { name: '逻辑配额', exact: true })
+  policyCard(page).getByRole('textbox', { name: '每个用户或组织的内容配额', exact: true })
 const policySave = (page: Page) =>
-  policyCard(page).getByRole('button', { name: '保存更改', exact: true })
+  policyCard(page).getByRole('button', { name: '保存策略', exact: true })
 async function openPolicy(page: Page) {
   await page.goto('/admin/storage')
   await storageAdminTab(page, '存储策略')
@@ -335,7 +338,7 @@ for (const [mode, defaultChoice, modeLabel, choiceLabel] of modes) {
   }
 }
 
-test('E-T04 restricted quota draft changes policy only through the explicit site action and sends four fields', async ({
+test('E-T04 restricted quota draft changes policy only through the explicit site action and sends five fields', async ({
   page,
 }) => {
   const state = await setup(page)
@@ -359,8 +362,11 @@ test('E-T04 restricted quota draft changes policy only through the explicit site
     default_choice: 'site',
     generation: 6,
     logical_limit_bytes: 23000,
+    default_space_capacity_bytes: null,
   })
-  await expect(quota(page)).toHaveValue('23000')
+  await expect(quota(page)).toHaveValue('22.4609375')
+  await expect(policyCard(page).getByText('23,000 字节', { exact: true })).toBeVisible()
+  await expect(policyCard(page).locator('.n-base-selection-label').last()).toContainText('KiB')
 })
 
 test('E-T04/E-T09 focus preserves a dirty draft and external generation requires explicit review', async ({
@@ -389,6 +395,7 @@ test('E-T04/E-T09 focus preserves a dirty draft and external generation requires
     default_choice: 'user',
     generation: 7,
     logical_limit_bytes: 23000,
+    default_space_capacity_bytes: null,
   })
 })
 
@@ -467,6 +474,10 @@ test('E-T04 successful PUT followed by failed GET stays saved, preserves new edi
   await expect(
     page.getByText('政策已保存，状态待刷新。不会自动再次提交。', { exact: true }),
   ).toBeVisible()
+  await expect(quota(page)).toHaveValue('22.4609375')
+  await expect(policyCard(page).getByText('23,000 字节', { exact: true })).toBeVisible()
+  await policyCard(page).locator('.n-base-selection').last().click()
+  await page.locator('.n-base-select-option').filter({ hasText: /^B$/ }).click()
   await expect(quota(page)).toHaveValue('23000')
   await quota(page).fill('25000')
   await focus(page)

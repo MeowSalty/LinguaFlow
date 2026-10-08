@@ -2,6 +2,22 @@
 
 此目录是长期维护的 Vitest 集成测试，用真实后端验证注册政策、组织授权、Profile 合并、凭据生命周期及任务快照。它与单元测试、Playwright 页面测试分别运行。
 
+## 任务历史保留套件
+
+`task frontend:test:task-history-integration` 使用相同的独立后端构建入口，单独运行 `task-history.test.mjs`。需要 Node 22.13+ 的 `node:sqlite`、Task 和 Go；默认运行五项真实 HTTP 场景，浏览器场景不在未准备预览服务时自动启动。数据库、配置、日志、报告和截图均在 `frontend/tests/artifacts/task-history-integration/` 的本例目录内。
+
+五项场景覆盖管理员版本冲突、关闭时预览、个人与组织写权限、活动/暂停拒删、两类任务批量删除、项目成果/固定导出/独立用量保留及真实自动过期。自动过期只在本例后端停止后修改指定终态任务的两个时间字段；TM 保留检查显式种入一条既有记忆，不把它当作当前翻译流程产出的证明。全部数据路径均在访问前解析并核验位于本例隔离目录。
+
+先构建前端并启动 `task frontend:preview`，再启用真实产品双用户场景：
+
+```powershell
+$env:LINGUAFLOW_TEST_PRODUCT_URL = 'http://127.0.0.1:4173'
+task frontend:test:task-history-integration
+Remove-Item Env:LINGUAFLOW_TEST_PRODUCT_URL
+```
+
+浏览器场景用两个独立 context 登录组织 owner/admin，经真实界面删除翻译及同步历史；另一用户通过终态详情复核收到真实 404 并收敛。请求只做同源转发，业务响应不 mock，不保存令牌、HAR 或 trace。运行报告明确记录结果；预览的 partial、维护屏障、数据库延迟及大规模压力仍需对应单元测试或额外部署证据。
+
 ## 运行
 
 在仓库根目录执行：

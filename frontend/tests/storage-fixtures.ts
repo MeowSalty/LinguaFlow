@@ -22,6 +22,7 @@ export const connectionActions = (): ApiSchemas['StorageConnectionManagementActi
 })
 export const spaceActions = (): ApiSchemas['StorageSpaceManagementActions'] => ({
   set_status: storageAction(),
+  set_quota: storageAction(),
 })
 export const storageCapabilities = (
   scope: 'user' | 'org' = 'user',

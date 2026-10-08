@@ -110,13 +110,14 @@ describe('E-T01 capabilities request ownership', () => {
     expect(() => getStorageCapabilities({ kind: 'site' } as never)).toThrow()
     expect(requests).toHaveLength(0)
   })
-  it('sends only the four policy request fields even when passed a response', async () => {
+  it('sends only the five policy request fields even when passed a response', async () => {
     const policy: ApiSchemas['StoragePolicy'] = {
       ...policyCapabilities(),
       mode: 'both',
       default_choice: 'user',
       generation: 7,
       logical_limit_bytes: 1000,
+      default_space_capacity_bytes: null,
       configuration_needs_update: true,
     }
     await setStoragePolicy(policy)
@@ -125,6 +126,7 @@ describe('E-T01 capabilities request ownership', () => {
       default_choice: 'user',
       generation: 7,
       logical_limit_bytes: 1000,
+      default_space_capacity_bytes: null,
     })
   })
 })

@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 import type { ApiClient, ApiSchemas } from './client-core'
 import { apiClient } from './client-core'
 import { buildRequestFailureError } from './utils'
+import { TaskHistoryApiError, taskHistoryRequestError, validRetentionPolicy } from './task-history'
 
 export const fetchAdminStats = async (
   client: ApiClient = apiClient,
@@ -130,9 +131,12 @@ export const fetchAdminSettings = async (
 ): Promise<ApiSchemas['SystemSettingsResponse']> => {
   const { data, error, response } = await client.GET('/admin/settings')
 
-  if (!data || typeof data.settings?.registration_enabled !== 'boolean') {
-    throw buildRequestFailureError(t('api.errors.fetchAdminSettingsFailed'), error, response)
-  }
+  if (!data) throw taskHistoryRequestError(response, error)
+  if (
+    typeof data.settings?.registration_enabled !== 'boolean' ||
+    !validRetentionPolicy(data.settings?.task_retention)
+  )
+    throw new TaskHistoryApiError(response?.status, 'invalid_contract')
 
   return data
 }
@@ -143,9 +147,12 @@ export const updateAdminSettings = async (
 ): Promise<ApiSchemas['SystemSettingsResponse']> => {
   const { data, error, response } = await client.PATCH('/admin/settings', { body })
 
-  if (!data || typeof data.settings?.registration_enabled !== 'boolean') {
-    throw buildRequestFailureError(t('api.errors.updateAdminSettingsFailed'), error, response)
-  }
+  if (!data) throw taskHistoryRequestError(response, error)
+  if (
+    typeof data.settings?.registration_enabled !== 'boolean' ||
+    !validRetentionPolicy(data.settings?.task_retention)
+  )
+    throw new TaskHistoryApiError(response?.status, 'invalid_contract')
 
   return data
 }

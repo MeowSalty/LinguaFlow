@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, onScopeDispose, ref, shallowRef } from 'vue'
 import { listJobEvents, type ApiSchemas } from '@/api/client'
-import { isAccessDenied } from '@/api/utils'
+import { ApiError, isAccessDenied } from '@/api/utils'
+import { taskHistoryErrorMessage } from '@/api/task-history'
 import { captureSession, isSessionCurrent } from '@/api/session-context'
 import { KNOWN_EVENT_TYPES, resolveStreamUrl, type SSEEvent } from '@/composables/sseShared'
 import { useOperationsStore } from './operations'
@@ -65,7 +66,10 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
 
   // Any denied endpoint invalidates the whole drawer, including in-flight successful reads.
   // Keep its ID so the user can explicitly retry after permissions are restored.
-  const denyAccess = (forgetTask = true): void => {
+  const denyAccess = (forgetTask = true, cause?: unknown): void => {
+    const missing = cause instanceof ApiError && cause.status === 404
+    if (missing) expectedProjectId ??= detailJob.value?.project_id
+    else expectedProjectId = undefined
     ++version
     cancelDrawerRequests()
     accessBlocked = true
@@ -82,7 +86,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     jobEnded.value = false
     historyLoaded = false
     historyFlight = null
-    taskError = t('operations.inaccessible')
+    taskError = missing ? t('taskHistoryErrors.notFound') : t('operations.inaccessible')
     historyError = null
     syncError()
     if (forgetTask && drawerJobId.value != null)
@@ -145,9 +149,9 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
         syncError()
       } catch (error) {
         if (!valid()) return
-        if (isAccessDenied(error)) denyAccess()
+        if (isAccessDenied(error)) denyAccess(true, error)
         else {
-          historyError = error instanceof Error ? error.message : t('operations.loadFailed')
+          historyError = taskHistoryErrorMessage(error)
           syncError()
         }
       }
@@ -230,7 +234,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
       },
       (error) => {
         if (!valid()) return
-        if (isAccessDenied(error)) denyAccess()
+        if (isAccessDenied(error)) denyAccess(true, error)
         else {
           loadingDetail.value = false
           taskError = error instanceof Error ? error.message : t('operations.loadFailed')
@@ -238,6 +242,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
           finishInitialRequest()
         }
       },
+      { terminalRecheckMs: 30_000 },
     )
     // A synchronous subscription callback may already have denied this drawer.
     if (valid()) unsubscribe = release
@@ -260,7 +265,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
       if (current === version && isSessionCurrent(context) && !disposed) accept(job)
     } catch (error) {
       if (current !== version || !isSessionCurrent(context) || disposed) return
-      if (isAccessDenied(error)) denyAccess()
+      if (isAccessDenied(error)) denyAccess(true, error)
       else {
         taskError = error instanceof Error ? error.message : t('operations.loadFailed')
         syncError()
@@ -302,9 +307,9 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
       syncError()
     } catch (error) {
       if (current !== version || !isSessionCurrent(context) || disposed) return
-      if (isAccessDenied(error)) denyAccess()
+      if (isAccessDenied(error)) denyAccess(true, error)
       else {
-        historyError = error instanceof Error ? error.message : t('operations.loadFailed')
+        historyError = taskHistoryErrorMessage(error)
         syncError()
       }
     } finally {
@@ -334,6 +339,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     drawerJobId,
     detailJob,
     detailError,
+    detailProjectId: computed(() => detailJob.value?.project_id ?? expectedProjectId),
     loadingDetail,
     projectName,
     hasOlder,

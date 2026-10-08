@@ -132,6 +132,7 @@ describe('C01-C09 synchronized transport contract', () => {
       default_choice: 'site',
       generation: 0,
       logical_limit_bytes: 100,
+      default_space_capacity_bytes: null,
       configuration_needs_update: true,
     })
     await revokeStorageAuthorization(4, {
@@ -143,6 +144,7 @@ describe('C01-C09 synchronized transport contract', () => {
       default_choice: 'site',
       generation: 0,
       logical_limit_bytes: 100,
+      default_space_capacity_bytes: null,
     })
     expect(await requests[1]!.json()).toEqual({ expected_generation: 0 })
   })

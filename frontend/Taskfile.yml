@@ -41,6 +41,9 @@ tasks:
   test:storage-visual:
     desc: 对已运行的生产预览采集存储页面视觉证据（CLI_ARGS=before 或 after）
     cmds: ['node --experimental-strip-types tests/e2e/capture-storage-visual.mjs {{.CLI_ARGS}}']
+  test:storage-quota-visual:
+    desc: 对已运行生产预览采集配额、磁盘与真实 200% 缩放视觉证据
+    cmds: ['node --experimental-strip-types tests/e2e/capture-storage-quota.mjs {{.CLI_ARGS}}']
   test:task-header-visual:
     desc: 对已运行的生产预览检查全局任务顶栏与真实 200% 缩放并采集视觉证据
     cmds: ['node --experimental-strip-types tests/e2e/capture-task-header-visual.mjs {{.CLI_ARGS}}']
@@ -50,6 +53,9 @@ tasks:
   test:storage-integration:
     desc: 使用独立 Local 后端与隔离数据库验证文件存储真实传输及快照
     cmds: ['pnpm exec vitest run --config vitest.storage-integration.config.ts {{.CLI_ARGS}}']
+  test:task-history-integration:
+    desc: 使用独立后端及隔离数据库验证任务保留、删除权限和真实浏览器收敛
+    cmds: ['pnpm exec vitest run --config vitest.task-history-integration.config.ts {{.CLI_ARGS}}']
   test:startup:
     desc: 验证前端开发和生产环境启动
     deps: [build]

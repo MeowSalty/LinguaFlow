@@ -2,6 +2,11 @@
 import { useI18n } from 'vue-i18n'
 import type { LocationQueryRaw } from 'vue-router'
 import type { Operation } from '@/api/operations'
+import { taskHistoryKey, toTaskHistoryItem, type TaskHistoryItem } from '@/api/task-history'
+import { useTaskHistoryStore } from '@/stores/taskHistory'
+import { useTaskMutationsStore } from '@/stores/taskMutations'
+import { sessionGeneration } from '@/api/session-context'
+import { useMessage } from 'naive-ui'
 import { useOperationsStore } from '@/stores/operations'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
@@ -18,6 +23,93 @@ const { t } = useI18n(),
 const operations = useOperationsStore(),
   preferences = usePreferencesStore(),
   tracker = useGlobalJobTrackerStore()
+const history = useTaskHistoryStore()
+const mutations = useTaskMutationsStore()
+const message = useMessage()
+const selecting = ref(false)
+const selectedKeys = ref<string[]>([])
+const toggleSelection = (): void => {
+  selecting.value = !selecting.value
+  selectedKeys.value = []
+}
+const deletableItems = computed(() =>
+  operations.items
+    .map(toTaskHistoryItem)
+    .filter((item): item is TaskHistoryItem => !!item?.can_delete && !mutations.isPending(item)),
+)
+const selectedItems = computed(() =>
+  deletableItems.value.filter((item) => selectedKeys.value.includes(taskHistoryKey(item))),
+)
+const allSelected = computed(
+  () =>
+    deletableItems.value.length > 0 &&
+    deletableItems.value.every((item) => selectedKeys.value.includes(taskHistoryKey(item))),
+)
+const resultsSummary = computed(() => ({
+  deleted: history.results.filter((item) => item.status === 'deleted').length,
+  missing: history.results.filter((item) => item.status === 'not_found').length,
+  remaining: history.results.filter((item) => !['deleted', 'not_found'].includes(item.status))
+    .length,
+}))
+const selectItem = (operation: Operation, checked: boolean): void => {
+  if (history.confirming || history.submitting) return
+  const item = toTaskHistoryItem(operation)
+  if (!item?.can_delete || mutations.isPending(item)) return
+  const key = taskHistoryKey(item)
+  if (!checked) selectedKeys.value = selectedKeys.value.filter((value) => value !== key)
+  else if (!selectedKeys.value.includes(key)) {
+    if (selectedKeys.value.length >= 100) message.warning(t('taskHistory.limit'))
+    else selectedKeys.value = [...selectedKeys.value, key]
+  }
+}
+const selectAll = (checked: boolean): void => {
+  if (!checked) {
+    selectedKeys.value = []
+    return
+  }
+  if (deletableItems.value.length > 100) {
+    message.warning(t('taskHistory.limit'))
+    return
+  }
+  selectedKeys.value = deletableItems.value.map(taskHistoryKey)
+}
+const requestDelete = (operation: Operation): void => {
+  const item = toTaskHistoryItem(operation)
+  if (item?.can_delete && !mutations.isPending(item)) history.requestDelete([item])
+}
+const refresh = (): void => {
+  selectedKeys.value = []
+  void operations.refresh()
+}
+watch(deletableItems, (items) => {
+  if (history.submitting) return
+  const keys = new Set(items.map(taskHistoryKey))
+  const kept = selectedKeys.value.filter((key) => keys.has(key))
+  const removed = selectedKeys.value.length - kept.length
+  selectedKeys.value = kept
+  if (removed) message.info(t('taskHistory.selectionChanged', { count: removed }))
+})
+watch(
+  () => history.removalRevision,
+  () => {
+    const removed = new Set(history.lastRemoved.map(taskHistoryKey))
+    selectedKeys.value = selectedKeys.value.filter((key) => !removed.has(key))
+  },
+)
+watch(
+  () => history.results,
+  (results) => {
+    if (results.length) selectedKeys.value = []
+  },
+)
+watch(
+  sessionGeneration,
+  () => {
+    selectedKeys.value = []
+    selecting.value = false
+  },
+  { flush: 'sync' },
+)
 const invalid = ref<string | null>(null),
   advanced = ref(false),
   syncLocator = shallowRef<(OperationLocator & { task_type: 'glossary_sync' }) | null>(null),
@@ -36,6 +128,12 @@ const parsed = computed(() => {
   }
 })
 const filters = computed(() => parsed.value?.filters ?? {})
+watch(
+  () => JSON.stringify(filters.value),
+  () => {
+    selectedKeys.value = []
+  },
+)
 const options = (keys: string[]) =>
   keys.map((value) => ({ value, label: t(`operations.${value}`) }))
 const types = computed(() => options(['translation', 'glossary_sync', 'storage']))
@@ -155,7 +253,7 @@ watch(
   <div class="lf-page mx-auto w-full max-w-350">
     <PageHeader :title="t('operations.title')" :subtitle="t('operations.subtitle')">
       <template #actions
-        ><NButton secondary :loading="operations.listLoading" @click="operations.refresh()">{{
+        ><NButton secondary :loading="operations.listLoading" @click="refresh">{{
           t('operations.refresh')
         }}</NButton></template
       >
@@ -169,7 +267,9 @@ watch(
       :loading="operations.listLoading"
       :error="operations.filteredSummaryError"
     />
-    <p class="text-xs text-lf-text-muted">{{ t('operations.summaryNote') }}</p>
+    <p class="text-xs text-lf-text-muted">
+      {{ t('operations.summaryNote') }} {{ t('taskHistory.retainedOnly') }}
+    </p>
     <div class="lf-panel space-y-3 p-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <NSelect
@@ -228,11 +328,71 @@ watch(
     </div>
     <NAlert v-if="invalid" type="error" :bordered="false">{{ invalid }}</NAlert>
     <template v-else>
+      <div
+        class="flex flex-wrap items-center justify-between gap-3"
+        data-task-history-focus
+        tabindex="-1"
+      >
+        <NButton :disabled="history.submitting || history.confirming" @click="toggleSelection">{{
+          t(selecting ? 'taskHistory.finishSelection' : 'taskHistory.select')
+        }}</NButton>
+        <template v-if="selecting">
+          <NCheckbox
+            :checked="allSelected"
+            :indeterminate="selectedKeys.length > 0 && !allSelected"
+            :disabled="history.submitting || history.confirming || !deletableItems.length"
+            @update:checked="selectAll"
+            >{{ t('taskHistory.selectLoaded') }}</NCheckbox
+          >
+          <span class="text-xs tabular-nums text-lf-text-muted" role="status">{{
+            t('taskHistory.selected', { count: selectedKeys.length })
+          }}</span>
+          <NButton
+            type="error"
+            secondary
+            :disabled="!selectedItems.length || history.submitting || history.confirming"
+            @click="history.requestDelete(selectedItems)"
+            data-task-history-trigger
+            >{{ t('taskHistory.deleteSelected') }}</NButton
+          >
+          <p v-if="selectedKeys.length >= 100" class="w-full text-xs text-lf-text-muted">
+            {{ t('taskHistory.limit') }}
+          </p>
+        </template>
+      </div>
+      <NAlert v-if="history.results.length" type="info" :bordered="false">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span>{{ t('taskHistory.resultsSummary', resultsSummary) }}</span>
+          <NButton size="small" quaternary @click="history.clearResults()">{{
+            t('taskHistory.dismissResults')
+          }}</NButton>
+        </div>
+        <NCollapse class="mt-2"
+          ><NCollapseItem name="results" :title="t('taskHistory.resultsTitle')">
+            <ul class="space-y-1 text-xs">
+              <li v-for="item in history.results" :key="taskHistoryKey(item)">
+                {{ t(`operations.${item.kind}`) }} #{{ item.id }} ·
+                {{ t(`taskHistory.results.${item.status}`) }}
+              </li>
+            </ul>
+            <p class="mt-2 text-xs">{{ t('taskHistory.resultHint') }}</p>
+          </NCollapseItem></NCollapse
+        >
+      </NAlert>
       <NAlert v-if="operations.listError" type="warning" :bordered="false"
         >{{ operations.items.length ? t('operations.stale') + ' · ' : ''
         }}{{ operations.listError }}</NAlert
       >
-      <OperationList :items="operations.items" :loading="operations.listLoading" @open="open" />
+      <OperationList
+        :items="operations.items"
+        :loading="operations.listLoading"
+        :selecting="selecting"
+        :selected-keys="selectedKeys"
+        :selection-locked="history.submitting || history.confirming"
+        @open="open"
+        @delete="requestDelete"
+        @select="selectItem"
+      />
       <div class="flex justify-end gap-3 text-xs text-lf-text-muted">
         <NButton
           v-if="operations.nextCursor"

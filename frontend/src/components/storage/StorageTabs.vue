@@ -6,7 +6,7 @@ const props = withDefaults(
     value: string
     label: string
     tabs: readonly { name: string; label: string }[]
-    keepMounted?: boolean
+    keepMounted?: boolean | readonly string[]
   }>(),
   { keepMounted: false },
 )
@@ -85,7 +85,12 @@ function navigate(event: KeyboardEvent, index: number) {
         class="storage-tab-panel"
       >
         <slot
-          v-if="active === tab.name || (keepMounted && visited.includes(tab.name))"
+          v-if="
+            active === tab.name ||
+            ((keepMounted === true ||
+              (Array.isArray(keepMounted) && keepMounted.includes(tab.name))) &&
+              visited.includes(tab.name))
+          "
           :name="tab.name"
         />
       </section>

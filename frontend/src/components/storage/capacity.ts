@@ -1,5 +1,6 @@
 export type CapacityLedger = {
   capacity_bytes?: number | null
+  available_bytes?: number | null
   reserved_bytes?: number | null
   candidate_bytes?: number | null
   live_bytes?: number | null
@@ -24,6 +25,15 @@ export function formatStorageBytes(value: number | undefined | null): string {
   const unit = storageCapacityUnit(value)
   const amount = value / Number(unitBytes(unit))
   return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`
+}
+
+/** Only quota fields give null the meaning of unlimited. Other byte values stay unknown. */
+export function formatStorageQuota(value: number | undefined | null, unlimited: string): string {
+  return value === null
+    ? unlimited
+    : typeof value === 'number' && value > 0
+      ? formatStorageBytes(value)
+      : '—'
 }
 
 /** Powers of 1024 have finite decimal expansions; keep every digit when editing. */
@@ -64,6 +74,20 @@ export function capacityTotals(space: CapacityLedger) {
   const accounted = values.reduce((sum, value) => sum + value, 0)
   if (!Number.isSafeInteger(accounted)) return null
   const capacity = space.capacity_bytes
-  const available = safeBytes(capacity) ? Math.max(capacity - accounted, 0) : null
-  return { accounted, available }
+  const available = space.available_bytes
+  const quotaState =
+    capacity === null && available === null
+      ? 'unlimited'
+      : safeBytes(capacity) &&
+          capacity > 0 &&
+          safeBytes(available) &&
+          available === Math.max(capacity - accounted, 0)
+        ? 'finite'
+        : 'unknown'
+  return {
+    accounted,
+    available: quotaState === 'finite' ? (available as number) : null,
+    quotaState,
+    exceeded: quotaState === 'finite' ? Math.max(accounted - (capacity as number), 0) : null,
+  }
 }

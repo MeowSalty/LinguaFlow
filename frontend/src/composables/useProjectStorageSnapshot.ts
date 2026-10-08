@@ -69,6 +69,33 @@ export function useProjectStorageSnapshot(
       return false
     }
   }
+  /**
+   * Resolves once an in-flight invalidation/refresh settles. Window focus and
+   * visibility changes park the snapshot in 'stale'/'loading' for one read
+   * round; callers that gate writes on `ready`-derived flags should await this
+   * first so a drop or click landing on that instant is not misread as an
+   * admission failure. Gives up after `timeoutMs`, leaving the judgement of
+   * the current flags to the caller.
+   */
+  function whenSettled(timeoutMs = 2000): Promise<void> {
+    if (status.value !== 'loading' && status.value !== 'stale') return Promise.resolve()
+    return new Promise((resolve) => {
+      let settled = false
+      let timer = 0
+      const finish = (): void => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        stopWatch()
+        resolve()
+      }
+      const stopWatch = watch(status, (value) => {
+        if (value !== 'loading' && value !== 'stale') finish()
+      })
+      timer = setTimeout(finish, timeoutMs)
+    })
+  }
+
   watch(
     [
       () => project()?.id,
@@ -97,5 +124,5 @@ export function useProjectStorageSnapshot(
     }),
   )
   onScopeDispose(invalidate)
-  return { value, status, error, ready, contentWritable, invalidate, refresh }
+  return { value, status, error, ready, contentWritable, whenSettled, invalidate, refresh }
 }

@@ -50,6 +50,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const storageMetadataWritable = computed(
     () => storageSnapshot.ready.value && !storageSnapshot.value.value?.runtime.maintenance,
   )
+  /** 等待快照结束瞬时的失效/刷新窗口（如窗口重新聚焦触发的重新校验） */
+  const settleStorageSnapshot = storageSnapshot.whenSettled
 
   // ── 重新导出资源 Store 的响应式状态 ──
   const {
@@ -362,6 +364,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   return {
     storageContentWritable,
     storageMetadataWritable,
+    settleStorageSnapshot,
     prepareStorageWrite,
     refreshAfterSourceUpdate,
     contentWriteRevision,

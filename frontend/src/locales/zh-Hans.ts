@@ -1,4 +1,7 @@
 import operations from './operations'
+import taskHistory from './task-history'
+import taskHistoryErrors from './task-history-errors'
+import taskRetention from './task-retention'
 import runtime from './runtime'
 import workbench from './workbench'
 import team from './team'
@@ -13,11 +16,18 @@ import storageProject from './storage-project'
 import storageUi from './storage-ui'
 import storageAdmin from './storage-admin'
 import storageCapacity from './storage-capacity'
+import storageDisk from './storage-disk'
+import storageQuota from './storage-quota'
 
 const messages = {
+  taskHistory,
+  taskHistoryErrors,
+  taskRetention,
   storageUi,
   storageAdmin,
   storageCapacity,
+  storageDisk,
+  storageQuota,
   storageManagement,
   storageProject,
   storage,
@@ -387,9 +397,9 @@ const messages = {
       },
     },
     jobStatus: {
-      title: '任务状态概览',
-      total: '总计 {count} 个任务',
-      successRate: '{percent}% 成功率',
+      title: '保留的翻译任务记录',
+      total: '已完成与失败共 {count} 条',
+      successRate: '完成占比 {percent}',
       completed: '已完成',
       failed: '失败',
     },
@@ -524,7 +534,8 @@ const messages = {
     explorer: {
       rootLabel: '项目根目录',
       emptyDirectory: '当前目录为空，上传文件后即可开始翻译',
-      dropToUpload: '拖拽文件或文件夹到此处上传',
+      releaseToUpload: '松开鼠标，上传到当前目录',
+      releaseHint: '支持文件与文件夹，自动保留目录层级',
       dropHint: '也可以直接把文件或文件夹拖入此区域，系统会保留当前目录层级',
       backToParent: '返回上级',
       refreshDirectory: '刷新目录',

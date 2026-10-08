@@ -11,6 +11,14 @@ export const isSafeStorageId = (value: unknown): value is number =>
 export const isStorageGeneration = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 
+export const isStorageQuota = (value: unknown): value is number | null =>
+  value === null || isSafeStorageId(value)
+
+export const requireStorageQuota = (value: unknown): number | null => {
+  if (!isStorageQuota(value)) throw new ApiError(t('storageCapacity.invalid'), 400)
+  return value
+}
+
 export const requireStorageId = (value: unknown): number => {
   if (!isSafeStorageId(value)) throw new ApiError(t('storageErrors.invalidIdentity'))
   return value

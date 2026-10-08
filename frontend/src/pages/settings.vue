@@ -6,6 +6,7 @@ import { useServiceStore } from '@/stores/service'
 const { t } = useI18n()
 const route = useRoute()
 const service = useServiceStore()
+const navigation = useTemplateRef<HTMLElement>('navigation')
 const tabs = computed(() => [
   { path: '/settings/profile', label: t('workbench.settings.profile') },
   { path: '/settings/security', label: t('workbench.settings.security') },
@@ -13,6 +14,24 @@ const tabs = computed(() => [
   { path: '/settings/storage', label: t('storage.title') },
   ...(!service.isLocal ? [{ path: '/settings/team', label: t('workbench.settings.team') }] : []),
 ])
+
+function revealActiveTab() {
+  const nav = navigation.value
+  const active = nav?.querySelector<HTMLElement>('[aria-current="page"]')
+  if (!nav || !active) return
+  const bounds = nav.getBoundingClientRect()
+  const tabBounds = active.getBoundingClientRect()
+  if (tabBounds.left < bounds.left) nav.scrollLeft += tabBounds.left - bounds.left
+  else if (tabBounds.right > bounds.right) nav.scrollLeft += tabBounds.right - bounds.right
+}
+
+watch([() => route.path, tabs, navigation], revealActiveTab, { flush: 'post' })
+watch(navigation, (nav, _, onCleanup) => {
+  if (!nav) return
+  const observer = new ResizeObserver(revealActiveTab)
+  observer.observe(nav)
+  onCleanup(() => observer.disconnect())
+})
 </script>
 <template>
   <div class="lf-page lf-content-narrow">
@@ -21,6 +40,7 @@ const tabs = computed(() => [
       :subtitle="t('workbench.settings.subtitle')"
     />
     <nav
+      ref="navigation"
       :aria-label="t('workbench.settings.title')"
       class="flex gap-1 overflow-x-auto border-b border-lf-border-soft pb-2"
     >

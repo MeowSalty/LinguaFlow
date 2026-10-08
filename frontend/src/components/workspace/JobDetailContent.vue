@@ -75,6 +75,14 @@ const focusEvents = (): void => {
                 </dd>
               </div>
               <div>
+                <dt class="text-xs text-lf-text-muted">{{ t('taskHistory.finishedAt') }}</dt>
+                <dd class="mt-1 text-sm tabular-nums text-lf-text-strong">
+                  {{
+                    job.finished_at ? formatDate(job.finished_at) : t('taskHistory.finishedUnknown')
+                  }}
+                </dd>
+              </div>
+              <div>
                 <dt class="text-xs text-lf-text-muted">
                   {{ t('workspace.job.columns.duration') }}
                 </dt>

@@ -32,6 +32,8 @@ vi.mock('@/stores/operations', () => ({
     queryTranslation: api.detail,
     forget: api.forget,
     removeProject: api.removeProject,
+    beginCapabilityRead: () => 1,
+    observeCapabilities: vi.fn(),
   }),
 }))
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
@@ -40,6 +42,8 @@ const job = (id = 1, status: Job['status'] = 'running', project = 7): Job => ({
   project_id: project,
   execution_plan_id: 1,
   status,
+  can_delete: ['completed', 'failed', 'cancelled'].includes(status),
+  finished_at: null,
   trigger_type: 'manual',
   created_at: '2026-09-30T00:00:00Z',
   updated_at: '2026-09-30T00:00:00Z',
@@ -94,6 +98,18 @@ describe('workspace job requests', () => {
     await other
     expect(store.jobs.map((item) => item.id)).toEqual([2])
     expect(store.loadingJobs).toBe(false)
+  })
+  it('a late mutation response cannot restore a removed task or leave its pending flag stuck', async () => {
+    const store = useJobStore()
+    await store.loadJobs(7)
+    const late = deferred<Job>()
+    api.retry.mockReturnValueOnce(late.promise)
+    const retry = store.retryJob(1)
+    store.removeHistories([{ kind: 'translation', id: '1', project_id: 7 }])
+    late.resolve(job(1, 'running'))
+    await expect(retry).rejects.toBeInstanceOf(StaleSessionError)
+    expect(store.jobs).toEqual([])
+    expect(store.retryingJobIds).toEqual([])
   })
 
   it('invalidates old filtered requests and preserves the active filter on pagination', async () => {

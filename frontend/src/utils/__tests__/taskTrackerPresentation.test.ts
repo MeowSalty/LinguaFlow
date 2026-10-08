@@ -8,6 +8,8 @@ const operation = (id: string, status: Operation['status'] = 'running'): Operati
   project_id: 7,
   project_name: 'Project',
   status,
+  can_delete: ['completed', 'failed', 'cancelled'].includes(status),
+  finished_at: null,
   created_at: '2026-10-05T00:00:00Z',
   updated_at: '2026-10-05T00:00:00Z',
   supported_actions: ['view'],

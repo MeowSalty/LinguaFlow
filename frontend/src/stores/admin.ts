@@ -16,6 +16,11 @@ import {
 import { t } from '@/i18n'
 import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
 import { ApiError } from '@/api/utils'
+import {
+  TaskHistoryApiError,
+  taskHistoryErrorMessage,
+  validRetentionPolicy,
+} from '@/api/task-history'
 
 type SystemStats = ApiSchemas['SystemStats']
 type User = ApiSchemas['User']
@@ -45,18 +50,32 @@ export const useAdminStore = defineStore('admin', () => {
   const settingsError = ref<string | null>(null)
   const settingsSaving = ref(false)
   const settingsSaveError = ref<string | null>(null)
+  const settingsAccessDenied = ref(false)
   let settingsRequest = 0
+  let latestPolicy: ApiSchemas['TaskRetentionPolicy'] | null = null
+  const acceptRetentionPolicy = (policy: ApiSchemas['TaskRetentionPolicy']): void => {
+    if (!validRetentionPolicy(policy) || (latestPolicy && policy.revision < latestPolicy.revision))
+      return
+    latestPolicy = { ...policy }
+    if (settings.value) settings.value = { ...settings.value, task_retention: latestPolicy }
+  }
+  const acceptSettings = (value: SystemSettings): void => {
+    if (!latestPolicy || value.task_retention.revision >= latestPolicy.revision)
+      latestPolicy = { ...value.task_retention }
+    settings.value = { ...value, task_retention: latestPolicy }
+  }
+  const clearSettings = (denied = false): void => {
+    settingsRequest++
+    latestPolicy = null
+    settings.value = null
+    settingsLoading.value = false
+    settingsSaving.value = false
+    settingsError.value = null
+    settingsSaveError.value = null
+    settingsAccessDenied.value = denied
+  }
 
-  onScopeDispose(
-    onSessionChange(() => {
-      settingsRequest++
-      settings.value = null
-      settingsLoading.value = false
-      settingsSaving.value = false
-      settingsError.value = null
-      settingsSaveError.value = null
-    }),
-  )
+  onScopeDispose(onSessionChange(() => clearSettings()))
 
   const creatingUser = ref(false)
   const updatingUser = ref(false)
@@ -220,13 +239,14 @@ export const useAdminStore = defineStore('admin', () => {
     try {
       const response = await fetchAdminSettings()
       if (!current()) return false
-      settings.value = response.settings
+      acceptSettings(response.settings)
+      settingsAccessDenied.value = false
       settingsSaveError.value = null
       return true
     } catch (error) {
       if (!current()) return false
       const denied = error instanceof ApiError && [401, 403].includes(error.status ?? 0)
-      if (denied) settings.value = null
+      if (denied) clearSettings(true)
       settingsError.value = denied
         ? t('configurationSettings.accessDenied')
         : settings.value
@@ -238,7 +258,9 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  const saveSettings = async (newSettings: SystemSettings): Promise<boolean> => {
+  const saveSettings = async (
+    newSettings: Pick<SystemSettings, 'registration_enabled'>,
+  ): Promise<boolean> => {
     if (
       settingsLoading.value ||
       settingsSaving.value ||
@@ -258,17 +280,64 @@ export const useAdminStore = defineStore('admin', () => {
         settings: { registration_enabled: newSettings.registration_enabled },
       })
       if (!current()) return false
-      settings.value = response.settings
+      acceptSettings(response.settings)
       settingsError.value = null
       return true
     } catch (error) {
       if (!current()) return false
       const denied = error instanceof ApiError && [401, 403].includes(error.status ?? 0)
-      if (denied) settings.value = null
+      if (denied) clearSettings(true)
       settingsSaveError.value = t(
         denied ? 'configurationSettings.accessDenied' : 'configurationSettings.saveFailed',
       )
       return false
+    } finally {
+      if (current()) settingsSaving.value = false
+    }
+  }
+
+  const saveTaskRetention = async (
+    patch: ApiSchemas['TaskRetentionPatch'],
+  ): Promise<'saved' | 'conflict' | 'failed' | 'stale'> => {
+    if (
+      settingsLoading.value ||
+      settingsSaving.value ||
+      !settings.value ||
+      !validRetentionPolicy({ ...patch, revision: patch.expected_revision })
+    )
+      return 'failed'
+    const baseline = settings.value.task_retention
+    if (baseline.revision !== patch.expected_revision) return 'conflict'
+    if (baseline.enabled === patch.enabled && baseline.retention_days === patch.retention_days)
+      return 'saved'
+    const context = captureSession(),
+      request = ++settingsRequest
+    const current = () => request === settingsRequest && isSessionCurrent(context)
+    settingsSaving.value = true
+    settingsSaveError.value = null
+    try {
+      const response = await updateAdminSettings({
+        settings: {
+          task_retention: {
+            enabled: patch.enabled,
+            retention_days: patch.retention_days,
+            expected_revision: patch.expected_revision,
+          },
+        },
+      })
+      if (!current()) return 'stale'
+      acceptSettings(response.settings)
+      settingsError.value = null
+      return 'saved'
+    } catch (error) {
+      if (!current()) return 'stale'
+      if (error instanceof ApiError && [401, 403].includes(error.status ?? 0)) clearSettings(true)
+      settingsSaveError.value = taskHistoryErrorMessage(error)
+      return error instanceof ApiError &&
+        error.status === 409 &&
+        (!(error instanceof TaskHistoryApiError) || error.error_code === 'settings_conflict')
+        ? 'conflict'
+        : 'failed'
     } finally {
       if (current()) settingsSaving.value = false
     }
@@ -306,6 +375,7 @@ export const useAdminStore = defineStore('admin', () => {
     settingsError,
     settingsSaving,
     settingsSaveError,
+    settingsAccessDenied,
     creatingUser,
     updatingUser,
     disablingUserIds,
@@ -319,6 +389,9 @@ export const useAdminStore = defineStore('admin', () => {
     loadAuditLogs,
     loadSettings,
     saveSettings,
+    saveTaskRetention,
+    acceptRetentionPolicy,
+    clearSettings,
     loadAll,
   }
 })

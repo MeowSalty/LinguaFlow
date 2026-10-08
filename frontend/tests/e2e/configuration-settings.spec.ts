@@ -1,9 +1,15 @@
 import { expect, test, type Page } from '@playwright/test'
 import { json, mockApp } from './fixtures'
 
-const policy = (enabled: boolean) => ({ settings: { registration_enabled: enabled } })
+const policy = (enabled: boolean) => ({
+  settings: {
+    registration_enabled: enabled,
+    task_retention: { enabled: false, retention_days: 30, revision: 1 },
+  },
+})
+const registrationPatch = (enabled: boolean) => ({ settings: { registration_enabled: enabled } })
 const toggle = (page: Page) => page.getByRole('switch', { name: '允许公开注册' })
-const save = (page: Page) => page.getByRole('button', { name: /保存设置$/ })
+const save = (page: Page) => page.getByRole('button', { name: /保存注册设置$/ })
 const refresh = (page: Page) => page.getByRole('button', { name: /^(loading )?刷新$/ })
 
 test('registration settings load a confirmed value and send true and false as booleans', async ({
@@ -15,7 +21,10 @@ test('registration settings load a confirmed value and send true and false as bo
     if (route.request().method() === 'PATCH') {
       const body: unknown = route.request().postDataJSON()
       writes.push(body)
-      return json(route, body)
+      return json(
+        route,
+        policy((body as ReturnType<typeof registrationPatch>).settings.registration_enabled),
+      )
     }
     return json(route, policy(false))
   })
@@ -25,11 +34,11 @@ test('registration settings load a confirmed value and send true and false as bo
   await toggle(page).click()
   await save(page).click()
   await expect(save(page)).toBeDisabled()
-  expect(writes).toEqual([policy(true)])
+  expect(writes).toEqual([registrationPatch(true)])
   await toggle(page).click()
   await save(page).click()
   await expect(save(page)).toBeDisabled()
-  expect(writes).toEqual([policy(true), policy(false)])
+  expect(writes).toEqual([registrationPatch(true), registrationPatch(false)])
   await expect(page.getByText('保存后影响后续注册请求；重启不会重置此设置。')).toBeVisible()
   await expect(page.getByRole('button', { name: '添加配置项' })).toHaveCount(0)
 })
@@ -49,7 +58,7 @@ test('initial read failure does not manufacture a disabled registration policy',
   await page.goto('/admin/settings')
   await expect(page.getByText('读取注册政策失败，请重试。', { exact: true })).toBeVisible()
   await expect(toggle(page)).toHaveCount(0)
-  await expect(save(page)).toBeDisabled()
+  await expect(save(page)).toHaveCount(0)
   failed = false
   await refresh(page).click()
   await expect(toggle(page)).toBeChecked()

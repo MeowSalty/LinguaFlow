@@ -26,6 +26,12 @@ import {
   type OperationLocator,
 } from '@/utils/operationQuery'
 import { t } from '@/i18n'
+import {
+  taskHistoryKey,
+  toTaskHistoryItem,
+  type TaskHistoryItem,
+  type TaskHistoryTarget,
+} from '@/api/task-history'
 
 export type TaskDetailMap = {
   translation: ApiSchemas['Job']
@@ -45,7 +51,13 @@ const withDetailStatus = (operation: Operation, detail: TaskDetail): Operation =
       next_retry_at: detail.next_retry_at ?? null,
     }
   }
-  return { ...operation, status: detail.status } as Operation
+  return {
+    ...operation,
+    status: detail.status,
+    ...('can_delete' in detail
+      ? { can_delete: detail.can_delete, finished_at: detail.finished_at }
+      : {}),
+  } as Operation
 }
 type Subscription = {
   locator: OperationLocator
@@ -54,6 +66,7 @@ type Subscription = {
   active: boolean
   nextPollAt: number
   controller: AbortController
+  terminalRecheckMs?: number
 }
 type TaskFlight = {
   promise: Promise<TaskDetail>
@@ -81,6 +94,23 @@ export const useOperationsStore = defineStore('operations', () => {
     discoveryComplete = ref(false),
     initialized = ref(false)
   const revision = ref(0)
+  const capabilityRevision = ref(0)
+  const capabilities = new Map<string, { item: TaskHistoryItem; read: number }>()
+  let capabilityRead = 0
+  const beginCapabilityRead = () => ++capabilityRead
+  const observeCapabilities = (items: TaskHistoryItem[], read = beginCapabilityRead()): void => {
+    let changed = false
+    for (const item of items) {
+      const key = taskHistoryKey(item),
+        previous = capabilities.get(key)
+      if (previous && previous.read > read) continue
+      capabilities.set(key, { item: { ...item }, read })
+      changed = true
+    }
+    if (changed) capabilityRevision.value++
+  }
+  const getTaskCapability = (target: TaskHistoryTarget): TaskHistoryItem | undefined =>
+    capabilities.get(taskHistoryKey(target))?.item
   const items = shallowRef<Operation[]>([]),
     nextCursor = ref<string | undefined>()
   const listLoading = ref(false),
@@ -131,9 +161,17 @@ export const useOperationsStore = defineStore('operations', () => {
     if (pending) return pending
     const cached = queryCache.get(key)
     if (!force && cached && Date.now() - cached.at < 10000) return Promise.resolve(cached.data)
+    const capabilityStamp = beginCapabilityRead()
     const flight = listOperations(query, { signal: requestController.signal })
       .then((data) => {
         assertCurrent(context)
+        observeCapabilities(
+          data.items.flatMap((item) => {
+            const target = toTaskHistoryItem(item)
+            return target ? [target] : []
+          }),
+          capabilityStamp,
+        )
         queryCache.set(key, { at: Date.now(), data })
         if (queryCache.size > 100) queryCache.delete(queryCache.keys().next().value!)
         return data
@@ -204,6 +242,7 @@ export const useOperationsStore = defineStore('operations', () => {
     let shared = taskFlights.get(key)
     if (!shared) {
       const context = captureOperations()
+      const capabilityStamp = beginCapabilityRead()
       const controller = new AbortController()
       const signal = AbortSignal.any([controller.signal, requestController.signal])
       const flight: TaskFlight = {
@@ -229,6 +268,22 @@ export const useOperationsStore = defineStore('operations', () => {
           .then((data) => {
             assertCurrent(context)
             signal.throwIfAborted()
+            if (locator.task_type !== 'storage' && 'can_delete' in data) {
+              const projectId = 'project_id' in data ? data.project_id : locator.project_id
+              if (projectId != null)
+                observeCapabilities(
+                  [
+                    {
+                      kind: locator.task_type,
+                      id: locator.task_id,
+                      project_id: projectId,
+                      can_delete: data.can_delete,
+                      status: data.status,
+                    },
+                  ],
+                  capabilityStamp,
+                )
+            }
             return data
           })
           .finally(() => {
@@ -299,6 +354,27 @@ export const useOperationsStore = defineStore('operations', () => {
     signal?: AbortSignal,
   ): Promise<ApiSchemas['StorageTask']> =>
     queryTask({ task_type: 'storage', task_id: id, project_id: projectId }, signal)
+  const projectTask = (locator: OperationLocator, detail: TaskDetail): void => {
+    const key = operationKey(locator)
+    const update = (item: Operation) =>
+      operationKey(item) === key ? withDetailStatus(item, detail) : item
+    active.value = active.value.map(update)
+    terminal.value = terminal.value.map(update)
+    items.value = items.value.map(update)
+    for (const subscription of subscriptions)
+      if (
+        operationKey(subscription.locator) === key &&
+        (subscription.locator.project_id == null ||
+          subscription.locator.project_id === locator.project_id)
+      )
+        subscription.receive(detail)
+  }
+  const invalidateReads = (): void => {
+    discardRequests()
+    nextCursor.value = undefined
+    listExpanded = false
+    revision.value++
+  }
   const removeProject = (projectId: number): void => {
     discardRequests()
     active.value = active.value.filter((item) => item.project_id !== projectId)
@@ -318,7 +394,42 @@ export const useOperationsStore = defineStore('operations', () => {
     items.value = items.value.filter((item) => operationKey(item) !== key)
     queryCache.clear()
     summaryCache.clear()
+    summary.value = null
+    filteredSummary.value = null
+    nextCursor.value = undefined
+    revision.value++
     schedule()
+  }
+  // Synchronous removal barrier. The caller clears dependent stores before one public refresh.
+  const invalidateTasks = (targets: TaskHistoryTarget[], publish = true): void => {
+    for (const target of targets) capabilities.delete(taskHistoryKey(target))
+    const matches = (locator: OperationLocator) =>
+      targets.some(
+        (target) =>
+          target.kind === locator.task_type &&
+          target.id === locator.task_id &&
+          (locator.project_id == null || target.project_id === locator.project_id),
+      )
+    for (const subscription of subscriptions)
+      if (matches(subscription.locator)) {
+        subscription.controller.abort()
+        subscriptions.delete(subscription)
+      }
+    discardRequests()
+    const keep = (item: Operation) => !matches(item)
+    active.value = active.value.filter(keep)
+    terminal.value = terminal.value.filter(keep)
+    items.value = items.value.filter(keep)
+    summary.value = null
+    filteredSummary.value = null
+    summaryUpdatedAt.value = null
+    nextCursor.value = undefined
+    listExpanded = false
+    if (publish) revision.value++
+    schedule()
+  }
+  const publishHistoryChange = (): void => {
+    revision.value++
   }
   const discover = (): Promise<void> => {
     if (discoveryFlight) return discoveryFlight
@@ -470,9 +581,12 @@ export const useOperationsStore = defineStore('operations', () => {
         subscription.locator.task_type === 'storage' &&
         'cleanup_status' in data &&
         ['cleanup_pending', 'running', 'blocked'].includes(data.cleanup_status)
-      subscription.active = !businessTerminal || pendingCleanup
-      subscription.nextPollAt = businessTerminal && pendingCleanup ? Date.now() + 30_000 : 0
-      if (subscription.locator.task_type === 'storage') {
+      subscription.active = !businessTerminal || pendingCleanup || !!subscription.terminalRecheckMs
+      subscription.nextPollAt =
+        businessTerminal && (pendingCleanup || subscription.terminalRecheckMs)
+          ? Date.now() + (subscription.terminalRecheckMs ?? 30_000)
+          : 0
+      {
         const key = operationKey(subscription.locator)
         const update = (item: Operation) =>
           operationKey(item) === key ? withDetailStatus(item, data) : item
@@ -494,6 +608,7 @@ export const useOperationsStore = defineStore('operations', () => {
     locator: OperationLocator & { task_type: T },
     receive: (detail: TaskDetailMap[T]) => void,
     fail: Subscription['fail'],
+    options?: { terminalRecheckMs?: number },
   ): (() => void) => {
     const subscription: Subscription = {
       locator,
@@ -502,6 +617,7 @@ export const useOperationsStore = defineStore('operations', () => {
       active: true,
       nextPollAt: 0,
       controller: new AbortController(),
+      terminalRecheckMs: options?.terminalRecheckMs,
     }
     subscriptions.add(subscription)
     void pollSubscription(subscription)
@@ -612,6 +728,10 @@ export const useOperationsStore = defineStore('operations', () => {
     discoveryComplete,
     initialized,
     revision,
+    capabilityRevision,
+    beginCapabilityRead,
+    observeCapabilities,
+    getTaskCapability,
     items,
     nextCursor,
     listLoading,
@@ -636,6 +756,10 @@ export const useOperationsStore = defineStore('operations', () => {
     invalidate,
     removeProject,
     forget,
+    invalidateTasks,
+    publishHistoryChange,
+    projectTask,
+    invalidateReads,
     start,
     stop,
   }

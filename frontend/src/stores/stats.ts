@@ -19,6 +19,17 @@ export const useStatsStore = defineStore('stats', () => {
   let statsRequest: Promise<void> | null = null
   let activityRequest: Promise<void> | null = null
   let activityGeneration = 0
+  let statsGeneration = 0
+  const revision = ref(0)
+  const invalidate = (publish = true): void => {
+    statsGeneration++
+    statsRequest = null
+    statsLoading.value = false
+    if (publish) revision.value++
+  }
+  const publishInvalidation = (): void => {
+    revision.value++
+  }
 
   const clearActivities = (): void => {
     activityGeneration++
@@ -29,6 +40,7 @@ export const useStatsStore = defineStore('stats', () => {
     activitiesLoading.value = false
   }
   const reset = (): void => {
+    statsGeneration++
     statsRequest = null
     stats.value = null
     statsLoading.value = false
@@ -45,22 +57,24 @@ export const useStatsStore = defineStore('stats', () => {
   const loadStats = (): Promise<void> => {
     if (statsRequest) return statsRequest
     const session = captureSession()
+    const generation = statsGeneration
+    const current = () => isSessionCurrent(session) && generation === statsGeneration
     statsLoading.value = true
     statsError.value = null
     const work = async (): Promise<void> => {
       try {
         // Usage statistics do not support organization filtering.
         const response = await fetchStatsSummary()
-        if (isSessionCurrent(session)) {
+        if (current()) {
           stats.value = response
           statsUpdatedAt.value = new Date().toISOString()
         }
       } catch (error) {
-        if (!isSessionCurrent(session)) return
+        if (!current()) return
         if (isAccessDenied(error)) stats.value = null
         statsError.value = error instanceof Error ? error.message : t('api.errors.loadStatsFailed')
       } finally {
-        if (isSessionCurrent(session)) {
+        if (current()) {
           statsLoading.value = false
           statsRequest = null
         }
@@ -130,5 +144,8 @@ export const useStatsStore = defineStore('stats', () => {
     loadAll,
     setActivityOrganization,
     reset,
+    invalidate,
+    publishInvalidation,
+    revision,
   }
 })

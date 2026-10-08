@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { storageConfirmationButtons } from './confirmation'
 import {
   NAlert,
@@ -33,7 +34,9 @@ import { getStorageContractGate } from '@/utils/storage-contract'
 import { subscribeStorageRefresh, invalidateStorageSnapshots } from '@/utils/storage-snapshots'
 import type { StorageManagementAction } from '@/utils/storage-availability'
 import { formatDateTime } from '@/utils/datetime'
-import StorageCapacityInput from './StorageCapacityInput.vue'
+import StorageQuotaInput from './StorageQuotaInput.vue'
+import StorageQuotaDialog from './StorageQuotaDialog.vue'
+import { resolveQuota, type QuotaDraft } from '@/utils/storage-quota'
 import StorageSpaces from './StorageSpaces.vue'
 import StorageTabs from './StorageTabs.vue'
 import StorageAppearance from './StorageAppearance.vue'
@@ -65,6 +68,9 @@ const selectedChecks = computed(() =>
   selectedId.value === null ? undefined : store.checks[selectedId.value],
 )
 const formKind = ref<'connection' | 'space' | 'authorization' | null>(null)
+const quotaSpaceId = ref<number | null>(null)
+const quotaDialogOpen = ref(false)
+const createQuota = ref<QuotaDraft>({ mode: 'unselected' })
 const form = reactive({
   name: '',
   endpoint: '',
@@ -72,7 +78,6 @@ const form = reactive({
   path_style: false,
   bucket: '',
   prefix: '',
-  capacity_bytes: 1024 * 1024 * 1024,
 })
 const secrets = reactive({ access_key_id: '', secret_access_key: '', session_token: '' })
 const authorizationWrite = ref(false)
@@ -159,11 +164,7 @@ const moreActions = computed(() => {
     },
   ]
 })
-const formValid = computed(
-  () =>
-    formKind.value !== 'space' ||
-    (Number.isSafeInteger(form.capacity_bytes) && form.capacity_bytes > 0),
-)
+const formValid = computed(() => formKind.value !== 'space' || resolveQuota(createQuota.value).ok)
 function restoreFocus() {
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true })
   returnFocus = null
@@ -178,8 +179,46 @@ function clearSecrets() {
 function closeForm() {
   formKind.value = null
   clearSecrets()
+  createQuota.value = { mode: 'unselected' }
+  Object.assign(form, {
+    name: '',
+    endpoint: '',
+    region: '',
+    path_style: false,
+    bucket: '',
+    prefix: '',
+  })
   formError.value = null
 }
+function confirmCloseForm(): Promise<boolean> {
+  if (store.busy[writeKey.value]) return Promise.resolve(false)
+  if (
+    formKind.value !== 'space' ||
+    (!form.name && !form.bucket && !form.prefix && createQuota.value.mode === 'unselected')
+  ) {
+    return Promise.resolve(true)
+  }
+  const version = formGeneration
+  return new Promise((resolve) => {
+    dialog.warning({
+      title: t('storageQuota.discardTitle'),
+      content: t('storageQuota.discardBody'),
+      positiveText: t('storageQuota.discard'),
+      negativeText: t('storageQuota.continueEditing'),
+      ...storageConfirmationButtons,
+      onPositiveClick: () => {
+        resolve(version === formGeneration)
+      },
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+      onMaskClick: () => resolve(false),
+    })
+  })
+}
+async function requestCloseForm() {
+  if (await confirmCloseForm()) closeForm()
+}
+onBeforeRouteLeave(() => (formKind.value === 'space' ? confirmCloseForm() : true))
 function openForm(kind: NonNullable<typeof formKind.value>) {
   ++formGeneration
   clearSecrets()
@@ -190,8 +229,8 @@ function openForm(kind: NonNullable<typeof formKind.value>) {
     path_style: false,
     bucket: '',
     prefix: '',
-    capacity_bytes: 1024 * 1024 * 1024,
   })
+  createQuota.value = { mode: 'unselected' }
   formError.value = null
   if (kind === 'authorization') authorizationWrite.value = false
   formKind.value = kind
@@ -322,11 +361,8 @@ async function submit() {
         )
           closeForm()
       } else if (id !== null) {
-        if (
-          !form.bucket.trim() ||
-          !Number.isSafeInteger(form.capacity_bytes) ||
-          form.capacity_bytes < 1
-        ) {
+        const quota = resolveQuota(createQuota.value)
+        if (!form.bucket.trim() || !quota.ok) {
           formError.value = t('storage.required')
           return
         }
@@ -336,7 +372,7 @@ async function submit() {
               name: form.name.trim(),
               bucket: form.bucket.trim(),
               prefix: form.prefix,
-              capacity_bytes: form.capacity_bytes,
+              capacity_bytes: quota.value,
             }),
           )
         )
@@ -474,6 +510,7 @@ watch(
   () => {
     ++generation
     selectedId.value = null
+    quotaSpaceId.value = null
     closeForm()
     void refresh()
   },
@@ -485,6 +522,7 @@ watch(
     if (!value) {
       ++generation
       selectedId.value = null
+      quotaSpaceId.value = null
       closeForm()
     }
   },
@@ -494,6 +532,7 @@ watch(
   () => {
     ++generation
     ++viewRequest
+    quotaSpaceId.value = null
     closeForm()
   },
   { flush: 'sync' },
@@ -741,6 +780,12 @@ onUnmounted(() => {
                   <StorageSpaces
                     :connection-id="selected.id"
                     @change="(space) => changeSpace(space.id, space.status, space.name)"
+                    @quota="
+                      (space) => {
+                        quotaSpaceId = space.id
+                        quotaDialogOpen = true
+                      }
+                    "
                   />
                 </div>
               </template>
@@ -966,6 +1011,13 @@ onUnmounted(() => {
           </div>
         </NDrawerContent>
       </NDrawer>
+      <StorageQuotaDialog
+        v-if="selectedId !== null && quotaSpaceId !== null"
+        :show="quotaDialogOpen"
+        :connection-id="selectedId"
+        :space-id="quotaSpaceId"
+        @update:show="(value) => (quotaDialogOpen = value)"
+      />
       <NModal
         :show="formKind !== null"
         preset="card"
@@ -982,14 +1034,14 @@ onUnmounted(() => {
         "
         @update:show="
           (value: boolean) => {
-            if (!value) closeForm()
+            if (!value) requestCloseForm()
           }
         "
       >
         <NAlert v-if="formError || store.writeErrors[writeKey]" type="error" class="mb-4">{{
           formError || store.writeErrors[writeKey]
         }}</NAlert>
-        <NForm label-placement="top" @submit.prevent="submit">
+        <NForm label-placement="top" :disabled="!!store.busy[writeKey]" @submit.prevent="submit">
           <template v-if="formKind === 'authorization'">
             <NFormItem :label="t('storageManagement.authorizationPurpose')"
               ><NSelect
@@ -1041,10 +1093,10 @@ onUnmounted(() => {
                 ><NInput v-model:value="form.prefix"
               /></NFormItem>
               <NFormItem :label="t('storageUi.quotaLabel')" required>
-                <StorageCapacityInput
-                  :value="form.capacity_bytes"
+                <StorageQuotaInput
+                  v-model:value="createQuota"
+                  :disabled="!!store.busy[writeKey]"
                   :label="t('storageUi.quotaLabel')"
-                  @update:value="(value) => (form.capacity_bytes = value)"
                 />
               </NFormItem>
             </template>
@@ -1053,7 +1105,9 @@ onUnmounted(() => {
         <p v-if="!formAllowed" class="mt-3 text-sm text-lf-text-muted">{{ formReason }}</p>
         <template #footer
           ><div class="flex justify-end gap-2">
-            <NButton @click="closeForm">{{ t('storage.cancel') }}</NButton
+            <NButton :disabled="!!store.busy[writeKey]" @click="requestCloseForm">{{
+              t('storage.cancel')
+            }}</NButton
             ><NButton
               type="primary"
               :loading="!!store.busy[writeKey]"
