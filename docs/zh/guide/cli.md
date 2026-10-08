@@ -58,8 +58,8 @@ linguaflow translate -i input.md -o output.md --to zh
 | `--input` | `-i` | string[] | 必填 | 输入文件或目录路径，可传多个 |
 | `--output` | `-o` | string | 必填 | 输出路径（单文件为文件路径，多文件/目录为目录路径） |
 | `--config` | `-c` | string | `""` | 翻译配置路径（或 `LINGUAFLOW_TRANSLATION_CONFIG`） |
-| `--to` | | string | `"zh"` | 目标语言代码 |
-| `--from` | | string | `"auto"` | 源语言代码（默认自动检测） |
+| `--to` | | string | `""` | 目标语言代码(留空则用配置文件) |
+| `--from` | | string | `""` | 源语言代码(留空则用配置文件,可配 `auto` 自动检测) |
 | `--glossary-path` | | string | `""` | 术语表 CSV 路径 |
 | `--bootstrap` | | string | `""` | 术语自举模式：`off` \| `pre` \| `inline` |
 | `--profile` | | string | `""` | 执行配置名称（覆盖计划级 `execution.profile`；引用 `translation_profiles` key，未命中报错） |
@@ -283,21 +283,21 @@ linguaflow admin credentials reencrypt --config ./server.yaml
 
 ```bash
 # 只读清点：看看有多少旧文件要迁
-linguaflow-storage-migrate --config server.yaml --mode serve inventory
+linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json inventory
 
 # 演练：不写任何数据，输出迁移计划
-linguaflow-storage-migrate --config server.yaml --mode serve dry-run
+linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json dry-run
 
 # 正式迁移（要求先备份，见下方 warning）
-linguaflow-storage-migrate --config server.yaml --mode serve apply \
+linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json apply \
   --offline --backup-confirmed
 
 # 中断后续跑 / 回滚
-linguaflow-storage-migrate --config server.yaml --mode serve resume --offline --backup-confirmed
-linguaflow-storage-migrate --config server.yaml --mode serve rollback --offline --backup-confirmed
+linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json resume --offline --backup-confirmed
+linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json rollback --offline --backup-confirmed
 
 # 离线一致性备份
-linguaflow-storage-migrate --config server.yaml --mode serve backup capture \
+linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json backup capture \
   --offline --destination /backup/linguaflow
 ```
 
@@ -305,7 +305,7 @@ linguaflow-storage-migrate --config server.yaml --mode serve backup capture \
 | --- | --- | --- |
 | `--config` | `""` | 部署文档路径 |
 | `--mode` | `serve` | 部署模式：`serve` / `local` |
-| `--manifest` | `""` | 迁移清单文件路径（工具生成与续跑依据） |
+| `--manifest` | `""` | 迁移清单文件路径(工具生成与续跑依据);`inventory` / `dry-run` / `apply` / `resume` / `rollback` 与全部 `backup` 动作**必填** |
 | `--legacy-root` | `<data_dir>/jobs` | 旧版文件存储根目录 |
 | `--offline` | `false` | 离线操作标记；写操作必填 |
 | `--backup-confirmed` | `false` | 确认已完成备份；写操作必填 |

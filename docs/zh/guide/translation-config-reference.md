@@ -176,25 +176,23 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 [0] 你好世界
 ```
 
-默认模板源码可参考：`backend/internal/templates/default/prompts/default.tmpl`。
+默认模板源码可参考：`backend/internal/templates/default/prompts/default_translation.tmpl`。
 
 ---
 
 ## 执行配置
 
-执行配置文件（`profiles/*.yaml`）必须声明 `schema_version: 1`，缺失或版本不符会直接报错：
+执行配置文件(`profiles/*.yaml`)必须声明 `schema_version: 1`,缺失或版本不符会直接报错:
 
 ```yaml
 schema_version: 1
 ```
 
-### 分段（split）
+分段:`protect` / `ruby` / `postprocess` / `repair` / `glossary.bootstrap` / `context` / `qa`(无顶层 `split`,分段由流水线内部负责;写其他分段会被严格校验拒绝)。
 
-| 字段        | 类型   | 默认值      | 说明               |
-| ----------- | ------ | ----------- | ------------------ |
-| `enabled`   | bool   | `true`      | 是否分段           |
-| `strategy`  | string | `paragraph` | 当前仅 `paragraph` |
-| `max_chars` | int    | `1200`      | 每段最大字符数     |
+::: tip 更新执行配置是字段级合并
+编辑已有执行配置时,请求按**字段级合并**处理:只覆盖显式提交的字段,未提及的字段保留当前值(不会因缺省被零值重置);但**不允许显式传 `null`**。新建配置则以内置默认值为基线。
+:::
 
 ### 内容保护（protect）
 
@@ -246,7 +244,7 @@ schema_version: 1
 修复层只负责把模型返回解析成「可解析的翻译 ID 列表」；个别段没回怎么办，由 [流水线的池化缩批重试](/zh/guide/pipeline#批量与并发) 统一处理（按 `fallback_shrink` 缩小批次只重译缺失段），不再在修复配置里单独开关。
 :::
 
-### 术语自举（bootstrap）
+### 术语自举(glossary.bootstrap)
 
 | 字段                       | 类型   | 默认值          | 说明                     |
 | -------------------------- | ------ | --------------- | ------------------------ |
@@ -261,7 +259,7 @@ schema_version: 1
 | ------------------ | -------- | ------------- | ------------------------------------------------------------------------------------------ |
 | `enabled`          | bool     | `false`       | 总开关（内置通用策略默认关闭，按需开启）                                                   |
 | `auto_reject`      | bool     | `false`       | 检出 error 级问题的段落自动置为「已驳回」；`untranslated` 在源/目标语共用文字系统的语言对下降为 `warning`，不触发自动驳回 |
-| `checks`           | []string | `nil`         | 启用的确定性 checker 名称；`nil`/缺省 = 启用全部；空数组会被视为「等价于全部」并改回 `nil` |
+| `checks`           | []string | `nil`         | 启用的确定性 checker 名称;`nil`/缺省 = 启用全部(19 项 per-batch + 文档级 `duplicate_source_divergence`);非 `nil` 时只运行名单中的 checker,**空数组 = 一个都不启用**(与 `nil` 不同) |
 | `length_method`    | string   | `char_weight` | `char_weight`（CJK 字符 ×2、拉丁字符 ×1）\| `word_count`（按词计数）                       |
 | `length_ratio_min` | float    | `0.2`         | 译文/原文最小长度比；`0` 表示不检测                                                        |
 | `length_ratio_max` | float    | `3`           | 译文/原文最大长度比；`0` 表示不检测                                                        |
@@ -272,7 +270,7 @@ schema_version: 1
 
 #### 可配置 checker 名称（`qa.checks`）
 
-`checks` 接受下列 `Checker.Name()` 取值。`nil` 表示启用全部 19 项 per-batch checker；非 `nil` 时只运行名单中的 checker（精确匹配）。文档级 `duplicate_source_divergence` 始终随引擎运行，不能也不必在此排除。
+`checks` 接受下列 `Checker.Name()` 取值。`nil`(缺省)= 启用全部 19 项 per-batch checker **加上**文档级 `duplicate_source_divergence`;非 `nil` 时只运行名单中的 checker(精确匹配),**空数组表示一个都不启用**。文档级 `duplicate_source_divergence` 也可写进名单显式控制,见下方表格。
 
 | 名称                          | 说明                                           |
 | ----------------------------- | ---------------------------------------------- |
@@ -295,6 +293,7 @@ schema_version: 1
 | `term_inconsistency`          | 命中强制词条未用 target                        |
 | `leftover_placeholder`        | 译文残留占位符                                 |
 | `xml_tag_mismatch`           | XML 标签集合不一致，或译文 XML 结构损坏（标签未闭合/嵌套错误） |
+| `duplicate_source_divergence` | 文档级检查:规范化后相同的源文出现不同译文 |
 
 源语残留（`source_residual`）随质量检测引擎自动启用，无单独开关；源语言为 `auto` 时不生效。审校侧说明见 [翻译审校](/zh/guide/review#质量检测)。
 
@@ -310,11 +309,6 @@ schema_version: 1
 ### 默认配置示例
 
 ```yaml
-split:
-  enabled: true
-  strategy: paragraph
-  max_chars: 1200
-
 protect:
   enabled: true
   rules: [code, link, placeholder, xml]
@@ -334,11 +328,12 @@ repair:
   placeholder_normalize: true
   prompt_upgrade: true
 
-bootstrap:
-  enabled: false
-  max_terms_per_1000_chars: 3.0
-  min_source_len: 2
-  inline_conflict_strategy: "rewrite-local"
+glossary:
+  bootstrap:
+    enabled: false
+    max_terms_per_1000_chars: 3.0
+    min_source_len: 2
+    inline_conflict_strategy: "rewrite-local"
 
 qa:
   enabled: false
@@ -509,11 +504,11 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 
 #### `issue_codes` 取值
 
-支持全部 28 个 issue code（19 项 per-batch checker + 1 项文档级 `duplicate_source_divergence` + 8 项语义 code），规则码与语义码都可作筛选键：
+支持全部 30 个 issue code(19 项 per-batch checker + 1 项文档级 `duplicate_source_divergence` + 8 项语义 code + 2 项注音守恒 code),规则码与语义码都可作筛选键:
 
-`untranslated`、`length_ratio`、`duplicate`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss`、`whitespace_irregular`、`repeated_space`、`width_mix`、`script_mismatch`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`forbidden_term`、`term_inconsistency`、`leftover_placeholder`、`xml_tag_mismatch`、`duplicate_source_divergence`、`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`
+`untranslated`、`length_ratio`、`duplicate`、`source_residual`、`punctuation_pairing`、`punctuation_missing`、`punctuation_surplus`、`punctuation_wrap_loss`、`whitespace_irregular`、`repeated_space`、`width_mix`、`script_mismatch`、`number_mismatch`、`url_email_mismatch`、`subtitle_line_count`、`forbidden_term`、`term_inconsistency`、`leftover_placeholder`、`xml_tag_mismatch`、`duplicate_source_divergence`、`calque`、`term_fidelity`、`naturalness`、`mistranslation`、`omission`、`addition`、`grammar`、`register`、`ruby_restore_incomplete`、`ruby_tag_loss`
 
-其中 `ruby_restore_incomplete`、`ruby_tag_loss` 由翻译轮的注音守恒逻辑在译后产出，不属 `qa.checks` 可选名、不参与 `qa.checks` 过滤，但会随段落问题一同进入段落列表筛选与统计（见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)）。
+其中 `ruby_restore_incomplete`、`ruby_tag_loss` 由翻译轮的注音守恒逻辑在译后产出,不出现在 `qa.checks` 可选名单里、也**不受** `qa.checks` 过滤影响,但可作为 `semantic_qa.issue_codes` 的筛选键,并会随段落问题一同进入段落列表筛选与统计(见 [翻译审校 · 质量检测](/zh/guide/review#质量检测))。
 
 完整清单（含每项含义）见 [翻译审校 · 质量检测](/zh/guide/review#质量检测)；前端筛选 UI 的分组见 [翻译审校 · 按质量问题筛选](/zh/guide/review#按质量问题筛选)。
 
