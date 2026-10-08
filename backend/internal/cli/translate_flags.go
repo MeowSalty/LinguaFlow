@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 )
 
 func applyTranslateFlags(cfg *config.CLIConfig, opts translateOptions) error {
@@ -53,15 +54,18 @@ func applyTranslateFlags(cfg *config.CLIConfig, opts translateOptions) error {
 		if opts.bootstrapMode != "off" && opts.bootstrapMode != "pre" && opts.bootstrapMode != "inline" {
 			return errors.New("--bootstrap must be off, pre or inline")
 		}
-		profile, err := config.ResolveExecutionProfile(cfg)
-		if err != nil {
-			return err
+		for i := range cfg.Execution.Rounds {
+			r := &cfg.Execution.Rounds[i]
+			if r.Mode != "translate" || r.Translate == nil {
+				continue
+			}
+			inline := execution.DefaultInlineTermExtraction()
+			if r.Translate.InlineTermExtraction != nil {
+				inline = *r.Translate.InlineTermExtraction
+			}
+			inline.Enabled = opts.bootstrapMode == "inline"
+			r.Translate.InlineTermExtraction = &inline
 		}
-		profile.Glossary.Bootstrap.Enabled = opts.bootstrapMode == "inline"
-		if cfg.TranslationProfiles == nil {
-			cfg.TranslationProfiles = map[string]config.CLIConfigTranslationProfile{}
-		}
-		cfg.TranslationProfiles[cfg.Execution.Profile] = config.CLIConfigTranslationProfile{ProfileSpec: profile}
 		var extract, other []config.CLIConfigRound
 		for _, r := range cfg.Execution.Rounds {
 			if r.Mode == "extract" {
