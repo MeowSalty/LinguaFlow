@@ -52,13 +52,24 @@
 - 注册政策存储在数据库中，跨重启持久化；修改即时生效，无需重启服务
 - 首次初始化时的默认值由部署文档的 `bootstrap.registration_enabled` 决定（默认 `false`，详见 [配置文件与环境变量](/zh/guide/configuration#bootstrap-首次初始化顶层)）
 
+设置页还提供**任务历史保留**策略卡:
+
+| 项 | 说明 |
+| --- | --- |
+| **自动清理** | 开关,默认关闭 |
+| **保留天数** | `1`–`3650` 天,默认 `30`;翻译与术语同步任务共用同一周期 |
+| **预览影响** | 只读预览:候选 / 到期 / 可删 / 受屏障 / 收尾中数量与关联规模,不触发任何删除 |
+| **运行状态** | `disabled` / `idle` / `running` / `blocked` / `error`,含最近扫描时间、积压与跳过原因;后台每小时扫描一次 |
+
+保存需带上读取时的 `revision` 做乐观锁,不一致会返回 `409 settings_conflict`,避免覆盖他人的并发修改;缩短保留期或启用前会二次确认。任务计时起点取真实结束时间,旧记录无法确认结束时间时按保守起点,**缺少计时起点的记录会暂停自动清理**(重试会清空结束时间并重新计时)。
+
 ::: warning 与部署配置的关系
 此处的「系统设置」是数据库内的运行期政策，与 `server.yaml` 部署文档 / 环境变量是两套机制：部署配置在启动时加载，决定监听端口、数据库、密钥等基础设施行为；设置页面向可在线调整的运行期政策。初始化完成后，数据库中的注册政策**优先于** `bootstrap.registration_enabled`。
 :::
 
 ## 存储管理
 
-管理员后台的 **存储管理** 页负责站点级对象存储：新建存储连接与空间、管理访问授权（密钥只写不回显）、执行只读 / 写入检测、启停连接与空间、查看容量与缺失 / 损坏对象等健康诊断，以及设定全站**存储政策**（仅站点托管 / 站点托管或自有存储 / 必须使用自有存储，含默认选择与逻辑容量上限）。
+管理员后台的 **存储管理** 页负责站点级对象存储：新建存储连接与空间、管理访问授权（密钥只写不回显）、执行只读 / 写入检测、启停连接与空间、查看容量与缺失 / 损坏对象等健康诊断，以及设定全站**存储政策**(仅站点托管 / 站点托管或自有存储 / 必须使用自有存储,含默认选择、逻辑容量上限与新站点空间默认配额)。
 
 页面与操作详见 [存储管理](/zh/guide/storage)；部署侧的 `server.storage.*` 配置见 [配置文件与环境变量](/zh/guide/configuration#server-storage-—-对象存储)。
 
@@ -132,6 +143,9 @@ LinguaFlow 区分两套活动视图：
 | `resource.segment.translation_preview.apply` | 应用预览翻译到段落 | `segment` |
 | `glossary.sync_execute` | 执行术语表同步 | `glossary` |
 | `quick_translate` | 即时翻译（不落库，仅记录用量与事件） | — |
+| `job.history_deleted` | 删除单条翻译任务记录 | `job` |
+| `glossary.sync_task_history_deleted` | 删除单条术语同步任务记录 | `glossary` |
+| `admin.task_retention.update` | 修改任务历史保留策略 | `system_settings` |
 
 ::: tip 即时翻译为何也记录
 即时翻译本身不落库译文，但仍会消耗 LLM 配额并可能触发限流。将其记入审计日志，便于管理员核算用量与排查异常。
@@ -155,6 +169,8 @@ LinguaFlow 区分两套活动视图：
 | `GET` | `/admin/audit-logs` | 全局审计日志（`cursor` / `limit`） |
 | `GET` | `/admin/settings` | 读取注册开关等系统设置 |
 | `PATCH` | `/admin/settings` | 更新系统设置（如 `registration_enabled` 布尔开关） |
+| `POST` | `/admin/task-retention/preview` | 预览任务历史保留策略影响(只读,不触发删除) |
+| `GET` | `/admin/task-retention/status` | 任务历史清理运行状态与本进程扫描摘要 |
 | `GET` | `/admin/storage/policy` | 读取站点存储政策（含可用政策模式与限制原因） |
 | `PUT` | `/admin/storage/policy` | 整体保存站点存储政策（`generation` 乐观锁） |
 | `GET` | `/admin/storage/diagnostics` | 存储只读诊断（容量、缺失 / 损坏对象、恢复积压等） |
