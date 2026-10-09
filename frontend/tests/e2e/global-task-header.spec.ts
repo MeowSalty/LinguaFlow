@@ -231,9 +231,9 @@ for (const theme of ['light', 'dark'] as const) {
     })
     await expect(panel.getByRole('button', { name: '关闭', exact: true })).toBeInViewport()
     await expect(
-      panel.getByRole('button', { name: '清除已结束任务', exact: true }),
+      panel.getByRole('button', { name: '隐藏已结束任务', exact: true }),
     ).toBeInViewport()
-    await panel.getByRole('button', { name: '清除已结束任务', exact: true }).click()
+    await panel.getByRole('button', { name: '隐藏已结束任务', exact: true }).click()
     await expect(page.getByTestId('global-job-tracker')).toHaveAttribute(
       'data-attention',
       'needs_action',
@@ -269,7 +269,7 @@ test('failure reminders take priority and hiding or disabling retained terminals
   await expect(status).toContainText('等待自动重试 2')
   await panel.getByRole('button', { name: '隐藏此提醒', exact: true }).first().click()
   await expect(status).toContainText('失败提醒 1')
-  await panel.getByRole('button', { name: '清除已结束任务', exact: true }).click()
+  await panel.getByRole('button', { name: '隐藏已结束任务', exact: true }).click()
   await expect(tracker).toHaveAttribute('data-attention', 'needs_action')
   await expect(trigger).toHaveAccessibleName(/^当前任务 5/)
   await expect(status).not.toContainText('失败提醒')

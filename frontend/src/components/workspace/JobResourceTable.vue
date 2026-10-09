@@ -16,6 +16,7 @@ import {
 } from '@/composables/useWorkspaceUtils'
 import {
   getDetailRoundSeconds,
+  getJobRoundSkipReason,
   getResourceRoundSummary,
   getRoundDisplayState,
   selectResourceRound,
@@ -167,11 +168,12 @@ const rows = computed(() =>
       .sort((a, b) => a.round_index - b.round_index)
       .map((round) => {
         const state = getRoundDisplayState(props.job.status, resource.status, round.status)
+        const skipReason = getJobRoundSkipReason(props.job, round)
         const remaining = state === 'running' ? estimateRoundRemaining(round) : null
         return {
           ...round,
           state,
-          stateLabel: stateLabel(state),
+          stateLabel: skipReason ? t('termExtraction.skippedGlossaryDisabled') : stateLabel(state),
           segments: segmentText(round),
           duration: formatDetailDuration(getDetailRoundSeconds(round, props.job)),
           remaining:

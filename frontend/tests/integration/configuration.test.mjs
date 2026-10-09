@@ -105,6 +105,73 @@ test('A7 recursive profile merge preserves false/zero/empty arrays', async ({ ba
   assert.equal(saved.config.postprocess.trim_spaces, false)
 })
 
+test('inline extraction API preserves per-round presence and rejects legacy profile glossary', async ({
+  backend,
+}) => {
+  const { request, makeProfile, backendBody, endpoint, tokenSecrets } = backend
+  const profile = await makeProfile('Inline extraction profile')
+  assert.equal(Object.hasOwn(profile.config, 'glossary'), false)
+  const credential = await request(
+    'POST',
+    '/credentials',
+    { provider: 'openai', endpoint, secret: tokenSecrets[0] },
+    201,
+  )
+  const model = await request(
+    'POST',
+    '/backends',
+    backendBody('Inline extraction backend', 'fixture-model', endpoint, credential.id),
+    201,
+  )
+  const defaults = {
+    enabled: false,
+    max_terms_per_1000_words: 3,
+    min_source_len: 2,
+    conflict_strategy: 'rewrite-local',
+  }
+  const disabled = {
+    enabled: false,
+    max_terms_per_1000_words: 0.123456789,
+    min_source_len: 4,
+    conflict_strategy: 'off',
+  }
+  const rounds = [undefined, {}, { enabled: true }, disabled].map((inline) => ({
+    mode: 'translate',
+    backend_id: model.id,
+    concurrency: 1,
+    translate: {
+      prompt_template_id: -1,
+      batch_size: 10,
+      fallback_shrink: 1,
+      ...(inline === undefined ? {} : { inline_term_extraction: inline }),
+    },
+  }))
+  const created = await request(
+    'POST',
+    '/execution-plan-templates',
+    { name: 'Inline extraction presence', profile_id: profile.id, rounds },
+    201,
+  )
+  const expected = [undefined, defaults, { ...defaults, enabled: true }, disabled]
+  const assertInline = (plan) => {
+    assert.deepEqual(
+      plan.rounds.map((round) => round.translate.inline_term_extraction),
+      expected,
+    )
+    assert.equal(Object.hasOwn(plan.rounds[0].translate, 'inline_term_extraction'), false)
+  }
+  assertInline(created)
+  const path = `/execution-plan-templates/${created.id}`
+  assertInline(await request('PUT', path, { rounds: created.rounds }))
+  assertInline(await request('GET', path))
+
+  const legacy = { glossary: { bootstrap: { enabled: true } } }
+  await request('POST', '/execution-profiles', { name: 'Legacy glossary', config: legacy }, 400)
+  await request('PUT', `/execution-profiles/${profile.id}`, { config: legacy }, 400)
+  const unchanged = await request('GET', `/execution-profiles/${profile.id}`)
+  assert.deepEqual(unchanged.config, profile.config)
+})
+
 test('A1/A9 restart preserves registration policy and paused task snapshot', async ({
   backend,
 }) => {

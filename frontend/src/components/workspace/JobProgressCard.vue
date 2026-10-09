@@ -16,7 +16,7 @@ import {
   getRoundColumns,
   getStageLabel,
 } from '@/composables/useWorkspaceUtils'
-import { getRoundDisplayState } from '@/utils/jobPresentation'
+import { getJobRoundSkipReason, getRoundDisplayState } from '@/utils/jobPresentation'
 import StackedProgressBar from '@/components/common/StackedProgressBar.vue'
 import JobRoundStateIcon from './JobRoundStateIcon.vue'
 
@@ -61,6 +61,9 @@ const rounds = computed(() =>
         index: col.roundIndex,
         label: getStageLabel(col.mode),
         state,
+        stateLabel: getJobRoundSkipReason(props.job, { mode: col.mode, status: aggregate.status })
+          ? t('termExtraction.skippedGlossaryDisabled')
+          : t('workspace.job.detail.' + state),
         count: aggregate.total > 0 ? n(aggregate.completed) + '/' + n(aggregate.total) : '',
       },
     ]
@@ -140,7 +143,7 @@ const speedText = computed(() =>
         <span :class="round.state === 'running' ? 'text-lf-text-strong' : 'text-lf-text-muted'">{{
           round.label
         }}</span>
-        <span class="text-lf-text-subtle">{{ t('workspace.job.detail.' + round.state) }}</span>
+        <span class="text-lf-text-subtle">{{ round.stateLabel }}</span>
         <span
           v-if="
             round.count &&

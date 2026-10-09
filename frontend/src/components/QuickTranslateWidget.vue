@@ -74,6 +74,9 @@ const executionPlanOptions = computed<SelectMixedOption[]>(() => {
 const projectOptions = computed(() =>
   projects.items.map((item) => ({ label: item.name, value: item.id })),
 )
+const projectGlossaryDisabled = computed(
+  () => projects.items.find((item) => item.id === projectId.value)?.glossary_enabled === false,
+)
 
 // 加载中先按正常态渲染，避免空列表闪现警示
 const planAvailability = computed<'ok' | 'empty' | 'noneTranslatable'>(() => {
@@ -125,6 +128,11 @@ const statusLabel = (status: string): string => {
   if (status === 'skipped') return t('quickTranslate.statusSkipped')
   return t('quickTranslate.statusFailed')
 }
+
+const roundStatusLabel = (round: ApiSchemas['QuickRoundSummary']): string =>
+  round.mode === 'extract' && round.status === 'skipped'
+    ? t('termExtraction.skippedGlossaryDisabled')
+    : statusLabel(round.status)
 
 const addGlossaryRow = (): void => {
   glossarySeq.value += 1
@@ -318,7 +326,11 @@ onMounted(() => {
             :options="projectOptions"
             :placeholder="t('quickTranslate.projectPlaceholder')"
             :loading="projects.loading"
+            :aria-label="t('quickTranslate.projectLabel')"
           />
+          <NAlert v-if="projectGlossaryDisabled" type="info" :bordered="false">
+            {{ t('termExtraction.quickProjectDisabled') }}
+          </NAlert>
         </div>
 
         <div class="space-y-2.5">
@@ -478,7 +490,7 @@ onMounted(() => {
               :type="batchStatusTimelineType(round.status, 'info')"
               :bordered="false"
             >
-              {{ statusLabel(round.status) }}
+              {{ roundStatusLabel(round) }}
             </NTag>
             <NTag v-if="round.backend" size="tiny" :bordered="false">{{ round.backend }}</NTag>
             <span class="ml-auto font-mono text-xs tabular-nums text-lf-text-muted">

@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import type { ApiSchemas } from '../../src/api/client'
 import { json, mockApp } from './fixtures.ts'
 
 const timestamp = '2026-09-30T00:00:00Z'
@@ -47,7 +48,14 @@ const plan = {
 
 export async function regressionApp(
   page: Page,
-  options: { theme?: 'light' | 'dark'; populated?: boolean; upload?: boolean } = {},
+  options: {
+    theme?: 'light' | 'dark'
+    populated?: boolean
+    upload?: boolean
+    glossaryEnabled?: boolean
+    rounds?: ApiSchemas['ExecutionRoundConfig'][]
+    quickRoundSummary?: ApiSchemas['QuickRoundSummary'][]
+  } = {},
 ) {
   await mockApp(page, { role: 'user', theme: options.theme })
   const errors: string[] = []
@@ -55,9 +63,14 @@ export async function regressionApp(
   const quickRequests: Record<string, unknown>[] = [],
     segmentWrites: Record<string, unknown>[] = []
   const uploads: string[] = []
-  const currentProject = options.upload
-    ? { ...project, storage_space_id: 1, storage_generation: 0, storage_state: 'active' }
-    : project
+  const currentProject = {
+    ...project,
+    glossary_enabled: options.glossaryEnabled ?? project.glossary_enabled,
+    ...(options.upload
+      ? { storage_space_id: 1, storage_generation: 0, storage_state: 'active' }
+      : {}),
+  }
+  const currentPlan = { ...plan, rounds: options.rounds ?? plan.rounds }
   let segment = {
     id: 711,
     sub_job_id: 1,
@@ -90,7 +103,7 @@ export async function regressionApp(
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname.replace('/api/v1', '')
-    if (path === '/execution-plan-templates') return json(route, { items: [plan] })
+    if (path === '/execution-plan-templates') return json(route, { items: [currentPlan] })
     if (path === '/projects') return json(route, { items: [currentProject] })
     if (path === '/projects/7') return json(route, currentProject)
     if (options.upload && path === '/projects/7/storage')
@@ -155,10 +168,11 @@ export async function regressionApp(
         source_lang: 'en',
         target_lang: 'zh-Hans',
         quality_issues: [],
+        round_summary: options.quickRoundSummary,
         usage: { api_calls: 1, input_tokens: 8, output_tokens: 6 },
       })
     }
     return route.fallback()
   })
-  return { quickRequests, segmentWrites, errors, uploads }
+  return { quickRequests, segmentWrites, errors, uploads, project: currentProject }
 }

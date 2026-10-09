@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import type { ExecutionRound } from '../../src/utils/execution-plan-config'
 import { json, mockApp } from './fixtures'
 
 type Kind = 'prompt' | 'bootstrap' | 'prune' | 'profile' | 'plan'
@@ -64,16 +65,23 @@ const profileConfig = {
     placeholder_normalize: true,
     prompt_upgrade: true,
   },
-  glossary: {
-    bootstrap: {
-      enabled: false,
-      max_terms_per_1000_chars: 3,
-      min_source_len: 2,
-      inline_conflict_strategy: 'rewrite-local',
-    },
-  },
   context: { enabled: false, before: 0, after: 0, max_chars: 0 },
 }
+const inlineSettings = [
+  {
+    enabled: true,
+    max_terms_per_1000_words: 7.5,
+    min_source_len: 4,
+    conflict_strategy: 'off',
+  },
+  {
+    enabled: false,
+    max_terms_per_1000_words: 2.25,
+    min_source_len: 3,
+    conflict_strategy: 'rewrite-local',
+  },
+  undefined,
+] as const
 const display = (kind: string, scope: 'user' | 'org' | 'system', orgId = 7) =>
   `${scope === 'user' ? '私人' : scope === 'system' ? '系统' : orgId === 7 ? '目标组织' : '其他组织'}-${kind}`
 function entity(kind: Kind | 'backend', scope: 'user' | 'org' | 'system', orgId = 7): Entity {
@@ -93,19 +101,18 @@ function entity(kind: Kind | 'backend', scope: 'user' | 'org' | 'system', orgId 
       ...common,
       profile_id: id,
       ruby_retry: { enabled: false, backend_id: id, max_attempts: 1 },
-      rounds: [
-        {
-          mode: 'translate',
-          backend_id: id,
-          concurrency: 3,
-          translate: {
-            prompt_template_id: id,
-            batch_size: 10,
-            max_words_per_batch: 0,
-            fallback_shrink: 1,
-          },
+      rounds: inlineSettings.map((inline) => ({
+        mode: 'translate',
+        backend_id: id,
+        concurrency: 3,
+        translate: {
+          prompt_template_id: id,
+          batch_size: 10,
+          max_words_per_batch: 0,
+          fallback_shrink: 1,
+          ...(inline === undefined ? {} : { inline_term_extraction: { ...inline } }),
         },
-      ],
+      })),
     }
   if (kind === 'backend')
     return {
@@ -241,20 +248,33 @@ async function selectOption(page: Page, select: Locator, value: string, forbidde
   for (const label of forbidden) await expect(menu.getByText(label, { exact: true })).toHaveCount(0)
   await menu.getByText(value, { exact: true }).click()
 }
+async function chooseRoundMode(round: Locator, label: string) {
+  const radio = round.getByRole('radio', { name: label, exact: true })
+  await expect(radio).toBeEnabled()
+  await round
+    .locator('.n-radio__label')
+    .filter({ hasText: new RegExp(`^${label}$`) })
+    .click()
+  await expect(radio).toBeChecked()
+}
 async function planDependencies(page: Page) {
-  const selects = drawer(page).locator('.n-select:visible')
-  await selectOption(page, selects.nth(0), display('profile', 'system'), [
-    display('profile', 'user'),
-    display('profile', 'org', 8),
-  ])
-  await selectOption(page, selects.nth(1), display('backend', 'org'), [
-    display('backend', 'user'),
-    display('backend', 'org', 8),
-  ])
-  await selectOption(page, selects.nth(2), display('prompt', 'system'), [
-    display('prompt', 'user'),
-    display('prompt', 'org', 8),
-  ])
+  await selectOption(
+    page,
+    drawer(page).locator('.n-select:visible').first(),
+    display('profile', 'system'),
+    [display('profile', 'user'), display('profile', 'org', 8)],
+  )
+  for (const round of await drawer(page).getByTestId('execution-round').all()) {
+    const selects = round.locator('.n-select:visible')
+    await selectOption(page, selects.nth(0), display('backend', 'org'), [
+      display('backend', 'user'),
+      display('backend', 'org', 8),
+    ])
+    await selectOption(page, selects.nth(1), display('prompt', 'system'), [
+      display('prompt', 'user'),
+      display('prompt', 'org', 8),
+    ])
+  }
 }
 function expectOwnership(body: Record<string, unknown> | null, create: boolean) {
   expect(body).not.toBeNull()
@@ -321,8 +341,12 @@ for (const spec of specs) {
     expect(state.writes).toHaveLength(0)
     if (spec.kind === 'plan') {
       await expect(page.getByText('已清除目标组织不可用的依赖，请重新选择后保存。')).toBeVisible()
+      for (const round of await drawer(page).getByTestId('execution-round').all()) {
+        await expect(round.getByLabel('AI 后端', { exact: true })).toContainText('选择后端')
+        await expect(round.locator('.n-select').nth(1)).toContainText('选择提示词模板')
+      }
       await drawer(page).getByRole('button', { name: spec.submit, exact: true }).click()
-      await expect(page.getByText('请重新选择当前组织可用的依赖')).toBeVisible()
+      await expect(drawer(page).getByText('请选择执行策略', { exact: true })).toBeVisible()
       expect(state.writes).toHaveLength(0)
       await planDependencies(page)
     } else if (spec.field !== 'config')
@@ -338,7 +362,17 @@ for (const spec of specs) {
     const copied = state.data[spec.kind].find((item) => item.name === `Copied ${spec.kind}`)!
     expect(copied.owner_org_id).toBe(7)
     expect(copied.id).not.toBe(original.id)
-    if (spec.kind === 'plan') expect(copied.ruby_retry).toMatchObject({ backend_id: 0 })
+    if (spec.kind === 'plan') {
+      expect(copied.ruby_retry).not.toHaveProperty('backend_id')
+      const copiedRounds = copied.rounds as ExecutionRound[]
+      expect(copiedRounds.map((round) => round.translate?.inline_term_extraction)).toEqual(
+        inlineSettings,
+      )
+      expect(copiedRounds[2]!.translate).not.toHaveProperty('inline_term_extraction')
+      expect(copiedRounds.every((round) => round.backend_id === 701)).toBe(true)
+      expect(copiedRounds.every((round) => round.translate?.prompt_template_id === -1)).toBe(true)
+    }
+    if (spec.kind === 'profile') expect(copied.config).not.toHaveProperty('glossary')
     await page.goto(spec.path)
     await expect(card(page, original.name)).toBeVisible()
     await expect(card(page, copied.name)).toBeVisible()
@@ -356,9 +390,142 @@ for (const spec of specs) {
     await row.getByRole('button', { name: '查看', exact: true }).click()
     await expect(drawer(page).locator('input').first()).toBeDisabled()
     await expect(drawer(page).getByRole('button', { name: '保存', exact: true })).toHaveCount(0)
+    if (spec.kind === 'plan') {
+      const round = drawer(page).getByTestId('execution-round').first()
+      await round.getByText('高级配置', { exact: true }).click()
+      await expect(round.getByRole('switch', { name: '翻译时提取术语', exact: true })).toBeChecked()
+      await expect(
+        round.getByRole('switch', { name: '翻译时提取术语', exact: true }),
+      ).toBeDisabled()
+      await expect(round.getByLabel('每千源文字词最大术语数', { exact: true })).toBeDisabled()
+      await expect(round.getByLabel('每千源文字词最大术语数', { exact: true })).toHaveValue('7.5')
+    }
     expect(state.writes).toHaveLength(0)
   })
 }
+
+test('organization copy locks mode drafts until delayed target dependencies are cleared', async ({
+  page,
+}) => {
+  const state = await configApp(page)
+  const source = state.data.plan.find((item) => item.owner_org_id === 8)!
+  const original = structuredClone(source)
+  expect((original.rounds as ExecutionRound[])[0]).toMatchObject({
+    backend_id: 801,
+    translate: { prompt_template_id: 801 },
+  })
+  await page.goto('/execution-plan-templates?org_id=8')
+  let release!: () => void
+  let pendingReads = 0
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/v1/orgs/7/backends*', async (route) => {
+    pendingReads++
+    await waiting
+    await route.fallback()
+  })
+  try {
+    await card(page, source.name).getByRole('button', { name: '复制到组织', exact: true }).click()
+    const modal = page.locator('.n-modal:visible')
+    await selectOption(page, modal.locator('.n-select'), 'Organization 7')
+    await modal.getByRole('button', { name: '继续编辑', exact: true }).click()
+    await expect.poll(() => pendingReads).toBeGreaterThan(0)
+    await expect(drawer(page).locator('input').first()).toHaveValue(source.name)
+    const round = drawer(page).getByTestId('execution-round').first()
+    const modes = round.getByRole('radio')
+    await expect(modes).toHaveCount(6)
+    for (const mode of await modes.all()) await expect(mode).toBeDisabled()
+    await round.getByText('高级配置', { exact: true }).click()
+    const extraction = round.getByRole('switch', { name: '翻译时提取术语', exact: true })
+    await expect(extraction).toBeChecked()
+    await expect(extraction).toBeDisabled()
+    await expect(round.getByLabel('每千源文字词最大术语数', { exact: true })).toBeDisabled()
+    expect(state.writes).toHaveLength(0)
+  } finally {
+    release()
+  }
+
+  await expect(page.getByText('已清除目标组织不可用的依赖，请重新选择后保存。')).toBeVisible()
+  const round = drawer(page).getByTestId('execution-round').first()
+  for (const mode of await round.getByRole('radio').all()) await expect(mode).toBeEnabled()
+  if (!(await round.getByRole('switch', { name: '翻译时提取术语', exact: true }).isVisible()))
+    await round.getByText('高级配置', { exact: true }).click()
+  await expect(round.getByRole('switch', { name: '翻译时提取术语', exact: true })).toBeEnabled()
+  await expect(round.getByLabel('AI 后端', { exact: true })).toContainText('选择后端')
+  await expect(round.locator('.n-select').nth(1)).toContainText('选择提示词模板')
+  await chooseRoundMode(round, '术语抽取')
+  await expect(round.getByLabel('AI 后端', { exact: true })).toContainText('选择后端')
+  await chooseRoundMode(round, '翻译')
+  await expect(round.getByLabel('AI 后端', { exact: true })).toContainText('选择后端')
+  await expect(round.locator('.n-select').nth(1)).toContainText('选择提示词模板')
+  await planDependencies(page)
+  await drawer(page).getByRole('button', { name: '创建计划', exact: true }).click()
+  await expect.poll(() => state.writes.length).toBe(1)
+  const copied = state.writes[0]!.body!.rounds as ExecutionRound[]
+  expect(copied.every((item) => item.backend_id === 701)).toBe(true)
+  expect(copied.every((item) => item.translate?.prompt_template_id === -1)).toBe(true)
+  expect(copied.map((item) => item.translate?.inline_term_extraction)).toEqual(inlineSettings)
+  expect(source).toEqual(original)
+})
+
+test('copying a legacy profile drops its glossary field without changing the source', async ({
+  page,
+}) => {
+  const state = await configApp(page)
+  const source = state.data.profile.find((item) => item.scope === 'user')!
+  source.config = {
+    ...profileConfig,
+    glossary: { bootstrap: { enabled: true, max_terms_per_1000_chars: 8 } },
+  }
+  const original = structuredClone(source)
+  await page.goto('/execution-profiles')
+  await card(page, source.name).getByRole('button', { name: '复制到组织', exact: true }).click()
+  const modal = page.locator('.n-modal:visible')
+  await selectOption(page, modal.locator('.n-select'), 'Organization 7')
+  await modal.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await drawer(page).getByRole('button', { name: '创建策略', exact: true }).click()
+  await expect.poll(() => state.writes.length).toBe(1)
+  expect(state.writes[0]!.body?.config).toEqual(profileConfig)
+  expect(state.writes[0]!.body?.config).not.toHaveProperty('glossary')
+  expect(source).toEqual(original)
+})
+
+test('organization changes start fresh plan drafts without reusing another scope mode cache', async ({
+  page,
+}) => {
+  const state = await configApp(page)
+  const other = state.data.plan.find((item) => item.owner_org_id === 8)!
+  const otherRounds = other.rounds as ExecutionRound[]
+  otherRounds[0]!.translate!.inline_term_extraction!.max_terms_per_1000_words = 5
+  await page.goto('/execution-plan-templates?org_id=7')
+  await card(page, display('plan', 'org'))
+    .getByRole('button', { name: '编辑', exact: true })
+    .click()
+  let round = drawer(page).getByTestId('execution-round').first()
+  await round.getByText('高级配置', { exact: true }).click()
+  await round.getByLabel('每千源文字词最大术语数', { exact: true }).fill('99')
+  await round.getByLabel('每千源文字词最大术语数', { exact: true }).press('Tab')
+  await chooseRoundMode(round, '术语抽取')
+  await round.getByLabel('术语最短源文长度', { exact: true }).fill('8')
+  await round.getByLabel('术语最短源文长度', { exact: true }).press('Tab')
+  await drawer(page).getByRole('button', { name: '取消', exact: true }).click()
+  await selectOption(page, page.getByLabel('资源范围', { exact: true }), 'Organization 8')
+  await expect(page).toHaveURL(/org_id=8/)
+  await card(page, display('plan', 'org', 8))
+    .getByRole('button', { name: '编辑', exact: true })
+    .click()
+  round = drawer(page).getByTestId('execution-round').first()
+  await round.getByText('高级配置', { exact: true }).click()
+  await expect(round.getByLabel('每千源文字词最大术语数', { exact: true })).toHaveValue('5')
+  await chooseRoundMode(round, '术语抽取')
+  await expect(round.getByLabel('术语最短源文长度', { exact: true })).toHaveValue('2')
+  expect(state.writes).toHaveLength(0)
+  const first = state.data.plan.find((item) => item.owner_org_id === 7)!
+  expect((first.rounds as ExecutionRound[])[0]!.translate!.inline_term_extraction).toEqual(
+    inlineSettings[0],
+  )
+})
 
 test('organization backend CRUD uses organization paths and keeps ownership out of request bodies', async ({
   page,

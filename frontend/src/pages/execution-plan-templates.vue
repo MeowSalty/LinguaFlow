@@ -31,6 +31,9 @@ import ExecutionPlanEditor from '@/components/templates/ExecutionPlanEditor.vue'
 import {
   buildExecutionRoundInput,
   buildRubyRetryInput,
+  cloneExecutionPlanValue,
+  createExecutionPlanRound,
+  validateInlineTermExtractionConfig,
   validateRoundCodes,
 } from '@/utils/execution-plan-config'
 import type {
@@ -59,19 +62,6 @@ interface FormModel {
 
 // ── 默认值 ────────────────────────────────────────────────────
 
-const DEFAULT_ROUND: ExecutionPlanFormRound = {
-  mode: 'translate',
-  backend_id: null,
-  concurrency: 3,
-  translate: {
-    prompt_template_id: null,
-    batch_size: 10,
-    max_words_per_batch: 0,
-    fallback_shrink: 1,
-    retry: { max_attempts: 3, backoff_ms: 2000, jitter: true },
-  },
-}
-
 const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
   enabled: false,
   backend_id: null,
@@ -79,7 +69,7 @@ const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
 }
 
 function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
+  return cloneExecutionPlanValue(obj)
 }
 
 // ── Store & 依赖 ──────────────────────────────────────────────
@@ -111,7 +101,7 @@ const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
 const submitting = ref(false)
 const pendingFormWrites = ref(0)
-let formGeneration = 0
+const formGeneration = ref(0)
 const editingItem = ref<ExecutionPlanTemplate | null>(null)
 
 const formModel = reactive<FormModel>({
@@ -226,13 +216,13 @@ const ensureDependenciesLoaded = async (): Promise<void> => {
 }
 
 const resetForm = (): void => {
-  formGeneration++
+  formGeneration.value++
   submitting.value = false
   formModel.name = ''
   formModel.description = ''
   formModel.profile_id = null
   formModel.ruby_retry = deepClone(DEFAULT_RUBY_RETRY)
-  formModel.rounds = [deepClone(DEFAULT_ROUND)]
+  formModel.rounds = [createExecutionPlanRound()]
   editingItem.value = null
 }
 
@@ -251,7 +241,7 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
   formModel.ruby_retry = item.ruby_retry
     ? deepClone(item.ruby_retry)
     : deepClone(DEFAULT_RUBY_RETRY)
-  formModel.rounds = item.rounds?.length ? deepClone(item.rounds) : [deepClone(DEFAULT_ROUND)]
+  formModel.rounds = item.rounds?.length ? deepClone(item.rounds) : [createExecutionPlanRound()]
   ensureDependenciesLoaded()
   drawerVisible.value = true
 }
@@ -291,6 +281,12 @@ const validateRounds = (): boolean => {
       return false
     }
     if (round.mode === 'translate' && round.translate) {
+      if (validateInlineTermExtractionConfig(round.translate.inline_term_extraction).length) {
+        message.error(
+          t('executionPlanTemplates.validation.roundInlineTermExtractionInvalid', { n: i + 1 }),
+        )
+        return false
+      }
       const hasBatchSize = round.translate.batch_size && round.translate.batch_size > 0
       const hasMaxWords =
         round.translate.max_words_per_batch && round.translate.max_words_per_batch > 0
@@ -382,11 +378,11 @@ const buildPayload = (): CreateRequest => {
 const onSubmit = async (): Promise<void> => {
   const session = captureSession()
   const organization = store.orgId
-  const generation = formGeneration
+  const generation = formGeneration.value
   const current = () =>
     isSessionCurrent(session) &&
     organization === store.orgId &&
-    generation === formGeneration &&
+    generation === formGeneration.value &&
     drawerVisible.value
   if (!store.canEdit(editingItem.value ?? undefined) || submitting.value) return
   // 只拦截"已选择但当前组织不可用"的依赖；未选择（null）由表单/轮次必填校验负责提示
@@ -496,11 +492,11 @@ watch(
   { flush: 'sync' },
 )
 onBeforeUnmount(() => {
-  formGeneration++
+  formGeneration.value++
 })
 watch(drawerVisible, (visible) => {
   if (!visible) {
-    formGeneration++
+    formGeneration.value++
     submitting.value = false
   }
 })
@@ -667,6 +663,16 @@ useStoreErrorToast(
               {{ idx + 1 }}
             </span>
             {{ modeLabel(round.mode) }}
+            <span
+              v-if="
+                round.mode === 'translate' &&
+                round.translate?.inline_term_extraction?.enabled === true
+              "
+              data-testid="inline-term-extraction-badge"
+              class="border-l border-current/20 pl-1.5"
+            >
+              {{ t('executionPlanEditor.round.inlineTermExtraction.enabledBadge') }}
+            </span>
           </span>
         </div>
 
@@ -756,7 +762,7 @@ useStoreErrorToast(
             :backends="backendOptions"
             :prompt-templates="promptTemplateOptions"
             :bootstrap-prompt-templates="bootstrapPromptTemplateOptions"
-            :disabled="isSystemScope || submitting"
+            :disabled="isSystemScope || submitting || !dependenciesLoaded"
             @update:rounds="formModel.rounds = $event"
             @update:ruby-retry="formModel.ruby_retry = $event"
           />
@@ -775,7 +781,13 @@ useStoreErrorToast(
             :disabled="
               submitting ||
               !dependenciesLoaded ||
-              formModel.rounds.some((round) => Boolean(validateRoundCodes(round)))
+              formModel.rounds.some(
+                (round) =>
+                  Boolean(validateRoundCodes(round)) ||
+                  (round.mode === 'translate' &&
+                    validateInlineTermExtractionConfig(round.translate?.inline_term_extraction)
+                      .length > 0),
+              )
             "
             @click="onSubmit"
           >

@@ -5,7 +5,11 @@ import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import {
+  cloneExecutionPlanValue,
+  createExecutionPlanRound,
   createRoundCodeSelection,
+  createRoundModeSelection,
+  mergeTranslateRoundConfig,
   roundCodes,
   setRoundCodes,
   validateRoundCodes,
@@ -39,21 +43,11 @@ type ReviseSegmentScope = ReviseRoundConfig['segment_scope']
 type ReviseIssueCode = NonNullable<ReviseRoundConfig['issue_codes']>[number]
 
 type RoundModel = ExecutionPlanFormRound
-type FormTranslateConfig = NonNullable<RoundModel['translate']>
 type FormExtractConfig = NonNullable<RoundModel['extract']>
 
 // ─── 默认值 ──────────────────────────────────────────────────
 
 const DEFAULT_RETRY: RetryConfig = { max_attempts: 3, backoff_ms: 2000, jitter: true }
-
-const DEFAULT_TRANSLATE: FormTranslateConfig = {
-  prompt_template_id: null,
-  batch_size: 10,
-  max_words_per_batch: 0,
-  fallback_shrink: 1,
-  segment_filter: { status_filter: 'pending_only' },
-  retry: { ...DEFAULT_RETRY },
-}
 
 const DEFAULT_EXTRACT: FormExtractConfig = {
   template_id: null,
@@ -101,13 +95,6 @@ const DEFAULT_CORRECT: CorrectRoundConfig = {
   })),
 }
 
-const DEFAULT_ROUND: RoundModel = {
-  mode: 'translate',
-  backend_id: null,
-  concurrency: 3,
-  translate: { ...DEFAULT_TRANSLATE },
-}
-
 const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
   enabled: false,
   backend_id: null,
@@ -117,25 +104,7 @@ const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
 // ─── 工具函数 ────────────────────────────────────────────────
 
 function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
-}
-
-function mergeTranslate(source?: Partial<FormTranslateConfig>): FormTranslateConfig {
-  if (!source) return deepClone(DEFAULT_TRANSLATE)
-  return {
-    prompt_template_id: source.prompt_template_id ?? DEFAULT_TRANSLATE.prompt_template_id,
-    batch_size: source.batch_size ?? DEFAULT_TRANSLATE.batch_size,
-    max_words_per_batch: source.max_words_per_batch ?? DEFAULT_TRANSLATE.max_words_per_batch,
-    fallback_shrink: source.fallback_shrink ?? DEFAULT_TRANSLATE.fallback_shrink,
-    segment_filter: {
-      status_filter: source.segment_filter?.status_filter ?? 'pending_only',
-    },
-    retry: {
-      max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
-      backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
-      jitter: source.retry?.jitter ?? DEFAULT_RETRY.jitter,
-    },
-  }
+  return cloneExecutionPlanValue(obj)
 }
 
 function mergeExtract(source?: Partial<FormExtractConfig>): FormExtractConfig {
@@ -217,13 +186,14 @@ function mergeCorrect(source?: Partial<CorrectRoundConfig>): CorrectRoundConfig 
 }
 
 function mergeRound(source?: Partial<RoundModel>): RoundModel {
-  if (!source) return deepClone(DEFAULT_ROUND)
+  if (!source) return createExecutionPlanRound()
+  const defaults = createExecutionPlanRound()
   const mode = source.mode ?? 'translate'
   return {
     mode,
-    backend_id: source.backend_id ?? DEFAULT_ROUND.backend_id,
-    concurrency: source.concurrency ?? DEFAULT_ROUND.concurrency,
-    translate: mode === 'translate' ? mergeTranslate(source.translate) : undefined,
+    backend_id: source.backend_id ?? defaults.backend_id,
+    concurrency: source.concurrency ?? defaults.concurrency,
+    translate: mode === 'translate' ? mergeTranslateRoundConfig(source.translate) : undefined,
     extract: mode === 'extract' ? mergeExtract(source.extract) : undefined,
     adjudicate: mode === 'adjudicate' ? mergeAdjudicate(source.adjudicate) : undefined,
     semantic_qa: mode === 'semantic_qa' ? mergeSemanticQA(source.semantic_qa) : undefined,
@@ -283,6 +253,37 @@ const { t } = useI18n()
 const roundsModel = ref<RoundModel[]>(props.rounds.map((r) => mergeRound(r)))
 const rubyRetryModel = ref<ExecutionPlanFormRubyRetry>(mergeRubyRetry(props.rubyRetry))
 
+const roundKeys = new WeakMap<RoundModel, number>()
+let nextRoundKey = 0
+const roundKey = (round: RoundModel): number => {
+  let key = roundKeys.get(round)
+  if (key === undefined) {
+    key = nextRoundKey++
+    roundKeys.set(round, key)
+  }
+  return key
+}
+
+// Preserve the local identities used by mode/code drafts when the parent echoes or normalizes
+// the current form. The page remounts this editor for a new form or organization.
+const reconcileRounds = (incoming: RoundModel[]): RoundModel[] => {
+  const previous = roundsModel.value
+  const available = new Set(previous)
+  const matches = incoming.map((source) => {
+    const json = JSON.stringify(source)
+    const match = previous.find((round) => available.has(round) && JSON.stringify(round) === json)
+    if (match) available.delete(match)
+    return match
+  })
+  return incoming.map((source, index) => {
+    const match = matches[index] ?? (available.has(previous[index]!) ? previous[index] : undefined)
+    if (!match) return mergeRound(source)
+    available.delete(match)
+    Object.assign(match, mergeRound(source))
+    return match
+  })
+}
+
 let lastRoundsJson = JSON.stringify(props.rounds ?? [])
 let lastRubyRetryJson = JSON.stringify(props.rubyRetry ?? {})
 
@@ -291,7 +292,7 @@ watch(
   (newVal) => {
     const json = JSON.stringify(newVal ?? [])
     if (json === lastRoundsJson) return
-    roundsModel.value = (newVal ?? []).map((r) => mergeRound(r))
+    roundsModel.value = reconcileRounds(newVal ?? [])
   },
   { deep: true },
 )
@@ -444,32 +445,21 @@ const modeLabel = (mode: RoundMode): string => {
   return t('executionPlanEditor.round.modeCorrect')
 }
 
+const chooseRoundMode = createRoundModeSelection(mergeRound)
 const switchRoundMode = (round: RoundModel, mode: RoundMode): void => {
-  if (round.mode === mode) return
-  round.mode = mode
-  round.translate = undefined
-  round.extract = undefined
-  round.adjudicate = undefined
-  round.semantic_qa = undefined
-  round.revise = undefined
-  round.correct = undefined
-  if (mode === 'translate') {
-    round.translate = deepClone(DEFAULT_TRANSLATE)
-  } else if (mode === 'extract') {
-    round.extract = deepClone(DEFAULT_EXTRACT)
-  } else if (mode === 'adjudicate') {
-    round.adjudicate = deepClone(DEFAULT_ADJUDICATE)
-  } else if (mode === 'semantic_qa') {
-    round.semantic_qa = deepClone(DEFAULT_SEMANTIC_QA)
-  } else if (mode === 'revise') {
-    round.revise = deepClone(DEFAULT_REVISE)
-  } else if (mode === 'correct') {
-    round.correct = deepClone(DEFAULT_CORRECT)
-  }
+  if (!props.disabled) chooseRoundMode(round, mode)
+}
+
+const updateInlineTermExtraction = (
+  round: RoundModel,
+  config: ApiSchemas['InlineTermExtractionConfig'],
+): void => {
+  if (props.disabled || round.mode !== 'translate' || !round.translate) return
+  round.translate.inline_term_extraction = config
 }
 
 const addRound = (): void => {
-  roundsModel.value.push(deepClone(DEFAULT_ROUND))
+  roundsModel.value.push(createExecutionPlanRound())
   emitUpdate()
 }
 
@@ -548,10 +538,10 @@ const emitUpdate = (): void => {
     <ConfigSectionPanel
       v-for="(round, index) in roundsModel"
       data-testid="execution-round"
-      :key="index"
+      :key="roundKey(round)"
     >
       <template #title>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <span
             class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
             :class="modeBadgeClass(round.mode)"
@@ -559,6 +549,16 @@ const emitUpdate = (): void => {
             {{ index + 1 }}
           </span>
           <span class="text-sm font-semibold text-lf-text-strong">{{ modeLabel(round.mode) }}</span>
+          <span
+            v-if="
+              round.mode === 'translate' &&
+              round.translate?.inline_term_extraction?.enabled === true
+            "
+            data-testid="inline-term-extraction-badge"
+            class="rounded-full bg-lf-accent-amber-soft px-2 py-0.5 text-xs font-medium text-lf-accent-amber"
+          >
+            {{ t('executionPlanEditor.round.inlineTermExtraction.enabledBadge') }}
+          </span>
         </div>
       </template>
       <template #actions>
@@ -611,6 +611,7 @@ const emitUpdate = (): void => {
         </div>
         <NRadioGroup
           :value="round.mode"
+          :aria-label="t('executionPlanEditor.round.mode')"
           size="small"
           :disabled="disabled"
           @update:value="(v: RoundMode) => switchRoundMode(round, v)"
@@ -633,6 +634,7 @@ const emitUpdate = (): void => {
           </div>
           <NSelect
             v-model:value="round.backend_id"
+            :aria-label="t('executionPlanEditor.round.backend')"
             :options="backends"
             size="small"
             :disabled="disabled"
@@ -647,6 +649,7 @@ const emitUpdate = (): void => {
           </div>
           <NInputNumber
             v-model:value="round.concurrency"
+            :input-props="{ 'aria-label': t('executionPlanEditor.round.concurrency') }"
             :min="1"
             :max="100"
             size="small"
@@ -681,6 +684,7 @@ const emitUpdate = (): void => {
             </div>
             <NInputNumber
               v-model:value="round.translate.batch_size"
+              :input-props="{ 'aria-label': t('executionPlanEditor.round.batchSize') }"
               :min="0"
               :max="10000"
               size="small"
@@ -747,7 +751,11 @@ const emitUpdate = (): void => {
         </div>
 
         <!-- 高级配置（可折叠） -->
-        <RoundAdvancedSettings :round="round" :disabled="disabled" />
+        <RoundAdvancedSettings
+          :round="round"
+          :disabled="disabled"
+          @update:inline-term-extraction="(value) => updateInlineTermExtraction(round, value)"
+        />
       </template>
 
       <!-- 术语抽取模式配置 -->
@@ -760,6 +768,7 @@ const emitUpdate = (): void => {
             </div>
             <NSelect
               v-model:value="round.extract.template_id"
+              :aria-label="t('executionPlanEditor.round.extractTemplate')"
               :options="bootstrapPromptTemplates"
               size="small"
               :disabled="disabled"
@@ -774,6 +783,7 @@ const emitUpdate = (): void => {
             </div>
             <NInputNumber
               v-model:value="round.extract.min_source_len"
+              :input-props="{ 'aria-label': t('executionPlanEditor.round.extractMinSourceLen') }"
               :min="1"
               :max="100"
               size="small"
@@ -810,6 +820,7 @@ const emitUpdate = (): void => {
               </div>
               <NInputNumber
                 v-model:value="round.extract.batch_size"
+                :input-props="{ 'aria-label': t('executionPlanEditor.round.extractBatchSize') }"
                 :min="0"
                 :max="10000"
                 size="small"
@@ -826,6 +837,9 @@ const emitUpdate = (): void => {
               </div>
               <NInputNumber
                 v-model:value="round.extract.max_words_per_batch"
+                :input-props="{
+                  'aria-label': t('executionPlanEditor.round.extractMaxWordsPerBatch'),
+                }"
                 :min="0"
                 :max="100000"
                 size="small"
@@ -843,6 +857,7 @@ const emitUpdate = (): void => {
             </div>
             <NInputNumber
               v-model:value="round.extract.max_terms_per_1000_chars"
+              :input-props="{ 'aria-label': t('executionPlanEditor.round.extractMaxTerms') }"
               :min="0"
               :max="1000"
               :step="0.1"

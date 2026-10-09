@@ -12,6 +12,7 @@ import {
   parseOrganizationId,
 } from '@/utils/organization-scope'
 import { clearUnavailablePlanDependencies } from '@/utils/organization-copy'
+import type { ExecutionPlanFormRound } from '@/utils/execution-plan-config'
 
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
 const scopes: ReturnType<typeof effectScope>[] = []
@@ -88,6 +89,46 @@ describe('organization identity and permission boundaries', () => {
     expect(copy.rounds[1]?.extract?.template_id).toBe(null)
     expect(draft.ruby_retry.backend_id).toBe(9)
     expect(draft.rounds[1]?.extract?.template_id).toBe(9)
+  })
+  it('preserves independent inline extraction settings and absence while clearing copied dependencies', () => {
+    const enabled = {
+      enabled: true,
+      max_terms_per_1000_words: 7.5,
+      min_source_len: 4,
+      conflict_strategy: 'off' as const,
+    }
+    const disabled = { ...enabled, enabled: false, max_terms_per_1000_words: 0.125 }
+    const rounds: ExecutionPlanFormRound[] = [enabled, disabled, undefined].map((inline) => ({
+      mode: 'translate',
+      backend_id: 9,
+      concurrency: 2,
+      translate: {
+        prompt_template_id: 9,
+        batch_size: 10,
+        fallback_shrink: 1,
+        ...(inline === undefined ? {} : { inline_term_extraction: inline }),
+      },
+    }))
+    const draft = { profile_id: 9, ruby_retry: { enabled: false }, rounds }
+    const original = structuredClone(draft)
+    const copy = clearUnavailablePlanDependencies(draft, {
+      profiles: [],
+      backends: [],
+      prompts: [],
+      bootstrap: [],
+    })
+
+    expect(copy.profile_id).toBeNull()
+    for (const round of copy.rounds) {
+      expect(round.backend_id).toBeNull()
+      expect(round.translate?.prompt_template_id).toBeNull()
+    }
+    expect(copy.rounds[0]!.translate!.inline_term_extraction).toEqual(enabled)
+    expect(copy.rounds[1]!.translate!.inline_term_extraction).toEqual(disabled)
+    expect(copy.rounds[2]!.translate).not.toHaveProperty('inline_term_extraction')
+    copy.rounds[0]!.translate!.inline_term_extraction!.min_source_len = 8
+    expect(copy.rounds[1]!.translate!.inline_term_extraction!.min_source_len).toBe(4)
+    expect(draft).toEqual(original)
   })
 })
 

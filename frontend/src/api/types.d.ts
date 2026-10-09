@@ -3713,7 +3713,7 @@ export interface components {
                 [key: string]: unknown;
             };
             /**
-             * @description 是否启用术语表
+             * @description 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
              * @default false
              */
             glossary_enabled: boolean;
@@ -3734,7 +3734,7 @@ export interface components {
                 [key: string]: unknown;
             };
             /**
-             * @description 是否启用术语表
+             * @description 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
              * @default false
              */
             glossary_enabled?: boolean;
@@ -3746,7 +3746,7 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
-            /** @description 是否启用术语表 */
+            /** @description 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。 */
             glossary_enabled?: boolean;
             source_lang?: string;
             target_lang?: string;
@@ -4051,8 +4051,7 @@ export interface components {
             owner_org_id?: number;
             /**
              * @description 策略模板 ID（ExecutionProfile 单表全局唯一；允许内置负 ID，如 -1 内置默认策略）。
-             *     计划级策略引用：为全管道（所有改写型轮次与引擎级行为）供
-             *     protect/ruby/postprocess/repair/glossary/context/qa 七项行为预设，
+             *     计划级策略引用：为全管道（所有改写型轮次与引擎级行为）提供策略预设，
              *     任务创建时整体冻结进执行快照。
              */
             profile_id: number;
@@ -4062,6 +4061,37 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+        };
+        /**
+         * @description 翻译轮次的高级选项：在同一次模型请求中返回译文和新术语，供后续批次使用。
+         *     省略或 enabled=false 时不抽取新术语，仍按项目设置使用已有术语表。
+         *     关联项目时，项目 glossary_enabled 为总开关；false 时不应用术语表，也不执行内联提取，轮次配置仍然保存。
+         *     无项目的即时翻译按轮次配置和请求中的术语表决定是否启用术语功能。
+         */
+        InlineTermExtractionConfig: {
+            /**
+             * @description 是否在本翻译轮次的模型请求中同时抽取新术语；关联项目时还须启用项目术语表总开关
+             * @default false
+             */
+            enabled?: boolean;
+            /**
+             * Format: double
+             * @description 每 1000 源文字词的术语抽取上限系数；CJK 按字、其他文本按词计数，必须大于 0
+             * @default 3
+             */
+            max_terms_per_1000_words?: number;
+            /**
+             * @description 抽取术语源文的最短字符数（按 rune 计）
+             * @default 2
+             */
+            min_source_len?: number;
+            /**
+             * @description 内联提取生效时，新术语与已确认术语冲突的处理方式。
+             *     rewrite-local：按已确认术语改写本批译文；off：仅关闭冲突改写，仍然抽取和合并新术语。
+             * @default rewrite-local
+             * @enum {string}
+             */
+            conflict_strategy?: "off" | "rewrite-local";
         };
         AdminUserListResponse: {
             items: components["schemas"]["User"][];
@@ -4124,7 +4154,7 @@ export interface components {
             org_id?: number;
             name: string;
             description?: string;
-            /** @description 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道供七项行为预设 */
+            /** @description 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道提供策略预设 */
             profile_id: number;
             ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds: components["schemas"]["ExecutionRoundConfig"][];
@@ -4157,12 +4187,16 @@ export interface components {
              */
             execution_plan_id: number;
             /**
-             * @description 可选项目 ID。提供时仅复用项目的术语表与语言配置(若请求未显式覆盖),
+             * @description 可选项目 ID。提供时复用项目的语言配置(若请求未显式覆盖),
+             *     术语应用与抽取遵守项目 glossary_enabled 总开关；关闭时也不应用请求中的临时术语表。
              *     并校验 actor 对该项目的访问权;执行计划本身仍与项目无关,不因 project_id
-             *     改变授权路径。省略时为纯即时翻译,使用请求体内联术语表。
+             *     改变授权路径。省略时为纯即时翻译,按轮次配置和请求体术语表决定术语功能。
              */
             project_id?: number | null;
-            /** @description 内联临时术语表(纯内存,翻译完即丢)。项目场景下叠加在项目术语表之上。 */
+            /**
+             * @description 临时术语表(纯内存,翻译完即丢)。无项目时按请求应用；项目场景下仅在
+             *     glossary_enabled=true 时叠加在项目术语表之上，总开关关闭时不应用此列表。
+             */
             glossary?: components["schemas"]["QuickGlossaryEntry"][];
         };
         QuickTranslateResponse: {
@@ -4202,8 +4236,8 @@ export interface components {
             mode: string;
             backend?: string;
             /**
-             * @description 轮次执行结果。skipped 表示该轮因目标段状态不满足 segment_filter 而被跳过
-             *     （仅多轮计划的后续 translate 轮可能产生），其译文沿用上一轮结果。
+             * @description 轮次执行结果。skipped 表示翻译轮次因目标段状态不满足 segment_filter 而被跳过，
+             *     或独立抽取轮次因关联项目关闭术语表而被跳过；其译文沿用上一轮结果。
              * @enum {string}
              */
             status: "success" | "partial" | "failed" | "skipped";
@@ -4478,10 +4512,14 @@ export interface components {
         StorageDiagnostics: {
             disks: components["schemas"]["StorageDiskDiagnostic"][];
             spaces: components["schemas"]["StorageSpaceDiagnostics"][];
+            /** @description 下一页游标，取上一页最后一个空间 ID。仅在还有更多空间时返回，否则省略该字段。 */
             next_cursor?: number;
             /** Format: int64 */
             temporary_bytes: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 最早一条未完结写入的创建时间。没有未完结写入时省略该字段。
+             */
             oldest_intent_at?: string;
             recovery_backlog: number;
             blocked_cleanup_by_code: {
@@ -4490,6 +4528,7 @@ export interface components {
             migrations_by_phase: {
                 [key: string]: number;
             };
+            /** @description 最近一次备份的摘要。尚无备份记录时省略该字段。 */
             latest_backup?: {
                 id: number;
                 /** @enum {string} */
@@ -5294,8 +5333,13 @@ export interface components {
             fallback_shrink: number;
             /** @description 段落过滤配置；省略时默认 pending_only */
             segment_filter?: components["schemas"]["TranslateSegmentFilterConfig"];
+            inline_term_extraction?: components["schemas"]["InlineTermExtractionConfig"];
             retry?: components["schemas"]["RetryConfig"];
         };
+        /**
+         * @description 独立术语抽取轮次配置。关联项目 glossary_enabled=false 时跳过本轮，轮次配置仍然保存。
+         *     无项目的即时翻译按轮次配置执行。
+         */
         ExtractRoundConfig: {
             /**
              * @description 术语抽取提示词模板 ID（BootstrapPromptTemplate）。必填：省略或 0 会被后端拒绝（不规范化）。
@@ -5361,7 +5405,7 @@ export interface components {
         /**
          * @description 修订轮次配置。LLM 对已有译文做最小改动定点修订，修复段落上 pending 的语义 issue
          *     （误译、仿译、漏译等）。system prompt 内置不可见，无 prompt_template_id；
-         *     protect/ruby 及引擎级策略（repair/QA/glossary）经计划级策略引用（profile_id）
+         *     protect/ruby 及引擎级策略（repair/QA）经计划级策略引用（profile_id）
          *     贯穿所有改写型轮次，无需也不依赖计划内 translate 轮的存在。
          *     写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。
          */
@@ -5466,28 +5510,6 @@ export interface components {
             placeholder_normalize: boolean;
             prompt_upgrade: boolean;
         };
-        ProfileBootstrapConfig: {
-            /**
-             * @description 是否启用内联自举
-             * @default false
-             */
-            enabled: boolean;
-            /**
-             * Format: double
-             * @description 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
-             */
-            max_terms_per_1000_chars: number;
-            /** @description 内联自举术语源文最短字符数 */
-            min_source_len: number;
-            /**
-             * @description 并发术语冲突处理策略
-             * @enum {string}
-             */
-            inline_conflict_strategy: "off" | "rewrite-local";
-        };
-        ProfileGlossaryConfig: {
-            bootstrap: components["schemas"]["ProfileBootstrapConfig"];
-        };
         ProfileContextConfig: {
             /**
              * @description 是否启用上下文窗口
@@ -5552,7 +5574,6 @@ export interface components {
             ruby?: components["schemas"]["ProfileRubyConfig"];
             postprocess: components["schemas"]["ProfilePostprocessConfig"];
             repair: components["schemas"]["ProfileRepairConfig"];
-            glossary: components["schemas"]["ProfileGlossaryConfig"];
             context: components["schemas"]["ProfileContextConfig"];
             qa?: components["schemas"]["ProfileQAConfig"];
         };
@@ -5580,28 +5601,6 @@ export interface components {
             schema_aliases?: boolean;
             placeholder_normalize?: boolean;
             prompt_upgrade?: boolean;
-        };
-        ProfileBootstrapConfigInput: {
-            /**
-             * @description 是否启用内联自举
-             * @default false
-             */
-            enabled?: boolean;
-            /**
-             * Format: double
-             * @description 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
-             */
-            max_terms_per_1000_chars?: number;
-            /** @description 内联自举术语源文最短字符数 */
-            min_source_len?: number;
-            /**
-             * @description 并发术语冲突处理策略
-             * @enum {string}
-             */
-            inline_conflict_strategy?: "off" | "rewrite-local";
-        };
-        ProfileGlossaryConfigInput: {
-            bootstrap?: components["schemas"]["ProfileBootstrapConfigInput"];
         };
         ProfileContextConfigInput: {
             /**
@@ -5667,7 +5666,6 @@ export interface components {
             ruby?: components["schemas"]["ProfileRubyConfigInput"];
             postprocess?: components["schemas"]["ProfilePostprocessConfigInput"];
             repair?: components["schemas"]["ProfileRepairConfigInput"];
-            glossary?: components["schemas"]["ProfileGlossaryConfigInput"];
             context?: components["schemas"]["ProfileContextConfigInput"];
             qa?: components["schemas"]["ProfileQAConfigInput"];
         };

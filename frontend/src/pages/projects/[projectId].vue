@@ -758,6 +758,7 @@ onMounted(() => {
       :submitting="workspace.creatingJob"
       :segment-count="drawerSegmentCount"
       :selected-plan-template="jobMgmt.selectedPlanTemplate.value"
+      :project-glossary-enabled="workspace.project?.glossary_enabled"
       @update:execution-plan-id="(val) => (jobMgmt.jobForm.execution_plan_id = val)"
       @update:auto-approve="(val) => (jobMgmt.jobForm.auto_approve = val)"
       @update:segment-filter="(val) => (jobMgmt.jobForm.segment_filter = val)"
@@ -780,6 +781,7 @@ onMounted(() => {
       ref="segmentTranslationPreviewDrawerRef"
       v-model:show="segmentTranslationPreviewVisible"
       :project-id="projectId"
+      :project-glossary-enabled="workspace.project?.glossary_enabled"
       :text-render-mode="
         workspace.activeResource?.format === 'epub' ||
         workspace.activeResource?.format === 'docx' ||
