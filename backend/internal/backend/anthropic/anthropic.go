@@ -249,6 +249,14 @@ func (b *Backend) Close() error { return nil }
 // wrapAnthropicError 将 Anthropic SDK 错误包装为 backend.StatusError。
 // 与 OpenAI 类似，apierror.Error 在 internal 包中。
 func wrapAnthropicError(err error) error {
+	var apiErr *sdk.Error
+	if errors.As(err, &apiErr) {
+		var headers http.Header
+		if apiErr.Response != nil {
+			headers = apiErr.Response.Header
+		}
+		return backend.WrapHTTPError("anthropic: messages", err, apiErr.StatusCode, headers)
+	}
 	return backend.WrapUpstreamError("anthropic: messages", err)
 }
 
@@ -350,6 +358,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	}
 	clientOpts := []option.RequestOption{
 		option.WithAPIKey(apiKey),
+		option.WithMaxRetries(0),
 		option.WithHeader("User-Agent", backend.ClientUserAgent()),
 		option.WithHeader("X-Client-Name", backend.ClientName()),
 		option.WithHeader("X-Client-Version", backend.ClientVersion()),
