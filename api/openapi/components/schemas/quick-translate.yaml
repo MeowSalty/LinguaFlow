@@ -24,12 +24,15 @@ QuickTranslateRequest:
       type: integer
       nullable: true
       description: |
-        可选项目 ID。提供时仅复用项目的术语表与语言配置(若请求未显式覆盖),
+        可选项目 ID。提供时复用项目的语言配置(若请求未显式覆盖),
+        术语应用与抽取遵守项目 glossary_enabled 总开关；关闭时也不应用请求中的临时术语表。
         并校验 actor 对该项目的访问权;执行计划本身仍与项目无关,不因 project_id
-        改变授权路径。省略时为纯即时翻译,使用请求体内联术语表。
+        改变授权路径。省略时为纯即时翻译,按轮次配置和请求体术语表决定术语功能。
     glossary:
       type: array
-      description: 内联临时术语表(纯内存,翻译完即丢)。项目场景下叠加在项目术语表之上。
+      description: |
+        临时术语表(纯内存,翻译完即丢)。无项目时按请求应用；项目场景下仅在
+        glossary_enabled=true 时叠加在项目术语表之上，总开关关闭时不应用此列表。
       items:
         $ref: '#/QuickGlossaryEntry'
 
@@ -109,8 +112,8 @@ QuickRoundSummary:
       type: string
       enum: [success, partial, failed, skipped]
       description: |
-        轮次执行结果。skipped 表示该轮因目标段状态不满足 segment_filter 而被跳过
-        （仅多轮计划的后续 translate 轮可能产生），其译文沿用上一轮结果。
+        轮次执行结果。skipped 表示翻译轮次因目标段状态不满足 segment_filter 而被跳过，
+        或独立抽取轮次因关联项目关闭术语表而被跳过；其译文沿用上一轮结果。
     duration_ms:
       type: integer
 

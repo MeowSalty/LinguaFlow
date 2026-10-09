@@ -43,13 +43,7 @@ func TestBuildEngineConfigReadsTopLevelStrategy(t *testing.T) {
 		Strategy: service.StrategySnapshot{
 			Repair: schema.ProfileRepairConfig{Enabled: true, JSONStructural: true},
 			Ruby:   schema.ProfileRubyConfig{Enabled: true, PreserveKinds: []string{"phonetic"}},
-			Glossary: schema.ProfileGlossaryConfig{Bootstrap: schema.ProfileBootstrapConfig{
-				Enabled:                true,
-				MaxTermsPer1000Chars:   5.0,
-				MinSourceLen:           2,
-				InlineConflictStrategy: "rewrite-local",
-			}},
-			QA: schema.ProfileQAConfig{Enabled: true, AutoReject: true, LengthMethod: "ratio"},
+			QA:     schema.ProfileQAConfig{Enabled: true, AutoReject: true, LengthMethod: "ratio"},
 		},
 		// 快照不含 translate 轮：旧实现扫描第一条 translate 轮会落空，新实现读顶层。
 		Rounds: []service.JobRoundSnapshot{
@@ -64,10 +58,6 @@ func TestBuildEngineConfigReadsTopLevelStrategy(t *testing.T) {
 	}
 	if !cfg.Ruby.Enabled || len(cfg.Ruby.PreserveKinds) != 1 || cfg.Ruby.PreserveKinds[0] != "phonetic" {
 		t.Errorf("cfg.Ruby = %+v，want enabled + [phonetic]", cfg.Ruby)
-	}
-	if !cfg.Glossary.Bootstrap.Enabled || cfg.Glossary.Bootstrap.MaxTermsPer1000Chars != 5.0 ||
-		cfg.Glossary.Bootstrap.MinSourceLen != 2 || cfg.Glossary.Bootstrap.InlineConflictStrategy != "rewrite-local" {
-		t.Errorf("cfg.Glossary.Bootstrap = %+v，未按顶层 Strategy 注入", cfg.Glossary.Bootstrap)
 	}
 	if !cfg.QA.Enabled || !cfg.QA.AutoReject || string(cfg.QA.LengthMethod) != "ratio" {
 		t.Errorf("cfg.QA = %+v，未按顶层 Strategy 注入", cfg.QA)

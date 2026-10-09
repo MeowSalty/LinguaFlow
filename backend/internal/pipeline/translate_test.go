@@ -274,7 +274,7 @@ func TestCountWords(t *testing.T) {
 }
 
 func TestCalcMaxBootstrapTerms_UsesCountWords(t *testing.T) {
-	h := &TranslateHandler{MaxTermsPer1000Chars: 3.0}
+	h := &TranslateHandler{MaxTermsPer1000Words: 3.0}
 	// CJK: 4 字 → 4 words → ceil(4/1000*3) = 1
 	got := h.calcMaxBootstrapTerms([]string{"你好世界"})
 	if got != 1 {
@@ -325,7 +325,7 @@ func TestAbsorbInlineGlossary_RewritesConflictInBatch(t *testing.T) {
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Chars:   3.0,
+		MaxTermsPer1000Words:   3.0,
 		InlineConflictStrategy: InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
@@ -359,7 +359,7 @@ func TestAbsorbInlineGlossary_StrategyOffKeepsConflict(t *testing.T) {
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Chars:   3.0,
+		MaxTermsPer1000Words:   3.0,
 		InlineConflictStrategy: InlineConflictOff,
 	}
 	entries := []prompt.BootstrapEntry{
@@ -379,7 +379,7 @@ func TestAbsorbInlineGlossary_NoConflictNoChange(t *testing.T) {
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Chars:   3.0,
+		MaxTermsPer1000Words:   3.0,
 		InlineConflictStrategy: InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
@@ -400,7 +400,7 @@ func TestAbsorbInlineGlossary_SameTargetIsNoop(t *testing.T) {
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Chars:   3.0,
+		MaxTermsPer1000Words:   3.0,
 		InlineConflictStrategy: InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
@@ -421,7 +421,7 @@ func TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations(t *testing.T) 
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Chars:   3.0,
+		MaxTermsPer1000Words:   3.0,
 		InlineConflictStrategy: InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{

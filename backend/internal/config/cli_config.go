@@ -74,12 +74,13 @@ type CLIConfigRound struct {
 	Revise    *CLIConfigReviseRound    `yaml:"revise,omitempty"`
 }
 type CLIConfigTranslateRound struct {
-	Prompt           string      `yaml:"prompt"`
-	BatchSize        int         `yaml:"batch_size"`
-	MaxWordsPerBatch int         `yaml:"max_words_per_batch"`
-	Concurrency      int         `yaml:"concurrency"`
-	FallbackShrink   float64     `yaml:"fallback_shrink"`
-	Retry            RetryConfig `yaml:"retry"`
+	Prompt               string                                `yaml:"prompt"`
+	BatchSize            int                                   `yaml:"batch_size"`
+	MaxWordsPerBatch     int                                   `yaml:"max_words_per_batch"`
+	Concurrency          int                                   `yaml:"concurrency"`
+	FallbackShrink       float64                               `yaml:"fallback_shrink"`
+	Retry                RetryConfig                           `yaml:"retry"`
+	InlineTermExtraction *execution.InlineTermExtractionConfig `yaml:"inline_term_extraction,omitempty"`
 }
 type CLIConfigExtractRound struct {
 	Template             string      `yaml:"template"`
@@ -268,7 +269,12 @@ func ResolveCLIConfig(in CLIInputs) (*CLIConfig, error) {
 				return nil, fmt.Errorf("execution.rounds[%d] requires translate settings", i)
 			}
 			defaults := CLIConfigTranslateRound{BatchSize: 1, Concurrency: 4, FallbackShrink: 0.5, Retry: defaultCLIRetry()}
-			if err := strictTranslationDecode(mappingValue(node, "translate"), &defaults, fmt.Sprintf("execution.rounds[%d].translate", i)); err != nil {
+			translateNode := mappingValue(node, "translate")
+			if mappingValue(translateNode, "inline_term_extraction") != nil {
+				inline := execution.DefaultInlineTermExtraction()
+				defaults.InlineTermExtraction = &inline
+			}
+			if err := strictTranslationDecode(translateNode, &defaults, fmt.Sprintf("execution.rounds[%d].translate", i)); err != nil {
 				return nil, err
 			}
 			if ref := mappingValue(mappingValue(node, "translate"), "prompt"); ref != nil && strings.TrimSpace(ref.Value) == "" {
@@ -397,6 +403,9 @@ func ValidateCLIConfig(cfg *CLIConfig) error {
 			batch, words, concurrency, retry = t.BatchSize, t.MaxWordsPerBatch, t.Concurrency, t.Retry
 			if t.FallbackShrink <= 0 || t.FallbackShrink > 1 {
 				return fmt.Errorf("execution.rounds[%d] fallback_shrink must be in (0,1]", i)
+			}
+			if err := execution.ValidateInlineTermExtraction(t.InlineTermExtraction); err != nil {
+				return fmt.Errorf("execution.rounds[%d].translate.%w", i, err)
 			}
 		case "extract":
 			if r.Extract == nil {

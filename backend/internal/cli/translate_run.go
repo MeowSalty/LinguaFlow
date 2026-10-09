@@ -168,7 +168,7 @@ func resolveCLIExecution(cfg *config.CLIConfig) (result *cliExecution, err error
 		SourceLang:        cfg.SourceLang, TargetLang: cfg.TargetLang, GlossaryEnabled: cfg.Glossary.Enabled,
 		Strategy: execution.StrategySnapshot{
 			ProfileName: cfg.Execution.Profile, Protect: profile.Protect, Postprocess: profile.Postprocess, Repair: profile.Repair,
-			Glossary: profile.Glossary, Context: profile.Context, Ruby: profile.Ruby, QA: profile.QA,
+			Context: profile.Context, Ruby: profile.Ruby, QA: profile.QA,
 		},
 		RubyTemplates: execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate},
 	}
@@ -189,7 +189,7 @@ func resolveCLIExecution(cfg *config.CLIConfig) (result *cliExecution, err error
 				}
 				content = p.Content
 			}
-			round.Translate = &execution.JobTranslateRoundSnapshot{Prompt: execution.PromptSnapshot{TemplateName: t.Prompt, Content: content}, BatchSize: t.BatchSize, MaxWordsPerBatch: t.MaxWordsPerBatch, Concurrency: t.Concurrency, FallbackShrink: t.FallbackShrink, SegmentFilter: &execution.SegmentFilterSnapshot{StatusFilter: "pending_only"}, Retry: execution.RetryConfig(t.Retry)}
+			round.Translate = &execution.JobTranslateRoundSnapshot{Prompt: execution.PromptSnapshot{TemplateName: t.Prompt, Content: content}, BatchSize: t.BatchSize, MaxWordsPerBatch: t.MaxWordsPerBatch, Concurrency: t.Concurrency, FallbackShrink: t.FallbackShrink, SegmentFilter: &execution.SegmentFilterSnapshot{StatusFilter: "pending_only"}, Retry: execution.RetryConfig(t.Retry), InlineTermExtraction: t.InlineTermExtraction}
 		case "extract":
 			e := r.Extract
 			content := templates.EmbeddedBootstrapTemplate()

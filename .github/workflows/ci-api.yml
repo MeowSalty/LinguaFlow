@@ -76,8 +76,18 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      - name: 检查 OpenAPI 生成文件一致性
-        run: task openapi:check
+      - name: 校验 OpenAPI bundle 一致性
+        if: github.event_name != 'pull_request' || github.head_ref != 'frontend'
+        run: task openapi:check:api
+
+      - name: 校验后端生成物一致性
+        if: github.event_name != 'pull_request' || github.head_ref != 'frontend'
+        run: task openapi:check:backend
+
+      - name: 校验前端生成物一致性
+        if: github.head_ref == 'frontend'
+        run: task openapi:check:frontend
 
       - name: 检查 ent 生成文件一致性
+        if: github.event_name != 'pull_request' || github.head_ref != 'frontend'
         run: task backend:ent:check

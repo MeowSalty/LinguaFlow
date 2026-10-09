@@ -101,8 +101,11 @@ func TestMigrateExecutionPreservesSnapshotsAndCredentials(t *testing.T) {
 	if spec.Rounds[2].Adjudicate.TemplateContent == "" || spec.Rounds[3].SemanticQA.TemplateContent == "" || spec.Rounds[4].Revise.TemplateContent == "" || spec.RubyTemplates.JSON == "" || spec.RetryReminderTemplate == "" {
 		t.Fatal("migration did not freeze legacy runtime templates")
 	}
-	if spec.Strategy.QA.LengthRatioMin != 0 || spec.Strategy.QA.LengthRatioMax != 0 || spec.Strategy.Postprocess.Enabled || !spec.Strategy.Glossary.Bootstrap.Enabled || spec.RubyRetry.MaxAttempts != 1 {
+	if spec.Strategy.QA.LengthRatioMin != 0 || spec.Strategy.QA.LengthRatioMax != 0 || spec.Strategy.Postprocess.Enabled || spec.RubyRetry.MaxAttempts != 1 {
 		t.Fatal("migration replaced saved zero or boolean settings with current defaults")
+	}
+	if spec.Rounds[0].Translate.InlineTermExtraction != nil {
+		t.Fatal("legacy profile bootstrap was inherited by the translation round")
 	}
 	for _, binding := range spec.Bindings() {
 		got, err := credentials.Resolve(ctx, binding, "openai", "https://api.openai.com/v1")
@@ -123,9 +126,19 @@ func TestMigrateExecutionPreservesSnapshotsAndCredentials(t *testing.T) {
 	if bytes.Contains(raw, []byte("api_key")) || bytes.Contains(raw, []byte("snapshot-original-secret")) {
 		t.Fatal("plaintext survived in migrated snapshot")
 	}
+	if bytes.Contains(raw, []byte(`"glossary":`)) {
+		t.Fatal("legacy glossary strategy survived in migrated snapshot")
+	}
 	cfg := client.ExecutionProfile.GetX(ctx, storedProfile.ID).Config
-	if cfg.SchemaVersion != 1 || cfg.Ruby.Enabled || !cfg.Glossary.Bootstrap.Enabled || len(cfg.Ruby.PreserveKinds) != 3 || !cfg.Context.Enabled || cfg.Context.Before != 1 {
+	if cfg.SchemaVersion != 1 || cfg.Ruby.Enabled || len(cfg.Ruby.PreserveKinds) != 3 || !cfg.Context.Enabled || cfg.Context.Before != 1 {
 		t.Fatal("legacy profile semantics were not preserved")
+	}
+	profileRaw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(profileRaw, []byte(`"glossary":`)) {
+		t.Fatal("legacy glossary strategy survived in migrated profile")
 	}
 	tx, err := client.Tx(ctx)
 	if err != nil {

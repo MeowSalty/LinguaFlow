@@ -34,6 +34,10 @@ type BatchResult struct {
 
 // TranslateResult 描述一次翻译任务的总体结果。
 type TranslateResult struct {
+	// RoundSkipped denotes an intentionally disabled whole round, independently
+	// of SkippedCount, which counts structural skips within a translation round.
+	RoundSkipped       bool
+	SkipReason         string
 	SegmentCount       int
 	Segments           []SegmentResult
 	SkippedCount       int   // 因结构性原因被主动跳过的段数量（空白/纯符号/装饰分隔符/Skip 标记等）

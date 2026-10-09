@@ -75,28 +75,6 @@ type RetryConfig struct {
 	Jitter      bool `yaml:"jitter"`       // 退避时是否添加随机抖动
 }
 
-// BootstrapConfig 控制内联自举（inline）：翻译的 LLM 调用顺带返回术语。
-//
-// InlineConflictStrategy 控制并发 worker 给同一 source 提交不同
-// target 时的处理方式：First-Wins 保证全局术语表里只保留先到的版本，但后到 worker 的
-// 译文已经用了被丢弃的版本，会导致文档内同一术语翻译不一致。
-//   - rewrite-local（默认）：后到 worker 把本批译文里自己用的 target 字面值替换为
-//     权威表中的版本；CJK 直接替换，拉丁系按词边界，歧义场景仅 Warn 不动。
-//   - off：完全不处理，沿用旧行为（First-Wins + 不一致译文）。
-type BootstrapConfig struct {
-	Enabled                bool    `yaml:"enabled"`
-	MaxTermsPer1000Chars   float64 `yaml:"max_terms_per_1000_chars"`
-	MinSourceLen           int     `yaml:"min_source_len"`
-	InlineConflictStrategy string  `yaml:"inline_conflict_strategy"`
-}
-
-// Bootstrap 模式常量（保留用于向后兼容）。
-const (
-	BootstrapModeOff    = "off"
-	BootstrapModePre    = "pre"
-	BootstrapModeInline = "inline"
-)
-
 // Normalize 规范化 RepairConfig：
 //   - Enabled=false 时强制清零所有子开关，调用方据此短路所有修复逻辑
 func (r *RepairConfig) Normalize() {

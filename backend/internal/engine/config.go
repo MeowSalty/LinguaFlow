@@ -2,7 +2,6 @@ package engine
 
 import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
@@ -31,10 +30,9 @@ type TranslateDefaults struct {
 
 // GlossaryConfig 是术语表的运行时配置。
 type GlossaryConfig struct {
-	Enabled   bool
-	Path      string
-	Save      bool
-	Bootstrap config.BootstrapConfig
+	Enabled bool
+	Path    string
+	Save    bool
 }
 
 // RubyConfig 是 Ruby 注音保护的运行时配置。

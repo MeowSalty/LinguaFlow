@@ -11,7 +11,7 @@ type JobExecutionSnapshot struct {
 	ExecutionPlanID       int           `json:"execution_plan_id"`
 	ExecutionPlanName     string        `json:"execution_plan_name"`
 	// Strategy 计划级策略快照：来自计划引用的 ExecutionProfile（profile_id），
-	// 为全管道（所有改写型轮次与引擎级行为）供 protect/ruby 等七项行为预设。
+	// 为全管道（所有改写型轮次与引擎级行为）供 protect/ruby 等行为预设。
 	Strategy                 StrategySnapshot                `json:"strategy"`
 	Rounds                   []JobRoundSnapshot              `json:"rounds"`
 	SourceLang               string                          `json:"source_lang"`
@@ -41,13 +41,14 @@ type JobRoundSnapshot struct {
 }
 
 type JobTranslateRoundSnapshot struct {
-	Prompt           PromptSnapshot         `json:"prompt"`
-	BatchSize        int                    `json:"batch_size"`
-	MaxWordsPerBatch int                    `json:"max_words_per_batch"`
-	Concurrency      int                    `json:"concurrency"`
-	FallbackShrink   float64                `json:"fallback_shrink"`
-	SegmentFilter    *SegmentFilterSnapshot `json:"segment_filter,omitempty"`
-	Retry            RetryConfig            `json:"retry"`
+	Prompt               PromptSnapshot              `json:"prompt"`
+	BatchSize            int                         `json:"batch_size"`
+	MaxWordsPerBatch     int                         `json:"max_words_per_batch"`
+	Concurrency          int                         `json:"concurrency"`
+	FallbackShrink       float64                     `json:"fallback_shrink"`
+	SegmentFilter        *SegmentFilterSnapshot      `json:"segment_filter,omitempty"`
+	InlineTermExtraction *InlineTermExtractionConfig `json:"inline_term_extraction,omitempty"`
+	Retry                RetryConfig                 `json:"retry"`
 }
 
 type JobExtractRoundSnapshot struct {
@@ -132,7 +133,6 @@ type StrategySnapshot struct {
 	Protect     ProfileProtectConfig     `json:"protect"`
 	Postprocess ProfilePostprocessConfig `json:"postprocess"`
 	Repair      ProfileRepairConfig      `json:"repair"`
-	Glossary    ProfileGlossaryConfig    `json:"glossary"`
 	Context     ProfileContextConfig     `json:"context"`
 	Ruby        ProfileRubyConfig        `json:"ruby"`
 	QA          ProfileQAConfig          `json:"qa"`

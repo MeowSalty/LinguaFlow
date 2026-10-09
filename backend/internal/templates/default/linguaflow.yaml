@@ -38,6 +38,12 @@ execution:
         max_words_per_batch: 0
         concurrency: 4
         fallback_shrink: 0.5
+        # Extract new terms alongside this round's translation; glossary.enabled must also be true.
+        inline_term_extraction:
+          enabled: false
+          max_terms_per_1000_words: 3
+          min_source_len: 2
+          conflict_strategy: rewrite-local
         retry:
           max_attempts: 3
           backoff_ms: 2000

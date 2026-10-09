@@ -5,6 +5,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -41,12 +42,13 @@ type Round struct {
 	Repair           *repair.Config
 	ResponseMode     string
 
-	Mode              string
-	ProtectRules      []string
-	RubyEnabled       bool
-	RubyPreserveKinds []string
-	Context           *pipeline.ContextConfig
-	Postprocess       *pipeline.PostprocessConfig
+	Mode                 string
+	ProtectRules         []string
+	RubyEnabled          bool
+	RubyPreserveKinds    []string
+	Context              *pipeline.ContextConfig
+	Postprocess          *pipeline.PostprocessConfig
+	InlineTermExtraction *execution.InlineTermExtractionConfig
 
 	// 抽取轮次专用字段
 	ExtractRenderer             *prompt.BootstrapRenderer
@@ -113,6 +115,12 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 
 		switch mode {
 		case pipeline.RoundModeTranslate:
+			var extraction *execution.InlineTermExtractionConfig
+			if r.InlineTermExtraction != nil {
+				copy := *r.InlineTermExtraction
+				copy.Enabled = copy.Enabled && cfg.Glossary.Enabled
+				extraction = &copy
+			}
 			var roundRepair *repair.Config
 			if r.Repair != nil {
 				rr := *r.Repair
@@ -128,13 +136,14 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 			}
 
 			rc.Translate = &TranslateRoundConfig{
-				Renderer:          r.Renderer,
-				Repair:            roundRepair,
-				ResponseMode:      r.ResponseMode,
-				ProtectRules:      r.ProtectRules,
-				RubyEnabled:       r.RubyEnabled,
-				RubyPreserveKinds: r.RubyPreserveKinds,
-				Postprocess:       roundPostprocess,
+				Renderer:             r.Renderer,
+				Repair:               roundRepair,
+				ResponseMode:         r.ResponseMode,
+				ProtectRules:         r.ProtectRules,
+				RubyEnabled:          r.RubyEnabled,
+				RubyPreserveKinds:    r.RubyPreserveKinds,
+				Postprocess:          roundPostprocess,
+				InlineTermExtraction: extraction,
 			}
 
 		case pipeline.RoundModeExtract:
@@ -200,10 +209,6 @@ func buildPipelineRounds(
 	tmRes tm.TranslationMemory,
 	rubyRetryBackends []backend.Backend,
 	defaultRepair repair.Options,
-	inlineBootstrap bool,
-	maxTermsPer1000 float64,
-	minSourceLen int,
-	inlineConflictStr string,
 	logger *slog.Logger,
 	reporter progress.Reporter,
 	rubyRetryAttempts int,
@@ -212,8 +217,7 @@ func buildPipelineRounds(
 	for _, rc := range configs {
 		round, err := buildSinglePipelineRound(
 			rc, glossaryRes, tmRes, rubyRetryBackends,
-			defaultRepair, inlineBootstrap, maxTermsPer1000, minSourceLen,
-			inlineConflictStr, logger, reporter, rubyRetryAttempts,
+			defaultRepair, logger, reporter, rubyRetryAttempts,
 		)
 		if err != nil {
 			return nil, err
@@ -229,10 +233,6 @@ func buildSinglePipelineRound(
 	tmRes tm.TranslationMemory,
 	rubyRetryBackends []backend.Backend,
 	defaultRepair repair.Options,
-	inlineBootstrap bool,
-	maxTermsPer1000 float64,
-	minSourceLen int,
-	inlineConflictStr string,
 	logger *slog.Logger,
 	reporter progress.Reporter,
 	rubyRetryAttempts int,
@@ -257,8 +257,7 @@ func buildSinglePipelineRound(
 	}
 	return buildTranslatePipelineRound(
 		rc, glossaryRes, tmRes, rubyRetryBackends,
-		defaultRepair, inlineBootstrap, maxTermsPer1000, minSourceLen,
-		inlineConflictStr, logger, reporter, rubyRetryAttempts,
+		defaultRepair, logger, reporter, rubyRetryAttempts,
 	)
 }
 
@@ -281,10 +280,6 @@ func buildTranslatePipelineRound(
 	tmRes tm.TranslationMemory,
 	rubyRetryBackends []backend.Backend,
 	defaultRepair repair.Options,
-	inlineBootstrap bool,
-	maxTermsPer1000 float64,
-	minSourceLen int,
-	inlineConflictStr string,
 	logger *slog.Logger,
 	reporter progress.Reporter,
 	rubyRetryAttempts int,
@@ -292,6 +287,13 @@ func buildTranslatePipelineRound(
 	t := rc.Translate
 	if t == nil {
 		t = &TranslateRoundConfig{}
+	}
+	if err := execution.ValidateInlineTermExtraction(t.InlineTermExtraction); err != nil {
+		return pipeline.Round{}, err
+	}
+	var extraction execution.InlineTermExtractionConfig
+	if t.InlineTermExtraction != nil {
+		extraction = *t.InlineTermExtraction
 	}
 
 	repairOpts := defaultRepair
@@ -339,10 +341,10 @@ func buildTranslatePipelineRound(
 		Postprocess:            t.Postprocess,
 		RubyRetryBackends:      rubyRetryBackends,
 		RubyRetryAttempts:      rubyRetryAttempts,
-		InlineBootstrap:        inlineBootstrap,
-		MaxTermsPer1000Chars:   maxTermsPer1000,
-		MinBootstrapSourceLen:  minSourceLen,
-		InlineConflictStrategy: inlineConflictStr,
+		InlineBootstrap:        extraction.Enabled,
+		MaxTermsPer1000Words:   extraction.MaxTermsPer1000Words,
+		MinBootstrapSourceLen:  extraction.MinSourceLen,
+		InlineConflictStrategy: extraction.ConflictStrategy,
 		Reporter:               reporter,
 		Logger:                 logger,
 	}

@@ -50,7 +50,7 @@ type TranslateHandler struct {
 	RubyRetryAttempts int // 已解析的注音对齐重试轮数；0 表示禁用。
 
 	InlineBootstrap        bool
-	MaxTermsPer1000Chars   float64
+	MaxTermsPer1000Words   float64
 	MinBootstrapSourceLen  int
 	InlineConflictStrategy string
 
@@ -875,7 +875,7 @@ func (h *TranslateHandler) rewriteConflictsInBatch(
 
 // calcMaxBootstrapTerms 基于文本字词数动态计算本批最大术语抽取数。
 func (h *TranslateHandler) calcMaxBootstrapTerms(segments []string) int {
-	coeff := h.MaxTermsPer1000Chars
+	coeff := h.MaxTermsPer1000Words
 	if coeff <= 0 {
 		coeff = 3.0
 	}

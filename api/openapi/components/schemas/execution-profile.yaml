@@ -52,35 +52,6 @@ ProfileRepairConfig:
     prompt_upgrade:
       type: boolean
 
-ProfileBootstrapConfig:
-  type: object
-  required: [enabled, max_terms_per_1000_chars, min_source_len, inline_conflict_strategy]
-  properties:
-    enabled:
-      type: boolean
-      default: false
-      description: 是否启用内联自举
-    max_terms_per_1000_chars:
-      type: number
-      format: double
-      minimum: 0
-      description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
-    min_source_len:
-      type: integer
-      minimum: 1
-      description: 内联自举术语源文最短字符数
-    inline_conflict_strategy:
-      type: string
-      enum: [off, rewrite-local]
-      description: 并发术语冲突处理策略
-
-ProfileGlossaryConfig:
-  type: object
-  required: [bootstrap]
-  properties:
-    bootstrap:
-      $ref: '#/ProfileBootstrapConfig'
-
 ProfileContextConfig:
   type: object
   required: [enabled, before, after, max_chars]
@@ -142,7 +113,7 @@ ProfileQAConfig:
 
 ExecutionProfileConfig:
   type: object
-  required: [schema_version, protect, postprocess, repair, glossary, context]
+  required: [schema_version, protect, postprocess, repair, context]
   properties:
     schema_version:
       type: integer
@@ -156,8 +127,6 @@ ExecutionProfileConfig:
       $ref: '#/ProfilePostprocessConfig'
     repair:
       $ref: '#/ProfileRepairConfig'
-    glossary:
-      $ref: '#/ProfileGlossaryConfig'
     context:
       $ref: '#/ProfileContextConfig'
     qa:
@@ -274,35 +243,6 @@ ProfileRepairConfigInput:
       type: boolean
   additionalProperties: false
 
-ProfileBootstrapConfigInput:
-  type: object
-  properties:
-    enabled:
-      type: boolean
-      default: false
-      description: 是否启用内联自举
-    max_terms_per_1000_chars:
-      type: number
-      format: double
-      minimum: 0
-      description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
-    min_source_len:
-      type: integer
-      minimum: 1
-      description: 内联自举术语源文最短字符数
-    inline_conflict_strategy:
-      type: string
-      enum: [off, rewrite-local]
-      description: 并发术语冲突处理策略
-  additionalProperties: false
-
-ProfileGlossaryConfigInput:
-  type: object
-  properties:
-    bootstrap:
-      $ref: '#/ProfileBootstrapConfigInput'
-  additionalProperties: false
-
 ProfileContextConfigInput:
   type: object
   properties:
@@ -377,8 +317,6 @@ ExecutionProfileConfigInput:
       $ref: '#/ProfilePostprocessConfigInput'
     repair:
       $ref: '#/ProfileRepairConfigInput'
-    glossary:
-      $ref: '#/ProfileGlossaryConfigInput'
     context:
       $ref: '#/ProfileContextConfigInput'
     qa:

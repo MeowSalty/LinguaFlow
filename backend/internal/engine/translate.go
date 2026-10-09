@@ -9,11 +9,21 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 )
 
+// RoundSkipReason reports whether the effective configuration disables a round.
+// Runners use it before opening a stage so a skipped round adds no work counters.
+func (e *Engine) RoundSkipReason(roundIdx int) string {
+	if roundIdx >= 0 && roundIdx < len(e.rounds) &&
+		!e.cfg.Glossary.Enabled && e.rounds[roundIdx].Handler.ModeName() == pipeline.RoundModeExtract {
+		return "glossary_disabled"
+	}
+	return ""
+}
+
 // ExecuteRound 执行单轮（翻译或抽取）。
 func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.Document, opts ...ExecuteOption) (pipeline.TranslateResult, error) {
 	start := time.Now()
 
-	if roundIdx >= len(e.rounds) {
+	if roundIdx < 0 || roundIdx >= len(e.rounds) {
 		return pipeline.TranslateResult{}, fmt.Errorf("engine: round %d out of range", roundIdx)
 	}
 
@@ -24,6 +34,10 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 
 	if doc == nil {
 		return pipeline.TranslateResult{}, fmt.Errorf("engine: document is nil")
+	}
+	if reason := e.RoundSkipReason(roundIdx); reason != "" {
+		e.logger.Info("execute round skipped", "round", roundIdx, "reason", reason)
+		return pipeline.TranslateResult{RoundSkipped: true, SkipReason: reason}, nil
 	}
 	if len(doc.Segments) == 0 {
 		return pipeline.TranslateResult{}, nil

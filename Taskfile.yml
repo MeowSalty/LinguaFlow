@@ -50,11 +50,32 @@ tasks:
     cmds:
       - pnpm --package=@redocly/cli dlx redocly lint {{.OPENAPI_SCHEMA}}
 
-  openapi:check:
-    desc: 重新生成并检查 OpenAPI bundle 与前后端生成代码是否已同步
+  openapi:check:api:
+    desc: 校验 OpenAPI 源规范与已同步 bundle 一致(api 所有权)
     cmds:
-      - task: openapi:generate
-      - git diff --exit-code -- api/openapi/openapi-3.0.yaml frontend/src/api/types.d.ts backend/internal/api/openapi.gen.go backend/go.mod backend/go.sum
+      - task --force openapi:bundle
+      - git diff --exit-code -- {{.OPENAPI_SCHEMA}}
+
+  openapi:check:backend:
+    desc: 校验后端 OpenAPI 生成代码已同步(backend 所有权)
+    cmds:
+      - task --force openapi:bundle
+      - task: backend:openapi:generate
+      - git diff --exit-code -- backend/internal/api/openapi.gen.go backend/go.mod backend/go.sum
+
+  openapi:check:frontend:
+    desc: 校验前端 OpenAPI 类型已同步(frontend 所有权)
+    cmds:
+      - task --force openapi:bundle
+      - task: frontend:openapi:generate
+      - git diff --exit-code -- frontend/src/api/types.d.ts
+
+  openapi:check:
+    desc: 重新生成并检查全部 OpenAPI 产物是否已同步(本地全量校验;CI 按所有权分别调用 openapi:check:*)
+    cmds:
+      - task: openapi:check:api
+      - task: openapi:check:backend
+      - task: openapi:check:frontend
 
   backend:local:build:
     desc: 构建含嵌入前端的本地模式二进制

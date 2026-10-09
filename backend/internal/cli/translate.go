@@ -49,7 +49,7 @@ func newTranslateCmd(rt *appCtx) *cobra.Command {
 	cmd.Flags().StringVar(&from, "from", "", "源语言（留空则用配置）")
 	cmd.Flags().StringVar(&to, "to", "", "目标语言（留空则用配置）")
 	cmd.Flags().StringVar(&glossaryPath, "glossary-path", "", "术语表 CSV 路径；指定后强制启用 glossary")
-	cmd.Flags().StringVar(&bootstrapMode, "bootstrap", "", "术语自举模式 off|pre|inline；留空沿用配置（非 off 隐含启用 glossary）")
+	cmd.Flags().StringVar(&bootstrapMode, "bootstrap", "", "术语提取模式 off|pre|inline；inline 开启所有翻译轮次的内联提取，pre 使用独立抽取轮次；非 off 同时启用术语表，留空沿用各轮配置")
 	cmd.Flags().StringVar(&profile, "profile", "", "翻译策略名称（覆盖 execution.profile，引用 translation_profiles 中的 key）")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "提示词模板名称（引用 translation_prompt_templates 中的 key）")
 	cmd.Flags().StringVar(&revisionInput, "revision-input", "", "单文件修订输入：已有译文与语义问题的 schema_version: 1 YAML/JSON 文档")
