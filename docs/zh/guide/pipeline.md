@@ -40,7 +40,7 @@ flowchart TD
 4. 规则质检写回段落（19 项 per-batch checker + 1 项文档级 + 注音守恒码）
 5. EPUB 资源多一道**译文结构守卫**：写回的译文必须是能嵌入 XHTML 的合法 XML 片段，结构退化的结果会被拒绝（详见下文[译文结构守卫](#译文结构守卫-epub)）
 
-可选：执行配置中的 **内联术语自举** 会在翻译响应中一并抽术语。语义质检产生的 `warning` 级问题通过 `span` 精确定位到译文片段。可选的 `revise` 轮按段落上 `pending` 语义 issue 对现有译文做定点最小修订。
+可选：翻译轮次的 **内联术语提取**（`inline_term_extraction`）会在翻译响应中一并抽术语。语义质检产生的 `warning` 级问题通过 `span` 精确定位到译文片段。可选的 `revise` 轮按段落上 `pending` 语义 issue 对现有译文做定点最小修订。
 
 推荐轮次顺序：`extract`（可选）→ `translate`（可多轮）→ `correct`（可选）→ `adjudicate`（可选）→ `revise`（可选）→ `semantic_qa`（可选）。
 
@@ -162,21 +162,28 @@ Round 2：只处理 Round 1 失败的段落
 
 ---
 
-## 术语提取（Bootstrap）
+## 术语提取(Inline Extraction)
 
 | 模式                                  | 机制                                     |
 | ------------------------------------- | ---------------------------------------- |
-| **独立提取**（计划 `extract` 或 pre） | 译前单独调用，写术语表，后续翻译轮次共享 |
-| **内联**（执行配置 bootstrap）        | 翻译响应中顺带返回术语，省一次调用       |
+| **独立提取轮次**（计划 `extract`） | 译前单独调用，写术语表，后续翻译轮次共享 |
+| **内联提取**（翻译轮 `inline_term_extraction`） | 翻译响应中顺带返回术语，省一次调用 |
 
-内联冲突策略：
+内联提取配在**翻译轮次**上（`rounds[].translate.inline_term_extraction`），不再由执行配置控制：
+
+- 省略或 `enabled=false`：不抽取新术语，仍照常使用已有术语表
+- `enabled=true`：本轮模型响应里一并返回新术语；`max_terms_per_1000_words` 是密度上限（CJK 按字、其他按词），`min_source_len` 是源术语最短 rune 数
+
+内联冲突策略（`conflict_strategy`）：
 
 | 策略                    | 行为                               |
 | ----------------------- | ---------------------------------- |
 | `rewrite-local`（默认） | 冲突时以术语表权威译法改写本批译文 |
-| `off`                   | 先到先得，文档内可能不一致         |
+| `off`                   | 仅关闭冲突改写，**仍然抽取和合并**新术语     |
 
-产品操作见 [术语表管理](/zh/guide/glossary)；字段见 [翻译配置 · 参考](/zh/guide/translation-config-reference#术语自举-bootstrap)。
+**术语功能的项目总开关：** 关联项目时，项目设置里的 `glossary_enabled` 是总开关。关闭时：不使用已有术语表、不做内联提取，并**整轮跳过**独立 `extract` 轮（状态记为 `skipped`）——但已有术语与轮次配置都保留，重新开启即恢复。无项目的即时翻译不受项目开关约束，按轮次配置与请求体里的临时术语表决定。
+
+产品操作见 [术语表管理](/zh/guide/glossary)；字段见 [翻译配置 · 参考 · 术语提取](/zh/guide/translation-config-reference#术语提取-inline-term-extraction)。
 
 ---
 
@@ -271,7 +278,7 @@ EPUB 的译文最终要嵌回原书的 XHTML。为保证导出的电子书能被
 
 1. 仅处理 `translated` / `edited` 且译文非空的段，按 `segment_scope`（`with_issues` / `with_issue_codes`）扫描——只取段落上 `pending` 的语义 issue 作修复目标
 2. `issue_codes` 仅取 8 个语义白名单（`calque` / `term_fidelity` / `naturalness` / `mistranslation` / `omission` / `addition` / `grammar` / `register`），与段落实有 `pending` 语义 issue 取交集，交集为空的段不进入修订
-3. protect/ruby 及引擎级策略（repair/QA/glossary）经计划级 `profile_id` 贯穿，无需依赖计划内 translate 轮
+3. protect/ruby 及引擎级策略（repair/QA）经计划级 `profile_id` 贯穿，无需依赖计划内 translate 轮
 4. 写回遵循 correct 先例：改写译文与 issues、不改段落状态、CAS 保护；**无 `fallback_shrink`**（修订失败模式与批次大小无关，不缩批）
 
 `revise` 是把语义质检/裁决产出但尚未解决的 `pending` 语义问题，交给 LLM 做定点最小修订，而不是整段重译。与 `correct` 的差别在于：`correct` 纯本地、修高频安全问题；`revise` 调 LLM、按语义问题定点修订。配置字段见 [翻译配置 · 参考 · revise](/zh/guide/translation-config-reference#revise)。
