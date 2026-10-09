@@ -15,6 +15,100 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /admin/task-retention/preview:
+    post:
+      operationId: PreviewTaskRetention
+      summary: 预览任务历史保留影响
+      description: |
+        仅活跃系统管理员可读取全站汇总，不返回任务正文或项目名称。此 POST 完全只读。
+        自动清理关闭或维护期间也可预览；预览不是删除凭证，提交与扫描会重新校验。
+        总预算 5 秒，未完成的计数为 null 并返回 partial；数据库查询错误返回错误，不冒充零影响。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - retention_days
+              properties:
+                retention_days:
+                  type: integer
+                  minimum: 1
+                  maximum: 3650
+      responses:
+        '200':
+          description: 当前汇总与预计影响
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRetentionPreview'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/task-retention/status:
+    get:
+      operationId: GetTaskRetentionStatus
+      summary: 获取任务历史清理运行状态
+      description: 仅系统管理员可读。运行摘要属于本进程，重启后 last_scan 和 backlog 为 null；政策来自数据库。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 已保存政策版本及本进程运行摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRetentionStatus'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /operations/batch-delete:
+    post:
+      operationId: BatchDeleteTaskHistory
+      summary: 批量删除显式选择的任务记录
+      description: |
+        最多提交 100 个显式任务引用，不支持所有任务或筛选式删除。按 (kind,id,project_id) 去重并逐项鉴权。
+        结构错误整体返回 400；结构合法返回逐项结果，各项独立事务，已成功项不因其他项失败回滚。
+        project_id 必须与任务实际项目匹配；响应只回显输入标识和结果，不泄露其他项目数据。
+        总预算 30 秒、单项最多 5 秒，未处理或已确认超时回滚的项为 deferred。
+        删除执行历史和日志，保留原文、译文和独立用量事实；StorageTask 不接受此删除操作。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskHistoryBatchDeleteRequest'
+      responses:
+        '200':
+          description: 去重后的逐项结果，保持首次提交顺序
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskHistoryBatchDeleteResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /storage/capabilities:
     get:
       operationId: GetStorageCapabilities
@@ -660,6 +754,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StorageConnection'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/spaces/{spaceId}/quota:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    put:
+      operationId: SetStorageSpaceQuota
+      summary: SetStorageSpaceQuota
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageSpaceQuotaRequest'
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSpace'
         '400':
           $ref: '#/components/responses/Problem'
         '403':
@@ -3181,6 +3310,32 @@ paths:
         schema:
           type: string
         description: 同步任务 ID
+    delete:
+      operationId: DeleteGlossarySyncTaskHistory
+      summary: 删除术语同步任务记录
+      description: |
+        同时校验任务项目归属与项目写权限。仅终态且所有执行写入已收尾时可删除。
+        删除执行记录，保留已经提交的术语和译文；非终态 task_not_terminal、收尾中 task_busy 均返回 409。
+        单项事务预算 5 秒，确认回滚后返回 503 task_cleanup_deferred；重复删除返回 404。
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 任务记录已删除
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
     get:
       operationId: GetGlossarySyncTaskStatus
       summary: 查询术语同步任务状态
@@ -3535,6 +3690,33 @@ paths:
   /jobs/{jobId}:
     parameters:
       - $ref: '#/components/parameters/JobId'
+    delete:
+      operationId: DeleteJobHistory
+      summary: 删除翻译任务记录
+      description: |
+        要求项目写权限。仅 completed、failed、cancelled 且执行与事件写入均已收尾时可删除。
+        删除记录、执行详情和日志，保留项目原文、译文及独立用量事实；不能撤销。
+        非终态返回 409 task_not_terminal，仍在收尾返回 409 task_busy，维护/恢复屏障沿用领域错误。
+        单项事务预算 5 秒，确认回滚后返回 503 task_cleanup_deferred；已不存在返回 404。
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 任务记录已删除
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
     get:
       operationId: GetJob
       summary: 获取任务详情
@@ -3579,6 +3761,7 @@ paths:
         已完成的轮次与已翻译段落直接跳过，从当前进度断点继续。
         例外：显式选段（segment_ids 手动选择）的任务，首个翻译轮
         会重译所有选中段落。
+        上一轮执行仍在收尾时返回 409 task_busy；重试清空结束时间并重新计算保留周期。
       security:
         - bearerAuth: []
       responses:
@@ -3616,7 +3799,7 @@ paths:
     post:
       operationId: ResumeJob
       summary: 恢复已暂停的任务
-      description: 从轮次断点恢复已暂停的任务。
+      description: 从轮次断点恢复已暂停的任务；上一轮执行仍在收尾时返回 409 task_busy。
       security:
         - bearerAuth: []
       responses:
@@ -3636,6 +3819,7 @@ paths:
       summary: 订阅任务实时事件流 (SSE)
       description: |
         以 Server-Sent Events 推送任务实时事件。
+        任务历史删除后关闭已有订阅，新订阅返回 404；回放数据库不可用时结束连接，不伪报完整历史。
 
         - 认证：除 bearerAuth 外，原生 EventSource 无法设置自定义请求头，
           可改用 `access_token` 查询参数携带访问令牌。
@@ -4350,7 +4534,11 @@ paths:
     patch:
       operationId: AdminUpdateSettings
       summary: 更新系统配置
-      description: 原子更新布尔政策并记录操作者及非敏感变更；拒绝未知字段、null 和字符串布尔值。
+      description: |
+        settings 至少提交一个支持字段，未提交字段保持不变；拒绝未知字段、null 和错误类型。
+        task_retention 必须完整提交 enabled、retention_days 和 expected_revision，禁止提交 revision。
+        同时修改多个政策时全部提交或全部回滚。版本不一致返回 409 settings_conflict。
+        政策值没有变化时不递增版本、不重复记录审计；保存后无需重启，维护期间仍可修改政策。
       security:
         - bearerAuth: []
       requestBody:
@@ -4585,6 +4773,144 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
   schemas:
+    TaskRetentionPolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - retention_days
+        - revision
+      properties:
+        enabled:
+          type: boolean
+          default: false
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+          default: 30
+          description: 完整 24 小时天数；关闭时仍保存该值，两类任务及全部终态使用同一周期。
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+          readOnly: true
+    TaskRetentionPatch:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - retention_days
+        - expected_revision
+      properties:
+        enabled:
+          type: boolean
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+    TaskRetentionPreview:
+      type: object
+      required:
+        - policy_revision
+        - retention_days
+        - as_of
+        - cutoff
+        - partial
+        - incomplete_reasons
+        - by_type
+      properties:
+        policy_revision:
+          type: integer
+          format: int64
+        retention_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        as_of:
+          type: string
+          format: date-time
+        cutoff:
+          type: string
+          format: date-time
+        partial:
+          type: boolean
+        incomplete_reasons:
+          type: array
+          items:
+            type: string
+        by_type:
+          type: object
+          required:
+            - translation
+            - glossary_sync
+          properties:
+            translation:
+              $ref: '#/components/schemas/RetentionTypePreview'
+            glossary_sync:
+              $ref: '#/components/schemas/RetentionTypePreview'
+    TaskRetentionStatus:
+      type: object
+      required:
+        - task_retention
+        - policy_revision
+        - state
+        - reason_codes
+        - last_scan
+        - backlog
+      properties:
+        task_retention:
+          $ref: '#/components/schemas/TaskRetentionPolicy'
+        policy_revision:
+          type: integer
+          format: int64
+        state:
+          type: string
+          enum:
+            - disabled
+            - idle
+            - running
+            - blocked
+            - error
+        reason_codes:
+          type: array
+          items:
+            type: string
+        last_scan:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/RetentionScanSummary'
+        backlog:
+          type: boolean
+          nullable: true
+    TaskHistoryBatchDeleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/TaskHistoryTarget'
+    TaskHistoryBatchDeleteResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskHistoryDeleteResult'
     Problem:
       type: object
       required:
@@ -4593,7 +4919,7 @@ components:
       properties:
         error_code:
           type: string
-          description: Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Provider authorization, quota and availability retain their separate domain codes.
+          description: Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses storage_disk_probe_failed (503). Neither signals automatic retry. Provider authorization, quota and availability retain their separate domain codes.
         task_id:
           type: integer
         operation_id:
@@ -4978,8 +5304,10 @@ components:
           type: integer
         completed_jobs:
           type: integer
+          description: 当前保留记录范围内的完成任务数量；独立调用和 Token 用量不随历史删除减少。
         failed_jobs:
           type: integer
+          description: 当前保留记录范围内的失败任务数量。
     Resource:
       type: object
       required:
@@ -5966,7 +6294,13 @@ components:
         - progress
         - created_at
         - updated_at
+        - finished_at
+        - can_delete
       properties:
+        finished_at:
+          $ref: '#/components/schemas/TaskFinishedAt'
+        can_delete:
+          $ref: '#/components/schemas/TaskCanDelete'
         id:
           type: integer
         project_id:
@@ -6072,7 +6406,13 @@ components:
         - created_at
         - updated_at
         - started_at
+        - finished_at
+        - can_delete
       properties:
+        finished_at:
+          $ref: '#/components/schemas/TaskFinishedAt'
+        can_delete:
+          $ref: '#/components/schemas/TaskCanDelete'
         id:
           type: integer
         project_id:
@@ -6460,7 +6800,7 @@ components:
         glossary_enabled:
           type: boolean
           default: false
-          description: 是否启用术语表
+          description: 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
         source_lang:
           type: string
         target_lang:
@@ -6496,7 +6836,7 @@ components:
         glossary_enabled:
           type: boolean
           default: false
-          description: 是否启用术语表
+          description: 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
         source_lang:
           type: string
         target_lang:
@@ -6512,7 +6852,7 @@ components:
           additionalProperties: true
         glossary_enabled:
           type: boolean
-          description: 是否启用术语表
+          description: 项目术语功能总开关；false 时不应用术语表、不进行内联提取，并跳过独立抽取轮次。已有术语与轮次配置仍然保留。
         source_lang:
           type: string
         target_lang:
@@ -6703,7 +7043,13 @@ components:
         - status
         - processed
         - total
+        - finished_at
+        - can_delete
       properties:
+        finished_at:
+          $ref: '#/components/schemas/TaskFinishedAt'
+        can_delete:
+          $ref: '#/components/schemas/TaskCanDelete'
         task_id:
           type: string
         status:
@@ -7195,8 +7541,7 @@ components:
           type: integer
           description: |
             策略模板 ID（ExecutionProfile 单表全局唯一；允许内置负 ID，如 -1 内置默认策略）。
-            计划级策略引用：为全管道（所有改写型轮次与引擎级行为）供
-            protect/ruby/postprocess/repair/glossary/context/qa 七项行为预设，
+            计划级策略引用：为全管道（所有改写型轮次与引擎级行为）提供策略预设，
             任务创建时整体冻结进执行快照。
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
@@ -7211,6 +7556,40 @@ components:
         updated_at:
           type: string
           format: date-time
+    InlineTermExtractionConfig:
+      type: object
+      description: |
+        翻译轮次的高级选项：在同一次模型请求中返回译文和新术语，供后续批次使用。
+        省略或 enabled=false 时不抽取新术语，仍按项目设置使用已有术语表。
+        关联项目时，项目 glossary_enabled 为总开关；false 时不应用术语表，也不执行内联提取，轮次配置仍然保存。
+        无项目的即时翻译按轮次配置和请求中的术语表决定是否启用术语功能。
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否在本翻译轮次的模型请求中同时抽取新术语；关联项目时还须启用项目术语表总开关
+        max_terms_per_1000_words:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          default: 3
+          description: 每 1000 源文字词的术语抽取上限系数；CJK 按字、其他文本按词计数，必须大于 0
+        min_source_len:
+          type: integer
+          minimum: 1
+          default: 2
+          description: 抽取术语源文的最短字符数（按 rune 计）
+        conflict_strategy:
+          type: string
+          enum:
+            - 'off'
+            - rewrite-local
+          default: rewrite-local
+          description: |
+            内联提取生效时，新术语与已确认术语冲突的处理方式。
+            rewrite-local：按已确认术语改写本批译文；off：仅关闭冲突改写，仍然抽取和合并新术语。
+      additionalProperties: false
     AdminUserListResponse:
       type: object
       required:
@@ -7289,6 +7668,7 @@ components:
           type: integer
         total_jobs:
           type: integer
+          description: 当前保留的翻译任务记录数量，会随历史删除减少，不是永久累计任务数。
         total_resources:
           type: integer
     AdminAuditLogListResponse:
@@ -7314,7 +7694,10 @@ components:
           additionalProperties: false
           required:
             - registration_enabled
+            - task_retention
           properties:
+            task_retention:
+              $ref: '#/components/schemas/TaskRetentionPolicy'
             registration_enabled:
               type: boolean
               description: 是否允许公开注册；公开注册账户始终为普通用户。
@@ -7327,9 +7710,10 @@ components:
         settings:
           type: object
           additionalProperties: false
-          required:
-            - registration_enabled
+          minProperties: 1
           properties:
+            task_retention:
+              $ref: '#/components/schemas/TaskRetentionPatch'
             registration_enabled:
               type: boolean
     ExecutionPlanTemplateListResponse:
@@ -7358,7 +7742,7 @@ components:
           type: string
         profile_id:
           type: integer
-          description: 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道供七项行为预设
+          description: 策略模板 ID（ExecutionProfile；允许内置负 ID，如 -1 内置默认策略），为全管道提供策略预设
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
@@ -7413,12 +7797,15 @@ components:
           type: integer
           nullable: true
           description: |
-            可选项目 ID。提供时仅复用项目的术语表与语言配置(若请求未显式覆盖),
+            可选项目 ID。提供时复用项目的语言配置(若请求未显式覆盖),
+            术语应用与抽取遵守项目 glossary_enabled 总开关；关闭时也不应用请求中的临时术语表。
             并校验 actor 对该项目的访问权;执行计划本身仍与项目无关,不因 project_id
-            改变授权路径。省略时为纯即时翻译,使用请求体内联术语表。
+            改变授权路径。省略时为纯即时翻译,按轮次配置和请求体术语表决定术语功能。
         glossary:
           type: array
-          description: 内联临时术语表(纯内存,翻译完即丢)。项目场景下叠加在项目术语表之上。
+          description: |
+            临时术语表(纯内存,翻译完即丢)。无项目时按请求应用；项目场景下仅在
+            glossary_enabled=true 时叠加在项目术语表之上，总开关关闭时不应用此列表。
           items:
             $ref: '#/components/schemas/QuickGlossaryEntry'
     QuickTranslateResponse:
@@ -7511,8 +7898,8 @@ components:
             - failed
             - skipped
           description: |
-            轮次执行结果。skipped 表示该轮因目标段状态不满足 segment_filter 而被跳过
-            （仅多轮计划的后续 translate 轮可能产生），其译文沿用上一轮结果。
+            轮次执行结果。skipped 表示翻译轮次因目标段状态不满足 segment_filter 而被跳过，
+            或独立抽取轮次因关联项目关闭术语表而被跳过；其译文沿用上一轮结果。
         duration_ms:
           type: integer
     QuickUsage:
@@ -7651,6 +8038,215 @@ components:
           type: integer
           description: 占用该资源的未完成任务 ID
       additionalProperties: false
+    RetentionCount:
+      type: integer
+      format: int64
+      minimum: 0
+      nullable: true
+      description: 已完成全量统计的数量；未完成或未知为 null，不能把样本当作全站数量。
+    RetentionExpiredCounts:
+      type: object
+      required:
+        - blocked
+        - busy
+        - deletable
+      description: 已到期终态按屏障、忙碌、预计可删的优先级互斥归类。
+      properties:
+        blocked:
+          $ref: '#/components/schemas/RetentionCount'
+        busy:
+          $ref: '#/components/schemas/RetentionCount'
+        deletable:
+          $ref: '#/components/schemas/RetentionCount'
+    RetentionTimingSources:
+      type: object
+      required:
+        - finished_at
+        - legacy_anchor
+        - missing_anchor
+      description: 终态保留计时来源，属于独立维度，不能与到期分类重复相加。
+      properties:
+        finished_at:
+          $ref: '#/components/schemas/RetentionCount'
+        legacy_anchor:
+          $ref: '#/components/schemas/RetentionCount'
+        missing_anchor:
+          $ref: '#/components/schemas/RetentionCount'
+    RetentionTerminalAge:
+      type: object
+      required:
+        - lt_1d
+        - days_1_6
+        - days_7_29
+        - days_30_89
+        - days_90_plus
+        - unknown
+      description: 仅终态，按保留计时起点到 as_of 的 UTC 年龄统计；边界为 [0,1)、[1,7)、[7,30)、[30,90)、[90,+∞) 个 24 小时天，缺少锚点为 unknown。
+      properties:
+        lt_1d:
+          $ref: '#/components/schemas/RetentionCount'
+        days_1_6:
+          $ref: '#/components/schemas/RetentionCount'
+        days_7_29:
+          $ref: '#/components/schemas/RetentionCount'
+        days_30_89:
+          $ref: '#/components/schemas/RetentionCount'
+        days_90_plus:
+          $ref: '#/components/schemas/RetentionCount'
+        unknown:
+          $ref: '#/components/schemas/RetentionCount'
+    RetentionDependencies:
+      type: object
+      required:
+        - sse_events
+        - job_resources
+        - job_rounds
+        - job_round_segments
+        - credential_job_references
+      description: 预计可删任务关联行数，不代表磁盘释放字节；不读取正文。
+      properties:
+        sse_events:
+          $ref: '#/components/schemas/RetentionCount'
+        job_resources:
+          $ref: '#/components/schemas/RetentionCount'
+        job_rounds:
+          $ref: '#/components/schemas/RetentionCount'
+        job_round_segments:
+          $ref: '#/components/schemas/RetentionCount'
+        credential_job_references:
+          $ref: '#/components/schemas/RetentionCount'
+    RetentionTypePreview:
+      type: object
+      required:
+        - active
+        - terminal
+        - missing_anchor
+        - not_expired
+        - expired
+        - timing_sources
+        - terminal_age
+        - deletable_dependencies
+      properties:
+        active:
+          $ref: '#/components/schemas/RetentionCount'
+        terminal:
+          $ref: '#/components/schemas/RetentionCount'
+        missing_anchor:
+          $ref: '#/components/schemas/RetentionCount'
+        not_expired:
+          $ref: '#/components/schemas/RetentionCount'
+        expired:
+          $ref: '#/components/schemas/RetentionExpiredCounts'
+        timing_sources:
+          $ref: '#/components/schemas/RetentionTimingSources'
+        terminal_age:
+          $ref: '#/components/schemas/RetentionTerminalAge'
+        deletable_dependencies:
+          $ref: '#/components/schemas/RetentionDependencies'
+    RetentionScanSummary:
+      type: object
+      required:
+        - scan_id
+        - policy_revision
+        - as_of
+        - started_at
+        - finished_at
+        - duration_ms
+        - candidates
+        - deleted
+        - skipped
+        - error_code
+        - completed
+        - legacy_anchor_count
+        - missing_anchor_count
+      properties:
+        scan_id:
+          type: string
+        policy_revision:
+          type: integer
+          format: int64
+        as_of:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        candidates:
+          type: integer
+          minimum: 0
+        deleted:
+          type: integer
+          minimum: 0
+        skipped:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        error_code:
+          type: string
+        completed:
+          type: boolean
+          description: 是否已经遍历完本次固定候选域。
+        legacy_anchor_count:
+          $ref: '#/components/schemas/RetentionCount'
+        missing_anchor_count:
+          $ref: '#/components/schemas/RetentionCount'
+    TaskHistoryTarget:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - id
+        - project_id
+      properties:
+        kind:
+          type: string
+          enum:
+            - translation
+            - glossary_sync
+        id:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        project_id:
+          type: integer
+          minimum: 1
+    TaskHistoryDeleteResult:
+      type: object
+      required:
+        - kind
+        - id
+        - project_id
+        - status
+      properties:
+        kind:
+          type: string
+          enum:
+            - translation
+            - glossary_sync
+        id:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        project_id:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum:
+            - deleted
+            - not_found
+            - forbidden
+            - not_terminal
+            - busy
+            - blocked
+            - deferred
+            - failed
     StorageRuntime:
       type: object
       readOnly: true
@@ -7677,6 +8273,8 @@ components:
         - space_read_only
         - storage_auth_required
         - storage_crypto_unavailable
+        - storage_disk_insufficient
+        - storage_disk_probe_failed
         - storage_quota_exceeded
         - storage_unavailable
     StorageActionAvailability:
@@ -7935,6 +8533,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StorageCheck'
+    StorageDiskDiagnostic:
+      type: object
+      description: Administrator-only local filesystem observations; roles identify configured directory purposes, never host paths. Remote bucket capacity is not inferred.
+      required:
+        - roles
+        - state
+        - observed_at
+        - total_bytes
+        - available_bytes
+        - minimum_free_bytes
+      properties:
+        roles:
+          type: array
+          items:
+            type: string
+        state:
+          type: string
+          enum:
+            - available
+            - low
+            - unknown
+        observed_at:
+          type: string
+          format: date-time
+        total_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          maximum: 9007199254740991
+        available_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          maximum: 9007199254740991
+        minimum_free_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          maximum: 9007199254740991
     StorageSpaceDiagnostics:
       type: object
       required:
@@ -7974,22 +8611,29 @@ components:
     StorageDiagnostics:
       type: object
       required:
+        - disks
         - spaces
         - temporary_bytes
         - recovery_backlog
         - blocked_cleanup_by_code
         - migrations_by_phase
       properties:
+        disks:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageDiskDiagnostic'
         spaces:
           type: array
           items:
             $ref: '#/components/schemas/StorageSpaceDiagnostics'
         next_cursor:
+          description: 下一页游标，取上一页最后一个空间 ID。仅在还有更多空间时返回，否则省略该字段。
           type: integer
         temporary_bytes:
           type: integer
           format: int64
         oldest_intent_at:
+          description: 最早一条未完结写入的创建时间。没有未完结写入时省略该字段。
           type: string
           format: date-time
         recovery_backlog:
@@ -8003,6 +8647,7 @@ components:
           additionalProperties:
             type: integer
         latest_backup:
+          description: 最近一次备份的摘要。尚无备份记录时省略该字段。
           type: object
           required:
             - id
@@ -8028,6 +8673,7 @@ components:
         - default_choice
         - generation
         - logical_limit_bytes
+        - default_space_capacity_bytes
         - runtime
         - allowed_policy_modes
         - policy_restriction_codes
@@ -8066,10 +8712,19 @@ components:
         generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
           minimum: 0
+        default_space_capacity_bytes:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          nullable: true
+          minimum: 1
         logical_limit_bytes:
           type: integer
           format: int64
+          nullable: true
+          maximum: 9007199254740991
           minimum: 1
         configuration_needs_update:
           type: boolean
@@ -8080,6 +8735,7 @@ components:
         default_choice: user
         generation: 3
         logical_limit_bytes: 107374182400
+        default_space_capacity_bytes: null
         runtime:
           deployment_enabled: false
           maintenance: false
@@ -8095,6 +8751,7 @@ components:
         - default_choice
         - generation
         - logical_limit_bytes
+        - default_space_capacity_bytes
       description: Complete policy update. Deployment restrictions reject the whole save, including quota-only changes to an unsupported mode. Read-only response fields are rejected.
       properties:
         mode:
@@ -8111,10 +8768,19 @@ components:
         generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
           minimum: 0
+        default_space_capacity_bytes:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          nullable: true
+          minimum: 1
         logical_limit_bytes:
           type: integer
           format: int64
+          nullable: true
+          maximum: 9007199254740991
           minimum: 1
     StorageConnectionManagementActions:
       type: object
@@ -8195,9 +8861,11 @@ components:
         management_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         auth_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         checked_at:
           type: string
           format: date-time
@@ -8261,7 +8929,10 @@ components:
       additionalProperties: false
       required:
         - set_status
+        - set_quota
       properties:
+        set_quota:
+          $ref: '#/components/schemas/StorageActionAvailability'
         set_status:
           $ref: '#/components/schemas/StorageActionAvailability'
     StorageSpace:
@@ -8275,12 +8946,20 @@ components:
         - verified
         - management_generation
         - capacity_bytes
+        - available_bytes
         - reserved_bytes
         - candidate_bytes
         - live_bytes
         - pending_delete_bytes
         - management_actions
       properties:
+        available_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+          maximum: 9007199254740991
+          description: Business quota headroom, null for unlimited; not physical disk or bucket free space.
         management_actions:
           $ref: '#/components/schemas/StorageSpaceManagementActions'
         id:
@@ -8306,21 +8985,29 @@ components:
         management_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         capacity_bytes:
           type: integer
           format: int64
+          nullable: true
+          maximum: 9007199254740991
+          minimum: 1
         reserved_bytes:
           type: integer
           format: int64
+          maximum: 9007199254740991
         candidate_bytes:
           type: integer
           format: int64
+          maximum: 9007199254740991
         live_bytes:
           type: integer
           format: int64
+          maximum: 9007199254740991
         pending_delete_bytes:
           type: integer
           format: int64
+          maximum: 9007199254740991
     StorageSpaceList:
       type: object
       required:
@@ -8348,6 +9035,8 @@ components:
         capacity_bytes:
           type: integer
           format: int64
+          nullable: true
+          maximum: 9007199254740991
           minimum: 1
     StorageAuthorizationRequest:
       type: object
@@ -8372,6 +9061,7 @@ components:
         expected_management_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         expires_at:
           type: string
           format: date-time
@@ -8386,6 +9076,24 @@ components:
           type: integer
           minimum: 0
           format: int64
+    StorageSpaceQuotaRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - capacity_bytes
+        - expected_generation
+      properties:
+        capacity_bytes:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          nullable: true
+          minimum: 1
+        expected_generation:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 0
     StorageSpaceStateRequest:
       type: object
       additionalProperties: false
@@ -8500,6 +9208,7 @@ components:
         expected_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
           minimum: 0
     StorageMigrationRequest:
       type: object
@@ -8515,6 +9224,7 @@ components:
         expected_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
           minimum: 0
         idempotency_key:
           type: string
@@ -8555,9 +9265,11 @@ components:
         source_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         translation_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         stats:
           $ref: '#/components/schemas/SourceUpdateStats'
         expires_at:
@@ -8848,6 +9560,7 @@ components:
         location_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         health:
           type: string
     SourceVersionList:
@@ -8872,9 +9585,11 @@ components:
         expected_source_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
         expected_translation_generation:
           type: integer
           format: int64
+          maximum: 9007199254740991
     ExportArtifact:
       type: object
       additionalProperties: false
@@ -9362,6 +10077,19 @@ components:
           type: string
         affected_count:
           type: integer
+    TaskFinishedAt:
+      type: string
+      format: date-time
+      nullable: true
+      readOnly: true
+      x-omitempty: false
+      description: 最后一次执行的真实结束时间；活动任务或旧任务结束时间无法确认时为 null，重试清空。
+    TaskCanDelete:
+      type: boolean
+      readOnly: true
+      x-go-type-skip-optional-pointer: true
+      x-omitempty: false
+      description: 当前身份、状态、执行收尾及屏障的即时投影；不替代删除请求的再次校验。
     GlossarySyncExecuteResourceResult:
       type: object
       required:
@@ -9388,8 +10116,14 @@ components:
         - created_at
         - updated_at
         - started_at
+        - finished_at
+        - can_delete
         - supported_actions
       properties:
+        finished_at:
+          $ref: '#/components/schemas/TaskFinishedAt'
+        can_delete:
+          $ref: '#/components/schemas/TaskCanDelete'
         task_id:
           type: string
           pattern: ^[1-9][0-9]*$
@@ -9430,6 +10164,7 @@ components:
               - resume
               - cancel
               - retry
+              - delete
     TranslationOperation:
       allOf:
         - $ref: '#/components/schemas/OperationBase'
@@ -9488,6 +10223,7 @@ components:
                 enum:
                   - view
                   - cancel
+                  - delete
             progress:
               type: object
               required:
@@ -9502,6 +10238,7 @@ components:
                   type: integer
                   minimum: 0
     StorageOperation:
+      description: 存储任务承担恢复与物理清理证据；本功能不可删除，can_delete 始终为 false，finished_at 为 null。
       allOf:
         - $ref: '#/components/schemas/OperationBase'
         - type: object
@@ -9720,10 +10457,15 @@ components:
         segment_filter:
           $ref: '#/components/schemas/TranslateSegmentFilterConfig'
           description: 段落过滤配置；省略时默认 pending_only
+        inline_term_extraction:
+          $ref: '#/components/schemas/InlineTermExtractionConfig'
         retry:
           $ref: '#/components/schemas/RetryConfig'
     ExtractRoundConfig:
       type: object
+      description: |
+        独立术语抽取轮次配置。关联项目 glossary_enabled=false 时跳过本轮，轮次配置仍然保存。
+        无项目的即时翻译按轮次配置执行。
       required:
         - template_id
       properties:
@@ -9850,7 +10592,7 @@ components:
       description: |
         修订轮次配置。LLM 对已有译文做最小改动定点修订，修复段落上 pending 的语义 issue
         （误译、仿译、漏译等）。system prompt 内置不可见，无 prompt_template_id；
-        protect/ruby 及引擎级策略（repair/QA/glossary）经计划级策略引用（profile_id）
+        protect/ruby 及引擎级策略（repair/QA）经计划级策略引用（profile_id）
         贯穿所有改写型轮次，无需也不依赖计划内 translate 轮的存在。
         写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。
       properties:
@@ -10055,40 +10797,6 @@ components:
           type: boolean
         prompt_upgrade:
           type: boolean
-    ProfileBootstrapConfig:
-      type: object
-      required:
-        - enabled
-        - max_terms_per_1000_chars
-        - min_source_len
-        - inline_conflict_strategy
-      properties:
-        enabled:
-          type: boolean
-          default: false
-          description: 是否启用内联自举
-        max_terms_per_1000_chars:
-          type: number
-          format: double
-          minimum: 0
-          description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
-        min_source_len:
-          type: integer
-          minimum: 1
-          description: 内联自举术语源文最短字符数
-        inline_conflict_strategy:
-          type: string
-          enum:
-            - 'off'
-            - rewrite-local
-          description: 并发术语冲突处理策略
-    ProfileGlossaryConfig:
-      type: object
-      required:
-        - bootstrap
-      properties:
-        bootstrap:
-          $ref: '#/components/schemas/ProfileBootstrapConfig'
     ProfileContextConfig:
       type: object
       required:
@@ -10160,7 +10868,6 @@ components:
         - protect
         - postprocess
         - repair
-        - glossary
         - context
       properties:
         schema_version:
@@ -10176,8 +10883,6 @@ components:
           $ref: '#/components/schemas/ProfilePostprocessConfig'
         repair:
           $ref: '#/components/schemas/ProfileRepairConfig'
-        glossary:
-          $ref: '#/components/schemas/ProfileGlossaryConfig'
         context:
           $ref: '#/components/schemas/ProfileContextConfig'
         qa:
@@ -10235,35 +10940,6 @@ components:
           type: boolean
         prompt_upgrade:
           type: boolean
-      additionalProperties: false
-    ProfileBootstrapConfigInput:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-          default: false
-          description: 是否启用内联自举
-        max_terms_per_1000_chars:
-          type: number
-          format: double
-          minimum: 0
-          description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
-        min_source_len:
-          type: integer
-          minimum: 1
-          description: 内联自举术语源文最短字符数
-        inline_conflict_strategy:
-          type: string
-          enum:
-            - 'off'
-            - rewrite-local
-          description: 并发术语冲突处理策略
-      additionalProperties: false
-    ProfileGlossaryConfigInput:
-      type: object
-      properties:
-        bootstrap:
-          $ref: '#/components/schemas/ProfileBootstrapConfigInput'
       additionalProperties: false
     ProfileContextConfigInput:
       type: object
@@ -10340,8 +11016,6 @@ components:
           $ref: '#/components/schemas/ProfilePostprocessConfigInput'
         repair:
           $ref: '#/components/schemas/ProfileRepairConfigInput'
-        glossary:
-          $ref: '#/components/schemas/ProfileGlossaryConfigInput'
         context:
           $ref: '#/components/schemas/ProfileContextConfigInput'
         qa:
