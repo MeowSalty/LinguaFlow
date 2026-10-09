@@ -20,9 +20,9 @@ import type {
 
 declare module 'vue-router' {
   interface TypesConfig {
-    ParamParsers:
-      | never
+    _ParamParsers: {}
     RouteNamedMap: import('vue-router/auto-routes').RouteNamedMap
+    _RouteFileInfoMap: import('vue-router/auto-routes')._RouteFileInfoMap
   }
 }
 
@@ -285,17 +285,23 @@ declare module 'vue-router/auto-routes' {
         | '/'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/[...all].vue': {
       routes:
         | '/[...all]'
       views:
         | never
+      pathParamNames:
+        | 'all'
     }
     'src/pages/about.vue': {
       routes:
         | '/about'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/admin/index.vue': {
@@ -303,11 +309,15 @@ declare module 'vue-router/auto-routes' {
         | '/admin/'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/admin/audit-logs.vue': {
       routes:
         | '/admin/audit-logs'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/admin/runtime.vue': {
@@ -315,11 +325,15 @@ declare module 'vue-router/auto-routes' {
         | '/admin/runtime'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/admin/settings.vue': {
       routes:
         | '/admin/settings'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/admin/storage.vue': {
@@ -327,11 +341,15 @@ declare module 'vue-router/auto-routes' {
         | '/admin/storage'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/admin/users.vue': {
       routes:
         | '/admin/users'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/backends.vue': {
@@ -339,11 +357,15 @@ declare module 'vue-router/auto-routes' {
         | '/backends'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/bootstrap-prompt-templates.vue': {
       routes:
         | '/bootstrap-prompt-templates'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/changelog.vue': {
@@ -351,11 +373,15 @@ declare module 'vue-router/auto-routes' {
         | '/changelog'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/execution-plan-templates.vue': {
       routes:
         | '/execution-plan-templates'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/execution-profiles.vue': {
@@ -363,11 +389,15 @@ declare module 'vue-router/auto-routes' {
         | '/execution-profiles'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/login.vue': {
       routes:
         | '/login'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/operations.vue': {
@@ -375,11 +405,15 @@ declare module 'vue-router/auto-routes' {
         | '/operations'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/profile.vue': {
       routes:
         | '/profile'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/projects.vue': {
@@ -388,17 +422,23 @@ declare module 'vue-router/auto-routes' {
         | '/projects/[projectId]'
       views:
         | 'default'
+      pathParamNames:
+        | never
     }
     'src/pages/projects/[projectId].vue': {
       routes:
         | '/projects/[projectId]'
       views:
         | never
+      pathParamNames:
+        | 'projectId'
     }
     'src/pages/prompt-templates.vue': {
       routes:
         | '/prompt-templates'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/prune-prompt-templates.vue': {
@@ -406,11 +446,15 @@ declare module 'vue-router/auto-routes' {
         | '/prune-prompt-templates'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/register.vue': {
       routes:
         | '/register'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/security.vue': {
@@ -418,11 +462,15 @@ declare module 'vue-router/auto-routes' {
         | '/security'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/service.vue': {
       routes:
         | '/service'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/settings.vue': {
@@ -436,11 +484,15 @@ declare module 'vue-router/auto-routes' {
         | '/settings/team'
       views:
         | 'default'
+      pathParamNames:
+        | never
     }
     'src/pages/settings/index.vue': {
       routes:
         | '/settings/'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/settings/preferences.vue': {
@@ -448,11 +500,15 @@ declare module 'vue-router/auto-routes' {
         | '/settings/preferences'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/settings/profile.vue': {
       routes:
         | '/settings/profile'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/settings/security.vue': {
@@ -460,11 +516,15 @@ declare module 'vue-router/auto-routes' {
         | '/settings/security'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/settings/storage.vue': {
       routes:
         | '/settings/storage'
       views:
+        | never
+      pathParamNames:
         | never
     }
     'src/pages/settings/team.vue': {
@@ -472,17 +532,23 @@ declare module 'vue-router/auto-routes' {
         | '/settings/team'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/stats.vue': {
       routes:
         | '/stats'
       views:
         | never
+      pathParamNames:
+        | never
     }
     'src/pages/tools/epub-rotate.vue': {
       routes:
         | '/tools/epub-rotate'
       views:
+        | never
+      pathParamNames:
         | never
     }
   }
