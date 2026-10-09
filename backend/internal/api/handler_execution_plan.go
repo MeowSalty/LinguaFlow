@@ -256,6 +256,10 @@ func toRubyRetryConfigAPI(rr schema.ExecutionPlanRubyRetryConfig) ExecutionPlanR
 		v := rr.MaxAttempts
 		result.MaxAttempts = &v
 	}
+	if rr.Concurrency != nil {
+		v := *rr.Concurrency
+		result.Concurrency = &v
+	}
 	return result
 }
 
@@ -272,6 +276,10 @@ func parseRubyRetryConfig(api *ExecutionPlanRubyRetryConfig) schema.ExecutionPla
 	}
 	if api.MaxAttempts != nil {
 		result.MaxAttempts = *api.MaxAttempts
+	}
+	if api.Concurrency != nil {
+		v := *api.Concurrency
+		result.Concurrency = &v
 	}
 	return result
 }

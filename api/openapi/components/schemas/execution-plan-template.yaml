@@ -320,6 +320,10 @@ ExecutionPlanRubyRetryConfig:
       minimum: 1
       default: 1
       description: 注音对齐重试轮数（仅 enabled=true 时生效）
+    concurrency:
+      type: integer
+      minimum: 1
+      description: 单个任务全部资源与轮次共享的注音请求并发上限；省略时创建任务按版本化默认值 1 物化，与主轮 concurrency 独立。显式 0 或负数无效。
 
 ExecutionPlanTemplate:
   type: object

@@ -3457,6 +3457,7 @@ paths:
             enum:
               - pending
               - running
+              - pausing
               - paused
               - completed
               - failed
@@ -3508,7 +3509,7 @@ paths:
       summary: 列出当前用户可访问的跨项目翻译任务
       description: |
         按项目读取权限查询，包含组织项目内其他成员创建的任务。
-        未指定 state 或 status 时默认查询 pending、running、paused。
+        未指定 state 或 status 时默认查询 pending、running、pausing、paused。
         state 与 status 互斥。project_id 不存在或无读取权限时返回空列表。
         按 updated_at DESC、id DESC 排序；cursor 是不透明游标，仅用于原筛选条件的续页。
         任务更新会改变排序，本接口不提供跨请求快照；轮询应从首页重新查询并按 ID 去重，
@@ -3525,7 +3526,7 @@ paths:
               - active
               - terminal
               - all
-          description: active 包含 pending/running/paused；terminal 包含 completed/failed/cancelled；与 status 互斥
+          description: active 包含 pending/running/pausing/paused；terminal 包含 completed/failed/cancelled；与 status 互斥
         - name: status
           in: query
           schema:
@@ -3533,6 +3534,7 @@ paths:
             enum:
               - pending
               - running
+              - pausing
               - paused
               - completed
               - failed
@@ -6319,6 +6321,7 @@ components:
           enum:
             - pending
             - running
+            - pausing
             - paused
             - completed
             - failed
@@ -6383,6 +6386,58 @@ components:
           type: integer
           nullable: true
           description: 暂不可用，省略或为 null；不暴露全实例队列人数。
+        stages:
+          $ref: '#/components/schemas/JobStageCounts'
+    JobStageCounts:
+      type: object
+      description: 持久状态的阶段观察值，不用于请求准入或推进完成计数。只表示当前任务，不含草稿正文。
+      required:
+        - main_requests
+        - pending_alignment
+        - alignment_requests
+        - saving_requests
+        - ready_to_commit
+        - confirmed_work
+        - unknown_requests
+        - draining_requests
+        - as_of
+      properties:
+        main_requests:
+          type: integer
+          minimum: 0
+          description: 当前尝试中已派发、响应尚未入账的主请求数
+        pending_alignment:
+          type: integer
+          minimum: 0
+          description: 主译文已生成、等待或正在注音对齐的候选数；包含正在对齐的候选
+        alignment_requests:
+          type: integer
+          minimum: 0
+          description: 当前尝试中已派发、响应尚未入账的注音请求数
+        saving_requests:
+          type: integer
+          minimum: 0
+          description: 当前尝试中响应已入账、等待解析、可靠保存或完成确认的请求数；不以候选数代替
+        ready_to_commit:
+          type: integer
+          minimum: 0
+          description: 已准备好、等待正式确认的候选数
+        confirmed_work:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 已确认工作量（段落×轮），按持久断点完成事实计数；不同于按关闭轮次总量计算的有效 progress_completed
+        unknown_requests:
+          type: integer
+          minimum: 0
+          description: 当前尝试中完成情况未知的请求数
+        draining_requests:
+          type: integer
+          minimum: 0
+          description: 暂停期间等待收尾的主请求、注音请求与保存中请求总数；暂停完成还需保存屏障确认
+        as_of:
+          type: string
+          format: date-time
     JobListResponse:
       type: object
       required:
@@ -6424,6 +6479,7 @@ components:
           enum:
             - pending
             - running
+            - pausing
             - paused
             - completed
             - failed
@@ -6478,6 +6534,7 @@ components:
       required:
         - pending
         - running
+        - pausing
         - paused
         - recent_failed
         - recent_failed_since
@@ -6490,6 +6547,9 @@ components:
           type: integer
           minimum: 0
         paused:
+          type: integer
+          minimum: 0
+        pausing:
           type: integer
           minimum: 0
         recent_failed:
@@ -6514,6 +6574,7 @@ components:
       properties:
         type:
           type: string
+          description: 事件类型；job_pausing 表示停止新派发并等待收尾，job_paused 表示安全暂停，stage_counts 携带 metadata.stages 阶段观察值。
         job_id:
           type: integer
         level:
@@ -10393,6 +10454,10 @@ components:
           minimum: 1
           default: 1
           description: 注音对齐重试轮数（仅 enabled=true 时生效）
+        concurrency:
+          type: integer
+          minimum: 1
+          description: 单个任务全部资源与轮次共享的注音请求并发上限；省略时创建任务按版本化默认值 1 物化，与主轮 concurrency 独立。显式 0 或负数无效。
     TranslateSegmentFilterConfig:
       type: object
       description: 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。
