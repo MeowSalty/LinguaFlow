@@ -73,13 +73,20 @@ type BatchEvent struct {
 	Repaired        []string                `json:"repaired,omitempty"`  // 响应解析修复算子链(如 json.close-braces、json.truncation-salvage),按应用顺序
 
 	// Diagnostic fields for preview response.
-	RoundIndex      int            `json:"round_index,omitempty"`
-	Attempt         int            `json:"attempt,omitempty"`
-	SystemPrompt    string         `json:"system_prompt,omitempty"`
-	UserMessage     string         `json:"user_message,omitempty"`
-	ResponseFormat  string         `json:"response_format,omitempty"`
-	JSONSchema      map[string]any `json:"json_schema,omitempty"`
-	ResponseContent string         `json:"response_content,omitempty"`
+	RoundIndex       int            `json:"round_index,omitempty"`
+	Attempt          int            `json:"attempt,omitempty"`
+	SystemPrompt     string         `json:"system_prompt,omitempty"`
+	UserMessage      string         `json:"user_message,omitempty"`
+	ResponseFormat   string         `json:"response_format,omitempty"`
+	JSONSchema       map[string]any `json:"json_schema,omitempty"`
+	ResponseContent  string         `json:"response_content,omitempty"`
+	ParentRequestID  string         `json:"parent_request_id,omitempty"`
+	CandidateID      string         `json:"candidate_id,omitempty"`
+	CandidateVersion int64          `json:"candidate_version,omitempty"`
+	LogicalAttempt   int            `json:"logical_attempt,omitempty"`
+	NetworkAttempt   int            `json:"network_attempt,omitempty"`
+	VerifiedItems    int            `json:"verified_items,omitempty"`
+	MissingItems     int            `json:"missing_items,omitempty"`
 }
 
 // BatchObserver is an optional interface that a Reporter may implement

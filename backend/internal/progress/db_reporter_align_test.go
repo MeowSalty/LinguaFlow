@@ -279,16 +279,17 @@ func TestDBReporter_ConstraintConflict_RealignsAndAssertsCount(t *testing.T) {
 		}
 	}
 
-	// CreateBulk 撞唯一索引：本次事务整体回滚，计数列不得推进。
-	if err := r.flush(); err == nil {
-		t.Fatal("conflicting checkpoint flush unexpectedly succeeded")
+	// The unique writer discovers existing facts while holding the Job lock;
+	// an old reporter buffer succeeds without generating a unique violation.
+	if err := r.flush(); err != nil {
+		t.Fatalf("idempotent checkpoint flush: %v", err)
 	}
 	row, err := client.JobRound.Get(ctx, roundID)
 	if err != nil {
 		t.Fatalf("reload round after conflict: %v", err)
 	}
-	if row.SegmentCompleted != 0 {
-		t.Errorf("segment_completed = %d, want 0 (冲突事务整体回滚)", row.SegmentCompleted)
+	if row.SegmentCompleted != 2 {
+		t.Errorf("segment_completed = %d, want 2", row.SegmentCompleted)
 	}
 
 	// 对齐把 pending 过滤为空，但计数列仍须重申为集合基数。

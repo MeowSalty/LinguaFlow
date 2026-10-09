@@ -588,12 +588,12 @@ func TestDBReporter_StageStartBaselineAnchoredToCheckpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload job: %v", err)
 	}
-	// 恢复重跑不重复累加分母；只累加本轮实际完成的 2 段。
+	// 恢复校准断点与 Job 缓存后，再推进新完成的两段。
 	if job.ProgressTotal != 4 {
 		t.Errorf("job progress_total = %d, want 4 (no double add on resume)", job.ProgressTotal)
 	}
-	if job.ProgressCompleted != 2 {
-		t.Errorf("job progress_completed = %d, want 2", job.ProgressCompleted)
+	if job.ProgressCompleted != 4 {
+		t.Errorf("job progress_completed = %d, want 4", job.ProgressCompleted)
 	}
 }
 
