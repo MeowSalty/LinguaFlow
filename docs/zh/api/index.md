@@ -115,10 +115,10 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/quick-translate \
 
 | 字段                 | 说明                                                                       |
 | -------------------- | -------------------------------------------------------------------------- |
-| `project_id`         | 可选。提供时复用该项目的术语表与语言配置，并校验访问权                      |
-| `glossary`           | 内联临时术语表数组（`source`/`target` 必填，可选 `forbidden`/`mandatory` 等）。项目场景下叠加在项目术语表之上 |
+| `project_id`         | 可选。提供时复用该项目的语言配置并校验访问权;术语应用与抽取遵守项目 `glossary_enabled` 总开关 |
+| `glossary`           | 临时术语表数组 (`source`/`target` 必填，可选 `forbidden`/`mandatory` 等)。无项目时按请求应用;关联项目时仅在 `glossary_enabled=true` 时叠加在项目术语表之上 |
 
-响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-—-即时翻译)。
+响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`:翻译轮因 `segment_filter` 跳过，或独立抽取轮因关联项目关闭术语表而整轮跳过。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-—-即时翻译)。
 
 ### 8. 单段预览（试译 / 修订，不落库）
 

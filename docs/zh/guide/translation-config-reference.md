@@ -182,16 +182,20 @@ Web 中在对应资源页管理；内置模板 scope 为 `system`，不可改删
 
 ## 执行配置
 
-执行配置文件(`profiles/*.yaml`)必须声明 `schema_version: 1`,缺失或版本不符会直接报错:
+执行配置文件 (`profiles/*.yaml`) 必须声明 `schema_version: 1`,缺失或版本不符会直接报错：
 
 ```yaml
 schema_version: 1
 ```
 
-分段:`protect` / `ruby` / `postprocess` / `repair` / `glossary.bootstrap` / `context` / `qa`(无顶层 `split`,分段由流水线内部负责;写其他分段会被严格校验拒绝)。
+分段：`protect` / `ruby` / `postprocess` / `repair` / `context` / `qa`(无顶层 `split`,分段由流水线内部负责;写其他分段会被严格校验拒绝)。
 
 ::: tip 更新执行配置是字段级合并
-编辑已有执行配置时,请求按**字段级合并**处理:只覆盖显式提交的字段,未提及的字段保留当前值(不会因缺省被零值重置);但**不允许显式传 `null`**。新建配置则以内置默认值为基线。
+编辑已有执行配置时，请求按**字段级合并**处理：只覆盖显式提交的字段，未提及的字段保留当前值 (不会因缺省被零值重置);但**不允许显式传 `null`**。新建配置则以内置默认值为基线。
+:::
+
+::: warning 术语提取已下沉到翻译轮次
+旧版执行配置中的 `glossary.bootstrap` 分段**已移除**：术语提取不再由执行配置控制，改为在[执行计划的翻译轮次](#translate)上配置 `inline_term_extraction`（见 [术语提取](#术语提取-inline-term-extraction)）。执行配置分段里写 `glossary` 会被严格校验拒绝；旧配置文件升级后需把相关设置迁移到轮次上。
 :::
 
 ### 内容保护（protect）
@@ -244,14 +248,29 @@ schema_version: 1
 修复层只负责把模型返回解析成「可解析的翻译 ID 列表」；个别段没回怎么办，由 [流水线的池化缩批重试](/zh/guide/pipeline#批量与并发) 统一处理（按 `fallback_shrink` 缩小批次只重译缺失段），不再在修复配置里单独开关。
 :::
 
-### 术语自举(glossary.bootstrap)
+### 术语提取 (inline_term_extraction)
 
-| 字段                       | 类型   | 默认值          | 说明                     |
-| -------------------------- | ------ | --------------- | ------------------------ |
-| `enabled`                  | bool   | `false`         | 内联自举                 |
-| `max_terms_per_1000_chars` | float  | `3.0`           | 密度系数                 |
-| `min_source_len`           | int    | `2`             | 源术语最短长度           |
-| `inline_conflict_strategy` | string | `rewrite-local` | `off` \| `rewrite-local` |
+术语提取配置在**翻译轮次**上 (`rounds[].translate.inline_term_extraction`):同一次模型请求既返回译文、又抽取新术语，供后续批次使用。原执行配置的 `glossary.bootstrap` 分段已移除，相关设置需迁移到轮次上。
+
+| 字段                       | 类型   | 默认值          | 说明                                                                                          |
+| -------------------------- | ------ | --------------- | --------------------------------------------------------------------------------------------- |
+| `enabled`                  | bool   | `false`         | 是否在本翻译轮次的模型请求中同时抽取新术语;关联项目时还须启用项目术语表总开关                 |
+| `max_terms_per_1000_words` | float  | `3`             | 每 1000 源文字词的术语抽取上限系数，必须大于 0;CJK 按字、其他文本按词计数                      |
+| `min_source_len`           | int    | `2`             | 抽取术语源文的最短字符数 (按 rune 计),须 ≥ 1                                                 |
+| `conflict_strategy`        | string | `rewrite-local` | `off` \| `rewrite-local`,见下                                                                |
+
+`conflict_strategy` 决定内联提取生效时，新术语与已确认术语冲突的处理方式：
+
+| 取值                    | 行为                                                         |
+| ----------------------- | ------------------------------------------------------------ |
+| `rewrite-local`(默认) | 按已确认术语改写本批译文，保证文档内一致                     |
+| `off`                   | 仅关闭冲突改写，**仍然抽取和合并**新术语 (文档内可能不一致) |
+
+省略整个 `inline_term_extraction` 对象或 `enabled=false` 时不抽取新术语，仍照常使用已有术语表。配置整体受严格校验：非正密度、`min_source_len < 1`、非法 `conflict_strategy` 都会被拒绝。
+
+::: tip 自定义翻译模板需支持术语提取
+内联提取依赖翻译提示词模板里带有术语抽取协议（内置通用提示词已支持）。换成自建模板时，请确保它在该轮开启内联提取后能一并返回新术语。
+:::
 
 ### 质量检测（qa）
 
@@ -328,13 +347,6 @@ repair:
   placeholder_normalize: true
   prompt_upgrade: true
 
-glossary:
-  bootstrap:
-    enabled: false
-    max_terms_per_1000_chars: 3.0
-    min_source_len: 2
-    inline_conflict_strategy: "rewrite-local"
-
 qa:
   enabled: false
   auto_reject: false
@@ -379,7 +391,7 @@ context:
 | `min_source_len`           | int    | `2`    | 术语最短源文             |
 | `retry`                    | object | —      | 重试                     |
 
-提取轮次只写术语表，不改段落译文。
+提取轮次只写术语表，不改段落译文。**关联项目关闭术语表总开关时，该轮会被整轮跳过**(状态记为 `skipped`),但轮次配置本身仍保留;无项目的即时翻译按轮次配置照常执行。
 
 ### translate
 
@@ -390,6 +402,7 @@ context:
 | `max_words_per_batch` | int    | 字词数上限（**计入上下文段**）；`0` 不限制，与 `batch_size` 至少填一项。纯行数模式（此项与 `context.max_chars` 均为 0）下上下文体积不受约束 |
 | `fallback_shrink`     | float  | 池缩比系数（**必填**，合法域 (0, 1]）。`1.0` = 不缩（多池同尺寸重切）；`(0,1)` = 每池缩小，池 N 批次约束 = `floor(原始 × shrink^N)`。`0` 非法（不缩请用 `1.0`）；省略/零值会被后端拒绝（不规范化）。池数量由 `retry.max_attempts+1` 决定 |
 | `segment_filter`      | object | `pending_only` / `skip_approved` / `all` 等                                                                                |
+| `inline_term_extraction` | object | 见 [术语提取](#术语提取-inline-term-extraction)：本轮翻译响应中顺带抽取新术语；省略即不抽取                          |
 | `retry`               | object | 重试                                                                                                                       |
 
 ::: tip 执行策略已移到计划级
@@ -449,7 +462,7 @@ text 模式下若模型仍输出 JSON，解析会自动降级为 JSON，无需�
 
 ### revise
 
-LLM 修订轮次配置。系统提示词内置不可见、**不可覆盖**（无 `prompt_template_id`），protect/ruby 及引擎级策略（repair/QA/glossary）经计划级 `profile_id` 贯穿所有改写型轮次，无需也不依赖计划内 translate 轮。写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。仅处理段落上 `pending`（未裁决 `dismissed`）的语义 issue 作修复目标。
+LLM 修订轮次配置。系统提示词内置不可见、**不可覆盖**（无 `prompt_template_id`），protect/ruby 及引擎级策略（repair/QA）经计划级 `profile_id` 贯穿所有改写型轮次，无需也不依赖计划内 translate 轮。写回遵循 correct 轮先例：改写译文与 issues、不改段落状态、CAS 保护。仅处理段落上 `pending`（未裁决 `dismissed`）的语义 issue 作修复目标。
 
 | 字段                  | 类型     | 默认值         | 说明                                                                                                  |
 | --------------------- | -------- | -------------- | ----------------------------------------------------------------------------------------------------- |
@@ -547,6 +560,7 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 - `semantic_qa.segment_scope=with_issue_codes` 时 `issue_codes` 须 ⊆ 语义白名单；空数组 `[]` 显式表示不扫描任何段
 - `revise.segment_scope=with_issue_codes` 时 `issue_codes` 全部 ⊆ 语义白名单；空数组 `[]` 显式表示不修订任何问题
 - `fallback_shrink` ∈ (0, 1] 且必填（**仅翻译轮**）；修订/裁决/语义质检轮无 `fallback_shrink`（省略或 `0` 会被后端拒绝）→ 以 `1.0` 表达不缩
+- `translate.inline_term_extraction` 若提供：`max_terms_per_1000_words` 须为有限正数、`min_source_len` ≥ 1、`conflict_strategy` ∈ {`off`, `rewrite-local`}
 
 ### 执行计划模板顶层字段
 

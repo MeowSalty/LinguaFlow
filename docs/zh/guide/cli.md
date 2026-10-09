@@ -61,7 +61,7 @@ linguaflow translate -i input.md -o output.md --to zh
 | `--to` | | string | `""` | 目标语言代码(留空则用配置文件) |
 | `--from` | | string | `""` | 源语言代码(留空则用配置文件,可配 `auto` 自动检测) |
 | `--glossary-path` | | string | `""` | 术语表 CSV 路径 |
-| `--bootstrap` | | string | `""` | 术语自举模式：`off` \| `pre` \| `inline` |
+| `--bootstrap` | | string | `""` | 术语提取模式：`off` \| `pre` \| `inline`。`inline` 开启所有翻译轮次的内联提取并移除独立抽取轮次；`pre` 改用独立抽取轮次（缺则自动补一个）；非 `off` 同时启用术语表 |
 | `--profile` | | string | `""` | 执行配置名称（覆盖计划级 `execution.profile`；引用 `translation_profiles` key，未命中报错） |
 | `--prompt` | | string | `""` | 提示词模板名称（引用配置中 `translation_prompt_templates` 的 key） |
 | `--revision-input` | | string | `""` | revise 轮必填：`schema_version: 1` 审阅输入文件（YAML/JSON），详见 [配置文件与环境变量 · CLI 修订输入](/zh/guide/configuration#cli-修订输入-revision-input) |
@@ -90,7 +90,7 @@ linguaflow translate -i article.md -o article.ja --from en --to ja
 linguaflow translate -i docs.md -o out.md --to zh --glossary-path ./terms.csv
 ```
 
-```bash [术语自举]
+```bash [内联术语提取]
 linguaflow translate -i docs.md -o out.md --to zh --bootstrap=inline
 ```
 

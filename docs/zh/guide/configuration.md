@@ -183,18 +183,13 @@ translation_profiles:
       schema_aliases: true
       placeholder_normalize: true
       prompt_upgrade: true
-    glossary:
-      bootstrap:
-        enabled: false
-        max_terms_per_1000_chars: 3.0
-        min_source_len: 2
-        inline_conflict_strategy: rewrite-local
     context:
       enabled: true
       before: 1
       after: 1
       max_chars: 0
     # qa 段仅接受默认值；CLI 不执行翻译质量检测，启用请用 Web 端
+    # 术语提取也不在策略里（glossary.bootstrap 已移除），改在翻译轮次上配
 
 # 执行计划（CLI：translate / extract / revise）
 execution:
@@ -211,6 +206,13 @@ execution:
         max_words_per_batch: 0
         concurrency: 4
         fallback_shrink: 0.5
+        # 内联术语提取（可选）：翻译响应中顺带抽新术语；
+        # 顶层 glossary.enabled 与项目术语表开关为总开关
+        inline_term_extraction:
+          enabled: false
+          max_terms_per_1000_words: 3
+          min_source_len: 2
+          conflict_strategy: rewrite-local
         retry:
           max_attempts: 3
           backoff_ms: 2000
@@ -273,7 +275,11 @@ log:
 
 ### translation_profiles — 翻译策略
 
-控制翻译行为，使用 map 结构，key 为策略名称。可通过 `file` 字段引用外部文件（外部文件顶层必须带 `schema_version: 1`），或内联配置。策略文件支持的分段：`protect`、`ruby`、`postprocess`、`repair`、`glossary.bootstrap`、`context`、`qa`。显式写下的 `false` / `0` / `[]` 会被保留；写其他分段（如旧的顶层 `split`、`bootstrap`）会报错。
+控制翻译行为，使用 map 结构，key 为策略名称。可通过 `file` 字段引用外部文件（外部文件顶层必须带 `schema_version: 1`），或内联配置。策略文件支持的分段：`protect`、`ruby`、`postprocess`、`repair`、`context`、`qa`。显式写下的 `false` / `0` / `[]` 会被保留；写其他分段（如旧的顶层 `split`、`bootstrap`、`glossary`）会报错。
+
+::: warning 术语提取已从策略移出
+旧版策略里的 `glossary.bootstrap` 分段**已移除**，写入会因未知字段被严格校验拒绝。术语提取改在 `execution.rounds[].translate.inline_term_extraction` 上配置（见 [execution — 执行计划](#execution-—-执行计划) 的 [inline_term_extraction](#inline-term-extraction-—-内联术语提取)）。
+:::
 
 ##### protect — 内容保护
 
@@ -312,16 +318,18 @@ log:
 部分段缺失不再在修复配置里单独开关，改由翻译流水线的池化缩批重试统一处理（按 `fallback_shrink` 缩小批次只重译缺失段），见 [流水线与原理 · 批量与并发](/zh/guide/pipeline#批量与并发)。
 :::
 
-##### glossary.bootstrap — 术语提取
+##### inline_term_extraction — 内联术语提取
 
-原内联术语提取配置从顶层 `bootstrap:` 更名为 `glossary.bootstrap:`：
+原策略级 `glossary.bootstrap:` 已移除，内联术语提取改为翻译轮次的高级选项：
 
 | 字段 | 类型 | 默认值 | 说明 |
 | -------------------------- | ------ | --------------- | --------------------------------- |
-| `enabled` | bool | `false` | 是否启用内联术语提取 |
-| `max_terms_per_1000_chars` | float | `3.0` | 每千字符最大术语数 |
-| `min_source_len` | int | `2` | 最小源文本长度 |
-| `inline_conflict_strategy` | string | `rewrite-local` | 冲突策略：`rewrite-local` / `off` |
+| `enabled` | bool | `false` | 是否在本翻译轮的响应中同时抽取新术语 |
+| `max_terms_per_1000_words` | float | `3` | 每千源文字词的术语上限系数（CJK 按字、其他按词），须大于 0 |
+| `min_source_len` | int | `2` | 最小源文本长度（按 rune 计），须 ≥ 1 |
+| `conflict_strategy` | string | `rewrite-local` | 冲突策略：`rewrite-local` / `off` |
+
+省略整段或 `enabled: false` 时只使用 `glossary` 段指定的术语表、不抽取新术语。
 
 ##### context — 上下文窗口
 
@@ -375,6 +383,7 @@ CLI 轮次仅支持 `translate` / `extract` / `revise`；Web 执行计划另支�
 | `max_words_per_batch` | int | 每批字词数上限（计入上下文段） |
 | `concurrency` | int | 并发数 |
 | `fallback_shrink` | float | 池缩比系数，合法域 (0, 1]。`1.0` = 多池同尺寸重切；`(0,1)` = 每池缩小。`0` 非法（会被拒绝）；池数量 = `retry.max_attempts + 1`，见 [流水线与原理](/zh/guide/pipeline#批量与并发) |
+| `inline_term_extraction` | object | 可选。本轮翻译响应中顺带抽术语，见 [inline_term_extraction](#inline-term-extraction-—-内联术语提取) |
 | `retry.*` | — | `max_attempts`（决定池深 = `max_attempts + 1`）/ `backoff_ms` / `jitter` |
 
 ::: tip 策略引用已移到计划级
@@ -750,7 +759,7 @@ JWT secret 与凭据加密密钥没有命令行参数入口，只能通过环境
 | `--from` | | string | `""` | 源语言（覆盖配置文件） |
 | `--to` | | string | `""` | 目标语言（覆盖配置文件） |
 | `--glossary-path` | | string | `""` | 术语表路径，设置后强制启用 |
-| `--bootstrap` | | string | `""` | 术语提取模式：`off`/`pre`/`inline` |
+| `--bootstrap` | | string | `""` | 术语提取模式：`off`/`pre`/`inline`。`inline` 开启**所有**翻译轮次的内联提取并移除独立抽取轮次；`pre` 改用独立抽取轮次（缺则自动补一个置于最前）并关闭内联提取；`off` 两者都关；非 `off` 同时启用术语表；留空沿用配置 |
 | `--profile` | | string | `""` | 执行配置名称（覆盖计划级 `execution.profile`；引用 `translation_profiles` key，未命中报错） |
 | `--prompt` | | string | `""` | 提示词模板名称（`translation_prompt_templates` key） |
 | `--revision-input` | | string | `""` | revise 轮必填：`schema_version: 1` 审阅输入文件（YAML/JSON） |
