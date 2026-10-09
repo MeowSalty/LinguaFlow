@@ -52,6 +52,48 @@ func (_c *JobRoundCreate) SetNillableUpdatedAt(v *time.Time) *JobRoundCreate {
 	return _c
 }
 
+// SetManifestVersion sets the "manifest_version" field.
+func (_c *JobRoundCreate) SetManifestVersion(v int) *JobRoundCreate {
+	_c.mutation.SetManifestVersion(v)
+	return _c
+}
+
+// SetNillableManifestVersion sets the "manifest_version" field if the given value is not nil.
+func (_c *JobRoundCreate) SetNillableManifestVersion(v *int) *JobRoundCreate {
+	if v != nil {
+		_c.SetManifestVersion(*v)
+	}
+	return _c
+}
+
+// SetManifestSealed sets the "manifest_sealed" field.
+func (_c *JobRoundCreate) SetManifestSealed(v bool) *JobRoundCreate {
+	_c.mutation.SetManifestSealed(v)
+	return _c
+}
+
+// SetNillableManifestSealed sets the "manifest_sealed" field if the given value is not nil.
+func (_c *JobRoundCreate) SetNillableManifestSealed(v *bool) *JobRoundCreate {
+	if v != nil {
+		_c.SetManifestSealed(*v)
+	}
+	return _c
+}
+
+// SetPoolIndex sets the "pool_index" field.
+func (_c *JobRoundCreate) SetPoolIndex(v int) *JobRoundCreate {
+	_c.mutation.SetPoolIndex(v)
+	return _c
+}
+
+// SetNillablePoolIndex sets the "pool_index" field if the given value is not nil.
+func (_c *JobRoundCreate) SetNillablePoolIndex(v *int) *JobRoundCreate {
+	if v != nil {
+		_c.SetPoolIndex(*v)
+	}
+	return _c
+}
+
 // SetJobID sets the "job_id" field.
 func (_c *JobRoundCreate) SetJobID(v int) *JobRoundCreate {
 	_c.mutation.SetJobID(v)
@@ -243,6 +285,18 @@ func (_c *JobRoundCreate) defaults() {
 		v := jobround.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.ManifestVersion(); !ok {
+		v := jobround.DefaultManifestVersion
+		_c.mutation.SetManifestVersion(v)
+	}
+	if _, ok := _c.mutation.ManifestSealed(); !ok {
+		v := jobround.DefaultManifestSealed
+		_c.mutation.SetManifestSealed(v)
+	}
+	if _, ok := _c.mutation.PoolIndex(); !ok {
+		v := jobround.DefaultPoolIndex
+		_c.mutation.SetPoolIndex(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := jobround.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -264,6 +318,25 @@ func (_c *JobRoundCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "JobRound.updated_at"`)}
+	}
+	if _, ok := _c.mutation.ManifestVersion(); !ok {
+		return &ValidationError{Name: "manifest_version", err: errors.New(`ent: missing required field "JobRound.manifest_version"`)}
+	}
+	if v, ok := _c.mutation.ManifestVersion(); ok {
+		if err := jobround.ManifestVersionValidator(v); err != nil {
+			return &ValidationError{Name: "manifest_version", err: fmt.Errorf(`ent: validator failed for field "JobRound.manifest_version": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ManifestSealed(); !ok {
+		return &ValidationError{Name: "manifest_sealed", err: errors.New(`ent: missing required field "JobRound.manifest_sealed"`)}
+	}
+	if _, ok := _c.mutation.PoolIndex(); !ok {
+		return &ValidationError{Name: "pool_index", err: errors.New(`ent: missing required field "JobRound.pool_index"`)}
+	}
+	if v, ok := _c.mutation.PoolIndex(); ok {
+		if err := jobround.PoolIndexValidator(v); err != nil {
+			return &ValidationError{Name: "pool_index", err: fmt.Errorf(`ent: validator failed for field "JobRound.pool_index": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.JobID(); !ok {
 		return &ValidationError{Name: "job_id", err: errors.New(`ent: missing required field "JobRound.job_id"`)}
@@ -351,6 +424,18 @@ func (_c *JobRoundCreate) createSpec() (*JobRound, *sqlgraph.CreateSpec) {
 		_spec.SetField(jobround.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
 	}
+	if value, ok := _c.mutation.ManifestVersion(); ok {
+		_spec.SetField(jobround.FieldManifestVersion, field.TypeInt, value)
+		_node.ManifestVersion = value
+	}
+	if value, ok := _c.mutation.ManifestSealed(); ok {
+		_spec.SetField(jobround.FieldManifestSealed, field.TypeBool, value)
+		_node.ManifestSealed = value
+	}
+	if value, ok := _c.mutation.PoolIndex(); ok {
+		_spec.SetField(jobround.FieldPoolIndex, field.TypeInt, value)
+		_node.PoolIndex = value
+	}
 	if value, ok := _c.mutation.RoundIndex(); ok {
 		_spec.SetField(jobround.FieldRoundIndex, field.TypeInt, value)
 		_node.RoundIndex = value
@@ -431,6 +516,10 @@ func (_c *JobRoundCreate) createSpec() (*JobRound, *sqlgraph.CreateSpec) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
+		createE := &JobRoundSegmentCreate{config: _c.config, mutation: newJobRoundSegmentMutation(_c.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.JobRoundSegmentsIDs(); len(nodes) > 0 {

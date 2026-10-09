@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 )
@@ -19,6 +20,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldContentVersion holds the string denoting the content_version field in the database.
+	FieldContentVersion = "content_version"
 	// FieldSegmentIndex holds the string denoting the segment_index field in the database.
 	FieldSegmentIndex = "segment_index"
 	// FieldSourceText holds the string denoting the source_text field in the database.
@@ -69,6 +72,7 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldContentVersion,
 	FieldSegmentIndex,
 	FieldSourceText,
 	FieldTargetText,
@@ -106,13 +110,23 @@ func ValidColumn(column string) bool {
 	return false
 }
 
+// Note that the variables below are initialized by the runtime
+// package on the initialization of the application. Therefore,
+// it should be imported in the main as follows:
+//
+//	import _ "github.com/MeowSalty/LinguaFlow/backend/internal/ent/runtime"
 var (
+	Hooks [1]ent.Hook
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultContentVersion holds the default value on creation for the "content_version" field.
+	DefaultContentVersion int64
+	// ContentVersionValidator is a validator for the "content_version" field. It is called by the builders before save.
+	ContentVersionValidator func(int64) error
 	// SegmentIndexValidator is a validator for the "segment_index" field. It is called by the builders before save.
 	SegmentIndexValidator func(int) error
 	// SourceTextValidator is a validator for the "source_text" field. It is called by the builders before save.
@@ -166,6 +180,11 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByContentVersion orders the results by the content_version field.
+func ByContentVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldContentVersion, opts...).ToFunc()
 }
 
 // BySegmentIndex orders the results by the segment_index field.

@@ -21,6 +21,48 @@ type JobRoundSegmentCreate struct {
 	hooks    []Hook
 }
 
+// SetCommitID sets the "commit_id" field.
+func (_c *JobRoundSegmentCreate) SetCommitID(v string) *JobRoundSegmentCreate {
+	_c.mutation.SetCommitID(v)
+	return _c
+}
+
+// SetNillableCommitID sets the "commit_id" field if the given value is not nil.
+func (_c *JobRoundSegmentCreate) SetNillableCommitID(v *string) *JobRoundSegmentCreate {
+	if v != nil {
+		_c.SetCommitID(*v)
+	}
+	return _c
+}
+
+// SetCandidateID sets the "candidate_id" field.
+func (_c *JobRoundSegmentCreate) SetCandidateID(v string) *JobRoundSegmentCreate {
+	_c.mutation.SetCandidateID(v)
+	return _c
+}
+
+// SetNillableCandidateID sets the "candidate_id" field if the given value is not nil.
+func (_c *JobRoundSegmentCreate) SetNillableCandidateID(v *string) *JobRoundSegmentCreate {
+	if v != nil {
+		_c.SetCandidateID(*v)
+	}
+	return _c
+}
+
+// SetOutcome sets the "outcome" field.
+func (_c *JobRoundSegmentCreate) SetOutcome(v string) *JobRoundSegmentCreate {
+	_c.mutation.SetOutcome(v)
+	return _c
+}
+
+// SetNillableOutcome sets the "outcome" field if the given value is not nil.
+func (_c *JobRoundSegmentCreate) SetNillableOutcome(v *string) *JobRoundSegmentCreate {
+	if v != nil {
+		_c.SetOutcome(*v)
+	}
+	return _c
+}
+
 // SetJobRoundID sets the "job_round_id" field.
 func (_c *JobRoundSegmentCreate) SetJobRoundID(v int) *JobRoundSegmentCreate {
 	_c.mutation.SetJobRoundID(v)
@@ -50,6 +92,7 @@ func (_c *JobRoundSegmentCreate) Mutation() *JobRoundSegmentMutation {
 
 // Save creates the JobRoundSegment in the database.
 func (_c *JobRoundSegmentCreate) Save(ctx context.Context) (*JobRoundSegment, error) {
+	_c.defaults()
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
@@ -75,8 +118,19 @@ func (_c *JobRoundSegmentCreate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (_c *JobRoundSegmentCreate) defaults() {
+	if _, ok := _c.mutation.Outcome(); !ok {
+		v := jobroundsegment.DefaultOutcome
+		_c.mutation.SetOutcome(v)
+	}
+}
+
 // check runs all checks and user-defined validators on the builder.
 func (_c *JobRoundSegmentCreate) check() error {
+	if _, ok := _c.mutation.Outcome(); !ok {
+		return &ValidationError{Name: "outcome", err: errors.New(`ent: missing required field "JobRoundSegment.outcome"`)}
+	}
 	if _, ok := _c.mutation.JobRoundID(); !ok {
 		return &ValidationError{Name: "job_round_id", err: errors.New(`ent: missing required field "JobRoundSegment.job_round_id"`)}
 	}
@@ -125,6 +179,18 @@ func (_c *JobRoundSegmentCreate) createSpec() (*JobRoundSegment, *sqlgraph.Creat
 		_node = &JobRoundSegment{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(jobroundsegment.Table, sqlgraph.NewFieldSpec(jobroundsegment.FieldID, field.TypeInt))
 	)
+	if value, ok := _c.mutation.CommitID(); ok {
+		_spec.SetField(jobroundsegment.FieldCommitID, field.TypeString, value)
+		_node.CommitID = &value
+	}
+	if value, ok := _c.mutation.CandidateID(); ok {
+		_spec.SetField(jobroundsegment.FieldCandidateID, field.TypeString, value)
+		_node.CandidateID = &value
+	}
+	if value, ok := _c.mutation.Outcome(); ok {
+		_spec.SetField(jobroundsegment.FieldOutcome, field.TypeString, value)
+		_node.Outcome = value
+	}
 	if nodes := _c.mutation.JobRoundIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -180,6 +246,7 @@ func (_c *JobRoundSegmentCreateBulk) Save(ctx context.Context) ([]*JobRoundSegme
 	for i := range _c.builders {
 		func(i int, root context.Context) {
 			builder := _c.builders[i]
+			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*JobRoundSegmentMutation)
 				if !ok {

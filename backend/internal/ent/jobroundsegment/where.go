@@ -53,6 +53,21 @@ func IDLTE(id int) predicate.JobRoundSegment {
 	return predicate.JobRoundSegment(sql.FieldLTE(FieldID, id))
 }
 
+// CommitID applies equality check predicate on the "commit_id" field. It's identical to CommitIDEQ.
+func CommitID(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldEQ(FieldCommitID, v))
+}
+
+// CandidateID applies equality check predicate on the "candidate_id" field. It's identical to CandidateIDEQ.
+func CandidateID(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldEQ(FieldCandidateID, v))
+}
+
+// Outcome applies equality check predicate on the "outcome" field. It's identical to OutcomeEQ.
+func Outcome(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldEQ(FieldOutcome, v))
+}
+
 // JobRoundID applies equality check predicate on the "job_round_id" field. It's identical to JobRoundIDEQ.
 func JobRoundID(v int) predicate.JobRoundSegment {
 	return predicate.JobRoundSegment(sql.FieldEQ(FieldJobRoundID, v))
@@ -61,6 +76,221 @@ func JobRoundID(v int) predicate.JobRoundSegment {
 // SegmentID applies equality check predicate on the "segment_id" field. It's identical to SegmentIDEQ.
 func SegmentID(v int) predicate.JobRoundSegment {
 	return predicate.JobRoundSegment(sql.FieldEQ(FieldSegmentID, v))
+}
+
+// CommitIDEQ applies the EQ predicate on the "commit_id" field.
+func CommitIDEQ(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldEQ(FieldCommitID, v))
+}
+
+// CommitIDNEQ applies the NEQ predicate on the "commit_id" field.
+func CommitIDNEQ(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldNEQ(FieldCommitID, v))
+}
+
+// CommitIDIn applies the In predicate on the "commit_id" field.
+func CommitIDIn(vs ...string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldIn(FieldCommitID, vs...))
+}
+
+// CommitIDNotIn applies the NotIn predicate on the "commit_id" field.
+func CommitIDNotIn(vs ...string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldNotIn(FieldCommitID, vs...))
+}
+
+// CommitIDGT applies the GT predicate on the "commit_id" field.
+func CommitIDGT(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldGT(FieldCommitID, v))
+}
+
+// CommitIDGTE applies the GTE predicate on the "commit_id" field.
+func CommitIDGTE(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldGTE(FieldCommitID, v))
+}
+
+// CommitIDLT applies the LT predicate on the "commit_id" field.
+func CommitIDLT(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldLT(FieldCommitID, v))
+}
+
+// CommitIDLTE applies the LTE predicate on the "commit_id" field.
+func CommitIDLTE(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldLTE(FieldCommitID, v))
+}
+
+// CommitIDContains applies the Contains predicate on the "commit_id" field.
+func CommitIDContains(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldContains(FieldCommitID, v))
+}
+
+// CommitIDHasPrefix applies the HasPrefix predicate on the "commit_id" field.
+func CommitIDHasPrefix(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldHasPrefix(FieldCommitID, v))
+}
+
+// CommitIDHasSuffix applies the HasSuffix predicate on the "commit_id" field.
+func CommitIDHasSuffix(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldHasSuffix(FieldCommitID, v))
+}
+
+// CommitIDIsNil applies the IsNil predicate on the "commit_id" field.
+func CommitIDIsNil() predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldIsNull(FieldCommitID))
+}
+
+// CommitIDNotNil applies the NotNil predicate on the "commit_id" field.
+func CommitIDNotNil() predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldNotNull(FieldCommitID))
+}
+
+// CommitIDEqualFold applies the EqualFold predicate on the "commit_id" field.
+func CommitIDEqualFold(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldEqualFold(FieldCommitID, v))
+}
+
+// CommitIDContainsFold applies the ContainsFold predicate on the "commit_id" field.
+func CommitIDContainsFold(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldContainsFold(FieldCommitID, v))
+}
+
+// CandidateIDEQ applies the EQ predicate on the "candidate_id" field.
+func CandidateIDEQ(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldEQ(FieldCandidateID, v))
+}
+
+// CandidateIDNEQ applies the NEQ predicate on the "candidate_id" field.
+func CandidateIDNEQ(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldNEQ(FieldCandidateID, v))
+}
+
+// CandidateIDIn applies the In predicate on the "candidate_id" field.
+func CandidateIDIn(vs ...string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldIn(FieldCandidateID, vs...))
+}
+
+// CandidateIDNotIn applies the NotIn predicate on the "candidate_id" field.
+func CandidateIDNotIn(vs ...string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldNotIn(FieldCandidateID, vs...))
+}
+
+// CandidateIDGT applies the GT predicate on the "candidate_id" field.
+func CandidateIDGT(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldGT(FieldCandidateID, v))
+}
+
+// CandidateIDGTE applies the GTE predicate on the "candidate_id" field.
+func CandidateIDGTE(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldGTE(FieldCandidateID, v))
+}
+
+// CandidateIDLT applies the LT predicate on the "candidate_id" field.
+func CandidateIDLT(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldLT(FieldCandidateID, v))
+}
+
+// CandidateIDLTE applies the LTE predicate on the "candidate_id" field.
+func CandidateIDLTE(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldLTE(FieldCandidateID, v))
+}
+
+// CandidateIDContains applies the Contains predicate on the "candidate_id" field.
+func CandidateIDContains(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldContains(FieldCandidateID, v))
+}
+
+// CandidateIDHasPrefix applies the HasPrefix predicate on the "candidate_id" field.
+func CandidateIDHasPrefix(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldHasPrefix(FieldCandidateID, v))
+}
+
+// CandidateIDHasSuffix applies the HasSuffix predicate on the "candidate_id" field.
+func CandidateIDHasSuffix(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldHasSuffix(FieldCandidateID, v))
+}
+
+// CandidateIDIsNil applies the IsNil predicate on the "candidate_id" field.
+func CandidateIDIsNil() predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldIsNull(FieldCandidateID))
+}
+
+// CandidateIDNotNil applies the NotNil predicate on the "candidate_id" field.
+func CandidateIDNotNil() predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldNotNull(FieldCandidateID))
+}
+
+// CandidateIDEqualFold applies the EqualFold predicate on the "candidate_id" field.
+func CandidateIDEqualFold(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldEqualFold(FieldCandidateID, v))
+}
+
+// CandidateIDContainsFold applies the ContainsFold predicate on the "candidate_id" field.
+func CandidateIDContainsFold(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldContainsFold(FieldCandidateID, v))
+}
+
+// OutcomeEQ applies the EQ predicate on the "outcome" field.
+func OutcomeEQ(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldEQ(FieldOutcome, v))
+}
+
+// OutcomeNEQ applies the NEQ predicate on the "outcome" field.
+func OutcomeNEQ(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldNEQ(FieldOutcome, v))
+}
+
+// OutcomeIn applies the In predicate on the "outcome" field.
+func OutcomeIn(vs ...string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldIn(FieldOutcome, vs...))
+}
+
+// OutcomeNotIn applies the NotIn predicate on the "outcome" field.
+func OutcomeNotIn(vs ...string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldNotIn(FieldOutcome, vs...))
+}
+
+// OutcomeGT applies the GT predicate on the "outcome" field.
+func OutcomeGT(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldGT(FieldOutcome, v))
+}
+
+// OutcomeGTE applies the GTE predicate on the "outcome" field.
+func OutcomeGTE(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldGTE(FieldOutcome, v))
+}
+
+// OutcomeLT applies the LT predicate on the "outcome" field.
+func OutcomeLT(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldLT(FieldOutcome, v))
+}
+
+// OutcomeLTE applies the LTE predicate on the "outcome" field.
+func OutcomeLTE(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldLTE(FieldOutcome, v))
+}
+
+// OutcomeContains applies the Contains predicate on the "outcome" field.
+func OutcomeContains(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldContains(FieldOutcome, v))
+}
+
+// OutcomeHasPrefix applies the HasPrefix predicate on the "outcome" field.
+func OutcomeHasPrefix(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldHasPrefix(FieldOutcome, v))
+}
+
+// OutcomeHasSuffix applies the HasSuffix predicate on the "outcome" field.
+func OutcomeHasSuffix(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldHasSuffix(FieldOutcome, v))
+}
+
+// OutcomeEqualFold applies the EqualFold predicate on the "outcome" field.
+func OutcomeEqualFold(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldEqualFold(FieldOutcome, v))
+}
+
+// OutcomeContainsFold applies the ContainsFold predicate on the "outcome" field.
+func OutcomeContainsFold(v string) predicate.JobRoundSegment {
+	return predicate.JobRoundSegment(sql.FieldContainsFold(FieldOutcome, v))
 }
 
 // JobRoundIDEQ applies the EQ predicate on the "job_round_id" field.

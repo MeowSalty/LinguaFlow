@@ -18,6 +18,12 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldManifestVersion holds the string denoting the manifest_version field in the database.
+	FieldManifestVersion = "manifest_version"
+	// FieldManifestSealed holds the string denoting the manifest_sealed field in the database.
+	FieldManifestSealed = "manifest_sealed"
+	// FieldPoolIndex holds the string denoting the pool_index field in the database.
+	FieldPoolIndex = "pool_index"
 	// FieldJobID holds the string denoting the job_id field in the database.
 	FieldJobID = "job_id"
 	// FieldJobResourceID holds the string denoting the job_resource_id field in the database.
@@ -81,6 +87,9 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldManifestVersion,
+	FieldManifestSealed,
+	FieldPoolIndex,
 	FieldJobID,
 	FieldJobResourceID,
 	FieldRoundIndex,
@@ -116,6 +125,16 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultManifestVersion holds the default value on creation for the "manifest_version" field.
+	DefaultManifestVersion int
+	// ManifestVersionValidator is a validator for the "manifest_version" field. It is called by the builders before save.
+	ManifestVersionValidator func(int) error
+	// DefaultManifestSealed holds the default value on creation for the "manifest_sealed" field.
+	DefaultManifestSealed bool
+	// DefaultPoolIndex holds the default value on creation for the "pool_index" field.
+	DefaultPoolIndex int
+	// PoolIndexValidator is a validator for the "pool_index" field. It is called by the builders before save.
+	PoolIndexValidator func(int) error
 	// JobIDValidator is a validator for the "job_id" field. It is called by the builders before save.
 	JobIDValidator func(int) error
 	// JobResourceIDValidator is a validator for the "job_resource_id" field. It is called by the builders before save.
@@ -150,6 +169,21 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByManifestVersion orders the results by the manifest_version field.
+func ByManifestVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldManifestVersion, opts...).ToFunc()
+}
+
+// ByManifestSealed orders the results by the manifest_sealed field.
+func ByManifestSealed(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldManifestSealed, opts...).ToFunc()
+}
+
+// ByPoolIndex orders the results by the pool_index field.
+func ByPoolIndex(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPoolIndex, opts...).ToFunc()
 }
 
 // ByJobID orders the results by the job_id field.

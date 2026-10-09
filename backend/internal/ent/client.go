@@ -62,6 +62,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 
 	stdsql "database/sql"
 )
@@ -165,6 +168,12 @@ type Client struct {
 	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// WorkCandidate is the client for interacting with the WorkCandidate builders.
+	WorkCandidate *WorkCandidateClient
+	// WorkItem is the client for interacting with the WorkItem builders.
+	WorkItem *WorkItemClient
+	// WorkRequest is the client for interacting with the WorkRequest builders.
+	WorkRequest *WorkRequestClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -223,6 +232,9 @@ func (c *Client) init() {
 	c.TranslationPromptTemplate = NewTranslationPromptTemplateClient(c.config)
 	c.UsageRecord = NewUsageRecordClient(c.config)
 	c.User = NewUserClient(c.config)
+	c.WorkCandidate = NewWorkCandidateClient(c.config)
+	c.WorkItem = NewWorkItemClient(c.config)
+	c.WorkRequest = NewWorkRequestClient(c.config)
 }
 
 type (
@@ -362,6 +374,9 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		TranslationPromptTemplate: NewTranslationPromptTemplateClient(cfg),
 		UsageRecord:               NewUsageRecordClient(cfg),
 		User:                      NewUserClient(cfg),
+		WorkCandidate:             NewWorkCandidateClient(cfg),
+		WorkItem:                  NewWorkItemClient(cfg),
+		WorkRequest:               NewWorkRequestClient(cfg),
 	}, nil
 }
 
@@ -428,6 +443,9 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		TranslationPromptTemplate: NewTranslationPromptTemplateClient(cfg),
 		UsageRecord:               NewUsageRecordClient(cfg),
 		User:                      NewUserClient(cfg),
+		WorkCandidate:             NewWorkCandidateClient(cfg),
+		WorkItem:                  NewWorkItemClient(cfg),
+		WorkRequest:               NewWorkRequestClient(cfg),
 	}, nil
 }
 
@@ -468,7 +486,8 @@ func (c *Client) Use(hooks ...Hook) {
 		c.StorageCheckWrite, c.StorageConnection, c.StorageMigrationItem,
 		c.StorageReservation, c.StorageSpace, c.StorageTask, c.StorageUploadBatch,
 		c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask, c.SystemSetting,
-		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User, c.WorkCandidate,
+		c.WorkItem, c.WorkRequest,
 	} {
 		n.Use(hooks...)
 	}
@@ -489,7 +508,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.StorageCheckWrite, c.StorageConnection, c.StorageMigrationItem,
 		c.StorageReservation, c.StorageSpace, c.StorageTask, c.StorageUploadBatch,
 		c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask, c.SystemSetting,
-		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User, c.WorkCandidate,
+		c.WorkItem, c.WorkRequest,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -592,6 +612,12 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.UsageRecord.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
+	case *WorkCandidateMutation:
+		return c.WorkCandidate.mutate(ctx, m)
+	case *WorkItemMutation:
+		return c.WorkItem.mutate(ctx, m)
+	case *WorkRequestMutation:
+		return c.WorkRequest.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
 	}
@@ -5349,7 +5375,8 @@ func (c *SegmentClient) QueryResolvedInRounds(_m *Segment) *JobRoundQuery {
 
 // Hooks returns the client hooks.
 func (c *SegmentClient) Hooks() []Hook {
-	return c.hooks.Segment
+	hooks := c.hooks.Segment
+	return append(hooks[:len(hooks):len(hooks)], segment.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.
@@ -8608,6 +8635,533 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 	}
 }
 
+// WorkCandidateClient is a client for the WorkCandidate schema.
+type WorkCandidateClient struct {
+	config
+}
+
+// NewWorkCandidateClient returns a client for the WorkCandidate from the given config.
+func NewWorkCandidateClient(c config) *WorkCandidateClient {
+	return &WorkCandidateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `workcandidate.Hooks(f(g(h())))`.
+func (c *WorkCandidateClient) Use(hooks ...Hook) {
+	c.hooks.WorkCandidate = append(c.hooks.WorkCandidate, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `workcandidate.Intercept(f(g(h())))`.
+func (c *WorkCandidateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WorkCandidate = append(c.inters.WorkCandidate, interceptors...)
+}
+
+// Create returns a builder for creating a WorkCandidate entity.
+func (c *WorkCandidateClient) Create() *WorkCandidateCreate {
+	mutation := newWorkCandidateMutation(c.config, OpCreate)
+	return &WorkCandidateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WorkCandidate entities.
+func (c *WorkCandidateClient) CreateBulk(builders ...*WorkCandidateCreate) *WorkCandidateCreateBulk {
+	return &WorkCandidateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WorkCandidateClient) MapCreateBulk(slice any, setFunc func(*WorkCandidateCreate, int)) *WorkCandidateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WorkCandidateCreateBulk{err: fmt.Errorf("calling to WorkCandidateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WorkCandidateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WorkCandidateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WorkCandidate.
+func (c *WorkCandidateClient) Update() *WorkCandidateUpdate {
+	mutation := newWorkCandidateMutation(c.config, OpUpdate)
+	return &WorkCandidateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WorkCandidateClient) UpdateOne(_m *WorkCandidate) *WorkCandidateUpdateOne {
+	mutation := newWorkCandidateMutation(c.config, OpUpdateOne, withWorkCandidate(_m))
+	return &WorkCandidateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WorkCandidateClient) UpdateOneID(id int) *WorkCandidateUpdateOne {
+	mutation := newWorkCandidateMutation(c.config, OpUpdateOne, withWorkCandidateID(id))
+	return &WorkCandidateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WorkCandidate.
+func (c *WorkCandidateClient) Delete() *WorkCandidateDelete {
+	mutation := newWorkCandidateMutation(c.config, OpDelete)
+	return &WorkCandidateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WorkCandidateClient) DeleteOne(_m *WorkCandidate) *WorkCandidateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WorkCandidateClient) DeleteOneID(id int) *WorkCandidateDeleteOne {
+	builder := c.Delete().Where(workcandidate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WorkCandidateDeleteOne{builder}
+}
+
+// Query returns a query builder for WorkCandidate.
+func (c *WorkCandidateClient) Query() *WorkCandidateQuery {
+	return &WorkCandidateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWorkCandidate},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WorkCandidate entity by its id.
+func (c *WorkCandidateClient) Get(ctx context.Context, id int) (*WorkCandidate, error) {
+	return c.Query().Where(workcandidate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WorkCandidateClient) GetX(ctx context.Context, id int) *WorkCandidate {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryWorkItem queries the work_item edge of a WorkCandidate.
+func (c *WorkCandidateClient) QueryWorkItem(_m *WorkCandidate) *WorkItemQuery {
+	query := (&WorkItemClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workcandidate.Table, workcandidate.FieldID, id),
+			sqlgraph.To(workitem.Table, workitem.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workcandidate.WorkItemTable, workcandidate.WorkItemColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *WorkCandidateClient) Hooks() []Hook {
+	return c.hooks.WorkCandidate
+}
+
+// Interceptors returns the client interceptors.
+func (c *WorkCandidateClient) Interceptors() []Interceptor {
+	return c.inters.WorkCandidate
+}
+
+func (c *WorkCandidateClient) mutate(ctx context.Context, m *WorkCandidateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WorkCandidateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WorkCandidateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WorkCandidateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WorkCandidateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WorkCandidate mutation op: %q", m.Op())
+	}
+}
+
+// WorkItemClient is a client for the WorkItem schema.
+type WorkItemClient struct {
+	config
+}
+
+// NewWorkItemClient returns a client for the WorkItem from the given config.
+func NewWorkItemClient(c config) *WorkItemClient {
+	return &WorkItemClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `workitem.Hooks(f(g(h())))`.
+func (c *WorkItemClient) Use(hooks ...Hook) {
+	c.hooks.WorkItem = append(c.hooks.WorkItem, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `workitem.Intercept(f(g(h())))`.
+func (c *WorkItemClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WorkItem = append(c.inters.WorkItem, interceptors...)
+}
+
+// Create returns a builder for creating a WorkItem entity.
+func (c *WorkItemClient) Create() *WorkItemCreate {
+	mutation := newWorkItemMutation(c.config, OpCreate)
+	return &WorkItemCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WorkItem entities.
+func (c *WorkItemClient) CreateBulk(builders ...*WorkItemCreate) *WorkItemCreateBulk {
+	return &WorkItemCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WorkItemClient) MapCreateBulk(slice any, setFunc func(*WorkItemCreate, int)) *WorkItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WorkItemCreateBulk{err: fmt.Errorf("calling to WorkItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WorkItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WorkItemCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WorkItem.
+func (c *WorkItemClient) Update() *WorkItemUpdate {
+	mutation := newWorkItemMutation(c.config, OpUpdate)
+	return &WorkItemUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WorkItemClient) UpdateOne(_m *WorkItem) *WorkItemUpdateOne {
+	mutation := newWorkItemMutation(c.config, OpUpdateOne, withWorkItem(_m))
+	return &WorkItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WorkItemClient) UpdateOneID(id int) *WorkItemUpdateOne {
+	mutation := newWorkItemMutation(c.config, OpUpdateOne, withWorkItemID(id))
+	return &WorkItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WorkItem.
+func (c *WorkItemClient) Delete() *WorkItemDelete {
+	mutation := newWorkItemMutation(c.config, OpDelete)
+	return &WorkItemDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WorkItemClient) DeleteOne(_m *WorkItem) *WorkItemDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WorkItemClient) DeleteOneID(id int) *WorkItemDeleteOne {
+	builder := c.Delete().Where(workitem.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WorkItemDeleteOne{builder}
+}
+
+// Query returns a query builder for WorkItem.
+func (c *WorkItemClient) Query() *WorkItemQuery {
+	return &WorkItemQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWorkItem},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WorkItem entity by its id.
+func (c *WorkItemClient) Get(ctx context.Context, id int) (*WorkItem, error) {
+	return c.Query().Where(workitem.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WorkItemClient) GetX(ctx context.Context, id int) *WorkItem {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryJob queries the job edge of a WorkItem.
+func (c *WorkItemClient) QueryJob(_m *WorkItem) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workitem.Table, workitem.FieldID, id),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workitem.JobTable, workitem.JobColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryResource queries the resource edge of a WorkItem.
+func (c *WorkItemClient) QueryResource(_m *WorkItem) *ResourceQuery {
+	query := (&ResourceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workitem.Table, workitem.FieldID, id),
+			sqlgraph.To(resource.Table, resource.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workitem.ResourceTable, workitem.ResourceColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryRound queries the round edge of a WorkItem.
+func (c *WorkItemClient) QueryRound(_m *WorkItem) *JobRoundQuery {
+	query := (&JobRoundClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workitem.Table, workitem.FieldID, id),
+			sqlgraph.To(jobround.Table, jobround.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workitem.RoundTable, workitem.RoundColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QuerySegment queries the segment edge of a WorkItem.
+func (c *WorkItemClient) QuerySegment(_m *WorkItem) *SegmentQuery {
+	query := (&SegmentClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workitem.Table, workitem.FieldID, id),
+			sqlgraph.To(segment.Table, segment.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workitem.SegmentTable, workitem.SegmentColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *WorkItemClient) Hooks() []Hook {
+	return c.hooks.WorkItem
+}
+
+// Interceptors returns the client interceptors.
+func (c *WorkItemClient) Interceptors() []Interceptor {
+	return c.inters.WorkItem
+}
+
+func (c *WorkItemClient) mutate(ctx context.Context, m *WorkItemMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WorkItemCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WorkItemUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WorkItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WorkItemDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WorkItem mutation op: %q", m.Op())
+	}
+}
+
+// WorkRequestClient is a client for the WorkRequest schema.
+type WorkRequestClient struct {
+	config
+}
+
+// NewWorkRequestClient returns a client for the WorkRequest from the given config.
+func NewWorkRequestClient(c config) *WorkRequestClient {
+	return &WorkRequestClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `workrequest.Hooks(f(g(h())))`.
+func (c *WorkRequestClient) Use(hooks ...Hook) {
+	c.hooks.WorkRequest = append(c.hooks.WorkRequest, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `workrequest.Intercept(f(g(h())))`.
+func (c *WorkRequestClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WorkRequest = append(c.inters.WorkRequest, interceptors...)
+}
+
+// Create returns a builder for creating a WorkRequest entity.
+func (c *WorkRequestClient) Create() *WorkRequestCreate {
+	mutation := newWorkRequestMutation(c.config, OpCreate)
+	return &WorkRequestCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WorkRequest entities.
+func (c *WorkRequestClient) CreateBulk(builders ...*WorkRequestCreate) *WorkRequestCreateBulk {
+	return &WorkRequestCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WorkRequestClient) MapCreateBulk(slice any, setFunc func(*WorkRequestCreate, int)) *WorkRequestCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WorkRequestCreateBulk{err: fmt.Errorf("calling to WorkRequestClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WorkRequestCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WorkRequestCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WorkRequest.
+func (c *WorkRequestClient) Update() *WorkRequestUpdate {
+	mutation := newWorkRequestMutation(c.config, OpUpdate)
+	return &WorkRequestUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WorkRequestClient) UpdateOne(_m *WorkRequest) *WorkRequestUpdateOne {
+	mutation := newWorkRequestMutation(c.config, OpUpdateOne, withWorkRequest(_m))
+	return &WorkRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WorkRequestClient) UpdateOneID(id int) *WorkRequestUpdateOne {
+	mutation := newWorkRequestMutation(c.config, OpUpdateOne, withWorkRequestID(id))
+	return &WorkRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WorkRequest.
+func (c *WorkRequestClient) Delete() *WorkRequestDelete {
+	mutation := newWorkRequestMutation(c.config, OpDelete)
+	return &WorkRequestDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WorkRequestClient) DeleteOne(_m *WorkRequest) *WorkRequestDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WorkRequestClient) DeleteOneID(id int) *WorkRequestDeleteOne {
+	builder := c.Delete().Where(workrequest.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WorkRequestDeleteOne{builder}
+}
+
+// Query returns a query builder for WorkRequest.
+func (c *WorkRequestClient) Query() *WorkRequestQuery {
+	return &WorkRequestQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWorkRequest},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WorkRequest entity by its id.
+func (c *WorkRequestClient) Get(ctx context.Context, id int) (*WorkRequest, error) {
+	return c.Query().Where(workrequest.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WorkRequestClient) GetX(ctx context.Context, id int) *WorkRequest {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryJob queries the job edge of a WorkRequest.
+func (c *WorkRequestClient) QueryJob(_m *WorkRequest) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workrequest.Table, workrequest.FieldID, id),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workrequest.JobTable, workrequest.JobColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryResource queries the resource edge of a WorkRequest.
+func (c *WorkRequestClient) QueryResource(_m *WorkRequest) *ResourceQuery {
+	query := (&ResourceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workrequest.Table, workrequest.FieldID, id),
+			sqlgraph.To(resource.Table, resource.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workrequest.ResourceTable, workrequest.ResourceColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryRound queries the round edge of a WorkRequest.
+func (c *WorkRequestClient) QueryRound(_m *WorkRequest) *JobRoundQuery {
+	query := (&JobRoundClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workrequest.Table, workrequest.FieldID, id),
+			sqlgraph.To(jobround.Table, jobround.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workrequest.RoundTable, workrequest.RoundColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *WorkRequestClient) Hooks() []Hook {
+	return c.hooks.WorkRequest
+}
+
+// Interceptors returns the client interceptors.
+func (c *WorkRequestClient) Interceptors() []Interceptor {
+	return c.inters.WorkRequest
+}
+
+func (c *WorkRequestClient) mutate(ctx context.Context, m *WorkRequestMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WorkRequestCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WorkRequestUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WorkRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WorkRequestDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WorkRequest mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
@@ -8620,8 +9174,8 @@ type (
 		StorageAuthVersion, StorageBackup, StorageCheck, StorageCheckWrite,
 		StorageConnection, StorageMigrationItem, StorageReservation, StorageSpace,
 		StorageTask, StorageUploadBatch, StorageUploadBatchItem, StorageWrite,
-		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
-		User []ent.Hook
+		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord, User,
+		WorkCandidate, WorkItem, WorkRequest []ent.Hook
 	}
 	inters struct {
 		ActivityLog, Backend, BackupPin, Blob, BlobLocation, BootstrapPromptTemplate,
@@ -8633,8 +9187,8 @@ type (
 		StorageAuthVersion, StorageBackup, StorageCheck, StorageCheckWrite,
 		StorageConnection, StorageMigrationItem, StorageReservation, StorageSpace,
 		StorageTask, StorageUploadBatch, StorageUploadBatchItem, StorageWrite,
-		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
-		User []ent.Interceptor
+		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord, User,
+		WorkCandidate, WorkItem, WorkRequest []ent.Interceptor
 	}
 )
 

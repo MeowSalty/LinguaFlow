@@ -108,6 +108,12 @@ type Tx struct {
 	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// WorkCandidate is the client for interacting with the WorkCandidate builders.
+	WorkCandidate *WorkCandidateClient
+	// WorkItem is the client for interacting with the WorkItem builders.
+	WorkItem *WorkItemClient
+	// WorkRequest is the client for interacting with the WorkRequest builders.
+	WorkRequest *WorkRequestClient
 
 	// lazily loaded.
 	client     *Client
@@ -286,6 +292,9 @@ func (tx *Tx) init() {
 	tx.TranslationPromptTemplate = NewTranslationPromptTemplateClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)
 	tx.User = NewUserClient(tx.config)
+	tx.WorkCandidate = NewWorkCandidateClient(tx.config)
+	tx.WorkItem = NewWorkItemClient(tx.config)
+	tx.WorkRequest = NewWorkRequestClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

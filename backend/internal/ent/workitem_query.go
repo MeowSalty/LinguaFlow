@@ -11,59 +11,107 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 )
 
-// JobRoundSegmentQuery is the builder for querying JobRoundSegment entities.
-type JobRoundSegmentQuery struct {
+// WorkItemQuery is the builder for querying WorkItem entities.
+type WorkItemQuery struct {
 	config
 	ctx          *QueryContext
-	order        []jobroundsegment.OrderOption
+	order        []workitem.OrderOption
 	inters       []Interceptor
-	predicates   []predicate.JobRoundSegment
-	withJobRound *JobRoundQuery
+	predicates   []predicate.WorkItem
+	withJob      *JobQuery
+	withResource *ResourceQuery
+	withRound    *JobRoundQuery
 	withSegment  *SegmentQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
 }
 
-// Where adds a new predicate for the JobRoundSegmentQuery builder.
-func (_q *JobRoundSegmentQuery) Where(ps ...predicate.JobRoundSegment) *JobRoundSegmentQuery {
+// Where adds a new predicate for the WorkItemQuery builder.
+func (_q *WorkItemQuery) Where(ps ...predicate.WorkItem) *WorkItemQuery {
 	_q.predicates = append(_q.predicates, ps...)
 	return _q
 }
 
 // Limit the number of records to be returned by this query.
-func (_q *JobRoundSegmentQuery) Limit(limit int) *JobRoundSegmentQuery {
+func (_q *WorkItemQuery) Limit(limit int) *WorkItemQuery {
 	_q.ctx.Limit = &limit
 	return _q
 }
 
 // Offset to start from.
-func (_q *JobRoundSegmentQuery) Offset(offset int) *JobRoundSegmentQuery {
+func (_q *WorkItemQuery) Offset(offset int) *WorkItemQuery {
 	_q.ctx.Offset = &offset
 	return _q
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
-func (_q *JobRoundSegmentQuery) Unique(unique bool) *JobRoundSegmentQuery {
+func (_q *WorkItemQuery) Unique(unique bool) *WorkItemQuery {
 	_q.ctx.Unique = &unique
 	return _q
 }
 
 // Order specifies how the records should be ordered.
-func (_q *JobRoundSegmentQuery) Order(o ...jobroundsegment.OrderOption) *JobRoundSegmentQuery {
+func (_q *WorkItemQuery) Order(o ...workitem.OrderOption) *WorkItemQuery {
 	_q.order = append(_q.order, o...)
 	return _q
 }
 
-// QueryJobRound chains the current query on the "job_round" edge.
-func (_q *JobRoundSegmentQuery) QueryJobRound() *JobRoundQuery {
+// QueryJob chains the current query on the "job" edge.
+func (_q *WorkItemQuery) QueryJob() *JobQuery {
+	query := (&JobClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workitem.Table, workitem.FieldID, selector),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workitem.JobTable, workitem.JobColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryResource chains the current query on the "resource" edge.
+func (_q *WorkItemQuery) QueryResource() *ResourceQuery {
+	query := (&ResourceClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workitem.Table, workitem.FieldID, selector),
+			sqlgraph.To(resource.Table, resource.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, workitem.ResourceTable, workitem.ResourceColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryRound chains the current query on the "round" edge.
+func (_q *WorkItemQuery) QueryRound() *JobRoundQuery {
 	query := (&JobRoundClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -74,9 +122,9 @@ func (_q *JobRoundSegmentQuery) QueryJobRound() *JobRoundQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(jobroundsegment.Table, jobroundsegment.FieldID, selector),
+			sqlgraph.From(workitem.Table, workitem.FieldID, selector),
 			sqlgraph.To(jobround.Table, jobround.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, false, jobroundsegment.JobRoundTable, jobroundsegment.JobRoundColumn),
+			sqlgraph.Edge(sqlgraph.M2O, false, workitem.RoundTable, workitem.RoundColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -85,7 +133,7 @@ func (_q *JobRoundSegmentQuery) QueryJobRound() *JobRoundQuery {
 }
 
 // QuerySegment chains the current query on the "segment" edge.
-func (_q *JobRoundSegmentQuery) QuerySegment() *SegmentQuery {
+func (_q *WorkItemQuery) QuerySegment() *SegmentQuery {
 	query := (&SegmentClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -96,9 +144,9 @@ func (_q *JobRoundSegmentQuery) QuerySegment() *SegmentQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(jobroundsegment.Table, jobroundsegment.FieldID, selector),
+			sqlgraph.From(workitem.Table, workitem.FieldID, selector),
 			sqlgraph.To(segment.Table, segment.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, false, jobroundsegment.SegmentTable, jobroundsegment.SegmentColumn),
+			sqlgraph.Edge(sqlgraph.M2O, false, workitem.SegmentTable, workitem.SegmentColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -106,21 +154,21 @@ func (_q *JobRoundSegmentQuery) QuerySegment() *SegmentQuery {
 	return query
 }
 
-// First returns the first JobRoundSegment entity from the query.
-// Returns a *NotFoundError when no JobRoundSegment was found.
-func (_q *JobRoundSegmentQuery) First(ctx context.Context) (*JobRoundSegment, error) {
+// First returns the first WorkItem entity from the query.
+// Returns a *NotFoundError when no WorkItem was found.
+func (_q *WorkItemQuery) First(ctx context.Context) (*WorkItem, error) {
 	nodes, err := _q.Limit(1).All(setContextOp(ctx, _q.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
 	if len(nodes) == 0 {
-		return nil, &NotFoundError{jobroundsegment.Label}
+		return nil, &NotFoundError{workitem.Label}
 	}
 	return nodes[0], nil
 }
 
 // FirstX is like First, but panics if an error occurs.
-func (_q *JobRoundSegmentQuery) FirstX(ctx context.Context) *JobRoundSegment {
+func (_q *WorkItemQuery) FirstX(ctx context.Context) *WorkItem {
 	node, err := _q.First(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -128,22 +176,22 @@ func (_q *JobRoundSegmentQuery) FirstX(ctx context.Context) *JobRoundSegment {
 	return node
 }
 
-// FirstID returns the first JobRoundSegment ID from the query.
-// Returns a *NotFoundError when no JobRoundSegment ID was found.
-func (_q *JobRoundSegmentQuery) FirstID(ctx context.Context) (id int, err error) {
+// FirstID returns the first WorkItem ID from the query.
+// Returns a *NotFoundError when no WorkItem ID was found.
+func (_q *WorkItemQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
-		err = &NotFoundError{jobroundsegment.Label}
+		err = &NotFoundError{workitem.Label}
 		return
 	}
 	return ids[0], nil
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *JobRoundSegmentQuery) FirstIDX(ctx context.Context) int {
+func (_q *WorkItemQuery) FirstIDX(ctx context.Context) int {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -151,10 +199,10 @@ func (_q *JobRoundSegmentQuery) FirstIDX(ctx context.Context) int {
 	return id
 }
 
-// Only returns a single JobRoundSegment entity found by the query, ensuring it only returns one.
-// Returns a *NotSingularError when more than one JobRoundSegment entity is found.
-// Returns a *NotFoundError when no JobRoundSegment entities are found.
-func (_q *JobRoundSegmentQuery) Only(ctx context.Context) (*JobRoundSegment, error) {
+// Only returns a single WorkItem entity found by the query, ensuring it only returns one.
+// Returns a *NotSingularError when more than one WorkItem entity is found.
+// Returns a *NotFoundError when no WorkItem entities are found.
+func (_q *WorkItemQuery) Only(ctx context.Context) (*WorkItem, error) {
 	nodes, err := _q.Limit(2).All(setContextOp(ctx, _q.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
@@ -163,14 +211,14 @@ func (_q *JobRoundSegmentQuery) Only(ctx context.Context) (*JobRoundSegment, err
 	case 1:
 		return nodes[0], nil
 	case 0:
-		return nil, &NotFoundError{jobroundsegment.Label}
+		return nil, &NotFoundError{workitem.Label}
 	default:
-		return nil, &NotSingularError{jobroundsegment.Label}
+		return nil, &NotSingularError{workitem.Label}
 	}
 }
 
 // OnlyX is like Only, but panics if an error occurs.
-func (_q *JobRoundSegmentQuery) OnlyX(ctx context.Context) *JobRoundSegment {
+func (_q *WorkItemQuery) OnlyX(ctx context.Context) *WorkItem {
 	node, err := _q.Only(ctx)
 	if err != nil {
 		panic(err)
@@ -178,10 +226,10 @@ func (_q *JobRoundSegmentQuery) OnlyX(ctx context.Context) *JobRoundSegment {
 	return node
 }
 
-// OnlyID is like Only, but returns the only JobRoundSegment ID in the query.
-// Returns a *NotSingularError when more than one JobRoundSegment ID is found.
+// OnlyID is like Only, but returns the only WorkItem ID in the query.
+// Returns a *NotSingularError when more than one WorkItem ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *JobRoundSegmentQuery) OnlyID(ctx context.Context) (id int, err error) {
+func (_q *WorkItemQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
@@ -190,15 +238,15 @@ func (_q *JobRoundSegmentQuery) OnlyID(ctx context.Context) (id int, err error) 
 	case 1:
 		id = ids[0]
 	case 0:
-		err = &NotFoundError{jobroundsegment.Label}
+		err = &NotFoundError{workitem.Label}
 	default:
-		err = &NotSingularError{jobroundsegment.Label}
+		err = &NotSingularError{workitem.Label}
 	}
 	return
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *JobRoundSegmentQuery) OnlyIDX(ctx context.Context) int {
+func (_q *WorkItemQuery) OnlyIDX(ctx context.Context) int {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -206,18 +254,18 @@ func (_q *JobRoundSegmentQuery) OnlyIDX(ctx context.Context) int {
 	return id
 }
 
-// All executes the query and returns a list of JobRoundSegments.
-func (_q *JobRoundSegmentQuery) All(ctx context.Context) ([]*JobRoundSegment, error) {
+// All executes the query and returns a list of WorkItems.
+func (_q *WorkItemQuery) All(ctx context.Context) ([]*WorkItem, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	qr := querierAll[[]*JobRoundSegment, *JobRoundSegmentQuery]()
-	return withInterceptors[[]*JobRoundSegment](ctx, _q, qr, _q.inters)
+	qr := querierAll[[]*WorkItem, *WorkItemQuery]()
+	return withInterceptors[[]*WorkItem](ctx, _q, qr, _q.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
-func (_q *JobRoundSegmentQuery) AllX(ctx context.Context) []*JobRoundSegment {
+func (_q *WorkItemQuery) AllX(ctx context.Context) []*WorkItem {
 	nodes, err := _q.All(ctx)
 	if err != nil {
 		panic(err)
@@ -225,20 +273,20 @@ func (_q *JobRoundSegmentQuery) AllX(ctx context.Context) []*JobRoundSegment {
 	return nodes
 }
 
-// IDs executes the query and returns a list of JobRoundSegment IDs.
-func (_q *JobRoundSegmentQuery) IDs(ctx context.Context) (ids []int, err error) {
+// IDs executes the query and returns a list of WorkItem IDs.
+func (_q *WorkItemQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(jobroundsegment.FieldID).Scan(ctx, &ids); err != nil {
+	if err = _q.Select(workitem.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *JobRoundSegmentQuery) IDsX(ctx context.Context) []int {
+func (_q *WorkItemQuery) IDsX(ctx context.Context) []int {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -247,16 +295,16 @@ func (_q *JobRoundSegmentQuery) IDsX(ctx context.Context) []int {
 }
 
 // Count returns the count of the given query.
-func (_q *JobRoundSegmentQuery) Count(ctx context.Context) (int, error) {
+func (_q *WorkItemQuery) Count(ctx context.Context) (int, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryCount)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return withInterceptors[int](ctx, _q, querierCount[*JobRoundSegmentQuery](), _q.inters)
+	return withInterceptors[int](ctx, _q, querierCount[*WorkItemQuery](), _q.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
-func (_q *JobRoundSegmentQuery) CountX(ctx context.Context) int {
+func (_q *WorkItemQuery) CountX(ctx context.Context) int {
 	count, err := _q.Count(ctx)
 	if err != nil {
 		panic(err)
@@ -265,7 +313,7 @@ func (_q *JobRoundSegmentQuery) CountX(ctx context.Context) int {
 }
 
 // Exist returns true if the query has elements in the graph.
-func (_q *JobRoundSegmentQuery) Exist(ctx context.Context) (bool, error) {
+func (_q *WorkItemQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
 	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
@@ -278,7 +326,7 @@ func (_q *JobRoundSegmentQuery) Exist(ctx context.Context) (bool, error) {
 }
 
 // ExistX is like Exist, but panics if an error occurs.
-func (_q *JobRoundSegmentQuery) ExistX(ctx context.Context) bool {
+func (_q *WorkItemQuery) ExistX(ctx context.Context) bool {
 	exist, err := _q.Exist(ctx)
 	if err != nil {
 		panic(err)
@@ -286,19 +334,21 @@ func (_q *JobRoundSegmentQuery) ExistX(ctx context.Context) bool {
 	return exist
 }
 
-// Clone returns a duplicate of the JobRoundSegmentQuery builder, including all associated steps. It can be
+// Clone returns a duplicate of the WorkItemQuery builder, including all associated steps. It can be
 // used to prepare common query builders and use them differently after the clone is made.
-func (_q *JobRoundSegmentQuery) Clone() *JobRoundSegmentQuery {
+func (_q *WorkItemQuery) Clone() *WorkItemQuery {
 	if _q == nil {
 		return nil
 	}
-	return &JobRoundSegmentQuery{
+	return &WorkItemQuery{
 		config:       _q.config,
 		ctx:          _q.ctx.Clone(),
-		order:        append([]jobroundsegment.OrderOption{}, _q.order...),
+		order:        append([]workitem.OrderOption{}, _q.order...),
 		inters:       append([]Interceptor{}, _q.inters...),
-		predicates:   append([]predicate.JobRoundSegment{}, _q.predicates...),
-		withJobRound: _q.withJobRound.Clone(),
+		predicates:   append([]predicate.WorkItem{}, _q.predicates...),
+		withJob:      _q.withJob.Clone(),
+		withResource: _q.withResource.Clone(),
+		withRound:    _q.withRound.Clone(),
 		withSegment:  _q.withSegment.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
@@ -306,20 +356,42 @@ func (_q *JobRoundSegmentQuery) Clone() *JobRoundSegmentQuery {
 	}
 }
 
-// WithJobRound tells the query-builder to eager-load the nodes that are connected to
-// the "job_round" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *JobRoundSegmentQuery) WithJobRound(opts ...func(*JobRoundQuery)) *JobRoundSegmentQuery {
+// WithJob tells the query-builder to eager-load the nodes that are connected to
+// the "job" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *WorkItemQuery) WithJob(opts ...func(*JobQuery)) *WorkItemQuery {
+	query := (&JobClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withJob = query
+	return _q
+}
+
+// WithResource tells the query-builder to eager-load the nodes that are connected to
+// the "resource" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *WorkItemQuery) WithResource(opts ...func(*ResourceQuery)) *WorkItemQuery {
+	query := (&ResourceClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withResource = query
+	return _q
+}
+
+// WithRound tells the query-builder to eager-load the nodes that are connected to
+// the "round" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *WorkItemQuery) WithRound(opts ...func(*JobRoundQuery)) *WorkItemQuery {
 	query := (&JobRoundClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withJobRound = query
+	_q.withRound = query
 	return _q
 }
 
 // WithSegment tells the query-builder to eager-load the nodes that are connected to
 // the "segment" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *JobRoundSegmentQuery) WithSegment(opts ...func(*SegmentQuery)) *JobRoundSegmentQuery {
+func (_q *WorkItemQuery) WithSegment(opts ...func(*SegmentQuery)) *WorkItemQuery {
 	query := (&SegmentClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
@@ -334,19 +406,19 @@ func (_q *JobRoundSegmentQuery) WithSegment(opts ...func(*SegmentQuery)) *JobRou
 // Example:
 //
 //	var v []struct {
-//		CommitID string `json:"commit_id,omitempty"`
+//		CreatedAt time.Time `json:"created_at,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
-//	client.JobRoundSegment.Query().
-//		GroupBy(jobroundsegment.FieldCommitID).
+//	client.WorkItem.Query().
+//		GroupBy(workitem.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
-func (_q *JobRoundSegmentQuery) GroupBy(field string, fields ...string) *JobRoundSegmentGroupBy {
+func (_q *WorkItemQuery) GroupBy(field string, fields ...string) *WorkItemGroupBy {
 	_q.ctx.Fields = append([]string{field}, fields...)
-	grbuild := &JobRoundSegmentGroupBy{build: _q}
+	grbuild := &WorkItemGroupBy{build: _q}
 	grbuild.flds = &_q.ctx.Fields
-	grbuild.label = jobroundsegment.Label
+	grbuild.label = workitem.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
 }
@@ -357,26 +429,26 @@ func (_q *JobRoundSegmentQuery) GroupBy(field string, fields ...string) *JobRoun
 // Example:
 //
 //	var v []struct {
-//		CommitID string `json:"commit_id,omitempty"`
+//		CreatedAt time.Time `json:"created_at,omitempty"`
 //	}
 //
-//	client.JobRoundSegment.Query().
-//		Select(jobroundsegment.FieldCommitID).
+//	client.WorkItem.Query().
+//		Select(workitem.FieldCreatedAt).
 //		Scan(ctx, &v)
-func (_q *JobRoundSegmentQuery) Select(fields ...string) *JobRoundSegmentSelect {
+func (_q *WorkItemQuery) Select(fields ...string) *WorkItemSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
-	sbuild := &JobRoundSegmentSelect{JobRoundSegmentQuery: _q}
-	sbuild.label = jobroundsegment.Label
+	sbuild := &WorkItemSelect{WorkItemQuery: _q}
+	sbuild.label = workitem.Label
 	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
 
-// Aggregate returns a JobRoundSegmentSelect configured with the given aggregations.
-func (_q *JobRoundSegmentQuery) Aggregate(fns ...AggregateFunc) *JobRoundSegmentSelect {
+// Aggregate returns a WorkItemSelect configured with the given aggregations.
+func (_q *WorkItemQuery) Aggregate(fns ...AggregateFunc) *WorkItemSelect {
 	return _q.Select().Aggregate(fns...)
 }
 
-func (_q *JobRoundSegmentQuery) prepareQuery(ctx context.Context) error {
+func (_q *WorkItemQuery) prepareQuery(ctx context.Context) error {
 	for _, inter := range _q.inters {
 		if inter == nil {
 			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
@@ -388,7 +460,7 @@ func (_q *JobRoundSegmentQuery) prepareQuery(ctx context.Context) error {
 		}
 	}
 	for _, f := range _q.ctx.Fields {
-		if !jobroundsegment.ValidColumn(f) {
+		if !workitem.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
@@ -402,20 +474,22 @@ func (_q *JobRoundSegmentQuery) prepareQuery(ctx context.Context) error {
 	return nil
 }
 
-func (_q *JobRoundSegmentQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*JobRoundSegment, error) {
+func (_q *WorkItemQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*WorkItem, error) {
 	var (
-		nodes       = []*JobRoundSegment{}
+		nodes       = []*WorkItem{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
-			_q.withJobRound != nil,
+		loadedTypes = [4]bool{
+			_q.withJob != nil,
+			_q.withResource != nil,
+			_q.withRound != nil,
 			_q.withSegment != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
-		return (*JobRoundSegment).scanValues(nil, columns)
+		return (*WorkItem).scanValues(nil, columns)
 	}
 	_spec.Assign = func(columns []string, values []any) error {
-		node := &JobRoundSegment{config: _q.config}
+		node := &WorkItem{config: _q.config}
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
@@ -429,24 +503,94 @@ func (_q *JobRoundSegmentQuery) sqlAll(ctx context.Context, hooks ...queryHook) 
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := _q.withJobRound; query != nil {
-		if err := _q.loadJobRound(ctx, query, nodes, nil,
-			func(n *JobRoundSegment, e *JobRound) { n.Edges.JobRound = e }); err != nil {
+	if query := _q.withJob; query != nil {
+		if err := _q.loadJob(ctx, query, nodes, nil,
+			func(n *WorkItem, e *Job) { n.Edges.Job = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withResource; query != nil {
+		if err := _q.loadResource(ctx, query, nodes, nil,
+			func(n *WorkItem, e *Resource) { n.Edges.Resource = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withRound; query != nil {
+		if err := _q.loadRound(ctx, query, nodes, nil,
+			func(n *WorkItem, e *JobRound) { n.Edges.Round = e }); err != nil {
 			return nil, err
 		}
 	}
 	if query := _q.withSegment; query != nil {
 		if err := _q.loadSegment(ctx, query, nodes, nil,
-			func(n *JobRoundSegment, e *Segment) { n.Edges.Segment = e }); err != nil {
+			func(n *WorkItem, e *Segment) { n.Edges.Segment = e }); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
 }
 
-func (_q *JobRoundSegmentQuery) loadJobRound(ctx context.Context, query *JobRoundQuery, nodes []*JobRoundSegment, init func(*JobRoundSegment), assign func(*JobRoundSegment, *JobRound)) error {
+func (_q *WorkItemQuery) loadJob(ctx context.Context, query *JobQuery, nodes []*WorkItem, init func(*WorkItem), assign func(*WorkItem, *Job)) error {
 	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*JobRoundSegment)
+	nodeids := make(map[int][]*WorkItem)
+	for i := range nodes {
+		fk := nodes[i].JobID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(job.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "job_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *WorkItemQuery) loadResource(ctx context.Context, query *ResourceQuery, nodes []*WorkItem, init func(*WorkItem), assign func(*WorkItem, *Resource)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*WorkItem)
+	for i := range nodes {
+		fk := nodes[i].ResourceID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(resource.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "resource_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *WorkItemQuery) loadRound(ctx context.Context, query *JobRoundQuery, nodes []*WorkItem, init func(*WorkItem), assign func(*WorkItem, *JobRound)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*WorkItem)
 	for i := range nodes {
 		fk := nodes[i].JobRoundID
 		if _, ok := nodeids[fk]; !ok {
@@ -473,9 +617,9 @@ func (_q *JobRoundSegmentQuery) loadJobRound(ctx context.Context, query *JobRoun
 	}
 	return nil
 }
-func (_q *JobRoundSegmentQuery) loadSegment(ctx context.Context, query *SegmentQuery, nodes []*JobRoundSegment, init func(*JobRoundSegment), assign func(*JobRoundSegment, *Segment)) error {
+func (_q *WorkItemQuery) loadSegment(ctx context.Context, query *SegmentQuery, nodes []*WorkItem, init func(*WorkItem), assign func(*WorkItem, *Segment)) error {
 	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*JobRoundSegment)
+	nodeids := make(map[int][]*WorkItem)
 	for i := range nodes {
 		fk := nodes[i].SegmentID
 		if _, ok := nodeids[fk]; !ok {
@@ -503,7 +647,7 @@ func (_q *JobRoundSegmentQuery) loadSegment(ctx context.Context, query *SegmentQ
 	return nil
 }
 
-func (_q *JobRoundSegmentQuery) sqlCount(ctx context.Context) (int, error) {
+func (_q *WorkItemQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
 	_spec.Node.Columns = _q.ctx.Fields
 	if len(_q.ctx.Fields) > 0 {
@@ -512,8 +656,8 @@ func (_q *JobRoundSegmentQuery) sqlCount(ctx context.Context) (int, error) {
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
-func (_q *JobRoundSegmentQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(jobroundsegment.Table, jobroundsegment.Columns, sqlgraph.NewFieldSpec(jobroundsegment.FieldID, field.TypeInt))
+func (_q *WorkItemQuery) querySpec() *sqlgraph.QuerySpec {
+	_spec := sqlgraph.NewQuerySpec(workitem.Table, workitem.Columns, sqlgraph.NewFieldSpec(workitem.FieldID, field.TypeInt))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -522,17 +666,23 @@ func (_q *JobRoundSegmentQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, jobroundsegment.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, workitem.FieldID)
 		for i := range fields {
-			if fields[i] != jobroundsegment.FieldID {
+			if fields[i] != workitem.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		}
-		if _q.withJobRound != nil {
-			_spec.Node.AddColumnOnce(jobroundsegment.FieldJobRoundID)
+		if _q.withJob != nil {
+			_spec.Node.AddColumnOnce(workitem.FieldJobID)
+		}
+		if _q.withResource != nil {
+			_spec.Node.AddColumnOnce(workitem.FieldResourceID)
+		}
+		if _q.withRound != nil {
+			_spec.Node.AddColumnOnce(workitem.FieldJobRoundID)
 		}
 		if _q.withSegment != nil {
-			_spec.Node.AddColumnOnce(jobroundsegment.FieldSegmentID)
+			_spec.Node.AddColumnOnce(workitem.FieldSegmentID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {
@@ -558,12 +708,12 @@ func (_q *JobRoundSegmentQuery) querySpec() *sqlgraph.QuerySpec {
 	return _spec
 }
 
-func (_q *JobRoundSegmentQuery) sqlQuery(ctx context.Context) *sql.Selector {
+func (_q *WorkItemQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(_q.driver.Dialect())
-	t1 := builder.Table(jobroundsegment.Table)
+	t1 := builder.Table(workitem.Table)
 	columns := _q.ctx.Fields
 	if len(columns) == 0 {
-		columns = jobroundsegment.Columns
+		columns = workitem.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if _q.sql != nil {
@@ -590,28 +740,28 @@ func (_q *JobRoundSegmentQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	return selector
 }
 
-// JobRoundSegmentGroupBy is the group-by builder for JobRoundSegment entities.
-type JobRoundSegmentGroupBy struct {
+// WorkItemGroupBy is the group-by builder for WorkItem entities.
+type WorkItemGroupBy struct {
 	selector
-	build *JobRoundSegmentQuery
+	build *WorkItemQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
-func (_g *JobRoundSegmentGroupBy) Aggregate(fns ...AggregateFunc) *JobRoundSegmentGroupBy {
+func (_g *WorkItemGroupBy) Aggregate(fns ...AggregateFunc) *WorkItemGroupBy {
 	_g.fns = append(_g.fns, fns...)
 	return _g
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_g *JobRoundSegmentGroupBy) Scan(ctx context.Context, v any) error {
+func (_g *WorkItemGroupBy) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _g.build.ctx, ent.OpQueryGroupBy)
 	if err := _g.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*JobRoundSegmentQuery, *JobRoundSegmentGroupBy](ctx, _g.build, _g, _g.build.inters, v)
+	return scanWithInterceptors[*WorkItemQuery, *WorkItemGroupBy](ctx, _g.build, _g, _g.build.inters, v)
 }
 
-func (_g *JobRoundSegmentGroupBy) sqlScan(ctx context.Context, root *JobRoundSegmentQuery, v any) error {
+func (_g *WorkItemGroupBy) sqlScan(ctx context.Context, root *WorkItemQuery, v any) error {
 	selector := root.sqlQuery(ctx).Select()
 	aggregation := make([]string, 0, len(_g.fns))
 	for _, fn := range _g.fns {
@@ -638,28 +788,28 @@ func (_g *JobRoundSegmentGroupBy) sqlScan(ctx context.Context, root *JobRoundSeg
 	return sql.ScanSlice(rows, v)
 }
 
-// JobRoundSegmentSelect is the builder for selecting fields of JobRoundSegment entities.
-type JobRoundSegmentSelect struct {
-	*JobRoundSegmentQuery
+// WorkItemSelect is the builder for selecting fields of WorkItem entities.
+type WorkItemSelect struct {
+	*WorkItemQuery
 	selector
 }
 
 // Aggregate adds the given aggregation functions to the selector query.
-func (_s *JobRoundSegmentSelect) Aggregate(fns ...AggregateFunc) *JobRoundSegmentSelect {
+func (_s *WorkItemSelect) Aggregate(fns ...AggregateFunc) *WorkItemSelect {
 	_s.fns = append(_s.fns, fns...)
 	return _s
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_s *JobRoundSegmentSelect) Scan(ctx context.Context, v any) error {
+func (_s *WorkItemSelect) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _s.ctx, ent.OpQuerySelect)
 	if err := _s.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*JobRoundSegmentQuery, *JobRoundSegmentSelect](ctx, _s.JobRoundSegmentQuery, _s, _s.inters, v)
+	return scanWithInterceptors[*WorkItemQuery, *WorkItemSelect](ctx, _s.WorkItemQuery, _s, _s.inters, v)
 }
 
-func (_s *JobRoundSegmentSelect) sqlScan(ctx context.Context, root *JobRoundSegmentQuery, v any) error {
+func (_s *WorkItemSelect) sqlScan(ctx context.Context, root *WorkItemQuery, v any) error {
 	selector := root.sqlQuery(ctx)
 	aggregation := make([]string, 0, len(_s.fns))
 	for _, fn := range _s.fns {
