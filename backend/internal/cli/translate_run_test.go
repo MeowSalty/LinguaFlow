@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
@@ -56,6 +57,12 @@ func TestResolveCLIExecutionFreezesValuesWithoutSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resolved.Close()
+	if resolved.Spec.SchemaVersion != 2 || resolved.Spec.DefaultsVersion != 2 || resolved.Spec.RubyProtocolVersion != 2 || resolved.Spec.RubyValidatorVersion != 1 || resolved.Spec.RubyRetry.Concurrency != 1 {
+		t.Fatal("CLI did not freeze the new version and independent default concurrency")
+	}
+	if resolved.Spec.RubyTemplates.JSON != prompt.RubyAlignmentJSONTemplate || resolved.Spec.RubyTemplates.Text != prompt.RubyAlignmentTextTemplate {
+		t.Fatal("CLI alignment templates differ from the frozen protocol version")
+	}
 	before, err := json.Marshal(resolved.Spec)
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +96,7 @@ func TestResolveCLIExecutionFreezesValuesWithoutSecrets(t *testing.T) {
 	cfg.TranslationProfiles["strict"].Protect.Rules[0] = "changed"
 	cfg.PromptTemplates["default"] = config.CLIConfigPromptTemplate{Content: "changed"}
 	cfg.Execution.Rounds[0].Translate.BatchSize = 999
+	cfg.Execution.RubyRetry.Concurrency = new(9)
 	after, err := json.Marshal(resolved.Spec)
 	if err != nil {
 		t.Fatal(err)

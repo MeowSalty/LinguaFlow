@@ -164,6 +164,8 @@ func resolveCLIExecution(cfg *config.CLIConfig) (result *cliExecution, err error
 		return b, nil
 	}
 	snapshot := execution.JobExecutionSnapshot{
+		SchemaVersion: execution.SnapshotSchemaVersion, DefaultsVersion: execution.SnapshotDefaultsVersion,
+		RubyProtocolVersion: execution.RubyProtocolVersion, RubyValidatorVersion: execution.RubyValidatorVersion,
 		ExecutionPlanName: "CLI translation",
 		SourceLang:        cfg.SourceLang, TargetLang: cfg.TargetLang, GlossaryEnabled: cfg.Glossary.Enabled,
 		Strategy: execution.StrategySnapshot{
@@ -214,11 +216,15 @@ func resolveCLIExecution(cfg *config.CLIConfig) (result *cliExecution, err error
 		snapshot.Rounds = append(snapshot.Rounds, round)
 	}
 	if ruby := cfg.Execution.RubyRetry; ruby != nil && ruby.Enabled {
+		concurrency, concurrencyErr := execution.ResolveRubyRetryConcurrency(ruby.Concurrency)
+		if concurrencyErr != nil {
+			return result, concurrencyErr
+		}
 		b, backendErr := resolveBackend(ruby.Backend)
 		if backendErr != nil {
 			return result, backendErr
 		}
-		snapshot.RubyRetry = &execution.ExecutionPlanRubyRetrySnapshot{Enabled: true, Backend: b, MaxAttempts: ruby.MaxAttempts}
+		snapshot.RubyRetry = &execution.ExecutionPlanRubyRetrySnapshot{Enabled: true, Backend: b, MaxAttempts: ruby.MaxAttempts, Concurrency: concurrency}
 	}
 	result.Spec, err = execution.Resolve(snapshot)
 	if err != nil {

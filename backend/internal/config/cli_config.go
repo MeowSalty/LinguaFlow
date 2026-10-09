@@ -65,6 +65,7 @@ type CLIConfigRubyRetry struct {
 	Enabled     bool   `yaml:"enabled"`
 	Backend     string `yaml:"backend"`
 	MaxAttempts int    `yaml:"max_attempts"`
+	Concurrency *int   `yaml:"concurrency,omitempty"`
 }
 type CLIConfigRound struct {
 	Mode      string                   `yaml:"mode"`
@@ -435,6 +436,11 @@ func ValidateCLIConfig(cfg *CLIConfig) error {
 	}
 	if !hasContentRound {
 		return errors.New("execution.rounds must include a translate or revise round")
+	}
+	if cfg.Execution.RubyRetry != nil {
+		if _, err := execution.ResolveRubyRetryConcurrency(cfg.Execution.RubyRetry.Concurrency); err != nil {
+			return err
+		}
 	}
 	if cfg.TranslationMemory.Enabled || cfg.TranslationMemory.Driver != "" || cfg.TranslationMemory.DSN != "" {
 		return errors.New("translation_memory settings are not supported in CLI mode")

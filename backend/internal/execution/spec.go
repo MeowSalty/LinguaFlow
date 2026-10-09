@@ -7,6 +7,8 @@ type JobExecutionSnapshot struct {
 	DefaultsVersion       int           `json:"defaults_version"`
 	Sources               []AssetSource `json:"sources"`
 	RubyTemplates         RubyTemplates `json:"ruby_templates"`
+	RubyProtocolVersion   int           `json:"ruby_protocol_version,omitempty"`
+	RubyValidatorVersion  int           `json:"ruby_validator_version,omitempty"`
 	RetryReminderTemplate string        `json:"retry_reminder_template"`
 	ExecutionPlanID       int           `json:"execution_plan_id"`
 	ExecutionPlanName     string        `json:"execution_plan_name"`
@@ -27,6 +29,7 @@ type ExecutionPlanRubyRetrySnapshot struct {
 	Enabled     bool            `json:"enabled"`
 	Backend     BackendSnapshot `json:"backend"`
 	MaxAttempts int             `json:"max_attempts,omitempty"`
+	Concurrency int             `json:"concurrency,omitempty"`
 }
 
 type JobRoundSnapshot struct {

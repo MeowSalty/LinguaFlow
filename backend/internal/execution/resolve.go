@@ -30,7 +30,8 @@ func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, err
 	}
-	out.SchemaVersion, out.DefaultsVersion = SchemaVersion, DefaultsVersion
+	out.SchemaVersion, out.DefaultsVersion = SnapshotSchemaVersion, SnapshotDefaultsVersion
+	out.RubyProtocolVersion, out.RubyValidatorVersion = RubyProtocolVersion, RubyValidatorVersion
 	if out.RetryReminderTemplate == "" {
 		out.RetryReminderTemplate = repair.DefaultRetryReminderTemplate
 	}
@@ -59,6 +60,9 @@ func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
 		r.Backend.Options = opts
 	}
 	if out.RubyRetry != nil && out.RubyRetry.Enabled {
+		if out.RubyRetry.Concurrency == 0 {
+			out.RubyRetry.Concurrency = DefaultRubyRetryConcurrency
+		}
 		opts, err := ResolveBackendOptions(out.RubyRetry.Backend.Type, out.RubyRetry.Backend.Options)
 		if err != nil {
 			return nil, fmt.Errorf("ruby retry: %w", err)
@@ -267,8 +271,12 @@ func number(v any) (float64, bool) {
 
 // ValidateSpec 绝不填充默认值。恢复不完整的快照会直接失败。
 func ValidateSpec(s *ResolvedExecutionSpec) error {
-	if s == nil || s.SchemaVersion != SchemaVersion || s.DefaultsVersion != DefaultsVersion {
-		return errors.New("unsupported or missing execution snapshot version")
+	concurrencyModel, err := ConcurrencyModelForSpec(s)
+	if err != nil {
+		return err
+	}
+	if concurrencyModel == StageSeparated && (s.RubyProtocolVersion != RubyProtocolVersion || s.RubyValidatorVersion != RubyValidatorVersion) {
+		return errors.New("missing or unsupported frozen Ruby protocol/validator version")
 	}
 	if s.Strategy.QA.Checks == nil || s.Strategy.QA.LengthMethod == "" {
 		return errors.New("missing frozen QA checks or length method")
@@ -389,6 +397,9 @@ func ValidateSpec(s *ResolvedExecutionSpec) error {
 		}
 	}
 	if s.RubyRetry != nil && s.RubyRetry.Enabled {
+		if concurrencyModel == StageSeparated && s.RubyRetry.Concurrency < 1 {
+			return errors.New("missing frozen ruby retry concurrency")
+		}
 		if s.RubyRetry.MaxAttempts < 1 {
 			return errors.New("ruby retry attempts must be positive")
 		}
