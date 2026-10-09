@@ -224,6 +224,11 @@ async function memberAction(action: (id: number) => Promise<unknown>, leaving = 
     if (isSessionCurrent(session)) busy.value = false
   }
 }
+function submitAddMember() {
+  memberAction((id) =>
+    api.addOrganizationMember(id, { username: username.value.trim(), role: role.value }),
+  )
+}
 function confirmRole(member: ApiSchemas['OrganizationMember'], value: OrganizationRole) {
   dialog.warning({
     title: t('team.role'),
@@ -326,9 +331,7 @@ onUnmounted(() => {
         <form
           v-if="canWrite"
           class="mb-5 flex flex-wrap gap-3"
-          @submit.prevent="
-            memberAction((id) => api.addOrganizationMember(id, { username: username.trim(), role }))
-          "
+          @submit.prevent="submitAddMember"
         >
           <NInput
             v-model:value="username"
