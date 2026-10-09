@@ -5,14 +5,12 @@ on:
     branches: [main]
     paths:
       - 'frontend/**'
-      - 'api/**'
       - 'Taskfile.yml'
       - '.github/workflows/ci-frontend.yml'
   pull_request:
     branches: [main, frontend]
     paths:
       - 'frontend/**'
-      - 'api/**'
       - 'Taskfile.yml'
       - '.github/workflows/ci-frontend.yml'
 
