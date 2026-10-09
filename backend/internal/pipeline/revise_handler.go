@@ -44,7 +44,9 @@ type ReviseHandler struct {
 	// Gate 是任务级暂停闸门（退避重试等待中止信号）；nil 时无暂停语义。
 	Gate *PauseGate
 
-	RoundIndex int // execution plan round index, set by caller
+	RoundIndex          int // execution plan round index, set by caller
+	prepareOnly         bool
+	RubyProtocolVersion int
 
 	// Protector/Ruby* 与 TranslateHandler 同名同语义（protect 规则与 ruby 配置
 	// 取计划级策略快照，由 worker 引擎工厂从 JobExecutionSnapshot.Strategy 统一
@@ -411,7 +413,7 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 		for i, s := range segments {
 			revisionIDs[i] = s.ID
 		}
-		req.JSONSchema = prompt.ReviseRevisionSchema(h.RubyMode != "", revisionIDs)
+		req.JSONSchema = prompt.ReviseRevisionSchema(h.RubyMode != "", revisionIDs, h.RubyProtocolVersion)
 	}
 
 	callStart := time.Now()
@@ -434,6 +436,9 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 		if (isLocalTimeout || backend.IsRetryable(callErr)) && attempt+1 < transientBudgetFor(h.Retry) {
 			logger.Warn("revise backend error, will backoff and retry", "backend", h.Backend.Name(), "batch_size", len(idxs), "attempt", attempt, "err", callErr)
 			wait := backoffDuration(attempt, h.Retry, callErr)
+			if h.prepareOnly {
+				return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1, notBefore: time.Now().Add(wait)}}
+			}
 			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
@@ -484,6 +489,7 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 		stateByID[doc.Segments[idx].ID] = &states[k]
 	}
 	callbackSegs := make([]TranslatedSegment, 0, len(idxs))
+	var candidates []*Candidate
 	returned := make(map[int]struct{}, len(idxs))
 	seen := make(map[string]struct{}, len(revisions))
 	for _, revision := range revisions {
@@ -495,6 +501,23 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 			continue
 		}
 		seen[revision.ID] = struct{}{}
+		if h.prepareOnly {
+			for _, idx := range idxs {
+				if doc.Segments[idx].ID != revision.ID {
+					continue
+				}
+				candidate, err := h.prepareRevisionCandidate(seg, idx, revision, stateByID[revision.ID], rubyOutput, doc.Format)
+				if err != nil {
+					return batchResult{err: err}
+				}
+				if candidate != nil {
+					candidates = append(candidates, candidate)
+					returned[idx] = struct{}{}
+				}
+				break
+			}
+			continue
+		}
 		text, ok := h.finalizeRevision(ctx, seg, revision, stateByID[revision.ID], rubyOutput, isTextMode, doc.Format, logger)
 		if !ok {
 			// 占位符守恒被破坏：不进入 callback，落入 missing 计入 unresolved，
@@ -534,6 +557,9 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 		SystemPrompt: sys, UserMessage: usr, ResponseFormat: req.ResponseFormat, JSONSchema: req.JSONSchema, ResponseContent: resp.Text,
 		Truncated: resp.Truncated, Repaired: parseRepaired,
 	})
+	if h.prepareOnly {
+		return batchResult{candidates: candidates, unresolved: missing}
+	}
 	return batchResult{callbackResult: &BatchResult{Segments: callbackSegs}, unresolved: missing}
 }
 

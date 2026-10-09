@@ -61,7 +61,9 @@ type TranslateHandler struct {
 	// 由 RunRound 调用方经 engine.Round 注入（见 roundexecutor 的 Slots/Gate 注入）。
 	Gate *PauseGate
 
-	RoundIndex int // execution plan round index, set by caller
+	RoundIndex          int // execution plan round index, set by caller
+	prepareOnly         bool
+	RubyProtocolVersion int
 }
 
 func (h *TranslateHandler) ModeName() string { return "translate" }
@@ -328,6 +330,9 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 				JSONSchema:     req.JSONSchema,
 			})
 			wait := backoffDuration(attempt, h.Retry, callErr)
+			if h.prepareOnly {
+				return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1, notBefore: time.Now().Add(wait)}}
+			}
 			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
@@ -446,6 +451,9 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 		"missing", len(res.Missing))
 
 	h.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
+	if h.prepareOnly {
+		return h.prepareTranslatedCandidates(doc, expandedIdxs, wantIDs, trans, rubyOutputMap, contextSet, logger)
+	}
 
 	unresolved := h.processTranslatedSegments(ctx, doc, expandedIdxs, wantIDs, trans, rubyOutputMap, contextSet, logger)
 
@@ -535,7 +543,7 @@ func (h *TranslateHandler) buildRequest(
 	if isTextMode {
 		req.ResponseFormat = "none"
 	} else {
-		req.JSONSchema = translationsSchema(wantIDs, h.InlineBootstrap, h.RubyMode != "")
+		req.JSONSchema = translationsSchema(wantIDs, h.InlineBootstrap, h.RubyMode != "", h.RubyProtocolVersion)
 	}
 
 	return sys, usr, req, wantIDs, idMap, glos, nil
@@ -807,7 +815,11 @@ func (h *TranslateHandler) absorbInlineGlossary(
 	if len(candidates) == 0 {
 		return
 	}
-	result, err := h.Glossary.Add(ctx, candidates...)
+	requestID := ""
+	if session, ok := ctx.Value(requestSessionKey{}).(*requestSession); ok {
+		requestID = session.lastID
+	}
+	result, err := glossary.AddForRequest(ctx, h.Glossary, requestID, candidates...)
 	if err != nil {
 		logger.Warn("inline glossary add failed", "err", err)
 	}
