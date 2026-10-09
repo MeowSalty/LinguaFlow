@@ -43,6 +43,7 @@ type JobSummaryOptions struct {
 type JobCountsSummary struct {
 	Pending           int
 	Running           int
+	Pausing           int
 	Paused            int
 	RecentFailed      int
 	RecentFailedSince time.Time
@@ -70,7 +71,7 @@ func (s *JobService) ListAccessibleJobs(ctx context.Context, actorUserID int, op
 	} else {
 		switch opts.State {
 		case "", "active":
-			q.Where(job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPaused))
+			q.Where(job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPausing, JobStatusPaused))
 		case "terminal":
 			q.Where(job.StatusIn(JobStatusCompleted, JobStatusFailed, JobStatusCancelled))
 		}
@@ -145,7 +146,7 @@ func (s *JobService) getJobsSummary(ctx context.Context, actorUserID int, opts J
 	}
 	err := s.accessibleJobsQuery(actorUserID, opts.ProjectID, opts.TriggerType).
 		Where(job.Or(
-			job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPaused),
+			job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPausing, JobStatusPaused),
 			job.And(
 				job.StatusEQ(JobStatusFailed),
 				jobUpdatedAtCompare(sql.OpGTE, summary.RecentFailedSince),
@@ -164,6 +165,8 @@ func (s *JobService) getJobsSummary(ctx context.Context, actorUserID int, opts J
 			summary.Pending = count.Count
 		case JobStatusRunning:
 			summary.Running = count.Count
+		case JobStatusPausing:
+			summary.Pausing = count.Count
 		case JobStatusPaused:
 			summary.Paused = count.Count
 		case JobStatusFailed:
@@ -200,7 +203,7 @@ func validateAccessibleJobOptions(opts AccessibleJobListOptions) error {
 		return fmt.Errorf("%w: invalid state", ErrInvalidInput)
 	}
 	switch opts.Status {
-	case "", JobStatusPending, JobStatusRunning, JobStatusPaused, JobStatusCompleted, JobStatusFailed, JobStatusCancelled:
+	case "", JobStatusPending, JobStatusRunning, JobStatusPausing, JobStatusPaused, JobStatusCompleted, JobStatusFailed, JobStatusCancelled:
 	default:
 		return fmt.Errorf("%w: invalid status", ErrInvalidInput)
 	}

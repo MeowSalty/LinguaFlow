@@ -24,6 +24,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/localstore"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ziputil"
 )
 
@@ -431,6 +432,10 @@ func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, project
 		if e := storageProjectGate(ctx, tx, projectID, task.ExpectedStorageGeneration); e != nil {
 			return e
 		}
+		jobs, e := workstate.LockResourceJobs(ctx, tx, resourceID)
+		if e != nil {
+			return e
+		}
 		n, e := tx.Resource.Update().Where(resource.IDEQ(resourceID), resource.ProjectIDEQ(projectID), resource.SourceGenerationEQ(sourceGen), resource.TranslationGenerationEQ(translationGen)).AddSourceGeneration(1).AddTranslationGeneration(1).Save(ctx)
 		if e != nil {
 			return e
@@ -482,6 +487,9 @@ func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, project
 		if e = local.applySegmentChanges(ctx, resourceID, changes); e != nil {
 			return e
 		}
+		if e = workstate.CalibrateJobs(ctx, tx, jobs); e != nil {
+			return e
+		}
 		if e = tx.Resource.UpdateOneID(resourceID).SetCurrentSourceRevisionID(rev.ID).SetStoragePath("blob:" + b.Identity).SetTotalSegments(plan.Stats.Added + plan.Stats.Updated + plan.Stats.Unchanged).Exec(ctx); e != nil {
 			return e
 		}
@@ -530,7 +538,7 @@ func changeStats(changes []SegmentChange) *IncrementalUpdateStats {
 }
 
 func storageSourceIdle(ctx context.Context, tx *ent.Client, resourceID, projectID int) error {
-	busy, err := tx.JobResource.Query().Where(jobresource.HasResourceWith(resource.IDEQ(resourceID)), jobresource.HasJobWith(job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPaused))).Exist(ctx)
+	busy, err := tx.JobResource.Query().Where(jobresource.HasResourceWith(resource.IDEQ(resourceID)), jobresource.HasJobWith(job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPausing, JobStatusPaused))).Exist(ctx)
 	if err != nil {
 		return err
 	}

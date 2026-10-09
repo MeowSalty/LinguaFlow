@@ -9,6 +9,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 // PrepareRecovery coordinates persisted execution state before any translation
@@ -19,7 +20,7 @@ func (s *JobService) PrepareRecovery(ctx context.Context) error {
 	afterID := 0
 	for {
 		rows, err := s.client.Job.Query().
-			Where(job.StatusIn(JobStatusPending, JobStatusRunning), job.IDGT(afterID)).
+			Where(job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPausing), job.IDGT(afterID)).
 			Order(ent.Asc(job.FieldID)).Limit(pageSize).
 			Select(job.FieldID, job.FieldStatus).All(ctx)
 		if err != nil {
@@ -46,7 +47,29 @@ func (s *JobService) prepareRecoveredJob(ctx context.Context, id int) error {
 	if guard.Active() {
 		return tasklife.ErrBusy
 	}
+	return s.prepareRecoveredJobState(ctx, id)
+}
+
+func (s *JobService) prepareRecoveredJobState(ctx context.Context, id int) error {
 	return withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+		if err := workstate.LockJob(ctx, client, id); err != nil {
+			return err
+		}
+		current, err := client.Job.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		if current.PauseRequested || current.Status == JobStatusPausing {
+			if current.Status != JobStatusCancelled && current.Status != JobStatusCompleted && current.Status != JobStatusFailed {
+				if err := client.Job.UpdateOneID(id).SetStatus(JobStatusPaused).SetPauseRequested(true).ClearFinishedAt().ClearRetentionAnchorAt().Exec(ctx); err != nil {
+					return err
+				}
+			}
+			if err := workstate.MarkUnknown(ctx, client, id); err != nil {
+				return err
+			}
+			return workstate.Calibrate(ctx, client, id)
+		}
 		count, err := client.Job.Update().Where(job.IDEQ(id), job.StatusIn(JobStatusPending, JobStatusRunning)).
 			SetStatus(JobStatusPending).ClearFinishedAt().ClearRetentionAnchorAt().Save(ctx)
 		if err != nil || count == 0 {
@@ -69,7 +92,10 @@ func (s *JobService) prepareRecoveredJob(ctx context.Context, id int) error {
 		if err := txService.backfillJobRoundsForRecovery(ctx, id); err != nil {
 			return err
 		}
-		return recomputeJobProgress(ctx, clientProgressStore{client}, id)
+		if err := workstate.MarkUnknown(ctx, client, id); err != nil {
+			return err
+		}
+		return workstate.Calibrate(ctx, client, id)
 	})
 }
 

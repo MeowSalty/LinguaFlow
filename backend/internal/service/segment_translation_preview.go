@@ -321,6 +321,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 			BaselineSource:   result.Baseline.SourceText,
 			BaselineTarget:   result.Baseline.TargetText,
 			BaselineStatus:   result.Baseline.Status,
+			BaselineVersion:  allSegments[targetSegmentIdx].ContentVersion,
 			FinalIssues:      result.QualityIssues,
 			QAConfig:         qaCfg,
 		}
@@ -400,12 +401,16 @@ func (s *PreviewService) ApplyPreview(
 	baselineSource := claims.BaselineSource
 	baselineTarget := claims.BaselineTarget
 	baselineStatus := claims.BaselineStatus
+	baselineVersion := claims.BaselineVersion
+	if baselineVersion == 0 {
+		baselineVersion = 1
+	} // pre-version tokens can only apply to an untouched migrated row
 
 	sourceMatch := currentSeg.SourceText == baselineSource
 	targetMatch := ptrStringEqual(currentSeg.TargetText, baselineTarget)
 	statusMatch := string(currentSeg.Status) == baselineStatus
 
-	if !sourceMatch || !targetMatch || !statusMatch {
+	if !sourceMatch || !targetMatch || !statusMatch || currentSeg.ContentVersion != baselineVersion {
 		return nil, ErrPreviewConflict
 	}
 
@@ -490,6 +495,7 @@ func (s *PreviewService) ApplyPreview(
 			segment.ResourceIDEQ(resourceID),
 			segment.SourceTextEQ(baselineSource),
 			segment.StatusEQ(segment.Status(baselineStatus)),
+			segment.ContentVersionEQ(baselineVersion),
 		)
 	if baselineTarget != nil {
 		update = update.Where(segment.TargetTextEQ(*baselineTarget))

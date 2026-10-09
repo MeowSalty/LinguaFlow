@@ -585,7 +585,7 @@ func TestPauseJob_StatePrecondition(t *testing.T) {
 		wantJobSts string // 成功用例校验暂停请求后的任务状态
 	}{
 		{name: "pending pauses immediately", jobStatus: JobStatusPending, wantDrain: false, wantJobSts: JobStatusPaused},
-		{name: "running needs drain", jobStatus: JobStatusRunning, wantDrain: true, wantJobSts: JobStatusRunning},
+		{name: "running needs drain", jobStatus: JobStatusRunning, wantDrain: true, wantJobSts: JobStatusPausing},
 		{name: "completed rejected", jobStatus: JobStatusCompleted, wantErr: ErrJobNotPausable},
 		{name: "failed rejected", jobStatus: JobStatusFailed, wantErr: ErrJobNotPausable},
 		{name: "cancelled rejected", jobStatus: JobStatusCancelled, wantErr: ErrJobNotPausable},
@@ -788,16 +788,16 @@ func TestRecoverPendingJobs_NoDoubleAccumulation(t *testing.T) {
 	if len(roundsAfter) != 3 {
 		t.Fatalf("rounds len = %d, want 3", len(roundsAfter))
 	}
-	assertRoundCheckpoint(t, env.client, roundsAfter[1], JobRoundStatusPending, 50, 20, 1)
+	assertRoundCheckpoint(t, env.client, roundsAfter[1], JobRoundStatusPending, 50, 1, 1)
 	// r0：completed 终态行不得被重置。
-	assertRoundCheckpoint(t, env.client, roundsAfter[0], JobRoundStatusCompleted, 100, 100, 0)
+	assertRoundCheckpoint(t, env.client, roundsAfter[0], JobRoundStatusCompleted, 100, 0, 0)
 
 	// 任务状态 running → pending；派生缓存重算后恰为 150/120（求和公式见函数注释）。
 	after := reloadJob(t, env.client, job.ID)
 	if after.Status != JobStatusPending {
 		t.Errorf("job status = %q, want %q", after.Status, JobStatusPending)
 	}
-	assertJobProgress(t, after, 150, 120)
+	assertJobProgress(t, after, 150, 101)
 }
 
 // TestRecoverPendingJobs_BackfillFromFrozenSpec covers a crash after the valid

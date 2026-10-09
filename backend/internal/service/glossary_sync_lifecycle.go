@@ -550,7 +550,7 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 			// 防止读取与 UPDATE 之间的并发手动编辑，
 			// 包括资源迁移或将译文重置为 pending。
 			updated, err := client.Segment.Update().Where(segment.IDEQ(row.ID), segment.ResourceIDEQ(res.ID),
-				segment.SourceTextEQ(row.SourceText), segment.TargetTextEQ(*row.TargetText), segment.StatusEQ(row.Status)).
+				segment.ContentVersionEQ(row.ContentVersion), segment.SourceTextEQ(row.SourceText), segment.TargetTextEQ(*row.TargetText), segment.StatusEQ(row.Status)).
 				SetTargetText(newText).SetStatus(SegmentStatusEdited).ClearReviewedBy().ClearReviewComment().Save(ctx)
 			if err != nil {
 				return err

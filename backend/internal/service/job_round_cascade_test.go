@@ -208,8 +208,8 @@ func TestMarkJobResourceCompleted_GapRoundFailsNotInventsCompletion(t *testing.T
 	}
 	// 计数列不被抬高：保持断点集合基数 4。
 	assertRoundCheckpoint(t, env.client, after, JobRoundStatusFailed, 10, 4, 4)
-	// failed 不闭合：Job 缓存不因收敛增加，仍为 seed 的 100/64。
-	assertJobProgress(t, reloadJob(t, env.client, job.ID), 100, 64)
+	// failed 不闭合；唯一 writer 校准人为污染的 Job 缓存到真实矩阵。
+	assertJobProgress(t, reloadJob(t, env.client, job.ID), 10, 4)
 }
 
 // TestRetryJob_ResetsRunningRounds 重试重置范围回归：有未解决段的轮次
