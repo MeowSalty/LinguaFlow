@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
@@ -23,6 +24,10 @@ type Engine struct {
 	tm                tm.TranslationMemory
 	saveGlossary      bool
 	glossaryPath      string
+	runtime           *pipeline.ExecutionRuntime
+	ownRuntime        bool
+	closeOnce         sync.Once
+	closeErr          error
 }
 
 // NewWithOptions 按 Options 构造 Engine。rounds 必须非空，每轮 backends 必须非空。
@@ -78,12 +83,16 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("engine: build rounds: %w", err)
 	}
-	for _, round := range rounds {
+	for i := range rounds {
+		round := &rounds[i]
+		round.Runtime = opts.Runtime
 		switch h := round.Handler.(type) {
 		case *pipeline.TranslateHandler:
+			h.RubyProtocolVersion = opts.RubyProtocolVersion
 			h.RubyTemplates = opts.RubyTemplates
 			h.RetryReminderTemplate = opts.RetryReminderTemplate
 		case *pipeline.ReviseHandler:
+			h.RubyProtocolVersion = opts.RubyProtocolVersion
 			h.RubyTemplates = opts.RubyTemplates
 		}
 	}
@@ -98,12 +107,25 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		tm:                translationMemory,
 		saveGlossary:      opts.Config.Glossary.Save,
 		glossaryPath:      opts.Config.Glossary.Path,
+		runtime:           opts.Runtime,
+		ownRuntime:        opts.OwnRuntime,
 	}
 	return e, nil
 }
 
-// Close 释放后端连接。
+// Close releases backend connections and an owned call-scoped runtime once.
+// The caller must join execution before closing the Engine.
 func (e *Engine) Close() error {
+	e.closeOnce.Do(func() {
+		if e.ownRuntime && e.runtime != nil {
+			e.runtime.Close()
+		}
+		e.closeErr = e.closeBackends()
+	})
+	return e.closeErr
+}
+
+func (e *Engine) closeBackends() error {
 	seen := make(map[backend.Backend]struct{})
 	var firstErr error
 	for _, r := range e.rounds {

@@ -268,6 +268,9 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 					"attempt", attempt, "err", callErr)
 			}
 			wait := backoffDuration(attempt, h.Retry, callErr)
+			if retry := storedBackoffRetry(ctx, idxs, attempt, wait); retry != nil {
+				return batchResult{retry: retry}
+			}
 			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():

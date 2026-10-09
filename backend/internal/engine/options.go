@@ -18,6 +18,11 @@ import (
 
 // Options 是 Engine 的构造参数。
 type Options struct {
+	Runtime *pipeline.ExecutionRuntime
+	// OwnRuntime transfers lifecycle ownership on successful construction.
+	// Resource engines sharing a Job runtime leave this false.
+	OwnRuntime            bool
+	RubyProtocolVersion   int
 	Rounds                []Round
 	RubyRetryBackends     []backend.Backend
 	RubyRetryAttempts     int // 已解析的注音对齐重试轮数；0 表示禁用。
