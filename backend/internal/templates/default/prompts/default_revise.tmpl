@@ -37,7 +37,7 @@
 - 竖线是第一个分隔符；target 中可以包含竖线，解析时只按第一个分隔符切分，其余竖线都属于 target。
 - id 必须与输入 segment 的 id 一致；每个输入 id 必须恰好返回一行，即使 target 不变也必须返回。
 {{- if eq .RubyMode "section"}}
-- 带注音条目的段在 [revisions] 之后另起一行输出 [ruby]，然后每行一条：`段id: 基底 | 标注 | 类型 | 条目id`（条目 id 为该段 ruby 行携带的 #id，必须原样回显）。
+- 带注音条目的段在 [revisions] 之后另起一行输出 [ruby]，然后每行一条：`段id: 基底 | 标注 | 类型 | 条目id`。四字段均为 JSON 字符串字面量，条目 id 为该段 ruby 行 #id 的编号，必须原样回显；无法对应时省略整条。引号、反斜杠、换行使用 JSON 转义，解码后空白必须保留。
 {{- end}}
 {{- else}}
 - 用户消息是一个 JSON 对象，包含 task、source_lang、target_lang、segments 字段；每个 segment 含 id、source、target、issues。
@@ -62,7 +62,7 @@
   · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
   · creative（创意注音）：基底与标注存在语义落差。
 - 标注文本的翻译规则：phonetic 和 semantic 保留原文不翻译；creative 需要翻译。
-- 每条条目必须原样回显下发条目的 id（{{if eq .Protocol "text"}}[ruby] 行第 4 字段{{else}}条目的 "id" 字段{{end}}）；条目顺序与下发顺序一致。
+- 每条条目必须原样回显下发条目的 id（{{if eq .Protocol "text"}}[ruby] 行第 4 字段{{else}}条目的 "id" 字段{{end}}），每个 id 至多返回一次；无法对应时省略整条，不能返回无 id 条目。保留 base/text 的全部空白，不能以标签或属性的文本冒充正文。
 - 未被修订涉及的注音词也必须回填，不得遗漏任何条目。
 {{- end}}
 

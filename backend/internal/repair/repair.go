@@ -207,7 +207,7 @@ func finalizeResult(raw map[string]any, wantIDs []string, repaired []string, opt
 	var rubyOutput map[string][]ruby.OutputEntry
 	if rubyRaw, ok := raw["ruby_output"]; ok {
 		if b, mErr := json.Marshal(rubyRaw); mErr == nil {
-			_ = json.Unmarshal(b, &rubyOutput)
+			rubyOutput = ruby.ParseOutputMap(b)
 		}
 	}
 	if rubyOutput == nil {
@@ -436,6 +436,7 @@ func unmarshalGeneric(body string) (map[string]any, error) {
 	if err := json.Unmarshal([]byte(body), &raw); err != nil {
 		return nil, err
 	}
+	preserveRawRubyFields([]byte(body), raw)
 	return raw, nil
 }
 
@@ -520,8 +521,8 @@ func extractNestedRubyOutput(transRaw any) (map[string][]ruby.OutputEntry, bool)
 		if err != nil {
 			continue
 		}
-		var entries []ruby.OutputEntry
-		if err := json.Unmarshal(b, &entries); err != nil {
+		entries, err := ruby.ParseOutputEntries(b)
+		if err != nil {
 			continue
 		}
 		if len(entries) > 0 {

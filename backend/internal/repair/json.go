@@ -463,8 +463,12 @@ func extractValidEnvelope(text string) (map[string]any, bool) {
 // 因此即便对象被嵌在垃圾里也能定位。不校验字段值类型--由调用方通过 accept 判定。
 func decodeKeyedEnvelope(s, requiredKey string) (map[string]any, bool) {
 	dec := json.NewDecoder(strings.NewReader(s))
-	var raw map[string]any
-	if err := dec.Decode(&raw); err != nil {
+	var body json.RawMessage
+	if err := dec.Decode(&body); err != nil {
+		return nil, false
+	}
+	raw, err := unmarshalGeneric(string(body))
+	if err != nil {
 		return nil, false
 	}
 	if _, ok := raw[requiredKey]; !ok {
@@ -592,7 +596,8 @@ func extractBareArrayAsEnvelope(text, key string, accept func([]any) bool, close
 		err := dec.Decode(&arr)
 		if err != nil && closeBracesPatch && len(tail) <= robustScanTruncationWindow {
 			if fixed := closeUnbalancedBraces(tail); fixed != tail {
-				dec = json.NewDecoder(strings.NewReader(fixed))
+				tail = fixed
+				dec = json.NewDecoder(strings.NewReader(tail))
 				err = dec.Decode(&arr)
 			}
 		}
@@ -601,6 +606,9 @@ func extractBareArrayAsEnvelope(text, key string, accept func([]any) bool, close
 		}
 		if accept != nil && !accept(arr) {
 			continue
+		}
+		if key == "ruby_output" {
+			return map[string]any{key: rawRubyValue(json.RawMessage(tail[:dec.InputOffset()]))}, true
 		}
 		return map[string]any{key: arr}, true
 	}
@@ -645,8 +653,8 @@ func mergeTranslationObjects(text string) string {
 		if !strings.Contains(body, `"translations"`) {
 			continue
 		}
-		var raw map[string]any
-		if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		raw, err := unmarshalGeneric(body)
+		if err != nil {
 			continue
 		}
 		t, ok := raw["translations"].(map[string]any)
