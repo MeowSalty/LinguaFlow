@@ -274,7 +274,7 @@ task frontend:install
 task backend:local:build
 ```
 
-该任务会先构建前端并嵌入到二进制,产物位于 `bin/linguaflow`(含嵌入式 Web UI)。仅需后端二进制、不要内嵌前端时用 `task backend:build`。
+该任务会先构建前端并嵌入到二进制，产物位于 `bin/linguaflow`(含嵌入式 Web UI)。仅需后端二进制、不要内嵌前端时用 `task backend:build`。
 
 ### 开发模式
 
