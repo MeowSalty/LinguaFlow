@@ -173,14 +173,16 @@ func (f *EngineFactory) BuildEngineWithConfig(
 		rubyRetryAttempts = snapshot.RubyRetry.MaxAttempts
 	}
 
+	rubyBatch := execution.EffectiveRubyRetryBatch(snapshot)
 	e, err := engine.NewWithOptions(engine.Options{
 		Runtime:               runtime,
 		OwnRuntime:            ownRuntime,
 		RubyProtocolVersion:   execution.EffectiveRubyProtocolVersion(snapshot),
+		RubyBatch:             pipeline.AlignmentBatchConfig{BatchSize: rubyBatch.BatchSize, MaxWordsPerBatch: rubyBatch.MaxWordsPerBatch, Wait: time.Duration(rubyBatch.BatchWaitMS) * time.Millisecond, ProtocolVersion: execution.EffectiveRubyBatchProtocolVersion(snapshot)},
 		Rounds:                rounds,
 		RubyRetryBackends:     rubyRetryBackends,
 		RubyRetryAttempts:     rubyRetryAttempts,
-		RubyTemplates:         prompt.RubyTemplates{JSON: snapshot.RubyTemplates.JSON, Text: snapshot.RubyTemplates.Text},
+		RubyTemplates:         prompt.RubyTemplates{JSON: snapshot.RubyTemplates.JSON, Text: snapshot.RubyTemplates.Text, BatchJSON: snapshot.RubyTemplates.BatchJSON, BatchText: snapshot.RubyTemplates.BatchText},
 		RetryReminderTemplate: snapshot.RetryReminderTemplate,
 		Config:                cfg,
 		Logger:                f.logger,

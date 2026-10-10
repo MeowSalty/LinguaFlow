@@ -89,10 +89,12 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		switch h := round.Handler.(type) {
 		case *pipeline.TranslateHandler:
 			h.RubyProtocolVersion = opts.RubyProtocolVersion
+			h.RubyBatch = opts.RubyBatch
 			h.RubyTemplates = opts.RubyTemplates
 			h.RetryReminderTemplate = opts.RetryReminderTemplate
 		case *pipeline.ReviseHandler:
 			h.RubyProtocolVersion = opts.RubyProtocolVersion
+			h.RubyBatch = opts.RubyBatch
 			h.RubyTemplates = opts.RubyTemplates
 		}
 	}

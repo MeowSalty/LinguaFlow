@@ -33,7 +33,7 @@ func configureFakeFactory(factory *EngineFactory) {
 // Defaults belong in this fixture resolver, never in the runtime factory.
 func completeWorkerSnapshot(t *testing.T, snapshot *service.JobExecutionSnapshot) *service.JobExecutionSnapshot {
 	t.Helper()
-	snapshot.RubyTemplates = execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate}
+	snapshot.RubyTemplates = execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate, BatchJSON: prompt.RubyAlignmentBatchJSONTemplate, BatchText: prompt.RubyAlignmentBatchTextTemplate}
 	for i := range snapshot.Rounds {
 		r := &snapshot.Rounds[i]
 		if r.Mode != "correct" {

@@ -23,6 +23,7 @@ type Options struct {
 	// Resource engines sharing a Job runtime leave this false.
 	OwnRuntime            bool
 	RubyProtocolVersion   int
+	RubyBatch             pipeline.AlignmentBatchConfig
 	Rounds                []Round
 	RubyRetryBackends     []backend.Backend
 	RubyRetryAttempts     int // 已解析的注音对齐重试轮数；0 表示禁用。
