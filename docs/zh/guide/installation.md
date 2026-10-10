@@ -11,6 +11,10 @@ LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（�
 
 跑通第一次翻译请先看 [快速开始 · Web](/zh/guide/getting-started)。
 
+::: tip 懒得先搭环境？先逛在线预览
+官方部署了一个免安装的预览实例：**[meowsalty-linguaflow.hf.space](https://meowsalty-linguaflow.hf.space/)**，注册账号即可在线试用服务器模式（跑翻译需自备 AI API Key）。该实例仅供体验、**数据不做持久化**，长期使用请按下文部署到本机或自己的服务器。
+:::
+
 ## 系统要求
 
 | 要求                  | 最低版本 |
@@ -174,7 +178,7 @@ Compose 示例中常用变量：
 
 ### HuggingFace Spaces 部署
 
-LinguaFlow 支持部署到 HuggingFace Spaces，使用 `Dockerfile.hf` 构建。
+LinguaFlow 支持部署到 HuggingFace Spaces，使用 `Dockerfile.hf` 构建。官方在线预览实例 [meowsalty-linguaflow.hf.space](https://meowsalty-linguaflow.hf.space/) 就是用这套方式部署的；下面是把同一套镜像部署到你自己的 Space 的完整步骤。
 
 #### 自动部署（推荐）
 

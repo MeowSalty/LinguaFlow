@@ -10,6 +10,9 @@ hero:
       text: 5 分钟上手
       link: /zh/guide/getting-started
     - theme: alt
+      text: 在线体验
+      link: https://meowsalty-linguaflow.hf.space/
+    - theme: alt
       text: 快速开始 · CLI
       link: /zh/guide/cli-quickstart
     - theme: alt
@@ -55,6 +58,14 @@ features:
 | **电子书**          | EPUB 按章节浏览与翻译，导出仍是 EPUB；可用本机工具统一横竖排 |
 | **配置与 i18n**     | JSON / YAML / TOML 按字符串叶子节点翻译，结构路径可回写      |
 | **Word 文稿**       | DOCX 解析主文档段落，便于校对与导出                          |
+
+## 先在线试试
+
+不想装环境？官方预览实例 **[meowsalty-linguaflow.hf.space](https://meowsalty-linguaflow.hf.space/)** 注册即用：项目、翻译、审校、术语表与管理后台都能点，直接体验服务器模式的多用户能力（跑翻译仍需自备 AI API Key）。
+
+::: warning 仅供试用的演示环境
+预览实例**不做数据持久化**，重启后账号与项目可能丢失；请勿上传敏感或重要内容，也不要把它当作长期凭据保管处。稳定使用请按下面的方式安装到本机。
+:::
 
 ## 三步开始
 
