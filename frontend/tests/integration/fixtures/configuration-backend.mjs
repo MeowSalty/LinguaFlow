@@ -37,8 +37,26 @@ export function buildConfigurationBackend() {
     })
   }
   const digest = (file) => createHash('sha256').update(readFileSync(file)).digest('hex')
+  const normalizedDigest = (file) =>
+    createHash('sha256').update(readFileSync(file, 'utf8').replace(/\r\n/g, '\n')).digest('hex')
   return {
     backendCommit,
+    backendWorktreeStatus: execFileSync('git', ['status', '--short'], {
+      cwd: backend,
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 10_000,
+    }).trim(),
+    backendWorktreeDiffSha256: createHash('sha256')
+      .update(
+        execFileSync('git', ['diff', 'HEAD', '--binary', '--', 'backend', 'api'], {
+          cwd: backend,
+          windowsHide: true,
+          timeout: 10_000,
+          maxBuffer: 10 * 1024 * 1024,
+        }),
+      )
+      .digest('hex'),
     backend,
     backendBinarySha256: digest(
       path.join(
@@ -49,6 +67,12 @@ export function buildConfigurationBackend() {
     ),
     backendContractSha256: digest(path.join(backend, 'api/openapi/openapi-3.0.yaml')),
     frontendContractSha256: digest(path.join(frontend, '../api/openapi/openapi-3.0.yaml')),
+    backendContractNormalizedSha256: normalizedDigest(
+      path.join(backend, 'api/openapi/openapi-3.0.yaml'),
+    ),
+    frontendContractNormalizedSha256: normalizedDigest(
+      path.join(frontend, '../api/openapi/openapi-3.0.yaml'),
+    ),
   }
 }
 
@@ -78,12 +102,15 @@ async function restrictKeyring(file) {
 }
 
 export async function createConfigurationBackend(metadata, signal, options = {}) {
-  const category =
-    options.category === 'task-history-integration'
-      ? options.category
-      : options.storage
-        ? 'storage-integration'
-        : 'configuration-integration'
+  const category = [
+    'task-history-integration',
+    'ruby-alignment-integration',
+    'ruby-product',
+  ].includes(options.category)
+    ? options.category
+    : options.storage
+      ? 'storage-integration'
+      : 'configuration-integration'
   const resultsRoot = path.join(frontend, 'tests/artifacts', category)
   await mkdir(resultsRoot, { recursive: true })
   const runDir = await mkdtemp(path.join(resultsRoot, `${category}-`))
@@ -193,21 +220,30 @@ export async function createConfigurationBackend(metadata, signal, options = {})
       const body = JSON.parse(Buffer.concat(chunks).toString())
       const user = body.messages.findLast((message) => message.role === 'user')
       const envelope = JSON.parse(user.content)
-      calls.push({
+      const call = {
         model: body.model,
         secretVersion:
           tokenSecrets.indexOf(String(req.headers.authorization).replace(/^Bearer /, '')) + 1,
         at: Date.now(),
+      }
+      calls.push(call)
+      res.on('close', () => {
+        if (!res.writableFinished) call.disconnectedAt = Date.now()
       })
       if (holds.has(body.model))
         await new Promise((resolve) =>
           releases.set(body.model, [...(releases.get(body.model) ?? []), resolve]),
         )
-      const translations = Object.fromEntries(
-        Object.entries(envelope.segments)
-          .filter(([, segment]) => segment.translate)
-          .map(([id]) => [id, '测试译文']),
-      )
+      call.releasedAt = Date.now()
+      const content = options.respond
+        ? await options.respond(envelope, body)
+        : {
+            translations: Object.fromEntries(
+              Object.entries(envelope.segments)
+                .filter(([, segment]) => segment.translate)
+                .map(([id]) => [id, '测试译文']),
+            ),
+          }
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(
         JSON.stringify({
@@ -216,13 +252,14 @@ export async function createConfigurationBackend(metadata, signal, options = {})
           choices: [
             {
               index: 0,
-              message: { role: 'assistant', content: JSON.stringify({ translations }) },
+              message: { role: 'assistant', content: JSON.stringify(content) },
               finish_reason: 'stop',
             },
           ],
           usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
         }),
       )
+      call.completedAt = Date.now()
     } catch (error) {
       upstreamErrors.push(error.message)
       res.writeHead(500)
@@ -271,7 +308,7 @@ export async function createConfigurationBackend(metadata, signal, options = {})
       model,
       base_url: endpoint,
       response_format: 'json_schema',
-      timeout: 10,
+      timeout: options.upstreamTimeoutSeconds ?? 10,
     },
     rate_limit_per_minute: rpm,
     ...(credentialId ? { credential_id: credentialId } : {}),
