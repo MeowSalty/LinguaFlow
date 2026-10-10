@@ -29,6 +29,11 @@ type Scope struct {
 }
 
 type Cursor struct {
+	// These identify the response that authorizes clearing an alignment network
+	// cursor. They are handoff metadata; the candidate payload retains them.
+	LastAlignmentRequestID   string
+	CandidateVersion         int64
+	WorkID                   string
 	State                    string
 	PoolIndex                int
 	MainAttempts             int
@@ -60,19 +65,21 @@ type RoundState struct {
 }
 
 type Candidate struct {
-	ID              string
-	ParentRequestID string
-	Version         int64
-	Scope           Scope
-	SegmentID       int
-	DTOVersion      int
-	Mode            string
-	SnapshotDigest  string
-	BaselineVersion int64
-	BaselineTarget  *string
-	BaselineStatus  string
-	State           string
-	Payload         json.RawMessage
+	ID                     string
+	WorkID                 string
+	LastAlignmentRequestID string
+	ParentRequestID        string
+	Version                int64
+	Scope                  Scope
+	SegmentID              int
+	DTOVersion             int
+	Mode                   string
+	SnapshotDigest         string
+	BaselineVersion        int64
+	BaselineTarget         *string
+	BaselineStatus         string
+	State                  string
+	Payload                json.RawMessage
 }
 
 type Request struct {
@@ -80,6 +87,7 @@ type Request struct {
 	CandidateID string
 	Scope       Scope
 	SegmentIDs  []int
+	Members     []RequestMember
 	Stage       string
 	BackendID   int
 	BudgetModel string
@@ -91,6 +99,19 @@ type Request struct {
 	MaxMainAttempts      int
 	MaxAlignmentAttempts int
 	MaxNetworkAttempts   int
+}
+
+// RequestMember freezes each candidate and its cursor before one invocation.
+// NetworkAttempt zero opens a new logical attempt; otherwise it continues the
+// already debited logical attempt without refreshing its network allowance.
+type RequestMember struct {
+	SegmentID        int    `json:"segment_id"`
+	WorkID           string `json:"work_id"`
+	CandidateID      string `json:"candidate_id"`
+	CandidateVersion int64  `json:"candidate_version"`
+	Pool             int    `json:"pool"`
+	LogicalAttempt   int    `json:"logical_attempt"`
+	NetworkAttempt   int    `json:"network_attempt"`
 }
 
 type RequestResult struct {

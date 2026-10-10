@@ -218,7 +218,7 @@ func saveCursor(ctx context.Context, tx *ent.Client, scope Scope, segmentID int,
 	newAlignment := cursor.AlignmentAttempts > row.AlignmentAttempts
 	alignmentCompleted := false
 	if cursor.PromptPhase == "alignment_complete" && cursor.AlignmentAttempts == row.AlignmentAttempts && row.CandidateID != "" {
-		alignmentCompleted, err = tx.WorkRequest.Query().Where(workrequest.JobRoundIDEQ(scope.RoundID), workrequest.RetryEpochEQ(scope.RetryEpoch), workrequest.CandidateIDEQ(row.CandidateID), workrequest.LogicalAttemptEQ(cursor.AlignmentAttempts), workrequest.StageIn("ruby_alignment", "alignment"), workrequest.StateIn("received", "completed")).Exist(ctx)
+		alignmentCompleted, err = alignmentProof(ctx, tx, scope, row, cursor.LastAlignmentRequestID, cursor.WorkID, cursor.CandidateVersion, true)
 		if err != nil {
 			return err
 		}
@@ -310,6 +310,9 @@ func (s *Store) saveCandidate(ctx context.Context, c Candidate, cursor *Cursor) 
 			return err
 		}
 		if cursor != nil {
+			cursor.LastAlignmentRequestID = c.LastAlignmentRequestID
+			cursor.CandidateVersion = c.Version
+			cursor.WorkID = c.WorkID
 			return saveCursor(ctx, tx, c.Scope, c.SegmentID, *cursor)
 		}
 		return nil
@@ -348,7 +351,8 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 		return ErrStale
 	}
 	if old != nil {
-		if old.WorkItemID != w.ID || old.BaselineVersion != c.BaselineVersion || old.SnapshotDigest != c.SnapshotDigest || old.DtoVersion != c.DTOVersion || old.Mode != c.Mode || old.SourceGeneration != c.Scope.SourceGeneration || !sameInt(old.SourceRevisionID, c.Scope.SourceRevisionID) {
+		validDTO := old.DtoVersion == c.DTOVersion || (old.DtoVersion == 1 && c.DTOVersion == 2 && c.Version > old.Version)
+		if old.WorkItemID != w.ID || old.BaselineVersion != c.BaselineVersion || old.SnapshotDigest != c.SnapshotDigest || !validDTO || old.Mode != c.Mode || old.SourceGeneration != c.Scope.SourceGeneration || !sameInt(old.SourceRevisionID, c.Scope.SourceRevisionID) {
 			return ErrCandidateVersion
 		}
 		if old.State == "completed" || old.State == "stale" || old.State == "rejected" {
@@ -366,7 +370,7 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 		if c.Version != old.Version+1 || w.CandidateID != c.ID {
 			return ErrCandidateVersion
 		}
-		if err := tx.WorkCandidate.UpdateOneID(old.ID).SetVersion(c.Version).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).Exec(ctx); err != nil {
+		if err := tx.WorkCandidate.UpdateOneID(old.ID).SetVersion(c.Version).SetDtoVersion(c.DTOVersion).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).Exec(ctx); err != nil {
 			return err
 		}
 	} else {
@@ -393,13 +397,49 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 // current retry epoch. A retained candidate keeps its original main parent;
 // after Retry, its admitted alignment request supplies the new epoch's proof.
 func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old *ent.WorkCandidate) error {
+	if old != nil {
+		var saved struct {
+			RetryEpoch             int64  `json:"retry_epoch"`
+			LastAlignmentRequestID string `json:"last_alignment_request_id"`
+		}
+		validSaved := json.Unmarshal(old.Payload, &saved) == nil && saved.RetryEpoch == c.Scope.RetryEpoch
+		if validSaved && old.Version == c.Version && old.State == c.State && string(old.Payload) == string(c.Payload) {
+			return nil
+		}
+		w, err := member(ctx, tx, c.Scope, c.SegmentID)
+		if err != nil {
+			return err
+		}
+		ok, err := alignmentProof(ctx, tx, c.Scope, w, c.LastAlignmentRequestID, c.WorkID, c.Version, false)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		if c.LastAlignmentRequestID != "" && c.State == "ready_to_commit" && c.Version == old.Version+1 {
+			// A locally exhausted candidate may be finalized without another
+			// invocation. Its already saved response supplies the authorization;
+			// it does not authorize clearing any newer network debit.
+			if validSaved && saved.LastAlignmentRequestID == c.LastAlignmentRequestID {
+				ok, err = alignmentProof(ctx, tx, c.Scope, w, c.LastAlignmentRequestID, c.WorkID, old.Version, false)
+				if err != nil {
+					return err
+				}
+				if ok {
+					return nil
+				}
+			}
+		}
+		// A named alignment request must prove this exact successor. A main
+		// parent cannot authorize a stale or unrelated batch response.
+		if c.LastAlignmentRequestID != "" {
+			return ErrStopped
+		}
+	}
 	parentID := c.ParentRequestID
 	if old != nil {
 		parentID = old.ParentRequestID
-	}
-	proof := workrequest.And(workrequest.IdentityEQ(parentID), workrequest.StageEQ("main"))
-	if old != nil {
-		proof = workrequest.Or(proof, workrequest.And(workrequest.CandidateIDEQ(c.ID), workrequest.StageIn("ruby_alignment", "alignment")))
 	}
 	requests, err := tx.WorkRequest.Query().Where(
 		workrequest.JobIDEQ(c.Scope.JobID),
@@ -407,7 +447,7 @@ func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old
 		workrequest.JobRoundIDEQ(c.Scope.RoundID),
 		workrequest.RetryEpochEQ(c.Scope.RetryEpoch),
 		workrequest.StateIn("sent", "received", "completed", "failed"),
-		proof,
+		workrequest.IdentityEQ(parentID), workrequest.StageEQ("main"),
 	).Select(workrequest.FieldSegmentIds).All(ctx)
 	if err != nil {
 		return err

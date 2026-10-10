@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 )
@@ -59,6 +60,20 @@ func (s *Store) AbortRequest(ctx context.Context, id string) error {
 		if err := json.Unmarshal(row.Debits, &debits); err != nil || len(debits) != len(row.SegmentIds) {
 			return fmt.Errorf("%w: request reservation has no trustworthy debit record", ErrManifest)
 		}
+		members, err := decodeRequestMembers(row.Members)
+		if err != nil {
+			return err
+		}
+		byID := make(map[int]RequestMember, len(members))
+		for _, m := range members {
+			if _, duplicate := byID[m.SegmentID]; duplicate {
+				return ErrManifest
+			}
+			byID[m.SegmentID] = m
+		}
+		if len(members) > 0 && len(members) != len(debits) {
+			return ErrManifest
+		}
 		job, err := tx.Job.Get(ctx, row.JobID)
 		if err != nil {
 			return err
@@ -74,6 +89,19 @@ func (s *Store) AbortRequest(ctx context.Context, id string) error {
 				}
 				if w.RetryEpoch != row.RetryEpoch || w.PoolIndex != debit.Pool {
 					continue
+				}
+				if len(members) > 0 {
+					m, ok := byID[debit.SegmentID]
+					if !ok || m.CandidateID != w.CandidateID || m.Pool != w.PoolIndex || m.WorkID != WorkIdentity(Scope{JobID: row.JobID, RoundID: row.JobRoundID}, w.SegmentID) {
+						return ErrCandidateVersion
+					}
+					valid, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(m.CandidateID), workcandidate.WorkItemIDEQ(w.ID), workcandidate.VersionEQ(m.CandidateVersion)).Exist(ctx)
+					if err != nil {
+						return err
+					}
+					if !valid {
+						return ErrCandidateVersion
+					}
 				}
 				if attemptsFromRow(w) != debit.After {
 					return fmt.Errorf("%w: request cursor changed before abort", ErrCandidateVersion)

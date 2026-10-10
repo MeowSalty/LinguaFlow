@@ -25,13 +25,28 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 			return ErrManifest
 		}
 	}
+	members, err := normalizedMembers(r, ids)
+	if err != nil {
+		return err
+	}
+	var encodedMembers []byte
+	if len(members) > 0 {
+		encodedMembers, err = json.Marshal(requestMembers{Version: requestMembersVersion, Members: members})
+		if err != nil {
+			return err
+		}
+	}
 	return Transaction(ctx, s.client, func(tx *ent.Client) error {
 		if err := guardScope(ctx, tx, r.Scope, true); err != nil {
 			return err
 		}
 		old, err := tx.WorkRequest.Query().Where(workrequest.IdentityEQ(r.ID)).Only(ctx)
 		if err == nil {
-			if old.JobID != r.Scope.JobID || old.JobRoundID != r.Scope.RoundID || old.ResourceID != r.Scope.ResourceID || old.RetryEpoch != r.Scope.RetryEpoch || old.InputDigest != r.InputDigest || old.Stage != r.Stage || old.BackendID != r.BackendID || old.CandidateID != r.CandidateID || old.BudgetModel != r.BudgetModel || !reflect.DeepEqual(old.SegmentIds, ids) {
+			oldMembers, err := decodeRequestMembers(old.Members)
+			if err != nil {
+				return err
+			}
+			if old.JobID != r.Scope.JobID || old.JobRoundID != r.Scope.RoundID || old.ResourceID != r.Scope.ResourceID || old.RetryEpoch != r.Scope.RetryEpoch || old.InputDigest != r.InputDigest || old.Stage != r.Stage || old.BackendID != r.BackendID || old.CandidateID != r.CandidateID || old.BudgetModel != r.BudgetModel || !reflect.DeepEqual(old.SegmentIds, ids) || !reflect.DeepEqual(oldMembers, members) {
 				return fmt.Errorf("request identity already used for different input")
 			}
 			if old.State == "cancelled_before_dispatch" {
@@ -44,7 +59,7 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 		}
 		logicalAttempt := 0
 		debits := make([]requestDebit, 0, len(ids))
-		for _, id := range ids {
+		for i, id := range ids {
 			w, err := member(ctx, tx, r.Scope, id)
 			if err != nil {
 				return err
@@ -55,16 +70,23 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 			if r.CandidateID != "" && w.CandidateID != r.CandidateID {
 				return ErrCandidateVersion
 			}
+			alignmentAttempt := r.AlignmentAttempt
+			if len(members) > 0 {
+				if err := validateRequestMember(ctx, tx, w, members[i]); err != nil {
+					return err
+				}
+				alignmentAttempt = members[i].NetworkAttempt == 0
+			}
 			if r.MainAttempt && r.MaxMainAttempts > 0 && w.MainAttempts >= r.MaxMainAttempts {
 				return ErrBudget
 			}
-			if r.AlignmentAttempt && r.MaxAlignmentAttempts > 0 && w.AlignmentAttempts >= r.MaxAlignmentAttempts {
+			if alignmentAttempt && r.MaxAlignmentAttempts > 0 && w.AlignmentAttempts >= r.MaxAlignmentAttempts {
 				return ErrBudget
 			}
-			alignment := r.Stage == "ruby_alignment" || r.Stage == "alignment"
+			alignment := alignmentStage(r.Stage)
 			if alignment {
 				logicalAttempt = w.AlignmentAttempts
-				if r.AlignmentAttempt {
+				if alignmentAttempt {
 					logicalAttempt++
 				}
 			} else {
@@ -77,7 +99,7 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 			fresh := r.MainAttempt
 			if alignment {
 				network = w.AlignmentNetworkAttempts
-				fresh = r.AlignmentAttempt
+				fresh = alignmentAttempt
 			}
 			if fresh {
 				network = 0
@@ -101,7 +123,7 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 				u.AddMainAttempts(1)
 				after.Main++
 			}
-			if r.AlignmentAttempt {
+			if alignmentAttempt {
 				u.AddAlignmentAttempts(1)
 				after.Alignment++
 			}
@@ -114,7 +136,11 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 		if err != nil {
 			return err
 		}
-		return tx.WorkRequest.Create().SetIdentity(r.ID).SetCandidateID(r.CandidateID).SetLogicalAttempt(logicalAttempt).SetDebits(encoded).SetJobID(r.Scope.JobID).SetResourceID(r.Scope.ResourceID).SetJobRoundID(r.Scope.RoundID).SetRetryEpoch(r.Scope.RetryEpoch).SetSegmentIds(ids).SetStage(r.Stage).SetBackendID(r.BackendID).SetBudgetModel(r.BudgetModel).SetInputDigest(r.InputDigest).Exec(ctx)
+		create := tx.WorkRequest.Create().SetIdentity(r.ID).SetCandidateID(r.CandidateID).SetLogicalAttempt(logicalAttempt).SetDebits(encoded).SetJobID(r.Scope.JobID).SetResourceID(r.Scope.ResourceID).SetJobRoundID(r.Scope.RoundID).SetRetryEpoch(r.Scope.RetryEpoch).SetSegmentIds(ids).SetStage(r.Stage).SetBackendID(r.BackendID).SetBudgetModel(r.BudgetModel).SetInputDigest(r.InputDigest)
+		if len(encodedMembers) > 0 {
+			create.SetMembers(encodedMembers)
+		}
+		return create.Exec(ctx)
 	})
 }
 
