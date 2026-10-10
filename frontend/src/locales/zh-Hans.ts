@@ -18,8 +18,12 @@ import storageAdmin from './storage-admin'
 import storageCapacity from './storage-capacity'
 import storageDisk from './storage-disk'
 import storageQuota from './storage-quota'
+import { rubyAlignmentConfig } from './ruby-alignment-config'
+import jobStages from './job-stages'
 
 const messages = {
+  rubyAlignmentConfig,
+  jobStages,
   taskHistory,
   taskHistoryErrors,
   taskRetention,
@@ -1135,6 +1139,7 @@ const messages = {
         startingSoon: '即将开始',
         queued: '排队中，前面有 {ahead} 个任务',
         running: '已完成 {completed}/{total} 工作量',
+        pausing: '暂停中，等待当前请求收尾并确认保存',
         paused: '已暂停，可随时恢复',
         percentTooltip: '百分比为已知工作量占比；新轮次启动时分母增大，进度可能暂时回落',
         completed: '翻译完成',
@@ -1246,12 +1251,13 @@ const messages = {
         collapseResource: '收起 {name} 的轮次',
         mixedRounds: '完成 {completed} 轮 · 跳过 {skipped} 轮',
         executionEnded: '执行已结束',
+        pausingAt: '正在暂停 {stage}',
         pausedAt: '暂停于 {stage}',
         stoppedAt: '停止于 {stage}',
         showFullError: '展开全文',
         collapseError: '收起',
         noResources: '暂无资源执行记录',
-        roundState: { paused: '已暂停', stopped: '已停止', not_run: '未执行' },
+        roundState: { pausing: '暂停中', paused: '已暂停', stopped: '已停止', not_run: '未执行' },
         workload: '工作量（段×轮）',
         resourceCount: '{count} 个资源',
         failedResources: '{count} 个资源失败',
@@ -1262,6 +1268,7 @@ const messages = {
         cancelledHint: '已完成部分的结果仍会保留',
         pending: '等待中',
         running: '执行中',
+        pausing: '暂停中',
         paused: '已暂停',
         stopped: '已停止',
         not_run: '未执行',
@@ -1287,6 +1294,7 @@ const messages = {
       status: {
         pending: '等待中',
         running: '运行中',
+        pausing: '暂停中',
         paused: '已暂停',
         completed: '已完成',
         failed: '失败',
@@ -1295,6 +1303,7 @@ const messages = {
       statusSubtitle: {
         pending: '任务正在排队，开始执行后进度将实时更新',
         running: '任务正在执行，进度与事件日志实时更新',
+        pausing: '已停止派发新请求，等待当前请求收尾并确认保存',
         paused: '任务已暂停，可随时恢复执行',
         completed: '任务已执行完成，可查看各资源的执行明细',
         failed: '任务执行失败，可根据错误信息排查后重试',
