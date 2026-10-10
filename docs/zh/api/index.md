@@ -8,8 +8,11 @@ LinguaFlow 提供 RESTful API，便于与外部系统集成。个人使用 Web /
 | ------------------------------------ | ------------------------------------------------------ |
 | Base URL（本地模式）                 | `http://127.0.0.1:18080/api/v1`                        |
 | Base URL（服务器模式 / Docker 默认） | `http://localhost:8080/api/v1`                         |
+| Base URL（官方在线预览）             | `https://meowsalty-linguaflow.hf.space/api/v1`         |
 | 认证方式                             | 本地模式通常无需认证；服务器模式为 Bearer Token（JWT） |
 | 内容类型                             | `application/json`                                     |
+
+官方在线预览实例（[meowsalty-linguaflow.hf.space](https://meowsalty-linguaflow.hf.space/)）是一个真实运行的服务器模式环境，可直接注册账号后调用上面的 `/auth/login` 换取 JWT 调试接口。它仅供试用、**数据不做持久化**，请勿用于生产或存放重要数据。
 
 ::: tip 认证
 
