@@ -2,12 +2,18 @@ package pipeline
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
+
+// ErrCandidateStale lets storage report a failed content CAS without exposing
+// database types. Other members of the same received batch can still be saved.
+var ErrCandidateStale = errors.New("candidate baseline changed")
 
 type WorkCursor struct {
 	Pool           int
@@ -40,6 +46,19 @@ type RequestIntent struct {
 	NetworkAttempt int
 	Phase          string
 	InputDigest    string
+	Members        []RequestMember
+}
+
+// RequestMember freezes one candidate's identity and pre-dispatch attempt
+// cursor. A batch shares a request, never its members' attempt counters.
+type RequestMember struct {
+	Index            int
+	WorkID           string
+	CandidateID      string
+	CandidateVersion int64
+	Pool             int
+	LogicalAttempt   int
+	NetworkAttempt   int
 }
 
 type RequestRecord struct {
@@ -96,10 +115,15 @@ type MemoryRoundStore struct {
 	candidates map[string][]byte
 	confirmed  map[string]bool
 	apply      func(context.Context, BatchResult) error
+	identity   string
 }
 
 func NewMemoryRoundStore(apply func(context.Context, BatchResult) error) *MemoryRoundStore {
-	return &MemoryRoundStore{state: RoundRecovery{Cursors: map[int]WorkCursor{}}, candidates: map[string][]byte{}, confirmed: map[string]bool{}, apply: apply}
+	return &MemoryRoundStore{state: RoundRecovery{Cursors: map[int]WorkCursor{}}, candidates: map[string][]byte{}, confirmed: map[string]bool{}, apply: apply, identity: NewWorkID()}
+}
+
+func (s *MemoryRoundStore) WorkIdentity(index int) string {
+	return fmt.Sprintf("call:%s/segment:%d", s.identity, index)
 }
 func (s *MemoryRoundStore) Load(context.Context) (RoundRecovery, error) {
 	s.mu.Lock()

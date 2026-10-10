@@ -25,6 +25,7 @@ import (
 
 // TranslateHandler 实现 RoundHandler，执行翻译批次处理。
 type TranslateHandler struct {
+	RubyBatch        AlignmentBatchConfig
 	Backend          backend.Backend
 	BatchSize        int
 	MaxWordsPerBatch int

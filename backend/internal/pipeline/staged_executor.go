@@ -34,6 +34,7 @@ type stagedEvent struct {
 	err          error
 	inputTokens  int64
 	outputTokens int64
+	members      []stagedEvent
 }
 
 // ErrResourceYield suspends an unfinished resource after all its callbacks have
@@ -99,6 +100,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		cursors = map[int]WorkCursor{}
 	}
 	candidates := map[int]*Candidate{}
+	alignmentReadyAt := map[int]time.Time{}
 	// Decode at most one page of recovery payloads. The Job has reconstructed
 	// aggregate occupancy from small headers before any resource is admitted.
 	pageAfter, pageActive, recoveryDone := 0, false, false
@@ -112,20 +114,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 	var firstErr error
 	yielded := false
 	paused := func() bool { return runtime.Gate != nil && runtime.Gate.Paused() }
-	apply := func(e stagedEvent) {
-		atomic.AddInt64(&doc.InputTokens, e.inputTokens)
-		atomic.AddInt64(&doc.OutputTokens, e.outputTokens)
-		if e.page {
-			pageActive = false
-			pageAfter, recoveryDone = e.nextPage, e.lastPage
-		} else if e.main {
-			mainActive--
-		} else {
-			candidateActive--
-		}
-		for _, idx := range e.indices {
-			delete(active, idx)
-		}
+	applyMember := func(e stagedEvent) {
 		for idx, cursor := range e.cursors {
 			cursors[idx] = cursor
 		}
@@ -138,10 +127,12 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				continue
 			}
 			candidates[c.Index] = c
+			alignmentReadyAt[c.Index] = time.Now()
 		}
 		if e.candidate != nil {
 			c := e.candidate
 			candidates[c.Index] = c
+			alignmentReadyAt[c.Index] = maxTime(time.Now(), c.NextAttemptAt)
 			if e.outcome == CommitAccepted || e.outcome == CommitExisting || e.outcome == CommitNoop {
 				if e.completed != nil {
 					applied := false
@@ -169,10 +160,12 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				completed[c.Index] = true
 				delete(remaining, c.Index)
 				delete(candidates, c.Index)
+				delete(alignmentReadyAt, c.Index)
 				runtime.Window.Release(c.ID)
 				reporter.SegmentDone()
 			} else if e.outcome == CommitRejected || e.outcome == CommitStale {
 				delete(candidates, c.Index)
+				delete(alignmentReadyAt, c.Index)
 				runtime.Window.Release(c.ID)
 				if _, persisted := e.cursors[c.Index]; !persisted {
 					cursors[c.Index] = WorkCursor{Pool: maxPools, State: "unresolved"}
@@ -184,8 +177,28 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			cancel()
 		}
 	}
+	apply := func(e stagedEvent) {
+		atomic.AddInt64(&doc.InputTokens, e.inputTokens)
+		atomic.AddInt64(&doc.OutputTokens, e.outputTokens)
+		if e.page {
+			pageActive = false
+			pageAfter, recoveryDone = e.nextPage, e.lastPage
+		} else if e.main {
+			mainActive--
+		} else {
+			candidateActive--
+		}
+		for _, idx := range e.indices {
+			delete(active, idx)
+		}
+		applyMember(e)
+		for _, member := range e.members {
+			applyMember(member)
+		}
+	}
 	for {
 		windowChanged := runtime.Window.Changed()
+		var batchDeadline time.Time
 		if runCtx.Err() == nil && !paused() {
 			if !recoveryDone && !pageActive && len(candidates) == 0 {
 				pageActive = true
@@ -223,21 +236,62 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				keys = append(keys, idx)
 			}
 			sort.Ints(keys)
+			batchConfig := alignmentBatchSettings(round.Handler)
+			mayProduce := !recoveryDone || mainActive > 0
+			if !mayProduce {
+				for idx := range remaining {
+					if candidates[idx] == nil && cursors[idx].Pool < maxPools && cursors[idx].State != "unresolved" {
+						mayProduce = true
+						break
+					}
+				}
+			}
+			considered := make(map[int]bool)
 			for _, idx := range keys {
 				if candidateActive >= 16 {
 					break
 				}
 				c := candidates[idx]
-				if active[idx] || time.Now().Before(c.NextAttemptAt) {
+				if active[idx] || considered[idx] || time.Now().Before(c.NextAttemptAt) {
 					continue
 				}
-				active[idx] = true
+				ready := []*Candidate{c}
+				if needsAlignmentAttempt(round, c) && !c.ForceSingleAlignment && batchConfig.enabled() {
+					for _, other := range keys {
+						next := candidates[other]
+						if other != idx && !active[other] && !considered[other] && !time.Now().Before(next.NextAttemptAt) && needsAlignmentAttempt(round, next) {
+							ready = append(ready, next)
+						}
+					}
+				}
+				batch, full := readyAlignmentBatch(ready, batchConfig)
+				due := alignmentReadyAt[c.Index].Add(batchConfig.Wait)
+				for _, member := range batch {
+					considered[member.Index] = true
+					at := alignmentReadyAt[member.Index].Add(batchConfig.Wait)
+					if at.Before(due) {
+						due = at
+					}
+				}
+				if !full && needsAlignmentAttempt(round, c) && mayProduce && batchConfig.Wait > 0 && time.Now().Before(due) {
+					if batchDeadline.IsZero() || due.Before(batchDeadline) {
+						batchDeadline = due
+					}
+					continue
+				}
+				for _, member := range batch {
+					active[member.Index] = true
+				}
 				candidateActive++
 				wg.Add(1)
-				go func(c *Candidate) {
+				go func(batch []*Candidate) {
 					defer wg.Done()
-					events <- processCandidate(runCtx, round, c, store, runtime, logger, reporter)
-				}(c)
+					if len(batch) == 1 {
+						events <- processCandidate(runCtx, round, batch[0], store, runtime, logger, reporter)
+					} else {
+						events <- processCandidates(runCtx, round, batch, store, runtime, logger, reporter)
+					}
+				}(batch)
 			}
 			for recoveryDone && mainActive < max(1, round.Concurrency) {
 				pool := -1
@@ -341,7 +395,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			}
 		}
 		// Only real deadlines use a timer; capacity changes wake immediately.
-		var deadline time.Time
+		deadline := batchDeadline
 		for idx := range remaining {
 			if active[idx] {
 				continue
@@ -467,6 +521,9 @@ func prepareMain(ctx context.Context, round Round, h stagedHandler, doc *Documen
 		return e
 	}
 	for _, c := range result.candidates {
+		if identity, ok := store.(interface{ WorkIdentity(int) string }); ok {
+			c.WorkID = identity.WorkIdentity(c.Index)
+		}
 		c.PoolIndex = pool
 		c.MainAttempt = attempt + 1
 		c.ParentRequestID = session.lastID
@@ -556,6 +613,11 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 			e.err = update.err
 			return e
 		}
+		if update.stale[c.Index] {
+			retired := retireCandidate(ctx, round, c, store, runtime, true)
+			retired.inputTokens, retired.outputTokens = e.inputTokens, e.outputTokens
+			return retired
+		}
 	}
 	if !c.Ready {
 		return e
@@ -590,6 +652,67 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 	return e
 }
 
+// processCandidates retains one request completion reservation until all of its
+// independent candidate saves and confirmations have finished. A storage failure
+// leaves previously saved members recoverable without replaying their request.
+func processCandidates(ctx context.Context, round Round, candidates []*Candidate, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporter progress.Reporter) (e stagedEvent) {
+	defer progress.NotifyWorkState(reporter)
+	for _, c := range candidates {
+		e.indices = append(e.indices, c.Index)
+	}
+	var live []*Candidate
+	for _, c := range candidates {
+		if validator, ok := store.(interface {
+			ValidateCandidate(context.Context, *Candidate) (bool, error)
+		}); ok {
+			valid, err := validator.ValidateCandidate(ctx, c)
+			if err != nil {
+				e.err = err
+				return e
+			}
+			if !valid {
+				member := retireCandidate(ctx, round, c, store, runtime, true)
+				e.members = append(e.members, member)
+				if member.err != nil {
+					e.err = member.err
+					return e
+				}
+				continue
+			}
+		}
+		live = append(live, c)
+	}
+	if len(live) == 0 {
+		return e
+	}
+	worker := &AlignmentWorker{store: store, runtime: runtime, reporter: reporter}
+	defer func() {
+		if err := worker.finish(e.err); err != nil && e.err == nil {
+			e.err = err
+		}
+	}()
+	update := worker.RunBatch(ctx, round, live)
+	e.inputTokens, e.outputTokens = update.inputTokens, update.outputTokens
+	if update.err != nil || update.paused {
+		e.err = update.err
+		return e
+	}
+	for _, c := range live {
+		member := stagedEvent{candidate: c}
+		if update.stale[c.Index] {
+			member = retireCandidate(ctx, round, c, store, runtime, true)
+		} else if c.Ready {
+			member = processCandidate(ctx, round, c, store, runtime, logger, reporter)
+		}
+		e.members = append(e.members, member)
+		if member.err != nil {
+			e.err = member.err
+			return e
+		}
+	}
+	return e
+}
+
 func retireCandidate(ctx context.Context, round Round, c *Candidate, store RoundStore, runtime *ExecutionRuntime, stale bool) stagedEvent {
 	cursor := WorkCursor{Pool: c.PoolIndex + 1, State: "pending"}
 	if stale || cursor.Pool >= max(1, round.Retry.MaxAttempts+1) {
@@ -600,7 +723,16 @@ func retireCandidate(ctx context.Context, round Round, c *Candidate, store Round
 	if stale {
 		e.outcome = CommitStale
 	}
-	e.err = runtime.Save(ctx, func(saveCtx context.Context) error { return store.Retire(saveCtx, c, cursor) })
+	e.err = runtime.Save(ctx, func(saveCtx context.Context) error {
+		if stale {
+			if retirer, ok := store.(interface {
+				RetireStale(context.Context, *Candidate, WorkCursor) error
+			}); ok {
+				return retirer.RetireStale(saveCtx, c, cursor)
+			}
+		}
+		return store.Retire(saveCtx, c, cursor)
+	})
 	if e.err != nil {
 		e.outcome = ""
 		e.cursors = nil

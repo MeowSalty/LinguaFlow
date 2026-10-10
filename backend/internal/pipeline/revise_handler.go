@@ -28,6 +28,7 @@ import (
 // 保护/还原全部在批内局部状态完成，doc 的 Source/Target/Protected/Meta 全程不被
 // 污染（worker 的 CAS 写回以 doc 原始 Target 为 baseline）。
 type ReviseHandler struct {
+	RubyBatch        AlignmentBatchConfig
 	Backend          backend.Backend
 	Renderer         *prompt.ReviseRenderer
 	BatchSize        int

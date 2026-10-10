@@ -19,30 +19,33 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
-const CandidateDTOVersion = 1
+const CandidateDTOVersion = 2
 
 // Candidate owns its entire payload. It is never an alias of a live Document.
 // Its baseline is captured before the main request, and cannot be refreshed on retry.
 type Candidate struct {
-	DTOVersion      int                  `json:"dto_version"`
-	ID              string               `json:"id"`
-	Version         int64                `json:"version"`
-	Index           int                  `json:"index"`
-	Mode            string               `json:"mode"`
-	Format          string               `json:"format"`
-	Segment         Segment              `json:"segment"`
-	BaselineTarget  string               `json:"baseline_target"`
-	BaselineStatus  string               `json:"baseline_status"`
-	Alignment       *ruby.AlignmentState `json:"alignment,omitempty"`
-	PoolIndex       int                  `json:"pool_index"`
-	MainAttempt     int                  `json:"main_attempt"`
-	LogicalAttempt  int                  `json:"logical_attempt"`
-	NetworkAttempt  int                  `json:"network_attempt"`
-	RetryEpoch      int64                `json:"retry_epoch"`
-	StoredBytes     int64                `json:"-"`
-	NextAttemptAt   time.Time            `json:"next_attempt_at,omitempty"`
-	Ready           bool                 `json:"ready"`
-	ParentRequestID string               `json:"parent_request_id"`
+	DTOVersion             int                  `json:"dto_version"`
+	ID                     string               `json:"id"`
+	WorkID                 string               `json:"work_id,omitempty"`
+	Version                int64                `json:"version"`
+	Index                  int                  `json:"index"`
+	Mode                   string               `json:"mode"`
+	Format                 string               `json:"format"`
+	Segment                Segment              `json:"segment"`
+	BaselineTarget         string               `json:"baseline_target"`
+	BaselineStatus         string               `json:"baseline_status"`
+	Alignment              *ruby.AlignmentState `json:"alignment,omitempty"`
+	PoolIndex              int                  `json:"pool_index"`
+	MainAttempt            int                  `json:"main_attempt"`
+	LogicalAttempt         int                  `json:"logical_attempt"`
+	NetworkAttempt         int                  `json:"network_attempt"`
+	RetryEpoch             int64                `json:"retry_epoch"`
+	StoredBytes            int64                `json:"-"`
+	NextAttemptAt          time.Time            `json:"next_attempt_at,omitempty"`
+	Ready                  bool                 `json:"ready"`
+	ParentRequestID        string               `json:"parent_request_id"`
+	LastAlignmentRequestID string               `json:"last_alignment_request_id,omitempty"`
+	ForceSingleAlignment   bool                 `json:"force_single_alignment,omitempty"`
 }
 
 func NewWorkID() string {
@@ -54,7 +57,7 @@ func NewWorkID() string {
 }
 
 func newCandidate(seg Segment, index int, mode, format string) *Candidate {
-	return &Candidate{DTOVersion: CandidateDTOVersion, ID: NewWorkID(), Version: 1,
+	return &Candidate{DTOVersion: CandidateDTOVersion, ID: NewWorkID(), WorkID: fmt.Sprintf("%s:%d", mode, index), Version: 1,
 		Index: index, Mode: mode, Format: format, Segment: cloneSegment(seg),
 		BaselineTarget: seg.Target, BaselineStatus: seg.Status}
 }
@@ -121,7 +124,7 @@ func DecodeCandidate(data []byte) (*Candidate, error) {
 	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("decode candidate: %w", err)
 	}
-	if c.DTOVersion != CandidateDTOVersion || c.ID == "" || c.Version < 1 {
+	if (c.DTOVersion != 1 && c.DTOVersion != CandidateDTOVersion) || c.ID == "" || c.Version < 1 {
 		return nil, fmt.Errorf("unsupported or invalid candidate DTO")
 	}
 	if c.Alignment != nil {
