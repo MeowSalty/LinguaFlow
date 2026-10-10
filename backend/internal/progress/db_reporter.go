@@ -736,6 +736,18 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 	if batchEvent.ParentRequestID != "" {
 		metadata["parent_request_id"] = batchEvent.ParentRequestID
 	}
+	if len(batchEvent.AlignmentMembers) > 0 {
+		metadata["alignment_members"] = append([]AlignmentMemberEvent(nil), batchEvent.AlignmentMembers...)
+	}
+	if len(batchEvent.ProtocolDiagnostics) > 0 {
+		metadata["protocol_diagnostics"] = append([]string(nil), batchEvent.ProtocolDiagnostics...)
+	}
+	if batchEvent.EnvelopeInvalid {
+		metadata["envelope_invalid"] = true
+	}
+	if batchEvent.UnknownAlignmentMembers > 0 {
+		metadata["unknown_alignment_members"] = batchEvent.UnknownAlignmentMembers
+	}
 	if batchEvent.CandidateID != "" {
 		metadata["candidate_id"] = batchEvent.CandidateID
 		metadata["candidate_version"] = batchEvent.CandidateVersion
