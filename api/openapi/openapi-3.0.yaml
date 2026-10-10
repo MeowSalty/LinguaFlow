@@ -3600,7 +3600,8 @@ paths:
       description: |
         只读投影，不新增通用任务实体。默认返回三类活动任务，组织成员可看到同项目其他成员的任务。
         未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限。
-        state 默认 active，与 status 互斥；同步没有 paused。trigger_type 仅允许显式 task_type=translation。
+        state 默认 active，与 status 互斥；翻译活动状态包含 pending、running、pausing、paused。
+        同步和存储没有 pausing、paused。trigger_type 仅允许显式 task_type=translation。
         存储任务的 waiting_retry、needs_action 属于活动状态；其实际可控制动作以存储任务详情为准。
         updated_at 区间为 [updated_from, updated_before)，按 updated_at DESC, task_type DESC, 整数 task_id DESC 排序。
         独立版本化游标绑定规范化筛选（不含 limit）；不可使用 Job 游标。每页重新鉴权，不提供跨请求快照。
@@ -3627,6 +3628,7 @@ paths:
             enum:
               - pending
               - running
+              - pausing
               - paused
               - waiting_retry
               - needs_action
@@ -3670,7 +3672,8 @@ paths:
       description: |
         只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。
         未知、重复、空或非法参数返回 400。权限与列表一致，无权项目返回零。
-        by_type 固定返回三类，未选类型计零，同步和存储 paused 恒为零；total 为逐字段求和。
+        by_type 固定返回三类，未选类型计零，同步和存储 pausing、paused 恒为零；total 为逐字段求和。
+        pausing 为必返的非负计数，无符合任务时返回零。
         waiting_retry、needs_action 分开统计，翻译与术语同步的这两个计数恒为零。
         recent_failed 只数当前 failed 且 updated_at 位于 [recent_failed_since,as_of) 的记录，窗口为连续七天。
         活动数不受时间限制；不受分页影响，不代表历史失败事件次数。
@@ -10198,6 +10201,7 @@ components:
           enum:
             - pending
             - running
+            - pausing
             - paused
             - waiting_retry
             - needs_action
@@ -10244,6 +10248,7 @@ components:
               enum:
                 - pending
                 - running
+                - pausing
                 - paused
                 - completed
                 - failed
@@ -10379,6 +10384,7 @@ components:
       required:
         - pending
         - running
+        - pausing
         - paused
         - recent_failed
         - waiting_retry
@@ -10388,6 +10394,9 @@ components:
           type: integer
           minimum: 0
         running:
+          type: integer
+          minimum: 0
+        pausing:
           type: integer
           minimum: 0
         paused:
