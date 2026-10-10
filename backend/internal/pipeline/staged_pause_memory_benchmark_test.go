@@ -24,10 +24,14 @@ const pauseMemoryTranslationBytes = 64 << 10
 type pauseMemoryCase struct {
 	main, alignment int
 	sameBackend     bool
+	mainBatch       int
+	batch, words    int
 }
 
 type pauseMemoryMetrics struct {
 	mainCalls, alignmentCalls       int
+	alignmentMembers                int
+	savedAlignmentMembers           int
 	mainInflight, alignmentInflight int
 	mainPeak, alignmentPeak         int
 	savedBytes, savedPeak           int64
@@ -64,6 +68,7 @@ type pauseMemoryFixture struct {
 	heap        *pauseMemoryHeap
 	saved       map[string]int64
 	translation string
+	mainBatch   int
 
 	otherMainStarted int
 	responsesReady   chan struct{}
@@ -113,7 +118,25 @@ func (f *pauseMemoryFixture) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	alignment := r.URL.Path == "/alignment"
 	warmup := false
 	var segments map[string]prompt.SegmentDetail
-	if !alignment {
+	var alignments []struct {
+		WorkID      string `json:"work_id"`
+		CandidateID string `json:"candidate_id"`
+	}
+	if alignment {
+		input := struct {
+			Alignments json.RawMessage `json:"alignments"`
+		}{}
+		if err := json.Unmarshal([]byte(request.User), &input); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(input.Alignments) > 0 {
+			if err := json.Unmarshal(input.Alignments, &alignments); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+	} else {
 		var input struct {
 			Segments map[string]prompt.SegmentDetail `json:"segments"`
 		}
@@ -129,6 +152,7 @@ func (f *pauseMemoryFixture) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	if alignment {
 		f.metrics.alignmentCalls++
+		f.metrics.alignmentMembers += max(1, len(alignments))
 		f.metrics.alignmentInflight++
 		f.metrics.alignmentPeak = max(f.metrics.alignmentPeak, f.metrics.alignmentInflight)
 	} else {
@@ -167,7 +191,22 @@ func (f *pauseMemoryFixture) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	text := `{"ruby_output":[{"id":"1","base":"alpha","text":"reading","kind":"creative","occurrence":1}]}`
-	if !alignment {
+	if len(alignments) > 0 {
+		members := make([]map[string]any, 0, len(alignments))
+		for i := len(alignments) - 1; i >= 0; i-- {
+			member := alignments[i]
+			members = append(members, map[string]any{
+				"work_id": member.WorkID, "candidate_id": member.CandidateID,
+				"ruby_output": []ruby.OutputEntry{{ID: "1", Base: "alpha", Text: "reading", Kind: "creative", Occurrence: 1}},
+			})
+		}
+		data, err := json.Marshal(map[string]any{"alignments": members})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		text = string(data)
+	} else if !alignment {
 		translations := make(map[string]string, len(segments))
 		for id, segment := range segments {
 			if segment.Translate {
@@ -209,7 +248,7 @@ func (s *pauseMemoryStore) Record(ctx context.Context, id string, record Request
 func (s *pauseMemoryStore) Save(ctx context.Context, c *Candidate) error {
 	f := s.fixture
 	f.observe()
-	if c.Index >= controlledBatchSize && c.Version == 1 {
+	if c.Index >= f.mainBatch && c.Version == 1 {
 		f.mu.Lock()
 		f.metrics.saveBlocked++
 		f.mu.Unlock()
@@ -230,6 +269,9 @@ func (s *pauseMemoryStore) Save(ctx context.Context, c *Candidate) error {
 	f.metrics.savedBytes += c.StoredBytes - f.saved[c.ID]
 	f.saved[c.ID] = c.StoredBytes
 	f.metrics.savedPeak = max(f.metrics.savedPeak, f.metrics.savedBytes)
+	if c.Version == 2 && c.Ready && c.LogicalAttempt == 1 {
+		f.metrics.savedAlignmentMembers++
+	}
 	f.mu.Unlock()
 	f.observe()
 	return nil
@@ -263,8 +305,12 @@ func runPauseMemoryBenchmark(tc pauseMemoryCase, sampleHeap bool) (metrics pause
 	}
 	runtime := NewExecutionRuntime(admission, DefaultCandidateLimits(), nil)
 	defer runtime.Close()
+	mainBatch := tc.mainBatch
+	if mainBatch == 0 {
+		mainBatch = controlledBatchSize
+	}
 	f := &pauseMemoryFixture{
-		tc: tc, runtime: runtime, saved: map[string]int64{},
+		tc: tc, runtime: runtime, saved: map[string]int64{}, mainBatch: mainBatch,
 		responsesReady: make(chan struct{}), networkRelease: make(chan struct{}),
 		saveEntered: make(chan struct{}), saveRelease: make(chan struct{}),
 		translation: "alpha beta" + strings.Repeat("x", pauseMemoryTranslationBytes-len("alpha beta")),
@@ -293,10 +339,15 @@ func runPauseMemoryBenchmark(tc pauseMemoryCase, sampleHeap bool) (metrics pause
 		return metrics, err
 	}
 	handler := &TranslateHandler{
-		Backend: makeBackend("main", 1), BatchSize: controlledBatchSize,
+		Backend: makeBackend("main", 1), BatchSize: mainBatch,
 		Renderer: renderer, RubyEnabled: true, RubyProtocolVersion: ruby.ProtocolV2,
 		RubyRetryBackends: []backend.Backend{makeBackend("alignment", alignID)},
 		RubyRetryAttempts: 1, RubyTemplates: testRubyTemplates(), Logger: quietLogger(),
+	}
+	if tc.batch > 0 || tc.words > 0 {
+		handler.RubyBatch = AlignmentBatchConfig{BatchSize: tc.batch, MaxWordsPerBatch: tc.words, Wait: 25 * time.Millisecond, ProtocolVersion: ruby.BatchProtocolVersion}
+		handler.RubyTemplates.BatchJSON = prompt.RubyAlignmentBatchJSONTemplate
+		handler.RubyTemplates.BatchText = prompt.RubyAlignmentBatchTextTemplate
 	}
 	round := Round{Concurrency: tc.main, Handler: handler, Runtime: runtime}
 	store := &pauseMemoryStore{MemoryRoundStore: NewMemoryRoundStore(nil), fixture: f}
@@ -304,7 +355,7 @@ func runPauseMemoryBenchmark(tc pauseMemoryCase, sampleHeap bool) (metrics pause
 	doc.Format = "text"
 	for index := range doc.Segments {
 		prefix := fmt.Sprintf("segment:%d ", index)
-		if index < controlledBatchSize {
+		if index < mainBatch {
 			prefix = "warmup:" + prefix
 		}
 		source := prefix + strings.Repeat("s", pauseMemorySourceBytes-len(prefix))
@@ -396,7 +447,7 @@ func runPauseMemoryBenchmark(tc pauseMemoryCase, sampleHeap bool) (metrics pause
 		return metrics, fmt.Errorf("pause dispatched more work or exceeded request limits: %+v", metrics)
 	}
 	limits := DefaultCandidateLimits()
-	if metrics.reservedBytesPeak != int64(tc.main*controlledBatchSize)*limits.ItemBytes || metrics.windowSegmentsPeak != (tc.main+1)*controlledBatchSize || metrics.windowBytesPeak > limits.Bytes {
+	if metrics.reservedBytesPeak != int64(tc.main*mainBatch)*limits.ItemBytes || metrics.windowSegmentsPeak != (tc.main+1)*mainBatch || metrics.windowBytesPeak > limits.Bytes {
 		return metrics, fmt.Errorf("controlled window occupancy differs from reserved work: %+v", metrics)
 	}
 	state, err := store.Load(ctx)
@@ -407,8 +458,8 @@ func runPauseMemoryBenchmark(tc pauseMemoryCase, sampleHeap bool) (metrics pause
 	if err != nil {
 		return metrics, err
 	}
-	wantCandidates := (tc.main+1)*controlledBatchSize - tc.alignment
-	if len(state.Completed) != tc.alignment || len(candidates) != wantCandidates || len(exit.result.Resolved) != tc.alignment {
+	wantCandidates := (tc.main+1)*mainBatch - metrics.alignmentMembers
+	if len(state.Completed) != metrics.alignmentMembers || metrics.savedAlignmentMembers != metrics.alignmentMembers || len(candidates) != wantCandidates || len(exit.result.Resolved) != metrics.alignmentMembers {
 		return metrics, fmt.Errorf("incomplete drain: confirmed=%d drafts=%d result=%+v", len(state.Completed), len(candidates), exit.result)
 	}
 	window := runtime.Window.Snapshot()
@@ -426,6 +477,63 @@ func runPauseMemoryBenchmark(tc pauseMemoryCase, sampleHeap bool) (metrics pause
 		}
 	}
 	return metrics, nil
+}
+
+// BenchmarkRubyAlignmentBatchPause keeps C=1/A=1, main batches of 8, the same
+// 24 paragraphs and byte/capacity limits as PauseMemory, and 6000 RPM per backend
+// with a full initial burst. Each fixed paragraph contributes 8 content words;
+// words24 therefore admits exactly 3 members. Only the alignment batch limit
+// varies. Both backend layouts remain separate comparison groups.
+//
+// The channels establish a common pause point: 8 warmup drafts are saved, one
+// alignment HTTP request is blocked, and the second main response is blocked at
+// its first candidate save. Gate.Pause then releases both barriers. No latency,
+// failures, heap sampling, or explicit GC is injected; pause_us/op includes only
+// the remaining response parsing, saves and confirmations until the round joins.
+// Setup and reaching the barrier are excluded. In every case exactly 3 HTTP
+// requests have started; confirmed/saved alignment members must equal the actual
+// membership of the one dispatched alignment request (1/4/8/3 respectively).
+func BenchmarkRubyAlignmentBatchPause(b *testing.B) {
+	for _, same := range []bool{true, false} {
+		backendName := "separate_backends"
+		if same {
+			backendName = "same_backend"
+		}
+		b.Run(backendName, func(b *testing.B) {
+			for _, config := range []struct {
+				name         string
+				batch, words int
+				wantMembers  int
+			}{{"B1", 1, 0, 1}, {"B4", 4, 0, 4}, {"B8", 8, 0, 8}, {"words24", 0, 24, 3}} {
+				b.Run("C1_A1_"+config.name, func(b *testing.B) {
+					var drain time.Duration
+					var last pauseMemoryMetrics
+					for range b.N {
+						metrics, err := runPauseMemoryBenchmark(pauseMemoryCase{
+							main: 1, alignment: 1, sameBackend: same, mainBatch: 8, batch: config.batch, words: config.words,
+						}, false)
+						if err != nil {
+							b.Fatal(err)
+						}
+						if metrics.mainCalls != 2 || metrics.alignmentCalls != 1 || metrics.alignmentMembers != config.wantMembers || metrics.savedAlignmentMembers != config.wantMembers {
+							b.Fatalf("pause drained other than the dispatched membership: %+v", metrics)
+						}
+						drain += metrics.drain
+						last = metrics
+					}
+					b.ReportMetric(0, "ns/op")
+					b.ReportMetric(float64(drain.Nanoseconds())/float64(b.N)/1000, "pause_us/op")
+					b.ReportMetric(float64(last.mainCalls+last.alignmentCalls), "HTTP/op")
+					b.ReportMetric(float64(last.mainCalls), "main_HTTP/op")
+					b.ReportMetric(float64(last.alignmentCalls), "alignment_HTTP/op")
+					b.ReportMetric(float64(last.alignmentMembers), "alignment_members/op")
+					b.ReportMetric(float64(last.savedAlignmentMembers), "saved_alignment_members/op")
+					b.ReportMetric(float64(last.mainPeak), "main_peak")
+					b.ReportMetric(float64(last.alignmentPeak), "alignment_peak")
+				})
+			}
+		})
+	}
 }
 
 // BenchmarkRubyAlignmentPauseMemory uses 24 paragraphs (4 KiB source/64 KiB

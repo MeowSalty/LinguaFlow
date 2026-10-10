@@ -22,11 +22,13 @@ const controlledBatchSize = 4
 const controlledTarget = "<ruby>alpha<rt>reading</rt></ruby> beta"
 
 type controlledCase struct {
-	name        string
-	main, align int
-	legacy      bool
-	serial      bool
-	shared      bool
+	name         string
+	main, align  int
+	legacy       bool
+	serial       bool
+	shared       bool
+	batch, words int
+	wait         time.Duration
 }
 
 var controlledCases = []controlledCase{
@@ -39,14 +41,18 @@ var controlledCases = []controlledCase{
 	{name: "shared_pipeline_C2", main: 2, shared: true},
 	{name: "independent_pipeline_C2_A2", main: 2, align: 2},
 	{name: "independent_pipeline_C2_A4", main: 2, align: 4},
+	{name: "batch_C1_A1_B4", main: 1, align: 1, batch: 4, wait: 25 * time.Millisecond},
+	{name: "batch_C1_A1_B8", main: 1, align: 1, batch: 8, wait: 25 * time.Millisecond},
+	{name: "batch_C1_A1_words24", main: 1, align: 1, words: 24, wait: 25 * time.Millisecond},
 }
 
 type controlledMetrics struct {
-	mainCalls, alignmentCalls, tokens  int
-	mainPeak, alignmentPeak, totalPeak int
-	backendPeak                        int
-	bytesPeak                          int64
-	firstVisible, lastMain             time.Time
+	mainCalls, alignmentCalls, tokens   int
+	mainPeak, alignmentPeak, totalPeak  int
+	backendPeak                         int
+	bytesPeak                           int64
+	firstVisible, lastMain              time.Time
+	alignmentMembers, maxAlignmentBatch int
 }
 
 type controlledHTTP struct {
@@ -133,6 +139,37 @@ func (f *controlledHTTP) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	text := `{"ruby_output":[{"id":"1","base":"alpha","text":"reading","kind":"creative","occurrence":1}]}`
+	if alignment {
+		var batch struct {
+			Alignments []struct {
+				WorkID      string `json:"work_id"`
+				CandidateID string `json:"candidate_id"`
+			} `json:"alignments"`
+		}
+		if err := json.Unmarshal([]byte(request.User), &batch); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		n := max(1, len(batch.Alignments))
+		f.mu.Lock()
+		f.metrics.alignmentMembers += n
+		f.metrics.maxAlignmentBatch = max(f.metrics.maxAlignmentBatch, n)
+		f.mu.Unlock()
+		if len(batch.Alignments) > 0 {
+			var rows []map[string]any
+			// Return reversed members to exercise identity association at transport.
+			for i := len(batch.Alignments) - 1; i >= 0; i-- {
+				member := batch.Alignments[i]
+				rows = append(rows, map[string]any{"work_id": member.WorkID, "candidate_id": member.CandidateID, "ruby_output": []map[string]any{{"id": "1", "base": "alpha", "text": "reading", "kind": "creative", "occurrence": 1}}})
+			}
+			encoded, err := json.Marshal(map[string]any{"alignments": rows})
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			text = string(encoded)
+		}
+	}
 	if !alignment {
 		var input struct {
 			Segments map[string]prompt.SegmentDetail `json:"segments"`
@@ -258,6 +295,10 @@ func runControlledPipeline(ctx context.Context, f *controlledHTTP, tc controlled
 	}
 	h := &TranslateHandler{Backend: makeBackend("main", 1), BatchSize: controlledBatchSize, Renderer: renderer, RubyEnabled: true, RubyProtocolVersion: ruby.ProtocolV2,
 		RubyRetryBackends: []backend.Backend{makeBackend("alignment", alignID)}, RubyRetryAttempts: 1, RubyTemplates: testRubyTemplates(), Logger: quietLogger()}
+	if tc.batch > 0 || tc.words > 0 {
+		h.RubyBatch = AlignmentBatchConfig{BatchSize: tc.batch, MaxWordsPerBatch: tc.words, Wait: tc.wait, ProtocolVersion: ruby.BatchProtocolVersion}
+		h.RubyTemplates.BatchJSON, h.RubyTemplates.BatchText = prompt.RubyAlignmentBatchJSONTemplate, prompt.RubyAlignmentBatchTextTemplate
+	}
 	round := Round{Concurrency: tc.main, Handler: h, Runtime: runtime}
 	store := &controlledStore{MemoryRoundStore: NewMemoryRoundStore(nil), fixture: f}
 	if !tc.serial {
@@ -361,8 +402,14 @@ func checkControlledRun(tb testing.TB, f *controlledHTTP, doc *Document, tc cont
 	f.mu.Lock()
 	m := f.metrics
 	f.mu.Unlock()
-	if m.mainCalls != controlledSegments/controlledBatchSize || m.alignmentCalls != controlledSegments || m.tokens != 540 {
+	if m.mainCalls != controlledSegments/controlledBatchSize || m.alignmentMembers != controlledSegments || m.tokens != 18*(m.mainCalls+m.alignmentCalls) {
 		tb.Fatalf("%s changed work or usage: %+v", tc.name, m)
+	}
+	if tc.batch == 0 && tc.words == 0 && m.alignmentCalls != controlledSegments {
+		tb.Fatalf("single-paragraph baseline changed: %+v", m)
+	}
+	if tc.batch > 0 && m.maxAlignmentBatch > tc.batch {
+		tb.Fatalf("batch exceeded configured segment limit: %+v", m)
 	}
 	if m.mainPeak > tc.main || (tc.shared && m.totalPeak > tc.main) || (!tc.shared && m.alignmentPeak > tc.align) {
 		tb.Fatalf("%s exceeded HTTP budgets: %+v", tc.name, m)
@@ -396,7 +443,8 @@ func TestRubyAlignmentControlledHTTPBudgets(t *testing.T) {
 // candidate window, 1 MiB item/response limits, no errors or retries, and identical
 // verified output. "legacy" reconstructs the old scheduling/protocol with the
 // current single-attempt HTTP transport; it is not a historical binary benchmark.
-// P2 is intentionally absent. Timing and capacity gains are separate comparisons.
+// P2 cases fix C/A and capacity, varying only content batching. Fake usage is
+// fixed per invocation and measures accounting, not real model token savings.
 func BenchmarkRubyAlignmentPipeline(b *testing.B) {
 	for _, same := range []bool{true, false} {
 		name := "separate_backends"
@@ -432,8 +480,11 @@ func BenchmarkRubyAlignmentPipeline(b *testing.B) {
 					b.ReportMetric(float64(visible.Microseconds())/float64(b.N)/1000, "first_ms/op")
 					b.ReportMetric(float64(metrics.mainCalls+metrics.alignmentCalls), "HTTP/op")
 					b.ReportMetric(float64(metrics.tokens), "tokens/op")
+					b.ReportMetric(float64(metrics.alignmentCalls), "alignment_HTTP/op")
+					b.ReportMetric(float64(metrics.maxAlignmentBatch), "max_alignment_batch")
 					b.ReportMetric(float64(metrics.mainPeak), "main_peak")
 					b.ReportMetric(float64(metrics.alignmentPeak), "alignment_peak")
+					b.ReportMetric(float64(metrics.totalPeak), "total_peak")
 					b.ReportMetric(float64(metrics.backendPeak), "backend_peak")
 					b.ReportMetric(float64(metrics.bytesPeak), "candidate_bytes_peak")
 				})
