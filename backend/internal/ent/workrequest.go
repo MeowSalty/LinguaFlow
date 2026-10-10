@@ -45,6 +45,8 @@ type WorkRequest struct {
 	CandidateID string `json:"candidate_id,omitempty"`
 	// LogicalAttempt holds the value of the "logical_attempt" field.
 	LogicalAttempt int `json:"logical_attempt,omitempty"`
+	// Versioned per-member candidate identity, version, pool and invocation cursor; absent for legacy single-candidate requests
+	Members json.RawMessage `json:"members,omitempty"`
 	// Per-member attempt counters before and after reservation; only proven pre-dispatch aborts may restore them
 	Debits json.RawMessage `json:"debits,omitempty"`
 	// Idempotent inline glossary absorption result, committed with the glossary entries
@@ -124,7 +126,7 @@ func (*WorkRequest) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case workrequest.FieldSegmentIds, workrequest.FieldDebits, workrequest.FieldGlossaryReceipt:
+		case workrequest.FieldSegmentIds, workrequest.FieldMembers, workrequest.FieldDebits, workrequest.FieldGlossaryReceipt:
 			values[i] = new([]byte)
 		case workrequest.FieldUsageKnown:
 			values[i] = new(sql.NullBool)
@@ -228,6 +230,14 @@ func (_m *WorkRequest) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field logical_attempt", values[i])
 			} else if value.Valid {
 				_m.LogicalAttempt = int(value.Int64)
+			}
+		case workrequest.FieldMembers:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field members", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Members); err != nil {
+					return fmt.Errorf("unmarshal field members: %w", err)
+				}
 			}
 		case workrequest.FieldDebits:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -386,6 +396,9 @@ func (_m *WorkRequest) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("logical_attempt=")
 	builder.WriteString(fmt.Sprintf("%v", _m.LogicalAttempt))
+	builder.WriteString(", ")
+	builder.WriteString("members=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Members))
 	builder.WriteString(", ")
 	builder.WriteString("debits=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Debits))

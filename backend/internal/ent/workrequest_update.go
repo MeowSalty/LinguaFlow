@@ -198,6 +198,24 @@ func (_u *WorkRequestUpdate) AddLogicalAttempt(v int) *WorkRequestUpdate {
 	return _u
 }
 
+// SetMembers sets the "members" field.
+func (_u *WorkRequestUpdate) SetMembers(v json.RawMessage) *WorkRequestUpdate {
+	_u.mutation.SetMembers(v)
+	return _u
+}
+
+// AppendMembers appends value to the "members" field.
+func (_u *WorkRequestUpdate) AppendMembers(v json.RawMessage) *WorkRequestUpdate {
+	_u.mutation.AppendMembers(v)
+	return _u
+}
+
+// ClearMembers clears the value of the "members" field.
+func (_u *WorkRequestUpdate) ClearMembers() *WorkRequestUpdate {
+	_u.mutation.ClearMembers()
+	return _u
+}
+
 // SetDebits sets the "debits" field.
 func (_u *WorkRequestUpdate) SetDebits(v json.RawMessage) *WorkRequestUpdate {
 	_u.mutation.SetDebits(v)
@@ -608,6 +626,17 @@ func (_u *WorkRequestUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	if value, ok := _u.mutation.AddedLogicalAttempt(); ok {
 		_spec.AddField(workrequest.FieldLogicalAttempt, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.Members(); ok {
+		_spec.SetField(workrequest.FieldMembers, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedMembers(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, workrequest.FieldMembers, value)
+		})
+	}
+	if _u.mutation.MembersCleared() {
+		_spec.ClearField(workrequest.FieldMembers, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Debits(); ok {
 		_spec.SetField(workrequest.FieldDebits, field.TypeJSON, value)
 	}
@@ -941,6 +970,24 @@ func (_u *WorkRequestUpdateOne) SetNillableLogicalAttempt(v *int) *WorkRequestUp
 // AddLogicalAttempt adds value to the "logical_attempt" field.
 func (_u *WorkRequestUpdateOne) AddLogicalAttempt(v int) *WorkRequestUpdateOne {
 	_u.mutation.AddLogicalAttempt(v)
+	return _u
+}
+
+// SetMembers sets the "members" field.
+func (_u *WorkRequestUpdateOne) SetMembers(v json.RawMessage) *WorkRequestUpdateOne {
+	_u.mutation.SetMembers(v)
+	return _u
+}
+
+// AppendMembers appends value to the "members" field.
+func (_u *WorkRequestUpdateOne) AppendMembers(v json.RawMessage) *WorkRequestUpdateOne {
+	_u.mutation.AppendMembers(v)
+	return _u
+}
+
+// ClearMembers clears the value of the "members" field.
+func (_u *WorkRequestUpdateOne) ClearMembers() *WorkRequestUpdateOne {
+	_u.mutation.ClearMembers()
 	return _u
 }
 
@@ -1383,6 +1430,17 @@ func (_u *WorkRequestUpdateOne) sqlSave(ctx context.Context) (_node *WorkRequest
 	}
 	if value, ok := _u.mutation.AddedLogicalAttempt(); ok {
 		_spec.AddField(workrequest.FieldLogicalAttempt, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.Members(); ok {
+		_spec.SetField(workrequest.FieldMembers, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedMembers(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, workrequest.FieldMembers, value)
+		})
+	}
+	if _u.mutation.MembersCleared() {
+		_spec.ClearField(workrequest.FieldMembers, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Debits(); ok {
 		_spec.SetField(workrequest.FieldDebits, field.TypeJSON, value)

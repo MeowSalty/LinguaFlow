@@ -38,6 +38,8 @@ const (
 	FieldCandidateID = "candidate_id"
 	// FieldLogicalAttempt holds the string denoting the logical_attempt field in the database.
 	FieldLogicalAttempt = "logical_attempt"
+	// FieldMembers holds the string denoting the members field in the database.
+	FieldMembers = "members"
 	// FieldDebits holds the string denoting the debits field in the database.
 	FieldDebits = "debits"
 	// FieldGlossaryReceipt holds the string denoting the glossary_receipt field in the database.
@@ -106,6 +108,7 @@ var Columns = []string{
 	FieldBackendID,
 	FieldCandidateID,
 	FieldLogicalAttempt,
+	FieldMembers,
 	FieldDebits,
 	FieldGlossaryReceipt,
 	FieldUsageRecordID,

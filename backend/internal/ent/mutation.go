@@ -56804,6 +56804,8 @@ type WorkRequestMutation struct {
 	candidate_id           *string
 	logical_attempt        *int
 	addlogical_attempt     *int
+	members                *json.RawMessage
+	appendmembers          json.RawMessage
 	debits                 *json.RawMessage
 	appenddebits           json.RawMessage
 	glossary_receipt       *json.RawMessage
@@ -57436,6 +57438,71 @@ func (m *WorkRequestMutation) AddedLogicalAttempt() (r int, exists bool) {
 func (m *WorkRequestMutation) ResetLogicalAttempt() {
 	m.logical_attempt = nil
 	m.addlogical_attempt = nil
+}
+
+// SetMembers sets the "members" field.
+func (m *WorkRequestMutation) SetMembers(jm json.RawMessage) {
+	m.members = &jm
+	m.appendmembers = nil
+}
+
+// Members returns the value of the "members" field in the mutation.
+func (m *WorkRequestMutation) Members() (r json.RawMessage, exists bool) {
+	v := m.members
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMembers returns the old "members" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldMembers(ctx context.Context) (v json.RawMessage, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMembers is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMembers requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMembers: %w", err)
+	}
+	return oldValue.Members, nil
+}
+
+// AppendMembers adds jm to the "members" field.
+func (m *WorkRequestMutation) AppendMembers(jm json.RawMessage) {
+	m.appendmembers = append(m.appendmembers, jm...)
+}
+
+// AppendedMembers returns the list of values that were appended to the "members" field in this mutation.
+func (m *WorkRequestMutation) AppendedMembers() (json.RawMessage, bool) {
+	if len(m.appendmembers) == 0 {
+		return nil, false
+	}
+	return m.appendmembers, true
+}
+
+// ClearMembers clears the value of the "members" field.
+func (m *WorkRequestMutation) ClearMembers() {
+	m.members = nil
+	m.appendmembers = nil
+	m.clearedFields[workrequest.FieldMembers] = struct{}{}
+}
+
+// MembersCleared returns if the "members" field was cleared in this mutation.
+func (m *WorkRequestMutation) MembersCleared() bool {
+	_, ok := m.clearedFields[workrequest.FieldMembers]
+	return ok
+}
+
+// ResetMembers resets all changes to the "members" field.
+func (m *WorkRequestMutation) ResetMembers() {
+	m.members = nil
+	m.appendmembers = nil
+	delete(m.clearedFields, workrequest.FieldMembers)
 }
 
 // SetDebits sets the "debits" field.
@@ -58114,7 +58181,7 @@ func (m *WorkRequestMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *WorkRequestMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, workrequest.FieldCreatedAt)
 	}
@@ -58150,6 +58217,9 @@ func (m *WorkRequestMutation) Fields() []string {
 	}
 	if m.logical_attempt != nil {
 		fields = append(fields, workrequest.FieldLogicalAttempt)
+	}
+	if m.members != nil {
+		fields = append(fields, workrequest.FieldMembers)
 	}
 	if m.debits != nil {
 		fields = append(fields, workrequest.FieldDebits)
@@ -58216,6 +58286,8 @@ func (m *WorkRequestMutation) Field(name string) (ent.Value, bool) {
 		return m.CandidateID()
 	case workrequest.FieldLogicalAttempt:
 		return m.LogicalAttempt()
+	case workrequest.FieldMembers:
+		return m.Members()
 	case workrequest.FieldDebits:
 		return m.Debits()
 	case workrequest.FieldGlossaryReceipt:
@@ -58271,6 +58343,8 @@ func (m *WorkRequestMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldCandidateID(ctx)
 	case workrequest.FieldLogicalAttempt:
 		return m.OldLogicalAttempt(ctx)
+	case workrequest.FieldMembers:
+		return m.OldMembers(ctx)
 	case workrequest.FieldDebits:
 		return m.OldDebits(ctx)
 	case workrequest.FieldGlossaryReceipt:
@@ -58385,6 +58459,13 @@ func (m *WorkRequestMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetLogicalAttempt(v)
+		return nil
+	case workrequest.FieldMembers:
+		v, ok := value.(json.RawMessage)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMembers(v)
 		return nil
 	case workrequest.FieldDebits:
 		v, ok := value.(json.RawMessage)
@@ -58580,6 +58661,9 @@ func (m *WorkRequestMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *WorkRequestMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(workrequest.FieldMembers) {
+		fields = append(fields, workrequest.FieldMembers)
+	}
 	if m.FieldCleared(workrequest.FieldDebits) {
 		fields = append(fields, workrequest.FieldDebits)
 	}
@@ -58603,6 +58687,9 @@ func (m *WorkRequestMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *WorkRequestMutation) ClearField(name string) error {
 	switch name {
+	case workrequest.FieldMembers:
+		m.ClearMembers()
+		return nil
 	case workrequest.FieldDebits:
 		m.ClearDebits()
 		return nil
@@ -58655,6 +58742,9 @@ func (m *WorkRequestMutation) ResetField(name string) error {
 		return nil
 	case workrequest.FieldLogicalAttempt:
 		m.ResetLogicalAttempt()
+		return nil
+	case workrequest.FieldMembers:
+		m.ResetMembers()
 		return nil
 	case workrequest.FieldDebits:
 		m.ResetDebits()

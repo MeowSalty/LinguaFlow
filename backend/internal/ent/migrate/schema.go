@@ -1854,6 +1854,7 @@ var (
 		{Name: "backend_id", Type: field.TypeInt},
 		{Name: "candidate_id", Type: field.TypeString, Default: ""},
 		{Name: "logical_attempt", Type: field.TypeInt, Default: 0},
+		{Name: "members", Type: field.TypeJSON, Nullable: true},
 		{Name: "debits", Type: field.TypeJSON, Nullable: true},
 		{Name: "glossary_receipt", Type: field.TypeJSON, Nullable: true},
 		{Name: "usage_record_id", Type: field.TypeInt, Nullable: true},
@@ -1877,19 +1878,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "work_requests_jobs_job",
-				Columns:    []*schema.Column{WorkRequestsColumns[21]},
+				Columns:    []*schema.Column{WorkRequestsColumns[22]},
 				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_requests_resources_resource",
-				Columns:    []*schema.Column{WorkRequestsColumns[22]},
+				Columns:    []*schema.Column{WorkRequestsColumns[23]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_requests_job_rounds_round",
-				Columns:    []*schema.Column{WorkRequestsColumns[23]},
+				Columns:    []*schema.Column{WorkRequestsColumns[24]},
 				RefColumns: []*schema.Column{JobRoundsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -1898,7 +1899,7 @@ var (
 			{
 				Name:    "workrequest_job_id_state_id",
 				Unique:  false,
-				Columns: []*schema.Column{WorkRequestsColumns[21], WorkRequestsColumns[15], WorkRequestsColumns[0]},
+				Columns: []*schema.Column{WorkRequestsColumns[22], WorkRequestsColumns[16], WorkRequestsColumns[0]},
 			},
 		},
 	}

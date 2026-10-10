@@ -21,6 +21,7 @@ func (WorkRequest) Fields() []ent.Field {
 		field.Int64("retry_epoch").NonNegative(), field.JSON("segment_ids", []int{}),
 		field.String("stage").NotEmpty(), field.Int("backend_id").NonNegative(),
 		field.String("candidate_id").Default(""), field.Int("logical_attempt").Default(0).NonNegative(),
+		field.JSON("members", json.RawMessage{}).Optional().Comment("Versioned per-member candidate identity, version, pool and invocation cursor; absent for legacy single-candidate requests"),
 		field.JSON("debits", json.RawMessage{}).Optional().Comment("Per-member attempt counters before and after reservation; only proven pre-dispatch aborts may restore them"),
 		field.JSON("glossary_receipt", json.RawMessage{}).Optional().Comment("Idempotent inline glossary absorption result, committed with the glossary entries"),
 		field.Int("usage_record_id").Optional().Nillable().Positive(),

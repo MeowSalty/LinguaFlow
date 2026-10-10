@@ -610,6 +610,16 @@ func LogicalAttemptLTE(v int) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldLTE(FieldLogicalAttempt, v))
 }
 
+// MembersIsNil applies the IsNil predicate on the "members" field.
+func MembersIsNil() predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIsNull(FieldMembers))
+}
+
+// MembersNotNil applies the NotNil predicate on the "members" field.
+func MembersNotNil() predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotNull(FieldMembers))
+}
+
 // DebitsIsNil applies the IsNil predicate on the "debits" field.
 func DebitsIsNil() predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldIsNull(FieldDebits))

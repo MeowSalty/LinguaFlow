@@ -2172,45 +2172,45 @@ func init() {
 	// workrequest.LogicalAttemptValidator is a validator for the "logical_attempt" field. It is called by the builders before save.
 	workrequest.LogicalAttemptValidator = workrequestDescLogicalAttempt.Validators[0].(func(int) error)
 	// workrequestDescUsageRecordID is the schema descriptor for usage_record_id field.
-	workrequestDescUsageRecordID := workrequestFields[12].Descriptor()
+	workrequestDescUsageRecordID := workrequestFields[13].Descriptor()
 	// workrequest.UsageRecordIDValidator is a validator for the "usage_record_id" field. It is called by the builders before save.
 	workrequest.UsageRecordIDValidator = workrequestDescUsageRecordID.Validators[0].(func(int) error)
 	// workrequestDescBudgetModel is the schema descriptor for budget_model field.
-	workrequestDescBudgetModel := workrequestFields[13].Descriptor()
+	workrequestDescBudgetModel := workrequestFields[14].Descriptor()
 	// workrequest.BudgetModelValidator is a validator for the "budget_model" field. It is called by the builders before save.
 	workrequest.BudgetModelValidator = workrequestDescBudgetModel.Validators[0].(func(string) error)
 	// workrequestDescInputDigest is the schema descriptor for input_digest field.
-	workrequestDescInputDigest := workrequestFields[14].Descriptor()
+	workrequestDescInputDigest := workrequestFields[15].Descriptor()
 	// workrequest.InputDigestValidator is a validator for the "input_digest" field. It is called by the builders before save.
 	workrequest.InputDigestValidator = workrequestDescInputDigest.Validators[0].(func(string) error)
 	// workrequestDescState is the schema descriptor for state field.
-	workrequestDescState := workrequestFields[15].Descriptor()
+	workrequestDescState := workrequestFields[16].Descriptor()
 	// workrequest.DefaultState holds the default value on creation for the state field.
 	workrequest.DefaultState = workrequestDescState.Default.(string)
 	// workrequestDescUsageKnown is the schema descriptor for usage_known field.
-	workrequestDescUsageKnown := workrequestFields[16].Descriptor()
+	workrequestDescUsageKnown := workrequestFields[17].Descriptor()
 	// workrequest.DefaultUsageKnown holds the default value on creation for the usage_known field.
 	workrequest.DefaultUsageKnown = workrequestDescUsageKnown.Default.(bool)
 	// workrequestDescInputTokens is the schema descriptor for input_tokens field.
-	workrequestDescInputTokens := workrequestFields[17].Descriptor()
+	workrequestDescInputTokens := workrequestFields[18].Descriptor()
 	// workrequest.DefaultInputTokens holds the default value on creation for the input_tokens field.
 	workrequest.DefaultInputTokens = workrequestDescInputTokens.Default.(int64)
 	// workrequest.InputTokensValidator is a validator for the "input_tokens" field. It is called by the builders before save.
 	workrequest.InputTokensValidator = workrequestDescInputTokens.Validators[0].(func(int64) error)
 	// workrequestDescOutputTokens is the schema descriptor for output_tokens field.
-	workrequestDescOutputTokens := workrequestFields[18].Descriptor()
+	workrequestDescOutputTokens := workrequestFields[19].Descriptor()
 	// workrequest.DefaultOutputTokens holds the default value on creation for the output_tokens field.
 	workrequest.DefaultOutputTokens = workrequestDescOutputTokens.Default.(int64)
 	// workrequest.OutputTokensValidator is a validator for the "output_tokens" field. It is called by the builders before save.
 	workrequest.OutputTokensValidator = workrequestDescOutputTokens.Validators[0].(func(int64) error)
 	// workrequestDescDurationMs is the schema descriptor for duration_ms field.
-	workrequestDescDurationMs := workrequestFields[19].Descriptor()
+	workrequestDescDurationMs := workrequestFields[20].Descriptor()
 	// workrequest.DefaultDurationMs holds the default value on creation for the duration_ms field.
 	workrequest.DefaultDurationMs = workrequestDescDurationMs.Default.(int64)
 	// workrequest.DurationMsValidator is a validator for the "duration_ms" field. It is called by the builders before save.
 	workrequest.DurationMsValidator = workrequestDescDurationMs.Validators[0].(func(int64) error)
 	// workrequestDescLastError is the schema descriptor for last_error field.
-	workrequestDescLastError := workrequestFields[20].Descriptor()
+	workrequestDescLastError := workrequestFields[21].Descriptor()
 	// workrequest.DefaultLastError holds the default value on creation for the last_error field.
 	workrequest.DefaultLastError = workrequestDescLastError.Default.(string)
 }

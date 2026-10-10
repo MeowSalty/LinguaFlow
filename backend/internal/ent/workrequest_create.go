@@ -128,6 +128,12 @@ func (_c *WorkRequestCreate) SetNillableLogicalAttempt(v *int) *WorkRequestCreat
 	return _c
 }
 
+// SetMembers sets the "members" field.
+func (_c *WorkRequestCreate) SetMembers(v json.RawMessage) *WorkRequestCreate {
+	_c.mutation.SetMembers(v)
+	return _c
+}
+
 // SetDebits sets the "debits" field.
 func (_c *WorkRequestCreate) SetDebits(v json.RawMessage) *WorkRequestCreate {
 	_c.mutation.SetDebits(v)
@@ -550,6 +556,10 @@ func (_c *WorkRequestCreate) createSpec() (*WorkRequest, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.LogicalAttempt(); ok {
 		_spec.SetField(workrequest.FieldLogicalAttempt, field.TypeInt, value)
 		_node.LogicalAttempt = value
+	}
+	if value, ok := _c.mutation.Members(); ok {
+		_spec.SetField(workrequest.FieldMembers, field.TypeJSON, value)
+		_node.Members = value
 	}
 	if value, ok := _c.mutation.Debits(); ok {
 		_spec.SetField(workrequest.FieldDebits, field.TypeJSON, value)
