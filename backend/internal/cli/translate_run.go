@@ -166,13 +166,14 @@ func resolveCLIExecution(cfg *config.CLIConfig) (result *cliExecution, err error
 	snapshot := execution.JobExecutionSnapshot{
 		SchemaVersion: execution.SnapshotSchemaVersion, DefaultsVersion: execution.SnapshotDefaultsVersion,
 		RubyProtocolVersion: execution.RubyProtocolVersion, RubyValidatorVersion: execution.RubyValidatorVersion,
-		ExecutionPlanName: "CLI translation",
-		SourceLang:        cfg.SourceLang, TargetLang: cfg.TargetLang, GlossaryEnabled: cfg.Glossary.Enabled,
+		RubyBatchProtocolVersion: execution.RubyBatchProtocolVersion,
+		ExecutionPlanName:        "CLI translation",
+		SourceLang:               cfg.SourceLang, TargetLang: cfg.TargetLang, GlossaryEnabled: cfg.Glossary.Enabled,
 		Strategy: execution.StrategySnapshot{
 			ProfileName: cfg.Execution.Profile, Protect: profile.Protect, Postprocess: profile.Postprocess, Repair: profile.Repair,
 			Context: profile.Context, Ruby: profile.Ruby, QA: profile.QA,
 		},
-		RubyTemplates: execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate},
+		RubyTemplates: execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate, BatchJSON: prompt.RubyAlignmentBatchJSONTemplate, BatchText: prompt.RubyAlignmentBatchTextTemplate},
 	}
 	for i, r := range cfg.Execution.Rounds {
 		b, backendErr := resolveBackend(r.Backend)
@@ -224,7 +225,7 @@ func resolveCLIExecution(cfg *config.CLIConfig) (result *cliExecution, err error
 		if backendErr != nil {
 			return result, backendErr
 		}
-		snapshot.RubyRetry = &execution.ExecutionPlanRubyRetrySnapshot{Enabled: true, Backend: b, MaxAttempts: ruby.MaxAttempts, Concurrency: concurrency}
+		snapshot.RubyRetry = &execution.ExecutionPlanRubyRetrySnapshot{Enabled: true, Backend: b, MaxAttempts: ruby.MaxAttempts, Concurrency: concurrency, BatchSize: ruby.BatchSize, MaxWordsPerBatch: ruby.MaxWordsPerBatch, BatchWaitMS: ruby.BatchWaitMS}
 	}
 	result.Spec, err = execution.Resolve(snapshot)
 	if err != nil {

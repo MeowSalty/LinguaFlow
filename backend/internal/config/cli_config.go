@@ -62,10 +62,13 @@ type CLIConfigExecution struct {
 	RubyRetry *CLIConfigRubyRetry `yaml:"ruby_retry,omitempty"`
 }
 type CLIConfigRubyRetry struct {
-	Enabled     bool   `yaml:"enabled"`
-	Backend     string `yaml:"backend"`
-	MaxAttempts int    `yaml:"max_attempts"`
-	Concurrency *int   `yaml:"concurrency,omitempty"`
+	Enabled          bool   `yaml:"enabled"`
+	Backend          string `yaml:"backend"`
+	MaxAttempts      int    `yaml:"max_attempts"`
+	Concurrency      *int   `yaml:"concurrency,omitempty"`
+	BatchSize        *int   `yaml:"batch_size,omitempty"`
+	MaxWordsPerBatch *int   `yaml:"max_words_per_batch,omitempty"`
+	BatchWaitMS      *int   `yaml:"batch_wait_ms,omitempty"`
 }
 type CLIConfigRound struct {
 	Mode      string                   `yaml:"mode"`
@@ -439,6 +442,10 @@ func ValidateCLIConfig(cfg *CLIConfig) error {
 	}
 	if cfg.Execution.RubyRetry != nil {
 		if _, err := execution.ResolveRubyRetryConcurrency(cfg.Execution.RubyRetry.Concurrency); err != nil {
+			return err
+		}
+		ruby := cfg.Execution.RubyRetry
+		if _, err := execution.ResolveRubyRetryBatch(ruby.BatchSize, ruby.MaxWordsPerBatch, ruby.BatchWaitMS); err != nil {
 			return err
 		}
 	}
