@@ -101,10 +101,13 @@ type CorrectRuleConfig struct {
 
 // ExecutionPlanRubyRetryConfig 注音对齐重试配置。
 type ExecutionPlanRubyRetryConfig struct {
-	Enabled     bool `json:"enabled"              yaml:"enabled"`                // 是否启用注音对齐重试
-	BackendID   int  `json:"backend_id"           yaml:"backend_id"`             // 引用的后端 ID；0 时使用翻译主后端
-	MaxAttempts int  `json:"max_attempts,omitempty" yaml:"max_attempts"`         // 注音对齐重试轮数；省略/<=0 规范化为 1
-	Concurrency *int `json:"concurrency,omitempty" yaml:"concurrency,omitempty"` // nil uses the versioned default; explicit values must be positive.
+	Enabled          bool `json:"enabled"              yaml:"enabled"`                // 是否启用注音对齐重试
+	BackendID        int  `json:"backend_id"           yaml:"backend_id"`             // 引用的后端 ID；0 时使用翻译主后端
+	MaxAttempts      int  `json:"max_attempts,omitempty" yaml:"max_attempts"`         // 注音对齐重试轮数；省略/<=0 规范化为 1
+	Concurrency      *int `json:"concurrency,omitempty" yaml:"concurrency,omitempty"` // nil uses the versioned default; explicit values must be positive.
+	BatchSize        *int `json:"batch_size,omitempty" yaml:"batch_size,omitempty"`
+	MaxWordsPerBatch *int `json:"max_words_per_batch,omitempty" yaml:"max_words_per_batch,omitempty"`
+	BatchWaitMS      *int `json:"batch_wait_ms,omitempty" yaml:"batch_wait_ms,omitempty"`
 }
 
 // RetryConfig 重试策略。

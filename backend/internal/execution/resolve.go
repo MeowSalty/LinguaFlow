@@ -32,6 +32,7 @@ func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
 	}
 	out.SchemaVersion, out.DefaultsVersion = SnapshotSchemaVersion, SnapshotDefaultsVersion
 	out.RubyProtocolVersion, out.RubyValidatorVersion = RubyProtocolVersion, RubyValidatorVersion
+	out.RubyBatchProtocolVersion = RubyBatchProtocolVersion
 	if out.RetryReminderTemplate == "" {
 		out.RetryReminderTemplate = repair.DefaultRetryReminderTemplate
 	}
@@ -60,6 +61,13 @@ func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
 		r.Backend.Options = opts
 	}
 	if out.RubyRetry != nil && out.RubyRetry.Enabled {
+		batch, err := ResolveRubyRetryBatch(out.RubyRetry.BatchSize, out.RubyRetry.MaxWordsPerBatch, out.RubyRetry.BatchWaitMS)
+		if err != nil {
+			return nil, err
+		}
+		out.RubyRetry.BatchSize = &batch.BatchSize
+		out.RubyRetry.MaxWordsPerBatch = &batch.MaxWordsPerBatch
+		out.RubyRetry.BatchWaitMS = &batch.BatchWaitMS
 		if out.RubyRetry.Concurrency == 0 {
 			out.RubyRetry.Concurrency = DefaultRubyRetryConcurrency
 		}
@@ -278,6 +286,9 @@ func ValidateSpec(s *ResolvedExecutionSpec) error {
 	if concurrencyModel == StageSeparated && (s.RubyProtocolVersion != RubyProtocolVersion || s.RubyValidatorVersion != RubyValidatorVersion) {
 		return errors.New("missing or unsupported frozen Ruby protocol/validator version")
 	}
+	if s.SchemaVersion == SnapshotSchemaVersion && s.RubyBatchProtocolVersion != RubyBatchProtocolVersion {
+		return errors.New("missing or unsupported frozen Ruby batch protocol version")
+	}
 	if s.Strategy.QA.Checks == nil || s.Strategy.QA.LengthMethod == "" {
 		return errors.New("missing frozen QA checks or length method")
 	}
@@ -397,6 +408,14 @@ func ValidateSpec(s *ResolvedExecutionSpec) error {
 		}
 	}
 	if s.RubyRetry != nil && s.RubyRetry.Enabled {
+		if s.SchemaVersion == SnapshotSchemaVersion {
+			if s.RubyRetry.BatchSize == nil || s.RubyRetry.MaxWordsPerBatch == nil || s.RubyRetry.BatchWaitMS == nil {
+				return errors.New("missing frozen ruby retry batch configuration")
+			}
+			if _, err := ResolveRubyRetryBatch(s.RubyRetry.BatchSize, s.RubyRetry.MaxWordsPerBatch, s.RubyRetry.BatchWaitMS); err != nil {
+				return err
+			}
+		}
 		if concurrencyModel == StageSeparated && s.RubyRetry.Concurrency < 1 {
 			return errors.New("missing frozen ruby retry concurrency")
 		}
@@ -409,6 +428,9 @@ func ValidateSpec(s *ResolvedExecutionSpec) error {
 	}
 	if s.Strategy.Ruby.Enabled && (s.RubyTemplates.JSON == "" || s.RubyTemplates.Text == "") {
 		return errors.New("missing frozen Ruby alignment templates")
+	}
+	if s.SchemaVersion == SnapshotSchemaVersion && s.Strategy.Ruby.Enabled && (s.RubyTemplates.BatchJSON == "" || s.RubyTemplates.BatchText == "") {
+		return errors.New("missing frozen Ruby batch alignment templates")
 	}
 	return nil
 }
