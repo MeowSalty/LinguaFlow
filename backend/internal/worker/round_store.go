@@ -13,6 +13,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
@@ -46,6 +47,13 @@ func newRoundStore(client *ent.Client, scope workstate.Scope, indices map[int]in
 	return s
 }
 func (s *roundStore) ResourceIdentity() int { return s.scope.ResourceID }
+func (s *roundStore) WorkIdentity(index int) string {
+	id, ok := s.indexToID[index]
+	if !ok {
+		return ""
+	}
+	return workstate.WorkIdentity(s.scope, id)
+}
 
 type permanentStoreError struct{ error }
 
@@ -138,6 +146,10 @@ func (s *roundStore) Candidates(ctx context.Context, after, limit int) ([]*pipel
 			return nil, after, permanentStoreError{workstate.ErrManifest}
 		}
 		c.Index = idx
+		if c.WorkID != "" && c.WorkID != s.WorkIdentity(idx) {
+			return nil, after, permanentStoreError{workstate.ErrManifest}
+		}
+		c.WorkID = s.WorkIdentity(idx)
 		c.StoredBytes = int64(len(row.Payload))
 		candidates = append(candidates, c)
 		cur, curErr := s.current(ctx, idx)
@@ -151,6 +163,7 @@ func (s *roundStore) Candidates(ctx context.Context, after, limit int) ([]*pipel
 			c.LogicalAttempt = 0
 			c.NetworkAttempt = 0
 			c.NextAttemptAt = time.Time{}
+			c.LastAlignmentRequestID = ""
 		}
 		if !c.Ready && cur.AlignmentAttempts > c.LogicalAttempt {
 			// An intent without a saved response is an unknown network attempt,
@@ -175,6 +188,12 @@ func candidateBaseline(c *pipeline.Candidate) *string {
 }
 func (s *roundStore) Save(ctx context.Context, c *pipeline.Candidate) error {
 	c.RetryEpoch = s.scope.RetryEpoch
+	if c.WorkID == "" {
+		c.WorkID = s.WorkIdentity(c.Index)
+	}
+	if c.WorkID != s.WorkIdentity(c.Index) {
+		return permanentStoreError{workstate.ErrManifest}
+	}
 	payload, err := c.Encode()
 	if err != nil {
 		return permanentStoreError{err}
@@ -200,9 +219,21 @@ func (s *roundStore) Save(ctx context.Context, c *pipeline.Candidate) error {
 	}
 	// The payload and its successor budget/deadline form one handoff. A
 	// failure must leave neither a hidden draft nor unaccounted window bytes.
-	err = s.store.SaveCandidateWithCursor(ctx, workstate.Candidate{ID: c.ID, ParentRequestID: c.ParentRequestID, Version: c.Version, Scope: s.scope, SegmentID: c.Segment.DBID, DTOVersion: c.DTOVersion, Mode: c.Mode, SnapshotDigest: s.digest, BaselineVersion: c.Segment.ContentVersion, BaselineTarget: candidateBaseline(c), BaselineStatus: c.BaselineStatus, State: state, Payload: payload}, cur)
+	err = s.store.SaveCandidateWithCursor(ctx, workstate.Candidate{ID: c.ID, WorkID: c.WorkID, LastAlignmentRequestID: c.LastAlignmentRequestID, ParentRequestID: c.ParentRequestID, Version: c.Version, Scope: s.scope, SegmentID: c.Segment.DBID, DTOVersion: c.DTOVersion, Mode: c.Mode, SnapshotDigest: s.digest, BaselineVersion: c.Segment.ContentVersion, BaselineTarget: candidateBaseline(c), BaselineStatus: c.BaselineStatus, State: state, Payload: payload}, cur)
 	if err == nil {
 		c.StoredBytes = int64(len(payload))
+	}
+	if errors.Is(err, workstate.ErrStale) {
+		// ErrStale also guards cursor monotonicity and resource generations.
+		// Isolate only an independently confirmed segment baseline change;
+		// bookkeeping failures must still stop the run for diagnosis/recovery.
+		valid, validationErr := s.ValidateCandidate(ctx, c)
+		if validationErr == nil && !valid {
+			return permanentStoreError{errors.Join(pipeline.ErrCandidateStale, err)}
+		}
+		if validationErr != nil {
+			return s.classify(errors.Join(err, validationErr))
+		}
 	}
 	return s.classify(err)
 }
@@ -286,6 +317,13 @@ func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) err
 	req := workstate.Request{ID: in.ID, CandidateID: in.CandidateID, Scope: s.scope, SegmentIDs: ids, Stage: string(in.Stage), BackendID: in.BackendID, BudgetModel: model, InputDigest: in.InputDigest,
 		MainAttempt: in.Stage == backend.RequestStageMain && in.Phase != "prompt_upgrade", AlignmentAttempt: in.Stage == backend.RequestStageAlignment && in.NetworkAttempt == 0,
 		MaxMainAttempts: min(max(1, retry+1), 3), MaxAlignmentAttempts: max(1, rubyBudget)}
+	for _, m := range in.Members {
+		id, ok := s.indexToID[m.Index]
+		if !ok {
+			return permanentStoreError{workstate.ErrManifest}
+		}
+		req.Members = append(req.Members, workstate.RequestMember{SegmentID: id, WorkID: m.WorkID, CandidateID: m.CandidateID, CandidateVersion: m.CandidateVersion, Pool: m.Pool, LogicalAttempt: m.LogicalAttempt, NetworkAttempt: m.NetworkAttempt})
+	}
 	if in.Stage == backend.RequestStageAlignment {
 		req.MaxNetworkAttempts = max(1, retry)
 	}
@@ -314,6 +352,29 @@ func (s *roundStore) Retire(ctx context.Context, c *pipeline.Candidate, next pip
 	}
 	cur.State = next.State
 	return s.classify(s.store.RetireCandidate(ctx, s.scope, c.ID, c.Version, cur))
+}
+
+// RetireStale also handles a saved response whose commit acknowledgement was
+// lost immediately before an edit. Only this candidate's attempted successor
+// version is accepted; unrelated version changes remain a consistency error.
+func (s *roundStore) RetireStale(ctx context.Context, c *pipeline.Candidate, next pipeline.WorkCursor) error {
+	valid, err := s.ValidateCandidate(ctx, c)
+	if err != nil {
+		return err
+	}
+	if valid {
+		return permanentStoreError{workstate.ErrCandidateVersion}
+	}
+	row, err := s.client.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Select(workcandidate.FieldVersion).Only(ctx)
+	if err != nil {
+		return s.classify(err)
+	}
+	if row.Version != c.Version && row.Version != c.Version+1 {
+		return permanentStoreError{workstate.ErrCandidateVersion}
+	}
+	copy := *c
+	copy.Version = row.Version
+	return s.Retire(ctx, &copy, next)
 }
 func (s *roundStore) ValidateCandidate(ctx context.Context, c *pipeline.Candidate) (bool, error) {
 	row, err := s.client.Segment.Query().Where(segment.IDEQ(c.Segment.DBID)).Select(segment.FieldID, segment.FieldContentVersion, segment.FieldTargetText, segment.FieldStatus).Only(ctx)
