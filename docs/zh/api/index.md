@@ -115,10 +115,10 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/quick-translate \
 
 | 字段                 | 说明                                                                       |
 | -------------------- | -------------------------------------------------------------------------- |
-| `project_id`         | 可选。提供时复用该项目的术语表与语言配置，并校验访问权                      |
-| `glossary`           | 内联临时术语表数组（`source`/`target` 必填，可选 `forbidden`/`mandatory` 等）。项目场景下叠加在项目术语表之上 |
+| `project_id`         | 可选。提供时复用该项目的语言配置并校验访问权;术语应用与抽取遵守项目 `glossary_enabled` 总开关 |
+| `glossary`           | 临时术语表数组 (`source`/`target` 必填，可选 `forbidden`/`mandatory` 等)。无项目时按请求应用;关联项目时仅在 `glossary_enabled=true` 时叠加在项目术语表之上 |
 
-响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`（多轮计划后续轮次因 `segment_filter` 跳过）。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-—-即时翻译)。
+响应中的 `round_summary[].status` 可能为 `success` / `partial` / `failed` / `skipped`:翻译轮因 `segment_filter` 跳过，或独立抽取轮因关联项目关闭术语表而整轮跳过。并发与超时由服务端 `quick_translate` 配置控制，见 [配置文件与环境变量 · 即时翻译](/zh/guide/configuration#server-quick-translate-—-即时翻译)。
 
 ### 8. 单段预览（试译 / 修订，不落库）
 
@@ -334,7 +334,7 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/credentials/{credentialId}/collect
 
 ### 16. 任务中心（跨项目任务列表）
 
-`GET /operations` 返回你有权限查看的跨项目任务(翻译、术语同步与文件存储),按项目读权限过滤:
+`GET /operations` 返回你有权限查看的跨项目任务 (翻译、术语同步与文件存储),按项目读权限过滤：
 
 ```bash
 curl -s "http://localhost:8080/api/v1/operations?status=failed&limit=20" \
@@ -347,14 +347,14 @@ curl -s http://localhost:8080/api/v1/operations/summary \
 
 | 参数 | 说明 |
 | --- | --- |
-| `task_type` | 任务类型:`translation` / `glossary_sync` / `storage`;`trigger_type` 过滤仅允许显式指定任务类型时使用 |
+| `task_type` | 任务类型：`translation` / `glossary_sync` / `storage`;`trigger_type` 过滤仅允许显式指定任务类型时使用 |
 | `project_id` | 限定项目；未授权或不存在的项目返回空列表（系统管理员无额外跨项目权限） |
 | `state` | `active`（默认）/ `terminal` / `all`；与 `status` 互斥 |
 | `status` | `pending` / `running` / `paused` / `waiting_retry` / `needs_action` / `completed` / `failed` / `cancelled` |
 | `updated_from` / `updated_before` | 更新时间区间 `[from, before)` |
 | `cursor` / `limit` | 版本化游标分页（`limit` 1–100，默认 50） |
 
-默认只返回活跃任务；组织成员可看到同项目其他成员创建的任务。轻量任务视图另有 `GET /jobs`（跨项目任务列表）与 `GET /jobs/summary`。任务响应**不再包含**队列位置字段；实例队列与限流数据收敛到管理端 runtime 摘要。管理员可用 `GET /admin/runtime/summary` 读取该摘要(另见根路径 `GET /metrics`,仅管理员)。产品侧见 [项目管理 · 任务中心](/zh/guide/projects#任务中心跨项目任务列表)。
+默认只返回活跃任务；组织成员可看到同项目其他成员创建的任务。轻量任务视图另有 `GET /jobs`（跨项目任务列表）与 `GET /jobs/summary`。任务响应**不再包含**队列位置字段；实例队列与限流数据收敛到管理端 runtime 摘要。管理员可用 `GET /admin/runtime/summary` 读取该摘要 (另见根路径 `GET /metrics`,仅管理员)。产品侧见 [项目管理 · 任务中心](/zh/guide/projects#任务中心跨项目任务列表)。
 
 ### 17. 用户资料与密码（服务器模式）
 
@@ -370,7 +370,7 @@ curl -s -X PUT http://localhost:8080/api/v1/users/me/password \
   -d '{"current_password": "...", "new_password": "..."}'
 ```
 
-密码规则:至少 8 个 Unicode 字符且不超过 72 字节。`POST /auth/logout` 只撤销当前登录用户自己的刷新令牌,重复提交幂等返回 204;撤销他人的 token 返回 403,未知 token 保持 401。Token 过期后可用 `POST /auth/refresh`(无需 `Authorization` 头,提交 refresh token)换取新的 access / refresh token。产品侧入口见用户菜单的 **个人资料 / 安全设置**。
+密码规则：至少 8 个 Unicode 字符且不超过 72 字节。`POST /auth/logout` 只撤销当前登录用户自己的刷新令牌，重复提交幂等返回 204;撤销他人的 token 返回 403，未知 token 保持 401。Token 过期后可用 `POST /auth/refresh`(无需 `Authorization` 头，提交 refresh token) 换取新的 access / refresh token。产品侧入口见用户菜单的 **个人资料 / 安全设置**。
 
 ### 18. 存储管理（连接 / 空间 / 项目绑定）
 
@@ -388,11 +388,11 @@ curl -s http://localhost:8080/api/v1/projects/<projectId>/storage \
   -H "Authorization: Bearer <token>"
 ```
 
-存储域共约 30 个端点：能力发现（`GET /storage/capabilities`）、目标发现（`GET /storage/options`、`GET /projects/{projectId}/storage/options`）、连接与空间 CRUD 及授权 / 撤销 / 校验（凭据全部 `writeOnly`，响应只回 `has_auth`，永不回显）、项目绑定与迁移（`PUT /projects/{projectId}/storage`、`POST .../storage/migrations`）、持久化存储任务（`GET|POST /projects/{projectId}/storage/tasks`，创建返回 202，`idempotency_key` 重放命中原操作，进行中返回 409）、源文件版本 / 预览 / 提交与 legacy 快照、导出产物管理，单个空间的配额调整(`PUT /storage/spaces/{spaceId}/quota`),以及管理端 `GET|PUT /admin/storage/policy`、`GET /admin/storage/diagnostics` 等。产品侧见 [存储管理](/zh/guide/storage)。
+存储域共约 30 个端点：能力发现（`GET /storage/capabilities`）、目标发现（`GET /storage/options`、`GET /projects/{projectId}/storage/options`）、连接与空间 CRUD 及授权 / 撤销 / 校验（凭据全部 `writeOnly`，响应只回 `has_auth`，永不回显）、项目绑定与迁移（`PUT /projects/{projectId}/storage`、`POST .../storage/migrations`）、持久化存储任务（`GET|POST /projects/{projectId}/storage/tasks`，创建返回 202，`idempotency_key` 重放命中原操作，进行中返回 409）、源文件版本 / 预览 / 提交与 legacy 快照、导出产物管理，单个空间的配额调整 (`PUT /storage/spaces/{spaceId}/quota`),以及管理端 `GET|PUT /admin/storage/policy`、`GET /admin/storage/diagnostics` 等。产品侧见 [存储管理](/zh/guide/storage)。
 
 ### 19. 任务历史清理与保留策略
 
-删除不再需要的**任务记录**,以及管理员配置基于保留天数的自动清理(产品侧见 [项目管理 · 任务历史清理](/zh/guide/projects#任务历史清理) 与 [管理员后台 · 系统设置](/zh/guide/admin#系统设置)):
+删除不再需要的**任务记录**,以及管理员配置基于保留天数的自动清理 (产品侧见 [项目管理 · 任务历史清理](/zh/guide/projects#任务历史清理) 与 [管理员后台 · 系统设置](/zh/guide/admin#系统设置)):
 
 ```bash
 # 删除单条翻译任务记录(仅终态;需项目写权限)
@@ -415,10 +415,10 @@ curl -s http://localhost:8080/api/v1/admin/task-retention/status \
   -H "Authorization: Bearer <token>"
 ```
 
-要点:
+要点：
 
-- **仅终态可删**:`completed` / `failed` / `cancelled`;非终态返回 409 `task_not_terminal`,收尾中返回 409 `task_busy`,维护 / 恢复屏障拦截,超清理预算返回 503 `task_cleanup_deferred`
-- **存储任务不可删**;`can_delete` 字段是「当前身份 + 状态 + 收尾 + 屏障」的即时投影,不替代删除请求的再次校验
+- **仅终态可删**:`completed` / `failed` / `cancelled`;非终态返回 409 `task_not_terminal`,收尾中返回 409 `task_busy`,维护 / 恢复屏障拦截，超清理预算返回 503 `task_cleanup_deferred`
+- **存储任务不可删**;`can_delete` 字段是「当前身份 + 状态 + 收尾 + 屏障」的即时投影，不替代删除请求的再次校验
 - **批量删除逐项返回**:响应 `items[].status` 取值 `deleted` / `not_found` / `forbidden` / `not_terminal` / `busy` / `blocked` / `deferred` / `failed`,已成功的项不因其他项失败而回滚
 - **保留策略**:`GET|PATCH /admin/settings` 中的 `task_retention`(`enabled` 默认 `false`、`retention_days` 默认 `30`、`revision` 乐观锁);修改需带 `expected_revision`,不一致返回 409 `settings_conflict`
 
@@ -428,8 +428,8 @@ curl -s http://localhost:8080/api/v1/admin/task-retention/status \
 | ------ | ------------------------------------------ |
 | 200    | 成功                                       |
 | 201    | 创建成功                                   |
-| 202    | 已接受(异步任务已入队) |
-| 204    | 无内容(如登出、撤销等幂等操作成功) |
+| 202    | 已接受 (异步任务已入队) |
+| 204    | 无内容 (如登出、撤销等幂等操作成功) |
 | 400    | 请求参数错误                               |
 | 401    | 未认证                                     |
 | 403    | 无权限                                     |
@@ -439,9 +439,9 @@ curl -s http://localhost:8080/api/v1/admin/task-retention/status \
 | 422    | 语义/校验错误                              |
 | 429    | 并发/限流（部分端点带 `Retry-After` 头）   |
 | 500    | 服务器内部错误 |
-| 503    | 服务暂不可用(如磁盘探测失败,存储域返回 `storage_disk_probe_failed`) |
-| 504    | 网关/上游超时(存储域返回 `storage_timeout`) |
-| 507    | 存储空间不足(存储域返回 `storage_disk_insufficient`) |
+| 503    | 服务暂不可用 (如磁盘探测失败，存储域返回 `storage_disk_probe_failed`) |
+| 504    | 网关/上游超时 (存储域返回 `storage_timeout`) |
+| 507    | 存储空间不足 (存储域返回 `storage_disk_insufficient`) |
 
 ### Problem 响应与错误 type
 
@@ -485,7 +485,7 @@ EPUB 资源的译文必须是能嵌入 XHTML 的合法 XML 片段。两类接口
 | `storage_maintenance` | 409 | 存储处于维护态，写入被拒绝 |
 | `storage_timeout` | 504 | 存储操作超时 |
 | `storage_operation_in_progress` | 409 | 同一 `idempotency_key` 的操作仍在进行中（幂等重放命中）|
-| `storage_disk_insufficient` | 507 | 本地磁盘保护余量不足,拒绝新写入 |
+| `storage_disk_insufficient` | 507 | 本地磁盘保护余量不足，拒绝新写入 |
 | `storage_disk_probe_failed` | 503 | 本地磁盘探测失败 |
 | `storage_policy_violation` / `storage_permission_denied` | 403 | 政策不允许该空间 / 无操作权限 |
 
