@@ -457,10 +457,11 @@ func (s *JobService) validateAndSnapshotWith(
 	snapshot := &JobExecutionSnapshot{
 		SchemaVersion: execution.SnapshotSchemaVersion, DefaultsVersion: execution.SnapshotDefaultsVersion,
 		RubyProtocolVersion: execution.RubyProtocolVersion, RubyValidatorVersion: execution.RubyValidatorVersion,
-		RubyTemplates:     execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate},
-		ExecutionPlanID:   plan.ID,
-		ExecutionPlanName: plan.Name,
-		Rounds:            make([]JobRoundSnapshot, 0, len(plan.Rounds)),
+		RubyBatchProtocolVersion: execution.RubyBatchProtocolVersion,
+		RubyTemplates:            execution.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate, BatchJSON: prompt.RubyAlignmentBatchJSONTemplate, BatchText: prompt.RubyAlignmentBatchTextTemplate},
+		ExecutionPlanID:          plan.ID,
+		ExecutionPlanName:        plan.Name,
+		Rounds:                   make([]JobRoundSnapshot, 0, len(plan.Rounds)),
 	}
 
 	// 计划级策略快照：在轮次循环前物化一次，为全管道（所有改写型轮次与
@@ -631,6 +632,10 @@ func (s *JobService) validateAndSnapshotWith(
 	if err != nil {
 		return nil, err
 	}
+	rubyBatch, err := execution.ResolveRubyRetryBatch(rr.BatchSize, rr.MaxWordsPerBatch, rr.BatchWaitMS)
+	if err != nil {
+		return nil, err
+	}
 	var rrBackendSnap *BackendSnapshot
 	if rr.Enabled && rr.BackendID > 0 {
 		if err := check(rr.BackendID); err != nil {
@@ -653,10 +658,13 @@ func (s *JobService) validateAndSnapshotWith(
 	}
 	if rrBackendSnap != nil {
 		snapshot.RubyRetry = &ExecutionPlanRubyRetrySnapshot{
-			Enabled:     true,
-			Backend:     *rrBackendSnap,
-			MaxAttempts: NormalizeRubyRetryAttempts(rr.MaxAttempts),
-			Concurrency: rubyConcurrency,
+			Enabled:          true,
+			Backend:          *rrBackendSnap,
+			MaxAttempts:      NormalizeRubyRetryAttempts(rr.MaxAttempts),
+			Concurrency:      rubyConcurrency,
+			BatchSize:        &rubyBatch.BatchSize,
+			MaxWordsPerBatch: &rubyBatch.MaxWordsPerBatch,
+			BatchWaitMS:      &rubyBatch.BatchWaitMS,
 		}
 	}
 

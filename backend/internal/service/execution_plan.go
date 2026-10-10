@@ -272,6 +272,9 @@ func (s *ExecutionPlanService) validatePlanReferences(ctx context.Context, actor
 	if _, err := execution.ResolveRubyRetryConcurrency(rubyRetry.Concurrency); err != nil {
 		return fmt.Errorf("%w: %s", ErrExecutionPlanConfigInvalid, err)
 	}
+	if _, err := execution.ResolveRubyRetryBatch(rubyRetry.BatchSize, rubyRetry.MaxWordsPerBatch, rubyRetry.BatchWaitMS); err != nil {
+		return fmt.Errorf("%w: %s", ErrExecutionPlanConfigInvalid, err)
+	}
 	if err := s.validatePlanProfileReference(ctx, actorID, orgID, profileID); err != nil {
 		return err
 	}

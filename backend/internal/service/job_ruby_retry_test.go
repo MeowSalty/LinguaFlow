@@ -145,6 +145,9 @@ func TestRubyRetrySnapshot_BackendIDZeroFallsBackToTranslateBackend(t *testing.T
 		if snap.RubyTemplates.JSON != prompt.RubyAlignmentJSONTemplate || snap.RubyTemplates.Text != prompt.RubyAlignmentTextTemplate {
 			t.Fatal("new snapshot did not freeze the v2 alignment templates")
 		}
+		if got := execution.EffectiveRubyRetryBatch(snap); got != (execution.RubyRetryBatchConfig{BatchSize: 1, BatchWaitMS: 25}) || snap.RubyBatchProtocolVersion != 1 || snap.RubyTemplates.BatchJSON != prompt.RubyAlignmentBatchJSONTemplate || snap.RubyTemplates.BatchText != prompt.RubyAlignmentBatchTextTemplate {
+			t.Fatalf("new snapshot did not freeze batching defaults/templates: %+v", got)
+		}
 	})
 
 	t.Run("显式 concurrency 按值冻结且拒绝非正数", func(t *testing.T) {
@@ -167,6 +170,28 @@ func TestRubyRetrySnapshot_BackendIDZeroFallsBackToTranslateBackend(t *testing.T
 			if snap.RubyRetry.Concurrency != value {
 				t.Fatal("frozen concurrency aliases plan input")
 			}
+		}
+	})
+
+	t.Run("合批配置保留显式零且不与计划共享指针", func(t *testing.T) {
+		batch, words, wait := 0, 250, 0
+		snap, err := jobs.validateAndSnapshotWith(ctx, user.ID, newPlan(
+			schema.ExecutionPlanRubyRetryConfig{Enabled: true, BackendID: 0, BatchSize: &batch, MaxWordsPerBatch: &words, BatchWaitMS: &wait},
+			[]schema.ExecutionRoundConfig{validTranslateRound(backendRow.ID)},
+		), "", check)
+		if err != nil {
+			t.Fatal(err)
+		}
+		batch, words, wait = 8, 999, 100
+		if got := execution.EffectiveRubyRetryBatch(snap); got != (execution.RubyRetryBatchConfig{MaxWordsPerBatch: 250}) {
+			t.Fatalf("batch setting not frozen: %+v", got)
+		}
+		_, err = jobs.validateAndSnapshotWith(ctx, user.ID, newPlan(
+			schema.ExecutionPlanRubyRetryConfig{Enabled: true, BatchSize: new(0), MaxWordsPerBatch: new(0)},
+			[]schema.ExecutionRoundConfig{validTranslateRound(backendRow.ID)},
+		), "", check)
+		if err == nil {
+			t.Fatal("snapshot accepted two unlimited batch constraints")
 		}
 	})
 

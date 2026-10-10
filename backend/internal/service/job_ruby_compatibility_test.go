@@ -11,8 +11,9 @@ import (
 )
 
 func TestRubySnapshotVersionSurvivesRecoveryResumeAndRetry(t *testing.T) {
-	for _, legacy := range []bool{false, true} {
-		t.Run(map[bool]string{false: "stage_separated", true: "legacy_round_shared"}[legacy], func(t *testing.T) {
+	for _, version := range []int{1, 2, 3} {
+		t.Run(map[int]string{1: "legacy_round_shared", 2: "stage_separated", 3: "stage_separated_batch"}[version], func(t *testing.T) {
+			legacy := version == 1
 			ctx := context.Background()
 			env := newJobRoundTestEnv(t, nil)
 			row, resources, rounds := seedJobWithRounds(t, env, JobStatusPausing, 1, 0, []jobResourceSpec{{
@@ -24,7 +25,13 @@ func TestRubySnapshotVersionSurvivesRecoveryResumeAndRetry(t *testing.T) {
 				t.Fatal(err)
 			}
 			snapshot.Strategy.Ruby.Enabled = true
-			snapshot.RubyRetry = &ExecutionPlanRubyRetrySnapshot{Enabled: true, Backend: snapshot.Rounds[0].Backend, MaxAttempts: 2, Concurrency: 3}
+			snapshot.RubyRetry = &ExecutionPlanRubyRetrySnapshot{Enabled: true, Backend: snapshot.Rounds[0].Backend, MaxAttempts: 2, Concurrency: 3, BatchSize: new(4), MaxWordsPerBatch: new(120), BatchWaitMS: new(0)}
+			snapshot.SchemaVersion, snapshot.DefaultsVersion = version, version
+			if version < 3 {
+				snapshot.RubyRetry.BatchSize, snapshot.RubyRetry.MaxWordsPerBatch, snapshot.RubyRetry.BatchWaitMS = nil, nil, nil
+				snapshot.RubyBatchProtocolVersion = 0
+				snapshot.RubyTemplates.BatchJSON, snapshot.RubyTemplates.BatchText = "", ""
+			}
 			if legacy {
 				snapshot.SchemaVersion, snapshot.DefaultsVersion = 1, 1
 				snapshot.RubyProtocolVersion, snapshot.RubyValidatorVersion = 0, 0
@@ -63,6 +70,13 @@ func TestRubySnapshotVersionSurvivesRecoveryResumeAndRetry(t *testing.T) {
 				}
 				if err != nil || model != wantModel {
 					t.Fatalf("concurrency interpretation changed: %s %v", model, err)
+				}
+				wantBatch := execution.RubyRetryBatchConfig{BatchSize: 1}
+				if version == 3 {
+					wantBatch = execution.RubyRetryBatchConfig{BatchSize: 4, MaxWordsPerBatch: 120}
+				}
+				if got := execution.EffectiveRubyRetryBatch(restored); got != wantBatch {
+					t.Fatalf("frozen batching changed: %+v want=%+v", got, wantBatch)
 				}
 			}
 			assertFrozen()
