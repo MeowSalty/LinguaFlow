@@ -103,7 +103,7 @@ func parseOutputArray(raw json.RawMessage, requireOccurrence, strict bool) ([]Ou
 }
 
 func decodeOutputEntry(raw json.RawMessage, requireOccurrence, strict bool) OutputEntry {
-	entry := OutputEntry{}
+	entry := OutputEntry{Invalid: !utf8.Valid(raw)}
 	fields := make(map[string]json.RawMessage)
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	token, err := dec.Token()
@@ -186,7 +186,11 @@ func ParseAlignmentTextV2(text string) []OutputEntry {
 // A malformed but delimited field must not hide a later valid ID from duplicate
 // rejection. An unterminated string remains ambiguous and is never guessed.
 func splitQuotedTextFields(text string) []string {
-	fields := make([]string, 0, 5)
+	return splitQuotedTextFieldsLimit(text, 5)
+}
+
+func splitQuotedTextFieldsLimit(text string, limit int) []string {
+	fields := make([]string, 0, limit)
 	start := 0
 	inString, escaped := false, false
 	for i := 0; i < len(text); i++ {
@@ -205,9 +209,9 @@ func splitQuotedTextFields(text string) []string {
 		} else if text[i] == '|' {
 			fields = append(fields, text[start:i])
 			start = i + 1
-			// Six fields already prove the row invalid; bound temporary metadata
+			// An extra field already proves the row invalid; bound metadata
 			// even when a malformed response contains millions of delimiters.
-			if len(fields) == 5 {
+			if len(fields) == limit {
 				break
 			}
 		}
@@ -273,28 +277,52 @@ func AlignmentJSONSchema() map[string]any {
 // AlignmentRequest is the identical user payload for JSON and text protocols.
 // Only public region text is sent; raw coordinates remain internal to Go.
 func (s *AlignmentState) AlignmentRequest(source string, missing []Item) string {
-	type region struct {
-		Text string `json:"text"`
-	}
-	type item struct {
-		ID         string `json:"id"`
-		SourceBase string `json:"source_base"`
-		SourceText string `json:"source_text"`
-	}
-	view := make([]region, len(s.Regions))
-	for i, r := range s.Regions {
-		view[i] = region{Text: r.Text}
-	}
-	items := make([]item, len(missing))
-	for i, it := range missing {
-		items[i] = item{ID: it.ID, SourceBase: it.SourceBase, SourceText: it.SourceText}
-	}
-	data, _ := json.Marshal(struct {
-		Source       string   `json:"source"`
-		Translation  string   `json:"translation"`
-		Regions      []region `json:"translation_regions"`
-		RegionDigest string   `json:"region_digest"`
-		Missing      []item   `json:"missing"`
-	}{StripRubyTags(source), s.Translation, view, s.Digest, items})
+	data, _ := json.Marshal(s.alignmentRequestPayload(source, missing))
 	return string(data)
+}
+
+type alignmentRequestRegion struct {
+	Text string `json:"text"`
+}
+
+type alignmentRequestItem struct {
+	ID         string `json:"id"`
+	SourceBase string `json:"source_base"`
+	SourceText string `json:"source_text"`
+}
+
+type alignmentRequestPayload struct {
+	Source       string                   `json:"source"`
+	Translation  string                   `json:"translation"`
+	Regions      []alignmentRequestRegion `json:"translation_regions"`
+	RegionDigest string                   `json:"region_digest"`
+	Missing      []alignmentRequestItem   `json:"missing"`
+}
+
+func (s *AlignmentState) alignmentRequestPayload(source string, missing []Item) alignmentRequestPayload {
+	view := make([]alignmentRequestRegion, len(s.Regions))
+	for i, r := range s.Regions {
+		view[i] = alignmentRequestRegion{Text: r.Text}
+	}
+	items := make([]alignmentRequestItem, len(missing))
+	for i, it := range missing {
+		items[i] = alignmentRequestItem{ID: it.ID, SourceBase: it.SourceBase, SourceText: it.SourceText}
+	}
+	return alignmentRequestPayload{StripRubyTags(source), s.Translation, view, s.Digest, items}
+}
+
+// AlignmentRequestTexts returns precisely the content fields sent to the model,
+// including repeated translation/region text. IDs and the digest are metadata.
+// Callers apply their shared word counter to each string independently.
+func (s *AlignmentState) AlignmentRequestTexts(source string, missing []Item) []string {
+	payload := s.alignmentRequestPayload(source, missing)
+	texts := make([]string, 0, 2+len(payload.Regions)+2*len(payload.Missing))
+	texts = append(texts, payload.Source, payload.Translation)
+	for _, region := range payload.Regions {
+		texts = append(texts, region.Text)
+	}
+	for _, item := range payload.Missing {
+		texts = append(texts, item.SourceBase, item.SourceText)
+	}
+	return texts
 }

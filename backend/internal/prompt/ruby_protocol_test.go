@@ -22,3 +22,19 @@ func TestRubyOutputSchemaVersionedIDRequirement(t *testing.T) {
 		t.Fatal("legacy template changed")
 	}
 }
+
+func TestRubyBatchTemplatesSpecifyIdentityAndEmptyResults(t *testing.T) {
+	for _, template := range []string{RubyAlignmentBatchJSONTemplate, RubyAlignmentBatchTextTemplate} {
+		for _, required := range []string{"work_id", "candidate_id", "translation_regions", "occurrence", "missing", "原样回显", "每个输入段都必须返回结果"} {
+			if !strings.Contains(template, required) {
+				t.Fatalf("batch template missing %q", required)
+			}
+		}
+	}
+	if !strings.Contains(RubyAlignmentBatchJSONTemplate, `"alignments"`) || !strings.Contains(RubyAlignmentBatchJSONTemplate, "ruby_output 设为 []") {
+		t.Fatal("JSON batch template does not define empty members")
+	}
+	if !strings.Contains(RubyAlignmentBatchTextTemplate, "前六字段均为 JSON 字符串") || !strings.Contains(RubyAlignmentBatchTextTemplate, `"work-1" | "candidate-1" | "" | "" | "" | "" | 0`) || !strings.Contains(RubyAlignmentBatchTextTemplate, "不得重复标记或与成功条目混用") {
+		t.Fatal("text batch template does not define the seven-field empty marker")
+	}
+}

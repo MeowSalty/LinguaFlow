@@ -3,8 +3,10 @@ package prompt
 // RubyTemplates is resolved with the execution specification, not chosen by a
 // running pipeline. These defaults are used only when resolving a new execution.
 type RubyTemplates struct {
-	JSON string
-	Text string
+	JSON      string
+	Text      string
+	BatchJSON string
+	BatchText string
 }
 
 const LegacyRubyAlignmentJSONTemplate = `你是注音对齐工具。给定原文、译文和尚未对齐的注音条目，确定每个条目在译文中对应的文本。
@@ -52,3 +54,20 @@ const RubyAlignmentTextTemplate = rubyAlignmentV2Rules + `
 - 前四字段均为 JSON 字符串字面量，第五字段为正整数。例如："A|B" | "读法" | "phonetic" | "6" | 1。
 - 字符串中的引号、反斜杠、换行使用 JSON 转义；不要拆成多行。字段外空白可忽略，字符串内空白必须保留。
 - 仅输出成功条目的行，无 markdown 围栏、解释或额外文字；没有成功条目时输出空文本。`
+
+const rubyAlignmentBatchRules = rubyAlignmentV2Rules + `
+- 输入 alignments 中的每个对象是独立段落；必须原样回显该段的 work_id 和 candidate_id，不能跨段使用正文、missing 条目或 occurrence。
+- 每个输入段都必须返回结果；只处理该段 missing 中的 id，不返回已完成条目。段落之间允许乱序。`
+
+const RubyAlignmentBatchJSONTemplate = rubyAlignmentBatchRules + `
+- 仅输出 JSON 对象 {"alignments":[{"work_id":"work-1","candidate_id":"candidate-1","ruby_output":[{"id":"6","base":"行","text":"xíng","kind":"phonetic","occurrence":3}]}]}。
+- 每段只输出一个对象，包含非空字符串 work_id/candidate_id 和 ruby_output 数组，不输出其他字段。
+- 每个成功条目必须包含非空字符串 id/base/text、合法 kind 和正整数 occurrence；该段没有成功条目时仍返回该段对象，并将 ruby_output 设为 []。`
+
+const RubyAlignmentBatchTextTemplate = rubyAlignmentBatchRules + `
+- 每行固定七字段：work_id | candidate_id | base | text | kind | id | occurrence。
+- 前六字段均为 JSON 字符串字面量，第七字段为正整数。例如："work-1" | "candidate-1" | "A|B" | "读法" | "phonetic" | "6" | 1。
+- 同段可以输出多行，每行均重复该段的 work_id/candidate_id；同段每个 missing id 至多一次。
+- 该段没有成功条目时，必须单独输出一行空结果标记："work-1" | "candidate-1" | "" | "" | "" | "" | 0。只有此标记允许后四个字符串为空且 occurrence 为 0；同段不得重复标记或与成功条目混用。
+- 字符串中的引号、反斜杠、换行使用 JSON 转义；不要拆成多行。字段外空白可忽略，字符串内空白必须保留。
+- 仅输出结果行，无 markdown 围栏、解释或额外文字。`
