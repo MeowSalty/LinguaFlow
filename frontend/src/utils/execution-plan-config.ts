@@ -21,9 +21,13 @@ export type ExecutionPlanFormRound = Omit<
   }
 }
 
-/** 表单态注音重试：backend_id 以 null 表示未选择（后端语义为回退到翻译主后端）。 */
-export type ExecutionPlanFormRubyRetry = Omit<ExecutionPlanRubyRetry, 'backend_id'> & {
+/** 表单中的 null 表示未选择后端或使用服务端默认注音并发，提交时均省略。 */
+export type ExecutionPlanFormRubyRetry = Omit<
+  ExecutionPlanRubyRetry,
+  'backend_id' | 'concurrency'
+> & {
   backend_id?: number | null
+  concurrency?: number | null
 }
 
 export type InlineTermExtractionConfig = ApiSchemas['InlineTermExtractionConfig']
@@ -38,6 +42,31 @@ export function cloneExecutionPlanValue<T>(value: T): T {
       Object.entries(value).map(([key, item]) => [key, cloneExecutionPlanValue(item)]),
     ) as T
   return value
+}
+
+export function createRubyRetryConfig(): ExecutionPlanFormRubyRetry {
+  return { enabled: false, backend_id: null, max_attempts: 1 }
+}
+
+/** Preserve omitted concurrency and explicit invalid values until validation. */
+export function mergeRubyRetryConfig(
+  source?: Partial<ExecutionPlanFormRubyRetry>,
+): ExecutionPlanFormRubyRetry {
+  const defaults = createRubyRetryConfig()
+  return {
+    enabled: source?.enabled ?? defaults.enabled,
+    backend_id: source?.backend_id ?? defaults.backend_id,
+    max_attempts: source?.max_attempts ?? defaults.max_attempts,
+    ...(source?.concurrency === undefined ? {} : { concurrency: source.concurrency }),
+  }
+}
+
+export function validateRubyRetryConfig(retry: ExecutionPlanFormRubyRetry): 'concurrency'[] {
+  const value = retry.concurrency
+  return value != null &&
+    (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value < 1)
+    ? ['concurrency']
+    : []
 }
 
 export function createInlineTermExtractionConfig(): Required<InlineTermExtractionConfig> {
@@ -316,8 +345,13 @@ export function buildExecutionRoundInput(round: ExecutionPlanFormRound): Executi
   return result
 }
 
-/** Normalize the form-state ruby retry; an unset backend (null) is omitted. */
+/** Validate before serializing; cleared fields remain omitted, never materialized as defaults. */
 export function buildRubyRetryInput(retry: ExecutionPlanFormRubyRetry): ExecutionPlanRubyRetry {
-  const { backend_id, ...rest } = retry
-  return backend_id == null ? rest : { ...rest, backend_id }
+  if (validateRubyRetryConfig(retry).length) throw new Error('Invalid ruby retry concurrency')
+  return {
+    enabled: retry.enabled,
+    ...(retry.backend_id == null ? {} : { backend_id: retry.backend_id }),
+    ...(retry.max_attempts === undefined ? {} : { max_attempts: retry.max_attempts }),
+    ...(retry.concurrency == null ? {} : { concurrency: retry.concurrency }),
+  }
 }

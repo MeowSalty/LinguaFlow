@@ -2,6 +2,7 @@
 import { NButton, NInputNumber, NSelect, NSwitch, NRadioGroup, NRadioButton } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import { useId } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
 import {
@@ -9,10 +10,12 @@ import {
   createExecutionPlanRound,
   createRoundCodeSelection,
   createRoundModeSelection,
+  mergeRubyRetryConfig,
   mergeTranslateRoundConfig,
   roundCodes,
   setRoundCodes,
   validateRoundCodes,
+  validateRubyRetryConfig,
 } from '@/utils/execution-plan-config'
 import type {
   ExecutionPlanFormRound,
@@ -93,12 +96,6 @@ const DEFAULT_CORRECT: CorrectRoundConfig = {
     name,
     enabled: name === 'punctuation_missing_wrap',
   })),
-}
-
-const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
-  enabled: false,
-  backend_id: null,
-  max_attempts: 1,
 }
 
 // ─── 工具函数 ────────────────────────────────────────────────
@@ -218,15 +215,6 @@ function setNoBatch(
   }
 }
 
-function mergeRubyRetry(source?: Partial<ExecutionPlanFormRubyRetry>): ExecutionPlanFormRubyRetry {
-  if (!source) return deepClone(DEFAULT_RUBY_RETRY)
-  return {
-    enabled: source.enabled ?? DEFAULT_RUBY_RETRY.enabled,
-    backend_id: source.backend_id ?? DEFAULT_RUBY_RETRY.backend_id,
-    max_attempts: source.max_attempts ?? DEFAULT_RUBY_RETRY.max_attempts,
-  }
-}
-
 // ─── Props & Emits ──────────────────────────────────────────
 
 const props = withDefaults(
@@ -251,7 +239,11 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const roundsModel = ref<RoundModel[]>(props.rounds.map((r) => mergeRound(r)))
-const rubyRetryModel = ref<ExecutionPlanFormRubyRetry>(mergeRubyRetry(props.rubyRetry))
+const rubyRetryModel = ref<ExecutionPlanFormRubyRetry>(mergeRubyRetryConfig(props.rubyRetry))
+const rubyConcurrencyId = useId()
+const rubyConcurrencyInvalid = computed(
+  () => validateRubyRetryConfig(rubyRetryModel.value).length > 0,
+)
 
 const roundKeys = new WeakMap<RoundModel, number>()
 let nextRoundKey = 0
@@ -285,7 +277,11 @@ const reconcileRounds = (incoming: RoundModel[]): RoundModel[] => {
 }
 
 let lastRoundsJson = JSON.stringify(props.rounds ?? [])
-let lastRubyRetryJson = JSON.stringify(props.rubyRetry ?? {})
+let lastRubyRetry = deepClone(props.rubyRetry)
+const sameRubyRetry = (first?: ExecutionPlanFormRubyRetry, second?: ExecutionPlanFormRubyRetry) =>
+  (['enabled', 'backend_id', 'max_attempts', 'concurrency'] as const).every((field) =>
+    Object.is(first?.[field], second?.[field]),
+  )
 
 watch(
   () => props.rounds,
@@ -311,9 +307,8 @@ watch(
 watch(
   () => props.rubyRetry,
   (newVal) => {
-    const json = JSON.stringify(newVal ?? {})
-    if (json === lastRubyRetryJson) return
-    rubyRetryModel.value = mergeRubyRetry(newVal)
+    if (sameRubyRetry(newVal, lastRubyRetry)) return
+    rubyRetryModel.value = mergeRubyRetryConfig(newVal)
   },
   { deep: true },
 )
@@ -321,9 +316,8 @@ watch(
 watch(
   rubyRetryModel,
   (newVal) => {
-    const json = JSON.stringify(newVal)
-    if (json === lastRubyRetryJson) return
-    lastRubyRetryJson = json
+    if (sameRubyRetry(newVal, lastRubyRetry)) return
+    lastRubyRetry = deepClone(newVal)
     emit('update:rubyRetry', deepClone(newVal))
   },
   { deep: true },
@@ -490,7 +484,6 @@ const emitUpdate = (): void => {
     <ConfigSectionPanel
       :title="t('executionPlanEditor.rubyRetry.title')"
       :description="t('executionPlanEditor.rubyRetry.description')"
-      :enabled="rubyRetryModel.enabled"
     >
       <template #actions>
         <NSwitch
@@ -500,7 +493,7 @@ const emitUpdate = (): void => {
           :aria-label="t('executionPlanEditor.rubyRetry.enabled')"
         />
       </template>
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div v-if="rubyRetryModel.enabled" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.rubyRetry.backend') }}
@@ -531,6 +524,31 @@ const emitUpdate = (): void => {
             {{ t('executionPlanEditor.rubyRetry.maxAttemptsHint') }}
           </div>
         </div>
+      </div>
+      <div class="mt-3">
+        <div class="mb-1 text-xs text-lf-text-subtle">
+          {{ t('rubyAlignmentConfig.concurrency') }}
+        </div>
+        <NInputNumber
+          v-model:value="rubyRetryModel.concurrency"
+          :input-props="{
+            'aria-label': t('rubyAlignmentConfig.concurrency'),
+            'aria-invalid': rubyConcurrencyInvalid,
+            'aria-describedby': rubyConcurrencyId,
+          }"
+          :placeholder="t('rubyAlignmentConfig.defaultConcurrency')"
+          :status="rubyConcurrencyInvalid ? 'error' : undefined"
+          clearable
+          size="small"
+          :disabled="disabled"
+          class="w-full"
+        />
+        <p :id="rubyConcurrencyId" class="mt-1 text-xs text-lf-text-subtle">
+          {{ t('rubyAlignmentConfig.concurrencyHint') }}
+        </p>
+        <p v-if="rubyConcurrencyInvalid" role="alert" class="mt-1 text-xs text-lf-danger">
+          {{ t('rubyAlignmentConfig.invalidConcurrency') }}
+        </p>
       </div>
     </ConfigSectionPanel>
 
