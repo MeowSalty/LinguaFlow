@@ -48,8 +48,15 @@ type rubyPipelineMissing struct {
 }
 
 type rubyPipelineRequest struct {
-	Segments map[string]prompt.SegmentDetail `json:"segments"`
-	Missing  []rubyPipelineMissing           `json:"missing"`
+	Segments   map[string]prompt.SegmentDetail `json:"segments"`
+	Missing    []rubyPipelineMissing           `json:"missing"`
+	Alignments []rubyPipelineAlignment         `json:"alignments"`
+}
+
+type rubyPipelineAlignment struct {
+	WorkID      string                `json:"work_id"`
+	CandidateID string                `json:"candidate_id"`
+	Missing     []rubyPipelineMissing `json:"missing"`
 }
 
 // These tests use the provider's real HTTP adapter, real credential lookup,
@@ -76,8 +83,12 @@ type rubyPipelineFixture struct {
 
 func newRubyPipelineFixture(t *testing.T, segmentCounts ...int) *rubyPipelineFixture {
 	t.Helper()
+	return newRubyPipelineFixtureWithClient(t, newRegistryTestClient(t), "", segmentCounts...)
+}
+
+func newRubyPipelineFixtureWithClient(t *testing.T, client *ent.Client, upstreamURL string, segmentCounts ...int) *rubyPipelineFixture {
+	t.Helper()
 	ctx := context.Background()
-	client := newRegistryTestClient(t)
 	jobID, first, second := registryFixture(t, client)
 	owner := client.User.Query().OnlyX(ctx)
 	f := &rubyPipelineFixture{
@@ -86,29 +97,18 @@ func newRubyPipelineFixture(t *testing.T, segmentCounts ...int) *rubyPipelineFix
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	t.Cleanup(f.pool.Shutdown)
-	upstream := httptest.NewServer(http.HandlerFunc(f.serveHTTP))
-	t.Cleanup(upstream.Close)
-	users := service.NewUserService(client, nil)
-	keyJSON, err := json.Marshal(map[string]any{
-		"version": 1, "active_key_id": "integration",
-		"keys": map[string]string{"integration": base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))},
-	})
-	if err != nil {
-		t.Fatal(err)
+	if upstreamURL == "" {
+		upstream := httptest.NewServer(http.HandlerFunc(f.serveHTTP))
+		t.Cleanup(upstream.Close)
+		upstreamURL = upstream.URL
 	}
-	keyring, err := credential.ParseKeyring(keyJSON)
-	if err != nil {
-		t.Fatal(err)
-	}
-	credentials := service.NewCredentialService(client, keyring, users)
-	backends := service.NewBackendService(client, users, f.pool)
-	backends.SetCredentials(credentials)
+	backends := f.initializeServices(t)
 	secret := "integration-only"
 	provider, err := backends.Create(ctx, service.CreateBackendInput{
 		Scope: service.ScopeUser, OwnerUserID: &owner.ID,
 		BackendInput: service.BackendInput{
 			Name: "ruby-pipeline", Type: "openai", Secret: &secret,
-			Options: map[string]any{"base_url": upstream.URL, "model": "fixture", "response_format": "none"},
+			Options: map[string]any{"base_url": upstreamURL, "model": "fixture", "response_format": "none"},
 		},
 	})
 	if err != nil {
@@ -150,13 +150,33 @@ func newRubyPipelineFixture(t *testing.T, segmentCounts ...int) *rubyPipelineFix
 		}
 		f.roundIDs = append(f.roundIDs, createJobRoundRow(t, client, jobID, jrID, 0, "translate"))
 	}
+	return f
+}
+
+func (f *rubyPipelineFixture) initializeServices(t *testing.T) *service.BackendService {
+	t.Helper()
+	users := service.NewUserService(f.client, nil)
+	keyJSON, err := json.Marshal(map[string]any{
+		"version": 1, "active_key_id": "integration",
+		"keys": map[string]string{"integration": base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyring, err := credential.ParseKeyring(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials := service.NewCredentialService(f.client, keyring, users)
+	backends := service.NewBackendService(f.client, users, f.pool)
+	backends.SetCredentials(credentials)
 	broker := event.NewBroker(nil)
-	f.jobs = service.NewJobService(client, service.NewProjectService(client, users), nil, backends, nil, nil, nil, nil, broker)
-	f.runner = NewJobRunner(f.logger, client, f.jobs, nil, nil, broker, f.pool, NewResourceMutex(), "sqlite",
+	f.jobs = service.NewJobService(f.client, service.NewProjectService(f.client, users), nil, backends, nil, nil, nil, nil, broker)
+	f.runner = NewJobRunner(f.logger, f.client, f.jobs, nil, nil, broker, f.pool, NewResourceMutex(), "sqlite",
 		PipelineConfig{Candidates: pipeline.DefaultCandidateLimits(), MaxInflightResources: 1}, nil)
 	f.runner.SetCredentials(credentials, credentials)
 	f.factory = NewEngineFactoryWithCredentials(f.logger, f.pool, credentials, credentials)
-	return f
+	return backends
 }
 
 func (f *rubyPipelineFixture) persistSnapshot(t *testing.T) {
@@ -181,6 +201,15 @@ func rubyPipelineResponse(request rubyPipelineRequest) any {
 			}
 		}
 		return map[string]any{"translations": translations}
+	}
+	if len(request.Alignments) > 0 {
+		alignments := make([]map[string]any, 0, len(request.Alignments))
+		for _, member := range request.Alignments {
+			response := rubyPipelineResponse(rubyPipelineRequest{Missing: member.Missing}).(map[string]any)
+			response["work_id"], response["candidate_id"] = member.WorkID, member.CandidateID
+			alignments = append(alignments, response)
+		}
+		return map[string]any{"alignments": alignments}
 	}
 	entries := make([]ruby.OutputEntry, 0, len(request.Missing))
 	for _, missing := range request.Missing {
@@ -213,7 +242,7 @@ func (f *rubyPipelineFixture) serveHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}
-	if request.Segments == nil && len(request.Missing) == 0 {
+	if request.Segments == nil && len(request.Missing) == 0 && len(request.Alignments) == 0 {
 		http.Error(w, "missing translation or alignment payload", http.StatusBadRequest)
 		return
 	}
