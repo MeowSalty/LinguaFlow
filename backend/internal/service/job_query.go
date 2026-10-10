@@ -50,6 +50,10 @@ type JobCountsSummary struct {
 	AsOf              time.Time
 }
 
+func activeJobStatuses() []string {
+	return []string{JobStatusPending, JobStatusRunning, JobStatusPausing, JobStatusPaused}
+}
+
 // The cursor stores the timestamp read from the database before response
 // formatting, preserving all fractional digits in canonical UTC.
 type accessibleJobCursor struct {
@@ -71,7 +75,7 @@ func (s *JobService) ListAccessibleJobs(ctx context.Context, actorUserID int, op
 	} else {
 		switch opts.State {
 		case "", "active":
-			q.Where(job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPausing, JobStatusPaused))
+			q.Where(job.StatusIn(activeJobStatuses()...))
 		case "terminal":
 			q.Where(job.StatusIn(JobStatusCompleted, JobStatusFailed, JobStatusCancelled))
 		}
@@ -146,7 +150,7 @@ func (s *JobService) getJobsSummary(ctx context.Context, actorUserID int, opts J
 	}
 	err := s.accessibleJobsQuery(actorUserID, opts.ProjectID, opts.TriggerType).
 		Where(job.Or(
-			job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPausing, JobStatusPaused),
+			job.StatusIn(activeJobStatuses()...),
 			job.And(
 				job.StatusEQ(JobStatusFailed),
 				jobUpdatedAtCompare(sql.OpGTE, summary.RecentFailedSince),

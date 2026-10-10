@@ -1535,7 +1535,7 @@ func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*en
 	if err != nil {
 		return nil, err
 	}
-	// 仅 pending/running/paused 可取消；completed/failed/cancelled 为终态，取消会篡改状态。
+	// 仅 pending/running/pausing/paused 可取消；completed/failed/cancelled 为终态，取消会篡改状态。
 	if current.Status != JobStatusPending && current.Status != JobStatusRunning && current.Status != JobStatusPausing && current.Status != JobStatusPaused {
 		return nil, ErrJobNotCancellable
 	}
@@ -1590,8 +1590,8 @@ type PauseResult struct {
 
 // PauseJob 优雅暂停任务。
 //   - pending：直接翻转 paused（未派发、无需排空），发布 job_paused 事件；
-//   - running：不改状态，返回 NeedsDrain=true 交由 worker 排空后落终态；
-//   - 终态（completed/failed/cancelled/paused）：ErrJobNotPausable。
+//   - running：翻转 pausing，返回 NeedsDrain=true，交由 worker 排空后置 paused；
+//   - pausing、paused 及终态（completed/failed/cancelled）：ErrJobNotPausable。
 func (s *JobService) PauseJob(ctx context.Context, actorUserID, jobID int) (PauseResult, error) {
 	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
 	if err != nil {
@@ -1640,7 +1640,7 @@ func (s *JobService) PauseJob(ctx context.Context, actorUserID, jobID int) (Paus
 	return PauseResult{Job: current, NeedsDrain: target == JobStatusPausing}, nil
 }
 
-// MarkJobPaused 由 worker 在暂停排空后调用：条件翻转 running→paused 并发布
+// MarkJobPaused 由 worker 在暂停排空后调用：条件翻转 running/pausing→paused 并发布
 // job_paused 事件。已被并发取消/暂停时未命中（0 行受影响），良性 no-op。
 func (s *JobService) MarkJobPaused(ctx context.Context, jobID int) error {
 	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
