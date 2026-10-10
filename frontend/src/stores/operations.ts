@@ -26,6 +26,7 @@ import {
   type OperationLocator,
 } from '@/utils/operationQuery'
 import { t } from '@/i18n'
+import { jobObservationTime } from '@/utils/jobStages'
 import {
   taskHistoryKey,
   toTaskHistoryItem,
@@ -40,6 +41,11 @@ export type TaskDetailMap = {
 }
 type TaskType = keyof TaskDetailMap
 type TaskDetail = TaskDetailMap[TaskType]
+type TranslationOperation = Extract<Operation, { task_type: 'translation' }>
+type TranslationObservation = Pick<
+  TranslationOperation,
+  'project_id' | 'status' | 'updated_at' | 'can_delete' | 'finished_at'
+> & { progress?: TranslationOperation['progress'] }
 const withDetailStatus = (operation: Operation, detail: TaskDetail): Operation => {
   if (operation.task_type === 'storage' && 'cleanup_status' in detail) {
     return {
@@ -54,6 +60,7 @@ const withDetailStatus = (operation: Operation, detail: TaskDetail): Operation =
   return {
     ...operation,
     status: detail.status,
+    ...('updated_at' in detail ? { updated_at: detail.updated_at } : {}),
     ...('can_delete' in detail
       ? { can_delete: detail.can_delete, finished_at: detail.finished_at }
       : {}),
@@ -64,6 +71,7 @@ type Subscription = {
   receive: (detail: TaskDetail) => void
   fail: (error: unknown) => void
   active: boolean
+  status?: TaskDetail['status']
   nextPollAt: number
   controller: AbortController
   terminalRecheckMs?: number
@@ -124,7 +132,127 @@ export const useOperationsStore = defineStore('operations', () => {
   const summaryFlights = new Map<string, Promise<OperationsSummary>>()
   const summaryCache = new Map<string, { at: number; data: OperationsSummary }>()
   const taskFlights = new Map<string, TaskFlight>()
+  const detailReads = new WeakMap<TaskDetail, number>()
   const subscriptions = new Set<Subscription>()
+  // Session-scoped observations arbitrate list/detail/action races without inventing transitions.
+  const translationObservations = new Map<string, { value: TranslationObservation; read: number }>()
+  const observeTranslation = (
+    id: string,
+    incoming: TranslationObservation,
+    read: number,
+  ): TranslationObservation => {
+    const previous = translationObservations.get(id)
+    const before = jobObservationTime(previous?.value.updated_at)
+    const after = jobObservationTime(incoming.updated_at)
+    if (
+      previous &&
+      before !== null &&
+      after !== null &&
+      (before > after || (before === after && previous.read > read))
+    )
+      return previous.value
+    translationObservations.set(id, { value: incoming, read })
+    return incoming
+  }
+  const projectOperation = (item: Operation): Operation => {
+    if (item.task_type !== 'translation') return item
+    const latest = translationObservations.get(item.task_id)?.value
+    const capability = getTaskCapability({
+      kind: 'translation',
+      id: item.task_id,
+      project_id: item.project_id,
+    })
+    return { ...item, ...latest, ...(capability ? { can_delete: capability.can_delete } : {}) }
+  }
+  const observeOperation = (item: Operation, read: number): Operation => {
+    if (item.task_type !== 'translation') return item
+    const { project_id, status, updated_at, can_delete, finished_at, progress } = item
+    observeTranslation(
+      item.task_id,
+      {
+        project_id,
+        status,
+        updated_at,
+        can_delete,
+        finished_at,
+        progress,
+      },
+      read,
+    )
+    return projectOperation(item)
+  }
+  const observeDetail = (
+    locator: OperationLocator,
+    detail: TaskDetail,
+    read = beginCapabilityRead(),
+  ): TaskDetail => {
+    if (locator.task_type !== 'translation' || !('project_id' in detail)) return detail
+    const job = detail as ApiSchemas['Job']
+    const { project_id, status, updated_at, can_delete, finished_at } = job
+    const progress = job.progress && {
+      total_resources: job.progress.total_resources,
+      completed_resources: job.progress.completed_resources,
+      failed_resources: job.progress.failed_resources,
+      progress_total: job.progress.progress_total,
+      progress_completed: job.progress.progress_completed,
+      queue_position: job.progress.queue_position ?? null,
+      queue_size: job.progress.queue_size ?? null,
+    }
+    observeTranslation(
+      locator.task_id,
+      {
+        project_id,
+        status,
+        updated_at,
+        can_delete,
+        finished_at,
+        ...(progress ? { progress } : {}),
+      },
+      read,
+    )
+    return projectJobObservation(job)
+  }
+  // A projection is never recorded as another read: only raw REST/action responses advance observations.
+  const projectJobObservation = (job: ApiSchemas['Job']): ApiSchemas['Job'] => {
+    const latest = translationObservations.get(String(job.id))?.value
+    const capability = getTaskCapability({
+      kind: 'translation',
+      id: String(job.id),
+      project_id: job.project_id,
+    })
+    return {
+      ...job,
+      ...latest,
+      ...(job.progress ? { progress: { ...job.progress, ...latest?.progress } } : {}),
+      ...(capability ? { can_delete: capability.can_delete } : {}),
+    } as ApiSchemas['Job']
+  }
+  const matchesState = (item: Operation, query: OperationsQuery): boolean =>
+    query.status
+      ? item.status === query.status
+      : query.state === 'all'
+        ? true
+        : query.state === 'terminal'
+          ? isTerminalOperation(item.status)
+          : !isTerminalOperation(item.status)
+  const projectRows = (locator: OperationLocator, detail: TaskDetail): void => {
+    const key = operationKey(locator)
+    const update = (item: Operation) =>
+      operationKey(item) === key
+        ? projectOperation(withDetailStatus(item, detail))
+        : projectOperation(item)
+    const discovered = new Map(
+      [...active.value, ...terminal.value].map((item) => {
+        const updated = update(item)
+        return [operationKey(updated), updated] as const
+      }),
+    )
+    active.value = [...discovered.values()].filter((item) => !isTerminalOperation(item.status))
+    terminal.value = [...discovered.values()]
+      .filter((item) => isTerminalOperation(item.status))
+      .slice(0, 20)
+    items.value = items.value.map(update).filter((item) => matchesState(item, filters.value))
+  }
   let timer: ReturnType<typeof setTimeout> | null = null
   let running: Promise<void> | null = null
   let discoveryFlight: Promise<void> | null = null
@@ -160,7 +288,11 @@ export const useOperationsStore = defineStore('operations', () => {
     const pending = queryFlights.get(key)
     if (pending) return pending
     const cached = queryCache.get(key)
-    if (!force && cached && Date.now() - cached.at < 10000) return Promise.resolve(cached.data)
+    if (!force && cached && Date.now() - cached.at < 10000)
+      return Promise.resolve({
+        ...cached.data,
+        items: cached.data.items.map(projectOperation).filter((item) => matchesState(item, query)),
+      })
     const capabilityStamp = beginCapabilityRead()
     const flight = listOperations(query, { signal: requestController.signal })
       .then((data) => {
@@ -172,6 +304,12 @@ export const useOperationsStore = defineStore('operations', () => {
           }),
           capabilityStamp,
         )
+        data = {
+          ...data,
+          items: data.items
+            .map((item) => observeOperation(item, capabilityStamp))
+            .filter((item) => matchesState(item, query)),
+        }
         queryCache.set(key, { at: Date.now(), data })
         if (queryCache.size > 100) queryCache.delete(queryCache.keys().next().value!)
         return data
@@ -268,6 +406,7 @@ export const useOperationsStore = defineStore('operations', () => {
           .then((data) => {
             assertCurrent(context)
             signal.throwIfAborted()
+            detailReads.set(data, capabilityStamp)
             if (locator.task_type !== 'storage' && 'can_delete' in data) {
               const projectId = 'project_id' in data ? data.project_id : locator.project_id
               if (projectId != null)
@@ -284,6 +423,8 @@ export const useOperationsStore = defineStore('operations', () => {
                   capabilityStamp,
                 )
             }
+            const observed = observeDetail(locator, data, capabilityStamp)
+            projectRows(locator, observed)
             return data
           })
           .finally(() => {
@@ -355,12 +496,24 @@ export const useOperationsStore = defineStore('operations', () => {
   ): Promise<ApiSchemas['StorageTask']> =>
     queryTask({ task_type: 'storage', task_id: id, project_id: projectId }, signal)
   const projectTask = (locator: OperationLocator, detail: TaskDetail): void => {
+    // Preflight and history callers may project a raw query response again after it was superseded.
+    const read = detailReads.get(detail) ?? beginCapabilityRead()
+    if (locator.task_type === 'translation' && 'can_delete' in detail && 'project_id' in detail)
+      observeCapabilities(
+        [
+          {
+            kind: 'translation',
+            id: locator.task_id,
+            project_id: detail.project_id,
+            can_delete: detail.can_delete,
+            status: detail.status,
+          },
+        ],
+        read,
+      )
+    const observed = observeDetail(locator, detail, read)
     const key = operationKey(locator)
-    const update = (item: Operation) =>
-      operationKey(item) === key ? withDetailStatus(item, detail) : item
-    active.value = active.value.map(update)
-    terminal.value = terminal.value.map(update)
-    items.value = items.value.map(update)
+    projectRows(locator, observed)
     for (const subscription of subscriptions)
       if (
         operationKey(subscription.locator) === key &&
@@ -377,6 +530,8 @@ export const useOperationsStore = defineStore('operations', () => {
   }
   const removeProject = (projectId: number): void => {
     discardRequests()
+    for (const [id, state] of translationObservations)
+      if (state.value.project_id === projectId) translationObservations.delete(id)
     active.value = active.value.filter((item) => item.project_id !== projectId)
     terminal.value = terminal.value.filter((item) => item.project_id !== projectId)
     items.value = items.value.filter((item) => item.project_id !== projectId)
@@ -388,6 +543,7 @@ export const useOperationsStore = defineStore('operations', () => {
   }
   const forget = (locator: OperationLocator): void => {
     discardRequests()
+    if (locator.task_type === 'translation') translationObservations.delete(locator.task_id)
     const key = operationKey(locator)
     active.value = active.value.filter((item) => operationKey(item) !== key)
     terminal.value = terminal.value.filter((item) => operationKey(item) !== key)
@@ -402,7 +558,10 @@ export const useOperationsStore = defineStore('operations', () => {
   }
   // Synchronous removal barrier. The caller clears dependent stores before one public refresh.
   const invalidateTasks = (targets: TaskHistoryTarget[], publish = true): void => {
-    for (const target of targets) capabilities.delete(taskHistoryKey(target))
+    for (const target of targets) {
+      capabilities.delete(taskHistoryKey(target))
+      if (target.kind === 'translation') translationObservations.delete(target.id)
+    }
     const matches = (locator: OperationLocator) =>
       targets.some(
         (target) =>
@@ -471,14 +630,28 @@ export const useOperationsStore = defineStore('operations', () => {
         if (denied.size) {
           // Fence off older list/history flights before removing rows already known to be denied.
           discardRequests()
+          for (const key of denied)
+            if (key.startsWith('translation:'))
+              translationObservations.delete(key.slice('translation:'.length))
           items.value = items.value.filter((item) => !denied.has(operationKey(item)))
           terminal.value = terminal.value.filter((item) => !denied.has(operationKey(item)))
           summary.value = null
           filteredSummary.value = null
           initialized.value = true
         }
-        active.value = [...found.values()]
-        terminal.value = terminal.value.filter((item) => !found.has(operationKey(item)))
+        const observed = [...found.values()].map(projectOperation)
+        active.value = observed.filter((item) => !isTerminalOperation(item.status))
+        const activeKeys = new Set(active.value.map(operationKey))
+        terminal.value = [
+          ...new Map(
+            [
+              ...terminal.value.map(projectOperation),
+              ...observed.filter((item) => isTerminalOperation(item.status)),
+            ].map((item) => [operationKey(item), item]),
+          ).values(),
+        ]
+          .filter((item) => !activeKeys.has(operationKey(item)))
+          .slice(0, 20)
         discoveryComplete.value = true
         discoveryError.value = null
         failures = 0
@@ -490,11 +663,14 @@ export const useOperationsStore = defineStore('operations', () => {
         if (isAccessDenied(error)) {
           active.value = []
           terminal.value = []
+          translationObservations.clear()
           queryCache.clear()
         } else {
           for (const old of active.value)
             if (!found.has(operationKey(old))) found.set(operationKey(old), old)
           active.value = [...found.values()]
+            .map(projectOperation)
+            .filter((item) => !isTerminalOperation(item.status))
         }
       } finally {
         if (isCurrent(context)) initialized.value = true
@@ -548,6 +724,8 @@ export const useOperationsStore = defineStore('operations', () => {
       const unique = new Map((more ? items.value : []).map((item) => [operationKey(item), item]))
       for (const item of page.items) unique.set(operationKey(item), item)
       items.value = [...unique.values()]
+        .map(projectOperation)
+        .filter((item) => matchesState(item, filters.value))
       nextCursor.value = page.next_cursor
       listUpdatedAt.value = Date.now()
     } catch (error) {
@@ -574,9 +752,14 @@ export const useOperationsStore = defineStore('operations', () => {
     // Keep cleanup retries at the low frequency even if a detail read fails.
     if (subscription.nextPollAt > 0) subscription.nextPollAt = Date.now() + 30_000
     try {
-      const data = await queryTask(subscription.locator, subscription.controller.signal)
+      const response = await queryTask(subscription.locator, subscription.controller.signal)
       if (!subscriptions.has(subscription) || !isCurrent(context)) return
+      const data =
+        subscription.locator.task_type === 'translation'
+          ? projectJobObservation(response as ApiSchemas['Job'])
+          : response
       const businessTerminal = isTerminalOperation(data.status)
+      subscription.status = data.status
       const pendingCleanup =
         subscription.locator.task_type === 'storage' &&
         'cleanup_status' in data &&
@@ -586,15 +769,8 @@ export const useOperationsStore = defineStore('operations', () => {
         businessTerminal && (pendingCleanup || subscription.terminalRecheckMs)
           ? Date.now() + (subscription.terminalRecheckMs ?? 30_000)
           : 0
-      {
-        const key = operationKey(subscription.locator)
-        const update = (item: Operation) =>
-          operationKey(item) === key ? withDetailStatus(item, data) : item
-        active.value = active.value.map(update)
-        terminal.value = terminal.value.map(update)
-        items.value = items.value.map(update)
-      }
-      subscription.receive(data)
+      projectRows(subscription.locator, data)
+      subscription.receive(response)
     } catch (error) {
       if (!subscriptions.has(subscription) || !isCurrent(context)) return
       if (isAccessDenied(error)) {
@@ -629,7 +805,10 @@ export const useOperationsStore = defineStore('operations', () => {
   const interval = (): number =>
     failures
       ? Math.min(10000, 3000 * 2 ** failures)
-      : active.value.some((item) => item.status === 'running')
+      : active.value.some((item) => ['running', 'pausing'].includes(item.status)) ||
+          [...subscriptions].some(
+            (sub) => sub.active && ['running', 'pausing'].includes(sub.status ?? ''),
+          )
         ? 3000
         : active.value.some((item) => item.status === 'pending')
           ? 5000
@@ -658,7 +837,9 @@ export const useOperationsStore = defineStore('operations', () => {
         if (!isCurrent(context) || !listUsers || !listExpanded) return
         // Preserve loaded historical pages/cursor while updating rows already present.
         const fresh = new Map(allDiscovered.value.map((item) => [operationKey(item), item]))
-        items.value = items.value.map((item) => fresh.get(operationKey(item)) ?? item)
+        items.value = items.value
+          .map((item) => projectOperation(fresh.get(operationKey(item)) ?? item))
+          .filter((item) => matchesState(item, filters.value))
       })
       .finally(() => {
         if (running === flight) running = null
@@ -668,6 +849,7 @@ export const useOperationsStore = defineStore('operations', () => {
     return flight
   }
   const refresh = async (): Promise<void> => {
+    summaryCache.clear()
     await Promise.all([
       cycle(),
       ensureSummary(true),
@@ -706,15 +888,21 @@ export const useOperationsStore = defineStore('operations', () => {
       void refresh()
     }
   }
+  const reconnect = (): void => {
+    if (started && !disposed && !document.hidden && getSessionScope()) void refresh()
+  }
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', visibility)
+  if (typeof window !== 'undefined') window.addEventListener('online', reconnect)
   onScopeDispose(() => {
     disposed = true
     stop()
     requestController.abort()
     for (const subscription of subscriptions) subscription.controller.abort()
     subscriptions.clear()
+    translationObservations.clear()
     if (typeof document !== 'undefined')
       document.removeEventListener('visibilitychange', visibility)
+    if (typeof window !== 'undefined') window.removeEventListener('online', reconnect)
   })
   return {
     active,
@@ -759,6 +947,7 @@ export const useOperationsStore = defineStore('operations', () => {
     invalidateTasks,
     publishHistoryChange,
     projectTask,
+    projectJobObservation,
     invalidateReads,
     start,
     stop,

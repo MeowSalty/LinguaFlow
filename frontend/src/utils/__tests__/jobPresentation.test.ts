@@ -5,6 +5,7 @@ import {
   getJobRoundSkipReason,
   getResourceRoundSummary,
   getRoundDisplayState,
+  isJobActionAllowed,
   isJobEventAnomaly,
   selectResourceRound,
 } from '../jobPresentation'
@@ -47,6 +48,8 @@ const resource = (status: Resource['status'], rounds: Round[]): Resource => ({
 
 const job = (status: Job['status'], overrides: Partial<Job> = {}): Job => ({
   execution_config: {},
+  finished_at: null,
+  can_delete: false,
   id: 1,
   project_id: 1,
   execution_plan_id: 1,
@@ -187,6 +190,11 @@ for (const [jobStatus, resourceStatus, roundStatus, expected] of [
   ['running', 'pending', 'running', 'pending'],
   ['pending', 'running', 'running', 'pending'],
   ['paused', 'running', 'running', 'paused'],
+  ['pausing', 'running', 'running', 'pausing'],
+  ['pausing', 'pending', 'pending', 'pending'],
+  ['pausing', 'running', 'pending', 'pending'],
+  ['pausing', 'cancelled', 'running', 'stopped'],
+  ['pausing', 'failed', 'pending', 'not_run'],
   ['cancelled', 'running', 'running', 'stopped'],
   ['failed', 'running', 'running', 'stopped'],
   ['completed', 'running', 'running', 'stopped'],
@@ -203,7 +211,14 @@ for (const [jobStatus, resourceStatus, roundStatus, expected] of [
 }
 
 for (const historicalStatus of ['completed', 'failed', 'skipped'] as const) {
-  for (const parentStatus of ['running', 'paused', 'cancelled', 'failed', 'completed'] as const) {
+  for (const parentStatus of [
+    'running',
+    'pausing',
+    'paused',
+    'cancelled',
+    'failed',
+    'completed',
+  ] as const) {
     it(`preserve historical ${historicalStatus} under ${parentStatus}`, () => {
       expect(getRoundDisplayState(parentStatus, 'cancelled', historicalStatus)).toBe(
         historicalStatus,
@@ -275,6 +290,14 @@ for (const status of ['paused', 'cancelled', 'failed', 'completed'] as const) {
 for (const [name, item, parent, now, expected] of [
   ['live elapsed time advances', running, job('running'), NOW, 3600],
   ['live elapsed time advances again', running, job('running'), NOW + 1000, 3601],
+  ['draining work still accumulates elapsed time', running, job('pausing'), NOW, 3600],
+  [
+    'draining work continues until server confirms pause',
+    running,
+    job('pausing'),
+    NOW + 1000,
+    3601,
+  ],
   [
     'finished round uses its own finish time',
     completed,
@@ -320,4 +343,21 @@ for (const [name, item, parent, now, expected] of [
   ],
 ] as const) {
   it(name, () => expect(getDetailRoundSeconds(item, parent, now)).toBe(expected))
+}
+
+for (const [status, allowed] of [
+  ['pending', ['pause', 'cancel']],
+  ['running', ['pause', 'cancel']],
+  ['pausing', ['cancel']],
+  ['paused', ['resume', 'cancel']],
+  ['completed', []],
+  ['failed', ['retry']],
+  ['cancelled', ['retry']],
+] as const) {
+  it(`${status} exposes only its allowed actions`, () => {
+    const actions = (['pause', 'resume', 'cancel', 'retry'] as const).filter((action) =>
+      isJobActionAllowed(action, status),
+    )
+    expect(actions).toEqual(allowed)
+  })
 }

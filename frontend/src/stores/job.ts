@@ -243,6 +243,10 @@ export const useJobStore = defineStore('job', () => {
         const job = await createJobRequest(projectId, payload)
         assertSessionCurrent(session)
         if (disposed) throw new StaleSessionError()
+        operations.projectTask(
+          { task_type: 'translation', task_id: String(job.id), project_id: job.project_id },
+          job,
+        )
         if (current()) accept(job)
         invalidateOperations()
         return job
@@ -298,6 +302,10 @@ export const useJobStore = defineStore('job', () => {
         assertSessionCurrent(session)
         if (disposed || history !== (historyGenerations.get(jobId) ?? 0))
           throw new StaleSessionError()
+        operations.projectTask(
+          { task_type: 'translation', task_id: String(job.id), project_id: job.project_id },
+          job,
+        )
         if (current()) accept(job)
         invalidateOperations()
         return job

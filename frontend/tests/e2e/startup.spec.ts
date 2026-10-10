@@ -3,10 +3,18 @@ import { expect, test, type Page } from '@playwright/test'
 type StartupState = 'first-visit' | 'signed-out' | 'signed-in' | 'local'
 type ApiRequest = { path: string; authorization: string | undefined }
 
-const counts = { pending: 0, running: 0, paused: 0, recent_failed: 0 }
+const counts = {
+  pending: 0,
+  running: 0,
+  pausing: 0,
+  paused: 0,
+  waiting_retry: 0,
+  needs_action: 0,
+  recent_failed: 0,
+}
 const operationsSummary = {
   total: counts,
-  by_type: { translation: counts, glossary_sync: counts },
+  by_type: { translation: counts, glossary_sync: counts, storage: counts },
   recent_failed_since: '2026-09-29T00:00:00Z',
   as_of: '2026-09-30T00:00:00Z',
 }

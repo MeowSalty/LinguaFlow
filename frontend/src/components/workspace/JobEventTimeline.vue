@@ -159,7 +159,10 @@ const getRowStatus = (event: SSEEvent, level: LogLevel): string => {
   return ''
 }
 
-const anomalyCount = computed(() => props.events.filter(isJobEventAnomaly).length)
+// Stage observations keep their sequence IDs in the source window for pagination,
+// but do not count as readable logs or unread activity.
+const visibleEvents = computed(() => props.events.filter((event) => event.type !== 'stage_counts'))
+const anomalyCount = computed(() => visibleEvents.value.filter(isJobEventAnomaly).length)
 let rowCache = new WeakMap<SSEEvent, LogRow>()
 let cacheLocale = locale.value
 const logRows = computed<LogRow[]>(() => {
@@ -167,7 +170,7 @@ const logRows = computed<LogRow[]>(() => {
     rowCache = new WeakMap<SSEEvent, LogRow>()
     cacheLocale = locale.value
   }
-  return props.events
+  return visibleEvents.value
     .filter((event) => props.filter === 'all' || isJobEventAnomaly(event))
     .map((event) => {
       const cached = rowCache.get(event)
@@ -319,7 +322,7 @@ watch(
       return
     }
     if (previousTail !== undefined && tail !== undefined && tail > previousTail) {
-      const appended = props.events.filter((event) => event.seq > previousTail)
+      const appended = visibleEvents.value.filter((event) => event.seq > previousTail)
       for (const filter of ['all', 'anomalies'] as const) {
         const position = positions[filter]
         if (position.initialized && !position.followTail) {
@@ -407,7 +410,7 @@ onUnmounted(() => {
         {{
           filter === 'anomalies'
             ? t('workspace.job.detail.logAnomalyScope', { count: anomalyCount })
-            : t('workspace.job.detail.logLoadedCount', { count: events.length })
+            : t('workspace.job.detail.logLoadedCount', { count: visibleEvents.length })
         }}
       </p>
     </div>
