@@ -2110,7 +2110,7 @@ export interface paths {
         /**
          * 列出当前用户可访问的跨项目翻译任务
          * @description 按项目读取权限查询，包含组织项目内其他成员创建的任务。
-         *     未指定 state 或 status 时默认查询 pending、running、paused。
+         *     未指定 state 或 status 时默认查询 pending、running、pausing、paused。
          *     state 与 status 互斥。project_id 不存在或无读取权限时返回空列表。
          *     按 updated_at DESC、id DESC 排序；cursor 是不透明游标，仅用于原筛选条件的续页。
          *     任务更新会改变排序，本接口不提供跨请求快照；轮询应从首页重新查询并按 ID 去重，
@@ -2161,7 +2161,8 @@ export interface paths {
          * 按项目权限发现翻译、术语同步与存储任务
          * @description 只读投影，不新增通用任务实体。默认返回三类活动任务，组织成员可看到同项目其他成员的任务。
          *     未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限。
-         *     state 默认 active，与 status 互斥；同步没有 paused。trigger_type 仅允许显式 task_type=translation。
+         *     state 默认 active，与 status 互斥；翻译活动状态包含 pending、running、pausing、paused。
+         *     同步和存储没有 pausing、paused。trigger_type 仅允许显式 task_type=translation。
          *     存储任务的 waiting_retry、needs_action 属于活动状态；其实际可控制动作以存储任务详情为准。
          *     updated_at 区间为 [updated_from, updated_before)，按 updated_at DESC, task_type DESC, 整数 task_id DESC 排序。
          *     独立版本化游标绑定规范化筛选（不含 limit）；不可使用 Job 游标。每页重新鉴权，不提供跨请求快照。
@@ -2188,7 +2189,8 @@ export interface paths {
          * 获取三类任务的独立数量摘要
          * @description 只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。
          *     未知、重复、空或非法参数返回 400。权限与列表一致，无权项目返回零。
-         *     by_type 固定返回三类，未选类型计零，同步和存储 paused 恒为零；total 为逐字段求和。
+         *     by_type 固定返回三类，未选类型计零，同步和存储 pausing、paused 恒为零；total 为逐字段求和。
+         *     pausing 为必返的非负计数，无符合任务时返回零。
          *     waiting_retry、needs_action 分开统计，翻译与术语同步的这两个计数恒为零。
          *     recent_failed 只数当前 failed 且 updated_at 位于 [recent_failed_since,as_of) 的记录，窗口为连续七天。
          *     活动数不受时间限制；不受分页影响，不代表历史失败事件次数。
@@ -3494,7 +3496,7 @@ export interface components {
             };
             execution_plan_id: number;
             /** @enum {string} */
-            status: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            status: "pending" | "running" | "pausing" | "paused" | "completed" | "failed" | "cancelled";
             /** @enum {string} */
             trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
             /** @description 执行配置快照（已脱敏，不含 API 密钥） */
@@ -3532,6 +3534,31 @@ export interface components {
             queue_position?: number | null;
             /** @description 暂不可用，省略或为 null；不暴露全实例队列人数。 */
             queue_size?: number | null;
+            stages?: components["schemas"]["JobStageCounts"];
+        };
+        /** @description 持久状态的阶段观察值，不用于请求准入或推进完成计数。只表示当前任务，不含草稿正文。 */
+        JobStageCounts: {
+            /** @description 当前尝试中已派发、响应尚未入账的主请求数 */
+            main_requests: number;
+            /** @description 主译文已生成、等待或正在注音对齐的候选数；包含正在对齐的候选 */
+            pending_alignment: number;
+            /** @description 当前尝试中已派发、响应尚未入账的注音请求数 */
+            alignment_requests: number;
+            /** @description 当前尝试中响应已入账、等待解析、可靠保存或完成确认的请求数；不以候选数代替 */
+            saving_requests: number;
+            /** @description 已准备好、等待正式确认的候选数 */
+            ready_to_commit: number;
+            /**
+             * Format: int64
+             * @description 已确认工作量（段落×轮），按持久断点完成事实计数；不同于按关闭轮次总量计算的有效 progress_completed
+             */
+            confirmed_work: number;
+            /** @description 当前尝试中完成情况未知的请求数 */
+            unknown_requests: number;
+            /** @description 暂停期间等待收尾的主请求、注音请求与保存中请求总数；暂停完成还需保存屏障确认 */
+            draining_requests: number;
+            /** Format: date-time */
+            as_of: string;
         };
         JobListResponse: {
             items: components["schemas"]["Job"][];
@@ -3544,7 +3571,7 @@ export interface components {
             project_id: number;
             project_name: string;
             /** @enum {string} */
-            status: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            status: "pending" | "running" | "pausing" | "paused" | "completed" | "failed" | "cancelled";
             /** @enum {string} */
             trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
             progress: components["schemas"]["JobSummaryProgress"];
@@ -3568,6 +3595,7 @@ export interface components {
             pending: number;
             running: number;
             paused: number;
+            pausing: number;
             /** @description 当前失败且最近 7 天内更新的任务数；重试后不再计入 */
             recent_failed: number;
             /** Format: date-time */
@@ -3576,6 +3604,7 @@ export interface components {
             as_of: string;
         };
         JobEvent: {
+            /** @description 事件类型；job_pausing 表示停止新派发并等待收尾，job_paused 表示安全暂停，stage_counts 携带 metadata.stages 阶段观察值。 */
             type: string;
             job_id: number;
             level: string;
@@ -5184,7 +5213,7 @@ export interface components {
             project_id: number;
             project_name: string;
             /** @enum {string} */
-            status: "pending" | "running" | "paused" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
+            status: "pending" | "running" | "pausing" | "paused" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -5198,7 +5227,7 @@ export interface components {
             /** @enum {string} */
             task_type: "translation";
             /** @enum {string} */
-            status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            status?: "pending" | "running" | "pausing" | "paused" | "completed" | "failed" | "cancelled";
             /** @enum {string} */
             trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
             progress: components["schemas"]["JobSummaryProgress"];
@@ -5258,6 +5287,7 @@ export interface components {
         OperationCounts: {
             pending: number;
             running: number;
+            pausing: number;
             paused: number;
             recent_failed: number;
             waiting_retry: number;
@@ -5290,6 +5320,8 @@ export interface components {
              * @default 1
              */
             max_attempts?: number;
+            /** @description 单个任务全部资源与轮次共享的注音请求并发上限；省略时创建任务按版本化默认值 1 物化，与主轮 concurrency 独立。显式 0 或负数无效。 */
+            concurrency?: number;
         };
         /** @description 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。 */
         TranslateSegmentFilterConfig: {
@@ -9101,7 +9133,7 @@ export interface operations {
     ListJobs: {
         parameters: {
             query?: {
-                status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+                status?: "pending" | "running" | "pausing" | "paused" | "completed" | "failed" | "cancelled";
                 trigger_type?: "manual" | "file_update" | "glossary_change" | "web_edit";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
@@ -9156,10 +9188,10 @@ export interface operations {
     ListAccessibleJobs: {
         parameters: {
             query?: {
-                /** @description active 包含 pending/running/paused；terminal 包含 completed/failed/cancelled；与 status 互斥 */
+                /** @description active 包含 pending/running/pausing/paused；terminal 包含 completed/failed/cancelled；与 status 互斥 */
                 state?: "active" | "terminal" | "all";
                 /** @description 精确单状态筛选，与 state 互斥 */
-                status?: "pending" | "running" | "paused" | "completed" | "failed" | "cancelled";
+                status?: "pending" | "running" | "pausing" | "paused" | "completed" | "failed" | "cancelled";
                 project_id?: components["parameters"]["jobProjectFilter"];
                 trigger_type?: components["parameters"]["jobTriggerFilter"];
                 /** @description 更新时间下界（包含），RFC3339；与 updated_before 同传时必须更早 */
@@ -9219,7 +9251,7 @@ export interface operations {
                 project_id?: components["parameters"]["jobProjectFilter"];
                 trigger_type?: components["parameters"]["jobTriggerFilter"];
                 state?: "active" | "terminal" | "all";
-                status?: "pending" | "running" | "paused" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
+                status?: "pending" | "running" | "pausing" | "paused" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
                 updated_from?: string;
                 updated_before?: string;
                 cursor?: string;
