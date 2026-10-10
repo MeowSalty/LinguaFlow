@@ -10,6 +10,9 @@ hero:
       text: 5 分钟上手
       link: /zh/guide/getting-started
     - theme: alt
+      text: 在线体验
+      link: https://meowsalty-linguaflow.hf.space/
+    - theme: alt
       text: 快速开始 · CLI
       link: /zh/guide/cli-quickstart
     - theme: alt
@@ -37,7 +40,7 @@ features:
     details: 双击二进制即可启动本地模式，数据落在本机 SQLite。无需账号、无需把全文交给第三方 SaaS 平台。
   - icon: 🌐
     title: 团队协作（服务器模式 · 预览）
-    details: 多用户注册与登录、组织与成员角色、组织级资源共享;任务中心跨项目追踪翻译、术语与文件存储任务,服务重启自动断点续跑;支持任务历史清理与保留策略。
+    details: 多用户注册与登录、组织与成员角色、组织级资源共享;任务中心跨项目追踪翻译、术语与文件存储任务，服务重启自动断点续跑;支持任务历史清理与保留策略。
   - icon: 🗄️
     title: 存储可控（服务器模式 · 预览）
     details: 项目文件存站点托管空间或接入你自己的 S3 兼容存储;源文件版本化、预览式更新与固定交付;管理员可设两层容量配额、存储政策与磁盘水位保护。
@@ -55,6 +58,14 @@ features:
 | **电子书**          | EPUB 按章节浏览与翻译，导出仍是 EPUB；可用本机工具统一横竖排 |
 | **配置与 i18n**     | JSON / YAML / TOML 按字符串叶子节点翻译，结构路径可回写      |
 | **Word 文稿**       | DOCX 解析主文档段落，便于校对与导出                          |
+
+## 先在线试试
+
+不想装环境？官方预览实例 **[meowsalty-linguaflow.hf.space](https://meowsalty-linguaflow.hf.space/)** 注册即用：项目、翻译、审校、术语表与管理后台都能点，直接体验服务器模式的多用户能力（跑翻译仍需自备 AI API Key）。
+
+::: warning 仅供试用的演示环境
+预览实例**不做数据持久化**，重启后账号与项目可能丢失；请勿上传敏感或重要内容，也不要把它当作长期凭据保管处。稳定使用请按下面的方式安装到本机。
+:::
 
 ## 三步开始
 
