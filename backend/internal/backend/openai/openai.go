@@ -221,6 +221,14 @@ func (b *Backend) Close() error { return nil }
 // 使用字符串解析提取 HTTP 状态码作为兜底方案。
 // 错误格式：POST "/v1/chat/completions": 401 Unauthorized {...}
 func wrapOpenAIError(err error) error {
+	var apiErr *openaigo.Error
+	if errors.As(err, &apiErr) {
+		var headers http.Header
+		if apiErr.Response != nil {
+			headers = apiErr.Response.Header
+		}
+		return backend.WrapHTTPError("openai: chat completion", err, apiErr.StatusCode, headers)
+	}
 	return backend.WrapUpstreamError("openai: chat completion", err)
 }
 
@@ -242,6 +250,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	}
 	clientOpts := []option.RequestOption{
 		option.WithAPIKey(apiKey),
+		option.WithMaxRetries(0),
 		option.WithHeader("User-Agent", backend.ClientUserAgent()),
 		option.WithHeader("X-Client-Name", backend.ClientName()),
 		option.WithHeader("X-Client-Version", backend.ClientVersion()),

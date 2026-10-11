@@ -10,6 +10,8 @@ import (
 // Round 描述一轮执行的编排器配置。
 // 编排器只关心并发、重试策略和 handler，不关心具体操作模式。
 type Round struct {
+	Runtime     *ExecutionRuntime
+	Store       RoundStore
 	Concurrency int
 	Retry       backend.RetryPolicy
 	Context     *ContextConfig
@@ -52,10 +54,24 @@ func NewStation(capacity int) *Station {
 
 // Acquire 获取一个槽位；返回 false 表示 ctx 已取消（未获取槽位）。
 func (s *Station) Acquire(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	select {
 	case s.sem <- struct{}{}:
 		return true
 	case <-ctx.Done():
+		return false
+	}
+}
+
+// TryAcquire does not wait or reserve a slot for future work. Joint request
+// admission uses its own frozen scope; this supports remaining local callers.
+func (s *Station) TryAcquire() bool {
+	select {
+	case s.sem <- struct{}{}:
+		return true
+	default:
 		return false
 	}
 }
@@ -106,9 +122,36 @@ func (g *PauseGate) Done() <-chan struct{} {
 // Pause 置位暂停请求。幂等；不等待排空。
 func (g *PauseGate) Pause() {
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.paused = true
-	g.mu.Unlock()
 	g.pauseOnce.Do(func() { close(g.done) })
+}
+
+// TryStartDispatch atomically arbitrates pause against a nonblocking joint
+// capacity/RPM decision. A request admitted first may finish after Pause; a pause
+// that wins prevents the callback from consuming any capacity or request token.
+func (g *PauseGate) TryStartDispatch(admit func() bool) bool {
+	if g == nil {
+		return admit()
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.paused || !admit() {
+		return false
+	}
+	g.inflight++
+	return true
+}
+
+// Inflight counts admitted requests only. Safe pause still requires the caller
+// to join response parsing, candidate saves, and transaction callbacks.
+func (g *PauseGate) Inflight() int {
+	if g == nil {
+		return 0
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.inflight
 }
 
 // AcquireInflight 登记一个在途批次（派发前调用）。
@@ -120,6 +163,9 @@ func (g *PauseGate) AcquireInflight() {
 
 // ReleaseInflight 注销一个在途批次，计数钳位非负。
 func (g *PauseGate) ReleaseInflight() {
+	if g == nil {
+		return
+	}
 	g.mu.Lock()
 	g.inflight--
 	if g.inflight < 0 {

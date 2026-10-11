@@ -52,6 +52,20 @@ func (_c *SegmentCreate) SetNillableUpdatedAt(v *time.Time) *SegmentCreate {
 	return _c
 }
 
+// SetContentVersion sets the "content_version" field.
+func (_c *SegmentCreate) SetContentVersion(v int64) *SegmentCreate {
+	_c.mutation.SetContentVersion(v)
+	return _c
+}
+
+// SetNillableContentVersion sets the "content_version" field if the given value is not nil.
+func (_c *SegmentCreate) SetNillableContentVersion(v *int64) *SegmentCreate {
+	if v != nil {
+		_c.SetContentVersion(*v)
+	}
+	return _c
+}
+
 // SetSegmentIndex sets the "segment_index" field.
 func (_c *SegmentCreate) SetSegmentIndex(v int) *SegmentCreate {
 	_c.mutation.SetSegmentIndex(v)
@@ -186,7 +200,9 @@ func (_c *SegmentCreate) Mutation() *SegmentMutation {
 
 // Save creates the Segment in the database.
 func (_c *SegmentCreate) Save(ctx context.Context) (*Segment, error) {
-	_c.defaults()
+	if err := _c.defaults(); err != nil {
+		return nil, err
+	}
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
@@ -213,19 +229,30 @@ func (_c *SegmentCreate) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (_c *SegmentCreate) defaults() {
+func (_c *SegmentCreate) defaults() error {
 	if _, ok := _c.mutation.CreatedAt(); !ok {
+		if segment.DefaultCreatedAt == nil {
+			return fmt.Errorf("ent: uninitialized segment.DefaultCreatedAt (forgotten import ent/runtime?)")
+		}
 		v := segment.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		if segment.DefaultUpdatedAt == nil {
+			return fmt.Errorf("ent: uninitialized segment.DefaultUpdatedAt (forgotten import ent/runtime?)")
+		}
 		v := segment.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
+	}
+	if _, ok := _c.mutation.ContentVersion(); !ok {
+		v := segment.DefaultContentVersion
+		_c.mutation.SetContentVersion(v)
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := segment.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -235,6 +262,14 @@ func (_c *SegmentCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Segment.updated_at"`)}
+	}
+	if _, ok := _c.mutation.ContentVersion(); !ok {
+		return &ValidationError{Name: "content_version", err: errors.New(`ent: missing required field "Segment.content_version"`)}
+	}
+	if v, ok := _c.mutation.ContentVersion(); ok {
+		if err := segment.ContentVersionValidator(v); err != nil {
+			return &ValidationError{Name: "content_version", err: fmt.Errorf(`ent: validator failed for field "Segment.content_version": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.SegmentIndex(); !ok {
 		return &ValidationError{Name: "segment_index", err: errors.New(`ent: missing required field "Segment.segment_index"`)}
@@ -298,6 +333,10 @@ func (_c *SegmentCreate) createSpec() (*Segment, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(segment.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.ContentVersion(); ok {
+		_spec.SetField(segment.FieldContentVersion, field.TypeInt64, value)
+		_node.ContentVersion = value
 	}
 	if value, ok := _c.mutation.SegmentIndex(); ok {
 		_spec.SetField(segment.FieldSegmentIndex, field.TypeInt, value)

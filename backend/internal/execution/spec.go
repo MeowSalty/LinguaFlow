@@ -3,13 +3,16 @@ package execution
 import "github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 
 type JobExecutionSnapshot struct {
-	SchemaVersion         int           `json:"schema_version"`
-	DefaultsVersion       int           `json:"defaults_version"`
-	Sources               []AssetSource `json:"sources"`
-	RubyTemplates         RubyTemplates `json:"ruby_templates"`
-	RetryReminderTemplate string        `json:"retry_reminder_template"`
-	ExecutionPlanID       int           `json:"execution_plan_id"`
-	ExecutionPlanName     string        `json:"execution_plan_name"`
+	SchemaVersion            int           `json:"schema_version"`
+	DefaultsVersion          int           `json:"defaults_version"`
+	Sources                  []AssetSource `json:"sources"`
+	RubyTemplates            RubyTemplates `json:"ruby_templates"`
+	RubyProtocolVersion      int           `json:"ruby_protocol_version,omitempty"`
+	RubyValidatorVersion     int           `json:"ruby_validator_version,omitempty"`
+	RubyBatchProtocolVersion int           `json:"ruby_batch_protocol_version,omitempty"`
+	RetryReminderTemplate    string        `json:"retry_reminder_template"`
+	ExecutionPlanID          int           `json:"execution_plan_id"`
+	ExecutionPlanName        string        `json:"execution_plan_name"`
 	// Strategy 计划级策略快照：来自计划引用的 ExecutionProfile（profile_id），
 	// 为全管道（所有改写型轮次与引擎级行为）供 protect/ruby 等行为预设。
 	Strategy                 StrategySnapshot                `json:"strategy"`
@@ -27,6 +30,11 @@ type ExecutionPlanRubyRetrySnapshot struct {
 	Enabled     bool            `json:"enabled"`
 	Backend     BackendSnapshot `json:"backend"`
 	MaxAttempts int             `json:"max_attempts,omitempty"`
+	Concurrency int             `json:"concurrency,omitempty"`
+	// Pointers distinguish missing frozen configuration from intentional zero.
+	BatchSize        *int `json:"batch_size,omitempty"`
+	MaxWordsPerBatch *int `json:"max_words_per_batch,omitempty"`
+	BatchWaitMS      *int `json:"batch_wait_ms,omitempty"`
 }
 
 type JobRoundSnapshot struct {
@@ -141,8 +149,10 @@ type StrategySnapshot struct {
 type ResolvedExecutionSpec = JobExecutionSnapshot
 
 type RubyTemplates struct {
-	JSON string `json:"json"`
-	Text string `json:"text"`
+	JSON      string `json:"json"`
+	Text      string `json:"text"`
+	BatchJSON string `json:"batch_json,omitempty"`
+	BatchText string `json:"batch_text,omitempty"`
 }
 
 type AssetSource struct {

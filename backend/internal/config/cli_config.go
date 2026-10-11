@@ -62,9 +62,13 @@ type CLIConfigExecution struct {
 	RubyRetry *CLIConfigRubyRetry `yaml:"ruby_retry,omitempty"`
 }
 type CLIConfigRubyRetry struct {
-	Enabled     bool   `yaml:"enabled"`
-	Backend     string `yaml:"backend"`
-	MaxAttempts int    `yaml:"max_attempts"`
+	Enabled          bool   `yaml:"enabled"`
+	Backend          string `yaml:"backend"`
+	MaxAttempts      int    `yaml:"max_attempts"`
+	Concurrency      *int   `yaml:"concurrency,omitempty"`
+	BatchSize        *int   `yaml:"batch_size,omitempty"`
+	MaxWordsPerBatch *int   `yaml:"max_words_per_batch,omitempty"`
+	BatchWaitMS      *int   `yaml:"batch_wait_ms,omitempty"`
 }
 type CLIConfigRound struct {
 	Mode      string                   `yaml:"mode"`
@@ -435,6 +439,15 @@ func ValidateCLIConfig(cfg *CLIConfig) error {
 	}
 	if !hasContentRound {
 		return errors.New("execution.rounds must include a translate or revise round")
+	}
+	if cfg.Execution.RubyRetry != nil {
+		if _, err := execution.ResolveRubyRetryConcurrency(cfg.Execution.RubyRetry.Concurrency); err != nil {
+			return err
+		}
+		ruby := cfg.Execution.RubyRetry
+		if _, err := execution.ResolveRubyRetryBatch(ruby.BatchSize, ruby.MaxWordsPerBatch, ruby.BatchWaitMS); err != nil {
+			return err
+		}
 	}
 	if cfg.TranslationMemory.Enabled || cfg.TranslationMemory.Driver != "" || cfg.TranslationMemory.DSN != "" {
 		return errors.New("translation_memory settings are not supported in CLI mode")

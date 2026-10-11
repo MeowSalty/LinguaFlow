@@ -23,12 +23,14 @@ import (
 // JobRunner and PreviewRunner so that both produce identical execution
 // configurations.
 type EngineFactory struct {
-	logger      *slog.Logger
-	limiterPool *backend.LimiterPool
-	httpClients telemetry.HTTPClientFactory
-	reader      credential.Reader
-	checker     credential.Checker
-	build       backend.Factory
+	logger           *slog.Logger
+	limiterPool      *backend.LimiterPool
+	httpClients      telemetry.HTTPClientFactory
+	reader           credential.Reader
+	checker          credential.Checker
+	build            backend.Factory
+	candidateLimits  pipeline.CandidateLimits
+	maxResponseBytes int64
 }
 
 func NewEngineFactory(logger *slog.Logger, limiterPool *backend.LimiterPool, clients ...telemetry.HTTPClientFactory) *EngineFactory {
@@ -39,7 +41,8 @@ func NewEngineFactoryWithCredentials(logger *slog.Logger, limiterPool *backend.L
 	if logger == nil {
 		logger = slog.Default()
 	}
-	f := &EngineFactory{logger: logger, limiterPool: limiterPool, reader: reader, checker: checker, build: backend.Build}
+	f := &EngineFactory{logger: logger, limiterPool: limiterPool, reader: reader, checker: checker, build: backend.Build,
+		candidateLimits: pipeline.DefaultCandidateLimits(), maxResponseBytes: backend.DefaultMaxResponseBytes}
 	if len(clients) > 0 {
 		f.httpClients = clients[0]
 	}
@@ -77,10 +80,22 @@ func (f *EngineFactory) BuildEngineWithConfig(
 	if cfg == nil {
 		return nil, fmt.Errorf("engine configuration is required")
 	}
+	runtime := pipeline.ExecutionRuntimeFromContext(ctx)
+	ownRuntime := runtime == nil
+	if runtime == nil {
+		var err error
+		runtime, err = NewExecutionRuntime(snapshot, f.limiterPool, nil, f.candidateLimits)
+		if err != nil {
+			return nil, err
+		}
+	}
 	var owned []backend.Backend
 	success := false
 	defer func() {
 		if !success {
+			if ownRuntime {
+				runtime.Close()
+			}
 			for _, b := range owned {
 				_ = b.Close()
 			}
@@ -96,6 +111,7 @@ func (f *EngineFactory) BuildEngineWithConfig(
 			if err != nil {
 				return nil, fmt.Errorf("round[%d] build backend: %w", i, err)
 			}
+			b = pipeline.BindRequestBackend(b, rs.Backend.ID, i, runtime)
 			owned = append(owned, b)
 		}
 
@@ -151,16 +167,22 @@ func (f *EngineFactory) BuildEngineWithConfig(
 		if err != nil {
 			return nil, fmt.Errorf("ruby retry backend: %w", err)
 		}
+		rrBackend = pipeline.BindRequestBackend(rrBackend, snapshot.RubyRetry.Backend.ID, 0, runtime)
 		owned = append(owned, rrBackend)
 		rubyRetryBackends = []backend.Backend{rrBackend}
 		rubyRetryAttempts = snapshot.RubyRetry.MaxAttempts
 	}
 
+	rubyBatch := execution.EffectiveRubyRetryBatch(snapshot)
 	e, err := engine.NewWithOptions(engine.Options{
+		Runtime:               runtime,
+		OwnRuntime:            ownRuntime,
+		RubyProtocolVersion:   execution.EffectiveRubyProtocolVersion(snapshot),
+		RubyBatch:             pipeline.AlignmentBatchConfig{BatchSize: rubyBatch.BatchSize, MaxWordsPerBatch: rubyBatch.MaxWordsPerBatch, Wait: time.Duration(rubyBatch.BatchWaitMS) * time.Millisecond, ProtocolVersion: execution.EffectiveRubyBatchProtocolVersion(snapshot)},
 		Rounds:                rounds,
 		RubyRetryBackends:     rubyRetryBackends,
 		RubyRetryAttempts:     rubyRetryAttempts,
-		RubyTemplates:         prompt.RubyTemplates{JSON: snapshot.RubyTemplates.JSON, Text: snapshot.RubyTemplates.Text},
+		RubyTemplates:         prompt.RubyTemplates{JSON: snapshot.RubyTemplates.JSON, Text: snapshot.RubyTemplates.Text, BatchJSON: snapshot.RubyTemplates.BatchJSON, BatchText: snapshot.RubyTemplates.BatchText},
 		RetryReminderTemplate: snapshot.RetryReminderTemplate,
 		Config:                cfg,
 		Logger:                f.logger,
@@ -198,7 +220,7 @@ func (f *EngineFactory) buildBackend(ctx context.Context, snapshot service.Backe
 	if err != nil {
 		return nil, err
 	}
-	b, err := f.build(backend.Config{Name: snapshot.Name, Type: snapshot.Type, Enabled: true, Options: options, HTTPClient: client})
+	b, err := f.build(backend.Config{Name: snapshot.Name, Type: snapshot.Type, Enabled: true, Options: options, HTTPClient: client, MaxResponseBytes: f.maxResponseBytes})
 	if err != nil {
 		return nil, err
 	}
@@ -221,32 +243,39 @@ func (f *EngineFactory) buildBackend(ctx context.Context, snapshot service.Backe
 // engine. After the engine has been closed, this is the only way to read the
 // final metering totals.
 func CollectMeterMetrics(e *engine.Engine) []backend.MeterMetrics {
-	seen := make(map[backend.Backend]struct{})
+	seen := make(map[*backend.MeteredBackend]struct{})
 	var metrics []backend.MeterMetrics
+	collect := func(b backend.Backend) {
+		meter, ok := unwrapMetered(b)
+		if !ok {
+			return
+		}
+		if _, ok := seen[meter]; ok {
+			return
+		}
+		seen[meter] = struct{}{}
+		metrics = append(metrics, meter.Metrics())
+	}
 	for _, r := range e.Rounds() {
-		m := meterMetricsFromBackend(r.Handler, seen)
-		if m != nil {
-			metrics = append(metrics, *m)
+		collect(extractBackend(r.Handler))
+		// Ruby backends are shared by rounds but have distinct request
+		// wrappers. Count the underlying meter once, including alignment.
+		switch h := r.Handler.(type) {
+		case *pipeline.TranslateHandler:
+			for _, b := range h.RubyRetryBackends {
+				collect(b)
+			}
+		case *pipeline.ReviseHandler:
+			for _, b := range h.RubyRetryBackends {
+				collect(b)
+			}
+		case *pipeline.ExtractHandler:
+			for _, b := range h.Backends {
+				collect(b)
+			}
 		}
 	}
 	return metrics
-}
-
-func meterMetricsFromBackend(handler pipeline.RoundHandler, seen map[backend.Backend]struct{}) *backend.MeterMetrics {
-	b := extractBackend(handler)
-	if b == nil {
-		return nil
-	}
-	if _, ok := seen[b]; ok {
-		return nil
-	}
-	seen[b] = struct{}{}
-	mb, ok := unwrapMetered(b)
-	if !ok {
-		return nil
-	}
-	m := mb.Metrics()
-	return &m
 }
 
 func extractBackend(handler pipeline.RoundHandler) backend.Backend {
@@ -277,7 +306,29 @@ func unwrapMetered(b backend.Backend) (*backend.MeteredBackend, bool) {
 	if guarded, ok := b.(*backend.PolicyBackend); ok {
 		return unwrapMetered(guarded.Backend())
 	}
+	if wrapped, ok := b.(interface{ Backend() backend.Backend }); ok {
+		return unwrapMetered(wrapped.Backend())
+	}
 	return nil, false
+}
+
+func NewExecutionRuntime(snapshot *service.JobExecutionSnapshot, pool *backend.LimiterPool, gate *pipeline.PauseGate, limits pipeline.CandidateLimits) (*pipeline.ExecutionRuntime, error) {
+	model, err := execution.ConcurrencyModelForSpec(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	config := backend.RequestAdmissionConfig{MainConcurrency: map[int]int{}, LegacyRoundShared: model == execution.LegacyRoundShared}
+	for i := range snapshot.Rounds {
+		config.MainConcurrency[i] = max(1, roundConcurrency(snapshot, i))
+	}
+	if snapshot.RubyRetry != nil && snapshot.RubyRetry.Enabled {
+		config.AlignmentConcurrency = snapshot.RubyRetry.Concurrency
+	}
+	admission, err := backend.NewRequestAdmission(pool, config)
+	if err != nil {
+		return nil, err
+	}
+	return pipeline.NewExecutionRuntime(admission, limits, gate), nil
 }
 
 // BuildEngineConfig 是 JobRunner 与 PreviewRunner 共享的引擎配置构建器。

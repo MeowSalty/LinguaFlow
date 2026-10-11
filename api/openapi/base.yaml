@@ -428,6 +428,8 @@ components:
       $ref: './components/schemas/job.yaml#/Job'
     JobProgress:
       $ref: './components/schemas/job.yaml#/JobProgress'
+    JobStageCounts:
+      $ref: './components/schemas/job.yaml#/JobStageCounts'
     JobListResponse:
       $ref: './components/schemas/job.yaml#/JobListResponse'
     JobSummary:

@@ -269,6 +269,12 @@ func (s *ExecutionPlanService) validatePlanProfileReference(ctx context.Context,
 // validatePlanReferences 在保存计划时与生成运行时快照前，都会检查所有依赖项的
 // 归属。组织目标不得内嵌私有内容或其他组织的内容，即使操作者有权读取这些内容。
 func (s *ExecutionPlanService) validatePlanReferences(ctx context.Context, actorID int, orgID *int, profileID int, rubyRetry schema.ExecutionPlanRubyRetryConfig, rounds []schema.ExecutionRoundConfig) error {
+	if _, err := execution.ResolveRubyRetryConcurrency(rubyRetry.Concurrency); err != nil {
+		return fmt.Errorf("%w: %s", ErrExecutionPlanConfigInvalid, err)
+	}
+	if _, err := execution.ResolveRubyRetryBatch(rubyRetry.BatchSize, rubyRetry.MaxWordsPerBatch, rubyRetry.BatchWaitMS); err != nil {
+		return fmt.Errorf("%w: %s", ErrExecutionPlanConfigInvalid, err)
+	}
 	if err := s.validatePlanProfileReference(ctx, actorID, orgID, profileID); err != nil {
 		return err
 	}

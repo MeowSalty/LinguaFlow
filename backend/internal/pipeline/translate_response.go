@@ -25,9 +25,9 @@ func parseBatchResponse(text string, wantIDs []string) (map[string]string, []pro
 		return nil, nil, nil, fmt.Errorf("no JSON object found in response")
 	}
 	var env struct {
-		Translations map[string]string             `json:"translations"`
-		Glossary     []prompt.BootstrapEntry       `json:"glossary"`
-		RubyOutput   map[string][]ruby.OutputEntry `json:"ruby_output"`
+		Translations map[string]string       `json:"translations"`
+		Glossary     []prompt.BootstrapEntry `json:"glossary"`
+		RubyOutput   json.RawMessage         `json:"ruby_output"`
 	}
 	if err := json.Unmarshal([]byte(body), &env); err != nil {
 		return nil, nil, nil, fmt.Errorf("unmarshal translations: %w", err)
@@ -43,7 +43,7 @@ func parseBatchResponse(text string, wantIDs []string) (map[string]string, []pro
 	if len(env.Translations) != len(wantIDs) {
 		return nil, nil, nil, fmt.Errorf("expected %d translations, got %d", len(wantIDs), len(env.Translations))
 	}
-	return env.Translations, env.Glossary, env.RubyOutput, nil
+	return env.Translations, env.Glossary, ruby.ParseOutputMap(env.RubyOutput), nil
 }
 
 // parseBatchResponseLenient 是 parseBatchResponse 的"宽容"版本：委托 repair.TryRepair
@@ -101,7 +101,7 @@ func jsonObjectSlice(text string) string {
 // 当 includeRuby=true 时，在外层属性里加一个 "ruby_output" 对象，按 wantIDs 键控，
 // 每个值为含 {base,text,kind}（id 可选）的对象数组；ruby_output 加入外层 required，
 // 强制 LLM 显式应答复注音（缺失进入修复链，最终缺口由守恒信号兜底）。
-func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool) map[string]any {
+func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool, rubyProtocolVersion ...int) map[string]any {
 	props := make(map[string]any, len(wantIDs))
 	for _, id := range wantIDs {
 		props[id] = map[string]any{"type": "string"}
@@ -135,7 +135,7 @@ func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool
 	}
 
 	if includeRuby {
-		outerProps["ruby_output"] = prompt.RubyOutputSchema(wantIDs)
+		outerProps["ruby_output"] = prompt.RubyOutputSchema(wantIDs, rubyProtocolVersion...)
 		outerRequired = append(outerRequired, "ruby_output")
 	}
 

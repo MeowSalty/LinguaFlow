@@ -7,7 +7,7 @@ import "errors"
 // 本地纠错（correct）没有分批概念，绝不能调用本校验器。
 func ValidateBatchLimits(mode string, batchSize, maxWordsPerBatch int) error {
 	switch mode {
-	case "translate", "extract", "adjudicate", "semantic_qa", "revise":
+	case "translate", "extract", "adjudicate", "semantic_qa", "revise", "ruby_retry":
 	default:
 		return errors.New("batch limits require an LLM round mode")
 	}

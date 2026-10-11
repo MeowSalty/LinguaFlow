@@ -54,6 +54,34 @@ func (_c *JobCreate) SetNillableUpdatedAt(v *time.Time) *JobCreate {
 	return _c
 }
 
+// SetRetryEpoch sets the "retry_epoch" field.
+func (_c *JobCreate) SetRetryEpoch(v int64) *JobCreate {
+	_c.mutation.SetRetryEpoch(v)
+	return _c
+}
+
+// SetNillableRetryEpoch sets the "retry_epoch" field if the given value is not nil.
+func (_c *JobCreate) SetNillableRetryEpoch(v *int64) *JobCreate {
+	if v != nil {
+		_c.SetRetryEpoch(*v)
+	}
+	return _c
+}
+
+// SetPauseRequested sets the "pause_requested" field.
+func (_c *JobCreate) SetPauseRequested(v bool) *JobCreate {
+	_c.mutation.SetPauseRequested(v)
+	return _c
+}
+
+// SetNillablePauseRequested sets the "pause_requested" field if the given value is not nil.
+func (_c *JobCreate) SetNillablePauseRequested(v *bool) *JobCreate {
+	if v != nil {
+		_c.SetPauseRequested(*v)
+	}
+	return _c
+}
+
 // SetProjectID sets the "project_id" field.
 func (_c *JobCreate) SetProjectID(v int) *JobCreate {
 	_c.mutation.SetProjectID(v)
@@ -353,6 +381,14 @@ func (_c *JobCreate) defaults() {
 		v := job.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.RetryEpoch(); !ok {
+		v := job.DefaultRetryEpoch
+		_c.mutation.SetRetryEpoch(v)
+	}
+	if _, ok := _c.mutation.PauseRequested(); !ok {
+		v := job.DefaultPauseRequested
+		_c.mutation.SetPauseRequested(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := job.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -394,6 +430,17 @@ func (_c *JobCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Job.updated_at"`)}
+	}
+	if _, ok := _c.mutation.RetryEpoch(); !ok {
+		return &ValidationError{Name: "retry_epoch", err: errors.New(`ent: missing required field "Job.retry_epoch"`)}
+	}
+	if v, ok := _c.mutation.RetryEpoch(); ok {
+		if err := job.RetryEpochValidator(v); err != nil {
+			return &ValidationError{Name: "retry_epoch", err: fmt.Errorf(`ent: validator failed for field "Job.retry_epoch": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.PauseRequested(); !ok {
+		return &ValidationError{Name: "pause_requested", err: errors.New(`ent: missing required field "Job.pause_requested"`)}
 	}
 	if _, ok := _c.mutation.ProjectID(); !ok {
 		return &ValidationError{Name: "project_id", err: errors.New(`ent: missing required field "Job.project_id"`)}
@@ -496,6 +543,14 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(job.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.RetryEpoch(); ok {
+		_spec.SetField(job.FieldRetryEpoch, field.TypeInt64, value)
+		_node.RetryEpoch = value
+	}
+	if value, ok := _c.mutation.PauseRequested(); ok {
+		_spec.SetField(job.FieldPauseRequested, field.TypeBool, value)
+		_node.PauseRequested = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)

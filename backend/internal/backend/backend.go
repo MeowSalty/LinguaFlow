@@ -112,5 +112,16 @@ func Build(cfg Config) (Backend, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownBackendType, cfg.Type)
 	}
-	return f(cfg)
+	if cfg.MaxResponseBytes < 0 {
+		return nil, errors.New("backend response byte limit must not be negative")
+	}
+	if cfg.MaxResponseBytes == 0 {
+		cfg.MaxResponseBytes = DefaultMaxResponseBytes
+	}
+	cfg.HTTPClient = LimitResponseClient(cfg.HTTPClient, cfg.MaxResponseBytes)
+	inner, err := f(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &boundedBackend{inner: inner, limit: cfg.MaxResponseBytes}, nil
 }

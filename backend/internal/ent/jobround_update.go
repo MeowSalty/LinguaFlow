@@ -38,6 +38,62 @@ func (_u *JobRoundUpdate) SetUpdatedAt(v time.Time) *JobRoundUpdate {
 	return _u
 }
 
+// SetManifestVersion sets the "manifest_version" field.
+func (_u *JobRoundUpdate) SetManifestVersion(v int) *JobRoundUpdate {
+	_u.mutation.ResetManifestVersion()
+	_u.mutation.SetManifestVersion(v)
+	return _u
+}
+
+// SetNillableManifestVersion sets the "manifest_version" field if the given value is not nil.
+func (_u *JobRoundUpdate) SetNillableManifestVersion(v *int) *JobRoundUpdate {
+	if v != nil {
+		_u.SetManifestVersion(*v)
+	}
+	return _u
+}
+
+// AddManifestVersion adds value to the "manifest_version" field.
+func (_u *JobRoundUpdate) AddManifestVersion(v int) *JobRoundUpdate {
+	_u.mutation.AddManifestVersion(v)
+	return _u
+}
+
+// SetManifestSealed sets the "manifest_sealed" field.
+func (_u *JobRoundUpdate) SetManifestSealed(v bool) *JobRoundUpdate {
+	_u.mutation.SetManifestSealed(v)
+	return _u
+}
+
+// SetNillableManifestSealed sets the "manifest_sealed" field if the given value is not nil.
+func (_u *JobRoundUpdate) SetNillableManifestSealed(v *bool) *JobRoundUpdate {
+	if v != nil {
+		_u.SetManifestSealed(*v)
+	}
+	return _u
+}
+
+// SetPoolIndex sets the "pool_index" field.
+func (_u *JobRoundUpdate) SetPoolIndex(v int) *JobRoundUpdate {
+	_u.mutation.ResetPoolIndex()
+	_u.mutation.SetPoolIndex(v)
+	return _u
+}
+
+// SetNillablePoolIndex sets the "pool_index" field if the given value is not nil.
+func (_u *JobRoundUpdate) SetNillablePoolIndex(v *int) *JobRoundUpdate {
+	if v != nil {
+		_u.SetPoolIndex(*v)
+	}
+	return _u
+}
+
+// AddPoolIndex adds value to the "pool_index" field.
+func (_u *JobRoundUpdate) AddPoolIndex(v int) *JobRoundUpdate {
+	_u.mutation.AddPoolIndex(v)
+	return _u
+}
+
 // SetJobID sets the "job_id" field.
 func (_u *JobRoundUpdate) SetJobID(v int) *JobRoundUpdate {
 	_u.mutation.SetJobID(v)
@@ -354,6 +410,16 @@ func (_u *JobRoundUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *JobRoundUpdate) check() error {
+	if v, ok := _u.mutation.ManifestVersion(); ok {
+		if err := jobround.ManifestVersionValidator(v); err != nil {
+			return &ValidationError{Name: "manifest_version", err: fmt.Errorf(`ent: validator failed for field "JobRound.manifest_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PoolIndex(); ok {
+		if err := jobround.PoolIndexValidator(v); err != nil {
+			return &ValidationError{Name: "pool_index", err: fmt.Errorf(`ent: validator failed for field "JobRound.pool_index": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.JobID(); ok {
 		if err := jobround.JobIDValidator(v); err != nil {
 			return &ValidationError{Name: "job_id", err: fmt.Errorf(`ent: validator failed for field "JobRound.job_id": %w`, err)}
@@ -402,6 +468,21 @@ func (_u *JobRoundUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(jobround.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.ManifestVersion(); ok {
+		_spec.SetField(jobround.FieldManifestVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedManifestVersion(); ok {
+		_spec.AddField(jobround.FieldManifestVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.ManifestSealed(); ok {
+		_spec.SetField(jobround.FieldManifestSealed, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PoolIndex(); ok {
+		_spec.SetField(jobround.FieldPoolIndex, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPoolIndex(); ok {
+		_spec.AddField(jobround.FieldPoolIndex, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.RoundIndex(); ok {
 		_spec.SetField(jobround.FieldRoundIndex, field.TypeInt, value)
@@ -514,6 +595,10 @@ func (_u *JobRoundUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 				IDSpec: sqlgraph.NewFieldSpec(segment.FieldID, field.TypeInt),
 			},
 		}
+		createE := &JobRoundSegmentCreate{config: _u.config, mutation: newJobRoundSegmentMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
 	if nodes := _u.mutation.RemovedResolvedSegmentsIDs(); len(nodes) > 0 && !_u.mutation.ResolvedSegmentsCleared() {
@@ -530,6 +615,10 @@ func (_u *JobRoundUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
+		createE := &JobRoundSegmentCreate{config: _u.config, mutation: newJobRoundSegmentMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
 	if nodes := _u.mutation.ResolvedSegmentsIDs(); len(nodes) > 0 {
@@ -546,6 +635,10 @@ func (_u *JobRoundUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
+		createE := &JobRoundSegmentCreate{config: _u.config, mutation: newJobRoundSegmentMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.JobRoundSegmentsCleared() {
@@ -616,6 +709,62 @@ type JobRoundUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *JobRoundUpdateOne) SetUpdatedAt(v time.Time) *JobRoundUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetManifestVersion sets the "manifest_version" field.
+func (_u *JobRoundUpdateOne) SetManifestVersion(v int) *JobRoundUpdateOne {
+	_u.mutation.ResetManifestVersion()
+	_u.mutation.SetManifestVersion(v)
+	return _u
+}
+
+// SetNillableManifestVersion sets the "manifest_version" field if the given value is not nil.
+func (_u *JobRoundUpdateOne) SetNillableManifestVersion(v *int) *JobRoundUpdateOne {
+	if v != nil {
+		_u.SetManifestVersion(*v)
+	}
+	return _u
+}
+
+// AddManifestVersion adds value to the "manifest_version" field.
+func (_u *JobRoundUpdateOne) AddManifestVersion(v int) *JobRoundUpdateOne {
+	_u.mutation.AddManifestVersion(v)
+	return _u
+}
+
+// SetManifestSealed sets the "manifest_sealed" field.
+func (_u *JobRoundUpdateOne) SetManifestSealed(v bool) *JobRoundUpdateOne {
+	_u.mutation.SetManifestSealed(v)
+	return _u
+}
+
+// SetNillableManifestSealed sets the "manifest_sealed" field if the given value is not nil.
+func (_u *JobRoundUpdateOne) SetNillableManifestSealed(v *bool) *JobRoundUpdateOne {
+	if v != nil {
+		_u.SetManifestSealed(*v)
+	}
+	return _u
+}
+
+// SetPoolIndex sets the "pool_index" field.
+func (_u *JobRoundUpdateOne) SetPoolIndex(v int) *JobRoundUpdateOne {
+	_u.mutation.ResetPoolIndex()
+	_u.mutation.SetPoolIndex(v)
+	return _u
+}
+
+// SetNillablePoolIndex sets the "pool_index" field if the given value is not nil.
+func (_u *JobRoundUpdateOne) SetNillablePoolIndex(v *int) *JobRoundUpdateOne {
+	if v != nil {
+		_u.SetPoolIndex(*v)
+	}
+	return _u
+}
+
+// AddPoolIndex adds value to the "pool_index" field.
+func (_u *JobRoundUpdateOne) AddPoolIndex(v int) *JobRoundUpdateOne {
+	_u.mutation.AddPoolIndex(v)
 	return _u
 }
 
@@ -948,6 +1097,16 @@ func (_u *JobRoundUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *JobRoundUpdateOne) check() error {
+	if v, ok := _u.mutation.ManifestVersion(); ok {
+		if err := jobround.ManifestVersionValidator(v); err != nil {
+			return &ValidationError{Name: "manifest_version", err: fmt.Errorf(`ent: validator failed for field "JobRound.manifest_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PoolIndex(); ok {
+		if err := jobround.PoolIndexValidator(v); err != nil {
+			return &ValidationError{Name: "pool_index", err: fmt.Errorf(`ent: validator failed for field "JobRound.pool_index": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.JobID(); ok {
 		if err := jobround.JobIDValidator(v); err != nil {
 			return &ValidationError{Name: "job_id", err: fmt.Errorf(`ent: validator failed for field "JobRound.job_id": %w`, err)}
@@ -1013,6 +1172,21 @@ func (_u *JobRoundUpdateOne) sqlSave(ctx context.Context) (_node *JobRound, err 
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(jobround.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.ManifestVersion(); ok {
+		_spec.SetField(jobround.FieldManifestVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedManifestVersion(); ok {
+		_spec.AddField(jobround.FieldManifestVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.ManifestSealed(); ok {
+		_spec.SetField(jobround.FieldManifestSealed, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PoolIndex(); ok {
+		_spec.SetField(jobround.FieldPoolIndex, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPoolIndex(); ok {
+		_spec.AddField(jobround.FieldPoolIndex, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.RoundIndex(); ok {
 		_spec.SetField(jobround.FieldRoundIndex, field.TypeInt, value)
@@ -1125,6 +1299,10 @@ func (_u *JobRoundUpdateOne) sqlSave(ctx context.Context) (_node *JobRound, err 
 				IDSpec: sqlgraph.NewFieldSpec(segment.FieldID, field.TypeInt),
 			},
 		}
+		createE := &JobRoundSegmentCreate{config: _u.config, mutation: newJobRoundSegmentMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
 	if nodes := _u.mutation.RemovedResolvedSegmentsIDs(); len(nodes) > 0 && !_u.mutation.ResolvedSegmentsCleared() {
@@ -1141,6 +1319,10 @@ func (_u *JobRoundUpdateOne) sqlSave(ctx context.Context) (_node *JobRound, err 
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
+		createE := &JobRoundSegmentCreate{config: _u.config, mutation: newJobRoundSegmentMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
 	if nodes := _u.mutation.ResolvedSegmentsIDs(); len(nodes) > 0 {
@@ -1157,6 +1339,10 @@ func (_u *JobRoundUpdateOne) sqlSave(ctx context.Context) (_node *JobRound, err 
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
+		createE := &JobRoundSegmentCreate{config: _u.config, mutation: newJobRoundSegmentMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.JobRoundSegmentsCleared() {

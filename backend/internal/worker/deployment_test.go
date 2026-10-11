@@ -15,6 +15,8 @@ func TestDeploymentPipelineAdmissionConsumers(t *testing.T) {
 		"LINGUAFLOW_PIPELINE_MAX_INFLIGHT_WEIGHT_MB": "2",
 		"LINGUAFLOW_PIPELINE_MAX_INFLIGHT_RESOURCES": "3",
 		"LINGUAFLOW_PIPELINE_RSS_LIMIT_MB":           "0",
+		"LINGUAFLOW_PIPELINE_MAX_RESPONSE_MB":        "3",
+		"LINGUAFLOW_PIPELINE_CANDIDATE_WINDOW_MB":    "7",
 	}}
 	resolved, err := config.ResolveServerConfig(inputs)
 	if err != nil {
@@ -24,6 +26,9 @@ func TestDeploymentPipelineAdmissionConsumers(t *testing.T) {
 	limits, rss := PipelineRuntime(resolved.Config.Pipeline, logger)
 	if rss != nil {
 		t.Fatal("explicit RSS zero should disable the gate")
+	}
+	if limits.MaxResponseBytes != 3<<20 || limits.Candidates.Bytes != 7<<20 {
+		t.Fatalf("response/candidate deployment limits lost: %+v", limits)
 	}
 	a := newAdmission(limits.MaxInflightWeight, limits.MaxInflightResources)
 	if err := a.admit(2 << 20); err != nil {

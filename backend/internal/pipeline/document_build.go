@@ -4,6 +4,9 @@ import "github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 
 // SegmentInput 表示从 DB 加载的待翻译段落。
 type SegmentInput struct {
+	DBID           int
+	ContentVersion int64
+	TargetIsNull   bool
 	// ID 使用 segmentIndex 的字符串形式作为稳定标识。
 	// 不使用 hash.Short(sourceText)，因为 DB 主键是 segmentIndex，
 	// 且 hash 在 Source 含 protect 占位符时会变化。
@@ -40,6 +43,9 @@ func BuildDocumentFromSegments(
 	}
 	for i, seg := range segments {
 		doc.Segments[i] = Segment{
+			DBID:           seg.DBID,
+			ContentVersion: seg.ContentVersion,
+			TargetIsNull:   seg.TargetIsNull,
 			ID:             seg.ID,
 			Source:         seg.SourceText,
 			OriginalSource: seg.SourceText,

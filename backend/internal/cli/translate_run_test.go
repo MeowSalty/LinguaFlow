@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
@@ -56,6 +57,15 @@ func TestResolveCLIExecutionFreezesValuesWithoutSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resolved.Close()
+	if resolved.Spec.SchemaVersion != 3 || resolved.Spec.DefaultsVersion != 3 || resolved.Spec.RubyProtocolVersion != 2 || resolved.Spec.RubyValidatorVersion != 1 || resolved.Spec.RubyBatchProtocolVersion != 1 || resolved.Spec.RubyRetry.Concurrency != 1 {
+		t.Fatal("CLI did not freeze the new version and independent default concurrency")
+	}
+	if resolved.Spec.RubyTemplates.JSON != prompt.RubyAlignmentJSONTemplate || resolved.Spec.RubyTemplates.Text != prompt.RubyAlignmentTextTemplate || resolved.Spec.RubyTemplates.BatchJSON != prompt.RubyAlignmentBatchJSONTemplate || resolved.Spec.RubyTemplates.BatchText != prompt.RubyAlignmentBatchTextTemplate {
+		t.Fatal("CLI alignment templates differ from the frozen protocol version")
+	}
+	if got := execution.EffectiveRubyRetryBatch(resolved.Spec); got != (execution.RubyRetryBatchConfig{BatchSize: 1, BatchWaitMS: 25}) {
+		t.Fatalf("CLI batching defaults not frozen: %+v", got)
+	}
 	before, err := json.Marshal(resolved.Spec)
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +99,7 @@ func TestResolveCLIExecutionFreezesValuesWithoutSecrets(t *testing.T) {
 	cfg.TranslationProfiles["strict"].Protect.Rules[0] = "changed"
 	cfg.PromptTemplates["default"] = config.CLIConfigPromptTemplate{Content: "changed"}
 	cfg.Execution.Rounds[0].Translate.BatchSize = 999
+	cfg.Execution.RubyRetry.Concurrency = new(9)
 	after, err := json.Marshal(resolved.Spec)
 	if err != nil {
 		t.Fatal(err)

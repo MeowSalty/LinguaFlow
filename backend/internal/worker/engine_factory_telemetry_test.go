@@ -114,7 +114,7 @@ func TestEngineFactoryRestoresFrozenTemplatesOptionsAndRuby(t *testing.T) {
 	s.Rounds[0].Translate.Prompt.Content = "archived translate"
 	s.Strategy.Ruby.Enabled = true
 	s.Strategy.Ruby.PreserveKinds = []string{}
-	s.RubyTemplates = execution.RubyTemplates{JSON: "archived ruby JSON", Text: "archived ruby text"}
+	s.RubyTemplates = execution.RubyTemplates{JSON: "archived ruby JSON", Text: "archived ruby text", BatchJSON: "archived batch JSON", BatchText: "archived batch text"}
 	s.RetryReminderTemplate = "archived reminder {{.Reason}}"
 	b := s.Rounds[0].Backend
 	s.Rounds = append(s.Rounds,
@@ -122,7 +122,7 @@ func TestEngineFactoryRestoresFrozenTemplatesOptionsAndRuby(t *testing.T) {
 		service.JobRoundSnapshot{Mode: "semantic_qa", Backend: b, SemanticQA: &service.JobSemanticQARoundSnapshot{TemplateContent: "archived semantic QA", BatchSize: 3, Concurrency: 1}},
 		service.JobRoundSnapshot{Mode: "revise", Backend: b, Revise: &service.JobReviseRoundSnapshot{TemplateContent: "archived revise", BatchSize: 3, Concurrency: 1}},
 	)
-	s.RubyRetry = &service.ExecutionPlanRubyRetrySnapshot{Enabled: true, Backend: b, MaxAttempts: 2}
+	s.RubyRetry = &service.ExecutionPlanRubyRetrySnapshot{Enabled: true, Backend: b, MaxAttempts: 2, BatchSize: new(4), MaxWordsPerBatch: new(100), BatchWaitMS: new(0)}
 	resolved, err := execution.Resolve(*s)
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestEngineFactoryRestoresFrozenTemplatesOptionsAndRuby(t *testing.T) {
 				t.Fatal("retry reminder snapshot lost")
 			}
 			system, _, err = h.Renderer.Render(prompt.Data{SourceLang: "en", TargetLang: "zh"})
-			if h.RubyTemplates.JSON != "archived ruby JSON" || h.RubyTemplates.Text != "archived ruby text" || h.RubyRetryAttempts != 2 {
+			if h.RubyTemplates.JSON != "archived ruby JSON" || h.RubyTemplates.Text != "archived ruby text" || h.RubyTemplates.BatchJSON != "archived batch JSON" || h.RubyTemplates.BatchText != "archived batch text" || h.RubyRetryAttempts != 2 || h.RubyBatch != (pipeline.AlignmentBatchConfig{BatchSize: 4, MaxWordsPerBatch: 100, ProtocolVersion: 1}) {
 				t.Fatal("frozen Ruby configuration lost")
 			}
 			if h.RubyPreserveKinds == nil || len(h.RubyPreserveKinds) != 0 {
@@ -179,7 +179,7 @@ func TestEngineFactoryRestoresFrozenTemplatesOptionsAndRuby(t *testing.T) {
 			system, _, err = h.Renderer.Render(prompt.SemanticQAData{})
 		case *pipeline.ReviseHandler:
 			system, _, err = h.Renderer.Render(prompt.ReviseData{})
-			if h.RubyTemplates.JSON != "archived ruby JSON" {
+			if h.RubyTemplates.JSON != "archived ruby JSON" || h.RubyTemplates.BatchJSON != "archived batch JSON" || h.RubyTemplates.BatchText != "archived batch text" || h.RubyBatch != (pipeline.AlignmentBatchConfig{BatchSize: 4, MaxWordsPerBatch: 100, ProtocolVersion: 1}) {
 				t.Fatal("revise Ruby configuration lost")
 			}
 		}

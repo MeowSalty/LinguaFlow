@@ -15,6 +15,10 @@ func NewPolicyBackend(inner Backend, check func(context.Context) error) *PolicyB
 func (b *PolicyBackend) Name() string     { return b.inner.Name() }
 func (b *PolicyBackend) Backend() Backend { return b.inner }
 func (b *PolicyBackend) Close() error     { return b.inner.Close() }
+
+// Check lets outer joint admission retain the same policy-before-capacity
+// boundary and prefer a revocation/deletion error over a missing RPM handle.
+func (b *PolicyBackend) Check(ctx context.Context) error { return b.check(ctx) }
 func (b *PolicyBackend) Translate(ctx context.Context, req Request) (*Response, error) {
 	if err := b.check(ctx); err != nil {
 		return nil, err

@@ -68,6 +68,51 @@ JobProgress:
       nullable: true
       description: 暂不可用，省略或为 null；不暴露全实例队列人数。
 
+    stages:
+      $ref: '#/JobStageCounts'
+
+JobStageCounts:
+  type: object
+  description: 持久状态的阶段观察值，不用于请求准入或推进完成计数。只表示当前任务，不含草稿正文。
+  required: [main_requests, pending_alignment, alignment_requests, saving_requests, ready_to_commit, confirmed_work, unknown_requests, draining_requests, as_of]
+  properties:
+    main_requests:
+      type: integer
+      minimum: 0
+      description: 当前尝试中已派发、响应尚未入账的主请求数
+    pending_alignment:
+      type: integer
+      minimum: 0
+      description: 主译文已生成、等待或正在注音对齐的候选数；包含正在对齐的候选
+    alignment_requests:
+      type: integer
+      minimum: 0
+      description: 当前尝试中已派发、响应尚未入账的注音请求数
+    saving_requests:
+      type: integer
+      minimum: 0
+      description: 当前尝试中响应已入账、等待解析、可靠保存或完成确认的请求数；不以候选数代替
+    ready_to_commit:
+      type: integer
+      minimum: 0
+      description: 已准备好、等待正式确认的候选数
+    confirmed_work:
+      type: integer
+      format: int64
+      minimum: 0
+      description: 已确认工作量（段落×轮），按持久断点完成事实计数；不同于按关闭轮次总量计算的有效 progress_completed
+    unknown_requests:
+      type: integer
+      minimum: 0
+      description: 当前尝试中完成情况未知的请求数
+    draining_requests:
+      type: integer
+      minimum: 0
+      description: 暂停期间等待收尾的主请求、注音请求与保存中请求总数；暂停完成还需保存屏障确认
+    as_of:
+      type: string
+      format: date-time
+
 JobResource:
   type: object
   required: [id, resource_id, status, segment_count, completed_segments, skipped_segments, work_weight, rounds, created_at, updated_at]
@@ -173,7 +218,7 @@ Job:
       type: integer
     status:
       type: string
-      enum: [pending, running, paused, completed, failed, cancelled]
+      enum: [pending, running, pausing, paused, completed, failed, cancelled]
     trigger_type:
       type: string
       enum: [manual, file_update, glossary_change, web_edit]
@@ -230,7 +275,7 @@ JobSummary:
       type: string
     status:
       type: string
-      enum: [pending, running, paused, completed, failed, cancelled]
+      enum: [pending, running, pausing, paused, completed, failed, cancelled]
     trigger_type:
       type: string
       enum: [manual, file_update, glossary_change, web_edit]
@@ -260,7 +305,7 @@ JobSummaryListResponse:
 
 JobsSummaryResponse:
   type: object
-  required: [pending, running, paused, recent_failed, recent_failed_since, as_of]
+  required: [pending, running, pausing, paused, recent_failed, recent_failed_since, as_of]
   properties:
     pending:
       type: integer
@@ -269,6 +314,9 @@ JobsSummaryResponse:
       type: integer
       minimum: 0
     paused:
+      type: integer
+      minimum: 0
+    pausing:
       type: integer
       minimum: 0
     recent_failed:
@@ -466,6 +514,7 @@ JobEvent:
   properties:
     type:
       type: string
+      description: 事件类型；job_pausing 表示停止新派发并等待收尾，job_paused 表示安全暂停，stage_counts 携带 metadata.stages 阶段观察值。
     job_id:
       type: integer
     level:

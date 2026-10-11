@@ -7,10 +7,12 @@ import (
 	"fmt"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
-const CurrentDataVersion = 1
+const CurrentDataVersion = 2
 
 var ErrDataMigrationRequired = errors.New("database data migration required; start a compatible server version with auto_migrate enabled")
 
@@ -52,6 +54,30 @@ func MigrateData(ctx context.Context, client *ent.Client) error {
 			return err
 		} else if _, err = parseTaskRetention(row.Value); err != nil {
 			return fmt.Errorf("%w: %w", ErrSettingsUnavailable, err)
+		}
+		// Version 2 installs the unique checkpoint writer. Existing completed
+		// links remain legacy facts; no candidate or successful main response is
+		// invented for old jobs. Schema defaults initialize segment versions.
+		if marker.DataVersion < 2 {
+			after := 0
+			for {
+				ids, err := tx.Job.Query().Where(job.IDGT(after)).Order(ent.Asc(job.FieldID)).Limit(128).IDs(ctx)
+				if err != nil {
+					return err
+				}
+				for _, id := range ids {
+					if err := workstate.LockJob(ctx, tx, id); err != nil {
+						return err
+					}
+					if err := workstate.Calibrate(ctx, tx, id); err != nil {
+						return err
+					}
+					after = id
+				}
+				if len(ids) < 128 {
+					break
+				}
+			}
 		}
 		return tx.InstanceInitialization.UpdateOneID(marker.ID).SetDataVersion(CurrentDataVersion).Exec(ctx)
 	})

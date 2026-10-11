@@ -146,3 +146,12 @@ type UsageRecord func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
+
+// WorkCandidate is the predicate function for workcandidate builders.
+type WorkCandidate func(*sql.Selector)
+
+// WorkItem is the predicate function for workitem builders.
+type WorkItem func(*sql.Selector)
+
+// WorkRequest is the predicate function for workrequest builders.
+type WorkRequest func(*sql.Selector)

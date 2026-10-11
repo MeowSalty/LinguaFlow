@@ -11,7 +11,7 @@ import (
 
 func validExecutionInput() JobExecutionSnapshot {
 	p := DefaultProfile()
-	return JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", RubyTemplates: RubyTemplates{JSON: "json alignment", Text: "text alignment"},
+	return JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", RubyTemplates: RubyTemplates{JSON: "json alignment", Text: "text alignment", BatchJSON: "json batch alignment", BatchText: "text batch alignment"},
 		Strategy: StrategySnapshot{Protect: p.Protect, Postprocess: p.Postprocess, Repair: p.Repair, Context: p.Context, Ruby: p.Ruby, QA: p.QA},
 		Rounds:   []JobRoundSnapshot{{Mode: "translate", Backend: BackendSnapshot{ID: 1, Type: "openai", Credential: credential.Binding{ID: 1, Version: 2}, Options: map[string]any{"model": "test"}}, Translate: &JobTranslateRoundSnapshot{Prompt: PromptSnapshot{Content: "frozen translation"}, BatchSize: 0, MaxWordsPerBatch: 100, Concurrency: 1, FallbackShrink: 1, SegmentFilter: &SegmentFilterSnapshot{StatusFilter: "pending_only"}}}},
 	}

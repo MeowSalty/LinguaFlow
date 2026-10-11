@@ -24,9 +24,13 @@ type Job struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// RetryEpoch holds the value of the "retry_epoch" field.
+	RetryEpoch int64 `json:"retry_epoch,omitempty"`
+	// PauseRequested holds the value of the "pause_requested" field.
+	PauseRequested bool `json:"pause_requested,omitempty"`
 	// 所属项目 ID
 	ProjectID int `json:"project_id,omitempty"`
-	// pending, running, paused, completed, failed, cancelled
+	// pending, running, pausing, paused, completed, failed, cancelled
 	Status string `json:"status,omitempty"`
 	// 触发类型：manual, file_update, glossary_change, web_edit
 	TriggerType string `json:"trigger_type,omitempty"`
@@ -143,7 +147,9 @@ func (*Job) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case job.FieldExecutionConfig:
 			values[i] = new([]byte)
-		case job.FieldID, job.FieldProjectID, job.FieldExecutionPlanID, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldProgressTotal, job.FieldProgressCompleted:
+		case job.FieldPauseRequested:
+			values[i] = new(sql.NullBool)
+		case job.FieldID, job.FieldRetryEpoch, job.FieldProjectID, job.FieldExecutionPlanID, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldProgressTotal, job.FieldProgressCompleted:
 			values[i] = new(sql.NullInt64)
 		case job.FieldStatus, job.FieldTriggerType, job.FieldErrorMessage:
 			values[i] = new(sql.NullString)
@@ -183,6 +189,18 @@ func (_m *Job) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case job.FieldRetryEpoch:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field retry_epoch", values[i])
+			} else if value.Valid {
+				_m.RetryEpoch = value.Int64
+			}
+		case job.FieldPauseRequested:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field pause_requested", values[i])
+			} else if value.Valid {
+				_m.PauseRequested = value.Bool
 			}
 		case job.FieldProjectID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -352,6 +370,12 @@ func (_m *Job) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("retry_epoch=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RetryEpoch))
+	builder.WriteString(", ")
+	builder.WriteString("pause_requested=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PauseRequested))
 	builder.WriteString(", ")
 	builder.WriteString("project_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ProjectID))
