@@ -14,6 +14,9 @@ func TestSettingsFailClosedAndTyped(t *testing.T) {
 	for _, value := range []string{"", "true", "false", "TRUE", "0", "invalid"} {
 		t.Run(value, func(t *testing.T) {
 			c := testClient(t)
+			if err := initializePasswordConnection(ctx, c); err != nil {
+				t.Fatal(err)
+			}
 			if value != "" {
 				c.SystemSetting.Create().SetKey(SettingRegistrationEnabled).SetValue(value).SaveX(ctx)
 			}

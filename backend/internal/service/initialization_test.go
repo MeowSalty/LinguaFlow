@@ -108,10 +108,16 @@ func TestInitializationRollbackAtEveryWrite(t *testing.T) {
 	}{
 		{config.ModeServer, "InstanceInitialization", ent.OpCreate},
 		{config.ModeServer, "SystemSetting", ent.OpCreate},
+		{config.ModeServer, "AuthConnection", ent.OpCreate},
+		{config.ModeServer, "AuthConnectionRevision", ent.OpCreate},
+		{config.ModeServer, "AuthChannelPolicy", ent.OpCreate},
 		{config.ModeServer, "User", ent.OpCreate},
 		{config.ModeServer, "ActivityLog", ent.OpCreate},
 		{config.ModeLocal, "InstanceInitialization", ent.OpCreate},
 		{config.ModeLocal, "SystemSetting", ent.OpCreate},
+		{config.ModeLocal, "AuthConnection", ent.OpCreate},
+		{config.ModeLocal, "AuthConnectionRevision", ent.OpCreate},
+		{config.ModeLocal, "AuthChannelPolicy", ent.OpCreate},
 		{config.ModeLocal, "User", ent.OpCreate},
 		{config.ModeLocal, "InstanceInitialization", ent.OpUpdateOne},
 		{config.ModeLocal, "ActivityLog", ent.OpCreate},
@@ -368,7 +374,7 @@ func TestAdministratorMaintenancePreservesPolicyAndRevokesSessions(t *testing.T)
 	}
 	account := c.User.Query().Where(user.UsernameEQ("admin")).OnlyX(ctx)
 	auth := NewAuthService(c, AuthConfig{Secret: []byte("test-secret"), Issuer: "test", AccessTokenTTL: time.Hour, RefreshTokenTTL: time.Hour}, NewSettingsService(c))
-	session, err := auth.Login(ctx, LoginInput{Username: "admin", Password: "password-123"})
+	session, err := auth.Login(ctx, LoginInput{Identifier: "admin", Password: "password-123"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,13 +383,16 @@ func TestAdministratorMaintenancePreservesPolicyAndRevokesSessions(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if recovered.ID != account.ID || !recovered.Active || recovered.Role != SystemRoleAdmin {
+	if recovered.ID != account.ID || !recovered.Active || recovered.Role != SystemRoleAdmin || recovered.AuthVersion != account.AuthVersion+1 {
 		t.Fatal("incorrect recovery")
 	}
 	if _, err := auth.Refresh(ctx, session.RefreshToken); !errors.Is(err, ErrRefreshTokenRevoked) {
 		t.Fatalf("old session accepted: %v", err)
 	}
-	if _, err := auth.Login(ctx, LoginInput{Username: "admin", Password: "new-password"}); err != nil {
+	if _, _, err := auth.ResolveUserFromAccessToken(ctx, session.AccessToken); err == nil {
+		t.Fatal("old access token accepted after administrator recovery")
+	}
+	if _, err := auth.Login(ctx, LoginInput{Identifier: "admin", Password: "new-password"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.MaintainAdministrator(ctx, AdminCreateUserInput{Username: "second", Email: "second@test.invalid", Password: "new-password"}, false); err != nil {
@@ -403,7 +412,11 @@ func TestAdministratorMaintenanceAuditFailureRollsBackIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	account := c.User.Query().OnlyX(ctx)
-	token := c.RefreshToken.Create().SetTokenHash("maintenance-token").SetUserID(account.ID).SetExpiresAt(time.Now().Add(time.Hour)).SaveX(ctx)
+	auth := NewAuthService(c, AuthConfig{Secret: []byte("test-secret"), Issuer: "test", AccessTokenTTL: time.Hour, RefreshTokenTTL: time.Hour}, NewSettingsService(c))
+	if _, err := auth.Login(ctx, LoginInput{Identifier: account.Username, Password: "password-123"}); err != nil {
+		t.Fatal(err)
+	}
+	token := c.RefreshToken.Query().OnlyX(ctx)
 	c.User.UpdateOneID(account.ID).SetRole(SystemRoleUser).SetActive(false).ExecX(ctx)
 	failure := errors.New("audit unavailable")
 	c.ActivityLog.Use(func(ent.Mutator) ent.Mutator {
@@ -413,16 +426,116 @@ func TestAdministratorMaintenanceAuditFailureRollsBackIdentity(t *testing.T) {
 		t.Fatalf("error=%v", err)
 	}
 	unchanged := c.User.GetX(ctx, account.ID)
-	if unchanged.Role != SystemRoleUser || unchanged.Active || unchanged.PasswordHash != account.PasswordHash {
+	if unchanged.Role != SystemRoleUser || unchanged.Active || unchanged.PasswordHash != account.PasswordHash || unchanged.AuthVersion != account.AuthVersion {
 		t.Fatal("failed maintenance changed identity")
 	}
 	if c.RefreshToken.GetX(ctx, token.ID).RevokedAt != nil {
 		t.Fatal("failed maintenance revoked an existing session")
+	}
+	if c.RefreshSession.Query().OnlyX(ctx).RevokedAt != nil {
+		t.Fatal("failed maintenance revoked an existing session chain")
 	}
 	if _, err := svc.MaintainAdministrator(ctx, AdminCreateUserInput{Username: "second", Email: "second@test.invalid", Password: "new-password"}, false); !errors.Is(err, failure) {
 		t.Fatalf("error=%v", err)
 	}
 	if c.User.Query().CountX(ctx) != 1 {
 		t.Fatal("failed create left an administrator")
+	}
+}
+
+func TestInitializationNullableAccountFields(t *testing.T) {
+	for _, mode := range []string{config.ModeServer, config.ModeLocal} {
+		t.Run(mode, func(t *testing.T) {
+			ctx := context.Background()
+			client := testClient(t)
+			input := config.BootstrapInput{}
+			if mode == config.ModeServer {
+				input.Admin = &config.BootstrapAdmin{Username: " ADMIN ", Password: "password-123"}
+			}
+			if _, err := NewInitializationService(client).Initialize(ctx, mode, input); err != nil {
+				t.Fatal(err)
+			}
+			account := client.User.Query().OnlyX(ctx)
+			if account.Email != "" || client.User.Query().Where(user.EmailIsNil()).CountX(ctx) != 1 {
+				t.Fatal("missing bootstrap email was not stored as NULL")
+			}
+			if mode == config.ModeLocal {
+				if account.Username != "local" || account.PasswordHash != "" || client.User.Query().Where(user.PasswordHashIsNil()).CountX(ctx) != 1 {
+					t.Fatal("local initialization fabricated credentials")
+				}
+			} else if account.Username != "admin" || account.PasswordHash == "" {
+				t.Fatal("server initialization failed to canonicalize administrator or hash password")
+			}
+		})
+	}
+}
+
+func TestInitializationRejectsInvalidAdministratorNames(t *testing.T) {
+	for _, name := range []string{"local", "system", "support", "user--name", "admin\t", "Ａdmin"} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			client := testClient(t)
+			svc := NewInitializationService(client)
+			if _, err := svc.Initialize(ctx, config.ModeServer, bootstrapForTest(name, false)); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("invalid name error = %v", err)
+			}
+			if empty, err := svc.IsEmpty(ctx); err != nil || !empty {
+				t.Fatalf("invalid bootstrap claimed database: empty=%v, error=%v", empty, err)
+			}
+		})
+	}
+}
+
+func TestInitializationRejectsDamagedAuthPolicyWithoutRepair(t *testing.T) {
+	for _, statement := range []string{
+		"DELETE FROM auth_connection_revisions",
+		"DELETE FROM auth_channel_policies",
+		"UPDATE auth_connections SET published_revision = NULL",
+		"UPDATE auth_connection_revisions SET email_login_enabled = true",
+	} {
+		t.Run(statement, func(t *testing.T) {
+			ctx := context.Background()
+			client := testClient(t)
+			svc := NewInitializationService(client)
+			if _, err := svc.Initialize(ctx, config.ModeServer, bootstrapForTest("admin", false)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := client.ExecContext(ctx, statement); err != nil {
+				t.Fatal(err)
+			}
+			for range 2 {
+				if _, err := svc.Initialize(ctx, config.ModeServer, bootstrapForTest("replacement", true)); !errors.Is(err, ErrSettingsUnavailable) {
+					t.Fatalf("damaged policy error = %v", err)
+				}
+			}
+			if client.User.Query().OnlyX(ctx).Username != "admin" || client.ActivityLog.Query().CountX(ctx) != 1 {
+				t.Fatal("damaged policy caused initialization writes")
+			}
+		})
+	}
+}
+
+func TestAdministratorMaintenanceUsernamePurposesAndOptionalEmail(t *testing.T) {
+	ctx := context.Background()
+	client := testClient(t)
+	svc := NewInitializationService(client)
+	if _, err := svc.Initialize(ctx, config.ModeServer, bootstrapForTest("admin", false)); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{" ROOT ", "Administrator", "ordinary-admin"} {
+		account, err := svc.MaintainAdministrator(ctx, AdminCreateUserInput{Username: name, Password: "password-123"}, false)
+		if err != nil || account == nil || account.Email != "" {
+			t.Fatalf("create administrator %q: account=%v, error=%v", name, account, err)
+		}
+	}
+	for _, name := range []string{"local", "system", "auth", "bad--name"} {
+		if _, err := svc.MaintainAdministrator(ctx, AdminCreateUserInput{Username: name, Password: "password-123"}, false); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("create reserved or invalid name %q: %v", name, err)
+		}
+	}
+	existing := client.User.Create().SetUsername("system").SetEmail("original@example.com").SaveX(ctx)
+	recovered, err := svc.MaintainAdministrator(ctx, AdminCreateUserInput{Username: " SYSTEM ", Password: "new-password", Email: "ignored"}, true)
+	if err != nil || recovered.ID != existing.ID || recovered.Email != existing.Email {
+		t.Fatalf("recover existing reserved account changed email or failed: %v", err)
 	}
 }

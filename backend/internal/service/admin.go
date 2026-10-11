@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 var (
@@ -118,142 +120,180 @@ func (s *AdminService) GetUser(ctx context.Context, userID int) (*ent.User, erro
 }
 
 func (s *AdminService) CreateUser(ctx context.Context, input AdminCreateUserInput) (*ent.User, error) {
-	username := normalizeIdentity(input.Username)
-	email := normalizeIdentity(input.Email)
-	if username == "" || email == "" || len(input.Password) < 8 {
-		return nil, ErrInvalidInput
-	}
-	if !strings.Contains(email, "@") {
-		return nil, ErrInvalidInput
-	}
-
 	role := SystemRoleUser
-	if input.Role == SystemRoleAdmin {
-		role = SystemRoleAdmin
+	if input.Role != "" {
+		role = input.Role
 	}
-
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if role != SystemRoleUser && role != SystemRoleAdmin {
+		return nil, ErrInvalidInput
+	}
+	username, err := accountidentity.NormalizeUsername(input.Username)
+	if err != nil {
+		return nil, invalidAccountField("username", err)
+	}
+	purpose := accountidentity.Public
+	if role == SystemRoleAdmin {
+		purpose = accountidentity.Administrator
+	}
+	if err := accountidentity.ValidateAllocation(username, purpose); err != nil {
+		return nil, invalidAccountField("username", err)
+	}
+	email, err := accountidentity.NormalizeEmail(input.Email)
+	if err != nil {
+		return nil, invalidAccountField("email", err)
+	}
+	if err := validateNewPassword(input.Password); err != nil {
+		return nil, err
+	}
+	passwordHash, err := hashPassword(input.Password)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
-
-	created, err := s.client.User.Create().
-		SetUsername(username).
-		SetPasswordHash(string(passwordHash)).
-		SetEmail(email).
-		SetDisplayName(strings.TrimSpace(input.DisplayName)).
-		SetRole(role).
-		SetActive(true).
-		Save(ctx)
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			return nil, ErrUserExists
-		}
-		return nil, err
+	create := s.client.User.Create().SetUsername(username).SetPasswordHash(passwordHash).SetDisplayName(strings.TrimSpace(input.DisplayName)).SetRole(role).SetActive(true)
+	if email != "" {
+		create.SetEmail(email)
 	}
-	return created, nil
+	created, err := create.Save(ctx)
+	if ent.IsConstraintError(err) {
+		return nil, ErrUserExists
+	}
+	return created, err
+}
+
+// Serialize changes to the active administrator set before locking any users.
+func lockAdministratorState(ctx context.Context, tx *ent.Client, actorID, targetID int) error {
+	r, err := tx.ExecContext(ctx, "UPDATE instance_initializations SET version = version WHERE id = 1")
+	if err != nil {
+		return err
+	}
+	n, err := r.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrInstanceUninitialized
+	}
+	ids := []int{actorID, targetID}
+	sort.Ints(ids)
+	for i, id := range ids {
+		if i > 0 && id == ids[i-1] {
+			continue
+		}
+		if err := lockAuthUser(ctx, tx, id); err != nil {
+			return err
+		}
+	}
+	actor, err := tx.User.Get(ctx, actorID)
+	if err != nil {
+		return err
+	}
+	if !actor.Active || actor.Role != SystemRoleAdmin {
+		return ErrForbidden
+	}
+	return nil
 }
 
 func (s *AdminService) UpdateUser(ctx context.Context, actorUserID, targetUserID int, input AdminUpdateUserInput) (*ent.User, error) {
 	if actorUserID == targetUserID && input.Role != nil {
 		return nil, ErrAdminSelfDemotion
 	}
-
-	target, err := s.client.User.Get(ctx, targetUserID)
-	if err != nil {
-		return nil, err
+	if input.Active != nil && !*input.Active && actorUserID == targetUserID {
+		return nil, ErrAdminSelfDeletion
 	}
-
-	if input.Role != nil {
-		newRole := strings.ToLower(strings.TrimSpace(*input.Role))
-		if newRole != SystemRoleUser && newRole != SystemRoleAdmin {
-			return nil, ErrInvalidInput
-		}
-		if target.Role == SystemRoleAdmin && newRole == SystemRoleUser {
-			count, err := s.client.User.Query().Where(user.RoleEQ(SystemRoleAdmin), user.ActiveEQ(true)).Count(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if count <= 1 {
-				return nil, ErrLastAdmin
-			}
-		}
-	}
-
-	update := s.client.User.UpdateOneID(targetUserID)
-	if input.DisplayName != nil {
-		update.SetDisplayName(strings.TrimSpace(*input.DisplayName))
-	}
+	var email string
 	if input.Email != nil {
-		email := normalizeIdentity(*input.Email)
-		if email != "" && !strings.Contains(email, "@") {
+		var err error
+		email, err = accountidentity.NormalizeEmail(*input.Email)
+		if err != nil {
 			return nil, ErrInvalidInput
 		}
-		if email != "" {
-			update.SetEmail(email)
+	}
+	if input.Role != nil && *input.Role != SystemRoleUser && *input.Role != SystemRoleAdmin {
+		return nil, ErrInvalidInput
+	}
+	var result *ent.User
+	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		if err := lockAdministratorState(ctx, tx, actorUserID, targetUserID); err != nil {
+			return err
 		}
-	}
-	if input.Role != nil {
-		update.SetRole(strings.ToLower(strings.TrimSpace(*input.Role)))
-	}
-	if input.Active != nil {
-		if !*input.Active && actorUserID == targetUserID {
-			return nil, ErrAdminSelfDeletion
-		}
-		if !*input.Active && target.Role == SystemRoleAdmin {
-			count, err := s.client.User.Query().Where(user.RoleEQ(SystemRoleAdmin), user.ActiveEQ(true)).Count(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if count <= 1 {
-				return nil, ErrLastAdmin
-			}
-		}
-		update.SetActive(*input.Active)
-	}
-
-	updated, err := update.Save(ctx)
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			return nil, ErrUserExists
-		}
-		return nil, err
-	}
-	return updated, nil
-}
-
-func (s *AdminService) DisableUser(ctx context.Context, actorUserID, targetUserID int) error {
-	if actorUserID == targetUserID {
-		return ErrAdminSelfDeletion
-	}
-
-	target, err := s.client.User.Get(ctx, targetUserID)
-	if err != nil {
-		return err
-	}
-
-	if target.Role == SystemRoleAdmin {
-		count, err := s.client.User.Query().Where(user.RoleEQ(SystemRoleAdmin), user.ActiveEQ(true)).Count(ctx)
+		target, err := tx.User.Get(ctx, targetUserID)
 		if err != nil {
 			return err
 		}
-		if count <= 1 {
-			return ErrLastAdmin
+		if input.Email != nil && (target.EmailVerifiedAt != nil || target.VerifiedEmailKey != "" || target.EmailVerificationSource != "") {
+			return ErrAccountConflict
 		}
+		losesAdmin := target.Active && target.Role == SystemRoleAdmin && ((input.Role != nil && *input.Role != SystemRoleAdmin) || (input.Active != nil && !*input.Active))
+		if losesAdmin {
+			count, err := tx.User.Query().Where(user.RoleEQ(SystemRoleAdmin), user.ActiveEQ(true)).Count(ctx)
+			if err != nil {
+				return err
+			}
+			if count <= 1 {
+				return ErrLastAdmin
+			}
+		}
+		update := tx.User.UpdateOneID(targetUserID)
+		if input.DisplayName != nil {
+			update.SetDisplayName(strings.TrimSpace(*input.DisplayName))
+		}
+		if input.Email != nil {
+			if email == "" {
+				update.ClearEmail()
+			} else {
+				update.SetEmail(email)
+			}
+		}
+		if input.Role != nil {
+			update.SetRole(*input.Role)
+		}
+		if input.Active != nil {
+			if !*input.Active && target.Active {
+				if err := revokeUserSessions(ctx, tx, targetUserID, timeutil.NowUTC()); err != nil {
+					return err
+				}
+			}
+			update.SetActive(*input.Active)
+		}
+		result, err = update.Save(ctx)
+		if err != nil {
+			return err
+		}
+		return recordAuditEvent(ctx, tx, AuditEvent{ActorUserID: actorUserID, Action: "admin.account.updated", ResourceType: "user", ResourceID: targetUserID,
+			Metadata: map[string]any{"auth_version": result.AuthVersion, "active": result.Active}})
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	return s.client.User.UpdateOneID(targetUserID).SetActive(false).Exec(ctx)
+	return result.Unwrap(), nil
 }
 
-func (s *AdminService) ResetPassword(ctx context.Context, userID int, newPassword string) error {
-	if len(newPassword) < 8 {
-		return ErrInvalidInput
+func (s *AdminService) DisableUser(ctx context.Context, actorUserID, targetUserID int) error {
+	active := false
+	_, err := s.UpdateUser(ctx, actorUserID, targetUserID, AdminUpdateUserInput{Active: &active})
+	return err
+}
+
+func (s *AdminService) ResetPassword(ctx context.Context, actorUserID, userID int, newPassword string) error {
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
 	}
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	passwordHash, err := hashPassword(newPassword)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
-	return s.client.User.UpdateOneID(userID).SetPasswordHash(string(passwordHash)).Exec(ctx)
+	return withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		if err := lockAdministratorState(ctx, tx, actorUserID, userID); err != nil {
+			return err
+		}
+		if err := revokeUserSessions(ctx, tx, userID, timeutil.NowUTC()); err != nil {
+			return err
+		}
+		if err := tx.User.UpdateOneID(userID).SetPasswordHash(passwordHash).Exec(ctx); err != nil {
+			return err
+		}
+		return recordAuditEvent(ctx, tx, AuditEvent{ActorUserID: actorUserID, Action: "admin.account.password_reset", ResourceType: "user", ResourceID: userID})
+	})
 }
 
 func (s *AdminService) GetSystemStats(ctx context.Context) (*SystemStats, error) {

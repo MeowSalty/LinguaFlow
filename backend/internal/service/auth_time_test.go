@@ -21,11 +21,14 @@ func TestSessionExpiryMatchesCredentials(t *testing.T) {
 func assertSessionExpiryMatchesCredentials(t *testing.T, client *ent.Client, account *ent.User) {
 	t.Helper()
 	ctx := context.Background()
+	if err := initializePasswordConnection(ctx, client); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Date(2026, 9, 29, 17, 45, 32, 123456789, time.FixedZone("east", 8*60*60))
 	cfg := AuthConfig{Secret: []byte("expiry-test-key"), Issuer: "expiry-test", AccessTokenTTL: 17*time.Minute + 234*time.Nanosecond, RefreshTokenTTL: 30*24*time.Hour + 345*time.Nanosecond}
 	svc := NewAuthService(client, cfg, nil)
 	svc.now = func() time.Time { return now }
-	session, err := svc.issueSession(ctx, account, nil)
+	session, err := svc.issueSession(ctx, account)
 	if err != nil {
 		t.Fatal(err)
 	}

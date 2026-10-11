@@ -73,8 +73,21 @@ func organizationTransactionAttempt(ctx context.Context, client *ent.Client, mut
 		}
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		// database/sql marks the transaction done even when Commit fails. Its
+		// Rollback cannot confirm whether the driver's cleanup succeeded, so a
+		// conflict code at this boundary is insufficient evidence for replay.
+		return &organizationCommitError{cause: err}
+	}
+	return nil
 }
+
+type organizationCommitError struct{ cause error }
+
+func (e *organizationCommitError) Error() string {
+	return "organization transaction commit failed: " + e.cause.Error()
+}
+func (e *organizationCommitError) Unwrap() error { return e.cause }
 
 type organizationRollbackError struct {
 	cause    error
@@ -86,6 +99,10 @@ func (e *organizationRollbackError) Error() string {
 }
 
 func isOrganizationTransactionConflict(err error) bool {
+	var commitErr *organizationCommitError
+	if errors.As(err, &commitErr) {
+		return false
+	}
 	// Do not replay network errors or ambiguous commit outcomes. These codes
 	// specifically identify transactions that did not successfully commit.
 	var pgErr *pgconn.PgError

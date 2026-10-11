@@ -256,6 +256,39 @@ func TestOrganizationTransactionRetriesAreBounded(t *testing.T) {
 	}
 }
 
+func TestOrganizationTransactionDoesNotReplayCommitErrors(t *testing.T) {
+	ctx := context.Background()
+	f := newOrganizationFixture(t)
+	f.client.Organization.Use(func(next ent.Mutator) ent.Mutator {
+		return ent.MutateFunc(func(ctx context.Context, mutation ent.Mutation) (ent.Value, error) {
+			tx, err := mutation.(*ent.OrganizationMutation).Tx()
+			if err != nil {
+				return nil, err
+			}
+			tx.OnCommit(func(next ent.Committer) ent.Committer {
+				return ent.CommitFunc(func(ctx context.Context, tx *ent.Tx) error {
+					if err := next.Commit(ctx, tx); err != nil {
+						return err
+					}
+					// Even a normally retryable code must not replay an operation
+					// whose commit acknowledgement cannot establish rollback.
+					return &pgconn.PgError{Code: "40001"}
+				})
+			})
+			return next.Mutate(ctx, mutation)
+		})
+	})
+	attempts := 0
+	err := withOrganizationMutation(ctx, f.client, f.org.ID, func(*ent.Client) error {
+		attempts++
+		return nil
+	})
+	var commitErr *organizationCommitError
+	if !errors.As(err, &commitErr) || attempts != 1 || isOrganizationTransactionConflict(err) {
+		t.Fatalf("uncertain commit replayed: attempts=%d err=%v", attempts, err)
+	}
+}
+
 func TestOrganizationCancelledRollbackKeepsUncertainty(t *testing.T) {
 	f := newOrganizationFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())

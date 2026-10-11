@@ -23,6 +23,8 @@ func TestUpdateMePartialProfile(t *testing.T) {
 		{name: "clear display name", input: UpdateProfileInput{DisplayName: profileTestString("")}, email: "profile@test.com"},
 		{name: "whitespace display name", input: UpdateProfileInput{DisplayName: profileTestString(" \t\u2003")}, email: "profile@test.com"},
 		{name: "email only", input: UpdateProfileInput{Email: profileTestString(" \tNew.Address+Tag@Example.COM\u2003")}, displayName: "Original", email: "new.address+tag@example.com"},
+		{name: "clear email", input: UpdateProfileInput{Email: profileTestString("")}, displayName: "Original"},
+		{name: "whitespace email", input: UpdateProfileInput{Email: profileTestString(" \t\u2003")}, displayName: "Original"},
 		{name: "both fields", input: UpdateProfileInput{DisplayName: profileTestString(" Updated "), Email: profileTestString(" Updated@Example.COM ")}, displayName: "Updated", email: "updated@example.com"},
 	}
 	for _, tt := range tests {
@@ -61,7 +63,7 @@ func TestUpdateMeRejectsInvalidEmailWithoutPartialWrite(t *testing.T) {
 	original := createProfileTestUser(t, client)
 	svc := NewUserService(client, nil)
 	tests := []string{
-		"", " \t\u2003", "@", "missing-at", "user@", "@example.com",
+		"@", "missing-at", "user@", "@example.com",
 		"user name@example.com", "user\tname@example.com", "user\u00a0name@example.com",
 		"Name <user@example.com>", "<user@example.com>", "user@example.com (Name)",
 		"one@example.com,two@example.com", "user@example.com\nother@example.com",
@@ -80,21 +82,47 @@ func TestUpdateMeRejectsInvalidEmailWithoutPartialWrite(t *testing.T) {
 	}
 }
 
-func TestUpdateMeEmailConflictIsAtomic(t *testing.T) {
+func TestUpdateMeAllowsRepeatedUnverifiedEmail(t *testing.T) {
 	ctx := context.Background()
 	client := testClient(t)
 	original := createProfileTestUser(t, client)
 	other := createTestUser(t, client, "other")
 	svc := NewUserService(client, nil)
-	_, err := svc.UpdateMe(ctx, original.ID, UpdateProfileInput{
-		DisplayName: profileTestString("Must not be stored"),
+	updated, err := svc.UpdateMe(ctx, original.ID, UpdateProfileInput{
+		DisplayName: profileTestString("Updated"),
 		Email:       profileTestString("  OTHER@Test.COM  "),
 	})
-	if !errors.Is(err, ErrUserExists) {
-		t.Fatalf("error = %v, want ErrUserExists", err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	assertProfileUnchanged(t, client, original)
+	if updated.Email != other.Email || updated.DisplayName != "Updated" {
+		t.Fatal("unverified email update was not stored")
+	}
 	assertProfileUnchanged(t, client, other)
+}
+
+func TestUpdateMeVerifiedEmailConflictIsAtomic(t *testing.T) {
+	for _, replacement := range []string{"", "new@example.com", "profile@test.com"} {
+		t.Run(replacement, func(t *testing.T) {
+			ctx := context.Background()
+			client := testClient(t)
+			original := createProfileTestUser(t, client)
+			original = client.User.UpdateOneID(original.ID).SetEmailVerifiedAt(time.Now()).
+				SetEmailVerificationSource("provider").SetVerifiedEmailKey(original.Email).SaveX(ctx)
+			svc := NewUserService(client, nil)
+			_, err := svc.UpdateMe(ctx, original.ID, UpdateProfileInput{
+				DisplayName: profileTestString("Must not be stored"),
+				Email:       profileTestString(replacement),
+			})
+			if !errors.Is(err, ErrAccountConflict) {
+				t.Fatalf("error = %v, want ErrAccountConflict", err)
+			}
+			assertProfileUnchanged(t, client, original)
+			if _, err := svc.UpdateMe(ctx, original.ID, UpdateProfileInput{DisplayName: profileTestString("Allowed")}); err != nil {
+				t.Fatalf("display-name-only update: %v", err)
+			}
+		})
+	}
 }
 
 func createProfileTestUser(t *testing.T, client *ent.Client) *ent.User {

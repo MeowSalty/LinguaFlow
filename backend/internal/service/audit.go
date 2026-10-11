@@ -182,6 +182,8 @@ func SanitizeActivityMetadata(action string, metadata map[string]any) map[string
 	out := map[string]any{}
 	var keys []string
 	switch {
+	case action == "account.password.changed", action == "admin.account.updated", action == "admin.account.password_reset":
+		keys = []string{"auth_version", "connection_id", "active"}
 	case action == "job.history_deleted", action == "glossary.sync_task_history_deleted":
 		keys = []string{"task_kind", "task_id", "project_id", "previous_status", "source", "scan_id", "policy_revision"}
 	case action == "admin.task_retention.update":
