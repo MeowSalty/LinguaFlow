@@ -14,6 +14,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	entbackend "github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	entschema "github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 )
@@ -194,7 +195,7 @@ func TestPostgresIntegration(t *testing.T) {
 		t.Fatalf("release migration lock: %v", err)
 	}
 
-	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	suffix := fmt.Sprintf("%x", time.Now().UnixNano())
 	cleanups := make([]func(), 0, 12)
 	defer func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
@@ -204,7 +205,7 @@ func TestPostgresIntegration(t *testing.T) {
 
 	newUser := func(label string) *ent.User {
 		u, err := client.User.Create().
-			SetUsername("postgres-" + label + "-" + suffix).
+			SetUsername("pg-" + label + "-" + suffix).
 			SetPasswordHash("integration-test-hash").
 			SetEmail("postgres-" + label + "-" + suffix + "@example.invalid").
 			Save(ctx)
@@ -237,9 +238,32 @@ func TestPostgresIntegration(t *testing.T) {
 		t.Fatal("time mixin fields were not populated")
 	}
 
+	connection, err := client.AuthConnection.Create().
+		SetID("pg-" + suffix).
+		SetKind(authconnection.KindOidc).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create authentication connection: %v", err)
+	}
+	cleanups = append(cleanups, func() { _ = client.AuthConnection.DeleteOneID(connection.ID).Exec(context.Background()) })
+	expiresAt := time.Now().Add(time.Hour).UTC()
+	session, err := client.RefreshSession.Create().
+		SetUser(userOne).
+		SetAuthVersion(userOne.AuthVersion).
+		SetConnection(connection).
+		SetConnectionGeneration(connection.AuthGeneration).
+		SetLoginPolicyRevision(1).
+		SetExpiresAt(expiresAt).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create refresh session: %v", err)
+	}
+	cleanups = append(cleanups, func() { _ = client.RefreshSession.DeleteOneID(session.ID).Exec(context.Background()) })
 	token, err := client.RefreshToken.Create().
 		SetTokenHash("postgres-token-" + suffix).
-		SetExpiresAt(time.Now().Add(time.Hour).UTC()).
+		SetSession(session).
+		SetGeneration(session.Generation).
+		SetExpiresAt(expiresAt).
 		SetUser(userOne).
 		Save(ctx)
 	if err != nil {
