@@ -8,7 +8,7 @@ export const ACTIVE_POLL_INTERVALS = {
 } as const
 
 /**
- * 按最高活跃状态解析轮询间隔：running > pending > paused，
+ * 按最高活跃状态解析轮询间隔：running/pausing > pending > paused，
  * 无活跃任务返回 null（停止轮询）。paused 慢速轮询保证
  * "在其他会话被恢复"能最终同步回本端。
  */
@@ -17,7 +17,7 @@ export function resolveAdaptiveInterval(
   intervals: { running: number; pending: number; paused: number } = ACTIVE_POLL_INTERVALS,
 ): number | null {
   const set = new Set(statuses)
-  if (set.has('running')) return intervals.running
+  if (set.has('running') || set.has('pausing')) return intervals.running
   if (set.has('pending')) return intervals.pending
   if (set.has('paused')) return intervals.paused
   return null

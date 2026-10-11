@@ -10,6 +10,7 @@ const { t } = useI18n()
 const keys = [
   'running',
   'pending',
+  'pausing',
   'paused',
   'waiting_retry',
   'needs_action',
@@ -18,11 +19,23 @@ const keys = [
 </script>
 <template>
   <div class="space-y-2">
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-      <div v-for="key in keys" :key="key" class="lf-panel p-4">
+    <div
+      class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7"
+      data-testid="operation-counts"
+    >
+      <div
+        v-for="key in keys"
+        :key="key"
+        class="lf-panel p-4"
+        :data-testid="`operation-count-${key}`"
+      >
         <div class="text-xs text-lf-text-muted">{{ t(`operations.${key}`) }}</div>
         <NSkeleton v-if="props.loading && !props.summary" text class="mt-3" :width="48" />
-        <div v-else class="mt-2 text-2xl font-semibold tabular-nums text-lf-text-strong">
+        <div
+          v-else
+          class="mt-2 text-2xl font-semibold tabular-nums text-lf-text-strong"
+          data-count-value
+        >
           {{ props.summary?.total[key] ?? '—' }}
         </div>
       </div>

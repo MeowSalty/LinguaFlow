@@ -51,7 +51,7 @@ watch(
 )
 
 const stateLabel = (state: RoundDisplayState): string =>
-  state === 'paused' || state === 'stopped' || state === 'not_run'
+  state === 'pausing' || state === 'paused' || state === 'stopped' || state === 'not_run'
     ? t(`workspace.job.detail.roundState.${state}`)
     : t(`workspace.job.round.status.${state}`)
 
@@ -69,10 +69,13 @@ const resourceStatus = (resource: Resource) => {
       return { label: stateLabel('not_run'), type: 'default' as const }
     }
   }
-  // A resource can retain running after its parent has paused or stopped.
+  // A resource can retain running while its parent drains, pauses or stops.
   if (resource.status === 'running' && props.job.status !== 'running') {
     const state = getRoundDisplayState(props.job.status, resource.status, 'running')
-    return { label: stateLabel(state), type: 'default' as const }
+    return {
+      label: stateLabel(state),
+      type: state === 'pausing' ? ('warning' as const) : ('default' as const),
+    }
   }
   return {
     label: getJobStatusLabel(resource.status),
@@ -129,11 +132,13 @@ const stageSummary = (resource: Resource) => {
         : roundState
   const stage = getStageLabel(round.mode)
   const headline =
-    state === 'paused'
-      ? t('workspace.job.detail.pausedAt', { stage })
-      : state === 'stopped'
-        ? t('workspace.job.detail.stoppedAt', { stage })
-        : stage
+    state === 'pausing'
+      ? t('workspace.job.detail.pausingAt', { stage })
+      : state === 'paused'
+        ? t('workspace.job.detail.pausedAt', { stage })
+        : state === 'stopped'
+          ? t('workspace.job.detail.stoppedAt', { stage })
+          : stage
   const details = [
     roundState === 'pending' || roundState === 'not_run'
       ? stateLabel(roundState)

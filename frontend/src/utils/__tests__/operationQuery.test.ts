@@ -41,6 +41,7 @@ describe('operations URLs and identifiers', () => {
   })
   it.each([
     { state: 'active', status: 'running' },
+    { state: 'active', status: 'pausing' },
     { trigger_type: 'manual' },
     { task_type: 'glossary_sync', trigger_type: 'manual' },
     { task_type: 'glossary_sync', task_id: '1' },
@@ -55,6 +56,23 @@ describe('operations URLs and identifiers', () => {
     { updated_from: 'not-a-date' },
   ])('rejects incompatible or ambiguous URL parameters %o', (query) => {
     expect(() => parseOperationQuery(query)).toThrow()
+  })
+  it('accepts a pausing deep link without a state filter and excludes it from summary dimensions', () => {
+    const result = parseOperationQuery({
+      task_type: 'translation',
+      project_id: '7',
+      task_id: '42',
+      status: 'pausing',
+      trigger_type: 'manual',
+    })
+    expect(result.locator).toEqual({ task_type: 'translation', project_id: 7, task_id: '42' })
+    expect(result.filters.status).toBe('pausing')
+    expect(result.filters.state).toBeUndefined()
+    expect(summaryQuery(result.filters)).toEqual({
+      task_type: 'translation',
+      project_id: 7,
+      trigger_type: 'manual',
+    })
   })
   it('retains original submillisecond timestamps and compares at full precision', () => {
     const updated_from = '2026-09-30T00:00:00.123456788Z'

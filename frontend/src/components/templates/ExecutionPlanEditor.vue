@@ -9,8 +9,10 @@ import {
   createExecutionPlanRound,
   createRoundCodeSelection,
   createRoundModeSelection,
+  mergeRubyRetryConfig,
   mergeTranslateRoundConfig,
   roundCodes,
+  sameRubyRetryConfig,
   setRoundCodes,
   validateRoundCodes,
 } from '@/utils/execution-plan-config'
@@ -25,6 +27,7 @@ import {
 } from '@/composables/useQualityIssues'
 
 import ConfigSectionPanel from './ConfigSectionPanel.vue'
+import RubyRetrySettings from './RubyRetrySettings.vue'
 
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type TranslateRoundConfig = NonNullable<ExecutionRoundConfig['translate']>
@@ -93,12 +96,6 @@ const DEFAULT_CORRECT: CorrectRoundConfig = {
     name,
     enabled: name === 'punctuation_missing_wrap',
   })),
-}
-
-const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
-  enabled: false,
-  backend_id: null,
-  max_attempts: 1,
 }
 
 // ─── 工具函数 ────────────────────────────────────────────────
@@ -218,15 +215,6 @@ function setNoBatch(
   }
 }
 
-function mergeRubyRetry(source?: Partial<ExecutionPlanFormRubyRetry>): ExecutionPlanFormRubyRetry {
-  if (!source) return deepClone(DEFAULT_RUBY_RETRY)
-  return {
-    enabled: source.enabled ?? DEFAULT_RUBY_RETRY.enabled,
-    backend_id: source.backend_id ?? DEFAULT_RUBY_RETRY.backend_id,
-    max_attempts: source.max_attempts ?? DEFAULT_RUBY_RETRY.max_attempts,
-  }
-}
-
 // ─── Props & Emits ──────────────────────────────────────────
 
 const props = withDefaults(
@@ -251,7 +239,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const roundsModel = ref<RoundModel[]>(props.rounds.map((r) => mergeRound(r)))
-const rubyRetryModel = ref<ExecutionPlanFormRubyRetry>(mergeRubyRetry(props.rubyRetry))
+const rubyRetryModel = ref<ExecutionPlanFormRubyRetry>(mergeRubyRetryConfig(props.rubyRetry))
 
 const roundKeys = new WeakMap<RoundModel, number>()
 let nextRoundKey = 0
@@ -285,7 +273,7 @@ const reconcileRounds = (incoming: RoundModel[]): RoundModel[] => {
 }
 
 let lastRoundsJson = JSON.stringify(props.rounds ?? [])
-let lastRubyRetryJson = JSON.stringify(props.rubyRetry ?? {})
+let lastRubyRetry = deepClone(props.rubyRetry)
 
 watch(
   () => props.rounds,
@@ -311,9 +299,8 @@ watch(
 watch(
   () => props.rubyRetry,
   (newVal) => {
-    const json = JSON.stringify(newVal ?? {})
-    if (json === lastRubyRetryJson) return
-    rubyRetryModel.value = mergeRubyRetry(newVal)
+    if (sameRubyRetryConfig(newVal, lastRubyRetry)) return
+    rubyRetryModel.value = mergeRubyRetryConfig(newVal)
   },
   { deep: true },
 )
@@ -321,9 +308,8 @@ watch(
 watch(
   rubyRetryModel,
   (newVal) => {
-    const json = JSON.stringify(newVal)
-    if (json === lastRubyRetryJson) return
-    lastRubyRetryJson = json
+    if (sameRubyRetryConfig(newVal, lastRubyRetry)) return
+    lastRubyRetry = deepClone(newVal)
     emit('update:rubyRetry', deepClone(newVal))
   },
   { deep: true },
@@ -486,53 +472,7 @@ const emitUpdate = (): void => {
 
 <template>
   <div class="flex flex-col gap-4">
-    <!-- Ruby Retry 注音对齐重试配置 -->
-    <ConfigSectionPanel
-      :title="t('executionPlanEditor.rubyRetry.title')"
-      :description="t('executionPlanEditor.rubyRetry.description')"
-      :enabled="rubyRetryModel.enabled"
-    >
-      <template #actions>
-        <NSwitch
-          v-model:value="rubyRetryModel.enabled"
-          size="small"
-          :disabled="disabled"
-          :aria-label="t('executionPlanEditor.rubyRetry.enabled')"
-        />
-      </template>
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.rubyRetry.backend') }}
-          </div>
-          <NSelect
-            v-model:value="rubyRetryModel.backend_id"
-            :options="backends"
-            size="small"
-            :disabled="disabled"
-            clearable
-            :placeholder="t('executionPlanEditor.rubyRetry.backendPlaceholder')"
-            class="w-full"
-          />
-        </div>
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.rubyRetry.maxAttempts') }}
-          </div>
-          <NInputNumber
-            v-model:value="rubyRetryModel.max_attempts"
-            :min="1"
-            :max="10"
-            size="small"
-            :disabled="disabled"
-            class="w-full"
-          />
-          <div class="mt-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.rubyRetry.maxAttemptsHint') }}
-          </div>
-        </div>
-      </div>
-    </ConfigSectionPanel>
+    <RubyRetrySettings v-model="rubyRetryModel" :backends="backends" :disabled="disabled" />
 
     <!-- 轮次列表 -->
     <ConfigSectionPanel

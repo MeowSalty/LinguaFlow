@@ -4,8 +4,19 @@ type Job = ApiSchemas['Job']
 type Resource = ApiSchemas['JobResource']
 type Round = ApiSchemas['JobResourceRound']
 
-export type RoundDisplayState = Round['status'] | 'paused' | 'stopped' | 'not_run'
+export type RoundDisplayState = Round['status'] | 'pausing' | 'paused' | 'stopped' | 'not_run'
 export type JobEventFilter = 'all' | 'anomalies'
+export type JobAction = 'pause' | 'resume' | 'cancel' | 'retry'
+
+const JOB_ACTION_STATUSES: Record<JobAction, readonly Job['status'][]> = {
+  pause: ['pending', 'running'],
+  resume: ['paused'],
+  cancel: ['pending', 'running', 'pausing', 'paused'],
+  retry: ['failed', 'cancelled'],
+}
+
+export const isJobActionAllowed = (action: JobAction, status: Job['status']): boolean =>
+  JOB_ACTION_STATUSES[action].includes(status)
 
 export const isJobTerminal = (status: Job['status']): boolean =>
   status === 'completed' || status === 'failed' || status === 'cancelled'
@@ -34,6 +45,7 @@ export const getRoundDisplayState = (
     isJobTerminal(jobStatus) || ['completed', 'failed', 'cancelled'].includes(resourceStatus)
   if (roundStatus === 'pending') return stopped ? 'not_run' : 'pending'
   if (stopped) return 'stopped'
+  if (jobStatus === 'pausing') return 'pausing'
   if (jobStatus === 'paused') return 'paused'
   return jobStatus === 'running' && resourceStatus === 'running' ? 'running' : 'pending'
 }

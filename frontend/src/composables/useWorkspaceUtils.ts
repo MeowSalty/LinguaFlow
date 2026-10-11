@@ -41,6 +41,7 @@ export const statusTagType = (status: string): StatusTagType => {
     case 'pending':
     case 'running':
       return 'info'
+    case 'pausing':
     case 'paused':
       return 'warning'
     case 'error':
@@ -155,6 +156,7 @@ export const getJobProgressText = (job: Job): string => {
     return t('workspace.job.progress.running', { completed, total })
   }
 
+  if (job.status === 'pausing') return t('workspace.job.progress.pausing')
   if (job.status === 'paused') return t('workspace.job.progress.paused')
   if (job.status === 'completed') return t('workspace.job.progress.completed')
   if (job.status === 'failed') return t('workspace.job.progress.failed')

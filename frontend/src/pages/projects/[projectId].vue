@@ -34,6 +34,7 @@ import { formatDate } from '@/composables/useWorkspaceUtils'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlossaryStore } from '@/stores/glossary'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import { isJobTerminal } from '@/utils/jobPresentation'
 
 type Resource = ApiSchemas['Resource']
 
@@ -511,20 +512,19 @@ onBeforeUnmount(() => {
 
 // ── 5.2 段落状态联动刷新 ──
 watch(
-  () => workspace.jobs.map((j) => `${j.id}:${j.status}`),
+  () => new Map(workspace.jobs.map((job) => [job.id, job.status] as const)),
   (newVal, oldVal) => {
     if (!oldVal) return
-    // 检测到任务状态从 running/pending 变为其他状态
-    for (let i = 0; i < newVal.length; i++) {
-      const newStatus = newVal[i]!.split(':')[1]
-      const oldStatus = oldVal[i]?.split(':')[1]
+    // Match by identity because refreshing the list can reorder jobs.
+    for (const [id, newStatus] of newVal) {
+      const oldStatus = oldVal.get(id)
       if (
         oldStatus &&
-        (oldStatus === 'running' || oldStatus === 'pending') &&
-        newStatus !== 'running' &&
-        newStatus !== 'pending'
+        oldStatus !== newStatus &&
+        !isJobTerminal(oldStatus) &&
+        (newStatus === 'paused' || isJobTerminal(newStatus))
       ) {
-        // 任务完成或取消，刷新段落
+        // Safe pause and terminal states confirm saved results; pausing still drains.
         if (projectId.value && workspace.activeResourceId) {
           if (workspace.isEpubResource) {
             // 刷新章节分组进度

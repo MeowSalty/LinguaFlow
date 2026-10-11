@@ -19,6 +19,7 @@ function summary(total: Partial<OperationsSummary['total']> = {}): OperationsSum
   const counts = {
     running: 0,
     pending: 0,
+    pausing: 0,
     paused: 0,
     waiting_retry: 0,
     needs_action: 0,
@@ -41,12 +42,13 @@ const input = () => ({
 })
 
 describe('task tracker presentation', () => {
-  it('uses the complete summary for five active states independently of visible rows', () => {
+  it('uses the complete summary for six active states independently of visible rows', () => {
     const result = taskTrackerPresentation({
       ...input(),
       summary: summary({
         running: 100,
         pending: 10,
+        pausing: 7,
         paused: 3,
         waiting_retry: 5,
         needs_action: 2,
@@ -55,12 +57,22 @@ describe('task tracker presentation', () => {
       active: Array.from({ length: 25 }, (_, i) => operation(String(i + 1))),
       terminal: [operation('90', 'failed')],
     })
-    expect(result.activeCount).toBe(120)
+    expect(result.activeCount).toBe(127)
     expect(result.countLabel).toBe('99+')
     expect(result.displayed).toHaveLength(20)
     expect(result.displayed.every((row) => row.status === 'running')).toBe(true)
     expect(result.failedCount).toBe(1)
     expect(result.attention).toBe('failed')
+  })
+  it('counts a sole pausing task even before its discovery page arrives', () => {
+    expect(
+      taskTrackerPresentation({ ...input(), summary: summary({ pausing: 1, recent_failed: 12 }) }),
+    ).toMatchObject({
+      activeCount: 1,
+      countLabel: '1',
+      attention: 'normal',
+      displayed: [],
+    })
   })
   it('keeps unknown counts distinct from a successfully loaded empty summary', () => {
     expect(taskTrackerPresentation({ ...input(), summary: null })).toMatchObject({

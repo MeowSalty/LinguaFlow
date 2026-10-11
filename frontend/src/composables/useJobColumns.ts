@@ -7,6 +7,7 @@ import { type ApiSchemas } from '@/api/client'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { useTaskMutationsStore } from '@/stores/taskMutations'
 import { taskHistoryDeleteOption } from '@/utils/taskHistoryPresentation'
+import { isJobActionAllowed } from '@/utils/jobPresentation'
 import { t } from '@/i18n'
 import {
   formatDate,
@@ -37,6 +38,7 @@ export function useJobColumns(actions: JobColumnActions) {
     { label: t('workspace.filters.allStatuses'), value: 'all' },
     { label: t('workspace.job.status.pending'), value: 'pending' },
     { label: t('workspace.job.status.running'), value: 'running' },
+    { label: t('workspace.job.status.pausing'), value: 'pausing' },
     { label: t('workspace.job.status.paused'), value: 'paused' },
     { label: t('workspace.job.status.completed'), value: 'completed' },
     { label: t('workspace.job.status.failed'), value: 'failed' },
@@ -88,7 +90,7 @@ export function useJobColumns(actions: JobColumnActions) {
             showIndicator: false,
             height: 6,
             borderRadius: 3,
-            processing: row.status === 'running',
+            processing: row.status === 'running' || row.status === 'pausing',
             status:
               row.status === 'completed'
                 ? 'success'
@@ -171,7 +173,7 @@ export function useJobColumns(actions: JobColumnActions) {
           ),
         )
         // 暂停：pending / running
-        if (row.status === 'pending' || row.status === 'running') {
+        if (isJobActionAllowed('pause', row.status)) {
           buttons.push(
             h(
               NButton,
@@ -194,7 +196,7 @@ export function useJobColumns(actions: JobColumnActions) {
           )
         }
         // 恢复：paused
-        if (row.status === 'paused') {
+        if (isJobActionAllowed('resume', row.status)) {
           buttons.push(
             h(
               NButton,
@@ -216,8 +218,8 @@ export function useJobColumns(actions: JobColumnActions) {
             ),
           )
         }
-        // 取消：pending / running / paused（paused 任务可取消）
-        if (row.status === 'pending' || row.status === 'running' || row.status === 'paused') {
+        // 取消：pending / running / pausing / paused
+        if (isJobActionAllowed('cancel', row.status)) {
           buttons.push(
             h(
               NButton,
@@ -240,7 +242,7 @@ export function useJobColumns(actions: JobColumnActions) {
           )
         }
         // 重试：failed / cancelled
-        if (row.status === 'failed' || row.status === 'cancelled') {
+        if (isJobActionAllowed('retry', row.status)) {
           buttons.push(
             h(
               NButton,

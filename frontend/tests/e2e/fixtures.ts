@@ -70,6 +70,7 @@ export const runtimeSample = (id = 'instance-alpha'): ApiSchemas['RuntimeSummary
 export const emptyCounts = {
   pending: 0,
   running: 0,
+  pausing: 0,
   paused: 0,
   waiting_retry: 0,
   needs_action: 0,

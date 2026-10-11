@@ -3,7 +3,7 @@ export default {
     selectResources: '请选择需要同步的资源。',
     conflict: '任务状态已改变，已刷新最新状态。',
     updated: '任务状态已更新',
-    pauseRequested: '暂停请求已接受，等待当前工作完成。',
+    pauseRequested: '暂停请求已接受，等待当前请求收尾并确认保存。',
     syncTitle: '术语同步任务',
     progress: '已处理 {processed} / {total} 段落',
     progressHint: '已处理数量包括安全跳过的段落，不代表全部发生替换。',
@@ -81,6 +81,7 @@ export default {
     statuses: {
       pending: '待执行',
       running: '运行中',
+      pausing: '暂停中',
       paused: '已暂停',
       waiting_retry: '等待自动重试',
       needs_action: '需要处理',
