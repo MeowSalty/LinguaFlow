@@ -50,6 +50,93 @@ var (
 			},
 		},
 	}
+	// AuthChannelPoliciesColumns holds the columns for the "auth_channel_policies" table.
+	AuthChannelPoliciesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "revision", Type: field.TypeInt64},
+		{Name: "login_policy_revision", Type: field.TypeInt64},
+		{Name: "enabled", Type: field.TypeBool, Default: false},
+		{Name: "login_enabled", Type: field.TypeBool, Default: false},
+		{Name: "signup_enabled", Type: field.TypeBool, Default: false},
+		{Name: "link_enabled", Type: field.TypeBool, Default: false},
+		{Name: "login_rule", Type: field.TypeEnum, Enums: []string{"unrestricted"}},
+		{Name: "signup_rule", Type: field.TypeEnum, Enums: []string{"unrestricted"}},
+		{Name: "link_rule", Type: field.TypeEnum, Enums: []string{"unrestricted"}},
+		{Name: "connection_id", Type: field.TypeString},
+	}
+	// AuthChannelPoliciesTable holds the schema information for the "auth_channel_policies" table.
+	AuthChannelPoliciesTable = &schema.Table{
+		Name:       "auth_channel_policies",
+		Columns:    AuthChannelPoliciesColumns,
+		PrimaryKey: []*schema.Column{AuthChannelPoliciesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "auth_channel_policies_auth_connections_policies",
+				Columns:    []*schema.Column{AuthChannelPoliciesColumns[12]},
+				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "authchannelpolicy_connection_id_revision",
+				Unique:  true,
+				Columns: []*schema.Column{AuthChannelPoliciesColumns[12], AuthChannelPoliciesColumns[3]},
+			},
+		},
+	}
+	// AuthConnectionsColumns holds the columns for the "auth_connections" table.
+	AuthConnectionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "kind", Type: field.TypeEnum, Enums: []string{"password", "oidc", "generic_oauth2", "provider"}},
+		{Name: "published_revision", Type: field.TypeInt64, Nullable: true},
+		{Name: "auth_generation", Type: field.TypeInt64, Default: 1},
+		{Name: "archived_at", Type: field.TypeTime, Nullable: true},
+	}
+	// AuthConnectionsTable holds the schema information for the "auth_connections" table.
+	AuthConnectionsTable = &schema.Table{
+		Name:       "auth_connections",
+		Columns:    AuthConnectionsColumns,
+		PrimaryKey: []*schema.Column{AuthConnectionsColumns[0]},
+	}
+	// AuthConnectionRevisionsColumns holds the columns for the "auth_connection_revisions" table.
+	AuthConnectionRevisionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "revision", Type: field.TypeInt64},
+		{Name: "display_name", Type: field.TypeString},
+		{Name: "display_order", Type: field.TypeInt, Default: 0},
+		{Name: "config_version", Type: field.TypeInt, Default: 1},
+		{Name: "username_login_enabled", Type: field.TypeBool, Default: false},
+		{Name: "email_login_enabled", Type: field.TypeBool, Default: false},
+		{Name: "connection_id", Type: field.TypeString},
+	}
+	// AuthConnectionRevisionsTable holds the schema information for the "auth_connection_revisions" table.
+	AuthConnectionRevisionsTable = &schema.Table{
+		Name:       "auth_connection_revisions",
+		Columns:    AuthConnectionRevisionsColumns,
+		PrimaryKey: []*schema.Column{AuthConnectionRevisionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "auth_connection_revisions_auth_connections_revisions",
+				Columns:    []*schema.Column{AuthConnectionRevisionsColumns[9]},
+				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "authconnectionrevision_connection_id_revision",
+				Unique:  true,
+				Columns: []*schema.Column{AuthConnectionRevisionsColumns[9], AuthConnectionRevisionsColumns[3]},
+			},
+		},
+	}
 	// BackendsColumns holds the columns for the "backends" table.
 	BackendsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -470,6 +557,37 @@ var (
 			},
 		},
 	}
+	// ExternalIdentitiesColumns holds the columns for the "external_identities" table.
+	ExternalIdentitiesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "protocol", Type: field.TypeEnum, Enums: []string{"oidc", "oauth2", "provider"}},
+		{Name: "authority", Type: field.TypeString},
+		{Name: "subject", Type: field.TypeString},
+		{Name: "user_id", Type: field.TypeInt},
+	}
+	// ExternalIdentitiesTable holds the schema information for the "external_identities" table.
+	ExternalIdentitiesTable = &schema.Table{
+		Name:       "external_identities",
+		Columns:    ExternalIdentitiesColumns,
+		PrimaryKey: []*schema.Column{ExternalIdentitiesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "external_identities_users_external_identities",
+				Columns:    []*schema.Column{ExternalIdentitiesColumns[6]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "externalidentity_protocol_authority_subject",
+				Unique:  true,
+				Columns: []*schema.Column{ExternalIdentitiesColumns[3], ExternalIdentitiesColumns[4], ExternalIdentitiesColumns[5]},
+			},
+		},
+	}
 	// GlossaryEntriesColumns holds the columns for the "glossary_entries" table.
 	GlossaryEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -731,6 +849,49 @@ var (
 			},
 		},
 	}
+	// LoginBindingsColumns holds the columns for the "login_bindings" table.
+	LoginBindingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
+		{Name: "connection_id", Type: field.TypeString},
+		{Name: "external_identity_id", Type: field.TypeInt},
+		{Name: "user_id", Type: field.TypeInt},
+	}
+	// LoginBindingsTable holds the schema information for the "login_bindings" table.
+	LoginBindingsTable = &schema.Table{
+		Name:       "login_bindings",
+		Columns:    LoginBindingsColumns,
+		PrimaryKey: []*schema.Column{LoginBindingsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "login_bindings_auth_connections_bindings",
+				Columns:    []*schema.Column{LoginBindingsColumns[4]},
+				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "login_bindings_external_identities_bindings",
+				Columns:    []*schema.Column{LoginBindingsColumns[5]},
+				RefColumns: []*schema.Column{ExternalIdentitiesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "login_bindings_users_login_bindings",
+				Columns:    []*schema.Column{LoginBindingsColumns[6]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "loginbinding_user_id_connection_id",
+				Unique:  true,
+				Columns: []*schema.Column{LoginBindingsColumns[6], LoginBindingsColumns[4]},
+			},
+		},
+	}
 	// OrgMembershipsColumns holds the columns for the "org_memberships" table.
 	OrgMembershipsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -853,14 +1014,70 @@ var (
 			},
 		},
 	}
+	// RefreshSessionsColumns holds the columns for the "refresh_sessions" table.
+	RefreshSessionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "auth_version", Type: field.TypeInt64},
+		{Name: "connection_generation", Type: field.TypeInt64},
+		{Name: "login_policy_revision", Type: field.TypeInt64},
+		{Name: "generation", Type: field.TypeInt64, Default: 0},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+		{Name: "connection_id", Type: field.TypeString},
+		{Name: "binding_id", Type: field.TypeInt, Nullable: true},
+		{Name: "user_id", Type: field.TypeInt},
+	}
+	// RefreshSessionsTable holds the schema information for the "refresh_sessions" table.
+	RefreshSessionsTable = &schema.Table{
+		Name:       "refresh_sessions",
+		Columns:    RefreshSessionsColumns,
+		PrimaryKey: []*schema.Column{RefreshSessionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "refresh_sessions_auth_connections_sessions",
+				Columns:    []*schema.Column{RefreshSessionsColumns[9]},
+				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "refresh_sessions_login_bindings_sessions",
+				Columns:    []*schema.Column{RefreshSessionsColumns[10]},
+				RefColumns: []*schema.Column{LoginBindingsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "refresh_sessions_users_refresh_sessions",
+				Columns:    []*schema.Column{RefreshSessionsColumns[11]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "refreshsession_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{RefreshSessionsColumns[11]},
+			},
+			{
+				Name:    "refreshsession_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{RefreshSessionsColumns[7]},
+			},
+		},
+	}
 	// RefreshTokensColumns holds the columns for the "refresh_tokens" table.
 	RefreshTokensColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "token_hash", Type: field.TypeString, Unique: true},
+		{Name: "generation", Type: field.TypeInt64},
 		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+		{Name: "session_id", Type: field.TypeInt},
 		{Name: "user_refresh_tokens", Type: field.TypeInt},
 	}
 	// RefreshTokensTable holds the schema information for the "refresh_tokens" table.
@@ -870,10 +1087,23 @@ var (
 		PrimaryKey: []*schema.Column{RefreshTokensColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
+				Symbol:     "refresh_tokens_refresh_sessions_tokens",
+				Columns:    []*schema.Column{RefreshTokensColumns[8]},
+				RefColumns: []*schema.Column{RefreshSessionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
 				Symbol:     "refresh_tokens_users_refresh_tokens",
-				Columns:    []*schema.Column{RefreshTokensColumns[6]},
+				Columns:    []*schema.Column{RefreshTokensColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "refreshtoken_session_id_generation",
+				Unique:  true,
+				Columns: []*schema.Column{RefreshTokensColumns[8], RefreshTokensColumns[4]},
 			},
 		},
 	}
@@ -1711,8 +1941,12 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "username", Type: field.TypeString, Unique: true},
-		{Name: "password_hash", Type: field.TypeString},
-		{Name: "email", Type: field.TypeString, Unique: true},
+		{Name: "password_hash", Type: field.TypeString, Nullable: true},
+		{Name: "email", Type: field.TypeString, Nullable: true},
+		{Name: "email_verified_at", Type: field.TypeTime, Nullable: true},
+		{Name: "email_verification_source", Type: field.TypeString, Nullable: true},
+		{Name: "verified_email_key", Type: field.TypeString, Unique: true, Nullable: true},
+		{Name: "auth_version", Type: field.TypeInt64, Default: 1},
 		{Name: "display_name", Type: field.TypeString, Nullable: true},
 		{Name: "role", Type: field.TypeString, Default: "user"},
 		{Name: "active", Type: field.TypeBool, Default: true},
@@ -1906,6 +2140,9 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		ActivityLogsTable,
+		AuthChannelPoliciesTable,
+		AuthConnectionsTable,
+		AuthConnectionRevisionsTable,
 		BackendsTable,
 		BackupPinsTable,
 		BlobsTable,
@@ -1918,16 +2155,19 @@ var (
 		ExecutionPlanTemplatesTable,
 		ExecutionProfilesTable,
 		ExportArtifactsTable,
+		ExternalIdentitiesTable,
 		GlossaryEntriesTable,
 		InstanceInitializationsTable,
 		JobsTable,
 		JobResourcesTable,
 		JobRoundsTable,
 		JobRoundSegmentsTable,
+		LoginBindingsTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
 		ProjectsTable,
 		PrunePromptTemplatesTable,
+		RefreshSessionsTable,
 		RefreshTokensTable,
 		ResourcesTable,
 		SseEventsTable,
@@ -1962,6 +2202,13 @@ func init() {
 	ActivityLogsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ActivityLogsTable.ForeignKeys[1].RefTable = ProjectsTable
 	ActivityLogsTable.ForeignKeys[2].RefTable = UsersTable
+	AuthChannelPoliciesTable.ForeignKeys[0].RefTable = AuthConnectionsTable
+	AuthConnectionsTable.Annotation = &entsql.Annotation{}
+	AuthConnectionsTable.Annotation.Checks = map[string]string{
+		"auth_connection_generation_safe":   "auth_generation >= 1 AND auth_generation <= 9007199254740991",
+		"auth_connection_reserved_password": "((id = 'password' AND kind = 'password' AND archived_at IS NULL) OR (id <> 'password' AND kind <> 'password'))",
+	}
+	AuthConnectionRevisionsTable.ForeignKeys[0].RefTable = AuthConnectionsTable
 	BackendsTable.ForeignKeys[0].RefTable = CredentialsTable
 	BackendsTable.ForeignKeys[1].RefTable = OrganizationsTable
 	BackendsTable.ForeignKeys[2].RefTable = UsersTable
@@ -1986,6 +2233,7 @@ func init() {
 	ExportArtifactsTable.ForeignKeys[0].RefTable = SourceRevisionsTable
 	ExportArtifactsTable.ForeignKeys[1].RefTable = BlobsTable
 	ExportArtifactsTable.ForeignKeys[2].RefTable = BlobsTable
+	ExternalIdentitiesTable.ForeignKeys[0].RefTable = UsersTable
 	GlossaryEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[0].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[1].RefTable = UsersTable
@@ -1995,6 +2243,9 @@ func init() {
 	JobRoundsTable.ForeignKeys[1].RefTable = JobResourcesTable
 	JobRoundSegmentsTable.ForeignKeys[0].RefTable = JobRoundsTable
 	JobRoundSegmentsTable.ForeignKeys[1].RefTable = SegmentsTable
+	LoginBindingsTable.ForeignKeys[0].RefTable = AuthConnectionsTable
+	LoginBindingsTable.ForeignKeys[1].RefTable = ExternalIdentitiesTable
+	LoginBindingsTable.ForeignKeys[2].RefTable = UsersTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
@@ -2006,7 +2257,11 @@ func init() {
 	}
 	PrunePromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	PrunePromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
-	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
+	RefreshSessionsTable.ForeignKeys[0].RefTable = AuthConnectionsTable
+	RefreshSessionsTable.ForeignKeys[1].RefTable = LoginBindingsTable
+	RefreshSessionsTable.ForeignKeys[2].RefTable = UsersTable
+	RefreshTokensTable.ForeignKeys[0].RefTable = RefreshSessionsTable
+	RefreshTokensTable.ForeignKeys[1].RefTable = UsersTable
 	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
 	ResourcesTable.Annotation = &entsql.Annotation{}
 	ResourcesTable.Annotation.Checks = map[string]string{
@@ -2061,6 +2316,11 @@ func init() {
 	UsageRecordsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	UsageRecordsTable.ForeignKeys[1].RefTable = ProjectsTable
 	UsageRecordsTable.ForeignKeys[2].RefTable = UsersTable
+	UsersTable.Annotation = &entsql.Annotation{}
+	UsersTable.Annotation.Checks = map[string]string{
+		"user_auth_version_safe":             "auth_version >= 1 AND auth_version <= 9007199254740991",
+		"user_email_verification_consistent": "((verified_email_key IS NULL AND email_verified_at IS NULL AND email_verification_source IS NULL) OR (email IS NOT NULL AND verified_email_key IS NOT NULL AND verified_email_key = email AND email_verified_at IS NOT NULL AND email_verification_source IS NOT NULL AND email_verification_source <> ''))",
+	}
 	WorkCandidatesTable.ForeignKeys[0].RefTable = WorkItemsTable
 	WorkItemsTable.ForeignKeys[0].RefTable = JobsTable
 	WorkItemsTable.ForeignKeys[1].RefTable = ResourcesTable

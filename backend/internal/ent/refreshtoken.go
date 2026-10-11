@@ -9,6 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -23,9 +24,15 @@ type RefreshToken struct {
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// TokenHash holds the value of the "token_hash" field.
-	TokenHash string `json:"token_hash,omitempty"`
+	TokenHash string `json:"-"`
+	// SessionID holds the value of the "session_id" field.
+	SessionID int `json:"session_id,omitempty"`
+	// Generation holds the value of the "generation" field.
+	Generation int64 `json:"generation,omitempty"`
 	// ExpiresAt holds the value of the "expires_at" field.
 	ExpiresAt time.Time `json:"expires_at,omitempty"`
+	// ConsumedAt holds the value of the "consumed_at" field.
+	ConsumedAt *time.Time `json:"consumed_at,omitempty"`
 	// RevokedAt holds the value of the "revoked_at" field.
 	RevokedAt *time.Time `json:"revoked_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -37,11 +44,24 @@ type RefreshToken struct {
 
 // RefreshTokenEdges holds the relations/edges for other nodes in the graph.
 type RefreshTokenEdges struct {
+	// Session holds the value of the session edge.
+	Session *RefreshSession `json:"session,omitempty"`
 	// User holds the value of the user edge.
 	User *User `json:"user,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
+	loadedTypes [2]bool
+}
+
+// SessionOrErr returns the Session value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e RefreshTokenEdges) SessionOrErr() (*RefreshSession, error) {
+	if e.Session != nil {
+		return e.Session, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: refreshsession.Label}
+	}
+	return nil, &NotLoadedError{edge: "session"}
 }
 
 // UserOrErr returns the User value or an error if the edge
@@ -49,7 +69,7 @@ type RefreshTokenEdges struct {
 func (e RefreshTokenEdges) UserOrErr() (*User, error) {
 	if e.User != nil {
 		return e.User, nil
-	} else if e.loadedTypes[0] {
+	} else if e.loadedTypes[1] {
 		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "user"}
@@ -60,11 +80,11 @@ func (*RefreshToken) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case refreshtoken.FieldID:
+		case refreshtoken.FieldID, refreshtoken.FieldSessionID, refreshtoken.FieldGeneration:
 			values[i] = new(sql.NullInt64)
 		case refreshtoken.FieldTokenHash:
 			values[i] = new(sql.NullString)
-		case refreshtoken.FieldCreatedAt, refreshtoken.FieldUpdatedAt, refreshtoken.FieldExpiresAt, refreshtoken.FieldRevokedAt:
+		case refreshtoken.FieldCreatedAt, refreshtoken.FieldUpdatedAt, refreshtoken.FieldExpiresAt, refreshtoken.FieldConsumedAt, refreshtoken.FieldRevokedAt:
 			values[i] = new(sql.NullTime)
 		case refreshtoken.ForeignKeys[0]: // user_refresh_tokens
 			values[i] = new(sql.NullInt64)
@@ -107,11 +127,30 @@ func (_m *RefreshToken) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.TokenHash = value.String
 			}
+		case refreshtoken.FieldSessionID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field session_id", values[i])
+			} else if value.Valid {
+				_m.SessionID = int(value.Int64)
+			}
+		case refreshtoken.FieldGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field generation", values[i])
+			} else if value.Valid {
+				_m.Generation = value.Int64
+			}
 		case refreshtoken.FieldExpiresAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field expires_at", values[i])
 			} else if value.Valid {
 				_m.ExpiresAt = value.Time
+			}
+		case refreshtoken.FieldConsumedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field consumed_at", values[i])
+			} else if value.Valid {
+				_m.ConsumedAt = new(time.Time)
+				*_m.ConsumedAt = value.Time
 			}
 		case refreshtoken.FieldRevokedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -138,6 +177,11 @@ func (_m *RefreshToken) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *RefreshToken) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
+}
+
+// QuerySession queries the "session" edge of the RefreshToken entity.
+func (_m *RefreshToken) QuerySession() *RefreshSessionQuery {
+	return NewRefreshTokenClient(_m.config).QuerySession(_m)
 }
 
 // QueryUser queries the "user" edge of the RefreshToken entity.
@@ -174,11 +218,21 @@ func (_m *RefreshToken) String() string {
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
-	builder.WriteString("token_hash=")
-	builder.WriteString(_m.TokenHash)
+	builder.WriteString("token_hash=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("session_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SessionID))
+	builder.WriteString(", ")
+	builder.WriteString("generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Generation))
 	builder.WriteString(", ")
 	builder.WriteString("expires_at=")
 	builder.WriteString(_m.ExpiresAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	if v := _m.ConsumedAt; v != nil {
+		builder.WriteString("consumed_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	if v := _m.RevokedAt; v != nil {
 		builder.WriteString("revoked_at=")

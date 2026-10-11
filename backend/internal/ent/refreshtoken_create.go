@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -55,9 +56,35 @@ func (_c *RefreshTokenCreate) SetTokenHash(v string) *RefreshTokenCreate {
 	return _c
 }
 
+// SetSessionID sets the "session_id" field.
+func (_c *RefreshTokenCreate) SetSessionID(v int) *RefreshTokenCreate {
+	_c.mutation.SetSessionID(v)
+	return _c
+}
+
+// SetGeneration sets the "generation" field.
+func (_c *RefreshTokenCreate) SetGeneration(v int64) *RefreshTokenCreate {
+	_c.mutation.SetGeneration(v)
+	return _c
+}
+
 // SetExpiresAt sets the "expires_at" field.
 func (_c *RefreshTokenCreate) SetExpiresAt(v time.Time) *RefreshTokenCreate {
 	_c.mutation.SetExpiresAt(v)
+	return _c
+}
+
+// SetConsumedAt sets the "consumed_at" field.
+func (_c *RefreshTokenCreate) SetConsumedAt(v time.Time) *RefreshTokenCreate {
+	_c.mutation.SetConsumedAt(v)
+	return _c
+}
+
+// SetNillableConsumedAt sets the "consumed_at" field if the given value is not nil.
+func (_c *RefreshTokenCreate) SetNillableConsumedAt(v *time.Time) *RefreshTokenCreate {
+	if v != nil {
+		_c.SetConsumedAt(*v)
+	}
 	return _c
 }
 
@@ -73,6 +100,11 @@ func (_c *RefreshTokenCreate) SetNillableRevokedAt(v *time.Time) *RefreshTokenCr
 		_c.SetRevokedAt(*v)
 	}
 	return _c
+}
+
+// SetSession sets the "session" edge to the RefreshSession entity.
+func (_c *RefreshTokenCreate) SetSession(v *RefreshSession) *RefreshTokenCreate {
+	return _c.SetSessionID(v.ID)
 }
 
 // SetUserID sets the "user" edge to the User entity by ID.
@@ -93,7 +125,9 @@ func (_c *RefreshTokenCreate) Mutation() *RefreshTokenMutation {
 
 // Save creates the RefreshToken in the database.
 func (_c *RefreshTokenCreate) Save(ctx context.Context) (*RefreshToken, error) {
-	_c.defaults()
+	if err := _c.defaults(); err != nil {
+		return nil, err
+	}
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
@@ -120,15 +154,22 @@ func (_c *RefreshTokenCreate) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (_c *RefreshTokenCreate) defaults() {
+func (_c *RefreshTokenCreate) defaults() error {
 	if _, ok := _c.mutation.CreatedAt(); !ok {
+		if refreshtoken.DefaultCreatedAt == nil {
+			return fmt.Errorf("ent: uninitialized refreshtoken.DefaultCreatedAt (forgotten import ent/runtime?)")
+		}
 		v := refreshtoken.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		if refreshtoken.DefaultUpdatedAt == nil {
+			return fmt.Errorf("ent: uninitialized refreshtoken.DefaultUpdatedAt (forgotten import ent/runtime?)")
+		}
 		v := refreshtoken.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -147,8 +188,27 @@ func (_c *RefreshTokenCreate) check() error {
 			return &ValidationError{Name: "token_hash", err: fmt.Errorf(`ent: validator failed for field "RefreshToken.token_hash": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.SessionID(); !ok {
+		return &ValidationError{Name: "session_id", err: errors.New(`ent: missing required field "RefreshToken.session_id"`)}
+	}
+	if v, ok := _c.mutation.SessionID(); ok {
+		if err := refreshtoken.SessionIDValidator(v); err != nil {
+			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "RefreshToken.session_id": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Generation(); !ok {
+		return &ValidationError{Name: "generation", err: errors.New(`ent: missing required field "RefreshToken.generation"`)}
+	}
+	if v, ok := _c.mutation.Generation(); ok {
+		if err := refreshtoken.GenerationValidator(v); err != nil {
+			return &ValidationError{Name: "generation", err: fmt.Errorf(`ent: validator failed for field "RefreshToken.generation": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.ExpiresAt(); !ok {
 		return &ValidationError{Name: "expires_at", err: errors.New(`ent: missing required field "RefreshToken.expires_at"`)}
+	}
+	if len(_c.mutation.SessionIDs()) == 0 {
+		return &ValidationError{Name: "session", err: errors.New(`ent: missing required edge "RefreshToken.session"`)}
 	}
 	if len(_c.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "RefreshToken.user"`)}
@@ -191,13 +251,38 @@ func (_c *RefreshTokenCreate) createSpec() (*RefreshToken, *sqlgraph.CreateSpec)
 		_spec.SetField(refreshtoken.FieldTokenHash, field.TypeString, value)
 		_node.TokenHash = value
 	}
+	if value, ok := _c.mutation.Generation(); ok {
+		_spec.SetField(refreshtoken.FieldGeneration, field.TypeInt64, value)
+		_node.Generation = value
+	}
 	if value, ok := _c.mutation.ExpiresAt(); ok {
 		_spec.SetField(refreshtoken.FieldExpiresAt, field.TypeTime, value)
 		_node.ExpiresAt = value
 	}
+	if value, ok := _c.mutation.ConsumedAt(); ok {
+		_spec.SetField(refreshtoken.FieldConsumedAt, field.TypeTime, value)
+		_node.ConsumedAt = &value
+	}
 	if value, ok := _c.mutation.RevokedAt(); ok {
 		_spec.SetField(refreshtoken.FieldRevokedAt, field.TypeTime, value)
 		_node.RevokedAt = &value
+	}
+	if nodes := _c.mutation.SessionIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   refreshtoken.SessionTable,
+			Columns: []string{refreshtoken.SessionColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.SessionID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.UserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

@@ -16,11 +16,14 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
@@ -48,20 +51,6 @@ func (_u *UserUpdate) SetUpdatedAt(v time.Time) *UserUpdate {
 	return _u
 }
 
-// SetUsername sets the "username" field.
-func (_u *UserUpdate) SetUsername(v string) *UserUpdate {
-	_u.mutation.SetUsername(v)
-	return _u
-}
-
-// SetNillableUsername sets the "username" field if the given value is not nil.
-func (_u *UserUpdate) SetNillableUsername(v *string) *UserUpdate {
-	if v != nil {
-		_u.SetUsername(*v)
-	}
-	return _u
-}
-
 // SetPasswordHash sets the "password_hash" field.
 func (_u *UserUpdate) SetPasswordHash(v string) *UserUpdate {
 	_u.mutation.SetPasswordHash(v)
@@ -76,6 +65,12 @@ func (_u *UserUpdate) SetNillablePasswordHash(v *string) *UserUpdate {
 	return _u
 }
 
+// ClearPasswordHash clears the value of the "password_hash" field.
+func (_u *UserUpdate) ClearPasswordHash() *UserUpdate {
+	_u.mutation.ClearPasswordHash()
+	return _u
+}
+
 // SetEmail sets the "email" field.
 func (_u *UserUpdate) SetEmail(v string) *UserUpdate {
 	_u.mutation.SetEmail(v)
@@ -87,6 +82,93 @@ func (_u *UserUpdate) SetNillableEmail(v *string) *UserUpdate {
 	if v != nil {
 		_u.SetEmail(*v)
 	}
+	return _u
+}
+
+// ClearEmail clears the value of the "email" field.
+func (_u *UserUpdate) ClearEmail() *UserUpdate {
+	_u.mutation.ClearEmail()
+	return _u
+}
+
+// SetEmailVerifiedAt sets the "email_verified_at" field.
+func (_u *UserUpdate) SetEmailVerifiedAt(v time.Time) *UserUpdate {
+	_u.mutation.SetEmailVerifiedAt(v)
+	return _u
+}
+
+// SetNillableEmailVerifiedAt sets the "email_verified_at" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableEmailVerifiedAt(v *time.Time) *UserUpdate {
+	if v != nil {
+		_u.SetEmailVerifiedAt(*v)
+	}
+	return _u
+}
+
+// ClearEmailVerifiedAt clears the value of the "email_verified_at" field.
+func (_u *UserUpdate) ClearEmailVerifiedAt() *UserUpdate {
+	_u.mutation.ClearEmailVerifiedAt()
+	return _u
+}
+
+// SetEmailVerificationSource sets the "email_verification_source" field.
+func (_u *UserUpdate) SetEmailVerificationSource(v string) *UserUpdate {
+	_u.mutation.SetEmailVerificationSource(v)
+	return _u
+}
+
+// SetNillableEmailVerificationSource sets the "email_verification_source" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableEmailVerificationSource(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetEmailVerificationSource(*v)
+	}
+	return _u
+}
+
+// ClearEmailVerificationSource clears the value of the "email_verification_source" field.
+func (_u *UserUpdate) ClearEmailVerificationSource() *UserUpdate {
+	_u.mutation.ClearEmailVerificationSource()
+	return _u
+}
+
+// SetVerifiedEmailKey sets the "verified_email_key" field.
+func (_u *UserUpdate) SetVerifiedEmailKey(v string) *UserUpdate {
+	_u.mutation.SetVerifiedEmailKey(v)
+	return _u
+}
+
+// SetNillableVerifiedEmailKey sets the "verified_email_key" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableVerifiedEmailKey(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetVerifiedEmailKey(*v)
+	}
+	return _u
+}
+
+// ClearVerifiedEmailKey clears the value of the "verified_email_key" field.
+func (_u *UserUpdate) ClearVerifiedEmailKey() *UserUpdate {
+	_u.mutation.ClearVerifiedEmailKey()
+	return _u
+}
+
+// SetAuthVersion sets the "auth_version" field.
+func (_u *UserUpdate) SetAuthVersion(v int64) *UserUpdate {
+	_u.mutation.ResetAuthVersion()
+	_u.mutation.SetAuthVersion(v)
+	return _u
+}
+
+// SetNillableAuthVersion sets the "auth_version" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableAuthVersion(v *int64) *UserUpdate {
+	if v != nil {
+		_u.SetAuthVersion(*v)
+	}
+	return _u
+}
+
+// AddAuthVersion adds value to the "auth_version" field.
+func (_u *UserUpdate) AddAuthVersion(v int64) *UserUpdate {
+	_u.mutation.AddAuthVersion(v)
 	return _u
 }
 
@@ -181,6 +263,51 @@ func (_u *UserUpdate) AddRefreshTokens(v ...*RefreshToken) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddRefreshTokenIDs(ids...)
+}
+
+// AddRefreshSessionIDs adds the "refresh_sessions" edge to the RefreshSession entity by IDs.
+func (_u *UserUpdate) AddRefreshSessionIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddRefreshSessionIDs(ids...)
+	return _u
+}
+
+// AddRefreshSessions adds the "refresh_sessions" edges to the RefreshSession entity.
+func (_u *UserUpdate) AddRefreshSessions(v ...*RefreshSession) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddRefreshSessionIDs(ids...)
+}
+
+// AddExternalIdentityIDs adds the "external_identities" edge to the ExternalIdentity entity by IDs.
+func (_u *UserUpdate) AddExternalIdentityIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddExternalIdentityIDs(ids...)
+	return _u
+}
+
+// AddExternalIdentities adds the "external_identities" edges to the ExternalIdentity entity.
+func (_u *UserUpdate) AddExternalIdentities(v ...*ExternalIdentity) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExternalIdentityIDs(ids...)
+}
+
+// AddLoginBindingIDs adds the "login_bindings" edge to the LoginBinding entity by IDs.
+func (_u *UserUpdate) AddLoginBindingIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddLoginBindingIDs(ids...)
+	return _u
+}
+
+// AddLoginBindings adds the "login_bindings" edges to the LoginBinding entity.
+func (_u *UserUpdate) AddLoginBindings(v ...*LoginBinding) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLoginBindingIDs(ids...)
 }
 
 // AddMembershipIDs adds the "memberships" edge to the OrgMembership entity by IDs.
@@ -414,6 +541,69 @@ func (_u *UserUpdate) RemoveRefreshTokens(v ...*RefreshToken) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveRefreshTokenIDs(ids...)
+}
+
+// ClearRefreshSessions clears all "refresh_sessions" edges to the RefreshSession entity.
+func (_u *UserUpdate) ClearRefreshSessions() *UserUpdate {
+	_u.mutation.ClearRefreshSessions()
+	return _u
+}
+
+// RemoveRefreshSessionIDs removes the "refresh_sessions" edge to RefreshSession entities by IDs.
+func (_u *UserUpdate) RemoveRefreshSessionIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveRefreshSessionIDs(ids...)
+	return _u
+}
+
+// RemoveRefreshSessions removes "refresh_sessions" edges to RefreshSession entities.
+func (_u *UserUpdate) RemoveRefreshSessions(v ...*RefreshSession) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveRefreshSessionIDs(ids...)
+}
+
+// ClearExternalIdentities clears all "external_identities" edges to the ExternalIdentity entity.
+func (_u *UserUpdate) ClearExternalIdentities() *UserUpdate {
+	_u.mutation.ClearExternalIdentities()
+	return _u
+}
+
+// RemoveExternalIdentityIDs removes the "external_identities" edge to ExternalIdentity entities by IDs.
+func (_u *UserUpdate) RemoveExternalIdentityIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveExternalIdentityIDs(ids...)
+	return _u
+}
+
+// RemoveExternalIdentities removes "external_identities" edges to ExternalIdentity entities.
+func (_u *UserUpdate) RemoveExternalIdentities(v ...*ExternalIdentity) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExternalIdentityIDs(ids...)
+}
+
+// ClearLoginBindings clears all "login_bindings" edges to the LoginBinding entity.
+func (_u *UserUpdate) ClearLoginBindings() *UserUpdate {
+	_u.mutation.ClearLoginBindings()
+	return _u
+}
+
+// RemoveLoginBindingIDs removes the "login_bindings" edge to LoginBinding entities by IDs.
+func (_u *UserUpdate) RemoveLoginBindingIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveLoginBindingIDs(ids...)
+	return _u
+}
+
+// RemoveLoginBindings removes "login_bindings" edges to LoginBinding entities.
+func (_u *UserUpdate) RemoveLoginBindings(v ...*LoginBinding) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLoginBindingIDs(ids...)
 }
 
 // ClearMemberships clears all "memberships" edges to the OrgMembership entity.
@@ -685,11 +875,6 @@ func (_u *UserUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *UserUpdate) check() error {
-	if v, ok := _u.mutation.Username(); ok {
-		if err := user.UsernameValidator(v); err != nil {
-			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.PasswordHash(); ok {
 		if err := user.PasswordHashValidator(v); err != nil {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
@@ -698,6 +883,21 @@ func (_u *UserUpdate) check() error {
 	if v, ok := _u.mutation.Email(); ok {
 		if err := user.EmailValidator(v); err != nil {
 			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.EmailVerificationSource(); ok {
+		if err := user.EmailVerificationSourceValidator(v); err != nil {
+			return &ValidationError{Name: "email_verification_source", err: fmt.Errorf(`ent: validator failed for field "User.email_verification_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.VerifiedEmailKey(); ok {
+		if err := user.VerifiedEmailKeyValidator(v); err != nil {
+			return &ValidationError{Name: "verified_email_key", err: fmt.Errorf(`ent: validator failed for field "User.verified_email_key": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.AuthVersion(); ok {
+		if err := user.AuthVersionValidator(v); err != nil {
+			return &ValidationError{Name: "auth_version", err: fmt.Errorf(`ent: validator failed for field "User.auth_version": %w`, err)}
 		}
 	}
 	return nil
@@ -718,14 +918,41 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
 	}
-	if value, ok := _u.mutation.Username(); ok {
-		_spec.SetField(user.FieldUsername, field.TypeString, value)
-	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
+	if _u.mutation.PasswordHashCleared() {
+		_spec.ClearField(user.FieldPasswordHash, field.TypeString)
+	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
+	}
+	if _u.mutation.EmailCleared() {
+		_spec.ClearField(user.FieldEmail, field.TypeString)
+	}
+	if value, ok := _u.mutation.EmailVerifiedAt(); ok {
+		_spec.SetField(user.FieldEmailVerifiedAt, field.TypeTime, value)
+	}
+	if _u.mutation.EmailVerifiedAtCleared() {
+		_spec.ClearField(user.FieldEmailVerifiedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.EmailVerificationSource(); ok {
+		_spec.SetField(user.FieldEmailVerificationSource, field.TypeString, value)
+	}
+	if _u.mutation.EmailVerificationSourceCleared() {
+		_spec.ClearField(user.FieldEmailVerificationSource, field.TypeString)
+	}
+	if value, ok := _u.mutation.VerifiedEmailKey(); ok {
+		_spec.SetField(user.FieldVerifiedEmailKey, field.TypeString, value)
+	}
+	if _u.mutation.VerifiedEmailKeyCleared() {
+		_spec.ClearField(user.FieldVerifiedEmailKey, field.TypeString)
+	}
+	if value, ok := _u.mutation.AuthVersion(); ok {
+		_spec.SetField(user.FieldAuthVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAuthVersion(); ok {
+		_spec.AddField(user.FieldAuthVersion, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.DisplayName(); ok {
 		_spec.SetField(user.FieldDisplayName, field.TypeString, value)
@@ -867,6 +1094,141 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(refreshtoken.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.RefreshSessionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RefreshSessionsTable,
+			Columns: []string{user.RefreshSessionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedRefreshSessionsIDs(); len(nodes) > 0 && !_u.mutation.RefreshSessionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RefreshSessionsTable,
+			Columns: []string{user.RefreshSessionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RefreshSessionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RefreshSessionsTable,
+			Columns: []string{user.RefreshSessionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ExternalIdentitiesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExternalIdentitiesTable,
+			Columns: []string{user.ExternalIdentitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(externalidentity.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExternalIdentitiesIDs(); len(nodes) > 0 && !_u.mutation.ExternalIdentitiesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExternalIdentitiesTable,
+			Columns: []string{user.ExternalIdentitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(externalidentity.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExternalIdentitiesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExternalIdentitiesTable,
+			Columns: []string{user.ExternalIdentitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(externalidentity.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.LoginBindingsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginBindingsTable,
+			Columns: []string{user.LoginBindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginbinding.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLoginBindingsIDs(); len(nodes) > 0 && !_u.mutation.LoginBindingsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginBindingsTable,
+			Columns: []string{user.LoginBindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginbinding.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LoginBindingsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginBindingsTable,
+			Columns: []string{user.LoginBindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginbinding.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1395,20 +1757,6 @@ func (_u *UserUpdateOne) SetUpdatedAt(v time.Time) *UserUpdateOne {
 	return _u
 }
 
-// SetUsername sets the "username" field.
-func (_u *UserUpdateOne) SetUsername(v string) *UserUpdateOne {
-	_u.mutation.SetUsername(v)
-	return _u
-}
-
-// SetNillableUsername sets the "username" field if the given value is not nil.
-func (_u *UserUpdateOne) SetNillableUsername(v *string) *UserUpdateOne {
-	if v != nil {
-		_u.SetUsername(*v)
-	}
-	return _u
-}
-
 // SetPasswordHash sets the "password_hash" field.
 func (_u *UserUpdateOne) SetPasswordHash(v string) *UserUpdateOne {
 	_u.mutation.SetPasswordHash(v)
@@ -1423,6 +1771,12 @@ func (_u *UserUpdateOne) SetNillablePasswordHash(v *string) *UserUpdateOne {
 	return _u
 }
 
+// ClearPasswordHash clears the value of the "password_hash" field.
+func (_u *UserUpdateOne) ClearPasswordHash() *UserUpdateOne {
+	_u.mutation.ClearPasswordHash()
+	return _u
+}
+
 // SetEmail sets the "email" field.
 func (_u *UserUpdateOne) SetEmail(v string) *UserUpdateOne {
 	_u.mutation.SetEmail(v)
@@ -1434,6 +1788,93 @@ func (_u *UserUpdateOne) SetNillableEmail(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetEmail(*v)
 	}
+	return _u
+}
+
+// ClearEmail clears the value of the "email" field.
+func (_u *UserUpdateOne) ClearEmail() *UserUpdateOne {
+	_u.mutation.ClearEmail()
+	return _u
+}
+
+// SetEmailVerifiedAt sets the "email_verified_at" field.
+func (_u *UserUpdateOne) SetEmailVerifiedAt(v time.Time) *UserUpdateOne {
+	_u.mutation.SetEmailVerifiedAt(v)
+	return _u
+}
+
+// SetNillableEmailVerifiedAt sets the "email_verified_at" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableEmailVerifiedAt(v *time.Time) *UserUpdateOne {
+	if v != nil {
+		_u.SetEmailVerifiedAt(*v)
+	}
+	return _u
+}
+
+// ClearEmailVerifiedAt clears the value of the "email_verified_at" field.
+func (_u *UserUpdateOne) ClearEmailVerifiedAt() *UserUpdateOne {
+	_u.mutation.ClearEmailVerifiedAt()
+	return _u
+}
+
+// SetEmailVerificationSource sets the "email_verification_source" field.
+func (_u *UserUpdateOne) SetEmailVerificationSource(v string) *UserUpdateOne {
+	_u.mutation.SetEmailVerificationSource(v)
+	return _u
+}
+
+// SetNillableEmailVerificationSource sets the "email_verification_source" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableEmailVerificationSource(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetEmailVerificationSource(*v)
+	}
+	return _u
+}
+
+// ClearEmailVerificationSource clears the value of the "email_verification_source" field.
+func (_u *UserUpdateOne) ClearEmailVerificationSource() *UserUpdateOne {
+	_u.mutation.ClearEmailVerificationSource()
+	return _u
+}
+
+// SetVerifiedEmailKey sets the "verified_email_key" field.
+func (_u *UserUpdateOne) SetVerifiedEmailKey(v string) *UserUpdateOne {
+	_u.mutation.SetVerifiedEmailKey(v)
+	return _u
+}
+
+// SetNillableVerifiedEmailKey sets the "verified_email_key" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableVerifiedEmailKey(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetVerifiedEmailKey(*v)
+	}
+	return _u
+}
+
+// ClearVerifiedEmailKey clears the value of the "verified_email_key" field.
+func (_u *UserUpdateOne) ClearVerifiedEmailKey() *UserUpdateOne {
+	_u.mutation.ClearVerifiedEmailKey()
+	return _u
+}
+
+// SetAuthVersion sets the "auth_version" field.
+func (_u *UserUpdateOne) SetAuthVersion(v int64) *UserUpdateOne {
+	_u.mutation.ResetAuthVersion()
+	_u.mutation.SetAuthVersion(v)
+	return _u
+}
+
+// SetNillableAuthVersion sets the "auth_version" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableAuthVersion(v *int64) *UserUpdateOne {
+	if v != nil {
+		_u.SetAuthVersion(*v)
+	}
+	return _u
+}
+
+// AddAuthVersion adds value to the "auth_version" field.
+func (_u *UserUpdateOne) AddAuthVersion(v int64) *UserUpdateOne {
+	_u.mutation.AddAuthVersion(v)
 	return _u
 }
 
@@ -1528,6 +1969,51 @@ func (_u *UserUpdateOne) AddRefreshTokens(v ...*RefreshToken) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.AddRefreshTokenIDs(ids...)
+}
+
+// AddRefreshSessionIDs adds the "refresh_sessions" edge to the RefreshSession entity by IDs.
+func (_u *UserUpdateOne) AddRefreshSessionIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddRefreshSessionIDs(ids...)
+	return _u
+}
+
+// AddRefreshSessions adds the "refresh_sessions" edges to the RefreshSession entity.
+func (_u *UserUpdateOne) AddRefreshSessions(v ...*RefreshSession) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddRefreshSessionIDs(ids...)
+}
+
+// AddExternalIdentityIDs adds the "external_identities" edge to the ExternalIdentity entity by IDs.
+func (_u *UserUpdateOne) AddExternalIdentityIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddExternalIdentityIDs(ids...)
+	return _u
+}
+
+// AddExternalIdentities adds the "external_identities" edges to the ExternalIdentity entity.
+func (_u *UserUpdateOne) AddExternalIdentities(v ...*ExternalIdentity) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExternalIdentityIDs(ids...)
+}
+
+// AddLoginBindingIDs adds the "login_bindings" edge to the LoginBinding entity by IDs.
+func (_u *UserUpdateOne) AddLoginBindingIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddLoginBindingIDs(ids...)
+	return _u
+}
+
+// AddLoginBindings adds the "login_bindings" edges to the LoginBinding entity.
+func (_u *UserUpdateOne) AddLoginBindings(v ...*LoginBinding) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLoginBindingIDs(ids...)
 }
 
 // AddMembershipIDs adds the "memberships" edge to the OrgMembership entity by IDs.
@@ -1761,6 +2247,69 @@ func (_u *UserUpdateOne) RemoveRefreshTokens(v ...*RefreshToken) *UserUpdateOne 
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveRefreshTokenIDs(ids...)
+}
+
+// ClearRefreshSessions clears all "refresh_sessions" edges to the RefreshSession entity.
+func (_u *UserUpdateOne) ClearRefreshSessions() *UserUpdateOne {
+	_u.mutation.ClearRefreshSessions()
+	return _u
+}
+
+// RemoveRefreshSessionIDs removes the "refresh_sessions" edge to RefreshSession entities by IDs.
+func (_u *UserUpdateOne) RemoveRefreshSessionIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveRefreshSessionIDs(ids...)
+	return _u
+}
+
+// RemoveRefreshSessions removes "refresh_sessions" edges to RefreshSession entities.
+func (_u *UserUpdateOne) RemoveRefreshSessions(v ...*RefreshSession) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveRefreshSessionIDs(ids...)
+}
+
+// ClearExternalIdentities clears all "external_identities" edges to the ExternalIdentity entity.
+func (_u *UserUpdateOne) ClearExternalIdentities() *UserUpdateOne {
+	_u.mutation.ClearExternalIdentities()
+	return _u
+}
+
+// RemoveExternalIdentityIDs removes the "external_identities" edge to ExternalIdentity entities by IDs.
+func (_u *UserUpdateOne) RemoveExternalIdentityIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveExternalIdentityIDs(ids...)
+	return _u
+}
+
+// RemoveExternalIdentities removes "external_identities" edges to ExternalIdentity entities.
+func (_u *UserUpdateOne) RemoveExternalIdentities(v ...*ExternalIdentity) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExternalIdentityIDs(ids...)
+}
+
+// ClearLoginBindings clears all "login_bindings" edges to the LoginBinding entity.
+func (_u *UserUpdateOne) ClearLoginBindings() *UserUpdateOne {
+	_u.mutation.ClearLoginBindings()
+	return _u
+}
+
+// RemoveLoginBindingIDs removes the "login_bindings" edge to LoginBinding entities by IDs.
+func (_u *UserUpdateOne) RemoveLoginBindingIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveLoginBindingIDs(ids...)
+	return _u
+}
+
+// RemoveLoginBindings removes "login_bindings" edges to LoginBinding entities.
+func (_u *UserUpdateOne) RemoveLoginBindings(v ...*LoginBinding) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLoginBindingIDs(ids...)
 }
 
 // ClearMemberships clears all "memberships" edges to the OrgMembership entity.
@@ -2045,11 +2594,6 @@ func (_u *UserUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *UserUpdateOne) check() error {
-	if v, ok := _u.mutation.Username(); ok {
-		if err := user.UsernameValidator(v); err != nil {
-			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.PasswordHash(); ok {
 		if err := user.PasswordHashValidator(v); err != nil {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
@@ -2058,6 +2602,21 @@ func (_u *UserUpdateOne) check() error {
 	if v, ok := _u.mutation.Email(); ok {
 		if err := user.EmailValidator(v); err != nil {
 			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.EmailVerificationSource(); ok {
+		if err := user.EmailVerificationSourceValidator(v); err != nil {
+			return &ValidationError{Name: "email_verification_source", err: fmt.Errorf(`ent: validator failed for field "User.email_verification_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.VerifiedEmailKey(); ok {
+		if err := user.VerifiedEmailKeyValidator(v); err != nil {
+			return &ValidationError{Name: "verified_email_key", err: fmt.Errorf(`ent: validator failed for field "User.verified_email_key": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.AuthVersion(); ok {
+		if err := user.AuthVersionValidator(v); err != nil {
+			return &ValidationError{Name: "auth_version", err: fmt.Errorf(`ent: validator failed for field "User.auth_version": %w`, err)}
 		}
 	}
 	return nil
@@ -2095,14 +2654,41 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
 	}
-	if value, ok := _u.mutation.Username(); ok {
-		_spec.SetField(user.FieldUsername, field.TypeString, value)
-	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
+	if _u.mutation.PasswordHashCleared() {
+		_spec.ClearField(user.FieldPasswordHash, field.TypeString)
+	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
+	}
+	if _u.mutation.EmailCleared() {
+		_spec.ClearField(user.FieldEmail, field.TypeString)
+	}
+	if value, ok := _u.mutation.EmailVerifiedAt(); ok {
+		_spec.SetField(user.FieldEmailVerifiedAt, field.TypeTime, value)
+	}
+	if _u.mutation.EmailVerifiedAtCleared() {
+		_spec.ClearField(user.FieldEmailVerifiedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.EmailVerificationSource(); ok {
+		_spec.SetField(user.FieldEmailVerificationSource, field.TypeString, value)
+	}
+	if _u.mutation.EmailVerificationSourceCleared() {
+		_spec.ClearField(user.FieldEmailVerificationSource, field.TypeString)
+	}
+	if value, ok := _u.mutation.VerifiedEmailKey(); ok {
+		_spec.SetField(user.FieldVerifiedEmailKey, field.TypeString, value)
+	}
+	if _u.mutation.VerifiedEmailKeyCleared() {
+		_spec.ClearField(user.FieldVerifiedEmailKey, field.TypeString)
+	}
+	if value, ok := _u.mutation.AuthVersion(); ok {
+		_spec.SetField(user.FieldAuthVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAuthVersion(); ok {
+		_spec.AddField(user.FieldAuthVersion, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.DisplayName(); ok {
 		_spec.SetField(user.FieldDisplayName, field.TypeString, value)
@@ -2244,6 +2830,141 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(refreshtoken.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.RefreshSessionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RefreshSessionsTable,
+			Columns: []string{user.RefreshSessionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedRefreshSessionsIDs(); len(nodes) > 0 && !_u.mutation.RefreshSessionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RefreshSessionsTable,
+			Columns: []string{user.RefreshSessionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RefreshSessionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RefreshSessionsTable,
+			Columns: []string{user.RefreshSessionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ExternalIdentitiesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExternalIdentitiesTable,
+			Columns: []string{user.ExternalIdentitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(externalidentity.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExternalIdentitiesIDs(); len(nodes) > 0 && !_u.mutation.ExternalIdentitiesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExternalIdentitiesTable,
+			Columns: []string{user.ExternalIdentitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(externalidentity.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExternalIdentitiesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExternalIdentitiesTable,
+			Columns: []string{user.ExternalIdentitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(externalidentity.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.LoginBindingsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginBindingsTable,
+			Columns: []string{user.LoginBindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginbinding.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLoginBindingsIDs(); len(nodes) > 0 && !_u.mutation.LoginBindingsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginBindingsTable,
+			Columns: []string{user.LoginBindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginbinding.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LoginBindingsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginBindingsTable,
+			Columns: []string{user.LoginBindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginbinding.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

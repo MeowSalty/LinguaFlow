@@ -80,6 +80,26 @@ func Email(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldEmail, v))
 }
 
+// EmailVerifiedAt applies equality check predicate on the "email_verified_at" field. It's identical to EmailVerifiedAtEQ.
+func EmailVerifiedAt(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldEmailVerifiedAt, v))
+}
+
+// EmailVerificationSource applies equality check predicate on the "email_verification_source" field. It's identical to EmailVerificationSourceEQ.
+func EmailVerificationSource(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldEmailVerificationSource, v))
+}
+
+// VerifiedEmailKey applies equality check predicate on the "verified_email_key" field. It's identical to VerifiedEmailKeyEQ.
+func VerifiedEmailKey(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldVerifiedEmailKey, v))
+}
+
+// AuthVersion applies equality check predicate on the "auth_version" field. It's identical to AuthVersionEQ.
+func AuthVersion(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldAuthVersion, v))
+}
+
 // DisplayName applies equality check predicate on the "display_name" field. It's identical to DisplayNameEQ.
 func DisplayName(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldDisplayName, v))
@@ -295,6 +315,16 @@ func PasswordHashHasSuffix(v string) predicate.User {
 	return predicate.User(sql.FieldHasSuffix(FieldPasswordHash, v))
 }
 
+// PasswordHashIsNil applies the IsNil predicate on the "password_hash" field.
+func PasswordHashIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldPasswordHash))
+}
+
+// PasswordHashNotNil applies the NotNil predicate on the "password_hash" field.
+func PasswordHashNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldPasswordHash))
+}
+
 // PasswordHashEqualFold applies the EqualFold predicate on the "password_hash" field.
 func PasswordHashEqualFold(v string) predicate.User {
 	return predicate.User(sql.FieldEqualFold(FieldPasswordHash, v))
@@ -360,6 +390,16 @@ func EmailHasSuffix(v string) predicate.User {
 	return predicate.User(sql.FieldHasSuffix(FieldEmail, v))
 }
 
+// EmailIsNil applies the IsNil predicate on the "email" field.
+func EmailIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldEmail))
+}
+
+// EmailNotNil applies the NotNil predicate on the "email" field.
+func EmailNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldEmail))
+}
+
 // EmailEqualFold applies the EqualFold predicate on the "email" field.
 func EmailEqualFold(v string) predicate.User {
 	return predicate.User(sql.FieldEqualFold(FieldEmail, v))
@@ -368,6 +408,246 @@ func EmailEqualFold(v string) predicate.User {
 // EmailContainsFold applies the ContainsFold predicate on the "email" field.
 func EmailContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldEmail, v))
+}
+
+// EmailVerifiedAtEQ applies the EQ predicate on the "email_verified_at" field.
+func EmailVerifiedAtEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldEmailVerifiedAt, v))
+}
+
+// EmailVerifiedAtNEQ applies the NEQ predicate on the "email_verified_at" field.
+func EmailVerifiedAtNEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldEmailVerifiedAt, v))
+}
+
+// EmailVerifiedAtIn applies the In predicate on the "email_verified_at" field.
+func EmailVerifiedAtIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldIn(FieldEmailVerifiedAt, vs...))
+}
+
+// EmailVerifiedAtNotIn applies the NotIn predicate on the "email_verified_at" field.
+func EmailVerifiedAtNotIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldEmailVerifiedAt, vs...))
+}
+
+// EmailVerifiedAtGT applies the GT predicate on the "email_verified_at" field.
+func EmailVerifiedAtGT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGT(FieldEmailVerifiedAt, v))
+}
+
+// EmailVerifiedAtGTE applies the GTE predicate on the "email_verified_at" field.
+func EmailVerifiedAtGTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldEmailVerifiedAt, v))
+}
+
+// EmailVerifiedAtLT applies the LT predicate on the "email_verified_at" field.
+func EmailVerifiedAtLT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLT(FieldEmailVerifiedAt, v))
+}
+
+// EmailVerifiedAtLTE applies the LTE predicate on the "email_verified_at" field.
+func EmailVerifiedAtLTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldEmailVerifiedAt, v))
+}
+
+// EmailVerifiedAtIsNil applies the IsNil predicate on the "email_verified_at" field.
+func EmailVerifiedAtIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldEmailVerifiedAt))
+}
+
+// EmailVerifiedAtNotNil applies the NotNil predicate on the "email_verified_at" field.
+func EmailVerifiedAtNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldEmailVerifiedAt))
+}
+
+// EmailVerificationSourceEQ applies the EQ predicate on the "email_verification_source" field.
+func EmailVerificationSourceEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceNEQ applies the NEQ predicate on the "email_verification_source" field.
+func EmailVerificationSourceNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceIn applies the In predicate on the "email_verification_source" field.
+func EmailVerificationSourceIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldEmailVerificationSource, vs...))
+}
+
+// EmailVerificationSourceNotIn applies the NotIn predicate on the "email_verification_source" field.
+func EmailVerificationSourceNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldEmailVerificationSource, vs...))
+}
+
+// EmailVerificationSourceGT applies the GT predicate on the "email_verification_source" field.
+func EmailVerificationSourceGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceGTE applies the GTE predicate on the "email_verification_source" field.
+func EmailVerificationSourceGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceLT applies the LT predicate on the "email_verification_source" field.
+func EmailVerificationSourceLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceLTE applies the LTE predicate on the "email_verification_source" field.
+func EmailVerificationSourceLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceContains applies the Contains predicate on the "email_verification_source" field.
+func EmailVerificationSourceContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceHasPrefix applies the HasPrefix predicate on the "email_verification_source" field.
+func EmailVerificationSourceHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceHasSuffix applies the HasSuffix predicate on the "email_verification_source" field.
+func EmailVerificationSourceHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceIsNil applies the IsNil predicate on the "email_verification_source" field.
+func EmailVerificationSourceIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldEmailVerificationSource))
+}
+
+// EmailVerificationSourceNotNil applies the NotNil predicate on the "email_verification_source" field.
+func EmailVerificationSourceNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldEmailVerificationSource))
+}
+
+// EmailVerificationSourceEqualFold applies the EqualFold predicate on the "email_verification_source" field.
+func EmailVerificationSourceEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldEmailVerificationSource, v))
+}
+
+// EmailVerificationSourceContainsFold applies the ContainsFold predicate on the "email_verification_source" field.
+func EmailVerificationSourceContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldEmailVerificationSource, v))
+}
+
+// VerifiedEmailKeyEQ applies the EQ predicate on the "verified_email_key" field.
+func VerifiedEmailKeyEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyNEQ applies the NEQ predicate on the "verified_email_key" field.
+func VerifiedEmailKeyNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyIn applies the In predicate on the "verified_email_key" field.
+func VerifiedEmailKeyIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldVerifiedEmailKey, vs...))
+}
+
+// VerifiedEmailKeyNotIn applies the NotIn predicate on the "verified_email_key" field.
+func VerifiedEmailKeyNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldVerifiedEmailKey, vs...))
+}
+
+// VerifiedEmailKeyGT applies the GT predicate on the "verified_email_key" field.
+func VerifiedEmailKeyGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyGTE applies the GTE predicate on the "verified_email_key" field.
+func VerifiedEmailKeyGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyLT applies the LT predicate on the "verified_email_key" field.
+func VerifiedEmailKeyLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyLTE applies the LTE predicate on the "verified_email_key" field.
+func VerifiedEmailKeyLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyContains applies the Contains predicate on the "verified_email_key" field.
+func VerifiedEmailKeyContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyHasPrefix applies the HasPrefix predicate on the "verified_email_key" field.
+func VerifiedEmailKeyHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyHasSuffix applies the HasSuffix predicate on the "verified_email_key" field.
+func VerifiedEmailKeyHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyIsNil applies the IsNil predicate on the "verified_email_key" field.
+func VerifiedEmailKeyIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldVerifiedEmailKey))
+}
+
+// VerifiedEmailKeyNotNil applies the NotNil predicate on the "verified_email_key" field.
+func VerifiedEmailKeyNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldVerifiedEmailKey))
+}
+
+// VerifiedEmailKeyEqualFold applies the EqualFold predicate on the "verified_email_key" field.
+func VerifiedEmailKeyEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldVerifiedEmailKey, v))
+}
+
+// VerifiedEmailKeyContainsFold applies the ContainsFold predicate on the "verified_email_key" field.
+func VerifiedEmailKeyContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldVerifiedEmailKey, v))
+}
+
+// AuthVersionEQ applies the EQ predicate on the "auth_version" field.
+func AuthVersionEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldAuthVersion, v))
+}
+
+// AuthVersionNEQ applies the NEQ predicate on the "auth_version" field.
+func AuthVersionNEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldAuthVersion, v))
+}
+
+// AuthVersionIn applies the In predicate on the "auth_version" field.
+func AuthVersionIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldAuthVersion, vs...))
+}
+
+// AuthVersionNotIn applies the NotIn predicate on the "auth_version" field.
+func AuthVersionNotIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldAuthVersion, vs...))
+}
+
+// AuthVersionGT applies the GT predicate on the "auth_version" field.
+func AuthVersionGT(v int64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldAuthVersion, v))
+}
+
+// AuthVersionGTE applies the GTE predicate on the "auth_version" field.
+func AuthVersionGTE(v int64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldAuthVersion, v))
+}
+
+// AuthVersionLT applies the LT predicate on the "auth_version" field.
+func AuthVersionLT(v int64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldAuthVersion, v))
+}
+
+// AuthVersionLTE applies the LTE predicate on the "auth_version" field.
+func AuthVersionLTE(v int64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldAuthVersion, v))
 }
 
 // DisplayNameEQ applies the EQ predicate on the "display_name" field.
@@ -581,6 +861,75 @@ func HasRefreshTokens() predicate.User {
 func HasRefreshTokensWith(preds ...predicate.RefreshToken) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := newRefreshTokensStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasRefreshSessions applies the HasEdge predicate on the "refresh_sessions" edge.
+func HasRefreshSessions() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, RefreshSessionsTable, RefreshSessionsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasRefreshSessionsWith applies the HasEdge predicate on the "refresh_sessions" edge with a given conditions (other predicates).
+func HasRefreshSessionsWith(preds ...predicate.RefreshSession) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newRefreshSessionsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasExternalIdentities applies the HasEdge predicate on the "external_identities" edge.
+func HasExternalIdentities() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ExternalIdentitiesTable, ExternalIdentitiesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasExternalIdentitiesWith applies the HasEdge predicate on the "external_identities" edge with a given conditions (other predicates).
+func HasExternalIdentitiesWith(preds ...predicate.ExternalIdentity) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newExternalIdentitiesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasLoginBindings applies the HasEdge predicate on the "login_bindings" edge.
+func HasLoginBindings() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, LoginBindingsTable, LoginBindingsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasLoginBindingsWith applies the HasEdge predicate on the "login_bindings" edge with a given conditions (other predicates).
+func HasLoginBindingsWith(preds ...predicate.LoginBinding) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newLoginBindingsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

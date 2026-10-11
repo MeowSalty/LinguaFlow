@@ -9,6 +9,15 @@ import (
 // ActivityLog is the predicate function for activitylog builders.
 type ActivityLog func(*sql.Selector)
 
+// AuthChannelPolicy is the predicate function for authchannelpolicy builders.
+type AuthChannelPolicy func(*sql.Selector)
+
+// AuthConnection is the predicate function for authconnection builders.
+type AuthConnection func(*sql.Selector)
+
+// AuthConnectionRevision is the predicate function for authconnectionrevision builders.
+type AuthConnectionRevision func(*sql.Selector)
+
 // Backend is the predicate function for backend builders.
 type Backend func(*sql.Selector)
 
@@ -45,6 +54,9 @@ type ExecutionProfile func(*sql.Selector)
 // ExportArtifact is the predicate function for exportartifact builders.
 type ExportArtifact func(*sql.Selector)
 
+// ExternalIdentity is the predicate function for externalidentity builders.
+type ExternalIdentity func(*sql.Selector)
+
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
 
@@ -63,6 +75,9 @@ type JobRound func(*sql.Selector)
 // JobRoundSegment is the predicate function for jobroundsegment builders.
 type JobRoundSegment func(*sql.Selector)
 
+// LoginBinding is the predicate function for loginbinding builders.
+type LoginBinding func(*sql.Selector)
+
 // OrgMembership is the predicate function for orgmembership builders.
 type OrgMembership func(*sql.Selector)
 
@@ -74,6 +89,9 @@ type Project func(*sql.Selector)
 
 // PrunePromptTemplate is the predicate function for pruneprompttemplate builders.
 type PrunePromptTemplate func(*sql.Selector)
+
+// RefreshSession is the predicate function for refreshsession builders.
+type RefreshSession func(*sql.Selector)
 
 // RefreshToken is the predicate function for refreshtoken builders.
 type RefreshToken func(*sql.Selector)
