@@ -50,6 +50,13 @@ tasks:
   test:configuration-integration:
     desc: 使用 Vitest、独立后端与隔离数据库验证配置、凭据和真实任务链路
     cmds: ['pnpm exec vitest run --config vitest.integration.config.ts {{.CLI_ARGS}}']
+  test:ruby-integration:
+    desc: 使用独立后端、SQLite 与可控 HTTP 上游验证注音阶段和暂停恢复
+    cmds: ['pnpm exec vitest run --config vitest.ruby-integration.config.ts {{.CLI_ARGS}}']
+  test:ruby-product:
+    desc: 构建生产前端并必跑真实后端、流式代理和 Chromium 的 P1b T32 验收
+    deps: [build]
+    cmds: ['pnpm exec vitest run --config vitest.ruby-product.config.ts {{.CLI_ARGS}}']
   test:storage-integration:
     desc: 使用独立 Local 后端与隔离数据库验证文件存储真实传输及快照
     cmds: ['pnpm exec vitest run --config vitest.storage-integration.config.ts {{.CLI_ARGS}}']

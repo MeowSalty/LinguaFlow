@@ -12,6 +12,11 @@ import { useTaskHistoryStore } from '@/stores/taskHistory'
 import { useTaskMutationsStore } from '@/stores/taskMutations'
 import { taskHistoryErrorMessage } from '@/api/task-history'
 import { taskHistoryDeleteOption } from '@/utils/taskHistoryPresentation'
+import {
+  isJobActionAllowed as allowed,
+  isJobTerminal,
+  type JobAction as Action,
+} from '@/utils/jobPresentation'
 import JobDetailDrawerBase from '@/components/workspace/JobDetailDrawerBase.vue'
 
 const { t } = useI18n()
@@ -22,7 +27,6 @@ const operations = useOperationsStore()
 const history = useTaskHistoryStore()
 const mutations = useTaskMutationsStore()
 const message = useMessage()
-type Action = 'pause' | 'resume' | 'cancel' | 'retry'
 const busy = ref<Action | null>(null)
 let detailGeneration = 0
 const job = computed(() => tracker.detailJob)
@@ -50,13 +54,6 @@ const requestDelete = (): void => {
   if (target.value?.can_delete && !mutationPending.value) history.requestDelete([target.value])
 }
 const actions = { pause: pauseJob, resume: resumeJob, cancel: cancelJob, retry: retryJob }
-const allowed = (action: Action, status: string): boolean =>
-  ({
-    pause: ['pending', 'running'],
-    resume: ['paused'],
-    cancel: ['pending', 'running', 'paused'],
-    retry: ['failed', 'cancelled'],
-  })[action].includes(status)
 const close = (): void => {
   tracker.closeDetail()
   if (route.path === '/operations' && (route.query.task_id || route.query.job_id)) {
@@ -94,15 +91,15 @@ const handleAction = async (action: Action): Promise<void> => {
     await mutations.run([submittedTarget], action, async () => {
       const fresh = await operations.queryTranslation(String(id))
       if (!current()) return
-      tracker.detailJob = fresh
+      tracker.trackJob(fresh)
       if (!allowed(action, fresh.status)) {
         message.info(t('workbench.details.conflict'))
         return
       }
       const response = await actions[action](id)
       if (!current()) return
-      tracker.detailJob = response
-      if (action === 'pause' && response.status !== 'paused')
+      tracker.trackJob(response)
+      if (action === 'pause' && response.status !== 'paused' && !isJobTerminal(response.status))
         message.success(t('workbench.details.pauseRequested'))
       else message.success(t('workbench.details.updated'))
       await operations.invalidate()

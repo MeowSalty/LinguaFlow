@@ -64,11 +64,40 @@ describe('workspace task messages', () => {
   })
   const actions = (projectId = ref<number | null>(7)) => scope.run(() => useJobActions(projectId))!
 
-  it('uses pause requested when the server has not paused the job yet', async () => {
-    state.workspace.pauseJob.mockResolvedValue(job)
+  it('uses pause requested when the server is draining the job', async () => {
+    state.workspace.pauseJob.mockResolvedValue({ ...job, status: 'pausing' })
     await actions().pauseJob(job)
     expect(state.message.success).toHaveBeenCalledWith('workbench.details.pauseRequested')
   })
+
+  it('blocks pause, resume and retry while draining but permits cancellation', async () => {
+    const pausing = { ...job, status: 'pausing' as const }
+    state.workspace.cancelJob.mockResolvedValue({ ...job, status: 'cancelled' })
+    const api = actions()
+    await api.pauseJob(pausing)
+    await api.resumeJob(pausing)
+    await api.retryJob(pausing)
+    expect(state.workspace.pauseJob).not.toHaveBeenCalled()
+    expect(state.workspace.resumeJob).not.toHaveBeenCalled()
+    expect(state.workspace.retryJob).not.toHaveBeenCalled()
+    await api.cancelJob(pausing)
+    expect(state.workspace.cancelJob).toHaveBeenCalledWith(pausing.id)
+  })
+
+  it('announces a safe pause only after the response confirms paused', async () => {
+    state.workspace.pauseJob.mockResolvedValue({ ...job, status: 'paused' })
+    await actions().pauseJob(job)
+    expect(state.message.success).toHaveBeenCalledWith('workspace.messages.jobPaused')
+  })
+
+  it.each(['completed', 'cancelled', 'failed'])(
+    'does not announce a pending pause when the response is already %s',
+    async (status) => {
+      state.workspace.pauseJob.mockResolvedValue({ ...job, status })
+      await actions().pauseJob(job)
+      expect(state.message.success).toHaveBeenCalledWith('workbench.details.updated')
+    },
+  )
 
   it('does not show stale successes or errors after an identity change', async () => {
     const a = deferred<void>(),
@@ -77,7 +106,7 @@ describe('workspace task messages', () => {
     state.workspace.resumeJob.mockReturnValue(b.promise)
     const api = actions()
     const cancel = api.cancelJob(job),
-      resume = api.resumeJob(job)
+      resume = api.resumeJob({ ...job, status: 'paused' })
     changeSessionContext('/api/v1', 2, true)
     a.resolve()
     b.reject(new Error('old failure'))
@@ -118,7 +147,7 @@ describe('workspace task messages', () => {
   it('closes a revoked detail and reports access loss', async () => {
     state.workspace.retryJob.mockRejectedValue(new ApiError('removed', 403))
     state.tracker.drawerJobId = 1
-    await actions().retryJob(job)
+    await actions().retryJob({ ...job, status: 'failed' })
     expect(state.tracker.closeDetail).toHaveBeenCalledOnce()
     expect(state.message.error).toHaveBeenCalledWith('operations.inaccessible')
   })

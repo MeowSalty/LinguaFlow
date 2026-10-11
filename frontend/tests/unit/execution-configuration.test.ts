@@ -8,12 +8,15 @@ import {
 import {
   ADJUDICATE_CODES,
   buildExecutionRoundInput,
+  buildRubyRetryInput,
   cloneExecutionPlanValue,
   createExecutionPlanRound,
   createInlineTermExtractionConfig,
   createRoundCodeSelection,
   createRoundModeSelection,
+  createRubyRetryConfig,
   mergeInlineTermExtractionConfig,
+  mergeRubyRetryConfig,
   mergeTranslateRoundConfig,
   planUsesTermExtraction,
   REVISE_CODES,
@@ -22,10 +25,94 @@ import {
   setRoundCodes,
   validateRoundCodes,
   validateInlineTermExtractionConfig,
+  validateRubyRetryConfig,
   type ExecutionPlanFormRound,
   type InlineTermExtractionConfig,
   type ExecutionRound,
+  type ExecutionPlanFormRubyRetry,
 } from '../../src/utils/execution-plan-config'
+import { clearUnavailablePlanDependencies } from '../../src/utils/organization-copy'
+
+describe('ruby retry concurrency configuration', () => {
+  it('keeps new and legacy plans implicit without inheriting main round concurrency', () => {
+    const created = createRubyRetryConfig()
+    expect(created).not.toHaveProperty('concurrency')
+    expect(created).not.toBe(createRubyRetryConfig())
+    const legacy = mergeRubyRetryConfig({ enabled: true, max_attempts: 3, backend_id: 5 })
+    expect(legacy).not.toHaveProperty('concurrency')
+    expect(buildRubyRetryInput(legacy)).toEqual({ enabled: true, max_attempts: 3, backend_id: 5 })
+    expect(buildRubyRetryInput(created)).toEqual({ enabled: false, max_attempts: 1 })
+    expect(createExecutionPlanRound().concurrency).toBe(3)
+  })
+
+  it.each([1, 4, 101, 10000])(
+    'preserves explicit concurrency %s through edit and serialization',
+    (value) => {
+      const source = { enabled: false, concurrency: value, max_attempts: 2, backend_id: 7 }
+      const draft = mergeRubyRetryConfig(source)
+      expect(validateRubyRetryConfig(draft)).toEqual([])
+      expect(buildRubyRetryInput(draft)).toEqual(source)
+      draft.concurrency = null
+      expect(buildRubyRetryInput(draft)).not.toHaveProperty('concurrency')
+      expect(source.concurrency).toBe(value)
+    },
+  )
+
+  it.each([undefined, null])('serializes an empty form value %s as omission', (value) => {
+    const draft = mergeRubyRetryConfig({ enabled: true, concurrency: value })
+    expect(validateRubyRetryConfig(draft)).toEqual([])
+    expect(buildRubyRetryInput(draft)).not.toHaveProperty('concurrency')
+  })
+
+  for (const enabled of [false, true]) {
+    it.each([
+      0,
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      '2',
+      false,
+    ])(`rejects explicit invalid concurrency %s while enabled=${enabled}`, (value) => {
+      const draft = mergeRubyRetryConfig({
+        enabled,
+        concurrency: value,
+      } as ExecutionPlanFormRubyRetry)
+      expect(draft.concurrency).toBe(value)
+      expect(validateRubyRetryConfig(draft)).toEqual(['concurrency'])
+      expect(() => buildRubyRetryInput(draft)).toThrow('Invalid ruby retry concurrency')
+    })
+  }
+
+  it.each([undefined, null, 1, 8, Number.NaN, Number.POSITIVE_INFINITY])(
+    'retains concurrency %s when copying and clearing inaccessible dependencies',
+    (concurrency) => {
+      const source = {
+        name: 'Copied plan',
+        profile_id: 2,
+        ruby_retry: mergeRubyRetryConfig({ enabled: true, backend_id: 5, concurrency }),
+        rounds: [{ ...createExecutionPlanRound(), backend_id: 5 }],
+      }
+      const copy = clearUnavailablePlanDependencies(source, {
+        profiles: [],
+        backends: [],
+        prompts: [],
+        bootstrap: [],
+      })
+      expect(copy.ruby_retry.concurrency).toBe(concurrency)
+      expect(copy.ruby_retry.backend_id).toBeNull()
+      expect(copy.profile_id).toBeNull()
+      expect(source.ruby_retry.backend_id).toBe(5)
+      expect(copy.ruby_retry).not.toBe(source.ruby_retry)
+      if (concurrency == null)
+        expect(buildRubyRetryInput(copy.ruby_retry)).not.toHaveProperty('concurrency')
+      else if (!Number.isFinite(concurrency))
+        expect(() => buildRubyRetryInput(copy.ruby_retry)).toThrow()
+      else expect(buildRubyRetryInput(copy.ruby_retry).concurrency).toBe(concurrency)
+    },
+  )
+})
 
 describe('inline term extraction configuration', () => {
   function roundWith(value?: unknown): ExecutionPlanFormRound {

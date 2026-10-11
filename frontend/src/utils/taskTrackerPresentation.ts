@@ -12,7 +12,12 @@ type TrackerInput = {
 export function taskTrackerPresentation(input: TrackerInput) {
   const counts = input.summary?.total
   const activeCount = counts
-    ? counts.running + counts.pending + counts.paused + counts.waiting_retry + counts.needs_action
+    ? counts.running +
+      counts.pending +
+      counts.pausing +
+      counts.paused +
+      counts.waiting_retry +
+      counts.needs_action
     : null
   const hidden = new Set(input.hiddenTerminalKeys)
   const reminders = input.retainTerminal

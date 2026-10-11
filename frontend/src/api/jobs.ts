@@ -7,7 +7,7 @@ import { buildRequestFailureError } from './utils'
 export const fetchJobs = async (
   projectId: number,
   params?: {
-    status?: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+    status?: ApiSchemas['Job']['status']
     trigger_type?: 'manual' | 'file_update' | 'glossary_change' | 'web_edit'
     cursor?: string
     limit?: number

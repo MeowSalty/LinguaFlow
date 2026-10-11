@@ -4,14 +4,23 @@ import {
   QA_CHECKS,
   type ProfileConfigInput,
 } from '../../src/utils/execution-profile-config'
-import type { ExecutionRound } from '../../src/utils/execution-plan-config'
+import type { ExecutionRound, ExecutionPlanRubyRetry } from '../../src/utils/execution-plan-config'
 import { json, mockApp } from './fixtures'
 
-type Write = { path: string; body: { config: ProfileConfigInput; rounds: ExecutionRound[] } }
+type Write = {
+  path: string
+  body: {
+    config: ProfileConfigInput
+    rounds: ExecutionRound[]
+    ruby_retry?: ExecutionPlanRubyRetry
+    org_id?: number
+  }
+}
 async function setup(
   page: Page,
   config: unknown = createProfileConfig(),
   rounds: ExecutionRound[] = [],
+  rubyRetry?: ExecutionPlanRubyRetry,
 ) {
   await mockApp(page, { role: 'user' })
   const writes: Write[] = []
@@ -31,6 +40,7 @@ async function setup(
     owner_user_id: 1,
     profile_id: 1,
     rounds,
+    ...(rubyRetry === undefined ? {} : { ruby_retry: rubyRetry }),
   }
   let delayWrite: ((route: Route) => Promise<void>) | undefined
   await page.route('**/api/v1/**', async (route) => {
@@ -153,6 +163,150 @@ async function chooseRoundMode(round: Locator, label: string) {
     .filter({ hasText: new RegExp(`^${label}$`) })
     .click()
   await expect(radio).toBeChecked()
+}
+
+for (const concurrency of [undefined, 4]) {
+  test(`ruby concurrency ${concurrency ?? 'default'} survives new plan creation`, async ({
+    page,
+  }) => {
+    const { writes } = await setup(page)
+    await page.goto('/execution-plan-templates')
+    await page.getByRole('button', { name: '新建计划', exact: true }).click()
+    const drawer = page.locator('.n-drawer:visible')
+    await drawer.getByRole('textbox').first().fill('注音并发计划')
+    await chooseOption(
+      page,
+      drawer.locator('.n-select').filter({ hasText: '选择计划引用的执行策略' }),
+      '策略样本',
+    )
+    await chooseRoundMode(drawer.getByTestId('execution-round'), '本地改写')
+    const field = drawer.getByLabel('注音请求并发上限', { exact: true })
+    await expect(field).toHaveValue('')
+    await expect(field).toHaveAttribute('placeholder', '默认（1）')
+    if (concurrency !== undefined) await fillNumber(field, String(concurrency))
+    await drawer.getByRole('button', { name: '创建计划', exact: true }).click()
+    await expect.poll(() => writes.length).toBe(1)
+    if (concurrency === undefined)
+      expect(writes[0]!.body.ruby_retry).not.toHaveProperty('concurrency')
+    else expect(writes[0]!.body.ruby_retry?.concurrency).toBe(concurrency)
+  })
+}
+
+test('ruby concurrency omission survives editing a legacy plan', async ({ page }) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()])
+  const drawer = await openPlan(page)
+  await expect(drawer.getByLabel('注音请求并发上限', { exact: true })).toHaveValue('')
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry).not.toHaveProperty('concurrency')
+  expect(writes[0]!.body.rounds[0]!.concurrency).toBe(2)
+})
+
+test('ruby concurrency stays independent when the main round and retry switch change', async ({
+  page,
+}) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()], {
+    enabled: true,
+    backend_id: 2,
+    max_attempts: 3,
+    concurrency: 7,
+  })
+  const drawer = await openPlan(page)
+  await expect(drawer.getByLabel('注音请求并发上限', { exact: true })).toHaveValue('7')
+  await fillNumber(
+    drawer.getByTestId('execution-round').getByLabel('并发数', { exact: true }),
+    '11',
+  )
+  await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry).toEqual({
+    enabled: false,
+    backend_id: 2,
+    max_attempts: 3,
+    concurrency: 7,
+  })
+  expect(writes[0]!.body.rounds[0]!.concurrency).toBe(11)
+})
+
+test('ruby concurrency clearing removes an existing explicit value', async ({ page }) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()], {
+    enabled: true,
+    concurrency: 3,
+  })
+  const drawer = await openPlan(page)
+  const field = drawer.getByLabel('注音请求并发上限', { exact: true })
+  await expect(field).toHaveValue('3')
+  await fillNumber(field, '')
+  await expect(field).toHaveAttribute('placeholder', '默认（1）')
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry).not.toHaveProperty('concurrency')
+})
+
+test('ruby concurrency invalid values block saving even while retry is disabled', async ({
+  page,
+}) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()], {
+    enabled: false,
+  })
+  const drawer = await openPlan(page)
+  const field = drawer.getByLabel('注音请求并发上限', { exact: true })
+  const save = drawer.getByRole('button', { name: '保存', exact: true })
+  for (const value of ['0', '-1', '1.5']) {
+    await fillNumber(field, value)
+    await expect(field).toHaveValue(value)
+    await expect(field).toHaveAttribute('aria-invalid', 'true')
+    await expect(drawer.getByRole('alert')).toHaveText(
+      '注音并发必须为有限的正整数，或留空使用默认值。',
+    )
+    await expect(save).toBeDisabled()
+  }
+  await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+  await expect(save).toBeDisabled()
+  expect(writes).toHaveLength(0)
+  await fillNumber(field, '101')
+  await expect(save).toBeEnabled()
+  await save.click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry?.concurrency).toBe(101)
+})
+
+for (const concurrency of [undefined, 8]) {
+  test(`ruby concurrency ${concurrency ?? 'default'} survives copying a personal plan to an organization`, async ({
+    page,
+  }) => {
+    const { profile, writes } = await setup(
+      page,
+      createProfileConfig(),
+      [
+        {
+          mode: 'correct',
+          concurrency: 1,
+          correct: { rules: [{ name: 'width_mix_normalize', enabled: true }] },
+        },
+      ],
+      { enabled: true, backend_id: 2, ...(concurrency === undefined ? {} : { concurrency }) },
+    )
+    profile.scope = 'system'
+    await page.goto('/execution-plan-templates')
+    await page.getByRole('button', { name: '复制到组织', exact: true }).click()
+    const modal = page.locator('.n-modal:visible')
+    await chooseOption(page, modal.locator('.n-select'), '目标组织')
+    await modal.getByRole('button', { name: '继续编辑', exact: true }).click()
+    const drawer = page.locator('.n-drawer:visible')
+    await expect(drawer.getByLabel('注音请求并发上限', { exact: true })).toHaveValue(
+      concurrency === undefined ? '' : String(concurrency),
+    )
+    await expect(drawer.getByRole('button', { name: '创建计划', exact: true })).toBeEnabled()
+    await drawer.getByRole('button', { name: '创建计划', exact: true }).click()
+    await expect.poll(() => writes.length).toBe(1)
+    expect(writes[0]!.body.org_id).toBe(7)
+    expect(writes[0]!.body.ruby_retry).not.toHaveProperty('backend_id')
+    if (concurrency === undefined)
+      expect(writes[0]!.body.ruby_retry).not.toHaveProperty('concurrency')
+    else expect(writes[0]!.body.ruby_retry?.concurrency).toBe(concurrency)
+  })
 }
 
 test('new profile uses the new defaults and keeps QA checks omitted', async ({ page }) => {

@@ -23,6 +23,7 @@ const taskLink = (task: Operation) => ({
 const tones = {
   pending: 'default',
   running: 'info',
+  pausing: 'warning',
   paused: 'warning',
   waiting_retry: 'warning',
   needs_action: 'warning',

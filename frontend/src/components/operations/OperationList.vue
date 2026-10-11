@@ -41,7 +41,7 @@ const tone = (status: string): 'info' | 'warning' | 'success' | 'error' | 'defau
       ? 'success'
       : status === 'failed'
         ? 'error'
-        : ['paused', 'pending', 'waiting_retry', 'needs_action'].includes(status)
+        : ['pausing', 'paused', 'pending', 'waiting_retry', 'needs_action'].includes(status)
           ? 'warning'
           : 'default'
 const progress = (item: Operation): string =>

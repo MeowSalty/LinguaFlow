@@ -19,6 +19,7 @@ import {
 import { getJobRoundSkipReason, getRoundDisplayState } from '@/utils/jobPresentation'
 import StackedProgressBar from '@/components/common/StackedProgressBar.vue'
 import JobRoundStateIcon from './JobRoundStateIcon.vue'
+import JobStageProgress from './JobStageProgress.vue'
 
 const props = defineProps<{ job: ApiSchemas['Job'] }>()
 const emit = defineEmits<{ focusEvents: [] }>()
@@ -30,6 +31,7 @@ const skipped = computed(() => resources.value.reduce((sum, r) => sum + r.skippe
 const warned = computed(() => resources.value.filter((r) => r.warning_message?.trim()).length)
 const barTone = computed<'brand' | 'success' | 'warning' | 'neutral'>(() => {
   if (props.job.status === 'completed') return warned.value ? 'warning' : 'success'
+  if (props.job.status === 'pausing') return 'warning'
   return props.job.status === 'running' ? 'brand' : 'neutral'
 })
 const percentClass = computed(() => {
@@ -69,7 +71,9 @@ const rounds = computed(() =>
     ]
   }),
 )
-const hasRunningRound = computed(() => rounds.value.some((round) => round.state === 'running'))
+const hasRunningRound = computed(
+  () => props.job.status === 'running' && rounds.value.some((round) => round.state === 'running'),
+)
 const eta = computed(() => (hasRunningRound.value ? calculateJobETA(props.job) : null))
 const etaText = computed(() => formatETA(eta.value))
 const completionText = computed(() => formatEtaCompletionTime(eta.value))
@@ -147,7 +151,10 @@ const speedText = computed(() =>
         <span
           v-if="
             round.count &&
-            (round.state === 'running' || round.state === 'paused' || round.state === 'stopped')
+            (round.state === 'running' ||
+              round.state === 'pausing' ||
+              round.state === 'paused' ||
+              round.state === 'stopped')
           "
           class="tabular-nums"
           :class="round.state === 'running' ? 'text-brand-500' : 'text-lf-text-muted'"
@@ -172,5 +179,6 @@ const speedText = computed(() =>
         <dd class="mt-1 text-sm tabular-nums">{{ speedText }}</dd>
       </div>
     </dl>
+    <JobStageProgress :stages="job.progress.stages" :pausing="job.status === 'pausing'" />
   </section>
 </template>

@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, disposePinia, setActivePinia, type Pinia } from 'pinia'
 import { useOperationsStore } from '../operations'
+import { useGlobalJobTrackerStore } from '../globalJobTracker'
 import { ApiError } from '@/api/utils'
 import { changeSessionContext } from '@/api/session-context'
 import type { Operation } from '@/api/operations'
+import type { ApiSchemas } from '@/api/client'
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -11,13 +13,22 @@ const api = vi.hoisted(() => ({
   job: vi.fn(),
   sync: vi.fn(),
   storage: vi.fn(),
+  events: vi.fn(),
 }))
 vi.mock('@/api/storage', () => ({ getStorageTask: api.storage }))
 vi.mock('@/api/operations', () => ({
   listOperations: api.list,
   fetchOperationsSummary: api.summary,
 }))
-vi.mock('@/api/client', () => ({ fetchJob: api.job, getGlossarySyncTaskStatus: api.sync }))
+vi.mock('@/api/client', () => ({
+  fetchJob: api.job,
+  getGlossarySyncTaskStatus: api.sync,
+  listJobEvents: api.events,
+}))
+vi.mock('@/composables/sseShared', () => ({
+  KNOWN_EVENT_TYPES: [],
+  resolveStreamUrl: () => '/stream',
+}))
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
 
 const task = (
@@ -63,6 +74,7 @@ const task = (
 const counts = {
   pending: 0,
   running: 1,
+  pausing: 0,
   paused: 0,
   waiting_retry: 0,
   needs_action: 0,
@@ -85,16 +97,20 @@ function deferred<T>() {
 describe('operations coordinator', () => {
   let pinia: Pinia
   let fakeDocument: EventTarget & { hidden: boolean }
+  let fakeWindow: EventTarget
   beforeEach(() => {
     vi.useFakeTimers()
     fakeDocument = Object.assign(new EventTarget(), { hidden: false })
     vi.stubGlobal('document', fakeDocument)
+    fakeWindow = new EventTarget()
+    vi.stubGlobal('window', fakeWindow)
     changeSessionContext('/api/v1', 1, true)
     pinia = createPinia()
     setActivePinia(pinia)
     api.list.mockReset().mockResolvedValue({ items: [] })
     api.summary.mockReset().mockResolvedValue(summary)
     api.job.mockReset().mockResolvedValue({ status: 'completed', project_id: 7 })
+    api.events.mockReset().mockResolvedValue({ items: [] })
     api.sync.mockReset().mockResolvedValue({ status: 'completed' })
     api.storage.mockReset().mockResolvedValue({
       id: 1,
@@ -122,6 +138,317 @@ describe('operations coordinator', () => {
       'glossary_sync:1',
     ])
     expect(store.discoveryComplete).toBe(true)
+  })
+  it('discovers an uncached pausing task across pages and keeps fast polling despite a zero summary', async () => {
+    api.list.mockImplementation((query) =>
+      Promise.resolve(
+        query.state === 'terminal'
+          ? { items: [] }
+          : query.cursor
+            ? { items: [task('1', 'translation', 'pausing')] }
+            : { items: [], next_cursor: 'pausing-page' },
+      ),
+    )
+    api.summary.mockResolvedValue({ ...summary, total: { ...counts, running: 0 } })
+    const store = useOperationsStore()
+    store.start()
+    await store.refresh()
+    expect(store.active).toHaveLength(1)
+    expect(store.active[0]?.status).toBe('pausing')
+    expect(store.summary?.total.pausing).toBe(0)
+    const reads = api.list.mock.calls.filter(([query]) => query.state === 'active').length
+    await vi.advanceTimersByTimeAsync(2999)
+    expect(api.list.mock.calls.filter(([query]) => query.state === 'active')).toHaveLength(reads)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(api.list.mock.calls.filter(([query]) => query.state === 'active')).toHaveLength(
+      reads + 2,
+    )
+    expect(store.active[0]?.status).toBe('pausing')
+  })
+  it('restarts complete discovery and refreshes cached summaries on reconnect without overlapping flights', async () => {
+    const store = useOperationsStore()
+    store.start()
+    await store.refresh()
+    const pending = deferred<{ items: Operation[]; next_cursor?: string }>()
+    api.list.mockImplementation((query) =>
+      query.state === 'active' && !query.cursor
+        ? pending.promise
+        : Promise.resolve({ items: query.cursor ? [task('2', 'translation', 'pausing')] : [] }),
+    )
+    api.list.mockClear()
+    api.summary.mockClear()
+    fakeWindow.dispatchEvent(new Event('online'))
+    fakeWindow.dispatchEvent(new Event('online'))
+    expect(api.list.mock.calls.filter(([query]) => query.state === 'active')).toHaveLength(1)
+    pending.resolve({ items: [], next_cursor: 'second' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(
+      api.list.mock.calls
+        .filter(([query]) => query.state === 'active')
+        .map(([query]) => query.cursor),
+    ).toEqual([undefined, 'second'])
+    expect(api.summary).toHaveBeenCalledTimes(1)
+    expect(store.active[0]?.status).toBe('pausing')
+    store.stop()
+    api.list.mockClear()
+    fakeWindow.dispatchEvent(new Event('online'))
+    expect(api.list).not.toHaveBeenCalled()
+  })
+  it('a newer cancellation fences older pages, cached queries and details while a later retry remains discoverable', async () => {
+    const before = '2026-09-30T00:01:00.123456788Z'
+    const cancelledAt = '2026-09-30T00:01:00.123456789Z'
+    const retriedAt = '2026-09-30T00:01:00.123456790Z'
+    const pausing = { ...task('1', 'translation', 'pausing'), updated_at: before }
+    const store = useOperationsStore()
+    api.list.mockResolvedValue({ items: [pausing] })
+    await store.discover()
+    await store.queryOperations({ status: 'pausing' })
+    await store.setFilters({ status: 'pausing' })
+    const page = deferred<{ items: Operation[] }>()
+    api.list.mockReturnValueOnce(page.promise)
+    const discovering = store.discover()
+    const locator = { task_type: 'translation', task_id: '1', project_id: 7 } as const
+    const cancelled = {
+      id: 1,
+      project_id: 7,
+      status: 'cancelled',
+      updated_at: cancelledAt,
+      can_delete: false,
+      finished_at: cancelledAt,
+    } as ApiSchemas['Job']
+    store.projectTask(locator, cancelled)
+    page.resolve({ items: [pausing] })
+    await discovering
+    expect(store.active).toHaveLength(0)
+    expect(store.terminal).toEqual([
+      expect.objectContaining({ status: 'cancelled', updated_at: cancelledAt }),
+    ])
+    expect(store.items).toHaveLength(0)
+    expect((await store.queryOperations({ status: 'pausing' })).items).toHaveLength(0)
+    api.job.mockResolvedValue({ ...cancelled, status: 'pausing', updated_at: before })
+    const oldDetail = await store.queryTranslation('1')
+    expect(store.projectJobObservation(oldDetail)).toMatchObject({
+      status: 'cancelled',
+      updated_at: cancelledAt,
+    })
+    expect(store.terminal[0]?.status).toBe('cancelled')
+    store.projectTask(locator, {
+      ...cancelled,
+      status: 'pending',
+      updated_at: retriedAt,
+      finished_at: null,
+    })
+    expect(store.active).toEqual([
+      expect.objectContaining({ status: 'pending', updated_at: retriedAt }),
+    ])
+    expect(store.terminal).toHaveLength(0)
+    api.list.mockResolvedValue({
+      items: [{ ...pausing, status: 'cancelled', updated_at: cancelledAt }],
+    })
+    expect((await store.queryOperations({ state: 'terminal' }, true)).items).toHaveLength(0)
+  })
+  it('combines a newer list cancellation with older drawer details without regressing progress or blocking retry', async () => {
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        close() {}
+        addEventListener() {}
+      },
+    )
+    const store = useOperationsStore()
+    const tracker = useGlobalJobTrackerStore()
+    const running = {
+      id: 1,
+      project_id: 7,
+      status: 'running',
+      updated_at: '2026-09-30T00:00:02Z',
+      can_delete: false,
+      finished_at: null,
+      progress: {
+        total_resources: 1,
+        completed_resources: 0,
+        failed_resources: 0,
+        progress_completed: 10,
+        progress_total: 100,
+      },
+    } as ApiSchemas['Job']
+    api.list.mockResolvedValueOnce({
+      items: [
+        {
+          ...task('1'),
+          updated_at: '2026-09-30T00:00:01Z',
+          progress: {
+            ...running.progress,
+            progress_completed: 5,
+            queue_position: null,
+            queue_size: null,
+          },
+        },
+      ],
+    })
+    await store.discover()
+    api.job.mockResolvedValueOnce(running)
+    await tracker.openDetail(1)
+    expect(store.active[0]).toMatchObject({
+      updated_at: running.updated_at,
+      progress: { progress_completed: 10 },
+    })
+    const oldDetail = deferred<ApiSchemas['Job']>()
+    api.job.mockReturnValueOnce(oldDetail.promise)
+    const refreshing = tracker.refreshDetail()
+    const cancelled = {
+      ...task('1', 'translation', 'cancelled'),
+      updated_at: '2026-09-30T00:00:03Z',
+      progress: { ...running.progress, progress_completed: 20 },
+    } as Operation
+    api.list.mockResolvedValueOnce({ items: [cancelled] })
+    await store.queryOperations({ state: 'terminal' }, true)
+    oldDetail.resolve({
+      ...running,
+      status: 'pausing',
+      updated_at: '2026-09-30T00:00:01Z',
+      progress: { ...running.progress, progress_completed: 5 },
+    })
+    await refreshing
+    expect(tracker.detailJob).toMatchObject({
+      status: 'cancelled',
+      updated_at: cancelled.updated_at,
+      progress: { progress_completed: 20 },
+    })
+    expect(tracker.jobEnded).toBe(true)
+    api.list.mockResolvedValueOnce({
+      items: [
+        {
+          ...cancelled,
+          status: 'pausing',
+          updated_at: '2026-09-30T00:00:01Z',
+          progress: { ...running.progress, progress_completed: 5 },
+        },
+      ],
+    })
+    expect((await store.queryOperations({ state: 'all' }, true)).items[0]).toMatchObject({
+      status: 'cancelled',
+      updated_at: cancelled.updated_at,
+      progress: { progress_completed: 20 },
+    })
+    api.job.mockResolvedValueOnce({
+      ...running,
+      status: 'pending',
+      updated_at: '2026-09-30T00:00:04Z',
+    })
+    await tracker.refreshDetail()
+    expect(tracker.detailJob?.status).toBe('pending')
+    expect(tracker.jobEnded).toBe(false)
+  })
+  it('orders equal-time permissions and progress by actual reads, never by cached projections', async () => {
+    const store = useOperationsStore()
+    const older = deferred<{ items: Operation[] }>()
+    api.list.mockReturnValueOnce(older.promise)
+    const query = { state: 'all' as const, project_id: 7 }
+    const oldRead = store.queryOperations(query)
+    const fresh = { ...task('1', 'translation', 'cancelled'), can_delete: false } as Operation
+    api.list.mockResolvedValueOnce({ items: [fresh] })
+    await store.queryOperations({ state: 'all' })
+    older.resolve({
+      items: [
+        {
+          ...fresh,
+          can_delete: true,
+          progress: { ...fresh.progress, progress_completed: 1 },
+        } as Operation,
+      ],
+    })
+    expect((await oldRead).items[0]).toMatchObject({
+      can_delete: false,
+      progress: { progress_completed: 50 },
+    })
+    expect((await store.queryOperations(query)).items[0]).toMatchObject({
+      can_delete: false,
+      progress: { progress_completed: 50 },
+    })
+    expect(
+      store.getTaskCapability({ kind: 'translation', id: '1', project_id: 7 })?.can_delete,
+    ).toBe(false)
+    const detail = {
+      id: 1,
+      project_id: 7,
+      status: 'cancelled',
+      updated_at: fresh.updated_at,
+      can_delete: true,
+      finished_at: null,
+      progress: { progress_completed: 1 },
+    } as ApiSchemas['Job']
+    expect(store.projectJobObservation(detail)).toMatchObject({
+      can_delete: false,
+      progress: { progress_completed: 50 },
+    })
+  })
+  it('reprojecting an old preflight response preserves its original read ordering', async () => {
+    const store = useOperationsStore()
+    const old = deferred<ApiSchemas['Job']>()
+    api.job.mockReturnValueOnce(old.promise)
+    const read = store.queryTranslation('1')
+    await Promise.resolve()
+    const fresh = { ...task('1', 'translation', 'cancelled'), can_delete: false } as Operation
+    api.list.mockResolvedValueOnce({ items: [fresh] })
+    await store.queryOperations({ state: 'all' })
+    old.resolve({
+      id: 1,
+      project_id: 7,
+      status: 'cancelled',
+      can_delete: true,
+      finished_at: null,
+      updated_at: fresh.updated_at,
+      progress: { progress_completed: 1 },
+    } as ApiSchemas['Job'])
+    const detail = await read
+    store.projectTask({ task_type: 'translation', task_id: '1', project_id: 7 }, detail)
+    expect(store.projectJobObservation(detail)).toMatchObject({
+      can_delete: false,
+      progress: { progress_completed: 50 },
+    })
+  })
+  it('removes safely paused tasks from an expanded pausing filter while retaining its cursor', async () => {
+    const store = useOperationsStore()
+    api.list.mockImplementation((query) =>
+      Promise.resolve({
+        items:
+          query.state === 'active'
+            ? [task('1', 'translation', 'pausing'), task('2', 'translation', 'pausing')]
+            : [],
+      }),
+    )
+    store.start()
+    await store.refresh()
+    api.list.mockImplementation((query) =>
+      Promise.resolve(
+        query.status === 'pausing'
+          ? {
+              items: [task(query.cursor ? '2' : '1', 'translation', 'pausing')],
+              next_cursor: query.cursor ? 'third' : 'second',
+            }
+          : { items: [] },
+      ),
+    )
+    await store.setFilters({ status: 'pausing' })
+    await store.loadList(true)
+    const detach = store.attachList()
+    api.list.mockImplementation((query) =>
+      Promise.resolve({
+        items:
+          query.state === 'active'
+            ? ['1', '2'].map((id) => ({
+                ...task(id, 'translation', 'paused'),
+                updated_at: '2026-09-30T00:02:00Z',
+              }))
+            : [],
+      }),
+    )
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(store.items).toHaveLength(0)
+    expect(store.nextCursor).toBe('third')
+    expect(store.active.map((item) => item.status)).toEqual(['paused', 'paused'])
+    detach()
   })
   it('an older project read cannot overwrite a later capability projection from another view', () => {
     const store = useOperationsStore()
@@ -288,6 +615,26 @@ describe('operations coordinator', () => {
     expect(api.list.mock.calls.filter(([query]) => query.state === 'active')).toHaveLength(1)
     await vi.advanceTimersByTimeAsync(1)
     expect(api.list.mock.calls.filter(([query]) => query.state === 'active')).toHaveLength(2)
+  })
+
+  it('polls a subscribed pausing job at running frequency even before discovery includes it', async () => {
+    api.job.mockResolvedValue({ id: 1, status: 'pausing', project_id: 7 })
+    const store = useOperationsStore()
+    const receive = vi.fn()
+    const release = store.subscribeTask(
+      { task_type: 'translation', task_id: '1' },
+      receive,
+      vi.fn(),
+    )
+    store.start()
+    await store.refresh()
+    api.job.mockClear()
+    await vi.advanceTimersByTimeAsync(2_999)
+    expect(api.job).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(api.job).toHaveBeenCalledTimes(1)
+    expect(receive).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'pausing' }))
+    release()
   })
 
   it('continues discovery while idle and stops its timer while hidden', async () => {
