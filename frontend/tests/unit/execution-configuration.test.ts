@@ -72,6 +72,7 @@ describe('ruby retry concurrency configuration', () => {
       Number.NaN,
       Number.POSITIVE_INFINITY,
       Number.NEGATIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
       '2',
       false,
     ])(`rejects explicit invalid concurrency %s while enabled=${enabled}`, (value) => {
@@ -81,7 +82,9 @@ describe('ruby retry concurrency configuration', () => {
       } as ExecutionPlanFormRubyRetry)
       expect(draft.concurrency).toBe(value)
       expect(validateRubyRetryConfig(draft)).toEqual(['concurrency'])
-      expect(() => buildRubyRetryInput(draft)).toThrow('Invalid ruby retry concurrency')
+      expect(() => buildRubyRetryInput(draft)).toThrow(
+        'Invalid ruby retry configuration: concurrency',
+      )
     })
   }
 
