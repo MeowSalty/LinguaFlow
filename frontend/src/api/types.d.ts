@@ -5322,6 +5322,21 @@ export interface components {
             max_attempts?: number;
             /** @description 单个任务全部资源与轮次共享的注音请求并发上限；省略时创建任务按版本化默认值 1 物化，与主轮 concurrency 独立。显式 0 或负数无效。 */
             concurrency?: number;
+            /**
+             * @description 每次注音请求的段数上限；0 表示不限段数。与 max_words_per_batch 不可同时为 0。尾批不足上限时直接发送，正常重试保持上限；仅批级协议异常触发单段兜底。
+             * @default 1
+             */
+            batch_size?: number;
+            /**
+             * @description 注音合批的内容字词数上限；0 表示不限字词数。计入实际发送的原文、候选译文、正文区域及 missing 文本，固定模板/schema 不计入。单段超限时独占请求。
+             * @default 0
+             */
+            max_words_per_batch?: number;
+            /**
+             * @description 最大凑批等待毫秒数；0 表示立即派发。等待不预扣尝试次数，也不占注音并发或 RPM 配额。
+             * @default 25
+             */
+            batch_wait_ms?: number;
         };
         /** @description 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。 */
         TranslateSegmentFilterConfig: {
