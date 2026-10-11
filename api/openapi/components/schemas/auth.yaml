@@ -1,31 +1,87 @@
+UsernameInput:
+  type: string
+  maxLength: 128
+  description: |
+    原始输入最多 128 ASCII 字节；先拒绝非 ASCII、控制字符和 DEL，再移除首尾普通空格并仅将 A-Z 转为小写。
+    规范值须为 3–32 字符，以字母开头、字母或数字结尾，仅允许 a-z、0-9 及不相邻的中间 -/_。
+    保留名按服务端创建用途限制，登录和成员定位不重新检查分配用途。创建后不可改名。
+
+Username:
+  type: string
+  minLength: 3
+  maxLength: 32
+  pattern: '^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$'
+  description: 实例唯一且不可改名的规范用户名；停用后继续占用。
+
+AuthCapabilities:
+  type: object
+  additionalProperties: false
+  required: [mode, password, connections, email_verification_enabled, password_reset_enabled]
+  properties:
+    mode:
+      type: string
+      enum: [local, server]
+      x-enum-varnames: [AuthCapabilitiesModeLocal, AuthCapabilitiesModeServer]
+    password:
+      type: object
+      additionalProperties: false
+      required: [can_login, can_signup, username_login_enabled, email_login_enabled]
+      properties:
+        can_login:
+          type: boolean
+        can_signup:
+          type: boolean
+          description: 同时满足已发布密码渠道政策及全局公开注册政策。
+        username_login_enabled:
+          type: boolean
+        email_login_enabled:
+          type: boolean
+    connections:
+      type: array
+      maxItems: 0
+      description: 阶段 A 不提供外部渠道，始终为空；未来扩展使用同一能力发现入口。
+      items:
+        type: object
+    email_verification_enabled:
+      type: boolean
+      enum: [false]
+    password_reset_enabled:
+      type: boolean
+      enum: [false]
+
 RegisterRequest:
   type: object
-  required: [username, password, email]
+  additionalProperties: false
+  required: [username, password]
   properties:
     username:
-      type: string
+      $ref: '#/UsernameInput'
     password:
       type: string
       minLength: 8
       description: 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。
     email:
       type: string
-      format: email
+      nullable: true
+      description: 可省略、为 null 或空字符串；非空值去除首尾空白并转小写后校验单个纯邮箱地址。填写地址仅作为未验证资料，不占用唯一登录归属。
     display_name:
       type: string
 
 LoginRequest:
   type: object
-  required: [username, password]
+  additionalProperties: false
+  required: [identifier, password]
   properties:
-    username:
+    identifier:
       type: string
+      description: 按是否含 ASCII @ 选择唯一的用户名或已验证邮箱定位路径。阶段 A 仅开放用户名入口；邮箱路径统一认证失败，不回退查询用户名。不接受 username 或 identifier_type 别名。
     password:
       type: string
       description: 原样验证密码，不施加注册或改密时的新密码长度规则，以兼容历史密码。
 
 RefreshRequest:
   type: object
+  additionalProperties: false
   required: [refresh_token]
   properties:
     refresh_token:
@@ -38,7 +94,7 @@ LogoutRequest:
   properties:
     refresh_token:
       type: string
-      description: 当前认证用户本人持有的 refresh token；只撤销此 token，不影响其他会话。
+      description: 当前认证用户本人持有的 refresh token；撤销其整条刷新会话链，包括已轮换后继，不影响其他独立登录会话。
 
 AuthSession:
   type: object

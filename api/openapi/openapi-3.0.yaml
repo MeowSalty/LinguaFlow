@@ -1628,6 +1628,23 @@ paths:
                 $ref: '#/components/schemas/ModeResponse'
         default:
           $ref: '#/components/responses/Problem'
+  /auth/capabilities:
+    get:
+      operationId: GetAuthCapabilities
+      summary: 获取当前实例可用认证入口
+      description: 仅公开已实现且有效的入口能力，不披露用户或私有政策。读取失败不能解释为允许注册。local 不提供登录入口。
+      security: []
+      responses:
+        '200':
+          description: 当前能力快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthCapabilities'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /auth/register:
     post:
       operationId: RegisterAuth
@@ -1661,6 +1678,7 @@ paths:
     post:
       operationId: LoginAuth
       summary: 用户登录
+      description: 仅接受 identifier/password。字段错误返回 400；无效标识、关闭的标识入口、不存在或停用账号、未设密码及密码错误统一返回 401。政策不可用返回 503。
       security: []
       requestBody:
         required: true
@@ -1681,6 +1699,7 @@ paths:
     post:
       operationId: RefreshAuth
       summary: 刷新访问令牌
+      description: 原子轮换同一刷新会话链。已消费 token 重放会撤销整条链，无重试宽限期；并发刷新至多一次签发且成功方后继也可能被重放撤销。绝对期限从首次登录计算，轮换不延长。失效后重新登录。
       security: []
       requestBody:
         required: true
@@ -1702,7 +1721,7 @@ paths:
       operationId: LogoutAuth
       summary: 登出并撤销刷新令牌
       description: |
-        只撤销当前认证用户提交的 refresh token，不影响其他会话。本人已撤销的 token 再次提交返回 204；
+        撤销当前认证用户提交的 refresh token 所属整条会话链，包含已轮换后继，不影响其他独立登录会话。本人已撤销的 token 再次提交返回 204；
         他人的 token（包括已撤销的 token）返回 403 且不修改。未知 token 保持 401 token-invalid 错误，
         响应不包含 token 所属信息。数据库中仍存在的本人过期 refresh token 也可撤销。
         已签发的 access token 在到期前仍可能有效，不承诺全设备退出或即时撤销 access token。
@@ -1748,7 +1767,7 @@ paths:
       operationId: UpdateCurrentUser
       summary: 更新当前用户资料
       description: |
-        省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400，邮箱冲突返回 409；失败不部分更新。
+        省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400；已验证邮箱禁止直接替换（409）。未验证邮箱允许重复；失败不部分更新。
         服务器模式要求 bearer 认证；本地模式仍允许通过本地身份调用，页面只读不代表后端禁止写入。
       security:
         - bearerAuth: []
@@ -1778,7 +1797,7 @@ paths:
       operationId: ChangeCurrentUserPassword
       summary: 修改当前用户密码
       description: |
-        只更新密码，已有 access/refresh token 继续沿用各自有效期。
+        核验当前密码后原子更新密码、递增账号认证版本并撤销全部刷新会话。旧 access 在后续鉴权失效；已连接 SSE 有界中止。成功后须重新登录，不在改密响应中签发替代会话。
         缺失、空值、非法类型或新密码长度不合法返回 400；非空旧密码错误返回专用
         urn:linguaflow:current-password-mismatch Problem（400），不会被当作认证失效。
         401 仅表示请求认证缺失或失效。本地模式沿用现有本地身份授权，页面不提供密码表单。
@@ -1800,6 +1819,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '401':
+          $ref: '#/components/responses/Problem'
+        '409':
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
@@ -4963,6 +4984,69 @@ components:
           x-enum-varnames:
             - ModeLocal
             - ModeServer
+    UsernameInput:
+      type: string
+      maxLength: 128
+      description: |
+        原始输入最多 128 ASCII 字节；先拒绝非 ASCII、控制字符和 DEL，再移除首尾普通空格并仅将 A-Z 转为小写。
+        规范值须为 3–32 字符，以字母开头、字母或数字结尾，仅允许 a-z、0-9 及不相邻的中间 -/_。
+        保留名按服务端创建用途限制，登录和成员定位不重新检查分配用途。创建后不可改名。
+    Username:
+      type: string
+      minLength: 3
+      maxLength: 32
+      pattern: ^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$
+      description: 实例唯一且不可改名的规范用户名；停用后继续占用。
+    AuthCapabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+        - password
+        - connections
+        - email_verification_enabled
+        - password_reset_enabled
+      properties:
+        mode:
+          type: string
+          enum:
+            - local
+            - server
+          x-enum-varnames:
+            - AuthCapabilitiesModeLocal
+            - AuthCapabilitiesModeServer
+        password:
+          type: object
+          additionalProperties: false
+          required:
+            - can_login
+            - can_signup
+            - username_login_enabled
+            - email_login_enabled
+          properties:
+            can_login:
+              type: boolean
+            can_signup:
+              type: boolean
+              description: 同时满足已发布密码渠道政策及全局公开注册政策。
+            username_login_enabled:
+              type: boolean
+            email_login_enabled:
+              type: boolean
+        connections:
+          type: array
+          maxItems: 0
+          description: 阶段 A 不提供外部渠道，始终为空；未来扩展使用同一能力发现入口。
+          items:
+            type: object
+        email_verification_enabled:
+          type: boolean
+          enum:
+            - false
+        password_reset_enabled:
+          type: boolean
+          enum:
+            - false
     User:
       type: object
       required:
@@ -4975,10 +5059,11 @@ components:
         id:
           type: integer
         username:
-          type: string
+          $ref: '#/components/schemas/Username'
         email:
           type: string
           format: email
+          nullable: true
         display_name:
           type: string
         role:
@@ -4987,35 +5072,39 @@ components:
           type: boolean
     RegisterRequest:
       type: object
+      additionalProperties: false
       required:
         - username
         - password
-        - email
       properties:
         username:
-          type: string
+          $ref: '#/components/schemas/UsernameInput'
         password:
           type: string
           minLength: 8
           description: 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。
         email:
           type: string
-          format: email
+          nullable: true
+          description: 可省略、为 null 或空字符串；非空值去除首尾空白并转小写后校验单个纯邮箱地址。填写地址仅作为未验证资料，不占用唯一登录归属。
         display_name:
           type: string
     LoginRequest:
       type: object
+      additionalProperties: false
       required:
-        - username
+        - identifier
         - password
       properties:
-        username:
+        identifier:
           type: string
+          description: 按是否含 ASCII @ 选择唯一的用户名或已验证邮箱定位路径。阶段 A 仅开放用户名入口；邮箱路径统一认证失败，不回退查询用户名。不接受 username 或 identifier_type 别名。
         password:
           type: string
           description: 原样验证密码，不施加注册或改密时的新密码长度规则，以兼容历史密码。
     RefreshRequest:
       type: object
+      additionalProperties: false
       required:
         - refresh_token
       properties:
@@ -5029,7 +5118,7 @@ components:
       properties:
         refresh_token:
           type: string
-          description: 当前认证用户本人持有的 refresh token；只撤销此 token，不影响其他会话。
+          description: 当前认证用户本人持有的 refresh token；撤销其整条刷新会话链，包括已轮换后继，不影响其他独立登录会话。
     AuthSession:
       type: object
       required:
@@ -5059,7 +5148,7 @@ components:
       additionalProperties: false
       description: |
         仅更新提供的字段，省略字段保持原值；空对象返回当前资料且不修改更新时间。
-        字段不可为 null，用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
+        仅 email 可为 null（清空）；用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
       properties:
         display_name:
           type: string
@@ -5067,9 +5156,8 @@ components:
           description: 去除首尾空白；空字符串允许清空显示名。
         email:
           type: string
-          format: email
-          nullable: false
-          description: 去除首尾空白并转小写后校验单个纯邮箱地址；拒绝空值、内部空白、显示名及地址包装。
+          nullable: true
+          description: null 或空字符串清空未验证邮箱；非空值去除首尾空白并转小写后校验单个纯邮箱地址。未验证邮箱可重复；已有验证状态的邮箱禁止通过资料接口变更（409）。
     ChangePasswordRequest:
       type: object
       additionalProperties: false
@@ -5173,9 +5261,7 @@ components:
         - username
       properties:
         username:
-          type: string
-          minLength: 1
-          description: 精确匹配已有账号用户名；不发送邀请。
+          $ref: '#/components/schemas/UsernameInput'
         role:
           type: string
           enum:
@@ -7668,19 +7754,20 @@ components:
           type: integer
     AdminCreateUserRequest:
       type: object
+      additionalProperties: false
       required:
         - username
         - password
-        - email
       properties:
         username:
-          type: string
+          $ref: '#/components/schemas/UsernameInput'
         password:
           type: string
           minLength: 8
         email:
           type: string
-          format: email
+          nullable: true
+          description: 可省略、为 null 或空字符串；非空值去除首尾空白并转小写后校验单个纯邮箱地址。管理员录入不代表已验证所有权。
         display_name:
           type: string
         role:
@@ -7691,12 +7778,14 @@ components:
           default: user
     AdminUpdateUserRequest:
       type: object
+      additionalProperties: false
       properties:
         display_name:
           type: string
         email:
           type: string
-          format: email
+          nullable: true
+          description: 省略保持原值；null 或空串清空未验证邮箱；非空值去除首尾空白并转小写后校验单个纯邮箱地址。已有验证状态的邮箱禁止直接变更（409）。
         role:
           type: string
           enum:
@@ -7706,6 +7795,7 @@ components:
           type: boolean
     AdminResetPasswordRequest:
       type: object
+      additionalProperties: false
       required:
         - new_password
       properties:

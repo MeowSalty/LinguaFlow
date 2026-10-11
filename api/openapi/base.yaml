@@ -99,6 +99,8 @@ paths:
     $ref: './paths/system.yaml#/ping'
   /mode:
     $ref: './paths/system.yaml#/mode'
+  /auth/capabilities:
+    $ref: './paths/auth.yaml#/capabilities'
   /auth/register:
     $ref: './paths/auth.yaml#/register'
   /auth/login:
@@ -322,6 +324,12 @@ components:
       $ref: './components/schemas/common.yaml#/HealthResponse'
     ModeResponse:
       $ref: './components/schemas/common.yaml#/ModeResponse'
+    UsernameInput:
+      $ref: './components/schemas/auth.yaml#/UsernameInput'
+    Username:
+      $ref: './components/schemas/auth.yaml#/Username'
+    AuthCapabilities:
+      $ref: './components/schemas/auth.yaml#/AuthCapabilities'
     User:
       $ref: './components/schemas/user.yaml#/User'
     RegisterRequest:

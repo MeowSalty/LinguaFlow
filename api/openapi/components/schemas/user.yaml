@@ -5,10 +5,11 @@ User:
     id:
       type: integer
     username:
-      type: string
+      $ref: './auth.yaml#/Username'
     email:
       type: string
       format: email
+      nullable: true
     display_name:
       type: string
     role:
@@ -21,7 +22,7 @@ UpdateCurrentUserRequest:
   additionalProperties: false
   description: |
     仅更新提供的字段，省略字段保持原值；空对象返回当前资料且不修改更新时间。
-    字段不可为 null，用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
+    仅 email 可为 null（清空）；用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
   properties:
     display_name:
       type: string
@@ -29,9 +30,8 @@ UpdateCurrentUserRequest:
       description: 去除首尾空白；空字符串允许清空显示名。
     email:
       type: string
-      format: email
-      nullable: false
-      description: 去除首尾空白并转小写后校验单个纯邮箱地址；拒绝空值、内部空白、显示名及地址包装。
+      nullable: true
+      description: null 或空字符串清空未验证邮箱；非空值去除首尾空白并转小写后校验单个纯邮箱地址。未验证邮箱可重复；已有验证状态的邮箱禁止通过资料接口变更（409）。
 
 ChangePasswordRequest:
   type: object
