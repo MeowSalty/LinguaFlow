@@ -7,6 +7,13 @@ import {
   createConfigurationBackend,
 } from './fixtures/configuration-backend.mjs'
 import { createRubyProductProxy } from './fixtures/ruby-product-proxy.mjs'
+import {
+  assertRubyResults,
+  makeRubyProject,
+  makeRubyWorkflow,
+  observeRubyRequest,
+  rubyResponse,
+} from './fixtures/ruby-backend.mjs'
 
 let metadata
 beforeAll(() => {
@@ -18,24 +25,8 @@ const test = base.extend({
     const backend = await createConfigurationBackend(metadata, signal, {
       category: 'ruby-product',
       upstreamTimeoutSeconds: 180,
-      respond: (envelope) =>
-        envelope.missing
-          ? {
-              ruby_output: envelope.missing.map((item) => ({
-                id: item.id,
-                base: 'alpha',
-                text: 'hero',
-                kind: 'creative',
-                occurrence: 1,
-              })),
-            }
-          : {
-              translations: Object.fromEntries(
-                Object.entries(envelope.segments)
-                  .filter(([, segment]) => segment.translate)
-                  .map(([id]) => [id, 'alpha']),
-              ),
-            },
+      respond: rubyResponse,
+      observeRequest: observeRubyRequest,
     })
     onTestFinished(() => backend.writeReport(task))
     try {
@@ -387,5 +378,160 @@ test('T32b genuine cursor discovery, restart while pausing, and authorized cance
     cancellationInitiatedThroughUI: true,
     delayedUpstreamCompletedAfterCancel: held.length,
     cancelledStatusStableAfterReload: true,
+  })
+})
+
+test('P2 browser configuration, four-member pause drain and resume preserve confirmed work and request accounting', async ({
+  backend,
+  product,
+}) => {
+  const flow = await makeRubyWorkflow(backend, {
+    mainModel: 'ruby-product-main',
+    alignmentModel: 'ruby-product-align',
+    mainBatch: 4,
+  })
+  const page = await product.freshPage()
+  const configuration = [
+    ['每次注音最多段数', '4'],
+    ['每次注音最多字词数', '0'],
+    ['最大凑批等待时间（毫秒）', '100'],
+  ]
+  await page.goto(`${product.origin}/execution-plan-templates`)
+  const planCard = page.locator('.lf-interactive-card').filter({
+    has: page.getByRole('heading', { name: flow.plan.name, exact: true }),
+  })
+  await planCard.getByRole('button', { name: '编辑', exact: true }).click()
+  const editor = page.locator('.n-drawer:visible')
+  await expect(editor.getByLabel(configuration[0][0], { exact: true })).toBeHidden()
+  await editor.getByText('合批设置', { exact: true }).click()
+  for (const [label, value] of configuration) {
+    const field = editor.getByLabel(label, { exact: true })
+    await expect(field).toHaveValue('')
+    await field.fill(value)
+    await field.press('Tab')
+  }
+  await expect(editor.getByLabel('注音请求并发上限', { exact: true })).toHaveValue('1')
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname === `/api/v1/execution-plan-templates/${flow.plan.id}`,
+  )
+  await editor.getByRole('button', { name: '保存', exact: true }).click()
+  assert.equal((await saved).status(), 200)
+  await expect(editor).toBeHidden()
+  await page.reload()
+  await planCard.getByRole('button', { name: '编辑', exact: true }).click()
+  for (const [label, value] of configuration) {
+    await expect(editor.getByLabel(label, { exact: true })).toBeVisible()
+    await expect(editor.getByLabel(label, { exact: true })).toHaveValue(value)
+  }
+  await editor.screenshot({ path: path.join(backend.runDir, 'p2-configuration-readback.png') })
+  await editor.getByRole('button', { name: '取消', exact: true }).click()
+  const stored = await backend.request('GET', `/execution-plan-templates/${flow.plan.id}`)
+  assert.deepEqual(stored.ruby_retry, {
+    enabled: true,
+    backend_id: flow.alignment.id,
+    max_attempts: 2,
+    concurrency: 1,
+    batch_size: 4,
+    max_words_per_batch: 0,
+    batch_wait_ms: 100,
+  })
+  const { project, resource } = await makeRubyProject(backend, 'P2 eight paragraphs', 8)
+  backend.holds.add('ruby-product-align')
+  const job = await backend.startJob(project, stored)
+  const ready = await backend.until(
+    () => backend.getJob(job.id),
+    (current) =>
+      current.progress.stages.main_requests === 0 &&
+      current.progress.stages.alignment_requests === 1 &&
+      current.progress.stages.pending_alignment === 8,
+    'eight durable candidates and one blocked four-member alignment request',
+  )
+  const alignmentCalls = () => backend.calls.filter((call) => call.model === 'ruby-product-align')
+  const mainCalls = () => backend.calls.filter((call) => call.model === 'ruby-product-main')
+  assert.equal(mainCalls().length, 2)
+  assert.deepEqual(
+    mainCalls().map((call) => call.memberCount),
+    [4, 4],
+  )
+  assert.equal(alignmentCalls().length, 1)
+  assert.equal(alignmentCalls()[0].memberCount, 4)
+  assert.equal(ready.progress.progress_completed, 0)
+  const firstMembers = alignmentCalls()[0].members.map((member) => member.workId)
+  assert.equal(new Set(firstMembers).size, 4)
+  const drawer = await openDetail(page, product, { job, project })
+  const stages = drawer.getByRole('region', { name: '阶段详情', exact: true })
+  const stageValue = (label) =>
+    stages
+      .locator('dt')
+      .filter({ hasText: new RegExp(`^${label}$`) })
+      .locator('+ dd')
+  await expect(stageValue('注音请求')).toHaveText(/^1\s*个请求$/)
+  await expect(stageValue('待完成注音候选')).toHaveText(/^8\s*个候选段落$/)
+  await expect(stageValue('已确认工作量')).toHaveText(/^0\s*段落 × 轮$/)
+  await drawer.getByRole('button', { name: '暂停', exact: true }).click()
+  await expect(drawer.locator('.n-drawer-header .n-tag')).toHaveText('暂停中')
+  await expect(drawer.getByRole('button', { name: '恢复', exact: true })).toBeHidden()
+  const pausing = await backend.getJob(job.id)
+  assert.equal(pausing.status, 'pausing')
+  assert.equal(pausing.progress.stages.draining_requests, 1)
+  assert.equal(alignmentCalls().length, 1, 'pause cannot dispatch queued candidates')
+  await drawer.screenshot({ path: path.join(backend.runDir, 'p2-batch-pausing.png') })
+  backend.release('ruby-product-align')
+  const paused = await backend.until(
+    () => backend.getJob(job.id),
+    (current) => current.status === 'paused',
+    'the complete received batch drains before pause confirmation',
+  )
+  assert.equal(paused.progress.stages.draining_requests, 0)
+  assert.equal(paused.progress.stages.pending_alignment, 4)
+  assert.equal(paused.progress.stages.confirmed_work, 4)
+  assert.equal(paused.progress.progress_completed, 4)
+  assert.equal(alignmentCalls().length, 1)
+  await expect(drawer.locator('.n-drawer-header .n-tag')).toHaveText('已暂停')
+  await expect(stageValue('待完成注音候选')).toHaveText(/^4\s*个候选段落$/)
+  await expect(stageValue('已确认工作量')).toHaveText(/^4\s*段落 × 轮$/)
+  await drawer.screenshot({ path: path.join(backend.runDir, 'p2-batch-paused.png') })
+  await drawer.getByRole('button', { name: '恢复', exact: true }).click()
+  const completed = await backend.terminalJob(job.id)
+  assert.equal(completed.status, 'completed', completed.error_message)
+  assert.equal(completed.progress.progress_completed, 8)
+  assert.equal(completed.progress.stages.confirmed_work, 8)
+  assert.equal(mainCalls().length, 2, 'resume reuses all durable main candidates')
+  assert.deepEqual(
+    alignmentCalls().map((call) => call.memberCount),
+    [4, 4],
+  )
+  const resumedMembers = alignmentCalls()[1].members.map((member) => member.workId)
+  assert.equal(new Set([...firstMembers, ...resumedMembers]).size, 8)
+  assert.ok(resumedMembers.every((member) => !firstMembers.includes(member)))
+  await expect(drawer.locator('.n-drawer-header .n-tag')).toHaveText('已完成')
+  await expect(stageValue('已确认工作量')).toHaveText(/^8\s*段落 × 轮$/)
+  await drawer.screenshot({ path: path.join(backend.runDir, 'p2-batch-completed.png') })
+  const verified = await assertRubyResults(backend, project, resource, 8, 4)
+  for (const action of ['pause', 'resume'])
+    assert.equal(
+      product.requests.filter(
+        (request) =>
+          request.method === 'POST' && request.path === `/api/v1/jobs/${job.id}/${action}`,
+      ).length,
+      1,
+      `${action} is initiated exactly once through the product`,
+    )
+  backend.recordObservation('P2 product acceptance', {
+    configurationEditedThroughUI: true,
+    configurationReadBackAfterReload: stored.ruby_retry,
+    mainBatchSize: 4,
+    mainConcurrency: 1,
+    alignmentConcurrency: 1,
+    mainRequests: mainCalls().length,
+    actualAlignmentBatchSizes: alignmentCalls().map((call) => call.memberCount),
+    readyStages: ready.progress.stages,
+    pausingStages: pausing.progress.stages,
+    pausedStages: paused.progress.stages,
+    completedStages: completed.progress.stages,
+    noConfirmedMemberResent: true,
+    ...verified,
   })
 })

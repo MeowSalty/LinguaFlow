@@ -225,6 +225,7 @@ export async function createConfigurationBackend(metadata, signal, options = {})
         secretVersion:
           tokenSecrets.indexOf(String(req.headers.authorization).replace(/^Bearer /, '')) + 1,
         at: Date.now(),
+        ...options.observeRequest?.(envelope),
       }
       calls.push(call)
       res.on('close', () => {
@@ -504,6 +505,8 @@ export async function createConfigurationBackend(metadata, signal, options = {})
     }
   }
   async function writeReport(task) {
+    if (options.observeRequest)
+      report.upstreamRequests = calls.map(({ secretVersion: _secretVersion, ...call }) => call)
     report.scenarios = [
       { name: task.name, status: task.result?.state === 'pass' ? 'passed' : 'failed' },
     ]
