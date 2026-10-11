@@ -35,9 +35,9 @@ func TestAdministratorInitializationCommands(t *testing.T) {
 			t.Fatalf("%v: %v", args, err)
 		}
 	}
-	run("initialize", "--username", "initial-admin", "--email", "initial@test.invalid", "--password-stdin")
+	run("initialize", "--username", " INITIAL-ADMIN ", "--password-stdin")
 	run("initialize")
-	run("create", "--username", "backup-admin", "--email", "backup@test.invalid", "--password-stdin")
+	run("create", "--username", " BACKUP-ADMIN ", "--password-stdin")
 	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: config.ModeServer, Environment: config.Environment()})
 	if err != nil {
 		t.Fatal(err)
@@ -49,8 +49,11 @@ func TestAdministratorInitializationCommands(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	initial := client.User.Query().Where(user.UsernameEQ("initial-admin")).OnlyX(ctx)
+	if client.User.Query().Where(user.EmailIsNil()).CountX(ctx) != 2 {
+		t.Fatal("optional administrator emails were not stored as NULL")
+	}
 	client.User.UpdateOne(initial).SetRole(service.SystemRoleUser).SetActive(false).SaveX(ctx)
-	run("recover", "--username", "initial-admin", "--password-stdin")
+	run("recover", "--username", " INITIAL-ADMIN ", "--password-stdin")
 	recovered := client.User.GetX(ctx, initial.ID)
 	if !recovered.Active || recovered.Role != service.SystemRoleAdmin {
 		t.Fatal("recover command did not restore the selected administrator")
