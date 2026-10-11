@@ -15,7 +15,7 @@ interface UseJobPollingOptions {
 interface UseJobPollingReturn {
   /** 是否正在轮询 */
   isPolling: Ref<boolean>
-  /** 是否存在活跃（running/pending/paused）任务 */
+  /** 是否存在活跃（running/pausing/pending/paused）任务 */
   hasActiveJobs: Ref<boolean>
   /** 手动启动轮询 */
   start: () => void
@@ -32,32 +32,30 @@ export function useJobPolling({
   const jobStore = useJobStore()
 
   const isPolling = ref(false)
+  let mounted = false
 
   // ── 活跃任务检测 ──
-  const hasActiveJobs = computed(() =>
-    jobStore.jobs.some(
-      (j) => j.status === 'running' || j.status === 'pending' || j.status === 'paused',
-    ),
+  const pollingInterval = computed(() =>
+    resolveAdaptiveInterval(jobStore.jobs.map((job) => job.status)),
   )
+  const hasActiveJobs = computed(() => pollingInterval.value != null)
 
   const pollList = (): void => {
-    if (!projectId.value || !enabled.value) return
+    if (!projectId.value || !enabled.value || document.hidden) return
     void jobStore.loadJobs(projectId.value)
   }
 
-  const poller = createAdaptivePoller(
-    () => resolveAdaptiveInterval(jobStore.jobs.map((j) => j.status)),
-    pollList,
-  )
+  const poller = createAdaptivePoller(() => pollingInterval.value, pollList)
 
   // ── 统一控制 ──
 
   const start = (): void => {
     if (isPolling.value) return
-    if (!hasActiveJobs.value) return
+    if (!mounted || !projectId.value || !enabled.value || document.hidden || !hasActiveJobs.value)
+      return
 
-    isPolling.value = true
     poller.start()
+    isPolling.value = poller.isRunning()
   }
 
   const stop = (): void => {
@@ -65,48 +63,26 @@ export function useJobPolling({
     poller.stop()
   }
 
-  // ── 页面可见性处理 ──
-  const handleVisibility = (): void => {
-    if (document.hidden) {
-      stop()
-    } else if (hasActiveJobs.value) {
-      if (enabled.value) pollList()
-      start()
-    }
+  // Rebuild immediately when the service moves paused work into running or pausing.
+  const reconcile = (): void => {
+    stop()
+    start()
+    if (isPolling.value) pollList()
   }
 
-  // ── 监听 enabled 变化：仅控制列表轮询 ──
-  watch(enabled, (val) => {
-    if (val && hasActiveJobs.value) {
-      pollList()
-      poller.start()
-    } else {
-      poller.stop()
-    }
-  })
-
-  // ── 监听任务列表变化：有新活跃任务时自动启动轮询 ──
-  watch(hasActiveJobs, (active) => {
-    if (active && !isPolling.value) {
-      if (enabled.value) pollList()
-      start()
-    } else if (!active && isPolling.value) {
-      stop()
-    }
-  })
+  watch([enabled, projectId, pollingInterval], reconcile)
 
   // ── 生命周期 ──
   onMounted(() => {
-    document.addEventListener('visibilitychange', handleVisibility)
-    if (hasActiveJobs.value) {
-      if (enabled.value) pollList()
-      start()
-    }
+    mounted = true
+    document.addEventListener('visibilitychange', reconcile)
+    reconcile()
   })
 
   onUnmounted(() => {
+    mounted = false
     stop()
-    document.removeEventListener('visibilitychange', handleVisibility)
+    document.removeEventListener('visibilitychange', reconcile)
   })
 
   return { isPolling, hasActiveJobs, start, stop }

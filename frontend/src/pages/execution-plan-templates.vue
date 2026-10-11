@@ -33,8 +33,11 @@ import {
   buildRubyRetryInput,
   cloneExecutionPlanValue,
   createExecutionPlanRound,
+  createRubyRetryConfig,
+  mergeRubyRetryConfig,
   validateInlineTermExtractionConfig,
   validateRoundCodes,
+  validateRubyRetryConfig,
 } from '@/utils/execution-plan-config'
 import type {
   ExecutionPlanFormRound,
@@ -46,6 +49,7 @@ import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { formatDateTime } from '@/utils/datetime'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
+import { rubyRetryValidationKeys } from '@/locales/ruby-alignment-config'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
@@ -61,12 +65,6 @@ interface FormModel {
 }
 
 // ── 默认值 ────────────────────────────────────────────────────
-
-const DEFAULT_RUBY_RETRY: ExecutionPlanFormRubyRetry = {
-  enabled: false,
-  backend_id: null,
-  max_attempts: 1,
-}
 
 function deepClone<T>(obj: T): T {
   return cloneExecutionPlanValue(obj)
@@ -108,7 +106,7 @@ const formModel = reactive<FormModel>({
   name: '',
   description: '',
   profile_id: null,
-  ruby_retry: deepClone(DEFAULT_RUBY_RETRY),
+  ruby_retry: createRubyRetryConfig(),
   rounds: [],
 })
 
@@ -221,7 +219,7 @@ const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
   formModel.profile_id = null
-  formModel.ruby_retry = deepClone(DEFAULT_RUBY_RETRY)
+  formModel.ruby_retry = createRubyRetryConfig()
   formModel.rounds = [createExecutionPlanRound()]
   editingItem.value = null
 }
@@ -238,9 +236,7 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
   formModel.name = item.name
   formModel.description = item.description ?? ''
   formModel.profile_id = item.profile_id ?? null
-  formModel.ruby_retry = item.ruby_retry
-    ? deepClone(item.ruby_retry)
-    : deepClone(DEFAULT_RUBY_RETRY)
+  formModel.ruby_retry = mergeRubyRetryConfig(item.ruby_retry)
   formModel.rounds = item.rounds?.length ? deepClone(item.rounds) : [createExecutionPlanRound()]
   ensureDependenciesLoaded()
   drawerVisible.value = true
@@ -415,6 +411,11 @@ const onSubmit = async (): Promise<void> => {
   }
 
   if (!validateRounds()) return
+  const [rubyRetryError] = validateRubyRetryConfig(formModel.ruby_retry)
+  if (rubyRetryError) {
+    message.error(t(rubyRetryValidationKeys[rubyRetryError]))
+    return
+  }
 
   if (!current()) return
   const payload = buildPayload()
@@ -781,6 +782,7 @@ useStoreErrorToast(
             :disabled="
               submitting ||
               !dependenciesLoaded ||
+              validateRubyRetryConfig(formModel.ruby_retry).length > 0 ||
               formModel.rounds.some(
                 (round) =>
                   Boolean(validateRoundCodes(round)) ||

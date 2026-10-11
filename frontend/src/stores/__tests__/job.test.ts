@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   detail: vi.fn(),
   forget: vi.fn(),
   removeProject: vi.fn(),
+  projectTask: vi.fn(),
 }))
 vi.mock('@/api/client', () => ({
   fetchJobs: api.list,
@@ -32,6 +33,7 @@ vi.mock('@/stores/operations', () => ({
     queryTranslation: api.detail,
     forget: api.forget,
     removeProject: api.removeProject,
+    projectTask: api.projectTask,
     beginCapabilityRead: () => 1,
     observeCapabilities: vi.fn(),
   }),
@@ -145,6 +147,13 @@ describe('workspace job requests', () => {
       }[action]
       const response = await method(1)
       expect(api.invalidate).toHaveBeenCalledOnce()
+      expect(api.projectTask).toHaveBeenCalledWith(
+        { task_type: 'translation', task_id: '1', project_id: 7 },
+        job(1, 'running'),
+      )
+      expect(api.projectTask.mock.invocationCallOrder[0]).toBeLessThan(
+        api.invalidate.mock.invocationCallOrder[0]!,
+      )
       expect(store.jobs[0]?.status).toBe('running')
       if (action === 'pause') expect(response?.status).toBe('running')
     },
@@ -160,6 +169,10 @@ describe('workspace job requests', () => {
     pending.resolve(job(4, 'pending'))
     await Promise.all([first, second])
     expect(api.invalidate).toHaveBeenCalledOnce()
+    expect(api.projectTask).toHaveBeenCalledWith(
+      { task_type: 'translation', task_id: '4', project_id: 7 },
+      job(4, 'pending'),
+    )
     expect(store.jobs.map((item) => item.id)).toEqual([4])
     expect(store.creatingJob).toBe(false)
   })

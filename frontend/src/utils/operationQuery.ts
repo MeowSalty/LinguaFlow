@@ -57,6 +57,7 @@ export const parseOperationQuery = (
   const status = choice('status', [
     'pending',
     'running',
+    'pausing',
     'paused',
     'waiting_retry',
     'needs_action',

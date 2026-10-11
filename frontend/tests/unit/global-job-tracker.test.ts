@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   invalidate: vi.fn(async () => {}),
   start: vi.fn(),
   refresh: vi.fn(),
+  projectTask: vi.fn(),
+  projectJobObservation: vi.fn((job) => job),
 }))
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
 vi.mock('@/api/client', () => ({ listJobEvents: mocks.listJobEvents }))
@@ -19,7 +21,7 @@ vi.mock('@/stores/operations', () => ({
   useOperationsStore: () => ({ ...mocks, initialized: true, allDiscovered: [] }),
 }))
 vi.mock('@/composables/sseShared', () => ({
-  KNOWN_EVENT_TYPES: ['batch'],
+  KNOWN_EVENT_TYPES: ['batch', 'stage_counts', 'job_pausing', 'job_paused', 'job_cancelled'],
   resolveStreamUrl: () => '/stream',
 }))
 
@@ -32,7 +34,13 @@ const subscriptions: Subscription[] = []
 class TestEventSource {
   static instances: TestEventSource[] = []
   close = vi.fn()
-  addEventListener = vi.fn()
+  listeners = new Map<string, (event: { data: string }) => void>()
+  addEventListener = vi.fn((type: string, receive: (event: { data: string }) => void) => {
+    this.listeners.set(type, receive)
+  })
+  emit(value: ReturnType<typeof event> & { metadata?: Record<string, unknown> }) {
+    this.listeners.get(value.type)?.({ data: JSON.stringify(value) })
+  }
   onopen: (() => void) | null = null
   onerror: (() => void) | null = null
   constructor() {
@@ -72,6 +80,7 @@ beforeEach(() => {
   TestEventSource.instances = []
   for (const mock of Object.values(mocks)) mock.mockReset()
   mocks.invalidate.mockResolvedValue(undefined)
+  mocks.projectJobObservation.mockImplementation((job) => job)
   mocks.listJobEvents.mockResolvedValue({ items: [event()], next_before_seq: 5 })
   mocks.subscribeTask.mockImplementation((_locator, receive, fail) => {
     const release = vi.fn()
@@ -88,10 +97,230 @@ beforeEach(() => {
 })
 afterEach(() => {
   tracker.$dispose()
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
+const stageCounts = (as_of = '2026-10-09T11:00:00.123456789Z') => ({
+  main_requests: 1,
+  pending_alignment: 2,
+  alignment_requests: 1,
+  saving_requests: 0,
+  ready_to_commit: 0,
+  confirmed_work: 3,
+  unknown_requests: 0,
+  draining_requests: 2,
+  as_of,
+})
+const observedJob = () => ({
+  ...job(),
+  updated_at: '2026-10-09T11:00:00Z',
+  progress: { progress_completed: 10, progress_total: 20, stages: stageCounts() },
+})
+const stageEvent = (stages: unknown = stageCounts(), id = 12, seq = 6) => ({
+  ...event(id, seq),
+  type: 'stage_counts',
+  metadata: { stages },
+})
+
+describe('live job stage observations', () => {
+  it('revalidates through the coordinator after SSE reconnect and ignores obsolete streams', async () => {
+    const opening = tracker.openDetail(12)
+    subscriptions[0]!.receive({ ...observedJob(), status: 'pausing' })
+    await opening
+    const first = TestEventSource.instances[0]!
+    first.onopen?.()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+    first.onerror?.()
+    expect(tracker.isJobSSEConnected()).toBe(false)
+    subscriptions[0]!.receive({ ...observedJob(), status: 'pausing' })
+    const second = TestEventSource.instances[1]!
+    second.onopen?.()
+    expect(mocks.refresh).toHaveBeenCalledTimes(1)
+    expect(tracker.isJobSSEConnected()).toBe(true)
+    first.onopen?.()
+    first.onerror?.()
+    expect(mocks.refresh).toHaveBeenCalledTimes(1)
+    expect(tracker.isJobSSEConnected()).toBe(true)
+    tracker.closeDetail()
+    second.onopen?.()
+    expect(mocks.refresh).toHaveBeenCalledTimes(1)
+  })
+  it('publishes actual cancellation before old pause callbacks and preserves newer retry responses', async () => {
+    const opening = tracker.openDetail(12)
+    subscriptions[0]!.receive({ ...observedJob(), status: 'pausing' })
+    await opening
+    const source = TestEventSource.instances[0]!
+    const cancelled = {
+      ...observedJob(),
+      status: 'cancelled' as const,
+      updated_at: '2026-10-09T11:00:00.123456790Z',
+    }
+    tracker.trackJob(cancelled as Parameters<typeof tracker.trackJob>[0])
+    expect(mocks.projectTask).toHaveBeenCalledWith(
+      { task_type: 'translation', task_id: '12', project_id: 7 },
+      cancelled,
+    )
+    subscriptions[0]!.receive({
+      ...observedJob(),
+      status: 'paused',
+      updated_at: '2026-10-09T11:00:00.123456789Z',
+    })
+    source.emit({ ...event(12, 10), type: 'job_paused' })
+    expect(tracker.detailJob?.status).toBe('cancelled')
+    expect(tracker.isJobSSEConnected()).toBe(false)
+    subscriptions[0]!.receive({
+      ...observedJob(),
+      status: 'pending',
+      updated_at: '2026-10-09T11:00:00.123456791Z',
+    })
+    expect(tracker.detailJob?.status).toBe('pending')
+    expect(TestEventSource.instances).toHaveLength(2)
+  })
+  it('rejects malformed REST and live event envelopes before log rendering', async () => {
+    mocks.listJobEvents.mockResolvedValueOnce({
+      items: [{ job_id: 12, seq: 1, type: 'job_paused' }, event()],
+    })
+    const opening = tracker.openDetail(12)
+    subscriptions[0]!.receive(observedJob())
+    await opening
+    const source = TestEventSource.instances[0]!
+    source.listeners.get('job_paused')?.({
+      data: JSON.stringify({ job_id: 12, seq: 9, type: 'job_paused' }),
+    })
+    source.emit({ ...event(12, 10), created_at: 'invalid', type: 'job_paused' })
+    expect(tracker.getJobEvents()).toEqual([event()])
+    expect(mocks.queryTranslation).not.toHaveBeenCalled()
+  })
+
+  it('clearing logs invalidates in-flight history without interrupting live stage updates', async () => {
+    const opening = tracker.openDetail(12)
+    subscriptions[0]!.receive(observedJob())
+    await opening
+    const history = deferred<{ items: ReturnType<typeof event>[] }>()
+    mocks.listJobEvents.mockReturnValueOnce(history.promise)
+    const older = tracker.loadOlder()
+    tracker.clearJobEvents()
+    const next = stageCounts('2026-10-09T11:00:01Z')
+    TestEventSource.instances[0]!.emit(stageEvent(next))
+    history.resolve({ items: [event(12, 4)] })
+    await older
+    expect(tracker.getJobEvents().map((item) => item.seq)).toEqual([6])
+    expect(tracker.detailJob?.progress.stages).toEqual(next)
+    expect(tracker.loadingOlder).toBe(false)
+  })
+
+  it('merges only newer live observations and leaves history and effective progress independent', async () => {
+    const opening = tracker.openDetail(12)
+    subscriptions[0]!.receive(observedJob())
+    await opening
+    const source = TestEventSource.instances[0]!
+    const newer = { ...stageCounts('2026-10-09T11:00:00.123456790Z'), alignment_requests: 0 }
+    source.emit(stageEvent(newer))
+    source.emit(stageEvent(stageCounts(), 12, 7))
+    source.emit(stageEvent({ main_requests: 90 }, 12, 8))
+    source.emit(stageEvent(stageCounts('2026-10-09T12:00:00Z'), 13, 9))
+    subscriptions[0]!.receive(observedJob())
+    expect(tracker.detailJob?.progress.stages).toEqual(newer)
+    expect(tracker.detailJob?.progress.progress_completed).toBe(10)
+    expect(tracker.detailJob?.status).toBe('running')
+    mocks.listJobEvents.mockResolvedValueOnce({
+      items: [stageEvent(stageCounts('2026-10-10T00:00:00Z'), 12, 4)],
+    })
+    await tracker.loadOlder()
+    expect(tracker.detailJob?.progress.stages).toEqual(newer)
+    expect(tracker.getJobEvents().map((item) => item.seq)).toEqual([4, 5, 6, 7, 8])
+  })
+
+  it('coalesces lifecycle events into a server refresh and never infers paused from zero draining', async () => {
+    vi.useFakeTimers()
+    const opening = tracker.openDetail(12)
+    subscriptions[0]!.receive({ ...observedJob(), status: 'pausing' })
+    await opening
+    const source = TestEventSource.instances[0]!
+    source.emit(stageEvent({ ...stageCounts('2026-10-09T11:00:01Z'), draining_requests: 0 }))
+    expect(tracker.detailJob?.status).toBe('pausing')
+    mocks.queryTranslation.mockResolvedValue({
+      ...observedJob(),
+      status: 'paused',
+      updated_at: '2026-10-09T11:00:02Z',
+    })
+    source.emit({ ...event(12, 7), type: 'job_pausing' })
+    source.emit({ ...event(12, 8), type: 'job_paused' })
+    expect(mocks.queryTranslation).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(mocks.queryTranslation).toHaveBeenCalledTimes(1)
+    expect(tracker.detailJob?.status).toBe('paused')
+  })
+
+  it('drops closed streams, pending lifecycle refreshes and observations from a different session', async () => {
+    vi.useFakeTimers()
+    const opening = tracker.openDetail(12)
+    subscriptions[0]!.receive(observedJob())
+    await opening
+    const source = TestEventSource.instances[0]!
+    source.emit({ ...event(12, 7), type: 'job_pausing' })
+    tracker.closeDetail()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(mocks.queryTranslation).not.toHaveBeenCalled()
+    const next = tracker.openDetail(13)
+    subscriptions[1]!.receive({
+      ...job(13),
+      progress: { progress_completed: 0, progress_total: 3 },
+    })
+    await next
+    source.emit(stageEvent(stageCounts('2026-10-09T12:00:00Z')))
+    expect(tracker.detailJob?.progress.stages).toBeUndefined()
+    changeSessionContext('https://another.test/api/v1', 2, true)
+    TestEventSource.instances[1]!.emit(stageEvent(stageCounts(), 13))
+    expect(tracker.detailJob?.progress.stages).toBeUndefined()
+  })
+})
+
 describe('translation detail authorization and response ordering', () => {
+  for (const read of ['latest', 'older'] as const) {
+    it.each([403, 404])(
+      `clearing logs cannot suppress ${read} history denial (%i)`,
+      async (status) => {
+        const opening = tracker.openDetail(12)
+        subscriptions[0]!.receive(observedJob())
+        await opening
+        const history = deferred<{ items: ReturnType<typeof event>[] }>()
+        mocks.listJobEvents.mockReturnValueOnce(history.promise)
+        const pending = read === 'latest' ? tracker.loadLatestPage(12) : tracker.loadOlder()
+        const source = TestEventSource.instances[0]!
+        tracker.clearJobEvents()
+        history.reject(new ApiError('inaccessible', status))
+        await pending
+        source.emit(stageEvent(stageCounts('2026-10-09T12:00:00Z')))
+        subscriptions[0]!.receive(observedJob())
+        expect(tracker.detailJob).toBeNull()
+        expect(tracker.getJobEvents()).toEqual([])
+        expect(tracker.detailError).toBe(
+          status === 404 ? 'taskHistoryErrors.notFound' : 'operations.inaccessible',
+        )
+        expect(source.close).toHaveBeenCalledOnce()
+        expect(subscriptions[0]!.release).toHaveBeenCalledOnce()
+      },
+    )
+
+    it(`clearing logs discards temporary ${read} history errors without stopping stages`, async () => {
+      const opening = tracker.openDetail(12)
+      subscriptions[0]!.receive(observedJob())
+      await opening
+      const history = deferred<{ items: ReturnType<typeof event>[] }>()
+      mocks.listJobEvents.mockReturnValueOnce(history.promise)
+      const pending = read === 'latest' ? tracker.loadLatestPage(12) : tracker.loadOlder()
+      tracker.clearJobEvents()
+      history.reject(new ApiError('temporary', 503))
+      await pending
+      const next = stageCounts('2026-10-09T12:00:00Z')
+      TestEventSource.instances[0]!.emit(stageEvent(next))
+      expect(tracker.detailError).toBeNull()
+      expect(tracker.detailJob?.progress.stages).toEqual(next)
+    })
+  }
+
   it('checks the link project before accepting detail, starting SSE, or requesting events', async () => {
     const opening = tracker.openDetail(12, 7)
     expect(mocks.listJobEvents).not.toHaveBeenCalled()

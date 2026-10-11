@@ -12,6 +12,10 @@ defineProps<{ state: RoundDisplayState }>()
       v-else-if="state === 'running'"
       class="text-brand-500 motion-safe:animate-pulse"
     />
+    <IconCarbonPauseFilled
+      v-else-if="state === 'pausing'"
+      class="text-lf-warning motion-safe:animate-pulse"
+    />
     <IconCarbonPauseFilled v-else-if="state === 'paused'" class="text-lf-text-muted" />
     <IconCarbonStopFilled v-else-if="state === 'stopped'" class="text-lf-text-muted" />
     <IconCarbonSubtractAlt

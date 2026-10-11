@@ -7,8 +7,24 @@ import { captureSession, isSessionCurrent } from '@/api/session-context'
 import { KNOWN_EVENT_TYPES, resolveStreamUrl, type SSEEvent } from '@/composables/sseShared'
 import { useOperationsStore } from './operations'
 import { t } from '@/i18n'
+import { jobObservationTime, latestJobStages, mergeJobObservation } from '@/utils/jobStages'
 
 type Job = ApiSchemas['Job']
+
+const isValidEvent = (value: unknown): value is SSEEvent => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const event = value as Record<string, unknown>
+  return (
+    Number.isSafeInteger(event.job_id) &&
+    Number.isSafeInteger(event.seq) &&
+    Number(event.seq) > 0 &&
+    typeof event.type === 'string' &&
+    typeof event.level === 'string' &&
+    typeof event.message === 'string' &&
+    jobObservationTime(event.created_at) !== null &&
+    (event.stage === undefined || typeof event.stage === 'string')
+  )
+}
 
 // Compatibility adapter: discovery and polling belong to the operations coordinator.
 export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
@@ -24,9 +40,12 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   const jobEnded = ref(false)
   const projectName = ref<string | undefined>()
   let source: EventSource | null = null
+  let streamInterrupted = false
   let unsubscribe: (() => void) | null = null
   let finishOpening: (() => void) | null = null
   let historyFlight: Promise<void> | null = null
+  let historyVersion = 0
+  let lifecycleRefresh: ReturnType<typeof setTimeout> | null = null
   let expectedProjectId: number | undefined
   let taskError: string | null = null
   let historyError: string | null = null
@@ -48,18 +67,24 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     finishOpening = null
   }
   const disconnect = (): void => {
+    if (lifecycleRefresh !== null) clearTimeout(lifecycleRefresh)
+    lifecycleRefresh = null
     source?.close()
     source = null
     connected.value = false
   }
   const insert = (incoming: SSEEvent[]): void => {
     const map = new Map(events.value.map((event) => [event.seq, event]))
-    for (const event of incoming) if (event.job_id === drawerJobId.value) map.set(event.seq, event)
+    for (const event of incoming)
+      if (isValidEvent(event) && event.job_id === drawerJobId.value) map.set(event.seq, event)
     const sorted = [...map.values()].sort((a, b) => a.seq - b.seq)
     if (sorted.length > 1000) hasOlder.value = true
     events.value = sorted.slice(-1000)
   }
   const clearJobEvents = (): void => {
+    historyVersion++
+    historyFlight = null
+    loadingOlder.value = false
     events.value = []
     hasOlder.value = true
   }
@@ -94,6 +119,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   }
 
   const connect = (id: number): void => {
+    const reconnecting = streamInterrupted
     disconnect()
     if (
       disposed ||
@@ -113,20 +139,39 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     const valid = () =>
       source === es && current === version && isSessionCurrent(context) && !disposed
     es.onopen = () => {
-      if (valid()) connected.value = true
+      if (!valid()) return
+      connected.value = true
+      streamInterrupted = false
+      if (reconnecting) void operations.refresh()
     }
     const receive = (event: MessageEvent): void => {
       if (!valid()) return
       try {
-        insert([JSON.parse(event.data) as SSEEvent])
+        const incoming: unknown = JSON.parse(event.data)
+        if (!isValidEvent(incoming) || incoming.job_id !== id) return
+        insert([incoming])
+        if (incoming.type === 'stage_counts') {
+          const job = detailJob.value
+          if (job?.id !== id || !job.progress) return
+          const stages = latestJobStages(job.progress.stages, incoming.metadata?.stages)
+          if (stages) detailJob.value = { ...job, progress: { ...job.progress, stages } }
+        } else if (incoming.type.startsWith('job_') && lifecycleRefresh === null) {
+          // Coalesce lifecycle bursts, then re-read through the shared request coordinator.
+          lifecycleRefresh = setTimeout(() => {
+            lifecycleRefresh = null
+            if (valid()) void Promise.all([refreshDetail(), operations.refresh()])
+          }, 100)
+        }
       } catch {
         /* Ignore malformed events. */
       }
     }
     for (const type of KNOWN_EVENT_TYPES) es.addEventListener(type, receive)
     es.onerror = () => {
-      if (source === es) disconnect()
-      else es.close()
+      if (valid()) {
+        streamInterrupted = true
+        disconnect()
+      } else es.close()
       // A coordinator detail response must revalidate access before reconnecting.
     }
   }
@@ -136,8 +181,13 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
       return Promise.resolve()
     if (historyFlight) return historyFlight
     const current = version,
+      currentHistory = historyVersion,
       context = captureSession()
-    const valid = () => current === version && isSessionCurrent(context) && !disposed
+    const valid = () =>
+      current === version &&
+      currentHistory === historyVersion &&
+      isSessionCurrent(context) &&
+      !disposed
     const flight = (async () => {
       try {
         const page = await listJobEvents(id, { limit: 50, signal: drawerController.signal })
@@ -148,9 +198,10 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
         historyError = null
         syncError()
       } catch (error) {
-        if (!valid()) return
+        // Clearing visible logs must not discard evidence that this task is inaccessible.
+        if (current !== version || !isSessionCurrent(context) || disposed) return
         if (isAccessDenied(error)) denyAccess(true, error)
-        else {
+        else if (currentHistory === historyVersion) {
           historyError = taskHistoryErrorMessage(error)
           syncError()
         }
@@ -172,11 +223,12 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
       denyAccess(false)
       return
     }
-    detailJob.value = job
+    const observed = operations.projectJobObservation(mergeJobObservation(detailJob.value, job))
+    detailJob.value = observed
     taskError = null
     syncError()
     loadingDetail.value = false
-    jobEnded.value = ['completed', 'failed', 'cancelled'].includes(job.status)
+    jobEnded.value = ['completed', 'failed', 'cancelled'].includes(observed.status)
     if (jobEnded.value) disconnect()
     else if (!source) connect(job.id)
     if (!historyLoaded) void loadLatestPage(job.id)
@@ -204,6 +256,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     historyLoaded = false
     historyFlight = null
     accessBlocked = false
+    streamInterrupted = false
   }
 
   const openDetail = async (id: number, projectId?: number): Promise<void> => {
@@ -278,6 +331,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   const loadOlder = async (): Promise<void> => {
     const id = drawerJobId.value,
       current = version,
+      currentHistory = historyVersion,
       context = captureSession()
     if (
       id == null ||
@@ -295,10 +349,16 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
         limit: 50,
         signal: drawerController.signal,
       })
-      if (current !== version || !isSessionCurrent(context) || disposed) return
+      if (
+        current !== version ||
+        currentHistory !== historyVersion ||
+        !isSessionCurrent(context) ||
+        disposed
+      )
+        return
       const map = new Map(
         [...page.items, ...events.value]
-          .filter((event) => event.job_id === id)
+          .filter((event) => isValidEvent(event) && event.job_id === id)
           .map((event) => [event.seq, event as SSEEvent]),
       )
       events.value = [...map.values()].sort((a, b) => a.seq - b.seq)
@@ -308,17 +368,22 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     } catch (error) {
       if (current !== version || !isSessionCurrent(context) || disposed) return
       if (isAccessDenied(error)) denyAccess(true, error)
-      else {
+      else if (currentHistory === historyVersion) {
         historyError = taskHistoryErrorMessage(error)
         syncError()
       }
     } finally {
-      if (current === version && isSessionCurrent(context)) loadingOlder.value = false
+      if (current === version && currentHistory === historyVersion && isSessionCurrent(context))
+        loadingOlder.value = false
     }
   }
 
   const trackJob = (job: Job, name?: string): void => {
     if (disposed) return
+    operations.projectTask(
+      { task_type: 'translation', task_id: String(job.id), project_id: job.project_id },
+      job,
+    )
     if (!accessBlocked && drawerJobId.value === job.id) {
       accept(job)
       if (!accessBlocked) projectName.value = name

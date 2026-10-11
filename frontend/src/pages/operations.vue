@@ -145,6 +145,7 @@ const states = computed(() => [
   ...[
     'pending',
     'running',
+    'pausing',
     'paused',
     'waiting_retry',
     'needs_action',

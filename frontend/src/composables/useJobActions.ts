@@ -10,6 +10,7 @@ import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
 import { isOrganizationDependency } from '@/utils/organization-scope'
+import { isJobActionAllowed, isJobTerminal, type JobAction } from '@/utils/jobPresentation'
 
 type Job = ApiSchemas['Job']
 type CreateJobRequest = ApiSchemas['CreateJobRequest']
@@ -214,7 +215,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
-  type JobAction = 'cancel' | 'retry' | 'pause' | 'resume'
   const actionHandlers: Record<JobAction, (id: number) => Promise<Job | void>> = {
     cancel: workspace.cancelJob,
     retry: workspace.retryJob,
@@ -230,6 +230,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   const runAction = async (action: JobAction, job: Job): Promise<void> => {
     if (
       job.project_id !== projectId.value ||
+      !isJobActionAllowed(action, job.status) ||
       [
         ...workspace.cancellingJobIds,
         ...workspace.retryingJobIds,
@@ -245,7 +246,9 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       message.success(
         t(
           action === 'pause' && response && response.status !== 'paused'
-            ? 'workbench.details.pauseRequested'
+            ? isJobTerminal(response.status)
+              ? 'workbench.details.updated'
+              : 'workbench.details.pauseRequested'
             : actionMessages[action][0],
         ),
       )

@@ -26,6 +26,7 @@ export default {
   all: '全部任务',
   pending: '待执行',
   running: '运行中',
+  pausing: '暂停中',
   paused: '已暂停',
   waiting_retry: '等待自动重试',
   needs_action: '需要处理',

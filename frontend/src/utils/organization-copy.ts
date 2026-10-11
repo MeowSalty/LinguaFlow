@@ -2,6 +2,7 @@ import type {
   ExecutionPlanFormRound,
   ExecutionPlanFormRubyRetry,
 } from '@/utils/execution-plan-config'
+import { cloneExecutionPlanValue, mergeRubyRetryConfig } from '@/utils/execution-plan-config'
 
 interface PlanDraft {
   profile_id: number | null
@@ -18,7 +19,8 @@ export function clearUnavailablePlanDependencies<T extends PlanDraft>(
     bootstrap: readonly { id: number }[]
   },
 ): T {
-  const copy = JSON.parse(JSON.stringify(draft)) as T
+  const copy = cloneExecutionPlanValue(draft)
+  copy.ruby_retry = mergeRubyRetryConfig(copy.ruby_retry)
   if (!allowed.profiles.some((item) => item.id === copy.profile_id)) copy.profile_id = null
   if (!allowed.backends.some((item) => item.id === copy.ruby_retry.backend_id))
     copy.ruby_retry.backend_id = null

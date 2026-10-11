@@ -1,19 +1,30 @@
-import { expect, test, type Locator, type Page, type Route } from '@playwright/test'
+import { chromium, expect, test, type Locator, type Page, type Route } from '@playwright/test'
+import { mkdir, writeFile } from 'node:fs/promises'
 import {
   createProfileConfig,
   QA_CHECKS,
   type ProfileConfigInput,
 } from '../../src/utils/execution-profile-config'
-import type { ExecutionRound } from '../../src/utils/execution-plan-config'
+import type { ExecutionRound, ExecutionPlanRubyRetry } from '../../src/utils/execution-plan-config'
 import { json, mockApp } from './fixtures'
 
-type Write = { path: string; body: { config: ProfileConfigInput; rounds: ExecutionRound[] } }
+type Write = {
+  path: string
+  body: {
+    config: ProfileConfigInput
+    rounds: ExecutionRound[]
+    ruby_retry?: ExecutionPlanRubyRetry
+    org_id?: number
+  }
+}
 async function setup(
   page: Page,
   config: unknown = createProfileConfig(),
   rounds: ExecutionRound[] = [],
+  rubyRetry?: ExecutionPlanRubyRetry,
+  theme: 'light' | 'dark' = 'light',
 ) {
-  await mockApp(page, { role: 'user' })
+  await mockApp(page, { role: 'user', theme })
   const writes: Write[] = []
   const profile = {
     id: 1,
@@ -31,6 +42,7 @@ async function setup(
     owner_user_id: 1,
     profile_id: 1,
     rounds,
+    ...(rubyRetry === undefined ? {} : { ruby_retry: rubyRetry }),
   }
   let delayWrite: ((route: Route) => Promise<void>) | undefined
   await page.route('**/api/v1/**', async (route) => {
@@ -145,6 +157,20 @@ async function fillNumber(field: Locator, value: string) {
   await field.fill(value)
   await field.press('Tab')
 }
+async function expectRubySettingsHidden(drawer: Locator) {
+  await expect(drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true })).toBeVisible()
+  await expect(drawer.getByText('注音对齐后端', { exact: true })).toBeHidden()
+  for (const label of [
+    '重试轮数',
+    '注音请求并发上限',
+    ...rubyBatchFields.map((field) => field.label),
+  ])
+    await expect(drawer.getByLabel(label, { exact: true })).toBeHidden()
+  await expect(drawer.getByRole('button', { name: '合批设置', exact: true })).toBeHidden()
+  await expect(
+    drawer.getByText('注音对齐已关闭，以下请求设置暂不生效。', { exact: true }),
+  ).toBeHidden()
+}
 async function chooseRoundMode(round: Locator, label: string) {
   const radio = round.getByRole('radio', { name: label, exact: true })
   await expect(radio).toBeEnabled()
@@ -154,6 +180,577 @@ async function chooseRoundMode(round: Locator, label: string) {
     .click()
   await expect(radio).toBeChecked()
 }
+
+for (const concurrency of [undefined, 4]) {
+  test(`ruby concurrency ${concurrency ?? 'default'} survives new plan creation`, async ({
+    page,
+  }) => {
+    const { writes } = await setup(page)
+    await page.goto('/execution-plan-templates')
+    await page.getByRole('button', { name: '新建计划', exact: true }).click()
+    const drawer = page.locator('.n-drawer:visible')
+    await drawer.getByRole('textbox').first().fill('注音并发计划')
+    await chooseOption(
+      page,
+      drawer.locator('.n-select').filter({ hasText: '选择计划引用的执行策略' }),
+      '策略样本',
+    )
+    await chooseRoundMode(drawer.getByTestId('execution-round'), '本地改写')
+    await expectRubySettingsHidden(drawer)
+    await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+    const field = drawer.getByLabel('注音请求并发上限', { exact: true })
+    await expect(field).toHaveValue('')
+    await expect(field).toHaveAttribute('placeholder', '默认（1）')
+    if (concurrency !== undefined) await fillNumber(field, String(concurrency))
+    await drawer.getByRole('button', { name: '创建计划', exact: true }).click()
+    await expect.poll(() => writes.length).toBe(1)
+    if (concurrency === undefined)
+      expect(writes[0]!.body.ruby_retry).not.toHaveProperty('concurrency')
+    else expect(writes[0]!.body.ruby_retry?.concurrency).toBe(concurrency)
+  })
+}
+
+test('ruby concurrency omission survives editing a legacy plan', async ({ page }) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()])
+  const drawer = await openPlan(page)
+  await expectRubySettingsHidden(drawer)
+  await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+  await expect(drawer.getByLabel('注音请求并发上限', { exact: true })).toHaveValue('')
+  await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry).not.toHaveProperty('concurrency')
+  expect(writes[0]!.body.rounds[0]!.concurrency).toBe(2)
+})
+
+test('ruby concurrency stays independent when the main round and retry switch change', async ({
+  page,
+}) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()], {
+    enabled: true,
+    backend_id: 2,
+    max_attempts: 3,
+    concurrency: 7,
+  })
+  const drawer = await openPlan(page)
+  await expect(drawer.getByLabel('注音请求并发上限', { exact: true })).toHaveValue('7')
+  await fillNumber(
+    drawer.getByTestId('execution-round').getByLabel('并发数', { exact: true }),
+    '11',
+  )
+  const retrySwitch = drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true })
+  await retrySwitch.click()
+  await expectRubySettingsHidden(drawer)
+  await retrySwitch.click()
+  await expect(drawer.locator('.n-select').filter({ hasText: '第二模型' })).toBeVisible()
+  await expect(drawer.getByLabel('重试轮数', { exact: true })).toHaveValue('3')
+  await expect(drawer.getByLabel('注音请求并发上限', { exact: true })).toHaveValue('7')
+  await retrySwitch.click()
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry).toEqual({
+    enabled: false,
+    backend_id: 2,
+    max_attempts: 3,
+    concurrency: 7,
+  })
+  expect(writes[0]!.body.rounds[0]!.concurrency).toBe(11)
+})
+
+test('ruby concurrency clearing removes an existing explicit value', async ({ page }) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()], {
+    enabled: true,
+    concurrency: 3,
+  })
+  const drawer = await openPlan(page)
+  const field = drawer.getByLabel('注音请求并发上限', { exact: true })
+  await expect(field).toHaveValue('3')
+  await fillNumber(field, '')
+  await expect(field).toHaveAttribute('placeholder', '默认（1）')
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry).not.toHaveProperty('concurrency')
+})
+
+for (const concurrency of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+  test(`ruby imported invalid concurrency ${concurrency} remains correctable after enabling retry`, async ({
+    page,
+  }) => {
+    const { writes } = await setup(page, createProfileConfig(), [translateRound()], {
+      enabled: false,
+      concurrency,
+    })
+    const drawer = await openPlan(page)
+    const field = drawer.getByLabel('注音请求并发上限', { exact: true })
+    const save = drawer.getByRole('button', { name: '保存', exact: true })
+    await expectRubySettingsHidden(drawer)
+    await expect(save).toBeDisabled()
+    await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+    await expect(field).toHaveValue(String(concurrency))
+    await expect(field).toHaveAttribute('aria-invalid', 'true')
+    await expect(drawer.getByRole('alert')).toHaveText(
+      '注音并发必须为可安全表示的正整数，或留空使用默认值。',
+    )
+    await expect(save).toBeDisabled()
+    expect(writes).toHaveLength(0)
+    await fillNumber(field, '101')
+    await expect(save).toBeEnabled()
+    await save.click()
+    await expect.poll(() => writes.length).toBe(1)
+    expect(writes[0]!.body.ruby_retry?.concurrency).toBe(101)
+  })
+}
+
+for (const concurrency of [undefined, 8]) {
+  test(`ruby concurrency ${concurrency ?? 'default'} survives copying a personal plan to an organization`, async ({
+    page,
+  }) => {
+    const { profile, writes } = await setup(
+      page,
+      createProfileConfig(),
+      [
+        {
+          mode: 'correct',
+          concurrency: 1,
+          correct: { rules: [{ name: 'width_mix_normalize', enabled: true }] },
+        },
+      ],
+      { enabled: true, backend_id: 2, ...(concurrency === undefined ? {} : { concurrency }) },
+    )
+    profile.scope = 'system'
+    await page.goto('/execution-plan-templates')
+    await page.getByRole('button', { name: '复制到组织', exact: true }).click()
+    const modal = page.locator('.n-modal:visible')
+    await chooseOption(page, modal.locator('.n-select'), '目标组织')
+    await modal.getByRole('button', { name: '继续编辑', exact: true }).click()
+    const drawer = page.locator('.n-drawer:visible')
+    await expect(drawer.getByLabel('注音请求并发上限', { exact: true })).toHaveValue(
+      concurrency === undefined ? '' : String(concurrency),
+    )
+    await expect(drawer.getByRole('button', { name: '创建计划', exact: true })).toBeEnabled()
+    await drawer.getByRole('button', { name: '创建计划', exact: true }).click()
+    await expect.poll(() => writes.length).toBe(1)
+    expect(writes[0]!.body.org_id).toBe(7)
+    expect(writes[0]!.body.ruby_retry).not.toHaveProperty('backend_id')
+    if (concurrency === undefined)
+      expect(writes[0]!.body.ruby_retry).not.toHaveProperty('concurrency')
+    else expect(writes[0]!.body.ruby_retry?.concurrency).toBe(concurrency)
+  })
+}
+
+const rubyBatchFields = [
+  { key: 'batch_size', label: '每次注音最多段数', placeholder: '默认（1）' },
+  { key: 'max_words_per_batch', label: '每次注音最多字词数', placeholder: '默认（0，不限）' },
+  { key: 'batch_wait_ms', label: '最大凑批等待时间（毫秒）', placeholder: '默认（25）' },
+] as const
+const explicitRubyBatch = {
+  enabled: true,
+  concurrency: 7,
+  batch_size: 4,
+  max_words_per_batch: 800,
+  batch_wait_ms: 25,
+}
+
+for (const settings of [
+  undefined,
+  { batch_size: 4, max_words_per_batch: 0, batch_wait_ms: 25 },
+  { batch_size: 0, max_words_per_batch: 800, batch_wait_ms: 0 },
+]) {
+  test(`P2 ruby new plan retains ${settings ? JSON.stringify(settings) : 'omitted defaults'}`, async ({
+    page,
+  }) => {
+    const { writes } = await setup(page)
+    await page.goto('/execution-plan-templates')
+    await page.getByRole('button', { name: '新建计划', exact: true }).click()
+    const drawer = page.locator('.n-drawer:visible')
+    await drawer.getByRole('textbox').first().fill('P2 注音合批计划')
+    await chooseOption(
+      page,
+      drawer.locator('.n-select').filter({ hasText: '选择计划引用的执行策略' }),
+      '策略样本',
+    )
+    await chooseRoundMode(drawer.getByTestId('execution-round'), '本地改写')
+    await expectRubySettingsHidden(drawer)
+    await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+    const toggle = drawer.getByRole('button', { name: '合批设置', exact: true })
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(drawer.getByLabel(rubyBatchFields[0].label, { exact: true })).toBeHidden()
+    await toggle.focus()
+    await toggle.press('Enter')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    for (const field of rubyBatchFields) {
+      const input = drawer.getByLabel(field.label, { exact: true })
+      await expect(input).toHaveValue('')
+      await expect(input).toHaveAttribute('placeholder', field.placeholder)
+      if (settings) await fillNumber(input, String(settings[field.key]))
+    }
+    await drawer.getByRole('button', { name: '创建计划', exact: true }).click()
+    await expect.poll(() => writes.length).toBe(1)
+    for (const field of rubyBatchFields) {
+      if (settings) expect(writes[0]!.body.ruby_retry?.[field.key]).toBe(settings[field.key])
+      else expect(writes[0]!.body.ruby_retry).not.toHaveProperty(field.key)
+    }
+  })
+}
+
+test('P2 ruby legacy edit does not materialize displayed defaults', async ({ page }) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()])
+  const drawer = await openPlan(page)
+  await expectRubySettingsHidden(drawer)
+  await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+  await expect(drawer.getByRole('button', { name: '合批设置', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  for (const field of rubyBatchFields)
+    expect(writes[0]!.body.ruby_retry).not.toHaveProperty(field.key)
+})
+
+for (const field of rubyBatchFields) {
+  test(`P2 ruby ${field.key} alone updates without losing other values or reopening collapsed drafts`, async ({
+    page,
+  }) => {
+    const { writes } = await setup(
+      page,
+      createProfileConfig(),
+      [translateRound()],
+      explicitRubyBatch,
+    )
+    const drawer = await openPlan(page)
+    const toggle = drawer.getByRole('button', { name: '合批设置', exact: true })
+    const retrySwitch = drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true })
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await fillNumber(drawer.getByLabel(field.label, { exact: true }), '0')
+    await retrySwitch.click()
+    await expectRubySettingsHidden(drawer)
+    await retrySwitch.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(drawer.getByLabel(field.label, { exact: true })).toHaveValue('0')
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await fillNumber(drawer.getByLabel('注音请求并发上限', { exact: true }), '8')
+    await retrySwitch.click()
+    await expectRubySettingsHidden(drawer)
+    await retrySwitch.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await toggle.click()
+    await expect(drawer.getByLabel(field.label, { exact: true })).toHaveValue('0')
+    await retrySwitch.click()
+    await drawer.getByRole('button', { name: '保存', exact: true }).click()
+    await expect.poll(() => writes.length).toBe(1)
+    expect(writes[0]!.body.ruby_retry).toEqual({
+      ...explicitRubyBatch,
+      max_attempts: 1,
+      enabled: false,
+      concurrency: 8,
+      [field.key]: 0,
+    })
+    expect(writes[0]!.body.rounds[0]!.concurrency).toBe(2)
+  })
+
+  test(`P2 ruby clearing ${field.key} restores omission`, async ({ page }) => {
+    const { writes } = await setup(
+      page,
+      createProfileConfig(),
+      [translateRound()],
+      explicitRubyBatch,
+    )
+    const drawer = await openPlan(page)
+    await fillNumber(drawer.getByLabel(field.label, { exact: true }), '')
+    await drawer.getByRole('button', { name: '保存', exact: true }).click()
+    await expect.poll(() => writes.length).toBe(1)
+    expect(writes[0]!.body.ruby_retry).not.toHaveProperty(field.key)
+    for (const other of rubyBatchFields.filter((item) => item !== field))
+      expect(writes[0]!.body.ruby_retry?.[other.key]).toBe(explicitRubyBatch[other.key])
+  })
+}
+
+test('P2 ruby combined limits remain validated and correctable after enabling retry', async ({
+  page,
+}) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()], {
+    enabled: false,
+    batch_size: 0,
+  })
+  const drawer = await openPlan(page)
+  const save = drawer.getByRole('button', { name: '保存', exact: true })
+  await expectRubySettingsHidden(drawer)
+  await expect(save).toBeDisabled()
+  await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+  await expect(drawer.getByRole('button', { name: '合批设置', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(drawer.getByRole('alert')).toHaveText(
+    '段数上限和字词数上限不能同时为 0；留空分别使用默认值 1 和 0。',
+  )
+  await expect(save).toBeDisabled()
+  for (const field of rubyBatchFields.slice(0, 2))
+    await expect(drawer.getByLabel(field.label, { exact: true })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+  await fillNumber(drawer.getByLabel(rubyBatchFields[0].label, { exact: true }), '')
+  await expect(save).toBeEnabled()
+  await fillNumber(drawer.getByLabel(rubyBatchFields[0].label, { exact: true }), '0')
+  await fillNumber(drawer.getByLabel(rubyBatchFields[1].label, { exact: true }), '0')
+  await expect(save).toBeDisabled()
+  await expect(drawer.getByRole('alert')).toHaveText(
+    '段数上限和字词数上限不能同时为 0；留空分别使用默认值 1 和 0。',
+  )
+  expect(writes).toHaveLength(0)
+  await fillNumber(drawer.getByLabel(rubyBatchFields[1].label, { exact: true }), '800')
+  await expect(save).toBeEnabled()
+  await save.click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry).toMatchObject({ batch_size: 0, max_words_per_batch: 800 })
+  expect(writes[0]!.body.ruby_retry).not.toHaveProperty('batch_wait_ms')
+})
+
+test('P2 ruby imported invalid batch settings remain correctable after enabling retry', async ({
+  page,
+}) => {
+  const invalidBatch = { batch_size: -1, max_words_per_batch: 1.5, batch_wait_ms: 9223372036855 }
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()], {
+    enabled: false,
+    ...invalidBatch,
+  })
+  const drawer = await openPlan(page)
+  const save = drawer.getByRole('button', { name: '保存', exact: true })
+  await expectRubySettingsHidden(drawer)
+  await expect(save).toBeDisabled()
+  await drawer.getByRole('switch', { name: '启用注音对齐重试', exact: true }).click()
+  await expect(drawer.getByRole('button', { name: '合批设置', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  for (const field of rubyBatchFields) {
+    const input = drawer.getByLabel(field.label, { exact: true })
+    await expect(input).toHaveValue(String(invalidBatch[field.key]))
+    await expect(input).toHaveAttribute('aria-invalid', 'true')
+    const ids = (await input.getAttribute('aria-describedby'))!.split(' ')
+    for (const id of ids) await expect(drawer.locator(`[id="${id}"]`)).toBeVisible()
+  }
+  await expect(save).toBeDisabled()
+  expect(writes).toHaveLength(0)
+  for (const field of rubyBatchFields)
+    await fillNumber(drawer.getByLabel(field.label, { exact: true }), '')
+  await fillNumber(drawer.getByLabel(rubyBatchFields[2].label, { exact: true }), '9223372036854')
+  await expect(save).toBeEnabled()
+  await save.click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry?.batch_wait_ms).toBe(9223372036854)
+  expect(writes[0]!.body.ruby_retry).not.toHaveProperty('batch_size')
+  expect(writes[0]!.body.ruby_retry).not.toHaveProperty('max_words_per_batch')
+})
+
+test('ruby number inputs clamp entered values and keep keyboard and stepper changes within bounds', async ({
+  page,
+}) => {
+  const { writes } = await setup(page, createProfileConfig(), [translateRound()], explicitRubyBatch)
+  const drawer = await openPlan(page)
+  const fields = [
+    { label: '重试轮数', min: 1, max: 10 },
+    { label: '注音请求并发上限', min: 1, max: Number.MAX_SAFE_INTEGER },
+    ...rubyBatchFields.map((field) => ({
+      label: field.label,
+      min: 0,
+      max: field.key === 'batch_wait_ms' ? 9223372036854 : Number.MAX_SAFE_INTEGER,
+    })),
+  ]
+  for (const field of fields) {
+    const input = drawer.getByLabel(field.label, { exact: true })
+    const buttons = drawer
+      .locator('.n-input-number')
+      .filter({ has: page.getByLabel(field.label, { exact: true }) })
+      .getByRole('button')
+    await fillNumber(input, '-2')
+    await expect(input).toHaveValue(String(field.min))
+    await expect(buttons.first()).toBeDisabled()
+    await input.press('ArrowDown')
+    await expect(input).toHaveValue(String(field.min))
+    await input.press('ArrowUp')
+    await expect(input).toHaveValue(String(field.min + 1))
+    await buttons.first().click()
+    await expect(input).toHaveValue(String(field.min))
+    await expect(buttons.first()).toBeDisabled()
+    await fillNumber(input, String(field.max + 1))
+    await expect(input).toHaveValue(String(field.max))
+    await expect(buttons.last()).toBeDisabled()
+    await input.press('ArrowUp')
+    await expect(input).toHaveValue(String(field.max))
+    await fillNumber(input, '1.5')
+    await expect(input).toHaveValue('2')
+  }
+  await fillNumber(drawer.getByLabel('重试轮数', { exact: true }), '')
+  await expect(drawer.getByLabel('重试轮数', { exact: true })).toHaveValue('1')
+  await expect(drawer.getByRole('alert')).toHaveCount(0)
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.ruby_retry).toEqual({
+    enabled: true,
+    max_attempts: 1,
+    concurrency: 2,
+    batch_size: 2,
+    max_words_per_batch: 2,
+    batch_wait_ms: 2,
+  })
+})
+
+test('P2 ruby organization copy retains zero and batching settings after clearing private dependencies', async ({
+  page,
+}) => {
+  const retry = {
+    enabled: true,
+    backend_id: 2,
+    batch_size: 0,
+    max_words_per_batch: 800,
+    batch_wait_ms: 0,
+  }
+  const { profile, writes, plan } = await setup(
+    page,
+    createProfileConfig(),
+    [
+      {
+        mode: 'correct',
+        concurrency: 1,
+        correct: { rules: [{ name: 'width_mix_normalize', enabled: true }] },
+      },
+    ],
+    retry,
+  )
+  profile.scope = 'system'
+  await page.goto('/execution-plan-templates')
+  await page.getByRole('button', { name: '复制到组织', exact: true }).click()
+  const modal = page.locator('.n-modal:visible')
+  await chooseOption(page, modal.locator('.n-select'), '目标组织')
+  await modal.getByRole('button', { name: '继续编辑', exact: true }).click()
+  const drawer = page.locator('.n-drawer:visible')
+  await expect(drawer.getByRole('button', { name: '合批设置', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  for (const field of rubyBatchFields)
+    await expect(drawer.getByLabel(field.label, { exact: true })).toHaveValue(
+      String(retry[field.key]),
+    )
+  await drawer.getByRole('button', { name: '创建计划', exact: true }).click()
+  await expect.poll(() => writes.length).toBe(1)
+  expect(writes[0]!.body.org_id).toBe(7)
+  expect(writes[0]!.body.ruby_retry).not.toHaveProperty('backend_id')
+  for (const field of rubyBatchFields)
+    expect(writes[0]!.body.ruby_retry?.[field.key]).toBe(retry[field.key])
+  expect(plan.ruby_retry).toEqual(retry)
+})
+
+async function rubyBatchLayout(drawer: Locator) {
+  const toggle = drawer.getByRole('button', { name: '合批设置', exact: true })
+  await toggle.focus()
+  await toggle.press('Enter')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await toggle.press('Space')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  const first = drawer.getByLabel(rubyBatchFields[0].label, { exact: true })
+  await first.focus()
+  await first.press('Tab')
+  await expect(drawer.getByLabel(rubyBatchFields[1].label, { exact: true })).toBeFocused()
+  for (const field of rubyBatchFields) {
+    const input = drawer.getByLabel(field.label, { exact: true })
+    await input.scrollIntoViewIfNeeded()
+    await expect(input).toBeVisible()
+    const control = (await input.boundingBox())!
+    const bounds = (await drawer.boundingBox())!
+    const footer = (await drawer.locator('.n-drawer-footer').boundingBox())!
+    expect(control.x).toBeGreaterThanOrEqual(bounds.x - 1)
+    expect(control.x + control.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1)
+    expect(control.y + control.height).toBeLessThanOrEqual(footer.y + 1)
+  }
+  const panelId = await toggle.getAttribute('aria-controls')
+  const panel = drawer.locator(`[id="${panelId}"]`)
+  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+    true,
+  )
+  return panel
+}
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`P2 ruby ${theme} configuration reflows with keyboard access`, async ({
+    page,
+  }, testInfo) => {
+    await setup(page, createProfileConfig(), [translateRound()], explicitRubyBatch, theme)
+    const drawer = await openPlan(page)
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    const panel = await rubyBatchLayout(drawer)
+    await mkdir('tests/artifacts/p2-ruby', { recursive: true })
+    await panel.screenshot({
+      path: `tests/artifacts/p2-ruby/config-${theme}-${testInfo.project.name}.png`,
+    })
+  })
+}
+
+test('P2 ruby configuration remains operable at real 200 percent browser zoom', async ({
+  browserName,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== 'chromium' || browserName !== 'chromium',
+    'Actual Chromium zoom is exercised once',
+  )
+  const extension = testInfo.outputPath('ruby-zoom-extension')
+  await mkdir(extension, { recursive: true })
+  await writeFile(
+    `${extension}/manifest.json`,
+    JSON.stringify({
+      manifest_version: 3,
+      name: 'Ruby configuration zoom verification',
+      version: '1.0',
+      permissions: ['tabs'],
+      background: { service_worker: 'worker.js' },
+    }),
+  )
+  await writeFile(`${extension}/worker.js`, 'chrome.runtime.onInstalled.addListener(() => {});')
+  const context = await chromium.launchPersistentContext('', {
+    channel: 'chromium',
+    executablePath: process.env.LINGUAFLOW_TEST_CHROMIUM,
+    headless: true,
+    baseURL: 'http://127.0.0.1:4173',
+    viewport: { width: 1440, height: 1100 },
+    deviceScaleFactor: 1,
+    args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
+  })
+  try {
+    const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'))
+    const page = await context.newPage()
+    await setup(page, createProfileConfig(), [translateRound()], explicitRubyBatch, 'dark')
+    const drawer = await openPlan(page)
+    const zoom = await worker.evaluate(async () => {
+      const api = (
+        globalThis as unknown as {
+          chrome: {
+            tabs: {
+              query(query: { url: string }): Promise<{ id: number }[]>
+              setZoom(id: number, factor: number): Promise<void>
+              getZoom(id: number): Promise<number>
+            }
+          }
+        }
+      ).chrome
+      const [tab] = await api.tabs.query({ url: 'http://127.0.0.1:4173/*' })
+      await api.tabs.setZoom(tab!.id, 2)
+      return api.tabs.getZoom(tab!.id)
+    })
+    expect(zoom).toBe(2)
+    await page.waitForFunction(() => innerWidth === 720 && devicePixelRatio === 2)
+    const panel = await rubyBatchLayout(drawer)
+    await mkdir('tests/artifacts/p2-ruby', { recursive: true })
+    await panel.scrollIntoViewIfNeeded()
+    // Element clipping uses unzoomed coordinates in Chromium; capture the actual zoomed viewport.
+    await page.screenshot({ path: 'tests/artifacts/p2-ruby/config-dark-200pct.png' })
+  } finally {
+    await context.close()
+  }
+})
 
 test('new profile uses the new defaults and keeps QA checks omitted', async ({ page }) => {
   const { writes } = await setup(page)
