@@ -49,6 +49,7 @@ import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { formatDateTime } from '@/utils/datetime'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
+import { rubyRetryValidationKeys } from '@/locales/ruby-alignment-config'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
@@ -410,8 +411,9 @@ const onSubmit = async (): Promise<void> => {
   }
 
   if (!validateRounds()) return
-  if (validateRubyRetryConfig(formModel.ruby_retry).length) {
-    message.error(t('rubyAlignmentConfig.invalidConcurrency'))
+  const [rubyRetryError] = validateRubyRetryConfig(formModel.ruby_retry)
+  if (rubyRetryError) {
+    message.error(t(rubyRetryValidationKeys[rubyRetryError]))
     return
   }
 

@@ -21,14 +21,24 @@ export type ExecutionPlanFormRound = Omit<
   }
 }
 
-/** 表单中的 null 表示未选择后端或使用服务端默认注音并发，提交时均省略。 */
+export const RUBY_BATCH_FIELDS = ['batch_size', 'max_words_per_batch', 'batch_wait_ms'] as const
+export type RubyBatchField = (typeof RUBY_BATCH_FIELDS)[number]
+export const RUBY_BATCH_DEFAULTS = {
+  batch_size: 1,
+  max_words_per_batch: 0,
+  batch_wait_ms: 25,
+} as const
+export const RUBY_BATCH_WAIT_MAX_MS = 9223372036854
+export type RubyRetryValidationError = 'concurrency' | RubyBatchField | 'batch_limits'
+
+/** 表单中的 null 表示未选择后端或使用服务端默认请求配置，提交时均省略。 */
 export type ExecutionPlanFormRubyRetry = Omit<
   ExecutionPlanRubyRetry,
-  'backend_id' | 'concurrency'
+  'backend_id' | 'concurrency' | RubyBatchField
 > & {
   backend_id?: number | null
   concurrency?: number | null
-}
+} & Partial<Record<RubyBatchField, number | null>>
 
 export type InlineTermExtractionConfig = ApiSchemas['InlineTermExtractionConfig']
 export type InlineTermExtractionError = keyof InlineTermExtractionConfig | 'config'
@@ -48,7 +58,7 @@ export function createRubyRetryConfig(): ExecutionPlanFormRubyRetry {
   return { enabled: false, backend_id: null, max_attempts: 1 }
 }
 
-/** Preserve omitted concurrency and explicit invalid values until validation. */
+/** Preserve omitted request settings and explicit invalid values until validation. */
 export function mergeRubyRetryConfig(
   source?: Partial<ExecutionPlanFormRubyRetry>,
 ): ExecutionPlanFormRubyRetry {
@@ -58,15 +68,49 @@ export function mergeRubyRetryConfig(
     backend_id: source?.backend_id ?? defaults.backend_id,
     max_attempts: source?.max_attempts ?? defaults.max_attempts,
     ...(source?.concurrency === undefined ? {} : { concurrency: source.concurrency }),
+    ...(source?.batch_size === undefined ? {} : { batch_size: source.batch_size }),
+    ...(source?.max_words_per_batch === undefined
+      ? {}
+      : { max_words_per_batch: source.max_words_per_batch }),
+    ...(source?.batch_wait_ms === undefined ? {} : { batch_wait_ms: source.batch_wait_ms }),
   }
 }
 
-export function validateRubyRetryConfig(retry: ExecutionPlanFormRubyRetry): 'concurrency'[] {
+/** Compare drafts without JSON coercing invalid numbers or losing newly added request settings. */
+export function sameRubyRetryConfig(
+  first?: ExecutionPlanFormRubyRetry,
+  second?: ExecutionPlanFormRubyRetry,
+): boolean {
+  return (
+    ['enabled', 'backend_id', 'max_attempts', 'concurrency', ...RUBY_BATCH_FIELDS] as const
+  ).every((field) => Object.is(first?.[field], second?.[field]))
+}
+
+export function validateRubyRetryConfig(
+  retry: ExecutionPlanFormRubyRetry,
+): RubyRetryValidationError[] {
+  const errors: RubyRetryValidationError[] = []
   const value = retry.concurrency
-  return value != null &&
-    (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value < 1)
-    ? ['concurrency']
-    : []
+  if (value != null && (!Number.isSafeInteger(value) || value < 1)) errors.push('concurrency')
+  for (const field of RUBY_BATCH_FIELDS) {
+    const setting = retry[field]
+    if (
+      setting != null &&
+      (!Number.isSafeInteger(setting) ||
+        setting < 0 ||
+        (field === 'batch_wait_ms' && setting > RUBY_BATCH_WAIT_MAX_MS))
+    ) {
+      errors.push(field)
+    }
+  }
+  // Resolve defaults only for validation. The draft and request must retain field presence.
+  if (
+    (retry.batch_size ?? RUBY_BATCH_DEFAULTS.batch_size) === 0 &&
+    (retry.max_words_per_batch ?? RUBY_BATCH_DEFAULTS.max_words_per_batch) === 0
+  ) {
+    errors.push('batch_limits')
+  }
+  return errors
 }
 
 export function createInlineTermExtractionConfig(): Required<InlineTermExtractionConfig> {
@@ -347,11 +391,17 @@ export function buildExecutionRoundInput(round: ExecutionPlanFormRound): Executi
 
 /** Validate before serializing; cleared fields remain omitted, never materialized as defaults. */
 export function buildRubyRetryInput(retry: ExecutionPlanFormRubyRetry): ExecutionPlanRubyRetry {
-  if (validateRubyRetryConfig(retry).length) throw new Error('Invalid ruby retry concurrency')
+  const errors = validateRubyRetryConfig(retry)
+  if (errors.length) throw new Error(`Invalid ruby retry configuration: ${errors.join(', ')}`)
   return {
     enabled: retry.enabled,
     ...(retry.backend_id == null ? {} : { backend_id: retry.backend_id }),
     ...(retry.max_attempts === undefined ? {} : { max_attempts: retry.max_attempts }),
     ...(retry.concurrency == null ? {} : { concurrency: retry.concurrency }),
+    ...(retry.batch_size == null ? {} : { batch_size: retry.batch_size }),
+    ...(retry.max_words_per_batch == null
+      ? {}
+      : { max_words_per_batch: retry.max_words_per_batch }),
+    ...(retry.batch_wait_ms == null ? {} : { batch_wait_ms: retry.batch_wait_ms }),
   }
 }
