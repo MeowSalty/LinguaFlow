@@ -183,6 +183,11 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) boo
 }
 
 func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
+	var accountInput *service.AccountInputError
+	if errors.As(err, &accountInput) {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", accountInput.Error())
+		return
+	}
 	switch {
 	case errors.Is(err, event.ErrHistoryUnavailable):
 		s.writeProblem(w, r, http.StatusServiceUnavailable, "history_unavailable", "任务事件历史暂不可用")
@@ -219,7 +224,7 @@ func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err e
 	case errors.Is(err, service.ErrInvalidInput):
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	case errors.Is(err, service.ErrInvalidCredentials):
-		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"invalid-credentials", "unauthorized", "用户名或密码错误")
+		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"invalid-credentials", "unauthorized", "账号或密码错误")
 	case errors.Is(err, service.ErrSettingsUnavailable):
 		s.writeProblemWithType(w, r, http.StatusServiceUnavailable, urnPrefix+"settings-unavailable", "unavailable", "系统设置暂不可用")
 	case errors.Is(err, service.ErrTokenExpired):
@@ -231,7 +236,9 @@ func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err e
 	case errors.Is(err, service.ErrUserInactive):
 		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"user-inactive", "unauthorized", "用户已被禁用")
 	case errors.Is(err, service.ErrUserExists):
-		s.writeProblem(w, r, http.StatusConflict, "conflict", "用户已存在")
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "用户名不可用")
+	case errors.Is(err, service.ErrAccountConflict):
+		s.writeProblem(w, r, http.StatusConflict, "account_conflict", "账号状态已改变，请重新读取后重试")
 	case errors.Is(err, service.ErrForbidden):
 		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrRegistrationClosed):

@@ -38,6 +38,7 @@ func jobStreamTestServer(t *testing.T, ringCapacity, replayBatch, maxReplay int)
 		t.Fatalf("new hybrid store: %v", err)
 	}
 	s := &Server{
+		mode:           config.ModeLocal,
 		serverCfg:      &config.ServerConfig{ServiceName: "test"},
 		logger:         logger,
 		entClient:      client,
@@ -55,6 +56,7 @@ func jobStreamTestServer(t *testing.T, ringCapacity, replayBatch, maxReplay int)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	s.localUser = u
 	return s, client, u
 }
 
@@ -103,6 +105,9 @@ type safeRecorder struct {
 func newSafeRecorder() *safeRecorder {
 	return &safeRecorder{ResponseRecorder: httptest.NewRecorder()}
 }
+
+// Recorder writes are synchronous and never block on a network peer.
+func (s *safeRecorder) SetWriteDeadline(time.Time) error { return nil }
 
 // Write 在 handler goroutine 写入 SSE 数据时加锁，保护共享 buffer。
 func (s *safeRecorder) Write(b []byte) (int, error) {

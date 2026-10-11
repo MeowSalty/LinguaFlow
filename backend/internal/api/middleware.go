@@ -58,7 +58,6 @@ func (s *Server) requestLoggingMiddleware(next http.Handler) http.Handler {
 			"request_id", chimiddleware.GetReqID(r.Context()),
 			"method", r.Method,
 			"path", r.URL.Path,
-			"query", r.URL.RawQuery,
 			"status", statusCode,
 			"bytes", ww.BytesWritten(),
 			"duration_ms", time.Since(startedAt).Milliseconds(),

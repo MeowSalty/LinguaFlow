@@ -10,6 +10,10 @@ func (s *Server) GetMode(w http.ResponseWriter, r *http.Request) {
 	s.handleMode(w, r)
 }
 
+func (s *Server) GetAuthCapabilities(w http.ResponseWriter, r *http.Request) {
+	s.handleAuthCapabilities(w, r)
+}
+
 func (s *Server) RegisterAuth(w http.ResponseWriter, r *http.Request) {
 	s.handleRegister(w, r)
 }

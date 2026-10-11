@@ -13,25 +13,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
-type adminCreateUserRequest struct {
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	Role        string `json:"role"`
-}
-
-type adminUpdateUserRequest struct {
-	DisplayName *string `json:"display_name"`
-	Email       *string `json:"email"`
-	Role        *string `json:"role"`
-	Active      *bool   `json:"active"`
-}
-
-type adminResetPasswordRequest struct {
-	NewPassword string `json:"new_password"`
-}
-
 type adminUserListResponse struct {
 	Items []userResponse `json:"items"`
 	Total int            `json:"total"`
@@ -124,16 +105,20 @@ func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
-	var req adminCreateUserRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "username", "password", "email", "display_name", "role")
+	if !ok {
+		return
+	}
+	if fields["username"] == nil || fields["password"] == nil {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
 		return
 	}
 	u, err := s.adminService.CreateUser(r.Context(), service.AdminCreateUserInput{
-		Username:    req.Username,
-		Password:    req.Password,
-		Email:       req.Email,
-		DisplayName: req.DisplayName,
-		Role:        req.Role,
+		Username:    *fields["username"],
+		Password:    *fields["password"],
+		Email:       organizationStringField(fields["email"]),
+		DisplayName: organizationStringField(fields["display_name"]),
+		Role:        organizationStringField(fields["role"]),
 	})
 	if err != nil {
 		s.writeAdminServiceError(w, r, err)
@@ -152,16 +137,33 @@ func (s *Server) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req adminUpdateUserRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountObject(w, r, "display_name", "email", "role", "active")
+	if !ok {
 		return
 	}
-	u, err := s.adminService.UpdateUser(r.Context(), authUser.User.ID, userID, service.AdminUpdateUserInput{
-		DisplayName: req.DisplayName,
-		Email:       req.Email,
-		Role:        req.Role,
-		Active:      req.Active,
-	})
+	var input service.AdminUpdateUserInput
+	for name, raw := range fields {
+		if name == "active" {
+			if err := json.Unmarshal(raw, &input.Active); err != nil || input.Active == nil {
+				s.writeServiceError(w, r, service.ErrInvalidInput)
+				return
+			}
+			continue
+		}
+		value, ok := s.accountStringValue(w, r, name, raw)
+		if !ok {
+			return
+		}
+		switch name {
+		case "display_name":
+			input.DisplayName = value
+		case "email":
+			input.Email = value
+		case "role":
+			input.Role = value
+		}
+	}
+	u, err := s.adminService.UpdateUser(r.Context(), authUser.User.ID, userID, input)
 	if err != nil {
 		s.writeAdminServiceError(w, r, err)
 		return
@@ -187,15 +189,24 @@ func (s *Server) handleAdminDisableUser(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAdminResetPassword(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
 	userID, ok := s.parseIntParam(w, r, chi.URLParam(r, "userId"), "userId")
 	if !ok {
 		return
 	}
-	var req adminResetPasswordRequest
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "new_password")
+	if !ok {
 		return
 	}
-	if err := s.adminService.ResetPassword(r.Context(), userID, req.NewPassword); err != nil {
+	if fields["new_password"] == nil {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
+		return
+	}
+	if err := s.adminService.ResetPassword(r.Context(), authUser.User.ID, userID, *fields["new_password"]); err != nil {
 		s.writeAdminServiceError(w, r, err)
 		return
 	}
