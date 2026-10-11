@@ -46,6 +46,44 @@ export async function createRubyProductProxy(backend) {
   preview.stderr.on('data', (chunk) => {
     previewOutput += chunk.toString()
   })
+  const { server: proxy, ...transport } = createRubyTransportProxy(
+    new URL(backend.apiBase).origin,
+    `http://127.0.0.1:${previewPort}`,
+  )
+  async function close() {
+    proxy.closeAllConnections()
+    if (proxy.listening) await new Promise((resolve) => proxy.close(resolve))
+    if (preview.pid && preview.exitCode == null && preview.signalCode == null) {
+      const stopped = once(preview, 'exit')
+      preview.kill()
+      await stopped
+    }
+  }
+  try {
+    await backend.until(
+      async () => {
+        if (previewError) throw previewError
+        if (preview.exitCode != null) throw new Error(`Preview exited: ${previewOutput}`)
+        try {
+          return (await fetch(`http://127.0.0.1:${previewPort}`)).ok
+        } catch {
+          return false
+        }
+      },
+      Boolean,
+      'production preview ready',
+    )
+    const port = await listen(proxy)
+    return { origin: `http://127.0.0.1:${port}`, ...transport, close }
+  } catch (error) {
+    await close()
+    throw error
+  }
+}
+
+export function createRubyTransportProxy(backendOrigin, previewOrigin) {
+  const backend = new URL(backendOrigin)
+  const preview = new URL(previewOrigin)
   const requests = []
   const streams = new Set()
   let activePageLimit
@@ -59,10 +97,7 @@ export async function createRubyProductProxy(backend) {
       activePageLimit
     )
       url.searchParams.set('limit', String(activePageLimit))
-    const destination = new URL(
-      `${url.pathname}${url.search}`,
-      api ? new URL(backend.apiBase).origin : `http://127.0.0.1:${previewPort}`,
-    )
+    const destination = api ? backend : preview
     // Never persist authorization, access_token query values, or response payloads.
     const observation = api
       ? {
@@ -80,6 +115,9 @@ export async function createRubyProductProxy(backend) {
     const outgoing = httpRequest(
       destination,
       {
+        // Keep the origin fixed: resolving a normalized path beginning with // as a URL
+        // would let a request such as /.//other-host/ replace the upstream host.
+        path: `${url.pathname}${url.search}`,
         method: req.method,
         headers: { ...req.headers, host: destination.host },
       },
@@ -108,43 +146,14 @@ export async function createRubyProductProxy(backend) {
     res.on('close', () => outgoing.destroy())
     req.pipe(outgoing)
   })
-  async function close() {
-    proxy.closeAllConnections()
-    if (proxy.listening) await new Promise((resolve) => proxy.close(resolve))
-    if (preview.pid && preview.exitCode == null && preview.signalCode == null) {
-      const stopped = once(preview, 'exit')
-      preview.kill()
-      await stopped
-    }
-  }
-  try {
-    await backend.until(
-      async () => {
-        if (previewError) throw previewError
-        if (preview.exitCode != null) throw new Error(`Preview exited: ${previewOutput}`)
-        try {
-          return (await fetch(`http://127.0.0.1:${previewPort}`)).ok
-        } catch {
-          return false
-        }
-      },
-      Boolean,
-      'production preview ready',
-    )
-    const port = await listen(proxy)
-    return {
-      origin: `http://127.0.0.1:${port}`,
-      requests,
-      close,
-      capActivePageSize(limit) {
-        activePageLimit = limit
-      },
-      disconnectStreams() {
-        for (const stream of streams) stream.destroy()
-      },
-    }
-  } catch (error) {
-    await close()
-    throw error
+  return {
+    server: proxy,
+    requests,
+    capActivePageSize(limit) {
+      activePageLimit = limit
+    },
+    disconnectStreams() {
+      for (const stream of streams) stream.destroy()
+    },
   }
 }
