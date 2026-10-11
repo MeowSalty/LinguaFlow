@@ -65,10 +65,11 @@ type jobProgressResponse struct {
 	FailedResources    int `json:"failed_resources"`
 	// ProgressTotal/ProgressCompleted：工作量单位 = 段落×轮的「已知工作量」
 	// 进度对（矩阵派生缓存）。分母随轮次启动动态增长。
-	ProgressTotal     *int64 `json:"progress_total"`
-	ProgressCompleted *int64 `json:"progress_completed"`
-	QueuePosition     *int   `json:"queue_position,omitempty"`
-	QueueSize         *int   `json:"queue_size,omitempty"`
+	ProgressTotal     *int64                  `json:"progress_total"`
+	ProgressCompleted *int64                  `json:"progress_completed"`
+	QueuePosition     *int                    `json:"queue_position,omitempty"`
+	QueueSize         *int                    `json:"queue_size,omitempty"`
+	Stages            *service.JobStageCounts `json:"stages,omitempty"`
 }
 
 type jobResponse struct {
@@ -322,6 +323,12 @@ func (s *Server) toJobListResponse(ctx context.Context, actorID int, row *ent.Jo
 		resp.CreatedBy = &userBriefResponse{ID: row.Edges.CreatedBy.ID, Username: row.Edges.CreatedBy.Username}
 	}
 	resp.Progress = buildProgressResponse(row, queueInfo)
+	if s.jobSvc != nil {
+		counts, err := s.jobSvc.GetJobStageCounts(ctx, actorID, row.ID)
+		if err == nil {
+			resp.Progress.Stages = counts
+		}
+	}
 	return resp
 }
 

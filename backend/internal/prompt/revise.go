@@ -175,7 +175,7 @@ type ReviseRevision struct {
 //
 // includeRuby 时顶层追加必填 ruby_output（按 revisionIDs 键控，与 translate 轮
 // translationsSchema 的 ruby 分支同构）。
-func ReviseRevisionSchema(includeRuby bool, revisionIDs []string) map[string]any {
+func ReviseRevisionSchema(includeRuby bool, revisionIDs []string, rubyProtocolVersion ...int) map[string]any {
 	itemProps := map[string]any{
 		"id":     map[string]any{"type": "string"},
 		"target": map[string]any{"type": "string"},
@@ -193,7 +193,7 @@ func ReviseRevisionSchema(includeRuby bool, revisionIDs []string) map[string]any
 	}
 	required := []string{"revisions"}
 	if includeRuby {
-		outerProps["ruby_output"] = RubyOutputSchema(revisionIDs)
+		outerProps["ruby_output"] = RubyOutputSchema(revisionIDs, rubyProtocolVersion...)
 		required = append(required, "ruby_output")
 	}
 	return map[string]any{
@@ -208,7 +208,11 @@ func ReviseRevisionSchema(includeRuby bool, revisionIDs []string) map[string]any
 // {id,base,text,kind} 条目数组（kind 为三级分类枚举，条目 id 可选）。
 // 由 translate 轮（translationsSchema）与 revise 轮（ReviseRevisionSchema）共用，
 // 保证两轮注音协议同构。
-func RubyOutputSchema(ids []string) map[string]any {
+func RubyOutputSchema(ids []string, protocolVersion ...int) map[string]any {
+	required := []string{"base", "text", "kind"}
+	if len(protocolVersion) > 0 && protocolVersion[0] >= 2 {
+		required = []string{"id", "base", "text", "kind"}
+	}
 	props := make(map[string]any, len(ids))
 	for _, id := range ids {
 		props[id] = map[string]any{
@@ -224,7 +228,7 @@ func RubyOutputSchema(ids []string) map[string]any {
 						"enum": []string{"phonetic", "semantic", "creative"},
 					},
 				},
-				"required":             []string{"base", "text", "kind"},
+				"required":             required,
 				"additionalProperties": false,
 			},
 		}

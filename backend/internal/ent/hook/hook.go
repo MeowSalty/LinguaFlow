@@ -573,6 +573,42 @@ func (f UserFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error)
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserMutation", m)
 }
 
+// The WorkCandidateFunc type is an adapter to allow the use of ordinary
+// function as WorkCandidate mutator.
+type WorkCandidateFunc func(context.Context, *ent.WorkCandidateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkCandidateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkCandidateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkCandidateMutation", m)
+}
+
+// The WorkItemFunc type is an adapter to allow the use of ordinary
+// function as WorkItem mutator.
+type WorkItemFunc func(context.Context, *ent.WorkItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkItemMutation", m)
+}
+
+// The WorkRequestFunc type is an adapter to allow the use of ordinary
+// function as WorkRequest mutator.
+type WorkRequestFunc func(context.Context, *ent.WorkRequestMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkRequestFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkRequestMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkRequestMutation", m)
+}
+
 // Condition is a hook condition function.
 type Condition func(context.Context, ent.Mutation) bool
 

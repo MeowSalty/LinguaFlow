@@ -65,6 +65,21 @@ func UpdatedAt(v time.Time) predicate.JobRound {
 	return predicate.JobRound(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// ManifestVersion applies equality check predicate on the "manifest_version" field. It's identical to ManifestVersionEQ.
+func ManifestVersion(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldEQ(FieldManifestVersion, v))
+}
+
+// ManifestSealed applies equality check predicate on the "manifest_sealed" field. It's identical to ManifestSealedEQ.
+func ManifestSealed(v bool) predicate.JobRound {
+	return predicate.JobRound(sql.FieldEQ(FieldManifestSealed, v))
+}
+
+// PoolIndex applies equality check predicate on the "pool_index" field. It's identical to PoolIndexEQ.
+func PoolIndex(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldEQ(FieldPoolIndex, v))
+}
+
 // JobID applies equality check predicate on the "job_id" field. It's identical to JobIDEQ.
 func JobID(v int) predicate.JobRound {
 	return predicate.JobRound(sql.FieldEQ(FieldJobID, v))
@@ -193,6 +208,96 @@ func UpdatedAtLT(v time.Time) predicate.JobRound {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.JobRound {
 	return predicate.JobRound(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// ManifestVersionEQ applies the EQ predicate on the "manifest_version" field.
+func ManifestVersionEQ(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldEQ(FieldManifestVersion, v))
+}
+
+// ManifestVersionNEQ applies the NEQ predicate on the "manifest_version" field.
+func ManifestVersionNEQ(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldNEQ(FieldManifestVersion, v))
+}
+
+// ManifestVersionIn applies the In predicate on the "manifest_version" field.
+func ManifestVersionIn(vs ...int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldIn(FieldManifestVersion, vs...))
+}
+
+// ManifestVersionNotIn applies the NotIn predicate on the "manifest_version" field.
+func ManifestVersionNotIn(vs ...int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldNotIn(FieldManifestVersion, vs...))
+}
+
+// ManifestVersionGT applies the GT predicate on the "manifest_version" field.
+func ManifestVersionGT(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldGT(FieldManifestVersion, v))
+}
+
+// ManifestVersionGTE applies the GTE predicate on the "manifest_version" field.
+func ManifestVersionGTE(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldGTE(FieldManifestVersion, v))
+}
+
+// ManifestVersionLT applies the LT predicate on the "manifest_version" field.
+func ManifestVersionLT(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldLT(FieldManifestVersion, v))
+}
+
+// ManifestVersionLTE applies the LTE predicate on the "manifest_version" field.
+func ManifestVersionLTE(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldLTE(FieldManifestVersion, v))
+}
+
+// ManifestSealedEQ applies the EQ predicate on the "manifest_sealed" field.
+func ManifestSealedEQ(v bool) predicate.JobRound {
+	return predicate.JobRound(sql.FieldEQ(FieldManifestSealed, v))
+}
+
+// ManifestSealedNEQ applies the NEQ predicate on the "manifest_sealed" field.
+func ManifestSealedNEQ(v bool) predicate.JobRound {
+	return predicate.JobRound(sql.FieldNEQ(FieldManifestSealed, v))
+}
+
+// PoolIndexEQ applies the EQ predicate on the "pool_index" field.
+func PoolIndexEQ(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldEQ(FieldPoolIndex, v))
+}
+
+// PoolIndexNEQ applies the NEQ predicate on the "pool_index" field.
+func PoolIndexNEQ(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldNEQ(FieldPoolIndex, v))
+}
+
+// PoolIndexIn applies the In predicate on the "pool_index" field.
+func PoolIndexIn(vs ...int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldIn(FieldPoolIndex, vs...))
+}
+
+// PoolIndexNotIn applies the NotIn predicate on the "pool_index" field.
+func PoolIndexNotIn(vs ...int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldNotIn(FieldPoolIndex, vs...))
+}
+
+// PoolIndexGT applies the GT predicate on the "pool_index" field.
+func PoolIndexGT(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldGT(FieldPoolIndex, v))
+}
+
+// PoolIndexGTE applies the GTE predicate on the "pool_index" field.
+func PoolIndexGTE(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldGTE(FieldPoolIndex, v))
+}
+
+// PoolIndexLT applies the LT predicate on the "pool_index" field.
+func PoolIndexLT(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldLT(FieldPoolIndex, v))
+}
+
+// PoolIndexLTE applies the LTE predicate on the "pool_index" field.
+func PoolIndexLTE(v int) predicate.JobRound {
+	return predicate.JobRound(sql.FieldLTE(FieldPoolIndex, v))
 }
 
 // JobIDEQ applies the EQ predicate on the "job_id" field.

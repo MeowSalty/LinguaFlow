@@ -12,11 +12,15 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sourcerevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 // registerResourceDeletion 在业务删除事务内运行。存储记录以数字化的归属
 // 墓碑记录保存归属关系，而不使用级联的业务外键。
 func registerResourceDeletion(ctx context.Context, tx *ent.Client, projectID, resourceID int, service *StorageService) error {
+	if _, err := workstate.LockResourceJobs(ctx, tx, resourceID); err != nil {
+		return err
+	}
 	p, err := tx.Project.Get(ctx, projectID)
 	if err != nil {
 		return err

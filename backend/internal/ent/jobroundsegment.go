@@ -18,6 +18,12 @@ type JobRoundSegment struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
+	// CommitID holds the value of the "commit_id" field.
+	CommitID *string `json:"commit_id,omitempty"`
+	// CandidateID holds the value of the "candidate_id" field.
+	CandidateID *string `json:"candidate_id,omitempty"`
+	// Outcome holds the value of the "outcome" field.
+	Outcome string `json:"outcome,omitempty"`
 	// 所属轮次行 ID
 	JobRoundID int `json:"job_round_id,omitempty"`
 	// 已解决段 ID
@@ -68,6 +74,8 @@ func (*JobRoundSegment) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case jobroundsegment.FieldID, jobroundsegment.FieldJobRoundID, jobroundsegment.FieldSegmentID:
 			values[i] = new(sql.NullInt64)
+		case jobroundsegment.FieldCommitID, jobroundsegment.FieldCandidateID, jobroundsegment.FieldOutcome:
+			values[i] = new(sql.NullString)
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -89,6 +97,26 @@ func (_m *JobRoundSegment) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int(value.Int64)
+		case jobroundsegment.FieldCommitID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field commit_id", values[i])
+			} else if value.Valid {
+				_m.CommitID = new(string)
+				*_m.CommitID = value.String
+			}
+		case jobroundsegment.FieldCandidateID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field candidate_id", values[i])
+			} else if value.Valid {
+				_m.CandidateID = new(string)
+				*_m.CandidateID = value.String
+			}
+		case jobroundsegment.FieldOutcome:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field outcome", values[i])
+			} else if value.Valid {
+				_m.Outcome = value.String
+			}
 		case jobroundsegment.FieldJobRoundID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field job_round_id", values[i])
@@ -147,6 +175,19 @@ func (_m *JobRoundSegment) String() string {
 	var builder strings.Builder
 	builder.WriteString("JobRoundSegment(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	if v := _m.CommitID; v != nil {
+		builder.WriteString("commit_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.CandidateID; v != nil {
+		builder.WriteString("candidate_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	builder.WriteString("outcome=")
+	builder.WriteString(_m.Outcome)
+	builder.WriteString(", ")
 	builder.WriteString("job_round_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.JobRoundID))
 	builder.WriteString(", ")

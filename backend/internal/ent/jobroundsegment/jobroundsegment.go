@@ -12,6 +12,12 @@ const (
 	Label = "job_round_segment"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
+	// FieldCommitID holds the string denoting the commit_id field in the database.
+	FieldCommitID = "commit_id"
+	// FieldCandidateID holds the string denoting the candidate_id field in the database.
+	FieldCandidateID = "candidate_id"
+	// FieldOutcome holds the string denoting the outcome field in the database.
+	FieldOutcome = "outcome"
 	// FieldJobRoundID holds the string denoting the job_round_id field in the database.
 	FieldJobRoundID = "job_round_id"
 	// FieldSegmentID holds the string denoting the segment_id field in the database.
@@ -41,6 +47,9 @@ const (
 // Columns holds all SQL columns for jobroundsegment fields.
 var Columns = []string{
 	FieldID,
+	FieldCommitID,
+	FieldCandidateID,
+	FieldOutcome,
 	FieldJobRoundID,
 	FieldSegmentID,
 }
@@ -56,6 +65,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultOutcome holds the default value on creation for the "outcome" field.
+	DefaultOutcome string
 	// JobRoundIDValidator is a validator for the "job_round_id" field. It is called by the builders before save.
 	JobRoundIDValidator func(int) error
 	// SegmentIDValidator is a validator for the "segment_id" field. It is called by the builders before save.
@@ -68,6 +79,21 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByCommitID orders the results by the commit_id field.
+func ByCommitID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCommitID, opts...).ToFunc()
+}
+
+// ByCandidateID orders the results by the candidate_id field.
+func ByCandidateID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCandidateID, opts...).ToFunc()
+}
+
+// ByOutcome orders the results by the outcome field.
+func ByOutcome(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOutcome, opts...).ToFunc()
 }
 
 // ByJobRoundID orders the results by the job_round_id field.

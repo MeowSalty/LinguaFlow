@@ -59,6 +59,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -166,6 +169,9 @@ func checkColumn(t, c string) error {
 			translationprompttemplate.Table: translationprompttemplate.ValidColumn,
 			usagerecord.Table:               usagerecord.ValidColumn,
 			user.Table:                      user.ValidColumn,
+			workcandidate.Table:             workcandidate.ValidColumn,
+			workitem.Table:                  workitem.ValidColumn,
+			workrequest.Table:               workrequest.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

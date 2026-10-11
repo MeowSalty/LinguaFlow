@@ -18,6 +18,10 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldRetryEpoch holds the string denoting the retry_epoch field in the database.
+	FieldRetryEpoch = "retry_epoch"
+	// FieldPauseRequested holds the string denoting the pause_requested field in the database.
+	FieldPauseRequested = "pause_requested"
 	// FieldProjectID holds the string denoting the project_id field in the database.
 	FieldProjectID = "project_id"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -109,6 +113,8 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldRetryEpoch,
+	FieldPauseRequested,
 	FieldProjectID,
 	FieldStatus,
 	FieldTriggerType,
@@ -153,6 +159,12 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultRetryEpoch holds the default value on creation for the "retry_epoch" field.
+	DefaultRetryEpoch int64
+	// RetryEpochValidator is a validator for the "retry_epoch" field. It is called by the builders before save.
+	RetryEpochValidator func(int64) error
+	// DefaultPauseRequested holds the default value on creation for the "pause_requested" field.
+	DefaultPauseRequested bool
 	// ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	ProjectIDValidator func(int) error
 	// DefaultStatus holds the default value on creation for the "status" field.
@@ -201,6 +213,16 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByRetryEpoch orders the results by the retry_epoch field.
+func ByRetryEpoch(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetryEpoch, opts...).ToFunc()
+}
+
+// ByPauseRequested orders the results by the pause_requested field.
+func ByPauseRequested(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPauseRequested, opts...).ToFunc()
 }
 
 // ByProjectID orders the results by the project_id field.

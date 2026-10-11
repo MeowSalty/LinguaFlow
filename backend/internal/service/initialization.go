@@ -224,7 +224,9 @@ func initializationBusinessChecks(c *ent.Client) map[string]func(context.Context
 		"prune_prompt_templates": c.PrunePromptTemplate.Query().Exist, "refresh_tokens": c.RefreshToken.Query().Exist,
 		"resources": c.Resource.Query().Exist, "segments": c.Segment.Query().Exist,
 		"segment_revisions": c.SegmentRevision.Query().Exist, "sse_events": c.SSEEvent.Query().Exist,
-		"sync_tasks": c.SyncTask.Query().Exist, "system_settings": c.SystemSetting.Query().Exist,
+		"work_items": c.WorkItem.Query().Exist, "work_candidates": c.WorkCandidate.Query().Exist,
+		"work_requests": c.WorkRequest.Query().Exist,
+		"sync_tasks":    c.SyncTask.Query().Exist, "system_settings": c.SystemSetting.Query().Exist,
 		"tm_entries": c.TMEntry.Query().Exist, "translation_prompt_templates": c.TranslationPromptTemplate.Query().Exist,
 		"usage_records": c.UsageRecord.Query().Exist, "users": c.User.Query().Exist,
 	}

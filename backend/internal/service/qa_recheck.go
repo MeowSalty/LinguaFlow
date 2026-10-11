@@ -522,8 +522,8 @@ func (s *QARecheckService) recheckWriteBatch(
 			counters.skippedConcurrent++
 			continue
 		}
-		if row.TargetText == nil || loadedTarget == nil || *row.TargetText != *loadedTarget {
-			// 译文已被并发修改：QA 结果基于旧译文，写回会覆盖他人工作，跳过。
+		if row.TargetText == nil || loadedTarget == nil || *row.TargetText != *loadedTarget || row.ContentVersion != seg.ContentVersion {
+			// 正文或审核基线已被并发修改，旧 QA 结果不能覆盖新的决定。
 			counters.skippedConcurrent++
 			continue
 		}
@@ -576,7 +576,7 @@ func (s *QARecheckService) recheckWriteBatch(
 			}
 			advanced = true
 		}
-		upd := tx.Segment.UpdateOneID(row.ID).Where(segment.TargetTextEQ(*loadedTarget))
+		upd := tx.Segment.UpdateOneID(row.ID).Where(segment.ContentVersionEQ(seg.ContentVersion), segment.TargetTextEQ(*loadedTarget))
 		if len(final) > 0 {
 			upd.SetQualityIssues(final)
 		} else {

@@ -250,7 +250,7 @@ func tryRepairReviseWithRuby(text string, opt Options) ([]prompt.ReviseRevision,
 	var rubyOutput map[string][]ruby.OutputEntry
 	if rubyRaw, ok := raw["ruby_output"]; ok {
 		if b, mErr := json.Marshal(rubyRaw); mErr == nil {
-			_ = json.Unmarshal(b, &rubyOutput)
+			rubyOutput = ruby.ParseOutputMap(b)
 		}
 	}
 	return revisions, rubyOutput, repaired, nil

@@ -65,6 +65,11 @@ func UpdatedAt(v time.Time) predicate.Segment {
 	return predicate.Segment(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// ContentVersion applies equality check predicate on the "content_version" field. It's identical to ContentVersionEQ.
+func ContentVersion(v int64) predicate.Segment {
+	return predicate.Segment(sql.FieldEQ(FieldContentVersion, v))
+}
+
 // SegmentIndex applies equality check predicate on the "segment_index" field. It's identical to SegmentIndexEQ.
 func SegmentIndex(v int) predicate.Segment {
 	return predicate.Segment(sql.FieldEQ(FieldSegmentIndex, v))
@@ -173,6 +178,46 @@ func UpdatedAtLT(v time.Time) predicate.Segment {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.Segment {
 	return predicate.Segment(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// ContentVersionEQ applies the EQ predicate on the "content_version" field.
+func ContentVersionEQ(v int64) predicate.Segment {
+	return predicate.Segment(sql.FieldEQ(FieldContentVersion, v))
+}
+
+// ContentVersionNEQ applies the NEQ predicate on the "content_version" field.
+func ContentVersionNEQ(v int64) predicate.Segment {
+	return predicate.Segment(sql.FieldNEQ(FieldContentVersion, v))
+}
+
+// ContentVersionIn applies the In predicate on the "content_version" field.
+func ContentVersionIn(vs ...int64) predicate.Segment {
+	return predicate.Segment(sql.FieldIn(FieldContentVersion, vs...))
+}
+
+// ContentVersionNotIn applies the NotIn predicate on the "content_version" field.
+func ContentVersionNotIn(vs ...int64) predicate.Segment {
+	return predicate.Segment(sql.FieldNotIn(FieldContentVersion, vs...))
+}
+
+// ContentVersionGT applies the GT predicate on the "content_version" field.
+func ContentVersionGT(v int64) predicate.Segment {
+	return predicate.Segment(sql.FieldGT(FieldContentVersion, v))
+}
+
+// ContentVersionGTE applies the GTE predicate on the "content_version" field.
+func ContentVersionGTE(v int64) predicate.Segment {
+	return predicate.Segment(sql.FieldGTE(FieldContentVersion, v))
+}
+
+// ContentVersionLT applies the LT predicate on the "content_version" field.
+func ContentVersionLT(v int64) predicate.Segment {
+	return predicate.Segment(sql.FieldLT(FieldContentVersion, v))
+}
+
+// ContentVersionLTE applies the LTE predicate on the "content_version" field.
+func ContentVersionLTE(v int64) predicate.Segment {
+	return predicate.Segment(sql.FieldLTE(FieldContentVersion, v))
 }
 
 // SegmentIndexEQ applies the EQ predicate on the "segment_index" field.

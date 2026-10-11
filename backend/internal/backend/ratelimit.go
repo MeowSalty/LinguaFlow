@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
+	"net/http"
 	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -32,13 +36,17 @@ func (e *StatusError) GetRetryAfter() time.Duration { return e.RetryAfter }
 
 // IsRetryable 判断一个错误是否值得重试。
 func IsRetryable(err error) bool {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
-	}
-	// Runtime credential/Backend policy failures remain terminal even when a
-	// provider SDK wraps them. They are not transient upstream network failures.
+	// Capacity, persistence, and credential-policy failures stay terminal even
+	// when their original cause includes a retryable transport timeout.
 	var permanent interface{ Permanent() bool }
 	if errors.As(err, &permanent) && permanent.Permanent() {
+		return false
+	}
+	var requestTimeout *RequestTimeoutError
+	if errors.As(err, &requestTimeout) {
+		return true
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 	// 空响应类错误：上游返回 HTTP 200 但无可用内容（典型是内容过滤/安全拦截/空补全）。
@@ -50,7 +58,7 @@ func IsRetryable(err error) bool {
 	var hsErr HTTPStatusError
 	if errors.As(err, &hsErr) {
 		code := hsErr.HTTPStatus()
-		return code >= 500 || code == 429
+		return code >= 500 || code == http.StatusTooManyRequests || code == http.StatusRequestTimeout
 	}
 	// 未实现 HTTPStatusError 的错误（网络超时、DNS 失败等）默认可重试
 	return true
@@ -75,10 +83,8 @@ func ExtractHTTPStatusCode(msg string) (int, bool) {
 	return code, true
 }
 
-// WrapUpstreamError 将上游错误统一包装为带前缀的 StatusError。
-// 当能从错误消息中解析出 HTTP 状态码时（OpenAI/Anthropic SDK 的
-// internal/apierror.Error 无法直接类型断言），附上状态码以便上层
-// 做状态码相关的判断；否则仅加前缀。翻译路径与列模型路径共用此实现。
+// WrapUpstreamError is a compatibility fallback for untyped upstream errors.
+// Provider adapters should prefer the SDK's public Error aliases and headers.
 func WrapUpstreamError(prefix string, err error) error {
 	if code, ok := ExtractHTTPStatusCode(err.Error()); ok {
 		return fmt.Errorf("%s: %w",
@@ -86,6 +92,69 @@ func WrapUpstreamError(prefix string, err error) error {
 			&StatusError{StatusCode: code, Err: err})
 	}
 	return fmt.Errorf("%s: %w", prefix, err)
+}
+
+// WrapHTTPError retains typed HTTP status and provider backoff without losing
+// the original SDK error. Unknown 409 conflicts remain nonretryable.
+func WrapHTTPError(prefix string, err error, status int, headers http.Header) error {
+	return fmt.Errorf("%s: %w", prefix, &StatusError{
+		StatusCode: status, Err: err, RetryAfter: ParseRetryAfter(headers, time.Now()),
+	})
+}
+
+// ParseRetryAfter supports seconds, HTTP dates, and providers' millisecond
+// extension. It uses the later valid value and saturates overflow rather than
+// turning an excessive delay into immediate dispatch.
+func ParseRetryAfter(headers http.Header, now time.Time) time.Duration {
+	parseNumber := func(raw string, unit time.Duration) time.Duration {
+		value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+		if (err != nil && !errors.Is(err, strconv.ErrRange)) || math.IsNaN(value) || value <= 0 {
+			return 0
+		}
+		if value >= float64(math.MaxInt64)/float64(unit) {
+			return time.Duration(math.MaxInt64)
+		}
+		return time.Duration(value * float64(unit))
+	}
+	delay := parseNumber(headers.Get("Retry-After-Ms"), time.Millisecond)
+	raw := strings.TrimSpace(headers.Get("Retry-After"))
+	if at, err := http.ParseTime(raw); err == nil {
+		delay = max(delay, at.Sub(now))
+	} else {
+		delay = max(delay, parseNumber(raw, time.Second))
+	}
+	return delay
+}
+
+// RetryDelay computes a delay for a zero-based network retry index. It does not
+// own attempts or sleep, so a durable scheduler can persist its chosen deadline.
+// Arithmetic saturates instead of letting large Retry-After values wrap or make
+// jitter panic. The server's later deadline always wins, including on 5xx.
+func RetryDelay(policy RetryPolicy, retryIndex int, lastErr error) time.Duration {
+	wait := max(policy.Backoff, 0)
+	retryIndex = max(retryIndex, 0)
+	if wait > 0 {
+		if retryIndex >= 63 || wait > time.Duration(math.MaxInt64)>>retryIndex {
+			wait = time.Duration(math.MaxInt64)
+		} else {
+			wait <<= retryIndex
+		}
+	}
+	var status HTTPStatusError
+	if errors.As(lastErr, &status) && status.HTTPStatus() == http.StatusTooManyRequests {
+		wait = max(wait, minRateLimitBackoff)
+	}
+	if server := extractRetryAfterErr(lastErr); server != nil {
+		wait = max(wait, server.GetRetryAfter())
+	}
+	if policy.Jitter {
+		room := time.Duration(math.MaxInt64) - wait
+		spread := min(wait, room)
+		if spread > 0 {
+			wait += time.Duration(rand.Int63n(int64(spread) + 1))
+		}
+	}
+	return wait
 }
 
 // minRateLimitBackoff 是 429 错误的最小退避时间。
@@ -142,23 +211,7 @@ func WithRetry(ctx context.Context, policy RetryPolicy, fn func() error) error {
 		if attempt == policy.MaxAttempts {
 			break
 		}
-		wait := policy.Backoff << (attempt - 1)
-
-		// 429 错误：优先使用服务端 Retry-After，否则强制最小退避。
-		if raErr := extractRetryAfterErr(lastErr); raErr != nil && raErr.HTTPStatus() == 429 {
-			effectiveMin := minRateLimitBackoff
-			if ra := raErr.GetRetryAfter(); ra > effectiveMin {
-				effectiveMin = ra
-			}
-			if wait < effectiveMin {
-				wait = effectiveMin
-			}
-		}
-
-		if policy.Jitter {
-			// Equal jitter: wait + rand(0, wait)
-			wait += time.Duration(rand.Int63n(int64(wait) + 1))
-		}
+		wait := RetryDelay(policy, attempt-1, lastErr)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -272,6 +325,15 @@ type RateLimitedBackend struct {
 	limiter RateLimiter
 }
 
+type admittedRequestKey struct{}
+
+// WithAdmittedRequest marks a request whose current backend RPM was already
+// charged by joint admission. The marker is internal context state and cannot
+// be set through a model request or serialized execution snapshot.
+func WithAdmittedRequest(ctx context.Context) context.Context {
+	return context.WithValue(ctx, admittedRequestKey{}, true)
+}
+
 // NewRateLimitedBackend 创建一个带独立限流器的 Backend 包装。
 // limiter 为 nil 时限流器为 nop（不限流）。
 func NewRateLimitedBackend(inner Backend, limiter RateLimiter) *RateLimitedBackend {
@@ -287,8 +349,10 @@ func NewRateLimitedBackend(inner Backend, limiter RateLimiter) *RateLimitedBacke
 func (b *RateLimitedBackend) Name() string { return b.inner.Name() }
 
 func (b *RateLimitedBackend) Translate(ctx context.Context, req Request) (*Response, error) {
-	if err := b.limiter.Wait(ctx); err != nil {
-		return nil, err
+	if admitted, _ := ctx.Value(admittedRequestKey{}).(bool); !admitted {
+		if err := b.limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return b.inner.Translate(ctx, req)
 }

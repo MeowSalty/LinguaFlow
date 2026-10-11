@@ -34,8 +34,10 @@ func TestEngineCloseOwnsRubyRetryBackends(t *testing.T) {
 		rounds:            []pipeline.Round{{Handler: &pipeline.TranslateHandler{Backend: shared}}},
 		rubyRetryBackends: []backend.Backend{ruby, shared, nil, ruby},
 	}
-	if err := e.Close(); err != nil {
-		t.Fatal(err)
+	for range 2 {
+		if err := e.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if shared.closeCount != 1 || ruby.closeCount != 1 {
 		t.Fatalf("close counts: shared=%d ruby=%d", shared.closeCount, ruby.closeCount)

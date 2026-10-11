@@ -8,7 +8,7 @@ import (
 )
 
 func TestValidateBatchLimits(t *testing.T) {
-	for _, mode := range []string{"translate", "extract", "adjudicate", "semantic_qa", "revise"} {
+	for _, mode := range []string{"translate", "extract", "adjudicate", "semantic_qa", "revise", "ruby_retry"} {
 		for _, tc := range []struct {
 			name         string
 			batch, words int

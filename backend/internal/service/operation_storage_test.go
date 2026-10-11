@@ -13,7 +13,7 @@ import (
 
 func seedOperationStorage(t *testing.T, c *ent.Client, projectID, actor int, status string, at time.Time) *ent.StorageTask {
 	t.Helper()
-	key := fmt.Sprintf("storage-%d-%d-%s", projectID, actor, status)
+	key := fmt.Sprintf("storage-%d-%d-%s-%s", projectID, actor, status, generateUniqueID())
 	return c.StorageTask.Create().SetOperationID(key).SetIdempotencyKey(key).SetRequestHash("hash").SetProjectID(projectID).SetActorID(actor).
 		SetKind("repair").SetStatus(storagetask.Status(status)).SetInput(map[string]any{"private": "private-secret"}).SetPhase("verify").SetErrorCode("storage_auth_required").SetUpdatedAt(at).SaveX(context.Background())
 }

@@ -39,7 +39,7 @@ OperationBase:
       type: string
     status:
       type: string
-      enum: [pending, running, paused, waiting_retry, needs_action, completed, failed, cancelled]
+      enum: [pending, running, pausing, paused, waiting_retry, needs_action, completed, failed, cancelled]
     created_at:
       type: string
       format: date-time
@@ -68,7 +68,7 @@ TranslationOperation:
           enum: [translation]
         status:
           type: string
-          enum: [pending, running, paused, completed, failed, cancelled]
+          enum: [pending, running, pausing, paused, completed, failed, cancelled]
         trigger_type:
           type: string
           enum: [manual, file_update, glossary_change, web_edit]
@@ -140,12 +140,15 @@ StorageOperation:
 
 OperationCounts:
   type: object
-  required: [pending, running, paused, recent_failed, waiting_retry, needs_action]
+  required: [pending, running, pausing, paused, recent_failed, waiting_retry, needs_action]
   properties:
     pending:
       type: integer
       minimum: 0
     running:
+      type: integer
+      minimum: 0
+    pausing:
       type: integer
       minimum: 0
     paused:

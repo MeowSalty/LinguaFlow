@@ -164,6 +164,30 @@ func (p *LimiterPool) Snapshot() LimiterSnapshot {
 	return s
 }
 
+// tryTakeLocked performs the RPM part of joint admission while p.mu is held.
+// Failed admission never consumes a token. The returned channel is invalidated
+// by Refresh, Remove, and Shutdown, so callers must retry against current policy.
+func (p *LimiterPool) tryTakeLocked(id int, now time.Time) (bool, time.Time, <-chan struct{}, error) {
+	if p.closed {
+		return false, time.Time{}, nil, ErrLimiterClosed
+	}
+	h, ok := p.limiters[id]
+	if !ok || h.closed {
+		return false, time.Time{}, nil, ErrLimiterMissing
+	}
+	if h.rpm <= 0 {
+		return true, time.Time{}, h.changed, nil
+	}
+	h.tokens = min(float64(h.rpm), h.tokens+max(now.Sub(h.updated).Minutes(), 0)*float64(h.rpm))
+	h.updated = now
+	if h.tokens >= 1 {
+		h.tokens--
+		return true, time.Time{}, h.changed, nil
+	}
+	wait := time.Duration((1 - h.tokens) / float64(h.rpm) * float64(time.Minute))
+	return false, now.Add(max(wait, time.Nanosecond)), h.changed, nil
+}
+
 func (h *limiterHandle) Wait(ctx context.Context) (err error) {
 	p := h.pool
 	var start time.Time

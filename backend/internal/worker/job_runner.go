@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/sysmem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 // JobRunner 任务执行器，实现 TaskRunner 接口。
@@ -70,6 +72,8 @@ type jobCancelEntry struct {
 
 // PipelineConfig 流水线准入配置（由 server 从 WorkerConfig 注入）。
 type PipelineConfig struct {
+	Candidates       pipeline.CandidateLimits
+	MaxResponseBytes int64
 	// MaxInflightWeight 在途工作配额上限（源文本字节；0 = 不限制）。
 	MaxInflightWeight int64
 	// MaxInflightResources 在途资源数上限（0 = 不限制）。
@@ -202,7 +206,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 		return err
 	}
 	// 二次校验：任务可能在入队后、执行前被取消或暂停
-	if exec.Job.Status == service.JobStatusCancelled || exec.Job.Status == service.JobStatusPaused {
+	if exec.Job.Status == service.JobStatusCancelled || exec.Job.Status == service.JobStatusPaused || exec.Job.PauseRequested || exec.Job.Status == "pausing" {
 		r.logger.Info("job already cancelled or paused, skipping", "job_id", jobID, "status", exec.Job.Status)
 		return nil
 	}
@@ -244,6 +248,41 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 		_ = r.jobs.MarkJobStarted(jobCtx, jobID)
 
 		adm := newAdmission(r.pipeCfg.MaxInflightWeight, r.pipeCfg.MaxInflightResources)
+		requestRuntime, err := NewExecutionRuntime(snapshot, r.limiterPool, gate, r.pipeCfg.Candidates)
+		if err != nil {
+			return err
+		}
+		defer requestRuntime.Admission.Close()
+		jobCtx = pipeline.WithExecutionRuntime(jobCtx, requestRuntime)
+		// Reconstruct aggregate occupancy from headers before admitting a resource.
+		// Recovery never materializes all persisted candidate bodies at once.
+		draftResources := make(map[int]bool)
+		for after := 0; ; {
+			headers, next, err := workstate.NewStore(r.client).LoadCandidateHeaders(jobCtx, jobID, after, 128)
+			if err != nil {
+				return err
+			}
+			if len(headers) == 0 {
+				break
+			}
+			for _, header := range headers {
+				if header.DTOVersion != pipeline.CandidateDTOVersion {
+					return fmt.Errorf("unsupported saved candidate DTO %d", header.DTOVersion)
+				}
+				if err := requestRuntime.Window.Restore(header.ID, header.PayloadBytes); err != nil {
+					return err
+				}
+				draftResources[header.Scope.ResourceID] = true
+			}
+			if next <= after {
+				return fmt.Errorf("candidate recovery headers did not advance")
+			}
+			after = next
+		}
+		hasDraft := func(item *ent.JobResource) bool {
+			return item.Edges.Resource != nil && draftResources[item.Edges.Resource.ID]
+		}
+		sort.SliceStable(pending, func(i, j int) bool { return hasDraft(pending[i]) && !hasDraft(pending[j]) })
 
 		// 站位信号量：round_index → Station（容量 = 该轮快照 concurrency）。
 		stations := make([]*pipeline.Station, len(snapshot.Rounds))
@@ -251,21 +290,53 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 			stations[i] = pipeline.NewStation(roundConcurrency(snapshot, i))
 		}
 
-		var wg sync.WaitGroup
-		for _, item := range pending {
-			wg.Add(1)
-			go func(item *ent.JobResource) {
-				defer wg.Done()
-				r.runPipelineResource(jobCtx, exec, snapshot, item, registry, gate, adm, stations)
-			}(item)
+		type resourceExit struct {
+			item *ent.JobResource
+			err  error
 		}
-		wg.Wait()
+		exits := make(chan resourceExit, max(1, len(pending)))
+		queue := append([]*ent.JobResource(nil), pending...)
+		active := 0
+		resourceLimit := r.pipeCfg.MaxInflightResources
+		if resourceLimit <= 0 {
+			resourceLimit = max(1, len(queue))
+		}
+		var drainErr error
+		for len(queue) > 0 || active > 0 {
+			for len(queue) > 0 && active < resourceLimit && jobCtx.Err() == nil && !gate.Paused() && drainErr == nil {
+				item := queue[0]
+				queue = queue[1:]
+				active++
+				go func() {
+					exits <- resourceExit{item: item, err: r.runPipelineResource(jobCtx, exec, snapshot, item, registry, gate, adm, stations)}
+				}()
+			}
+			if active == 0 {
+				break
+			}
+			done := <-exits
+			active--
+			if errors.Is(done.err, pipeline.ErrResourceYield) {
+				if len(queue) == 0 && active == 0 {
+					drainErr = fmt.Errorf("candidate capacity is owned by work outside runnable resources")
+				} else {
+					queue = append(queue, done.item)
+				}
+			} else if done.err != nil && drainErr == nil {
+				drainErr = done.err
+			}
+		}
+		if drainErr != nil {
+			// A failed response save is not a safe pause. Preserve the persisted
+			// pause intent and return the storage failure for recovery/diagnosis.
+			return drainErr
+		}
 
 		// 排空后暂停：所有资源 goroutine 退出（在途请求已返回并持久化），
 		// 置任务为 paused（未取消时）。
 		if gate.Paused() && jobCtx.Err() == nil {
 			if err := r.jobs.MarkJobPaused(jobCtx, jobID); err != nil {
-				r.logger.Warn("failed to mark job paused", "job_id", jobID, "err", err)
+				return fmt.Errorf("persist drained job pause: %w", err)
 			}
 		}
 	}
@@ -328,7 +399,7 @@ func (r *JobRunner) runPipelineResource(
 	gate *pipeline.PauseGate,
 	adm *admission,
 	stations []*pipeline.Station,
-) {
+) error {
 	// 动态选择资源：首次入线加载选择集时回填 work_weight（准入从首次入线起算）。
 	// 权重计算/回填失败时资源以最小单元（weightAllow(0)=1）准入——绕过字节
 	// 配额但无功能错误；记 Warn 保持该降级路径可观测，避免瞬时 DB 错误
@@ -353,18 +424,18 @@ func (r *JobRunner) runPipelineResource(
 	// 调用 Allow() 推进双水位状态机；熔断中资源排队、在途继续——只出不进）。
 	for {
 		if jobCtx.Err() != nil {
-			return
+			return jobCtx.Err()
 		}
 		if gate.Paused() {
-			return // 暂停：未入线资源直接退出（resume 重新入队）
+			return nil // 暂停：未入线资源直接退出（resume 重新入队）
 		}
 		if r.rssFuse != nil && !r.rssFuse.Allow() {
 			// 熔断中：不占用配额，等待水位回落（1s 轮询）。
 			select {
 			case <-jobCtx.Done():
-				return
+				return jobCtx.Err()
 			case <-gate.Done():
-				return
+				return nil
 			case <-time.After(time.Second):
 			}
 			continue
@@ -382,21 +453,19 @@ func (r *JobRunner) runPipelineResource(
 			r.logger.Error("admission failed permanently, resource aborted",
 				"job_id", exec.Job.ID, "job_resource_id", item.ID, "err", err)
 			_ = r.jobs.MarkJobResourceFailed(jobCtx, exec.Job.ID, item.ID, err)
-			return
+			return err
 		}
 		select {
 		case <-jobCtx.Done():
-			return
+			return jobCtx.Err()
 		case <-gate.Done():
-			return
+			return nil
 		case <-time.After(time.Second):
 		}
 	}
 	defer adm.release(weight)
 
-	if err := r.processJobResource(jobCtx, exec, snapshot, item, registry, gate, stations); err != nil {
-		r.logger.Warn("job resource failed", "job_id", exec.Job.ID, "job_resource_id", item.ID, "err", err)
-	}
+	return r.processJobResource(jobCtx, exec, snapshot, item, registry, gate, stations)
 }
 
 // computeWorkWeight 聚合动态选择资源（segment_ids 为空）全部段落的
@@ -456,8 +525,16 @@ func (r *JobRunner) processJobResource(
 	registry *roundRegistry,
 	gate *pipeline.PauseGate,
 	stations []*pipeline.Station,
-) error {
+) (retErr error) {
 	job := exec.Job
+	ctx = context.WithValue(ctx, jobWriteScopeKey{}, jobWriteScope{jobID: job.ID, epoch: job.RetryEpoch})
+	if registry == nil {
+		var err error
+		registry, err = loadJobRounds(ctx, r.client, job.ID)
+		if err != nil {
+			return err
+		}
+	}
 	if err := service.ValidateJobResourceSource(ctx, r.client, item); err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
@@ -482,6 +559,7 @@ func (r *JobRunner) processJobResource(
 	defer func() {
 		if err := reporter.Close(); err != nil {
 			r.logger.Error("job progress final flush failed", "job_id", exec.Job.ID, "job_resource_id", item.ID, "err", err)
+			retErr = errors.Join(retErr, &pipeline.StorageError{Err: err})
 		}
 	}()
 
@@ -561,6 +639,7 @@ func (r *JobRunner) processJobResource(
 	}
 
 	factory := NewEngineFactoryWithCredentials(r.logger, r.limiterPool, r.credentialReader, r.credentialChecker, r.httpClients...)
+	factory.SetPipelineLimits(r.pipeCfg)
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory}
 	eng, err := factory.BuildEngine(ctx, snapshot, resources, reporter)
 	if err != nil {
@@ -681,11 +760,36 @@ func (r *JobRunner) processJobResource(
 			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, loadErr)
 			return nil
 		}
+		// A sealed manifest owns membership, including previously confirmed work.
+		// Current status filters must not erase drafts or redefine the denominator.
+		manifestSealed := false
+		if roundRowID > 0 {
+			state, stateErr := workstate.NewStore(r.client).LoadRound(ctx, workstate.Scope{JobID: job.ID, RoundID: roundRowID})
+			if stateErr != nil {
+				return stateErr
+			}
+			manifestSealed = state.Sealed
+			if state.Sealed {
+				members := make(map[int]bool, len(state.Members))
+				for _, id := range state.Members {
+					members[id] = true
+				}
+				selectedRows = nil
+				for _, row := range allRows {
+					if members[row.ID] {
+						selectedRows = append(selectedRows, row)
+					}
+				}
+				if len(selectedRows) != len(members) {
+					return workstate.ErrManifest
+				}
+			}
+		}
 
 		// 翻译轮次按 SegmentFilter 过滤
 		// 显式选择段落且未被任务级覆盖时，仅首个翻译轮次跳过默认过滤以尊重用户选择；
 		// 后续翻译轮次（兜底轮）正常应用 SegmentFilter，避免重译首轮已成功的段。
-		if round.Mode == "translate" && round.Translate != nil {
+		if !manifestSealed && round.Mode == "translate" && round.Translate != nil {
 			filter := round.Translate.SegmentFilter
 			skipFilter := isExplicitSelection && roundIdx == firstTranslateRoundIdx && (filter == nil || !filter.Overridden)
 			if skipFilter {
@@ -701,7 +805,7 @@ func (r *JobRunner) processJobResource(
 			// skipped（进度矩阵可见「跳过」而非静默消失），继续后续轮次。
 			if roundRowID > 0 {
 				if err := r.jobs.MarkJobRoundSkipped(ctx, roundRowID); err != nil {
-					r.logger.Warn("mark round skipped failed", "round_row_id", roundRowID, "err", err)
+					return fmt.Errorf("persist skipped round: %w", err)
 				}
 			}
 			if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
@@ -796,8 +900,9 @@ func (r *JobRunner) processJobResource(
 						segStatus = service.SegmentStatusRejected
 					}
 
-					persistErr := service.WithResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+					persistErr := withJobResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
 						update := client.Segment.UpdateOneID(dbID).
+							Where(segment.ContentVersionEQ(allRows[ts.Index].ContentVersion)).
 							SetTargetText(ts.TargetText).
 							SetStatus(segStatus)
 						if autoApprove {
@@ -860,8 +965,9 @@ func (r *JobRunner) processJobResource(
 					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
 					// 不对账：新译文导致指纹基本全变，旧裁决不跨文本存活；
 					// 若未来引入同译文手动重算，须接入 qa.ReconcileIssues。
-					persistErr := service.WithResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+					persistErr := withJobResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
 						update := client.Segment.UpdateOneID(dbID).
+							Where(segment.ContentVersionEQ(allRows[ts.Index].ContentVersion)).
 							SetTargetText(ts.TargetText)
 						if len(ts.Issues) > 0 {
 							update.SetQualityIssues(ts.Issues)
@@ -902,8 +1008,8 @@ func (r *JobRunner) processJobResource(
 					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
 					// 不对账：adjudicate 不产生新 issue，只是标记已有的
 					// （applyVerdicts 写 dismissed）；新译文场景下指纹全变，无需对账。
-					persistErr := service.WithResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
-						update := client.Segment.UpdateOneID(dbID)
+					persistErr := withJobResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+						update := client.Segment.UpdateOneID(dbID).Where(segment.ContentVersionEQ(allRows[ts.Index].ContentVersion))
 						if len(ts.Issues) > 0 {
 							update.SetQualityIssues(ts.Issues)
 						} else {
@@ -969,7 +1075,10 @@ func (r *JobRunner) processJobResource(
 						continue
 					}
 					var updated int
-					err := service.WithResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+					if row.ContentVersion != allRows[ts.Index].ContentVersion {
+						continue
+					}
+					err := withJobResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
 						var err error
 						updated, err = persistSemanticQASegmentIssues(batchCtx, client, row, ts.TargetText, ts.Issues)
 						return err
@@ -1057,7 +1166,10 @@ func (r *JobRunner) processJobResource(
 					}
 					fresh := qa.IssuesFor(ts.Index, allIssues)
 					var updated int
-					err := service.WithResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
+					if row.ContentVersion != allRows[ts.Index].ContentVersion {
+						continue
+					}
+					err := withJobResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
 						var err error
 						updated, err = persistReviseSegmentResult(batchCtx, client, row, baseline, ts.TargetText, fresh, reviseCodes, qaRan)
 						return err
@@ -1094,6 +1206,11 @@ func (r *JobRunner) processJobResource(
 		execOpts := []engine.ExecuteOption{
 			engine.WithSegmentFilter(segmentIndexes),
 			engine.WithBatchHandler(batchHandler),
+		}
+		if roundRowID > 0 {
+			scope := workstate.Scope{JobID: job.ID, ResourceID: res.ID, JobResourceID: item.ID, RoundID: roundRowID, RetryEpoch: job.RetryEpoch, SourceGeneration: item.SourceGeneration, SourceRevisionID: item.SourceRevisionID}
+			store := newRoundStore(r.client, scope, docIndexToDBID, snapshot, roundIdx, qaEngine, engineCfg.QA.AutoReject, r.dbDriver, memory, func() { mu.Lock(); completedCount++; mu.Unlock() })
+			execOpts = append(execOpts, engine.WithRoundStore(store))
 		}
 		// 非翻译轮注入跨轮增量载体：BuildBatches 据此排除上一同模式轮已解决的段。
 		if round.Mode != pipeline.RoundModeTranslate {
@@ -1136,23 +1253,24 @@ func (r *JobRunner) processJobResource(
 		}
 
 		if roundErr != nil {
-			// 暂停排空的未解决批次不应落 failed：暂停会把退避中/未派发的
-			// 批次全部转为 unresolved，extract 等轮次的 Finalize「全未解决」
-			// 检查会把它误报为轮次失败——按冻结语义返回（轮次行保持
-			// running，resume 重置后续跑），与成功路径的暂停豁免一致。
+			if errors.Is(roundErr, pipeline.ErrResourceYield) {
+				return roundErr
+			}
+			// Staged/stored executors return nil for a successfully drained
+			// pause and skip mode finalization. Any remaining error means
+			// draining failed, including payload/capacity and encoding errors.
 			if gate != nil && gate.Paused() {
-				return nil
+				return roundErr
 			}
 			// 轮次失败：轮次行落 failed 终态（供断点续传跳过与进度矩阵展示）。
 			if roundRowID > 0 {
 				if err := r.jobs.MarkJobRoundFailed(ctx, roundRowID, roundErr); err != nil {
-					r.logger.Warn("mark round failed failed", "round_row_id", roundRowID, "err", err)
+					return errors.Join(roundErr, fmt.Errorf("persist failed round: %w", err))
 				}
 			}
 			if errors.Is(roundErr, context.Canceled) && completedCount > 0 {
 				r.logger.Warn("translation cancelled, preserving partial progress",
 					"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
-				_ = r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens)
 				_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).SetSkippedSegments(lastResult.SkippedCount).Exec(ctx)
 				_ = r.jobs.MarkJobResourceCancelled(ctx, job.ID, item.ID)
 				return nil
@@ -1178,10 +1296,10 @@ func (r *JobRunner) processJobResource(
 				if err := r.jobs.MarkJobRoundFailed(ctx, roundRowID, fmt.Errorf(
 					"轮次有 %d 个未解决段、%d 个终态失败段，无后续同模式轮次承接",
 					residual.unresolved, residual.failed)); err != nil {
-					r.logger.Warn("mark round failed failed", "round_row_id", roundRowID, "err", err)
+					return fmt.Errorf("persist unresolved round: %w", err)
 				}
 			} else if err := r.jobs.MarkJobRoundCompleted(ctx, roundRowID); err != nil {
-				r.logger.Warn("mark round completed failed", "round_row_id", roundRowID, "err", err)
+				return fmt.Errorf("persist completed round: %w", err)
 			}
 		}
 		// 不再因 UnresolvedCount==0 提前 break，避免跳过后续 extract/adjudicate 轮
@@ -1225,7 +1343,6 @@ func (r *JobRunner) processJobResource(
 			r.logger.Warn("segments failed to persist after all translate rounds",
 				"resource_id", item.ID, "count", persistFailedCount,
 				"translate_rounds", translateRoundCount)
-			_ = r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens)
 			_ = r.client.JobResource.UpdateOneID(item.ID).
 				SetCompletedSegments(completedCount).SetSkippedSegments(skippedCount).Exec(ctx)
 			var err error
@@ -1255,16 +1372,9 @@ func (r *JobRunner) processJobResource(
 			"unresolved_count", translateResidual.total(),
 			"completed_count", completedCount,
 		)
-		_ = r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens)
 		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).SetSkippedSegments(skippedCount).Exec(ctx)
 		err := fmt.Errorf("%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
 			translateResidual.total(), completedCount)
-		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
-		return nil
-	}
-
-	if err := r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens); err != nil {
-		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).SetSkippedSegments(skippedCount).Exec(ctx)
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
@@ -1383,6 +1493,7 @@ func persistSemanticQASegmentIssues(ctx context.Context, c *ent.Client, row *ent
 	return c.Segment.Update().
 		Where(
 			segment.IDEQ(row.ID),
+			segment.ContentVersionEQ(row.ContentVersion),
 			segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
 			segment.TargetTextEQ(targetText),
 		).
@@ -1409,6 +1520,7 @@ func persistReviseSegmentResult(ctx context.Context, c *ent.Client, row *ent.Seg
 	final := qa.ReviseFinalIssues(row.QualityIssues, fresh, targetedCodes, qaRan)
 	update := c.Segment.Update().Where(
 		segment.IDEQ(row.ID),
+		segment.ContentVersionEQ(row.ContentVersion),
 		segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
 		segment.TargetTextEQ(baseline),
 	).SetTargetText(revised)
@@ -1434,12 +1546,15 @@ func buildSegmentInputs(rows []*ent.Segment) []pipeline.SegmentInput {
 			target = *row.TargetText
 		}
 		inputs[i] = pipeline.SegmentInput{
-			ID:         strconv.Itoa(row.SegmentIndex),
-			SourceText: row.SourceText,
-			Meta:       meta,
-			TargetText: target,
-			Issues:     row.QualityIssues,
-			Status:     string(row.Status),
+			DBID:           row.ID,
+			ContentVersion: row.ContentVersion,
+			TargetIsNull:   row.TargetText == nil,
+			ID:             strconv.Itoa(row.SegmentIndex),
+			SourceText:     row.SourceText,
+			Meta:           meta,
+			TargetText:     target,
+			Issues:         row.QualityIssues,
+			Status:         string(row.Status),
 		}
 	}
 	return inputs
@@ -1505,8 +1620,8 @@ func (r *JobRunner) persistDuplicateSourceDivergence(ctx context.Context, resour
 		// 已剔除旧的同 code issues，对账会从 row.QualityIssues 找回同指纹裁决；
 		// 保留的非该 code 旧 issues 与自身对账是幂等的，因此安全。
 		merged = qa.ReconcileIssues(merged, row.QualityIssues)
-		if err := service.WithResourceTranslation(ctx, r.client, resourceID, generation, func(client *ent.Client) error {
-			return client.Segment.UpdateOneID(row.ID).SetQualityIssues(merged).Exec(ctx)
+		if err := withJobResourceTranslation(ctx, r.client, resourceID, generation, func(client *ent.Client) error {
+			return client.Segment.UpdateOneID(row.ID).Where(segment.ContentVersionEQ(row.ContentVersion)).SetQualityIssues(merged).Exec(ctx)
 		}); err != nil {
 			return fmt.Errorf("persist duplicate source QA for segment %d: %w", row.ID, err)
 		}
@@ -1584,26 +1699,6 @@ func (r *JobRunner) loadSegments(ctx context.Context, resourceID int, selectedID
 		return nil, nil, err
 	}
 	return selectedRows, allRows, nil
-}
-
-// recordUsage 记录任务用量到数据库。
-func (r *JobRunner) recordUsage(ctx context.Context, exec *service.JobExecution, segmentCount int, inputTokens, outputTokens int64) error {
-	usage := r.client.UsageRecord.Create().
-		SetVisibilityScope("project").
-		SetProjectID(exec.Project.ID).
-		SetSource("job").
-		SetSegmentCount(segmentCount).
-		SetAPICalls(segmentCount).
-		SetInputTokens(clampInt64ToInt(inputTokens)).
-		SetOutputTokens(clampInt64ToInt(outputTokens)).
-		SetNote(fmt.Sprintf("job:%d", exec.Job.ID))
-	if exec.ActorUserID > 0 {
-		usage.SetUserID(exec.ActorUserID)
-	}
-	if orgID := service.EffectiveProjectOrgID(exec.Project); orgID != nil {
-		usage.SetOrganizationID(*orgID)
-	}
-	return usage.Exec(ctx)
 }
 
 // clampInt64ToInt 将 int64 安全地转换为 int，超过 math.MaxInt32 时截断。

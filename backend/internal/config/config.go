@@ -129,6 +129,12 @@ type PipelineConfig struct {
 	// MaxInflightResources 在途资源数上限（每任务口径；兜住每资源句柄开销）；
 	// 必须为正；缺省为 8。
 	MaxInflightResources int `yaml:"max_inflight_resources"`
+	// Candidate limits cover reservations, saved drafts, alignment, and commit.
+	// They are deployment capacity policy, independent of plan concurrency.
+	CandidateWindowSegments int `yaml:"candidate_window_segments"`
+	CandidateWindowMB       int `yaml:"candidate_window_mb"`
+	MaxCandidateMB          int `yaml:"max_candidate_mb"`
+	MaxResponseMB           int `yaml:"max_response_mb"`
 	// RssLimitMB 进程级 RSS 保险丝上限（MB）；0 = 关闭。
 	// 双水位：≥85% 暂停所有任务的新资源准入（只出不进），≤70% 恢复。
 	// 触发不改变任务状态（任务保持 running，资源排队），仅记结构化日志。
@@ -144,9 +150,13 @@ const (
 // DefaultPipelineConfig 返回默认的流水线准入配置（RSS 保险丝默认关闭）。
 func DefaultPipelineConfig() PipelineConfig {
 	return PipelineConfig{
-		MaxInflightWeightMB:  defaultMaxInflightWeightMB,
-		MaxInflightResources: defaultMaxInflightResources,
-		RssLimitMB:           0,
+		MaxInflightWeightMB:     defaultMaxInflightWeightMB,
+		MaxInflightResources:    defaultMaxInflightResources,
+		CandidateWindowSegments: 256,
+		CandidateWindowMB:       16,
+		MaxCandidateMB:          1,
+		MaxResponseMB:           1,
+		RssLimitMB:              0,
 	}
 }
 
@@ -454,6 +464,8 @@ func validateServerConfig(c *ServerConfig, requireSecret bool) error {
 		"workers.translation.count": c.Workers.Translation.Count, "workers.translation.queue_capacity": c.Workers.Translation.QueueCapacity,
 		"workers.sync.count": c.Workers.Sync.Count, "workers.sync.queue_capacity": c.Workers.Sync.QueueCapacity,
 		"pipeline.max_inflight_weight_mb": c.Pipeline.MaxInflightWeightMB, "pipeline.max_inflight_resources": c.Pipeline.MaxInflightResources,
+		"pipeline.candidate_window_segments": c.Pipeline.CandidateWindowSegments, "pipeline.candidate_window_mb": c.Pipeline.CandidateWindowMB,
+		"pipeline.max_candidate_mb": c.Pipeline.MaxCandidateMB, "pipeline.max_response_mb": c.Pipeline.MaxResponseMB,
 		"preview.max_concurrency": c.Preview.MaxConcurrency, "quick_translate.max_concurrency": c.QuickTranslate.MaxConcurrency,
 		"sse.ring_buffer_capacity": c.SSE.RingBufferCapacity, "sse.replay_batch_size": c.SSE.ReplayBatchSize, "sse.max_replay_events": c.SSE.MaxReplayEvents,
 	} {
@@ -473,6 +485,11 @@ func validateServerConfig(c *ServerConfig, requireSecret bool) error {
 	}
 	if uint64(c.Pipeline.MaxInflightWeightMB) > uint64(1<<63-1)/(1024*1024) || uint64(c.Pipeline.RssLimitMB) > uint64(1<<63-1)/(1024*1024) {
 		return fmt.Errorf("server.pipeline MB limits exceed supported byte size arithmetic")
+	}
+	for _, mb := range []int{c.Pipeline.CandidateWindowMB, c.Pipeline.MaxCandidateMB, c.Pipeline.MaxResponseMB} {
+		if uint64(mb) > uint64(1<<63-1)/(1024*1024) {
+			return fmt.Errorf("server.pipeline candidate/response limits exceed supported byte size arithmetic")
+		}
 	}
 	if c.QuickTranslate.MaxConcurrency > quickTranslateMaxConcurrencyUpper {
 		return fmt.Errorf("server.quick_translate.max_concurrency must not exceed 32")

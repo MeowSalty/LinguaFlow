@@ -334,12 +334,12 @@ func (_q *JobRoundSegmentQuery) WithSegment(opts ...func(*SegmentQuery)) *JobRou
 // Example:
 //
 //	var v []struct {
-//		JobRoundID int `json:"job_round_id,omitempty"`
+//		CommitID string `json:"commit_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.JobRoundSegment.Query().
-//		GroupBy(jobroundsegment.FieldJobRoundID).
+//		GroupBy(jobroundsegment.FieldCommitID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *JobRoundSegmentQuery) GroupBy(field string, fields ...string) *JobRoundSegmentGroupBy {
@@ -357,11 +357,11 @@ func (_q *JobRoundSegmentQuery) GroupBy(field string, fields ...string) *JobRoun
 // Example:
 //
 //	var v []struct {
-//		JobRoundID int `json:"job_round_id,omitempty"`
+//		CommitID string `json:"commit_id,omitempty"`
 //	}
 //
 //	client.JobRoundSegment.Query().
-//		Select(jobroundsegment.FieldJobRoundID).
+//		Select(jobroundsegment.FieldCommitID).
 //		Scan(ctx, &v)
 func (_q *JobRoundSegmentQuery) Select(fields ...string) *JobRoundSegmentSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

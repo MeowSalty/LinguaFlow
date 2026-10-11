@@ -21,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 // segmentBatchSize 每批插入的最大 Segment 数量。
@@ -361,6 +362,10 @@ func (s *ResourceService) DeleteResource(ctx context.Context, actorUserID, proje
 		if err != nil {
 			return err
 		}
+		jobs, err := workstate.LockResourceJobs(ctx, client, resourceID)
+		if err != nil {
+			return err
+		}
 		if err := registerResourceDeletion(ctx, client, projectID, resourceID, s.storage); err != nil {
 			return err
 		}
@@ -370,7 +375,10 @@ func (s *ResourceService) DeleteResource(ctx context.Context, actorUserID, proje
 		if _, err := client.Segment.Delete().Where(segment.ResourceIDEQ(res.ID)).Exec(ctx); err != nil {
 			return fmt.Errorf("resource: delete segments: %w", err)
 		}
-		return client.Resource.DeleteOneID(res.ID).Exec(ctx)
+		if err := client.Resource.DeleteOneID(res.ID).Exec(ctx); err != nil {
+			return err
+		}
+		return workstate.CalibrateJobs(ctx, client, jobs)
 	})
 }
 
@@ -799,6 +807,9 @@ func (s *ResourceService) applySegmentChanges(ctx context.Context, resourceID in
 
 	// 批量删除
 	if len(deleteIDs) > 0 {
+		if err := workstate.BeforeDeleteSegments(ctx, s.client, deleteIDs); err != nil {
+			return err
+		}
 		if _, err := s.client.Segment.Delete().
 			Where(segment.IDIn(deleteIDs...)).
 			Exec(ctx); err != nil {

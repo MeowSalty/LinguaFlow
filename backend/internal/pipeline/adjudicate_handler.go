@@ -253,6 +253,9 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
 			wait := backoffDuration(attempt, h.Retry, callErr)
+			if retry := storedBackoffRetry(ctx, idxs, attempt, wait); retry != nil {
+				return batchResult{retry: retry}
+			}
 			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():

@@ -69,10 +69,14 @@ func RestoreItems(target string, items []Item) (string, RestoreResult) {
 
 // OutputEntry 是 LLM 返回的单条标注输出。
 type OutputEntry struct {
-	Base string `json:"base"`
-	Text string `json:"text"`
-	Kind string `json:"kind"`         // "phonetic" | "semantic" | "creative"
-	ID   string `json:"id,omitempty"` // 段内条目 id（可选：旧后端/LLM 漏返为空 → 回退位置）
+	Base       string `json:"base"`
+	Text       string `json:"text"`
+	Kind       string `json:"kind"`         // "phonetic" | "semantic" | "creative"
+	ID         string `json:"id,omitempty"` // 段内条目 id（可选：旧后端/LLM 漏返为空 → 回退位置）
+	Occurrence int    `json:"occurrence,omitempty"`
+	// Invalid retains the ID of a malformed response row so a duplicate ID cannot
+	// become valid merely because its other row failed field decoding.
+	Invalid bool `json:"-"`
 }
 
 // ValidKinds 是所有合法的注音 kind 值。
@@ -263,6 +267,11 @@ func ParseSectionRubyOutput(lines []string) map[string][]OutputEntry {
 			continue
 		}
 		id := m[1] // 段号（map key），非条目 id
+		if strings.HasPrefix(strings.TrimSpace(m[2]), "\"") {
+			entry := parsePrimaryTextEntry(m[2])
+			result[id] = append(result[id], entry)
+			continue
+		}
 		base, text, kind, itemID, ok := ParseSectionLine(m[2])
 		if !ok {
 			continue

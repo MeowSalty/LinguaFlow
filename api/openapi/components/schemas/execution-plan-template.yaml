@@ -320,6 +320,26 @@ ExecutionPlanRubyRetryConfig:
       minimum: 1
       default: 1
       description: 注音对齐重试轮数（仅 enabled=true 时生效）
+    concurrency:
+      type: integer
+      minimum: 1
+      description: 单个任务全部资源与轮次共享的注音请求并发上限；省略时创建任务按版本化默认值 1 物化，与主轮 concurrency 独立。显式 0 或负数无效。
+    batch_size:
+      type: integer
+      minimum: 0
+      default: 1
+      description: 每次注音请求的段数上限；0 表示不限段数。与 max_words_per_batch 不可同时为 0。尾批不足上限时直接发送，正常重试保持上限；仅批级协议异常触发单段兜底。
+    max_words_per_batch:
+      type: integer
+      minimum: 0
+      default: 0
+      description: 注音合批的内容字词数上限；0 表示不限字词数。计入实际发送的原文、候选译文、正文区域及 missing 文本，固定模板/schema 不计入。单段超限时独占请求。
+    batch_wait_ms:
+      type: integer
+      minimum: 0
+      maximum: 9223372036854
+      default: 25
+      description: 最大凑批等待毫秒数；0 表示立即派发。等待不预扣尝试次数，也不占注音并发或 RPM 配额。
 
 ExecutionPlanTemplate:
   type: object

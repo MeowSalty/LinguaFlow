@@ -65,7 +65,8 @@ type ApplyClaims struct {
 	// BaselineTarget 是预览时数据库中可空的 target 文本。
 	BaselineTarget *string `json:"bt,omitempty"`
 	// BaselineStatus 是预览时数据库中的状态。
-	BaselineStatus string `json:"bst"`
+	BaselineStatus  string `json:"bst"`
+	BaselineVersion int64  `json:"bv,omitempty"`
 
 	// FinalIssues 是预览运行确定的质检 issue。
 	FinalIssues []qa.QualityIssue `json:"fi,omitempty"`

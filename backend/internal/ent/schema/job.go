@@ -18,10 +18,12 @@ func (Job) Mixin() []ent.Mixin {
 
 func (Job) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int64("retry_epoch").Default(0).NonNegative(),
+		field.Bool("pause_requested").Default(false),
 		field.Int("project_id").Positive().
 			Comment("所属项目 ID"),
 		field.String("status").Default("pending").
-			Comment("pending, running, paused, completed, failed, cancelled"),
+			Comment("pending, running, pausing, paused, completed, failed, cancelled"),
 		field.String("trigger_type").Default("manual").
 			Comment("触发类型：manual, file_update, glossary_change, web_edit"),
 		field.Int("execution_plan_id").Positive().

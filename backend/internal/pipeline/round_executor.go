@@ -30,12 +30,17 @@ type PostprocessConfig struct {
 
 // batchJob 描述一个待处理的批次任务。
 type batchJob struct {
-	idxs    []int
-	attempt int // 池内已消耗的重试次数
+	notBefore time.Time
+	idxs      []int
+	attempt   int // 池内已消耗的重试次数
 }
 
 // batchResult 描述一个批次的处理结果。
 type batchResult struct {
+	candidates      []*Candidate
+	err             error
+	finish          func() error // confirms handoff and releases response capacity after the checkpoint
+	fail            func(error)  // prevents an unconfirmed response from becoming completed on cleanup
 	unresolved      []int        // 需要下一池处理
 	retry           *batchJob    // 池内 in-flight 退避重试
 	callbackResult  *BatchResult // 可选，供 BatchHandler 回调使用
@@ -66,6 +71,7 @@ type RunRoundResult struct {
 
 // poolResult 是单个池的执行结果。
 type poolResult struct {
+	resolved        []int
 	unresolved      []int
 	fatalUnresolved []int
 	failedSegments  []int
@@ -83,6 +89,12 @@ func RunRound(
 	logger *slog.Logger,
 	reporter progress.Reporter,
 ) (RunRoundResult, error) {
+	if round.Runtime != nil {
+		if _, ok := round.Handler.(stagedHandler); ok {
+			return RunStagedRound(ctx, round, doc, round.Store, round.Runtime, logger, reporter)
+		}
+		return runStoredRound(ctx, round, doc, batchHandler, logger, reporter)
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -144,6 +156,11 @@ func RunRound(
 				totalSegments += len(batch)
 			}
 			reporter.StageStart(handler.ModeName(), totalSegments)
+			if checked, ok := reporter.(interface{ StageError() error }); ok {
+				if err := checked.StageError(); err != nil {
+					return RunRoundResult{}, err
+				}
+			}
 			stageStarted = true
 			defer reporter.StageDone()
 		}
@@ -186,7 +203,7 @@ func RunRound(
 			Phase:      "pool_start",
 		})
 
-		pr, err := runPool(ctx, round, handler, doc, batches, transientBudget, batchHandler, logger, reporter)
+		pr, err := runPool(ctx, round, handler, doc, batches, transientBudget, batchHandler, logger, reporter, poolIndex, nil)
 		if err != nil {
 			return RunRoundResult{}, err
 		}
@@ -304,6 +321,8 @@ func runPool(
 	batchHandler func(ctx context.Context, result BatchResult) error,
 	logger *slog.Logger,
 	reporter progress.Reporter,
+	poolIndex int,
+	initialCursors map[int]WorkCursor,
 ) (poolResult, error) {
 	concurrency := round.Concurrency
 	if concurrency < 1 {
@@ -316,12 +335,20 @@ func runPool(
 	runCtx, runCancel := context.WithCancel(ctx)
 	defer runCancel()
 	var handlerErr atomic.Value
+	var stopOnce sync.Once
+	stop := func(err error) {
+		stopOnce.Do(func() {
+			handlerErr.Store(err)
+			runCancel()
+		})
+	}
 	var pendingMu sync.Mutex
 
 	var nextPending []int
 	var fatalUnresolved []int
 	var failedSegments []int
 	var failedBatches int
+	var resolved []int
 
 	var wg sync.WaitGroup
 	for w := 0; w < concurrency; w++ {
@@ -333,6 +360,20 @@ func runPool(
 					pendingMu.Lock()
 					nextPending = append(nextPending, job.idxs...)
 					pendingMu.Unlock()
+					continue
+				}
+				if round.Runtime != nil {
+					result := processStoredBatch(runCtx, round, handler, doc, job, poolIndex, transientBudget, batchHandler, logger, reporter)
+					if result.err != nil {
+						stop(result.err)
+					}
+					if result.deferred {
+						pendingMu.Lock()
+						nextPending = append(nextPending, job.idxs...)
+						pendingMu.Unlock()
+					}
+					result.idxs = job.idxs
+					results <- result
 					continue
 				}
 				// 暂停闸门：批次派发前检查，暂停中不派发新批次。
@@ -389,8 +430,7 @@ func runPool(
 				if batchHandler != nil && result.callbackResult != nil {
 					if herr := batchHandler(runCtx, *result.callbackResult); herr != nil {
 						logger.Error("batch handler error, terminating pool", "err", herr)
-						handlerErr.Store(herr)
-						runCancel()
+						stop(herr)
 						pendingMu.Lock()
 						nextPending = append(nextPending, job.idxs...)
 						pendingMu.Unlock()
@@ -437,10 +477,18 @@ func runPool(
 	go func() {
 		defer submitWg.Done()
 		for _, batch := range batches {
+			job := batchJob{idxs: batch}
+			for _, idx := range batch {
+				cursor := initialCursors[idx]
+				job.attempt = max(job.attempt, cursor.Attempt)
+				if cursor.NextAttemptAt.After(job.notBefore) {
+					job.notBefore = cursor.NextAttemptAt
+				}
+			}
 			select {
 			case <-done:
 				return
-			case jobs <- batchJob{idxs: batch, attempt: 0}:
+			case jobs <- job:
 			}
 		}
 	}()
@@ -492,6 +540,19 @@ func runPool(
 	//   unresolved/retry；unresolved/fatalUnresolved 恒 ⊆ idxs；无任何形态
 	//   会把同一 idx 同时计入 resolved 与失败/未解决集合。
 	applyBatchResult := func(result batchResult) {
+		if result.finish != nil {
+			defer func() {
+				if err := result.finish(); err != nil {
+					stop(err)
+				}
+			}()
+		}
+		failCheckpoint := func(err error) {
+			if result.fail != nil {
+				result.fail(err)
+			}
+			stop(err)
+		}
 		pendingMu.Lock()
 		nextPending = append(nextPending, result.unresolved...)
 		fatalUnresolved = append(fatalUnresolved, result.fatalUnresolved...)
@@ -502,8 +563,30 @@ func runPool(
 		pendingMu.Unlock()
 
 		if !result.deferred && result.retry == nil {
+			excluded := append(append([]int(nil), result.unresolved...), result.fatalUnresolved...)
 			notifyResolvedSegments(result.idxs, result, reporter, resolvedNotifier)
-			reporter.BatchComplete()
+			if round.Runtime != nil {
+				if barrier, ok := reporter.(interface{ FlushCheckpoint(context.Context) error }); ok {
+					if err := round.Runtime.Save(runCtx, barrier.FlushCheckpoint); err != nil {
+						failCheckpoint(err)
+						return
+					}
+				} else {
+					reporter.BatchComplete()
+					if checked, ok := reporter.(interface{ StageError() error }); ok {
+						if err := checked.StageError(); err != nil {
+							failCheckpoint(&StorageError{Err: err})
+							return
+						}
+					}
+				}
+			} else {
+				reporter.BatchComplete()
+			}
+			resolved = append(resolved, computeResolved(result.idxs, excluded, result.failedSegments)...)
+		}
+		if round.Runtime != nil {
+			progress.NotifyWorkState(reporter)
 		}
 	}
 
@@ -578,6 +661,7 @@ cleanup:
 	}
 
 	return poolResult{
+		resolved:        uniqueSortedInts(resolved),
 		unresolved:      nextPending,
 		fatalUnresolved: fatalUnresolved,
 		failedSegments:  failedSegments,

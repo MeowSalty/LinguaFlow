@@ -304,6 +304,7 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 			BaselineSource:   segRow.SourceText,
 			BaselineTarget:   segRow.TargetText,
 			BaselineStatus:   string(segRow.Status),
+			BaselineVersion:  segRow.ContentVersion,
 			FinalIssues:      result.QualityIssues,
 			// 声明已修复的 code 集合与喂给 LLM 的修复目标同源（均为请求交集收窄
 			// 后的 Revise.IssueCodes），apply 改写文本时按同一契约剔除命中 pending。

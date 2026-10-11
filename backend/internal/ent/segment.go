@@ -25,6 +25,8 @@ type Segment struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// Monotonic version of content and acceptance state; undo never restores an earlier version
+	ContentVersion int64 `json:"content_version,omitempty"`
 	// SegmentIndex holds the value of the "segment_index" field.
 	SegmentIndex int `json:"segment_index,omitempty"`
 	// SourceText holds the value of the "source_text" field.
@@ -99,7 +101,7 @@ func (*Segment) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case segment.FieldQualityIssues:
 			values[i] = new([]byte)
-		case segment.FieldID, segment.FieldSegmentIndex, segment.FieldResourceID:
+		case segment.FieldID, segment.FieldContentVersion, segment.FieldSegmentIndex, segment.FieldResourceID:
 			values[i] = new(sql.NullInt64)
 		case segment.FieldSourceText, segment.FieldTargetText, segment.FieldStatus, segment.FieldReviewComment, segment.FieldMeta:
 			values[i] = new(sql.NullString)
@@ -139,6 +141,12 @@ func (_m *Segment) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case segment.FieldContentVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field content_version", values[i])
+			} else if value.Valid {
+				_m.ContentVersion = value.Int64
 			}
 		case segment.FieldSegmentIndex:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -257,6 +265,9 @@ func (_m *Segment) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("content_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ContentVersion))
 	builder.WriteString(", ")
 	builder.WriteString("segment_index=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SegmentIndex))

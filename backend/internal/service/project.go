@@ -23,6 +23,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 var (
@@ -263,18 +264,24 @@ func cascadeDeleteProject(ctx context.Context, tx *ent.Client, current *ent.Proj
 	if err != nil {
 		return nil, fmt.Errorf("query project resources: %w", err)
 	}
+	// 在锁定任何 Resource 前按统一顺序锁定项目任务，避免逐资源删除时
+	// 获取任务锁的顺序与候选提交或另一批量删除相反。
+	tjIDs, err := tx.Job.Query().
+		Where(job.ProjectIDEQ(projectID)).
+		Order(ent.Asc(job.FieldID)).
+		IDs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query translation job IDs: %w", err)
+	}
+	for _, id := range tjIDs {
+		if err := workstate.LockJob(ctx, tx, id); err != nil {
+			return nil, err
+		}
+	}
 	for _, r := range resources {
 		if err = registerResourceDeletion(ctx, tx, projectID, r.ID, storageService); err != nil {
 			return nil, err
 		}
-	}
-
-	// 收集项目关联的 Job IDs（用于删除 JobResource）
-	tjIDs, err := tx.Job.Query().
-		Where(job.ProjectIDEQ(projectID)).
-		IDs(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("query translation job IDs: %w", err)
 	}
 
 	// 收集项目关联的 Resource IDs（用于删除 Segment 和 JobResource）

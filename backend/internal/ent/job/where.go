@@ -65,6 +65,16 @@ func UpdatedAt(v time.Time) predicate.Job {
 	return predicate.Job(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// RetryEpoch applies equality check predicate on the "retry_epoch" field. It's identical to RetryEpochEQ.
+func RetryEpoch(v int64) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldRetryEpoch, v))
+}
+
+// PauseRequested applies equality check predicate on the "pause_requested" field. It's identical to PauseRequestedEQ.
+func PauseRequested(v bool) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldPauseRequested, v))
+}
+
 // ProjectID applies equality check predicate on the "project_id" field. It's identical to ProjectIDEQ.
 func ProjectID(v int) predicate.Job {
 	return predicate.Job(sql.FieldEQ(FieldProjectID, v))
@@ -208,6 +218,56 @@ func UpdatedAtLT(v time.Time) predicate.Job {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.Job {
 	return predicate.Job(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// RetryEpochEQ applies the EQ predicate on the "retry_epoch" field.
+func RetryEpochEQ(v int64) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldRetryEpoch, v))
+}
+
+// RetryEpochNEQ applies the NEQ predicate on the "retry_epoch" field.
+func RetryEpochNEQ(v int64) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldRetryEpoch, v))
+}
+
+// RetryEpochIn applies the In predicate on the "retry_epoch" field.
+func RetryEpochIn(vs ...int64) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldRetryEpoch, vs...))
+}
+
+// RetryEpochNotIn applies the NotIn predicate on the "retry_epoch" field.
+func RetryEpochNotIn(vs ...int64) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldRetryEpoch, vs...))
+}
+
+// RetryEpochGT applies the GT predicate on the "retry_epoch" field.
+func RetryEpochGT(v int64) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldRetryEpoch, v))
+}
+
+// RetryEpochGTE applies the GTE predicate on the "retry_epoch" field.
+func RetryEpochGTE(v int64) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldRetryEpoch, v))
+}
+
+// RetryEpochLT applies the LT predicate on the "retry_epoch" field.
+func RetryEpochLT(v int64) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldRetryEpoch, v))
+}
+
+// RetryEpochLTE applies the LTE predicate on the "retry_epoch" field.
+func RetryEpochLTE(v int64) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldRetryEpoch, v))
+}
+
+// PauseRequestedEQ applies the EQ predicate on the "pause_requested" field.
+func PauseRequestedEQ(v bool) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldPauseRequested, v))
+}
+
+// PauseRequestedNEQ applies the NEQ predicate on the "pause_requested" field.
+func PauseRequestedNEQ(v bool) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldPauseRequested, v))
 }
 
 // ProjectIDEQ applies the EQ predicate on the "project_id" field.

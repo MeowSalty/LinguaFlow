@@ -87,6 +87,7 @@ type OperationPage struct {
 type OperationCounts struct {
 	Pending      int `json:"pending"`
 	Running      int `json:"running"`
+	Pausing      int `json:"pausing"`
 	Paused       int `json:"paused"`
 	RecentFailed int `json:"recent_failed"`
 	WaitingRetry int `json:"waiting_retry"`
@@ -170,9 +171,22 @@ func operationTimePredicate(op sql.Op, instant time.Time) func(*sql.Selector) {
 		s.Where(sql.P(func(b *sql.Builder) { b.Ident(s.C("updated_at")).WriteOp(op).Arg(bound) }))
 	}
 }
+func activeOperationStatuses(kind string) []string {
+	switch kind {
+	case OperationTranslation:
+		return activeJobStatuses()
+	case OperationGlossarySync:
+		return []string{SyncTaskStatusPending, SyncTaskStatusRunning}
+	case OperationStorage:
+		return []string{string(storagetask.StatusPending), string(storagetask.StatusRunning), string(storagetask.StatusWaitingRetry), string(storagetask.StatusNeedsAction)}
+	default:
+		return nil
+	}
+}
+
 func operationQueryFilter(opts OperationListOptions, kind string, c *operationCursor, precisionErr *error) func(*sql.Selector) {
 	return func(s *sql.Selector) {
-		if kind == OperationGlossarySync && opts.Status == "paused" {
+		if kind != OperationTranslation && (opts.Status == JobStatusPausing || opts.Status == JobStatusPaused) {
 			s.Where(sql.EQ(s.C("id"), 0))
 			return
 		}
@@ -181,13 +195,7 @@ func operationQueryFilter(opts OperationListOptions, kind string, c *operationCu
 		} else {
 			switch opts.State {
 			case "", "active":
-				if kind == OperationStorage {
-					s.Where(sql.In(s.C("status"), "pending", "running", "waiting_retry", "needs_action"))
-				} else if kind == OperationGlossarySync {
-					s.Where(sql.In(s.C("status"), "pending", "running"))
-				} else {
-					s.Where(sql.In(s.C("status"), "pending", "running", "paused"))
-				}
+				sql.FieldIn("status", activeOperationStatuses(kind)...)(s)
 			case "terminal":
 				s.Where(sql.In(s.C("status"), "completed", "failed", "cancelled"))
 			}
@@ -368,19 +376,21 @@ func (s *OperationQueryService) summaryAt(ctx context.Context, actor int, opts O
 		return nil, err
 	}
 	result := &OperationsCountsSummary{AsOf: now.UTC(), RecentFailedSince: now.UTC().Add(-7 * 24 * time.Hour)}
-	filter := func(q *sql.Selector) {
-		since, until := result.RecentFailedSince, result.AsOf
-		if q.Dialect() == dialect.Postgres {
-			since = timeutil.CeilMicrosecond(since)
-			until = timeutil.CeilMicrosecond(until)
-		}
-		q.Where(sql.Or(sql.In(q.C("status"), "pending", "running", "paused", "waiting_retry", "needs_action"), sql.And(sql.EQ(q.C("status"), "failed"), sql.GTE(q.C("updated_at"), since), sql.LT(q.C("updated_at"), until))))
+	filter := func(kind string) func(*sql.Selector) {
+		return sql.OrPredicates(
+			sql.FieldIn("status", activeOperationStatuses(kind)...),
+			sql.AndPredicates(
+				sql.FieldEQ("status", "failed"),
+				operationTimePredicate(sql.OpGTE, result.RecentFailedSince),
+				operationTimePredicate(sql.OpLT, result.AsOf),
+			),
+		)
 	}
 	type bucket struct {
 		Status string `json:"status"`
 		Count  int    `json:"count"`
 	}
-	convert := func(rows []bucket, sync bool) OperationCounts {
+	convert := func(rows []bucket, kind string) OperationCounts {
 		var c OperationCounts
 		for _, r := range rows {
 			switch r.Status {
@@ -388,42 +398,58 @@ func (s *OperationQueryService) summaryAt(ctx context.Context, actor int, opts O
 				c.Pending = r.Count
 			case "running":
 				c.Running = r.Count
+			case "pausing":
+				if kind == OperationTranslation {
+					c.Pausing = r.Count
+				}
 			case "paused":
-				if !sync {
+				if kind == OperationTranslation {
 					c.Paused = r.Count
 				}
 			case "failed":
 				c.RecentFailed = r.Count
 			case "waiting_retry":
-				c.WaitingRetry = r.Count
+				if kind == OperationStorage {
+					c.WaitingRetry = r.Count
+				}
 			case "needs_action":
-				c.NeedsAction = r.Count
+				if kind == OperationStorage {
+					c.NeedsAction = r.Count
+				}
 			}
 		}
 		return c
 	}
 	if opts.TaskType == "" || opts.TaskType == OperationTranslation {
 		var buckets []bucket
-		if err := s.jobs(actor, opts.ProjectID, opts.TriggerType).Where(filter).GroupBy(job.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
+		if err := s.jobs(actor, opts.ProjectID, opts.TriggerType).Where(filter(OperationTranslation)).GroupBy(job.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
 			return nil, err
 		}
-		result.ByType.Translation = convert(buckets, false)
+		result.ByType.Translation = convert(buckets, OperationTranslation)
 	}
 	if opts.TaskType == "" || opts.TaskType == OperationGlossarySync {
 		var buckets []bucket
-		if err := s.syncTasks(actor, opts.ProjectID).Where(filter).GroupBy(synctask.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
+		if err := s.syncTasks(actor, opts.ProjectID).Where(filter(OperationGlossarySync)).GroupBy(synctask.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
 			return nil, err
 		}
-		result.ByType.GlossarySync = convert(buckets, true)
+		result.ByType.GlossarySync = convert(buckets, OperationGlossarySync)
 	}
 	if opts.TaskType == "" || opts.TaskType == OperationStorage {
 		var buckets []bucket
-		if err := s.storageTasks(actor, opts.ProjectID).Where(filter).GroupBy(storagetask.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
+		if err := s.storageTasks(actor, opts.ProjectID).Where(filter(OperationStorage)).GroupBy(storagetask.FieldStatus).Aggregate(ent.Count()).Scan(ctx, &buckets); err != nil {
 			return nil, err
 		}
-		result.ByType.Storage = convert(buckets, true)
+		result.ByType.Storage = convert(buckets, OperationStorage)
 	}
 	a, b, c := result.ByType.Translation, result.ByType.GlossarySync, result.ByType.Storage
-	result.Total = OperationCounts{Pending: a.Pending + b.Pending + c.Pending, Running: a.Running + b.Running + c.Running, Paused: a.Paused + b.Paused, RecentFailed: a.RecentFailed + b.RecentFailed + c.RecentFailed, WaitingRetry: c.WaitingRetry, NeedsAction: c.NeedsAction}
+	result.Total = OperationCounts{
+		Pending:      a.Pending + b.Pending + c.Pending,
+		Running:      a.Running + b.Running + c.Running,
+		Pausing:      a.Pausing + b.Pausing + c.Pausing,
+		Paused:       a.Paused + b.Paused + c.Paused,
+		RecentFailed: a.RecentFailed + b.RecentFailed + c.RecentFailed,
+		WaitingRetry: a.WaitingRetry + b.WaitingRetry + c.WaitingRetry,
+		NeedsAction:  a.NeedsAction + b.NeedsAction + c.NeedsAction,
+	}
 	return result, nil
 }

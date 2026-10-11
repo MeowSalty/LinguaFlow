@@ -23,6 +23,12 @@ type JobRound struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// ManifestVersion holds the value of the "manifest_version" field.
+	ManifestVersion int `json:"manifest_version,omitempty"`
+	// ManifestSealed holds the value of the "manifest_sealed" field.
+	ManifestSealed bool `json:"manifest_sealed,omitempty"`
+	// PoolIndex holds the value of the "pool_index" field.
+	PoolIndex int `json:"pool_index,omitempty"`
 	// 所属任务 ID
 	JobID int `json:"job_id,omitempty"`
 	// 所属任务资源 ID
@@ -33,9 +39,9 @@ type JobRound struct {
 	Mode string `json:"mode,omitempty"`
 	// pending, running, completed, failed, skipped
 	Status string `json:"status,omitempty"`
-	// 本轮实际处理的段落数（首次 StageStart 写入；恢复不重设）
+	// 封口清单成员数；恢复不按剩余批次重设，删除成员时同事务校准
 	SegmentTotal int `json:"segment_total,omitempty"`
-	// 本轮已完成段落数（≡ 该轮 job_round_segments 关联基数；由 progress.DBReporter 独占写入——绝对值、幂等、单调；终态闭合不改写本列，闭合口径在读侧按状态派生）
+	// 本轮 job_round_segments 关联基数；共享 workstate writer 在 Job 锁内维护，终态有效进度另按状态派生
 	SegmentCompleted int `json:"segment_completed,omitempty"`
 	// 轮次级错误信息
 	ErrorMessage *string `json:"error_message,omitempty"`
@@ -109,7 +115,9 @@ func (*JobRound) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case jobround.FieldID, jobround.FieldJobID, jobround.FieldJobResourceID, jobround.FieldRoundIndex, jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted:
+		case jobround.FieldManifestSealed:
+			values[i] = new(sql.NullBool)
+		case jobround.FieldID, jobround.FieldManifestVersion, jobround.FieldPoolIndex, jobround.FieldJobID, jobround.FieldJobResourceID, jobround.FieldRoundIndex, jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted:
 			values[i] = new(sql.NullInt64)
 		case jobround.FieldMode, jobround.FieldStatus, jobround.FieldErrorMessage:
 			values[i] = new(sql.NullString)
@@ -147,6 +155,24 @@ func (_m *JobRound) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case jobround.FieldManifestVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field manifest_version", values[i])
+			} else if value.Valid {
+				_m.ManifestVersion = int(value.Int64)
+			}
+		case jobround.FieldManifestSealed:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field manifest_sealed", values[i])
+			} else if value.Valid {
+				_m.ManifestSealed = value.Bool
+			}
+		case jobround.FieldPoolIndex:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field pool_index", values[i])
+			} else if value.Valid {
+				_m.PoolIndex = int(value.Int64)
 			}
 		case jobround.FieldJobID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -272,6 +298,15 @@ func (_m *JobRound) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("manifest_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ManifestVersion))
+	builder.WriteString(", ")
+	builder.WriteString("manifest_sealed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ManifestSealed))
+	builder.WriteString(", ")
+	builder.WriteString("pool_index=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PoolIndex))
 	builder.WriteString(", ")
 	builder.WriteString("job_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.JobID))

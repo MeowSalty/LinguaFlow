@@ -238,6 +238,9 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 					"backend", b.Name(), "err", callErr)
 				h.emitBatchOutcome(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
 				wait := backoffDuration(attempt, h.Retry, callErr)
+				if retry := storedBackoffRetry(ctx, idxs, attempt, wait); retry != nil {
+					return batchResult{retry: retry}
+				}
 				timer := time.NewTimer(wait)
 				select {
 				case <-ctx.Done():

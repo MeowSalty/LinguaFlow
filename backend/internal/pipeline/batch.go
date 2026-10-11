@@ -12,6 +12,13 @@ type BatchConstraint struct {
 	WordCount   func(Segment) int
 }
 
+// exceeds applies the same soft content limits to static round batches and
+// dynamic alignment batches. Callers admit an oversized first member alone.
+func (c BatchConstraint) exceeds(segments, words, nextWords int) bool {
+	return (c.MaxSegments > 0 && segments >= c.MaxSegments) ||
+		(c.MaxWords > 0 && (words > c.MaxWords || nextWords > c.MaxWords-words))
+}
+
 // contextWordEstimator 预估候选批次（pending 索引）会拉入的上下文字词数。
 // nil 表示不计入上下文预算（退化为旧行为）。仅在 MaxWords>0 时被调用。
 type contextWordEstimator func(batchIdxs []int) int
@@ -135,16 +142,15 @@ func splitByConstraintAndSpan(doc *Document, group []int, constraint BatchConstr
 		}
 		if i > start {
 			segCount := i - start
-			exceedSegments := !noSegLimit && segCount >= constraint.MaxSegments
 			estCtx := 0
 			if !noWordLimit && estimator != nil {
 				candidate := append([]int(nil), group[start:i]...)
 				candidate = append(candidate, idx)
 				estCtx = estimator(candidate)
 			}
-			exceedWords := !noWordLimit && pendingWords+segWords+estCtx > constraint.MaxWords
+			exceedContent := constraint.exceeds(segCount, pendingWords, segWords) || (!noWordLimit && (estCtx > constraint.MaxWords || pendingWords+segWords > constraint.MaxWords-estCtx))
 			exceedSpan := !noSpanLimit && idx-group[start] > maxIndexSpan
-			if exceedSegments || exceedWords || exceedSpan {
+			if exceedContent || exceedSpan {
 				batches = append(batches, append([]int(nil), group[start:i]...))
 				start = i
 				pendingWords = 0

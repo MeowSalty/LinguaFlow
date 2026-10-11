@@ -50,10 +50,18 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 	// 语义）。Round 为值类型副本，不污染引擎持有的基准配置。
 	round.Slots = cfg.station
 	round.Gate = cfg.gate
+	round.Store = cfg.store
+	if round.Runtime != nil {
+		round.Gate = round.Runtime.Gate
+		round.Slots = nil
+		if round.Store == nil {
+			round.Store = pipeline.NewMemoryRoundStore(cfg.batchHandler)
+		}
+	}
 	// 退避重试等待中止信号同步到 handler（各 LLM handler 的 backoff select）。
-	if cfg.gate != nil {
+	if round.Gate != nil {
 		if setter, ok := handler.(interface{ SetGate(*pipeline.PauseGate) }); ok {
-			setter.SetGate(cfg.gate)
+			setter.SetGate(round.Gate)
 		}
 	}
 

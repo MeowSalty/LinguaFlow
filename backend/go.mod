@@ -1,6 +1,6 @@
 module github.com/MeowSalty/LinguaFlow/backend
 
-go 1.26.8
+go 1.26.9
 
 require (
 	entgo.io/ent v0.14.6
@@ -24,7 +24,7 @@ require (
 	github.com/yuin/goldmark v1.8.6
 	github.com/yuin/goldmark-meta v1.1.0
 	golang.org/x/crypto v0.57.0
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0

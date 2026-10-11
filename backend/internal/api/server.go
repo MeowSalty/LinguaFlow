@@ -200,10 +200,14 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	if err := s.initStorage(context.Background(), keys); err != nil {
 		return nil, fmt.Errorf("initialize storage: %w", err)
 	}
+	// Deployment limits apply to synchronous previews and queued Jobs alike.
+	pipelineConfig, rssFuse := worker.PipelineRuntime(cfg.Pipeline, logger)
 	previewRunner := worker.NewPreviewRunner(logger, client, limiterPool, s.httpClients)
 	previewRunner.SetCredentials(credentials, credentials)
+	previewRunner.SetPipelineLimits(pipelineConfig)
 	revisionRunner := worker.NewRevisionPreviewRunner(logger, client, limiterPool, s.httpClients)
 	revisionRunner.SetCredentials(credentials, credentials)
+	revisionRunner.SetPipelineLimits(pipelineConfig)
 	revisionSemaphore := service.NewPreviewSemaphore(cfg.Preview.MaxConcurrency)
 	s.previewSvc = service.NewPreviewServiceWithSemaphore(
 		logger,
@@ -232,6 +236,7 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	)
 	quickTranslateRunner := worker.NewQuickTranslateRunner(logger, client, limiterPool, s.httpClients)
 	quickTranslateRunner.SetCredentials(credentials, credentials)
+	quickTranslateRunner.SetPipelineLimits(pipelineConfig)
 	s.quickTranslateSvc = service.NewQuickTranslateService(
 		logger,
 		client,
@@ -250,10 +255,6 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 
 	translationQueue := worker.NewQueue(cfg.Workers.Translation.QueueCapacity).WithLifecycle(s.taskLifecycle, service.OperationTranslation)
 	syncQueue := worker.NewQueue(cfg.Workers.Sync.QueueCapacity).WithLifecycle(s.taskLifecycle, service.OperationGlossarySync)
-
-	// RSS 保险丝：进程级双水位准入闸门（0 = 关闭）。仅是准入控制，
-	// 不改变任务状态；触发时资源排队、在途请求继续。
-	pipelineConfig, rssFuse := worker.PipelineRuntime(cfg.Pipeline, logger)
 
 	// 创建 Runner
 	translationRunner := worker.NewJobRunner(

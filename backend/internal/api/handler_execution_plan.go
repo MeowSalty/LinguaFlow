@@ -204,7 +204,13 @@ func toRetryConfigAPI(rc schema.RetryConfig) RetryConfig {
 	}
 }
 
-func intPtr(v int) *int             { return &v }
+func intPtr(v int) *int { return &v }
+func cloneInt(v *int) *int {
+	if v == nil {
+		return nil
+	}
+	return intPtr(*v)
+}
 func boolPtr(v bool) *bool          { return &v }
 func float32Ptr(v float32) *float32 { return &v }
 
@@ -247,7 +253,10 @@ func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlan
 // toRubyRetryConfigAPI 将 schema 层的注音对齐重试配置转换为 API 响应类型。
 func toRubyRetryConfigAPI(rr schema.ExecutionPlanRubyRetryConfig) ExecutionPlanRubyRetryConfig {
 	result := ExecutionPlanRubyRetryConfig{
-		Enabled: rr.Enabled,
+		Enabled:          rr.Enabled,
+		BatchSize:        cloneInt(rr.BatchSize),
+		MaxWordsPerBatch: cloneInt(rr.MaxWordsPerBatch),
+		BatchWaitMs:      cloneInt(rr.BatchWaitMS),
 	}
 	if rr.BackendID > 0 {
 		result.BackendId = &rr.BackendID
@@ -255,6 +264,10 @@ func toRubyRetryConfigAPI(rr schema.ExecutionPlanRubyRetryConfig) ExecutionPlanR
 	if rr.MaxAttempts > 0 {
 		v := rr.MaxAttempts
 		result.MaxAttempts = &v
+	}
+	if rr.Concurrency != nil {
+		v := *rr.Concurrency
+		result.Concurrency = &v
 	}
 	return result
 }
@@ -265,13 +278,20 @@ func parseRubyRetryConfig(api *ExecutionPlanRubyRetryConfig) schema.ExecutionPla
 		return schema.ExecutionPlanRubyRetryConfig{}
 	}
 	result := schema.ExecutionPlanRubyRetryConfig{
-		Enabled: api.Enabled,
+		Enabled:          api.Enabled,
+		BatchSize:        cloneInt(api.BatchSize),
+		MaxWordsPerBatch: cloneInt(api.MaxWordsPerBatch),
+		BatchWaitMS:      cloneInt(api.BatchWaitMs),
 	}
 	if api.BackendId != nil {
 		result.BackendID = *api.BackendId
 	}
 	if api.MaxAttempts != nil {
 		result.MaxAttempts = *api.MaxAttempts
+	}
+	if api.Concurrency != nil {
+		v := *api.Concurrency
+		result.Concurrency = &v
 	}
 	return result
 }

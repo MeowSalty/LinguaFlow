@@ -100,6 +100,7 @@ func (s *Server) handleJobsSummary(w http.ResponseWriter, r *http.Request, param
 	writeJSON(w, http.StatusOK, JobsSummaryResponse{
 		Pending:           summary.Pending,
 		Running:           summary.Running,
+		Pausing:           summary.Pausing,
 		Paused:            summary.Paused,
 		RecentFailed:      summary.RecentFailed,
 		RecentFailedSince: timeutil.Normalize(summary.RecentFailedSince),

@@ -2,6 +2,7 @@ package progress
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -9,10 +10,10 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 // segmentUpdate 记录一次 SegmentDone 事件的状态。
@@ -22,19 +23,10 @@ type segmentUpdate struct {
 
 // roundCheckpoint 是单个轮次行的断点缓冲：一个轮次行 + 该轮已解决段集合。
 //
-// resolved 是「本轮已解决段」的 DB Segment ID 集合（已落库 ∪ 待落库），
-// 也是该轮 segment_completed 的唯一事实源；pending 是尚未落库的增量。
-// 「resolved 与 DB 断点行一致」不是默认成立的推断而是显式状态：
-//   - aligned：集合是否已与 DB 对齐。SegmentResolved 只做增量登记，未对齐
-//     时 len(resolved) 不代表 DB 真相，不得作为 segment_completed 写入；
-//     对齐由 alignResolved 以 DB 断点行重建集合完成（StageStart 与每次
-//     flush 写入前）。
-//   - writtenCount：本 reporter 上次成功提交到 segment_completed 列的值，
-//     纯写抑制备忘，不是列的镜像（从不回读该列——回读会把非断点来源的值引进
-//     判据，正是这套设计要避免的）。初值 0 匹配新建的空集合，全新空轮因此不
-//     产生多余写入；恢复轮对齐出非空集合后 len(resolved) != 0，首次 flush 会
-//     发一条无插入的纯计数申明把列写成集合基数——这正是恢复时纠偏所需，代价
-//     是每个恢复轮多一次幂等的绝对值写。
+// resolved 只用于本 reporter 的展示与去重，pending 保存待确认的段 ID。
+// aligned 表示本地视图已从数据库初始化；writtenCount 只抑制本地重复 flush，
+// 不能代表数据库计数。实际断点基数始终由 workstate 在 Job 锁内维护，
+// 不会被这里落后的内存集合覆盖。
 //
 // docIndex→Segment ID 的映射在 SegmentResolved 入缓冲时就完成（而非 flush
 // 时才查 mapper），缓冲因此自包含——轮次切换后旧轮残留可独立重放，不依赖
@@ -45,21 +37,16 @@ type roundCheckpoint struct {
 	resolved     map[int]struct{}
 	pending      []int
 	aligned      bool // resolved 是否已与 DB 断点行对齐
-	writtenCount int  // 本 reporter 上次成功写入 segment_completed 的值
+	writtenCount int  // 本 reporter 上次成功 flush 的本地集合大小
 }
 
-// needsWrite 报告本轮是否还有待落库的写入：有待插入的断点增量，或计数列与
-// 集合基数不一致（对齐后重新断言 / 写失败后重试）。
+// needsWrite 报告是否有新增事实或恢复后尚未确认的本地视图。
 func (c *roundCheckpoint) needsWrite() bool {
 	return len(c.pending) > 0 || len(c.resolved) != c.writtenCount
 }
 
-// snapshot 取出一次完整的断点写入条目（调用方持 flushMu）。前提是对齐：
-// 对齐后待写增量恒 ⊆ resolved，且 resolved 的其余成员恒已落库，插入 pending
-// 后 DB 集合恰为 resolved，len(resolved) 即 segment_completed——未对齐的轮次
-// 一律不产出写入（此时 len(resolved) 不是 DB 真相，写出去只会倒退），返回
-// ok=false。ids 可为空：条目可以只为重申计数列而存在（对齐后的首次申明、
-// 写失败后的重试），此时 needsWrite 仅由计数分支驱动。
+// snapshot 取出待确认的事实（调用方持 flushMu）。count 仅供成功后的本地
+// 记账；数据库只接收 ids。空 ids 也可触发兼容轮次的断点缓存校准。
 func (c *roundCheckpoint) snapshot() (checkpointWrite, bool) {
 	if !c.aligned || !c.needsWrite() {
 		return checkpointWrite{}, false
@@ -78,36 +65,16 @@ func (c *roundCheckpoint) requeue(ids []int) {
 type checkpointWrite struct {
 	round *roundCheckpoint
 	ids   []int // 本次插入的 Segment ID
-	count int   // 插入后该轮断点集合基数（写入 segment_completed）
+	count int   // flush 成功后的本地视图备忘，不写入数据库
 }
 
 // DBReporter 将执行进度写入数据库，实现 Reporter 接口。
 // 采用双触发条件的缓冲区策略：BatchComplete() 立即 flush + 定时器安全网。
 //
-// 目标模型（流水线重构后）：
-//   - 进度事实源是 JobRound（资源×轮次）行；Job.progress_total/
-//     progress_completed 是矩阵派生的缓存计数器（同一事务增量维护）。
-//   - 轮次断点是关系化的 job_round_segments 行（每段一行、纯追加），
-//     且是轮次进度的**唯一**事实源：executor 对已解决子集逐段调
-//     SegmentResolved 登记，flush 事务内插入断点行并把
-//     segment_completed 写成该集合基数——「segment_completed ≡ 断点集合
-//     基数」（checkpoint 不变式）因此对全部模式恒成立，含 translate 轮。
-//   - 计数列由集合派生而非计数器累加，带来的性质：幂等（重复登记同一段
-//     不推进）、收敛（绝对值写入，列值恒向「对齐后的集合基数」收敛，不受
-//     写入次数与顺序影响）、自愈（「内存集合 = 已落库 ∪ 待落库」是显式前置
-//     状态而非假设：StageStart 与每次 flush 写入前都先以 DB 断点行重建未对齐
-//     的集合，对齐不成不写 segment_completed；重扫集合与已解决集合重叠也不会
-//     重复计数）。
-//     收敛而非单调：列值恒等于断点集合基数时写入只增不减，但列若被非断点来源
-//     污染到高于基数（存量数据、外部改数），对齐后的重申会把它拉回基数——那是
-//     这套设计要的修复方向，不是回退。真正需要禁止的是「写出低于断点行数的
-//     值」，由对齐闸门保证。
-//   - segment_completed 由本 Reporter 独占写入：service 层的终态闭合
-//     （completed/skipped）不回写这一列，闭合值在读侧按轮次状态派生
-//     （service.jobRoundProgress）——列值不被非断点来源污染，这正是它
-//     可以安全充当恢复基线的前提。
-//   - 无轮次行（单资源路径：preview/quick-translate/cli）时退化为旧语义
-//     ——SegmentResolved 为 no-op，仅按 SegmentDone 计数累加 Job 计数器。
+// job_round_segments 是完成事实；segment_completed 与 Job 进度都是派生缓存。
+// 本 reporter 与候选提交共用 workstate.Confirm，在同一 Job 事务内去重、
+// 维护轮次基数并按终态有效口径推进 Job。源删除的级联清理也在该边界校准。
+// 无轮次行时保留单资源兼容语义，SegmentResolved 为 no-op。
 //
 // 并发约定：flushMu 保护「计数缓冲 + 当前轮次记录 + 旧轮残留队列」的快照
 // 一致性（ticker goroutine 与调用方 goroutine 交叉 flush 时不出现「旧缓冲
@@ -139,9 +106,11 @@ type DBReporter struct {
 	stageDone atomic.Int64
 
 	// 轮次展示态
-	mu         sync.Mutex
-	stageName  string
-	stageTotal int
+	mu            sync.Mutex
+	stageName     string
+	stageTotal    int
+	stageErr      error
+	checkpointErr error
 
 	// 定时器安全网
 	ticker       *time.Ticker
@@ -272,29 +241,9 @@ func (r *DBReporter) SegmentResolved(docIndex int) {
 	c.pending = append(c.pending, dbID)
 }
 
-// StageStart 记录新轮次开始，将轮次信息写入 JobRound 行并累加 Job.progress_total。
-//
-// 断点集合对齐无条件先行（rowID > 0 即做，不以 segment_total > 0 为前提）：
-// 「segment_total == 0 ⇒ 无断点行」的推断靠不住——首次 StageStart 的行更新
-// 可能失败而流程继续（见下方非事务降级分支），后续 flush 照样落断点行，下一
-// 次恢复就会看到 segment_total == 0 与已有断点行并存。对齐是写
-// segment_completed 的前置条件，不能押在这个赌注上；代价是全新轮次多付一次
-// 必然空返的索引查询，换来集合不再依赖任何推断。
-//
-// 分母累加规则（矩阵不变式）：progress_total 仅在「首次揭示工作量」时累加——
-// 行内 segment_total == 0（首次启动）时写入 total 并累加 progress_total；行内
-// 已有 segment_total（恢复/重试重跑同一轮）时不覆写、不重复累加。
-//
-// 基线锚定对齐后的断点集合（而非计数列）的理由：集合是轮次进度的唯一事实源，
-// 且它同时就是「本轮无需重做的段」；segment_completed 只是集合基数的派生缓存
-// （由本 Reporter 独占写入，终态闭合值不落在这一列），读它做基线会把非断点
-// 来源的值混进基线。恢复重跑时集合与 DB 对齐后，重扫集合里的段会被
-// SegmentResolved 幂等跳过，故 baseline + 本轮新解决 = 集合基数 ≤ segment_total
-// 恒成立——重扫集合与已解决集合重叠（如 QA 自动拒绝的段被 pending_only 重新
-// 拾取）也不会重复计数，segment_completed 不会超过分母、也不会因基线归零而
-// 倒退。对齐失败（断点查询出错）时基线保持 0：只影响 stageDone 展示计数与
-// stage_done 的 SSE 文案，不喂养任何持久化计数器。
-// 单资源路径（无轮次行）：无行可对齐，无条件累加，基线 0。
+// StageStart 在事务内初始化兼容轮次分母并校准断点缓存，已封口清单保持原总量。
+// 本地展示基线另从完成事实恢复。任一步失败都保存为 StageError，执行器必须
+// 在派发前检查，不能降级为部分写入后继续执行。
 func (r *DBReporter) StageStart(name string, total int) {
 	if !r.beginWrite() {
 		return
@@ -302,139 +251,55 @@ func (r *DBReporter) StageStart(name string, total int) {
 	defer r.sourceMu.RUnlock()
 	r.flushWriteMu.Lock()
 	defer r.flushWriteMu.Unlock()
-
 	r.mu.Lock()
-	r.stageName = name
-	r.stageTotal = total
+	r.stageName, r.stageTotal, r.stageErr = name, total, nil
 	r.mu.Unlock()
-
-	// 重置计数缓冲并快照当前轮次记录（同锁保证快照一致）
 	r.flushMu.Lock()
 	r.pending = r.pending[:0]
 	round := r.round
 	r.flushMu.Unlock()
-
-	rowID := 0
-	if round != nil {
-		rowID = round.rowID
-	}
-
-	baseline := 0
-	addTotal := total
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-	if rowID > 0 {
-		// 对齐无条件先行（见函数 doc）。失败时 baseline 保持 0，集合留在未
-		// 对齐状态，该轮 segment_completed 的写入推迟到对齐成功的那次 flush。
-		if n, ok := r.alignResolved(ctx, round); ok {
-			baseline = n
+	err := workstate.Transaction(ctx, r.client, func(tx *ent.Client) error {
+		if err := workstate.LockJob(ctx, tx, r.jobID); err != nil {
+			return err
 		}
-		// 读取行内 segment_total，决定首次揭示 vs 恢复重跑。只取该列投影：
-		// segment_completed 不作为基线来源（它是集合基数的派生缓存、由本
-		// Reporter 独占写入，终态闭合值不落在这一列——读它会把非断点来源
-		// 的值混进基线），轮次行其余列每轮一次的读取读出即弃是纯读放大。
-		row, err := r.client.JobRound.Query().
-			Where(jobround.IDEQ(rowID)).
-			Select(jobround.FieldSegmentTotal).
-			Only(ctx)
-		if err != nil {
-			r.logger.Warn("DBReporter: failed to load round row, treating as fresh start",
-				"job_id", r.jobID, "round_row_id", rowID, "error", err)
-		} else if row.SegmentTotal > 0 {
-			// 恢复/重试重跑：保留原 total，不重复累加分母。
-			addTotal = 0
+		if round == nil {
+			return tx.Job.UpdateOneID(r.jobID).AddProgressTotal(int64(total)).Exec(ctx)
 		}
-	}
-	// 对齐失败时 baseline 为 0：stageDone 只被 StageDone 的 SSE 消息文本读取，
-	// 不喂养任何持久化计数器。
-	r.stageDone.Store(int64(baseline))
-
-	now := timeutil.NowUTC()
-	// 事务包裹 JobRound 行更新与 Job 的 progress_total 累加，避免单条失败
-	// 导致矩阵与计数器缓存偏离。
-	tx, err := r.client.Tx(ctx)
+		if err := workstate.InitializeTotal(ctx, tx, r.jobID, round.rowID, total); err != nil {
+			return err
+		}
+		return workstate.Calibrate(ctx, tx, r.jobID)
+	})
+	r.mu.Lock()
+	r.stageErr = err
+	r.mu.Unlock()
 	if err != nil {
-		r.logger.Warn("DBReporter: failed to begin stage tx, falling back to non-transactional write",
-			"job_id", r.jobID,
-			"job_resource_id", r.jobResourceID,
-			"stage", name,
-			"error", err)
-		// 降级为非事务写入：至少保证计数器尽量一致。
-		// 与事务路径同守卫：恢复/重跑（addTotal==0）不覆写行内 segment_total。
-		if rowID > 0 {
-			roundUpdate := r.client.JobRound.UpdateOneID(rowID).
-				SetNillableStartedAt(&now)
-			if addTotal > 0 {
-				roundUpdate = roundUpdate.SetSegmentTotal(total)
-			}
-			if err := roundUpdate.Exec(ctx); err != nil {
-				r.logger.Warn("DBReporter: fallback failed to update round row",
-					"job_id", r.jobID,
-					"round_row_id", rowID,
-					"error", err)
-			}
-		}
-		if addTotal > 0 {
-			if err := r.client.Job.UpdateOneID(r.jobID).
-				AddProgressTotal(int64(addTotal)).
-				Exec(ctx); err != nil {
-				r.logger.Warn("DBReporter: fallback failed to add job progress_total",
-					"job_id", r.jobID,
-					"total", addTotal,
-					"error", err)
-			}
-		}
-	} else {
-		defer func() {
-			_ = tx.Rollback()
-		}()
-		committed := false
-		if rowID > 0 {
-			roundUpdate := tx.JobRound.UpdateOneID(rowID).
-				SetNillableStartedAt(&now)
-			if addTotal > 0 {
-				// 首次揭示：写入 total（恢复重跑时保留原值不覆写）。
-				roundUpdate = roundUpdate.SetSegmentTotal(total)
-			}
-			if err := roundUpdate.Exec(ctx); err != nil {
-				r.logger.Warn("DBReporter: failed to update round row",
-					"job_id", r.jobID,
-					"round_row_id", rowID,
-					"error", err)
-			} else {
-				committed = true
-			}
+		r.logger.Error("round initialization failed", "job_id", r.jobID, "error", err)
+		return
+	}
+	baseline := 0
+	if round != nil {
+		if n, err := r.alignResolved(ctx, round); err == nil {
+			baseline = n
 		} else {
-			committed = true
-		}
-		if committed && addTotal > 0 {
-			if err := tx.Job.UpdateOneID(r.jobID).
-				AddProgressTotal(int64(addTotal)).
-				Exec(ctx); err != nil {
-				r.logger.Warn("DBReporter: failed to add job progress_total",
-					"job_id", r.jobID,
-					"total", addTotal,
-					"error", err)
-			} else if err := tx.Commit(); err != nil {
-				r.logger.Warn("DBReporter: failed to commit stage tx",
-					"job_id", r.jobID,
-					"stage", name,
-					"error", err)
-			}
-		} else if committed {
-			if err := tx.Commit(); err != nil {
-				r.logger.Warn("DBReporter: failed to commit stage tx",
-					"job_id", r.jobID,
-					"stage", name,
-					"error", err)
-			}
+			r.mu.Lock()
+			r.stageErr = fmt.Errorf("restore round %d checkpoint baseline: %w", round.rowID, err)
+			r.mu.Unlock()
+			return
 		}
 	}
-
-	// Publish stage_start event
+	r.stageDone.Store(int64(baseline))
 	r.publishEvent("stage_start", name, fmt.Sprintf("轮次开始: %s (%d 段)", name, total))
+}
+
+// StageError exposes failed durable initialization to the executor before it
+// admits requests. StageStart itself remains compatible with display reporters.
+func (r *DBReporter) StageError() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return errors.Join(r.stageErr, r.checkpointErr)
 }
 
 // alignResolved 以 DB 断点行为准对齐该轮内存集合，返回对齐后的集合基数与成败。
@@ -445,9 +310,8 @@ func (r *DBReporter) StageStart(name string, total int) {
 // 一并拾取，不丢。对齐成功后该轮才具备写 segment_completed 的资格（needsWrite
 // 的计数分支自此可信）。
 //
-// 失败时集合保持未对齐、本轮进度写入被推迟：调用方把基线按 0 处理（仅展示），
-// 真正的修复在下次 flush 前的 alignCheckpoints 重试。
-func (r *DBReporter) alignResolved(ctx context.Context, c *roundCheckpoint) (int, bool) {
+// 失败会返回给执行器，本轮必须先重试存储屏障才能继续派发。
+func (r *DBReporter) alignResolved(ctx context.Context, c *roundCheckpoint) (int, error) {
 	ids, err := r.client.JobRoundSegment.Query().
 		Where(jobroundsegment.JobRoundIDEQ(c.rowID)).
 		Select(jobroundsegment.FieldSegmentID).
@@ -455,7 +319,7 @@ func (r *DBReporter) alignResolved(ctx context.Context, c *roundCheckpoint) (int
 	if err != nil {
 		r.logger.Warn("DBReporter: failed to load round checkpoints, round progress write deferred until aligned",
 			"job_id", r.jobID, "round_row_id", c.rowID, "error", err)
-		return 0, false
+		return 0, err
 	}
 	persisted := make(map[int]struct{}, len(ids))
 	for _, id := range ids {
@@ -479,7 +343,7 @@ func (r *DBReporter) alignResolved(ctx context.Context, c *roundCheckpoint) (int
 	}
 	c.resolved = resolved
 	c.aligned = true
-	return len(c.resolved), true
+	return len(c.resolved), nil
 }
 
 // alignCheckpoints 把所有未对齐的轮次断点集合与 DB 对齐（flush 写
@@ -487,7 +351,7 @@ func (r *DBReporter) alignResolved(ctx context.Context, c *roundCheckpoint) (int
 // 无轮次行（round 与 stale 皆空）时自然为 no-op——flushFn 测试注入路径因此
 // 保持无 DB。单个对齐失败不阻断其余轮次：失败者保持未对齐、不产出写入，
 // 留待下次 flush 重试。
-func (r *DBReporter) alignCheckpoints() {
+func (r *DBReporter) alignCheckpoints(ctx context.Context) error {
 	r.flushMu.Lock()
 	var unaligned []*roundCheckpoint
 	for _, c := range r.stale {
@@ -500,13 +364,15 @@ func (r *DBReporter) alignCheckpoints() {
 	}
 	r.flushMu.Unlock()
 	if len(unaligned) == 0 {
-		return
+		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	var result error
 	for _, c := range unaligned {
-		r.alignResolved(ctx, c)
+		if _, err := r.alignResolved(ctx, c); err != nil {
+			result = errors.Join(result, fmt.Errorf("restore round %d checkpoint baseline: %w", c.rowID, err))
+		}
 	}
+	return result
 }
 
 // SegmentDone 记录一个段落完成：推进轮次展示计数，并追加计数缓冲。
@@ -533,6 +399,18 @@ func (r *DBReporter) BatchComplete() {
 	r.flush()
 }
 
+// FlushCheckpoint is the durable barrier before a legacy executor releases a
+// batch or starts another model request. Storage retries reuse the same facts.
+func (r *DBReporter) FlushCheckpoint(ctx context.Context) error {
+	if !r.beginWrite() {
+		return fmt.Errorf("checkpoint reporter is closed")
+	}
+	defer r.sourceMu.RUnlock()
+	r.flushWriteMu.Lock()
+	defer r.flushWriteMu.Unlock()
+	return r.flushLockedContext(ctx)
+}
+
 // StageDone 记录当前轮次完成。
 func (r *DBReporter) StageDone() {
 	if !r.beginWrite() {
@@ -540,7 +418,9 @@ func (r *DBReporter) StageDone() {
 	}
 	defer r.sourceMu.RUnlock()
 	// 轮次结束时做一次最终 flush，确保所有进度写入 DB
-	r.flush()
+	if err := r.flush(); err != nil {
+		return
+	}
 
 	r.mu.Lock()
 	stageName := r.stageName
@@ -579,7 +459,9 @@ func (r *DBReporter) Close() error {
 		r.reportCheckpointResidue()
 
 		// Publish final event
-		r.publishEvent("stage_done", "", "资源处理完成")
+		if r.closeErr == nil && r.StageError() == nil {
+			r.publishEvent("stage_done", "", "资源处理完成")
+		}
 	})
 	return r.closeErr
 }
@@ -655,9 +537,18 @@ func (r *DBReporter) flush() error {
 }
 
 func (r *DBReporter) flushLocked() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return r.flushLockedContext(ctx)
+}
+
+func (r *DBReporter) flushLockedContext(ctx context.Context) (err error) {
+	defer func() { r.mu.Lock(); r.checkpointErr = err; r.mu.Unlock() }()
 	// 对齐是写 segment_completed 的前置条件：未对齐的轮次先以 DB 为准重建
 	// 集合。无轮次行时该步自然为 no-op，flushFn 测试注入路径因此保持无 DB。
-	r.alignCheckpoints()
+	if err := r.alignCheckpoints(ctx); err != nil {
+		return err
+	}
 
 	r.flushMu.Lock()
 	updates := r.pending
@@ -695,15 +586,11 @@ func (r *DBReporter) flushLocked() error {
 		return nil
 	}
 
-	// DB IO 期间释放 flushMu：写入用的是快照（ids 与绝对 count 都已定格），
-	// 与其后到达的 SegmentResolved 无关——新段进 resolved 也进 pending，本次
-	// 写完后 DB 集合恰为快照 count，新段留待下次 flush 连带更大的 count 一起
-	// 落库，checkpoint 不变式在每个提交点都成立。持锁跨事务只会让收集点的
-	// SegmentDone/SegmentResolved 阻塞整个事务时长（DB 变慢时最多 5s）。
-	// flush 生命周期本身由 flushWriteMu 串行化，切轮与 StageStart 不会插进来。
+	// 数据库只接收快照中的新增 ID；其后的事件留在 pending 中。释放 flushMu
+	// 避免事件收集等待数据库，flushWriteMu 仍串行化完整 flush 生命周期。
 	r.flushMu.Unlock()
 
-	err := r.writeFlush(writes, jobDelta)
+	err = r.writeFlush(ctx, writes, jobDelta)
 	if len(writes) > 0 {
 		// 写回记账同一临界区完成：成功记下已提交的计数值（写抑制备忘，此后
 		// 集合不再增长就无需重写）；失败则断点是正确性数据，放回各记录队首
@@ -719,10 +606,8 @@ func (r *DBReporter) flushLocked() error {
 		r.flushMu.Unlock()
 	}
 	if err != nil && ent.IsConstraintError(err) {
-		// 唯一索引冲突 = 内存集合已偏离 DB（对齐失败，或「事务已提交但客户端
-		// 认为失败」的边界）：标记未对齐，下次 flush 前由 alignCheckpoints 以
-		// DB 为准重建集合再写——不重对齐会让该轮 flush 每次都撞同一行、永久
-		// 失败。
+		// 约束错误后重新加载本地视图；重复 ID 已由共享 writer 幂等处理，
+		// 此处分支用于真实约束异常，不依赖唯一冲突承担正常去重。
 		r.flushMu.Lock()
 		for _, w := range writes {
 			w.round.aligned = false
@@ -747,89 +632,27 @@ func (r *DBReporter) pruneStale() {
 	r.stale = kept
 }
 
-// writeFlush 真实写入路径（单事务）：
-//  1. 断点增量：逐轮 CreateBulk 追加 job_round_segments 行（纯计数申明的
-//     条目无增量，跳过插入）；
-//  2. 段计数：SetSegmentCompleted(断点集合基数)（绝对值写入，幂等且崩溃安全）；
-//  3. Job 计数：AddProgressCompleted(各轮基数增量之和 + 退化路径计数)。
-//
-// 事务保证任意崩溃点「segment_completed ≡ 断点集合基数」（checkpoint 不变式），
-// 且 Job 派生计数器与矩阵求和一致（ReconcileJob 重算不会跳变）。
-//
-// 关于冲突忽略：schema 注释约定写入方用 CreateBulk + OnConflict Ignore，但本项目
-// ent 生成代码未启用 sql/upsert feature（无 OnConflict API），故去重下移到内存
-// 集合（对齐重建 + SegmentResolved 入缓冲即去重）；(job_round_id, segment_id)
-// 唯一索引兜底残余边界，撞到即标记该轮未对齐，下次 flush 前以 DB 为准重建
-// 集合再写。
-func (r *DBReporter) writeFlush(writes []checkpointWrite, jobDelta int) error {
-	delta := jobDelta
-	for _, w := range writes {
-		delta += len(w.ids)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	tx, err := r.client.Tx(ctx)
-	if err != nil {
-		r.logger.Warn("DBReporter: failed to begin flush tx",
-			"job_id", r.jobID,
-			"job_resource_id", r.jobResourceID,
-			"error", err)
-		return err
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	for _, w := range writes {
-		// 纯计数申明的条目（ids 为空）只重申 segment_completed，不插入。
-		if len(w.ids) > 0 {
-			builders := make([]*ent.JobRoundSegmentCreate, 0, len(w.ids))
+// writeFlush 只提交完成事实，共享 writer 在 Job 锁内去重并维护全部派生进度。
+// 不向数据库回写 checkpointWrite.count，因其他消费者可能已经确认更多事实。
+func (r *DBReporter) writeFlush(ctx context.Context, writes []checkpointWrite, jobDelta int) error {
+	return workstate.Transaction(ctx, r.client, func(tx *ent.Client) error {
+		if err := workstate.LockJob(ctx, tx, r.jobID); err != nil {
+			return err
+		}
+		for _, w := range writes {
+			facts := make([]workstate.Confirmation, 0, len(w.ids))
 			for _, id := range w.ids {
-				builders = append(builders, tx.JobRoundSegment.Create().
-					SetJobRoundID(w.round.rowID).
-					SetSegmentID(id))
+				facts = append(facts, workstate.Confirmation{SegmentID: id})
 			}
-			if err := tx.JobRoundSegment.CreateBulk(builders...).Exec(ctx); err != nil {
-				r.logger.Warn("DBReporter: failed to insert checkpoint rows",
-					"job_id", r.jobID,
-					"round_row_id", w.round.rowID,
-					"count", len(builders),
-					"error", err)
+			if _, err := workstate.Confirm(ctx, tx, r.jobID, w.round.rowID, facts); err != nil {
 				return err
 			}
 		}
-		if err := tx.JobRound.UpdateOneID(w.round.rowID).
-			SetSegmentCompleted(w.count).
-			Exec(ctx); err != nil {
-			r.logger.Warn("DBReporter: failed to update round progress",
-				"job_id", r.jobID,
-				"round_row_id", w.round.rowID,
-				"error", err)
-			return err
+		if jobDelta > 0 {
+			return tx.Job.UpdateOneID(r.jobID).AddProgressCompleted(int64(jobDelta)).Exec(ctx)
 		}
-	}
-
-	if delta > 0 {
-		if err := tx.Job.UpdateOneID(r.jobID).
-			AddProgressCompleted(int64(delta)).
-			Exec(ctx); err != nil {
-			r.logger.Warn("DBReporter: failed to add job progress_completed",
-				"job_id", r.jobID,
-				"delta", delta,
-				"error", err)
-			return err
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		r.logger.Warn("DBReporter: failed to commit flush tx",
-			"job_id", r.jobID,
-			"error", err)
-		return err
-	}
-	return nil
+		return nil
+	})
 }
 
 // publishEvent publishes a lifecycle event to the Broker. No-op if broker is nil.
@@ -909,6 +732,31 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 	}
 	if len(batchEvent.JSONSchema) > 0 {
 		metadata["json_schema"] = batchEvent.JSONSchema
+	}
+	if batchEvent.ParentRequestID != "" {
+		metadata["parent_request_id"] = batchEvent.ParentRequestID
+	}
+	if len(batchEvent.AlignmentMembers) > 0 {
+		metadata["alignment_members"] = append([]AlignmentMemberEvent(nil), batchEvent.AlignmentMembers...)
+	}
+	if len(batchEvent.ProtocolDiagnostics) > 0 {
+		metadata["protocol_diagnostics"] = append([]string(nil), batchEvent.ProtocolDiagnostics...)
+	}
+	if batchEvent.EnvelopeInvalid {
+		metadata["envelope_invalid"] = true
+	}
+	if batchEvent.UnknownAlignmentMembers > 0 {
+		metadata["unknown_alignment_members"] = batchEvent.UnknownAlignmentMembers
+	}
+	if batchEvent.CandidateID != "" {
+		metadata["candidate_id"] = batchEvent.CandidateID
+		metadata["candidate_version"] = batchEvent.CandidateVersion
+	}
+	if batchEvent.Stage == "ruby_alignment" {
+		metadata["logical_attempt"] = batchEvent.LogicalAttempt
+		metadata["network_attempt"] = batchEvent.NetworkAttempt
+		metadata["verified_items"] = batchEvent.VerifiedItems
+		metadata["missing_items"] = batchEvent.MissingItems
 	}
 	r.broker.Publish(r.jobID, event.Event{
 		Type:      "batch",

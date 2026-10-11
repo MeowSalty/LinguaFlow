@@ -29,6 +29,60 @@ func (_u *JobRoundSegmentUpdate) Where(ps ...predicate.JobRoundSegment) *JobRoun
 	return _u
 }
 
+// SetCommitID sets the "commit_id" field.
+func (_u *JobRoundSegmentUpdate) SetCommitID(v string) *JobRoundSegmentUpdate {
+	_u.mutation.SetCommitID(v)
+	return _u
+}
+
+// SetNillableCommitID sets the "commit_id" field if the given value is not nil.
+func (_u *JobRoundSegmentUpdate) SetNillableCommitID(v *string) *JobRoundSegmentUpdate {
+	if v != nil {
+		_u.SetCommitID(*v)
+	}
+	return _u
+}
+
+// ClearCommitID clears the value of the "commit_id" field.
+func (_u *JobRoundSegmentUpdate) ClearCommitID() *JobRoundSegmentUpdate {
+	_u.mutation.ClearCommitID()
+	return _u
+}
+
+// SetCandidateID sets the "candidate_id" field.
+func (_u *JobRoundSegmentUpdate) SetCandidateID(v string) *JobRoundSegmentUpdate {
+	_u.mutation.SetCandidateID(v)
+	return _u
+}
+
+// SetNillableCandidateID sets the "candidate_id" field if the given value is not nil.
+func (_u *JobRoundSegmentUpdate) SetNillableCandidateID(v *string) *JobRoundSegmentUpdate {
+	if v != nil {
+		_u.SetCandidateID(*v)
+	}
+	return _u
+}
+
+// ClearCandidateID clears the value of the "candidate_id" field.
+func (_u *JobRoundSegmentUpdate) ClearCandidateID() *JobRoundSegmentUpdate {
+	_u.mutation.ClearCandidateID()
+	return _u
+}
+
+// SetOutcome sets the "outcome" field.
+func (_u *JobRoundSegmentUpdate) SetOutcome(v string) *JobRoundSegmentUpdate {
+	_u.mutation.SetOutcome(v)
+	return _u
+}
+
+// SetNillableOutcome sets the "outcome" field if the given value is not nil.
+func (_u *JobRoundSegmentUpdate) SetNillableOutcome(v *string) *JobRoundSegmentUpdate {
+	if v != nil {
+		_u.SetOutcome(*v)
+	}
+	return _u
+}
+
 // SetJobRoundID sets the "job_round_id" field.
 func (_u *JobRoundSegmentUpdate) SetJobRoundID(v int) *JobRoundSegmentUpdate {
 	_u.mutation.SetJobRoundID(v)
@@ -144,6 +198,21 @@ func (_u *JobRoundSegmentUpdate) sqlSave(ctx context.Context) (_node int, err er
 			}
 		}
 	}
+	if value, ok := _u.mutation.CommitID(); ok {
+		_spec.SetField(jobroundsegment.FieldCommitID, field.TypeString, value)
+	}
+	if _u.mutation.CommitIDCleared() {
+		_spec.ClearField(jobroundsegment.FieldCommitID, field.TypeString)
+	}
+	if value, ok := _u.mutation.CandidateID(); ok {
+		_spec.SetField(jobroundsegment.FieldCandidateID, field.TypeString, value)
+	}
+	if _u.mutation.CandidateIDCleared() {
+		_spec.ClearField(jobroundsegment.FieldCandidateID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Outcome(); ok {
+		_spec.SetField(jobroundsegment.FieldOutcome, field.TypeString, value)
+	}
 	if _u.mutation.JobRoundCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -220,6 +289,60 @@ type JobRoundSegmentUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *JobRoundSegmentMutation
+}
+
+// SetCommitID sets the "commit_id" field.
+func (_u *JobRoundSegmentUpdateOne) SetCommitID(v string) *JobRoundSegmentUpdateOne {
+	_u.mutation.SetCommitID(v)
+	return _u
+}
+
+// SetNillableCommitID sets the "commit_id" field if the given value is not nil.
+func (_u *JobRoundSegmentUpdateOne) SetNillableCommitID(v *string) *JobRoundSegmentUpdateOne {
+	if v != nil {
+		_u.SetCommitID(*v)
+	}
+	return _u
+}
+
+// ClearCommitID clears the value of the "commit_id" field.
+func (_u *JobRoundSegmentUpdateOne) ClearCommitID() *JobRoundSegmentUpdateOne {
+	_u.mutation.ClearCommitID()
+	return _u
+}
+
+// SetCandidateID sets the "candidate_id" field.
+func (_u *JobRoundSegmentUpdateOne) SetCandidateID(v string) *JobRoundSegmentUpdateOne {
+	_u.mutation.SetCandidateID(v)
+	return _u
+}
+
+// SetNillableCandidateID sets the "candidate_id" field if the given value is not nil.
+func (_u *JobRoundSegmentUpdateOne) SetNillableCandidateID(v *string) *JobRoundSegmentUpdateOne {
+	if v != nil {
+		_u.SetCandidateID(*v)
+	}
+	return _u
+}
+
+// ClearCandidateID clears the value of the "candidate_id" field.
+func (_u *JobRoundSegmentUpdateOne) ClearCandidateID() *JobRoundSegmentUpdateOne {
+	_u.mutation.ClearCandidateID()
+	return _u
+}
+
+// SetOutcome sets the "outcome" field.
+func (_u *JobRoundSegmentUpdateOne) SetOutcome(v string) *JobRoundSegmentUpdateOne {
+	_u.mutation.SetOutcome(v)
+	return _u
+}
+
+// SetNillableOutcome sets the "outcome" field if the given value is not nil.
+func (_u *JobRoundSegmentUpdateOne) SetNillableOutcome(v *string) *JobRoundSegmentUpdateOne {
+	if v != nil {
+		_u.SetOutcome(*v)
+	}
+	return _u
 }
 
 // SetJobRoundID sets the "job_round_id" field.
@@ -366,6 +489,21 @@ func (_u *JobRoundSegmentUpdateOne) sqlSave(ctx context.Context) (_node *JobRoun
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.CommitID(); ok {
+		_spec.SetField(jobroundsegment.FieldCommitID, field.TypeString, value)
+	}
+	if _u.mutation.CommitIDCleared() {
+		_spec.ClearField(jobroundsegment.FieldCommitID, field.TypeString)
+	}
+	if value, ok := _u.mutation.CandidateID(); ok {
+		_spec.SetField(jobroundsegment.FieldCandidateID, field.TypeString, value)
+	}
+	if _u.mutation.CandidateIDCleared() {
+		_spec.ClearField(jobroundsegment.FieldCandidateID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Outcome(); ok {
+		_spec.SetField(jobroundsegment.FieldOutcome, field.TypeString, value)
 	}
 	if _u.mutation.JobRoundCleared() {
 		edge := &sqlgraph.EdgeSpec{

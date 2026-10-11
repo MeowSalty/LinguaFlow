@@ -17,6 +17,9 @@ func (JobRound) Mixin() []ent.Mixin {
 
 func (JobRound) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("manifest_version").Default(0).NonNegative(),
+		field.Bool("manifest_sealed").Default(false),
+		field.Int("pool_index").Default(0).NonNegative(),
 		field.Int("job_id").Positive().
 			Comment("所属任务 ID"),
 		field.Int("job_resource_id").Positive().
@@ -28,9 +31,9 @@ func (JobRound) Fields() []ent.Field {
 		field.String("status").Default("pending").
 			Comment("pending, running, completed, failed, skipped"),
 		field.Int("segment_total").Default(0).NonNegative().
-			Comment("本轮实际处理的段落数（首次 StageStart 写入；恢复不重设）"),
+			Comment("封口清单成员数；恢复不按剩余批次重设，删除成员时同事务校准"),
 		field.Int("segment_completed").Default(0).NonNegative().
-			Comment("本轮已完成段落数（≡ 该轮 job_round_segments 关联基数；由 progress.DBReporter 独占写入——绝对值、幂等、单调；终态闭合不改写本列，闭合口径在读侧按状态派生）"),
+			Comment("本轮 job_round_segments 关联基数；共享 workstate writer 在 Job 锁内维护，终态有效进度另按状态派生"),
 		field.String("error_message").Optional().Nillable().
 			Comment("轮次级错误信息"),
 		field.Time("started_at").Optional().Nillable().
@@ -56,10 +59,8 @@ func (JobRound) Edges() []ent.Edge {
 			Field("job_resource_id").
 			Unique().
 			Required(),
-		// 轮次断点的关系化存储（取代 resolved_segment_ids JSON blob 的
-		// 全量重写）：每个已解决段一行纯追加，与 segment_completed 同一
-		// flush 事务推进，任意崩溃点「计数 ≡ 集合基数」。FK 级联见
-		// job_round_segment.go。
+		// 每个完成段保留一个最小事实，与正式提交/计数同事务确认。
+		// FK 级联删除后由共享 writer 在原事务内校准基数。
 		edge.To("resolved_segments", Segment.Type).
 			Through("job_round_segments", JobRoundSegment.Type),
 	}

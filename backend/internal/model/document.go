@@ -6,6 +6,9 @@ import "github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 
 // Segment 是文档中一个可翻译的最小单元。
 type Segment struct {
+	DBID           int   // Database identity; distinct from the prompt-facing ID.
+	ContentVersion int64 // Monotonic baseline for accepting a candidate.
+	TargetIsNull   bool
 	ID             string            // 稳定 hash（基于 Source）
 	Source         string            // 原文；protect stage 之后变为含占位符的版本
 	OriginalSource string            // protect 之前的原文快照，供上下文展示给 LLM 使用

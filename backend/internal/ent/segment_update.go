@@ -39,6 +39,27 @@ func (_u *SegmentUpdate) SetUpdatedAt(v time.Time) *SegmentUpdate {
 	return _u
 }
 
+// SetContentVersion sets the "content_version" field.
+func (_u *SegmentUpdate) SetContentVersion(v int64) *SegmentUpdate {
+	_u.mutation.ResetContentVersion()
+	_u.mutation.SetContentVersion(v)
+	return _u
+}
+
+// SetNillableContentVersion sets the "content_version" field if the given value is not nil.
+func (_u *SegmentUpdate) SetNillableContentVersion(v *int64) *SegmentUpdate {
+	if v != nil {
+		_u.SetContentVersion(*v)
+	}
+	return _u
+}
+
+// AddContentVersion adds value to the "content_version" field.
+func (_u *SegmentUpdate) AddContentVersion(v int64) *SegmentUpdate {
+	_u.mutation.AddContentVersion(v)
+	return _u
+}
+
 // SetSegmentIndex sets the "segment_index" field.
 func (_u *SegmentUpdate) SetSegmentIndex(v int) *SegmentUpdate {
 	_u.mutation.ResetSegmentIndex()
@@ -265,7 +286,9 @@ func (_u *SegmentUpdate) RemoveResolvedInRounds(v ...*JobRound) *SegmentUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *SegmentUpdate) Save(ctx context.Context) (int, error) {
-	_u.defaults()
+	if err := _u.defaults(); err != nil {
+		return 0, err
+	}
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -292,15 +315,24 @@ func (_u *SegmentUpdate) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *SegmentUpdate) defaults() {
+func (_u *SegmentUpdate) defaults() error {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		if segment.UpdateDefaultUpdatedAt == nil {
+			return fmt.Errorf("ent: uninitialized segment.UpdateDefaultUpdatedAt (forgotten import ent/runtime?)")
+		}
 		v := segment.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SegmentUpdate) check() error {
+	if v, ok := _u.mutation.ContentVersion(); ok {
+		if err := segment.ContentVersionValidator(v); err != nil {
+			return &ValidationError{Name: "content_version", err: fmt.Errorf(`ent: validator failed for field "Segment.content_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SegmentIndex(); ok {
 		if err := segment.SegmentIndexValidator(v); err != nil {
 			return &ValidationError{Name: "segment_index", err: fmt.Errorf(`ent: validator failed for field "Segment.segment_index": %w`, err)}
@@ -338,6 +370,12 @@ func (_u *SegmentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(segment.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.ContentVersion(); ok {
+		_spec.SetField(segment.FieldContentVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedContentVersion(); ok {
+		_spec.AddField(segment.FieldContentVersion, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.SegmentIndex(); ok {
 		_spec.SetField(segment.FieldSegmentIndex, field.TypeInt, value)
@@ -506,6 +544,27 @@ type SegmentUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *SegmentUpdateOne) SetUpdatedAt(v time.Time) *SegmentUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetContentVersion sets the "content_version" field.
+func (_u *SegmentUpdateOne) SetContentVersion(v int64) *SegmentUpdateOne {
+	_u.mutation.ResetContentVersion()
+	_u.mutation.SetContentVersion(v)
+	return _u
+}
+
+// SetNillableContentVersion sets the "content_version" field if the given value is not nil.
+func (_u *SegmentUpdateOne) SetNillableContentVersion(v *int64) *SegmentUpdateOne {
+	if v != nil {
+		_u.SetContentVersion(*v)
+	}
+	return _u
+}
+
+// AddContentVersion adds value to the "content_version" field.
+func (_u *SegmentUpdateOne) AddContentVersion(v int64) *SegmentUpdateOne {
+	_u.mutation.AddContentVersion(v)
 	return _u
 }
 
@@ -748,7 +807,9 @@ func (_u *SegmentUpdateOne) Select(field string, fields ...string) *SegmentUpdat
 
 // Save executes the query and returns the updated Segment entity.
 func (_u *SegmentUpdateOne) Save(ctx context.Context) (*Segment, error) {
-	_u.defaults()
+	if err := _u.defaults(); err != nil {
+		return nil, err
+	}
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -775,15 +836,24 @@ func (_u *SegmentUpdateOne) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *SegmentUpdateOne) defaults() {
+func (_u *SegmentUpdateOne) defaults() error {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		if segment.UpdateDefaultUpdatedAt == nil {
+			return fmt.Errorf("ent: uninitialized segment.UpdateDefaultUpdatedAt (forgotten import ent/runtime?)")
+		}
 		v := segment.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SegmentUpdateOne) check() error {
+	if v, ok := _u.mutation.ContentVersion(); ok {
+		if err := segment.ContentVersionValidator(v); err != nil {
+			return &ValidationError{Name: "content_version", err: fmt.Errorf(`ent: validator failed for field "Segment.content_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SegmentIndex(); ok {
 		if err := segment.SegmentIndexValidator(v); err != nil {
 			return &ValidationError{Name: "segment_index", err: fmt.Errorf(`ent: validator failed for field "Segment.segment_index": %w`, err)}
@@ -838,6 +908,12 @@ func (_u *SegmentUpdateOne) sqlSave(ctx context.Context) (_node *Segment, err er
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(segment.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.ContentVersion(); ok {
+		_spec.SetField(segment.FieldContentVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedContentVersion(); ok {
+		_spec.AddField(segment.FieldContentVersion, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.SegmentIndex(); ok {
 		_spec.SetField(segment.FieldSegmentIndex, field.TypeInt, value)

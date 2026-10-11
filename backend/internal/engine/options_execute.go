@@ -10,11 +10,16 @@ import (
 type ExecuteOption func(*executeConfig)
 
 type executeConfig struct {
+	store           pipeline.RoundStore
 	batchHandler    func(ctx context.Context, result pipeline.BatchResult) error
 	segmentFilter   map[int]struct{} // 非空时仅翻译这些索引
 	resolvedIndices map[int]struct{} // 本轮池 0 应跳过的已解决段（跨轮增量载体）
 	station         *pipeline.Station
 	gate            *pipeline.PauseGate
+}
+
+func WithRoundStore(store pipeline.RoundStore) ExecuteOption {
+	return func(c *executeConfig) { c.store = store }
 }
 
 // WithBatchHandler 注入每批完成后的回调。

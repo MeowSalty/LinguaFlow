@@ -40,6 +40,41 @@ func (_u *JobUpdate) SetUpdatedAt(v time.Time) *JobUpdate {
 	return _u
 }
 
+// SetRetryEpoch sets the "retry_epoch" field.
+func (_u *JobUpdate) SetRetryEpoch(v int64) *JobUpdate {
+	_u.mutation.ResetRetryEpoch()
+	_u.mutation.SetRetryEpoch(v)
+	return _u
+}
+
+// SetNillableRetryEpoch sets the "retry_epoch" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableRetryEpoch(v *int64) *JobUpdate {
+	if v != nil {
+		_u.SetRetryEpoch(*v)
+	}
+	return _u
+}
+
+// AddRetryEpoch adds value to the "retry_epoch" field.
+func (_u *JobUpdate) AddRetryEpoch(v int64) *JobUpdate {
+	_u.mutation.AddRetryEpoch(v)
+	return _u
+}
+
+// SetPauseRequested sets the "pause_requested" field.
+func (_u *JobUpdate) SetPauseRequested(v bool) *JobUpdate {
+	_u.mutation.SetPauseRequested(v)
+	return _u
+}
+
+// SetNillablePauseRequested sets the "pause_requested" field if the given value is not nil.
+func (_u *JobUpdate) SetNillablePauseRequested(v *bool) *JobUpdate {
+	if v != nil {
+		_u.SetPauseRequested(*v)
+	}
+	return _u
+}
+
 // SetProjectID sets the "project_id" field.
 func (_u *JobUpdate) SetProjectID(v int) *JobUpdate {
 	_u.mutation.SetProjectID(v)
@@ -517,6 +552,11 @@ func (_u *JobUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *JobUpdate) check() error {
+	if v, ok := _u.mutation.RetryEpoch(); ok {
+		if err := job.RetryEpochValidator(v); err != nil {
+			return &ValidationError{Name: "retry_epoch", err: fmt.Errorf(`ent: validator failed for field "Job.retry_epoch": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ProjectID(); ok {
 		if err := job.ProjectIDValidator(v); err != nil {
 			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "Job.project_id": %w`, err)}
@@ -572,6 +612,15 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(job.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.RetryEpoch(); ok {
+		_spec.SetField(job.FieldRetryEpoch, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRetryEpoch(); ok {
+		_spec.AddField(job.FieldRetryEpoch, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.PauseRequested(); ok {
+		_spec.SetField(job.FieldPauseRequested, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)
@@ -903,6 +952,41 @@ type JobUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *JobUpdateOne) SetUpdatedAt(v time.Time) *JobUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetRetryEpoch sets the "retry_epoch" field.
+func (_u *JobUpdateOne) SetRetryEpoch(v int64) *JobUpdateOne {
+	_u.mutation.ResetRetryEpoch()
+	_u.mutation.SetRetryEpoch(v)
+	return _u
+}
+
+// SetNillableRetryEpoch sets the "retry_epoch" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableRetryEpoch(v *int64) *JobUpdateOne {
+	if v != nil {
+		_u.SetRetryEpoch(*v)
+	}
+	return _u
+}
+
+// AddRetryEpoch adds value to the "retry_epoch" field.
+func (_u *JobUpdateOne) AddRetryEpoch(v int64) *JobUpdateOne {
+	_u.mutation.AddRetryEpoch(v)
+	return _u
+}
+
+// SetPauseRequested sets the "pause_requested" field.
+func (_u *JobUpdateOne) SetPauseRequested(v bool) *JobUpdateOne {
+	_u.mutation.SetPauseRequested(v)
+	return _u
+}
+
+// SetNillablePauseRequested sets the "pause_requested" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillablePauseRequested(v *bool) *JobUpdateOne {
+	if v != nil {
+		_u.SetPauseRequested(*v)
+	}
 	return _u
 }
 
@@ -1396,6 +1480,11 @@ func (_u *JobUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *JobUpdateOne) check() error {
+	if v, ok := _u.mutation.RetryEpoch(); ok {
+		if err := job.RetryEpochValidator(v); err != nil {
+			return &ValidationError{Name: "retry_epoch", err: fmt.Errorf(`ent: validator failed for field "Job.retry_epoch": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ProjectID(); ok {
 		if err := job.ProjectIDValidator(v); err != nil {
 			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "Job.project_id": %w`, err)}
@@ -1468,6 +1557,15 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(job.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.RetryEpoch(); ok {
+		_spec.SetField(job.FieldRetryEpoch, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRetryEpoch(); ok {
+		_spec.AddField(job.FieldRetryEpoch, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.PauseRequested(); ok {
+		_spec.SetField(job.FieldPauseRequested, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)

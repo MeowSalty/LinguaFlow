@@ -18,7 +18,7 @@
 {{- if eq .RubyMode "inline"}}
 - 需要注音的词使用 ⟦ruby:基底/标注/类型⟧ 格式插入，类型为 phonetic/semantic/creative 之一。
 {{- else if eq .RubyMode "section"}}
-- 在翻译结果后另起一行输出 [ruby]，然后每行一条注音：编号: 基底 | 标注 | 类型 | id。类型为 phonetic/semantic/creative 之一，id 为输入注音条目携带的 #id（无 #id 时省略该字段）。
+- 在翻译结果后另起一行输出 [ruby]，然后每行一条注音：编号: 基底 | 标注 | 类型 | id。四个字段均用 JSON 字符串字面量，例如：1: "词" | "读法" | "phonetic" | "2"。id 是输入 #id 中的编号；无法对应时省略整条。
 {{- end}}
 {{- if .InlineBootstrap}}
 - 如果发现值得固定的术语，在翻译结果后另起一行输出 [glossary]，然后每行一条：术语原文 | 译文 | 备注（无备注可省略）。
@@ -59,7 +59,7 @@
 源文本中曾有 <ruby>基底<rt>标注</rt></ruby> 标签，已提取注音信息。
 {{- if eq .Protocol "text"}}
 {{- if eq .RubyMode "section"}}
-注音以 [ruby] 独立段落追加，格式为 编号: 基底/标注#id, ...（#id 为条目 id，输出时需回显，无 id 时省略）。
+注音以 [ruby] 独立段落追加，格式为 编号: 基底/标注#id, ...（#id 为条目 id，输出时需原样回显编号；无法对应时省略整条）。
 {{- else}}
 注音以 ⟦ruby:基底/标注⟧ 格式内联在源文本中。
 {{- end}}
@@ -80,7 +80,8 @@
 - "基底" 必须是你译文中实际写入的对应文本，而不是原文本身。
 - "标注" 是标注文本（按上述规则处理）。
 - "类型" 是分类（phonetic/semantic/creative）。
-- "id" 是输入 [ruby] 列表中该条目携带的 #id，必须原样回显；输入无 #id 时省略该字段。
+- "id" 是输入 [ruby] 列表中该条目携带的 #id 的编号，必须原样回显；无法对应时省略整条。
+- 上述四字段都使用 JSON 字符串字面量，引号、反斜杠、换行用 JSON 转义；保留解码后的全部空白。每个 id 至多返回一次。
 - 条目顺序应与源文本中注音的顺序一致。
 - 无注音的片段不需要输出对应条目。
 {{- else if eq .RubyMode "inline"}}
@@ -88,8 +89,9 @@
 {{- end}}
 {{- else}}
 {{- if eq .RubyMode "json"}}
-你需要在顶层字段 "ruby_output"（与 "translations" 同级）中返回所有注音条目（不得省略任何一条），每条包含 kind 字段：
+你需要在顶层字段 "ruby_output"（与 "translations" 同级）中返回能够确定对应关系的注音条目；无法对应时省略整条，每条包含 kind 字段：
 - 每个条目必须原样回显 ruby_annotations 中对应条目的 "id"，即使条目结构调整或重排序也要按 "id" 关联对应。
+- 每个 id 至多返回一次。base/text 保留全部空白、大小写与 Unicode 字符，不能以标签或属性里的文本冒充正文。
 - 每个条目的 "base" 必须是你译文中实际写入的对应文本，而不是原文本身。
 - 每个条目的 "text" 是标注文本（按上述规则处理）。
 - 每个条目的 "kind" 是分类（phonetic/semantic/creative）。
