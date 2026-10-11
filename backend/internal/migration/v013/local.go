@@ -69,6 +69,9 @@ func RunSQLite(ctx context.Context, options SQLiteOptions) (result LocalReport, 
 }
 
 func runSQLite(ctx context.Context, options SQLiteOptions, cleanup func(localJournal) error) (result LocalReport, err error) {
+	if err := CheckTargetCompatibility(); err != nil {
+		return result, err
+	}
 	result.Recovery = "none"
 	if options.KeyringFile != "" {
 		options.KeyringFile = filepath.Clean(options.KeyringFile)

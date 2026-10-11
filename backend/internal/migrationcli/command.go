@@ -23,8 +23,11 @@ func NewCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use: "linguaflow-migrate", Short: "LinguaFlow 一次性旧版本迁移工具",
 		SilenceUsage: true, SilenceErrors: true,
+		PersistentPreRunE: func(*cobra.Command, []string) error {
+			return v013.CheckTargetCompatibility()
+		},
 	}
-	version := &cobra.Command{Use: "v013", Short: "迁移 v0.13.0 数据，默认预演"}
+	version := &cobra.Command{Use: "v013", Short: "历史 v0.13.0 迁移（当前账号格式不兼容，本版本拒绝执行）"}
 	version.AddCommand(newPostgresCommand(), newSQLiteCommand(), newLocalCommand())
 	root.AddCommand(version)
 	return root
@@ -36,7 +39,10 @@ func newPostgresCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "postgres", Args: cobra.NoArgs,
 		Short: "迁移 PostgreSQL serve 实例，默认在事务中预演并回滚",
-		Long: `先停止旧服务，并保留 PostgreSQL 备份或托管快照。
+		Long: `当前账号格式与 v0.13.0 迁移目标不兼容，本版本拒绝预演、提交和中断恢复。
+保留原数据；历史迁移与恢复须使用原迁移程序。以下仅保留历史参数说明。
+
+先停止旧服务，并保留 PostgreSQL 备份或托管快照。
 从 LINGUAFLOW_DATABASE_DSN 或 LINGUAFLOW_DATABASE_DSN_FILE 读取连接配置。
 默认预演 schema、凭据、实例和历史任务转换，然后回滚；预演持锁且可能消耗序列值。
 凭据支持 LINGUAFLOW_CREDENTIALS_MASTER_KEY 或其 _FILE，也可使用 keyring 文件。
@@ -150,7 +156,10 @@ func newLocalCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "local", Args: cobra.NoArgs,
 		Short: "在副本中迁移 SQLite local 数据目录，保留原目录备份",
-		Long: `先停止使用该目录的全部 LinguaFlow 进程，并保留独立备份。
+		Long: `当前账号格式与 v0.13.0 迁移目标不兼容，本版本拒绝预演、提交和中断恢复。
+保留原数据；历史迁移与恢复须使用原迁移程序。以下仅保留历史参数说明。
+
+先停止使用该目录的全部 LinguaFlow 进程，并保留独立备份。
 必须显式指定 --data-dir；只支持其中的标准 SQLite 数据库和目录内密钥。
 默认复制并验证后删除临时副本；--apply 将旧目录保留为备份并把迁移副本放回原路径。
 切换需要同卷本地普通目录，拒绝链接、junction、外部资源路径和特殊文件。

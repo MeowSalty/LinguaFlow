@@ -64,37 +64,37 @@ tasks:
       - go run ./cmd/linguaflow-storage-migrate rollback {{.CLI_ARGS}}
 
   migrate:v013:
-    desc: 预演 v0.13.0 PostgreSQL 迁移并回滚
+    desc: 历史 PostgreSQL 迁移入口（新账号格式不兼容，本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 postgres {{.CLI_ARGS}}
 
   migrate:v013:apply:
-    desc: 正式提交 v0.13.0 PostgreSQL 一次性迁移
+    desc: 历史 PostgreSQL 迁移提交入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 postgres --apply {{.CLI_ARGS}}
 
   migrate:v013:local:
-    desc: 预演 v0.13.0 SQLite local 数据目录迁移
+    desc: 历史 SQLite local 迁移入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 local {{.CLI_ARGS}}
 
   migrate:v013:local:apply:
-    desc: 迁移 v0.13.0 SQLite local 数据目录并保留原目录备份
+    desc: 历史 SQLite local 迁移提交入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 local --apply {{.CLI_ARGS}}
 
   migrate:v013:sqlite:
-    desc: 预演 SQLite 数据目录迁移（CLI_ARGS 显式指定 --mode serve 或 local）
+    desc: 历史 SQLite 迁移入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 sqlite {{.CLI_ARGS}}
 
   migrate:v013:sqlite:apply:
-    desc: 发布 SQLite 数据目录迁移并保留备份（显式指定 --mode）
+    desc: 历史 SQLite 迁移提交入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 sqlite --apply {{.CLI_ARGS}}
