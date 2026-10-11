@@ -231,16 +231,18 @@ func runOrganizationTransactionCompetition(t *testing.T, first, second *ent.Clie
 	}
 }
 
-func TestOrganizationTransactionRetriesAreBounded(t *testing.T) {
-	ctx := context.Background()
+func TestOrganizationTransactionRetriesRespectContext(t *testing.T) {
 	f := newOrganizationFixture(t)
 	for _, code := range []string{"40001", "40P01", "55P03"} {
+		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 		attempts := 0
 		err := withOrganizationMutation(ctx, f.client, f.org.ID, func(*ent.Client) error { attempts++; return &pgconn.PgError{Code: code} })
-		if err == nil || attempts != organizationMutationAttempts {
+		cancel()
+		if err == nil || !errors.Is(err, context.DeadlineExceeded) || attempts < 2 {
 			t.Fatalf("code=%s attempts=%d err=%v", code, attempts, err)
 		}
 	}
+	ctx := context.Background()
 	for _, cause := range []error{io.EOF, &pgconn.PgError{Code: "08007"}, ErrForbidden, ErrOwnerRequired} {
 		attempts := 0
 		err := withOrganizationMutation(ctx, f.client, f.org.ID, func(*ent.Client) error { attempts++; return cause })
