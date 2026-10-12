@@ -38,10 +38,9 @@ AuthCapabilities:
           type: boolean
     connections:
       type: array
-      maxItems: 0
-      description: 阶段 A 不提供外部渠道，始终为空；未来扩展使用同一能力发现入口。
+      description: 已发布且具备有效用途的 OIDC 连接；不暴露绑定、私有规则或配置。local 始终为空。
       items:
-        type: object
+        $ref: './auth-external.yaml#/PublicAuthConnection'
     email_verification_enabled:
       type: boolean
       enum: [false]

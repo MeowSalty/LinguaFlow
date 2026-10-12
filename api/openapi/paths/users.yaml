@@ -47,6 +47,70 @@ currentUser:
         $ref: '../base.yaml#/components/responses/Problem'
 
 currentUserPassword:
+  post:
+    operationId: "SetCurrentUserInitialPassword"
+    summary: "首次设置本地密码并撤销旧会话"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/InitialPasswordRequest"
+    responses:
+      204:
+        description: "Completed"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+  delete:
+    operationId: "DeleteCurrentUserPassword"
+    summary: "删除密码并保留可靠后备方式"
+    description: "仅 server 模式。要求另一登录方式的近期认证证明，不能使用待删除密码生成的证明；证明不符合要求返回 403，无可靠后备方式或最后密码管理员保护冲突返回 409。成功后撤销旧会话，响应使用 Cache-Control: no-store。"
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/SensitiveOperationRequest"
+    responses:
+      204:
+        description: "Completed"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
   put:
     operationId: ChangeCurrentUserPassword
     summary: 修改当前用户密码

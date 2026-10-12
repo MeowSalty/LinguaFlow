@@ -1,0 +1,681 @@
+OIDCConnectionConfig:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "issuer"
+    - "client_id"
+  properties:
+    issuer:
+      type: "string"
+      format: "uri"
+    client_id:
+      type: "string"
+    client_auth_method:
+      type: "string"
+      enum:
+        - "client_secret_basic"
+        - "client_secret_post"
+      default: "client_secret_basic"
+    scopes:
+      type: "array"
+      items:
+        type: "string"
+      default:
+        - "openid"
+        - "profile"
+    userinfo_enabled:
+      type: "boolean"
+      default: true
+AuthConnectionPolicy:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "enabled"
+    - "login_enabled"
+    - "signup_enabled"
+    - "link_enabled"
+    - "login_rule"
+    - "signup_rule"
+    - "link_rule"
+  properties:
+    enabled:
+      type: "boolean"
+    login_enabled:
+      type: "boolean"
+    signup_enabled:
+      type: "boolean"
+    link_enabled:
+      type: "boolean"
+    login_rule:
+      type: "string"
+      enum:
+        - "unrestricted"
+    signup_rule:
+      type: "string"
+      enum:
+        - "unrestricted"
+    link_rule:
+      type: "string"
+      enum:
+        - "unrestricted"
+ExternalBrowserInput:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "browser_challenge"
+    - "completion_url"
+  properties:
+    browser_challenge:
+      type: "string"
+      pattern: "^[A-Za-z0-9_-]{43}$"
+      description: "SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE."
+    completion_url:
+      type: "string"
+      format: "uri"
+    return_to:
+      type: "string"
+      default: "/"
+      description: "Validated application-relative path."
+ExternalLinkStartRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "browser_challenge"
+    - "completion_url"
+    - "reauthentication_proof"
+  properties:
+    browser_challenge:
+      type: "string"
+      pattern: "^[A-Za-z0-9_-]{43}$"
+      description: "SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE."
+    completion_url:
+      type: "string"
+      format: "uri"
+    return_to:
+      type: "string"
+      default: "/"
+      description: "Validated application-relative path."
+    reauthentication_proof:
+      type: "string"
+ExternalStartResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "transaction_id"
+    - "authorization_url"
+    - "expires_at"
+  properties:
+    transaction_id:
+      type: "string"
+    authorization_url:
+      type: "string"
+      format: "uri"
+    expires_at:
+      type: "string"
+      format: "date-time"
+ExternalExchangeRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "ticket"
+    - "verifier"
+  properties:
+    ticket:
+      type: "string"
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+ExternalCompleteRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "confirmation_token"
+    - "verifier"
+  properties:
+    confirmation_token:
+      type: "string"
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+    username:
+      $ref: "./auth.yaml#/UsernameInput"
+    display_name:
+      type: "string"
+ExternalCancelRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "transaction_id"
+    - "verifier"
+  properties:
+    transaction_id:
+      type: "string"
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+ReauthenticationRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "method"
+    - "action"
+    - "target_id"
+  properties:
+    method:
+      type: "string"
+      enum:
+        - "password"
+        - "oidc"
+    password:
+      type: "string"
+    binding_id:
+      type: "integer"
+      minimum: 1
+    action:
+      type: "string"
+      enum:
+        - "link"
+        - "password_set"
+        - "password_delete"
+        - "unlink"
+    target_id:
+      type: "string"
+    browser_challenge:
+      type: "string"
+      pattern: "^[A-Za-z0-9_-]{43}$"
+      description: "SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE."
+    completion_url:
+      type: "string"
+      format: "uri"
+    return_to:
+      type: "string"
+      default: "/"
+      description: "Validated application-relative path."
+ReauthenticationProofResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "reauthentication_proof"
+    - "expires_at"
+  properties:
+    reauthentication_proof:
+      type: "string"
+    expires_at:
+      type: "string"
+      format: "date-time"
+ExternalProfile:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "connection_id"
+    - "connection_name"
+    - "external_display"
+  properties:
+    connection_id:
+      type: "string"
+    connection_name:
+      type: "string"
+    external_display:
+      type: "string"
+ExternalConfirmationResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "confirmation_token"
+    - "transaction_id"
+    - "expires_at"
+    - "profile"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "signup_confirmation"
+        - "link_confirmation"
+    confirmation_token:
+      type: "string"
+    transaction_id:
+      type: "string"
+    expires_at:
+      type: "string"
+      format: "date-time"
+    profile:
+      $ref: "#/ExternalProfile"
+ExternalSessionResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "session"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "session"
+    session:
+      $ref: "./auth.yaml#/AuthSession"
+ExternalProofResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "reauthentication_proof"
+    - "expires_at"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "reauthentication_proof"
+    reauthentication_proof:
+      type: "string"
+    expires_at:
+      type: "string"
+      format: "date-time"
+ExternalTestResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "fresh_supported"
+    - "connection_id"
+    - "revision"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "test_result"
+    fresh_supported:
+      type: "boolean"
+    connection_id:
+      type: "string"
+    revision:
+      type: "integer"
+      format: "int64"
+ExternalExchangeResponse:
+  oneOf:
+    -
+      $ref: "#/ExternalSessionResponse"
+    -
+      $ref: "#/ExternalConfirmationResponse"
+    -
+      $ref: "#/ExternalProofResponse"
+    -
+      $ref: "#/ExternalTestResponse"
+  discriminator:
+    propertyName: "kind"
+ExternalLinkedResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "binding_id"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "linked"
+    binding_id:
+      type: "integer"
+ExternalCompleteResponse:
+  oneOf:
+    -
+      $ref: "#/ExternalSessionResponse"
+    -
+      $ref: "#/ExternalLinkedResponse"
+  discriminator:
+    propertyName: "kind"
+InitialPasswordRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "reauthentication_proof"
+    - "new_password"
+  properties:
+    reauthentication_proof:
+      type: "string"
+    new_password:
+      $ref: "./auth.yaml#/RegisterRequest/properties/password"
+SensitiveOperationRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "reauthentication_proof"
+  properties:
+    reauthentication_proof:
+      type: "string"
+PublicAuthConnection:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "connection_id"
+    - "display_name"
+    - "description"
+    - "display_order"
+    - "can_login"
+    - "can_signup"
+    - "signup_requirements"
+  properties:
+    connection_id:
+      type: "string"
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    logo_url:
+      type: "string"
+      nullable: true
+    can_login:
+      type: "boolean"
+    can_signup:
+      type: "boolean"
+    signup_requirements:
+      type: "array"
+      maxItems: 0
+      items:
+        type: "string"
+        enum:
+          - "local_password"
+CreateAuthConnectionRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "display_name"
+    - "oidc"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "oidc"
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    oidc:
+      $ref: "#/OIDCConnectionConfig"
+    client_secret:
+      type: "string"
+      writeOnly: true
+UpdateAuthConnectionRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "expected_revision"
+  properties:
+    expected_revision:
+      type: "integer"
+      format: "int64"
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    oidc:
+      $ref: "#/OIDCConnectionConfig"
+    client_secret:
+      type: "string"
+      nullable: true
+      writeOnly: true
+      description: "Omitted keeps the current secret; null clears it; a nonempty string creates a new encrypted version."
+    policy:
+      $ref: "#/AuthConnectionPolicy"
+AuthConnectionRevisionRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "expected_revision"
+  properties:
+    expected_revision:
+      type: "integer"
+      format: "int64"
+AuthConnectionTestRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "expected_revision"
+    - "browser_challenge"
+    - "completion_url"
+  properties:
+    expected_revision:
+      type: "integer"
+      format: "int64"
+    browser_challenge:
+      type: "string"
+      pattern: "^[A-Za-z0-9_-]{43}$"
+      description: "SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE."
+    completion_url:
+      type: "string"
+      format: "uri"
+    return_to:
+      type: "string"
+      default: "/"
+      description: "Validated application-relative path."
+AuthConnectionSnapshot:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "display_name"
+    - "description"
+    - "display_order"
+    - "revision"
+    - "policy"
+    - "has_client_secret"
+  properties:
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    oidc:
+      $ref: "#/OIDCConnectionConfig"
+    revision:
+      type: "integer"
+      format: "int64"
+    policy:
+      $ref: "#/AuthConnectionPolicy"
+    has_client_secret:
+      type: "boolean"
+    logo_url:
+      type: "string"
+      nullable: true
+AuthConnectionValidation:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "fresh_supported"
+    - "fingerprint_matches"
+  properties:
+    fresh_supported:
+      type: "boolean"
+    fingerprint_matches:
+      type: "boolean"
+    tested_at:
+      type: "string"
+      format: "date-time"
+      nullable: true
+AuthConnectionRecord:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "id"
+    - "kind"
+    - "aggregate_revision"
+    - "archived"
+    - "has_client_secret"
+  properties:
+    id:
+      type: "string"
+    kind:
+      type: "string"
+      enum:
+        - "password"
+        - "oidc"
+    aggregate_revision:
+      type: "integer"
+      format: "int64"
+    draft_revision:
+      type: "integer"
+      format: "int64"
+      nullable: true
+    published_revision:
+      type: "integer"
+      format: "int64"
+      nullable: true
+    archived:
+      type: "boolean"
+    has_client_secret:
+      type: "boolean"
+    draft:
+      $ref: "#/AuthConnectionSnapshot"
+    published:
+      $ref: "#/AuthConnectionSnapshot"
+    validation:
+      $ref: "#/AuthConnectionValidation"
+AuthConnectionsResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "items"
+  properties:
+    items:
+      type: "array"
+      items:
+        $ref: "#/AuthConnectionRecord"
+AuthConnectionCheck:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "valid"
+    - "fresh_supported"
+    - "issues"
+  properties:
+    valid:
+      type: "boolean"
+    fresh_supported:
+      type: "boolean"
+    issues:
+      type: "array"
+      items:
+        type: "string"
+AuthConnectionImpact:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "affected_users"
+    - "blocked_users"
+    - "affected_sessions"
+    - "can_publish"
+  properties:
+    affected_users:
+      type: "array"
+      items:
+        type: "integer"
+    blocked_users:
+      type: "array"
+      items:
+        type: "integer"
+    affected_sessions:
+      type: "integer"
+    can_publish:
+      type: "boolean"
+LoginMethod:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "binding_id"
+    - "connection_id"
+    - "display_name"
+    - "can_login"
+    - "can_reauthenticate"
+    - "can_unlink"
+    - "verified"
+    - "archived"
+  properties:
+    binding_id:
+      type: "integer"
+    connection_id:
+      type: "string"
+    display_name:
+      type: "string"
+    can_login:
+      type: "boolean"
+    can_reauthenticate:
+      type: "boolean"
+    can_unlink:
+      type: "boolean"
+    verified:
+      type: "boolean"
+    archived:
+      type: "boolean"
+LoginMethodsResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "password"
+    - "email"
+    - "bindings"
+    - "available_connections"
+  properties:
+    password:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "is_set"
+        - "can_login"
+        - "can_set"
+        - "can_delete"
+      properties:
+        is_set:
+          type: "boolean"
+        can_login:
+          type: "boolean"
+        can_set:
+          type: "boolean"
+        can_delete:
+          type: "boolean"
+    email:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "address"
+        - "verified"
+        - "can_recover"
+      properties:
+        address:
+          type: "string"
+          nullable: true
+        verified:
+          type: "boolean"
+        can_recover:
+          type: "boolean"
+    bindings:
+      type: "array"
+      items:
+        $ref: "#/LoginMethod"
+    available_connections:
+      type: "array"
+      items:
+        $ref: "#/AvailableLoginConnection"
+AvailableLoginConnection:
+  type: "object"
+  additionalProperties: false
+  required: [connection_id, display_name, can_link]
+  properties:
+    connection_id:
+      type: "string"
+    display_name:
+      type: "string"
+    can_link:
+      type: "boolean"
+    logo_url:
+      type: "string"
+      nullable: true
