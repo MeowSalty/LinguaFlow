@@ -465,6 +465,16 @@ func VerifiedLoginPolicyRevisionLTE(v int64) predicate.LoginBinding {
 	return predicate.LoginBinding(sql.FieldLTE(FieldVerifiedLoginPolicyRevision, v))
 }
 
+// EvidenceIsNil applies the IsNil predicate on the "evidence" field.
+func EvidenceIsNil() predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldIsNull(FieldEvidence))
+}
+
+// EvidenceNotNil applies the NotNil predicate on the "evidence" field.
+func EvidenceNotNil() predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNotNull(FieldEvidence))
+}
+
 // HasUser applies the HasEdge predicate on the "user" edge.
 func HasUser() predicate.LoginBinding {
 	return predicate.LoginBinding(func(s *sql.Selector) {

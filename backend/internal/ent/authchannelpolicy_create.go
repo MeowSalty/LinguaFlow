@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 )
@@ -123,21 +124,87 @@ func (_c *AuthChannelPolicyCreate) SetNillableLinkEnabled(v *bool) *AuthChannelP
 	return _c
 }
 
-// SetLoginRule sets the "login_rule" field.
-func (_c *AuthChannelPolicyCreate) SetLoginRule(v authchannelpolicy.LoginRule) *AuthChannelPolicyCreate {
-	_c.mutation.SetLoginRule(v)
+// SetLoginRules sets the "login_rules" field.
+func (_c *AuthChannelPolicyCreate) SetLoginRules(v authrules.RuleSet) *AuthChannelPolicyCreate {
+	_c.mutation.SetLoginRules(v)
 	return _c
 }
 
-// SetSignupRule sets the "signup_rule" field.
-func (_c *AuthChannelPolicyCreate) SetSignupRule(v authchannelpolicy.SignupRule) *AuthChannelPolicyCreate {
-	_c.mutation.SetSignupRule(v)
+// SetNillableLoginRules sets the "login_rules" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableLoginRules(v *authrules.RuleSet) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetLoginRules(*v)
+	}
 	return _c
 }
 
-// SetLinkRule sets the "link_rule" field.
-func (_c *AuthChannelPolicyCreate) SetLinkRule(v authchannelpolicy.LinkRule) *AuthChannelPolicyCreate {
-	_c.mutation.SetLinkRule(v)
+// SetSignupRules sets the "signup_rules" field.
+func (_c *AuthChannelPolicyCreate) SetSignupRules(v authrules.RuleSet) *AuthChannelPolicyCreate {
+	_c.mutation.SetSignupRules(v)
+	return _c
+}
+
+// SetNillableSignupRules sets the "signup_rules" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableSignupRules(v *authrules.RuleSet) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetSignupRules(*v)
+	}
+	return _c
+}
+
+// SetLinkRules sets the "link_rules" field.
+func (_c *AuthChannelPolicyCreate) SetLinkRules(v authrules.RuleSet) *AuthChannelPolicyCreate {
+	_c.mutation.SetLinkRules(v)
+	return _c
+}
+
+// SetNillableLinkRules sets the "link_rules" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableLinkRules(v *authrules.RuleSet) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetLinkRules(*v)
+	}
+	return _c
+}
+
+// SetLegacyLoginRule sets the "legacy_login_rule" field.
+func (_c *AuthChannelPolicyCreate) SetLegacyLoginRule(v string) *AuthChannelPolicyCreate {
+	_c.mutation.SetLegacyLoginRule(v)
+	return _c
+}
+
+// SetNillableLegacyLoginRule sets the "legacy_login_rule" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableLegacyLoginRule(v *string) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetLegacyLoginRule(*v)
+	}
+	return _c
+}
+
+// SetLegacySignupRule sets the "legacy_signup_rule" field.
+func (_c *AuthChannelPolicyCreate) SetLegacySignupRule(v string) *AuthChannelPolicyCreate {
+	_c.mutation.SetLegacySignupRule(v)
+	return _c
+}
+
+// SetNillableLegacySignupRule sets the "legacy_signup_rule" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableLegacySignupRule(v *string) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetLegacySignupRule(*v)
+	}
+	return _c
+}
+
+// SetLegacyLinkRule sets the "legacy_link_rule" field.
+func (_c *AuthChannelPolicyCreate) SetLegacyLinkRule(v string) *AuthChannelPolicyCreate {
+	_c.mutation.SetLegacyLinkRule(v)
+	return _c
+}
+
+// SetNillableLegacyLinkRule sets the "legacy_link_rule" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableLegacyLinkRule(v *string) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetLegacyLinkRule(*v)
+	}
 	return _c
 }
 
@@ -213,6 +280,18 @@ func (_c *AuthChannelPolicyCreate) defaults() error {
 		v := authchannelpolicy.DefaultLinkEnabled
 		_c.mutation.SetLinkEnabled(v)
 	}
+	if _, ok := _c.mutation.LegacyLoginRule(); !ok {
+		v := authchannelpolicy.DefaultLegacyLoginRule
+		_c.mutation.SetLegacyLoginRule(v)
+	}
+	if _, ok := _c.mutation.LegacySignupRule(); !ok {
+		v := authchannelpolicy.DefaultLegacySignupRule
+		_c.mutation.SetLegacySignupRule(v)
+	}
+	if _, ok := _c.mutation.LegacyLinkRule(); !ok {
+		v := authchannelpolicy.DefaultLegacyLinkRule
+		_c.mutation.SetLegacyLinkRule(v)
+	}
 	return nil
 }
 
@@ -260,29 +339,14 @@ func (_c *AuthChannelPolicyCreate) check() error {
 	if _, ok := _c.mutation.LinkEnabled(); !ok {
 		return &ValidationError{Name: "link_enabled", err: errors.New(`ent: missing required field "AuthChannelPolicy.link_enabled"`)}
 	}
-	if _, ok := _c.mutation.LoginRule(); !ok {
-		return &ValidationError{Name: "login_rule", err: errors.New(`ent: missing required field "AuthChannelPolicy.login_rule"`)}
+	if _, ok := _c.mutation.LegacyLoginRule(); !ok {
+		return &ValidationError{Name: "legacy_login_rule", err: errors.New(`ent: missing required field "AuthChannelPolicy.legacy_login_rule"`)}
 	}
-	if v, ok := _c.mutation.LoginRule(); ok {
-		if err := authchannelpolicy.LoginRuleValidator(v); err != nil {
-			return &ValidationError{Name: "login_rule", err: fmt.Errorf(`ent: validator failed for field "AuthChannelPolicy.login_rule": %w`, err)}
-		}
+	if _, ok := _c.mutation.LegacySignupRule(); !ok {
+		return &ValidationError{Name: "legacy_signup_rule", err: errors.New(`ent: missing required field "AuthChannelPolicy.legacy_signup_rule"`)}
 	}
-	if _, ok := _c.mutation.SignupRule(); !ok {
-		return &ValidationError{Name: "signup_rule", err: errors.New(`ent: missing required field "AuthChannelPolicy.signup_rule"`)}
-	}
-	if v, ok := _c.mutation.SignupRule(); ok {
-		if err := authchannelpolicy.SignupRuleValidator(v); err != nil {
-			return &ValidationError{Name: "signup_rule", err: fmt.Errorf(`ent: validator failed for field "AuthChannelPolicy.signup_rule": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.LinkRule(); !ok {
-		return &ValidationError{Name: "link_rule", err: errors.New(`ent: missing required field "AuthChannelPolicy.link_rule"`)}
-	}
-	if v, ok := _c.mutation.LinkRule(); ok {
-		if err := authchannelpolicy.LinkRuleValidator(v); err != nil {
-			return &ValidationError{Name: "link_rule", err: fmt.Errorf(`ent: validator failed for field "AuthChannelPolicy.link_rule": %w`, err)}
-		}
+	if _, ok := _c.mutation.LegacyLinkRule(); !ok {
+		return &ValidationError{Name: "legacy_link_rule", err: errors.New(`ent: missing required field "AuthChannelPolicy.legacy_link_rule"`)}
 	}
 	if len(_c.mutation.ConnectionIDs()) == 0 {
 		return &ValidationError{Name: "connection", err: errors.New(`ent: missing required edge "AuthChannelPolicy.connection"`)}
@@ -345,17 +409,29 @@ func (_c *AuthChannelPolicyCreate) createSpec() (*AuthChannelPolicy, *sqlgraph.C
 		_spec.SetField(authchannelpolicy.FieldLinkEnabled, field.TypeBool, value)
 		_node.LinkEnabled = value
 	}
-	if value, ok := _c.mutation.LoginRule(); ok {
-		_spec.SetField(authchannelpolicy.FieldLoginRule, field.TypeEnum, value)
-		_node.LoginRule = value
+	if value, ok := _c.mutation.LoginRules(); ok {
+		_spec.SetField(authchannelpolicy.FieldLoginRules, field.TypeJSON, value)
+		_node.LoginRules = value
 	}
-	if value, ok := _c.mutation.SignupRule(); ok {
-		_spec.SetField(authchannelpolicy.FieldSignupRule, field.TypeEnum, value)
-		_node.SignupRule = value
+	if value, ok := _c.mutation.SignupRules(); ok {
+		_spec.SetField(authchannelpolicy.FieldSignupRules, field.TypeJSON, value)
+		_node.SignupRules = value
 	}
-	if value, ok := _c.mutation.LinkRule(); ok {
-		_spec.SetField(authchannelpolicy.FieldLinkRule, field.TypeEnum, value)
-		_node.LinkRule = value
+	if value, ok := _c.mutation.LinkRules(); ok {
+		_spec.SetField(authchannelpolicy.FieldLinkRules, field.TypeJSON, value)
+		_node.LinkRules = value
+	}
+	if value, ok := _c.mutation.LegacyLoginRule(); ok {
+		_spec.SetField(authchannelpolicy.FieldLegacyLoginRule, field.TypeString, value)
+		_node.LegacyLoginRule = value
+	}
+	if value, ok := _c.mutation.LegacySignupRule(); ok {
+		_spec.SetField(authchannelpolicy.FieldLegacySignupRule, field.TypeString, value)
+		_node.LegacySignupRule = value
+	}
+	if value, ok := _c.mutation.LegacyLinkRule(); ok {
+		_spec.SetField(authchannelpolicy.FieldLegacyLinkRule, field.TypeString, value)
+		_node.LegacyLinkRule = value
 	}
 	if nodes := _c.mutation.ConnectionIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

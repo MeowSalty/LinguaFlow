@@ -22,6 +22,10 @@ const (
 	FieldUsername = "username"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
 	FieldPasswordHash = "password_hash"
+	// FieldPasswordVerifiedHash holds the string denoting the password_verified_hash field in the database.
+	FieldPasswordVerifiedHash = "password_verified_hash"
+	// FieldPasswordVerifiedAt holds the string denoting the password_verified_at field in the database.
+	FieldPasswordVerifiedAt = "password_verified_at"
 	// FieldEmail holds the string denoting the email field in the database.
 	FieldEmail = "email"
 	// FieldEmailVerifiedAt holds the string denoting the email_verified_at field in the database.
@@ -202,6 +206,8 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldUsername,
 	FieldPasswordHash,
+	FieldPasswordVerifiedHash,
+	FieldPasswordVerifiedAt,
 	FieldEmail,
 	FieldEmailVerifiedAt,
 	FieldEmailVerificationSource,
@@ -275,6 +281,16 @@ func ByUsername(opts ...sql.OrderTermOption) OrderOption {
 // ByPasswordHash orders the results by the password_hash field.
 func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPasswordHash, opts...).ToFunc()
+}
+
+// ByPasswordVerifiedHash orders the results by the password_verified_hash field.
+func ByPasswordVerifiedHash(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPasswordVerifiedHash, opts...).ToFunc()
+}
+
+// ByPasswordVerifiedAt orders the results by the password_verified_at field.
+func ByPasswordVerifiedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPasswordVerifiedAt, opts...).ToFunc()
 }
 
 // ByEmail orders the results by the email field.

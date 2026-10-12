@@ -28,6 +28,10 @@ const (
 	FieldMethod = "method"
 	// FieldConnectionID holds the string denoting the connection_id field in the database.
 	FieldConnectionID = "connection_id"
+	// FieldConnectionGeneration holds the string denoting the connection_generation field in the database.
+	FieldConnectionGeneration = "connection_generation"
+	// FieldLoginPolicyRevision holds the string denoting the login_policy_revision field in the database.
+	FieldLoginPolicyRevision = "login_policy_revision"
 	// FieldAction holds the string denoting the action field in the database.
 	FieldAction = "action"
 	// FieldTargetID holds the string denoting the target_id field in the database.
@@ -52,6 +56,8 @@ var Columns = []string{
 	FieldAuthVersion,
 	FieldMethod,
 	FieldConnectionID,
+	FieldConnectionGeneration,
+	FieldLoginPolicyRevision,
 	FieldAction,
 	FieldTargetID,
 	FieldAuthenticatedAt,
@@ -175,6 +181,16 @@ func ByMethod(opts ...sql.OrderTermOption) OrderOption {
 // ByConnectionID orders the results by the connection_id field.
 func ByConnectionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldConnectionID, opts...).ToFunc()
+}
+
+// ByConnectionGeneration orders the results by the connection_generation field.
+func ByConnectionGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldConnectionGeneration, opts...).ToFunc()
+}
+
+// ByLoginPolicyRevision orders the results by the login_policy_revision field.
+func ByLoginPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLoginPolicyRevision, opts...).ToFunc()
 }
 
 // ByAction orders the results by the action field.

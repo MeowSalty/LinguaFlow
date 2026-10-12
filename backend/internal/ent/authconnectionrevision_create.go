@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 )
@@ -105,6 +106,26 @@ func (_c *AuthConnectionRevisionCreate) SetConfigVersion(v int) *AuthConnectionR
 func (_c *AuthConnectionRevisionCreate) SetNillableConfigVersion(v *int) *AuthConnectionRevisionCreate {
 	if v != nil {
 		_c.SetConfigVersion(*v)
+	}
+	return _c
+}
+
+// SetAttributeMappings sets the "attribute_mappings" field.
+func (_c *AuthConnectionRevisionCreate) SetAttributeMappings(v []authrules.Field) *AuthConnectionRevisionCreate {
+	_c.mutation.SetAttributeMappings(v)
+	return _c
+}
+
+// SetEvidenceMaxAgeSeconds sets the "evidence_max_age_seconds" field.
+func (_c *AuthConnectionRevisionCreate) SetEvidenceMaxAgeSeconds(v int) *AuthConnectionRevisionCreate {
+	_c.mutation.SetEvidenceMaxAgeSeconds(v)
+	return _c
+}
+
+// SetNillableEvidenceMaxAgeSeconds sets the "evidence_max_age_seconds" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableEvidenceMaxAgeSeconds(v *int) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetEvidenceMaxAgeSeconds(*v)
 	}
 	return _c
 }
@@ -301,6 +322,10 @@ func (_c *AuthConnectionRevisionCreate) defaults() error {
 		v := authconnectionrevision.DefaultConfigVersion
 		_c.mutation.SetConfigVersion(v)
 	}
+	if _, ok := _c.mutation.EvidenceMaxAgeSeconds(); !ok {
+		v := authconnectionrevision.DefaultEvidenceMaxAgeSeconds
+		_c.mutation.SetEvidenceMaxAgeSeconds(v)
+	}
 	if _, ok := _c.mutation.OidcUserinfoEnabled(); !ok {
 		v := authconnectionrevision.DefaultOidcUserinfoEnabled
 		_c.mutation.SetOidcUserinfoEnabled(v)
@@ -360,6 +385,14 @@ func (_c *AuthConnectionRevisionCreate) check() error {
 	if v, ok := _c.mutation.ConfigVersion(); ok {
 		if err := authconnectionrevision.ConfigVersionValidator(v); err != nil {
 			return &ValidationError{Name: "config_version", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.config_version": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.EvidenceMaxAgeSeconds(); !ok {
+		return &ValidationError{Name: "evidence_max_age_seconds", err: errors.New(`ent: missing required field "AuthConnectionRevision.evidence_max_age_seconds"`)}
+	}
+	if v, ok := _c.mutation.EvidenceMaxAgeSeconds(); ok {
+		if err := authconnectionrevision.EvidenceMaxAgeSecondsValidator(v); err != nil {
+			return &ValidationError{Name: "evidence_max_age_seconds", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.evidence_max_age_seconds": %w`, err)}
 		}
 	}
 	if v, ok := _c.mutation.OidcClientAuthMethod(); ok {
@@ -437,6 +470,14 @@ func (_c *AuthConnectionRevisionCreate) createSpec() (*AuthConnectionRevision, *
 	if value, ok := _c.mutation.ConfigVersion(); ok {
 		_spec.SetField(authconnectionrevision.FieldConfigVersion, field.TypeInt, value)
 		_node.ConfigVersion = value
+	}
+	if value, ok := _c.mutation.AttributeMappings(); ok {
+		_spec.SetField(authconnectionrevision.FieldAttributeMappings, field.TypeJSON, value)
+		_node.AttributeMappings = value
+	}
+	if value, ok := _c.mutation.EvidenceMaxAgeSeconds(); ok {
+		_spec.SetField(authconnectionrevision.FieldEvidenceMaxAgeSeconds, field.TypeInt, value)
+		_node.EvidenceMaxAgeSeconds = value
 	}
 	if value, ok := _c.mutation.OidcIssuer(); ok {
 		_spec.SetField(authconnectionrevision.FieldOidcIssuer, field.TypeString, value)

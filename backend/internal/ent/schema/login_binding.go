@@ -8,6 +8,7 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	entmodel "github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 )
 
@@ -23,6 +24,7 @@ func (LoginBinding) Fields() []ent.Field {
 		field.Time("last_verified_at").Optional().Nillable(),
 		field.Int64("verified_auth_generation").Default(0).NonNegative(),
 		field.Int64("verified_login_policy_revision").Default(0).NonNegative(),
+		field.JSON("evidence", authrules.Evidence{}).Optional().Sensitive(),
 	}
 }
 func (LoginBinding) Hooks() []ent.Hook {

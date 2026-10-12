@@ -61,9 +61,12 @@ var (
 		{Name: "login_enabled", Type: field.TypeBool, Default: false},
 		{Name: "signup_enabled", Type: field.TypeBool, Default: false},
 		{Name: "link_enabled", Type: field.TypeBool, Default: false},
-		{Name: "login_rule", Type: field.TypeEnum, Enums: []string{"unrestricted"}},
-		{Name: "signup_rule", Type: field.TypeEnum, Enums: []string{"unrestricted"}},
-		{Name: "link_rule", Type: field.TypeEnum, Enums: []string{"unrestricted"}},
+		{Name: "login_rules", Type: field.TypeJSON, Nullable: true},
+		{Name: "signup_rules", Type: field.TypeJSON, Nullable: true},
+		{Name: "link_rules", Type: field.TypeJSON, Nullable: true},
+		{Name: "login_rule", Type: field.TypeString, Default: "unrestricted"},
+		{Name: "signup_rule", Type: field.TypeString, Default: "unrestricted"},
+		{Name: "link_rule", Type: field.TypeString, Default: "unrestricted"},
 		{Name: "connection_id", Type: field.TypeString},
 	}
 	// AuthChannelPoliciesTable holds the schema information for the "auth_channel_policies" table.
@@ -74,7 +77,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "auth_channel_policies_auth_connections_policies",
-				Columns:    []*schema.Column{AuthChannelPoliciesColumns[12]},
+				Columns:    []*schema.Column{AuthChannelPoliciesColumns[15]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -83,7 +86,7 @@ var (
 			{
 				Name:    "authchannelpolicy_connection_id_revision",
 				Unique:  true,
-				Columns: []*schema.Column{AuthChannelPoliciesColumns[12], AuthChannelPoliciesColumns[3]},
+				Columns: []*schema.Column{AuthChannelPoliciesColumns[15], AuthChannelPoliciesColumns[3]},
 			},
 		},
 	}
@@ -115,6 +118,8 @@ var (
 		{Name: "description", Type: field.TypeString, Default: ""},
 		{Name: "display_order", Type: field.TypeInt, Default: 0},
 		{Name: "config_version", Type: field.TypeInt, Default: 1},
+		{Name: "attribute_mappings", Type: field.TypeJSON, Nullable: true},
+		{Name: "evidence_max_age_seconds", Type: field.TypeInt, Default: 3600},
 		{Name: "oidc_issuer", Type: field.TypeString, Nullable: true},
 		{Name: "oidc_client_id", Type: field.TypeString, Nullable: true},
 		{Name: "oidc_client_auth_method", Type: field.TypeEnum, Nullable: true, Enums: []string{"client_secret_basic", "client_secret_post"}},
@@ -135,7 +140,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "auth_connection_revisions_auth_connections_revisions",
-				Columns:    []*schema.Column{AuthConnectionRevisionsColumns[18]},
+				Columns:    []*schema.Column{AuthConnectionRevisionsColumns[20]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -144,7 +149,7 @@ var (
 			{
 				Name:    "authconnectionrevision_connection_id_revision",
 				Unique:  true,
-				Columns: []*schema.Column{AuthConnectionRevisionsColumns[18], AuthConnectionRevisionsColumns[3]},
+				Columns: []*schema.Column{AuthConnectionRevisionsColumns[20], AuthConnectionRevisionsColumns[3]},
 			},
 		},
 	}
@@ -244,6 +249,10 @@ var (
 		{Name: "identity_username", Type: field.TypeString, Nullable: true},
 		{Name: "identity_email", Type: field.TypeString, Nullable: true},
 		{Name: "identity_auth_time", Type: field.TypeTime, Nullable: true},
+		{Name: "evidence", Type: field.TypeJSON, Nullable: true},
+		{Name: "authorization_connection_id", Type: field.TypeString, Nullable: true},
+		{Name: "authorization_connection_generation", Type: field.TypeInt64, Nullable: true},
+		{Name: "authorization_policy_revision", Type: field.TypeInt64, Nullable: true},
 		{Name: "authorized_action", Type: field.TypeString, Nullable: true},
 		{Name: "authorized_target_id", Type: field.TypeString, Nullable: true},
 		{Name: "authorization_expires_at", Type: field.TypeTime, Nullable: true},
@@ -260,7 +269,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "auth_transactions_auth_connections_transactions",
-				Columns:    []*schema.Column{AuthTransactionsColumns[33]},
+				Columns:    []*schema.Column{AuthTransactionsColumns[37]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -269,7 +278,7 @@ var (
 			{
 				Name:    "authtransaction_status_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{AuthTransactionsColumns[4], AuthTransactionsColumns[31]},
+				Columns: []*schema.Column{AuthTransactionsColumns[4], AuthTransactionsColumns[35]},
 			},
 			{
 				Name:    "authtransaction_user_id_status",
@@ -999,6 +1008,7 @@ var (
 		{Name: "last_verified_at", Type: field.TypeTime, Nullable: true},
 		{Name: "verified_auth_generation", Type: field.TypeInt64, Default: 0},
 		{Name: "verified_login_policy_revision", Type: field.TypeInt64, Default: 0},
+		{Name: "evidence", Type: field.TypeJSON, Nullable: true},
 		{Name: "connection_id", Type: field.TypeString},
 		{Name: "external_identity_id", Type: field.TypeInt},
 		{Name: "user_id", Type: field.TypeInt},
@@ -1011,19 +1021,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "login_bindings_auth_connections_bindings",
-				Columns:    []*schema.Column{LoginBindingsColumns[7]},
+				Columns:    []*schema.Column{LoginBindingsColumns[8]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "login_bindings_external_identities_bindings",
-				Columns:    []*schema.Column{LoginBindingsColumns[8]},
+				Columns:    []*schema.Column{LoginBindingsColumns[9]},
 				RefColumns: []*schema.Column{ExternalIdentitiesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "login_bindings_users_login_bindings",
-				Columns:    []*schema.Column{LoginBindingsColumns[9]},
+				Columns:    []*schema.Column{LoginBindingsColumns[10]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1032,7 +1042,7 @@ var (
 			{
 				Name:    "loginbinding_user_id_connection_id",
 				Unique:  true,
-				Columns: []*schema.Column{LoginBindingsColumns[9], LoginBindingsColumns[7]},
+				Columns: []*schema.Column{LoginBindingsColumns[10], LoginBindingsColumns[8]},
 			},
 		},
 	}
@@ -1168,6 +1178,8 @@ var (
 		{Name: "auth_version", Type: field.TypeInt64},
 		{Name: "method", Type: field.TypeEnum, Enums: []string{"password", "oidc"}},
 		{Name: "connection_id", Type: field.TypeString, Nullable: true},
+		{Name: "connection_generation", Type: field.TypeInt64, Nullable: true},
+		{Name: "login_policy_revision", Type: field.TypeInt64, Nullable: true},
 		{Name: "action", Type: field.TypeEnum, Enums: []string{"link", "password_set", "password_delete", "unlink"}},
 		{Name: "target_id", Type: field.TypeString},
 		{Name: "authenticated_at", Type: field.TypeTime},
@@ -1183,7 +1195,7 @@ var (
 			{
 				Name:    "reauthenticationproof_user_id_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{ReauthenticationProofsColumns[4], ReauthenticationProofsColumns[11]},
+				Columns: []*schema.Column{ReauthenticationProofsColumns[4], ReauthenticationProofsColumns[13]},
 			},
 		},
 	}
@@ -1195,6 +1207,7 @@ var (
 		{Name: "auth_version", Type: field.TypeInt64},
 		{Name: "connection_generation", Type: field.TypeInt64},
 		{Name: "login_policy_revision", Type: field.TypeInt64},
+		{Name: "evidence", Type: field.TypeJSON, Nullable: true},
 		{Name: "generation", Type: field.TypeInt64, Default: 0},
 		{Name: "expires_at", Type: field.TypeTime},
 		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
@@ -1210,19 +1223,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "refresh_sessions_auth_connections_sessions",
-				Columns:    []*schema.Column{RefreshSessionsColumns[9]},
+				Columns:    []*schema.Column{RefreshSessionsColumns[10]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "refresh_sessions_login_bindings_sessions",
-				Columns:    []*schema.Column{RefreshSessionsColumns[10]},
+				Columns:    []*schema.Column{RefreshSessionsColumns[11]},
 				RefColumns: []*schema.Column{LoginBindingsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "refresh_sessions_users_refresh_sessions",
-				Columns:    []*schema.Column{RefreshSessionsColumns[11]},
+				Columns:    []*schema.Column{RefreshSessionsColumns[12]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1231,12 +1244,12 @@ var (
 			{
 				Name:    "refreshsession_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{RefreshSessionsColumns[11]},
+				Columns: []*schema.Column{RefreshSessionsColumns[12]},
 			},
 			{
 				Name:    "refreshsession_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{RefreshSessionsColumns[7]},
+				Columns: []*schema.Column{RefreshSessionsColumns[8]},
 			},
 		},
 	}
@@ -2115,6 +2128,8 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "username", Type: field.TypeString, Unique: true},
 		{Name: "password_hash", Type: field.TypeString, Nullable: true},
+		{Name: "password_verified_hash", Type: field.TypeString, Nullable: true},
+		{Name: "password_verified_at", Type: field.TypeTime, Nullable: true},
 		{Name: "email", Type: field.TypeString, Nullable: true},
 		{Name: "email_verified_at", Type: field.TypeTime, Nullable: true},
 		{Name: "email_verification_source", Type: field.TypeString, Nullable: true},

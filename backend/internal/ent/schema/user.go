@@ -21,6 +21,8 @@ func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("username").NotEmpty().Unique().Immutable().Validate(accountidentity.ValidateUsername),
 		field.String("password_hash").NotEmpty().Optional().Sensitive(),
+		field.String("password_verified_hash").Optional().Sensitive(),
+		field.Time("password_verified_at").Optional().Nillable(),
 		field.String("email").NotEmpty().Optional(),
 		field.Time("email_verified_at").Optional().Nillable(),
 		field.String("email_verification_source").NotEmpty().Optional(),

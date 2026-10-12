@@ -110,6 +110,12 @@ func (_u *ReauthenticationProofUpdate) sqlSave(ctx context.Context) (_node int, 
 	if _u.mutation.ConnectionIDCleared() {
 		_spec.ClearField(reauthenticationproof.FieldConnectionID, field.TypeString)
 	}
+	if _u.mutation.ConnectionGenerationCleared() {
+		_spec.ClearField(reauthenticationproof.FieldConnectionGeneration, field.TypeInt64)
+	}
+	if _u.mutation.LoginPolicyRevisionCleared() {
+		_spec.ClearField(reauthenticationproof.FieldLoginPolicyRevision, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.ConsumedAt(); ok {
 		_spec.SetField(reauthenticationproof.FieldConsumedAt, field.TypeTime, value)
 	}
@@ -247,6 +253,12 @@ func (_u *ReauthenticationProofUpdateOne) sqlSave(ctx context.Context) (_node *R
 	}
 	if _u.mutation.ConnectionIDCleared() {
 		_spec.ClearField(reauthenticationproof.FieldConnectionID, field.TypeString)
+	}
+	if _u.mutation.ConnectionGenerationCleared() {
+		_spec.ClearField(reauthenticationproof.FieldConnectionGeneration, field.TypeInt64)
+	}
+	if _u.mutation.LoginPolicyRevisionCleared() {
+		_spec.ClearField(reauthenticationproof.FieldLoginPolicyRevision, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.ConsumedAt(); ok {
 		_spec.SetField(reauthenticationproof.FieldConsumedAt, field.TypeTime, value)

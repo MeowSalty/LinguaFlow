@@ -8,6 +8,7 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 )
 
 // Revisions are immutable snapshots. Only the connection's published pointer
@@ -23,6 +24,8 @@ func (AuthConnectionRevision) Fields() []ent.Field {
 		field.String("description").Default("").Immutable(),
 		field.Int("display_order").Default(0).Immutable(),
 		field.Int("config_version").Default(1).Positive().Immutable(),
+		field.JSON("attribute_mappings", []authrules.Field{}).Optional().Immutable(),
+		field.Int("evidence_max_age_seconds").Default(3600).Positive().Immutable(),
 		field.String("oidc_issuer").Optional().Immutable(),
 		field.String("oidc_client_id").Optional().Immutable(),
 		field.Enum("oidc_client_auth_method").Values("client_secret_basic", "client_secret_post").Optional().Immutable(),

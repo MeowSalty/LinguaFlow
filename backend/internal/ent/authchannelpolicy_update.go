@@ -104,6 +104,15 @@ func (_u *AuthChannelPolicyUpdate) sqlSave(ctx context.Context) (_node int, err 
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authchannelpolicy.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if _u.mutation.LoginRulesCleared() {
+		_spec.ClearField(authchannelpolicy.FieldLoginRules, field.TypeJSON)
+	}
+	if _u.mutation.SignupRulesCleared() {
+		_spec.ClearField(authchannelpolicy.FieldSignupRules, field.TypeJSON)
+	}
+	if _u.mutation.LinkRulesCleared() {
+		_spec.ClearField(authchannelpolicy.FieldLinkRules, field.TypeJSON)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{authchannelpolicy.Label}
@@ -229,6 +238,15 @@ func (_u *AuthChannelPolicyUpdateOne) sqlSave(ctx context.Context) (_node *AuthC
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authchannelpolicy.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.LoginRulesCleared() {
+		_spec.ClearField(authchannelpolicy.FieldLoginRules, field.TypeJSON)
+	}
+	if _u.mutation.SignupRulesCleared() {
+		_spec.ClearField(authchannelpolicy.FieldSignupRules, field.TypeJSON)
+	}
+	if _u.mutation.LinkRulesCleared() {
+		_spec.ClearField(authchannelpolicy.FieldLinkRules, field.TypeJSON)
 	}
 	_node = &AuthChannelPolicy{config: _u.config}
 	_spec.Assign = _node.assignValues

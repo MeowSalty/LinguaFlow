@@ -31,6 +31,10 @@ type ReauthenticationProof struct {
 	Method reauthenticationproof.Method `json:"method,omitempty"`
 	// ConnectionID holds the value of the "connection_id" field.
 	ConnectionID string `json:"connection_id,omitempty"`
+	// ConnectionGeneration holds the value of the "connection_generation" field.
+	ConnectionGeneration int64 `json:"connection_generation,omitempty"`
+	// LoginPolicyRevision holds the value of the "login_policy_revision" field.
+	LoginPolicyRevision int64 `json:"login_policy_revision,omitempty"`
 	// Action holds the value of the "action" field.
 	Action reauthenticationproof.Action `json:"action,omitempty"`
 	// TargetID holds the value of the "target_id" field.
@@ -49,7 +53,7 @@ func (*ReauthenticationProof) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case reauthenticationproof.FieldID, reauthenticationproof.FieldUserID, reauthenticationproof.FieldAuthVersion:
+		case reauthenticationproof.FieldID, reauthenticationproof.FieldUserID, reauthenticationproof.FieldAuthVersion, reauthenticationproof.FieldConnectionGeneration, reauthenticationproof.FieldLoginPolicyRevision:
 			values[i] = new(sql.NullInt64)
 		case reauthenticationproof.FieldTokenHash, reauthenticationproof.FieldMethod, reauthenticationproof.FieldConnectionID, reauthenticationproof.FieldAction, reauthenticationproof.FieldTargetID:
 			values[i] = new(sql.NullString)
@@ -117,6 +121,18 @@ func (_m *ReauthenticationProof) assignValues(columns []string, values []any) er
 				return fmt.Errorf("unexpected type %T for field connection_id", values[i])
 			} else if value.Valid {
 				_m.ConnectionID = value.String
+			}
+		case reauthenticationproof.FieldConnectionGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field connection_generation", values[i])
+			} else if value.Valid {
+				_m.ConnectionGeneration = value.Int64
+			}
+		case reauthenticationproof.FieldLoginPolicyRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field login_policy_revision", values[i])
+			} else if value.Valid {
+				_m.LoginPolicyRevision = value.Int64
 			}
 		case reauthenticationproof.FieldAction:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -204,6 +220,12 @@ func (_m *ReauthenticationProof) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("connection_id=")
 	builder.WriteString(_m.ConnectionID)
+	builder.WriteString(", ")
+	builder.WriteString("connection_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ConnectionGeneration))
+	builder.WriteString(", ")
+	builder.WriteString("login_policy_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.LoginPolicyRevision))
 	builder.WriteString(", ")
 	builder.WriteString("action=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Action))

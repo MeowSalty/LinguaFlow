@@ -3,12 +3,14 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
@@ -38,6 +40,8 @@ type LoginBinding struct {
 	VerifiedAuthGeneration int64 `json:"verified_auth_generation,omitempty"`
 	// VerifiedLoginPolicyRevision holds the value of the "verified_login_policy_revision" field.
 	VerifiedLoginPolicyRevision int64 `json:"verified_login_policy_revision,omitempty"`
+	// Evidence holds the value of the "evidence" field.
+	Evidence authrules.Evidence `json:"-"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the LoginBindingQuery when eager-loading is set.
 	Edges        LoginBindingEdges `json:"edges"`
@@ -106,6 +110,8 @@ func (*LoginBinding) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case loginbinding.FieldEvidence:
+			values[i] = new([]byte)
 		case loginbinding.FieldID, loginbinding.FieldUserID, loginbinding.FieldExternalIdentityID, loginbinding.FieldVerifiedAuthGeneration, loginbinding.FieldVerifiedLoginPolicyRevision:
 			values[i] = new(sql.NullInt64)
 		case loginbinding.FieldConnectionID:
@@ -188,6 +194,14 @@ func (_m *LoginBinding) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field verified_login_policy_revision", values[i])
 			} else if value.Valid {
 				_m.VerifiedLoginPolicyRevision = value.Int64
+			}
+		case loginbinding.FieldEvidence:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field evidence", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Evidence); err != nil {
+					return fmt.Errorf("unmarshal field evidence: %w", err)
+				}
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -275,6 +289,8 @@ func (_m *LoginBinding) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("verified_login_policy_revision=")
 	builder.WriteString(fmt.Sprintf("%v", _m.VerifiedLoginPolicyRevision))
+	builder.WriteString(", ")
+	builder.WriteString("evidence=<sensitive>")
 	builder.WriteByte(')')
 	return builder.String()
 }

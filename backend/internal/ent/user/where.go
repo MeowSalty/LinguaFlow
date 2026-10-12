@@ -75,6 +75,16 @@ func PasswordHash(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldPasswordHash, v))
 }
 
+// PasswordVerifiedHash applies equality check predicate on the "password_verified_hash" field. It's identical to PasswordVerifiedHashEQ.
+func PasswordVerifiedHash(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedAt applies equality check predicate on the "password_verified_at" field. It's identical to PasswordVerifiedAtEQ.
+func PasswordVerifiedAt(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPasswordVerifiedAt, v))
+}
+
 // Email applies equality check predicate on the "email" field. It's identical to EmailEQ.
 func Email(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldEmail, v))
@@ -333,6 +343,131 @@ func PasswordHashEqualFold(v string) predicate.User {
 // PasswordHashContainsFold applies the ContainsFold predicate on the "password_hash" field.
 func PasswordHashContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldPasswordHash, v))
+}
+
+// PasswordVerifiedHashEQ applies the EQ predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashNEQ applies the NEQ predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashIn applies the In predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldPasswordVerifiedHash, vs...))
+}
+
+// PasswordVerifiedHashNotIn applies the NotIn predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldPasswordVerifiedHash, vs...))
+}
+
+// PasswordVerifiedHashGT applies the GT predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashGTE applies the GTE predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashLT applies the LT predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashLTE applies the LTE predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashContains applies the Contains predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashHasPrefix applies the HasPrefix predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashHasSuffix applies the HasSuffix predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashIsNil applies the IsNil predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldPasswordVerifiedHash))
+}
+
+// PasswordVerifiedHashNotNil applies the NotNil predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldPasswordVerifiedHash))
+}
+
+// PasswordVerifiedHashEqualFold applies the EqualFold predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedHashContainsFold applies the ContainsFold predicate on the "password_verified_hash" field.
+func PasswordVerifiedHashContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldPasswordVerifiedHash, v))
+}
+
+// PasswordVerifiedAtEQ applies the EQ predicate on the "password_verified_at" field.
+func PasswordVerifiedAtEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPasswordVerifiedAt, v))
+}
+
+// PasswordVerifiedAtNEQ applies the NEQ predicate on the "password_verified_at" field.
+func PasswordVerifiedAtNEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldPasswordVerifiedAt, v))
+}
+
+// PasswordVerifiedAtIn applies the In predicate on the "password_verified_at" field.
+func PasswordVerifiedAtIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldIn(FieldPasswordVerifiedAt, vs...))
+}
+
+// PasswordVerifiedAtNotIn applies the NotIn predicate on the "password_verified_at" field.
+func PasswordVerifiedAtNotIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldPasswordVerifiedAt, vs...))
+}
+
+// PasswordVerifiedAtGT applies the GT predicate on the "password_verified_at" field.
+func PasswordVerifiedAtGT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGT(FieldPasswordVerifiedAt, v))
+}
+
+// PasswordVerifiedAtGTE applies the GTE predicate on the "password_verified_at" field.
+func PasswordVerifiedAtGTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldPasswordVerifiedAt, v))
+}
+
+// PasswordVerifiedAtLT applies the LT predicate on the "password_verified_at" field.
+func PasswordVerifiedAtLT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLT(FieldPasswordVerifiedAt, v))
+}
+
+// PasswordVerifiedAtLTE applies the LTE predicate on the "password_verified_at" field.
+func PasswordVerifiedAtLTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldPasswordVerifiedAt, v))
+}
+
+// PasswordVerifiedAtIsNil applies the IsNil predicate on the "password_verified_at" field.
+func PasswordVerifiedAtIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldPasswordVerifiedAt))
+}
+
+// PasswordVerifiedAtNotNil applies the NotNil predicate on the "password_verified_at" field.
+func PasswordVerifiedAtNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldPasswordVerifiedAt))
 }
 
 // EmailEQ applies the EQ predicate on the "email" field.

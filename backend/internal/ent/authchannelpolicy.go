@@ -3,12 +3,14 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 )
@@ -36,12 +38,18 @@ type AuthChannelPolicy struct {
 	SignupEnabled bool `json:"signup_enabled,omitempty"`
 	// LinkEnabled holds the value of the "link_enabled" field.
 	LinkEnabled bool `json:"link_enabled,omitempty"`
-	// LoginRule holds the value of the "login_rule" field.
-	LoginRule authchannelpolicy.LoginRule `json:"login_rule,omitempty"`
-	// SignupRule holds the value of the "signup_rule" field.
-	SignupRule authchannelpolicy.SignupRule `json:"signup_rule,omitempty"`
-	// LinkRule holds the value of the "link_rule" field.
-	LinkRule authchannelpolicy.LinkRule `json:"link_rule,omitempty"`
+	// LoginRules holds the value of the "login_rules" field.
+	LoginRules authrules.RuleSet `json:"login_rules,omitempty"`
+	// SignupRules holds the value of the "signup_rules" field.
+	SignupRules authrules.RuleSet `json:"signup_rules,omitempty"`
+	// LinkRules holds the value of the "link_rules" field.
+	LinkRules authrules.RuleSet `json:"link_rules,omitempty"`
+	// LegacyLoginRule holds the value of the "legacy_login_rule" field.
+	LegacyLoginRule string `json:"legacy_login_rule,omitempty"`
+	// LegacySignupRule holds the value of the "legacy_signup_rule" field.
+	LegacySignupRule string `json:"legacy_signup_rule,omitempty"`
+	// LegacyLinkRule holds the value of the "legacy_link_rule" field.
+	LegacyLinkRule string `json:"legacy_link_rule,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the AuthChannelPolicyQuery when eager-loading is set.
 	Edges        AuthChannelPolicyEdges `json:"edges"`
@@ -73,11 +81,13 @@ func (*AuthChannelPolicy) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case authchannelpolicy.FieldLoginRules, authchannelpolicy.FieldSignupRules, authchannelpolicy.FieldLinkRules:
+			values[i] = new([]byte)
 		case authchannelpolicy.FieldEnabled, authchannelpolicy.FieldLoginEnabled, authchannelpolicy.FieldSignupEnabled, authchannelpolicy.FieldLinkEnabled:
 			values[i] = new(sql.NullBool)
 		case authchannelpolicy.FieldID, authchannelpolicy.FieldRevision, authchannelpolicy.FieldLoginPolicyRevision:
 			values[i] = new(sql.NullInt64)
-		case authchannelpolicy.FieldConnectionID, authchannelpolicy.FieldLoginRule, authchannelpolicy.FieldSignupRule, authchannelpolicy.FieldLinkRule:
+		case authchannelpolicy.FieldConnectionID, authchannelpolicy.FieldLegacyLoginRule, authchannelpolicy.FieldLegacySignupRule, authchannelpolicy.FieldLegacyLinkRule:
 			values[i] = new(sql.NullString)
 		case authchannelpolicy.FieldCreatedAt, authchannelpolicy.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -156,23 +166,47 @@ func (_m *AuthChannelPolicy) assignValues(columns []string, values []any) error 
 			} else if value.Valid {
 				_m.LinkEnabled = value.Bool
 			}
-		case authchannelpolicy.FieldLoginRule:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field login_rule", values[i])
-			} else if value.Valid {
-				_m.LoginRule = authchannelpolicy.LoginRule(value.String)
+		case authchannelpolicy.FieldLoginRules:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field login_rules", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.LoginRules); err != nil {
+					return fmt.Errorf("unmarshal field login_rules: %w", err)
+				}
 			}
-		case authchannelpolicy.FieldSignupRule:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field signup_rule", values[i])
-			} else if value.Valid {
-				_m.SignupRule = authchannelpolicy.SignupRule(value.String)
+		case authchannelpolicy.FieldSignupRules:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field signup_rules", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SignupRules); err != nil {
+					return fmt.Errorf("unmarshal field signup_rules: %w", err)
+				}
 			}
-		case authchannelpolicy.FieldLinkRule:
+		case authchannelpolicy.FieldLinkRules:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field link_rules", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.LinkRules); err != nil {
+					return fmt.Errorf("unmarshal field link_rules: %w", err)
+				}
+			}
+		case authchannelpolicy.FieldLegacyLoginRule:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field link_rule", values[i])
+				return fmt.Errorf("unexpected type %T for field legacy_login_rule", values[i])
 			} else if value.Valid {
-				_m.LinkRule = authchannelpolicy.LinkRule(value.String)
+				_m.LegacyLoginRule = value.String
+			}
+		case authchannelpolicy.FieldLegacySignupRule:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field legacy_signup_rule", values[i])
+			} else if value.Valid {
+				_m.LegacySignupRule = value.String
+			}
+		case authchannelpolicy.FieldLegacyLinkRule:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field legacy_link_rule", values[i])
+			} else if value.Valid {
+				_m.LegacyLinkRule = value.String
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -242,14 +276,23 @@ func (_m *AuthChannelPolicy) String() string {
 	builder.WriteString("link_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.LinkEnabled))
 	builder.WriteString(", ")
-	builder.WriteString("login_rule=")
-	builder.WriteString(fmt.Sprintf("%v", _m.LoginRule))
+	builder.WriteString("login_rules=")
+	builder.WriteString(fmt.Sprintf("%v", _m.LoginRules))
 	builder.WriteString(", ")
-	builder.WriteString("signup_rule=")
-	builder.WriteString(fmt.Sprintf("%v", _m.SignupRule))
+	builder.WriteString("signup_rules=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SignupRules))
 	builder.WriteString(", ")
-	builder.WriteString("link_rule=")
-	builder.WriteString(fmt.Sprintf("%v", _m.LinkRule))
+	builder.WriteString("link_rules=")
+	builder.WriteString(fmt.Sprintf("%v", _m.LinkRules))
+	builder.WriteString(", ")
+	builder.WriteString("legacy_login_rule=")
+	builder.WriteString(_m.LegacyLoginRule)
+	builder.WriteString(", ")
+	builder.WriteString("legacy_signup_rule=")
+	builder.WriteString(_m.LegacySignupRule)
+	builder.WriteString(", ")
+	builder.WriteString("legacy_link_rule=")
+	builder.WriteString(_m.LegacyLinkRule)
 	builder.WriteByte(')')
 	return builder.String()
 }

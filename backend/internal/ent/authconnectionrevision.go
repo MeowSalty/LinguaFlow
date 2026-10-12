@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 )
@@ -35,6 +36,10 @@ type AuthConnectionRevision struct {
 	DisplayOrder int `json:"display_order,omitempty"`
 	// ConfigVersion holds the value of the "config_version" field.
 	ConfigVersion int `json:"config_version,omitempty"`
+	// AttributeMappings holds the value of the "attribute_mappings" field.
+	AttributeMappings []authrules.Field `json:"attribute_mappings,omitempty"`
+	// EvidenceMaxAgeSeconds holds the value of the "evidence_max_age_seconds" field.
+	EvidenceMaxAgeSeconds int `json:"evidence_max_age_seconds,omitempty"`
 	// OidcIssuer holds the value of the "oidc_issuer" field.
 	OidcIssuer string `json:"oidc_issuer,omitempty"`
 	// OidcClientID holds the value of the "oidc_client_id" field.
@@ -86,11 +91,11 @@ func (*AuthConnectionRevision) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case authconnectionrevision.FieldOidcScopes, authconnectionrevision.FieldLogoData:
+		case authconnectionrevision.FieldAttributeMappings, authconnectionrevision.FieldOidcScopes, authconnectionrevision.FieldLogoData:
 			values[i] = new([]byte)
 		case authconnectionrevision.FieldOidcUserinfoEnabled, authconnectionrevision.FieldUsernameLoginEnabled, authconnectionrevision.FieldEmailLoginEnabled:
 			values[i] = new(sql.NullBool)
-		case authconnectionrevision.FieldID, authconnectionrevision.FieldRevision, authconnectionrevision.FieldDisplayOrder, authconnectionrevision.FieldConfigVersion, authconnectionrevision.FieldSecretVersion:
+		case authconnectionrevision.FieldID, authconnectionrevision.FieldRevision, authconnectionrevision.FieldDisplayOrder, authconnectionrevision.FieldConfigVersion, authconnectionrevision.FieldEvidenceMaxAgeSeconds, authconnectionrevision.FieldSecretVersion:
 			values[i] = new(sql.NullInt64)
 		case authconnectionrevision.FieldConnectionID, authconnectionrevision.FieldDisplayName, authconnectionrevision.FieldDescription, authconnectionrevision.FieldOidcIssuer, authconnectionrevision.FieldOidcClientID, authconnectionrevision.FieldOidcClientAuthMethod, authconnectionrevision.FieldLogoMediaType:
 			values[i] = new(sql.NullString)
@@ -164,6 +169,20 @@ func (_m *AuthConnectionRevision) assignValues(columns []string, values []any) e
 				return fmt.Errorf("unexpected type %T for field config_version", values[i])
 			} else if value.Valid {
 				_m.ConfigVersion = int(value.Int64)
+			}
+		case authconnectionrevision.FieldAttributeMappings:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field attribute_mappings", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.AttributeMappings); err != nil {
+					return fmt.Errorf("unmarshal field attribute_mappings: %w", err)
+				}
+			}
+		case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field evidence_max_age_seconds", values[i])
+			} else if value.Valid {
+				_m.EvidenceMaxAgeSeconds = int(value.Int64)
 			}
 		case authconnectionrevision.FieldOidcIssuer:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -292,6 +311,12 @@ func (_m *AuthConnectionRevision) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("config_version=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ConfigVersion))
+	builder.WriteString(", ")
+	builder.WriteString("attribute_mappings=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AttributeMappings))
+	builder.WriteString(", ")
+	builder.WriteString("evidence_max_age_seconds=")
+	builder.WriteString(fmt.Sprintf("%v", _m.EvidenceMaxAgeSeconds))
 	builder.WriteString(", ")
 	builder.WriteString("oidc_issuer=")
 	builder.WriteString(_m.OidcIssuer)

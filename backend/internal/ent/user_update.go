@@ -71,6 +71,46 @@ func (_u *UserUpdate) ClearPasswordHash() *UserUpdate {
 	return _u
 }
 
+// SetPasswordVerifiedHash sets the "password_verified_hash" field.
+func (_u *UserUpdate) SetPasswordVerifiedHash(v string) *UserUpdate {
+	_u.mutation.SetPasswordVerifiedHash(v)
+	return _u
+}
+
+// SetNillablePasswordVerifiedHash sets the "password_verified_hash" field if the given value is not nil.
+func (_u *UserUpdate) SetNillablePasswordVerifiedHash(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetPasswordVerifiedHash(*v)
+	}
+	return _u
+}
+
+// ClearPasswordVerifiedHash clears the value of the "password_verified_hash" field.
+func (_u *UserUpdate) ClearPasswordVerifiedHash() *UserUpdate {
+	_u.mutation.ClearPasswordVerifiedHash()
+	return _u
+}
+
+// SetPasswordVerifiedAt sets the "password_verified_at" field.
+func (_u *UserUpdate) SetPasswordVerifiedAt(v time.Time) *UserUpdate {
+	_u.mutation.SetPasswordVerifiedAt(v)
+	return _u
+}
+
+// SetNillablePasswordVerifiedAt sets the "password_verified_at" field if the given value is not nil.
+func (_u *UserUpdate) SetNillablePasswordVerifiedAt(v *time.Time) *UserUpdate {
+	if v != nil {
+		_u.SetPasswordVerifiedAt(*v)
+	}
+	return _u
+}
+
+// ClearPasswordVerifiedAt clears the value of the "password_verified_at" field.
+func (_u *UserUpdate) ClearPasswordVerifiedAt() *UserUpdate {
+	_u.mutation.ClearPasswordVerifiedAt()
+	return _u
+}
+
 // SetEmail sets the "email" field.
 func (_u *UserUpdate) SetEmail(v string) *UserUpdate {
 	_u.mutation.SetEmail(v)
@@ -924,6 +964,18 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.PasswordHashCleared() {
 		_spec.ClearField(user.FieldPasswordHash, field.TypeString)
 	}
+	if value, ok := _u.mutation.PasswordVerifiedHash(); ok {
+		_spec.SetField(user.FieldPasswordVerifiedHash, field.TypeString, value)
+	}
+	if _u.mutation.PasswordVerifiedHashCleared() {
+		_spec.ClearField(user.FieldPasswordVerifiedHash, field.TypeString)
+	}
+	if value, ok := _u.mutation.PasswordVerifiedAt(); ok {
+		_spec.SetField(user.FieldPasswordVerifiedAt, field.TypeTime, value)
+	}
+	if _u.mutation.PasswordVerifiedAtCleared() {
+		_spec.ClearField(user.FieldPasswordVerifiedAt, field.TypeTime)
+	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 	}
@@ -1774,6 +1826,46 @@ func (_u *UserUpdateOne) SetNillablePasswordHash(v *string) *UserUpdateOne {
 // ClearPasswordHash clears the value of the "password_hash" field.
 func (_u *UserUpdateOne) ClearPasswordHash() *UserUpdateOne {
 	_u.mutation.ClearPasswordHash()
+	return _u
+}
+
+// SetPasswordVerifiedHash sets the "password_verified_hash" field.
+func (_u *UserUpdateOne) SetPasswordVerifiedHash(v string) *UserUpdateOne {
+	_u.mutation.SetPasswordVerifiedHash(v)
+	return _u
+}
+
+// SetNillablePasswordVerifiedHash sets the "password_verified_hash" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillablePasswordVerifiedHash(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetPasswordVerifiedHash(*v)
+	}
+	return _u
+}
+
+// ClearPasswordVerifiedHash clears the value of the "password_verified_hash" field.
+func (_u *UserUpdateOne) ClearPasswordVerifiedHash() *UserUpdateOne {
+	_u.mutation.ClearPasswordVerifiedHash()
+	return _u
+}
+
+// SetPasswordVerifiedAt sets the "password_verified_at" field.
+func (_u *UserUpdateOne) SetPasswordVerifiedAt(v time.Time) *UserUpdateOne {
+	_u.mutation.SetPasswordVerifiedAt(v)
+	return _u
+}
+
+// SetNillablePasswordVerifiedAt sets the "password_verified_at" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillablePasswordVerifiedAt(v *time.Time) *UserUpdateOne {
+	if v != nil {
+		_u.SetPasswordVerifiedAt(*v)
+	}
+	return _u
+}
+
+// ClearPasswordVerifiedAt clears the value of the "password_verified_at" field.
+func (_u *UserUpdateOne) ClearPasswordVerifiedAt() *UserUpdateOne {
+	_u.mutation.ClearPasswordVerifiedAt()
 	return _u
 }
 
@@ -2659,6 +2751,18 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if _u.mutation.PasswordHashCleared() {
 		_spec.ClearField(user.FieldPasswordHash, field.TypeString)
+	}
+	if value, ok := _u.mutation.PasswordVerifiedHash(); ok {
+		_spec.SetField(user.FieldPasswordVerifiedHash, field.TypeString, value)
+	}
+	if _u.mutation.PasswordVerifiedHashCleared() {
+		_spec.ClearField(user.FieldPasswordVerifiedHash, field.TypeString)
+	}
+	if value, ok := _u.mutation.PasswordVerifiedAt(); ok {
+		_spec.SetField(user.FieldPasswordVerifiedAt, field.TypeTime, value)
+	}
+	if _u.mutation.PasswordVerifiedAtCleared() {
+		_spec.ClearField(user.FieldPasswordVerifiedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)

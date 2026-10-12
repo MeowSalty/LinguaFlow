@@ -5,6 +5,7 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 )
 
 // RefreshSession is the durable family of one login, including consumed tokens.
@@ -19,6 +20,7 @@ func (RefreshSession) Fields() []ent.Field {
 		field.Int("binding_id").Optional().Nillable().Positive().Immutable(),
 		field.Int64("connection_generation").Positive().Immutable(),
 		field.Int64("login_policy_revision").Positive().Immutable(),
+		field.JSON("evidence", authrules.Evidence{}).Optional().Sensitive().Immutable(),
 		field.Int64("generation").Default(0).NonNegative(),
 		field.Time("expires_at").Immutable(),
 		field.Time("revoked_at").Optional().Nillable(),

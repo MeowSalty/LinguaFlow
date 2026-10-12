@@ -25,6 +25,10 @@ type User struct {
 	Username string `json:"username,omitempty"`
 	// PasswordHash holds the value of the "password_hash" field.
 	PasswordHash string `json:"-"`
+	// PasswordVerifiedHash holds the value of the "password_verified_hash" field.
+	PasswordVerifiedHash string `json:"-"`
+	// PasswordVerifiedAt holds the value of the "password_verified_at" field.
+	PasswordVerifiedAt *time.Time `json:"password_verified_at,omitempty"`
 	// Email holds the value of the "email" field.
 	Email string `json:"email,omitempty"`
 	// EmailVerifiedAt holds the value of the "email_verified_at" field.
@@ -250,9 +254,9 @@ func (*User) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case user.FieldID, user.FieldAuthVersion:
 			values[i] = new(sql.NullInt64)
-		case user.FieldUsername, user.FieldPasswordHash, user.FieldEmail, user.FieldEmailVerificationSource, user.FieldVerifiedEmailKey, user.FieldDisplayName, user.FieldRole:
+		case user.FieldUsername, user.FieldPasswordHash, user.FieldPasswordVerifiedHash, user.FieldEmail, user.FieldEmailVerificationSource, user.FieldVerifiedEmailKey, user.FieldDisplayName, user.FieldRole:
 			values[i] = new(sql.NullString)
-		case user.FieldCreatedAt, user.FieldUpdatedAt, user.FieldEmailVerifiedAt:
+		case user.FieldCreatedAt, user.FieldUpdatedAt, user.FieldPasswordVerifiedAt, user.FieldEmailVerifiedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -298,6 +302,19 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field password_hash", values[i])
 			} else if value.Valid {
 				_m.PasswordHash = value.String
+			}
+		case user.FieldPasswordVerifiedHash:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field password_verified_hash", values[i])
+			} else if value.Valid {
+				_m.PasswordVerifiedHash = value.String
+			}
+		case user.FieldPasswordVerifiedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field password_verified_at", values[i])
+			} else if value.Valid {
+				_m.PasswordVerifiedAt = new(time.Time)
+				*_m.PasswordVerifiedAt = value.Time
 			}
 		case user.FieldEmail:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -479,6 +496,13 @@ func (_m *User) String() string {
 	builder.WriteString(_m.Username)
 	builder.WriteString(", ")
 	builder.WriteString("password_hash=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("password_verified_hash=<sensitive>")
+	builder.WriteString(", ")
+	if v := _m.PasswordVerifiedAt; v != nil {
+		builder.WriteString("password_verified_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("email=")
 	builder.WriteString(_m.Email)

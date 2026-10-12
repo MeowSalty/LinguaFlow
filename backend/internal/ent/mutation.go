@@ -12,6 +12,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
@@ -1131,9 +1132,12 @@ type AuthChannelPolicyMutation struct {
 	login_enabled            *bool
 	signup_enabled           *bool
 	link_enabled             *bool
-	login_rule               *authchannelpolicy.LoginRule
-	signup_rule              *authchannelpolicy.SignupRule
-	link_rule                *authchannelpolicy.LinkRule
+	login_rules              *authrules.RuleSet
+	signup_rules             *authrules.RuleSet
+	link_rules               *authrules.RuleSet
+	legacy_login_rule        *string
+	legacy_signup_rule       *string
+	legacy_link_rule         *string
 	clearedFields            map[string]struct{}
 	connection               *string
 	clearedconnection        bool
@@ -1604,112 +1608,259 @@ func (m *AuthChannelPolicyMutation) ResetLinkEnabled() {
 	m.link_enabled = nil
 }
 
-// SetLoginRule sets the "login_rule" field.
-func (m *AuthChannelPolicyMutation) SetLoginRule(ar authchannelpolicy.LoginRule) {
-	m.login_rule = &ar
+// SetLoginRules sets the "login_rules" field.
+func (m *AuthChannelPolicyMutation) SetLoginRules(as authrules.RuleSet) {
+	m.login_rules = &as
 }
 
-// LoginRule returns the value of the "login_rule" field in the mutation.
-func (m *AuthChannelPolicyMutation) LoginRule() (r authchannelpolicy.LoginRule, exists bool) {
-	v := m.login_rule
+// LoginRules returns the value of the "login_rules" field in the mutation.
+func (m *AuthChannelPolicyMutation) LoginRules() (r authrules.RuleSet, exists bool) {
+	v := m.login_rules
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldLoginRule returns the old "login_rule" field's value of the AuthChannelPolicy entity.
+// OldLoginRules returns the old "login_rules" field's value of the AuthChannelPolicy entity.
 // If the AuthChannelPolicy object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *AuthChannelPolicyMutation) OldLoginRule(ctx context.Context) (v authchannelpolicy.LoginRule, err error) {
+func (m *AuthChannelPolicyMutation) OldLoginRules(ctx context.Context) (v authrules.RuleSet, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldLoginRule is only allowed on UpdateOne operations")
+		return v, errors.New("OldLoginRules is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldLoginRule requires an ID field in the mutation")
+		return v, errors.New("OldLoginRules requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldLoginRule: %w", err)
+		return v, fmt.Errorf("querying old value for OldLoginRules: %w", err)
 	}
-	return oldValue.LoginRule, nil
+	return oldValue.LoginRules, nil
 }
 
-// ResetLoginRule resets all changes to the "login_rule" field.
-func (m *AuthChannelPolicyMutation) ResetLoginRule() {
-	m.login_rule = nil
+// ClearLoginRules clears the value of the "login_rules" field.
+func (m *AuthChannelPolicyMutation) ClearLoginRules() {
+	m.login_rules = nil
+	m.clearedFields[authchannelpolicy.FieldLoginRules] = struct{}{}
 }
 
-// SetSignupRule sets the "signup_rule" field.
-func (m *AuthChannelPolicyMutation) SetSignupRule(ar authchannelpolicy.SignupRule) {
-	m.signup_rule = &ar
+// LoginRulesCleared returns if the "login_rules" field was cleared in this mutation.
+func (m *AuthChannelPolicyMutation) LoginRulesCleared() bool {
+	_, ok := m.clearedFields[authchannelpolicy.FieldLoginRules]
+	return ok
 }
 
-// SignupRule returns the value of the "signup_rule" field in the mutation.
-func (m *AuthChannelPolicyMutation) SignupRule() (r authchannelpolicy.SignupRule, exists bool) {
-	v := m.signup_rule
+// ResetLoginRules resets all changes to the "login_rules" field.
+func (m *AuthChannelPolicyMutation) ResetLoginRules() {
+	m.login_rules = nil
+	delete(m.clearedFields, authchannelpolicy.FieldLoginRules)
+}
+
+// SetSignupRules sets the "signup_rules" field.
+func (m *AuthChannelPolicyMutation) SetSignupRules(as authrules.RuleSet) {
+	m.signup_rules = &as
+}
+
+// SignupRules returns the value of the "signup_rules" field in the mutation.
+func (m *AuthChannelPolicyMutation) SignupRules() (r authrules.RuleSet, exists bool) {
+	v := m.signup_rules
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldSignupRule returns the old "signup_rule" field's value of the AuthChannelPolicy entity.
+// OldSignupRules returns the old "signup_rules" field's value of the AuthChannelPolicy entity.
 // If the AuthChannelPolicy object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *AuthChannelPolicyMutation) OldSignupRule(ctx context.Context) (v authchannelpolicy.SignupRule, err error) {
+func (m *AuthChannelPolicyMutation) OldSignupRules(ctx context.Context) (v authrules.RuleSet, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldSignupRule is only allowed on UpdateOne operations")
+		return v, errors.New("OldSignupRules is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldSignupRule requires an ID field in the mutation")
+		return v, errors.New("OldSignupRules requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldSignupRule: %w", err)
+		return v, fmt.Errorf("querying old value for OldSignupRules: %w", err)
 	}
-	return oldValue.SignupRule, nil
+	return oldValue.SignupRules, nil
 }
 
-// ResetSignupRule resets all changes to the "signup_rule" field.
-func (m *AuthChannelPolicyMutation) ResetSignupRule() {
-	m.signup_rule = nil
+// ClearSignupRules clears the value of the "signup_rules" field.
+func (m *AuthChannelPolicyMutation) ClearSignupRules() {
+	m.signup_rules = nil
+	m.clearedFields[authchannelpolicy.FieldSignupRules] = struct{}{}
 }
 
-// SetLinkRule sets the "link_rule" field.
-func (m *AuthChannelPolicyMutation) SetLinkRule(ar authchannelpolicy.LinkRule) {
-	m.link_rule = &ar
+// SignupRulesCleared returns if the "signup_rules" field was cleared in this mutation.
+func (m *AuthChannelPolicyMutation) SignupRulesCleared() bool {
+	_, ok := m.clearedFields[authchannelpolicy.FieldSignupRules]
+	return ok
 }
 
-// LinkRule returns the value of the "link_rule" field in the mutation.
-func (m *AuthChannelPolicyMutation) LinkRule() (r authchannelpolicy.LinkRule, exists bool) {
-	v := m.link_rule
+// ResetSignupRules resets all changes to the "signup_rules" field.
+func (m *AuthChannelPolicyMutation) ResetSignupRules() {
+	m.signup_rules = nil
+	delete(m.clearedFields, authchannelpolicy.FieldSignupRules)
+}
+
+// SetLinkRules sets the "link_rules" field.
+func (m *AuthChannelPolicyMutation) SetLinkRules(as authrules.RuleSet) {
+	m.link_rules = &as
+}
+
+// LinkRules returns the value of the "link_rules" field in the mutation.
+func (m *AuthChannelPolicyMutation) LinkRules() (r authrules.RuleSet, exists bool) {
+	v := m.link_rules
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldLinkRule returns the old "link_rule" field's value of the AuthChannelPolicy entity.
+// OldLinkRules returns the old "link_rules" field's value of the AuthChannelPolicy entity.
 // If the AuthChannelPolicy object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *AuthChannelPolicyMutation) OldLinkRule(ctx context.Context) (v authchannelpolicy.LinkRule, err error) {
+func (m *AuthChannelPolicyMutation) OldLinkRules(ctx context.Context) (v authrules.RuleSet, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldLinkRule is only allowed on UpdateOne operations")
+		return v, errors.New("OldLinkRules is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldLinkRule requires an ID field in the mutation")
+		return v, errors.New("OldLinkRules requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldLinkRule: %w", err)
+		return v, fmt.Errorf("querying old value for OldLinkRules: %w", err)
 	}
-	return oldValue.LinkRule, nil
+	return oldValue.LinkRules, nil
 }
 
-// ResetLinkRule resets all changes to the "link_rule" field.
-func (m *AuthChannelPolicyMutation) ResetLinkRule() {
-	m.link_rule = nil
+// ClearLinkRules clears the value of the "link_rules" field.
+func (m *AuthChannelPolicyMutation) ClearLinkRules() {
+	m.link_rules = nil
+	m.clearedFields[authchannelpolicy.FieldLinkRules] = struct{}{}
+}
+
+// LinkRulesCleared returns if the "link_rules" field was cleared in this mutation.
+func (m *AuthChannelPolicyMutation) LinkRulesCleared() bool {
+	_, ok := m.clearedFields[authchannelpolicy.FieldLinkRules]
+	return ok
+}
+
+// ResetLinkRules resets all changes to the "link_rules" field.
+func (m *AuthChannelPolicyMutation) ResetLinkRules() {
+	m.link_rules = nil
+	delete(m.clearedFields, authchannelpolicy.FieldLinkRules)
+}
+
+// SetLegacyLoginRule sets the "legacy_login_rule" field.
+func (m *AuthChannelPolicyMutation) SetLegacyLoginRule(s string) {
+	m.legacy_login_rule = &s
+}
+
+// LegacyLoginRule returns the value of the "legacy_login_rule" field in the mutation.
+func (m *AuthChannelPolicyMutation) LegacyLoginRule() (r string, exists bool) {
+	v := m.legacy_login_rule
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLegacyLoginRule returns the old "legacy_login_rule" field's value of the AuthChannelPolicy entity.
+// If the AuthChannelPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthChannelPolicyMutation) OldLegacyLoginRule(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLegacyLoginRule is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLegacyLoginRule requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLegacyLoginRule: %w", err)
+	}
+	return oldValue.LegacyLoginRule, nil
+}
+
+// ResetLegacyLoginRule resets all changes to the "legacy_login_rule" field.
+func (m *AuthChannelPolicyMutation) ResetLegacyLoginRule() {
+	m.legacy_login_rule = nil
+}
+
+// SetLegacySignupRule sets the "legacy_signup_rule" field.
+func (m *AuthChannelPolicyMutation) SetLegacySignupRule(s string) {
+	m.legacy_signup_rule = &s
+}
+
+// LegacySignupRule returns the value of the "legacy_signup_rule" field in the mutation.
+func (m *AuthChannelPolicyMutation) LegacySignupRule() (r string, exists bool) {
+	v := m.legacy_signup_rule
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLegacySignupRule returns the old "legacy_signup_rule" field's value of the AuthChannelPolicy entity.
+// If the AuthChannelPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthChannelPolicyMutation) OldLegacySignupRule(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLegacySignupRule is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLegacySignupRule requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLegacySignupRule: %w", err)
+	}
+	return oldValue.LegacySignupRule, nil
+}
+
+// ResetLegacySignupRule resets all changes to the "legacy_signup_rule" field.
+func (m *AuthChannelPolicyMutation) ResetLegacySignupRule() {
+	m.legacy_signup_rule = nil
+}
+
+// SetLegacyLinkRule sets the "legacy_link_rule" field.
+func (m *AuthChannelPolicyMutation) SetLegacyLinkRule(s string) {
+	m.legacy_link_rule = &s
+}
+
+// LegacyLinkRule returns the value of the "legacy_link_rule" field in the mutation.
+func (m *AuthChannelPolicyMutation) LegacyLinkRule() (r string, exists bool) {
+	v := m.legacy_link_rule
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLegacyLinkRule returns the old "legacy_link_rule" field's value of the AuthChannelPolicy entity.
+// If the AuthChannelPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthChannelPolicyMutation) OldLegacyLinkRule(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLegacyLinkRule is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLegacyLinkRule requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLegacyLinkRule: %w", err)
+	}
+	return oldValue.LegacyLinkRule, nil
+}
+
+// ResetLegacyLinkRule resets all changes to the "legacy_link_rule" field.
+func (m *AuthChannelPolicyMutation) ResetLegacyLinkRule() {
+	m.legacy_link_rule = nil
 }
 
 // ClearConnection clears the "connection" edge to the AuthConnection entity.
@@ -1773,7 +1924,7 @@ func (m *AuthChannelPolicyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AuthChannelPolicyMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 15)
 	if m.created_at != nil {
 		fields = append(fields, authchannelpolicy.FieldCreatedAt)
 	}
@@ -1801,14 +1952,23 @@ func (m *AuthChannelPolicyMutation) Fields() []string {
 	if m.link_enabled != nil {
 		fields = append(fields, authchannelpolicy.FieldLinkEnabled)
 	}
-	if m.login_rule != nil {
-		fields = append(fields, authchannelpolicy.FieldLoginRule)
+	if m.login_rules != nil {
+		fields = append(fields, authchannelpolicy.FieldLoginRules)
 	}
-	if m.signup_rule != nil {
-		fields = append(fields, authchannelpolicy.FieldSignupRule)
+	if m.signup_rules != nil {
+		fields = append(fields, authchannelpolicy.FieldSignupRules)
 	}
-	if m.link_rule != nil {
-		fields = append(fields, authchannelpolicy.FieldLinkRule)
+	if m.link_rules != nil {
+		fields = append(fields, authchannelpolicy.FieldLinkRules)
+	}
+	if m.legacy_login_rule != nil {
+		fields = append(fields, authchannelpolicy.FieldLegacyLoginRule)
+	}
+	if m.legacy_signup_rule != nil {
+		fields = append(fields, authchannelpolicy.FieldLegacySignupRule)
+	}
+	if m.legacy_link_rule != nil {
+		fields = append(fields, authchannelpolicy.FieldLegacyLinkRule)
 	}
 	return fields
 }
@@ -1836,12 +1996,18 @@ func (m *AuthChannelPolicyMutation) Field(name string) (ent.Value, bool) {
 		return m.SignupEnabled()
 	case authchannelpolicy.FieldLinkEnabled:
 		return m.LinkEnabled()
-	case authchannelpolicy.FieldLoginRule:
-		return m.LoginRule()
-	case authchannelpolicy.FieldSignupRule:
-		return m.SignupRule()
-	case authchannelpolicy.FieldLinkRule:
-		return m.LinkRule()
+	case authchannelpolicy.FieldLoginRules:
+		return m.LoginRules()
+	case authchannelpolicy.FieldSignupRules:
+		return m.SignupRules()
+	case authchannelpolicy.FieldLinkRules:
+		return m.LinkRules()
+	case authchannelpolicy.FieldLegacyLoginRule:
+		return m.LegacyLoginRule()
+	case authchannelpolicy.FieldLegacySignupRule:
+		return m.LegacySignupRule()
+	case authchannelpolicy.FieldLegacyLinkRule:
+		return m.LegacyLinkRule()
 	}
 	return nil, false
 }
@@ -1869,12 +2035,18 @@ func (m *AuthChannelPolicyMutation) OldField(ctx context.Context, name string) (
 		return m.OldSignupEnabled(ctx)
 	case authchannelpolicy.FieldLinkEnabled:
 		return m.OldLinkEnabled(ctx)
-	case authchannelpolicy.FieldLoginRule:
-		return m.OldLoginRule(ctx)
-	case authchannelpolicy.FieldSignupRule:
-		return m.OldSignupRule(ctx)
-	case authchannelpolicy.FieldLinkRule:
-		return m.OldLinkRule(ctx)
+	case authchannelpolicy.FieldLoginRules:
+		return m.OldLoginRules(ctx)
+	case authchannelpolicy.FieldSignupRules:
+		return m.OldSignupRules(ctx)
+	case authchannelpolicy.FieldLinkRules:
+		return m.OldLinkRules(ctx)
+	case authchannelpolicy.FieldLegacyLoginRule:
+		return m.OldLegacyLoginRule(ctx)
+	case authchannelpolicy.FieldLegacySignupRule:
+		return m.OldLegacySignupRule(ctx)
+	case authchannelpolicy.FieldLegacyLinkRule:
+		return m.OldLegacyLinkRule(ctx)
 	}
 	return nil, fmt.Errorf("unknown AuthChannelPolicy field %s", name)
 }
@@ -1947,26 +2119,47 @@ func (m *AuthChannelPolicyMutation) SetField(name string, value ent.Value) error
 		}
 		m.SetLinkEnabled(v)
 		return nil
-	case authchannelpolicy.FieldLoginRule:
-		v, ok := value.(authchannelpolicy.LoginRule)
+	case authchannelpolicy.FieldLoginRules:
+		v, ok := value.(authrules.RuleSet)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetLoginRule(v)
+		m.SetLoginRules(v)
 		return nil
-	case authchannelpolicy.FieldSignupRule:
-		v, ok := value.(authchannelpolicy.SignupRule)
+	case authchannelpolicy.FieldSignupRules:
+		v, ok := value.(authrules.RuleSet)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetSignupRule(v)
+		m.SetSignupRules(v)
 		return nil
-	case authchannelpolicy.FieldLinkRule:
-		v, ok := value.(authchannelpolicy.LinkRule)
+	case authchannelpolicy.FieldLinkRules:
+		v, ok := value.(authrules.RuleSet)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetLinkRule(v)
+		m.SetLinkRules(v)
+		return nil
+	case authchannelpolicy.FieldLegacyLoginRule:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLegacyLoginRule(v)
+		return nil
+	case authchannelpolicy.FieldLegacySignupRule:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLegacySignupRule(v)
+		return nil
+	case authchannelpolicy.FieldLegacyLinkRule:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLegacyLinkRule(v)
 		return nil
 	}
 	return fmt.Errorf("unknown AuthChannelPolicy field %s", name)
@@ -2024,7 +2217,17 @@ func (m *AuthChannelPolicyMutation) AddField(name string, value ent.Value) error
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *AuthChannelPolicyMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(authchannelpolicy.FieldLoginRules) {
+		fields = append(fields, authchannelpolicy.FieldLoginRules)
+	}
+	if m.FieldCleared(authchannelpolicy.FieldSignupRules) {
+		fields = append(fields, authchannelpolicy.FieldSignupRules)
+	}
+	if m.FieldCleared(authchannelpolicy.FieldLinkRules) {
+		fields = append(fields, authchannelpolicy.FieldLinkRules)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -2037,6 +2240,17 @@ func (m *AuthChannelPolicyMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *AuthChannelPolicyMutation) ClearField(name string) error {
+	switch name {
+	case authchannelpolicy.FieldLoginRules:
+		m.ClearLoginRules()
+		return nil
+	case authchannelpolicy.FieldSignupRules:
+		m.ClearSignupRules()
+		return nil
+	case authchannelpolicy.FieldLinkRules:
+		m.ClearLinkRules()
+		return nil
+	}
 	return fmt.Errorf("unknown AuthChannelPolicy nullable field %s", name)
 }
 
@@ -2071,14 +2285,23 @@ func (m *AuthChannelPolicyMutation) ResetField(name string) error {
 	case authchannelpolicy.FieldLinkEnabled:
 		m.ResetLinkEnabled()
 		return nil
-	case authchannelpolicy.FieldLoginRule:
-		m.ResetLoginRule()
+	case authchannelpolicy.FieldLoginRules:
+		m.ResetLoginRules()
 		return nil
-	case authchannelpolicy.FieldSignupRule:
-		m.ResetSignupRule()
+	case authchannelpolicy.FieldSignupRules:
+		m.ResetSignupRules()
 		return nil
-	case authchannelpolicy.FieldLinkRule:
-		m.ResetLinkRule()
+	case authchannelpolicy.FieldLinkRules:
+		m.ResetLinkRules()
+		return nil
+	case authchannelpolicy.FieldLegacyLoginRule:
+		m.ResetLegacyLoginRule()
+		return nil
+	case authchannelpolicy.FieldLegacySignupRule:
+		m.ResetLegacySignupRule()
+		return nil
+	case authchannelpolicy.FieldLegacyLinkRule:
+		m.ResetLegacyLinkRule()
 		return nil
 	}
 	return fmt.Errorf("unknown AuthChannelPolicy field %s", name)
@@ -3659,37 +3882,41 @@ func (m *AuthConnectionMutation) ResetEdge(name string) error {
 // AuthConnectionRevisionMutation represents an operation that mutates the AuthConnectionRevision nodes in the graph.
 type AuthConnectionRevisionMutation struct {
 	config
-	op                      Op
-	typ                     string
-	id                      *int
-	created_at              *time.Time
-	updated_at              *time.Time
-	revision                *int64
-	addrevision             *int64
-	display_name            *string
-	description             *string
-	display_order           *int
-	adddisplay_order        *int
-	config_version          *int
-	addconfig_version       *int
-	oidc_issuer             *string
-	oidc_client_id          *string
-	oidc_client_auth_method *authconnectionrevision.OidcClientAuthMethod
-	oidc_scopes             *[]string
-	appendoidc_scopes       []string
-	oidc_userinfo_enabled   *bool
-	secret_version          *int64
-	addsecret_version       *int64
-	logo_data               *[]byte
-	logo_media_type         *string
-	username_login_enabled  *bool
-	email_login_enabled     *bool
-	clearedFields           map[string]struct{}
-	connection              *string
-	clearedconnection       bool
-	done                    bool
-	oldValue                func(context.Context) (*AuthConnectionRevision, error)
-	predicates              []predicate.AuthConnectionRevision
+	op                          Op
+	typ                         string
+	id                          *int
+	created_at                  *time.Time
+	updated_at                  *time.Time
+	revision                    *int64
+	addrevision                 *int64
+	display_name                *string
+	description                 *string
+	display_order               *int
+	adddisplay_order            *int
+	config_version              *int
+	addconfig_version           *int
+	attribute_mappings          *[]authrules.Field
+	appendattribute_mappings    []authrules.Field
+	evidence_max_age_seconds    *int
+	addevidence_max_age_seconds *int
+	oidc_issuer                 *string
+	oidc_client_id              *string
+	oidc_client_auth_method     *authconnectionrevision.OidcClientAuthMethod
+	oidc_scopes                 *[]string
+	appendoidc_scopes           []string
+	oidc_userinfo_enabled       *bool
+	secret_version              *int64
+	addsecret_version           *int64
+	logo_data                   *[]byte
+	logo_media_type             *string
+	username_login_enabled      *bool
+	email_login_enabled         *bool
+	clearedFields               map[string]struct{}
+	connection                  *string
+	clearedconnection           bool
+	done                        bool
+	oldValue                    func(context.Context) (*AuthConnectionRevision, error)
+	predicates                  []predicate.AuthConnectionRevision
 }
 
 var _ ent.Mutation = (*AuthConnectionRevisionMutation)(nil)
@@ -4136,6 +4363,127 @@ func (m *AuthConnectionRevisionMutation) AddedConfigVersion() (r int, exists boo
 func (m *AuthConnectionRevisionMutation) ResetConfigVersion() {
 	m.config_version = nil
 	m.addconfig_version = nil
+}
+
+// SetAttributeMappings sets the "attribute_mappings" field.
+func (m *AuthConnectionRevisionMutation) SetAttributeMappings(a []authrules.Field) {
+	m.attribute_mappings = &a
+	m.appendattribute_mappings = nil
+}
+
+// AttributeMappings returns the value of the "attribute_mappings" field in the mutation.
+func (m *AuthConnectionRevisionMutation) AttributeMappings() (r []authrules.Field, exists bool) {
+	v := m.attribute_mappings
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAttributeMappings returns the old "attribute_mappings" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldAttributeMappings(ctx context.Context) (v []authrules.Field, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAttributeMappings is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAttributeMappings requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAttributeMappings: %w", err)
+	}
+	return oldValue.AttributeMappings, nil
+}
+
+// AppendAttributeMappings adds a to the "attribute_mappings" field.
+func (m *AuthConnectionRevisionMutation) AppendAttributeMappings(a []authrules.Field) {
+	m.appendattribute_mappings = append(m.appendattribute_mappings, a...)
+}
+
+// AppendedAttributeMappings returns the list of values that were appended to the "attribute_mappings" field in this mutation.
+func (m *AuthConnectionRevisionMutation) AppendedAttributeMappings() ([]authrules.Field, bool) {
+	if len(m.appendattribute_mappings) == 0 {
+		return nil, false
+	}
+	return m.appendattribute_mappings, true
+}
+
+// ClearAttributeMappings clears the value of the "attribute_mappings" field.
+func (m *AuthConnectionRevisionMutation) ClearAttributeMappings() {
+	m.attribute_mappings = nil
+	m.appendattribute_mappings = nil
+	m.clearedFields[authconnectionrevision.FieldAttributeMappings] = struct{}{}
+}
+
+// AttributeMappingsCleared returns if the "attribute_mappings" field was cleared in this mutation.
+func (m *AuthConnectionRevisionMutation) AttributeMappingsCleared() bool {
+	_, ok := m.clearedFields[authconnectionrevision.FieldAttributeMappings]
+	return ok
+}
+
+// ResetAttributeMappings resets all changes to the "attribute_mappings" field.
+func (m *AuthConnectionRevisionMutation) ResetAttributeMappings() {
+	m.attribute_mappings = nil
+	m.appendattribute_mappings = nil
+	delete(m.clearedFields, authconnectionrevision.FieldAttributeMappings)
+}
+
+// SetEvidenceMaxAgeSeconds sets the "evidence_max_age_seconds" field.
+func (m *AuthConnectionRevisionMutation) SetEvidenceMaxAgeSeconds(i int) {
+	m.evidence_max_age_seconds = &i
+	m.addevidence_max_age_seconds = nil
+}
+
+// EvidenceMaxAgeSeconds returns the value of the "evidence_max_age_seconds" field in the mutation.
+func (m *AuthConnectionRevisionMutation) EvidenceMaxAgeSeconds() (r int, exists bool) {
+	v := m.evidence_max_age_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEvidenceMaxAgeSeconds returns the old "evidence_max_age_seconds" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldEvidenceMaxAgeSeconds(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEvidenceMaxAgeSeconds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEvidenceMaxAgeSeconds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEvidenceMaxAgeSeconds: %w", err)
+	}
+	return oldValue.EvidenceMaxAgeSeconds, nil
+}
+
+// AddEvidenceMaxAgeSeconds adds i to the "evidence_max_age_seconds" field.
+func (m *AuthConnectionRevisionMutation) AddEvidenceMaxAgeSeconds(i int) {
+	if m.addevidence_max_age_seconds != nil {
+		*m.addevidence_max_age_seconds += i
+	} else {
+		m.addevidence_max_age_seconds = &i
+	}
+}
+
+// AddedEvidenceMaxAgeSeconds returns the value that was added to the "evidence_max_age_seconds" field in this mutation.
+func (m *AuthConnectionRevisionMutation) AddedEvidenceMaxAgeSeconds() (r int, exists bool) {
+	v := m.addevidence_max_age_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEvidenceMaxAgeSeconds resets all changes to the "evidence_max_age_seconds" field.
+func (m *AuthConnectionRevisionMutation) ResetEvidenceMaxAgeSeconds() {
+	m.evidence_max_age_seconds = nil
+	m.addevidence_max_age_seconds = nil
 }
 
 // SetOidcIssuer sets the "oidc_issuer" field.
@@ -4687,7 +5035,7 @@ func (m *AuthConnectionRevisionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AuthConnectionRevisionMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 20)
 	if m.created_at != nil {
 		fields = append(fields, authconnectionrevision.FieldCreatedAt)
 	}
@@ -4711,6 +5059,12 @@ func (m *AuthConnectionRevisionMutation) Fields() []string {
 	}
 	if m.config_version != nil {
 		fields = append(fields, authconnectionrevision.FieldConfigVersion)
+	}
+	if m.attribute_mappings != nil {
+		fields = append(fields, authconnectionrevision.FieldAttributeMappings)
+	}
+	if m.evidence_max_age_seconds != nil {
+		fields = append(fields, authconnectionrevision.FieldEvidenceMaxAgeSeconds)
 	}
 	if m.oidc_issuer != nil {
 		fields = append(fields, authconnectionrevision.FieldOidcIssuer)
@@ -4766,6 +5120,10 @@ func (m *AuthConnectionRevisionMutation) Field(name string) (ent.Value, bool) {
 		return m.DisplayOrder()
 	case authconnectionrevision.FieldConfigVersion:
 		return m.ConfigVersion()
+	case authconnectionrevision.FieldAttributeMappings:
+		return m.AttributeMappings()
+	case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
+		return m.EvidenceMaxAgeSeconds()
 	case authconnectionrevision.FieldOidcIssuer:
 		return m.OidcIssuer()
 	case authconnectionrevision.FieldOidcClientID:
@@ -4811,6 +5169,10 @@ func (m *AuthConnectionRevisionMutation) OldField(ctx context.Context, name stri
 		return m.OldDisplayOrder(ctx)
 	case authconnectionrevision.FieldConfigVersion:
 		return m.OldConfigVersion(ctx)
+	case authconnectionrevision.FieldAttributeMappings:
+		return m.OldAttributeMappings(ctx)
+	case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
+		return m.OldEvidenceMaxAgeSeconds(ctx)
 	case authconnectionrevision.FieldOidcIssuer:
 		return m.OldOidcIssuer(ctx)
 	case authconnectionrevision.FieldOidcClientID:
@@ -4895,6 +5257,20 @@ func (m *AuthConnectionRevisionMutation) SetField(name string, value ent.Value) 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetConfigVersion(v)
+		return nil
+	case authconnectionrevision.FieldAttributeMappings:
+		v, ok := value.([]authrules.Field)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAttributeMappings(v)
+		return nil
+	case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEvidenceMaxAgeSeconds(v)
 		return nil
 	case authconnectionrevision.FieldOidcIssuer:
 		v, ok := value.(string)
@@ -4983,6 +5359,9 @@ func (m *AuthConnectionRevisionMutation) AddedFields() []string {
 	if m.addconfig_version != nil {
 		fields = append(fields, authconnectionrevision.FieldConfigVersion)
 	}
+	if m.addevidence_max_age_seconds != nil {
+		fields = append(fields, authconnectionrevision.FieldEvidenceMaxAgeSeconds)
+	}
 	if m.addsecret_version != nil {
 		fields = append(fields, authconnectionrevision.FieldSecretVersion)
 	}
@@ -5000,6 +5379,8 @@ func (m *AuthConnectionRevisionMutation) AddedField(name string) (ent.Value, boo
 		return m.AddedDisplayOrder()
 	case authconnectionrevision.FieldConfigVersion:
 		return m.AddedConfigVersion()
+	case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
+		return m.AddedEvidenceMaxAgeSeconds()
 	case authconnectionrevision.FieldSecretVersion:
 		return m.AddedSecretVersion()
 	}
@@ -5032,6 +5413,13 @@ func (m *AuthConnectionRevisionMutation) AddField(name string, value ent.Value) 
 		}
 		m.AddConfigVersion(v)
 		return nil
+	case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEvidenceMaxAgeSeconds(v)
+		return nil
 	case authconnectionrevision.FieldSecretVersion:
 		v, ok := value.(int64)
 		if !ok {
@@ -5047,6 +5435,9 @@ func (m *AuthConnectionRevisionMutation) AddField(name string, value ent.Value) 
 // mutation.
 func (m *AuthConnectionRevisionMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(authconnectionrevision.FieldAttributeMappings) {
+		fields = append(fields, authconnectionrevision.FieldAttributeMappings)
+	}
 	if m.FieldCleared(authconnectionrevision.FieldOidcIssuer) {
 		fields = append(fields, authconnectionrevision.FieldOidcIssuer)
 	}
@@ -5082,6 +5473,9 @@ func (m *AuthConnectionRevisionMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *AuthConnectionRevisionMutation) ClearField(name string) error {
 	switch name {
+	case authconnectionrevision.FieldAttributeMappings:
+		m.ClearAttributeMappings()
+		return nil
 	case authconnectionrevision.FieldOidcIssuer:
 		m.ClearOidcIssuer()
 		return nil
@@ -5134,6 +5528,12 @@ func (m *AuthConnectionRevisionMutation) ResetField(name string) error {
 		return nil
 	case authconnectionrevision.FieldConfigVersion:
 		m.ResetConfigVersion()
+		return nil
+	case authconnectionrevision.FieldAttributeMappings:
+		m.ResetAttributeMappings()
+		return nil
+	case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
+		m.ResetEvidenceMaxAgeSeconds()
 		return nil
 	case authconnectionrevision.FieldOidcIssuer:
 		m.ResetOidcIssuer()
@@ -6987,53 +7387,59 @@ func (m *AuthConnectionValidationMutation) ResetEdge(name string) error {
 // AuthTransactionMutation represents an operation that mutates the AuthTransaction nodes in the graph.
 type AuthTransactionMutation struct {
 	config
-	op                         Op
-	typ                        string
-	id                         *string
-	created_at                 *time.Time
-	updated_at                 *time.Time
-	purpose                    *authtransaction.Purpose
-	status                     *authtransaction.Status
-	connection_revision        *int64
-	addconnection_revision     *int64
-	connection_generation      *int64
-	addconnection_generation   *int64
-	policy_revision            *int64
-	addpolicy_revision         *int64
-	user_id                    *int
-	adduser_id                 *int
-	auth_version               *int64
-	addauth_version            *int64
-	binding_id                 *int
-	addbinding_id              *int
-	state_hash                 *string
-	nonce                      *string
-	pkce_verifier              *string
-	browser_challenge          *string
-	completion_url             *string
-	return_to                  *string
-	exchange_ticket_hash       *string
-	exchange_ticket_expires_at *time.Time
-	confirmation_token_hash    *string
-	confirmation_expires_at    *time.Time
-	identity_issuer            *string
-	identity_subject           *string
-	identity_display_name      *string
-	identity_username          *string
-	identity_email             *string
-	identity_auth_time         *time.Time
-	authorized_action          *string
-	authorized_target_id       *string
-	authorization_expires_at   *time.Time
-	failure_code               *string
-	expires_at                 *time.Time
-	finished_at                *time.Time
-	clearedFields              map[string]struct{}
-	connection                 *string
-	clearedconnection          bool
-	done                       bool
-	oldValue                   func(context.Context) (*AuthTransaction, error)
-	predicates                 []predicate.AuthTransaction
+	op                                     Op
+	typ                                    string
+	id                                     *string
+	created_at                             *time.Time
+	updated_at                             *time.Time
+	purpose                                *authtransaction.Purpose
+	status                                 *authtransaction.Status
+	connection_revision                    *int64
+	addconnection_revision                 *int64
+	connection_generation                  *int64
+	addconnection_generation               *int64
+	policy_revision                        *int64
+	addpolicy_revision                     *int64
+	user_id                                *int
+	adduser_id                             *int
+	auth_version                           *int64
+	addauth_version                        *int64
+	binding_id                             *int
+	addbinding_id                          *int
+	state_hash                             *string
+	nonce                                  *string
+	pkce_verifier                          *string
+	browser_challenge                      *string
+	completion_url                         *string
+	return_to                              *string
+	exchange_ticket_hash                   *string
+	exchange_ticket_expires_at             *time.Time
+	confirmation_token_hash                *string
+	confirmation_expires_at                *time.Time
+	identity_issuer                        *string
+	identity_subject                       *string
+	identity_display_name                  *string
+	identity_username                      *string
+	identity_email                         *string
+	identity_auth_time                     *time.Time
+	evidence                               *authrules.Evidence
+	authorization_connection_id            *string
+	authorization_connection_generation    *int64
+	addauthorization_connection_generation *int64
+	authorization_policy_revision          *int64
+	addauthorization_policy_revision       *int64
+	authorized_action                      *string
+	authorized_target_id                   *string
+	authorization_expires_at               *time.Time
+	failure_code                           *string
+	expires_at                             *time.Time
+	finished_at                            *time.Time
+	clearedFields                          map[string]struct{}
+	connection                             *string
+	clearedconnection                      bool
+	done                                   bool
+	oldValue                               func(context.Context) (*AuthTransaction, error)
+	predicates                             []predicate.AuthTransaction
 }
 
 var _ ent.Mutation = (*AuthTransactionMutation)(nil)
@@ -8404,6 +8810,244 @@ func (m *AuthTransactionMutation) ResetIdentityAuthTime() {
 	delete(m.clearedFields, authtransaction.FieldIdentityAuthTime)
 }
 
+// SetEvidence sets the "evidence" field.
+func (m *AuthTransactionMutation) SetEvidence(a authrules.Evidence) {
+	m.evidence = &a
+}
+
+// Evidence returns the value of the "evidence" field in the mutation.
+func (m *AuthTransactionMutation) Evidence() (r authrules.Evidence, exists bool) {
+	v := m.evidence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEvidence returns the old "evidence" field's value of the AuthTransaction entity.
+// If the AuthTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthTransactionMutation) OldEvidence(ctx context.Context) (v authrules.Evidence, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEvidence is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEvidence requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEvidence: %w", err)
+	}
+	return oldValue.Evidence, nil
+}
+
+// ClearEvidence clears the value of the "evidence" field.
+func (m *AuthTransactionMutation) ClearEvidence() {
+	m.evidence = nil
+	m.clearedFields[authtransaction.FieldEvidence] = struct{}{}
+}
+
+// EvidenceCleared returns if the "evidence" field was cleared in this mutation.
+func (m *AuthTransactionMutation) EvidenceCleared() bool {
+	_, ok := m.clearedFields[authtransaction.FieldEvidence]
+	return ok
+}
+
+// ResetEvidence resets all changes to the "evidence" field.
+func (m *AuthTransactionMutation) ResetEvidence() {
+	m.evidence = nil
+	delete(m.clearedFields, authtransaction.FieldEvidence)
+}
+
+// SetAuthorizationConnectionID sets the "authorization_connection_id" field.
+func (m *AuthTransactionMutation) SetAuthorizationConnectionID(s string) {
+	m.authorization_connection_id = &s
+}
+
+// AuthorizationConnectionID returns the value of the "authorization_connection_id" field in the mutation.
+func (m *AuthTransactionMutation) AuthorizationConnectionID() (r string, exists bool) {
+	v := m.authorization_connection_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAuthorizationConnectionID returns the old "authorization_connection_id" field's value of the AuthTransaction entity.
+// If the AuthTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthTransactionMutation) OldAuthorizationConnectionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAuthorizationConnectionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAuthorizationConnectionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAuthorizationConnectionID: %w", err)
+	}
+	return oldValue.AuthorizationConnectionID, nil
+}
+
+// ClearAuthorizationConnectionID clears the value of the "authorization_connection_id" field.
+func (m *AuthTransactionMutation) ClearAuthorizationConnectionID() {
+	m.authorization_connection_id = nil
+	m.clearedFields[authtransaction.FieldAuthorizationConnectionID] = struct{}{}
+}
+
+// AuthorizationConnectionIDCleared returns if the "authorization_connection_id" field was cleared in this mutation.
+func (m *AuthTransactionMutation) AuthorizationConnectionIDCleared() bool {
+	_, ok := m.clearedFields[authtransaction.FieldAuthorizationConnectionID]
+	return ok
+}
+
+// ResetAuthorizationConnectionID resets all changes to the "authorization_connection_id" field.
+func (m *AuthTransactionMutation) ResetAuthorizationConnectionID() {
+	m.authorization_connection_id = nil
+	delete(m.clearedFields, authtransaction.FieldAuthorizationConnectionID)
+}
+
+// SetAuthorizationConnectionGeneration sets the "authorization_connection_generation" field.
+func (m *AuthTransactionMutation) SetAuthorizationConnectionGeneration(i int64) {
+	m.authorization_connection_generation = &i
+	m.addauthorization_connection_generation = nil
+}
+
+// AuthorizationConnectionGeneration returns the value of the "authorization_connection_generation" field in the mutation.
+func (m *AuthTransactionMutation) AuthorizationConnectionGeneration() (r int64, exists bool) {
+	v := m.authorization_connection_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAuthorizationConnectionGeneration returns the old "authorization_connection_generation" field's value of the AuthTransaction entity.
+// If the AuthTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthTransactionMutation) OldAuthorizationConnectionGeneration(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAuthorizationConnectionGeneration is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAuthorizationConnectionGeneration requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAuthorizationConnectionGeneration: %w", err)
+	}
+	return oldValue.AuthorizationConnectionGeneration, nil
+}
+
+// AddAuthorizationConnectionGeneration adds i to the "authorization_connection_generation" field.
+func (m *AuthTransactionMutation) AddAuthorizationConnectionGeneration(i int64) {
+	if m.addauthorization_connection_generation != nil {
+		*m.addauthorization_connection_generation += i
+	} else {
+		m.addauthorization_connection_generation = &i
+	}
+}
+
+// AddedAuthorizationConnectionGeneration returns the value that was added to the "authorization_connection_generation" field in this mutation.
+func (m *AuthTransactionMutation) AddedAuthorizationConnectionGeneration() (r int64, exists bool) {
+	v := m.addauthorization_connection_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAuthorizationConnectionGeneration clears the value of the "authorization_connection_generation" field.
+func (m *AuthTransactionMutation) ClearAuthorizationConnectionGeneration() {
+	m.authorization_connection_generation = nil
+	m.addauthorization_connection_generation = nil
+	m.clearedFields[authtransaction.FieldAuthorizationConnectionGeneration] = struct{}{}
+}
+
+// AuthorizationConnectionGenerationCleared returns if the "authorization_connection_generation" field was cleared in this mutation.
+func (m *AuthTransactionMutation) AuthorizationConnectionGenerationCleared() bool {
+	_, ok := m.clearedFields[authtransaction.FieldAuthorizationConnectionGeneration]
+	return ok
+}
+
+// ResetAuthorizationConnectionGeneration resets all changes to the "authorization_connection_generation" field.
+func (m *AuthTransactionMutation) ResetAuthorizationConnectionGeneration() {
+	m.authorization_connection_generation = nil
+	m.addauthorization_connection_generation = nil
+	delete(m.clearedFields, authtransaction.FieldAuthorizationConnectionGeneration)
+}
+
+// SetAuthorizationPolicyRevision sets the "authorization_policy_revision" field.
+func (m *AuthTransactionMutation) SetAuthorizationPolicyRevision(i int64) {
+	m.authorization_policy_revision = &i
+	m.addauthorization_policy_revision = nil
+}
+
+// AuthorizationPolicyRevision returns the value of the "authorization_policy_revision" field in the mutation.
+func (m *AuthTransactionMutation) AuthorizationPolicyRevision() (r int64, exists bool) {
+	v := m.authorization_policy_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAuthorizationPolicyRevision returns the old "authorization_policy_revision" field's value of the AuthTransaction entity.
+// If the AuthTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthTransactionMutation) OldAuthorizationPolicyRevision(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAuthorizationPolicyRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAuthorizationPolicyRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAuthorizationPolicyRevision: %w", err)
+	}
+	return oldValue.AuthorizationPolicyRevision, nil
+}
+
+// AddAuthorizationPolicyRevision adds i to the "authorization_policy_revision" field.
+func (m *AuthTransactionMutation) AddAuthorizationPolicyRevision(i int64) {
+	if m.addauthorization_policy_revision != nil {
+		*m.addauthorization_policy_revision += i
+	} else {
+		m.addauthorization_policy_revision = &i
+	}
+}
+
+// AddedAuthorizationPolicyRevision returns the value that was added to the "authorization_policy_revision" field in this mutation.
+func (m *AuthTransactionMutation) AddedAuthorizationPolicyRevision() (r int64, exists bool) {
+	v := m.addauthorization_policy_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAuthorizationPolicyRevision clears the value of the "authorization_policy_revision" field.
+func (m *AuthTransactionMutation) ClearAuthorizationPolicyRevision() {
+	m.authorization_policy_revision = nil
+	m.addauthorization_policy_revision = nil
+	m.clearedFields[authtransaction.FieldAuthorizationPolicyRevision] = struct{}{}
+}
+
+// AuthorizationPolicyRevisionCleared returns if the "authorization_policy_revision" field was cleared in this mutation.
+func (m *AuthTransactionMutation) AuthorizationPolicyRevisionCleared() bool {
+	_, ok := m.clearedFields[authtransaction.FieldAuthorizationPolicyRevision]
+	return ok
+}
+
+// ResetAuthorizationPolicyRevision resets all changes to the "authorization_policy_revision" field.
+func (m *AuthTransactionMutation) ResetAuthorizationPolicyRevision() {
+	m.authorization_policy_revision = nil
+	m.addauthorization_policy_revision = nil
+	delete(m.clearedFields, authtransaction.FieldAuthorizationPolicyRevision)
+}
+
 // SetAuthorizedAction sets the "authorized_action" field.
 func (m *AuthTransactionMutation) SetAuthorizedAction(s string) {
 	m.authorized_action = &s
@@ -8746,7 +9390,7 @@ func (m *AuthTransactionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AuthTransactionMutation) Fields() []string {
-	fields := make([]string, 0, 33)
+	fields := make([]string, 0, 37)
 	if m.created_at != nil {
 		fields = append(fields, authtransaction.FieldCreatedAt)
 	}
@@ -8828,6 +9472,18 @@ func (m *AuthTransactionMutation) Fields() []string {
 	if m.identity_auth_time != nil {
 		fields = append(fields, authtransaction.FieldIdentityAuthTime)
 	}
+	if m.evidence != nil {
+		fields = append(fields, authtransaction.FieldEvidence)
+	}
+	if m.authorization_connection_id != nil {
+		fields = append(fields, authtransaction.FieldAuthorizationConnectionID)
+	}
+	if m.authorization_connection_generation != nil {
+		fields = append(fields, authtransaction.FieldAuthorizationConnectionGeneration)
+	}
+	if m.authorization_policy_revision != nil {
+		fields = append(fields, authtransaction.FieldAuthorizationPolicyRevision)
+	}
 	if m.authorized_action != nil {
 		fields = append(fields, authtransaction.FieldAuthorizedAction)
 	}
@@ -8908,6 +9564,14 @@ func (m *AuthTransactionMutation) Field(name string) (ent.Value, bool) {
 		return m.IdentityEmail()
 	case authtransaction.FieldIdentityAuthTime:
 		return m.IdentityAuthTime()
+	case authtransaction.FieldEvidence:
+		return m.Evidence()
+	case authtransaction.FieldAuthorizationConnectionID:
+		return m.AuthorizationConnectionID()
+	case authtransaction.FieldAuthorizationConnectionGeneration:
+		return m.AuthorizationConnectionGeneration()
+	case authtransaction.FieldAuthorizationPolicyRevision:
+		return m.AuthorizationPolicyRevision()
 	case authtransaction.FieldAuthorizedAction:
 		return m.AuthorizedAction()
 	case authtransaction.FieldAuthorizedTargetID:
@@ -8983,6 +9647,14 @@ func (m *AuthTransactionMutation) OldField(ctx context.Context, name string) (en
 		return m.OldIdentityEmail(ctx)
 	case authtransaction.FieldIdentityAuthTime:
 		return m.OldIdentityAuthTime(ctx)
+	case authtransaction.FieldEvidence:
+		return m.OldEvidence(ctx)
+	case authtransaction.FieldAuthorizationConnectionID:
+		return m.OldAuthorizationConnectionID(ctx)
+	case authtransaction.FieldAuthorizationConnectionGeneration:
+		return m.OldAuthorizationConnectionGeneration(ctx)
+	case authtransaction.FieldAuthorizationPolicyRevision:
+		return m.OldAuthorizationPolicyRevision(ctx)
 	case authtransaction.FieldAuthorizedAction:
 		return m.OldAuthorizedAction(ctx)
 	case authtransaction.FieldAuthorizedTargetID:
@@ -9193,6 +9865,34 @@ func (m *AuthTransactionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetIdentityAuthTime(v)
 		return nil
+	case authtransaction.FieldEvidence:
+		v, ok := value.(authrules.Evidence)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEvidence(v)
+		return nil
+	case authtransaction.FieldAuthorizationConnectionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAuthorizationConnectionID(v)
+		return nil
+	case authtransaction.FieldAuthorizationConnectionGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAuthorizationConnectionGeneration(v)
+		return nil
+	case authtransaction.FieldAuthorizationPolicyRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAuthorizationPolicyRevision(v)
+		return nil
 	case authtransaction.FieldAuthorizedAction:
 		v, ok := value.(string)
 		if !ok {
@@ -9261,6 +9961,12 @@ func (m *AuthTransactionMutation) AddedFields() []string {
 	if m.addbinding_id != nil {
 		fields = append(fields, authtransaction.FieldBindingID)
 	}
+	if m.addauthorization_connection_generation != nil {
+		fields = append(fields, authtransaction.FieldAuthorizationConnectionGeneration)
+	}
+	if m.addauthorization_policy_revision != nil {
+		fields = append(fields, authtransaction.FieldAuthorizationPolicyRevision)
+	}
 	return fields
 }
 
@@ -9281,6 +9987,10 @@ func (m *AuthTransactionMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedAuthVersion()
 	case authtransaction.FieldBindingID:
 		return m.AddedBindingID()
+	case authtransaction.FieldAuthorizationConnectionGeneration:
+		return m.AddedAuthorizationConnectionGeneration()
+	case authtransaction.FieldAuthorizationPolicyRevision:
+		return m.AddedAuthorizationPolicyRevision()
 	}
 	return nil, false
 }
@@ -9332,6 +10042,20 @@ func (m *AuthTransactionMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddBindingID(v)
 		return nil
+	case authtransaction.FieldAuthorizationConnectionGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAuthorizationConnectionGeneration(v)
+		return nil
+	case authtransaction.FieldAuthorizationPolicyRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAuthorizationPolicyRevision(v)
+		return nil
 	}
 	return fmt.Errorf("unknown AuthTransaction numeric field %s", name)
 }
@@ -9378,6 +10102,18 @@ func (m *AuthTransactionMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(authtransaction.FieldIdentityAuthTime) {
 		fields = append(fields, authtransaction.FieldIdentityAuthTime)
+	}
+	if m.FieldCleared(authtransaction.FieldEvidence) {
+		fields = append(fields, authtransaction.FieldEvidence)
+	}
+	if m.FieldCleared(authtransaction.FieldAuthorizationConnectionID) {
+		fields = append(fields, authtransaction.FieldAuthorizationConnectionID)
+	}
+	if m.FieldCleared(authtransaction.FieldAuthorizationConnectionGeneration) {
+		fields = append(fields, authtransaction.FieldAuthorizationConnectionGeneration)
+	}
+	if m.FieldCleared(authtransaction.FieldAuthorizationPolicyRevision) {
+		fields = append(fields, authtransaction.FieldAuthorizationPolicyRevision)
 	}
 	if m.FieldCleared(authtransaction.FieldAuthorizedAction) {
 		fields = append(fields, authtransaction.FieldAuthorizedAction)
@@ -9446,6 +10182,18 @@ func (m *AuthTransactionMutation) ClearField(name string) error {
 		return nil
 	case authtransaction.FieldIdentityAuthTime:
 		m.ClearIdentityAuthTime()
+		return nil
+	case authtransaction.FieldEvidence:
+		m.ClearEvidence()
+		return nil
+	case authtransaction.FieldAuthorizationConnectionID:
+		m.ClearAuthorizationConnectionID()
+		return nil
+	case authtransaction.FieldAuthorizationConnectionGeneration:
+		m.ClearAuthorizationConnectionGeneration()
+		return nil
+	case authtransaction.FieldAuthorizationPolicyRevision:
+		m.ClearAuthorizationPolicyRevision()
 		return nil
 	case authtransaction.FieldAuthorizedAction:
 		m.ClearAuthorizedAction()
@@ -9550,6 +10298,18 @@ func (m *AuthTransactionMutation) ResetField(name string) error {
 		return nil
 	case authtransaction.FieldIdentityAuthTime:
 		m.ResetIdentityAuthTime()
+		return nil
+	case authtransaction.FieldEvidence:
+		m.ResetEvidence()
+		return nil
+	case authtransaction.FieldAuthorizationConnectionID:
+		m.ResetAuthorizationConnectionID()
+		return nil
+	case authtransaction.FieldAuthorizationConnectionGeneration:
+		m.ResetAuthorizationConnectionGeneration()
+		return nil
+	case authtransaction.FieldAuthorizationPolicyRevision:
+		m.ResetAuthorizationPolicyRevision()
 		return nil
 	case authtransaction.FieldAuthorizedAction:
 		m.ResetAuthorizedAction()
@@ -29729,6 +30489,7 @@ type LoginBindingMutation struct {
 	addverified_auth_generation       *int64
 	verified_login_policy_revision    *int64
 	addverified_login_policy_revision *int64
+	evidence                          *authrules.Evidence
 	clearedFields                     map[string]struct{}
 	user                              *int
 	cleareduser                       bool
@@ -30232,6 +30993,55 @@ func (m *LoginBindingMutation) ResetVerifiedLoginPolicyRevision() {
 	m.addverified_login_policy_revision = nil
 }
 
+// SetEvidence sets the "evidence" field.
+func (m *LoginBindingMutation) SetEvidence(a authrules.Evidence) {
+	m.evidence = &a
+}
+
+// Evidence returns the value of the "evidence" field in the mutation.
+func (m *LoginBindingMutation) Evidence() (r authrules.Evidence, exists bool) {
+	v := m.evidence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEvidence returns the old "evidence" field's value of the LoginBinding entity.
+// If the LoginBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LoginBindingMutation) OldEvidence(ctx context.Context) (v authrules.Evidence, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEvidence is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEvidence requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEvidence: %w", err)
+	}
+	return oldValue.Evidence, nil
+}
+
+// ClearEvidence clears the value of the "evidence" field.
+func (m *LoginBindingMutation) ClearEvidence() {
+	m.evidence = nil
+	m.clearedFields[loginbinding.FieldEvidence] = struct{}{}
+}
+
+// EvidenceCleared returns if the "evidence" field was cleared in this mutation.
+func (m *LoginBindingMutation) EvidenceCleared() bool {
+	_, ok := m.clearedFields[loginbinding.FieldEvidence]
+	return ok
+}
+
+// ResetEvidence resets all changes to the "evidence" field.
+func (m *LoginBindingMutation) ResetEvidence() {
+	m.evidence = nil
+	delete(m.clearedFields, loginbinding.FieldEvidence)
+}
+
 // ClearUser clears the "user" edge to the User entity.
 func (m *LoginBindingMutation) ClearUser() {
 	m.cleareduser = true
@@ -30401,7 +31211,7 @@ func (m *LoginBindingMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *LoginBindingMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, loginbinding.FieldCreatedAt)
 	}
@@ -30429,6 +31239,9 @@ func (m *LoginBindingMutation) Fields() []string {
 	if m.verified_login_policy_revision != nil {
 		fields = append(fields, loginbinding.FieldVerifiedLoginPolicyRevision)
 	}
+	if m.evidence != nil {
+		fields = append(fields, loginbinding.FieldEvidence)
+	}
 	return fields
 }
 
@@ -30455,6 +31268,8 @@ func (m *LoginBindingMutation) Field(name string) (ent.Value, bool) {
 		return m.VerifiedAuthGeneration()
 	case loginbinding.FieldVerifiedLoginPolicyRevision:
 		return m.VerifiedLoginPolicyRevision()
+	case loginbinding.FieldEvidence:
+		return m.Evidence()
 	}
 	return nil, false
 }
@@ -30482,6 +31297,8 @@ func (m *LoginBindingMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldVerifiedAuthGeneration(ctx)
 	case loginbinding.FieldVerifiedLoginPolicyRevision:
 		return m.OldVerifiedLoginPolicyRevision(ctx)
+	case loginbinding.FieldEvidence:
+		return m.OldEvidence(ctx)
 	}
 	return nil, fmt.Errorf("unknown LoginBinding field %s", name)
 }
@@ -30554,6 +31371,13 @@ func (m *LoginBindingMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetVerifiedLoginPolicyRevision(v)
 		return nil
+	case loginbinding.FieldEvidence:
+		v, ok := value.(authrules.Evidence)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEvidence(v)
+		return nil
 	}
 	return fmt.Errorf("unknown LoginBinding field %s", name)
 }
@@ -30617,6 +31441,9 @@ func (m *LoginBindingMutation) ClearedFields() []string {
 	if m.FieldCleared(loginbinding.FieldLastVerifiedAt) {
 		fields = append(fields, loginbinding.FieldLastVerifiedAt)
 	}
+	if m.FieldCleared(loginbinding.FieldEvidence) {
+		fields = append(fields, loginbinding.FieldEvidence)
+	}
 	return fields
 }
 
@@ -30636,6 +31463,9 @@ func (m *LoginBindingMutation) ClearField(name string) error {
 		return nil
 	case loginbinding.FieldLastVerifiedAt:
 		m.ClearLastVerifiedAt()
+		return nil
+	case loginbinding.FieldEvidence:
+		m.ClearEvidence()
 		return nil
 	}
 	return fmt.Errorf("unknown LoginBinding nullable field %s", name)
@@ -30671,6 +31501,9 @@ func (m *LoginBindingMutation) ResetField(name string) error {
 		return nil
 	case loginbinding.FieldVerifiedLoginPolicyRevision:
 		m.ResetVerifiedLoginPolicyRevision()
+		return nil
+	case loginbinding.FieldEvidence:
+		m.ResetEvidence()
 		return nil
 	}
 	return fmt.Errorf("unknown LoginBinding field %s", name)
@@ -35629,27 +36462,31 @@ func (m *PrunePromptTemplateMutation) ResetEdge(name string) error {
 // ReauthenticationProofMutation represents an operation that mutates the ReauthenticationProof nodes in the graph.
 type ReauthenticationProofMutation struct {
 	config
-	op               Op
-	typ              string
-	id               *int
-	created_at       *time.Time
-	updated_at       *time.Time
-	token_hash       *string
-	user_id          *int
-	adduser_id       *int
-	auth_version     *int64
-	addauth_version  *int64
-	method           *reauthenticationproof.Method
-	connection_id    *string
-	action           *reauthenticationproof.Action
-	target_id        *string
-	authenticated_at *time.Time
-	expires_at       *time.Time
-	consumed_at      *time.Time
-	clearedFields    map[string]struct{}
-	done             bool
-	oldValue         func(context.Context) (*ReauthenticationProof, error)
-	predicates       []predicate.ReauthenticationProof
+	op                       Op
+	typ                      string
+	id                       *int
+	created_at               *time.Time
+	updated_at               *time.Time
+	token_hash               *string
+	user_id                  *int
+	adduser_id               *int
+	auth_version             *int64
+	addauth_version          *int64
+	method                   *reauthenticationproof.Method
+	connection_id            *string
+	connection_generation    *int64
+	addconnection_generation *int64
+	login_policy_revision    *int64
+	addlogin_policy_revision *int64
+	action                   *reauthenticationproof.Action
+	target_id                *string
+	authenticated_at         *time.Time
+	expires_at               *time.Time
+	consumed_at              *time.Time
+	clearedFields            map[string]struct{}
+	done                     bool
+	oldValue                 func(context.Context) (*ReauthenticationProof, error)
+	predicates               []predicate.ReauthenticationProof
 }
 
 var _ ent.Mutation = (*ReauthenticationProofMutation)(nil)
@@ -36055,6 +36892,146 @@ func (m *ReauthenticationProofMutation) ResetConnectionID() {
 	delete(m.clearedFields, reauthenticationproof.FieldConnectionID)
 }
 
+// SetConnectionGeneration sets the "connection_generation" field.
+func (m *ReauthenticationProofMutation) SetConnectionGeneration(i int64) {
+	m.connection_generation = &i
+	m.addconnection_generation = nil
+}
+
+// ConnectionGeneration returns the value of the "connection_generation" field in the mutation.
+func (m *ReauthenticationProofMutation) ConnectionGeneration() (r int64, exists bool) {
+	v := m.connection_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConnectionGeneration returns the old "connection_generation" field's value of the ReauthenticationProof entity.
+// If the ReauthenticationProof object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ReauthenticationProofMutation) OldConnectionGeneration(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConnectionGeneration is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConnectionGeneration requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConnectionGeneration: %w", err)
+	}
+	return oldValue.ConnectionGeneration, nil
+}
+
+// AddConnectionGeneration adds i to the "connection_generation" field.
+func (m *ReauthenticationProofMutation) AddConnectionGeneration(i int64) {
+	if m.addconnection_generation != nil {
+		*m.addconnection_generation += i
+	} else {
+		m.addconnection_generation = &i
+	}
+}
+
+// AddedConnectionGeneration returns the value that was added to the "connection_generation" field in this mutation.
+func (m *ReauthenticationProofMutation) AddedConnectionGeneration() (r int64, exists bool) {
+	v := m.addconnection_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearConnectionGeneration clears the value of the "connection_generation" field.
+func (m *ReauthenticationProofMutation) ClearConnectionGeneration() {
+	m.connection_generation = nil
+	m.addconnection_generation = nil
+	m.clearedFields[reauthenticationproof.FieldConnectionGeneration] = struct{}{}
+}
+
+// ConnectionGenerationCleared returns if the "connection_generation" field was cleared in this mutation.
+func (m *ReauthenticationProofMutation) ConnectionGenerationCleared() bool {
+	_, ok := m.clearedFields[reauthenticationproof.FieldConnectionGeneration]
+	return ok
+}
+
+// ResetConnectionGeneration resets all changes to the "connection_generation" field.
+func (m *ReauthenticationProofMutation) ResetConnectionGeneration() {
+	m.connection_generation = nil
+	m.addconnection_generation = nil
+	delete(m.clearedFields, reauthenticationproof.FieldConnectionGeneration)
+}
+
+// SetLoginPolicyRevision sets the "login_policy_revision" field.
+func (m *ReauthenticationProofMutation) SetLoginPolicyRevision(i int64) {
+	m.login_policy_revision = &i
+	m.addlogin_policy_revision = nil
+}
+
+// LoginPolicyRevision returns the value of the "login_policy_revision" field in the mutation.
+func (m *ReauthenticationProofMutation) LoginPolicyRevision() (r int64, exists bool) {
+	v := m.login_policy_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLoginPolicyRevision returns the old "login_policy_revision" field's value of the ReauthenticationProof entity.
+// If the ReauthenticationProof object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ReauthenticationProofMutation) OldLoginPolicyRevision(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLoginPolicyRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLoginPolicyRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLoginPolicyRevision: %w", err)
+	}
+	return oldValue.LoginPolicyRevision, nil
+}
+
+// AddLoginPolicyRevision adds i to the "login_policy_revision" field.
+func (m *ReauthenticationProofMutation) AddLoginPolicyRevision(i int64) {
+	if m.addlogin_policy_revision != nil {
+		*m.addlogin_policy_revision += i
+	} else {
+		m.addlogin_policy_revision = &i
+	}
+}
+
+// AddedLoginPolicyRevision returns the value that was added to the "login_policy_revision" field in this mutation.
+func (m *ReauthenticationProofMutation) AddedLoginPolicyRevision() (r int64, exists bool) {
+	v := m.addlogin_policy_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearLoginPolicyRevision clears the value of the "login_policy_revision" field.
+func (m *ReauthenticationProofMutation) ClearLoginPolicyRevision() {
+	m.login_policy_revision = nil
+	m.addlogin_policy_revision = nil
+	m.clearedFields[reauthenticationproof.FieldLoginPolicyRevision] = struct{}{}
+}
+
+// LoginPolicyRevisionCleared returns if the "login_policy_revision" field was cleared in this mutation.
+func (m *ReauthenticationProofMutation) LoginPolicyRevisionCleared() bool {
+	_, ok := m.clearedFields[reauthenticationproof.FieldLoginPolicyRevision]
+	return ok
+}
+
+// ResetLoginPolicyRevision resets all changes to the "login_policy_revision" field.
+func (m *ReauthenticationProofMutation) ResetLoginPolicyRevision() {
+	m.login_policy_revision = nil
+	m.addlogin_policy_revision = nil
+	delete(m.clearedFields, reauthenticationproof.FieldLoginPolicyRevision)
+}
+
 // SetAction sets the "action" field.
 func (m *ReauthenticationProofMutation) SetAction(r reauthenticationproof.Action) {
 	m.action = &r
@@ -36282,7 +37259,7 @@ func (m *ReauthenticationProofMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ReauthenticationProofMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 14)
 	if m.created_at != nil {
 		fields = append(fields, reauthenticationproof.FieldCreatedAt)
 	}
@@ -36303,6 +37280,12 @@ func (m *ReauthenticationProofMutation) Fields() []string {
 	}
 	if m.connection_id != nil {
 		fields = append(fields, reauthenticationproof.FieldConnectionID)
+	}
+	if m.connection_generation != nil {
+		fields = append(fields, reauthenticationproof.FieldConnectionGeneration)
+	}
+	if m.login_policy_revision != nil {
+		fields = append(fields, reauthenticationproof.FieldLoginPolicyRevision)
 	}
 	if m.action != nil {
 		fields = append(fields, reauthenticationproof.FieldAction)
@@ -36341,6 +37324,10 @@ func (m *ReauthenticationProofMutation) Field(name string) (ent.Value, bool) {
 		return m.Method()
 	case reauthenticationproof.FieldConnectionID:
 		return m.ConnectionID()
+	case reauthenticationproof.FieldConnectionGeneration:
+		return m.ConnectionGeneration()
+	case reauthenticationproof.FieldLoginPolicyRevision:
+		return m.LoginPolicyRevision()
 	case reauthenticationproof.FieldAction:
 		return m.Action()
 	case reauthenticationproof.FieldTargetID:
@@ -36374,6 +37361,10 @@ func (m *ReauthenticationProofMutation) OldField(ctx context.Context, name strin
 		return m.OldMethod(ctx)
 	case reauthenticationproof.FieldConnectionID:
 		return m.OldConnectionID(ctx)
+	case reauthenticationproof.FieldConnectionGeneration:
+		return m.OldConnectionGeneration(ctx)
+	case reauthenticationproof.FieldLoginPolicyRevision:
+		return m.OldLoginPolicyRevision(ctx)
 	case reauthenticationproof.FieldAction:
 		return m.OldAction(ctx)
 	case reauthenticationproof.FieldTargetID:
@@ -36442,6 +37433,20 @@ func (m *ReauthenticationProofMutation) SetField(name string, value ent.Value) e
 		}
 		m.SetConnectionID(v)
 		return nil
+	case reauthenticationproof.FieldConnectionGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConnectionGeneration(v)
+		return nil
+	case reauthenticationproof.FieldLoginPolicyRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLoginPolicyRevision(v)
+		return nil
 	case reauthenticationproof.FieldAction:
 		v, ok := value.(reauthenticationproof.Action)
 		if !ok {
@@ -36491,6 +37496,12 @@ func (m *ReauthenticationProofMutation) AddedFields() []string {
 	if m.addauth_version != nil {
 		fields = append(fields, reauthenticationproof.FieldAuthVersion)
 	}
+	if m.addconnection_generation != nil {
+		fields = append(fields, reauthenticationproof.FieldConnectionGeneration)
+	}
+	if m.addlogin_policy_revision != nil {
+		fields = append(fields, reauthenticationproof.FieldLoginPolicyRevision)
+	}
 	return fields
 }
 
@@ -36503,6 +37514,10 @@ func (m *ReauthenticationProofMutation) AddedField(name string) (ent.Value, bool
 		return m.AddedUserID()
 	case reauthenticationproof.FieldAuthVersion:
 		return m.AddedAuthVersion()
+	case reauthenticationproof.FieldConnectionGeneration:
+		return m.AddedConnectionGeneration()
+	case reauthenticationproof.FieldLoginPolicyRevision:
+		return m.AddedLoginPolicyRevision()
 	}
 	return nil, false
 }
@@ -36526,6 +37541,20 @@ func (m *ReauthenticationProofMutation) AddField(name string, value ent.Value) e
 		}
 		m.AddAuthVersion(v)
 		return nil
+	case reauthenticationproof.FieldConnectionGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddConnectionGeneration(v)
+		return nil
+	case reauthenticationproof.FieldLoginPolicyRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLoginPolicyRevision(v)
+		return nil
 	}
 	return fmt.Errorf("unknown ReauthenticationProof numeric field %s", name)
 }
@@ -36536,6 +37565,12 @@ func (m *ReauthenticationProofMutation) ClearedFields() []string {
 	var fields []string
 	if m.FieldCleared(reauthenticationproof.FieldConnectionID) {
 		fields = append(fields, reauthenticationproof.FieldConnectionID)
+	}
+	if m.FieldCleared(reauthenticationproof.FieldConnectionGeneration) {
+		fields = append(fields, reauthenticationproof.FieldConnectionGeneration)
+	}
+	if m.FieldCleared(reauthenticationproof.FieldLoginPolicyRevision) {
+		fields = append(fields, reauthenticationproof.FieldLoginPolicyRevision)
 	}
 	if m.FieldCleared(reauthenticationproof.FieldConsumedAt) {
 		fields = append(fields, reauthenticationproof.FieldConsumedAt)
@@ -36556,6 +37591,12 @@ func (m *ReauthenticationProofMutation) ClearField(name string) error {
 	switch name {
 	case reauthenticationproof.FieldConnectionID:
 		m.ClearConnectionID()
+		return nil
+	case reauthenticationproof.FieldConnectionGeneration:
+		m.ClearConnectionGeneration()
+		return nil
+	case reauthenticationproof.FieldLoginPolicyRevision:
+		m.ClearLoginPolicyRevision()
 		return nil
 	case reauthenticationproof.FieldConsumedAt:
 		m.ClearConsumedAt()
@@ -36588,6 +37629,12 @@ func (m *ReauthenticationProofMutation) ResetField(name string) error {
 		return nil
 	case reauthenticationproof.FieldConnectionID:
 		m.ResetConnectionID()
+		return nil
+	case reauthenticationproof.FieldConnectionGeneration:
+		m.ResetConnectionGeneration()
+		return nil
+	case reauthenticationproof.FieldLoginPolicyRevision:
+		m.ResetLoginPolicyRevision()
 		return nil
 	case reauthenticationproof.FieldAction:
 		m.ResetAction()
@@ -36670,6 +37717,7 @@ type RefreshSessionMutation struct {
 	addconnection_generation *int64
 	login_policy_revision    *int64
 	addlogin_policy_revision *int64
+	evidence                 *authrules.Evidence
 	generation               *int64
 	addgeneration            *int64
 	expires_at               *time.Time
@@ -37148,6 +38196,55 @@ func (m *RefreshSessionMutation) ResetLoginPolicyRevision() {
 	m.addlogin_policy_revision = nil
 }
 
+// SetEvidence sets the "evidence" field.
+func (m *RefreshSessionMutation) SetEvidence(a authrules.Evidence) {
+	m.evidence = &a
+}
+
+// Evidence returns the value of the "evidence" field in the mutation.
+func (m *RefreshSessionMutation) Evidence() (r authrules.Evidence, exists bool) {
+	v := m.evidence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEvidence returns the old "evidence" field's value of the RefreshSession entity.
+// If the RefreshSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RefreshSessionMutation) OldEvidence(ctx context.Context) (v authrules.Evidence, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEvidence is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEvidence requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEvidence: %w", err)
+	}
+	return oldValue.Evidence, nil
+}
+
+// ClearEvidence clears the value of the "evidence" field.
+func (m *RefreshSessionMutation) ClearEvidence() {
+	m.evidence = nil
+	m.clearedFields[refreshsession.FieldEvidence] = struct{}{}
+}
+
+// EvidenceCleared returns if the "evidence" field was cleared in this mutation.
+func (m *RefreshSessionMutation) EvidenceCleared() bool {
+	_, ok := m.clearedFields[refreshsession.FieldEvidence]
+	return ok
+}
+
+// ResetEvidence resets all changes to the "evidence" field.
+func (m *RefreshSessionMutation) ResetEvidence() {
+	m.evidence = nil
+	delete(m.clearedFields, refreshsession.FieldEvidence)
+}
+
 // SetGeneration sets the "generation" field.
 func (m *RefreshSessionMutation) SetGeneration(i int64) {
 	m.generation = &i
@@ -37458,7 +38555,7 @@ func (m *RefreshSessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RefreshSessionMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.created_at != nil {
 		fields = append(fields, refreshsession.FieldCreatedAt)
 	}
@@ -37482,6 +38579,9 @@ func (m *RefreshSessionMutation) Fields() []string {
 	}
 	if m.login_policy_revision != nil {
 		fields = append(fields, refreshsession.FieldLoginPolicyRevision)
+	}
+	if m.evidence != nil {
+		fields = append(fields, refreshsession.FieldEvidence)
 	}
 	if m.generation != nil {
 		fields = append(fields, refreshsession.FieldGeneration)
@@ -37516,6 +38616,8 @@ func (m *RefreshSessionMutation) Field(name string) (ent.Value, bool) {
 		return m.ConnectionGeneration()
 	case refreshsession.FieldLoginPolicyRevision:
 		return m.LoginPolicyRevision()
+	case refreshsession.FieldEvidence:
+		return m.Evidence()
 	case refreshsession.FieldGeneration:
 		return m.Generation()
 	case refreshsession.FieldExpiresAt:
@@ -37547,6 +38649,8 @@ func (m *RefreshSessionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldConnectionGeneration(ctx)
 	case refreshsession.FieldLoginPolicyRevision:
 		return m.OldLoginPolicyRevision(ctx)
+	case refreshsession.FieldEvidence:
+		return m.OldEvidence(ctx)
 	case refreshsession.FieldGeneration:
 		return m.OldGeneration(ctx)
 	case refreshsession.FieldExpiresAt:
@@ -37617,6 +38721,13 @@ func (m *RefreshSessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetLoginPolicyRevision(v)
+		return nil
+	case refreshsession.FieldEvidence:
+		v, ok := value.(authrules.Evidence)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEvidence(v)
 		return nil
 	case refreshsession.FieldGeneration:
 		v, ok := value.(int64)
@@ -37723,6 +38834,9 @@ func (m *RefreshSessionMutation) ClearedFields() []string {
 	if m.FieldCleared(refreshsession.FieldBindingID) {
 		fields = append(fields, refreshsession.FieldBindingID)
 	}
+	if m.FieldCleared(refreshsession.FieldEvidence) {
+		fields = append(fields, refreshsession.FieldEvidence)
+	}
 	if m.FieldCleared(refreshsession.FieldRevokedAt) {
 		fields = append(fields, refreshsession.FieldRevokedAt)
 	}
@@ -37742,6 +38856,9 @@ func (m *RefreshSessionMutation) ClearField(name string) error {
 	switch name {
 	case refreshsession.FieldBindingID:
 		m.ClearBindingID()
+		return nil
+	case refreshsession.FieldEvidence:
+		m.ClearEvidence()
 		return nil
 	case refreshsession.FieldRevokedAt:
 		m.ClearRevokedAt()
@@ -37777,6 +38894,9 @@ func (m *RefreshSessionMutation) ResetField(name string) error {
 		return nil
 	case refreshsession.FieldLoginPolicyRevision:
 		m.ResetLoginPolicyRevision()
+		return nil
+	case refreshsession.FieldEvidence:
+		m.ResetEvidence()
 		return nil
 	case refreshsession.FieldGeneration:
 		m.ResetGeneration()
@@ -64534,6 +65654,8 @@ type UserMutation struct {
 	updated_at                          *time.Time
 	username                            *string
 	password_hash                       *string
+	password_verified_hash              *string
+	password_verified_at                *time.Time
 	email                               *string
 	email_verified_at                   *time.Time
 	email_verification_source           *string
@@ -64853,6 +65975,104 @@ func (m *UserMutation) PasswordHashCleared() bool {
 func (m *UserMutation) ResetPasswordHash() {
 	m.password_hash = nil
 	delete(m.clearedFields, user.FieldPasswordHash)
+}
+
+// SetPasswordVerifiedHash sets the "password_verified_hash" field.
+func (m *UserMutation) SetPasswordVerifiedHash(s string) {
+	m.password_verified_hash = &s
+}
+
+// PasswordVerifiedHash returns the value of the "password_verified_hash" field in the mutation.
+func (m *UserMutation) PasswordVerifiedHash() (r string, exists bool) {
+	v := m.password_verified_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPasswordVerifiedHash returns the old "password_verified_hash" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldPasswordVerifiedHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPasswordVerifiedHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPasswordVerifiedHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPasswordVerifiedHash: %w", err)
+	}
+	return oldValue.PasswordVerifiedHash, nil
+}
+
+// ClearPasswordVerifiedHash clears the value of the "password_verified_hash" field.
+func (m *UserMutation) ClearPasswordVerifiedHash() {
+	m.password_verified_hash = nil
+	m.clearedFields[user.FieldPasswordVerifiedHash] = struct{}{}
+}
+
+// PasswordVerifiedHashCleared returns if the "password_verified_hash" field was cleared in this mutation.
+func (m *UserMutation) PasswordVerifiedHashCleared() bool {
+	_, ok := m.clearedFields[user.FieldPasswordVerifiedHash]
+	return ok
+}
+
+// ResetPasswordVerifiedHash resets all changes to the "password_verified_hash" field.
+func (m *UserMutation) ResetPasswordVerifiedHash() {
+	m.password_verified_hash = nil
+	delete(m.clearedFields, user.FieldPasswordVerifiedHash)
+}
+
+// SetPasswordVerifiedAt sets the "password_verified_at" field.
+func (m *UserMutation) SetPasswordVerifiedAt(t time.Time) {
+	m.password_verified_at = &t
+}
+
+// PasswordVerifiedAt returns the value of the "password_verified_at" field in the mutation.
+func (m *UserMutation) PasswordVerifiedAt() (r time.Time, exists bool) {
+	v := m.password_verified_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPasswordVerifiedAt returns the old "password_verified_at" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldPasswordVerifiedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPasswordVerifiedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPasswordVerifiedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPasswordVerifiedAt: %w", err)
+	}
+	return oldValue.PasswordVerifiedAt, nil
+}
+
+// ClearPasswordVerifiedAt clears the value of the "password_verified_at" field.
+func (m *UserMutation) ClearPasswordVerifiedAt() {
+	m.password_verified_at = nil
+	m.clearedFields[user.FieldPasswordVerifiedAt] = struct{}{}
+}
+
+// PasswordVerifiedAtCleared returns if the "password_verified_at" field was cleared in this mutation.
+func (m *UserMutation) PasswordVerifiedAtCleared() bool {
+	_, ok := m.clearedFields[user.FieldPasswordVerifiedAt]
+	return ok
+}
+
+// ResetPasswordVerifiedAt resets all changes to the "password_verified_at" field.
+func (m *UserMutation) ResetPasswordVerifiedAt() {
+	m.password_verified_at = nil
+	delete(m.clearedFields, user.FieldPasswordVerifiedAt)
 }
 
 // SetEmail sets the "email" field.
@@ -66180,7 +67400,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 14)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -66192,6 +67412,12 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.password_hash != nil {
 		fields = append(fields, user.FieldPasswordHash)
+	}
+	if m.password_verified_hash != nil {
+		fields = append(fields, user.FieldPasswordVerifiedHash)
+	}
+	if m.password_verified_at != nil {
+		fields = append(fields, user.FieldPasswordVerifiedAt)
 	}
 	if m.email != nil {
 		fields = append(fields, user.FieldEmail)
@@ -66233,6 +67459,10 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Username()
 	case user.FieldPasswordHash:
 		return m.PasswordHash()
+	case user.FieldPasswordVerifiedHash:
+		return m.PasswordVerifiedHash()
+	case user.FieldPasswordVerifiedAt:
+		return m.PasswordVerifiedAt()
 	case user.FieldEmail:
 		return m.Email()
 	case user.FieldEmailVerifiedAt:
@@ -66266,6 +67496,10 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldUsername(ctx)
 	case user.FieldPasswordHash:
 		return m.OldPasswordHash(ctx)
+	case user.FieldPasswordVerifiedHash:
+		return m.OldPasswordVerifiedHash(ctx)
+	case user.FieldPasswordVerifiedAt:
+		return m.OldPasswordVerifiedAt(ctx)
 	case user.FieldEmail:
 		return m.OldEmail(ctx)
 	case user.FieldEmailVerifiedAt:
@@ -66318,6 +67552,20 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPasswordHash(v)
+		return nil
+	case user.FieldPasswordVerifiedHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPasswordVerifiedHash(v)
+		return nil
+	case user.FieldPasswordVerifiedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPasswordVerifiedAt(v)
 		return nil
 	case user.FieldEmail:
 		v, ok := value.(string)
@@ -66423,6 +67671,12 @@ func (m *UserMutation) ClearedFields() []string {
 	if m.FieldCleared(user.FieldPasswordHash) {
 		fields = append(fields, user.FieldPasswordHash)
 	}
+	if m.FieldCleared(user.FieldPasswordVerifiedHash) {
+		fields = append(fields, user.FieldPasswordVerifiedHash)
+	}
+	if m.FieldCleared(user.FieldPasswordVerifiedAt) {
+		fields = append(fields, user.FieldPasswordVerifiedAt)
+	}
 	if m.FieldCleared(user.FieldEmail) {
 		fields = append(fields, user.FieldEmail)
 	}
@@ -66454,6 +67708,12 @@ func (m *UserMutation) ClearField(name string) error {
 	switch name {
 	case user.FieldPasswordHash:
 		m.ClearPasswordHash()
+		return nil
+	case user.FieldPasswordVerifiedHash:
+		m.ClearPasswordVerifiedHash()
+		return nil
+	case user.FieldPasswordVerifiedAt:
+		m.ClearPasswordVerifiedAt()
 		return nil
 	case user.FieldEmail:
 		m.ClearEmail()
@@ -66489,6 +67749,12 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldPasswordHash:
 		m.ResetPasswordHash()
+		return nil
+	case user.FieldPasswordVerifiedHash:
+		m.ResetPasswordVerifiedHash()
+		return nil
+	case user.FieldPasswordVerifiedAt:
+		m.ResetPasswordVerifiedAt()
 		return nil
 	case user.FieldEmail:
 		m.ResetEmail()

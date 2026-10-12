@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
@@ -122,6 +123,20 @@ func (_c *LoginBindingCreate) SetVerifiedLoginPolicyRevision(v int64) *LoginBind
 func (_c *LoginBindingCreate) SetNillableVerifiedLoginPolicyRevision(v *int64) *LoginBindingCreate {
 	if v != nil {
 		_c.SetVerifiedLoginPolicyRevision(*v)
+	}
+	return _c
+}
+
+// SetEvidence sets the "evidence" field.
+func (_c *LoginBindingCreate) SetEvidence(v authrules.Evidence) *LoginBindingCreate {
+	_c.mutation.SetEvidence(v)
+	return _c
+}
+
+// SetNillableEvidence sets the "evidence" field if the given value is not nil.
+func (_c *LoginBindingCreate) SetNillableEvidence(v *authrules.Evidence) *LoginBindingCreate {
+	if v != nil {
+		_c.SetEvidence(*v)
 	}
 	return _c
 }
@@ -324,6 +339,10 @@ func (_c *LoginBindingCreate) createSpec() (*LoginBinding, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.VerifiedLoginPolicyRevision(); ok {
 		_spec.SetField(loginbinding.FieldVerifiedLoginPolicyRevision, field.TypeInt64, value)
 		_node.VerifiedLoginPolicyRevision = value
+	}
+	if value, ok := _c.mutation.Evidence(); ok {
+		_spec.SetField(loginbinding.FieldEvidence, field.TypeJSON, value)
+		_node.Evidence = value
 	}
 	if nodes := _c.mutation.UserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

@@ -190,6 +190,21 @@ func IdentityAuthTime(v time.Time) predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldEQ(FieldIdentityAuthTime, v))
 }
 
+// AuthorizationConnectionID applies equality check predicate on the "authorization_connection_id" field. It's identical to AuthorizationConnectionIDEQ.
+func AuthorizationConnectionID(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionGeneration applies equality check predicate on the "authorization_connection_generation" field. It's identical to AuthorizationConnectionGenerationEQ.
+func AuthorizationConnectionGeneration(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldAuthorizationConnectionGeneration, v))
+}
+
+// AuthorizationPolicyRevision applies equality check predicate on the "authorization_policy_revision" field. It's identical to AuthorizationPolicyRevisionEQ.
+func AuthorizationPolicyRevision(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldAuthorizationPolicyRevision, v))
+}
+
 // AuthorizedAction applies equality check predicate on the "authorized_action" field. It's identical to AuthorizedActionEQ.
 func AuthorizedAction(v string) predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldEQ(FieldAuthorizedAction, v))
@@ -1738,6 +1753,191 @@ func IdentityAuthTimeIsNil() predicate.AuthTransaction {
 // IdentityAuthTimeNotNil applies the NotNil predicate on the "identity_auth_time" field.
 func IdentityAuthTimeNotNil() predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldNotNull(FieldIdentityAuthTime))
+}
+
+// EvidenceIsNil applies the IsNil predicate on the "evidence" field.
+func EvidenceIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldEvidence))
+}
+
+// EvidenceNotNil applies the NotNil predicate on the "evidence" field.
+func EvidenceNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldEvidence))
+}
+
+// AuthorizationConnectionIDEQ applies the EQ predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDNEQ applies the NEQ predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDNEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDIn applies the In predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldAuthorizationConnectionID, vs...))
+}
+
+// AuthorizationConnectionIDNotIn applies the NotIn predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDNotIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldAuthorizationConnectionID, vs...))
+}
+
+// AuthorizationConnectionIDGT applies the GT predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDGT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDGTE applies the GTE predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDGTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDLT applies the LT predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDLT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDLTE applies the LTE predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDLTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDContains applies the Contains predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDContains(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContains(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDHasPrefix applies the HasPrefix predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDHasPrefix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasPrefix(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDHasSuffix applies the HasSuffix predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDHasSuffix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasSuffix(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDIsNil applies the IsNil predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldAuthorizationConnectionID))
+}
+
+// AuthorizationConnectionIDNotNil applies the NotNil predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldAuthorizationConnectionID))
+}
+
+// AuthorizationConnectionIDEqualFold applies the EqualFold predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDEqualFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEqualFold(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionIDContainsFold applies the ContainsFold predicate on the "authorization_connection_id" field.
+func AuthorizationConnectionIDContainsFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContainsFold(FieldAuthorizationConnectionID, v))
+}
+
+// AuthorizationConnectionGenerationEQ applies the EQ predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldAuthorizationConnectionGeneration, v))
+}
+
+// AuthorizationConnectionGenerationNEQ applies the NEQ predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationNEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldAuthorizationConnectionGeneration, v))
+}
+
+// AuthorizationConnectionGenerationIn applies the In predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldAuthorizationConnectionGeneration, vs...))
+}
+
+// AuthorizationConnectionGenerationNotIn applies the NotIn predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationNotIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldAuthorizationConnectionGeneration, vs...))
+}
+
+// AuthorizationConnectionGenerationGT applies the GT predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationGT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldAuthorizationConnectionGeneration, v))
+}
+
+// AuthorizationConnectionGenerationGTE applies the GTE predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationGTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldAuthorizationConnectionGeneration, v))
+}
+
+// AuthorizationConnectionGenerationLT applies the LT predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationLT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldAuthorizationConnectionGeneration, v))
+}
+
+// AuthorizationConnectionGenerationLTE applies the LTE predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationLTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldAuthorizationConnectionGeneration, v))
+}
+
+// AuthorizationConnectionGenerationIsNil applies the IsNil predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldAuthorizationConnectionGeneration))
+}
+
+// AuthorizationConnectionGenerationNotNil applies the NotNil predicate on the "authorization_connection_generation" field.
+func AuthorizationConnectionGenerationNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldAuthorizationConnectionGeneration))
+}
+
+// AuthorizationPolicyRevisionEQ applies the EQ predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldAuthorizationPolicyRevision, v))
+}
+
+// AuthorizationPolicyRevisionNEQ applies the NEQ predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionNEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldAuthorizationPolicyRevision, v))
+}
+
+// AuthorizationPolicyRevisionIn applies the In predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldAuthorizationPolicyRevision, vs...))
+}
+
+// AuthorizationPolicyRevisionNotIn applies the NotIn predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionNotIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldAuthorizationPolicyRevision, vs...))
+}
+
+// AuthorizationPolicyRevisionGT applies the GT predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionGT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldAuthorizationPolicyRevision, v))
+}
+
+// AuthorizationPolicyRevisionGTE applies the GTE predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionGTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldAuthorizationPolicyRevision, v))
+}
+
+// AuthorizationPolicyRevisionLT applies the LT predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionLT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldAuthorizationPolicyRevision, v))
+}
+
+// AuthorizationPolicyRevisionLTE applies the LTE predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionLTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldAuthorizationPolicyRevision, v))
+}
+
+// AuthorizationPolicyRevisionIsNil applies the IsNil predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldAuthorizationPolicyRevision))
+}
+
+// AuthorizationPolicyRevisionNotNil applies the NotNil predicate on the "authorization_policy_revision" field.
+func AuthorizationPolicyRevisionNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldAuthorizationPolicyRevision))
 }
 
 // AuthorizedActionEQ applies the EQ predicate on the "authorized_action" field.

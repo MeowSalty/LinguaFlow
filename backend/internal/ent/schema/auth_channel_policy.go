@@ -5,6 +5,7 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 )
 
 // AuthChannelPolicy belongs to an immutable configuration revision.
@@ -20,9 +21,14 @@ func (AuthChannelPolicy) Fields() []ent.Field {
 		field.Bool("login_enabled").Default(false).Immutable(),
 		field.Bool("signup_enabled").Default(false).Immutable(),
 		field.Bool("link_enabled").Default(false).Immutable(),
-		field.Enum("login_rule").Values("unrestricted").Immutable(),
-		field.Enum("signup_rule").Values("unrestricted").Immutable(),
-		field.Enum("link_rule").Values("unrestricted").Immutable(),
+		field.JSON("login_rules", authrules.RuleSet{}).Optional().Immutable(),
+		field.JSON("signup_rules", authrules.RuleSet{}).Optional().Immutable(),
+		field.JSON("link_rules", authrules.RuleSet{}).Optional().Immutable(),
+		// Retained storage columns allow an in-place B1 upgrade without dropping
+		// immutable historical snapshots. Runtime readers never use these values.
+		field.String("legacy_login_rule").StorageKey("login_rule").Default("unrestricted").Immutable(),
+		field.String("legacy_signup_rule").StorageKey("signup_rule").Default("unrestricted").Immutable(),
+		field.String("legacy_link_rule").StorageKey("link_rule").Default("unrestricted").Immutable(),
 	}
 }
 func (AuthChannelPolicy) Edges() []ent.Edge {

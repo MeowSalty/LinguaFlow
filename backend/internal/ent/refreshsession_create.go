@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
@@ -93,6 +94,20 @@ func (_c *RefreshSessionCreate) SetConnectionGeneration(v int64) *RefreshSession
 // SetLoginPolicyRevision sets the "login_policy_revision" field.
 func (_c *RefreshSessionCreate) SetLoginPolicyRevision(v int64) *RefreshSessionCreate {
 	_c.mutation.SetLoginPolicyRevision(v)
+	return _c
+}
+
+// SetEvidence sets the "evidence" field.
+func (_c *RefreshSessionCreate) SetEvidence(v authrules.Evidence) *RefreshSessionCreate {
+	_c.mutation.SetEvidence(v)
+	return _c
+}
+
+// SetNillableEvidence sets the "evidence" field if the given value is not nil.
+func (_c *RefreshSessionCreate) SetNillableEvidence(v *authrules.Evidence) *RefreshSessionCreate {
+	if v != nil {
+		_c.SetEvidence(*v)
+	}
 	return _c
 }
 
@@ -324,6 +339,10 @@ func (_c *RefreshSessionCreate) createSpec() (*RefreshSession, *sqlgraph.CreateS
 	if value, ok := _c.mutation.LoginPolicyRevision(); ok {
 		_spec.SetField(refreshsession.FieldLoginPolicyRevision, field.TypeInt64, value)
 		_node.LoginPolicyRevision = value
+	}
+	if value, ok := _c.mutation.Evidence(); ok {
+		_spec.SetField(refreshsession.FieldEvidence, field.TypeJSON, value)
+		_node.Evidence = value
 	}
 	if value, ok := _c.mutation.Generation(); ok {
 		_spec.SetField(refreshsession.FieldGeneration, field.TypeInt64, value)

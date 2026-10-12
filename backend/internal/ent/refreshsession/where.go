@@ -425,6 +425,16 @@ func LoginPolicyRevisionLTE(v int64) predicate.RefreshSession {
 	return predicate.RefreshSession(sql.FieldLTE(FieldLoginPolicyRevision, v))
 }
 
+// EvidenceIsNil applies the IsNil predicate on the "evidence" field.
+func EvidenceIsNil() predicate.RefreshSession {
+	return predicate.RefreshSession(sql.FieldIsNull(FieldEvidence))
+}
+
+// EvidenceNotNil applies the NotNil predicate on the "evidence" field.
+func EvidenceNotNil() predicate.RefreshSession {
+	return predicate.RefreshSession(sql.FieldNotNull(FieldEvidence))
+}
+
 // GenerationEQ applies the EQ predicate on the "generation" field.
 func GenerationEQ(v int64) predicate.RefreshSession {
 	return predicate.RefreshSession(sql.FieldEQ(FieldGeneration, v))

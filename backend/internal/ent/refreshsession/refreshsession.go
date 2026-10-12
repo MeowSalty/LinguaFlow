@@ -30,6 +30,8 @@ const (
 	FieldConnectionGeneration = "connection_generation"
 	// FieldLoginPolicyRevision holds the string denoting the login_policy_revision field in the database.
 	FieldLoginPolicyRevision = "login_policy_revision"
+	// FieldEvidence holds the string denoting the evidence field in the database.
+	FieldEvidence = "evidence"
 	// FieldGeneration holds the string denoting the generation field in the database.
 	FieldGeneration = "generation"
 	// FieldExpiresAt holds the string denoting the expires_at field in the database.
@@ -87,6 +89,7 @@ var Columns = []string{
 	FieldBindingID,
 	FieldConnectionGeneration,
 	FieldLoginPolicyRevision,
+	FieldEvidence,
 	FieldGeneration,
 	FieldExpiresAt,
 	FieldRevokedAt,

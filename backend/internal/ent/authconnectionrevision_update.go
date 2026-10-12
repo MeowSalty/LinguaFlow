@@ -104,6 +104,9 @@ func (_u *AuthConnectionRevisionUpdate) sqlSave(ctx context.Context) (_node int,
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authconnectionrevision.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if _u.mutation.AttributeMappingsCleared() {
+		_spec.ClearField(authconnectionrevision.FieldAttributeMappings, field.TypeJSON)
+	}
 	if _u.mutation.OidcIssuerCleared() {
 		_spec.ClearField(authconnectionrevision.FieldOidcIssuer, field.TypeString)
 	}
@@ -250,6 +253,9 @@ func (_u *AuthConnectionRevisionUpdateOne) sqlSave(ctx context.Context) (_node *
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authconnectionrevision.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.AttributeMappingsCleared() {
+		_spec.ClearField(authconnectionrevision.FieldAttributeMappings, field.TypeJSON)
 	}
 	if _u.mutation.OidcIssuerCleared() {
 		_spec.ClearField(authconnectionrevision.FieldOidcIssuer, field.TypeString)

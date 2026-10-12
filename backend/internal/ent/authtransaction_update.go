@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 )
@@ -248,6 +249,100 @@ func (_u *AuthTransactionUpdate) ClearIdentityAuthTime() *AuthTransactionUpdate 
 	return _u
 }
 
+// SetEvidence sets the "evidence" field.
+func (_u *AuthTransactionUpdate) SetEvidence(v authrules.Evidence) *AuthTransactionUpdate {
+	_u.mutation.SetEvidence(v)
+	return _u
+}
+
+// SetNillableEvidence sets the "evidence" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableEvidence(v *authrules.Evidence) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetEvidence(*v)
+	}
+	return _u
+}
+
+// ClearEvidence clears the value of the "evidence" field.
+func (_u *AuthTransactionUpdate) ClearEvidence() *AuthTransactionUpdate {
+	_u.mutation.ClearEvidence()
+	return _u
+}
+
+// SetAuthorizationConnectionID sets the "authorization_connection_id" field.
+func (_u *AuthTransactionUpdate) SetAuthorizationConnectionID(v string) *AuthTransactionUpdate {
+	_u.mutation.SetAuthorizationConnectionID(v)
+	return _u
+}
+
+// SetNillableAuthorizationConnectionID sets the "authorization_connection_id" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableAuthorizationConnectionID(v *string) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetAuthorizationConnectionID(*v)
+	}
+	return _u
+}
+
+// ClearAuthorizationConnectionID clears the value of the "authorization_connection_id" field.
+func (_u *AuthTransactionUpdate) ClearAuthorizationConnectionID() *AuthTransactionUpdate {
+	_u.mutation.ClearAuthorizationConnectionID()
+	return _u
+}
+
+// SetAuthorizationConnectionGeneration sets the "authorization_connection_generation" field.
+func (_u *AuthTransactionUpdate) SetAuthorizationConnectionGeneration(v int64) *AuthTransactionUpdate {
+	_u.mutation.ResetAuthorizationConnectionGeneration()
+	_u.mutation.SetAuthorizationConnectionGeneration(v)
+	return _u
+}
+
+// SetNillableAuthorizationConnectionGeneration sets the "authorization_connection_generation" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableAuthorizationConnectionGeneration(v *int64) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetAuthorizationConnectionGeneration(*v)
+	}
+	return _u
+}
+
+// AddAuthorizationConnectionGeneration adds value to the "authorization_connection_generation" field.
+func (_u *AuthTransactionUpdate) AddAuthorizationConnectionGeneration(v int64) *AuthTransactionUpdate {
+	_u.mutation.AddAuthorizationConnectionGeneration(v)
+	return _u
+}
+
+// ClearAuthorizationConnectionGeneration clears the value of the "authorization_connection_generation" field.
+func (_u *AuthTransactionUpdate) ClearAuthorizationConnectionGeneration() *AuthTransactionUpdate {
+	_u.mutation.ClearAuthorizationConnectionGeneration()
+	return _u
+}
+
+// SetAuthorizationPolicyRevision sets the "authorization_policy_revision" field.
+func (_u *AuthTransactionUpdate) SetAuthorizationPolicyRevision(v int64) *AuthTransactionUpdate {
+	_u.mutation.ResetAuthorizationPolicyRevision()
+	_u.mutation.SetAuthorizationPolicyRevision(v)
+	return _u
+}
+
+// SetNillableAuthorizationPolicyRevision sets the "authorization_policy_revision" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableAuthorizationPolicyRevision(v *int64) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetAuthorizationPolicyRevision(*v)
+	}
+	return _u
+}
+
+// AddAuthorizationPolicyRevision adds value to the "authorization_policy_revision" field.
+func (_u *AuthTransactionUpdate) AddAuthorizationPolicyRevision(v int64) *AuthTransactionUpdate {
+	_u.mutation.AddAuthorizationPolicyRevision(v)
+	return _u
+}
+
+// ClearAuthorizationPolicyRevision clears the value of the "authorization_policy_revision" field.
+func (_u *AuthTransactionUpdate) ClearAuthorizationPolicyRevision() *AuthTransactionUpdate {
+	_u.mutation.ClearAuthorizationPolicyRevision()
+	return _u
+}
+
 // SetFailureCode sets the "failure_code" field.
 func (_u *AuthTransactionUpdate) SetFailureCode(v string) *AuthTransactionUpdate {
 	_u.mutation.SetFailureCode(v)
@@ -428,6 +523,36 @@ func (_u *AuthTransactionUpdate) sqlSave(ctx context.Context) (_node int, err er
 	}
 	if _u.mutation.IdentityAuthTimeCleared() {
 		_spec.ClearField(authtransaction.FieldIdentityAuthTime, field.TypeTime)
+	}
+	if value, ok := _u.mutation.Evidence(); ok {
+		_spec.SetField(authtransaction.FieldEvidence, field.TypeJSON, value)
+	}
+	if _u.mutation.EvidenceCleared() {
+		_spec.ClearField(authtransaction.FieldEvidence, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.AuthorizationConnectionID(); ok {
+		_spec.SetField(authtransaction.FieldAuthorizationConnectionID, field.TypeString, value)
+	}
+	if _u.mutation.AuthorizationConnectionIDCleared() {
+		_spec.ClearField(authtransaction.FieldAuthorizationConnectionID, field.TypeString)
+	}
+	if value, ok := _u.mutation.AuthorizationConnectionGeneration(); ok {
+		_spec.SetField(authtransaction.FieldAuthorizationConnectionGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAuthorizationConnectionGeneration(); ok {
+		_spec.AddField(authtransaction.FieldAuthorizationConnectionGeneration, field.TypeInt64, value)
+	}
+	if _u.mutation.AuthorizationConnectionGenerationCleared() {
+		_spec.ClearField(authtransaction.FieldAuthorizationConnectionGeneration, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.AuthorizationPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldAuthorizationPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAuthorizationPolicyRevision(); ok {
+		_spec.AddField(authtransaction.FieldAuthorizationPolicyRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.AuthorizationPolicyRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldAuthorizationPolicyRevision, field.TypeInt64)
 	}
 	if _u.mutation.AuthorizedActionCleared() {
 		_spec.ClearField(authtransaction.FieldAuthorizedAction, field.TypeString)
@@ -690,6 +815,100 @@ func (_u *AuthTransactionUpdateOne) ClearIdentityAuthTime() *AuthTransactionUpda
 	return _u
 }
 
+// SetEvidence sets the "evidence" field.
+func (_u *AuthTransactionUpdateOne) SetEvidence(v authrules.Evidence) *AuthTransactionUpdateOne {
+	_u.mutation.SetEvidence(v)
+	return _u
+}
+
+// SetNillableEvidence sets the "evidence" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableEvidence(v *authrules.Evidence) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetEvidence(*v)
+	}
+	return _u
+}
+
+// ClearEvidence clears the value of the "evidence" field.
+func (_u *AuthTransactionUpdateOne) ClearEvidence() *AuthTransactionUpdateOne {
+	_u.mutation.ClearEvidence()
+	return _u
+}
+
+// SetAuthorizationConnectionID sets the "authorization_connection_id" field.
+func (_u *AuthTransactionUpdateOne) SetAuthorizationConnectionID(v string) *AuthTransactionUpdateOne {
+	_u.mutation.SetAuthorizationConnectionID(v)
+	return _u
+}
+
+// SetNillableAuthorizationConnectionID sets the "authorization_connection_id" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableAuthorizationConnectionID(v *string) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetAuthorizationConnectionID(*v)
+	}
+	return _u
+}
+
+// ClearAuthorizationConnectionID clears the value of the "authorization_connection_id" field.
+func (_u *AuthTransactionUpdateOne) ClearAuthorizationConnectionID() *AuthTransactionUpdateOne {
+	_u.mutation.ClearAuthorizationConnectionID()
+	return _u
+}
+
+// SetAuthorizationConnectionGeneration sets the "authorization_connection_generation" field.
+func (_u *AuthTransactionUpdateOne) SetAuthorizationConnectionGeneration(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.ResetAuthorizationConnectionGeneration()
+	_u.mutation.SetAuthorizationConnectionGeneration(v)
+	return _u
+}
+
+// SetNillableAuthorizationConnectionGeneration sets the "authorization_connection_generation" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableAuthorizationConnectionGeneration(v *int64) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetAuthorizationConnectionGeneration(*v)
+	}
+	return _u
+}
+
+// AddAuthorizationConnectionGeneration adds value to the "authorization_connection_generation" field.
+func (_u *AuthTransactionUpdateOne) AddAuthorizationConnectionGeneration(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.AddAuthorizationConnectionGeneration(v)
+	return _u
+}
+
+// ClearAuthorizationConnectionGeneration clears the value of the "authorization_connection_generation" field.
+func (_u *AuthTransactionUpdateOne) ClearAuthorizationConnectionGeneration() *AuthTransactionUpdateOne {
+	_u.mutation.ClearAuthorizationConnectionGeneration()
+	return _u
+}
+
+// SetAuthorizationPolicyRevision sets the "authorization_policy_revision" field.
+func (_u *AuthTransactionUpdateOne) SetAuthorizationPolicyRevision(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.ResetAuthorizationPolicyRevision()
+	_u.mutation.SetAuthorizationPolicyRevision(v)
+	return _u
+}
+
+// SetNillableAuthorizationPolicyRevision sets the "authorization_policy_revision" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableAuthorizationPolicyRevision(v *int64) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetAuthorizationPolicyRevision(*v)
+	}
+	return _u
+}
+
+// AddAuthorizationPolicyRevision adds value to the "authorization_policy_revision" field.
+func (_u *AuthTransactionUpdateOne) AddAuthorizationPolicyRevision(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.AddAuthorizationPolicyRevision(v)
+	return _u
+}
+
+// ClearAuthorizationPolicyRevision clears the value of the "authorization_policy_revision" field.
+func (_u *AuthTransactionUpdateOne) ClearAuthorizationPolicyRevision() *AuthTransactionUpdateOne {
+	_u.mutation.ClearAuthorizationPolicyRevision()
+	return _u
+}
+
 // SetFailureCode sets the "failure_code" field.
 func (_u *AuthTransactionUpdateOne) SetFailureCode(v string) *AuthTransactionUpdateOne {
 	_u.mutation.SetFailureCode(v)
@@ -900,6 +1119,36 @@ func (_u *AuthTransactionUpdateOne) sqlSave(ctx context.Context) (_node *AuthTra
 	}
 	if _u.mutation.IdentityAuthTimeCleared() {
 		_spec.ClearField(authtransaction.FieldIdentityAuthTime, field.TypeTime)
+	}
+	if value, ok := _u.mutation.Evidence(); ok {
+		_spec.SetField(authtransaction.FieldEvidence, field.TypeJSON, value)
+	}
+	if _u.mutation.EvidenceCleared() {
+		_spec.ClearField(authtransaction.FieldEvidence, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.AuthorizationConnectionID(); ok {
+		_spec.SetField(authtransaction.FieldAuthorizationConnectionID, field.TypeString, value)
+	}
+	if _u.mutation.AuthorizationConnectionIDCleared() {
+		_spec.ClearField(authtransaction.FieldAuthorizationConnectionID, field.TypeString)
+	}
+	if value, ok := _u.mutation.AuthorizationConnectionGeneration(); ok {
+		_spec.SetField(authtransaction.FieldAuthorizationConnectionGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAuthorizationConnectionGeneration(); ok {
+		_spec.AddField(authtransaction.FieldAuthorizationConnectionGeneration, field.TypeInt64, value)
+	}
+	if _u.mutation.AuthorizationConnectionGenerationCleared() {
+		_spec.ClearField(authtransaction.FieldAuthorizationConnectionGeneration, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.AuthorizationPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldAuthorizationPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAuthorizationPolicyRevision(); ok {
+		_spec.AddField(authtransaction.FieldAuthorizationPolicyRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.AuthorizationPolicyRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldAuthorizationPolicyRevision, field.TypeInt64)
 	}
 	if _u.mutation.AuthorizedActionCleared() {
 		_spec.ClearField(authtransaction.FieldAuthorizedAction, field.TypeString)

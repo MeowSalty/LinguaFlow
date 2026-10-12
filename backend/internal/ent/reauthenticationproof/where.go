@@ -84,6 +84,16 @@ func ConnectionID(v string) predicate.ReauthenticationProof {
 	return predicate.ReauthenticationProof(sql.FieldEQ(FieldConnectionID, v))
 }
 
+// ConnectionGeneration applies equality check predicate on the "connection_generation" field. It's identical to ConnectionGenerationEQ.
+func ConnectionGeneration(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldEQ(FieldConnectionGeneration, v))
+}
+
+// LoginPolicyRevision applies equality check predicate on the "login_policy_revision" field. It's identical to LoginPolicyRevisionEQ.
+func LoginPolicyRevision(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldEQ(FieldLoginPolicyRevision, v))
+}
+
 // TargetID applies equality check predicate on the "target_id" field. It's identical to TargetIDEQ.
 func TargetID(v string) predicate.ReauthenticationProof {
 	return predicate.ReauthenticationProof(sql.FieldEQ(FieldTargetID, v))
@@ -422,6 +432,106 @@ func ConnectionIDEqualFold(v string) predicate.ReauthenticationProof {
 // ConnectionIDContainsFold applies the ContainsFold predicate on the "connection_id" field.
 func ConnectionIDContainsFold(v string) predicate.ReauthenticationProof {
 	return predicate.ReauthenticationProof(sql.FieldContainsFold(FieldConnectionID, v))
+}
+
+// ConnectionGenerationEQ applies the EQ predicate on the "connection_generation" field.
+func ConnectionGenerationEQ(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldEQ(FieldConnectionGeneration, v))
+}
+
+// ConnectionGenerationNEQ applies the NEQ predicate on the "connection_generation" field.
+func ConnectionGenerationNEQ(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldNEQ(FieldConnectionGeneration, v))
+}
+
+// ConnectionGenerationIn applies the In predicate on the "connection_generation" field.
+func ConnectionGenerationIn(vs ...int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldIn(FieldConnectionGeneration, vs...))
+}
+
+// ConnectionGenerationNotIn applies the NotIn predicate on the "connection_generation" field.
+func ConnectionGenerationNotIn(vs ...int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldNotIn(FieldConnectionGeneration, vs...))
+}
+
+// ConnectionGenerationGT applies the GT predicate on the "connection_generation" field.
+func ConnectionGenerationGT(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldGT(FieldConnectionGeneration, v))
+}
+
+// ConnectionGenerationGTE applies the GTE predicate on the "connection_generation" field.
+func ConnectionGenerationGTE(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldGTE(FieldConnectionGeneration, v))
+}
+
+// ConnectionGenerationLT applies the LT predicate on the "connection_generation" field.
+func ConnectionGenerationLT(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldLT(FieldConnectionGeneration, v))
+}
+
+// ConnectionGenerationLTE applies the LTE predicate on the "connection_generation" field.
+func ConnectionGenerationLTE(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldLTE(FieldConnectionGeneration, v))
+}
+
+// ConnectionGenerationIsNil applies the IsNil predicate on the "connection_generation" field.
+func ConnectionGenerationIsNil() predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldIsNull(FieldConnectionGeneration))
+}
+
+// ConnectionGenerationNotNil applies the NotNil predicate on the "connection_generation" field.
+func ConnectionGenerationNotNil() predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldNotNull(FieldConnectionGeneration))
+}
+
+// LoginPolicyRevisionEQ applies the EQ predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionEQ(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldEQ(FieldLoginPolicyRevision, v))
+}
+
+// LoginPolicyRevisionNEQ applies the NEQ predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionNEQ(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldNEQ(FieldLoginPolicyRevision, v))
+}
+
+// LoginPolicyRevisionIn applies the In predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionIn(vs ...int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldIn(FieldLoginPolicyRevision, vs...))
+}
+
+// LoginPolicyRevisionNotIn applies the NotIn predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionNotIn(vs ...int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldNotIn(FieldLoginPolicyRevision, vs...))
+}
+
+// LoginPolicyRevisionGT applies the GT predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionGT(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldGT(FieldLoginPolicyRevision, v))
+}
+
+// LoginPolicyRevisionGTE applies the GTE predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionGTE(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldGTE(FieldLoginPolicyRevision, v))
+}
+
+// LoginPolicyRevisionLT applies the LT predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionLT(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldLT(FieldLoginPolicyRevision, v))
+}
+
+// LoginPolicyRevisionLTE applies the LTE predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionLTE(v int64) predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldLTE(FieldLoginPolicyRevision, v))
+}
+
+// LoginPolicyRevisionIsNil applies the IsNil predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionIsNil() predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldIsNull(FieldLoginPolicyRevision))
+}
+
+// LoginPolicyRevisionNotNil applies the NotNil predicate on the "login_policy_revision" field.
+func LoginPolicyRevisionNotNil() predicate.ReauthenticationProof {
+	return predicate.ReauthenticationProof(sql.FieldNotNull(FieldLoginPolicyRevision))
 }
 
 // ActionEQ applies the EQ predicate on the "action" field.

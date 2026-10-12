@@ -184,6 +184,9 @@ func (_u *RefreshSessionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(refreshsession.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if _u.mutation.EvidenceCleared() {
+		_spec.ClearField(refreshsession.FieldEvidence, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Generation(); ok {
 		_spec.SetField(refreshsession.FieldGeneration, field.TypeInt64, value)
 	}
@@ -445,6 +448,9 @@ func (_u *RefreshSessionUpdateOne) sqlSave(ctx context.Context) (_node *RefreshS
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(refreshsession.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.EvidenceCleared() {
+		_spec.ClearField(refreshsession.FieldEvidence, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Generation(); ok {
 		_spec.SetField(refreshsession.FieldGeneration, field.TypeInt64, value)

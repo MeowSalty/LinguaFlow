@@ -95,6 +95,11 @@ func ConfigVersion(v int) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldConfigVersion, v))
 }
 
+// EvidenceMaxAgeSeconds applies equality check predicate on the "evidence_max_age_seconds" field. It's identical to EvidenceMaxAgeSecondsEQ.
+func EvidenceMaxAgeSeconds(v int) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldEvidenceMaxAgeSeconds, v))
+}
+
 // OidcIssuer applies equality check predicate on the "oidc_issuer" field. It's identical to OidcIssuerEQ.
 func OidcIssuer(v string) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOidcIssuer, v))
@@ -528,6 +533,56 @@ func ConfigVersionLT(v int) predicate.AuthConnectionRevision {
 // ConfigVersionLTE applies the LTE predicate on the "config_version" field.
 func ConfigVersionLTE(v int) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldConfigVersion, v))
+}
+
+// AttributeMappingsIsNil applies the IsNil predicate on the "attribute_mappings" field.
+func AttributeMappingsIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldAttributeMappings))
+}
+
+// AttributeMappingsNotNil applies the NotNil predicate on the "attribute_mappings" field.
+func AttributeMappingsNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldAttributeMappings))
+}
+
+// EvidenceMaxAgeSecondsEQ applies the EQ predicate on the "evidence_max_age_seconds" field.
+func EvidenceMaxAgeSecondsEQ(v int) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldEvidenceMaxAgeSeconds, v))
+}
+
+// EvidenceMaxAgeSecondsNEQ applies the NEQ predicate on the "evidence_max_age_seconds" field.
+func EvidenceMaxAgeSecondsNEQ(v int) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldEvidenceMaxAgeSeconds, v))
+}
+
+// EvidenceMaxAgeSecondsIn applies the In predicate on the "evidence_max_age_seconds" field.
+func EvidenceMaxAgeSecondsIn(vs ...int) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldEvidenceMaxAgeSeconds, vs...))
+}
+
+// EvidenceMaxAgeSecondsNotIn applies the NotIn predicate on the "evidence_max_age_seconds" field.
+func EvidenceMaxAgeSecondsNotIn(vs ...int) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldEvidenceMaxAgeSeconds, vs...))
+}
+
+// EvidenceMaxAgeSecondsGT applies the GT predicate on the "evidence_max_age_seconds" field.
+func EvidenceMaxAgeSecondsGT(v int) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldEvidenceMaxAgeSeconds, v))
+}
+
+// EvidenceMaxAgeSecondsGTE applies the GTE predicate on the "evidence_max_age_seconds" field.
+func EvidenceMaxAgeSecondsGTE(v int) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldEvidenceMaxAgeSeconds, v))
+}
+
+// EvidenceMaxAgeSecondsLT applies the LT predicate on the "evidence_max_age_seconds" field.
+func EvidenceMaxAgeSecondsLT(v int) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldEvidenceMaxAgeSeconds, v))
+}
+
+// EvidenceMaxAgeSecondsLTE applies the LTE predicate on the "evidence_max_age_seconds" field.
+func EvidenceMaxAgeSecondsLTE(v int) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldEvidenceMaxAgeSeconds, v))
 }
 
 // OidcIssuerEQ applies the EQ predicate on the "oidc_issuer" field.

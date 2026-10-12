@@ -32,6 +32,10 @@ const (
 	FieldDisplayOrder = "display_order"
 	// FieldConfigVersion holds the string denoting the config_version field in the database.
 	FieldConfigVersion = "config_version"
+	// FieldAttributeMappings holds the string denoting the attribute_mappings field in the database.
+	FieldAttributeMappings = "attribute_mappings"
+	// FieldEvidenceMaxAgeSeconds holds the string denoting the evidence_max_age_seconds field in the database.
+	FieldEvidenceMaxAgeSeconds = "evidence_max_age_seconds"
 	// FieldOidcIssuer holds the string denoting the oidc_issuer field in the database.
 	FieldOidcIssuer = "oidc_issuer"
 	// FieldOidcClientID holds the string denoting the oidc_client_id field in the database.
@@ -76,6 +80,8 @@ var Columns = []string{
 	FieldDescription,
 	FieldDisplayOrder,
 	FieldConfigVersion,
+	FieldAttributeMappings,
+	FieldEvidenceMaxAgeSeconds,
 	FieldOidcIssuer,
 	FieldOidcClientID,
 	FieldOidcClientAuthMethod,
@@ -125,6 +131,10 @@ var (
 	DefaultConfigVersion int
 	// ConfigVersionValidator is a validator for the "config_version" field. It is called by the builders before save.
 	ConfigVersionValidator func(int) error
+	// DefaultEvidenceMaxAgeSeconds holds the default value on creation for the "evidence_max_age_seconds" field.
+	DefaultEvidenceMaxAgeSeconds int
+	// EvidenceMaxAgeSecondsValidator is a validator for the "evidence_max_age_seconds" field. It is called by the builders before save.
+	EvidenceMaxAgeSecondsValidator func(int) error
 	// DefaultOidcUserinfoEnabled holds the default value on creation for the "oidc_userinfo_enabled" field.
 	DefaultOidcUserinfoEnabled bool
 	// SecretVersionValidator is a validator for the "secret_version" field. It is called by the builders before save.
@@ -204,6 +214,11 @@ func ByDisplayOrder(opts ...sql.OrderTermOption) OrderOption {
 // ByConfigVersion orders the results by the config_version field.
 func ByConfigVersion(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldConfigVersion, opts...).ToFunc()
+}
+
+// ByEvidenceMaxAgeSeconds orders the results by the evidence_max_age_seconds field.
+func ByEvidenceMaxAgeSeconds(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEvidenceMaxAgeSeconds, opts...).ToFunc()
 }
 
 // ByOidcIssuer orders the results by the oidc_issuer field.

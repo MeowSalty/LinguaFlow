@@ -69,6 +69,14 @@ const (
 	FieldIdentityEmail = "identity_email"
 	// FieldIdentityAuthTime holds the string denoting the identity_auth_time field in the database.
 	FieldIdentityAuthTime = "identity_auth_time"
+	// FieldEvidence holds the string denoting the evidence field in the database.
+	FieldEvidence = "evidence"
+	// FieldAuthorizationConnectionID holds the string denoting the authorization_connection_id field in the database.
+	FieldAuthorizationConnectionID = "authorization_connection_id"
+	// FieldAuthorizationConnectionGeneration holds the string denoting the authorization_connection_generation field in the database.
+	FieldAuthorizationConnectionGeneration = "authorization_connection_generation"
+	// FieldAuthorizationPolicyRevision holds the string denoting the authorization_policy_revision field in the database.
+	FieldAuthorizationPolicyRevision = "authorization_policy_revision"
 	// FieldAuthorizedAction holds the string denoting the authorized_action field in the database.
 	FieldAuthorizedAction = "authorized_action"
 	// FieldAuthorizedTargetID holds the string denoting the authorized_target_id field in the database.
@@ -124,6 +132,10 @@ var Columns = []string{
 	FieldIdentityUsername,
 	FieldIdentityEmail,
 	FieldIdentityAuthTime,
+	FieldEvidence,
+	FieldAuthorizationConnectionID,
+	FieldAuthorizationConnectionGeneration,
+	FieldAuthorizationPolicyRevision,
 	FieldAuthorizedAction,
 	FieldAuthorizedTargetID,
 	FieldAuthorizationExpiresAt,
@@ -377,6 +389,21 @@ func ByIdentityEmail(opts ...sql.OrderTermOption) OrderOption {
 // ByIdentityAuthTime orders the results by the identity_auth_time field.
 func ByIdentityAuthTime(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIdentityAuthTime, opts...).ToFunc()
+}
+
+// ByAuthorizationConnectionID orders the results by the authorization_connection_id field.
+func ByAuthorizationConnectionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAuthorizationConnectionID, opts...).ToFunc()
+}
+
+// ByAuthorizationConnectionGeneration orders the results by the authorization_connection_generation field.
+func ByAuthorizationConnectionGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAuthorizationConnectionGeneration, opts...).ToFunc()
+}
+
+// ByAuthorizationPolicyRevision orders the results by the authorization_policy_revision field.
+func ByAuthorizationPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAuthorizationPolicyRevision, opts...).ToFunc()
 }
 
 // ByAuthorizedAction orders the results by the authorized_action field.

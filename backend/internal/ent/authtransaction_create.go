@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 )
@@ -315,6 +316,62 @@ func (_c *AuthTransactionCreate) SetIdentityAuthTime(v time.Time) *AuthTransacti
 func (_c *AuthTransactionCreate) SetNillableIdentityAuthTime(v *time.Time) *AuthTransactionCreate {
 	if v != nil {
 		_c.SetIdentityAuthTime(*v)
+	}
+	return _c
+}
+
+// SetEvidence sets the "evidence" field.
+func (_c *AuthTransactionCreate) SetEvidence(v authrules.Evidence) *AuthTransactionCreate {
+	_c.mutation.SetEvidence(v)
+	return _c
+}
+
+// SetNillableEvidence sets the "evidence" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableEvidence(v *authrules.Evidence) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetEvidence(*v)
+	}
+	return _c
+}
+
+// SetAuthorizationConnectionID sets the "authorization_connection_id" field.
+func (_c *AuthTransactionCreate) SetAuthorizationConnectionID(v string) *AuthTransactionCreate {
+	_c.mutation.SetAuthorizationConnectionID(v)
+	return _c
+}
+
+// SetNillableAuthorizationConnectionID sets the "authorization_connection_id" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableAuthorizationConnectionID(v *string) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetAuthorizationConnectionID(*v)
+	}
+	return _c
+}
+
+// SetAuthorizationConnectionGeneration sets the "authorization_connection_generation" field.
+func (_c *AuthTransactionCreate) SetAuthorizationConnectionGeneration(v int64) *AuthTransactionCreate {
+	_c.mutation.SetAuthorizationConnectionGeneration(v)
+	return _c
+}
+
+// SetNillableAuthorizationConnectionGeneration sets the "authorization_connection_generation" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableAuthorizationConnectionGeneration(v *int64) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetAuthorizationConnectionGeneration(*v)
+	}
+	return _c
+}
+
+// SetAuthorizationPolicyRevision sets the "authorization_policy_revision" field.
+func (_c *AuthTransactionCreate) SetAuthorizationPolicyRevision(v int64) *AuthTransactionCreate {
+	_c.mutation.SetAuthorizationPolicyRevision(v)
+	return _c
+}
+
+// SetNillableAuthorizationPolicyRevision sets the "authorization_policy_revision" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableAuthorizationPolicyRevision(v *int64) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetAuthorizationPolicyRevision(*v)
 	}
 	return _c
 }
@@ -722,6 +779,22 @@ func (_c *AuthTransactionCreate) createSpec() (*AuthTransaction, *sqlgraph.Creat
 	if value, ok := _c.mutation.IdentityAuthTime(); ok {
 		_spec.SetField(authtransaction.FieldIdentityAuthTime, field.TypeTime, value)
 		_node.IdentityAuthTime = &value
+	}
+	if value, ok := _c.mutation.Evidence(); ok {
+		_spec.SetField(authtransaction.FieldEvidence, field.TypeJSON, value)
+		_node.Evidence = value
+	}
+	if value, ok := _c.mutation.AuthorizationConnectionID(); ok {
+		_spec.SetField(authtransaction.FieldAuthorizationConnectionID, field.TypeString, value)
+		_node.AuthorizationConnectionID = value
+	}
+	if value, ok := _c.mutation.AuthorizationConnectionGeneration(); ok {
+		_spec.SetField(authtransaction.FieldAuthorizationConnectionGeneration, field.TypeInt64, value)
+		_node.AuthorizationConnectionGeneration = value
+	}
+	if value, ok := _c.mutation.AuthorizationPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldAuthorizationPolicyRevision, field.TypeInt64, value)
+		_node.AuthorizationPolicyRevision = value
 	}
 	if value, ok := _c.mutation.AuthorizedAction(); ok {
 		_spec.SetField(authtransaction.FieldAuthorizedAction, field.TypeString, value)

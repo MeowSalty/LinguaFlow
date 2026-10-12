@@ -3,7 +3,6 @@
 package authchannelpolicy
 
 import (
-	"fmt"
 	"time"
 
 	"entgo.io/ent"
@@ -34,12 +33,18 @@ const (
 	FieldSignupEnabled = "signup_enabled"
 	// FieldLinkEnabled holds the string denoting the link_enabled field in the database.
 	FieldLinkEnabled = "link_enabled"
-	// FieldLoginRule holds the string denoting the login_rule field in the database.
-	FieldLoginRule = "login_rule"
-	// FieldSignupRule holds the string denoting the signup_rule field in the database.
-	FieldSignupRule = "signup_rule"
-	// FieldLinkRule holds the string denoting the link_rule field in the database.
-	FieldLinkRule = "link_rule"
+	// FieldLoginRules holds the string denoting the login_rules field in the database.
+	FieldLoginRules = "login_rules"
+	// FieldSignupRules holds the string denoting the signup_rules field in the database.
+	FieldSignupRules = "signup_rules"
+	// FieldLinkRules holds the string denoting the link_rules field in the database.
+	FieldLinkRules = "link_rules"
+	// FieldLegacyLoginRule holds the string denoting the legacy_login_rule field in the database.
+	FieldLegacyLoginRule = "login_rule"
+	// FieldLegacySignupRule holds the string denoting the legacy_signup_rule field in the database.
+	FieldLegacySignupRule = "signup_rule"
+	// FieldLegacyLinkRule holds the string denoting the legacy_link_rule field in the database.
+	FieldLegacyLinkRule = "link_rule"
 	// EdgeConnection holds the string denoting the connection edge name in mutations.
 	EdgeConnection = "connection"
 	// Table holds the table name of the authchannelpolicy in the database.
@@ -65,9 +70,12 @@ var Columns = []string{
 	FieldLoginEnabled,
 	FieldSignupEnabled,
 	FieldLinkEnabled,
-	FieldLoginRule,
-	FieldSignupRule,
-	FieldLinkRule,
+	FieldLoginRules,
+	FieldSignupRules,
+	FieldLinkRules,
+	FieldLegacyLoginRule,
+	FieldLegacySignupRule,
+	FieldLegacyLinkRule,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -107,73 +115,13 @@ var (
 	DefaultSignupEnabled bool
 	// DefaultLinkEnabled holds the default value on creation for the "link_enabled" field.
 	DefaultLinkEnabled bool
+	// DefaultLegacyLoginRule holds the default value on creation for the "legacy_login_rule" field.
+	DefaultLegacyLoginRule string
+	// DefaultLegacySignupRule holds the default value on creation for the "legacy_signup_rule" field.
+	DefaultLegacySignupRule string
+	// DefaultLegacyLinkRule holds the default value on creation for the "legacy_link_rule" field.
+	DefaultLegacyLinkRule string
 )
-
-// LoginRule defines the type for the "login_rule" enum field.
-type LoginRule string
-
-// LoginRule values.
-const (
-	LoginRuleUnrestricted LoginRule = "unrestricted"
-)
-
-func (lr LoginRule) String() string {
-	return string(lr)
-}
-
-// LoginRuleValidator is a validator for the "login_rule" field enum values. It is called by the builders before save.
-func LoginRuleValidator(lr LoginRule) error {
-	switch lr {
-	case LoginRuleUnrestricted:
-		return nil
-	default:
-		return fmt.Errorf("authchannelpolicy: invalid enum value for login_rule field: %q", lr)
-	}
-}
-
-// SignupRule defines the type for the "signup_rule" enum field.
-type SignupRule string
-
-// SignupRule values.
-const (
-	SignupRuleUnrestricted SignupRule = "unrestricted"
-)
-
-func (sr SignupRule) String() string {
-	return string(sr)
-}
-
-// SignupRuleValidator is a validator for the "signup_rule" field enum values. It is called by the builders before save.
-func SignupRuleValidator(sr SignupRule) error {
-	switch sr {
-	case SignupRuleUnrestricted:
-		return nil
-	default:
-		return fmt.Errorf("authchannelpolicy: invalid enum value for signup_rule field: %q", sr)
-	}
-}
-
-// LinkRule defines the type for the "link_rule" enum field.
-type LinkRule string
-
-// LinkRule values.
-const (
-	LinkRuleUnrestricted LinkRule = "unrestricted"
-)
-
-func (lr LinkRule) String() string {
-	return string(lr)
-}
-
-// LinkRuleValidator is a validator for the "link_rule" field enum values. It is called by the builders before save.
-func LinkRuleValidator(lr LinkRule) error {
-	switch lr {
-	case LinkRuleUnrestricted:
-		return nil
-	default:
-		return fmt.Errorf("authchannelpolicy: invalid enum value for link_rule field: %q", lr)
-	}
-}
 
 // OrderOption defines the ordering options for the AuthChannelPolicy queries.
 type OrderOption func(*sql.Selector)
@@ -228,19 +176,19 @@ func ByLinkEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLinkEnabled, opts...).ToFunc()
 }
 
-// ByLoginRule orders the results by the login_rule field.
-func ByLoginRule(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLoginRule, opts...).ToFunc()
+// ByLegacyLoginRule orders the results by the legacy_login_rule field.
+func ByLegacyLoginRule(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLegacyLoginRule, opts...).ToFunc()
 }
 
-// BySignupRule orders the results by the signup_rule field.
-func BySignupRule(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldSignupRule, opts...).ToFunc()
+// ByLegacySignupRule orders the results by the legacy_signup_rule field.
+func ByLegacySignupRule(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLegacySignupRule, opts...).ToFunc()
 }
 
-// ByLinkRule orders the results by the link_rule field.
-func ByLinkRule(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLinkRule, opts...).ToFunc()
+// ByLegacyLinkRule orders the results by the legacy_link_rule field.
+func ByLegacyLinkRule(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLegacyLinkRule, opts...).ToFunc()
 }
 
 // ByConnectionField orders the results by connection field.

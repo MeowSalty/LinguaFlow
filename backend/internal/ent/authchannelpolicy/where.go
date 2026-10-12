@@ -100,6 +100,21 @@ func LinkEnabled(v bool) predicate.AuthChannelPolicy {
 	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLinkEnabled, v))
 }
 
+// LegacyLoginRule applies equality check predicate on the "legacy_login_rule" field. It's identical to LegacyLoginRuleEQ.
+func LegacyLoginRule(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLegacyLoginRule, v))
+}
+
+// LegacySignupRule applies equality check predicate on the "legacy_signup_rule" field. It's identical to LegacySignupRuleEQ.
+func LegacySignupRule(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLegacySignupRule, v))
+}
+
+// LegacyLinkRule applies equality check predicate on the "legacy_link_rule" field. It's identical to LegacyLinkRuleEQ.
+func LegacyLinkRule(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLegacyLinkRule, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.AuthChannelPolicy {
 	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldCreatedAt, v))
@@ -365,64 +380,229 @@ func LinkEnabledNEQ(v bool) predicate.AuthChannelPolicy {
 	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldLinkEnabled, v))
 }
 
-// LoginRuleEQ applies the EQ predicate on the "login_rule" field.
-func LoginRuleEQ(v LoginRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLoginRule, v))
+// LoginRulesIsNil applies the IsNil predicate on the "login_rules" field.
+func LoginRulesIsNil() predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIsNull(FieldLoginRules))
 }
 
-// LoginRuleNEQ applies the NEQ predicate on the "login_rule" field.
-func LoginRuleNEQ(v LoginRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldLoginRule, v))
+// LoginRulesNotNil applies the NotNil predicate on the "login_rules" field.
+func LoginRulesNotNil() predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotNull(FieldLoginRules))
 }
 
-// LoginRuleIn applies the In predicate on the "login_rule" field.
-func LoginRuleIn(vs ...LoginRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldIn(FieldLoginRule, vs...))
+// SignupRulesIsNil applies the IsNil predicate on the "signup_rules" field.
+func SignupRulesIsNil() predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIsNull(FieldSignupRules))
 }
 
-// LoginRuleNotIn applies the NotIn predicate on the "login_rule" field.
-func LoginRuleNotIn(vs ...LoginRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldLoginRule, vs...))
+// SignupRulesNotNil applies the NotNil predicate on the "signup_rules" field.
+func SignupRulesNotNil() predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotNull(FieldSignupRules))
 }
 
-// SignupRuleEQ applies the EQ predicate on the "signup_rule" field.
-func SignupRuleEQ(v SignupRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldSignupRule, v))
+// LinkRulesIsNil applies the IsNil predicate on the "link_rules" field.
+func LinkRulesIsNil() predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIsNull(FieldLinkRules))
 }
 
-// SignupRuleNEQ applies the NEQ predicate on the "signup_rule" field.
-func SignupRuleNEQ(v SignupRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldSignupRule, v))
+// LinkRulesNotNil applies the NotNil predicate on the "link_rules" field.
+func LinkRulesNotNil() predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotNull(FieldLinkRules))
 }
 
-// SignupRuleIn applies the In predicate on the "signup_rule" field.
-func SignupRuleIn(vs ...SignupRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldIn(FieldSignupRule, vs...))
+// LegacyLoginRuleEQ applies the EQ predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleEQ(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLegacyLoginRule, v))
 }
 
-// SignupRuleNotIn applies the NotIn predicate on the "signup_rule" field.
-func SignupRuleNotIn(vs ...SignupRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldSignupRule, vs...))
+// LegacyLoginRuleNEQ applies the NEQ predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleNEQ(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldLegacyLoginRule, v))
 }
 
-// LinkRuleEQ applies the EQ predicate on the "link_rule" field.
-func LinkRuleEQ(v LinkRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLinkRule, v))
+// LegacyLoginRuleIn applies the In predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleIn(vs ...string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIn(FieldLegacyLoginRule, vs...))
 }
 
-// LinkRuleNEQ applies the NEQ predicate on the "link_rule" field.
-func LinkRuleNEQ(v LinkRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldLinkRule, v))
+// LegacyLoginRuleNotIn applies the NotIn predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleNotIn(vs ...string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldLegacyLoginRule, vs...))
 }
 
-// LinkRuleIn applies the In predicate on the "link_rule" field.
-func LinkRuleIn(vs ...LinkRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldIn(FieldLinkRule, vs...))
+// LegacyLoginRuleGT applies the GT predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleGT(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGT(FieldLegacyLoginRule, v))
 }
 
-// LinkRuleNotIn applies the NotIn predicate on the "link_rule" field.
-func LinkRuleNotIn(vs ...LinkRule) predicate.AuthChannelPolicy {
-	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldLinkRule, vs...))
+// LegacyLoginRuleGTE applies the GTE predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleGTE(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGTE(FieldLegacyLoginRule, v))
+}
+
+// LegacyLoginRuleLT applies the LT predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleLT(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLT(FieldLegacyLoginRule, v))
+}
+
+// LegacyLoginRuleLTE applies the LTE predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleLTE(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLTE(FieldLegacyLoginRule, v))
+}
+
+// LegacyLoginRuleContains applies the Contains predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleContains(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldContains(FieldLegacyLoginRule, v))
+}
+
+// LegacyLoginRuleHasPrefix applies the HasPrefix predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleHasPrefix(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldHasPrefix(FieldLegacyLoginRule, v))
+}
+
+// LegacyLoginRuleHasSuffix applies the HasSuffix predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleHasSuffix(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldHasSuffix(FieldLegacyLoginRule, v))
+}
+
+// LegacyLoginRuleEqualFold applies the EqualFold predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleEqualFold(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEqualFold(FieldLegacyLoginRule, v))
+}
+
+// LegacyLoginRuleContainsFold applies the ContainsFold predicate on the "legacy_login_rule" field.
+func LegacyLoginRuleContainsFold(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldContainsFold(FieldLegacyLoginRule, v))
+}
+
+// LegacySignupRuleEQ applies the EQ predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleEQ(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleNEQ applies the NEQ predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleNEQ(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleIn applies the In predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleIn(vs ...string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIn(FieldLegacySignupRule, vs...))
+}
+
+// LegacySignupRuleNotIn applies the NotIn predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleNotIn(vs ...string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldLegacySignupRule, vs...))
+}
+
+// LegacySignupRuleGT applies the GT predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleGT(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGT(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleGTE applies the GTE predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleGTE(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGTE(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleLT applies the LT predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleLT(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLT(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleLTE applies the LTE predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleLTE(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLTE(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleContains applies the Contains predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleContains(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldContains(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleHasPrefix applies the HasPrefix predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleHasPrefix(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldHasPrefix(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleHasSuffix applies the HasSuffix predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleHasSuffix(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldHasSuffix(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleEqualFold applies the EqualFold predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleEqualFold(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEqualFold(FieldLegacySignupRule, v))
+}
+
+// LegacySignupRuleContainsFold applies the ContainsFold predicate on the "legacy_signup_rule" field.
+func LegacySignupRuleContainsFold(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldContainsFold(FieldLegacySignupRule, v))
+}
+
+// LegacyLinkRuleEQ applies the EQ predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleEQ(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleNEQ applies the NEQ predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleNEQ(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleIn applies the In predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleIn(vs ...string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIn(FieldLegacyLinkRule, vs...))
+}
+
+// LegacyLinkRuleNotIn applies the NotIn predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleNotIn(vs ...string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldLegacyLinkRule, vs...))
+}
+
+// LegacyLinkRuleGT applies the GT predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleGT(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGT(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleGTE applies the GTE predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleGTE(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGTE(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleLT applies the LT predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleLT(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLT(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleLTE applies the LTE predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleLTE(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLTE(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleContains applies the Contains predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleContains(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldContains(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleHasPrefix applies the HasPrefix predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleHasPrefix(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldHasPrefix(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleHasSuffix applies the HasSuffix predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleHasSuffix(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldHasSuffix(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleEqualFold applies the EqualFold predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleEqualFold(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEqualFold(FieldLegacyLinkRule, v))
+}
+
+// LegacyLinkRuleContainsFold applies the ContainsFold predicate on the "legacy_link_rule" field.
+func LegacyLinkRuleContainsFold(v string) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldContainsFold(FieldLegacyLinkRule, v))
 }
 
 // HasConnection applies the HasEdge predicate on the "connection" edge.

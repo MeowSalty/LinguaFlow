@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
@@ -114,6 +115,26 @@ func (_u *LoginBindingUpdate) SetNillableVerifiedLoginPolicyRevision(v *int64) *
 // AddVerifiedLoginPolicyRevision adds value to the "verified_login_policy_revision" field.
 func (_u *LoginBindingUpdate) AddVerifiedLoginPolicyRevision(v int64) *LoginBindingUpdate {
 	_u.mutation.AddVerifiedLoginPolicyRevision(v)
+	return _u
+}
+
+// SetEvidence sets the "evidence" field.
+func (_u *LoginBindingUpdate) SetEvidence(v authrules.Evidence) *LoginBindingUpdate {
+	_u.mutation.SetEvidence(v)
+	return _u
+}
+
+// SetNillableEvidence sets the "evidence" field if the given value is not nil.
+func (_u *LoginBindingUpdate) SetNillableEvidence(v *authrules.Evidence) *LoginBindingUpdate {
+	if v != nil {
+		_u.SetEvidence(*v)
+	}
+	return _u
+}
+
+// ClearEvidence clears the value of the "evidence" field.
+func (_u *LoginBindingUpdate) ClearEvidence() *LoginBindingUpdate {
+	_u.mutation.ClearEvidence()
 	return _u
 }
 
@@ -262,6 +283,12 @@ func (_u *LoginBindingUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if value, ok := _u.mutation.AddedVerifiedLoginPolicyRevision(); ok {
 		_spec.AddField(loginbinding.FieldVerifiedLoginPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.Evidence(); ok {
+		_spec.SetField(loginbinding.FieldEvidence, field.TypeJSON, value)
+	}
+	if _u.mutation.EvidenceCleared() {
+		_spec.ClearField(loginbinding.FieldEvidence, field.TypeJSON)
 	}
 	if _u.mutation.SessionsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -413,6 +440,26 @@ func (_u *LoginBindingUpdateOne) SetNillableVerifiedLoginPolicyRevision(v *int64
 // AddVerifiedLoginPolicyRevision adds value to the "verified_login_policy_revision" field.
 func (_u *LoginBindingUpdateOne) AddVerifiedLoginPolicyRevision(v int64) *LoginBindingUpdateOne {
 	_u.mutation.AddVerifiedLoginPolicyRevision(v)
+	return _u
+}
+
+// SetEvidence sets the "evidence" field.
+func (_u *LoginBindingUpdateOne) SetEvidence(v authrules.Evidence) *LoginBindingUpdateOne {
+	_u.mutation.SetEvidence(v)
+	return _u
+}
+
+// SetNillableEvidence sets the "evidence" field if the given value is not nil.
+func (_u *LoginBindingUpdateOne) SetNillableEvidence(v *authrules.Evidence) *LoginBindingUpdateOne {
+	if v != nil {
+		_u.SetEvidence(*v)
+	}
+	return _u
+}
+
+// ClearEvidence clears the value of the "evidence" field.
+func (_u *LoginBindingUpdateOne) ClearEvidence() *LoginBindingUpdateOne {
+	_u.mutation.ClearEvidence()
 	return _u
 }
 
@@ -591,6 +638,12 @@ func (_u *LoginBindingUpdateOne) sqlSave(ctx context.Context) (_node *LoginBindi
 	}
 	if value, ok := _u.mutation.AddedVerifiedLoginPolicyRevision(); ok {
 		_spec.AddField(loginbinding.FieldVerifiedLoginPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.Evidence(); ok {
+		_spec.SetField(loginbinding.FieldEvidence, field.TypeJSON, value)
+	}
+	if _u.mutation.EvidenceCleared() {
+		_spec.ClearField(loginbinding.FieldEvidence, field.TypeJSON)
 	}
 	if _u.mutation.SessionsCleared() {
 		edge := &sqlgraph.EdgeSpec{

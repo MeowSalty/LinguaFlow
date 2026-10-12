@@ -85,6 +85,34 @@ func (_c *UserCreate) SetNillablePasswordHash(v *string) *UserCreate {
 	return _c
 }
 
+// SetPasswordVerifiedHash sets the "password_verified_hash" field.
+func (_c *UserCreate) SetPasswordVerifiedHash(v string) *UserCreate {
+	_c.mutation.SetPasswordVerifiedHash(v)
+	return _c
+}
+
+// SetNillablePasswordVerifiedHash sets the "password_verified_hash" field if the given value is not nil.
+func (_c *UserCreate) SetNillablePasswordVerifiedHash(v *string) *UserCreate {
+	if v != nil {
+		_c.SetPasswordVerifiedHash(*v)
+	}
+	return _c
+}
+
+// SetPasswordVerifiedAt sets the "password_verified_at" field.
+func (_c *UserCreate) SetPasswordVerifiedAt(v time.Time) *UserCreate {
+	_c.mutation.SetPasswordVerifiedAt(v)
+	return _c
+}
+
+// SetNillablePasswordVerifiedAt sets the "password_verified_at" field if the given value is not nil.
+func (_c *UserCreate) SetNillablePasswordVerifiedAt(v *time.Time) *UserCreate {
+	if v != nil {
+		_c.SetPasswordVerifiedAt(*v)
+	}
+	return _c
+}
+
 // SetEmail sets the "email" field.
 func (_c *UserCreate) SetEmail(v string) *UserCreate {
 	_c.mutation.SetEmail(v)
@@ -600,6 +628,14 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 		_node.PasswordHash = value
+	}
+	if value, ok := _c.mutation.PasswordVerifiedHash(); ok {
+		_spec.SetField(user.FieldPasswordVerifiedHash, field.TypeString, value)
+		_node.PasswordVerifiedHash = value
+	}
+	if value, ok := _c.mutation.PasswordVerifiedAt(); ok {
+		_spec.SetField(user.FieldPasswordVerifiedAt, field.TypeTime, value)
+		_node.PasswordVerifiedAt = &value
 	}
 	if value, ok := _c.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)

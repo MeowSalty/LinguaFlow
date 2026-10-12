@@ -3,12 +3,14 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 )
@@ -72,6 +74,14 @@ type AuthTransaction struct {
 	IdentityEmail string `json:"identity_email,omitempty"`
 	// IdentityAuthTime holds the value of the "identity_auth_time" field.
 	IdentityAuthTime *time.Time `json:"identity_auth_time,omitempty"`
+	// Evidence holds the value of the "evidence" field.
+	Evidence authrules.Evidence `json:"-"`
+	// AuthorizationConnectionID holds the value of the "authorization_connection_id" field.
+	AuthorizationConnectionID string `json:"authorization_connection_id,omitempty"`
+	// AuthorizationConnectionGeneration holds the value of the "authorization_connection_generation" field.
+	AuthorizationConnectionGeneration int64 `json:"authorization_connection_generation,omitempty"`
+	// AuthorizationPolicyRevision holds the value of the "authorization_policy_revision" field.
+	AuthorizationPolicyRevision int64 `json:"authorization_policy_revision,omitempty"`
 	// AuthorizedAction holds the value of the "authorized_action" field.
 	AuthorizedAction string `json:"authorized_action,omitempty"`
 	// AuthorizedTargetID holds the value of the "authorized_target_id" field.
@@ -115,9 +125,11 @@ func (*AuthTransaction) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case authtransaction.FieldConnectionRevision, authtransaction.FieldConnectionGeneration, authtransaction.FieldPolicyRevision, authtransaction.FieldUserID, authtransaction.FieldAuthVersion, authtransaction.FieldBindingID:
+		case authtransaction.FieldEvidence:
+			values[i] = new([]byte)
+		case authtransaction.FieldConnectionRevision, authtransaction.FieldConnectionGeneration, authtransaction.FieldPolicyRevision, authtransaction.FieldUserID, authtransaction.FieldAuthVersion, authtransaction.FieldBindingID, authtransaction.FieldAuthorizationConnectionGeneration, authtransaction.FieldAuthorizationPolicyRevision:
 			values[i] = new(sql.NullInt64)
-		case authtransaction.FieldID, authtransaction.FieldPurpose, authtransaction.FieldStatus, authtransaction.FieldConnectionID, authtransaction.FieldStateHash, authtransaction.FieldNonce, authtransaction.FieldPkceVerifier, authtransaction.FieldBrowserChallenge, authtransaction.FieldCompletionURL, authtransaction.FieldReturnTo, authtransaction.FieldExchangeTicketHash, authtransaction.FieldConfirmationTokenHash, authtransaction.FieldIdentityIssuer, authtransaction.FieldIdentitySubject, authtransaction.FieldIdentityDisplayName, authtransaction.FieldIdentityUsername, authtransaction.FieldIdentityEmail, authtransaction.FieldAuthorizedAction, authtransaction.FieldAuthorizedTargetID, authtransaction.FieldFailureCode:
+		case authtransaction.FieldID, authtransaction.FieldPurpose, authtransaction.FieldStatus, authtransaction.FieldConnectionID, authtransaction.FieldStateHash, authtransaction.FieldNonce, authtransaction.FieldPkceVerifier, authtransaction.FieldBrowserChallenge, authtransaction.FieldCompletionURL, authtransaction.FieldReturnTo, authtransaction.FieldExchangeTicketHash, authtransaction.FieldConfirmationTokenHash, authtransaction.FieldIdentityIssuer, authtransaction.FieldIdentitySubject, authtransaction.FieldIdentityDisplayName, authtransaction.FieldIdentityUsername, authtransaction.FieldIdentityEmail, authtransaction.FieldAuthorizationConnectionID, authtransaction.FieldAuthorizedAction, authtransaction.FieldAuthorizedTargetID, authtransaction.FieldFailureCode:
 			values[i] = new(sql.NullString)
 		case authtransaction.FieldCreatedAt, authtransaction.FieldUpdatedAt, authtransaction.FieldExchangeTicketExpiresAt, authtransaction.FieldConfirmationExpiresAt, authtransaction.FieldIdentityAuthTime, authtransaction.FieldAuthorizationExpiresAt, authtransaction.FieldExpiresAt, authtransaction.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
@@ -312,6 +324,32 @@ func (_m *AuthTransaction) assignValues(columns []string, values []any) error {
 				_m.IdentityAuthTime = new(time.Time)
 				*_m.IdentityAuthTime = value.Time
 			}
+		case authtransaction.FieldEvidence:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field evidence", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Evidence); err != nil {
+					return fmt.Errorf("unmarshal field evidence: %w", err)
+				}
+			}
+		case authtransaction.FieldAuthorizationConnectionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field authorization_connection_id", values[i])
+			} else if value.Valid {
+				_m.AuthorizationConnectionID = value.String
+			}
+		case authtransaction.FieldAuthorizationConnectionGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field authorization_connection_generation", values[i])
+			} else if value.Valid {
+				_m.AuthorizationConnectionGeneration = value.Int64
+			}
+		case authtransaction.FieldAuthorizationPolicyRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field authorization_policy_revision", values[i])
+			} else if value.Valid {
+				_m.AuthorizationPolicyRevision = value.Int64
+			}
 		case authtransaction.FieldAuthorizedAction:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field authorized_action", values[i])
@@ -477,6 +515,17 @@ func (_m *AuthTransaction) String() string {
 		builder.WriteString("identity_auth_time=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("evidence=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("authorization_connection_id=")
+	builder.WriteString(_m.AuthorizationConnectionID)
+	builder.WriteString(", ")
+	builder.WriteString("authorization_connection_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AuthorizationConnectionGeneration))
+	builder.WriteString(", ")
+	builder.WriteString("authorization_policy_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AuthorizationPolicyRevision))
 	builder.WriteString(", ")
 	builder.WriteString("authorized_action=")
 	builder.WriteString(_m.AuthorizedAction)

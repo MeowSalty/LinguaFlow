@@ -33,6 +33,8 @@ const (
 	FieldVerifiedAuthGeneration = "verified_auth_generation"
 	// FieldVerifiedLoginPolicyRevision holds the string denoting the verified_login_policy_revision field in the database.
 	FieldVerifiedLoginPolicyRevision = "verified_login_policy_revision"
+	// FieldEvidence holds the string denoting the evidence field in the database.
+	FieldEvidence = "evidence"
 	// EdgeUser holds the string denoting the user edge name in mutations.
 	EdgeUser = "user"
 	// EdgeConnection holds the string denoting the connection edge name in mutations.
@@ -85,6 +87,7 @@ var Columns = []string{
 	FieldLastVerifiedAt,
 	FieldVerifiedAuthGeneration,
 	FieldVerifiedLoginPolicyRevision,
+	FieldEvidence,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).

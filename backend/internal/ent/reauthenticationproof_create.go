@@ -86,6 +86,34 @@ func (_c *ReauthenticationProofCreate) SetNillableConnectionID(v *string) *Reaut
 	return _c
 }
 
+// SetConnectionGeneration sets the "connection_generation" field.
+func (_c *ReauthenticationProofCreate) SetConnectionGeneration(v int64) *ReauthenticationProofCreate {
+	_c.mutation.SetConnectionGeneration(v)
+	return _c
+}
+
+// SetNillableConnectionGeneration sets the "connection_generation" field if the given value is not nil.
+func (_c *ReauthenticationProofCreate) SetNillableConnectionGeneration(v *int64) *ReauthenticationProofCreate {
+	if v != nil {
+		_c.SetConnectionGeneration(*v)
+	}
+	return _c
+}
+
+// SetLoginPolicyRevision sets the "login_policy_revision" field.
+func (_c *ReauthenticationProofCreate) SetLoginPolicyRevision(v int64) *ReauthenticationProofCreate {
+	_c.mutation.SetLoginPolicyRevision(v)
+	return _c
+}
+
+// SetNillableLoginPolicyRevision sets the "login_policy_revision" field if the given value is not nil.
+func (_c *ReauthenticationProofCreate) SetNillableLoginPolicyRevision(v *int64) *ReauthenticationProofCreate {
+	if v != nil {
+		_c.SetLoginPolicyRevision(*v)
+	}
+	return _c
+}
+
 // SetAction sets the "action" field.
 func (_c *ReauthenticationProofCreate) SetAction(v reauthenticationproof.Action) *ReauthenticationProofCreate {
 	_c.mutation.SetAction(v)
@@ -284,6 +312,14 @@ func (_c *ReauthenticationProofCreate) createSpec() (*ReauthenticationProof, *sq
 	if value, ok := _c.mutation.ConnectionID(); ok {
 		_spec.SetField(reauthenticationproof.FieldConnectionID, field.TypeString, value)
 		_node.ConnectionID = value
+	}
+	if value, ok := _c.mutation.ConnectionGeneration(); ok {
+		_spec.SetField(reauthenticationproof.FieldConnectionGeneration, field.TypeInt64, value)
+		_node.ConnectionGeneration = value
+	}
+	if value, ok := _c.mutation.LoginPolicyRevision(); ok {
+		_spec.SetField(reauthenticationproof.FieldLoginPolicyRevision, field.TypeInt64, value)
+		_node.LoginPolicyRevision = value
 	}
 	if value, ok := _c.mutation.Action(); ok {
 		_spec.SetField(reauthenticationproof.FieldAction, field.TypeEnum, value)

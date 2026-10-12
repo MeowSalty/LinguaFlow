@@ -5,6 +5,7 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 )
 
 // AuthTransaction is the single durable state machine for external browser flows.
@@ -39,6 +40,10 @@ func (AuthTransaction) Fields() []ent.Field {
 		field.String("identity_username").Optional(),
 		field.String("identity_email").Optional(),
 		field.Time("identity_auth_time").Optional().Nillable(),
+		field.JSON("evidence", authrules.Evidence{}).Optional().Sensitive(),
+		field.String("authorization_connection_id").Optional(),
+		field.Int64("authorization_connection_generation").Optional(),
+		field.Int64("authorization_policy_revision").Optional(),
 		field.String("authorized_action").Optional().Immutable(),
 		field.String("authorized_target_id").Optional().Immutable(),
 		field.Time("authorization_expires_at").Optional().Nillable().Immutable(),
