@@ -1,0 +1,478 @@
+// Package authoidc contains the deliberately small OIDC adapter used by the
+// account authentication service. It owns all provider/network validation;
+// callers only receive a stable, provider-independent identity result.
+package authoidc
+
+import (
+	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+	"golang.org/x/oauth2"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+)
+
+var (
+	ErrInvalidConfig = errors.New("oidc configuration is invalid")
+	ErrUnavailable   = errors.New("oidc provider is unavailable")
+	ErrInvalidToken  = errors.New("oidc response is invalid")
+	ErrFreshAuth     = errors.New("recent authentication is required")
+)
+
+type Config struct {
+	Issuer           string
+	ClientID         string
+	ClientSecret     string
+	ClientAuthMethod string
+	Scopes           []string
+	UserInfoEnabled  bool
+}
+
+type Identity struct {
+	Issuer            string
+	Subject           string
+	AuthTime          time.Time
+	DisplayName       string
+	PreferredUsername string
+	Email             string
+	Nonce             string
+}
+
+type ProviderMetadata struct {
+	Issuer                string   `json:"issuer"`
+	AuthorizationEndpoint string   `json:"authorization_endpoint"`
+	TokenEndpoint         string   `json:"token_endpoint"`
+	UserInfoEndpoint      string   `json:"userinfo_endpoint,omitempty"`
+	ScopesSupported       []string `json:"scopes_supported,omitempty"`
+	AuthStyle             string   `json:"client_auth_method"`
+	SupportsPKCES256      bool     `json:"supports_pkce_s256"`
+}
+
+type AuthorizationRequest struct {
+	RedirectURL  string
+	State        string
+	Nonce        string
+	CodeVerifier string
+	Fresh        bool
+	MaxAge       time.Duration
+}
+
+type Authorization struct {
+	URL           string
+	CodeChallenge string
+}
+
+type ExchangeRequest struct {
+	RedirectURL   string
+	Code          string
+	CodeVerifier  string
+	ExpectedNonce string
+	RequireFresh  bool
+	MaxAge        time.Duration
+	Now           time.Time
+}
+
+type Client struct {
+	deployment config.AuthDeploymentConfig
+	transport  *secureTransport
+}
+
+func New(deployment config.AuthDeploymentConfig) (*Client, error) {
+	if deployment.RequestTimeout == 0 {
+		deployment.RequestTimeout = 10 * time.Second
+	}
+	if deployment.MaxResponseBytes == 0 {
+		deployment.MaxResponseBytes = 1 << 20
+	}
+	if deployment.RateLimitPerMinute == 0 {
+		deployment.RateLimitPerMinute = 60
+	}
+	if err := validateDeployment(deployment); err != nil {
+		return nil, err
+	}
+	transport := &secureTransport{deployment: deployment, base: http.Transport{
+		ForceAttemptHTTP2:   true,
+		TLSHandshakeTimeout: deployment.RequestTimeout / 2,
+	}}
+	transport.base.DialContext = transport.dial
+	return &Client{deployment: deployment, transport: transport}, nil
+}
+
+func validateDeployment(d config.AuthDeploymentConfig) error {
+	if d.RequestTimeout <= 0 || d.MaxResponseBytes <= 0 || d.RateLimitPerMinute <= 0 {
+		return ErrInvalidConfig
+	}
+	for _, raw := range append(append([]string{}, d.CompletionURLs...), d.PublicBaseURL) {
+		if raw == "" {
+			continue
+		}
+		u, err := url.Parse(raw)
+		if err != nil || !u.IsAbs() || u.Host == "" || u.User != nil || u.Fragment != "" {
+			return ErrInvalidConfig
+		}
+		if u.Scheme != "https" && !(d.AllowHTTPLoopback && u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
+			return ErrInvalidConfig
+		}
+	}
+	return nil
+}
+
+func (c *Client) validateConnection(connection Config) error {
+	u, err := url.Parse(strings.TrimSpace(connection.Issuer))
+	if err != nil || !u.IsAbs() || u.Host == "" || u.User != nil || u.Fragment != "" || connection.ClientID == "" || !c.transport.validURL(u) {
+		return ErrInvalidConfig
+	}
+	if connection.ClientAuthMethod == "" {
+		connection.ClientAuthMethod = "basic"
+	}
+	if connection.ClientAuthMethod != "basic" && connection.ClientAuthMethod != "post" {
+		return ErrInvalidConfig
+	}
+	return nil
+}
+
+func (c *Client) httpClient() *http.Client {
+	return &http.Client{
+		Transport:     c.transport,
+		Timeout:       c.deployment.RequestTimeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}
+}
+
+func (c *Client) provider(ctx context.Context, cfg Config) (*oidc.Provider, error) {
+	if err := c.validateConnection(cfg); err != nil {
+		return nil, err
+	}
+	hc := c.httpClient()
+	ctx = oidc.ClientContext(ctx, hc)
+	p, err := oidc.NewProvider(ctx, cfg.Issuer)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	return p, nil
+}
+
+func (c *Client) Check(ctx context.Context, cfg Config) (ProviderMetadata, error) {
+	p, err := c.provider(ctx, cfg)
+	if err != nil {
+		return ProviderMetadata{}, err
+	}
+	e := p.Endpoint()
+	meta := ProviderMetadata{Issuer: cfg.Issuer, AuthorizationEndpoint: e.AuthURL, TokenEndpoint: e.TokenURL, AuthStyle: normalizedAuthMethod(cfg)}
+	if !c.transport.validRawURL(e.AuthURL) || !c.transport.validRawURL(e.TokenURL) {
+		return ProviderMetadata{}, ErrUnavailable
+	}
+	if p.UserInfoEndpoint() != "" {
+		if !c.transport.validRawURL(p.UserInfoEndpoint()) {
+			return ProviderMetadata{}, ErrUnavailable
+		}
+		meta.UserInfoEndpoint = p.UserInfoEndpoint()
+	}
+	var claims struct {
+		ScopesSupported                   []string `json:"scopes_supported"`
+		CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
+		TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	}
+	if err := p.Claims(&claims); err != nil {
+		return ProviderMetadata{}, ErrUnavailable
+	}
+	meta.ScopesSupported = append([]string(nil), claims.ScopesSupported...)
+	for _, method := range claims.CodeChallengeMethodsSupported {
+		if method == "S256" {
+			meta.SupportsPKCES256 = true
+		}
+	}
+	if !meta.SupportsPKCES256 {
+		return ProviderMetadata{}, ErrInvalidConfig
+	}
+	wantAuth := "client_secret_basic"
+	if meta.AuthStyle == "post" {
+		wantAuth = "client_secret_post"
+	}
+	if len(claims.TokenEndpointAuthMethodsSupported) > 0 {
+		supported := false
+		for _, method := range claims.TokenEndpointAuthMethodsSupported {
+			if method == wantAuth {
+				supported = true
+			}
+		}
+		if !supported {
+			return ProviderMetadata{}, ErrInvalidConfig
+		}
+	}
+	return meta, nil
+}
+
+func (c *Client) BuildAuthorization(ctx context.Context, cfg Config, req AuthorizationRequest) (Authorization, error) {
+	if err := c.validateConnection(cfg); err != nil || req.State == "" || req.Nonce == "" || !validCodeVerifier(req.CodeVerifier) || !c.validRedirect(req.RedirectURL) {
+		return Authorization{}, ErrInvalidConfig
+	}
+	p, err := c.provider(ctx, cfg)
+	if err != nil {
+		return Authorization{}, err
+	}
+	if !c.transport.validRawURL(p.Endpoint().AuthURL) {
+		return Authorization{}, ErrUnavailable
+	}
+	challenge := pkceChallenge(req.CodeVerifier)
+	scopes := normalizedScopes(cfg.Scopes)
+	oauthCfg := oauth2.Config{ClientID: cfg.ClientID, Endpoint: p.Endpoint(), RedirectURL: req.RedirectURL, Scopes: scopes}
+	params := []oauth2.AuthCodeOption{oauth2.SetAuthURLParam("nonce", req.Nonce), oauth2.SetAuthURLParam("code_challenge", challenge), oauth2.SetAuthURLParam("code_challenge_method", "S256")}
+	if req.Fresh {
+		maxAge := req.MaxAge
+		if maxAge < 0 {
+			maxAge = 0
+		}
+		params = append(params, oauth2.SetAuthURLParam("max_age", fmt.Sprintf("%d", int64(maxAge/time.Second))))
+	}
+	return Authorization{URL: oauthCfg.AuthCodeURL(req.State, params...), CodeChallenge: challenge}, nil
+}
+
+func (c *Client) ExchangeAndVerify(ctx context.Context, cfg Config, req ExchangeRequest) (Identity, error) {
+	if err := c.validateConnection(cfg); err != nil || req.Code == "" || !validCodeVerifier(req.CodeVerifier) || !c.validRedirect(req.RedirectURL) {
+		return Identity{}, ErrInvalidConfig
+	}
+	ctx = oidc.ClientContext(ctx, c.httpClient())
+	p, err := c.provider(ctx, cfg)
+	if err != nil {
+		return Identity{}, err
+	}
+	oauthCfg := oauth2.Config{ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret, Endpoint: p.Endpoint(), RedirectURL: req.RedirectURL, Scopes: normalizedScopes(cfg.Scopes)}
+	if normalizedAuthMethod(cfg) == "post" {
+		oauthCfg.Endpoint.AuthStyle = oauth2.AuthStyleInParams
+	} else {
+		oauthCfg.Endpoint.AuthStyle = oauth2.AuthStyleInHeader
+	}
+	tok, err := oauthCfg.Exchange(ctx, req.Code, oauth2.SetAuthURLParam("code_verifier", req.CodeVerifier))
+	if err != nil {
+		var upstream *oauth2.RetrieveError
+		if errors.Is(err, ErrUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) ||
+			(errors.As(err, &upstream) && upstream.Response != nil && (upstream.Response.StatusCode >= 500 || upstream.Response.StatusCode == http.StatusTooManyRequests)) {
+			return Identity{}, ErrUnavailable
+		}
+		return Identity{}, ErrInvalidToken
+	}
+	idToken, ok := tok.Extra("id_token").(string)
+	if !ok || idToken == "" {
+		return Identity{}, ErrInvalidToken
+	}
+	verifier := p.Verifier(&oidc.Config{ClientID: cfg.ClientID, SupportedSigningAlgs: []string{"RS256", "ES256", "PS256"}})
+	id, err := verifier.Verify(ctx, idToken)
+	if err != nil {
+		return Identity{}, ErrInvalidToken
+	}
+	var claims struct {
+		Issuer            string `json:"iss"`
+		Subject           string `json:"sub"`
+		Nonce             string `json:"nonce"`
+		AuthTime          int64  `json:"auth_time"`
+		Name              string `json:"name"`
+		PreferredUsername string `json:"preferred_username"`
+		Email             string `json:"email"`
+		AuthorizedParty   string `json:"azp"`
+	}
+	if err := id.Claims(&claims); err != nil || claims.Subject == "" || claims.Issuer != cfg.Issuer || (req.ExpectedNonce != "" && subtle.ConstantTimeCompare([]byte(claims.Nonce), []byte(req.ExpectedNonce)) != 1) {
+		return Identity{}, ErrInvalidToken
+	}
+	if (len(id.Audience) > 1 && claims.AuthorizedParty == "") || (claims.AuthorizedParty != "" && claims.AuthorizedParty != cfg.ClientID) {
+		return Identity{}, ErrInvalidToken
+	}
+	now := req.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if id.IssuedAt.IsZero() || id.IssuedAt.After(now.Add(time.Minute)) {
+		return Identity{}, ErrInvalidToken
+	}
+	var authTime time.Time
+	if claims.AuthTime > 0 {
+		authTime = time.Unix(claims.AuthTime, 0)
+	}
+	if req.RequireFresh {
+		maxAge := req.MaxAge
+		if maxAge <= 0 {
+			maxAge = 5 * time.Minute
+		}
+		if claims.AuthTime <= 0 || authTime.After(now.Add(2*time.Second)) || now.Sub(authTime) > maxAge {
+			return Identity{}, ErrFreshAuth
+		}
+	}
+	identity := Identity{Issuer: claims.Issuer, Subject: claims.Subject, AuthTime: authTime, DisplayName: claims.Name, PreferredUsername: claims.PreferredUsername, Email: claims.Email, Nonce: claims.Nonce}
+	if cfg.UserInfoEnabled && p.UserInfoEndpoint() != "" {
+		ui, err := p.UserInfo(ctx, oauth2.StaticTokenSource(tok))
+		if err != nil {
+			return Identity{}, ErrUnavailable
+		}
+		var user struct {
+			Subject           string `json:"sub"`
+			Name              string `json:"name"`
+			PreferredUsername string `json:"preferred_username"`
+			Email             string `json:"email"`
+		}
+		if err := ui.Claims(&user); err != nil || user.Subject != identity.Subject {
+			return Identity{}, ErrInvalidToken
+		}
+		if identity.DisplayName == "" {
+			identity.DisplayName = user.Name
+		}
+		if identity.PreferredUsername == "" {
+			identity.PreferredUsername = user.PreferredUsername
+		}
+		if identity.Email == "" {
+			identity.Email = user.Email
+		}
+	}
+	return identity, nil
+}
+
+func normalizedAuthMethod(c Config) string {
+	if c.ClientAuthMethod == "post" {
+		return "post"
+	}
+	return "basic"
+}
+func normalizedScopes(scopes []string) []string {
+	if len(scopes) == 0 {
+		return []string{"openid", "profile"}
+	}
+	out := append([]string(nil), scopes...)
+	has := false
+	for _, s := range out {
+		if s == "openid" {
+			has = true
+		}
+	}
+	if !has {
+		out = append([]string{"openid"}, out...)
+	}
+	return out
+}
+func pkceChallenge(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+func (c *Client) validRedirect(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.IsAbs() && u.Host != "" && u.User == nil && u.Fragment == "" && (u.Scheme == "https" || (c.deployment.AllowHTTPLoopback && u.Scheme == "http" && isLoopbackHost(u.Hostname())))
+}
+func validCodeVerifier(value string) bool {
+	if len(value) < 43 || len(value) > 128 {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || strings.ContainsRune("-._~", r)) {
+			return false
+		}
+	}
+	return true
+}
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
+}
+
+type secureTransport struct {
+	deployment config.AuthDeploymentConfig
+	base       http.Transport
+}
+
+func (t *secureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL == nil || !t.validURL(req.URL) {
+		return nil, ErrUnavailable
+	}
+	resp, err := t.base.RoundTrip(req)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	resp.Body = &limitedBody{ReadCloser: resp.Body, reader: io.LimitReader(resp.Body, t.deployment.MaxResponseBytes+1), max: t.deployment.MaxResponseBytes}
+	return resp, nil
+}
+func (t *secureTransport) validRawURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && t.validURL(u)
+}
+func (t *secureTransport) validURL(u *url.URL) bool {
+	return u != nil && u.IsAbs() && u.Host != "" && u.User == nil && u.Fragment == "" && (u.Scheme == "https" || (t.deployment.AllowHTTPLoopback && u.Scheme == "http" && isLoopbackHost(u.Hostname())))
+}
+func (t *secureTransport) dial(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil || len(ips) == 0 {
+		return nil, ErrUnavailable
+	}
+	var last error
+	for _, ip := range ips {
+		if !t.allowed(host, ip.IP) {
+			continue
+		}
+		conn, err := (&net.Dialer{Timeout: t.deployment.RequestTimeout / 2}).DialContext(ctx, network, net.JoinHostPort(ip.IP.String(), port))
+		if err == nil {
+			return conn, nil
+		}
+		last = err
+	}
+	if last != nil {
+		return nil, ErrUnavailable
+	}
+	return nil, ErrUnavailable
+}
+func (t *secureTransport) allowed(host string, ip net.IP) bool {
+	for _, h := range t.deployment.AllowedHosts {
+		if strings.EqualFold(strings.TrimSpace(h), host) {
+			return true
+		}
+	}
+	for _, raw := range t.deployment.AllowedCIDRs {
+		_, n, err := net.ParseCIDR(raw)
+		if err == nil && n.Contains(ip) {
+			return true
+		}
+	}
+	if len(t.deployment.AllowedHosts) > 0 || len(t.deployment.AllowedCIDRs) > 0 {
+		return false
+	}
+	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast()
+}
+
+type limitedBody struct {
+	io.ReadCloser
+	reader io.Reader
+	max    int64
+	read   int64
+}
+
+func (b *limitedBody) Read(p []byte) (int, error) {
+	remaining := b.max - b.read
+	if remaining < 0 {
+		return 0, ErrUnavailable
+	}
+	limit := int64(len(p))
+	if limit > remaining+1 {
+		limit = remaining + 1
+	}
+	n, err := b.reader.Read(p[:limit])
+	if int64(n) > remaining {
+		allowed := int(remaining)
+		b.read = b.max + 1
+		return allowed, ErrUnavailable
+	}
+	b.read += int64(n)
+	return n, err
+}
