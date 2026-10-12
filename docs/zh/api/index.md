@@ -357,7 +357,7 @@ curl -s http://localhost:8080/api/v1/operations/summary \
 | `updated_from` / `updated_before` | 更新时间区间 `[from, before)` |
 | `cursor` / `limit` | 版本化游标分页（`limit` 1–100，默认 50） |
 
-默认只返回活跃任务；组织成员可看到同项目其他成员创建的任务。轻量任务视图另有 `GET /jobs`（跨项目任务列表）与 `GET /jobs/summary`。任务响应**不再包含**队列位置字段；实例队列与限流数据收敛到管理端 runtime 摘要。管理员可用 `GET /admin/runtime/summary` 读取该摘要 (另见根路径 `GET /metrics`,仅管理员)。产品侧见 [项目管理 · 任务中心](/zh/guide/projects#任务中心跨项目任务列表)。
+默认只返回活跃任务；组织成员可看到同项目其他成员创建的任务。轻量任务视图另有 `GET /jobs`（跨项目任务列表）与 `GET /jobs/summary`。任务响应**不再包含**队列位置字段；实例队列与限流数据收敛到管理端 runtime 摘要。管理员可用 `GET /admin/runtime/summary` 读取该摘要 (另见根路径 `GET /metrics`,仅管理员)。产品侧见 [项目管理 · 任务中心](/zh/guide/projects#任务中心-跨项目任务列表)。
 
 ### 17. 用户资料与密码（服务器模式）
 

@@ -216,7 +216,7 @@ qa:
 - `qa.checks` 为 `undefined`（CLI/界面未填写）→ 启用 **全部** 19 项 per-batch checker（文档级 `duplicate_source_divergence` 始终随引擎运行，不在此列）
 - `qa.checks` 为具体列表 → 仅启动名单中按 `Checker.Name()` 精确匹配的 checker；`ruby_restore_incomplete` / `ruby_tag_loss` 由翻译轮注音守恒产出，不属可选名
 - 列表为空数组时视为「等价于全部」并自动改回 `nil`
-- `qa.auto_reject` 开启后，检出 error 级问题的段落自动进入「已驳回」状态，无需人工逐条处理；`untranslated` 在源/目标语共用文字系统的语言对下降为 `warning`，不会触发自动驳回。字段详情见 [翻译配置 · 参考 · 质量检测](/zh/guide/translation-config-reference#质量检测qa)
+- `qa.auto_reject` 开启后，检出 error 级问题的段落自动进入「已驳回」状态，无需人工逐条处理；`untranslated` 在源/目标语共用文字系统的语言对下降为 `warning`，不会触发自动驳回。字段详情见 [翻译配置 · 参考 · 质量检测](/zh/guide/translation-config-reference#质量检测-qa)
 
 规则质检的 select-by-name（界面上的「全部启用 / 自定义选择」）是在配置编辑器里直接勾选具体检查项启用，详见 [翻译配置 · 使用](/zh/guide/translation-config#执行配置)。
 
@@ -365,7 +365,7 @@ qa:
 
 ### 撤销替换
 
-面板底部的 **撤销上次操作** 可回滚最近一次替换，再次撤销相当于重做。已被后续编辑的段落会被跳过。撤销历史在服务端保留一段时间（默认 90 天，由 `server.revision_retention` 配置，见 [配置文件与环境变量](/zh/guide/configuration#server-—-服务器)），超过保留期或切换资源后无法再撤销。接口契约见 [API 概述 · 段落搜索替换](/zh/api/#_13-段落搜索替换-search-replace)。
+面板底部的 **撤销上次操作** 可回滚最近一次替换，再次撤销相当于重做。已被后续编辑的段落会被跳过。撤销历史在服务端保留一段时间（默认 90 天，由 `server.revision_retention` 配置，见 [配置文件与环境变量](/zh/guide/configuration#server-字段详解)），超过保留期或切换资源后无法再撤销。接口契约见 [API 概述 · 段落搜索替换](/zh/api/#_13-段落搜索替换-search-replace)。
 
 ## 下载与导出
 

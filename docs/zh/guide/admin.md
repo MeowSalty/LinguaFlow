@@ -50,7 +50,7 @@
 
 - 开关开启后，注册页接受新用户注册；关闭时注册接口返回 403，注册页显示「注册已关闭」提示
 - 注册政策存储在数据库中，跨重启持久化；修改即时生效，无需重启服务
-- 首次初始化时的默认值由部署文档的 `bootstrap.registration_enabled` 决定（默认 `false`，详见 [配置文件与环境变量](/zh/guide/configuration#bootstrap-首次初始化顶层)）
+- 首次初始化时的默认值由部署文档的 `bootstrap.registration_enabled` 决定（默认 `false`，详见 [配置文件与环境变量](/zh/guide/configuration#bootstrap-—-首次初始化-顶层)）
 
 设置页还提供**任务历史保留**策略卡:
 
