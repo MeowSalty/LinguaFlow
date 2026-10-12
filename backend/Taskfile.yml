@@ -50,7 +50,7 @@ tasks:
     desc: 认证合同、状态机及网络边界定向测试
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go test -count=1 ./internal/authoidc ./internal/config ./internal/service ./internal/api ./internal/database -run 'Auth|OIDC|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
+      - go test -count=1 ./internal/authrules ./internal/authoidc ./internal/config ./internal/service ./internal/api ./internal/database -run 'Auth|OIDC|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
 
   test:auth:postgres:
     desc: 真实 PostgreSQL 认证竞态验收（缺少 DSN 直接失败）

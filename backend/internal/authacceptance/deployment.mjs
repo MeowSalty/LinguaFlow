@@ -30,7 +30,7 @@ async function request(page, path, data, method = 'POST', expected = 200, actor)
 }
 async function adopt(page, session) { await page.evaluate(s => auth.adopt(s), session); }
 async function loginPassword(page, username, password) { const session = await request(page, '/auth/login', { identifier: username, password }, 'POST', 200, null); await adopt(page, session); return session; }
-async function driveProvider(page, authorizationURL, provider, username, requirePrompt = false) {
+async function driveProvider(page, authorizationURL, provider, username, requirePrompt = false, expected = 200) {
   const authURL = new URL(authorizationURL);
   must(authURL.searchParams.get('code_challenge_method') === 'S256', 'Upstream PKCE S256 missing');
   must(authURL.searchParams.has('nonce'), 'OIDC nonce missing');
@@ -49,14 +49,14 @@ async function driveProvider(page, authorizationURL, provider, username, require
   await page.waitForFunction(() => window.result !== undefined && window.result !== null);
   must(!new URL(page.url()).search, 'Completion URL retained a ticket');
   const response = await page.evaluate(() => window.result);
-  assert.equal(response.status, 200, `OIDC exchange failed (${response.body?.code || response.body?.title || response.status})`);
+  assert.equal(response.status, expected, `OIDC exchange failed (${response.body?.code || response.body?.title || response.status})`);
   must(response.cache === 'no-store', 'Exchange must be no-store');
   rememberSecrets(response.body);
   return response.body;
 }
-async function flow(page, path, input, provider, username, { anonymous = false, fresh = false } = {}) {
+async function flow(page, path, input, provider, username, { anonymous = false, fresh = false, expected = 200 } = {}) {
   const start = await expectResponse(page.evaluate(({ path, input, anonymous }) => auth.begin(path, input, anonymous), { path, input, anonymous }), 200, 'start');
-  return driveProvider(page, start.authorization_url, provider, username, fresh);
+  return driveProvider(page, start.authorization_url, provider, username, fresh, expected);
 }
 async function reauth(page, bindingID, action, targetID, provider) {
   const result = await flow(page, '/auth/reauthenticate', { method: 'oidc', binding_id: bindingID, action, target_id: targetID }, provider, 'alice', { fresh: true });
@@ -75,9 +75,69 @@ async function createConnection(page, provider, clientID) {
   record = await request(page, path, undefined, 'GET');
   record = await request(page, path + '/publish', { expected_revision: record.aggregate_revision });
   must(!record.published.policy.enabled && !record.published.policy.login_enabled, 'First publication must keep switches off');
-  record = await request(page, path, { expected_revision: record.aggregate_revision, policy: { enabled: true, login_enabled: true, signup_enabled: true, link_enabled: true, login_rule: 'unrestricted', signup_rule: 'unrestricted', link_rule: 'unrestricted' } }, 'PATCH');
+  record = await request(page, path, { expected_revision: record.aggregate_revision, policy: { enabled: true, login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: 'unrestricted' }, signup_rules: { mode: 'unrestricted' }, link_rules: { mode: 'unrestricted' } } }, 'PATCH');
   record = await request(page, path + '/publish', { expected_revision: record.aggregate_revision });
   return record;
+}
+
+async function rulesScenario(admin, page, app, provider, first, second, bindingID) {
+  const path = `/admin/auth-connections/${second.id}`;
+  let record = await request(admin, path, undefined, 'GET');
+  const onlineRevision = record.published_revision;
+  const mappings = [
+    { field_id: 'custom.department', label: 'Department', type: 'string', source: 'oidc_userinfo', pointer: '/department' },
+    { field_id: 'custom.groups', label: 'Groups', type: 'string_list', source: 'oidc_userinfo', pointer: '/groups' }
+  ];
+  const loginRules = { mode: 'conditions', match: 'all', conditions: [
+    { field_id: 'custom.department', operator: 'eq', value: 'engineering' },
+    { field_id: 'custom.groups', operator: 'contains', value: 'ops' }
+  ] };
+  record = await request(admin, path, { expected_revision: record.aggregate_revision, attribute_mappings: mappings, evidence_max_age_seconds: 10, policy: { ...record.published.policy, login_rules: loginRules } }, 'PATCH');
+  const catalog = await request(admin, path + '/attributes?expected_revision=' + record.aggregate_revision, undefined, 'GET');
+  must(catalog.fields.some(f => f.field_id === 'custom.department') && catalog.operators.string_list.includes('contains'), 'Catalog missing typed mappings');
+  const sample = await request(admin, path + '/preview', { expected_revision: record.aggregate_revision, sources: { oidc_userinfo: { department: 'engineering', groups: ['ops'] } } });
+  must(sample.simulated && sample.rules.login.status === 'pass', 'Simulated rule preview failed');
+  await request(page, path + '/preview', { expected_revision: record.aggregate_revision, sources: {} }, 'POST', 403);
+  const tested = await flow(admin, path + '/test', { expected_revision: record.aggregate_revision }, provider, 'provideradmin', { fresh: true });
+  must(tested.kind === 'test_result' && tested.rules.login.status === 'fail' && !tested.session, 'Administrator failing test did not return isolated diagnostics');
+  let impact = await request(admin, path + '/impact', { expected_revision: record.aggregate_revision });
+  must(!impact.can_publish && impact.unknown_users.length === 1 && impact.blocked_users.length === 1, 'Old unrestricted login or simulation became candidate evidence');
+  const blocked = await request(admin, path + '/publish', { expected_revision: record.aggregate_revision }, 'POST', 409);
+  must(blocked.impact?.unknown_users.length === 1 && blocked.impact.remediation, 'Missing publication remediation');
+  must((await request(admin, path, undefined, 'GET')).published_revision === onlineRevision, 'Blocked publication replaced online version');
+  const setProof = await reauth(page, bindingID, 'password_set', 'password', provider);
+  const password = 'B2-verified-fallback-password!'; runtime.secrets.push(password);
+  await request(page, '/users/me/password', { reauthentication_proof: setProof, new_password: password }, 'POST', 204);
+  await request(admin, path + '/publish', { expected_revision: record.aggregate_revision }, 'POST', 409);
+  await loginPassword(page, 'alice_local', password);
+  must((await request(page, '/users/me/login-methods', undefined, 'GET')).password.verified, 'Password login did not establish verified fallback status');
+  const oldLogin = await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
+  const oldProof = await reauth(page, bindingID, 'link', first.id, provider);
+  record = await request(admin, path + '/publish', { expected_revision: record.aggregate_revision });
+  must(record.published.login_policy_revision > second.published.login_policy_revision, 'Login rule version did not advance');
+  await request(page, '/auth/refresh', { refresh_token: oldLogin.session.refresh_token }, 'POST', 401, null);
+  await request(page, `/users/me/login-bindings/${first.id}/start`, { reauthentication_proof: oldProof, browser_challenge: 'a'.repeat(43), completion_url: app.completionBase + '/complete' }, 'POST', 403);
+  const current = await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
+  must(current.kind === 'session' && !current.attributes && !current.rules, 'Formal login leaked administrator diagnostics');
+  let methods = await request(page, '/users/me/login-methods', undefined, 'GET');
+  const evidenceDeadline = methods.bindings.find(b => b.binding_id === bindingID).evidence_expires_at;
+  must(methods.bindings.find(b => b.binding_id === bindingID).login_rule_status === 'pass', 'Fresh verified login not marked pass');
+  const rotated = await request(page, '/auth/refresh', { refresh_token: current.session.refresh_token }, 'POST', 200, null);
+  methods = await request(page, '/users/me/login-methods', undefined, 'GET');
+  must(methods.bindings.find(b => b.binding_id === bindingID).evidence_expires_at === evidenceDeadline, 'Refresh extended evidence deadline');
+  await new Promise(resolve => setTimeout(resolve, Math.max(0, Date.parse(evidenceDeadline) - Date.now()) + 100));
+  await request(page, '/auth/refresh', { refresh_token: rotated.refresh_token }, 'POST', 401, null);
+  methods = await request(page, '/users/me/login-methods', undefined, 'GET');
+  must(methods.bindings.find(b => b.binding_id === bindingID).login_rule_status === 'unknown', 'Expired evidence remained pass');
+  await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
+  for (const username of ['bob', 'missing']) {
+    const deniedContext = await browser.newContext(), deniedPage = await deniedContext.newPage();
+    await deniedPage.goto(app.completionBase);
+    const denied = await flow(deniedPage, `/auth/external/${second.id}/start`, {}, provider, username, { anonymous: true, expected: 403 });
+    must(!denied.attributes && !denied.rules && denied.type === 'urn:linguaflow:authentication-rule-denied', 'Rule denial leaked attributes or used wrong status');
+    await deniedContext.close();
+  }
+  console.log('PASS B2: unknown blocks publication, verified fallback permits it, formal attributes and expiry enforced');
 }
 
 async function scenario(app, provider, mode) {
@@ -175,12 +235,13 @@ async function scenario(app, provider, mode) {
   must(!cors.headers()['access-control-allow-origin'], 'Unapproved origin allowed');
   must(callbacks.filter(c => c.status === 303).every(c => c.headers['cache-control'] === 'no-store' && c.headers['referrer-policy'] === 'no-referrer'), 'Callback caching/referrer headers missing');
   // No authentication secrets may appear in administrator views.
+  await rulesScenario(admin, page, app, provider, first, second, secondBinding);
   const allConnections = await request(admin, '/admin/auth-connections', undefined, 'GET');
   for (const marker of runtime.secrets) must(!JSON.stringify(allConnections).includes(marker), 'Administrator response leaked a marker secret');
   const audit = await request(admin, '/admin/audit-logs', undefined, 'GET');
   for (const marker of runtime.secrets) must(!JSON.stringify(audit).includes(marker), 'Audit response leaked a marker secret');
   await adminContext.close(); await userContext.close();
-  results.push({ mode, status: 'passed', flows: ['connection_check_test_publish', 'signup_username_retry', 'login', 'fresh_oidc_reauthentication_with_cookie', 'set_change_delete_password', 'explicit_second_binding', 'verified_fallback', 'safe_unlink', 'last_method_and_admin_protection', 'display_publication_session', 'cancel', 'denial_retry_replay', 'completion_allowlist', 'cors', 'url_ticket_removal', 'no_store_no_referrer'] });
+  results.push({ mode, status: 'passed', flows: ['connection_check_test_publish', 'signup_username_retry', 'login', 'fresh_oidc_reauthentication_with_cookie', 'set_change_delete_password', 'explicit_second_binding', 'verified_fallback', 'safe_unlink', 'last_method_and_admin_protection', 'display_publication_session', 'cancel', 'denial_retry_replay', 'completion_allowlist', 'cors', 'url_ticket_removal', 'no_store_no_referrer', 'typed_attribute_catalog_preview', 'admin_test_rule_failure', 'unknown_blocks_publish', 'password_control_required_for_fallback', 'verified_fallback_allows_publish', 'old_rule_refresh_and_proof_rejected', 'department_and_groups_rules', 'refresh_retains_evidence_deadline', 'expired_evidence_reauthentication', 'denied_and_missing_attributes_private'] });
   console.log(`PASS ${mode}: real Keycloak account lifecycle and browser contract`);
 }
 

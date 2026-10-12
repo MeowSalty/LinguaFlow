@@ -30,7 +30,7 @@ export async function ready(url, child, timeout = 120000) {
   throw new Error('Acceptance readiness timed out: ' + new URL(url).pathname);
 }
 export async function createRuntime() {
-  const root = await mkdtemp(join(tmpdir(), 'linguaflow-b1-acceptance-'));
+  const root = await mkdtemp(join(tmpdir(), 'linguaflow-b2-acceptance-'));
   const children = [], servers = [], secrets = [];
   const applicationPorts = {};
   for (const mode of ['same-origin', 'cross-origin']) {
@@ -58,6 +58,7 @@ export async function createRuntime() {
     if (!bin) throw new Error('Real PostgreSQL unverified: set LINGUAFLOW_AUTH_POSTGRES_BIN to portable PostgreSQL bin directory');
     const exe = name => join(bin, name + (process.platform === 'win32' ? '.exe' : ''));
     await access(exe('initdb'));
+    await run(exe('postgres'), ['--version']);
     const pgRoot = join(root, 'postgres'), password = secret(), pwfile = join(root, 'pg-password');
     secrets.push(password);
     await writeFile(pwfile, password, { mode: 0o600 });
@@ -86,8 +87,15 @@ export async function createRuntime() {
       clients: ['b1-first', 'b1-second'].map(clientId => ({ clientId, enabled: true, protocol: 'openid-connect', publicClient: false,
         secret: clientSecret, standardFlowEnabled: true, directAccessGrantsEnabled: false,
         redirectUris: Object.values(applicationPorts).map(({ proxyPort }) => `http://127.0.0.1:${proxyPort}/api/v1/auth/external/*`),
-        attributes: { 'pkce.code.challenge.method': 'S256' }, defaultClientScopes: ['basic', 'profile', 'email'] })),
-      users: ['provideradmin', 'alice', 'bob'].map(username => ({ username, enabled: true, email: `${username}@example.invalid`, emailVerified: true,
+        attributes: { 'pkce.code.challenge.method': 'S256' }, defaultClientScopes: ['basic', 'profile', 'email'],
+        protocolMappers: [
+          { name: 'department', protocol: 'openid-connect', protocolMapper: 'oidc-usermodel-attribute-mapper', config: { 'user.attribute': 'department', 'claim.name': 'department', 'jsonType.label': 'String', 'id.token.claim': 'true', 'access.token.claim': 'true', 'userinfo.token.claim': 'true' } },
+          { name: 'groups', protocol: 'openid-connect', protocolMapper: 'oidc-group-membership-mapper', config: { 'claim.name': 'groups', 'full.path': 'false', 'id.token.claim': 'true', 'access.token.claim': 'true', 'userinfo.token.claim': 'true' } }
+        ] })),
+      groups: [{ name: 'engineering' }, { name: 'ops' }],
+      users: ['provideradmin', 'alice', 'bob', 'missing'].map(username => ({ username, enabled: true, email: `${username}@example.invalid`, emailVerified: true,
+        ...(username === 'missing' ? {} : { attributes: { department: [username === 'alice' ? 'engineering' : 'sales'] } }),
+        groups: username === 'alice' ? ['/engineering', '/ops'] : [],
         firstName: username, lastName: 'Acceptance', credentials: [{ type: 'password', value: password, temporary: false }] }))
     };
     await mkdir(join(kcRoot, 'data/import'), { recursive: true });
