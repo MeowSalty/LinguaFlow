@@ -8,19 +8,21 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
 
 var (
@@ -40,6 +42,8 @@ type Config struct {
 }
 
 type Identity struct {
+	Sources           map[string]json.RawMessage
+	SourceErrors      map[string]string
 	Issuer            string
 	Subject           string
 	AuthTime          time.Time
@@ -272,15 +276,16 @@ func (c *Client) ExchangeAndVerify(ctx context.Context, cfg Config, req Exchange
 	if err != nil {
 		return Identity{}, ErrInvalidToken
 	}
+	var verifiedClaims json.RawMessage
+	if err := id.Claims(&verifiedClaims); err != nil || authrules.ValidateJSON(verifiedClaims) != nil {
+		return Identity{}, ErrInvalidToken
+	}
 	var claims struct {
-		Issuer            string `json:"iss"`
-		Subject           string `json:"sub"`
-		Nonce             string `json:"nonce"`
-		AuthTime          int64  `json:"auth_time"`
-		Name              string `json:"name"`
-		PreferredUsername string `json:"preferred_username"`
-		Email             string `json:"email"`
-		AuthorizedParty   string `json:"azp"`
+		Issuer          string `json:"iss"`
+		Subject         string `json:"sub"`
+		Nonce           string `json:"nonce"`
+		AuthTime        int64  `json:"auth_time"`
+		AuthorizedParty string `json:"azp"`
 	}
 	if err := id.Claims(&claims); err != nil || claims.Subject == "" || claims.Issuer != cfg.Issuer || (req.ExpectedNonce != "" && subtle.ConstantTimeCompare([]byte(claims.Nonce), []byte(req.ExpectedNonce)) != 1) {
 		return Identity{}, ErrInvalidToken
@@ -308,32 +313,83 @@ func (c *Client) ExchangeAndVerify(ctx context.Context, cfg Config, req Exchange
 			return Identity{}, ErrFreshAuth
 		}
 	}
-	identity := Identity{Issuer: claims.Issuer, Subject: claims.Subject, AuthTime: authTime, DisplayName: claims.Name, PreferredUsername: claims.PreferredUsername, Email: claims.Email, Nonce: claims.Nonce}
-	if cfg.UserInfoEnabled && p.UserInfoEndpoint() != "" {
-		ui, err := p.UserInfo(ctx, oauth2.StaticTokenSource(tok))
+	identity := Identity{Sources: map[string]json.RawMessage{"oidc_id_token": verifiedClaims}, SourceErrors: map[string]string{}, Issuer: claims.Issuer, Subject: claims.Subject, AuthTime: authTime, Nonce: claims.Nonce}
+	fillOrdinaryProfile(&identity, verifiedClaims)
+	if cfg.UserInfoEnabled {
+		endpoint := p.UserInfoEndpoint()
+		if endpoint == "" {
+			identity.SourceErrors["oidc_userinfo"] = "source_missing"
+			return identity, nil
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 		if err != nil {
-			return Identity{}, ErrUnavailable
-		}
-		var user struct {
-			Subject           string `json:"sub"`
-			Name              string `json:"name"`
-			PreferredUsername string `json:"preferred_username"`
-			Email             string `json:"email"`
-		}
-		if err := ui.Claims(&user); err != nil || user.Subject != identity.Subject {
 			return Identity{}, ErrInvalidToken
 		}
-		if identity.DisplayName == "" {
-			identity.DisplayName = user.Name
+		request.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+		request.Header.Set("Accept", "application/json")
+		client := c.httpClient()
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		response, err := client.Do(request)
+		if err != nil {
+			if errors.Is(err, ErrInvalidConfig) {
+				return Identity{}, err
+			}
+			identity.SourceErrors["oidc_userinfo"] = "source_unavailable"
+			return identity, nil
 		}
-		if identity.PreferredUsername == "" {
-			identity.PreferredUsername = user.PreferredUsername
+		defer response.Body.Close()
+		if response.StatusCode == 429 || response.StatusCode >= 500 {
+			identity.SourceErrors["oidc_userinfo"] = "source_unavailable"
+			return identity, nil
 		}
-		if identity.Email == "" {
-			identity.Email = user.Email
+		if response.StatusCode == 401 || response.StatusCode == 403 {
+			identity.SourceErrors["oidc_userinfo"] = "scope_missing"
+			return identity, nil
+		}
+		media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+		if response.StatusCode != http.StatusOK || err != nil || media != "application/json" {
+			return Identity{}, ErrInvalidToken
+		}
+		raw, err := io.ReadAll(response.Body)
+		if err != nil {
+			var networkError net.Error
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, io.ErrUnexpectedEOF) || errors.As(err, &networkError) {
+				identity.SourceErrors["oidc_userinfo"] = "source_unavailable"
+				return identity, nil
+			}
+			return Identity{}, ErrInvalidToken
+		}
+		if authrules.ValidateJSON(raw) != nil {
+			return Identity{}, ErrInvalidToken
+		}
+		var user struct {
+			Subject string `json:"sub"`
+		}
+		if err := json.Unmarshal(raw, &user); err != nil || user.Subject != identity.Subject {
+			return Identity{}, ErrInvalidToken
+		}
+		identity.Sources["oidc_userinfo"] = raw
+		fillOrdinaryProfile(&identity, raw)
+	}
+
+	return identity, nil
+}
+
+// Ordinary profile fields never participate in protocol identity validation.
+// Wrong types remain available to the rule engine as unknown attributes.
+func fillOrdinaryProfile(identity *Identity, raw json.RawMessage) {
+	var profile map[string]json.RawMessage
+	if json.Unmarshal(raw, &profile) != nil {
+		return
+	}
+	for field, target := range map[string]*string{"name": &identity.DisplayName, "preferred_username": &identity.PreferredUsername, "email": &identity.Email} {
+		if *target == "" {
+			var value string
+			if json.Unmarshal(profile[field], &value) == nil && len(value) <= 8192 {
+				*target = value
+			}
 		}
 	}
-	return identity, nil
 }
 
 func normalizedAuthMethod(c Config) string {
