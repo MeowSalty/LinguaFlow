@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
@@ -73,15 +74,26 @@ type PasswordCapabilities struct {
 }
 
 type AuthCapabilities struct {
-	Mode                     string               `json:"mode"`
-	Password                 PasswordCapabilities `json:"password"`
-	Connections              []struct{}           `json:"connections"`
-	EmailVerificationEnabled bool                 `json:"email_verification_enabled"`
-	PasswordResetEnabled     bool                 `json:"password_reset_enabled"`
+	Mode                     string                           `json:"mode"`
+	Password                 PasswordCapabilities             `json:"password"`
+	Connections              []PublicAuthConnectionCapability `json:"connections"`
+	EmailVerificationEnabled bool                             `json:"email_verification_enabled"`
+	PasswordResetEnabled     bool                             `json:"password_reset_enabled"`
+}
+
+type PublicAuthConnectionCapability struct {
+	ConnectionID       string   `json:"connection_id"`
+	DisplayName        string   `json:"display_name"`
+	Description        string   `json:"description"`
+	DisplayOrder       int      `json:"display_order"`
+	LogoURL            *string  `json:"logo_url,omitempty"`
+	CanLogin           bool     `json:"can_login"`
+	CanSignup          bool     `json:"can_signup"`
+	SignupRequirements []string `json:"signup_requirements"`
 }
 
 func (s *AuthService) Capabilities(ctx context.Context) (AuthCapabilities, error) {
-	result := AuthCapabilities{Mode: "server", Connections: []struct{}{}}
+	result := AuthCapabilities{Mode: "server", Connections: []PublicAuthConnectionCapability{}}
 	p, err := readPasswordPolicy(ctx, s.client)
 	if err != nil {
 		return result, err
@@ -91,6 +103,24 @@ func (s *AuthService) Capabilities(ctx context.Context) (AuthCapabilities, error
 		return result, fmt.Errorf("%w: %w", ErrSettingsUnavailable, err)
 	}
 	result.Password = PasswordCapabilities{CanLogin: p.canLogin(), CanSignup: registration && p.canLogin() && p.Policy.SignupEnabled, UsernameLoginEnabled: p.canLogin()}
+	connections, err := s.client.AuthConnection.Query().All(ctx)
+	if err != nil {
+		return result, err
+	}
+	for _, connection := range connections {
+		if connection.ID == PasswordConnectionID || connection.PublishedRevision == nil || connection.ArchivedAt != nil {
+			continue
+		}
+		x, err := readExternalConnection(ctx, s.client, connection.ID, 0)
+		if err != nil {
+			continue
+		}
+		if !x.Policy.Enabled {
+			continue
+		}
+		result.Connections = append(result.Connections, PublicAuthConnectionCapability{ConnectionID: connection.ID, DisplayName: x.Config.DisplayName, Description: x.Config.Description, DisplayOrder: x.Config.DisplayOrder, CanLogin: x.Policy.LoginEnabled, CanSignup: registration && x.Policy.LoginEnabled && x.Policy.SignupEnabled, SignupRequirements: []string{}})
+	}
+	sort.Slice(result.Connections, func(i, j int) bool { return result.Connections[i].DisplayOrder < result.Connections[j].DisplayOrder })
 	return result, nil
 }
 

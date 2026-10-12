@@ -184,6 +184,10 @@ func SanitizeActivityMetadata(action string, metadata map[string]any) map[string
 	switch {
 	case action == "account.password.changed", action == "admin.account.updated", action == "admin.account.password_reset":
 		keys = []string{"auth_version", "connection_id", "active"}
+	case strings.HasPrefix(action, "admin.auth_connection."):
+		keys = []string{"connection_id", "revision", "auth_generation"}
+	case strings.HasPrefix(action, "account.authentication."), strings.HasPrefix(action, "account.login_binding."), action == "account.password.set", action == "account.password.deleted":
+		keys = []string{"connection_id", "binding_id", "auth_version"}
 	case action == "job.history_deleted", action == "glossary.sync_task_history_deleted":
 		keys = []string{"task_kind", "task_id", "project_id", "previous_status", "source", "scan_id", "policy_revision"}
 	case action == "admin.task_retention.update":

@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
@@ -38,6 +39,10 @@ var (
 	ErrCurrentPasswordMismatch = errors.New("current password mismatch")
 	ErrAccountConflict         = errors.New("account security state changed")
 )
+
+// A fixed valid bcrypt value keeps unknown users, disabled users and accounts
+// without a password on the same expensive verification path.
+const dummyPasswordHash = "$2a$10$7EqJtq98hPqEX7fNZaFWoO5z8O4uKq7H6N4jGkCq5HqFQHGXQrX8u"
 
 type AuthConfig struct {
 	Secret          []byte
@@ -160,12 +165,18 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*Session, er
 	}
 	account, err := s.client.User.Query().Where(user.UsernameEQ(identifier)).Only(ctx)
 	if ent.IsNotFound(err) {
+		_ = comparePassword(dummyPasswordHash, input.Password)
 		return nil, ErrInvalidCredentials
 	}
 	if err != nil {
 		return nil, err
 	}
-	if !account.Active || account.PasswordHash == "" || comparePassword(account.PasswordHash, input.Password) != nil {
+	passwordHash := account.PasswordHash
+	if passwordHash == "" {
+		passwordHash = dummyPasswordHash
+	}
+	passwordMatches := comparePassword(passwordHash, input.Password) == nil
+	if !account.Active || account.PasswordHash == "" || !passwordMatches {
 		return nil, ErrInvalidCredentials
 	}
 	return s.issueSession(ctx, account)
@@ -210,14 +221,14 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ses
 	if err != nil {
 		return nil, err
 	}
-	if stored.Edges.Session == nil || stored.Edges.Session.ConnectionID != PasswordConnectionID {
+	if stored.Edges.Session == nil {
 		return nil, ErrTokenInvalid
 	}
 	var result *Session
 	var rejection error
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		result, rejection = nil, nil
-		if err := lockPasswordConnection(ctx, tx); err != nil {
+		if err := lockAuthConnection(ctx, tx, stored.Edges.Session.ConnectionID); err != nil {
 			return err
 		}
 		if err := lockAuthUser(ctx, tx, stored.Edges.Session.UserID); err != nil {
@@ -255,12 +266,32 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ses
 		if !now.Before(chain.ExpiresAt) || !now.Before(token.ExpiresAt) {
 			return reject(ErrTokenExpired)
 		}
-		p, err := readPasswordPolicy(ctx, tx)
-		if err != nil {
-			return err
-		}
 		account := token.Edges.User
-		if !account.Active || account.AuthVersion != chain.AuthVersion || account.PasswordHash == "" || !p.canLogin() || chain.BindingID != nil || chain.ConnectionGeneration != p.Connection.AuthGeneration || chain.LoginPolicyRevision != p.Policy.LoginPolicyRevision || token.Generation != chain.Generation {
+		validConnection := false
+		var connection *ent.AuthConnection
+		var policyRevision int64
+		var binding *ent.LoginBinding
+		if chain.ConnectionID == PasswordConnectionID {
+			p, policyErr := readPasswordPolicy(ctx, tx)
+			if policyErr != nil {
+				return policyErr
+			}
+			connection, policyRevision = p.Connection, p.Policy.LoginPolicyRevision
+			validConnection = p.canLogin() && account.PasswordHash != "" && chain.BindingID == nil
+		} else {
+			p, policyErr := readExternalConnection(ctx, tx, chain.ConnectionID, 0)
+			if policyErr == nil && chain.BindingID != nil {
+				binding, policyErr = tx.LoginBinding.Query().Where(loginbinding.IDEQ(*chain.BindingID), loginbinding.UserIDEQ(account.ID), loginbinding.ConnectionIDEQ(chain.ConnectionID)).Only(ctx)
+			}
+			if policyErr != nil && !ent.IsNotFound(policyErr) {
+				return policyErr
+			}
+			if policyErr == nil {
+				connection, policyRevision = p.Connection, p.Policy.LoginPolicyRevision
+				validConnection = p.Connection.ArchivedAt == nil && p.Policy.Enabled && p.Policy.LoginEnabled && binding != nil
+			}
+		}
+		if !account.Active || account.AuthVersion != chain.AuthVersion || !validConnection || connection == nil || chain.ConnectionGeneration != connection.AuthGeneration || chain.LoginPolicyRevision != policyRevision || token.Generation != chain.Generation {
 			return reject(ErrRefreshTokenRevoked)
 		}
 		if chain.Generation >= maxAuthVersion {
@@ -277,7 +308,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ses
 		if err != nil {
 			return err
 		}
-		result, err = s.createSession(ctx, tx, account, p, chain)
+		result, err = s.createSessionForConnection(ctx, tx, account, connection, policyRevision, binding, chain)
 		return err
 	})
 	if err != nil {
@@ -427,12 +458,20 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID int, currentPas
 
 // Caller owns connection/user locks and has verified credentials and policy.
 func (s *AuthService) createSession(ctx context.Context, tx *ent.Client, account *ent.User, p passwordPolicy, chain *ent.RefreshSession) (*Session, error) {
+	return s.createSessionForConnection(ctx, tx, account, p.Connection, p.Policy.LoginPolicyRevision, nil, chain)
+}
+
+func (s *AuthService) createSessionForConnection(ctx context.Context, tx *ent.Client, account *ent.User, connection *ent.AuthConnection, policyRevision int64, binding *ent.LoginBinding, chain *ent.RefreshSession) (*Session, error) {
 	now := timeutil.Normalize(s.now())
 	if s.cfg.AccessTokenTTL <= 0 || s.cfg.RefreshTokenTTL <= 0 || len(s.cfg.Secret) == 0 {
 		return nil, fmt.Errorf("invalid session configuration")
 	}
 	if chain == nil {
-		created, err := tx.RefreshSession.Create().SetUserID(account.ID).SetAuthVersion(account.AuthVersion).SetConnectionID(PasswordConnectionID).SetConnectionGeneration(p.Connection.AuthGeneration).SetLoginPolicyRevision(p.Policy.LoginPolicyRevision).SetExpiresAt(now.Add(s.cfg.RefreshTokenTTL)).Save(ctx)
+		create := tx.RefreshSession.Create().SetUserID(account.ID).SetAuthVersion(account.AuthVersion).SetConnectionID(connection.ID).SetConnectionGeneration(connection.AuthGeneration).SetLoginPolicyRevision(policyRevision).SetExpiresAt(now.Add(s.cfg.RefreshTokenTTL))
+		if binding != nil {
+			create.SetBindingID(binding.ID)
+		}
+		created, err := create.Save(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -455,6 +494,24 @@ func (s *AuthService) createSession(ctx context.Context, tx *ent.Client, account
 		return nil, err
 	}
 	return &Session{AccessToken: access, RefreshToken: raw, AccessExpiresAt: accessExpiry, RefreshExpiresAt: timeutil.Normalize(chain.ExpiresAt), User: account}, nil
+}
+
+func lockAuthConnection(ctx context.Context, client *ent.Client, id string) error {
+	if id == PasswordConnectionID {
+		return lockPasswordConnection(ctx, client)
+	}
+	result, err := client.ExecContext(ctx, "UPDATE auth_connections SET auth_generation = auth_generation WHERE id = '"+strings.ReplaceAll(id, "'", "''")+"'")
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrSettingsUnavailable
+	}
+	return nil
 }
 func (s *AuthService) signAccessToken(account *ent.User, expiresAt time.Time) (string, error) {
 	claims := AccessTokenClaims{UserID: account.ID, Username: account.Username, Role: account.Role, AuthVersion: account.AuthVersion, RegisteredClaims: jwt.RegisteredClaims{Issuer: s.cfg.Issuer, Subject: fmt.Sprintf("user:%d", account.ID), IssuedAt: jwt.NewNumericDate(timeutil.Normalize(s.now())), ExpiresAt: jwt.NewNumericDate(expiresAt)}}
