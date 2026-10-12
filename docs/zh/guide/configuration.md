@@ -234,6 +234,10 @@ execution:
 #     enabled: true
 #     backend: openai-default
 #     max_attempts: 1
+#     concurrency: 1          # 注音请求并发上限，省略按默认 1
+#     batch_size: 1           # 每个注音请求的段数上限，0 不限段数
+#     max_words_per_batch: 0  # 每个注音请求的字词数上限，0 不限
+#     batch_wait_ms: 25       # 最大凑批等待毫秒数，0 立即派发
 
 # 术语表
 glossary:
@@ -352,7 +356,7 @@ CLI 配置仅接受默认值（`enabled: false`）。规则质检、AI 裁决、
 | --------- | ------ | ------------------------------------------------------------------------------------------ |
 | `profile` | string | 计划级翻译策略名称（引用 `translation_profiles` 的 key）。**未写时使用内置默认策略；写了但名称不存在会报错** |
 | `rounds` | array | 执行轮次列表，按顺序执行 |
-| `ruby_retry` | object | 可选。注音重试：`enabled`（写入即视为 true）、`backend`（引用 `backends` key）、`max_attempts`（默认 `1`） |
+| `ruby_retry` | object | 可选。注音对齐重试：`enabled`（写入即视为 true）、`backend`（引用 `backends` key）、`max_attempts`（默认 `1`）、`concurrency`（注音请求并发上限，省略按默认 `1`）、`batch_size`（每次注音请求段数上限，默认 `1`，`0` 不限段数）、`max_words_per_batch`（每次注音请求字词数上限，默认 `0` 不限）、`batch_wait_ms`（最大凑批等待毫秒数，默认 `25`，`0` 立即派发）。`batch_size` 与 `max_words_per_batch` 不可同时为 `0` |
 
 CLI 轮次仅支持 `translate` / `extract` / `revise`；Web 执行计划另支持 `adjudicate`（质量裁决）、`correct`（本地改写）、`semantic_qa`（语义质检），详见 [流水线与原理](/zh/guide/pipeline#规则质检与-ai-质量裁决)。
 

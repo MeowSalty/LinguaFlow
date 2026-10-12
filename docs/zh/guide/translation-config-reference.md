@@ -227,6 +227,8 @@ schema_version: 1
 | `semantic` | 义训，通常保留不译 |
 | `creative` | 创意注音，常需翻译 |
 
+本地还原失败时可用计划级 **Ruby 重试**（见下方 [Ruby 重试（计划级）](#ruby-重试-计划级)）再调一次 LLM；重试需批量对齐多个段落时可开启合批（`batch_size` / `max_words_per_batch` / `batch_wait_ms`）。
+
 ### 后处理（postprocess）
 
 | 字段          | 类型 | 默认值 | 说明         |
@@ -548,6 +550,10 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 | `enabled`       | bool | `false` | 本地还原失败时 LLM 对齐                         |
 | `backend_id`    | int  | `0`     | `0` 表示用翻译主后端                           |
 | `max_attempts`  | int  | `1`     | 注音对齐重试轮数（仅 `enabled=true` 时生效，最小 1） |
+| `concurrency`   | int  | `1`     | 单个任务全部资源与轮次共享的注音请求并发上限，省略时按默认值 `1` 物化，与主轮 `concurrency` 独立；显式 `0` 或负数无效 |
+| `batch_size`    | int  | `1`     | 每次注音请求的段数上限，`0` 表示不限段数；与 `max_words_per_batch` 不可同时为 `0`。尾批不足上限时直接发送，正常重试保持上限，仅批级协议异常触发单段兜底 |
+| `max_words_per_batch` | int | `0` | 注音合批的内容字词数上限，`0` 表示不限；按实际发送的原文、候选译文、正文区域与待补注音文本计数（不含固定模板），单段超限时独占一次请求 |
+| `batch_wait_ms` | int  | `25`    | 最大凑批等待毫秒数，`0` 表示立即派发；等待不预扣尝试次数，也不占用注音并发或 RPM 配额 |
 
 ### 校验摘要
 
@@ -561,6 +567,7 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 - `revise.segment_scope=with_issue_codes` 时 `issue_codes` 全部 ⊆ 语义白名单；空数组 `[]` 显式表示不修订任何问题
 - `fallback_shrink` ∈ (0, 1] 且必填（**仅翻译轮**）；修订/裁决/语义质检轮无 `fallback_shrink`（省略或 `0` 会被后端拒绝）→ 以 `1.0` 表达不缩
 - `translate.inline_term_extraction` 若提供：`max_terms_per_1000_words` 须为有限正数、`min_source_len` ≥ 1、`conflict_strategy` ∈ {`off`, `rewrite-local`}
+- `ruby_retry` 若提供：`concurrency` ≥ 1、`batch_size` 与 `max_words_per_batch` 不可同时为 0、`batch_wait_ms` ∈ [0, 9223372036854]
 
 ### 执行计划模板顶层字段
 
@@ -570,6 +577,7 @@ revise 轮的 `issue_codes` 是**修订可修复的语义白名单子集**（与
 | ------------- | ---- | ---- | ------------------------------------------------------------------------------------------------------ |
 | `profile_id`  | int  | 是   | 执行配置 ID；translate 与 revise 轮共用该策略的 protect/ruby/repair/QA 行为预设。允许内置负 ID（如 `-1`） |
 | `org_id`      | int  | 否   | 创建**组织共享**模板时指定目标组织（须为该组织 admin/owner）                                             |
+| `ruby_retry`  | object | 否   | 计划级注音对齐重试配置 (见上方 [Ruby 重试 (计划级)](#ruby-重试-计划级));创建任务时整体冻结进执行快照，改动只影响之后创建的任务 |
 
 ---
 

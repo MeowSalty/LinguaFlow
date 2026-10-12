@@ -312,6 +312,8 @@ EPUB 的译文最终要嵌回原书的 XHTML。为保证导出的电子书能被
 2. **译后** 按类型过滤，把标签插回译文
 3. 本地对齐失败时，可用计划级 **Ruby 重试** 再调一次 LLM
 
+重试默认**逐段**派发（`batch_size: 1`）。需要时可开启**合批**：把多个待对齐段落合并进同一次注音请求，减少请求次数——`batch_size` 控制每次请求的段数上限、`max_words_per_batch` 控制字词数上限、`batch_wait_ms` 是凑批的最长等待、`concurrency` 是注音请求的并发上限（与主轮并发独立）。合批只影响注音对齐这一次调用的组织方式，不改写译文本身；某段超限时该段独占一次请求。字段与默认值见 [翻译配置 · 参考 · Ruby 重试](/zh/guide/translation-config-reference#ruby-重试-计划级)。
+
 类型：`phonetic` / `semantic` / `creative`。字段见 [翻译配置 · 参考 · ruby](/zh/guide/translation-config-reference#ruby-ruby)。
 
 ---
