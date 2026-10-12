@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoidc"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -108,6 +109,8 @@ type ReauthenticationResult struct {
 	ExpiresAt time.Time
 }
 type ExternalTestResult struct {
+	Attributes     map[string]authrules.Attribute
+	Diagnostics    AuthRulesDiagnostics `json:"rules"`
 	ConnectionID   string
 	Revision       int64
 	FreshSupported bool

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
@@ -289,6 +290,15 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ses
 			if policyErr == nil {
 				connection, policyRevision = p.Connection, p.Policy.LoginPolicyRevision
 				validConnection = p.Connection.ArchivedAt == nil && p.Policy.Enabled && p.Policy.LoginEnabled && binding != nil
+				if validConnection && p.Policy.LoginRules.Mode == "conditions" {
+					identity, identityErr := tx.ExternalIdentity.Get(ctx, binding.ExternalIdentityID)
+					if identityErr != nil {
+						return identityErr
+					}
+					if chain.Evidence.Subject != identity.Subject || chain.Evidence.Issuer != identity.Authority || requireRule(p, chain.Evidence, p.Policy.LoginRules, now) != nil {
+						return reject(ErrRefreshTokenRevoked)
+					}
+				}
 			}
 		}
 		if !account.Active || account.AuthVersion != chain.AuthVersion || !validConnection || connection == nil || chain.ConnectionGeneration != connection.AuthGeneration || chain.LoginPolicyRevision != policyRevision || token.Generation != chain.Generation {
@@ -458,10 +468,15 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID int, currentPas
 
 // Caller owns connection/user locks and has verified credentials and policy.
 func (s *AuthService) createSession(ctx context.Context, tx *ent.Client, account *ent.User, p passwordPolicy, chain *ent.RefreshSession) (*Session, error) {
+	if chain == nil {
+		if err := tx.User.UpdateOneID(account.ID).SetPasswordVerifiedHash(hash.Full(account.PasswordHash)).SetPasswordVerifiedAt(s.now()).Exec(ctx); err != nil {
+			return nil, err
+		}
+	}
 	return s.createSessionForConnection(ctx, tx, account, p.Connection, p.Policy.LoginPolicyRevision, nil, chain)
 }
 
-func (s *AuthService) createSessionForConnection(ctx context.Context, tx *ent.Client, account *ent.User, connection *ent.AuthConnection, policyRevision int64, binding *ent.LoginBinding, chain *ent.RefreshSession) (*Session, error) {
+func (s *AuthService) createSessionForConnection(ctx context.Context, tx *ent.Client, account *ent.User, connection *ent.AuthConnection, policyRevision int64, binding *ent.LoginBinding, chain *ent.RefreshSession, evidences ...authrules.Evidence) (*Session, error) {
 	now := timeutil.Normalize(s.now())
 	if s.cfg.AccessTokenTTL <= 0 || s.cfg.RefreshTokenTTL <= 0 || len(s.cfg.Secret) == 0 {
 		return nil, fmt.Errorf("invalid session configuration")
@@ -470,6 +485,14 @@ func (s *AuthService) createSessionForConnection(ctx context.Context, tx *ent.Cl
 		create := tx.RefreshSession.Create().SetUserID(account.ID).SetAuthVersion(account.AuthVersion).SetConnectionID(connection.ID).SetConnectionGeneration(connection.AuthGeneration).SetLoginPolicyRevision(policyRevision).SetExpiresAt(now.Add(s.cfg.RefreshTokenTTL))
 		if binding != nil {
 			create.SetBindingID(binding.ID)
+			evidence := authrules.Evidence{}
+			if len(evidences) > 0 {
+				evidence = evidences[0]
+			}
+			create.SetEvidence(evidence)
+			if err := tx.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(connection.AuthGeneration).SetVerifiedLoginPolicyRevision(policyRevision).SetEvidence(evidence).Exec(ctx); err != nil {
+				return nil, err
+			}
 		}
 		created, err := create.Save(ctx)
 		if err != nil {

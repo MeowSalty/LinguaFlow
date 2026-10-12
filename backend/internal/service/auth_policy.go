@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
@@ -36,8 +37,8 @@ func initializePasswordConnection(ctx context.Context, client *ent.Client) error
 	}
 	return client.AuthChannelPolicy.Create().SetConnectionID(PasswordConnectionID).SetRevision(1).SetLoginPolicyRevision(1).
 		SetEnabled(true).SetLoginEnabled(true).SetSignupEnabled(true).SetLinkEnabled(true).
-		SetLoginRule(authchannelpolicy.LoginRuleUnrestricted).SetSignupRule(authchannelpolicy.SignupRuleUnrestricted).
-		SetLinkRule(authchannelpolicy.LinkRuleUnrestricted).Exec(ctx)
+		SetLoginRules(authrules.Unrestricted()).SetSignupRules(authrules.Unrestricted()).
+		SetLinkRules(authrules.Unrestricted()).Exec(ctx)
 }
 
 func readPasswordPolicy(ctx context.Context, client *ent.Client) (passwordPolicy, error) {
@@ -59,7 +60,8 @@ func readPasswordPolicy(ctx context.Context, client *ent.Client) (passwordPolicy
 		return p, fmt.Errorf("%w: password policy: %w", ErrSettingsUnavailable, err)
 	}
 	if cfg.ConfigVersion != 1 || cfg.EmailLoginEnabled || policy.LoginPolicyRevision < 1 || policy.LoginPolicyRevision > maxAuthVersion ||
-		policy.LoginRule != authchannelpolicy.LoginRuleUnrestricted || policy.SignupRule != authchannelpolicy.SignupRuleUnrestricted || policy.LinkRule != authchannelpolicy.LinkRuleUnrestricted ||
+		policy.LoginRules.Mode != "unrestricted" || policy.SignupRules.Mode != "unrestricted" || policy.LinkRules.Mode != "unrestricted" ||
+		authrules.Validate(nil, policy.LoginRules, policy.SignupRules, policy.LinkRules) != nil ||
 		(policy.SignupEnabled && !policy.LoginEnabled) || (policy.LoginEnabled && !cfg.UsernameLoginEnabled) {
 		return p, fmt.Errorf("%w: unsupported password policy", ErrSettingsUnavailable)
 	}

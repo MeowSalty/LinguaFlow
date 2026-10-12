@@ -60,12 +60,18 @@ func revokeUserSessions(ctx context.Context, client *ent.Client, userID int, now
 	if _, err := client.RefreshSession.Update().Where(refreshsession.UserIDEQ(userID), refreshsession.RevokedAtIsNil()).SetRevokedAt(now).Save(ctx); err != nil {
 		return err
 	}
+	if _, err := client.ExecContext(ctx, fmt.Sprintf("UPDATE refresh_sessions SET evidence=NULL WHERE user_id=%d", userID)); err != nil {
+		return err
+	}
 	_, err = client.RefreshToken.Update().Where(refreshtoken.HasUserWith(user.IDEQ(userID)), refreshtoken.RevokedAtIsNil()).SetRevokedAt(now).Save(ctx)
 	return err
 }
 
 func revokeRefreshSession(ctx context.Context, client *ent.Client, id int, now time.Time) error {
 	if _, err := client.RefreshSession.Update().Where(refreshsession.IDEQ(id), refreshsession.RevokedAtIsNil()).SetRevokedAt(now).Save(ctx); err != nil {
+		return err
+	}
+	if _, err := client.ExecContext(ctx, fmt.Sprintf("UPDATE refresh_sessions SET evidence=NULL WHERE id=%d", id)); err != nil {
 		return err
 	}
 	_, err := client.RefreshToken.Update().Where(refreshtoken.SessionIDEQ(id), refreshtoken.RevokedAtIsNil()).SetRevokedAt(now).Save(ctx)

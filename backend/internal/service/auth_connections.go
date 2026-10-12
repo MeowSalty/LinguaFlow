@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"image"
 	"image/png"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoidc"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
@@ -22,7 +22,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/google/uuid"
@@ -42,13 +41,13 @@ type OIDCConnectionInput struct {
 	UserinfoEnabled  *bool    `json:"userinfo_enabled,omitempty"`
 }
 type AuthConnectionPolicyInput struct {
-	Enabled       bool   `json:"enabled"`
-	LoginEnabled  bool   `json:"login_enabled"`
-	SignupEnabled bool   `json:"signup_enabled"`
-	LinkEnabled   bool   `json:"link_enabled"`
-	LoginRule     string `json:"login_rule"`
-	SignupRule    string `json:"signup_rule"`
-	LinkRule      string `json:"link_rule"`
+	Enabled       bool              `json:"enabled"`
+	LoginEnabled  bool              `json:"login_enabled"`
+	SignupEnabled bool              `json:"signup_enabled"`
+	LinkEnabled   bool              `json:"link_enabled"`
+	LoginRules    authrules.RuleSet `json:"login_rules"`
+	SignupRules   authrules.RuleSet `json:"signup_rules"`
+	LinkRules     authrules.RuleSet `json:"link_rules"`
 }
 type CreateAuthConnectionInput struct {
 	Kind         string              `json:"kind"`
@@ -59,23 +58,28 @@ type CreateAuthConnectionInput struct {
 	ClientSecret string              `json:"client_secret,omitempty"`
 }
 type UpdateAuthConnectionInput struct {
-	ExpectedRevision int64                      `json:"expected_revision"`
-	DisplayName      *string                    `json:"display_name,omitempty"`
-	Description      *string                    `json:"description,omitempty"`
-	DisplayOrder     *int                       `json:"display_order,omitempty"`
-	OIDC             *OIDCConnectionInput       `json:"oidc,omitempty"`
-	ClientSecret     json.RawMessage            `json:"client_secret,omitempty"`
-	Policy           *AuthConnectionPolicyInput `json:"policy,omitempty"`
+	AttributeMappings     *[]authrules.Field         `json:"attribute_mappings,omitempty"`
+	EvidenceMaxAgeSeconds *int                       `json:"evidence_max_age_seconds,omitempty"`
+	ExpectedRevision      int64                      `json:"expected_revision"`
+	DisplayName           *string                    `json:"display_name,omitempty"`
+	Description           *string                    `json:"description,omitempty"`
+	DisplayOrder          *int                       `json:"display_order,omitempty"`
+	OIDC                  *OIDCConnectionInput       `json:"oidc,omitempty"`
+	ClientSecret          json.RawMessage            `json:"client_secret,omitempty"`
+	Policy                *AuthConnectionPolicyInput `json:"policy,omitempty"`
 }
 type AuthConnectionSnapshot struct {
-	Revision        int64                     `json:"revision"`
-	DisplayName     string                    `json:"display_name"`
-	Description     string                    `json:"description"`
-	DisplayOrder    int                       `json:"display_order"`
-	OIDC            *OIDCConnectionInput      `json:"oidc,omitempty"`
-	Policy          AuthConnectionPolicyInput `json:"policy"`
-	HasClientSecret bool                      `json:"has_client_secret"`
-	LogoURL         *string                   `json:"logo_url"`
+	AttributeMappings     []authrules.Field         `json:"attribute_mappings"`
+	EvidenceMaxAgeSeconds int                       `json:"evidence_max_age_seconds"`
+	LoginPolicyRevision   int64                     `json:"login_policy_revision"`
+	Revision              int64                     `json:"revision"`
+	DisplayName           string                    `json:"display_name"`
+	Description           string                    `json:"description"`
+	DisplayOrder          int                       `json:"display_order"`
+	OIDC                  *OIDCConnectionInput      `json:"oidc,omitempty"`
+	Policy                AuthConnectionPolicyInput `json:"policy"`
+	HasClientSecret       bool                      `json:"has_client_secret"`
+	LogoURL               *string                   `json:"logo_url"`
 }
 type AuthConnectionValidationResult struct {
 	FreshSupported     bool       `json:"fresh_supported"`
@@ -95,15 +99,24 @@ type AuthConnectionRecord struct {
 	Validation        AuthConnectionValidationResult `json:"validation"`
 }
 type AuthConnectionCheckResult struct {
-	Valid          bool     `json:"valid"`
-	FreshSupported bool     `json:"fresh_supported"`
-	Issues         []string `json:"issues"`
+	Revision       int64                `json:"revision"`
+	Rules          AuthRulesDiagnostics `json:"rules"`
+	Valid          bool                 `json:"valid"`
+	FreshSupported bool                 `json:"fresh_supported"`
+	Issues         []string             `json:"issues"`
 }
 type AuthConnectionImpactResult struct {
-	AffectedUsers    []int `json:"affected_users"`
-	BlockedUsers     []int `json:"blocked_users"`
-	AffectedSessions int   `json:"affected_sessions"`
-	CanPublish       bool  `json:"can_publish"`
+	Revision           int64     `json:"revision"`
+	EvaluatedAt        time.Time `json:"evaluated_at"`
+	PassUsers          []int     `json:"pass_users"`
+	FailUsers          []int     `json:"fail_users"`
+	UnknownUsers       []int     `json:"unknown_users"`
+	AdministratorUsers []int     `json:"administrator_users"`
+	Remediation        string    `json:"remediation,omitempty"`
+	AffectedUsers      []int     `json:"affected_users"`
+	BlockedUsers       []int     `json:"blocked_users"`
+	AffectedSessions   int       `json:"affected_sessions"`
+	CanPublish         bool      `json:"can_publish"`
 }
 type externalConnection struct {
 	Connection *ent.AuthConnection
@@ -132,6 +145,12 @@ func readExternalConnection(ctx context.Context, c *ent.Client, id string, revis
 	}
 	p, err := c.AuthChannelPolicy.Query().Where(authchannelpolicy.ConnectionIDEQ(id), authchannelpolicy.RevisionEQ(revision)).Only(ctx)
 	if err != nil {
+		return out, ErrSettingsUnavailable
+	}
+	if err := authrules.Validate(cfg.AttributeMappings, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
+		return out, ErrSettingsUnavailable
+	}
+	if cfg.EvidenceMaxAgeSeconds < 1 || cfg.EvidenceMaxAgeSeconds > 31536000 {
 		return out, ErrSettingsUnavailable
 	}
 	return externalConnection{row, cfg, p}, nil
@@ -240,13 +259,13 @@ func lockExternalConfiguration(ctx context.Context, c *ent.Client, actorID int) 
 	return checkConnectionAdmin(ctx, c, actorID)
 }
 func policyInput(p *ent.AuthChannelPolicy) AuthConnectionPolicyInput {
-	return AuthConnectionPolicyInput{p.Enabled, p.LoginEnabled, p.SignupEnabled, p.LinkEnabled, string(p.LoginRule), string(p.SignupRule), string(p.LinkRule)}
+	return AuthConnectionPolicyInput{p.Enabled, p.LoginEnabled, p.SignupEnabled, p.LinkEnabled, p.LoginRules, p.SignupRules, p.LinkRules}
 }
 func validConnectionPolicy(p AuthConnectionPolicyInput) bool {
-	return p.LoginRule == "unrestricted" && p.SignupRule == "unrestricted" && p.LinkRule == "unrestricted" && (!p.SignupEnabled || p.LoginEnabled)
+	return (!p.SignupEnabled || p.LoginEnabled)
 }
 func defaultExternalPolicy() AuthConnectionPolicyInput {
-	return AuthConnectionPolicyInput{LoginRule: "unrestricted", SignupRule: "unrestricted", LinkRule: "unrestricted"}
+	return AuthConnectionPolicyInput{LoginRules: authrules.Unrestricted(), SignupRules: authrules.Unrestricted(), LinkRules: authrules.Unrestricted()}
 }
 func normalizeOIDCInput(in OIDCConnectionInput) (OIDCConnectionInput, error) {
 	if in.Issuer == "" || in.ClientID == "" || len(in.ClientID) > 1024 || len(in.Issuer) > 2048 {
@@ -287,7 +306,7 @@ func (s *ExternalAuthService) connectionRecord(ctx context.Context, c *ent.Clien
 		if err != nil {
 			return nil, nil, err
 		}
-		snapshot := &AuthConnectionSnapshot{Revision: rev, DisplayName: p.Config.DisplayName, Description: p.Config.Description, DisplayOrder: p.Config.DisplayOrder, Policy: policyInput(p.Policy), HasClientSecret: connectionSecretVersion(p.Config) > 0}
+		snapshot := &AuthConnectionSnapshot{AttributeMappings: append([]authrules.Field{}, p.Config.AttributeMappings...), EvidenceMaxAgeSeconds: p.Config.EvidenceMaxAgeSeconds, LoginPolicyRevision: p.Policy.LoginPolicyRevision, Revision: rev, DisplayName: p.Config.DisplayName, Description: p.Config.Description, DisplayOrder: p.Config.DisplayOrder, Policy: policyInput(p.Policy), HasClientSecret: connectionSecretVersion(p.Config) > 0}
 		if row.Kind == authconnection.KindOidc {
 			v := p.Config.OidcUserinfoEnabled
 			snapshot.OIDC = &OIDCConnectionInput{p.Config.OidcIssuer, p.Config.OidcClientID, string(p.Config.OidcClientAuthMethod), p.Config.OidcScopes, &v}
@@ -359,6 +378,15 @@ func (s *ExternalAuthService) GetConnection(ctx context.Context, actorID int, id
 }
 
 func saveExternalSnapshot(ctx context.Context, c *ent.Client, id string, revision, loginRevision int64, cfg *ent.AuthConnectionRevision, p AuthConnectionPolicyInput) error {
+	if cfg.EvidenceMaxAgeSeconds < 1 || cfg.EvidenceMaxAgeSeconds > 31536000 {
+		return ErrInvalidInput
+	}
+	if err := authrules.Validate(cfg.AttributeMappings, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidInput, err)
+	}
+	if err := authrules.ValidateScopes(cfg.AttributeMappings, cfg.OidcScopes, cfg.OidcUserinfoEnabled, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidInput, err)
+	}
 	if !validConnectionPolicy(p) || strings.TrimSpace(cfg.DisplayName) == "" || len(cfg.DisplayName) > 120 || len(cfg.Description) > 2000 {
 		return ErrInvalidInput
 	}
@@ -366,10 +394,11 @@ func saveExternalSnapshot(ctx context.Context, c *ent.Client, id string, revisio
 	if len(cfg.LogoData) > 0 {
 		q.SetLogoData(cfg.LogoData)
 	}
+	q.SetAttributeMappings(cfg.AttributeMappings).SetEvidenceMaxAgeSeconds(cfg.EvidenceMaxAgeSeconds)
 	if err := q.Exec(ctx); err != nil {
 		return err
 	}
-	return c.AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(revision).SetLoginPolicyRevision(loginRevision).SetEnabled(p.Enabled).SetLoginEnabled(p.LoginEnabled).SetSignupEnabled(p.SignupEnabled).SetLinkEnabled(p.LinkEnabled).SetLoginRule(authchannelpolicy.LoginRuleUnrestricted).SetSignupRule(authchannelpolicy.SignupRuleUnrestricted).SetLinkRule(authchannelpolicy.LinkRuleUnrestricted).Exec(ctx)
+	return c.AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(revision).SetLoginPolicyRevision(loginRevision).SetEnabled(p.Enabled).SetLoginEnabled(p.LoginEnabled).SetSignupEnabled(p.SignupEnabled).SetLinkEnabled(p.LinkEnabled).SetLoginRules(p.LoginRules).SetSignupRules(p.SignupRules).SetLinkRules(p.LinkRules).Exec(ctx)
 }
 func (s *ExternalAuthService) CreateConnection(ctx context.Context, actorID int, in CreateAuthConnectionInput) (AuthConnectionRecord, error) {
 	if in.Kind != "oidc" {
@@ -389,7 +418,7 @@ func (s *ExternalAuthService) CreateConnection(ctx context.Context, actorID int,
 		if err != nil {
 			return err
 		}
-		cfg := &ent.AuthConnectionRevision{ConnectionID: id, DisplayName: in.DisplayName, Description: in.Description, DisplayOrder: in.DisplayOrder, OidcIssuer: oidc.Issuer, OidcClientID: oidc.ClientID, OidcClientAuthMethod: authconnectionrevision.OidcClientAuthMethod(oidc.ClientAuthMethod), OidcScopes: oidc.Scopes, OidcUserinfoEnabled: *oidc.UserinfoEnabled}
+		cfg := &ent.AuthConnectionRevision{EvidenceMaxAgeSeconds: 3600, ConnectionID: id, DisplayName: in.DisplayName, Description: in.Description, DisplayOrder: in.DisplayOrder, OidcIssuer: oidc.Issuer, OidcClientID: oidc.ClientID, OidcClientAuthMethod: authconnectionrevision.OidcClientAuthMethod(oidc.ClientAuthMethod), OidcScopes: oidc.Scopes, OidcUserinfoEnabled: *oidc.UserinfoEnabled}
 		if in.ClientSecret != "" {
 			if err = s.saveConnectionSecret(ctx, c, id, 1, in.ClientSecret, actorID); err != nil {
 				return err
@@ -455,6 +484,12 @@ func (s *ExternalAuthService) UpdateConnection(ctx context.Context, actorID int,
 	return s.mutateConnection(ctx, actorID, id, in.ExpectedRevision, func(c *ent.Client, row *ent.AuthConnection, p externalConnection) error {
 		cfg := *p.Config
 		policy := policyInput(p.Policy)
+		if in.AttributeMappings != nil {
+			cfg.AttributeMappings = *in.AttributeMappings
+		}
+		if in.EvidenceMaxAgeSeconds != nil {
+			cfg.EvidenceMaxAgeSeconds = *in.EvidenceMaxAgeSeconds
+		}
 		if in.DisplayName != nil {
 			cfg.DisplayName = *in.DisplayName
 		}
@@ -534,6 +569,12 @@ func (s *ExternalAuthService) CheckConnection(ctx context.Context, actorID int, 
 	if err != nil {
 		return out, err
 	}
+	out.Revision = p.Config.Revision
+	out.Rules = diagnostics(p, authrules.Evidence{}, s.now())
+	if err := authrules.ValidateScopes(p.Config.AttributeMappings, p.Config.OidcScopes, p.Config.OidcUserinfoEnabled, p.Policy.LoginRules, p.Policy.SignupRules, p.Policy.LinkRules); err != nil {
+		out.Issues = append(out.Issues, err.Error())
+		return out, nil
+	}
 	cfg, err := s.externalOIDCConfig(ctx, s.client, p.Config)
 	if err != nil {
 		return out, err
@@ -551,89 +592,22 @@ func (s *ExternalAuthService) CheckConnection(ctx context.Context, actorID int, 
 	return out, err
 }
 
-// A fallback is a version-current successful login, never a mere binding.
-func connectionFallbackAvailable(ctx context.Context, c *ent.Client, u *ent.User, excluding string) (bool, error) {
-	p, err := readPasswordPolicy(ctx, c)
-	if err != nil {
-		return false, err
-	}
-	if excluding != PasswordConnectionID && u.PasswordHash != "" && p.canLogin() {
-		return true, nil
-	}
-	bindings, err := c.LoginBinding.Query().Where(loginbinding.UserIDEQ(u.ID)).All(ctx)
-	if err != nil {
-		return false, err
-	}
-	for _, b := range bindings {
-		if b.ConnectionID == excluding || b.LastVerifiedAt == nil {
-			continue
-		}
-		p, err := readExternalConnection(ctx, c, b.ConnectionID, 0)
-		if errors.Is(err, ErrAuthConnectionConflict) {
-			continue
-		}
-		if err != nil {
-			return false, err
-		}
-		if p.Connection.ArchivedAt != nil || !p.Policy.Enabled || !p.Policy.LoginEnabled || b.VerifiedAuthGeneration != p.Connection.AuthGeneration || b.VerifiedLoginPolicyRevision != p.Policy.LoginPolicyRevision {
-			continue
-		}
-		// A fallback is established by an actual successful login or
-		// reauthentication for this binding at the current connection and
-		// policy generation. Administrator protocol-test evidence is scoped to
-		// publishing a draft and must not be required from ordinary users.
-		return true, nil
-	}
-	return false, nil
-}
-func connectionImpact(ctx context.Context, c *ent.Client, id string) (AuthConnectionImpactResult, error) {
-	out := AuthConnectionImpactResult{AffectedUsers: []int{}, BlockedUsers: []int{}, CanPublish: true}
-	bindings, err := c.LoginBinding.Query().Where(loginbinding.ConnectionIDEQ(id)).All(ctx)
-	if err != nil {
-		return out, err
-	}
-	for _, b := range bindings {
-		u, err := c.User.Get(ctx, b.UserID)
-		if err != nil {
-			return out, err
-		}
-		if !u.Active {
-			continue
-		}
-		out.AffectedUsers = append(out.AffectedUsers, u.ID)
-		ok, err := connectionFallbackAvailable(ctx, c, u, id)
-		if err != nil {
-			return out, err
-		}
-		if !ok {
-			out.BlockedUsers = append(out.BlockedUsers, u.ID)
-			out.CanPublish = false
-		}
-	}
-	sort.Ints(out.AffectedUsers)
-	sort.Ints(out.BlockedUsers)
-	out.AffectedSessions, err = c.RefreshSession.Query().Where(refreshsession.ConnectionIDEQ(id), refreshsession.RevokedAtIsNil()).Count(ctx)
-	return out, err
-}
-func authConnectionInvalidatesLogin(a, b *ent.AuthConnectionRevision) bool {
-	return a.OidcIssuer != b.OidcIssuer || a.OidcClientID != b.OidcClientID || a.OidcClientAuthMethod != b.OidcClientAuthMethod || a.OidcUserinfoEnabled != b.OidcUserinfoEnabled || strings.Join(a.OidcScopes, "\x00") != strings.Join(b.OidcScopes, "\x00")
-}
 func (s *ExternalAuthService) ImpactConnection(ctx context.Context, actorID int, id string, expected int64) (AuthConnectionImpactResult, error) {
 	p, err := s.candidateConnection(ctx, actorID, id, expected)
 	if err != nil {
 		return AuthConnectionImpactResult{}, err
 	}
-	if p.Connection.PublishedRevision == nil {
-		return AuthConnectionImpactResult{AffectedUsers: []int{}, BlockedUsers: []int{}, CanPublish: true}, nil
+	if p.Connection.PublishedRevision != nil {
+		published, err := readExternalConnection(ctx, s.client, id, 0)
+		if err != nil {
+			return AuthConnectionImpactResult{}, err
+		}
+		turnsOff := (published.Policy.Enabled && !p.Policy.Enabled) || (published.Policy.Enabled && published.Policy.LoginEnabled && !p.Policy.LoginEnabled)
+		if !loginRulesChanged(published, p) && !turnsOff {
+			return emptyAuthImpact(p.Config.Revision, s.now()), nil
+		}
 	}
-	pub, err := readExternalConnection(ctx, s.client, id, 0)
-	if err != nil {
-		return AuthConnectionImpactResult{}, err
-	}
-	if p.Policy.Enabled && p.Policy.LoginEnabled && !authConnectionInvalidatesLogin(pub.Config, p.Config) {
-		return AuthConnectionImpactResult{AffectedUsers: []int{}, BlockedUsers: []int{}, CanPublish: true}, nil
-	}
-	return connectionImpact(ctx, s.client, id)
+	return candidateImpact(ctx, s.client, p, s.now(), !p.Policy.Enabled || !p.Policy.LoginEnabled)
 }
 func revokeConnectionSessions(ctx context.Context, c *ent.Client, id string, now time.Time) error {
 	sessions, err := c.RefreshSession.Query().Where(refreshsession.ConnectionIDEQ(id), refreshsession.RevokedAtIsNil()).IDs(ctx)
@@ -685,18 +659,18 @@ func (s *ExternalAuthService) PublishConnection(ctx context.Context, actorID int
 			if err != nil {
 				return err
 			}
-			invalidates := authConnectionInvalidatesLogin(pub.Config, p.Config)
+			invalidates := loginRulesChanged(pub, p)
 			// Disabling the connection itself revokes its generation even when
 			// login was already off: pending transactions and stale refresh
 			// chains must not become valid after a close/reopen cycle.
-			turnsOff := pub.Policy.Enabled && (!policy.Enabled || !policy.LoginEnabled)
+			turnsOff := (pub.Policy.Enabled && !policy.Enabled) || (pub.Policy.Enabled && pub.Policy.LoginEnabled && !policy.LoginEnabled)
 			if invalidates || turnsOff {
-				impact, err := connectionImpact(ctx, c, id)
+				impact, err := candidateImpact(ctx, c, p, s.now(), !policy.Enabled || !policy.LoginEnabled)
 				if err != nil {
 					return err
 				}
 				if !impact.CanPublish {
-					return ErrAuthConnectionConflict
+					return &AuthenticationPublishConflict{Impact: impact}
 				}
 				if generation >= maxAuthVersion || loginRevision >= maxAuthVersion {
 					return ErrAuthConnectionConflict
@@ -734,12 +708,12 @@ func (s *ExternalAuthService) changeConnectionArchive(ctx context.Context, actor
 			return ErrAuthConnectionConflict
 		}
 		if archive {
-			impact, err := connectionImpact(ctx, c, id)
+			impact, err := candidateImpact(ctx, c, p, s.now(), true)
 			if err != nil {
 				return err
 			}
 			if !impact.CanPublish {
-				return ErrAuthConnectionConflict
+				return &AuthenticationPublishConflict{Impact: impact}
 			}
 		}
 		if err := ensurePasswordAdministrator(ctx, c); err != nil {

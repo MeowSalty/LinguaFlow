@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
@@ -20,7 +21,7 @@ func validSensitiveAction(action string) bool {
 	return false
 }
 
-func (s *ExternalAuthService) issueReauthenticationProof(ctx context.Context, c *ent.Client, account *ent.User, method, connectionID, action, target string, authenticatedAt time.Time) (ReauthenticationResult, error) {
+func (s *ExternalAuthService) issueReauthenticationProof(ctx context.Context, c *ent.Client, account *ent.User, method, connectionID, action, target string, authenticatedAt time.Time, evidences ...authrules.Evidence) (ReauthenticationResult, error) {
 	if !validSensitiveAction(action) || target == "" {
 		return ReauthenticationResult{}, ErrInvalidInput
 	}
@@ -28,6 +29,9 @@ func (s *ExternalAuthService) issueReauthenticationProof(ctx context.Context, c 
 	expires := authenticatedAt.Add(reauthenticationTTL)
 	if now.Add(reauthenticationTTL).Before(expires) {
 		expires = now.Add(reauthenticationTTL)
+	}
+	if len(evidences) > 0 && !evidences[0].ExpiresAt.IsZero() && evidences[0].ExpiresAt.Before(expires) {
+		expires = evidences[0].ExpiresAt
 	}
 	if !now.Before(expires) {
 		return ReauthenticationResult{}, ErrReauthenticationRequired
@@ -39,6 +43,11 @@ func (s *ExternalAuthService) issueReauthenticationProof(ctx context.Context, c 
 	create := c.ReauthenticationProof.Create().SetTokenHash(hash.Full(raw)).SetUserID(account.ID).SetAuthVersion(account.AuthVersion).SetMethod(reauthenticationproof.Method(method)).SetAction(reauthenticationproof.Action(action)).SetTargetID(target).SetAuthenticatedAt(authenticatedAt).SetExpiresAt(expires)
 	if connectionID != "" {
 		create.SetConnectionID(connectionID)
+		generation, revision, err := authenticationSourceVersion(ctx, c, connectionID)
+		if err != nil {
+			return ReauthenticationResult{}, err
+		}
+		create.SetConnectionGeneration(generation).SetLoginPolicyRevision(revision)
 	}
 	if err = create.Exec(ctx); err != nil {
 		return ReauthenticationResult{}, err
@@ -66,6 +75,10 @@ func (s *ExternalAuthService) consumeReauthenticationProof(ctx context.Context, 
 	}
 	now := timeutil.Normalize(s.now())
 	if !account.Active || proof.UserID != userID || proof.AuthVersion != account.AuthVersion || proof.ConsumedAt != nil || proof.Action.String() != action || proof.TargetID != target || !now.Before(proof.ExpiresAt) || now.Sub(proof.AuthenticatedAt) > reauthenticationTTL {
+		return nil, ErrReauthenticationRequired
+	}
+	generation, revision, err := authenticationSourceVersion(ctx, c, proof.ConnectionID)
+	if err != nil || generation != proof.ConnectionGeneration || revision != proof.LoginPolicyRevision {
 		return nil, ErrReauthenticationRequired
 	}
 	n, err := c.ReauthenticationProof.Update().Where(reauthenticationproof.IDEQ(proof.ID), reauthenticationproof.ConsumedAtIsNil()).SetConsumedAt(now).Save(ctx)
@@ -113,6 +126,9 @@ func (s *ExternalAuthService) Reauthenticate(ctx context.Context, userID int, in
 			}
 			if !matches || observed.PasswordHash == "" || account.PasswordHash != observed.PasswordHash || account.AuthVersion != observed.AuthVersion || !account.Active || !p.canLogin() {
 				return ErrInvalidCredentials
+			}
+			if err := c.User.UpdateOneID(account.ID).SetPasswordVerifiedHash(hash.Full(account.PasswordHash)).SetPasswordVerifiedAt(s.now()).Exec(ctx); err != nil {
+				return err
 			}
 			result, err = s.issueReauthenticationProof(ctx, c, account, "password", PasswordConnectionID, input.Action, input.TargetID, timeutil.Normalize(s.now()))
 			return err
@@ -177,7 +193,7 @@ func (s *ExternalAuthService) StartLink(ctx context.Context, userID int, connect
 	if err != nil {
 		return ExternalStartResult{}, err
 	}
-	return s.startExternal(WithExternalActor(ctx, userID, proof.AuthVersion), p, authtransaction.PurposeLink, &userID, nil, input.ExternalBrowserInput, "link", connectionID, proof.ExpiresAt)
+	return s.startExternal(WithExternalActor(ctx, userID, proof.AuthVersion), p, authtransaction.PurposeLink, &userID, nil, input.ExternalBrowserInput, "link", connectionID, proof.ExpiresAt, proof)
 }
 
 func (s *ExternalAuthService) StartTest(ctx context.Context, actorID int, connectionID string, expected int64, input ExternalBrowserInput) (ExternalStartResult, error) {

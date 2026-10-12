@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
@@ -15,14 +16,16 @@ import (
 )
 
 type LoginMethodRecord struct {
-	BindingID         int    `json:"binding_id"`
-	ConnectionID      string `json:"connection_id"`
-	DisplayName       string `json:"display_name"`
-	Archived          bool   `json:"archived"`
-	CanLogin          bool   `json:"can_login"`
-	CanReauthenticate bool   `json:"can_reauthenticate"`
-	CanUnlink         bool   `json:"can_unlink"`
-	Verified          bool   `json:"verified"`
+	LoginRuleStatus   string     `json:"login_rule_status"`
+	EvidenceExpiresAt *time.Time `json:"evidence_expires_at,omitempty"`
+	BindingID         int        `json:"binding_id"`
+	ConnectionID      string     `json:"connection_id"`
+	DisplayName       string     `json:"display_name"`
+	Archived          bool       `json:"archived"`
+	CanLogin          bool       `json:"can_login"`
+	CanReauthenticate bool       `json:"can_reauthenticate"`
+	CanUnlink         bool       `json:"can_unlink"`
+	Verified          bool       `json:"verified"`
 }
 type AvailableLoginConnection struct {
 	ConnectionID string  `json:"connection_id"`
@@ -31,6 +34,7 @@ type AvailableLoginConnection struct {
 	LogoURL      *string `json:"logo_url,omitempty"`
 }
 type PasswordLoginMethod struct {
+	Verified  bool `json:"verified"`
 	IsSet     bool `json:"is_set"`
 	CanLogin  bool `json:"can_login"`
 	CanSet    bool `json:"can_set"`
@@ -63,6 +67,7 @@ func (s *ExternalAuthService) LoginMethods(ctx context.Context, userID int) (Log
 	}
 	out.Password.IsSet = account.PasswordHash != ""
 	out.Password.CanLogin = out.Password.IsSet && passwordPolicy.canLogin()
+	out.Password.Verified = verifiedPasswordFallback(account, passwordPolicy)
 	out.Password.CanSet = !out.Password.IsSet && passwordPolicy.canLogin()
 	if account.Email != "" {
 		value := account.Email
@@ -88,13 +93,21 @@ func (s *ExternalAuthService) LoginMethods(ctx context.Context, userID int) (Log
 			record.Archived = p.Connection.ArchivedAt != nil
 			record.DisplayName = p.Config.DisplayName
 			record.CanLogin = !record.Archived && p.Policy.Enabled && p.Policy.LoginEnabled
-			record.Verified = binding.LastVerifiedAt != nil && binding.VerifiedAuthGeneration == p.Connection.AuthGeneration && binding.VerifiedLoginPolicyRevision == p.Policy.LoginPolicyRevision
+			ruleResult, ruleErr := bindingRuleResult(ctx, s.client, binding, p, s.now(), false)
+			if ruleErr != nil {
+				return out, ruleErr
+			}
+			record.LoginRuleStatus = ruleResult.Status
+			record.Verified = record.CanLogin && ruleResult.Status == "pass"
+			if !binding.Evidence.ExpiresAt.IsZero() {
+				v := binding.Evidence.ExpiresAt
+				record.EvidenceExpiresAt = &v
+			}
 			if record.CanLogin {
-				fresh, _ := hasFreshValidation(ctx, s.client, binding.ConnectionID, connectionFingerprint(p.Config))
-				record.CanReauthenticate = fresh
+				record.CanReauthenticate = true
 			}
 		}
-		fallback, fallbackErr := connectionFallbackAvailable(ctx, s.client, account, binding.ConnectionID)
+		fallback, fallbackErr := connectionFallbackAt(ctx, s.client, account, binding.ConnectionID, s.now())
 		if fallbackErr == nil {
 			record.CanUnlink = fallback
 		}
@@ -102,7 +115,7 @@ func (s *ExternalAuthService) LoginMethods(ctx context.Context, userID int) (Log
 	}
 	out.Password.CanDelete = false
 	if out.Password.IsSet {
-		out.Password.CanDelete, _ = connectionFallbackAvailable(ctx, s.client, account, PasswordConnectionID)
+		out.Password.CanDelete, _ = connectionFallbackAt(ctx, s.client, account, PasswordConnectionID, s.now())
 	}
 	connections, err := s.client.AuthConnection.Query().Where(authconnection.KindEQ(authconnection.KindOidc), authconnection.ArchivedAtIsNil(), authconnection.PublishedRevisionNotNil()).All(ctx)
 	if err != nil {
@@ -155,7 +168,7 @@ func (s *ExternalAuthService) Unlink(ctx context.Context, userID, bindingID int,
 		if err != nil {
 			return err
 		}
-		fallback, err := connectionFallbackAvailable(ctx, c, account, binding.ConnectionID)
+		fallback, err := connectionFallbackAt(ctx, c, account, binding.ConnectionID, s.now())
 		if err != nil {
 			return err
 		}
@@ -263,7 +276,7 @@ func (s *ExternalAuthService) DeletePassword(ctx context.Context, userID int, ra
 		if err != nil {
 			return err
 		}
-		fallback, err := connectionFallbackAvailable(ctx, c, account, PasswordConnectionID)
+		fallback, err := connectionFallbackAt(ctx, c, account, PasswordConnectionID, s.now())
 		if err != nil {
 			return err
 		}
@@ -297,6 +310,9 @@ func (s *ExternalAuthService) DeletePassword(ctx context.Context, userID int, ra
 // rows remain until the original deadline so retries stay unambiguously invalid.
 func (s *ExternalAuthService) CleanupExpired(ctx context.Context) error {
 	now := timeutil.Normalize(s.now())
+	if err := s.cleanupRuleEvidence(ctx, now); err != nil {
+		return err
+	}
 	if _, err := s.client.AuthTransaction.Delete().Where(authtransaction.ExpiresAtLTE(now)).Exec(ctx); err != nil {
 		return err
 	}

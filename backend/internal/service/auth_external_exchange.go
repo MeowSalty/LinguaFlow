@@ -37,6 +37,9 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 		if n != 1 {
 			return ExternalExchangeResult{}, ErrExternalFlowInvalid
 		}
+		if row.FailureCode == "configuration_changed" {
+			return ExternalExchangeResult{}, ErrAuthConnectionConflict
+		}
 		if row.FailureCode == "identity_provider_unavailable" || row.FailureCode == "configuration_unavailable" {
 			return ExternalExchangeResult{}, ErrExternalUnavailable
 		}
@@ -80,7 +83,10 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if runtimeErr != nil || runtime.Connection.AuthGeneration != current.ConnectionGeneration || runtime.Policy.LoginPolicyRevision != current.PolicyRevision {
 				return ErrAuthConnectionConflict
 			}
-			p.Connection, p.Policy = runtime.Connection, runtime.Policy
+			p = runtime
+		}
+		if err := transactionRulesCurrent(ctx, c, current, p); err != nil {
+			return err
 		}
 		if current.UserID != nil {
 			account, err := c.User.Get(ctx, *current.UserID)
@@ -99,6 +105,9 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 		}
 		switch current.Purpose {
 		case authtransaction.PurposeLogin:
+			if err := requireRule(p, current.Evidence, p.Policy.LoginRules, now); err != nil {
+				return err
+			}
 			if p.Connection.ArchivedAt != nil || !p.Policy.Enabled || !p.Policy.LoginEnabled {
 				return ErrAuthConnectionConflict
 			}
@@ -110,6 +119,9 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 				}
 				if !registration || !p.Policy.SignupEnabled {
 					return ErrRegistrationClosed
+				}
+				if err := requireRule(p, current.Evidence, p.Policy.SignupRules, now); err != nil {
+					return err
 				}
 				return s.awaitConfirmation(ctx, c, current, p, "signup_confirmation", &result)
 			}
@@ -134,11 +146,11 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if err != nil || !account.Active {
 				return ErrInvalidCredentials
 			}
-			session, err := s.auth.createSessionForConnection(ctx, c, account, p.Connection, p.Policy.LoginPolicyRevision, binding, nil)
+			session, err := s.auth.createSessionForConnection(ctx, c, account, p.Connection, p.Policy.LoginPolicyRevision, binding, nil, loginEvidence(p, current.Evidence))
 			if err != nil {
 				return err
 			}
-			if err = c.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(p.Connection.AuthGeneration).SetVerifiedLoginPolicyRevision(p.Policy.LoginPolicyRevision).Exec(ctx); err != nil {
+			if err = c.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(p.Connection.AuthGeneration).SetVerifiedLoginPolicyRevision(p.Policy.LoginPolicyRevision).SetEvidence(loginEvidence(p, current.Evidence)).Exec(ctx); err != nil {
 				return err
 			}
 			if err = s.finishExchange(ctx, c, current.ID, input.Ticket); err != nil {
@@ -147,11 +159,20 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			result = ExternalExchangeResult{Kind: "session", Session: session}
 			return nil
 		case authtransaction.PurposeLink:
+			if err := requireRule(p, current.Evidence, p.Policy.LinkRules, now); err != nil {
+				return err
+			}
+			if err := validateTransactionAuthorization(ctx, c, current, now); err != nil {
+				return err
+			}
 			if !p.Policy.Enabled || !p.Policy.LinkEnabled || p.Connection.ArchivedAt != nil {
 				return ErrAuthConnectionConflict
 			}
 			return s.awaitConfirmation(ctx, c, current, p, "link_confirmation", &result)
 		case authtransaction.PurposeReauthenticate:
+			if err := requireRule(p, current.Evidence, p.Policy.LoginRules, now); err != nil {
+				return err
+			}
 			if current.BindingID == nil || current.UserID == nil || current.IdentityAuthTime == nil || p.Connection.ArchivedAt != nil || !p.Policy.Enabled || !p.Policy.LoginEnabled {
 				return ErrReauthenticationRequired
 			}
@@ -170,11 +191,11 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if current.IdentityAuthTime != nil {
 				authenticatedAt = *current.IdentityAuthTime
 			}
-			proof, err := s.issueReauthenticationProof(ctx, c, account, "oidc", current.ConnectionID, current.AuthorizedAction, current.AuthorizedTargetID, authenticatedAt)
+			proof, err := s.issueReauthenticationProof(ctx, c, account, "oidc", current.ConnectionID, current.AuthorizedAction, current.AuthorizedTargetID, authenticatedAt, loginEvidence(p, current.Evidence))
 			if err != nil {
 				return err
 			}
-			if err = c.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(authenticatedAt).SetVerifiedAuthGeneration(p.Connection.AuthGeneration).SetVerifiedLoginPolicyRevision(p.Policy.LoginPolicyRevision).Exec(ctx); err != nil {
+			if err = c.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(authenticatedAt).SetVerifiedAuthGeneration(p.Connection.AuthGeneration).SetVerifiedLoginPolicyRevision(p.Policy.LoginPolicyRevision).SetEvidence(loginEvidence(p, current.Evidence)).Exec(ctx); err != nil {
 				return err
 			}
 			if err = s.finishExchange(ctx, c, current.ID, input.Ticket); err != nil {
@@ -203,7 +224,7 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if err = s.finishExchange(ctx, c, current.ID, input.Ticket); err != nil {
 				return err
 			}
-			result = ExternalExchangeResult{Kind: "test_result", Test: &ExternalTestResult{ConnectionID: current.ConnectionID, Revision: current.ConnectionRevision, FreshSupported: true}}
+			result = ExternalExchangeResult{Kind: "test_result", Test: &ExternalTestResult{ConnectionID: current.ConnectionID, Revision: current.ConnectionRevision, FreshSupported: true, Attributes: current.Evidence.Attributes, Diagnostics: diagnostics(p, current.Evidence, now)}}
 			return nil
 		default:
 			return ErrExternalFlowInvalid
@@ -313,8 +334,17 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 		if p.Connection.ArchivedAt != nil || p.Connection.AuthGeneration != current.ConnectionGeneration || p.Policy.LoginPolicyRevision != current.PolicyRevision {
 			return ErrAuthConnectionConflict
 		}
+		if err := transactionRulesCurrent(ctx, c, current, p); err != nil {
+			return err
+		}
 		switch current.Purpose {
 		case authtransaction.PurposeLogin:
+			if err := requireRule(p, current.Evidence, p.Policy.LoginRules, now); err != nil {
+				return err
+			}
+			if err := requireRule(p, current.Evidence, p.Policy.SignupRules, now); err != nil {
+				return err
+			}
 			if actorID != nil {
 				return ErrAuthConnectionConflict
 			}
@@ -357,7 +387,7 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			if err != nil {
 				return err
 			}
-			session, err := s.auth.createSessionForConnection(ctx, c, account, p.Connection, p.Policy.LoginPolicyRevision, binding, nil)
+			session, err := s.auth.createSessionForConnection(ctx, c, account, p.Connection, p.Policy.LoginPolicyRevision, binding, nil, loginEvidence(p, current.Evidence))
 			if err != nil {
 				return err
 			}
@@ -370,6 +400,12 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			result = ExternalCompleteResult{Kind: "session", Session: session}
 			return nil
 		case authtransaction.PurposeLink:
+			if err := requireRule(p, current.Evidence, p.Policy.LinkRules, now); err != nil {
+				return err
+			}
+			if err := validateTransactionAuthorization(ctx, c, current, now); err != nil {
+				return err
+			}
 			if actorID == nil || current.UserID == nil || *actorID != *current.UserID {
 				return ErrTokenInvalid
 			}

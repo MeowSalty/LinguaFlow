@@ -12,14 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoidc"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
+	"github.com/google/uuid"
 )
 
 type sealedAuthField struct {
@@ -124,7 +124,7 @@ func (s *ExternalAuthService) StartLogin(ctx context.Context, connectionID strin
 	return s.startExternal(ctx, p, authtransaction.PurposeLogin, nil, nil, input, "", "", time.Time{})
 }
 
-func (s *ExternalAuthService) startExternal(ctx context.Context, p externalConnection, purpose authtransaction.Purpose, userID *int, bindingID *int, input ExternalBrowserInput, action, target string, authorizationExpiry time.Time) (ExternalStartResult, error) {
+func (s *ExternalAuthService) startExternal(ctx context.Context, p externalConnection, purpose authtransaction.Purpose, userID *int, bindingID *int, input ExternalBrowserInput, action, target string, authorizationExpiry time.Time, authorizations ...*ent.ReauthenticationProof) (ExternalStartResult, error) {
 	if !validBrowserChallenge(input.BrowserChallenge) || !s.validCompletionURL(input.CompletionURL) || !validReturnTo(input.ReturnTo) {
 		return ExternalStartResult{}, ErrInvalidInput
 	}
@@ -183,6 +183,10 @@ func (s *ExternalAuthService) startExternal(ctx context.Context, p externalConne
 	}
 	if bindingID != nil {
 		create.SetBindingID(*bindingID)
+	}
+	if len(authorizations) > 0 && authorizations[0] != nil {
+		proof := authorizations[0]
+		create.SetAuthorizationConnectionID(proof.ConnectionID).SetAuthorizationConnectionGeneration(proof.ConnectionGeneration).SetAuthorizationPolicyRevision(proof.LoginPolicyRevision)
 	}
 	if action != "" {
 		create.SetAuthorizedAction(action).SetAuthorizedTargetID(target).SetAuthorizationExpiresAt(authorizationExpiry)
@@ -257,6 +261,14 @@ func (s *ExternalAuthService) HandleCallback(ctx context.Context, connectionID, 
 	if err != nil {
 		return issueFailure("configuration_changed")
 	}
+	if row.Purpose != authtransaction.PurposeTest {
+		runtime, e := readExternalConnection(ctx, s.client, row.ConnectionID, 0)
+		if e != nil || transactionRulesCurrent(ctx, s.client, row, runtime) != nil {
+			return issueFailure("configuration_changed")
+		}
+	} else if transactionRulesCurrent(ctx, s.client, row, p) != nil {
+		return issueFailure("configuration_changed")
+	}
 	if len(responseIssuer) > 0 && responseIssuer[0] != "" && responseIssuer[0] != p.Config.OidcIssuer {
 		return issueFailure("issuer_mismatch")
 	}
@@ -279,6 +291,22 @@ func (s *ExternalAuthService) HandleCallback(ctx context.Context, connectionID, 
 	if !now.Before(row.ExpiresAt) {
 		return issueFailure("expired_transaction")
 	}
+	attrs, err := authrules.Extract(p.Config.AttributeMappings, identity.Sources, identity.SourceErrors, now)
+	if err != nil {
+		return issueFailure("provider_verification_failed")
+	}
+	if row.Purpose != authtransaction.PurposeTest {
+		attrs = authrules.SelectAttributes(attrs, authrules.RequiredAttributes(p.Config.AttributeMappings, rulesForPurpose(p, row.Purpose)...))
+	}
+	evidence := authrules.Evidence{Issuer: identity.Issuer, Subject: identity.Subject, SourceFingerprint: sourceTrustFingerprint(p.Config), LoginPolicyRevision: p.Policy.LoginPolicyRevision, ObservedAt: now, ExpiresAt: now.Add(time.Duration(p.Config.EvidenceMaxAgeSeconds) * time.Second), Attributes: attrs}
+	if row.Purpose != authtransaction.PurposeTest {
+		runtime, e := readExternalConnection(ctx, s.client, row.ConnectionID, 0)
+		if e != nil || transactionRulesCurrent(ctx, s.client, row, runtime) != nil {
+			return issueFailure("configuration_changed")
+		}
+	} else if transactionRulesCurrent(ctx, s.client, row, p) != nil {
+		return issueFailure("configuration_changed")
+	}
 	ticket, err := s.randomToken()
 	if err != nil {
 		return ExternalCallbackResult{}, err
@@ -287,7 +315,7 @@ func (s *ExternalAuthService) HandleCallback(ctx context.Context, connectionID, 
 	if row.ExpiresAt.Before(deadline) {
 		deadline = row.ExpiresAt
 	}
-	update := s.client.AuthTransaction.Update().Where(authtransaction.IDEQ(row.ID), authtransaction.StatusEQ(authtransaction.StatusCallbackProcessing)).SetStatus(authtransaction.StatusCallbackVerified).SetExchangeTicketHash(hash.Full(ticket)).SetExchangeTicketExpiresAt(deadline).SetIdentityIssuer(identity.Issuer).SetIdentitySubject(identity.Subject).SetIdentityDisplayName(identity.DisplayName).SetIdentityUsername(identity.PreferredUsername).SetIdentityEmail(identity.Email)
+	update := s.client.AuthTransaction.Update().Where(authtransaction.IDEQ(row.ID), authtransaction.StatusEQ(authtransaction.StatusCallbackProcessing)).SetStatus(authtransaction.StatusCallbackVerified).SetExchangeTicketHash(hash.Full(ticket)).SetExchangeTicketExpiresAt(deadline).SetIdentityIssuer(identity.Issuer).SetIdentitySubject(identity.Subject).SetIdentityDisplayName(identity.DisplayName).SetIdentityUsername(identity.PreferredUsername).SetIdentityEmail(identity.Email).SetEvidence(evidence)
 	if !identity.AuthTime.IsZero() {
 		update.SetIdentityAuthTime(identity.AuthTime)
 	}
