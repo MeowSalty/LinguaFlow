@@ -75,6 +75,16 @@ func UpdatedAt(v time.Time) predicate.AuthConnection {
 	return predicate.AuthConnection(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// AggregateRevision applies equality check predicate on the "aggregate_revision" field. It's identical to AggregateRevisionEQ.
+func AggregateRevision(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldAggregateRevision, v))
+}
+
+// DraftRevision applies equality check predicate on the "draft_revision" field. It's identical to DraftRevisionEQ.
+func DraftRevision(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldDraftRevision, v))
+}
+
 // PublishedRevision applies equality check predicate on the "published_revision" field. It's identical to PublishedRevisionEQ.
 func PublishedRevision(v int64) predicate.AuthConnection {
 	return predicate.AuthConnection(sql.FieldEQ(FieldPublishedRevision, v))
@@ -188,6 +198,96 @@ func KindIn(vs ...Kind) predicate.AuthConnection {
 // KindNotIn applies the NotIn predicate on the "kind" field.
 func KindNotIn(vs ...Kind) predicate.AuthConnection {
 	return predicate.AuthConnection(sql.FieldNotIn(FieldKind, vs...))
+}
+
+// AggregateRevisionEQ applies the EQ predicate on the "aggregate_revision" field.
+func AggregateRevisionEQ(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldAggregateRevision, v))
+}
+
+// AggregateRevisionNEQ applies the NEQ predicate on the "aggregate_revision" field.
+func AggregateRevisionNEQ(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNEQ(FieldAggregateRevision, v))
+}
+
+// AggregateRevisionIn applies the In predicate on the "aggregate_revision" field.
+func AggregateRevisionIn(vs ...int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIn(FieldAggregateRevision, vs...))
+}
+
+// AggregateRevisionNotIn applies the NotIn predicate on the "aggregate_revision" field.
+func AggregateRevisionNotIn(vs ...int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotIn(FieldAggregateRevision, vs...))
+}
+
+// AggregateRevisionGT applies the GT predicate on the "aggregate_revision" field.
+func AggregateRevisionGT(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGT(FieldAggregateRevision, v))
+}
+
+// AggregateRevisionGTE applies the GTE predicate on the "aggregate_revision" field.
+func AggregateRevisionGTE(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGTE(FieldAggregateRevision, v))
+}
+
+// AggregateRevisionLT applies the LT predicate on the "aggregate_revision" field.
+func AggregateRevisionLT(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLT(FieldAggregateRevision, v))
+}
+
+// AggregateRevisionLTE applies the LTE predicate on the "aggregate_revision" field.
+func AggregateRevisionLTE(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLTE(FieldAggregateRevision, v))
+}
+
+// DraftRevisionEQ applies the EQ predicate on the "draft_revision" field.
+func DraftRevisionEQ(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldDraftRevision, v))
+}
+
+// DraftRevisionNEQ applies the NEQ predicate on the "draft_revision" field.
+func DraftRevisionNEQ(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNEQ(FieldDraftRevision, v))
+}
+
+// DraftRevisionIn applies the In predicate on the "draft_revision" field.
+func DraftRevisionIn(vs ...int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIn(FieldDraftRevision, vs...))
+}
+
+// DraftRevisionNotIn applies the NotIn predicate on the "draft_revision" field.
+func DraftRevisionNotIn(vs ...int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotIn(FieldDraftRevision, vs...))
+}
+
+// DraftRevisionGT applies the GT predicate on the "draft_revision" field.
+func DraftRevisionGT(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGT(FieldDraftRevision, v))
+}
+
+// DraftRevisionGTE applies the GTE predicate on the "draft_revision" field.
+func DraftRevisionGTE(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGTE(FieldDraftRevision, v))
+}
+
+// DraftRevisionLT applies the LT predicate on the "draft_revision" field.
+func DraftRevisionLT(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLT(FieldDraftRevision, v))
+}
+
+// DraftRevisionLTE applies the LTE predicate on the "draft_revision" field.
+func DraftRevisionLTE(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLTE(FieldDraftRevision, v))
+}
+
+// DraftRevisionIsNil applies the IsNil predicate on the "draft_revision" field.
+func DraftRevisionIsNil() predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIsNull(FieldDraftRevision))
+}
+
+// DraftRevisionNotNil applies the NotNil predicate on the "draft_revision" field.
+func DraftRevisionNotNil() predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotNull(FieldDraftRevision))
 }
 
 // PublishedRevisionEQ applies the EQ predicate on the "published_revision" field.
@@ -414,6 +514,75 @@ func HasSessions() predicate.AuthConnection {
 func HasSessionsWith(preds ...predicate.RefreshSession) predicate.AuthConnection {
 	return predicate.AuthConnection(func(s *sql.Selector) {
 		step := newSessionsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasSecrets applies the HasEdge predicate on the "secrets" edge.
+func HasSecrets() predicate.AuthConnection {
+	return predicate.AuthConnection(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, SecretsTable, SecretsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasSecretsWith applies the HasEdge predicate on the "secrets" edge with a given conditions (other predicates).
+func HasSecretsWith(preds ...predicate.AuthConnectionSecret) predicate.AuthConnection {
+	return predicate.AuthConnection(func(s *sql.Selector) {
+		step := newSecretsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasValidations applies the HasEdge predicate on the "validations" edge.
+func HasValidations() predicate.AuthConnection {
+	return predicate.AuthConnection(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ValidationsTable, ValidationsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasValidationsWith applies the HasEdge predicate on the "validations" edge with a given conditions (other predicates).
+func HasValidationsWith(preds ...predicate.AuthConnectionValidation) predicate.AuthConnection {
+	return predicate.AuthConnection(func(s *sql.Selector) {
+		step := newValidationsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasTransactions applies the HasEdge predicate on the "transactions" edge.
+func HasTransactions() predicate.AuthConnection {
+	return predicate.AuthConnection(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, TransactionsTable, TransactionsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasTransactionsWith applies the HasEdge predicate on the "transactions" edge with a given conditions (other predicates).
+func HasTransactionsWith(preds ...predicate.AuthTransaction) predicate.AuthConnection {
+	return predicate.AuthConnection(func(s *sql.Selector) {
+		step := newTransactionsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

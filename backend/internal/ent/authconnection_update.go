@@ -14,6 +14,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
@@ -35,6 +38,54 @@ func (_u *AuthConnectionUpdate) Where(ps ...predicate.AuthConnection) *AuthConne
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *AuthConnectionUpdate) SetUpdatedAt(v time.Time) *AuthConnectionUpdate {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetAggregateRevision sets the "aggregate_revision" field.
+func (_u *AuthConnectionUpdate) SetAggregateRevision(v int64) *AuthConnectionUpdate {
+	_u.mutation.ResetAggregateRevision()
+	_u.mutation.SetAggregateRevision(v)
+	return _u
+}
+
+// SetNillableAggregateRevision sets the "aggregate_revision" field if the given value is not nil.
+func (_u *AuthConnectionUpdate) SetNillableAggregateRevision(v *int64) *AuthConnectionUpdate {
+	if v != nil {
+		_u.SetAggregateRevision(*v)
+	}
+	return _u
+}
+
+// AddAggregateRevision adds value to the "aggregate_revision" field.
+func (_u *AuthConnectionUpdate) AddAggregateRevision(v int64) *AuthConnectionUpdate {
+	_u.mutation.AddAggregateRevision(v)
+	return _u
+}
+
+// SetDraftRevision sets the "draft_revision" field.
+func (_u *AuthConnectionUpdate) SetDraftRevision(v int64) *AuthConnectionUpdate {
+	_u.mutation.ResetDraftRevision()
+	_u.mutation.SetDraftRevision(v)
+	return _u
+}
+
+// SetNillableDraftRevision sets the "draft_revision" field if the given value is not nil.
+func (_u *AuthConnectionUpdate) SetNillableDraftRevision(v *int64) *AuthConnectionUpdate {
+	if v != nil {
+		_u.SetDraftRevision(*v)
+	}
+	return _u
+}
+
+// AddDraftRevision adds value to the "draft_revision" field.
+func (_u *AuthConnectionUpdate) AddDraftRevision(v int64) *AuthConnectionUpdate {
+	_u.mutation.AddDraftRevision(v)
+	return _u
+}
+
+// ClearDraftRevision clears the value of the "draft_revision" field.
+func (_u *AuthConnectionUpdate) ClearDraftRevision() *AuthConnectionUpdate {
+	_u.mutation.ClearDraftRevision()
 	return _u
 }
 
@@ -166,6 +217,51 @@ func (_u *AuthConnectionUpdate) AddSessions(v ...*RefreshSession) *AuthConnectio
 	return _u.AddSessionIDs(ids...)
 }
 
+// AddSecretIDs adds the "secrets" edge to the AuthConnectionSecret entity by IDs.
+func (_u *AuthConnectionUpdate) AddSecretIDs(ids ...int) *AuthConnectionUpdate {
+	_u.mutation.AddSecretIDs(ids...)
+	return _u
+}
+
+// AddSecrets adds the "secrets" edges to the AuthConnectionSecret entity.
+func (_u *AuthConnectionUpdate) AddSecrets(v ...*AuthConnectionSecret) *AuthConnectionUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSecretIDs(ids...)
+}
+
+// AddValidationIDs adds the "validations" edge to the AuthConnectionValidation entity by IDs.
+func (_u *AuthConnectionUpdate) AddValidationIDs(ids ...int) *AuthConnectionUpdate {
+	_u.mutation.AddValidationIDs(ids...)
+	return _u
+}
+
+// AddValidations adds the "validations" edges to the AuthConnectionValidation entity.
+func (_u *AuthConnectionUpdate) AddValidations(v ...*AuthConnectionValidation) *AuthConnectionUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddValidationIDs(ids...)
+}
+
+// AddTransactionIDs adds the "transactions" edge to the AuthTransaction entity by IDs.
+func (_u *AuthConnectionUpdate) AddTransactionIDs(ids ...string) *AuthConnectionUpdate {
+	_u.mutation.AddTransactionIDs(ids...)
+	return _u
+}
+
+// AddTransactions adds the "transactions" edges to the AuthTransaction entity.
+func (_u *AuthConnectionUpdate) AddTransactions(v ...*AuthTransaction) *AuthConnectionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTransactionIDs(ids...)
+}
+
 // Mutation returns the AuthConnectionMutation object of the builder.
 func (_u *AuthConnectionUpdate) Mutation() *AuthConnectionMutation {
 	return _u.mutation
@@ -255,6 +351,69 @@ func (_u *AuthConnectionUpdate) RemoveSessions(v ...*RefreshSession) *AuthConnec
 	return _u.RemoveSessionIDs(ids...)
 }
 
+// ClearSecrets clears all "secrets" edges to the AuthConnectionSecret entity.
+func (_u *AuthConnectionUpdate) ClearSecrets() *AuthConnectionUpdate {
+	_u.mutation.ClearSecrets()
+	return _u
+}
+
+// RemoveSecretIDs removes the "secrets" edge to AuthConnectionSecret entities by IDs.
+func (_u *AuthConnectionUpdate) RemoveSecretIDs(ids ...int) *AuthConnectionUpdate {
+	_u.mutation.RemoveSecretIDs(ids...)
+	return _u
+}
+
+// RemoveSecrets removes "secrets" edges to AuthConnectionSecret entities.
+func (_u *AuthConnectionUpdate) RemoveSecrets(v ...*AuthConnectionSecret) *AuthConnectionUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSecretIDs(ids...)
+}
+
+// ClearValidations clears all "validations" edges to the AuthConnectionValidation entity.
+func (_u *AuthConnectionUpdate) ClearValidations() *AuthConnectionUpdate {
+	_u.mutation.ClearValidations()
+	return _u
+}
+
+// RemoveValidationIDs removes the "validations" edge to AuthConnectionValidation entities by IDs.
+func (_u *AuthConnectionUpdate) RemoveValidationIDs(ids ...int) *AuthConnectionUpdate {
+	_u.mutation.RemoveValidationIDs(ids...)
+	return _u
+}
+
+// RemoveValidations removes "validations" edges to AuthConnectionValidation entities.
+func (_u *AuthConnectionUpdate) RemoveValidations(v ...*AuthConnectionValidation) *AuthConnectionUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveValidationIDs(ids...)
+}
+
+// ClearTransactions clears all "transactions" edges to the AuthTransaction entity.
+func (_u *AuthConnectionUpdate) ClearTransactions() *AuthConnectionUpdate {
+	_u.mutation.ClearTransactions()
+	return _u
+}
+
+// RemoveTransactionIDs removes the "transactions" edge to AuthTransaction entities by IDs.
+func (_u *AuthConnectionUpdate) RemoveTransactionIDs(ids ...string) *AuthConnectionUpdate {
+	_u.mutation.RemoveTransactionIDs(ids...)
+	return _u
+}
+
+// RemoveTransactions removes "transactions" edges to AuthTransaction entities.
+func (_u *AuthConnectionUpdate) RemoveTransactions(v ...*AuthTransaction) *AuthConnectionUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTransactionIDs(ids...)
+}
+
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *AuthConnectionUpdate) Save(ctx context.Context) (int, error) {
 	if err := _u.defaults(); err != nil {
@@ -299,6 +458,16 @@ func (_u *AuthConnectionUpdate) defaults() error {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *AuthConnectionUpdate) check() error {
+	if v, ok := _u.mutation.AggregateRevision(); ok {
+		if err := authconnection.AggregateRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "aggregate_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.aggregate_revision": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DraftRevision(); ok {
+		if err := authconnection.DraftRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "draft_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.draft_revision": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PublishedRevision(); ok {
 		if err := authconnection.PublishedRevisionValidator(v); err != nil {
 			return &ValidationError{Name: "published_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.published_revision": %w`, err)}
@@ -326,6 +495,21 @@ func (_u *AuthConnectionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authconnection.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.AggregateRevision(); ok {
+		_spec.SetField(authconnection.FieldAggregateRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAggregateRevision(); ok {
+		_spec.AddField(authconnection.FieldAggregateRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.DraftRevision(); ok {
+		_spec.SetField(authconnection.FieldDraftRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDraftRevision(); ok {
+		_spec.AddField(authconnection.FieldDraftRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.DraftRevisionCleared() {
+		_spec.ClearField(authconnection.FieldDraftRevision, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.PublishedRevision(); ok {
 		_spec.SetField(authconnection.FieldPublishedRevision, field.TypeInt64, value)
@@ -528,6 +712,141 @@ func (_u *AuthConnectionUpdate) sqlSave(ctx context.Context) (_node int, err err
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.SecretsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.SecretsTable,
+			Columns: []string{authconnection.SecretsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionsecret.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSecretsIDs(); len(nodes) > 0 && !_u.mutation.SecretsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.SecretsTable,
+			Columns: []string{authconnection.SecretsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionsecret.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SecretsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.SecretsTable,
+			Columns: []string{authconnection.SecretsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionsecret.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ValidationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.ValidationsTable,
+			Columns: []string{authconnection.ValidationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionvalidation.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedValidationsIDs(); len(nodes) > 0 && !_u.mutation.ValidationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.ValidationsTable,
+			Columns: []string{authconnection.ValidationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionvalidation.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ValidationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.ValidationsTable,
+			Columns: []string{authconnection.ValidationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionvalidation.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TransactionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.TransactionsTable,
+			Columns: []string{authconnection.TransactionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authtransaction.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTransactionsIDs(); len(nodes) > 0 && !_u.mutation.TransactionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.TransactionsTable,
+			Columns: []string{authconnection.TransactionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authtransaction.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TransactionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.TransactionsTable,
+			Columns: []string{authconnection.TransactionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authtransaction.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{authconnection.Label}
@@ -551,6 +870,54 @@ type AuthConnectionUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *AuthConnectionUpdateOne) SetUpdatedAt(v time.Time) *AuthConnectionUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetAggregateRevision sets the "aggregate_revision" field.
+func (_u *AuthConnectionUpdateOne) SetAggregateRevision(v int64) *AuthConnectionUpdateOne {
+	_u.mutation.ResetAggregateRevision()
+	_u.mutation.SetAggregateRevision(v)
+	return _u
+}
+
+// SetNillableAggregateRevision sets the "aggregate_revision" field if the given value is not nil.
+func (_u *AuthConnectionUpdateOne) SetNillableAggregateRevision(v *int64) *AuthConnectionUpdateOne {
+	if v != nil {
+		_u.SetAggregateRevision(*v)
+	}
+	return _u
+}
+
+// AddAggregateRevision adds value to the "aggregate_revision" field.
+func (_u *AuthConnectionUpdateOne) AddAggregateRevision(v int64) *AuthConnectionUpdateOne {
+	_u.mutation.AddAggregateRevision(v)
+	return _u
+}
+
+// SetDraftRevision sets the "draft_revision" field.
+func (_u *AuthConnectionUpdateOne) SetDraftRevision(v int64) *AuthConnectionUpdateOne {
+	_u.mutation.ResetDraftRevision()
+	_u.mutation.SetDraftRevision(v)
+	return _u
+}
+
+// SetNillableDraftRevision sets the "draft_revision" field if the given value is not nil.
+func (_u *AuthConnectionUpdateOne) SetNillableDraftRevision(v *int64) *AuthConnectionUpdateOne {
+	if v != nil {
+		_u.SetDraftRevision(*v)
+	}
+	return _u
+}
+
+// AddDraftRevision adds value to the "draft_revision" field.
+func (_u *AuthConnectionUpdateOne) AddDraftRevision(v int64) *AuthConnectionUpdateOne {
+	_u.mutation.AddDraftRevision(v)
+	return _u
+}
+
+// ClearDraftRevision clears the value of the "draft_revision" field.
+func (_u *AuthConnectionUpdateOne) ClearDraftRevision() *AuthConnectionUpdateOne {
+	_u.mutation.ClearDraftRevision()
 	return _u
 }
 
@@ -682,6 +1049,51 @@ func (_u *AuthConnectionUpdateOne) AddSessions(v ...*RefreshSession) *AuthConnec
 	return _u.AddSessionIDs(ids...)
 }
 
+// AddSecretIDs adds the "secrets" edge to the AuthConnectionSecret entity by IDs.
+func (_u *AuthConnectionUpdateOne) AddSecretIDs(ids ...int) *AuthConnectionUpdateOne {
+	_u.mutation.AddSecretIDs(ids...)
+	return _u
+}
+
+// AddSecrets adds the "secrets" edges to the AuthConnectionSecret entity.
+func (_u *AuthConnectionUpdateOne) AddSecrets(v ...*AuthConnectionSecret) *AuthConnectionUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSecretIDs(ids...)
+}
+
+// AddValidationIDs adds the "validations" edge to the AuthConnectionValidation entity by IDs.
+func (_u *AuthConnectionUpdateOne) AddValidationIDs(ids ...int) *AuthConnectionUpdateOne {
+	_u.mutation.AddValidationIDs(ids...)
+	return _u
+}
+
+// AddValidations adds the "validations" edges to the AuthConnectionValidation entity.
+func (_u *AuthConnectionUpdateOne) AddValidations(v ...*AuthConnectionValidation) *AuthConnectionUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddValidationIDs(ids...)
+}
+
+// AddTransactionIDs adds the "transactions" edge to the AuthTransaction entity by IDs.
+func (_u *AuthConnectionUpdateOne) AddTransactionIDs(ids ...string) *AuthConnectionUpdateOne {
+	_u.mutation.AddTransactionIDs(ids...)
+	return _u
+}
+
+// AddTransactions adds the "transactions" edges to the AuthTransaction entity.
+func (_u *AuthConnectionUpdateOne) AddTransactions(v ...*AuthTransaction) *AuthConnectionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTransactionIDs(ids...)
+}
+
 // Mutation returns the AuthConnectionMutation object of the builder.
 func (_u *AuthConnectionUpdateOne) Mutation() *AuthConnectionMutation {
 	return _u.mutation
@@ -771,6 +1183,69 @@ func (_u *AuthConnectionUpdateOne) RemoveSessions(v ...*RefreshSession) *AuthCon
 	return _u.RemoveSessionIDs(ids...)
 }
 
+// ClearSecrets clears all "secrets" edges to the AuthConnectionSecret entity.
+func (_u *AuthConnectionUpdateOne) ClearSecrets() *AuthConnectionUpdateOne {
+	_u.mutation.ClearSecrets()
+	return _u
+}
+
+// RemoveSecretIDs removes the "secrets" edge to AuthConnectionSecret entities by IDs.
+func (_u *AuthConnectionUpdateOne) RemoveSecretIDs(ids ...int) *AuthConnectionUpdateOne {
+	_u.mutation.RemoveSecretIDs(ids...)
+	return _u
+}
+
+// RemoveSecrets removes "secrets" edges to AuthConnectionSecret entities.
+func (_u *AuthConnectionUpdateOne) RemoveSecrets(v ...*AuthConnectionSecret) *AuthConnectionUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSecretIDs(ids...)
+}
+
+// ClearValidations clears all "validations" edges to the AuthConnectionValidation entity.
+func (_u *AuthConnectionUpdateOne) ClearValidations() *AuthConnectionUpdateOne {
+	_u.mutation.ClearValidations()
+	return _u
+}
+
+// RemoveValidationIDs removes the "validations" edge to AuthConnectionValidation entities by IDs.
+func (_u *AuthConnectionUpdateOne) RemoveValidationIDs(ids ...int) *AuthConnectionUpdateOne {
+	_u.mutation.RemoveValidationIDs(ids...)
+	return _u
+}
+
+// RemoveValidations removes "validations" edges to AuthConnectionValidation entities.
+func (_u *AuthConnectionUpdateOne) RemoveValidations(v ...*AuthConnectionValidation) *AuthConnectionUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveValidationIDs(ids...)
+}
+
+// ClearTransactions clears all "transactions" edges to the AuthTransaction entity.
+func (_u *AuthConnectionUpdateOne) ClearTransactions() *AuthConnectionUpdateOne {
+	_u.mutation.ClearTransactions()
+	return _u
+}
+
+// RemoveTransactionIDs removes the "transactions" edge to AuthTransaction entities by IDs.
+func (_u *AuthConnectionUpdateOne) RemoveTransactionIDs(ids ...string) *AuthConnectionUpdateOne {
+	_u.mutation.RemoveTransactionIDs(ids...)
+	return _u
+}
+
+// RemoveTransactions removes "transactions" edges to AuthTransaction entities.
+func (_u *AuthConnectionUpdateOne) RemoveTransactions(v ...*AuthTransaction) *AuthConnectionUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTransactionIDs(ids...)
+}
+
 // Where appends a list predicates to the AuthConnectionUpdate builder.
 func (_u *AuthConnectionUpdateOne) Where(ps ...predicate.AuthConnection) *AuthConnectionUpdateOne {
 	_u.mutation.Where(ps...)
@@ -828,6 +1303,16 @@ func (_u *AuthConnectionUpdateOne) defaults() error {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *AuthConnectionUpdateOne) check() error {
+	if v, ok := _u.mutation.AggregateRevision(); ok {
+		if err := authconnection.AggregateRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "aggregate_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.aggregate_revision": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DraftRevision(); ok {
+		if err := authconnection.DraftRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "draft_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.draft_revision": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PublishedRevision(); ok {
 		if err := authconnection.PublishedRevisionValidator(v); err != nil {
 			return &ValidationError{Name: "published_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.published_revision": %w`, err)}
@@ -872,6 +1357,21 @@ func (_u *AuthConnectionUpdateOne) sqlSave(ctx context.Context) (_node *AuthConn
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authconnection.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.AggregateRevision(); ok {
+		_spec.SetField(authconnection.FieldAggregateRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAggregateRevision(); ok {
+		_spec.AddField(authconnection.FieldAggregateRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.DraftRevision(); ok {
+		_spec.SetField(authconnection.FieldDraftRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDraftRevision(); ok {
+		_spec.AddField(authconnection.FieldDraftRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.DraftRevisionCleared() {
+		_spec.ClearField(authconnection.FieldDraftRevision, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.PublishedRevision(); ok {
 		_spec.SetField(authconnection.FieldPublishedRevision, field.TypeInt64, value)
@@ -1067,6 +1567,141 @@ func (_u *AuthConnectionUpdateOne) sqlSave(ctx context.Context) (_node *AuthConn
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SecretsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.SecretsTable,
+			Columns: []string{authconnection.SecretsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionsecret.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSecretsIDs(); len(nodes) > 0 && !_u.mutation.SecretsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.SecretsTable,
+			Columns: []string{authconnection.SecretsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionsecret.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SecretsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.SecretsTable,
+			Columns: []string{authconnection.SecretsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionsecret.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ValidationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.ValidationsTable,
+			Columns: []string{authconnection.ValidationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionvalidation.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedValidationsIDs(); len(nodes) > 0 && !_u.mutation.ValidationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.ValidationsTable,
+			Columns: []string{authconnection.ValidationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionvalidation.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ValidationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.ValidationsTable,
+			Columns: []string{authconnection.ValidationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionvalidation.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TransactionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.TransactionsTable,
+			Columns: []string{authconnection.TransactionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authtransaction.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTransactionsIDs(); len(nodes) > 0 && !_u.mutation.TransactionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.TransactionsTable,
+			Columns: []string{authconnection.TransactionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authtransaction.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TransactionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.TransactionsTable,
+			Columns: []string{authconnection.TransactionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authtransaction.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

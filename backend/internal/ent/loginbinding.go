@@ -32,6 +32,12 @@ type LoginBinding struct {
 	ExternalIdentityID int `json:"external_identity_id,omitempty"`
 	// LastUsedAt holds the value of the "last_used_at" field.
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	// LastVerifiedAt holds the value of the "last_verified_at" field.
+	LastVerifiedAt *time.Time `json:"last_verified_at,omitempty"`
+	// VerifiedAuthGeneration holds the value of the "verified_auth_generation" field.
+	VerifiedAuthGeneration int64 `json:"verified_auth_generation,omitempty"`
+	// VerifiedLoginPolicyRevision holds the value of the "verified_login_policy_revision" field.
+	VerifiedLoginPolicyRevision int64 `json:"verified_login_policy_revision,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the LoginBindingQuery when eager-loading is set.
 	Edges        LoginBindingEdges `json:"edges"`
@@ -100,11 +106,11 @@ func (*LoginBinding) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case loginbinding.FieldID, loginbinding.FieldUserID, loginbinding.FieldExternalIdentityID:
+		case loginbinding.FieldID, loginbinding.FieldUserID, loginbinding.FieldExternalIdentityID, loginbinding.FieldVerifiedAuthGeneration, loginbinding.FieldVerifiedLoginPolicyRevision:
 			values[i] = new(sql.NullInt64)
 		case loginbinding.FieldConnectionID:
 			values[i] = new(sql.NullString)
-		case loginbinding.FieldCreatedAt, loginbinding.FieldUpdatedAt, loginbinding.FieldLastUsedAt:
+		case loginbinding.FieldCreatedAt, loginbinding.FieldUpdatedAt, loginbinding.FieldLastUsedAt, loginbinding.FieldLastVerifiedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -163,6 +169,25 @@ func (_m *LoginBinding) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.LastUsedAt = new(time.Time)
 				*_m.LastUsedAt = value.Time
+			}
+		case loginbinding.FieldLastVerifiedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field last_verified_at", values[i])
+			} else if value.Valid {
+				_m.LastVerifiedAt = new(time.Time)
+				*_m.LastVerifiedAt = value.Time
+			}
+		case loginbinding.FieldVerifiedAuthGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field verified_auth_generation", values[i])
+			} else if value.Valid {
+				_m.VerifiedAuthGeneration = value.Int64
+			}
+		case loginbinding.FieldVerifiedLoginPolicyRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field verified_login_policy_revision", values[i])
+			} else if value.Valid {
+				_m.VerifiedLoginPolicyRevision = value.Int64
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -239,6 +264,17 @@ func (_m *LoginBinding) String() string {
 		builder.WriteString("last_used_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	if v := _m.LastVerifiedAt; v != nil {
+		builder.WriteString("last_verified_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("verified_auth_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.VerifiedAuthGeneration))
+	builder.WriteString(", ")
+	builder.WriteString("verified_login_policy_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.VerifiedLoginPolicyRevision))
 	builder.WriteByte(')')
 	return builder.String()
 }

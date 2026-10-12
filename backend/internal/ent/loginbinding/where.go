@@ -85,6 +85,21 @@ func LastUsedAt(v time.Time) predicate.LoginBinding {
 	return predicate.LoginBinding(sql.FieldEQ(FieldLastUsedAt, v))
 }
 
+// LastVerifiedAt applies equality check predicate on the "last_verified_at" field. It's identical to LastVerifiedAtEQ.
+func LastVerifiedAt(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldEQ(FieldLastVerifiedAt, v))
+}
+
+// VerifiedAuthGeneration applies equality check predicate on the "verified_auth_generation" field. It's identical to VerifiedAuthGenerationEQ.
+func VerifiedAuthGeneration(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldEQ(FieldVerifiedAuthGeneration, v))
+}
+
+// VerifiedLoginPolicyRevision applies equality check predicate on the "verified_login_policy_revision" field. It's identical to VerifiedLoginPolicyRevisionEQ.
+func VerifiedLoginPolicyRevision(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldEQ(FieldVerifiedLoginPolicyRevision, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.LoginBinding {
 	return predicate.LoginBinding(sql.FieldEQ(FieldCreatedAt, v))
@@ -318,6 +333,136 @@ func LastUsedAtIsNil() predicate.LoginBinding {
 // LastUsedAtNotNil applies the NotNil predicate on the "last_used_at" field.
 func LastUsedAtNotNil() predicate.LoginBinding {
 	return predicate.LoginBinding(sql.FieldNotNull(FieldLastUsedAt))
+}
+
+// LastVerifiedAtEQ applies the EQ predicate on the "last_verified_at" field.
+func LastVerifiedAtEQ(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldEQ(FieldLastVerifiedAt, v))
+}
+
+// LastVerifiedAtNEQ applies the NEQ predicate on the "last_verified_at" field.
+func LastVerifiedAtNEQ(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNEQ(FieldLastVerifiedAt, v))
+}
+
+// LastVerifiedAtIn applies the In predicate on the "last_verified_at" field.
+func LastVerifiedAtIn(vs ...time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldIn(FieldLastVerifiedAt, vs...))
+}
+
+// LastVerifiedAtNotIn applies the NotIn predicate on the "last_verified_at" field.
+func LastVerifiedAtNotIn(vs ...time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNotIn(FieldLastVerifiedAt, vs...))
+}
+
+// LastVerifiedAtGT applies the GT predicate on the "last_verified_at" field.
+func LastVerifiedAtGT(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldGT(FieldLastVerifiedAt, v))
+}
+
+// LastVerifiedAtGTE applies the GTE predicate on the "last_verified_at" field.
+func LastVerifiedAtGTE(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldGTE(FieldLastVerifiedAt, v))
+}
+
+// LastVerifiedAtLT applies the LT predicate on the "last_verified_at" field.
+func LastVerifiedAtLT(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldLT(FieldLastVerifiedAt, v))
+}
+
+// LastVerifiedAtLTE applies the LTE predicate on the "last_verified_at" field.
+func LastVerifiedAtLTE(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldLTE(FieldLastVerifiedAt, v))
+}
+
+// LastVerifiedAtIsNil applies the IsNil predicate on the "last_verified_at" field.
+func LastVerifiedAtIsNil() predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldIsNull(FieldLastVerifiedAt))
+}
+
+// LastVerifiedAtNotNil applies the NotNil predicate on the "last_verified_at" field.
+func LastVerifiedAtNotNil() predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNotNull(FieldLastVerifiedAt))
+}
+
+// VerifiedAuthGenerationEQ applies the EQ predicate on the "verified_auth_generation" field.
+func VerifiedAuthGenerationEQ(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldEQ(FieldVerifiedAuthGeneration, v))
+}
+
+// VerifiedAuthGenerationNEQ applies the NEQ predicate on the "verified_auth_generation" field.
+func VerifiedAuthGenerationNEQ(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNEQ(FieldVerifiedAuthGeneration, v))
+}
+
+// VerifiedAuthGenerationIn applies the In predicate on the "verified_auth_generation" field.
+func VerifiedAuthGenerationIn(vs ...int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldIn(FieldVerifiedAuthGeneration, vs...))
+}
+
+// VerifiedAuthGenerationNotIn applies the NotIn predicate on the "verified_auth_generation" field.
+func VerifiedAuthGenerationNotIn(vs ...int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNotIn(FieldVerifiedAuthGeneration, vs...))
+}
+
+// VerifiedAuthGenerationGT applies the GT predicate on the "verified_auth_generation" field.
+func VerifiedAuthGenerationGT(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldGT(FieldVerifiedAuthGeneration, v))
+}
+
+// VerifiedAuthGenerationGTE applies the GTE predicate on the "verified_auth_generation" field.
+func VerifiedAuthGenerationGTE(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldGTE(FieldVerifiedAuthGeneration, v))
+}
+
+// VerifiedAuthGenerationLT applies the LT predicate on the "verified_auth_generation" field.
+func VerifiedAuthGenerationLT(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldLT(FieldVerifiedAuthGeneration, v))
+}
+
+// VerifiedAuthGenerationLTE applies the LTE predicate on the "verified_auth_generation" field.
+func VerifiedAuthGenerationLTE(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldLTE(FieldVerifiedAuthGeneration, v))
+}
+
+// VerifiedLoginPolicyRevisionEQ applies the EQ predicate on the "verified_login_policy_revision" field.
+func VerifiedLoginPolicyRevisionEQ(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldEQ(FieldVerifiedLoginPolicyRevision, v))
+}
+
+// VerifiedLoginPolicyRevisionNEQ applies the NEQ predicate on the "verified_login_policy_revision" field.
+func VerifiedLoginPolicyRevisionNEQ(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNEQ(FieldVerifiedLoginPolicyRevision, v))
+}
+
+// VerifiedLoginPolicyRevisionIn applies the In predicate on the "verified_login_policy_revision" field.
+func VerifiedLoginPolicyRevisionIn(vs ...int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldIn(FieldVerifiedLoginPolicyRevision, vs...))
+}
+
+// VerifiedLoginPolicyRevisionNotIn applies the NotIn predicate on the "verified_login_policy_revision" field.
+func VerifiedLoginPolicyRevisionNotIn(vs ...int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNotIn(FieldVerifiedLoginPolicyRevision, vs...))
+}
+
+// VerifiedLoginPolicyRevisionGT applies the GT predicate on the "verified_login_policy_revision" field.
+func VerifiedLoginPolicyRevisionGT(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldGT(FieldVerifiedLoginPolicyRevision, v))
+}
+
+// VerifiedLoginPolicyRevisionGTE applies the GTE predicate on the "verified_login_policy_revision" field.
+func VerifiedLoginPolicyRevisionGTE(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldGTE(FieldVerifiedLoginPolicyRevision, v))
+}
+
+// VerifiedLoginPolicyRevisionLT applies the LT predicate on the "verified_login_policy_revision" field.
+func VerifiedLoginPolicyRevisionLT(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldLT(FieldVerifiedLoginPolicyRevision, v))
+}
+
+// VerifiedLoginPolicyRevisionLTE applies the LTE predicate on the "verified_login_policy_revision" field.
+func VerifiedLoginPolicyRevisionLTE(v int64) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldLTE(FieldVerifiedLoginPolicyRevision, v))
 }
 
 // HasUser applies the HasEdge predicate on the "user" edge.

@@ -15,6 +15,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
@@ -23,14 +26,17 @@ import (
 // AuthConnectionQuery is the builder for querying AuthConnection entities.
 type AuthConnectionQuery struct {
 	config
-	ctx           *QueryContext
-	order         []authconnection.OrderOption
-	inters        []Interceptor
-	predicates    []predicate.AuthConnection
-	withRevisions *AuthConnectionRevisionQuery
-	withPolicies  *AuthChannelPolicyQuery
-	withBindings  *LoginBindingQuery
-	withSessions  *RefreshSessionQuery
+	ctx              *QueryContext
+	order            []authconnection.OrderOption
+	inters           []Interceptor
+	predicates       []predicate.AuthConnection
+	withRevisions    *AuthConnectionRevisionQuery
+	withPolicies     *AuthChannelPolicyQuery
+	withBindings     *LoginBindingQuery
+	withSessions     *RefreshSessionQuery
+	withSecrets      *AuthConnectionSecretQuery
+	withValidations  *AuthConnectionValidationQuery
+	withTransactions *AuthTransactionQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -148,6 +154,72 @@ func (_q *AuthConnectionQuery) QuerySessions() *RefreshSessionQuery {
 			sqlgraph.From(authconnection.Table, authconnection.FieldID, selector),
 			sqlgraph.To(refreshsession.Table, refreshsession.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, authconnection.SessionsTable, authconnection.SessionsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QuerySecrets chains the current query on the "secrets" edge.
+func (_q *AuthConnectionQuery) QuerySecrets() *AuthConnectionSecretQuery {
+	query := (&AuthConnectionSecretClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(authconnection.Table, authconnection.FieldID, selector),
+			sqlgraph.To(authconnectionsecret.Table, authconnectionsecret.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, authconnection.SecretsTable, authconnection.SecretsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryValidations chains the current query on the "validations" edge.
+func (_q *AuthConnectionQuery) QueryValidations() *AuthConnectionValidationQuery {
+	query := (&AuthConnectionValidationClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(authconnection.Table, authconnection.FieldID, selector),
+			sqlgraph.To(authconnectionvalidation.Table, authconnectionvalidation.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, authconnection.ValidationsTable, authconnection.ValidationsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryTransactions chains the current query on the "transactions" edge.
+func (_q *AuthConnectionQuery) QueryTransactions() *AuthTransactionQuery {
+	query := (&AuthTransactionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(authconnection.Table, authconnection.FieldID, selector),
+			sqlgraph.To(authtransaction.Table, authtransaction.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, authconnection.TransactionsTable, authconnection.TransactionsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -342,15 +414,18 @@ func (_q *AuthConnectionQuery) Clone() *AuthConnectionQuery {
 		return nil
 	}
 	return &AuthConnectionQuery{
-		config:        _q.config,
-		ctx:           _q.ctx.Clone(),
-		order:         append([]authconnection.OrderOption{}, _q.order...),
-		inters:        append([]Interceptor{}, _q.inters...),
-		predicates:    append([]predicate.AuthConnection{}, _q.predicates...),
-		withRevisions: _q.withRevisions.Clone(),
-		withPolicies:  _q.withPolicies.Clone(),
-		withBindings:  _q.withBindings.Clone(),
-		withSessions:  _q.withSessions.Clone(),
+		config:           _q.config,
+		ctx:              _q.ctx.Clone(),
+		order:            append([]authconnection.OrderOption{}, _q.order...),
+		inters:           append([]Interceptor{}, _q.inters...),
+		predicates:       append([]predicate.AuthConnection{}, _q.predicates...),
+		withRevisions:    _q.withRevisions.Clone(),
+		withPolicies:     _q.withPolicies.Clone(),
+		withBindings:     _q.withBindings.Clone(),
+		withSessions:     _q.withSessions.Clone(),
+		withSecrets:      _q.withSecrets.Clone(),
+		withValidations:  _q.withValidations.Clone(),
+		withTransactions: _q.withTransactions.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -398,6 +473,39 @@ func (_q *AuthConnectionQuery) WithSessions(opts ...func(*RefreshSessionQuery)) 
 		opt(query)
 	}
 	_q.withSessions = query
+	return _q
+}
+
+// WithSecrets tells the query-builder to eager-load the nodes that are connected to
+// the "secrets" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AuthConnectionQuery) WithSecrets(opts ...func(*AuthConnectionSecretQuery)) *AuthConnectionQuery {
+	query := (&AuthConnectionSecretClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSecrets = query
+	return _q
+}
+
+// WithValidations tells the query-builder to eager-load the nodes that are connected to
+// the "validations" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AuthConnectionQuery) WithValidations(opts ...func(*AuthConnectionValidationQuery)) *AuthConnectionQuery {
+	query := (&AuthConnectionValidationClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withValidations = query
+	return _q
+}
+
+// WithTransactions tells the query-builder to eager-load the nodes that are connected to
+// the "transactions" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AuthConnectionQuery) WithTransactions(opts ...func(*AuthTransactionQuery)) *AuthConnectionQuery {
+	query := (&AuthTransactionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withTransactions = query
 	return _q
 }
 
@@ -479,11 +587,14 @@ func (_q *AuthConnectionQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 	var (
 		nodes       = []*AuthConnection{}
 		_spec       = _q.querySpec()
-		loadedTypes = [4]bool{
+		loadedTypes = [7]bool{
 			_q.withRevisions != nil,
 			_q.withPolicies != nil,
 			_q.withBindings != nil,
 			_q.withSessions != nil,
+			_q.withSecrets != nil,
+			_q.withValidations != nil,
+			_q.withTransactions != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -529,6 +640,29 @@ func (_q *AuthConnectionQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 		if err := _q.loadSessions(ctx, query, nodes,
 			func(n *AuthConnection) { n.Edges.Sessions = []*RefreshSession{} },
 			func(n *AuthConnection, e *RefreshSession) { n.Edges.Sessions = append(n.Edges.Sessions, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withSecrets; query != nil {
+		if err := _q.loadSecrets(ctx, query, nodes,
+			func(n *AuthConnection) { n.Edges.Secrets = []*AuthConnectionSecret{} },
+			func(n *AuthConnection, e *AuthConnectionSecret) { n.Edges.Secrets = append(n.Edges.Secrets, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withValidations; query != nil {
+		if err := _q.loadValidations(ctx, query, nodes,
+			func(n *AuthConnection) { n.Edges.Validations = []*AuthConnectionValidation{} },
+			func(n *AuthConnection, e *AuthConnectionValidation) {
+				n.Edges.Validations = append(n.Edges.Validations, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withTransactions; query != nil {
+		if err := _q.loadTransactions(ctx, query, nodes,
+			func(n *AuthConnection) { n.Edges.Transactions = []*AuthTransaction{} },
+			func(n *AuthConnection, e *AuthTransaction) { n.Edges.Transactions = append(n.Edges.Transactions, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -640,6 +774,96 @@ func (_q *AuthConnectionQuery) loadSessions(ctx context.Context, query *RefreshS
 	}
 	query.Where(predicate.RefreshSession(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(authconnection.SessionsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ConnectionID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "connection_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *AuthConnectionQuery) loadSecrets(ctx context.Context, query *AuthConnectionSecretQuery, nodes []*AuthConnection, init func(*AuthConnection), assign func(*AuthConnection, *AuthConnectionSecret)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*AuthConnection)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(authconnectionsecret.FieldConnectionID)
+	}
+	query.Where(predicate.AuthConnectionSecret(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(authconnection.SecretsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ConnectionID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "connection_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *AuthConnectionQuery) loadValidations(ctx context.Context, query *AuthConnectionValidationQuery, nodes []*AuthConnection, init func(*AuthConnection), assign func(*AuthConnection, *AuthConnectionValidation)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*AuthConnection)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(authconnectionvalidation.FieldConnectionID)
+	}
+	query.Where(predicate.AuthConnectionValidation(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(authconnection.ValidationsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ConnectionID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "connection_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *AuthConnectionQuery) loadTransactions(ctx context.Context, query *AuthTransactionQuery, nodes []*AuthConnection, init func(*AuthConnection), assign func(*AuthConnection, *AuthTransaction)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*AuthConnection)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(authtransaction.FieldConnectionID)
+	}
+	query.Where(predicate.AuthTransaction(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(authconnection.TransactionsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

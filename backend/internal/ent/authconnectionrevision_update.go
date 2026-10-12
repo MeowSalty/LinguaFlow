@@ -104,6 +104,27 @@ func (_u *AuthConnectionRevisionUpdate) sqlSave(ctx context.Context) (_node int,
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authconnectionrevision.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if _u.mutation.OidcIssuerCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOidcIssuer, field.TypeString)
+	}
+	if _u.mutation.OidcClientIDCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOidcClientID, field.TypeString)
+	}
+	if _u.mutation.OidcClientAuthMethodCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOidcClientAuthMethod, field.TypeEnum)
+	}
+	if _u.mutation.OidcScopesCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOidcScopes, field.TypeJSON)
+	}
+	if _u.mutation.SecretVersionCleared() {
+		_spec.ClearField(authconnectionrevision.FieldSecretVersion, field.TypeInt64)
+	}
+	if _u.mutation.LogoDataCleared() {
+		_spec.ClearField(authconnectionrevision.FieldLogoData, field.TypeBytes)
+	}
+	if _u.mutation.LogoMediaTypeCleared() {
+		_spec.ClearField(authconnectionrevision.FieldLogoMediaType, field.TypeString)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{authconnectionrevision.Label}
@@ -229,6 +250,27 @@ func (_u *AuthConnectionRevisionUpdateOne) sqlSave(ctx context.Context) (_node *
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authconnectionrevision.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.OidcIssuerCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOidcIssuer, field.TypeString)
+	}
+	if _u.mutation.OidcClientIDCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOidcClientID, field.TypeString)
+	}
+	if _u.mutation.OidcClientAuthMethodCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOidcClientAuthMethod, field.TypeEnum)
+	}
+	if _u.mutation.OidcScopesCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOidcScopes, field.TypeJSON)
+	}
+	if _u.mutation.SecretVersionCleared() {
+		_spec.ClearField(authconnectionrevision.FieldSecretVersion, field.TypeInt64)
+	}
+	if _u.mutation.LogoDataCleared() {
+		_spec.ClearField(authconnectionrevision.FieldLogoData, field.TypeBytes)
+	}
+	if _u.mutation.LogoMediaTypeCleared() {
+		_spec.ClearField(authconnectionrevision.FieldLogoMediaType, field.TypeString)
 	}
 	_node = &AuthConnectionRevision{config: _u.config}
 	_spec.Assign = _node.assignValues

@@ -9,6 +9,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
@@ -33,6 +36,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/reauthenticationproof"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
@@ -161,12 +165,22 @@ func init() {
 	authconnection.DefaultUpdatedAt = authconnectionDescUpdatedAt.Default.(func() time.Time)
 	// authconnection.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	authconnection.UpdateDefaultUpdatedAt = authconnectionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// authconnectionDescAggregateRevision is the schema descriptor for aggregate_revision field.
+	authconnectionDescAggregateRevision := authconnectionFields[2].Descriptor()
+	// authconnection.DefaultAggregateRevision holds the default value on creation for the aggregate_revision field.
+	authconnection.DefaultAggregateRevision = authconnectionDescAggregateRevision.Default.(int64)
+	// authconnection.AggregateRevisionValidator is a validator for the "aggregate_revision" field. It is called by the builders before save.
+	authconnection.AggregateRevisionValidator = authconnectionDescAggregateRevision.Validators[0].(func(int64) error)
+	// authconnectionDescDraftRevision is the schema descriptor for draft_revision field.
+	authconnectionDescDraftRevision := authconnectionFields[3].Descriptor()
+	// authconnection.DraftRevisionValidator is a validator for the "draft_revision" field. It is called by the builders before save.
+	authconnection.DraftRevisionValidator = authconnectionDescDraftRevision.Validators[0].(func(int64) error)
 	// authconnectionDescPublishedRevision is the schema descriptor for published_revision field.
-	authconnectionDescPublishedRevision := authconnectionFields[2].Descriptor()
+	authconnectionDescPublishedRevision := authconnectionFields[4].Descriptor()
 	// authconnection.PublishedRevisionValidator is a validator for the "published_revision" field. It is called by the builders before save.
 	authconnection.PublishedRevisionValidator = authconnectionDescPublishedRevision.Validators[0].(func(int64) error)
 	// authconnectionDescAuthGeneration is the schema descriptor for auth_generation field.
-	authconnectionDescAuthGeneration := authconnectionFields[3].Descriptor()
+	authconnectionDescAuthGeneration := authconnectionFields[5].Descriptor()
 	// authconnection.DefaultAuthGeneration holds the default value on creation for the auth_generation field.
 	authconnection.DefaultAuthGeneration = authconnectionDescAuthGeneration.Default.(int64)
 	// authconnection.AuthGenerationValidator is a validator for the "auth_generation" field. It is called by the builders before save.
@@ -204,24 +218,187 @@ func init() {
 	authconnectionrevisionDescDisplayName := authconnectionrevisionFields[2].Descriptor()
 	// authconnectionrevision.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	authconnectionrevision.DisplayNameValidator = authconnectionrevisionDescDisplayName.Validators[0].(func(string) error)
+	// authconnectionrevisionDescDescription is the schema descriptor for description field.
+	authconnectionrevisionDescDescription := authconnectionrevisionFields[3].Descriptor()
+	// authconnectionrevision.DefaultDescription holds the default value on creation for the description field.
+	authconnectionrevision.DefaultDescription = authconnectionrevisionDescDescription.Default.(string)
 	// authconnectionrevisionDescDisplayOrder is the schema descriptor for display_order field.
-	authconnectionrevisionDescDisplayOrder := authconnectionrevisionFields[3].Descriptor()
+	authconnectionrevisionDescDisplayOrder := authconnectionrevisionFields[4].Descriptor()
 	// authconnectionrevision.DefaultDisplayOrder holds the default value on creation for the display_order field.
 	authconnectionrevision.DefaultDisplayOrder = authconnectionrevisionDescDisplayOrder.Default.(int)
 	// authconnectionrevisionDescConfigVersion is the schema descriptor for config_version field.
-	authconnectionrevisionDescConfigVersion := authconnectionrevisionFields[4].Descriptor()
+	authconnectionrevisionDescConfigVersion := authconnectionrevisionFields[5].Descriptor()
 	// authconnectionrevision.DefaultConfigVersion holds the default value on creation for the config_version field.
 	authconnectionrevision.DefaultConfigVersion = authconnectionrevisionDescConfigVersion.Default.(int)
 	// authconnectionrevision.ConfigVersionValidator is a validator for the "config_version" field. It is called by the builders before save.
 	authconnectionrevision.ConfigVersionValidator = authconnectionrevisionDescConfigVersion.Validators[0].(func(int) error)
+	// authconnectionrevisionDescOidcUserinfoEnabled is the schema descriptor for oidc_userinfo_enabled field.
+	authconnectionrevisionDescOidcUserinfoEnabled := authconnectionrevisionFields[10].Descriptor()
+	// authconnectionrevision.DefaultOidcUserinfoEnabled holds the default value on creation for the oidc_userinfo_enabled field.
+	authconnectionrevision.DefaultOidcUserinfoEnabled = authconnectionrevisionDescOidcUserinfoEnabled.Default.(bool)
+	// authconnectionrevisionDescSecretVersion is the schema descriptor for secret_version field.
+	authconnectionrevisionDescSecretVersion := authconnectionrevisionFields[11].Descriptor()
+	// authconnectionrevision.SecretVersionValidator is a validator for the "secret_version" field. It is called by the builders before save.
+	authconnectionrevision.SecretVersionValidator = authconnectionrevisionDescSecretVersion.Validators[0].(func(int64) error)
 	// authconnectionrevisionDescUsernameLoginEnabled is the schema descriptor for username_login_enabled field.
-	authconnectionrevisionDescUsernameLoginEnabled := authconnectionrevisionFields[5].Descriptor()
+	authconnectionrevisionDescUsernameLoginEnabled := authconnectionrevisionFields[14].Descriptor()
 	// authconnectionrevision.DefaultUsernameLoginEnabled holds the default value on creation for the username_login_enabled field.
 	authconnectionrevision.DefaultUsernameLoginEnabled = authconnectionrevisionDescUsernameLoginEnabled.Default.(bool)
 	// authconnectionrevisionDescEmailLoginEnabled is the schema descriptor for email_login_enabled field.
-	authconnectionrevisionDescEmailLoginEnabled := authconnectionrevisionFields[6].Descriptor()
+	authconnectionrevisionDescEmailLoginEnabled := authconnectionrevisionFields[15].Descriptor()
 	// authconnectionrevision.DefaultEmailLoginEnabled holds the default value on creation for the email_login_enabled field.
 	authconnectionrevision.DefaultEmailLoginEnabled = authconnectionrevisionDescEmailLoginEnabled.Default.(bool)
+	authconnectionsecretMixin := schema.AuthConnectionSecret{}.Mixin()
+	authconnectionsecretMixinFields0 := authconnectionsecretMixin[0].Fields()
+	_ = authconnectionsecretMixinFields0
+	authconnectionsecretFields := schema.AuthConnectionSecret{}.Fields()
+	_ = authconnectionsecretFields
+	// authconnectionsecretDescCreatedAt is the schema descriptor for created_at field.
+	authconnectionsecretDescCreatedAt := authconnectionsecretMixinFields0[0].Descriptor()
+	// authconnectionsecret.DefaultCreatedAt holds the default value on creation for the created_at field.
+	authconnectionsecret.DefaultCreatedAt = authconnectionsecretDescCreatedAt.Default.(func() time.Time)
+	// authconnectionsecretDescUpdatedAt is the schema descriptor for updated_at field.
+	authconnectionsecretDescUpdatedAt := authconnectionsecretMixinFields0[1].Descriptor()
+	// authconnectionsecret.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	authconnectionsecret.DefaultUpdatedAt = authconnectionsecretDescUpdatedAt.Default.(func() time.Time)
+	// authconnectionsecret.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	authconnectionsecret.UpdateDefaultUpdatedAt = authconnectionsecretDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// authconnectionsecretDescConnectionID is the schema descriptor for connection_id field.
+	authconnectionsecretDescConnectionID := authconnectionsecretFields[0].Descriptor()
+	// authconnectionsecret.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
+	authconnectionsecret.ConnectionIDValidator = authconnectionsecretDescConnectionID.Validators[0].(func(string) error)
+	// authconnectionsecretDescVersion is the schema descriptor for version field.
+	authconnectionsecretDescVersion := authconnectionsecretFields[1].Descriptor()
+	// authconnectionsecret.VersionValidator is a validator for the "version" field. It is called by the builders before save.
+	authconnectionsecret.VersionValidator = authconnectionsecretDescVersion.Validators[0].(func(int64) error)
+	// authconnectionsecretDescCipherVersion is the schema descriptor for cipher_version field.
+	authconnectionsecretDescCipherVersion := authconnectionsecretFields[2].Descriptor()
+	// authconnectionsecret.DefaultCipherVersion holds the default value on creation for the cipher_version field.
+	authconnectionsecret.DefaultCipherVersion = authconnectionsecretDescCipherVersion.Default.(int)
+	// authconnectionsecret.CipherVersionValidator is a validator for the "cipher_version" field. It is called by the builders before save.
+	authconnectionsecret.CipherVersionValidator = authconnectionsecretDescCipherVersion.Validators[0].(func(int) error)
+	// authconnectionsecretDescKeyID is the schema descriptor for key_id field.
+	authconnectionsecretDescKeyID := authconnectionsecretFields[3].Descriptor()
+	// authconnectionsecret.KeyIDValidator is a validator for the "key_id" field. It is called by the builders before save.
+	authconnectionsecret.KeyIDValidator = authconnectionsecretDescKeyID.Validators[0].(func(string) error)
+	// authconnectionsecretDescNonce is the schema descriptor for nonce field.
+	authconnectionsecretDescNonce := authconnectionsecretFields[4].Descriptor()
+	// authconnectionsecret.NonceValidator is a validator for the "nonce" field. It is called by the builders before save.
+	authconnectionsecret.NonceValidator = authconnectionsecretDescNonce.Validators[0].(func([]byte) error)
+	// authconnectionsecretDescCiphertext is the schema descriptor for ciphertext field.
+	authconnectionsecretDescCiphertext := authconnectionsecretFields[5].Descriptor()
+	// authconnectionsecret.CiphertextValidator is a validator for the "ciphertext" field. It is called by the builders before save.
+	authconnectionsecret.CiphertextValidator = authconnectionsecretDescCiphertext.Validators[0].(func([]byte) error)
+	// authconnectionsecretDescActorUserID is the schema descriptor for actor_user_id field.
+	authconnectionsecretDescActorUserID := authconnectionsecretFields[6].Descriptor()
+	// authconnectionsecret.ActorUserIDValidator is a validator for the "actor_user_id" field. It is called by the builders before save.
+	authconnectionsecret.ActorUserIDValidator = authconnectionsecretDescActorUserID.Validators[0].(func(int) error)
+	authconnectionvalidationMixin := schema.AuthConnectionValidation{}.Mixin()
+	authconnectionvalidationMixinFields0 := authconnectionvalidationMixin[0].Fields()
+	_ = authconnectionvalidationMixinFields0
+	authconnectionvalidationFields := schema.AuthConnectionValidation{}.Fields()
+	_ = authconnectionvalidationFields
+	// authconnectionvalidationDescCreatedAt is the schema descriptor for created_at field.
+	authconnectionvalidationDescCreatedAt := authconnectionvalidationMixinFields0[0].Descriptor()
+	// authconnectionvalidation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	authconnectionvalidation.DefaultCreatedAt = authconnectionvalidationDescCreatedAt.Default.(func() time.Time)
+	// authconnectionvalidationDescUpdatedAt is the schema descriptor for updated_at field.
+	authconnectionvalidationDescUpdatedAt := authconnectionvalidationMixinFields0[1].Descriptor()
+	// authconnectionvalidation.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	authconnectionvalidation.DefaultUpdatedAt = authconnectionvalidationDescUpdatedAt.Default.(func() time.Time)
+	// authconnectionvalidation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	authconnectionvalidation.UpdateDefaultUpdatedAt = authconnectionvalidationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// authconnectionvalidationDescConnectionID is the schema descriptor for connection_id field.
+	authconnectionvalidationDescConnectionID := authconnectionvalidationFields[0].Descriptor()
+	// authconnectionvalidation.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
+	authconnectionvalidation.ConnectionIDValidator = authconnectionvalidationDescConnectionID.Validators[0].(func(string) error)
+	// authconnectionvalidationDescFingerprint is the schema descriptor for fingerprint field.
+	authconnectionvalidationDescFingerprint := authconnectionvalidationFields[1].Descriptor()
+	// authconnectionvalidation.FingerprintValidator is a validator for the "fingerprint" field. It is called by the builders before save.
+	authconnectionvalidation.FingerprintValidator = authconnectionvalidationDescFingerprint.Validators[0].(func(string) error)
+	// authconnectionvalidationDescRevision is the schema descriptor for revision field.
+	authconnectionvalidationDescRevision := authconnectionvalidationFields[2].Descriptor()
+	// authconnectionvalidation.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
+	authconnectionvalidation.RevisionValidator = authconnectionvalidationDescRevision.Validators[0].(func(int64) error)
+	// authconnectionvalidationDescFreshSupported is the schema descriptor for fresh_supported field.
+	authconnectionvalidationDescFreshSupported := authconnectionvalidationFields[3].Descriptor()
+	// authconnectionvalidation.DefaultFreshSupported holds the default value on creation for the fresh_supported field.
+	authconnectionvalidation.DefaultFreshSupported = authconnectionvalidationDescFreshSupported.Default.(bool)
+	// authconnectionvalidationDescActorUserID is the schema descriptor for actor_user_id field.
+	authconnectionvalidationDescActorUserID := authconnectionvalidationFields[5].Descriptor()
+	// authconnectionvalidation.ActorUserIDValidator is a validator for the "actor_user_id" field. It is called by the builders before save.
+	authconnectionvalidation.ActorUserIDValidator = authconnectionvalidationDescActorUserID.Validators[0].(func(int) error)
+	authtransactionMixin := schema.AuthTransaction{}.Mixin()
+	authtransactionMixinFields0 := authtransactionMixin[0].Fields()
+	_ = authtransactionMixinFields0
+	authtransactionFields := schema.AuthTransaction{}.Fields()
+	_ = authtransactionFields
+	// authtransactionDescCreatedAt is the schema descriptor for created_at field.
+	authtransactionDescCreatedAt := authtransactionMixinFields0[0].Descriptor()
+	// authtransaction.DefaultCreatedAt holds the default value on creation for the created_at field.
+	authtransaction.DefaultCreatedAt = authtransactionDescCreatedAt.Default.(func() time.Time)
+	// authtransactionDescUpdatedAt is the schema descriptor for updated_at field.
+	authtransactionDescUpdatedAt := authtransactionMixinFields0[1].Descriptor()
+	// authtransaction.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	authtransaction.DefaultUpdatedAt = authtransactionDescUpdatedAt.Default.(func() time.Time)
+	// authtransaction.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	authtransaction.UpdateDefaultUpdatedAt = authtransactionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// authtransactionDescConnectionID is the schema descriptor for connection_id field.
+	authtransactionDescConnectionID := authtransactionFields[3].Descriptor()
+	// authtransaction.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
+	authtransaction.ConnectionIDValidator = authtransactionDescConnectionID.Validators[0].(func(string) error)
+	// authtransactionDescConnectionRevision is the schema descriptor for connection_revision field.
+	authtransactionDescConnectionRevision := authtransactionFields[4].Descriptor()
+	// authtransaction.ConnectionRevisionValidator is a validator for the "connection_revision" field. It is called by the builders before save.
+	authtransaction.ConnectionRevisionValidator = authtransactionDescConnectionRevision.Validators[0].(func(int64) error)
+	// authtransactionDescConnectionGeneration is the schema descriptor for connection_generation field.
+	authtransactionDescConnectionGeneration := authtransactionFields[5].Descriptor()
+	// authtransaction.ConnectionGenerationValidator is a validator for the "connection_generation" field. It is called by the builders before save.
+	authtransaction.ConnectionGenerationValidator = authtransactionDescConnectionGeneration.Validators[0].(func(int64) error)
+	// authtransactionDescPolicyRevision is the schema descriptor for policy_revision field.
+	authtransactionDescPolicyRevision := authtransactionFields[6].Descriptor()
+	// authtransaction.PolicyRevisionValidator is a validator for the "policy_revision" field. It is called by the builders before save.
+	authtransaction.PolicyRevisionValidator = authtransactionDescPolicyRevision.Validators[0].(func(int64) error)
+	// authtransactionDescUserID is the schema descriptor for user_id field.
+	authtransactionDescUserID := authtransactionFields[7].Descriptor()
+	// authtransaction.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	authtransaction.UserIDValidator = authtransactionDescUserID.Validators[0].(func(int) error)
+	// authtransactionDescAuthVersion is the schema descriptor for auth_version field.
+	authtransactionDescAuthVersion := authtransactionFields[8].Descriptor()
+	// authtransaction.AuthVersionValidator is a validator for the "auth_version" field. It is called by the builders before save.
+	authtransaction.AuthVersionValidator = authtransactionDescAuthVersion.Validators[0].(func(int64) error)
+	// authtransactionDescBindingID is the schema descriptor for binding_id field.
+	authtransactionDescBindingID := authtransactionFields[9].Descriptor()
+	// authtransaction.BindingIDValidator is a validator for the "binding_id" field. It is called by the builders before save.
+	authtransaction.BindingIDValidator = authtransactionDescBindingID.Validators[0].(func(int) error)
+	// authtransactionDescStateHash is the schema descriptor for state_hash field.
+	authtransactionDescStateHash := authtransactionFields[10].Descriptor()
+	// authtransaction.StateHashValidator is a validator for the "state_hash" field. It is called by the builders before save.
+	authtransaction.StateHashValidator = authtransactionDescStateHash.Validators[0].(func(string) error)
+	// authtransactionDescNonce is the schema descriptor for nonce field.
+	authtransactionDescNonce := authtransactionFields[11].Descriptor()
+	// authtransaction.NonceValidator is a validator for the "nonce" field. It is called by the builders before save.
+	authtransaction.NonceValidator = authtransactionDescNonce.Validators[0].(func(string) error)
+	// authtransactionDescPkceVerifier is the schema descriptor for pkce_verifier field.
+	authtransactionDescPkceVerifier := authtransactionFields[12].Descriptor()
+	// authtransaction.PkceVerifierValidator is a validator for the "pkce_verifier" field. It is called by the builders before save.
+	authtransaction.PkceVerifierValidator = authtransactionDescPkceVerifier.Validators[0].(func(string) error)
+	// authtransactionDescBrowserChallenge is the schema descriptor for browser_challenge field.
+	authtransactionDescBrowserChallenge := authtransactionFields[13].Descriptor()
+	// authtransaction.BrowserChallengeValidator is a validator for the "browser_challenge" field. It is called by the builders before save.
+	authtransaction.BrowserChallengeValidator = authtransactionDescBrowserChallenge.Validators[0].(func(string) error)
+	// authtransactionDescCompletionURL is the schema descriptor for completion_url field.
+	authtransactionDescCompletionURL := authtransactionFields[14].Descriptor()
+	// authtransaction.CompletionURLValidator is a validator for the "completion_url" field. It is called by the builders before save.
+	authtransaction.CompletionURLValidator = authtransactionDescCompletionURL.Validators[0].(func(string) error)
+	// authtransactionDescReturnTo is the schema descriptor for return_to field.
+	authtransactionDescReturnTo := authtransactionFields[15].Descriptor()
+	// authtransaction.DefaultReturnTo holds the default value on creation for the return_to field.
+	authtransaction.DefaultReturnTo = authtransactionDescReturnTo.Default.(string)
+	// authtransactionDescID is the schema descriptor for id field.
+	authtransactionDescID := authtransactionFields[0].Descriptor()
+	// authtransaction.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	authtransaction.IDValidator = authtransactionDescID.Validators[0].(func(string) error)
 	backendMixin := schema.Backend{}.Mixin()
 	backendMixinFields0 := backendMixin[0].Fields()
 	_ = backendMixinFields0
@@ -1010,6 +1187,18 @@ func init() {
 	loginbindingDescExternalIdentityID := loginbindingFields[2].Descriptor()
 	// loginbinding.ExternalIdentityIDValidator is a validator for the "external_identity_id" field. It is called by the builders before save.
 	loginbinding.ExternalIdentityIDValidator = loginbindingDescExternalIdentityID.Validators[0].(func(int) error)
+	// loginbindingDescVerifiedAuthGeneration is the schema descriptor for verified_auth_generation field.
+	loginbindingDescVerifiedAuthGeneration := loginbindingFields[5].Descriptor()
+	// loginbinding.DefaultVerifiedAuthGeneration holds the default value on creation for the verified_auth_generation field.
+	loginbinding.DefaultVerifiedAuthGeneration = loginbindingDescVerifiedAuthGeneration.Default.(int64)
+	// loginbinding.VerifiedAuthGenerationValidator is a validator for the "verified_auth_generation" field. It is called by the builders before save.
+	loginbinding.VerifiedAuthGenerationValidator = loginbindingDescVerifiedAuthGeneration.Validators[0].(func(int64) error)
+	// loginbindingDescVerifiedLoginPolicyRevision is the schema descriptor for verified_login_policy_revision field.
+	loginbindingDescVerifiedLoginPolicyRevision := loginbindingFields[6].Descriptor()
+	// loginbinding.DefaultVerifiedLoginPolicyRevision holds the default value on creation for the verified_login_policy_revision field.
+	loginbinding.DefaultVerifiedLoginPolicyRevision = loginbindingDescVerifiedLoginPolicyRevision.Default.(int64)
+	// loginbinding.VerifiedLoginPolicyRevisionValidator is a validator for the "verified_login_policy_revision" field. It is called by the builders before save.
+	loginbinding.VerifiedLoginPolicyRevisionValidator = loginbindingDescVerifiedLoginPolicyRevision.Validators[0].(func(int64) error)
 	orgmembershipMixin := schema.OrgMembership{}.Mixin()
 	orgmembershipMixinFields0 := orgmembershipMixin[0].Fields()
 	_ = orgmembershipMixinFields0
@@ -1154,6 +1343,37 @@ func init() {
 	pruneprompttemplateDescContent := pruneprompttemplateFields[5].Descriptor()
 	// pruneprompttemplate.DefaultContent holds the default value on creation for the content field.
 	pruneprompttemplate.DefaultContent = pruneprompttemplateDescContent.Default.(string)
+	reauthenticationproofMixin := schema.ReauthenticationProof{}.Mixin()
+	reauthenticationproofMixinFields0 := reauthenticationproofMixin[0].Fields()
+	_ = reauthenticationproofMixinFields0
+	reauthenticationproofFields := schema.ReauthenticationProof{}.Fields()
+	_ = reauthenticationproofFields
+	// reauthenticationproofDescCreatedAt is the schema descriptor for created_at field.
+	reauthenticationproofDescCreatedAt := reauthenticationproofMixinFields0[0].Descriptor()
+	// reauthenticationproof.DefaultCreatedAt holds the default value on creation for the created_at field.
+	reauthenticationproof.DefaultCreatedAt = reauthenticationproofDescCreatedAt.Default.(func() time.Time)
+	// reauthenticationproofDescUpdatedAt is the schema descriptor for updated_at field.
+	reauthenticationproofDescUpdatedAt := reauthenticationproofMixinFields0[1].Descriptor()
+	// reauthenticationproof.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	reauthenticationproof.DefaultUpdatedAt = reauthenticationproofDescUpdatedAt.Default.(func() time.Time)
+	// reauthenticationproof.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	reauthenticationproof.UpdateDefaultUpdatedAt = reauthenticationproofDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// reauthenticationproofDescTokenHash is the schema descriptor for token_hash field.
+	reauthenticationproofDescTokenHash := reauthenticationproofFields[0].Descriptor()
+	// reauthenticationproof.TokenHashValidator is a validator for the "token_hash" field. It is called by the builders before save.
+	reauthenticationproof.TokenHashValidator = reauthenticationproofDescTokenHash.Validators[0].(func(string) error)
+	// reauthenticationproofDescUserID is the schema descriptor for user_id field.
+	reauthenticationproofDescUserID := reauthenticationproofFields[1].Descriptor()
+	// reauthenticationproof.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	reauthenticationproof.UserIDValidator = reauthenticationproofDescUserID.Validators[0].(func(int) error)
+	// reauthenticationproofDescAuthVersion is the schema descriptor for auth_version field.
+	reauthenticationproofDescAuthVersion := reauthenticationproofFields[2].Descriptor()
+	// reauthenticationproof.AuthVersionValidator is a validator for the "auth_version" field. It is called by the builders before save.
+	reauthenticationproof.AuthVersionValidator = reauthenticationproofDescAuthVersion.Validators[0].(func(int64) error)
+	// reauthenticationproofDescTargetID is the schema descriptor for target_id field.
+	reauthenticationproofDescTargetID := reauthenticationproofFields[6].Descriptor()
+	// reauthenticationproof.TargetIDValidator is a validator for the "target_id" field. It is called by the builders before save.
+	reauthenticationproof.TargetIDValidator = reauthenticationproofDescTargetID.Validators[0].(func(string) error)
 	refreshsessionMixin := schema.RefreshSession{}.Mixin()
 	refreshsessionMixinFields0 := refreshsessionMixin[0].Fields()
 	_ = refreshsessionMixinFields0

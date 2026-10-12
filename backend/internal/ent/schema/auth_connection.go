@@ -19,6 +19,8 @@ func (AuthConnection) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").NotEmpty().Immutable(),
 		field.Enum("kind").Values("password", "oidc", "generic_oauth2", "provider").Immutable(),
+		field.Int64("aggregate_revision").Default(1).Positive(),
+		field.Int64("draft_revision").Optional().Nillable().Positive(),
 		field.Int64("published_revision").Optional().Nillable().Positive(),
 		field.Int64("auth_generation").Default(1).Positive(),
 		field.Time("archived_at").Optional().Nillable(),
@@ -56,5 +58,8 @@ func (AuthConnection) Edges() []ent.Edge {
 		edge.To("policies", AuthChannelPolicy.Type),
 		edge.To("bindings", LoginBinding.Type),
 		edge.To("sessions", RefreshSession.Type),
+		edge.To("secrets", AuthConnectionSecret.Type),
+		edge.To("validations", AuthConnectionValidation.Type),
+		edge.To("transactions", AuthTransaction.Type),
 	}
 }

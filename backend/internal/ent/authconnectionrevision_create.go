@@ -67,6 +67,20 @@ func (_c *AuthConnectionRevisionCreate) SetDisplayName(v string) *AuthConnection
 	return _c
 }
 
+// SetDescription sets the "description" field.
+func (_c *AuthConnectionRevisionCreate) SetDescription(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetDescription(v)
+	return _c
+}
+
+// SetNillableDescription sets the "description" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableDescription(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetDescription(*v)
+	}
+	return _c
+}
+
 // SetDisplayOrder sets the "display_order" field.
 func (_c *AuthConnectionRevisionCreate) SetDisplayOrder(v int) *AuthConnectionRevisionCreate {
 	_c.mutation.SetDisplayOrder(v)
@@ -91,6 +105,102 @@ func (_c *AuthConnectionRevisionCreate) SetConfigVersion(v int) *AuthConnectionR
 func (_c *AuthConnectionRevisionCreate) SetNillableConfigVersion(v *int) *AuthConnectionRevisionCreate {
 	if v != nil {
 		_c.SetConfigVersion(*v)
+	}
+	return _c
+}
+
+// SetOidcIssuer sets the "oidc_issuer" field.
+func (_c *AuthConnectionRevisionCreate) SetOidcIssuer(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOidcIssuer(v)
+	return _c
+}
+
+// SetNillableOidcIssuer sets the "oidc_issuer" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOidcIssuer(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOidcIssuer(*v)
+	}
+	return _c
+}
+
+// SetOidcClientID sets the "oidc_client_id" field.
+func (_c *AuthConnectionRevisionCreate) SetOidcClientID(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOidcClientID(v)
+	return _c
+}
+
+// SetNillableOidcClientID sets the "oidc_client_id" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOidcClientID(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOidcClientID(*v)
+	}
+	return _c
+}
+
+// SetOidcClientAuthMethod sets the "oidc_client_auth_method" field.
+func (_c *AuthConnectionRevisionCreate) SetOidcClientAuthMethod(v authconnectionrevision.OidcClientAuthMethod) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOidcClientAuthMethod(v)
+	return _c
+}
+
+// SetNillableOidcClientAuthMethod sets the "oidc_client_auth_method" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOidcClientAuthMethod(v *authconnectionrevision.OidcClientAuthMethod) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOidcClientAuthMethod(*v)
+	}
+	return _c
+}
+
+// SetOidcScopes sets the "oidc_scopes" field.
+func (_c *AuthConnectionRevisionCreate) SetOidcScopes(v []string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOidcScopes(v)
+	return _c
+}
+
+// SetOidcUserinfoEnabled sets the "oidc_userinfo_enabled" field.
+func (_c *AuthConnectionRevisionCreate) SetOidcUserinfoEnabled(v bool) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOidcUserinfoEnabled(v)
+	return _c
+}
+
+// SetNillableOidcUserinfoEnabled sets the "oidc_userinfo_enabled" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOidcUserinfoEnabled(v *bool) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOidcUserinfoEnabled(*v)
+	}
+	return _c
+}
+
+// SetSecretVersion sets the "secret_version" field.
+func (_c *AuthConnectionRevisionCreate) SetSecretVersion(v int64) *AuthConnectionRevisionCreate {
+	_c.mutation.SetSecretVersion(v)
+	return _c
+}
+
+// SetNillableSecretVersion sets the "secret_version" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableSecretVersion(v *int64) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetSecretVersion(*v)
+	}
+	return _c
+}
+
+// SetLogoData sets the "logo_data" field.
+func (_c *AuthConnectionRevisionCreate) SetLogoData(v []byte) *AuthConnectionRevisionCreate {
+	_c.mutation.SetLogoData(v)
+	return _c
+}
+
+// SetLogoMediaType sets the "logo_media_type" field.
+func (_c *AuthConnectionRevisionCreate) SetLogoMediaType(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetLogoMediaType(v)
+	return _c
+}
+
+// SetNillableLogoMediaType sets the "logo_media_type" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableLogoMediaType(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetLogoMediaType(*v)
 	}
 	return _c
 }
@@ -179,6 +289,10 @@ func (_c *AuthConnectionRevisionCreate) defaults() error {
 		v := authconnectionrevision.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.Description(); !ok {
+		v := authconnectionrevision.DefaultDescription
+		_c.mutation.SetDescription(v)
+	}
 	if _, ok := _c.mutation.DisplayOrder(); !ok {
 		v := authconnectionrevision.DefaultDisplayOrder
 		_c.mutation.SetDisplayOrder(v)
@@ -186,6 +300,10 @@ func (_c *AuthConnectionRevisionCreate) defaults() error {
 	if _, ok := _c.mutation.ConfigVersion(); !ok {
 		v := authconnectionrevision.DefaultConfigVersion
 		_c.mutation.SetConfigVersion(v)
+	}
+	if _, ok := _c.mutation.OidcUserinfoEnabled(); !ok {
+		v := authconnectionrevision.DefaultOidcUserinfoEnabled
+		_c.mutation.SetOidcUserinfoEnabled(v)
 	}
 	if _, ok := _c.mutation.UsernameLoginEnabled(); !ok {
 		v := authconnectionrevision.DefaultUsernameLoginEnabled
@@ -230,6 +348,9 @@ func (_c *AuthConnectionRevisionCreate) check() error {
 			return &ValidationError{Name: "display_name", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.display_name": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.Description(); !ok {
+		return &ValidationError{Name: "description", err: errors.New(`ent: missing required field "AuthConnectionRevision.description"`)}
+	}
 	if _, ok := _c.mutation.DisplayOrder(); !ok {
 		return &ValidationError{Name: "display_order", err: errors.New(`ent: missing required field "AuthConnectionRevision.display_order"`)}
 	}
@@ -239,6 +360,19 @@ func (_c *AuthConnectionRevisionCreate) check() error {
 	if v, ok := _c.mutation.ConfigVersion(); ok {
 		if err := authconnectionrevision.ConfigVersionValidator(v); err != nil {
 			return &ValidationError{Name: "config_version", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.config_version": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.OidcClientAuthMethod(); ok {
+		if err := authconnectionrevision.OidcClientAuthMethodValidator(v); err != nil {
+			return &ValidationError{Name: "oidc_client_auth_method", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.oidc_client_auth_method": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.OidcUserinfoEnabled(); !ok {
+		return &ValidationError{Name: "oidc_userinfo_enabled", err: errors.New(`ent: missing required field "AuthConnectionRevision.oidc_userinfo_enabled"`)}
+	}
+	if v, ok := _c.mutation.SecretVersion(); ok {
+		if err := authconnectionrevision.SecretVersionValidator(v); err != nil {
+			return &ValidationError{Name: "secret_version", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.secret_version": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.UsernameLoginEnabled(); !ok {
@@ -292,6 +426,10 @@ func (_c *AuthConnectionRevisionCreate) createSpec() (*AuthConnectionRevision, *
 		_spec.SetField(authconnectionrevision.FieldDisplayName, field.TypeString, value)
 		_node.DisplayName = value
 	}
+	if value, ok := _c.mutation.Description(); ok {
+		_spec.SetField(authconnectionrevision.FieldDescription, field.TypeString, value)
+		_node.Description = value
+	}
 	if value, ok := _c.mutation.DisplayOrder(); ok {
 		_spec.SetField(authconnectionrevision.FieldDisplayOrder, field.TypeInt, value)
 		_node.DisplayOrder = value
@@ -299,6 +437,38 @@ func (_c *AuthConnectionRevisionCreate) createSpec() (*AuthConnectionRevision, *
 	if value, ok := _c.mutation.ConfigVersion(); ok {
 		_spec.SetField(authconnectionrevision.FieldConfigVersion, field.TypeInt, value)
 		_node.ConfigVersion = value
+	}
+	if value, ok := _c.mutation.OidcIssuer(); ok {
+		_spec.SetField(authconnectionrevision.FieldOidcIssuer, field.TypeString, value)
+		_node.OidcIssuer = value
+	}
+	if value, ok := _c.mutation.OidcClientID(); ok {
+		_spec.SetField(authconnectionrevision.FieldOidcClientID, field.TypeString, value)
+		_node.OidcClientID = value
+	}
+	if value, ok := _c.mutation.OidcClientAuthMethod(); ok {
+		_spec.SetField(authconnectionrevision.FieldOidcClientAuthMethod, field.TypeEnum, value)
+		_node.OidcClientAuthMethod = value
+	}
+	if value, ok := _c.mutation.OidcScopes(); ok {
+		_spec.SetField(authconnectionrevision.FieldOidcScopes, field.TypeJSON, value)
+		_node.OidcScopes = value
+	}
+	if value, ok := _c.mutation.OidcUserinfoEnabled(); ok {
+		_spec.SetField(authconnectionrevision.FieldOidcUserinfoEnabled, field.TypeBool, value)
+		_node.OidcUserinfoEnabled = value
+	}
+	if value, ok := _c.mutation.SecretVersion(); ok {
+		_spec.SetField(authconnectionrevision.FieldSecretVersion, field.TypeInt64, value)
+		_node.SecretVersion = &value
+	}
+	if value, ok := _c.mutation.LogoData(); ok {
+		_spec.SetField(authconnectionrevision.FieldLogoData, field.TypeBytes, value)
+		_node.LogoData = value
+	}
+	if value, ok := _c.mutation.LogoMediaType(); ok {
+		_spec.SetField(authconnectionrevision.FieldLogoMediaType, field.TypeString, value)
+		_node.LogoMediaType = value
 	}
 	if value, ok := _c.mutation.UsernameLoginEnabled(); ok {
 		_spec.SetField(authconnectionrevision.FieldUsernameLoginEnabled, field.TypeBool, value)

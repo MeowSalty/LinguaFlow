@@ -16,6 +16,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
@@ -40,6 +43,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/reauthenticationproof"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
@@ -132,6 +136,9 @@ func checkColumn(t, c string) error {
 			authchannelpolicy.Table:         authchannelpolicy.ValidColumn,
 			authconnection.Table:            authconnection.ValidColumn,
 			authconnectionrevision.Table:    authconnectionrevision.ValidColumn,
+			authconnectionsecret.Table:      authconnectionsecret.ValidColumn,
+			authconnectionvalidation.Table:  authconnectionvalidation.ValidColumn,
+			authtransaction.Table:           authtransaction.ValidColumn,
 			backend.Table:                   backend.ValidColumn,
 			backuppin.Table:                 backuppin.ValidColumn,
 			blob.Table:                      blob.ValidColumn,
@@ -156,6 +163,7 @@ func checkColumn(t, c string) error {
 			organization.Table:              organization.ValidColumn,
 			project.Table:                   project.ValidColumn,
 			pruneprompttemplate.Table:       pruneprompttemplate.ValidColumn,
+			reauthenticationproof.Table:     reauthenticationproof.ValidColumn,
 			refreshsession.Table:            refreshsession.ValidColumn,
 			refreshtoken.Table:              refreshtoken.ValidColumn,
 			resource.Table:                  resource.ValidColumn,

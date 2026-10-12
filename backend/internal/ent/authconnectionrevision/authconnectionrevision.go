@@ -3,6 +3,7 @@
 package authconnectionrevision
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent"
@@ -25,10 +26,28 @@ const (
 	FieldRevision = "revision"
 	// FieldDisplayName holds the string denoting the display_name field in the database.
 	FieldDisplayName = "display_name"
+	// FieldDescription holds the string denoting the description field in the database.
+	FieldDescription = "description"
 	// FieldDisplayOrder holds the string denoting the display_order field in the database.
 	FieldDisplayOrder = "display_order"
 	// FieldConfigVersion holds the string denoting the config_version field in the database.
 	FieldConfigVersion = "config_version"
+	// FieldOidcIssuer holds the string denoting the oidc_issuer field in the database.
+	FieldOidcIssuer = "oidc_issuer"
+	// FieldOidcClientID holds the string denoting the oidc_client_id field in the database.
+	FieldOidcClientID = "oidc_client_id"
+	// FieldOidcClientAuthMethod holds the string denoting the oidc_client_auth_method field in the database.
+	FieldOidcClientAuthMethod = "oidc_client_auth_method"
+	// FieldOidcScopes holds the string denoting the oidc_scopes field in the database.
+	FieldOidcScopes = "oidc_scopes"
+	// FieldOidcUserinfoEnabled holds the string denoting the oidc_userinfo_enabled field in the database.
+	FieldOidcUserinfoEnabled = "oidc_userinfo_enabled"
+	// FieldSecretVersion holds the string denoting the secret_version field in the database.
+	FieldSecretVersion = "secret_version"
+	// FieldLogoData holds the string denoting the logo_data field in the database.
+	FieldLogoData = "logo_data"
+	// FieldLogoMediaType holds the string denoting the logo_media_type field in the database.
+	FieldLogoMediaType = "logo_media_type"
 	// FieldUsernameLoginEnabled holds the string denoting the username_login_enabled field in the database.
 	FieldUsernameLoginEnabled = "username_login_enabled"
 	// FieldEmailLoginEnabled holds the string denoting the email_login_enabled field in the database.
@@ -54,8 +73,17 @@ var Columns = []string{
 	FieldConnectionID,
 	FieldRevision,
 	FieldDisplayName,
+	FieldDescription,
 	FieldDisplayOrder,
 	FieldConfigVersion,
+	FieldOidcIssuer,
+	FieldOidcClientID,
+	FieldOidcClientAuthMethod,
+	FieldOidcScopes,
+	FieldOidcUserinfoEnabled,
+	FieldSecretVersion,
+	FieldLogoData,
+	FieldLogoMediaType,
 	FieldUsernameLoginEnabled,
 	FieldEmailLoginEnabled,
 }
@@ -89,17 +117,46 @@ var (
 	RevisionValidator func(int64) error
 	// DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	DisplayNameValidator func(string) error
+	// DefaultDescription holds the default value on creation for the "description" field.
+	DefaultDescription string
 	// DefaultDisplayOrder holds the default value on creation for the "display_order" field.
 	DefaultDisplayOrder int
 	// DefaultConfigVersion holds the default value on creation for the "config_version" field.
 	DefaultConfigVersion int
 	// ConfigVersionValidator is a validator for the "config_version" field. It is called by the builders before save.
 	ConfigVersionValidator func(int) error
+	// DefaultOidcUserinfoEnabled holds the default value on creation for the "oidc_userinfo_enabled" field.
+	DefaultOidcUserinfoEnabled bool
+	// SecretVersionValidator is a validator for the "secret_version" field. It is called by the builders before save.
+	SecretVersionValidator func(int64) error
 	// DefaultUsernameLoginEnabled holds the default value on creation for the "username_login_enabled" field.
 	DefaultUsernameLoginEnabled bool
 	// DefaultEmailLoginEnabled holds the default value on creation for the "email_login_enabled" field.
 	DefaultEmailLoginEnabled bool
 )
+
+// OidcClientAuthMethod defines the type for the "oidc_client_auth_method" enum field.
+type OidcClientAuthMethod string
+
+// OidcClientAuthMethod values.
+const (
+	OidcClientAuthMethodClientSecretBasic OidcClientAuthMethod = "client_secret_basic"
+	OidcClientAuthMethodClientSecretPost  OidcClientAuthMethod = "client_secret_post"
+)
+
+func (ocam OidcClientAuthMethod) String() string {
+	return string(ocam)
+}
+
+// OidcClientAuthMethodValidator is a validator for the "oidc_client_auth_method" field enum values. It is called by the builders before save.
+func OidcClientAuthMethodValidator(ocam OidcClientAuthMethod) error {
+	switch ocam {
+	case OidcClientAuthMethodClientSecretBasic, OidcClientAuthMethodClientSecretPost:
+		return nil
+	default:
+		return fmt.Errorf("authconnectionrevision: invalid enum value for oidc_client_auth_method field: %q", ocam)
+	}
+}
 
 // OrderOption defines the ordering options for the AuthConnectionRevision queries.
 type OrderOption func(*sql.Selector)
@@ -134,6 +191,11 @@ func ByDisplayName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDisplayName, opts...).ToFunc()
 }
 
+// ByDescription orders the results by the description field.
+func ByDescription(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDescription, opts...).ToFunc()
+}
+
 // ByDisplayOrder orders the results by the display_order field.
 func ByDisplayOrder(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDisplayOrder, opts...).ToFunc()
@@ -142,6 +204,36 @@ func ByDisplayOrder(opts ...sql.OrderTermOption) OrderOption {
 // ByConfigVersion orders the results by the config_version field.
 func ByConfigVersion(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldConfigVersion, opts...).ToFunc()
+}
+
+// ByOidcIssuer orders the results by the oidc_issuer field.
+func ByOidcIssuer(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOidcIssuer, opts...).ToFunc()
+}
+
+// ByOidcClientID orders the results by the oidc_client_id field.
+func ByOidcClientID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOidcClientID, opts...).ToFunc()
+}
+
+// ByOidcClientAuthMethod orders the results by the oidc_client_auth_method field.
+func ByOidcClientAuthMethod(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOidcClientAuthMethod, opts...).ToFunc()
+}
+
+// ByOidcUserinfoEnabled orders the results by the oidc_userinfo_enabled field.
+func ByOidcUserinfoEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOidcUserinfoEnabled, opts...).ToFunc()
+}
+
+// BySecretVersion orders the results by the secret_version field.
+func BySecretVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSecretVersion, opts...).ToFunc()
+}
+
+// ByLogoMediaType orders the results by the logo_media_type field.
+func ByLogoMediaType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLogoMediaType, opts...).ToFunc()
 }
 
 // ByUsernameLoginEnabled orders the results by the username_login_enabled field.

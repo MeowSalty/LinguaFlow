@@ -23,6 +23,10 @@ type AuthConnection struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// Kind holds the value of the "kind" field.
 	Kind authconnection.Kind `json:"kind,omitempty"`
+	// AggregateRevision holds the value of the "aggregate_revision" field.
+	AggregateRevision int64 `json:"aggregate_revision,omitempty"`
+	// DraftRevision holds the value of the "draft_revision" field.
+	DraftRevision *int64 `json:"draft_revision,omitempty"`
 	// PublishedRevision holds the value of the "published_revision" field.
 	PublishedRevision *int64 `json:"published_revision,omitempty"`
 	// AuthGeneration holds the value of the "auth_generation" field.
@@ -45,9 +49,15 @@ type AuthConnectionEdges struct {
 	Bindings []*LoginBinding `json:"bindings,omitempty"`
 	// Sessions holds the value of the sessions edge.
 	Sessions []*RefreshSession `json:"sessions,omitempty"`
+	// Secrets holds the value of the secrets edge.
+	Secrets []*AuthConnectionSecret `json:"secrets,omitempty"`
+	// Validations holds the value of the validations edge.
+	Validations []*AuthConnectionValidation `json:"validations,omitempty"`
+	// Transactions holds the value of the transactions edge.
+	Transactions []*AuthTransaction `json:"transactions,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [4]bool
+	loadedTypes [7]bool
 }
 
 // RevisionsOrErr returns the Revisions value or an error if the edge
@@ -86,12 +96,39 @@ func (e AuthConnectionEdges) SessionsOrErr() ([]*RefreshSession, error) {
 	return nil, &NotLoadedError{edge: "sessions"}
 }
 
+// SecretsOrErr returns the Secrets value or an error if the edge
+// was not loaded in eager-loading.
+func (e AuthConnectionEdges) SecretsOrErr() ([]*AuthConnectionSecret, error) {
+	if e.loadedTypes[4] {
+		return e.Secrets, nil
+	}
+	return nil, &NotLoadedError{edge: "secrets"}
+}
+
+// ValidationsOrErr returns the Validations value or an error if the edge
+// was not loaded in eager-loading.
+func (e AuthConnectionEdges) ValidationsOrErr() ([]*AuthConnectionValidation, error) {
+	if e.loadedTypes[5] {
+		return e.Validations, nil
+	}
+	return nil, &NotLoadedError{edge: "validations"}
+}
+
+// TransactionsOrErr returns the Transactions value or an error if the edge
+// was not loaded in eager-loading.
+func (e AuthConnectionEdges) TransactionsOrErr() ([]*AuthTransaction, error) {
+	if e.loadedTypes[6] {
+		return e.Transactions, nil
+	}
+	return nil, &NotLoadedError{edge: "transactions"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*AuthConnection) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case authconnection.FieldPublishedRevision, authconnection.FieldAuthGeneration:
+		case authconnection.FieldAggregateRevision, authconnection.FieldDraftRevision, authconnection.FieldPublishedRevision, authconnection.FieldAuthGeneration:
 			values[i] = new(sql.NullInt64)
 		case authconnection.FieldID, authconnection.FieldKind:
 			values[i] = new(sql.NullString)
@@ -135,6 +172,19 @@ func (_m *AuthConnection) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field kind", values[i])
 			} else if value.Valid {
 				_m.Kind = authconnection.Kind(value.String)
+			}
+		case authconnection.FieldAggregateRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field aggregate_revision", values[i])
+			} else if value.Valid {
+				_m.AggregateRevision = value.Int64
+			}
+		case authconnection.FieldDraftRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field draft_revision", values[i])
+			} else if value.Valid {
+				_m.DraftRevision = new(int64)
+				*_m.DraftRevision = value.Int64
 			}
 		case authconnection.FieldPublishedRevision:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -189,6 +239,21 @@ func (_m *AuthConnection) QuerySessions() *RefreshSessionQuery {
 	return NewAuthConnectionClient(_m.config).QuerySessions(_m)
 }
 
+// QuerySecrets queries the "secrets" edge of the AuthConnection entity.
+func (_m *AuthConnection) QuerySecrets() *AuthConnectionSecretQuery {
+	return NewAuthConnectionClient(_m.config).QuerySecrets(_m)
+}
+
+// QueryValidations queries the "validations" edge of the AuthConnection entity.
+func (_m *AuthConnection) QueryValidations() *AuthConnectionValidationQuery {
+	return NewAuthConnectionClient(_m.config).QueryValidations(_m)
+}
+
+// QueryTransactions queries the "transactions" edge of the AuthConnection entity.
+func (_m *AuthConnection) QueryTransactions() *AuthTransactionQuery {
+	return NewAuthConnectionClient(_m.config).QueryTransactions(_m)
+}
+
 // Update returns a builder for updating this AuthConnection.
 // Note that you need to call AuthConnection.Unwrap() before calling this method if this AuthConnection
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -220,6 +285,14 @@ func (_m *AuthConnection) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("kind=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Kind))
+	builder.WriteString(", ")
+	builder.WriteString("aggregate_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AggregateRevision))
+	builder.WriteString(", ")
+	if v := _m.DraftRevision; v != nil {
+		builder.WriteString("draft_revision=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	if v := _m.PublishedRevision; v != nil {
 		builder.WriteString("published_revision=")

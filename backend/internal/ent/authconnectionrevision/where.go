@@ -80,6 +80,11 @@ func DisplayName(v string) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldDisplayName, v))
 }
 
+// Description applies equality check predicate on the "description" field. It's identical to DescriptionEQ.
+func Description(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldDescription, v))
+}
+
 // DisplayOrder applies equality check predicate on the "display_order" field. It's identical to DisplayOrderEQ.
 func DisplayOrder(v int) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldDisplayOrder, v))
@@ -88,6 +93,36 @@ func DisplayOrder(v int) predicate.AuthConnectionRevision {
 // ConfigVersion applies equality check predicate on the "config_version" field. It's identical to ConfigVersionEQ.
 func ConfigVersion(v int) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldConfigVersion, v))
+}
+
+// OidcIssuer applies equality check predicate on the "oidc_issuer" field. It's identical to OidcIssuerEQ.
+func OidcIssuer(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOidcIssuer, v))
+}
+
+// OidcClientID applies equality check predicate on the "oidc_client_id" field. It's identical to OidcClientIDEQ.
+func OidcClientID(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOidcClientID, v))
+}
+
+// OidcUserinfoEnabled applies equality check predicate on the "oidc_userinfo_enabled" field. It's identical to OidcUserinfoEnabledEQ.
+func OidcUserinfoEnabled(v bool) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOidcUserinfoEnabled, v))
+}
+
+// SecretVersion applies equality check predicate on the "secret_version" field. It's identical to SecretVersionEQ.
+func SecretVersion(v int64) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldSecretVersion, v))
+}
+
+// LogoData applies equality check predicate on the "logo_data" field. It's identical to LogoDataEQ.
+func LogoData(v []byte) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldLogoData, v))
+}
+
+// LogoMediaType applies equality check predicate on the "logo_media_type" field. It's identical to LogoMediaTypeEQ.
+func LogoMediaType(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldLogoMediaType, v))
 }
 
 // UsernameLoginEnabled applies equality check predicate on the "username_login_enabled" field. It's identical to UsernameLoginEnabledEQ.
@@ -350,6 +385,71 @@ func DisplayNameContainsFold(v string) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldDisplayName, v))
 }
 
+// DescriptionEQ applies the EQ predicate on the "description" field.
+func DescriptionEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldDescription, v))
+}
+
+// DescriptionNEQ applies the NEQ predicate on the "description" field.
+func DescriptionNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldDescription, v))
+}
+
+// DescriptionIn applies the In predicate on the "description" field.
+func DescriptionIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldDescription, vs...))
+}
+
+// DescriptionNotIn applies the NotIn predicate on the "description" field.
+func DescriptionNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldDescription, vs...))
+}
+
+// DescriptionGT applies the GT predicate on the "description" field.
+func DescriptionGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldDescription, v))
+}
+
+// DescriptionGTE applies the GTE predicate on the "description" field.
+func DescriptionGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldDescription, v))
+}
+
+// DescriptionLT applies the LT predicate on the "description" field.
+func DescriptionLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldDescription, v))
+}
+
+// DescriptionLTE applies the LTE predicate on the "description" field.
+func DescriptionLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldDescription, v))
+}
+
+// DescriptionContains applies the Contains predicate on the "description" field.
+func DescriptionContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldDescription, v))
+}
+
+// DescriptionHasPrefix applies the HasPrefix predicate on the "description" field.
+func DescriptionHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldDescription, v))
+}
+
+// DescriptionHasSuffix applies the HasSuffix predicate on the "description" field.
+func DescriptionHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldDescription, v))
+}
+
+// DescriptionEqualFold applies the EqualFold predicate on the "description" field.
+func DescriptionEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldDescription, v))
+}
+
+// DescriptionContainsFold applies the ContainsFold predicate on the "description" field.
+func DescriptionContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldDescription, v))
+}
+
 // DisplayOrderEQ applies the EQ predicate on the "display_order" field.
 func DisplayOrderEQ(v int) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldDisplayOrder, v))
@@ -428,6 +528,381 @@ func ConfigVersionLT(v int) predicate.AuthConnectionRevision {
 // ConfigVersionLTE applies the LTE predicate on the "config_version" field.
 func ConfigVersionLTE(v int) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldConfigVersion, v))
+}
+
+// OidcIssuerEQ applies the EQ predicate on the "oidc_issuer" field.
+func OidcIssuerEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOidcIssuer, v))
+}
+
+// OidcIssuerNEQ applies the NEQ predicate on the "oidc_issuer" field.
+func OidcIssuerNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOidcIssuer, v))
+}
+
+// OidcIssuerIn applies the In predicate on the "oidc_issuer" field.
+func OidcIssuerIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOidcIssuer, vs...))
+}
+
+// OidcIssuerNotIn applies the NotIn predicate on the "oidc_issuer" field.
+func OidcIssuerNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOidcIssuer, vs...))
+}
+
+// OidcIssuerGT applies the GT predicate on the "oidc_issuer" field.
+func OidcIssuerGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldOidcIssuer, v))
+}
+
+// OidcIssuerGTE applies the GTE predicate on the "oidc_issuer" field.
+func OidcIssuerGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldOidcIssuer, v))
+}
+
+// OidcIssuerLT applies the LT predicate on the "oidc_issuer" field.
+func OidcIssuerLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldOidcIssuer, v))
+}
+
+// OidcIssuerLTE applies the LTE predicate on the "oidc_issuer" field.
+func OidcIssuerLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldOidcIssuer, v))
+}
+
+// OidcIssuerContains applies the Contains predicate on the "oidc_issuer" field.
+func OidcIssuerContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldOidcIssuer, v))
+}
+
+// OidcIssuerHasPrefix applies the HasPrefix predicate on the "oidc_issuer" field.
+func OidcIssuerHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldOidcIssuer, v))
+}
+
+// OidcIssuerHasSuffix applies the HasSuffix predicate on the "oidc_issuer" field.
+func OidcIssuerHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldOidcIssuer, v))
+}
+
+// OidcIssuerIsNil applies the IsNil predicate on the "oidc_issuer" field.
+func OidcIssuerIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOidcIssuer))
+}
+
+// OidcIssuerNotNil applies the NotNil predicate on the "oidc_issuer" field.
+func OidcIssuerNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOidcIssuer))
+}
+
+// OidcIssuerEqualFold applies the EqualFold predicate on the "oidc_issuer" field.
+func OidcIssuerEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldOidcIssuer, v))
+}
+
+// OidcIssuerContainsFold applies the ContainsFold predicate on the "oidc_issuer" field.
+func OidcIssuerContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldOidcIssuer, v))
+}
+
+// OidcClientIDEQ applies the EQ predicate on the "oidc_client_id" field.
+func OidcClientIDEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOidcClientID, v))
+}
+
+// OidcClientIDNEQ applies the NEQ predicate on the "oidc_client_id" field.
+func OidcClientIDNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOidcClientID, v))
+}
+
+// OidcClientIDIn applies the In predicate on the "oidc_client_id" field.
+func OidcClientIDIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOidcClientID, vs...))
+}
+
+// OidcClientIDNotIn applies the NotIn predicate on the "oidc_client_id" field.
+func OidcClientIDNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOidcClientID, vs...))
+}
+
+// OidcClientIDGT applies the GT predicate on the "oidc_client_id" field.
+func OidcClientIDGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldOidcClientID, v))
+}
+
+// OidcClientIDGTE applies the GTE predicate on the "oidc_client_id" field.
+func OidcClientIDGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldOidcClientID, v))
+}
+
+// OidcClientIDLT applies the LT predicate on the "oidc_client_id" field.
+func OidcClientIDLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldOidcClientID, v))
+}
+
+// OidcClientIDLTE applies the LTE predicate on the "oidc_client_id" field.
+func OidcClientIDLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldOidcClientID, v))
+}
+
+// OidcClientIDContains applies the Contains predicate on the "oidc_client_id" field.
+func OidcClientIDContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldOidcClientID, v))
+}
+
+// OidcClientIDHasPrefix applies the HasPrefix predicate on the "oidc_client_id" field.
+func OidcClientIDHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldOidcClientID, v))
+}
+
+// OidcClientIDHasSuffix applies the HasSuffix predicate on the "oidc_client_id" field.
+func OidcClientIDHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldOidcClientID, v))
+}
+
+// OidcClientIDIsNil applies the IsNil predicate on the "oidc_client_id" field.
+func OidcClientIDIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOidcClientID))
+}
+
+// OidcClientIDNotNil applies the NotNil predicate on the "oidc_client_id" field.
+func OidcClientIDNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOidcClientID))
+}
+
+// OidcClientIDEqualFold applies the EqualFold predicate on the "oidc_client_id" field.
+func OidcClientIDEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldOidcClientID, v))
+}
+
+// OidcClientIDContainsFold applies the ContainsFold predicate on the "oidc_client_id" field.
+func OidcClientIDContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldOidcClientID, v))
+}
+
+// OidcClientAuthMethodEQ applies the EQ predicate on the "oidc_client_auth_method" field.
+func OidcClientAuthMethodEQ(v OidcClientAuthMethod) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOidcClientAuthMethod, v))
+}
+
+// OidcClientAuthMethodNEQ applies the NEQ predicate on the "oidc_client_auth_method" field.
+func OidcClientAuthMethodNEQ(v OidcClientAuthMethod) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOidcClientAuthMethod, v))
+}
+
+// OidcClientAuthMethodIn applies the In predicate on the "oidc_client_auth_method" field.
+func OidcClientAuthMethodIn(vs ...OidcClientAuthMethod) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOidcClientAuthMethod, vs...))
+}
+
+// OidcClientAuthMethodNotIn applies the NotIn predicate on the "oidc_client_auth_method" field.
+func OidcClientAuthMethodNotIn(vs ...OidcClientAuthMethod) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOidcClientAuthMethod, vs...))
+}
+
+// OidcClientAuthMethodIsNil applies the IsNil predicate on the "oidc_client_auth_method" field.
+func OidcClientAuthMethodIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOidcClientAuthMethod))
+}
+
+// OidcClientAuthMethodNotNil applies the NotNil predicate on the "oidc_client_auth_method" field.
+func OidcClientAuthMethodNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOidcClientAuthMethod))
+}
+
+// OidcScopesIsNil applies the IsNil predicate on the "oidc_scopes" field.
+func OidcScopesIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOidcScopes))
+}
+
+// OidcScopesNotNil applies the NotNil predicate on the "oidc_scopes" field.
+func OidcScopesNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOidcScopes))
+}
+
+// OidcUserinfoEnabledEQ applies the EQ predicate on the "oidc_userinfo_enabled" field.
+func OidcUserinfoEnabledEQ(v bool) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOidcUserinfoEnabled, v))
+}
+
+// OidcUserinfoEnabledNEQ applies the NEQ predicate on the "oidc_userinfo_enabled" field.
+func OidcUserinfoEnabledNEQ(v bool) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOidcUserinfoEnabled, v))
+}
+
+// SecretVersionEQ applies the EQ predicate on the "secret_version" field.
+func SecretVersionEQ(v int64) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldSecretVersion, v))
+}
+
+// SecretVersionNEQ applies the NEQ predicate on the "secret_version" field.
+func SecretVersionNEQ(v int64) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldSecretVersion, v))
+}
+
+// SecretVersionIn applies the In predicate on the "secret_version" field.
+func SecretVersionIn(vs ...int64) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldSecretVersion, vs...))
+}
+
+// SecretVersionNotIn applies the NotIn predicate on the "secret_version" field.
+func SecretVersionNotIn(vs ...int64) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldSecretVersion, vs...))
+}
+
+// SecretVersionGT applies the GT predicate on the "secret_version" field.
+func SecretVersionGT(v int64) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldSecretVersion, v))
+}
+
+// SecretVersionGTE applies the GTE predicate on the "secret_version" field.
+func SecretVersionGTE(v int64) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldSecretVersion, v))
+}
+
+// SecretVersionLT applies the LT predicate on the "secret_version" field.
+func SecretVersionLT(v int64) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldSecretVersion, v))
+}
+
+// SecretVersionLTE applies the LTE predicate on the "secret_version" field.
+func SecretVersionLTE(v int64) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldSecretVersion, v))
+}
+
+// SecretVersionIsNil applies the IsNil predicate on the "secret_version" field.
+func SecretVersionIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldSecretVersion))
+}
+
+// SecretVersionNotNil applies the NotNil predicate on the "secret_version" field.
+func SecretVersionNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldSecretVersion))
+}
+
+// LogoDataEQ applies the EQ predicate on the "logo_data" field.
+func LogoDataEQ(v []byte) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldLogoData, v))
+}
+
+// LogoDataNEQ applies the NEQ predicate on the "logo_data" field.
+func LogoDataNEQ(v []byte) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldLogoData, v))
+}
+
+// LogoDataIn applies the In predicate on the "logo_data" field.
+func LogoDataIn(vs ...[]byte) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldLogoData, vs...))
+}
+
+// LogoDataNotIn applies the NotIn predicate on the "logo_data" field.
+func LogoDataNotIn(vs ...[]byte) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldLogoData, vs...))
+}
+
+// LogoDataGT applies the GT predicate on the "logo_data" field.
+func LogoDataGT(v []byte) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldLogoData, v))
+}
+
+// LogoDataGTE applies the GTE predicate on the "logo_data" field.
+func LogoDataGTE(v []byte) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldLogoData, v))
+}
+
+// LogoDataLT applies the LT predicate on the "logo_data" field.
+func LogoDataLT(v []byte) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldLogoData, v))
+}
+
+// LogoDataLTE applies the LTE predicate on the "logo_data" field.
+func LogoDataLTE(v []byte) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldLogoData, v))
+}
+
+// LogoDataIsNil applies the IsNil predicate on the "logo_data" field.
+func LogoDataIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldLogoData))
+}
+
+// LogoDataNotNil applies the NotNil predicate on the "logo_data" field.
+func LogoDataNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldLogoData))
+}
+
+// LogoMediaTypeEQ applies the EQ predicate on the "logo_media_type" field.
+func LogoMediaTypeEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeNEQ applies the NEQ predicate on the "logo_media_type" field.
+func LogoMediaTypeNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeIn applies the In predicate on the "logo_media_type" field.
+func LogoMediaTypeIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldLogoMediaType, vs...))
+}
+
+// LogoMediaTypeNotIn applies the NotIn predicate on the "logo_media_type" field.
+func LogoMediaTypeNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldLogoMediaType, vs...))
+}
+
+// LogoMediaTypeGT applies the GT predicate on the "logo_media_type" field.
+func LogoMediaTypeGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeGTE applies the GTE predicate on the "logo_media_type" field.
+func LogoMediaTypeGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeLT applies the LT predicate on the "logo_media_type" field.
+func LogoMediaTypeLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeLTE applies the LTE predicate on the "logo_media_type" field.
+func LogoMediaTypeLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeContains applies the Contains predicate on the "logo_media_type" field.
+func LogoMediaTypeContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeHasPrefix applies the HasPrefix predicate on the "logo_media_type" field.
+func LogoMediaTypeHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeHasSuffix applies the HasSuffix predicate on the "logo_media_type" field.
+func LogoMediaTypeHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeIsNil applies the IsNil predicate on the "logo_media_type" field.
+func LogoMediaTypeIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldLogoMediaType))
+}
+
+// LogoMediaTypeNotNil applies the NotNil predicate on the "logo_media_type" field.
+func LogoMediaTypeNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldLogoMediaType))
+}
+
+// LogoMediaTypeEqualFold applies the EqualFold predicate on the "logo_media_type" field.
+func LogoMediaTypeEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldLogoMediaType, v))
+}
+
+// LogoMediaTypeContainsFold applies the ContainsFold predicate on the "logo_media_type" field.
+func LogoMediaTypeContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldLogoMediaType, v))
 }
 
 // UsernameLoginEnabledEQ applies the EQ predicate on the "username_login_enabled" field.

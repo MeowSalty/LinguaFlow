@@ -13,6 +13,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 )
@@ -55,6 +58,34 @@ func (_c *AuthConnectionCreate) SetNillableUpdatedAt(v *time.Time) *AuthConnecti
 // SetKind sets the "kind" field.
 func (_c *AuthConnectionCreate) SetKind(v authconnection.Kind) *AuthConnectionCreate {
 	_c.mutation.SetKind(v)
+	return _c
+}
+
+// SetAggregateRevision sets the "aggregate_revision" field.
+func (_c *AuthConnectionCreate) SetAggregateRevision(v int64) *AuthConnectionCreate {
+	_c.mutation.SetAggregateRevision(v)
+	return _c
+}
+
+// SetNillableAggregateRevision sets the "aggregate_revision" field if the given value is not nil.
+func (_c *AuthConnectionCreate) SetNillableAggregateRevision(v *int64) *AuthConnectionCreate {
+	if v != nil {
+		_c.SetAggregateRevision(*v)
+	}
+	return _c
+}
+
+// SetDraftRevision sets the "draft_revision" field.
+func (_c *AuthConnectionCreate) SetDraftRevision(v int64) *AuthConnectionCreate {
+	_c.mutation.SetDraftRevision(v)
+	return _c
+}
+
+// SetNillableDraftRevision sets the "draft_revision" field if the given value is not nil.
+func (_c *AuthConnectionCreate) SetNillableDraftRevision(v *int64) *AuthConnectionCreate {
+	if v != nil {
+		_c.SetDraftRevision(*v)
+	}
 	return _c
 }
 
@@ -166,6 +197,51 @@ func (_c *AuthConnectionCreate) AddSessions(v ...*RefreshSession) *AuthConnectio
 	return _c.AddSessionIDs(ids...)
 }
 
+// AddSecretIDs adds the "secrets" edge to the AuthConnectionSecret entity by IDs.
+func (_c *AuthConnectionCreate) AddSecretIDs(ids ...int) *AuthConnectionCreate {
+	_c.mutation.AddSecretIDs(ids...)
+	return _c
+}
+
+// AddSecrets adds the "secrets" edges to the AuthConnectionSecret entity.
+func (_c *AuthConnectionCreate) AddSecrets(v ...*AuthConnectionSecret) *AuthConnectionCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSecretIDs(ids...)
+}
+
+// AddValidationIDs adds the "validations" edge to the AuthConnectionValidation entity by IDs.
+func (_c *AuthConnectionCreate) AddValidationIDs(ids ...int) *AuthConnectionCreate {
+	_c.mutation.AddValidationIDs(ids...)
+	return _c
+}
+
+// AddValidations adds the "validations" edges to the AuthConnectionValidation entity.
+func (_c *AuthConnectionCreate) AddValidations(v ...*AuthConnectionValidation) *AuthConnectionCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddValidationIDs(ids...)
+}
+
+// AddTransactionIDs adds the "transactions" edge to the AuthTransaction entity by IDs.
+func (_c *AuthConnectionCreate) AddTransactionIDs(ids ...string) *AuthConnectionCreate {
+	_c.mutation.AddTransactionIDs(ids...)
+	return _c
+}
+
+// AddTransactions adds the "transactions" edges to the AuthTransaction entity.
+func (_c *AuthConnectionCreate) AddTransactions(v ...*AuthTransaction) *AuthConnectionCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddTransactionIDs(ids...)
+}
+
 // Mutation returns the AuthConnectionMutation object of the builder.
 func (_c *AuthConnectionCreate) Mutation() *AuthConnectionMutation {
 	return _c.mutation
@@ -217,6 +293,10 @@ func (_c *AuthConnectionCreate) defaults() error {
 		v := authconnection.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.AggregateRevision(); !ok {
+		v := authconnection.DefaultAggregateRevision
+		_c.mutation.SetAggregateRevision(v)
+	}
 	if _, ok := _c.mutation.AuthGeneration(); !ok {
 		v := authconnection.DefaultAuthGeneration
 		_c.mutation.SetAuthGeneration(v)
@@ -238,6 +318,19 @@ func (_c *AuthConnectionCreate) check() error {
 	if v, ok := _c.mutation.Kind(); ok {
 		if err := authconnection.KindValidator(v); err != nil {
 			return &ValidationError{Name: "kind", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.kind": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.AggregateRevision(); !ok {
+		return &ValidationError{Name: "aggregate_revision", err: errors.New(`ent: missing required field "AuthConnection.aggregate_revision"`)}
+	}
+	if v, ok := _c.mutation.AggregateRevision(); ok {
+		if err := authconnection.AggregateRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "aggregate_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.aggregate_revision": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.DraftRevision(); ok {
+		if err := authconnection.DraftRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "draft_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.draft_revision": %w`, err)}
 		}
 	}
 	if v, ok := _c.mutation.PublishedRevision(); ok {
@@ -304,6 +397,14 @@ func (_c *AuthConnectionCreate) createSpec() (*AuthConnection, *sqlgraph.CreateS
 	if value, ok := _c.mutation.Kind(); ok {
 		_spec.SetField(authconnection.FieldKind, field.TypeEnum, value)
 		_node.Kind = value
+	}
+	if value, ok := _c.mutation.AggregateRevision(); ok {
+		_spec.SetField(authconnection.FieldAggregateRevision, field.TypeInt64, value)
+		_node.AggregateRevision = value
+	}
+	if value, ok := _c.mutation.DraftRevision(); ok {
+		_spec.SetField(authconnection.FieldDraftRevision, field.TypeInt64, value)
+		_node.DraftRevision = &value
 	}
 	if value, ok := _c.mutation.PublishedRevision(); ok {
 		_spec.SetField(authconnection.FieldPublishedRevision, field.TypeInt64, value)
@@ -374,6 +475,54 @@ func (_c *AuthConnectionCreate) createSpec() (*AuthConnection, *sqlgraph.CreateS
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SecretsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.SecretsTable,
+			Columns: []string{authconnection.SecretsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionsecret.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ValidationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.ValidationsTable,
+			Columns: []string{authconnection.ValidationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authconnectionvalidation.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.TransactionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   authconnection.TransactionsTable,
+			Columns: []string{authconnection.TransactionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(authtransaction.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

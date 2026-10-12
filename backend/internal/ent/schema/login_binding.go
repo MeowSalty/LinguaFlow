@@ -20,6 +20,9 @@ func (LoginBinding) Fields() []ent.Field {
 		field.String("connection_id").NotEmpty().Immutable(),
 		field.Int("external_identity_id").Positive().Immutable(),
 		field.Time("last_used_at").Optional().Nillable(),
+		field.Time("last_verified_at").Optional().Nillable(),
+		field.Int64("verified_auth_generation").Default(0).NonNegative(),
+		field.Int64("verified_login_policy_revision").Default(0).NonNegative(),
 	}
 }
 func (LoginBinding) Hooks() []ent.Hook {

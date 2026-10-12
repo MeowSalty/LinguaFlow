@@ -93,6 +93,8 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "kind", Type: field.TypeEnum, Enums: []string{"password", "oidc", "generic_oauth2", "provider"}},
+		{Name: "aggregate_revision", Type: field.TypeInt64, Default: 1},
+		{Name: "draft_revision", Type: field.TypeInt64, Nullable: true},
 		{Name: "published_revision", Type: field.TypeInt64, Nullable: true},
 		{Name: "auth_generation", Type: field.TypeInt64, Default: 1},
 		{Name: "archived_at", Type: field.TypeTime, Nullable: true},
@@ -110,8 +112,17 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "revision", Type: field.TypeInt64},
 		{Name: "display_name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
 		{Name: "display_order", Type: field.TypeInt, Default: 0},
 		{Name: "config_version", Type: field.TypeInt, Default: 1},
+		{Name: "oidc_issuer", Type: field.TypeString, Nullable: true},
+		{Name: "oidc_client_id", Type: field.TypeString, Nullable: true},
+		{Name: "oidc_client_auth_method", Type: field.TypeEnum, Nullable: true, Enums: []string{"client_secret_basic", "client_secret_post"}},
+		{Name: "oidc_scopes", Type: field.TypeJSON, Nullable: true},
+		{Name: "oidc_userinfo_enabled", Type: field.TypeBool, Default: false},
+		{Name: "secret_version", Type: field.TypeInt64, Nullable: true},
+		{Name: "logo_data", Type: field.TypeBytes, Nullable: true},
+		{Name: "logo_media_type", Type: field.TypeString, Nullable: true},
 		{Name: "username_login_enabled", Type: field.TypeBool, Default: false},
 		{Name: "email_login_enabled", Type: field.TypeBool, Default: false},
 		{Name: "connection_id", Type: field.TypeString},
@@ -124,7 +135,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "auth_connection_revisions_auth_connections_revisions",
-				Columns:    []*schema.Column{AuthConnectionRevisionsColumns[9]},
+				Columns:    []*schema.Column{AuthConnectionRevisionsColumns[18]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -133,7 +144,137 @@ var (
 			{
 				Name:    "authconnectionrevision_connection_id_revision",
 				Unique:  true,
-				Columns: []*schema.Column{AuthConnectionRevisionsColumns[9], AuthConnectionRevisionsColumns[3]},
+				Columns: []*schema.Column{AuthConnectionRevisionsColumns[18], AuthConnectionRevisionsColumns[3]},
+			},
+		},
+	}
+	// AuthConnectionSecretsColumns holds the columns for the "auth_connection_secrets" table.
+	AuthConnectionSecretsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "version", Type: field.TypeInt64},
+		{Name: "cipher_version", Type: field.TypeInt, Default: 1},
+		{Name: "key_id", Type: field.TypeString},
+		{Name: "nonce", Type: field.TypeBytes},
+		{Name: "ciphertext", Type: field.TypeBytes},
+		{Name: "actor_user_id", Type: field.TypeInt},
+		{Name: "connection_id", Type: field.TypeString},
+	}
+	// AuthConnectionSecretsTable holds the schema information for the "auth_connection_secrets" table.
+	AuthConnectionSecretsTable = &schema.Table{
+		Name:       "auth_connection_secrets",
+		Columns:    AuthConnectionSecretsColumns,
+		PrimaryKey: []*schema.Column{AuthConnectionSecretsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "auth_connection_secrets_auth_connections_secrets",
+				Columns:    []*schema.Column{AuthConnectionSecretsColumns[9]},
+				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "authconnectionsecret_connection_id_version",
+				Unique:  true,
+				Columns: []*schema.Column{AuthConnectionSecretsColumns[9], AuthConnectionSecretsColumns[3]},
+			},
+		},
+	}
+	// AuthConnectionValidationsColumns holds the columns for the "auth_connection_validations" table.
+	AuthConnectionValidationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "fingerprint", Type: field.TypeString},
+		{Name: "revision", Type: field.TypeInt64},
+		{Name: "fresh_supported", Type: field.TypeBool, Default: false},
+		{Name: "tested_at", Type: field.TypeTime},
+		{Name: "actor_user_id", Type: field.TypeInt},
+		{Name: "connection_id", Type: field.TypeString},
+	}
+	// AuthConnectionValidationsTable holds the schema information for the "auth_connection_validations" table.
+	AuthConnectionValidationsTable = &schema.Table{
+		Name:       "auth_connection_validations",
+		Columns:    AuthConnectionValidationsColumns,
+		PrimaryKey: []*schema.Column{AuthConnectionValidationsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "auth_connection_validations_auth_connections_validations",
+				Columns:    []*schema.Column{AuthConnectionValidationsColumns[8]},
+				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "authconnectionvalidation_connection_id_fingerprint",
+				Unique:  true,
+				Columns: []*schema.Column{AuthConnectionValidationsColumns[8], AuthConnectionValidationsColumns[3]},
+			},
+		},
+	}
+	// AuthTransactionsColumns holds the columns for the "auth_transactions" table.
+	AuthTransactionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "purpose", Type: field.TypeEnum, Enums: []string{"login", "link", "reauthenticate", "test"}},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"created", "callback_processing", "callback_verified", "awaiting_confirmation", "completed", "cancelled", "expired", "failed"}, Default: "created"},
+		{Name: "connection_revision", Type: field.TypeInt64},
+		{Name: "connection_generation", Type: field.TypeInt64},
+		{Name: "policy_revision", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt, Nullable: true},
+		{Name: "auth_version", Type: field.TypeInt64, Nullable: true},
+		{Name: "binding_id", Type: field.TypeInt, Nullable: true},
+		{Name: "state_hash", Type: field.TypeString, Unique: true},
+		{Name: "nonce", Type: field.TypeString},
+		{Name: "pkce_verifier", Type: field.TypeString},
+		{Name: "browser_challenge", Type: field.TypeString},
+		{Name: "completion_url", Type: field.TypeString},
+		{Name: "return_to", Type: field.TypeString, Default: ""},
+		{Name: "exchange_ticket_hash", Type: field.TypeString, Unique: true, Nullable: true},
+		{Name: "exchange_ticket_expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "confirmation_token_hash", Type: field.TypeString, Unique: true, Nullable: true},
+		{Name: "confirmation_expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "identity_issuer", Type: field.TypeString, Nullable: true},
+		{Name: "identity_subject", Type: field.TypeString, Nullable: true},
+		{Name: "identity_display_name", Type: field.TypeString, Nullable: true},
+		{Name: "identity_username", Type: field.TypeString, Nullable: true},
+		{Name: "identity_email", Type: field.TypeString, Nullable: true},
+		{Name: "identity_auth_time", Type: field.TypeTime, Nullable: true},
+		{Name: "authorized_action", Type: field.TypeString, Nullable: true},
+		{Name: "authorized_target_id", Type: field.TypeString, Nullable: true},
+		{Name: "authorization_expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "failure_code", Type: field.TypeString, Nullable: true},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+		{Name: "connection_id", Type: field.TypeString},
+	}
+	// AuthTransactionsTable holds the schema information for the "auth_transactions" table.
+	AuthTransactionsTable = &schema.Table{
+		Name:       "auth_transactions",
+		Columns:    AuthTransactionsColumns,
+		PrimaryKey: []*schema.Column{AuthTransactionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "auth_transactions_auth_connections_transactions",
+				Columns:    []*schema.Column{AuthTransactionsColumns[33]},
+				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "authtransaction_status_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{AuthTransactionsColumns[4], AuthTransactionsColumns[31]},
+			},
+			{
+				Name:    "authtransaction_user_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{AuthTransactionsColumns[8], AuthTransactionsColumns[4]},
 			},
 		},
 	}
@@ -855,6 +996,9 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_verified_at", Type: field.TypeTime, Nullable: true},
+		{Name: "verified_auth_generation", Type: field.TypeInt64, Default: 0},
+		{Name: "verified_login_policy_revision", Type: field.TypeInt64, Default: 0},
 		{Name: "connection_id", Type: field.TypeString},
 		{Name: "external_identity_id", Type: field.TypeInt},
 		{Name: "user_id", Type: field.TypeInt},
@@ -867,19 +1011,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "login_bindings_auth_connections_bindings",
-				Columns:    []*schema.Column{LoginBindingsColumns[4]},
+				Columns:    []*schema.Column{LoginBindingsColumns[7]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "login_bindings_external_identities_bindings",
-				Columns:    []*schema.Column{LoginBindingsColumns[5]},
+				Columns:    []*schema.Column{LoginBindingsColumns[8]},
 				RefColumns: []*schema.Column{ExternalIdentitiesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "login_bindings_users_login_bindings",
-				Columns:    []*schema.Column{LoginBindingsColumns[6]},
+				Columns:    []*schema.Column{LoginBindingsColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -888,7 +1032,7 @@ var (
 			{
 				Name:    "loginbinding_user_id_connection_id",
 				Unique:  true,
-				Columns: []*schema.Column{LoginBindingsColumns[6], LoginBindingsColumns[4]},
+				Columns: []*schema.Column{LoginBindingsColumns[9], LoginBindingsColumns[7]},
 			},
 		},
 	}
@@ -1011,6 +1155,35 @@ var (
 				Columns:    []*schema.Column{PrunePromptTemplatesColumns[8]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
+			},
+		},
+	}
+	// ReauthenticationProofsColumns holds the columns for the "reauthentication_proofs" table.
+	ReauthenticationProofsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "token_hash", Type: field.TypeString, Unique: true},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "auth_version", Type: field.TypeInt64},
+		{Name: "method", Type: field.TypeEnum, Enums: []string{"password", "oidc"}},
+		{Name: "connection_id", Type: field.TypeString, Nullable: true},
+		{Name: "action", Type: field.TypeEnum, Enums: []string{"link", "password_set", "password_delete", "unlink"}},
+		{Name: "target_id", Type: field.TypeString},
+		{Name: "authenticated_at", Type: field.TypeTime},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
+	}
+	// ReauthenticationProofsTable holds the schema information for the "reauthentication_proofs" table.
+	ReauthenticationProofsTable = &schema.Table{
+		Name:       "reauthentication_proofs",
+		Columns:    ReauthenticationProofsColumns,
+		PrimaryKey: []*schema.Column{ReauthenticationProofsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "reauthenticationproof_user_id_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{ReauthenticationProofsColumns[4], ReauthenticationProofsColumns[11]},
 			},
 		},
 	}
@@ -2143,6 +2316,9 @@ var (
 		AuthChannelPoliciesTable,
 		AuthConnectionsTable,
 		AuthConnectionRevisionsTable,
+		AuthConnectionSecretsTable,
+		AuthConnectionValidationsTable,
+		AuthTransactionsTable,
 		BackendsTable,
 		BackupPinsTable,
 		BlobsTable,
@@ -2167,6 +2343,7 @@ var (
 		OrganizationsTable,
 		ProjectsTable,
 		PrunePromptTemplatesTable,
+		ReauthenticationProofsTable,
 		RefreshSessionsTable,
 		RefreshTokensTable,
 		ResourcesTable,
@@ -2209,6 +2386,9 @@ func init() {
 		"auth_connection_reserved_password": "((id = 'password' AND kind = 'password' AND archived_at IS NULL) OR (id <> 'password' AND kind <> 'password'))",
 	}
 	AuthConnectionRevisionsTable.ForeignKeys[0].RefTable = AuthConnectionsTable
+	AuthConnectionSecretsTable.ForeignKeys[0].RefTable = AuthConnectionsTable
+	AuthConnectionValidationsTable.ForeignKeys[0].RefTable = AuthConnectionsTable
+	AuthTransactionsTable.ForeignKeys[0].RefTable = AuthConnectionsTable
 	BackendsTable.ForeignKeys[0].RefTable = CredentialsTable
 	BackendsTable.ForeignKeys[1].RefTable = OrganizationsTable
 	BackendsTable.ForeignKeys[2].RefTable = UsersTable

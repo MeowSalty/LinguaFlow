@@ -18,6 +18,15 @@ type AuthConnection func(*sql.Selector)
 // AuthConnectionRevision is the predicate function for authconnectionrevision builders.
 type AuthConnectionRevision func(*sql.Selector)
 
+// AuthConnectionSecret is the predicate function for authconnectionsecret builders.
+type AuthConnectionSecret func(*sql.Selector)
+
+// AuthConnectionValidation is the predicate function for authconnectionvalidation builders.
+type AuthConnectionValidation func(*sql.Selector)
+
+// AuthTransaction is the predicate function for authtransaction builders.
+type AuthTransaction func(*sql.Selector)
+
 // Backend is the predicate function for backend builders.
 type Backend func(*sql.Selector)
 
@@ -89,6 +98,9 @@ type Project func(*sql.Selector)
 
 // PrunePromptTemplate is the predicate function for pruneprompttemplate builders.
 type PrunePromptTemplate func(*sql.Selector)
+
+// ReauthenticationProof is the predicate function for reauthenticationproof builders.
+type ReauthenticationProof func(*sql.Selector)
 
 // RefreshSession is the predicate function for refreshsession builders.
 type RefreshSession func(*sql.Selector)

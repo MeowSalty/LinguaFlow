@@ -84,6 +84,48 @@ func (_c *LoginBindingCreate) SetNillableLastUsedAt(v *time.Time) *LoginBindingC
 	return _c
 }
 
+// SetLastVerifiedAt sets the "last_verified_at" field.
+func (_c *LoginBindingCreate) SetLastVerifiedAt(v time.Time) *LoginBindingCreate {
+	_c.mutation.SetLastVerifiedAt(v)
+	return _c
+}
+
+// SetNillableLastVerifiedAt sets the "last_verified_at" field if the given value is not nil.
+func (_c *LoginBindingCreate) SetNillableLastVerifiedAt(v *time.Time) *LoginBindingCreate {
+	if v != nil {
+		_c.SetLastVerifiedAt(*v)
+	}
+	return _c
+}
+
+// SetVerifiedAuthGeneration sets the "verified_auth_generation" field.
+func (_c *LoginBindingCreate) SetVerifiedAuthGeneration(v int64) *LoginBindingCreate {
+	_c.mutation.SetVerifiedAuthGeneration(v)
+	return _c
+}
+
+// SetNillableVerifiedAuthGeneration sets the "verified_auth_generation" field if the given value is not nil.
+func (_c *LoginBindingCreate) SetNillableVerifiedAuthGeneration(v *int64) *LoginBindingCreate {
+	if v != nil {
+		_c.SetVerifiedAuthGeneration(*v)
+	}
+	return _c
+}
+
+// SetVerifiedLoginPolicyRevision sets the "verified_login_policy_revision" field.
+func (_c *LoginBindingCreate) SetVerifiedLoginPolicyRevision(v int64) *LoginBindingCreate {
+	_c.mutation.SetVerifiedLoginPolicyRevision(v)
+	return _c
+}
+
+// SetNillableVerifiedLoginPolicyRevision sets the "verified_login_policy_revision" field if the given value is not nil.
+func (_c *LoginBindingCreate) SetNillableVerifiedLoginPolicyRevision(v *int64) *LoginBindingCreate {
+	if v != nil {
+		_c.SetVerifiedLoginPolicyRevision(*v)
+	}
+	return _c
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_c *LoginBindingCreate) SetUser(v *User) *LoginBindingCreate {
 	return _c.SetUserID(v.ID)
@@ -165,6 +207,14 @@ func (_c *LoginBindingCreate) defaults() error {
 		v := loginbinding.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.VerifiedAuthGeneration(); !ok {
+		v := loginbinding.DefaultVerifiedAuthGeneration
+		_c.mutation.SetVerifiedAuthGeneration(v)
+	}
+	if _, ok := _c.mutation.VerifiedLoginPolicyRevision(); !ok {
+		v := loginbinding.DefaultVerifiedLoginPolicyRevision
+		_c.mutation.SetVerifiedLoginPolicyRevision(v)
+	}
 	return nil
 }
 
@@ -198,6 +248,22 @@ func (_c *LoginBindingCreate) check() error {
 	if v, ok := _c.mutation.ExternalIdentityID(); ok {
 		if err := loginbinding.ExternalIdentityIDValidator(v); err != nil {
 			return &ValidationError{Name: "external_identity_id", err: fmt.Errorf(`ent: validator failed for field "LoginBinding.external_identity_id": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.VerifiedAuthGeneration(); !ok {
+		return &ValidationError{Name: "verified_auth_generation", err: errors.New(`ent: missing required field "LoginBinding.verified_auth_generation"`)}
+	}
+	if v, ok := _c.mutation.VerifiedAuthGeneration(); ok {
+		if err := loginbinding.VerifiedAuthGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "verified_auth_generation", err: fmt.Errorf(`ent: validator failed for field "LoginBinding.verified_auth_generation": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.VerifiedLoginPolicyRevision(); !ok {
+		return &ValidationError{Name: "verified_login_policy_revision", err: errors.New(`ent: missing required field "LoginBinding.verified_login_policy_revision"`)}
+	}
+	if v, ok := _c.mutation.VerifiedLoginPolicyRevision(); ok {
+		if err := loginbinding.VerifiedLoginPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "verified_login_policy_revision", err: fmt.Errorf(`ent: validator failed for field "LoginBinding.verified_login_policy_revision": %w`, err)}
 		}
 	}
 	if len(_c.mutation.UserIDs()) == 0 {
@@ -246,6 +312,18 @@ func (_c *LoginBindingCreate) createSpec() (*LoginBinding, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.LastUsedAt(); ok {
 		_spec.SetField(loginbinding.FieldLastUsedAt, field.TypeTime, value)
 		_node.LastUsedAt = &value
+	}
+	if value, ok := _c.mutation.LastVerifiedAt(); ok {
+		_spec.SetField(loginbinding.FieldLastVerifiedAt, field.TypeTime, value)
+		_node.LastVerifiedAt = &value
+	}
+	if value, ok := _c.mutation.VerifiedAuthGeneration(); ok {
+		_spec.SetField(loginbinding.FieldVerifiedAuthGeneration, field.TypeInt64, value)
+		_node.VerifiedAuthGeneration = value
+	}
+	if value, ok := _c.mutation.VerifiedLoginPolicyRevision(); ok {
+		_spec.SetField(loginbinding.FieldVerifiedLoginPolicyRevision, field.TypeInt64, value)
+		_node.VerifiedLoginPolicyRevision = value
 	}
 	if nodes := _c.mutation.UserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

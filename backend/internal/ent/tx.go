@@ -22,6 +22,12 @@ type Tx struct {
 	AuthConnection *AuthConnectionClient
 	// AuthConnectionRevision is the client for interacting with the AuthConnectionRevision builders.
 	AuthConnectionRevision *AuthConnectionRevisionClient
+	// AuthConnectionSecret is the client for interacting with the AuthConnectionSecret builders.
+	AuthConnectionSecret *AuthConnectionSecretClient
+	// AuthConnectionValidation is the client for interacting with the AuthConnectionValidation builders.
+	AuthConnectionValidation *AuthConnectionValidationClient
+	// AuthTransaction is the client for interacting with the AuthTransaction builders.
+	AuthTransaction *AuthTransactionClient
 	// Backend is the client for interacting with the Backend builders.
 	Backend *BackendClient
 	// BackupPin is the client for interacting with the BackupPin builders.
@@ -70,6 +76,8 @@ type Tx struct {
 	Project *ProjectClient
 	// PrunePromptTemplate is the client for interacting with the PrunePromptTemplate builders.
 	PrunePromptTemplate *PrunePromptTemplateClient
+	// ReauthenticationProof is the client for interacting with the ReauthenticationProof builders.
+	ReauthenticationProof *ReauthenticationProofClient
 	// RefreshSession is the client for interacting with the RefreshSession builders.
 	RefreshSession *RefreshSessionClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
@@ -261,6 +269,9 @@ func (tx *Tx) init() {
 	tx.AuthChannelPolicy = NewAuthChannelPolicyClient(tx.config)
 	tx.AuthConnection = NewAuthConnectionClient(tx.config)
 	tx.AuthConnectionRevision = NewAuthConnectionRevisionClient(tx.config)
+	tx.AuthConnectionSecret = NewAuthConnectionSecretClient(tx.config)
+	tx.AuthConnectionValidation = NewAuthConnectionValidationClient(tx.config)
+	tx.AuthTransaction = NewAuthTransactionClient(tx.config)
 	tx.Backend = NewBackendClient(tx.config)
 	tx.BackupPin = NewBackupPinClient(tx.config)
 	tx.Blob = NewBlobClient(tx.config)
@@ -285,6 +296,7 @@ func (tx *Tx) init() {
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
 	tx.PrunePromptTemplate = NewPrunePromptTemplateClient(tx.config)
+	tx.ReauthenticationProof = NewReauthenticationProofClient(tx.config)
 	tx.RefreshSession = NewRefreshSessionClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)

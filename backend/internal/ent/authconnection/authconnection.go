@@ -22,6 +22,10 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldKind holds the string denoting the kind field in the database.
 	FieldKind = "kind"
+	// FieldAggregateRevision holds the string denoting the aggregate_revision field in the database.
+	FieldAggregateRevision = "aggregate_revision"
+	// FieldDraftRevision holds the string denoting the draft_revision field in the database.
+	FieldDraftRevision = "draft_revision"
 	// FieldPublishedRevision holds the string denoting the published_revision field in the database.
 	FieldPublishedRevision = "published_revision"
 	// FieldAuthGeneration holds the string denoting the auth_generation field in the database.
@@ -36,6 +40,12 @@ const (
 	EdgeBindings = "bindings"
 	// EdgeSessions holds the string denoting the sessions edge name in mutations.
 	EdgeSessions = "sessions"
+	// EdgeSecrets holds the string denoting the secrets edge name in mutations.
+	EdgeSecrets = "secrets"
+	// EdgeValidations holds the string denoting the validations edge name in mutations.
+	EdgeValidations = "validations"
+	// EdgeTransactions holds the string denoting the transactions edge name in mutations.
+	EdgeTransactions = "transactions"
 	// Table holds the table name of the authconnection in the database.
 	Table = "auth_connections"
 	// RevisionsTable is the table that holds the revisions relation/edge.
@@ -66,6 +76,27 @@ const (
 	SessionsInverseTable = "refresh_sessions"
 	// SessionsColumn is the table column denoting the sessions relation/edge.
 	SessionsColumn = "connection_id"
+	// SecretsTable is the table that holds the secrets relation/edge.
+	SecretsTable = "auth_connection_secrets"
+	// SecretsInverseTable is the table name for the AuthConnectionSecret entity.
+	// It exists in this package in order to avoid circular dependency with the "authconnectionsecret" package.
+	SecretsInverseTable = "auth_connection_secrets"
+	// SecretsColumn is the table column denoting the secrets relation/edge.
+	SecretsColumn = "connection_id"
+	// ValidationsTable is the table that holds the validations relation/edge.
+	ValidationsTable = "auth_connection_validations"
+	// ValidationsInverseTable is the table name for the AuthConnectionValidation entity.
+	// It exists in this package in order to avoid circular dependency with the "authconnectionvalidation" package.
+	ValidationsInverseTable = "auth_connection_validations"
+	// ValidationsColumn is the table column denoting the validations relation/edge.
+	ValidationsColumn = "connection_id"
+	// TransactionsTable is the table that holds the transactions relation/edge.
+	TransactionsTable = "auth_transactions"
+	// TransactionsInverseTable is the table name for the AuthTransaction entity.
+	// It exists in this package in order to avoid circular dependency with the "authtransaction" package.
+	TransactionsInverseTable = "auth_transactions"
+	// TransactionsColumn is the table column denoting the transactions relation/edge.
+	TransactionsColumn = "connection_id"
 )
 
 // Columns holds all SQL columns for authconnection fields.
@@ -74,6 +105,8 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldKind,
+	FieldAggregateRevision,
+	FieldDraftRevision,
 	FieldPublishedRevision,
 	FieldAuthGeneration,
 	FieldArchivedAt,
@@ -102,6 +135,12 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultAggregateRevision holds the default value on creation for the "aggregate_revision" field.
+	DefaultAggregateRevision int64
+	// AggregateRevisionValidator is a validator for the "aggregate_revision" field. It is called by the builders before save.
+	AggregateRevisionValidator func(int64) error
+	// DraftRevisionValidator is a validator for the "draft_revision" field. It is called by the builders before save.
+	DraftRevisionValidator func(int64) error
 	// PublishedRevisionValidator is a validator for the "published_revision" field. It is called by the builders before save.
 	PublishedRevisionValidator func(int64) error
 	// DefaultAuthGeneration holds the default value on creation for the "auth_generation" field.
@@ -158,6 +197,16 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByKind orders the results by the kind field.
 func ByKind(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldKind, opts...).ToFunc()
+}
+
+// ByAggregateRevision orders the results by the aggregate_revision field.
+func ByAggregateRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAggregateRevision, opts...).ToFunc()
+}
+
+// ByDraftRevision orders the results by the draft_revision field.
+func ByDraftRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDraftRevision, opts...).ToFunc()
 }
 
 // ByPublishedRevision orders the results by the published_revision field.
@@ -230,6 +279,48 @@ func BySessions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newSessionsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// BySecretsCount orders the results by secrets count.
+func BySecretsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSecretsStep(), opts...)
+	}
+}
+
+// BySecrets orders the results by secrets terms.
+func BySecrets(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSecretsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByValidationsCount orders the results by validations count.
+func ByValidationsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newValidationsStep(), opts...)
+	}
+}
+
+// ByValidations orders the results by validations terms.
+func ByValidations(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newValidationsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByTransactionsCount orders the results by transactions count.
+func ByTransactionsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newTransactionsStep(), opts...)
+	}
+}
+
+// ByTransactions orders the results by transactions terms.
+func ByTransactions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTransactionsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newRevisionsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -256,5 +347,26 @@ func newSessionsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(SessionsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, SessionsTable, SessionsColumn),
+	)
+}
+func newSecretsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SecretsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SecretsTable, SecretsColumn),
+	)
+}
+func newValidationsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ValidationsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ValidationsTable, ValidationsColumn),
+	)
+}
+func newTransactionsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TransactionsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TransactionsTable, TransactionsColumn),
 	)
 }

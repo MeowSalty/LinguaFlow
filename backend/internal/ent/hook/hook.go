@@ -57,6 +57,42 @@ func (f AuthConnectionRevisionFunc) Mutate(ctx context.Context, m ent.Mutation) 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthConnectionRevisionMutation", m)
 }
 
+// The AuthConnectionSecretFunc type is an adapter to allow the use of ordinary
+// function as AuthConnectionSecret mutator.
+type AuthConnectionSecretFunc func(context.Context, *ent.AuthConnectionSecretMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthConnectionSecretFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthConnectionSecretMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthConnectionSecretMutation", m)
+}
+
+// The AuthConnectionValidationFunc type is an adapter to allow the use of ordinary
+// function as AuthConnectionValidation mutator.
+type AuthConnectionValidationFunc func(context.Context, *ent.AuthConnectionValidationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthConnectionValidationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthConnectionValidationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthConnectionValidationMutation", m)
+}
+
+// The AuthTransactionFunc type is an adapter to allow the use of ordinary
+// function as AuthTransaction mutator.
+type AuthTransactionFunc func(context.Context, *ent.AuthTransactionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthTransactionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthTransactionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthTransactionMutation", m)
+}
+
 // The BackendFunc type is an adapter to allow the use of ordinary
 // function as Backend mutator.
 type BackendFunc func(context.Context, *ent.BackendMutation) (ent.Value, error)
@@ -343,6 +379,18 @@ func (f PrunePromptTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (en
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PrunePromptTemplateMutation", m)
+}
+
+// The ReauthenticationProofFunc type is an adapter to allow the use of ordinary
+// function as ReauthenticationProof mutator.
+type ReauthenticationProofFunc func(context.Context, *ent.ReauthenticationProofMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ReauthenticationProofFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ReauthenticationProofMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ReauthenticationProofMutation", m)
 }
 
 // The RefreshSessionFunc type is an adapter to allow the use of ordinary

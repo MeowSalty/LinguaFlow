@@ -27,6 +27,12 @@ const (
 	FieldExternalIdentityID = "external_identity_id"
 	// FieldLastUsedAt holds the string denoting the last_used_at field in the database.
 	FieldLastUsedAt = "last_used_at"
+	// FieldLastVerifiedAt holds the string denoting the last_verified_at field in the database.
+	FieldLastVerifiedAt = "last_verified_at"
+	// FieldVerifiedAuthGeneration holds the string denoting the verified_auth_generation field in the database.
+	FieldVerifiedAuthGeneration = "verified_auth_generation"
+	// FieldVerifiedLoginPolicyRevision holds the string denoting the verified_login_policy_revision field in the database.
+	FieldVerifiedLoginPolicyRevision = "verified_login_policy_revision"
 	// EdgeUser holds the string denoting the user edge name in mutations.
 	EdgeUser = "user"
 	// EdgeConnection holds the string denoting the connection edge name in mutations.
@@ -76,6 +82,9 @@ var Columns = []string{
 	FieldConnectionID,
 	FieldExternalIdentityID,
 	FieldLastUsedAt,
+	FieldLastVerifiedAt,
+	FieldVerifiedAuthGeneration,
+	FieldVerifiedLoginPolicyRevision,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -107,6 +116,14 @@ var (
 	ConnectionIDValidator func(string) error
 	// ExternalIdentityIDValidator is a validator for the "external_identity_id" field. It is called by the builders before save.
 	ExternalIdentityIDValidator func(int) error
+	// DefaultVerifiedAuthGeneration holds the default value on creation for the "verified_auth_generation" field.
+	DefaultVerifiedAuthGeneration int64
+	// VerifiedAuthGenerationValidator is a validator for the "verified_auth_generation" field. It is called by the builders before save.
+	VerifiedAuthGenerationValidator func(int64) error
+	// DefaultVerifiedLoginPolicyRevision holds the default value on creation for the "verified_login_policy_revision" field.
+	DefaultVerifiedLoginPolicyRevision int64
+	// VerifiedLoginPolicyRevisionValidator is a validator for the "verified_login_policy_revision" field. It is called by the builders before save.
+	VerifiedLoginPolicyRevisionValidator func(int64) error
 )
 
 // OrderOption defines the ordering options for the LoginBinding queries.
@@ -145,6 +162,21 @@ func ByExternalIdentityID(opts ...sql.OrderTermOption) OrderOption {
 // ByLastUsedAt orders the results by the last_used_at field.
 func ByLastUsedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastUsedAt, opts...).ToFunc()
+}
+
+// ByLastVerifiedAt orders the results by the last_verified_at field.
+func ByLastVerifiedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLastVerifiedAt, opts...).ToFunc()
+}
+
+// ByVerifiedAuthGeneration orders the results by the verified_auth_generation field.
+func ByVerifiedAuthGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVerifiedAuthGeneration, opts...).ToFunc()
+}
+
+// ByVerifiedLoginPolicyRevision orders the results by the verified_login_policy_revision field.
+func ByVerifiedLoginPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVerifiedLoginPolicyRevision, opts...).ToFunc()
 }
 
 // ByUserField orders the results by user field.

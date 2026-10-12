@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -28,10 +29,28 @@ type AuthConnectionRevision struct {
 	Revision int64 `json:"revision,omitempty"`
 	// DisplayName holds the value of the "display_name" field.
 	DisplayName string `json:"display_name,omitempty"`
+	// Description holds the value of the "description" field.
+	Description string `json:"description,omitempty"`
 	// DisplayOrder holds the value of the "display_order" field.
 	DisplayOrder int `json:"display_order,omitempty"`
 	// ConfigVersion holds the value of the "config_version" field.
 	ConfigVersion int `json:"config_version,omitempty"`
+	// OidcIssuer holds the value of the "oidc_issuer" field.
+	OidcIssuer string `json:"oidc_issuer,omitempty"`
+	// OidcClientID holds the value of the "oidc_client_id" field.
+	OidcClientID string `json:"oidc_client_id,omitempty"`
+	// OidcClientAuthMethod holds the value of the "oidc_client_auth_method" field.
+	OidcClientAuthMethod authconnectionrevision.OidcClientAuthMethod `json:"oidc_client_auth_method,omitempty"`
+	// OidcScopes holds the value of the "oidc_scopes" field.
+	OidcScopes []string `json:"oidc_scopes,omitempty"`
+	// OidcUserinfoEnabled holds the value of the "oidc_userinfo_enabled" field.
+	OidcUserinfoEnabled bool `json:"oidc_userinfo_enabled,omitempty"`
+	// SecretVersion holds the value of the "secret_version" field.
+	SecretVersion *int64 `json:"secret_version,omitempty"`
+	// LogoData holds the value of the "logo_data" field.
+	LogoData []byte `json:"-"`
+	// LogoMediaType holds the value of the "logo_media_type" field.
+	LogoMediaType string `json:"logo_media_type,omitempty"`
 	// UsernameLoginEnabled holds the value of the "username_login_enabled" field.
 	UsernameLoginEnabled bool `json:"username_login_enabled,omitempty"`
 	// EmailLoginEnabled holds the value of the "email_login_enabled" field.
@@ -67,11 +86,13 @@ func (*AuthConnectionRevision) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case authconnectionrevision.FieldUsernameLoginEnabled, authconnectionrevision.FieldEmailLoginEnabled:
+		case authconnectionrevision.FieldOidcScopes, authconnectionrevision.FieldLogoData:
+			values[i] = new([]byte)
+		case authconnectionrevision.FieldOidcUserinfoEnabled, authconnectionrevision.FieldUsernameLoginEnabled, authconnectionrevision.FieldEmailLoginEnabled:
 			values[i] = new(sql.NullBool)
-		case authconnectionrevision.FieldID, authconnectionrevision.FieldRevision, authconnectionrevision.FieldDisplayOrder, authconnectionrevision.FieldConfigVersion:
+		case authconnectionrevision.FieldID, authconnectionrevision.FieldRevision, authconnectionrevision.FieldDisplayOrder, authconnectionrevision.FieldConfigVersion, authconnectionrevision.FieldSecretVersion:
 			values[i] = new(sql.NullInt64)
-		case authconnectionrevision.FieldConnectionID, authconnectionrevision.FieldDisplayName:
+		case authconnectionrevision.FieldConnectionID, authconnectionrevision.FieldDisplayName, authconnectionrevision.FieldDescription, authconnectionrevision.FieldOidcIssuer, authconnectionrevision.FieldOidcClientID, authconnectionrevision.FieldOidcClientAuthMethod, authconnectionrevision.FieldLogoMediaType:
 			values[i] = new(sql.NullString)
 		case authconnectionrevision.FieldCreatedAt, authconnectionrevision.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -126,6 +147,12 @@ func (_m *AuthConnectionRevision) assignValues(columns []string, values []any) e
 			} else if value.Valid {
 				_m.DisplayName = value.String
 			}
+		case authconnectionrevision.FieldDescription:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field description", values[i])
+			} else if value.Valid {
+				_m.Description = value.String
+			}
 		case authconnectionrevision.FieldDisplayOrder:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field display_order", values[i])
@@ -137,6 +164,57 @@ func (_m *AuthConnectionRevision) assignValues(columns []string, values []any) e
 				return fmt.Errorf("unexpected type %T for field config_version", values[i])
 			} else if value.Valid {
 				_m.ConfigVersion = int(value.Int64)
+			}
+		case authconnectionrevision.FieldOidcIssuer:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oidc_issuer", values[i])
+			} else if value.Valid {
+				_m.OidcIssuer = value.String
+			}
+		case authconnectionrevision.FieldOidcClientID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oidc_client_id", values[i])
+			} else if value.Valid {
+				_m.OidcClientID = value.String
+			}
+		case authconnectionrevision.FieldOidcClientAuthMethod:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oidc_client_auth_method", values[i])
+			} else if value.Valid {
+				_m.OidcClientAuthMethod = authconnectionrevision.OidcClientAuthMethod(value.String)
+			}
+		case authconnectionrevision.FieldOidcScopes:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field oidc_scopes", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.OidcScopes); err != nil {
+					return fmt.Errorf("unmarshal field oidc_scopes: %w", err)
+				}
+			}
+		case authconnectionrevision.FieldOidcUserinfoEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field oidc_userinfo_enabled", values[i])
+			} else if value.Valid {
+				_m.OidcUserinfoEnabled = value.Bool
+			}
+		case authconnectionrevision.FieldSecretVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field secret_version", values[i])
+			} else if value.Valid {
+				_m.SecretVersion = new(int64)
+				*_m.SecretVersion = value.Int64
+			}
+		case authconnectionrevision.FieldLogoData:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field logo_data", values[i])
+			} else if value != nil {
+				_m.LogoData = *value
+			}
+		case authconnectionrevision.FieldLogoMediaType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field logo_media_type", values[i])
+			} else if value.Valid {
+				_m.LogoMediaType = value.String
 			}
 		case authconnectionrevision.FieldUsernameLoginEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -206,11 +284,39 @@ func (_m *AuthConnectionRevision) String() string {
 	builder.WriteString("display_name=")
 	builder.WriteString(_m.DisplayName)
 	builder.WriteString(", ")
+	builder.WriteString("description=")
+	builder.WriteString(_m.Description)
+	builder.WriteString(", ")
 	builder.WriteString("display_order=")
 	builder.WriteString(fmt.Sprintf("%v", _m.DisplayOrder))
 	builder.WriteString(", ")
 	builder.WriteString("config_version=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ConfigVersion))
+	builder.WriteString(", ")
+	builder.WriteString("oidc_issuer=")
+	builder.WriteString(_m.OidcIssuer)
+	builder.WriteString(", ")
+	builder.WriteString("oidc_client_id=")
+	builder.WriteString(_m.OidcClientID)
+	builder.WriteString(", ")
+	builder.WriteString("oidc_client_auth_method=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OidcClientAuthMethod))
+	builder.WriteString(", ")
+	builder.WriteString("oidc_scopes=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OidcScopes))
+	builder.WriteString(", ")
+	builder.WriteString("oidc_userinfo_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OidcUserinfoEnabled))
+	builder.WriteString(", ")
+	if v := _m.SecretVersion; v != nil {
+		builder.WriteString("secret_version=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("logo_data=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("logo_media_type=")
+	builder.WriteString(_m.LogoMediaType)
 	builder.WriteString(", ")
 	builder.WriteString("username_login_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.UsernameLoginEnabled))

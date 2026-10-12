@@ -55,6 +55,68 @@ func (_u *LoginBindingUpdate) ClearLastUsedAt() *LoginBindingUpdate {
 	return _u
 }
 
+// SetLastVerifiedAt sets the "last_verified_at" field.
+func (_u *LoginBindingUpdate) SetLastVerifiedAt(v time.Time) *LoginBindingUpdate {
+	_u.mutation.SetLastVerifiedAt(v)
+	return _u
+}
+
+// SetNillableLastVerifiedAt sets the "last_verified_at" field if the given value is not nil.
+func (_u *LoginBindingUpdate) SetNillableLastVerifiedAt(v *time.Time) *LoginBindingUpdate {
+	if v != nil {
+		_u.SetLastVerifiedAt(*v)
+	}
+	return _u
+}
+
+// ClearLastVerifiedAt clears the value of the "last_verified_at" field.
+func (_u *LoginBindingUpdate) ClearLastVerifiedAt() *LoginBindingUpdate {
+	_u.mutation.ClearLastVerifiedAt()
+	return _u
+}
+
+// SetVerifiedAuthGeneration sets the "verified_auth_generation" field.
+func (_u *LoginBindingUpdate) SetVerifiedAuthGeneration(v int64) *LoginBindingUpdate {
+	_u.mutation.ResetVerifiedAuthGeneration()
+	_u.mutation.SetVerifiedAuthGeneration(v)
+	return _u
+}
+
+// SetNillableVerifiedAuthGeneration sets the "verified_auth_generation" field if the given value is not nil.
+func (_u *LoginBindingUpdate) SetNillableVerifiedAuthGeneration(v *int64) *LoginBindingUpdate {
+	if v != nil {
+		_u.SetVerifiedAuthGeneration(*v)
+	}
+	return _u
+}
+
+// AddVerifiedAuthGeneration adds value to the "verified_auth_generation" field.
+func (_u *LoginBindingUpdate) AddVerifiedAuthGeneration(v int64) *LoginBindingUpdate {
+	_u.mutation.AddVerifiedAuthGeneration(v)
+	return _u
+}
+
+// SetVerifiedLoginPolicyRevision sets the "verified_login_policy_revision" field.
+func (_u *LoginBindingUpdate) SetVerifiedLoginPolicyRevision(v int64) *LoginBindingUpdate {
+	_u.mutation.ResetVerifiedLoginPolicyRevision()
+	_u.mutation.SetVerifiedLoginPolicyRevision(v)
+	return _u
+}
+
+// SetNillableVerifiedLoginPolicyRevision sets the "verified_login_policy_revision" field if the given value is not nil.
+func (_u *LoginBindingUpdate) SetNillableVerifiedLoginPolicyRevision(v *int64) *LoginBindingUpdate {
+	if v != nil {
+		_u.SetVerifiedLoginPolicyRevision(*v)
+	}
+	return _u
+}
+
+// AddVerifiedLoginPolicyRevision adds value to the "verified_login_policy_revision" field.
+func (_u *LoginBindingUpdate) AddVerifiedLoginPolicyRevision(v int64) *LoginBindingUpdate {
+	_u.mutation.AddVerifiedLoginPolicyRevision(v)
+	return _u
+}
+
 // AddSessionIDs adds the "sessions" edge to the RefreshSession entity by IDs.
 func (_u *LoginBindingUpdate) AddSessionIDs(ids ...int) *LoginBindingUpdate {
 	_u.mutation.AddSessionIDs(ids...)
@@ -140,6 +202,16 @@ func (_u *LoginBindingUpdate) defaults() error {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *LoginBindingUpdate) check() error {
+	if v, ok := _u.mutation.VerifiedAuthGeneration(); ok {
+		if err := loginbinding.VerifiedAuthGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "verified_auth_generation", err: fmt.Errorf(`ent: validator failed for field "LoginBinding.verified_auth_generation": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.VerifiedLoginPolicyRevision(); ok {
+		if err := loginbinding.VerifiedLoginPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "verified_login_policy_revision", err: fmt.Errorf(`ent: validator failed for field "LoginBinding.verified_login_policy_revision": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "LoginBinding.user"`)
 	}
@@ -172,6 +244,24 @@ func (_u *LoginBindingUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.LastUsedAtCleared() {
 		_spec.ClearField(loginbinding.FieldLastUsedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.LastVerifiedAt(); ok {
+		_spec.SetField(loginbinding.FieldLastVerifiedAt, field.TypeTime, value)
+	}
+	if _u.mutation.LastVerifiedAtCleared() {
+		_spec.ClearField(loginbinding.FieldLastVerifiedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.VerifiedAuthGeneration(); ok {
+		_spec.SetField(loginbinding.FieldVerifiedAuthGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedVerifiedAuthGeneration(); ok {
+		_spec.AddField(loginbinding.FieldVerifiedAuthGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.VerifiedLoginPolicyRevision(); ok {
+		_spec.SetField(loginbinding.FieldVerifiedLoginPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedVerifiedLoginPolicyRevision(); ok {
+		_spec.AddField(loginbinding.FieldVerifiedLoginPolicyRevision, field.TypeInt64, value)
 	}
 	if _u.mutation.SessionsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -261,6 +351,68 @@ func (_u *LoginBindingUpdateOne) SetNillableLastUsedAt(v *time.Time) *LoginBindi
 // ClearLastUsedAt clears the value of the "last_used_at" field.
 func (_u *LoginBindingUpdateOne) ClearLastUsedAt() *LoginBindingUpdateOne {
 	_u.mutation.ClearLastUsedAt()
+	return _u
+}
+
+// SetLastVerifiedAt sets the "last_verified_at" field.
+func (_u *LoginBindingUpdateOne) SetLastVerifiedAt(v time.Time) *LoginBindingUpdateOne {
+	_u.mutation.SetLastVerifiedAt(v)
+	return _u
+}
+
+// SetNillableLastVerifiedAt sets the "last_verified_at" field if the given value is not nil.
+func (_u *LoginBindingUpdateOne) SetNillableLastVerifiedAt(v *time.Time) *LoginBindingUpdateOne {
+	if v != nil {
+		_u.SetLastVerifiedAt(*v)
+	}
+	return _u
+}
+
+// ClearLastVerifiedAt clears the value of the "last_verified_at" field.
+func (_u *LoginBindingUpdateOne) ClearLastVerifiedAt() *LoginBindingUpdateOne {
+	_u.mutation.ClearLastVerifiedAt()
+	return _u
+}
+
+// SetVerifiedAuthGeneration sets the "verified_auth_generation" field.
+func (_u *LoginBindingUpdateOne) SetVerifiedAuthGeneration(v int64) *LoginBindingUpdateOne {
+	_u.mutation.ResetVerifiedAuthGeneration()
+	_u.mutation.SetVerifiedAuthGeneration(v)
+	return _u
+}
+
+// SetNillableVerifiedAuthGeneration sets the "verified_auth_generation" field if the given value is not nil.
+func (_u *LoginBindingUpdateOne) SetNillableVerifiedAuthGeneration(v *int64) *LoginBindingUpdateOne {
+	if v != nil {
+		_u.SetVerifiedAuthGeneration(*v)
+	}
+	return _u
+}
+
+// AddVerifiedAuthGeneration adds value to the "verified_auth_generation" field.
+func (_u *LoginBindingUpdateOne) AddVerifiedAuthGeneration(v int64) *LoginBindingUpdateOne {
+	_u.mutation.AddVerifiedAuthGeneration(v)
+	return _u
+}
+
+// SetVerifiedLoginPolicyRevision sets the "verified_login_policy_revision" field.
+func (_u *LoginBindingUpdateOne) SetVerifiedLoginPolicyRevision(v int64) *LoginBindingUpdateOne {
+	_u.mutation.ResetVerifiedLoginPolicyRevision()
+	_u.mutation.SetVerifiedLoginPolicyRevision(v)
+	return _u
+}
+
+// SetNillableVerifiedLoginPolicyRevision sets the "verified_login_policy_revision" field if the given value is not nil.
+func (_u *LoginBindingUpdateOne) SetNillableVerifiedLoginPolicyRevision(v *int64) *LoginBindingUpdateOne {
+	if v != nil {
+		_u.SetVerifiedLoginPolicyRevision(*v)
+	}
+	return _u
+}
+
+// AddVerifiedLoginPolicyRevision adds value to the "verified_login_policy_revision" field.
+func (_u *LoginBindingUpdateOne) AddVerifiedLoginPolicyRevision(v int64) *LoginBindingUpdateOne {
+	_u.mutation.AddVerifiedLoginPolicyRevision(v)
 	return _u
 }
 
@@ -362,6 +514,16 @@ func (_u *LoginBindingUpdateOne) defaults() error {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *LoginBindingUpdateOne) check() error {
+	if v, ok := _u.mutation.VerifiedAuthGeneration(); ok {
+		if err := loginbinding.VerifiedAuthGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "verified_auth_generation", err: fmt.Errorf(`ent: validator failed for field "LoginBinding.verified_auth_generation": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.VerifiedLoginPolicyRevision(); ok {
+		if err := loginbinding.VerifiedLoginPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "verified_login_policy_revision", err: fmt.Errorf(`ent: validator failed for field "LoginBinding.verified_login_policy_revision": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "LoginBinding.user"`)
 	}
@@ -411,6 +573,24 @@ func (_u *LoginBindingUpdateOne) sqlSave(ctx context.Context) (_node *LoginBindi
 	}
 	if _u.mutation.LastUsedAtCleared() {
 		_spec.ClearField(loginbinding.FieldLastUsedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.LastVerifiedAt(); ok {
+		_spec.SetField(loginbinding.FieldLastVerifiedAt, field.TypeTime, value)
+	}
+	if _u.mutation.LastVerifiedAtCleared() {
+		_spec.ClearField(loginbinding.FieldLastVerifiedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.VerifiedAuthGeneration(); ok {
+		_spec.SetField(loginbinding.FieldVerifiedAuthGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedVerifiedAuthGeneration(); ok {
+		_spec.AddField(loginbinding.FieldVerifiedAuthGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.VerifiedLoginPolicyRevision(); ok {
+		_spec.SetField(loginbinding.FieldVerifiedLoginPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedVerifiedLoginPolicyRevision(); ok {
+		_spec.AddField(loginbinding.FieldVerifiedLoginPolicyRevision, field.TypeInt64, value)
 	}
 	if _u.mutation.SessionsCleared() {
 		edge := &sqlgraph.EdgeSpec{
