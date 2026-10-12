@@ -27,4 +27,7 @@ bin/
 # 本地开发密钥（task backend:dev:setup 生成，勿提交）
 .env
 
+# 后端独立浏览器验收的本地依赖，按 package.json / pnpm-lock.yaml 安装
+node_modules/
+
 # End of https://www.toptal.com/developers/gitignore/api/go
