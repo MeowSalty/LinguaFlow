@@ -1,0 +1,243 @@
+import assert from 'node:assert/strict';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { chromium } from '@playwright/test';
+import { createRuntime, backendDir } from './runtime.mjs';
+import { run, keycloakVersion, keycloakSHA256 } from './prepare.mjs';
+
+const runtime = await createRuntime();
+let browser;
+const results = [];
+const must = (condition, message) => assert.ok(condition, message);
+function rememberSecrets(value) {
+  if (!value || typeof value !== 'object') return;
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === 'string' && ['access_token', 'refresh_token', 'confirmation_token', 'reauthentication_proof'].includes(key)) runtime.secrets.push(item);
+    else if (item && typeof item === 'object') rememberSecrets(item);
+  }
+}
+async function expectResponse(promise, expected, operation) {
+  const value = await promise;
+  assert.equal(value.status, expected, `${operation}: unexpected status (${value.body?.code || value.body?.title || 'no public error'})`);
+  if (value.status >= 400) {
+    for (const marker of runtime.secrets) must(!JSON.stringify(value.body).includes(marker), 'Problem response leaked a marker secret');
+  }
+  rememberSecrets(value.body);
+  return value.body;
+}
+async function request(page, path, data, method = 'POST', expected = 200, actor) {
+  return expectResponse(page.evaluate(({ path, data, method, actor }) => auth.request(path, data, method, actor), { path, data, method, actor }), expected, path);
+}
+async function adopt(page, session) { await page.evaluate(s => auth.adopt(s), session); }
+async function loginPassword(page, username, password) { const session = await request(page, '/auth/login', { identifier: username, password }, 'POST', 200, null); await adopt(page, session); return session; }
+async function driveProvider(page, authorizationURL, provider, username, requirePrompt = false) {
+  const authURL = new URL(authorizationURL);
+  must(authURL.searchParams.get('code_challenge_method') === 'S256', 'Upstream PKCE S256 missing');
+  must(authURL.searchParams.has('nonce'), 'OIDC nonce missing');
+  if (requirePrompt) must(authURL.searchParams.get('max_age') === '0', 'Fresh authentication must request max_age=0');
+  // auth_time is expressed in whole seconds. Age any existing cookie beyond
+  // that precision before asserting max_age=0 causes an interactive challenge.
+  if (requirePrompt) await new Promise(resolve => setTimeout(resolve, 1100));
+  await page.goto(authorizationURL);
+  await Promise.race([page.locator('#password').waitFor({ state: 'visible' }), page.waitForURL('**/complete')]);
+  if (await page.locator('#password').isVisible()) {
+    if (await page.locator('#username').isVisible()) await page.locator('#username').fill(username);
+    await page.locator('#password').fill(provider.password);
+    await page.locator('#kc-login').click();
+  } else must(!requirePrompt, 'Existing IdP cookie bypassed required fresh authentication');
+  await page.waitForURL('**/complete');
+  await page.waitForFunction(() => window.result !== undefined && window.result !== null);
+  must(!new URL(page.url()).search, 'Completion URL retained a ticket');
+  const response = await page.evaluate(() => window.result);
+  assert.equal(response.status, 200, `OIDC exchange failed (${response.body?.code || response.body?.title || response.status})`);
+  must(response.cache === 'no-store', 'Exchange must be no-store');
+  rememberSecrets(response.body);
+  return response.body;
+}
+async function flow(page, path, input, provider, username, { anonymous = false, fresh = false } = {}) {
+  const start = await expectResponse(page.evaluate(({ path, input, anonymous }) => auth.begin(path, input, anonymous), { path, input, anonymous }), 200, 'start');
+  return driveProvider(page, start.authorization_url, provider, username, fresh);
+}
+async function reauth(page, bindingID, action, targetID, provider) {
+  const result = await flow(page, '/auth/reauthenticate', { method: 'oidc', binding_id: bindingID, action, target_id: targetID }, provider, 'alice', { fresh: true });
+  must(result.kind === 'reauthentication_proof', 'Expected an action-bound reauthentication proof');
+  return result.reauthentication_proof;
+}
+async function createConnection(page, provider, clientID) {
+  console.log(`Checking and testing connection ${clientID}`);
+  let record = await request(page, '/admin/auth-connections', { kind: 'oidc', display_name: clientID, oidc: { issuer: provider.issuer, client_id: clientID }, client_secret: provider.clientSecret }, 'POST', 201);
+  const path = '/admin/auth-connections/' + record.id;
+  must(Object.values(record.draft.policy).filter(v => typeof v === 'boolean').every(v => !v), 'New connection switches must be off');
+  const checked = await request(page, path + '/check', { expected_revision: record.aggregate_revision });
+  must(checked.valid && !checked.fresh_supported, 'Discovery must not claim tested fresh authentication');
+  const tested = await flow(page, path + '/test', { expected_revision: record.aggregate_revision }, provider, 'provideradmin', { fresh: true });
+  must(tested.kind === 'test_result' && tested.fresh_supported, 'Real connection test failed');
+  record = await request(page, path, undefined, 'GET');
+  record = await request(page, path + '/publish', { expected_revision: record.aggregate_revision });
+  must(!record.published.policy.enabled && !record.published.policy.login_enabled, 'First publication must keep switches off');
+  record = await request(page, path, { expected_revision: record.aggregate_revision, policy: { enabled: true, login_enabled: true, signup_enabled: true, link_enabled: true, login_rule: 'unrestricted', signup_rule: 'unrestricted', link_rule: 'unrestricted' } }, 'PATCH');
+  record = await request(page, path + '/publish', { expected_revision: record.aggregate_revision });
+  return record;
+}
+
+async function scenario(app, provider, mode) {
+  console.log(`Running ${mode} browser lifecycle`);
+  const adminContext = await browser.newContext(), userContext = await browser.newContext();
+  const admin = await adminContext.newPage(), page = await userContext.newPage();
+  page.setDefaultTimeout(20000); admin.setDefaultTimeout(20000);
+  const callbacks = [];
+  page.on('response', async response => {
+    if (new URL(response.url()).pathname.endsWith('/callback')) {
+      callbacks.push({ status: response.status(), headers: await response.allHeaders(), url: response.url() });
+    }
+  });
+  await admin.goto(app.completionBase); await page.goto(app.completionBase);
+  await loginPassword(admin, 'admin', app.adminPassword);
+  const first = await createConnection(admin, provider, 'b1-first');
+  const second = await createConnection(admin, provider, 'b1-second');
+  const capabilities = await request(page, '/auth/capabilities', undefined, 'GET', 200, null);
+  must(capabilities.connections.length === 2 && capabilities.connections.every(c => c.can_login && c.can_signup && c.signup_requirements.length === 0), 'Capabilities mismatch');
+  await request(page, '/auth/register', { username: 'taken_name', password: app.adminPassword }, 'POST', 201, null);
+  const signup = await flow(page, `/auth/external/${first.id}/start`, {}, provider, 'alice', { anonymous: true });
+  must(signup.kind === 'signup_confirmation', 'Callback/exchange should require signup confirmation');
+  const signupVerifier = await page.evaluate(() => JSON.parse(sessionStorage.getItem(flowKey)).verifier);
+  await expectResponse(page.evaluate(() => auth.complete({ username: 'taken_name' })), 409, 'duplicate username');
+  const signedUp = await expectResponse(page.evaluate(() => auth.complete({ username: 'alice_local', display_name: 'Alice' })), 200, 'complete signup');
+  must(signedUp.kind === 'session' && signedUp.session.user.email === null, 'Provider email was elevated into platform account email');
+  const firstSession = signedUp.session;
+  // Replaying an accepted confirmation cannot resend session secrets.
+  await request(page, '/auth/external/complete', { confirmation_token: signup.confirmation_token, verifier: signupVerifier, username: 'alice_local' }, 'POST', 400, null);
+  let methods = await request(page, '/users/me/login-methods', undefined, 'GET');
+  const firstBinding = methods.bindings.find(b => b.connection_id === first.id).binding_id;
+  const initialProof = await reauth(page, firstBinding, 'password_set', 'password', provider);
+  const password = 'Acceptance-local-password-1!'; runtime.secrets.push(password);
+  await request(page, '/users/me/password', { reauthentication_proof: initialProof, new_password: password }, 'POST', 204);
+  await request(page, '/users/me/login-methods', undefined, 'GET', 401);
+  await request(page, '/auth/refresh', { refresh_token: firstSession.refresh_token }, 'POST', 401, null);
+  await loginPassword(page, 'alice_local', password);
+  const changedPassword = 'Acceptance-local-password-2!'; runtime.secrets.push(changedPassword);
+  await request(page, '/users/me/password', { current_password: password, new_password: changedPassword }, 'PUT', 204);
+  await request(page, '/users/me/login-methods', undefined, 'GET', 401);
+  await loginPassword(page, 'alice_local', changedPassword);
+  const linkProof = await request(page, '/auth/reauthenticate', { method: 'password', password: changedPassword, action: 'link', target_id: second.id });
+  const linked = await flow(page, `/users/me/login-bindings/${second.id}/start`, { reauthentication_proof: linkProof.reauthentication_proof }, provider, 'alice');
+  must(linked.kind === 'link_confirmation', 'Expected explicit binding confirmation');
+  const completion = await expectResponse(page.evaluate(() => auth.complete()), 200, 'complete link');
+  must(completion.kind === 'linked' && !completion.session, 'Binding must not issue the target-channel session');
+  methods = await request(page, '/users/me/login-methods', undefined, 'GET');
+  const secondBinding = methods.bindings.find(b => b.connection_id === second.id).binding_id;
+  must(!methods.bindings.find(b => b.binding_id === secondBinding).verified, 'Binding alone must not count as a verified fallback');
+  const secondLogin = await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
+  must(secondLogin.kind === 'session', 'Second connection explicit login failed');
+  methods = await request(page, '/users/me/login-methods', undefined, 'GET');
+  must(methods.bindings.find(b => b.binding_id === secondBinding).verified, 'Actual login must verify the binding generation');
+  const ownPasswordProof = await request(page, '/auth/reauthenticate', { method: 'password', password: changedPassword, action: 'password_delete', target_id: 'password' });
+  await request(page, '/users/me/password', { reauthentication_proof: ownPasswordProof.reauthentication_proof }, 'DELETE', 403);
+  const deleteProof = await reauth(page, secondBinding, 'password_delete', 'password', provider);
+  await request(page, '/users/me/password', { reauthentication_proof: deleteProof }, 'DELETE', 204);
+  await request(page, '/users/me/login-methods', undefined, 'GET', 401);
+  await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
+  const ownBindingProof = await reauth(page, firstBinding, 'unlink', String(firstBinding), provider);
+  await request(page, `/users/me/login-bindings/${firstBinding}`, { reauthentication_proof: ownBindingProof }, 'DELETE', 403);
+  const unlinkProof = await reauth(page, secondBinding, 'unlink', String(firstBinding), provider);
+  await request(page, `/users/me/login-bindings/${firstBinding}`, { reauthentication_proof: unlinkProof }, 'DELETE', 204);
+  await request(page, '/users/me/login-methods', undefined, 'GET', 401);
+  await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
+  const lastProof = await reauth(page, secondBinding, 'unlink', String(secondBinding), provider);
+  await request(page, `/users/me/login-bindings/${secondBinding}`, { reauthentication_proof: lastProof }, 'DELETE', 409);
+  let record = await request(admin, `/admin/auth-connections/${second.id}`, undefined, 'GET');
+  await request(admin, `/admin/auth-connections/${second.id}/archive`, { expected_revision: record.aggregate_revision }, 'POST', 409);
+  // A display-only publication must preserve current sessions.
+  const previousRevision = record.aggregate_revision;
+  record = await request(admin, `/admin/auth-connections/${second.id}`, { expected_revision: previousRevision, description: 'Updated display only' }, 'PATCH');
+  await request(admin, `/admin/auth-connections/${second.id}/publish`, { expected_revision: previousRevision }, 'POST', 409);
+  await request(admin, `/admin/auth-connections/${second.id}/publish`, { expected_revision: record.aggregate_revision });
+  await request(page, '/users/me/login-methods', undefined, 'GET');
+  const adminProof = await request(admin, '/auth/reauthenticate', { method: 'password', password: app.adminPassword, action: 'password_delete', target_id: 'password' });
+  await request(admin, '/users/me/password', { reauthentication_proof: adminProof.reauthentication_proof }, 'DELETE', 409);
+  // Cancellation is durable even if the browser subsequently visits the old authorization URL.
+  const cancelStart = await expectResponse(page.evaluate(id => auth.begin(`/auth/external/${id}/start`, {}, true), second.id), 200, 'cancel start');
+  await expectResponse(page.evaluate(() => auth.cancel()), 204, 'cancel');
+  const state = new URL(cancelStart.authorization_url).searchParams.get('state');
+  const cancelled = await page.request.get(`${app.publicBase}/api/v1/auth/external/${second.id}/callback?state=${encodeURIComponent(state)}&error=access_denied`, { maxRedirects: 0 });
+  must(cancelled.status() === 400 && !cancelled.headers().location, 'Cancelled callback redirected');
+  const failureStart = await expectResponse(page.evaluate(id => auth.begin(`/auth/external/${id}/start`, {}, true), second.id), 200, 'failure start');
+  const failureState = new URL(failureStart.authorization_url).searchParams.get('state');
+  const failureURL = `${app.publicBase}/api/v1/auth/external/${second.id}/callback?state=${encodeURIComponent(failureState)}&error=access_denied`;
+  await page.goto(failureURL); await page.waitForURL('**/complete'); await page.waitForFunction(() => window.result?.status);
+  must((await page.evaluate(() => window.result.status)) === 400 && !new URL(page.url()).search, 'Failed flow ticket contract mismatch');
+  const replay = await page.request.get(failureURL, { maxRedirects: 0 });
+  must(replay.status() === 400 && !replay.headers().location, 'Replayed state redirected');
+  await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
+  const badCompletion = await page.evaluate(id => auth.request(`/auth/external/${id}/start`, { browser_challenge: 'a'.repeat(43), completion_url: 'https://untrusted.invalid/complete' }), second.id);
+  must(badCompletion.status === 400, 'Unapproved completion accepted');
+  const cors = await page.request.fetch(`${app.publicBase}/api/v1/auth/external/exchange`, { method: 'OPTIONS', headers: { Origin: 'https://untrusted.invalid', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' } });
+  must(!cors.headers()['access-control-allow-origin'], 'Unapproved origin allowed');
+  must(callbacks.filter(c => c.status === 303).every(c => c.headers['cache-control'] === 'no-store' && c.headers['referrer-policy'] === 'no-referrer'), 'Callback caching/referrer headers missing');
+  // No authentication secrets may appear in administrator views.
+  const allConnections = await request(admin, '/admin/auth-connections', undefined, 'GET');
+  for (const marker of runtime.secrets) must(!JSON.stringify(allConnections).includes(marker), 'Administrator response leaked a marker secret');
+  const audit = await request(admin, '/admin/audit-logs', undefined, 'GET');
+  for (const marker of runtime.secrets) must(!JSON.stringify(audit).includes(marker), 'Audit response leaked a marker secret');
+  await adminContext.close(); await userContext.close();
+  results.push({ mode, status: 'passed', flows: ['connection_check_test_publish', 'signup_username_retry', 'login', 'fresh_oidc_reauthentication_with_cookie', 'set_change_delete_password', 'explicit_second_binding', 'verified_fallback', 'safe_unlink', 'last_method_and_admin_protection', 'display_publication_session', 'cancel', 'denial_retry_replay', 'completion_allowlist', 'cors', 'url_ticket_removal', 'no_store_no_referrer'] });
+  console.log(`PASS ${mode}: real Keycloak account lifecycle and browser contract`);
+}
+
+async function instanceIsolation(source, other, provider) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(source.completionBase);
+  const capabilities = await request(page, '/auth/capabilities', undefined, 'GET', 200, null);
+  const connection = capabilities.connections.find(c => c.display_name === 'b1-second');
+  must(connection, 'Missing isolation test connection');
+  let captured;
+  const exchangePath = '**/api/v1/auth/external/exchange';
+  await page.route(exchangePath, async route => {
+    captured = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Cache-Control': 'no-store' }, body: JSON.stringify({ kind: 'held_for_isolation' }) });
+  });
+  const held = await flow(page, `/auth/external/${connection.connection_id}/start`, {}, provider, 'alice', { anonymous: true });
+  must(held.kind === 'held_for_isolation' && captured?.ticket, 'Could not hold an unconsumed exchange ticket');
+  const otherPage = await context.newPage();
+  await otherPage.goto(`${other.completionBase}/complete?ticket=${encodeURIComponent(captured.ticket)}`);
+  await otherPage.waitForFunction(() => window.result?.status);
+  must((await otherPage.evaluate(() => window.result.body.code)) === 'missing_instance_flow' && !new URL(otherPage.url()).search, 'Other instance completion used foreign flow state');
+  const wrongInstance = await page.request.post(`${other.publicBase}/api/v1/auth/external/exchange`, { data: captured });
+  must(wrongInstance.status() === 400, 'Foreign instance accepted a ticket');
+  await page.unroute(exchangePath);
+  const correct = await request(page, '/auth/external/exchange', captured, 'POST', 200, null);
+  must(correct.kind === 'session', 'Foreign rejection consumed the legitimate instance ticket');
+  await request(page, '/auth/external/exchange', captured, 'POST', 400, null);
+  await context.close();
+  results.push({ mode: 'instance-isolation', status: 'passed', flows: ['foreign_completion_rejected', 'foreign_ticket_rejected', 'original_ticket_usable_once'] });
+  console.log('PASS instance isolation and exchange replay');
+}
+
+try {
+  await run('task', ['backend:build'], { cwd: resolve(backendDir, '..') });
+  console.log('Starting isolated PostgreSQL and verified Keycloak 26.8.0');
+  const [postgres, provider] = await Promise.all([runtime.postgres(), runtime.keycloak()]);
+  if (process.argv.includes('--postgres')) {
+    await run('task', ['backend:test:auth:postgres'], { cwd: resolve(backendDir, '..'), env: { ...process.env, LINGUAFLOW_TEST_POSTGRES_DSN: postgres.dsn } });
+    results.push({ database: 'PostgreSQL', status: 'passed' });
+  }
+  browser = await chromium.launch({ headless: true, ...(process.env.LINGUAFLOW_AUTH_BROWSER ? { executablePath: process.env.LINGUAFLOW_AUTH_BROWSER } : {}) });
+  const sameOrigin = await runtime.application('same-origin');
+  await scenario(sameOrigin, provider, 'same-origin');
+  const crossOrigin = await runtime.application('cross-origin', postgres.applicationDSN);
+  await scenario(crossOrigin, provider, 'cross-origin');
+  await instanceIsolation(sameOrigin, crossOrigin, provider);
+  for (const file of await readdir(runtime.root)) {
+    if (!file.endsWith('.log') || file === 'postgres.log' || file === 'keycloak.log') continue;
+    const data = await readFile(join(runtime.root, file), 'utf8');
+    for (const marker of runtime.secrets) must(!data.includes(marker), 'Server log leaked a marker secret');
+  }
+  const report = { tested_at: new Date().toISOString(), keycloak: { version: keycloakVersion, sha256: keycloakSHA256 }, results };
+  await writeFile(join(runtime.root, 'report.json'), JSON.stringify(report, null, 2));
+  console.log('Acceptance report: ' + join(runtime.root, 'report.json'));
+} catch (error) {
+  console.error('Acceptance failed: ' + error.message);
+  console.error('Isolated diagnostic directory: ' + runtime.root);
+  process.exitCode = 1;
+} finally { await browser?.close(); await runtime.close(); }

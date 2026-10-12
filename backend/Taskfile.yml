@@ -21,6 +21,46 @@ vars:
   BACKEND_LDFLAGS: '{{default (printf "%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=%s" .BACKEND_LDFLAGS_EXTRA .VERSION .COMMIT) .BACKEND_LDFLAGS}}'
 
 tasks:
+  test:auth:deployment:
+    desc: 隔离 PostgreSQL、Keycloak 26.8.0 及同源/跨域浏览器认证闭环验收（缺少环境直接失败）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/deployment.mjs --postgres
+
+  test:auth:browser:
+    desc: 真实 Keycloak 与双部署浏览器认证验收
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/deployment.mjs
+
+  auth:prepare:
+    desc: 下载并校验隔离认证验收所需的 Keycloak 26.8.0
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/prepare.mjs
+
+  auth:browser:install:
+    desc: 安装后端独立浏览器验收依赖与 Chromium（不改前端）
+    dir: '{{.TASKFILE_DIR}}/internal/authacceptance'
+    cmds:
+      - pnpm install --ignore-workspace --registry=https://registry.npmjs.org
+      - pnpm exec playwright install chromium
+
+  test:auth:
+    desc: 认证合同、状态机及网络边界定向测试
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test -count=1 ./internal/authoidc ./internal/config ./internal/service ./internal/api ./internal/database -run 'Auth|OIDC|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
+
+  test:auth:postgres:
+    desc: 真实 PostgreSQL 认证竞态验收（缺少 DSN 直接失败）
+    dir: '{{.TASKFILE_DIR}}'
+    preconditions:
+      - sh: test -n "$LINGUAFLOW_TEST_POSTGRES_DSN"
+        msg: PostgreSQL 未验收，必须提供隔离实例 LINGUAFLOW_TEST_POSTGRES_DSN
+    cmds:
+      - go test -race -count=1 ./internal/service ./internal/database -run 'Auth|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
+
   deps:tidy:
     desc: 整理后端 Go 模块依赖
     dir: '{{.TASKFILE_DIR}}'
