@@ -175,7 +175,7 @@ curl -s "http://127.0.0.1:18080/api/v1/jobs/42/events?limit=50&after_seq=1000"
 SSE 负责「实时 + 最近窗口补进」，REST 历史端点负责全量分页。新连接默认只补最近窗口，更早历史走本端点。回放窗口大小由 `server.sse` 配置，见 [配置文件与环境变量 · 实时事件流](/zh/guide/configuration#server-sse-—-实时事件流)。
 :::
 
-SSE 也可直接通过 OpenAPI 收录的 `GET /jobs/{jobId}/stream` 端点订阅：原生 `EventSource` 无法设置 `Authorization` 头时，可用 `access_token` 查询参数携带令牌；断线重连用 `Last-Event-ID` 请求头或 `lastEventId` 查询参数传入上次收到的 seq，从该位置续传。生命周期事件含 `job_paused` / `job_resumed`（任务暂停/恢复完成时发布）。
+SSE 也可直接通过 OpenAPI 收录的 `GET /jobs/{jobId}/stream` 端点订阅：原生 `EventSource` 无法设置 `Authorization` 头时，可用 `access_token` 查询参数携带令牌；断线重连用 `Last-Event-ID` 请求头或 `lastEventId` 查询参数传入上次收到的 seq，从该位置续传。生命周期事件含 `job_pausing`（已停止派发、开始等待在途请求收尾）/ `job_paused`（收尾完成、安全暂停）/ `job_resumed`（任务恢复时发布）；另一类 `stage_counts` 事件携带 `metadata.stages` 阶段观察值，在暂停 / 恢复 / 取消 / 重试与持久化工作状态变化时发布。
 
 ### 10. 任务暂停 / 恢复 / 重试（断点续跑）
 
@@ -192,7 +192,7 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/jobs/42/resume
 curl -s -X POST http://127.0.0.1:18080/api/v1/jobs/42/retry
 ```
 
-任务状态枚举为 `pending` / `running` / `paused` / `completed` / `failed` / `cancelled`；主进度字段为 `progress_completed` / `progress_total`（工作量口径，单位「段 × 轮」）。状态前置校验不满足时返回 409（如恢复一个未暂停的任务）。产品侧操作见 [项目管理 · 暂停与恢复](/zh/guide/projects#暂停与恢复)。
+任务状态枚举为 `pending` / `running` / `pausing` / `paused` / `completed` / `failed` / `cancelled`；`pausing` 表示运行中的任务已收到暂停请求、正在等在途请求收尾与保存确认，随后自动转入 `paused`。主进度字段为 `progress_completed` / `progress_total`（工作量口径，单位「段 × 轮」），另有 `progress.stages`（`JobStageCounts`）给出阶段观察值。状态前置校验不满足时返回 409（如恢复一个未暂停的任务）；任务处于 `pausing` 时同样允许取消。产品侧操作见 [项目管理 · 暂停与恢复](/zh/guide/projects#暂停与恢复)。
 
 ### 11. 活动与审计日志（服务器模式）
 
@@ -352,12 +352,12 @@ curl -s http://localhost:8080/api/v1/operations/summary \
 | --- | --- |
 | `task_type` | 任务类型：`translation` / `glossary_sync` / `storage`;`trigger_type` 过滤仅允许显式指定任务类型时使用 |
 | `project_id` | 限定项目；未授权或不存在的项目返回空列表（系统管理员无额外跨项目权限） |
-| `state` | `active`（默认）/ `terminal` / `all`；与 `status` 互斥 |
-| `status` | `pending` / `running` / `paused` / `waiting_retry` / `needs_action` / `completed` / `failed` / `cancelled` |
+| `state` | `active`（默认）/ `terminal` / `all`；与 `status` 互斥。未指定 `status` 时活跃集合为 `pending,running,pausing,paused` |
+| `status` | `pending` / `running` / `pausing` / `paused` / `waiting_retry` / `needs_action` / `completed` / `failed` / `cancelled`（`pausing` / `paused` 仅翻译活动会有，同步与存储任务对这两个值返回空） |
 | `updated_from` / `updated_before` | 更新时间区间 `[from, before)` |
 | `cursor` / `limit` | 版本化游标分页（`limit` 1–100，默认 50） |
 
-默认只返回活跃任务；组织成员可看到同项目其他成员创建的任务。轻量任务视图另有 `GET /jobs`（跨项目任务列表）与 `GET /jobs/summary`。任务响应**不再包含**队列位置字段；实例队列与限流数据收敛到管理端 runtime 摘要。管理员可用 `GET /admin/runtime/summary` 读取该摘要 (另见根路径 `GET /metrics`,仅管理员)。产品侧见 [项目管理 · 任务中心](/zh/guide/projects#任务中心跨项目任务列表)。
+默认只返回活跃任务；组织成员可看到同项目其他成员创建的任务。轻量任务视图另有 `GET /jobs`（跨项目任务列表）与 `GET /jobs/summary`。任务响应**不再包含**队列位置字段；实例队列与限流数据收敛到管理端 runtime 摘要。管理员可用 `GET /admin/runtime/summary` 读取该摘要 (另见根路径 `GET /metrics`,仅管理员)。产品侧见 [项目管理 · 任务中心](/zh/guide/projects#任务中心-跨项目任务列表)。
 
 ### 17. 用户资料与密码（服务器模式）
 
