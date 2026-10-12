@@ -254,7 +254,13 @@ publish:
       '404':
         $ref: '../base.yaml#/components/responses/Problem'
       '409':
-        $ref: '../base.yaml#/components/responses/Problem'
+        description: Revision conflict or users without a verified fallback. Safety conflicts include the current impact and remediation.
+        content:
+          application/problem+json:
+            schema:
+              anyOf:
+                - $ref: '../components/schemas/auth-rules.yaml#/AuthPublishProblem'
+                - $ref: '../components/schemas/common.yaml#/Problem'
       '429':
         $ref: '../base.yaml#/components/responses/Problem'
       '503':
@@ -481,3 +487,55 @@ logo:
           schema:
             type: "string"
             format: "binary"
+attributes:
+  parameters:
+    - name: connectionId
+      in: path
+      required: true
+      schema: {type: string}
+  get:
+    operationId: GetAuthConnectionAttributes
+    summary: 获取指定版本的受信属性目录和可用运算符
+    security: [{bearerAuth: []}]
+    parameters:
+      - name: expected_revision
+        in: query
+        required: true
+        schema: {type: integer, format: int64, minimum: 1}
+    responses:
+      '200':
+        description: Attribute catalogue
+        content:
+          application/json:
+            schema: {$ref: '../components/schemas/auth-rules.yaml#/AuthAttributeCatalog'}
+      '400': {$ref: '../base.yaml#/components/responses/Problem'}
+      '401': {$ref: '../base.yaml#/components/responses/Problem'}
+      '403': {$ref: '../base.yaml#/components/responses/Problem'}
+      '409': {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}
+preview:
+  parameters:
+    - name: connectionId
+      in: path
+      required: true
+      schema: {type: string}
+  post:
+    operationId: PreviewAuthConnectionRules
+    summary: 使用模拟数据预览草稿规则，不创建认证证据
+    security: [{bearerAuth: []}]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '../components/schemas/auth-rules.yaml#/AuthRulesPreviewRequest'}
+    responses:
+      '200':
+        description: Simulated diagnostics only
+        content:
+          application/json:
+            schema: {$ref: '../components/schemas/auth-rules.yaml#/AuthRulesPreview'}
+      '400': {$ref: '../base.yaml#/components/responses/Problem'}
+      '401': {$ref: '../base.yaml#/components/responses/Problem'}
+      '403': {$ref: '../base.yaml#/components/responses/Problem'}
+      '409': {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}

@@ -34,9 +34,9 @@ AuthConnectionPolicy:
     - "login_enabled"
     - "signup_enabled"
     - "link_enabled"
-    - "login_rule"
-    - "signup_rule"
-    - "link_rule"
+    - "login_rules"
+    - "signup_rules"
+    - "link_rules"
   properties:
     enabled:
       type: "boolean"
@@ -46,18 +46,12 @@ AuthConnectionPolicy:
       type: "boolean"
     link_enabled:
       type: "boolean"
-    login_rule:
-      type: "string"
-      enum:
-        - "unrestricted"
-    signup_rule:
-      type: "string"
-      enum:
-        - "unrestricted"
-    link_rule:
-      type: "string"
-      enum:
-        - "unrestricted"
+    login_rules:
+      $ref: "./auth-rules.yaml#/AuthRuleSet"
+    signup_rules:
+      $ref: "./auth-rules.yaml#/AuthRuleSet"
+    link_rules:
+      $ref: "./auth-rules.yaml#/AuthRuleSet"
 ExternalBrowserInput:
   type: "object"
   additionalProperties: false
@@ -282,7 +276,15 @@ ExternalTestResponse:
     - "fresh_supported"
     - "connection_id"
     - "revision"
+    - "attributes"
+    - "rules"
   properties:
+    attributes:
+      type: object
+      additionalProperties:
+        $ref: "./auth-rules.yaml#/AuthAttributeValue"
+    rules:
+      $ref: "./auth-rules.yaml#/AuthRulesDiagnostics"
     kind:
       type: "string"
       enum:
@@ -409,6 +411,17 @@ UpdateAuthConnectionRequest:
   required:
     - "expected_revision"
   properties:
+    attribute_mappings:
+      type: array
+      maxItems: 64
+      items:
+        $ref: './auth-rules.yaml#/AuthAttributeField'
+    evidence_max_age_seconds:
+      type: integer
+      minimum: 1
+      maximum: 31536000
+      default: 3600
+      description: Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
     expected_revision:
       type: "integer"
       format: "int64"
@@ -469,6 +482,18 @@ AuthConnectionSnapshot:
     - "policy"
     - "has_client_secret"
   properties:
+    login_policy_revision: {type: integer, format: int64}
+    attribute_mappings:
+      type: array
+      maxItems: 64
+      items:
+        $ref: './auth-rules.yaml#/AuthAttributeField'
+    evidence_max_age_seconds:
+      type: integer
+      minimum: 1
+      maximum: 31536000
+      default: 3600
+      description: Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
     display_name:
       type: "string"
     description:
@@ -557,7 +582,12 @@ AuthConnectionCheck:
     - "valid"
     - "fresh_supported"
     - "issues"
+    - "revision"
+    - "rules"
   properties:
+    revision: {type: integer, format: int64}
+    rules:
+      $ref: "./auth-rules.yaml#/AuthRulesDiagnostics"
     valid:
       type: "boolean"
     fresh_supported:
@@ -575,6 +605,21 @@ AuthConnectionImpact:
     - "affected_sessions"
     - "can_publish"
   properties:
+    revision: {type: integer, format: int64}
+    evaluated_at: {type: string, format: date-time}
+    remediation: {type: string}
+    pass_users:
+      type: array
+      items: {type: integer}
+    fail_users:
+      type: array
+      items: {type: integer}
+    unknown_users:
+      type: array
+      items: {type: integer}
+    administrator_users:
+      type: array
+      items: {type: integer}
     affected_users:
       type: "array"
       items:
@@ -600,6 +645,8 @@ LoginMethod:
     - "verified"
     - "archived"
   properties:
+    login_rule_status: {type: string, enum: [pass, fail, unknown]}
+    evidence_expires_at: {type: string, format: date-time}
     binding_id:
       type: "integer"
     connection_id:
@@ -633,7 +680,11 @@ LoginMethodsResponse:
         - "can_login"
         - "can_set"
         - "can_delete"
+        - "verified"
       properties:
+        verified:
+          type: boolean
+          description: Current password has been used successfully for login or reauthentication under an enabled password policy.
         is_set:
           type: "boolean"
         can_login:

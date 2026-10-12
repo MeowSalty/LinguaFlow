@@ -484,6 +484,78 @@ paths:
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/attributes:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: GetAuthConnectionAttributes
+      summary: 获取指定版本的受信属性目录和可用运算符
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: expected_revision
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: Attribute catalogue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAttributeCatalog'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/preview:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: PreviewAuthConnectionRules
+      summary: 使用模拟数据预览草稿规则，不创建认证证据
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRulesPreviewRequest'
+      responses:
+        '200':
+          description: Simulated diagnostics only
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthRulesPreview'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /admin/auth-connections/{connectionId}/check:
     parameters:
       - name: connectionId
@@ -645,7 +717,13 @@ paths:
         '404':
           $ref: '#/components/responses/Problem'
         '409':
-          $ref: '#/components/responses/Problem'
+          description: Revision conflict or users without a verified fallback. Safety conflicts include the current impact and remediation.
+          content:
+            application/problem+json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/AuthPublishProblem'
+                  - $ref: '#/components/schemas/Problem'
         '429':
           $ref: '#/components/responses/Problem'
         '503':
@@ -5702,9 +5780,9 @@ components:
         - login_enabled
         - signup_enabled
         - link_enabled
-        - login_rule
-        - signup_rule
-        - link_rule
+        - login_rules
+        - signup_rules
+        - link_rules
       properties:
         enabled:
           type: boolean
@@ -5714,18 +5792,12 @@ components:
           type: boolean
         link_enabled:
           type: boolean
-        login_rule:
-          type: string
-          enum:
-            - unrestricted
-        signup_rule:
-          type: string
-          enum:
-            - unrestricted
-        link_rule:
-          type: string
-          enum:
-            - unrestricted
+        login_rules:
+          $ref: '#/components/schemas/AuthRuleSet'
+        signup_rules:
+          $ref: '#/components/schemas/AuthRuleSet'
+        link_rules:
+          $ref: '#/components/schemas/AuthRuleSet'
     ExternalBrowserInput:
       type: object
       additionalProperties: false
@@ -5950,7 +6022,15 @@ components:
         - fresh_supported
         - connection_id
         - revision
+        - attributes
+        - rules
       properties:
+        attributes:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AuthAttributeValue'
+        rules:
+          $ref: '#/components/schemas/AuthRulesDiagnostics'
         kind:
           type: string
           enum:
@@ -6071,6 +6151,17 @@ components:
       required:
         - expected_revision
       properties:
+        attribute_mappings:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/AuthAttributeField'
+        evidence_max_age_seconds:
+          type: integer
+          minimum: 1
+          maximum: 31536000
+          default: 3600
+          description: Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
         expected_revision:
           type: integer
           format: int64
@@ -6131,6 +6222,20 @@ components:
         - policy
         - has_client_secret
       properties:
+        login_policy_revision:
+          type: integer
+          format: int64
+        attribute_mappings:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/AuthAttributeField'
+        evidence_max_age_seconds:
+          type: integer
+          minimum: 1
+          maximum: 31536000
+          default: 3600
+          description: Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
         display_name:
           type: string
         description:
@@ -6219,7 +6324,14 @@ components:
         - valid
         - fresh_supported
         - issues
+        - revision
+        - rules
       properties:
+        revision:
+          type: integer
+          format: int64
+        rules:
+          $ref: '#/components/schemas/AuthRulesDiagnostics'
         valid:
           type: boolean
         fresh_supported:
@@ -6237,6 +6349,30 @@ components:
         - affected_sessions
         - can_publish
       properties:
+        revision:
+          type: integer
+          format: int64
+        evaluated_at:
+          type: string
+          format: date-time
+        remediation:
+          type: string
+        pass_users:
+          type: array
+          items:
+            type: integer
+        fail_users:
+          type: array
+          items:
+            type: integer
+        unknown_users:
+          type: array
+          items:
+            type: integer
+        administrator_users:
+          type: array
+          items:
+            type: integer
         affected_users:
           type: array
           items:
@@ -6262,6 +6398,15 @@ components:
         - verified
         - archived
       properties:
+        login_rule_status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - unknown
+        evidence_expires_at:
+          type: string
+          format: date-time
         binding_id:
           type: integer
         connection_id:
@@ -6295,7 +6440,11 @@ components:
             - can_login
             - can_set
             - can_delete
+            - verified
           properties:
+            verified:
+              type: boolean
+              description: Current password has been used successfully for login or reauthentication under an enabled password policy.
             is_set:
               type: boolean
             can_login:
@@ -9719,6 +9868,72 @@ components:
           type: integer
           description: 占用该资源的未完成任务 ID
       additionalProperties: false
+    AuthAttributeValue:
+      type: object
+      required:
+        - status
+        - fingerprint
+      properties:
+        value: {}
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - unknown
+        reason:
+          type: string
+        fingerprint:
+          type: string
+    AuthRuleResult:
+      type: object
+      required:
+        - status
+        - retryable
+        - conditions
+      properties:
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - unknown
+        retryable:
+          type: boolean
+        conditions:
+          type: array
+          items:
+            type: object
+            required:
+              - field_id
+              - operator
+              - status
+            properties:
+              field_id:
+                type: string
+              operator:
+                type: string
+              status:
+                type: string
+                enum:
+                  - pass
+                  - fail
+                  - unknown
+              reason:
+                type: string
+    AuthRulesDiagnostics:
+      type: object
+      required:
+        - login
+        - signup
+        - link
+      properties:
+        login:
+          $ref: '#/components/schemas/AuthRuleResult'
+        signup:
+          $ref: '#/components/schemas/AuthRuleResult'
+        link:
+          $ref: '#/components/schemas/AuthRuleResult'
     AvailableLoginConnection:
       type: object
       additionalProperties: false
@@ -9736,6 +9951,190 @@ components:
         logo_url:
           type: string
           nullable: true
+    AuthAttributeField:
+      type: object
+      additionalProperties: false
+      required:
+        - field_id
+        - label
+        - type
+        - source
+        - pointer
+      properties:
+        field_id:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum:
+            - string
+            - boolean
+            - integer
+            - number
+            - datetime
+            - string_list
+        source:
+          type: string
+          enum:
+            - oidc_id_token
+            - oidc_userinfo
+            - derived
+        pointer:
+          type: string
+        required_scopes:
+          type: array
+          items:
+            type: string
+        optional:
+          type: boolean
+        user_editable:
+          type: boolean
+          default: false
+          description: Administrator-declared property of the upstream field; never grants trust or platform permissions.
+        derived_from:
+          type: array
+          readOnly: true
+          description: Server-defined dependencies of a derived field.
+          items:
+            type: string
+    AuthRuleCondition:
+      type: object
+      additionalProperties: false
+      required:
+        - field_id
+        - operator
+        - value
+      properties:
+        field_id:
+          type: string
+        operator:
+          type: string
+          enum:
+            - eq
+            - ne
+            - in
+            - gt
+            - gte
+            - lt
+            - lte
+            - contains
+            - not_contains
+            - contains_any
+            - contains_all
+        value:
+          description: Strictly typed against the referenced field. Strings are case-sensitive; integers retain precision; datetimes require RFC3339 with timezone. No coercion or null values.
+          oneOf:
+            - type: string
+            - type: boolean
+            - type: number
+            - type: array
+              items:
+                type: string
+    AuthRuleSet:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - mode
+          properties:
+            mode:
+              type: string
+              enum:
+                - unrestricted
+        - type: object
+          additionalProperties: false
+          required:
+            - mode
+            - match
+            - conditions
+          properties:
+            mode:
+              type: string
+              enum:
+                - conditions
+            match:
+              type: string
+              enum:
+                - all
+                - any
+            conditions:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: '#/components/schemas/AuthRuleCondition'
+    AuthAttributeCatalog:
+      type: object
+      required:
+        - revision
+        - fields
+        - operators
+      properties:
+        revision:
+          type: integer
+          format: int64
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthAttributeField'
+        operators:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    AuthRulesPreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - sources
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        sources:
+          type: object
+          additionalProperties: false
+          properties:
+            oidc_id_token:
+              type: object
+              additionalProperties: true
+            oidc_userinfo:
+              type: object
+              additionalProperties: true
+    AuthRulesPreview:
+      type: object
+      required:
+        - revision
+        - simulated
+        - attributes
+        - rules
+      properties:
+        revision:
+          type: integer
+          format: int64
+        simulated:
+          type: boolean
+          enum:
+            - true
+        attributes:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AuthAttributeValue'
+        rules:
+          $ref: '#/components/schemas/AuthRulesDiagnostics'
+    AuthPublishProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required:
+            - impact
+          properties:
+            impact:
+              $ref: '#/components/schemas/AuthConnectionImpact'
     RetentionCount:
       type: integer
       format: int64

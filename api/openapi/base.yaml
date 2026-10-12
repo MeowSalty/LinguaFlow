@@ -39,6 +39,10 @@ paths:
     $ref: './paths/auth-connections.yaml#/collection'
   /admin/auth-connections/{connectionId}:
     $ref: './paths/auth-connections.yaml#/item'
+  /admin/auth-connections/{connectionId}/attributes:
+    $ref: './paths/auth-connections.yaml#/attributes'
+  /admin/auth-connections/{connectionId}/preview:
+    $ref: './paths/auth-connections.yaml#/preview'
   /admin/auth-connections/{connectionId}/check:
     $ref: './paths/auth-connections.yaml#/check'
   /admin/auth-connections/{connectionId}/test:
