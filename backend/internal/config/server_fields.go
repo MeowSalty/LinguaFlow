@@ -36,6 +36,15 @@ func admin(r *ResolvedServer) *BootstrapAdmin {
 }
 
 var serverFields = []serverField{
+	field("server.authentication.public_base_url", "LINGUAFLOW_AUTHENTICATION_PUBLIC_BASE_URL", "string", "serve/local", false, func(r *ResolvedServer) *string { return &r.Config.Authentication.PublicBaseURL }),
+	field("server.authentication.completion_urls", "LINGUAFLOW_AUTHENTICATION_COMPLETION_URLS", "strings", "serve/local", false, func(r *ResolvedServer) *[]string { return &r.Config.Authentication.CompletionURLs }),
+	field("server.authentication.allowed_hosts", "LINGUAFLOW_AUTHENTICATION_ALLOWED_HOSTS", "strings", "serve/local", false, func(r *ResolvedServer) *[]string { return &r.Config.Authentication.AllowedHosts }),
+	field("server.authentication.allowed_cidrs", "LINGUAFLOW_AUTHENTICATION_ALLOWED_CIDRS", "strings", "serve/local", false, func(r *ResolvedServer) *[]string { return &r.Config.Authentication.AllowedCIDRs }),
+	field("server.authentication.allow_http_loopback", "LINGUAFLOW_AUTHENTICATION_ALLOW_HTTP_LOOPBACK", "boolean", "serve/local", false, func(r *ResolvedServer) *bool { return &r.Config.Authentication.AllowHTTPLoopback }),
+	field("server.authentication.trusted_proxy_cidrs", "LINGUAFLOW_AUTHENTICATION_TRUSTED_PROXY_CIDRS", "strings", "serve/local", false, func(r *ResolvedServer) *[]string { return &r.Config.Authentication.TrustedProxyCIDRs }),
+	field("server.authentication.request_timeout", "LINGUAFLOW_AUTHENTICATION_REQUEST_TIMEOUT", "duration", "serve/local", false, func(r *ResolvedServer) *time.Duration { return &r.Config.Authentication.RequestTimeout }),
+	field("server.authentication.max_response_bytes", "LINGUAFLOW_AUTHENTICATION_MAX_RESPONSE_BYTES", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.Authentication.MaxResponseBytes }),
+	field("server.authentication.rate_limit_per_minute", "LINGUAFLOW_AUTHENTICATION_RATE_LIMIT_PER_MINUTE", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Authentication.RateLimitPerMinute }),
 	field("server.storage.enabled", "LINGUAFLOW_STORAGE_ENABLED", "boolean", "serve/local", false, func(r *ResolvedServer) *bool { return &r.Config.Storage.Enabled }),
 	field("server.storage.maintenance", "LINGUAFLOW_STORAGE_MAINTENANCE", "boolean", "serve/local", false, func(r *ResolvedServer) *bool { return &r.Config.Storage.Maintenance }),
 	field("server.storage.backends", "LINGUAFLOW_STORAGE_BACKENDS", "storage_backends", "serve/local", true, func(r *ResolvedServer) *[]StorageBackendConfig { return &r.Config.Storage.Backends }),
