@@ -14,9 +14,10 @@ import (
 
 func (s *Server) applyMiddleware(r *chi.Mux) {
 	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.RealIP)
+	r.Use(s.trustedProxyMiddleware)
 	r.Use(s.requestLoggingMiddleware)
 	r.Use(s.recoverer)
+	r.Use(s.authenticationRateMiddleware)
 
 	allowedOrigins := s.serverCfg.CORS.AllowedOrigins
 	if s.isLocal() {

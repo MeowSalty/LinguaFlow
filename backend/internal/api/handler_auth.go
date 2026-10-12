@@ -59,6 +59,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, r, service.ErrInvalidInput)
 		return
 	}
+	if !s.passwordAttemptAllowed(w, r, *fields["identifier"]) {
+		return
+	}
 	session, err := s.authService.Login(r.Context(), service.LoginInput{
 		Identifier: *fields["identifier"],
 		Password:   *fields["password"],
@@ -133,7 +136,7 @@ func newAuthSessionResponse(session *service.Session) authSessionResponse {
 func (s *Server) handleAuthCapabilities(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if s.isLocal() {
-		writeJSON(w, http.StatusOK, service.AuthCapabilities{Mode: "local", Connections: []struct{}{}})
+		writeJSON(w, http.StatusOK, service.AuthCapabilities{Mode: "local", Connections: []service.PublicAuthConnectionCapability{}})
 		return
 	}
 	capabilities, err := s.authService.Capabilities(r.Context())
