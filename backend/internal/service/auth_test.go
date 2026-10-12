@@ -8,11 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func newAccountTestAuth(t *testing.T) (*AuthService, *ent.Client) {
@@ -304,7 +303,7 @@ func createPasswordTestUser(t *testing.T, client *ent.Client, username, password
 	}
 	account, err := client.User.Create().SetUsername(username).
 		SetEmail(username + "@example.com").SetDisplayName("Original profile").
-		SetPasswordHash(string(passwordHash)).Save(context.Background())
+		SetPasswordHash(string(passwordHash)).SetPasswordVerifiedAt(time.Now().UTC()).SetPasswordVerifiedHash(hash.Full(string(passwordHash))).Save(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

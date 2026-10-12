@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect"
-
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoidc"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
@@ -82,7 +82,7 @@ func TestAuthConnectionManagementLifecycle(t *testing.T) {
 		t.Fatalf("untested publish error=%v", err)
 	}
 	validateConnectionCandidate(t, services[0], clients[0], admin.ID, record.ID, 1)
-	policy := AuthConnectionPolicyInput{Enabled: true, LoginEnabled: true, SignupEnabled: true, LinkEnabled: true, LoginRule: "unrestricted", SignupRule: "unrestricted", LinkRule: "unrestricted"}
+	policy := AuthConnectionPolicyInput{Enabled: true, LoginEnabled: true, SignupEnabled: true, LinkEnabled: true, LoginRules: authrules.Unrestricted(), SignupRules: authrules.Unrestricted(), LinkRules: authrules.Unrestricted()}
 	record, err = services[0].UpdateConnection(ctx, admin.ID, record.ID, UpdateAuthConnectionInput{ExpectedRevision: 1, Policy: &policy})
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestAuthConnectionArchiveRequiresVerifiedFallback(t *testing.T) {
 	createPublished := func(id string) {
 		clients[0].AuthConnection.Create().SetID(id).SetKind(authconnection.KindOidc).SetPublishedRevision(1).ExecX(ctx)
 		clients[0].AuthConnectionRevision.Create().SetConnectionID(id).SetRevision(1).SetDisplayName(id).SetOidcIssuer("https://" + id + ".example.test").SetOidcClientID(id).SetOidcClientAuthMethod(authconnectionrevision.OidcClientAuthMethodClientSecretBasic).SetOidcScopes([]string{"openid"}).ExecX(ctx)
-		clients[0].AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(1).SetLoginPolicyRevision(1).SetEnabled(true).SetLoginEnabled(true).SetLoginRule("unrestricted").SetSignupRule("unrestricted").SetLinkRule("unrestricted").ExecX(ctx)
+		clients[0].AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(1).SetLoginPolicyRevision(1).SetEnabled(true).SetLoginEnabled(true).SetLoginRules(authrules.Unrestricted()).SetSignupRules(authrules.Unrestricted()).SetLinkRules(authrules.Unrestricted()).ExecX(ctx)
 		cfg := clients[0].AuthConnectionRevision.Query().Where(authconnectionrevision.ConnectionIDEQ(id)).OnlyX(ctx)
 		clients[0].AuthConnectionValidation.Create().SetConnectionID(id).SetFingerprint(connectionFingerprint(cfg)).SetRevision(1).SetFreshSupported(true).SetTestedAt(time.Now()).SetActorUserID(admin.ID).ExecX(ctx)
 	}
@@ -318,7 +318,7 @@ func TestAuthConnectionCloseRevokesRefreshRace(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			policy := AuthConnectionPolicyInput{Enabled: true, LoginEnabled: true, SignupEnabled: true, LinkEnabled: true, LoginRule: "unrestricted", SignupRule: "unrestricted", LinkRule: "unrestricted"}
+			policy := AuthConnectionPolicyInput{Enabled: true, LoginEnabled: true, SignupEnabled: true, LinkEnabled: true, LoginRules: authrules.Unrestricted(), SignupRules: authrules.Unrestricted(), LinkRules: authrules.Unrestricted()}
 			record, err = services[0].UpdateConnection(ctx, admin.ID, record.ID, UpdateAuthConnectionInput{ExpectedRevision: 1, Policy: &policy})
 			if err != nil {
 				t.Fatal(err)

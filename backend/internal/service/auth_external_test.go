@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect"
-
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoidc"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
@@ -76,7 +76,7 @@ func seedExternalFlowConnection(t *testing.T, c *ent.Client, ids ...string) {
 	}
 	c.AuthConnection.Create().SetID(id).SetKind(authconnection.KindOidc).SetPublishedRevision(1).ExecX(ctx)
 	c.AuthConnectionRevision.Create().SetConnectionID(id).SetRevision(1).SetDisplayName("Test identity").SetOidcIssuer("https://issuer.example.test").SetOidcClientID("client").SetOidcClientAuthMethod(authconnectionrevision.OidcClientAuthMethodClientSecretBasic).SetOidcScopes([]string{"openid", "profile"}).ExecX(ctx)
-	c.AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(1).SetLoginPolicyRevision(1).SetEnabled(true).SetLoginEnabled(true).SetSignupEnabled(true).SetLinkEnabled(true).SetLoginRule("unrestricted").SetSignupRule("unrestricted").SetLinkRule("unrestricted").ExecX(ctx)
+	c.AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(1).SetLoginPolicyRevision(1).SetEnabled(true).SetLoginEnabled(true).SetSignupEnabled(true).SetLinkEnabled(true).SetLoginRules(authrules.Unrestricted()).SetSignupRules(authrules.Unrestricted()).SetLinkRules(authrules.Unrestricted()).ExecX(ctx)
 }
 
 func browserChallenge(verifier string) string {
@@ -147,7 +147,7 @@ func TestExternalAuthSecretStorageAndCleanup(t *testing.T) {
 
 			account := clients[0].User.Create().SetUsername("proof-owner").SetPasswordHash("placeholder").SaveX(ctx)
 			proofExpiry := now.Add(time.Minute)
-			clients[0].ReauthenticationProof.Create().SetTokenHash(hash.Full("proof-secret")).SetUserID(account.ID).SetAuthVersion(account.AuthVersion).SetMethod(reauthenticationproof.MethodPassword).SetAction(reauthenticationproof.ActionLink).SetTargetID("flow-oidc").SetAuthenticatedAt(now).SetExpiresAt(proofExpiry).ExecX(ctx)
+			clients[0].ReauthenticationProof.Create().SetTokenHash(hash.Full("proof-secret")).SetUserID(account.ID).SetAuthVersion(account.AuthVersion).SetConnectionID(PasswordConnectionID).SetConnectionGeneration(1).SetLoginPolicyRevision(1).SetMethod(reauthenticationproof.MethodPassword).SetAction(reauthenticationproof.ActionLink).SetTargetID("flow-oidc").SetAuthenticatedAt(now).SetExpiresAt(proofExpiry).ExecX(ctx)
 			if err := services[0].CleanupExpired(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -183,7 +183,7 @@ func TestReauthenticationProofConcurrentConsumption(t *testing.T) {
 			ctx := context.Background()
 			account := createPasswordTestUser(t, clients[0], "proof-race-owner", "password-123")
 			proof := "one-use-proof-secret"
-			clients[0].ReauthenticationProof.Create().SetTokenHash(hash.Full(proof)).SetUserID(account.ID).SetAuthVersion(account.AuthVersion).SetMethod(reauthenticationproof.MethodPassword).SetAction(reauthenticationproof.ActionUnlink).SetTargetID("19").SetAuthenticatedAt(now).SetExpiresAt(now.Add(reauthenticationTTL)).ExecX(ctx)
+			clients[0].ReauthenticationProof.Create().SetTokenHash(hash.Full(proof)).SetUserID(account.ID).SetAuthVersion(account.AuthVersion).SetConnectionID(PasswordConnectionID).SetConnectionGeneration(1).SetLoginPolicyRevision(1).SetMethod(reauthenticationproof.MethodPassword).SetAction(reauthenticationproof.ActionUnlink).SetTargetID("19").SetAuthenticatedAt(now).SetExpiresAt(now.Add(reauthenticationTTL)).ExecX(ctx)
 
 			start := make(chan struct{})
 			results := make(chan error, 2)
