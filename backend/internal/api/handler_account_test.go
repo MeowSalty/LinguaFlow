@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const accountTestPassword = "original-password"
@@ -28,7 +28,7 @@ func accountTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 		SetDisplayName("Password").SetUsernameLoginEnabled(true).ExecX(t.Context())
 	client.AuthChannelPolicy.Create().SetConnectionID(service.PasswordConnectionID).SetRevision(1).SetLoginPolicyRevision(1).
 		SetEnabled(true).SetLoginEnabled(true).SetSignupEnabled(true).SetLinkEnabled(true).
-		SetLoginRule("unrestricted").SetSignupRule("unrestricted").SetLinkRule("unrestricted").ExecX(t.Context())
+		SetLoginRules(authrules.Unrestricted()).SetSignupRules(authrules.Unrestricted()).SetLinkRules(authrules.Unrestricted()).ExecX(t.Context())
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(accountTestPassword), bcrypt.MinCost)
 	if err != nil {
 		t.Fatal(err)
@@ -339,6 +339,7 @@ func TestRouter_AccountAuthenticationAndLocalMode(t *testing.T) {
 	s, client, account := accountTestServer(t)
 	router := s.newRouter()
 	session := accountLogin(t, router, account.Username, accountTestPassword)
+	account = client.User.GetX(t.Context(), account.ID)
 	paths := []struct{ method, path, body string }{
 		{http.MethodGet, "/users/me", ""},
 		{http.MethodPut, "/users/me", `{"display_name":"Denied"}`},

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -66,7 +67,16 @@ func (s *Server) externalActor(w http.ResponseWriter, r *http.Request, required,
 	return r.WithContext(ctx), &account.ID, true
 }
 func (s *Server) writeExternalError(w http.ResponseWriter, r *http.Request, err error) {
+	var conflict *service.AuthenticationPublishConflict
+	if errors.As(err, &conflict) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{"type": "urn:linguaflow:authentication-publish-blocked", "title": "authentication_publish_blocked", "error_code": "authentication_publish_blocked", "status": 409, "detail": conflict.Impact.Remediation, "impact": conflict.Impact})
+		return
+	}
 	switch {
+	case errors.Is(err, service.ErrAuthenticationRuleDenied):
+		s.writeProblemWithType(w, r, 403, "urn:linguaflow:authentication-rule-denied", "authentication_rule_denied", "当前渠道不满足使用条件")
 	case errors.Is(err, service.ErrExternalFlowInvalid):
 		s.writeProblemWithType(w, r, 400, "urn:linguaflow:external-flow-invalid", "external_flow_invalid", "认证流程无效、过期或已使用，请重新开始")
 	case errors.Is(err, service.ErrReauthenticationRequired):
@@ -200,6 +210,8 @@ func (s *Server) ExchangeExternalAuthentication(w http.ResponseWriter, r *http.R
 		response["connection_id"] = out.Test.ConnectionID
 		response["revision"] = out.Test.Revision
 		response["fresh_supported"] = out.Test.FreshSupported
+		response["rules"] = out.Test.Diagnostics
+		response["attributes"] = out.Test.Attributes
 	default:
 		s.writeExternalError(w, r, service.ErrExternalFlowInvalid)
 		return

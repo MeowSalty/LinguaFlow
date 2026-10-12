@@ -30,6 +30,12 @@ func TestAuthenticationJSONContract(t *testing.T) {
 		{"nested alias", `{"oidc":{"Issuer":"https://id.test"}}`, func() any { return &service.CreateAuthConnectionInput{} }, false},
 		{"nested duplicate", `{"oidc":{"issuer":"a","issuer":"b"}}`, func() any { return &service.CreateAuthConnectionInput{} }, false},
 		{"trailing", `{"expected_revision":1} {}`, func() any { return &externalRevisionRequest{} }, false},
+		{"typed condition number", `{"policy":{"login_rules":{"mode":"conditions","match":"all","conditions":[{"field_id":"custom.count","operator":"gte","value":9007199254740993}]}}}`, func() any { return &service.UpdateAuthConnectionInput{} }, true},
+		{"old policy spelling", `{"policy":{"login_rule":"unrestricted"}}`, func() any { return &service.UpdateAuthConnectionInput{} }, false},
+		{"sample source object", `{"expected_revision":1,"sources":{"oidc_userinfo":{"department":"engineering","nested":{"a":1},"groups":[]}}}`, func() any { return &service.AuthRulesPreviewInput{} }, true},
+		{"duplicate sample source field", `{"expected_revision":1,"sources":{"oidc_userinfo":{"department":"engineering","department":"sales"}}}`, func() any { return &service.AuthRulesPreviewInput{} }, false},
+		{"condition null", `{"policy":{"login_rules":{"mode":"conditions","match":"all","conditions":[{"field_id":"custom.count","operator":"gte","value":null}]}}}`, func() any { return &service.UpdateAuthConnectionInput{} }, false},
+		{"condition unknown member", `{"policy":{"login_rules":{"mode":"conditions","match":"all","script":"allow"}}}`, func() any { return &service.UpdateAuthConnectionInput{} }, false},
 		{"missing content type", `{"expected_revision":1}`, func() any { return &externalRevisionRequest{} }, false},
 		{"wrong content type", `{"expected_revision":1}`, func() any { return &externalRevisionRequest{} }, false},
 	} {

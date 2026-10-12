@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 )
 
 // Authentication JSON is intentionally exact: encoding/json alone accepts
@@ -47,6 +49,16 @@ func validateAuthenticationJSON(dec *json.Decoder, t reflect.Type, path string) 
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
+	if t == reflect.TypeFor[json.RawMessage]() {
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			return err
+		}
+		if string(raw) == "null" && path != "client_secret" {
+			return errors.New("null authentication field")
+		}
+		return authrules.ValidateJSON(raw)
+	}
 	token, err := dec.Token()
 	if err != nil {
 		return err
@@ -76,6 +88,9 @@ func validateAuthenticationJSON(dec *json.Decoder, t reflect.Type, path string) 
 			}
 			seen[name] = true
 			fieldType, ok := fields[name]
+			if t.Kind() == reflect.Map && t.Key().Kind() == reflect.String {
+				fieldType, ok = t.Elem(), true
+			}
 			if !ok {
 				return errors.New("unknown authentication field")
 			}
@@ -123,6 +138,7 @@ func (s *Server) decodeExternalRequest(w http.ResponseWriter, r *http.Request, o
 	if err == nil {
 		dec := json.NewDecoder(bytes.NewReader(data))
 		dec.DisallowUnknownFields()
+		dec.UseNumber()
 		err = dec.Decode(out)
 	}
 	if err != nil {
