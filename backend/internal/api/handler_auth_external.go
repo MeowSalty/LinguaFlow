@@ -22,6 +22,14 @@ func (b externalBrowserRequest) input() service.ExternalBrowserInput {
 	return service.ExternalBrowserInput{BrowserChallenge: b.BrowserChallenge, CompletionURL: b.CompletionURL, ReturnTo: b.ReturnTo}
 }
 
+type externalCompleteRequest struct {
+	InitialPassword   *string `json:"initial_password"`
+	ConfirmationToken string  `json:"confirmation_token"`
+	Verifier          string  `json:"verifier"`
+	Username          string  `json:"username"`
+	DisplayName       string  `json:"display_name"`
+}
+
 type externalProofRequest struct {
 	ReauthenticationProof string `json:"reauthentication_proof"`
 }
@@ -190,6 +198,7 @@ func (s *Server) ExchangeExternalAuthentication(w http.ResponseWriter, r *http.R
 			return
 		}
 		c := out.Confirmation
+		response["signup_requirements"] = c.SignupRequirements
 		response["confirmation_token"] = c.ConfirmationToken
 		response["transaction_id"] = c.TransactionID
 		response["expires_at"] = c.ExpiresAt
@@ -223,16 +232,11 @@ func (s *Server) CompleteExternalAuthentication(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	var in struct {
-		ConfirmationToken string `json:"confirmation_token"`
-		Verifier          string `json:"verifier"`
-		Username          string `json:"username"`
-		DisplayName       string `json:"display_name"`
-	}
+	var in externalCompleteRequest
 	if !s.decodeExternalRequest(w, r, &in) {
 		return
 	}
-	out, err := s.externalAuth.Complete(r.Context(), actor, service.ExternalCompleteInput{ConfirmationToken: in.ConfirmationToken, Verifier: in.Verifier, Username: in.Username, DisplayName: in.DisplayName})
+	out, err := s.externalAuth.Complete(r.Context(), actor, service.ExternalCompleteInput{InitialPassword: in.InitialPassword, ConfirmationToken: in.ConfirmationToken, Verifier: in.Verifier, Username: in.Username, DisplayName: in.DisplayName})
 	if err != nil {
 		s.writeExternalError(w, r, err)
 		return
