@@ -11,6 +11,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authhttp"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authprotocol"
 	"io"
 	"mime"
 	"net"
@@ -26,10 +28,10 @@ import (
 )
 
 var (
-	ErrInvalidConfig = errors.New("oidc configuration is invalid")
-	ErrUnavailable   = errors.New("oidc provider is unavailable")
-	ErrInvalidToken  = errors.New("oidc response is invalid")
-	ErrFreshAuth     = errors.New("recent authentication is required")
+	ErrInvalidConfig = authprotocol.ErrInvalidConfig
+	ErrUnavailable   = authprotocol.ErrUnavailable
+	ErrInvalidToken  = authprotocol.ErrInvalidToken
+	ErrFreshAuth     = authprotocol.ErrFreshAuth
 )
 
 type Config struct {
@@ -41,55 +43,15 @@ type Config struct {
 	UserInfoEnabled  bool
 }
 
-type Identity struct {
-	Sources           map[string]json.RawMessage
-	SourceErrors      map[string]string
-	Issuer            string
-	Subject           string
-	AuthTime          time.Time
-	DisplayName       string
-	PreferredUsername string
-	Email             string
-	Nonce             string
-}
-
-type ProviderMetadata struct {
-	Issuer                string   `json:"issuer"`
-	AuthorizationEndpoint string   `json:"authorization_endpoint"`
-	TokenEndpoint         string   `json:"token_endpoint"`
-	UserInfoEndpoint      string   `json:"userinfo_endpoint,omitempty"`
-	ScopesSupported       []string `json:"scopes_supported,omitempty"`
-	AuthStyle             string   `json:"client_auth_method"`
-	SupportsPKCES256      bool     `json:"supports_pkce_s256"`
-}
-
-type AuthorizationRequest struct {
-	RedirectURL  string
-	State        string
-	Nonce        string
-	CodeVerifier string
-	Fresh        bool
-	MaxAge       time.Duration
-}
-
-type Authorization struct {
-	URL           string
-	CodeChallenge string
-}
-
-type ExchangeRequest struct {
-	RedirectURL   string
-	Code          string
-	CodeVerifier  string
-	ExpectedNonce string
-	RequireFresh  bool
-	MaxAge        time.Duration
-	Now           time.Time
-}
+type Identity = authprotocol.Identity
+type ProviderMetadata = authprotocol.ProviderMetadata
+type AuthorizationRequest = authprotocol.AuthorizationRequest
+type Authorization = authprotocol.Authorization
+type ExchangeRequest = authprotocol.ExchangeRequest
 
 type Client struct {
 	deployment config.AuthDeploymentConfig
-	transport  *secureTransport
+	transport  *authhttp.Transport
 }
 
 func New(deployment config.AuthDeploymentConfig) (*Client, error) {
@@ -105,11 +67,7 @@ func New(deployment config.AuthDeploymentConfig) (*Client, error) {
 	if err := validateDeployment(deployment); err != nil {
 		return nil, err
 	}
-	transport := &secureTransport{deployment: deployment, base: http.Transport{
-		ForceAttemptHTTP2:   true,
-		TLSHandshakeTimeout: deployment.RequestTimeout / 2,
-	}}
-	transport.base.DialContext = transport.dial
+	transport := authhttp.New(deployment)
 	return &Client{deployment: deployment, transport: transport}, nil
 }
 
@@ -125,7 +83,7 @@ func validateDeployment(d config.AuthDeploymentConfig) error {
 		if err != nil || !u.IsAbs() || u.Host == "" || u.User != nil || u.Fragment != "" {
 			return ErrInvalidConfig
 		}
-		if u.Scheme != "https" && !(d.AllowHTTPLoopback && u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
+		if u.Scheme != "https" && !(d.AllowHTTPLoopback && u.Scheme == "http" && authhttp.IsLoopbackHost(u.Hostname())) {
 			return ErrInvalidConfig
 		}
 	}
@@ -134,7 +92,7 @@ func validateDeployment(d config.AuthDeploymentConfig) error {
 
 func (c *Client) validateConnection(connection Config) error {
 	u, err := url.Parse(strings.TrimSpace(connection.Issuer))
-	if err != nil || !u.IsAbs() || u.Host == "" || u.User != nil || u.Fragment != "" || connection.ClientID == "" || !c.transport.validURL(u) {
+	if err != nil || !u.IsAbs() || u.Host == "" || u.User != nil || u.Fragment != "" || connection.ClientID == "" || !c.transport.ValidURL(u) {
 		return ErrInvalidConfig
 	}
 	if connection.ClientAuthMethod == "" {
@@ -174,11 +132,11 @@ func (c *Client) Check(ctx context.Context, cfg Config) (ProviderMetadata, error
 	}
 	e := p.Endpoint()
 	meta := ProviderMetadata{Issuer: cfg.Issuer, AuthorizationEndpoint: e.AuthURL, TokenEndpoint: e.TokenURL, AuthStyle: normalizedAuthMethod(cfg)}
-	if !c.transport.validRawURL(e.AuthURL) || !c.transport.validRawURL(e.TokenURL) {
+	if !c.transport.ValidRawURL(e.AuthURL) || !c.transport.ValidRawURL(e.TokenURL) {
 		return ProviderMetadata{}, ErrUnavailable
 	}
 	if p.UserInfoEndpoint() != "" {
-		if !c.transport.validRawURL(p.UserInfoEndpoint()) {
+		if !c.transport.ValidRawURL(p.UserInfoEndpoint()) {
 			return ProviderMetadata{}, ErrUnavailable
 		}
 		meta.UserInfoEndpoint = p.UserInfoEndpoint()
@@ -226,7 +184,7 @@ func (c *Client) BuildAuthorization(ctx context.Context, cfg Config, req Authori
 	if err != nil {
 		return Authorization{}, err
 	}
-	if !c.transport.validRawURL(p.Endpoint().AuthURL) {
+	if !c.transport.ValidRawURL(p.Endpoint().AuthURL) {
 		return Authorization{}, ErrUnavailable
 	}
 	challenge := pkceChallenge(req.CodeVerifier)
@@ -313,7 +271,7 @@ func (c *Client) ExchangeAndVerify(ctx context.Context, cfg Config, req Exchange
 			return Identity{}, ErrFreshAuth
 		}
 	}
-	identity := Identity{Sources: map[string]json.RawMessage{"oidc_id_token": verifiedClaims}, SourceErrors: map[string]string{}, Issuer: claims.Issuer, Subject: claims.Subject, AuthTime: authTime, Nonce: claims.Nonce}
+	identity := Identity{Protocol: "oidc", Authority: claims.Issuer, Sources: map[string]json.RawMessage{"oidc_id_token": verifiedClaims}, SourceErrors: map[string]string{}, Issuer: claims.Issuer, Subject: claims.Subject, AuthTime: authTime, Nonce: claims.Nonce}
 	fillOrdinaryProfile(&identity, verifiedClaims)
 	if cfg.UserInfoEnabled {
 		endpoint := p.UserInfoEndpoint()
@@ -420,7 +378,7 @@ func pkceChallenge(verifier string) string {
 }
 func (c *Client) validRedirect(raw string) bool {
 	u, err := url.Parse(raw)
-	return err == nil && u.IsAbs() && u.Host != "" && u.User == nil && u.Fragment == "" && (u.Scheme == "https" || (c.deployment.AllowHTTPLoopback && u.Scheme == "http" && isLoopbackHost(u.Hostname())))
+	return err == nil && u.IsAbs() && u.Host != "" && u.User == nil && u.Fragment == "" && (u.Scheme == "https" || (c.deployment.AllowHTTPLoopback && u.Scheme == "http" && authhttp.IsLoopbackHost(u.Hostname())))
 }
 func validCodeVerifier(value string) bool {
 	if len(value) < 43 || len(value) > 128 {
@@ -432,103 +390,4 @@ func validCodeVerifier(value string) bool {
 		}
 	}
 	return true
-}
-func isLoopbackHost(host string) bool {
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(strings.Trim(host, "[]"))
-	return ip != nil && ip.IsLoopback()
-}
-
-type secureTransport struct {
-	deployment config.AuthDeploymentConfig
-	base       http.Transport
-}
-
-func (t *secureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.URL == nil || !t.validURL(req.URL) {
-		return nil, ErrUnavailable
-	}
-	resp, err := t.base.RoundTrip(req)
-	if err != nil {
-		return nil, ErrUnavailable
-	}
-	resp.Body = &limitedBody{ReadCloser: resp.Body, reader: io.LimitReader(resp.Body, t.deployment.MaxResponseBytes+1), max: t.deployment.MaxResponseBytes}
-	return resp, nil
-}
-func (t *secureTransport) validRawURL(raw string) bool {
-	u, err := url.Parse(raw)
-	return err == nil && t.validURL(u)
-}
-func (t *secureTransport) validURL(u *url.URL) bool {
-	return u != nil && u.IsAbs() && u.Host != "" && u.User == nil && u.Fragment == "" && (u.Scheme == "https" || (t.deployment.AllowHTTPLoopback && u.Scheme == "http" && isLoopbackHost(u.Hostname())))
-}
-func (t *secureTransport) dial(ctx context.Context, network, address string) (net.Conn, error) {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		return nil, ErrUnavailable
-	}
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil || len(ips) == 0 {
-		return nil, ErrUnavailable
-	}
-	var last error
-	for _, ip := range ips {
-		if !t.allowed(host, ip.IP) {
-			continue
-		}
-		conn, err := (&net.Dialer{Timeout: t.deployment.RequestTimeout / 2}).DialContext(ctx, network, net.JoinHostPort(ip.IP.String(), port))
-		if err == nil {
-			return conn, nil
-		}
-		last = err
-	}
-	if last != nil {
-		return nil, ErrUnavailable
-	}
-	return nil, ErrUnavailable
-}
-func (t *secureTransport) allowed(host string, ip net.IP) bool {
-	for _, h := range t.deployment.AllowedHosts {
-		if strings.EqualFold(strings.TrimSpace(h), host) {
-			return true
-		}
-	}
-	for _, raw := range t.deployment.AllowedCIDRs {
-		_, n, err := net.ParseCIDR(raw)
-		if err == nil && n.Contains(ip) {
-			return true
-		}
-	}
-	if len(t.deployment.AllowedHosts) > 0 || len(t.deployment.AllowedCIDRs) > 0 {
-		return false
-	}
-	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast()
-}
-
-type limitedBody struct {
-	io.ReadCloser
-	reader io.Reader
-	max    int64
-	read   int64
-}
-
-func (b *limitedBody) Read(p []byte) (int, error) {
-	remaining := b.max - b.read
-	if remaining < 0 {
-		return 0, ErrUnavailable
-	}
-	limit := int64(len(p))
-	if limit > remaining+1 {
-		limit = remaining + 1
-	}
-	n, err := b.reader.Read(p[:limit])
-	if int64(n) > remaining {
-		allowed := int(remaining)
-		b.read = b.max + 1
-		return allowed, ErrUnavailable
-	}
-	b.read += int64(n)
-	return n, err
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authhttp"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -59,7 +60,7 @@ func TestOIDCOutboundTimeoutSizeAndRedirect(t *testing.T) {
 			}
 			if name == "oversize" {
 				p.claimsOverride = map[string]any{"name": strings.Repeat("private-profile-marker", 1000)}
-				c.transport.deployment.MaxResponseBytes = 2048
+				c.transport.Deployment.MaxResponseBytes = 2048
 			}
 			_, err := c.ExchangeAndVerify(context.Background(), testConfig(p), ExchangeRequest{RedirectURL: "http://localhost/callback", Code: "code-1", CodeVerifier: strings.Repeat("v", 43), ExpectedNonce: p.nonce})
 			want := ErrUnavailable
@@ -82,9 +83,9 @@ func TestOIDCOutboundTimeoutSizeAndRedirect(t *testing.T) {
 	if redirected.Load() != 0 {
 		t.Fatal("provider redirect was followed")
 	}
-	policy := &secureTransport{}
+	policy := &authhttp.Transport{}
 	for _, ip := range []string{"127.0.0.1", "10.0.0.1", "169.254.169.254", "0.0.0.0", "224.0.0.1", "::1", "fe80::1", "ff02::1"} {
-		if policy.allowed("public-name.example.test", net.ParseIP(ip)) {
+		if policy.Allowed("public-name.example.test", net.ParseIP(ip)) {
 			t.Fatalf("unsafe default destination allowed: %s", ip)
 		}
 	}
