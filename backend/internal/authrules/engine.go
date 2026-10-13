@@ -162,7 +162,7 @@ func validType(t string) bool {
 	}
 	return false
 }
-func Catalog(mappings []Field) ([]Field, error) {
+func Catalog(protocol string, mappings []Field) ([]Field, error) {
 	if len(mappings) > maxEntries {
 		return nil, fmt.Errorf("attribute_mappings: at most %d mappings", maxEntries)
 	}
@@ -170,6 +170,11 @@ func Catalog(mappings []Field) ([]Field, error) {
 		{FieldID: "external.name", Label: "Name", Type: "string", Source: "oidc_id_token", Pointer: "/name", RequiredScopes: []string{"profile"}, Optional: true, UserEditable: true},
 		{FieldID: "external.preferred_username", Label: "Preferred username", Type: "string", Source: "oidc_id_token", Pointer: "/preferred_username", RequiredScopes: []string{"profile"}, Optional: true, UserEditable: true},
 		{FieldID: "external.email", Label: "External email (not a platform verified email)", Type: "string", Source: "oidc_id_token", Pointer: "/email", RequiredScopes: []string{"email"}, Optional: true, UserEditable: true},
+	}
+	if protocol == "oauth2" {
+		fields = []Field{}
+	} else if protocol != "oidc" && protocol != "password" {
+		return nil, fmt.Errorf("unsupported protocol")
 	}
 	seen, paths := map[string]bool{}, map[string]bool{}
 	for _, f := range fields {
@@ -193,7 +198,7 @@ func Catalog(mappings []Field) ([]Field, error) {
 		if len(f.DerivedFrom) != 0 {
 			return fail("derived relationships are defined by the server")
 		}
-		if f.Source != "oidc_id_token" && f.Source != "oidc_userinfo" {
+		if !ValidSource(protocol, f.Source) {
 			return fail("unsupported verified source")
 		}
 		if _, err := pointerParts(f.Pointer); err != nil {
@@ -319,8 +324,8 @@ func conditionType(f Field, op string) string {
 	}
 	return f.Type
 }
-func Validate(mappings []Field, rules ...RuleSet) error {
-	fields, err := Catalog(mappings)
+func Validate(protocol string, mappings []Field, rules ...RuleSet) error {
+	fields, err := Catalog(protocol, mappings)
 	if err != nil {
 		return err
 	}
@@ -351,11 +356,11 @@ func Validate(mappings []Field, rules ...RuleSet) error {
 	}
 	return nil
 }
-func ValidateScopes(mappings []Field, scopes []string, userinfoEnabled bool, rules ...RuleSet) error {
-	if err := Validate(mappings, rules...); err != nil {
+func ValidateScopes(protocol string, mappings []Field, scopes []string, userinfoEnabled bool, rules ...RuleSet) error {
+	if err := Validate(protocol, mappings, rules...); err != nil {
 		return err
 	}
-	fields, _ := Catalog(mappings)
+	fields, _ := Catalog(protocol, mappings)
 	catalog := fieldMap(fields)
 	available := map[string]bool{}
 	for _, scope := range scopes {
@@ -401,8 +406,8 @@ func RequiredAttributes(mappings []Field, rules ...RuleSet) []string {
 	sort.Strings(out)
 	return out
 }
-func RulesFingerprint(rule RuleSet, mappings []Field) string {
-	fields, err := Catalog(mappings)
+func RulesFingerprint(protocol string, rule RuleSet, mappings []Field) string {
+	fields, err := Catalog(protocol, mappings)
 	if err != nil {
 		return "invalid"
 	}
@@ -444,14 +449,14 @@ func canonical(f Field, raw any, now time.Time) (json.RawMessage, error) {
 	}
 	return json.Marshal(v)
 }
-func Extract(mappings []Field, sources map[string]json.RawMessage, sourceErrors map[string]string, now time.Time) (map[string]Attribute, error) {
-	fields, err := Catalog(mappings)
+func Extract(protocol string, mappings []Field, sources map[string]json.RawMessage, sourceErrors map[string]string, now time.Time) (map[string]Attribute, error) {
+	fields, err := Catalog(protocol, mappings)
 	if err != nil {
 		return nil, err
 	}
 	roots := map[string]any{}
 	for source, raw := range sources {
-		if source != "oidc_id_token" && source != "oidc_userinfo" {
+		if !ValidSource(protocol, source) {
 			return nil, fmt.Errorf("unsupported attribute source")
 		}
 		root, err := parse(raw)
@@ -576,16 +581,16 @@ func matches(f Field, op string, actual, expected any) bool {
 	}
 	return false
 }
-func Evaluate(rule RuleSet, mappings []Field, evidence Evidence, now time.Time) Result {
+func Evaluate(protocol string, rule RuleSet, mappings []Field, evidence Evidence, now time.Time) Result {
 	out := Result{Status: "unknown", Conditions: []ConditionResult{}}
-	if err := Validate(mappings, rule); err != nil {
+	if err := Validate(protocol, mappings, rule); err != nil {
 		return out
 	}
 	if rule.Mode == "unrestricted" {
 		out.Status = "pass"
 		return out
 	}
-	fields, _ := Catalog(mappings)
+	fields, _ := Catalog(protocol, mappings)
 	catalog := fieldMap(fields)
 	pass, fail, unknown := 0, 0, 0
 	for _, condition := range rule.Conditions {
@@ -667,4 +672,18 @@ func Evaluate(rule RuleSet, mappings []Field, evidence Evidence, now time.Time) 
 		out.Retryable = false
 	}
 	return out
+}
+
+func ValidSource(protocol, source string) bool {
+	return protocol == "oidc" && (source == "oidc_id_token" || source == "oidc_userinfo") || protocol == "oauth2" && source == "oauth2_profile"
+}
+
+// Subject extraction uses the same bounded JSON Pointer grammar as ordinary mappings.
+func ValidatePointer(pointer string) error { _, err := pointerParts(pointer); return err }
+func JSONValue(raw []byte, pointer string) (any, bool) {
+	root, err := parse(raw)
+	if err != nil {
+		return nil, false
+	}
+	return lookup(root, pointer)
 }

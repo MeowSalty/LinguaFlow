@@ -70,7 +70,7 @@ func TestOIDCVerifiedAttributeSources(t *testing.T) {
 				t.Fatal("failure produced UserInfo evidence")
 			}
 			f := authrules.Field{FieldID: "custom.department", Label: "Department", Type: "string", Source: "oidc_userinfo", Pointer: "/department"}
-			attrs, e := authrules.Extract([]authrules.Field{f}, identity.Sources, identity.SourceErrors, time.Now().UTC())
+			attrs, e := authrules.Extract("oidc", []authrules.Field{f}, identity.Sources, identity.SourceErrors, time.Now().UTC())
 			if e != nil {
 				t.Fatal(e)
 			}
