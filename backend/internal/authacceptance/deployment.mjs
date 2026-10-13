@@ -33,7 +33,7 @@ async function loginPassword(page, username, password) { const session = await r
 async function driveProvider(page, authorizationURL, provider, username, requirePrompt = false, expected = 200) {
   const authURL = new URL(authorizationURL);
   must(authURL.searchParams.get('code_challenge_method') === 'S256', 'Upstream PKCE S256 missing');
-  must(authURL.searchParams.has('nonce'), 'OIDC nonce missing');
+  if (!provider.base) must(authURL.searchParams.has('nonce'), 'OIDC nonce missing');
   if (requirePrompt) must(authURL.searchParams.get('max_age') === '0', 'Fresh authentication must request max_age=0');
   // auth_time is expressed in whole seconds. Age any existing cookie beyond
   // that precision before asserting max_age=0 causes an interactive challenge.
@@ -43,13 +43,13 @@ async function driveProvider(page, authorizationURL, provider, username, require
   if (await page.locator('#password').isVisible()) {
     if (await page.locator('#username').isVisible()) await page.locator('#username').fill(username);
     await page.locator('#password').fill(provider.password);
-    await page.locator('#kc-login').click();
+    await page.locator(provider.base ? '#oauth-approve' : '#kc-login').click();
   } else must(!requirePrompt, 'Existing IdP cookie bypassed required fresh authentication');
   await page.waitForURL('**/complete');
   await page.waitForFunction(() => window.result !== undefined && window.result !== null);
   must(!new URL(page.url()).search, 'Completion URL retained a ticket');
   const response = await page.evaluate(() => window.result);
-  assert.equal(response.status, expected, `OIDC exchange failed (${response.body?.code || response.body?.title || response.status})`);
+  assert.equal(response.status, expected, `Provider exchange failed (${response.body?.code || response.body?.title || response.status})`);
   must(response.cache === 'no-store', 'Exchange must be no-store');
   rememberSecrets(response.body);
   return response.body;
@@ -275,10 +275,100 @@ async function instanceIsolation(source, other, provider) {
   console.log('PASS instance isolation and exchange replay');
 }
 
+async function oauthScenario(app, provider, mode) {
+  console.log(`Running ${mode} generic OAuth 2.0 lifecycle`);
+  const eventStart = provider.events.length;
+  const adminContext = await browser.newContext(), userContext = await browser.newContext();
+  const admin = await adminContext.newPage(), page = await userContext.newPage();
+  await admin.goto(app.completionBase); await page.goto(app.completionBase);
+  await loginPassword(admin, 'admin', app.adminPassword);
+  const password = 'B3-first-maintenance-password!'; runtime.secrets.push(password);
+  const connections = [];
+  for (const [clientID, method] of [['b3-basic', 'client_secret_basic'], ['b3-post', 'client_secret_post']]) {
+    let record = await request(admin, '/admin/auth-connections', {
+      kind: 'generic_oauth2', display_name: clientID, client_secret: provider.clientSecret,
+      oauth2: { authorization_endpoint: provider.base + '/authorize', token_endpoint: provider.base + '/token', profile_endpoint: provider.base + '/user', client_id: clientID, client_auth_method: method, scopes: [], subject_mapping: { pointer: '/id', type: 'integer' } }
+    }, 'POST', 201);
+    const path = '/admin/auth-connections/' + record.id;
+    must(!record.draft.policy.enabled, 'New OAuth connection must start disabled');
+    record = await request(admin, path, { expected_revision: record.aggregate_revision,
+      attribute_mappings: [{ field_id: 'external.account_created_at', label: 'Account created', type: 'datetime', source: 'oauth2_profile', pointer: '/created_at' }],
+      policy: { enabled: true, login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: 'unrestricted' }, link_rules: { mode: 'unrestricted' }, signup_rules: { mode: 'conditions', match: 'all', conditions: [{ field_id: 'external.account_age_days', operator: 'gte', value: 365 }] } }
+    }, 'PATCH');
+    const checked = await request(admin, path + '/check', { expected_revision: record.aggregate_revision });
+    must(checked.valid && !checked.fresh_supported, 'OAuth configuration check must not invent fresh authentication');
+    await request(admin, path + '/publish', { expected_revision: record.aggregate_revision }, 'POST', 409);
+    const tested = await flow(admin, path + '/test', { expected_revision: record.aggregate_revision }, provider, 'provideradmin');
+    must(tested.kind === 'test_result' && !tested.fresh_supported && tested.rules.signup.status === 'pass', 'OAuth real test or account age rule failed');
+    must(tested.attributes['external.account_created_at'].status === 'pass' && tested.attributes['external.account_age_days'].value >= 365, 'Profile date did not feed typed derived rule');
+    record = await request(admin, path, undefined, 'GET');
+    record = await request(admin, path + '/publish', { expected_revision: record.aggregate_revision });
+    connections.push(record);
+  }
+  const [first, second] = connections;
+  const capabilities = await request(page, '/auth/capabilities', undefined, 'GET', 200, null);
+  for (const connection of connections) {
+    const capability = capabilities.connections.find(c => c.connection_id === connection.id);
+    must(capability?.can_signup, 'OAuth signup missing despite available password initialization');
+    assert.deepEqual(capability.signup_requirements, ['local_password']);
+  }
+  const signup = await flow(page, `/auth/external/${first.id}/start`, {}, provider, 'alice', { anonymous: true });
+  must(signup.kind === 'signup_confirmation' && !signup.session, 'OAuth signup issued a session before initialization');
+  assert.deepEqual(signup.signup_requirements, ['local_password']);
+  await expectResponse(page.evaluate(() => auth.complete({ username: 'oauth_alice' })), 400, 'missing initial password');
+  must((await request(admin, '/admin/users?search=oauth_alice', undefined, 'GET')).total === 0, 'Missing initial password left a user');
+  const registered = await expectResponse(page.evaluate(password => auth.complete({ username: 'oauth_alice', initial_password: password }), password), 200, 'OAuth first signup');
+  must(registered.kind === 'session' && registered.session.user.email === null, 'Untrusted OAuth email became platform account email');
+  const accountID = registered.session.user.id;
+  let methods = await request(page, '/users/me/login-methods', undefined, 'GET');
+  must(methods.password.is_set && !methods.email.verified && !methods.email.can_recover && methods.bindings.every(b => !b.can_reauthenticate), 'OAuth fabricated account maintenance or email capabilities');
+  const firstBinding = methods.bindings.find(b => b.connection_id === first.id).binding_id;
+  await expectResponse(page.evaluate(bindingID => auth.begin('/auth/reauthenticate', { method: 'oidc', binding_id: bindingID, action: 'link', target_id: 'password' }), firstBinding), 403, 'OAuth cannot provide fresh reauthentication');
+  const linkProof = await request(page, '/auth/reauthenticate', { method: 'password', password, action: 'link', target_id: second.id });
+  const linked = await flow(page, `/users/me/login-bindings/${second.id}/start`, { reauthentication_proof: linkProof.reauthentication_proof }, provider, 'alice');
+  must(linked.kind === 'link_confirmation', 'OAuth binding skipped explicit confirmation');
+  assert.deepEqual(linked.signup_requirements, []);
+  const linkResult = await expectResponse(page.evaluate(() => auth.complete()), 200, 'OAuth second binding');
+  must(linkResult.kind === 'linked' && !linkResult.session, 'OAuth binding issued an unrelated session');
+  const login = await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
+  must(login.kind === 'session' && login.session.user.id === accountID, 'OAuth login changed account ownership');
+  methods = await request(page, '/users/me/login-methods', undefined, 'GET');
+  must(methods.bindings.length === 2 && methods.bindings.every(b => b.verified && !b.can_reauthenticate) && !methods.password.can_delete, 'OAuth capability/maintenance status mismatch');
+  const deleteProof = await request(page, '/auth/reauthenticate', { method: 'password', password, action: 'password_delete', target_id: 'password' });
+  await request(page, '/users/me/password', { reauthentication_proof: deleteProof.reauthentication_proof }, 'DELETE', 409);
+  const unlinkProof = await request(page, '/auth/reauthenticate', { method: 'password', password, action: 'unlink', target_id: String(firstBinding) });
+  await request(page, `/users/me/login-bindings/${firstBinding}`, { reauthentication_proof: unlinkProof.reauthentication_proof }, 'DELETE', 204);
+  await request(page, '/users/me/login-methods', undefined, 'GET', 401);
+  const passwordLogin = await loginPassword(page, 'oauth_alice', password);
+  must(passwordLogin.user.id === accountID, 'Initial password cannot log back into the same account');
+  must((await request(page, '/users/me/login-methods', undefined, 'GET')).bindings.length === 1, 'OAuth unlink left the binding');
+  // Adjacent large decimal IDs would collide if decoded through float64/Number.
+  const neighbor = await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'neighbor', { anonymous: true });
+  must(neighbor.kind === 'signup_confirmation', 'Adjacent large integer subject was rounded into another account');
+  const neighborSession = await expectResponse(page.evaluate(password => auth.complete({ username: 'oauth_neighbor', initial_password: password }), password), 200, 'neighbor integer signup');
+  must(neighborSession.session.user.id !== accountID, 'Adjacent large integer subjects share a user');
+  for (const username of ['young', 'missing']) {
+    const denied = await flow(page, `/auth/external/${first.id}/start`, {}, provider, username, { anonymous: true, expected: 403 });
+    must(denied.type === 'urn:linguaflow:authentication-rule-denied' && !denied.attributes && !denied.rules && !denied.session, 'OAuth date rule denial leaked diagnostics or permitted signup');
+  }
+  must(provider.errors.length === 0, 'Controlled OAuth server rejected protocol requests');
+  const events = provider.events.slice(eventStart);
+  for (const method of ['client_secret_basic', 'client_secret_post']) {
+    must(events.some(e => e.phase === 'token' && e.method === method && e.pkce === 'S256') && events.some(e => e.phase === 'profile' && e.method === method), 'OAuth client authentication or profile retrieval was not exercised');
+  }
+  for (const endpoint of ['/admin/auth-connections', '/admin/audit-logs']) {
+    const response = await request(admin, endpoint, undefined, 'GET');
+    for (const secret of runtime.secrets) must(!JSON.stringify(response).includes(secret), 'OAuth secrets leaked in administrator response');
+  }
+  await adminContext.close(); await userContext.close();
+  results.push({ mode, database: mode === 'same-origin' ? 'SQLite' : 'PostgreSQL', protocol: 'generic_oauth2', status: 'passed', flows: ['client_secret_basic', 'client_secret_post', 'authorization_code_pkce_s256', 'bearer_current_user_profile', 'real_test_required_before_publish', 'fresh_supported_false_can_publish', 'created_at_derived_signup_rule', 'missing_and_young_date_denied', 'required_initial_password_atomic_signup', 'initial_password_immediate_reauthentication', 'generic_fresh_reauthentication_rejected', 'second_binding_and_login', 'distinct_adjacent_large_integer_subjects', 'unverified_email_not_promoted', 'last_maintenance_password_preserved', 'password_reauthenticated_unlink', 'password_login_after_unlink'] });
+  console.log(`PASS ${mode}: generic OAuth, initial password, maintenance, profile date rules and integer identity isolation`);
+}
+
 try {
   await run('task', ['backend:build'], { cwd: resolve(backendDir, '..') });
   console.log('Starting isolated PostgreSQL and verified Keycloak 26.8.0');
-  const [postgres, provider] = await Promise.all([runtime.postgres(), runtime.keycloak()]);
+  const [postgres, provider, oauth] = await Promise.all([runtime.postgres(), runtime.keycloak(), runtime.oauth2()]);
   if (process.argv.includes('--postgres')) {
     await run('task', ['backend:test:auth:postgres'], { cwd: resolve(backendDir, '..'), env: { ...process.env, LINGUAFLOW_TEST_POSTGRES_DSN: postgres.dsn } });
     results.push({ database: 'PostgreSQL', status: 'passed' });
@@ -286,15 +376,17 @@ try {
   browser = await chromium.launch({ headless: true, ...(process.env.LINGUAFLOW_AUTH_BROWSER ? { executablePath: process.env.LINGUAFLOW_AUTH_BROWSER } : {}) });
   const sameOrigin = await runtime.application('same-origin');
   await scenario(sameOrigin, provider, 'same-origin');
+  await oauthScenario(sameOrigin, oauth, 'same-origin');
   const crossOrigin = await runtime.application('cross-origin', postgres.applicationDSN);
   await scenario(crossOrigin, provider, 'cross-origin');
+  await oauthScenario(crossOrigin, oauth, 'cross-origin');
   await instanceIsolation(sameOrigin, crossOrigin, provider);
   for (const file of await readdir(runtime.root)) {
     if (!file.endsWith('.log') || file === 'postgres.log' || file === 'keycloak.log') continue;
     const data = await readFile(join(runtime.root, file), 'utf8');
     for (const marker of runtime.secrets) must(!data.includes(marker), 'Server log leaked a marker secret');
   }
-  const report = { tested_at: new Date().toISOString(), keycloak: { version: keycloakVersion, sha256: keycloakSHA256 }, results };
+  const report = { tested_at: new Date().toISOString(), keycloak: { version: keycloakVersion, sha256: keycloakSHA256 }, github: { status: 'pending', reason: 'Real GitHub OAuth application and interactive account authorization are deferred; controlled OAuth acceptance is not GitHub acceptance.' }, results };
   await writeFile(join(runtime.root, 'report.json'), JSON.stringify(report, null, 2));
   console.log('Acceptance report: ' + join(runtime.root, 'report.json'));
 } catch (error) {

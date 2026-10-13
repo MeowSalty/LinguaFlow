@@ -22,16 +22,40 @@ vars:
 
 tasks:
   test:auth:deployment:
-    desc: 隔离 PostgreSQL、Keycloak 26.8.0 及同源/跨域浏览器认证闭环验收（缺少环境直接失败）
+    desc: 隔离 PostgreSQL、Keycloak 26.8.0、通用 OAuth 及同源/跨域 A/B1/B2/B3 认证验收
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - node ./internal/authacceptance/deployment.mjs --postgres
 
   test:auth:browser:
-    desc: 真实 Keycloak 与双部署浏览器认证验收
+    desc: 真实 Keycloak、受控通用 OAuth 与双部署浏览器认证验收
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - node ./internal/authacceptance/deployment.mjs
+
+  test:auth:browser:syntax:
+    desc: 检查后端独立认证浏览器验收脚本语法
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node --check ./internal/authacceptance/deployment.mjs
+      - node --check ./internal/authacceptance/runtime.mjs
+      - node --check ./internal/authacceptance/oauth2.mjs
+      - node --check ./internal/authacceptance/github.mjs
+      - node --check ./internal/authacceptance/postgres-b3.mjs
+
+  test:auth:postgres:b3:
+    desc: 独立隔离 PostgreSQL B3 认证竞态验收（等待整个测试完成再清理实例）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/postgres-b3.mjs
+
+  test:auth:github:
+    desc: 显式真实 GitHub OAuth 交互验收（需专用 OAuth App 与人工浏览器授权；未运行不得记为通过）
+    dir: '{{.TASKFILE_DIR}}'
+    dotenv: ['{{.TASKFILE_DIR}}/internal/authacceptance/.env']
+    interactive: true
+    cmds:
+      - node ./internal/authacceptance/github.mjs
 
   auth:prepare:
     desc: 下载并校验隔离认证验收所需的 Keycloak 26.8.0
@@ -50,7 +74,7 @@ tasks:
     desc: 认证合同、状态机及网络边界定向测试
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go test -count=1 ./internal/authrules ./internal/authoidc ./internal/config ./internal/service ./internal/api ./internal/database -run 'Auth|OIDC|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
+      - go test -count=1 ./internal/authrules ./internal/authoidc ./internal/authoauth2 ./internal/config ./internal/service ./internal/api ./internal/database -run 'Auth|OIDC|OAuth|Generic|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
 
   test:auth:postgres:
     desc: 真实 PostgreSQL 认证竞态验收（缺少 DSN 直接失败）
@@ -59,7 +83,7 @@ tasks:
       - sh: test -n "$LINGUAFLOW_TEST_POSTGRES_DSN"
         msg: PostgreSQL 未验收，必须提供隔离实例 LINGUAFLOW_TEST_POSTGRES_DSN
     cmds:
-      - go test -race -count=1 ./internal/service ./internal/database -run 'Auth|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
+      - go test -race -count=1 ./internal/service ./internal/database -run 'Auth|OAuth|Generic|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
 
   deps:tidy:
     desc: 整理后端 Go 模块依赖

@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { prepareKeycloak, keycloakHome, run } from './prepare.mjs';
+import { controlledOAuth } from './oauth2.mjs';
 
 export const sourceDir = dirname(fileURLToPath(import.meta.url));
 export const backendDir = resolve(sourceDir, '../..');
@@ -30,7 +31,7 @@ export async function ready(url, child, timeout = 120000) {
   throw new Error('Acceptance readiness timed out: ' + new URL(url).pathname);
 }
 export async function createRuntime() {
-  const root = await mkdtemp(join(tmpdir(), 'linguaflow-b2-acceptance-'));
+  const root = await mkdtemp(join(tmpdir(), 'linguaflow-b3-acceptance-'));
   const children = [], servers = [], secrets = [];
   const applicationPorts = {};
   for (const mode of ['same-origin', 'cross-origin']) {
@@ -109,7 +110,12 @@ export async function createRuntime() {
     await ready(issuer + '/.well-known/openid-configuration', child, 180000);
     return { issuer, clientSecret, password };
   }
-  async function application(mode, dsn = '') {
+  async function oauth2() {
+    const provider = await controlledOAuth({ callbackBases: Object.values(applicationPorts).map(({ proxyPort }) => `http://127.0.0.1:${proxyPort}`), secrets });
+    servers.push(provider.server);
+    return provider;
+  }
+  async function application(mode, dsn = '', options = {}) {
     const { apiPort, proxyPort, crossPort } = applicationPorts[mode];
     const publicBase = `http://127.0.0.1:${proxyPort}`, crossBase = `http://127.0.0.1:${crossPort}`;
     const completionBase = mode === 'same-origin' ? publicBase : crossBase;
@@ -120,7 +126,7 @@ export async function createRuntime() {
       jwt_secret: secret(), credentials: { master_key: randomBytes(32).toString('base64') },
       storage: { initialization: { capacity_bytes: 1073741824, logical_limit_bytes: 1073741824 } },
       ...(dsn ? { database: { driver: 'postgres', dsn } } : {}),
-      authentication: { public_base_url: publicBase, completion_urls: [completionBase + '/complete'], allowed_cidrs: ['127.0.0.1/32'], allow_http_loopback: true, rate_limit_per_minute: 1000 },
+      authentication: { public_base_url: publicBase, completion_urls: [completionBase + '/complete'], allowed_cidrs: options.publicOAuth ? [] : ['127.0.0.1/32'], allow_http_loopback: true, rate_limit_per_minute: 1000 },
       cors: { allowed_origins: mode === 'same-origin' ? [] : [crossBase] }
     }, bootstrap: { registration_enabled: true, admin: { username: 'admin', password: adminPassword } } };
     const configPath = join(directory, 'server.json');
@@ -142,5 +148,5 @@ export async function createRuntime() {
     await ready(`http://127.0.0.1:${apiPort}/health/ready`, child);
     return { publicBase, completionBase, adminPassword, directory };
   }
-  return { root, secrets, postgres, keycloak, application, close };
+  return { root, secrets, postgres, keycloak, oauth2, application, close };
 }
