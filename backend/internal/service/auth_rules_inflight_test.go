@@ -29,6 +29,7 @@ func TestAuthRulesInFlightMappingChange(t *testing.T) {
 				t.Fatal(err)
 			}
 			c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(2).SetPublishedRevision(2).ExecX(ctx)
+			validateConnectionCandidate(t, s, c, 1, "flow-oidc", 2)
 			change := func() {
 				next := cfg
 				next.AttributeMappings = departmentMapping()
@@ -98,7 +99,7 @@ func TestAuthRulesTestDraftChangedDuringCallback(t *testing.T) {
 	if _, err = s.Exchange(ctx, &admin.ID, ExternalExchangeInput{Ticket: cb.Ticket, Verifier: flowTestVerifier}); !errors.Is(err, ErrAuthConnectionConflict) {
 		t.Fatalf("stale test result: %v", err)
 	}
-	if c.AuthConnectionValidation.Query().CountX(ctx) != 0 {
+	if c.AuthConnectionValidation.Query().CountX(ctx) != 1 {
 		t.Fatal("stale test recorded protocol validation")
 	}
 }
@@ -121,6 +122,7 @@ func TestAuthRulesTemporarySourceAndPurposeIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(2).SetPublishedRevision(2).ExecX(ctx)
+	validateConnectionCandidate(t, s, c, 1, "flow-oidc", 2)
 	protocol.exchange = func(context.Context, authoidc.Config, authoidc.ExchangeRequest) (authoidc.Identity, error) {
 		return authoidc.Identity{Issuer: cfg.OidcIssuer, Subject: "unavailable", SourceErrors: map[string]string{"oidc_userinfo": "source_unavailable"}}, nil
 	}

@@ -118,7 +118,7 @@ func TestAuthRulesPublicationUnknownAndFallback(t *testing.T) {
 			services, clients, admin := connectionTestServices(t, driver)
 			s, c := services[0], clients[0]
 			ctx := WithExternalActor(context.Background(), admin.ID, admin.AuthVersion)
-			rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Rules", OIDC: OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "rule-client"}, ClientSecret: "secret"})
+			rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Rules", OIDC: &OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "rule-client"}, ClientSecret: "secret"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -194,7 +194,7 @@ func TestAuthRulesOnlySignupChangePreservesSession(t *testing.T) {
 	services, clients, admin := connectionTestServices(t, dialect.SQLite)
 	s, c := services[0], clients[0]
 	ctx := WithExternalActor(context.Background(), admin.ID, admin.AuthVersion)
-	rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Rules", OIDC: OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "client"}, ClientSecret: "secret"})
+	rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Rules", OIDC: &OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "client"}, ClientSecret: "secret"})
 	if err != nil {
 		t.Fatal(err)
 	}

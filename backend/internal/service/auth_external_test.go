@@ -77,6 +77,8 @@ func seedExternalFlowConnection(t *testing.T, c *ent.Client, ids ...string) {
 	c.AuthConnection.Create().SetID(id).SetKind(authconnection.KindOidc).SetPublishedRevision(1).ExecX(ctx)
 	c.AuthConnectionRevision.Create().SetConnectionID(id).SetRevision(1).SetDisplayName("Test identity").SetOidcIssuer("https://issuer.example.test").SetOidcClientID("client").SetOidcClientAuthMethod(authconnectionrevision.OidcClientAuthMethodClientSecretBasic).SetOidcScopes([]string{"openid", "profile"}).ExecX(ctx)
 	c.AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(1).SetLoginPolicyRevision(1).SetEnabled(true).SetLoginEnabled(true).SetSignupEnabled(true).SetLinkEnabled(true).SetLoginRules(authrules.Unrestricted()).SetSignupRules(authrules.Unrestricted()).SetLinkRules(authrules.Unrestricted()).ExecX(ctx)
+	cfg := c.AuthConnectionRevision.Query().Where(authconnectionrevision.ConnectionIDEQ(id), authconnectionrevision.RevisionEQ(1)).OnlyX(ctx)
+	c.AuthConnectionValidation.Create().SetConnectionID(id).SetFingerprint(connectionFingerprint(cfg)).SetRevision(1).SetFreshSupported(true).SetActorUserID(1).SetTestedAt(time.Now()).ExecX(ctx)
 }
 
 func browserChallenge(verifier string) string {

@@ -20,7 +20,7 @@ import (
 func publishedRuleFixture(t *testing.T, s *ExternalAuthService, c *ent.Client, admin *ent.User, restricted bool) AuthConnectionRecord {
 	t.Helper()
 	ctx := context.Background()
-	rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Rules", OIDC: OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "rules"}, ClientSecret: "secret"})
+	rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Rules", OIDC: &OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "rules"}, ClientSecret: "secret"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestAuthRulesPublishRechecksExpiredEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			attrs, err := authrules.Extract(p.Config.AttributeMappings, map[string]json.RawMessage{"oidc_id_token": json.RawMessage(`{"department":"engineering"}`)}, nil, now)
+			attrs, err := authrules.Extract("oidc", p.Config.AttributeMappings, map[string]json.RawMessage{"oidc_id_token": json.RawMessage(`{"department":"engineering"}`)}, nil, now)
 			if err != nil {
 				t.Fatal(err)
 			}

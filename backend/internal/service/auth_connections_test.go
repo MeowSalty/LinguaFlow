@@ -57,13 +57,18 @@ func connectionTestServices(t *testing.T, driver string) ([2]*ExternalAuthServic
 func validateConnectionCandidate(t *testing.T, svc *ExternalAuthService, client *ent.Client, adminID int, connectionID string, revision int64) {
 	t.Helper()
 	row := client.AuthConnectionRevision.Query().Where(authconnectionrevision.ConnectionIDEQ(connectionID), authconnectionrevision.RevisionEQ(revision)).OnlyX(context.Background())
+	if valid, err := hasFreshValidation(context.Background(), client, connectionID, connectionFingerprint(row)); err != nil {
+		t.Fatal(err)
+	} else if valid {
+		return
+	}
 	client.AuthConnectionValidation.Create().SetConnectionID(connectionID).SetFingerprint(connectionFingerprint(row)).SetRevision(revision).SetFreshSupported(true).SetTestedAt(time.Now().UTC()).SetActorUserID(adminID).ExecX(context.Background())
 }
 
 func TestAuthConnectionManagementLifecycle(t *testing.T) {
 	services, clients, admin := connectionTestServices(t, dialect.SQLite)
 	ctx := WithExternalActor(context.Background(), admin.ID, admin.AuthVersion)
-	record, err := services[0].CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Identity", OIDC: OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "client-1"}, ClientSecret: "initial-secret"})
+	record, err := services[0].CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Identity", OIDC: &OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "client-1"}, ClientSecret: "initial-secret"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,8 +268,13 @@ func TestAuthConnectionArchiveRequiresVerifiedFallback(t *testing.T) {
 	backup := clients[0].LoginBinding.Query().Where(loginbinding.ConnectionIDEQ("backup")).OnlyX(ctx)
 	clients[0].AuthConnectionValidation.Delete().Where(authconnectionvalidation.ConnectionIDEQ("backup")).ExecX(ctx)
 	clients[0].LoginBinding.UpdateOne(backup).SetLastVerifiedAt(time.Now()).ExecX(ctx)
+	if _, err := services[0].ArchiveConnection(ctx, admin.ID, "primary", 1); !errors.Is(err, ErrAuthConnectionConflict) {
+		t.Fatalf("unknown maintenance capability allowed archive: %v", err)
+	}
+	cfg := clients[0].AuthConnectionRevision.Query().Where(authconnectionrevision.ConnectionIDEQ("backup")).OnlyX(ctx)
+	clients[0].AuthConnectionValidation.Create().SetConnectionID("backup").SetFingerprint(connectionFingerprint(cfg)).SetRevision(1).SetFreshSupported(true).SetTestedAt(time.Now()).SetActorUserID(admin.ID).ExecX(ctx)
 	if _, err := services[0].ArchiveConnection(ctx, admin.ID, "primary", 1); err != nil {
-		t.Fatalf("current-generation user login was rejected without administrator test evidence: %v", err)
+		t.Fatalf("verified login and maintenance fallback rejected: %v", err)
 	}
 	if n := clients[0].RefreshSession.Query().Where(refreshsession.ConnectionIDEQ("primary"), refreshsession.RevokedAtIsNil()).CountX(ctx); n != 0 {
 		t.Fatalf("active primary sessions=%d", n)
@@ -276,7 +286,7 @@ func TestAuthConnectionExpectedRevisionConcurrency(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			services, _, admin := connectionTestServices(t, driver)
 			ctx := WithExternalActor(context.Background(), admin.ID, admin.AuthVersion)
-			record, err := services[0].CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Concurrent", OIDC: OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "concurrent-client"}, ClientSecret: "secret"})
+			record, err := services[0].CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Concurrent", OIDC: &OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "concurrent-client"}, ClientSecret: "secret"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -314,7 +324,7 @@ func TestAuthConnectionCloseRevokesRefreshRace(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			services, clients, admin := connectionTestServices(t, driver)
 			ctx := WithExternalActor(context.Background(), admin.ID, admin.AuthVersion)
-			record, err := services[0].CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Race", OIDC: OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "race-client"}, ClientSecret: "secret"})
+			record, err := services[0].CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Race", OIDC: &OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "race-client"}, ClientSecret: "secret"})
 			if err != nil {
 				t.Fatal(err)
 			}
