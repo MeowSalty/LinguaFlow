@@ -1,3 +1,28 @@
+OAuth2ConnectionConfig:
+  type: object
+  additionalProperties: false
+  required: [authorization_endpoint, token_endpoint, profile_endpoint, client_id, subject_mapping]
+  properties:
+    authorization_endpoint: {type: string, format: uri}
+    token_endpoint: {type: string, format: uri}
+    profile_endpoint: {type: string, format: uri}
+    client_id: {type: string}
+    client_auth_method:
+      type: string
+      enum: [client_secret_basic, client_secret_post]
+      default: client_secret_basic
+    scopes:
+      type: array
+      maxItems: 32
+      default: []
+      items: {type: string}
+    subject_mapping:
+      type: object
+      additionalProperties: false
+      required: [pointer, type]
+      properties:
+        pointer: {type: string, minLength: 1, maxLength: 1024}
+        type: {type: string, enum: [string, integer]}
 OIDCConnectionConfig:
   type: "object"
   additionalProperties: false
@@ -133,6 +158,10 @@ ExternalCompleteRequest:
       type: "string"
       minLength: 43
       maxLength: 128
+    initial_password:
+      type: string
+      writeOnly: true
+      description: Required only for a signup confirmation requiring local_password; never accepted for an existing account or binding.
     username:
       $ref: "./auth.yaml#/UsernameInput"
     display_name:
@@ -223,6 +252,7 @@ ExternalConfirmationResponse:
     - "transaction_id"
     - "expires_at"
     - "profile"
+    - "signup_requirements"
   properties:
     kind:
       type: "string"
@@ -236,6 +266,10 @@ ExternalConfirmationResponse:
     expires_at:
       type: "string"
       format: "date-time"
+    signup_requirements:
+      type: array
+      items: {type: string, enum: [local_password]}
+      description: Empty for linking and signup with fresh authentication support.
     profile:
       $ref: "#/ExternalProfile"
 ExternalSessionResponse:
@@ -377,7 +411,7 @@ PublicAuthConnection:
       type: "boolean"
     signup_requirements:
       type: "array"
-      maxItems: 0
+      maxItems: 1
       items:
         type: "string"
         enum:
@@ -388,12 +422,19 @@ CreateAuthConnectionRequest:
   required:
     - "kind"
     - "display_name"
-    - "oidc"
+  oneOf:
+    - required: [oidc]
+      properties:
+        kind: {enum: [oidc]}
+    - required: [oauth2]
+      properties:
+        kind: {enum: [generic_oauth2]}
   properties:
     kind:
       type: "string"
       enum:
         - "oidc"
+        - "generic_oauth2"
     display_name:
       type: "string"
     description:
@@ -402,6 +443,8 @@ CreateAuthConnectionRequest:
       type: "integer"
     oidc:
       $ref: "#/OIDCConnectionConfig"
+    oauth2:
+      $ref: "#/OAuth2ConnectionConfig"
     client_secret:
       type: "string"
       writeOnly: true
@@ -433,6 +476,8 @@ UpdateAuthConnectionRequest:
       type: "integer"
     oidc:
       $ref: "#/OIDCConnectionConfig"
+    oauth2:
+      $ref: "#/OAuth2ConnectionConfig"
     client_secret:
       type: "string"
       nullable: true
@@ -502,6 +547,8 @@ AuthConnectionSnapshot:
       type: "integer"
     oidc:
       $ref: "#/OIDCConnectionConfig"
+    oauth2:
+      $ref: "#/OAuth2ConnectionConfig"
     revision:
       type: "integer"
       format: "int64"
@@ -537,6 +584,11 @@ AuthConnectionRecord:
     - "archived"
     - "has_client_secret"
   properties:
+    identity_authority_id:
+      type: string
+      readOnly: true
+      nullable: true
+      description: Server-assigned immutable namespace for a generic OAuth connection.
     id:
       type: "string"
     kind:
@@ -544,6 +596,7 @@ AuthConnectionRecord:
       enum:
         - "password"
         - "oidc"
+        - "generic_oauth2"
     aggregate_revision:
       type: "integer"
       format: "int64"

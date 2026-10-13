@@ -41,7 +41,7 @@ AuthAttributeField:
     field_id: {type: string}
     label: {type: string}
     type: {type: string, enum: [string, boolean, integer, number, datetime, string_list]}
-    source: {type: string, enum: [oidc_id_token, oidc_userinfo, derived]}
+    source: {type: string, enum: [oidc_id_token, oidc_userinfo, oauth2_profile, derived]}
     pointer: {type: string}
     required_scopes:
       type: array
