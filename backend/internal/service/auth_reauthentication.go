@@ -6,6 +6,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/reauthenticationproof"
@@ -154,6 +155,13 @@ func (s *ExternalAuthService) Reauthenticate(ctx context.Context, userID int, in
 	}
 	if p.Connection.ArchivedAt != nil || !p.Policy.Enabled || !p.Policy.LoginEnabled {
 		return nil, nil, ErrAuthConnectionConflict
+	}
+	fresh, e := hasFreshValidation(ctx, s.client, p.Connection.ID, connectionFingerprint(p.Config))
+	if e != nil {
+		return nil, nil, e
+	}
+	if p.Connection.Kind != authconnection.KindOidc || !fresh {
+		return nil, nil, ErrReauthenticationRequired
 	}
 	account, err := s.client.User.Get(ctx, userID)
 	if err != nil || !account.Active {

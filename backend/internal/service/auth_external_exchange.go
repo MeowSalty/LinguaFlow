@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"strings"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -55,7 +57,11 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 				return err
 			}
 		}
-		if err := lockAuthConnection(ctx, c, row.ConnectionID); err != nil {
+		if row.Purpose == authtransaction.PurposeLogin {
+			if err := lockSignupConnections(ctx, c, row.ConnectionID); err != nil {
+				return err
+			}
+		} else if err := lockAuthConnection(ctx, c, row.ConnectionID); err != nil {
 			return err
 		}
 		if row.UserID != nil {
@@ -85,6 +91,9 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			}
 			p = runtime
 		}
+		if string(current.IdentityProtocol) != configProtocol(p.Config) || current.IdentityIssuer != connectionAuthority(p) || current.IdentitySubject == "" {
+			return ErrExternalFlowInvalid
+		}
 		if err := transactionRulesCurrent(ctx, c, current, p); err != nil {
 			return err
 		}
@@ -111,13 +120,17 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if p.Connection.ArchivedAt != nil || !p.Policy.Enabled || !p.Policy.LoginEnabled {
 				return ErrAuthConnectionConflict
 			}
-			identity, identityErr := c.ExternalIdentity.Query().Where(externalidentity.ProtocolEQ(externalidentity.ProtocolOidc), externalidentity.AuthorityEQ(current.IdentityIssuer), externalidentity.SubjectEQ(current.IdentitySubject)).Only(ctx)
+			identity, identityErr := c.ExternalIdentity.Query().Where(externalidentity.ProtocolEQ(externalidentity.Protocol(current.IdentityProtocol)), externalidentity.AuthorityEQ(current.IdentityIssuer), externalidentity.SubjectEQ(current.IdentitySubject)).Only(ctx)
 			if ent.IsNotFound(identityErr) {
 				registration, readErr := readRegistrationPolicy(ctx, c)
 				if readErr != nil {
 					return readErr
 				}
-				if !registration || !p.Policy.SignupEnabled {
+				_, initializable, reqErr := signupRequirements(ctx, c, p)
+				if reqErr != nil {
+					return reqErr
+				}
+				if !registration || !p.Policy.SignupEnabled || !initializable {
 					return ErrRegistrationClosed
 				}
 				if err := requireRule(p, current.Evidence, p.Policy.SignupRules, now); err != nil {
@@ -173,7 +186,7 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if err := requireRule(p, current.Evidence, p.Policy.LoginRules, now); err != nil {
 				return err
 			}
-			if current.BindingID == nil || current.UserID == nil || current.IdentityAuthTime == nil || p.Connection.ArchivedAt != nil || !p.Policy.Enabled || !p.Policy.LoginEnabled {
+			if p.Connection.Kind != authconnection.KindOidc || current.IdentityProtocol != authtransaction.IdentityProtocolOidc || current.BindingID == nil || current.UserID == nil || current.IdentityAuthTime == nil || p.Connection.ArchivedAt != nil || !p.Policy.Enabled || !p.Policy.LoginEnabled {
 				return ErrReauthenticationRequired
 			}
 			binding, err := c.LoginBinding.Query().Where(loginbinding.IDEQ(*current.BindingID), loginbinding.UserIDEQ(*current.UserID), loginbinding.ConnectionIDEQ(current.ConnectionID)).WithExternalIdentity().Only(ctx)
@@ -204,19 +217,25 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			result = ExternalExchangeResult{Kind: "reauthentication_proof", Proof: &proof}
 			return nil
 		case authtransaction.PurposeTest:
-			if current.UserID == nil || current.IdentityAuthTime == nil || now.Sub(*current.IdentityAuthTime) >= reauthenticationTTL {
+			if current.UserID == nil {
 				return ErrReauthenticationRequired
 			}
 			account, err := c.User.Get(ctx, *current.UserID)
 			if err != nil || account.Role != SystemRoleAdmin {
 				return ErrForbidden
 			}
+			freshSupported := p.Connection.Kind == authconnection.KindOidc && current.IdentityAuthTime != nil && !current.IdentityAuthTime.After(now.Add(2*time.Second)) && now.Sub(*current.IdentityAuthTime) < reauthenticationTTL
 			fingerprint := connectionFingerprint(p.Config)
 			validation, err := c.AuthConnectionValidation.Query().Where(authconnectionvalidation.ConnectionIDEQ(current.ConnectionID), authconnectionvalidation.FingerprintEQ(fingerprint)).Only(ctx)
 			if ent.IsNotFound(err) {
-				err = c.AuthConnectionValidation.Create().SetConnectionID(current.ConnectionID).SetFingerprint(fingerprint).SetRevision(current.ConnectionRevision).SetFreshSupported(true).SetTestedAt(now).SetActorUserID(account.ID).Exec(ctx)
+				err = c.AuthConnectionValidation.Create().SetConnectionID(current.ConnectionID).SetFingerprint(fingerprint).SetRevision(current.ConnectionRevision).SetFreshSupported(freshSupported).SetTestedAt(now).SetActorUserID(account.ID).Exec(ctx)
 			} else if err == nil {
-				err = c.AuthConnectionValidation.UpdateOneID(validation.ID).SetFreshSupported(true).SetTestedAt(now).SetActorUserID(account.ID).Exec(ctx)
+				// A failed fresh probe cannot silently downgrade a published capability.
+				// A new configuration may test as non-fresh and go through safe publication.
+				if validation.FreshSupported && !freshSupported {
+					return ErrReauthenticationRequired
+				}
+				err = c.AuthConnectionValidation.UpdateOneID(validation.ID).SetFreshSupported(freshSupported).SetTestedAt(now).SetActorUserID(account.ID).Exec(ctx)
 			}
 			if err != nil {
 				return err
@@ -224,7 +243,7 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if err = s.finishExchange(ctx, c, current.ID, input.Ticket); err != nil {
 				return err
 			}
-			result = ExternalExchangeResult{Kind: "test_result", Test: &ExternalTestResult{ConnectionID: current.ConnectionID, Revision: current.ConnectionRevision, FreshSupported: true, Attributes: current.Evidence.Attributes, Diagnostics: diagnostics(p, current.Evidence, now)}}
+			result = ExternalExchangeResult{Kind: "test_result", Test: &ExternalTestResult{ConnectionID: current.ConnectionID, Revision: current.ConnectionRevision, FreshSupported: freshSupported, Attributes: current.Evidence.Attributes, Diagnostics: diagnostics(p, current.Evidence, now)}}
 			return nil
 		default:
 			return ErrExternalFlowInvalid
@@ -281,8 +300,19 @@ func (s *ExternalAuthService) awaitConfirmation(ctx context.Context, c *ent.Clie
 	if display == "" {
 		display = row.IdentitySubject
 	}
+	requirements := []string{}
+	if kind == "signup_confirmation" {
+		var available bool
+		requirements, available, err = signupRequirements(ctx, c, p)
+		if err != nil {
+			return err
+		}
+		if !available {
+			return ErrRegistrationClosed
+		}
+	}
 	result.Kind = kind
-	result.Confirmation = &ExternalConfirmation{TransactionID: row.ID, ConfirmationToken: raw, ExpiresAt: deadline, Profile: ExternalProfile{ConnectionID: row.ConnectionID, ConnectionName: p.Config.DisplayName, ExternalDisplay: display}}
+	result.Confirmation = &ExternalConfirmation{SignupRequirements: requirements, TransactionID: row.ID, ConfirmationToken: raw, ExpiresAt: deadline, Profile: ExternalProfile{ConnectionID: row.ConnectionID, ConnectionName: p.Config.DisplayName, ExternalDisplay: display}}
 	return nil
 }
 
@@ -301,6 +331,19 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 	if row.Status != authtransaction.StatusAwaitingConfirmation || row.ConfirmationExpiresAt == nil || !now.Before(*row.ConfirmationExpiresAt) || !now.Before(row.ExpiresAt) || !verifierMatches(row.BrowserChallenge, input.Verifier) {
 		return ExternalCompleteResult{}, ErrExternalFlowInvalid
 	}
+	var initialHash string
+	if input.InitialPassword != nil {
+		if row.Purpose != authtransaction.PurposeLogin {
+			return ExternalCompleteResult{}, ErrInvalidInput
+		}
+		if err := validateNewPassword(*input.InitialPassword); err != nil {
+			return ExternalCompleteResult{}, err
+		}
+		initialHash, err = hashPassword(*input.InitialPassword)
+		if err != nil {
+			return ExternalCompleteResult{}, err
+		}
+	}
 	var result ExternalCompleteResult
 	err = withOrganizationTransaction(ctx, s.client, func(c *ent.Client) error {
 		if row.Purpose == authtransaction.PurposeLogin {
@@ -308,7 +351,11 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 				return err
 			}
 		}
-		if err := lockAuthConnection(ctx, c, row.ConnectionID); err != nil {
+		if row.Purpose == authtransaction.PurposeLogin {
+			if err := lockSignupConnections(ctx, c, row.ConnectionID); err != nil {
+				return err
+			}
+		} else if err := lockAuthConnection(ctx, c, row.ConnectionID); err != nil {
 			return err
 		}
 		if row.UserID != nil {
@@ -334,6 +381,9 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 		if p.Connection.ArchivedAt != nil || p.Connection.AuthGeneration != current.ConnectionGeneration || p.Policy.LoginPolicyRevision != current.PolicyRevision {
 			return ErrAuthConnectionConflict
 		}
+		if string(current.IdentityProtocol) != configProtocol(p.Config) || current.IdentityIssuer != connectionAuthority(p) || current.IdentitySubject == "" {
+			return ErrExternalFlowInvalid
+		}
 		if err := transactionRulesCurrent(ctx, c, current, p); err != nil {
 			return err
 		}
@@ -355,6 +405,17 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			if !registration || !p.Policy.Enabled || !p.Policy.LoginEnabled || !p.Policy.SignupEnabled {
 				return ErrRegistrationClosed
 			}
+			requirements, initializable, err := signupRequirements(ctx, c, p)
+			if err != nil {
+				return err
+			}
+			if !initializable {
+				return ErrRegistrationClosed
+			}
+			requiresPassword := len(requirements) > 0
+			if requiresPassword != (input.InitialPassword != nil) {
+				return ErrInvalidInput
+			}
 			username, err := accountidentity.NormalizeUsername(input.Username)
 			if err != nil {
 				return ErrInvalidInput
@@ -362,21 +423,25 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			if err = accountidentity.ValidateAllocation(username, accountidentity.Public); err != nil {
 				return ErrInvalidInput
 			}
-			exists, err := c.ExternalIdentity.Query().Where(externalidentity.ProtocolEQ(externalidentity.ProtocolOidc), externalidentity.AuthorityEQ(current.IdentityIssuer), externalidentity.SubjectEQ(current.IdentitySubject)).Exist(ctx)
+			exists, err := c.ExternalIdentity.Query().Where(externalidentity.ProtocolEQ(externalidentity.Protocol(current.IdentityProtocol)), externalidentity.AuthorityEQ(current.IdentityIssuer), externalidentity.SubjectEQ(current.IdentitySubject)).Exist(ctx)
 			if err != nil {
 				return err
 			}
 			if exists {
 				return ErrAuthConnectionConflict
 			}
-			account, err := c.User.Create().SetUsername(username).SetDisplayName(strings.TrimSpace(input.DisplayName)).SetRole(SystemRoleUser).SetActive(true).Save(ctx)
+			create := c.User.Create().SetUsername(username).SetDisplayName(strings.TrimSpace(input.DisplayName)).SetRole(SystemRoleUser).SetActive(true)
+			if requiresPassword {
+				create.SetPasswordHash(initialHash)
+			}
+			account, err := create.Save(ctx)
 			if ent.IsConstraintError(err) {
 				return ErrUserExists
 			}
 			if err != nil {
 				return err
 			}
-			identity, err := c.ExternalIdentity.Create().SetUserID(account.ID).SetProtocol(externalidentity.ProtocolOidc).SetAuthority(current.IdentityIssuer).SetSubject(current.IdentitySubject).Save(ctx)
+			identity, err := c.ExternalIdentity.Create().SetUserID(account.ID).SetProtocol(externalidentity.Protocol(current.IdentityProtocol)).SetAuthority(current.IdentityIssuer).SetSubject(current.IdentitySubject).Save(ctx)
 			if ent.IsConstraintError(err) {
 				return ErrAuthConnectionConflict
 			}
@@ -419,9 +484,9 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			if current.AuthVersion == nil || account.AuthVersion != *current.AuthVersion || !account.Active || !p.Policy.Enabled || !p.Policy.LinkEnabled {
 				return ErrAuthConnectionConflict
 			}
-			identity, err := c.ExternalIdentity.Query().Where(externalidentity.ProtocolEQ(externalidentity.ProtocolOidc), externalidentity.AuthorityEQ(current.IdentityIssuer), externalidentity.SubjectEQ(current.IdentitySubject)).Only(ctx)
+			identity, err := c.ExternalIdentity.Query().Where(externalidentity.ProtocolEQ(externalidentity.Protocol(current.IdentityProtocol)), externalidentity.AuthorityEQ(current.IdentityIssuer), externalidentity.SubjectEQ(current.IdentitySubject)).Only(ctx)
 			if ent.IsNotFound(err) {
-				identity, err = c.ExternalIdentity.Create().SetUserID(account.ID).SetProtocol(externalidentity.ProtocolOidc).SetAuthority(current.IdentityIssuer).SetSubject(current.IdentitySubject).Save(ctx)
+				identity, err = c.ExternalIdentity.Create().SetUserID(account.ID).SetProtocol(externalidentity.Protocol(current.IdentityProtocol)).SetAuthority(current.IdentityIssuer).SetSubject(current.IdentitySubject).Save(ctx)
 				if ent.IsConstraintError(err) {
 					return ErrAuthConnectionConflict
 				}

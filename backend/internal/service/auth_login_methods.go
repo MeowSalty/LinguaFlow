@@ -68,7 +68,7 @@ func (s *ExternalAuthService) LoginMethods(ctx context.Context, userID int) (Log
 	out.Password.IsSet = account.PasswordHash != ""
 	out.Password.CanLogin = out.Password.IsSet && passwordPolicy.canLogin()
 	out.Password.Verified = verifiedPasswordFallback(account, passwordPolicy)
-	out.Password.CanSet = !out.Password.IsSet && passwordPolicy.canLogin()
+	out.Password.CanSet = !out.Password.IsSet && passwordPolicy.canLogin() && passwordPolicy.Policy.LinkEnabled
 	if account.Email != "" {
 		value := account.Email
 		out.Email.Address = &value
@@ -104,7 +104,11 @@ func (s *ExternalAuthService) LoginMethods(ctx context.Context, userID int) (Log
 				record.EvidenceExpiresAt = &v
 			}
 			if record.CanLogin {
-				record.CanReauthenticate = true
+				fresh, e := hasFreshValidation(ctx, s.client, p.Connection.ID, connectionFingerprint(p.Config))
+				if e != nil {
+					return out, e
+				}
+				record.CanReauthenticate = p.Connection.Kind == authconnection.KindOidc && fresh
 			}
 		}
 		fallback, fallbackErr := connectionFallbackAt(ctx, s.client, account, binding.ConnectionID, s.now())
@@ -117,7 +121,7 @@ func (s *ExternalAuthService) LoginMethods(ctx context.Context, userID int) (Log
 	if out.Password.IsSet {
 		out.Password.CanDelete, _ = connectionFallbackAt(ctx, s.client, account, PasswordConnectionID, s.now())
 	}
-	connections, err := s.client.AuthConnection.Query().Where(authconnection.KindEQ(authconnection.KindOidc), authconnection.ArchivedAtIsNil(), authconnection.PublishedRevisionNotNil()).All(ctx)
+	connections, err := s.client.AuthConnection.Query().Where(authconnection.KindIn(authconnection.KindOidc, authconnection.KindGenericOauth2), authconnection.ArchivedAtIsNil(), authconnection.PublishedRevisionNotNil()).All(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -198,7 +202,7 @@ func (s *ExternalAuthService) Unlink(ctx context.Context, userID, bindingID int,
 			authtransaction.StatusIn(authtransaction.StatusCreated, authtransaction.StatusCallbackProcessing, authtransaction.StatusCallbackVerified, authtransaction.StatusAwaitingConfirmation),
 			authtransaction.Or(authtransaction.UserIDEQ(userID), authtransaction.And(
 				authtransaction.PurposeNEQ(authtransaction.PurposeTest),
-				authtransaction.IdentityIssuerEQ(identity.Authority), authtransaction.IdentitySubjectEQ(identity.Subject),
+				authtransaction.IdentityProtocolEQ(authtransaction.IdentityProtocol(identity.Protocol)), authtransaction.IdentityIssuerEQ(identity.Authority), authtransaction.IdentitySubjectEQ(identity.Subject),
 			)),
 		).SetStatus(authtransaction.StatusCancelled).SetFinishedAt(now).ClearExchangeTicketHash().ClearExchangeTicketExpiresAt().ClearConfirmationTokenHash().ClearConfirmationExpiresAt().Save(ctx); err != nil {
 			return err
@@ -238,7 +242,7 @@ func (s *ExternalAuthService) SetInitialPassword(ctx context.Context, userID int
 		if err != nil {
 			return err
 		}
-		if account.PasswordHash != "" || !p.canLogin() {
+		if account.PasswordHash != "" || !p.canLogin() || !p.Policy.LinkEnabled {
 			return ErrLoginMethodConflict
 		}
 		if _, err = s.consumeReauthenticationProof(ctx, c, userID, rawProof, "password_set", PasswordConnectionID); err != nil {

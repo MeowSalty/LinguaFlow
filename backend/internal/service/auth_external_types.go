@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authoauth2"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoidc"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
@@ -36,13 +37,14 @@ type OIDCProtocol interface {
 }
 
 type ExternalAuthService struct {
-	client   *ent.Client
-	auth     *AuthService
-	keys     *credential.Keyring
-	cfg      config.AuthDeploymentConfig
-	protocol OIDCProtocol
-	now      func() time.Time
-	rand     io.Reader
+	client         *ent.Client
+	auth           *AuthService
+	keys           *credential.Keyring
+	cfg            config.AuthDeploymentConfig
+	protocol       OIDCProtocol
+	oauth2Protocol OAuth2Protocol
+	now            func() time.Time
+	rand           io.Reader
 }
 
 type externalActorContextKey struct{}
@@ -72,7 +74,11 @@ func NewExternalAuthService(client *ent.Client, auth *AuthService, keys *credent
 	if err != nil {
 		return nil, err
 	}
-	return &ExternalAuthService{client: client, auth: auth, keys: keys, cfg: cfg, protocol: protocol, now: timeutil.NowUTC, rand: crand.Reader}, nil
+	oauth, err := authoauth2.New(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &ExternalAuthService{oauth2Protocol: oauth, client: client, auth: auth, keys: keys, cfg: cfg, protocol: protocol, now: timeutil.NowUTC, rand: crand.Reader}, nil
 }
 
 func (s *ExternalAuthService) SetOIDCProtocol(protocol OIDCProtocol) { s.protocol = protocol }
@@ -96,10 +102,14 @@ type ExternalCallbackResult struct {
 	Failed                                         bool
 }
 type ExternalExchangeInput struct{ Ticket, Verifier string }
-type ExternalCompleteInput struct{ ConfirmationToken, Verifier, Username, DisplayName string }
+type ExternalCompleteInput struct {
+	ConfirmationToken, Verifier, Username, DisplayName string
+	InitialPassword                                    *string
+}
 type ExternalCancelInput struct{ TransactionID, Verifier string }
 type ExternalProfile struct{ ConnectionID, ConnectionName, ExternalDisplay string }
 type ExternalConfirmation struct {
+	SignupRequirements               []string
 	TransactionID, ConfirmationToken string
 	ExpiresAt                        time.Time
 	Profile                          ExternalProfile

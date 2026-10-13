@@ -61,7 +61,7 @@ func readPasswordPolicy(ctx context.Context, client *ent.Client) (passwordPolicy
 	}
 	if cfg.ConfigVersion != 1 || cfg.EmailLoginEnabled || policy.LoginPolicyRevision < 1 || policy.LoginPolicyRevision > maxAuthVersion ||
 		policy.LoginRules.Mode != "unrestricted" || policy.SignupRules.Mode != "unrestricted" || policy.LinkRules.Mode != "unrestricted" ||
-		authrules.Validate(nil, policy.LoginRules, policy.SignupRules, policy.LinkRules) != nil ||
+		authrules.Validate("oidc", nil, policy.LoginRules, policy.SignupRules, policy.LinkRules) != nil ||
 		(policy.SignupEnabled && !policy.LoginEnabled) || (policy.LoginEnabled && !cfg.UsernameLoginEnabled) {
 		return p, fmt.Errorf("%w: unsupported password policy", ErrSettingsUnavailable)
 	}
@@ -120,7 +120,11 @@ func (s *AuthService) Capabilities(ctx context.Context) (AuthCapabilities, error
 		if !x.Policy.Enabled {
 			continue
 		}
-		result.Connections = append(result.Connections, PublicAuthConnectionCapability{ConnectionID: connection.ID, DisplayName: x.Config.DisplayName, Description: x.Config.Description, DisplayOrder: x.Config.DisplayOrder, CanLogin: x.Policy.LoginEnabled, CanSignup: registration && x.Policy.LoginEnabled && x.Policy.SignupEnabled, SignupRequirements: []string{}})
+		requirements, initializable, err := signupRequirements(ctx, s.client, x)
+		if err != nil {
+			return result, err
+		}
+		result.Connections = append(result.Connections, PublicAuthConnectionCapability{ConnectionID: connection.ID, DisplayName: x.Config.DisplayName, Description: x.Config.Description, DisplayOrder: x.Config.DisplayOrder, CanLogin: x.Policy.LoginEnabled, CanSignup: registration && x.Policy.LoginEnabled && x.Policy.SignupEnabled && initializable, SignupRequirements: requirements})
 	}
 	sort.Slice(result.Connections, func(i, j int) bool { return result.Connections[i].DisplayOrder < result.Connections[j].DisplayOrder })
 	return result, nil

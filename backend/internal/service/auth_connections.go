@@ -22,6 +22,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/google/uuid"
@@ -50,12 +51,13 @@ type AuthConnectionPolicyInput struct {
 	LinkRules     authrules.RuleSet `json:"link_rules"`
 }
 type CreateAuthConnectionInput struct {
-	Kind         string              `json:"kind"`
-	DisplayName  string              `json:"display_name"`
-	Description  string              `json:"description"`
-	DisplayOrder int                 `json:"display_order"`
-	OIDC         OIDCConnectionInput `json:"oidc"`
-	ClientSecret string              `json:"client_secret,omitempty"`
+	Kind         string                 `json:"kind"`
+	DisplayName  string                 `json:"display_name"`
+	Description  string                 `json:"description"`
+	DisplayOrder int                    `json:"display_order"`
+	OIDC         *OIDCConnectionInput   `json:"oidc,omitempty"`
+	OAuth2       *OAuth2ConnectionInput `json:"oauth2,omitempty"`
+	ClientSecret string                 `json:"client_secret,omitempty"`
 }
 type UpdateAuthConnectionInput struct {
 	AttributeMappings     *[]authrules.Field         `json:"attribute_mappings,omitempty"`
@@ -64,6 +66,7 @@ type UpdateAuthConnectionInput struct {
 	DisplayName           *string                    `json:"display_name,omitempty"`
 	Description           *string                    `json:"description,omitempty"`
 	DisplayOrder          *int                       `json:"display_order,omitempty"`
+	OAuth2                *OAuth2ConnectionInput     `json:"oauth2,omitempty"`
 	OIDC                  *OIDCConnectionInput       `json:"oidc,omitempty"`
 	ClientSecret          json.RawMessage            `json:"client_secret,omitempty"`
 	Policy                *AuthConnectionPolicyInput `json:"policy,omitempty"`
@@ -76,6 +79,7 @@ type AuthConnectionSnapshot struct {
 	DisplayName           string                    `json:"display_name"`
 	Description           string                    `json:"description"`
 	DisplayOrder          int                       `json:"display_order"`
+	OAuth2                *OAuth2ConnectionInput    `json:"oauth2,omitempty"`
 	OIDC                  *OIDCConnectionInput      `json:"oidc,omitempty"`
 	Policy                AuthConnectionPolicyInput `json:"policy"`
 	HasClientSecret       bool                      `json:"has_client_secret"`
@@ -87,16 +91,17 @@ type AuthConnectionValidationResult struct {
 	TestedAt           *time.Time `json:"tested_at"`
 }
 type AuthConnectionRecord struct {
-	ID                string                         `json:"id"`
-	Kind              string                         `json:"kind"`
-	AggregateRevision int64                          `json:"aggregate_revision"`
-	DraftRevision     *int64                         `json:"draft_revision"`
-	PublishedRevision *int64                         `json:"published_revision"`
-	Archived          bool                           `json:"archived"`
-	HasClientSecret   bool                           `json:"has_client_secret"`
-	Draft             *AuthConnectionSnapshot        `json:"draft,omitempty"`
-	Published         *AuthConnectionSnapshot        `json:"published,omitempty"`
-	Validation        AuthConnectionValidationResult `json:"validation"`
+	IdentityAuthorityID *string                        `json:"identity_authority_id,omitempty"`
+	ID                  string                         `json:"id"`
+	Kind                string                         `json:"kind"`
+	AggregateRevision   int64                          `json:"aggregate_revision"`
+	DraftRevision       *int64                         `json:"draft_revision"`
+	PublishedRevision   *int64                         `json:"published_revision"`
+	Archived            bool                           `json:"archived"`
+	HasClientSecret     bool                           `json:"has_client_secret"`
+	Draft               *AuthConnectionSnapshot        `json:"draft,omitempty"`
+	Published           *AuthConnectionSnapshot        `json:"published,omitempty"`
+	Validation          AuthConnectionValidationResult `json:"validation"`
 }
 type AuthConnectionCheckResult struct {
 	Revision       int64                `json:"revision"`
@@ -147,7 +152,17 @@ func readExternalConnection(ctx context.Context, c *ent.Client, id string, revis
 	if err != nil {
 		return out, ErrSettingsUnavailable
 	}
-	if err := authrules.Validate(cfg.AttributeMappings, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
+	if cfg.ConfigVersion != 1 || (!supportedExternalKind(row.Kind) && row.Kind != authconnection.KindPassword) {
+		return out, ErrSettingsUnavailable
+	}
+	if row.Kind == authconnection.KindGenericOauth2 {
+		if row.IdentityAuthorityID == nil || *row.IdentityAuthorityID == "" || cfg.Oauth2ClientID == "" || cfg.OidcIssuer != "" {
+			return out, ErrSettingsUnavailable
+		}
+	} else if cfg.Oauth2ClientID != "" {
+		return out, ErrSettingsUnavailable
+	}
+	if err := authrules.Validate(configProtocol(cfg), cfg.AttributeMappings, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
 		return out, ErrSettingsUnavailable
 	}
 	if cfg.EvidenceMaxAgeSeconds < 1 || cfg.EvidenceMaxAgeSeconds > 31536000 {
@@ -156,6 +171,11 @@ func readExternalConnection(ctx context.Context, c *ent.Client, id string, revis
 	return externalConnection{row, cfg, p}, nil
 }
 func connectionFingerprint(c *ent.AuthConnectionRevision) string {
+	if configProtocol(c) == "oauth2" {
+		data, _ := json.Marshal([]any{"oauth2", c.ConnectionID, oauthInput(c), connectionSecretVersion(c)})
+		h := sha256.Sum256(data)
+		return hex.EncodeToString(h[:])
+	}
 	data, _ := json.Marshal(struct {
 		Issuer, ClientID, Method string
 		Scopes                   []string
@@ -178,19 +198,25 @@ func (s *ExternalAuthService) externalOIDCConfig(ctx context.Context, c *ent.Cli
 		method = "post"
 	}
 	result := authoidc.Config{Issuer: cfg.OidcIssuer, ClientID: cfg.OidcClientID, ClientAuthMethod: method, Scopes: cfg.OidcScopes, UserInfoEnabled: cfg.OidcUserinfoEnabled}
-	if connectionSecretVersion(cfg) > 0 {
-		v, err := c.AuthConnectionSecret.Query().Where(authconnectionsecret.ConnectionIDEQ(cfg.ConnectionID), authconnectionsecret.VersionEQ(connectionSecretVersion(cfg))).Only(ctx)
-		if err != nil {
-			return result, ErrSettingsUnavailable
-		}
-		plain, err := s.keys.Open(credential.Ciphertext{Version: v.CipherVersion, KeyID: v.KeyID, Nonce: v.Nonce, Data: v.Ciphertext}, authConnectionSecretAAD(cfg.ConnectionID, connectionSecretVersion(cfg)))
-		if err != nil {
-			return result, ErrSettingsUnavailable
-		}
-		result.ClientSecret = string(plain)
-	}
-	return result, nil
+	var err error
+	result.ClientSecret, err = s.connectionClientSecret(ctx, c, cfg)
+	return result, err
 }
+func (s *ExternalAuthService) connectionClientSecret(ctx context.Context, c *ent.Client, cfg *ent.AuthConnectionRevision) (string, error) {
+	if connectionSecretVersion(cfg) == 0 {
+		return "", nil
+	}
+	v, err := c.AuthConnectionSecret.Query().Where(authconnectionsecret.ConnectionIDEQ(cfg.ConnectionID), authconnectionsecret.VersionEQ(connectionSecretVersion(cfg))).Only(ctx)
+	if err != nil {
+		return "", ErrSettingsUnavailable
+	}
+	plain, err := s.keys.Open(credential.Ciphertext{Version: v.CipherVersion, KeyID: v.KeyID, Nonce: v.Nonce, Data: v.Ciphertext}, authConnectionSecretAAD(cfg.ConnectionID, connectionSecretVersion(cfg)))
+	if err != nil {
+		return "", ErrSettingsUnavailable
+	}
+	return string(plain), nil
+}
+
 func (s *ExternalAuthService) saveConnectionSecret(ctx context.Context, c *ent.Client, id string, version int64, secret string, actorID int) error {
 	if secret == "" || len(secret) > 16384 {
 		return ErrInvalidInput
@@ -300,13 +326,17 @@ func normalizeOIDCInput(in OIDCConnectionInput) (OIDCConnectionInput, error) {
 	return in, nil
 }
 func (s *ExternalAuthService) connectionRecord(ctx context.Context, c *ent.Client, row *ent.AuthConnection) (AuthConnectionRecord, error) {
-	out := AuthConnectionRecord{ID: row.ID, Kind: string(row.Kind), AggregateRevision: row.AggregateRevision, DraftRevision: row.DraftRevision, PublishedRevision: row.PublishedRevision, Archived: row.ArchivedAt != nil}
+	out := AuthConnectionRecord{IdentityAuthorityID: row.IdentityAuthorityID, ID: row.ID, Kind: string(row.Kind), AggregateRevision: row.AggregateRevision, DraftRevision: row.DraftRevision, PublishedRevision: row.PublishedRevision, Archived: row.ArchivedAt != nil}
 	makeSnapshot := func(rev int64, draft bool) (*AuthConnectionSnapshot, *ent.AuthConnectionRevision, error) {
 		p, err := readExternalConnection(ctx, c, row.ID, rev)
 		if err != nil {
 			return nil, nil, err
 		}
 		snapshot := &AuthConnectionSnapshot{AttributeMappings: append([]authrules.Field{}, p.Config.AttributeMappings...), EvidenceMaxAgeSeconds: p.Config.EvidenceMaxAgeSeconds, LoginPolicyRevision: p.Policy.LoginPolicyRevision, Revision: rev, DisplayName: p.Config.DisplayName, Description: p.Config.Description, DisplayOrder: p.Config.DisplayOrder, Policy: policyInput(p.Policy), HasClientSecret: connectionSecretVersion(p.Config) > 0}
+		if row.Kind == authconnection.KindGenericOauth2 {
+			v := oauthInput(p.Config)
+			snapshot.OAuth2 = &v
+		}
 		if row.Kind == authconnection.KindOidc {
 			v := p.Config.OidcUserinfoEnabled
 			snapshot.OIDC = &OIDCConnectionInput{p.Config.OidcIssuer, p.Config.OidcClientID, string(p.Config.OidcClientAuthMethod), p.Config.OidcScopes, &v}
@@ -381,16 +411,21 @@ func saveExternalSnapshot(ctx context.Context, c *ent.Client, id string, revisio
 	if cfg.EvidenceMaxAgeSeconds < 1 || cfg.EvidenceMaxAgeSeconds > 31536000 {
 		return ErrInvalidInput
 	}
-	if err := authrules.Validate(cfg.AttributeMappings, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
+	if err := authrules.Validate(configProtocol(cfg), cfg.AttributeMappings, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidInput, err)
 	}
-	if err := authrules.ValidateScopes(cfg.AttributeMappings, cfg.OidcScopes, cfg.OidcUserinfoEnabled, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
+	if err := validateConnectionRules(cfg, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidInput, err)
 	}
 	if !validConnectionPolicy(p) || strings.TrimSpace(cfg.DisplayName) == "" || len(cfg.DisplayName) > 120 || len(cfg.Description) > 2000 {
 		return ErrInvalidInput
 	}
-	q := c.AuthConnectionRevision.Create().SetConnectionID(id).SetRevision(revision).SetDisplayName(strings.TrimSpace(cfg.DisplayName)).SetDescription(cfg.Description).SetDisplayOrder(cfg.DisplayOrder).SetConfigVersion(1).SetOidcIssuer(cfg.OidcIssuer).SetOidcClientID(cfg.OidcClientID).SetOidcClientAuthMethod(cfg.OidcClientAuthMethod).SetOidcScopes(cfg.OidcScopes).SetOidcUserinfoEnabled(cfg.OidcUserinfoEnabled).SetNillableSecretVersion(cfg.SecretVersion).SetLogoMediaType(cfg.LogoMediaType)
+	q := c.AuthConnectionRevision.Create().SetConnectionID(id).SetRevision(revision).SetDisplayName(strings.TrimSpace(cfg.DisplayName)).SetDescription(cfg.Description).SetDisplayOrder(cfg.DisplayOrder).SetConfigVersion(1).SetOidcIssuer(cfg.OidcIssuer).SetOidcClientID(cfg.OidcClientID).SetOidcScopes(cfg.OidcScopes).SetOidcUserinfoEnabled(cfg.OidcUserinfoEnabled).SetNillableSecretVersion(cfg.SecretVersion).SetLogoMediaType(cfg.LogoMediaType)
+	if configProtocol(cfg) == "oauth2" {
+		q.SetOauth2AuthorizationEndpoint(cfg.Oauth2AuthorizationEndpoint).SetOauth2TokenEndpoint(cfg.Oauth2TokenEndpoint).SetOauth2ProfileEndpoint(cfg.Oauth2ProfileEndpoint).SetOauth2ClientID(cfg.Oauth2ClientID).SetOauth2ClientAuthMethod(cfg.Oauth2ClientAuthMethod).SetOauth2Scopes(cfg.Oauth2Scopes).SetOauth2SubjectPointer(cfg.Oauth2SubjectPointer).SetOauth2SubjectType(cfg.Oauth2SubjectType)
+	} else {
+		q.SetOidcClientAuthMethod(cfg.OidcClientAuthMethod)
+	}
 	if len(cfg.LogoData) > 0 {
 		q.SetLogoData(cfg.LogoData)
 	}
@@ -401,10 +436,23 @@ func saveExternalSnapshot(ctx context.Context, c *ent.Client, id string, revisio
 	return c.AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(revision).SetLoginPolicyRevision(loginRevision).SetEnabled(p.Enabled).SetLoginEnabled(p.LoginEnabled).SetSignupEnabled(p.SignupEnabled).SetLinkEnabled(p.LinkEnabled).SetLoginRules(p.LoginRules).SetSignupRules(p.SignupRules).SetLinkRules(p.LinkRules).Exec(ctx)
 }
 func (s *ExternalAuthService) CreateConnection(ctx context.Context, actorID int, in CreateAuthConnectionInput) (AuthConnectionRecord, error) {
-	if in.Kind != "oidc" {
+	if !supportedExternalKind(authconnection.Kind(in.Kind)) {
 		return AuthConnectionRecord{}, ErrInvalidInput
 	}
-	oidc, err := normalizeOIDCInput(in.OIDC)
+	var oidc OIDCConnectionInput
+	var oauth OAuth2ConnectionInput
+	var err error
+	if in.Kind == "oidc" {
+		if in.OAuth2 != nil || in.OIDC == nil {
+			return AuthConnectionRecord{}, ErrInvalidInput
+		}
+		oidc, err = normalizeOIDCInput(*in.OIDC)
+	} else {
+		if in.OAuth2 == nil || in.OIDC != nil {
+			return AuthConnectionRecord{}, ErrInvalidInput
+		}
+		oauth, err = s.normalizeOAuthInput(ctx, *in.OAuth2)
+	}
 	if err != nil {
 		return AuthConnectionRecord{}, err
 	}
@@ -414,11 +462,24 @@ func (s *ExternalAuthService) CreateConnection(ctx context.Context, actorID int,
 		if err := lockExternalConfiguration(ctx, c, actorID); err != nil {
 			return err
 		}
-		row, err := c.AuthConnection.Create().SetID(id).SetKind(authconnection.KindOidc).SetAggregateRevision(1).SetDraftRevision(1).Save(ctx)
+		create := c.AuthConnection.Create().SetID(id).SetKind(authconnection.Kind(in.Kind)).SetAggregateRevision(1).SetDraftRevision(1)
+		if in.Kind == "generic_oauth2" {
+			create.SetIdentityAuthorityID(uuid.NewString())
+		}
+		row, err := create.Save(ctx)
 		if err != nil {
 			return err
 		}
-		cfg := &ent.AuthConnectionRevision{EvidenceMaxAgeSeconds: 3600, ConnectionID: id, DisplayName: in.DisplayName, Description: in.Description, DisplayOrder: in.DisplayOrder, OidcIssuer: oidc.Issuer, OidcClientID: oidc.ClientID, OidcClientAuthMethod: authconnectionrevision.OidcClientAuthMethod(oidc.ClientAuthMethod), OidcScopes: oidc.Scopes, OidcUserinfoEnabled: *oidc.UserinfoEnabled}
+		cfg := &ent.AuthConnectionRevision{EvidenceMaxAgeSeconds: 3600, ConnectionID: id, DisplayName: in.DisplayName, Description: in.Description, DisplayOrder: in.DisplayOrder}
+		if in.Kind == "oidc" {
+			cfg.OidcIssuer = oidc.Issuer
+			cfg.OidcClientID = oidc.ClientID
+			cfg.OidcClientAuthMethod = authconnectionrevision.OidcClientAuthMethod(oidc.ClientAuthMethod)
+			cfg.OidcScopes = oidc.Scopes
+			cfg.OidcUserinfoEnabled = *oidc.UserinfoEnabled
+		} else {
+			setOAuthInput(cfg, oauth)
+		}
 		if in.ClientSecret != "" {
 			if err = s.saveConnectionSecret(ctx, c, id, 1, in.ClientSecret, actorID); err != nil {
 				return err
@@ -453,7 +514,7 @@ func (s *ExternalAuthService) mutateConnection(ctx context.Context, actorID int,
 		if err != nil {
 			return err
 		}
-		if row.Kind != authconnection.KindOidc || row.AggregateRevision != expected || row.AggregateRevision >= maxAuthVersion {
+		if !supportedExternalKind(row.Kind) || row.AggregateRevision != expected || row.AggregateRevision >= maxAuthVersion {
 			return ErrAuthConnectionConflict
 		}
 		var rev int64
@@ -503,6 +564,9 @@ func (s *ExternalAuthService) UpdateConnection(ctx context.Context, actorID int,
 			policy = *in.Policy
 		}
 		if in.OIDC != nil {
+			if row.Kind != authconnection.KindOidc {
+				return ErrInvalidInput
+			}
 			o, err := normalizeOIDCInput(*in.OIDC)
 			if err != nil {
 				return err
@@ -521,6 +585,29 @@ func (s *ExternalAuthService) UpdateConnection(ctx context.Context, actorID int,
 			cfg.OidcClientAuthMethod = authconnectionrevision.OidcClientAuthMethod(o.ClientAuthMethod)
 			cfg.OidcScopes = o.Scopes
 			cfg.OidcUserinfoEnabled = *o.UserinfoEnabled
+		}
+		if in.OAuth2 != nil {
+			if row.Kind != authconnection.KindGenericOauth2 {
+				return ErrInvalidInput
+			}
+			o, err := s.normalizeOAuthInput(ctx, *in.OAuth2)
+			if err != nil {
+				return err
+			}
+			bound, err := c.LoginBinding.Query().Where(loginbinding.ConnectionIDEQ(id)).Exist(ctx)
+			if err != nil {
+				return err
+			}
+			if bound {
+				published, err := readExternalConnection(ctx, c, id, 0)
+				if err != nil {
+					return err
+				}
+				if oauthIdentityContract(o) != oauthIdentityContract(oauthInput(published.Config)) {
+					return ErrAuthConnectionConflict
+				}
+			}
+			setOAuthInput(&cfg, o)
 		}
 		next := row.AggregateRevision + 1
 		if len(in.ClientSecret) > 0 {
@@ -558,7 +645,7 @@ func (s *ExternalAuthService) candidateConnection(ctx context.Context, actorID i
 	if err != nil {
 		return externalConnection{}, err
 	}
-	if row.Kind != authconnection.KindOidc || row.AggregateRevision != expected || row.DraftRevision == nil {
+	if !supportedExternalKind(row.Kind) || row.AggregateRevision != expected || row.DraftRevision == nil {
 		return externalConnection{}, ErrAuthConnectionConflict
 	}
 	return readExternalConnection(ctx, s.client, id, *row.DraftRevision)
@@ -571,20 +658,29 @@ func (s *ExternalAuthService) CheckConnection(ctx context.Context, actorID int, 
 	}
 	out.Revision = p.Config.Revision
 	out.Rules = diagnostics(p, authrules.Evidence{}, s.now())
-	if err := authrules.ValidateScopes(p.Config.AttributeMappings, p.Config.OidcScopes, p.Config.OidcUserinfoEnabled, p.Policy.LoginRules, p.Policy.SignupRules, p.Policy.LinkRules); err != nil {
+	if err := validateConnectionRules(p.Config, p.Policy.LoginRules, p.Policy.SignupRules, p.Policy.LinkRules); err != nil {
 		out.Issues = append(out.Issues, err.Error())
 		return out, nil
 	}
-	cfg, err := s.externalOIDCConfig(ctx, s.client, p.Config)
-	if err != nil {
-		return out, err
-	}
-	if cfg.ClientSecret == "" {
+	if connectionSecretVersion(p.Config) < 1 {
 		out.Issues = append(out.Issues, "client_secret is required")
 		return out, nil
 	}
-	if _, err = s.protocol.Check(ctx, cfg); err != nil {
-		out.Issues = append(out.Issues, "OIDC discovery or network validation failed")
+	if p.Connection.Kind == authconnection.KindGenericOauth2 {
+		cfg, e := s.externalOAuthConfig(ctx, p)
+		if e != nil {
+			return out, e
+		}
+		_, err = s.oauth2Protocol.Check(ctx, cfg)
+	} else {
+		cfg, e := s.externalOIDCConfig(ctx, s.client, p.Config)
+		if e != nil {
+			return out, e
+		}
+		_, err = s.protocol.Check(ctx, cfg)
+	}
+	if err != nil {
+		out.Issues = append(out.Issues, "Protocol configuration or network validation failed")
 		return out, nil
 	}
 	out.Valid = true
@@ -597,13 +693,20 @@ func (s *ExternalAuthService) ImpactConnection(ctx context.Context, actorID int,
 	if err != nil {
 		return AuthConnectionImpactResult{}, err
 	}
+	if err := ensureIdentityContract(ctx, s.client, p); err != nil {
+		return AuthConnectionImpactResult{}, err
+	}
 	if p.Connection.PublishedRevision != nil {
 		published, err := readExternalConnection(ctx, s.client, id, 0)
 		if err != nil {
 			return AuthConnectionImpactResult{}, err
 		}
 		turnsOff := (published.Policy.Enabled && !p.Policy.Enabled) || (published.Policy.Enabled && published.Policy.LoginEnabled && !p.Policy.LoginEnabled)
-		if !loginRulesChanged(published, p) && !turnsOff {
+		freshChanged, err := freshCapabilityChanged(ctx, s.client, published, p)
+		if err != nil {
+			return AuthConnectionImpactResult{}, err
+		}
+		if !loginRulesChanged(published, p) && !turnsOff && !freshChanged {
 			return emptyAuthImpact(p.Config.Revision, s.now()), nil
 		}
 	}
@@ -640,10 +743,13 @@ func ensurePasswordAdministrator(ctx context.Context, c *ent.Client) error {
 }
 func (s *ExternalAuthService) PublishConnection(ctx context.Context, actorID int, id string, expected int64) (AuthConnectionRecord, error) {
 	return s.mutateConnection(ctx, actorID, id, expected, func(c *ent.Client, row *ent.AuthConnection, p externalConnection) error {
+		if err := ensureIdentityContract(ctx, c, p); err != nil {
+			return err
+		}
 		if row.ArchivedAt != nil || row.DraftRevision == nil || connectionSecretVersion(p.Config) < 1 {
 			return ErrAuthConnectionConflict
 		}
-		valid, err := hasFreshValidation(ctx, c, id, connectionFingerprint(p.Config))
+		valid, err := hasAuthenticationValidation(ctx, c, id, connectionFingerprint(p.Config))
 		if err != nil {
 			return err
 		}
@@ -664,7 +770,11 @@ func (s *ExternalAuthService) PublishConnection(ctx context.Context, actorID int
 			// login was already off: pending transactions and stale refresh
 			// chains must not become valid after a close/reopen cycle.
 			turnsOff := (pub.Policy.Enabled && !policy.Enabled) || (pub.Policy.Enabled && pub.Policy.LoginEnabled && !policy.LoginEnabled)
-			if invalidates || turnsOff {
+			freshChanged, err := freshCapabilityChanged(ctx, c, pub, p)
+			if err != nil {
+				return err
+			}
+			if invalidates || turnsOff || freshChanged {
 				impact, err := candidateImpact(ctx, c, p, s.now(), !policy.Enabled || !policy.LoginEnabled)
 				if err != nil {
 					return err
@@ -704,6 +814,9 @@ func (s *ExternalAuthService) RestoreConnection(ctx context.Context, actorID int
 }
 func (s *ExternalAuthService) changeConnectionArchive(ctx context.Context, actorID int, id string, expected int64, archive bool) (AuthConnectionRecord, error) {
 	return s.mutateConnection(ctx, actorID, id, expected, func(c *ent.Client, row *ent.AuthConnection, p externalConnection) error {
+		if err := ensureIdentityContract(ctx, c, p); err != nil {
+			return err
+		}
 		if (row.ArchivedAt != nil) == archive || row.AuthGeneration >= maxAuthVersion {
 			return ErrAuthConnectionConflict
 		}

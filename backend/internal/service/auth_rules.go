@@ -12,6 +12,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
@@ -93,6 +94,13 @@ type AuthAttributeCatalog struct {
 }
 
 func sourceTrustFingerprint(cfg *ent.AuthConnectionRevision) string {
+	if configProtocol(cfg) == "oauth2" {
+		in := oauthInput(cfg)
+		sort.Strings(in.Scopes)
+		data, _ := json.Marshal([]any{"oauth2", cfg.ConnectionID, in})
+		digest := sha256.Sum256(data)
+		return hex.EncodeToString(digest[:])
+	}
 	scopes := append([]string(nil), cfg.OidcScopes...)
 	sort.Strings(scopes)
 	data, _ := json.Marshal([]any{cfg.OidcIssuer, cfg.OidcClientID, cfg.OidcClientAuthMethod, scopes, cfg.OidcUserinfoEnabled})
@@ -101,7 +109,7 @@ func sourceTrustFingerprint(cfg *ent.AuthConnectionRevision) string {
 }
 func loginRulesChanged(a, b externalConnection) bool {
 	return sourceTrustFingerprint(a.Config) != sourceTrustFingerprint(b.Config) ||
-		authrules.RulesFingerprint(a.Policy.LoginRules, a.Config.AttributeMappings) != authrules.RulesFingerprint(b.Policy.LoginRules, b.Config.AttributeMappings) ||
+		authrules.RulesFingerprint(configProtocol(a.Config), a.Policy.LoginRules, a.Config.AttributeMappings) != authrules.RulesFingerprint(configProtocol(b.Config), b.Policy.LoginRules, b.Config.AttributeMappings) ||
 		((a.Policy.LoginRules.Mode == "conditions" || b.Policy.LoginRules.Mode == "conditions") && a.Config.EvidenceMaxAgeSeconds != b.Config.EvidenceMaxAgeSeconds)
 }
 
@@ -166,7 +174,7 @@ func transactionRulesCurrent(ctx context.Context, c *ent.Client, row *ent.AuthTr
 	}
 	a, b := rulesForPurpose(old, row.Purpose), rulesForPurpose(p, row.Purpose)
 	for i := range a {
-		if authrules.RulesFingerprint(a[i], old.Config.AttributeMappings) != authrules.RulesFingerprint(b[i], p.Config.AttributeMappings) {
+		if authrules.RulesFingerprint(configProtocol(old.Config), a[i], old.Config.AttributeMappings) != authrules.RulesFingerprint(configProtocol(p.Config), b[i], p.Config.AttributeMappings) {
 			return ErrAuthConnectionConflict
 		}
 	}
@@ -196,10 +204,10 @@ func ruleEvidence(p externalConnection, evidence authrules.Evidence, rule authru
 			evidence.ExpiresAt = deadline
 		}
 	}
-	if evidence.SourceFingerprint != sourceTrustFingerprint(p.Config) || evidence.Issuer != p.Config.OidcIssuer || evidence.Subject == "" || (!candidate && evidence.LoginPolicyRevision != p.Policy.LoginPolicyRevision) {
+	if evidence.SourceFingerprint != sourceTrustFingerprint(p.Config) || evidence.Issuer != connectionAuthority(p) || evidence.Subject == "" || (!candidate && evidence.LoginPolicyRevision != p.Policy.LoginPolicyRevision) {
 		evidence.Attributes = nil
 	}
-	return authrules.Evaluate(rule, p.Config.AttributeMappings, evidence, now)
+	return authrules.Evaluate(configProtocol(p.Config), rule, p.Config.AttributeMappings, evidence, now)
 }
 func requireRule(p externalConnection, evidence authrules.Evidence, rule authrules.RuleSet, now time.Time) error {
 	result := ruleEvidence(p, evidence, rule, now, false)
@@ -246,7 +254,7 @@ func (s *ExternalAuthService) ConnectionAttributes(ctx context.Context, actorID 
 	if err != nil {
 		return AuthAttributeCatalog{}, err
 	}
-	fields, err := authrules.Catalog(p.Config.AttributeMappings)
+	fields, err := authrules.Catalog(configProtocol(p.Config), p.Config.AttributeMappings)
 	return AuthAttributeCatalog{Revision: p.Config.Revision, Fields: fields, Operators: map[string][]string{
 		"string": {"eq", "ne", "in"}, "boolean": {"eq"}, "integer": {"eq", "ne", "gt", "gte", "lt", "lte"}, "number": {"eq", "ne", "gt", "gte", "lt", "lte"}, "datetime": {"gt", "gte", "lt", "lte"}, "string_list": {"contains", "not_contains", "contains_any", "contains_all"}}}, err
 }
@@ -256,16 +264,16 @@ func (s *ExternalAuthService) PreviewConnectionRules(ctx context.Context, actorI
 		return AuthRulesPreview{}, err
 	}
 	for source := range in.Sources {
-		if source != "oidc_id_token" && source != "oidc_userinfo" {
+		if !authrules.ValidSource(configProtocol(p.Config), source) {
 			return AuthRulesPreview{}, ErrInvalidInput
 		}
 	}
 	now := s.now()
-	attrs, err := authrules.Extract(p.Config.AttributeMappings, in.Sources, nil, now)
+	attrs, err := authrules.Extract(configProtocol(p.Config), p.Config.AttributeMappings, in.Sources, nil, now)
 	if err != nil {
 		return AuthRulesPreview{}, ErrInvalidInput
 	}
-	e := authrules.Evidence{Issuer: p.Config.OidcIssuer, Subject: "simulated", SourceFingerprint: sourceTrustFingerprint(p.Config), LoginPolicyRevision: p.Policy.LoginPolicyRevision, ObservedAt: now, ExpiresAt: now.Add(time.Duration(p.Config.EvidenceMaxAgeSeconds) * time.Second), Attributes: attrs}
+	e := authrules.Evidence{Issuer: connectionAuthority(p), Subject: "simulated", SourceFingerprint: sourceTrustFingerprint(p.Config), LoginPolicyRevision: p.Policy.LoginPolicyRevision, ObservedAt: now, ExpiresAt: now.Add(time.Duration(p.Config.EvidenceMaxAgeSeconds) * time.Second), Attributes: attrs}
 	return AuthRulesPreview{Revision: p.Config.Revision, Simulated: true, Attributes: attrs, Rules: diagnostics(p, e, now)}, nil
 }
 
@@ -321,9 +329,13 @@ func connectionFallbackAt(ctx context.Context, c *ent.Client, u *ent.User, exclu
 		if result.Status != "pass" {
 			continue
 		}
-		// B2 only publishes OIDC implementations with fresh-authentication support.
-		// Administrator test records are publication diagnostics, not user evidence.
-		return true, nil
+		fresh, err := hasFreshValidation(ctx, c, p.Connection.ID, connectionFingerprint(p.Config))
+		if err != nil {
+			return false, err
+		}
+		if p.Connection.Kind == authconnection.KindOidc && fresh {
+			return true, nil
+		}
 	}
 	return false, nil
 }
