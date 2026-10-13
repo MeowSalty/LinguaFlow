@@ -57,6 +57,8 @@ const (
 	FieldConfirmationTokenHash = "confirmation_token_hash"
 	// FieldConfirmationExpiresAt holds the string denoting the confirmation_expires_at field in the database.
 	FieldConfirmationExpiresAt = "confirmation_expires_at"
+	// FieldIdentityProtocol holds the string denoting the identity_protocol field in the database.
+	FieldIdentityProtocol = "identity_protocol"
 	// FieldIdentityIssuer holds the string denoting the identity_issuer field in the database.
 	FieldIdentityIssuer = "identity_issuer"
 	// FieldIdentitySubject holds the string denoting the identity_subject field in the database.
@@ -126,6 +128,7 @@ var Columns = []string{
 	FieldExchangeTicketExpiresAt,
 	FieldConfirmationTokenHash,
 	FieldConfirmationExpiresAt,
+	FieldIdentityProtocol,
 	FieldIdentityIssuer,
 	FieldIdentitySubject,
 	FieldIdentityDisplayName,
@@ -248,6 +251,30 @@ func StatusValidator(s Status) error {
 	}
 }
 
+// IdentityProtocol defines the type for the "identity_protocol" enum field.
+type IdentityProtocol string
+
+// IdentityProtocol values.
+const (
+	IdentityProtocolOidc     IdentityProtocol = "oidc"
+	IdentityProtocolOauth2   IdentityProtocol = "oauth2"
+	IdentityProtocolProvider IdentityProtocol = "provider"
+)
+
+func (ip IdentityProtocol) String() string {
+	return string(ip)
+}
+
+// IdentityProtocolValidator is a validator for the "identity_protocol" field enum values. It is called by the builders before save.
+func IdentityProtocolValidator(ip IdentityProtocol) error {
+	switch ip {
+	case IdentityProtocolOidc, IdentityProtocolOauth2, IdentityProtocolProvider:
+		return nil
+	default:
+		return fmt.Errorf("authtransaction: invalid enum value for identity_protocol field: %q", ip)
+	}
+}
+
 // OrderOption defines the ordering options for the AuthTransaction queries.
 type OrderOption func(*sql.Selector)
 
@@ -359,6 +386,11 @@ func ByConfirmationTokenHash(opts ...sql.OrderTermOption) OrderOption {
 // ByConfirmationExpiresAt orders the results by the confirmation_expires_at field.
 func ByConfirmationExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldConfirmationExpiresAt, opts...).ToFunc()
+}
+
+// ByIdentityProtocol orders the results by the identity_protocol field.
+func ByIdentityProtocol(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIdentityProtocol, opts...).ToFunc()
 }
 
 // ByIdentityIssuer orders the results by the identity_issuer field.

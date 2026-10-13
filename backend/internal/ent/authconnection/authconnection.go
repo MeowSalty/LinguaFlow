@@ -22,6 +22,8 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldKind holds the string denoting the kind field in the database.
 	FieldKind = "kind"
+	// FieldIdentityAuthorityID holds the string denoting the identity_authority_id field in the database.
+	FieldIdentityAuthorityID = "identity_authority_id"
 	// FieldAggregateRevision holds the string denoting the aggregate_revision field in the database.
 	FieldAggregateRevision = "aggregate_revision"
 	// FieldDraftRevision holds the string denoting the draft_revision field in the database.
@@ -105,6 +107,7 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldKind,
+	FieldIdentityAuthorityID,
 	FieldAggregateRevision,
 	FieldDraftRevision,
 	FieldPublishedRevision,
@@ -197,6 +200,11 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByKind orders the results by the kind field.
 func ByKind(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldKind, opts...).ToFunc()
+}
+
+// ByIdentityAuthorityID orders the results by the identity_authority_id field.
+func ByIdentityAuthorityID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIdentityAuthorityID, opts...).ToFunc()
 }
 
 // ByAggregateRevision orders the results by the aggregate_revision field.

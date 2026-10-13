@@ -178,21 +178,21 @@ func init() {
 	// authconnection.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	authconnection.UpdateDefaultUpdatedAt = authconnectionDescUpdatedAt.UpdateDefault.(func() time.Time)
 	// authconnectionDescAggregateRevision is the schema descriptor for aggregate_revision field.
-	authconnectionDescAggregateRevision := authconnectionFields[2].Descriptor()
+	authconnectionDescAggregateRevision := authconnectionFields[3].Descriptor()
 	// authconnection.DefaultAggregateRevision holds the default value on creation for the aggregate_revision field.
 	authconnection.DefaultAggregateRevision = authconnectionDescAggregateRevision.Default.(int64)
 	// authconnection.AggregateRevisionValidator is a validator for the "aggregate_revision" field. It is called by the builders before save.
 	authconnection.AggregateRevisionValidator = authconnectionDescAggregateRevision.Validators[0].(func(int64) error)
 	// authconnectionDescDraftRevision is the schema descriptor for draft_revision field.
-	authconnectionDescDraftRevision := authconnectionFields[3].Descriptor()
+	authconnectionDescDraftRevision := authconnectionFields[4].Descriptor()
 	// authconnection.DraftRevisionValidator is a validator for the "draft_revision" field. It is called by the builders before save.
 	authconnection.DraftRevisionValidator = authconnectionDescDraftRevision.Validators[0].(func(int64) error)
 	// authconnectionDescPublishedRevision is the schema descriptor for published_revision field.
-	authconnectionDescPublishedRevision := authconnectionFields[4].Descriptor()
+	authconnectionDescPublishedRevision := authconnectionFields[5].Descriptor()
 	// authconnection.PublishedRevisionValidator is a validator for the "published_revision" field. It is called by the builders before save.
 	authconnection.PublishedRevisionValidator = authconnectionDescPublishedRevision.Validators[0].(func(int64) error)
 	// authconnectionDescAuthGeneration is the schema descriptor for auth_generation field.
-	authconnectionDescAuthGeneration := authconnectionFields[5].Descriptor()
+	authconnectionDescAuthGeneration := authconnectionFields[6].Descriptor()
 	// authconnection.DefaultAuthGeneration holds the default value on creation for the auth_generation field.
 	authconnection.DefaultAuthGeneration = authconnectionDescAuthGeneration.Default.(int64)
 	// authconnection.AuthGenerationValidator is a validator for the "auth_generation" field. It is called by the builders before save.
@@ -251,19 +251,19 @@ func init() {
 	// authconnectionrevision.EvidenceMaxAgeSecondsValidator is a validator for the "evidence_max_age_seconds" field. It is called by the builders before save.
 	authconnectionrevision.EvidenceMaxAgeSecondsValidator = authconnectionrevisionDescEvidenceMaxAgeSeconds.Validators[0].(func(int) error)
 	// authconnectionrevisionDescOidcUserinfoEnabled is the schema descriptor for oidc_userinfo_enabled field.
-	authconnectionrevisionDescOidcUserinfoEnabled := authconnectionrevisionFields[12].Descriptor()
+	authconnectionrevisionDescOidcUserinfoEnabled := authconnectionrevisionFields[20].Descriptor()
 	// authconnectionrevision.DefaultOidcUserinfoEnabled holds the default value on creation for the oidc_userinfo_enabled field.
 	authconnectionrevision.DefaultOidcUserinfoEnabled = authconnectionrevisionDescOidcUserinfoEnabled.Default.(bool)
 	// authconnectionrevisionDescSecretVersion is the schema descriptor for secret_version field.
-	authconnectionrevisionDescSecretVersion := authconnectionrevisionFields[13].Descriptor()
+	authconnectionrevisionDescSecretVersion := authconnectionrevisionFields[21].Descriptor()
 	// authconnectionrevision.SecretVersionValidator is a validator for the "secret_version" field. It is called by the builders before save.
 	authconnectionrevision.SecretVersionValidator = authconnectionrevisionDescSecretVersion.Validators[0].(func(int64) error)
 	// authconnectionrevisionDescUsernameLoginEnabled is the schema descriptor for username_login_enabled field.
-	authconnectionrevisionDescUsernameLoginEnabled := authconnectionrevisionFields[16].Descriptor()
+	authconnectionrevisionDescUsernameLoginEnabled := authconnectionrevisionFields[24].Descriptor()
 	// authconnectionrevision.DefaultUsernameLoginEnabled holds the default value on creation for the username_login_enabled field.
 	authconnectionrevision.DefaultUsernameLoginEnabled = authconnectionrevisionDescUsernameLoginEnabled.Default.(bool)
 	// authconnectionrevisionDescEmailLoginEnabled is the schema descriptor for email_login_enabled field.
-	authconnectionrevisionDescEmailLoginEnabled := authconnectionrevisionFields[17].Descriptor()
+	authconnectionrevisionDescEmailLoginEnabled := authconnectionrevisionFields[25].Descriptor()
 	// authconnectionrevision.DefaultEmailLoginEnabled holds the default value on creation for the email_login_enabled field.
 	authconnectionrevision.DefaultEmailLoginEnabled = authconnectionrevisionDescEmailLoginEnabled.Default.(bool)
 	authconnectionsecretMixin := schema.AuthConnectionSecret{}.Mixin()

@@ -36,6 +36,22 @@ const (
 	FieldAttributeMappings = "attribute_mappings"
 	// FieldEvidenceMaxAgeSeconds holds the string denoting the evidence_max_age_seconds field in the database.
 	FieldEvidenceMaxAgeSeconds = "evidence_max_age_seconds"
+	// FieldOauth2AuthorizationEndpoint holds the string denoting the oauth2_authorization_endpoint field in the database.
+	FieldOauth2AuthorizationEndpoint = "oauth2_authorization_endpoint"
+	// FieldOauth2TokenEndpoint holds the string denoting the oauth2_token_endpoint field in the database.
+	FieldOauth2TokenEndpoint = "oauth2_token_endpoint"
+	// FieldOauth2ProfileEndpoint holds the string denoting the oauth2_profile_endpoint field in the database.
+	FieldOauth2ProfileEndpoint = "oauth2_profile_endpoint"
+	// FieldOauth2ClientID holds the string denoting the oauth2_client_id field in the database.
+	FieldOauth2ClientID = "oauth2_client_id"
+	// FieldOauth2SubjectPointer holds the string denoting the oauth2_subject_pointer field in the database.
+	FieldOauth2SubjectPointer = "oauth2_subject_pointer"
+	// FieldOauth2ClientAuthMethod holds the string denoting the oauth2_client_auth_method field in the database.
+	FieldOauth2ClientAuthMethod = "oauth2_client_auth_method"
+	// FieldOauth2SubjectType holds the string denoting the oauth2_subject_type field in the database.
+	FieldOauth2SubjectType = "oauth2_subject_type"
+	// FieldOauth2Scopes holds the string denoting the oauth2_scopes field in the database.
+	FieldOauth2Scopes = "oauth2_scopes"
 	// FieldOidcIssuer holds the string denoting the oidc_issuer field in the database.
 	FieldOidcIssuer = "oidc_issuer"
 	// FieldOidcClientID holds the string denoting the oidc_client_id field in the database.
@@ -82,6 +98,14 @@ var Columns = []string{
 	FieldConfigVersion,
 	FieldAttributeMappings,
 	FieldEvidenceMaxAgeSeconds,
+	FieldOauth2AuthorizationEndpoint,
+	FieldOauth2TokenEndpoint,
+	FieldOauth2ProfileEndpoint,
+	FieldOauth2ClientID,
+	FieldOauth2SubjectPointer,
+	FieldOauth2ClientAuthMethod,
+	FieldOauth2SubjectType,
+	FieldOauth2Scopes,
 	FieldOidcIssuer,
 	FieldOidcClientID,
 	FieldOidcClientAuthMethod,
@@ -144,6 +168,52 @@ var (
 	// DefaultEmailLoginEnabled holds the default value on creation for the "email_login_enabled" field.
 	DefaultEmailLoginEnabled bool
 )
+
+// Oauth2ClientAuthMethod defines the type for the "oauth2_client_auth_method" enum field.
+type Oauth2ClientAuthMethod string
+
+// Oauth2ClientAuthMethod values.
+const (
+	Oauth2ClientAuthMethodClientSecretBasic Oauth2ClientAuthMethod = "client_secret_basic"
+	Oauth2ClientAuthMethodClientSecretPost  Oauth2ClientAuthMethod = "client_secret_post"
+)
+
+func (ocam Oauth2ClientAuthMethod) String() string {
+	return string(ocam)
+}
+
+// Oauth2ClientAuthMethodValidator is a validator for the "oauth2_client_auth_method" field enum values. It is called by the builders before save.
+func Oauth2ClientAuthMethodValidator(ocam Oauth2ClientAuthMethod) error {
+	switch ocam {
+	case Oauth2ClientAuthMethodClientSecretBasic, Oauth2ClientAuthMethodClientSecretPost:
+		return nil
+	default:
+		return fmt.Errorf("authconnectionrevision: invalid enum value for oauth2_client_auth_method field: %q", ocam)
+	}
+}
+
+// Oauth2SubjectType defines the type for the "oauth2_subject_type" enum field.
+type Oauth2SubjectType string
+
+// Oauth2SubjectType values.
+const (
+	Oauth2SubjectTypeString  Oauth2SubjectType = "string"
+	Oauth2SubjectTypeInteger Oauth2SubjectType = "integer"
+)
+
+func (ost Oauth2SubjectType) String() string {
+	return string(ost)
+}
+
+// Oauth2SubjectTypeValidator is a validator for the "oauth2_subject_type" field enum values. It is called by the builders before save.
+func Oauth2SubjectTypeValidator(ost Oauth2SubjectType) error {
+	switch ost {
+	case Oauth2SubjectTypeString, Oauth2SubjectTypeInteger:
+		return nil
+	default:
+		return fmt.Errorf("authconnectionrevision: invalid enum value for oauth2_subject_type field: %q", ost)
+	}
+}
 
 // OidcClientAuthMethod defines the type for the "oidc_client_auth_method" enum field.
 type OidcClientAuthMethod string
@@ -219,6 +289,41 @@ func ByConfigVersion(opts ...sql.OrderTermOption) OrderOption {
 // ByEvidenceMaxAgeSeconds orders the results by the evidence_max_age_seconds field.
 func ByEvidenceMaxAgeSeconds(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEvidenceMaxAgeSeconds, opts...).ToFunc()
+}
+
+// ByOauth2AuthorizationEndpoint orders the results by the oauth2_authorization_endpoint field.
+func ByOauth2AuthorizationEndpoint(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOauth2AuthorizationEndpoint, opts...).ToFunc()
+}
+
+// ByOauth2TokenEndpoint orders the results by the oauth2_token_endpoint field.
+func ByOauth2TokenEndpoint(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOauth2TokenEndpoint, opts...).ToFunc()
+}
+
+// ByOauth2ProfileEndpoint orders the results by the oauth2_profile_endpoint field.
+func ByOauth2ProfileEndpoint(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOauth2ProfileEndpoint, opts...).ToFunc()
+}
+
+// ByOauth2ClientID orders the results by the oauth2_client_id field.
+func ByOauth2ClientID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOauth2ClientID, opts...).ToFunc()
+}
+
+// ByOauth2SubjectPointer orders the results by the oauth2_subject_pointer field.
+func ByOauth2SubjectPointer(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOauth2SubjectPointer, opts...).ToFunc()
+}
+
+// ByOauth2ClientAuthMethod orders the results by the oauth2_client_auth_method field.
+func ByOauth2ClientAuthMethod(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOauth2ClientAuthMethod, opts...).ToFunc()
+}
+
+// ByOauth2SubjectType orders the results by the oauth2_subject_type field.
+func ByOauth2SubjectType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOauth2SubjectType, opts...).ToFunc()
 }
 
 // ByOidcIssuer orders the results by the oidc_issuer field.

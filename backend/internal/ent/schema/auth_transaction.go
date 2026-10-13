@@ -34,6 +34,7 @@ func (AuthTransaction) Fields() []ent.Field {
 		field.Time("exchange_ticket_expires_at").Optional().Nillable(),
 		field.String("confirmation_token_hash").Optional().Nillable().Unique().Sensitive(),
 		field.Time("confirmation_expires_at").Optional().Nillable(),
+		field.Enum("identity_protocol").Values("oidc", "oauth2", "provider").Optional(),
 		field.String("identity_issuer").Optional(),
 		field.String("identity_subject").Optional(),
 		field.String("identity_display_name").Optional(),

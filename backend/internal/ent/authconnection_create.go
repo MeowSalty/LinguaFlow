@@ -61,6 +61,20 @@ func (_c *AuthConnectionCreate) SetKind(v authconnection.Kind) *AuthConnectionCr
 	return _c
 }
 
+// SetIdentityAuthorityID sets the "identity_authority_id" field.
+func (_c *AuthConnectionCreate) SetIdentityAuthorityID(v string) *AuthConnectionCreate {
+	_c.mutation.SetIdentityAuthorityID(v)
+	return _c
+}
+
+// SetNillableIdentityAuthorityID sets the "identity_authority_id" field if the given value is not nil.
+func (_c *AuthConnectionCreate) SetNillableIdentityAuthorityID(v *string) *AuthConnectionCreate {
+	if v != nil {
+		_c.SetIdentityAuthorityID(*v)
+	}
+	return _c
+}
+
 // SetAggregateRevision sets the "aggregate_revision" field.
 func (_c *AuthConnectionCreate) SetAggregateRevision(v int64) *AuthConnectionCreate {
 	_c.mutation.SetAggregateRevision(v)
@@ -397,6 +411,10 @@ func (_c *AuthConnectionCreate) createSpec() (*AuthConnection, *sqlgraph.CreateS
 	if value, ok := _c.mutation.Kind(); ok {
 		_spec.SetField(authconnection.FieldKind, field.TypeEnum, value)
 		_node.Kind = value
+	}
+	if value, ok := _c.mutation.IdentityAuthorityID(); ok {
+		_spec.SetField(authconnection.FieldIdentityAuthorityID, field.TypeString, value)
+		_node.IdentityAuthorityID = &value
 	}
 	if value, ok := _c.mutation.AggregateRevision(); ok {
 		_spec.SetField(authconnection.FieldAggregateRevision, field.TypeInt64, value)

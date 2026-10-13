@@ -96,6 +96,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "kind", Type: field.TypeEnum, Enums: []string{"password", "oidc", "generic_oauth2", "provider"}},
+		{Name: "identity_authority_id", Type: field.TypeString, Unique: true, Nullable: true},
 		{Name: "aggregate_revision", Type: field.TypeInt64, Default: 1},
 		{Name: "draft_revision", Type: field.TypeInt64, Nullable: true},
 		{Name: "published_revision", Type: field.TypeInt64, Nullable: true},
@@ -120,6 +121,14 @@ var (
 		{Name: "config_version", Type: field.TypeInt, Default: 1},
 		{Name: "attribute_mappings", Type: field.TypeJSON, Nullable: true},
 		{Name: "evidence_max_age_seconds", Type: field.TypeInt, Default: 3600},
+		{Name: "oauth2_authorization_endpoint", Type: field.TypeString, Nullable: true},
+		{Name: "oauth2_token_endpoint", Type: field.TypeString, Nullable: true},
+		{Name: "oauth2_profile_endpoint", Type: field.TypeString, Nullable: true},
+		{Name: "oauth2_client_id", Type: field.TypeString, Nullable: true},
+		{Name: "oauth2_subject_pointer", Type: field.TypeString, Nullable: true},
+		{Name: "oauth2_client_auth_method", Type: field.TypeEnum, Nullable: true, Enums: []string{"client_secret_basic", "client_secret_post"}},
+		{Name: "oauth2_subject_type", Type: field.TypeEnum, Nullable: true, Enums: []string{"string", "integer"}},
+		{Name: "oauth2_scopes", Type: field.TypeJSON, Nullable: true},
 		{Name: "oidc_issuer", Type: field.TypeString, Nullable: true},
 		{Name: "oidc_client_id", Type: field.TypeString, Nullable: true},
 		{Name: "oidc_client_auth_method", Type: field.TypeEnum, Nullable: true, Enums: []string{"client_secret_basic", "client_secret_post"}},
@@ -140,7 +149,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "auth_connection_revisions_auth_connections_revisions",
-				Columns:    []*schema.Column{AuthConnectionRevisionsColumns[20]},
+				Columns:    []*schema.Column{AuthConnectionRevisionsColumns[28]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -149,7 +158,7 @@ var (
 			{
 				Name:    "authconnectionrevision_connection_id_revision",
 				Unique:  true,
-				Columns: []*schema.Column{AuthConnectionRevisionsColumns[20], AuthConnectionRevisionsColumns[3]},
+				Columns: []*schema.Column{AuthConnectionRevisionsColumns[28], AuthConnectionRevisionsColumns[3]},
 			},
 		},
 	}
@@ -243,6 +252,7 @@ var (
 		{Name: "exchange_ticket_expires_at", Type: field.TypeTime, Nullable: true},
 		{Name: "confirmation_token_hash", Type: field.TypeString, Unique: true, Nullable: true},
 		{Name: "confirmation_expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "identity_protocol", Type: field.TypeEnum, Nullable: true, Enums: []string{"oidc", "oauth2", "provider"}},
 		{Name: "identity_issuer", Type: field.TypeString, Nullable: true},
 		{Name: "identity_subject", Type: field.TypeString, Nullable: true},
 		{Name: "identity_display_name", Type: field.TypeString, Nullable: true},
@@ -269,7 +279,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "auth_transactions_auth_connections_transactions",
-				Columns:    []*schema.Column{AuthTransactionsColumns[37]},
+				Columns:    []*schema.Column{AuthTransactionsColumns[38]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -278,7 +288,7 @@ var (
 			{
 				Name:    "authtransaction_status_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{AuthTransactionsColumns[4], AuthTransactionsColumns[35]},
+				Columns: []*schema.Column{AuthTransactionsColumns[4], AuthTransactionsColumns[36]},
 			},
 			{
 				Name:    "authtransaction_user_id_status",

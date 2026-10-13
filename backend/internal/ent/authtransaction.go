@@ -62,6 +62,8 @@ type AuthTransaction struct {
 	ConfirmationTokenHash *string `json:"-"`
 	// ConfirmationExpiresAt holds the value of the "confirmation_expires_at" field.
 	ConfirmationExpiresAt *time.Time `json:"confirmation_expires_at,omitempty"`
+	// IdentityProtocol holds the value of the "identity_protocol" field.
+	IdentityProtocol authtransaction.IdentityProtocol `json:"identity_protocol,omitempty"`
 	// IdentityIssuer holds the value of the "identity_issuer" field.
 	IdentityIssuer string `json:"identity_issuer,omitempty"`
 	// IdentitySubject holds the value of the "identity_subject" field.
@@ -129,7 +131,7 @@ func (*AuthTransaction) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case authtransaction.FieldConnectionRevision, authtransaction.FieldConnectionGeneration, authtransaction.FieldPolicyRevision, authtransaction.FieldUserID, authtransaction.FieldAuthVersion, authtransaction.FieldBindingID, authtransaction.FieldAuthorizationConnectionGeneration, authtransaction.FieldAuthorizationPolicyRevision:
 			values[i] = new(sql.NullInt64)
-		case authtransaction.FieldID, authtransaction.FieldPurpose, authtransaction.FieldStatus, authtransaction.FieldConnectionID, authtransaction.FieldStateHash, authtransaction.FieldNonce, authtransaction.FieldPkceVerifier, authtransaction.FieldBrowserChallenge, authtransaction.FieldCompletionURL, authtransaction.FieldReturnTo, authtransaction.FieldExchangeTicketHash, authtransaction.FieldConfirmationTokenHash, authtransaction.FieldIdentityIssuer, authtransaction.FieldIdentitySubject, authtransaction.FieldIdentityDisplayName, authtransaction.FieldIdentityUsername, authtransaction.FieldIdentityEmail, authtransaction.FieldAuthorizationConnectionID, authtransaction.FieldAuthorizedAction, authtransaction.FieldAuthorizedTargetID, authtransaction.FieldFailureCode:
+		case authtransaction.FieldID, authtransaction.FieldPurpose, authtransaction.FieldStatus, authtransaction.FieldConnectionID, authtransaction.FieldStateHash, authtransaction.FieldNonce, authtransaction.FieldPkceVerifier, authtransaction.FieldBrowserChallenge, authtransaction.FieldCompletionURL, authtransaction.FieldReturnTo, authtransaction.FieldExchangeTicketHash, authtransaction.FieldConfirmationTokenHash, authtransaction.FieldIdentityProtocol, authtransaction.FieldIdentityIssuer, authtransaction.FieldIdentitySubject, authtransaction.FieldIdentityDisplayName, authtransaction.FieldIdentityUsername, authtransaction.FieldIdentityEmail, authtransaction.FieldAuthorizationConnectionID, authtransaction.FieldAuthorizedAction, authtransaction.FieldAuthorizedTargetID, authtransaction.FieldFailureCode:
 			values[i] = new(sql.NullString)
 		case authtransaction.FieldCreatedAt, authtransaction.FieldUpdatedAt, authtransaction.FieldExchangeTicketExpiresAt, authtransaction.FieldConfirmationExpiresAt, authtransaction.FieldIdentityAuthTime, authtransaction.FieldAuthorizationExpiresAt, authtransaction.FieldExpiresAt, authtransaction.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
@@ -286,6 +288,12 @@ func (_m *AuthTransaction) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ConfirmationExpiresAt = new(time.Time)
 				*_m.ConfirmationExpiresAt = value.Time
+			}
+		case authtransaction.FieldIdentityProtocol:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field identity_protocol", values[i])
+			} else if value.Valid {
+				_m.IdentityProtocol = authtransaction.IdentityProtocol(value.String)
 			}
 		case authtransaction.FieldIdentityIssuer:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -495,6 +503,9 @@ func (_m *AuthTransaction) String() string {
 		builder.WriteString("confirmation_expires_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("identity_protocol=")
+	builder.WriteString(fmt.Sprintf("%v", _m.IdentityProtocol))
 	builder.WriteString(", ")
 	builder.WriteString("identity_issuer=")
 	builder.WriteString(_m.IdentityIssuer)

@@ -1330,6 +1330,36 @@ func ConfirmationExpiresAtNotNil() predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldNotNull(FieldConfirmationExpiresAt))
 }
 
+// IdentityProtocolEQ applies the EQ predicate on the "identity_protocol" field.
+func IdentityProtocolEQ(v IdentityProtocol) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldIdentityProtocol, v))
+}
+
+// IdentityProtocolNEQ applies the NEQ predicate on the "identity_protocol" field.
+func IdentityProtocolNEQ(v IdentityProtocol) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldIdentityProtocol, v))
+}
+
+// IdentityProtocolIn applies the In predicate on the "identity_protocol" field.
+func IdentityProtocolIn(vs ...IdentityProtocol) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldIdentityProtocol, vs...))
+}
+
+// IdentityProtocolNotIn applies the NotIn predicate on the "identity_protocol" field.
+func IdentityProtocolNotIn(vs ...IdentityProtocol) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldIdentityProtocol, vs...))
+}
+
+// IdentityProtocolIsNil applies the IsNil predicate on the "identity_protocol" field.
+func IdentityProtocolIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldIdentityProtocol))
+}
+
+// IdentityProtocolNotNil applies the NotNil predicate on the "identity_protocol" field.
+func IdentityProtocolNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldIdentityProtocol))
+}
+
 // IdentityIssuerEQ applies the EQ predicate on the "identity_issuer" field.
 func IdentityIssuerEQ(v string) predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldEQ(FieldIdentityIssuer, v))

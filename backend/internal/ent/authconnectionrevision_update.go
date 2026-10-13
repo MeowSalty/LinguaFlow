@@ -107,6 +107,30 @@ func (_u *AuthConnectionRevisionUpdate) sqlSave(ctx context.Context) (_node int,
 	if _u.mutation.AttributeMappingsCleared() {
 		_spec.ClearField(authconnectionrevision.FieldAttributeMappings, field.TypeJSON)
 	}
+	if _u.mutation.Oauth2AuthorizationEndpointCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2AuthorizationEndpoint, field.TypeString)
+	}
+	if _u.mutation.Oauth2TokenEndpointCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2TokenEndpoint, field.TypeString)
+	}
+	if _u.mutation.Oauth2ProfileEndpointCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2ProfileEndpoint, field.TypeString)
+	}
+	if _u.mutation.Oauth2ClientIDCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2ClientID, field.TypeString)
+	}
+	if _u.mutation.Oauth2SubjectPointerCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2SubjectPointer, field.TypeString)
+	}
+	if _u.mutation.Oauth2ClientAuthMethodCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2ClientAuthMethod, field.TypeEnum)
+	}
+	if _u.mutation.Oauth2SubjectTypeCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2SubjectType, field.TypeEnum)
+	}
+	if _u.mutation.Oauth2ScopesCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2Scopes, field.TypeJSON)
+	}
 	if _u.mutation.OidcIssuerCleared() {
 		_spec.ClearField(authconnectionrevision.FieldOidcIssuer, field.TypeString)
 	}
@@ -256,6 +280,30 @@ func (_u *AuthConnectionRevisionUpdateOne) sqlSave(ctx context.Context) (_node *
 	}
 	if _u.mutation.AttributeMappingsCleared() {
 		_spec.ClearField(authconnectionrevision.FieldAttributeMappings, field.TypeJSON)
+	}
+	if _u.mutation.Oauth2AuthorizationEndpointCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2AuthorizationEndpoint, field.TypeString)
+	}
+	if _u.mutation.Oauth2TokenEndpointCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2TokenEndpoint, field.TypeString)
+	}
+	if _u.mutation.Oauth2ProfileEndpointCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2ProfileEndpoint, field.TypeString)
+	}
+	if _u.mutation.Oauth2ClientIDCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2ClientID, field.TypeString)
+	}
+	if _u.mutation.Oauth2SubjectPointerCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2SubjectPointer, field.TypeString)
+	}
+	if _u.mutation.Oauth2ClientAuthMethodCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2ClientAuthMethod, field.TypeEnum)
+	}
+	if _u.mutation.Oauth2SubjectTypeCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2SubjectType, field.TypeEnum)
+	}
+	if _u.mutation.Oauth2ScopesCleared() {
+		_spec.ClearField(authconnectionrevision.FieldOauth2Scopes, field.TypeJSON)
 	}
 	if _u.mutation.OidcIssuerCleared() {
 		_spec.ClearField(authconnectionrevision.FieldOidcIssuer, field.TypeString)

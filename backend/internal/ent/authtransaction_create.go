@@ -236,6 +236,20 @@ func (_c *AuthTransactionCreate) SetNillableConfirmationExpiresAt(v *time.Time) 
 	return _c
 }
 
+// SetIdentityProtocol sets the "identity_protocol" field.
+func (_c *AuthTransactionCreate) SetIdentityProtocol(v authtransaction.IdentityProtocol) *AuthTransactionCreate {
+	_c.mutation.SetIdentityProtocol(v)
+	return _c
+}
+
+// SetNillableIdentityProtocol sets the "identity_protocol" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableIdentityProtocol(v *authtransaction.IdentityProtocol) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetIdentityProtocol(*v)
+	}
+	return _c
+}
+
 // SetIdentityIssuer sets the "identity_issuer" field.
 func (_c *AuthTransactionCreate) SetIdentityIssuer(v string) *AuthTransactionCreate {
 	_c.mutation.SetIdentityIssuer(v)
@@ -630,6 +644,11 @@ func (_c *AuthTransactionCreate) check() error {
 	if _, ok := _c.mutation.ReturnTo(); !ok {
 		return &ValidationError{Name: "return_to", err: errors.New(`ent: missing required field "AuthTransaction.return_to"`)}
 	}
+	if v, ok := _c.mutation.IdentityProtocol(); ok {
+		if err := authtransaction.IdentityProtocolValidator(v); err != nil {
+			return &ValidationError{Name: "identity_protocol", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.identity_protocol": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.ExpiresAt(); !ok {
 		return &ValidationError{Name: "expires_at", err: errors.New(`ent: missing required field "AuthTransaction.expires_at"`)}
 	}
@@ -755,6 +774,10 @@ func (_c *AuthTransactionCreate) createSpec() (*AuthTransaction, *sqlgraph.Creat
 	if value, ok := _c.mutation.ConfirmationExpiresAt(); ok {
 		_spec.SetField(authtransaction.FieldConfirmationExpiresAt, field.TypeTime, value)
 		_node.ConfirmationExpiresAt = &value
+	}
+	if value, ok := _c.mutation.IdentityProtocol(); ok {
+		_spec.SetField(authtransaction.FieldIdentityProtocol, field.TypeEnum, value)
+		_node.IdentityProtocol = value
 	}
 	if value, ok := _c.mutation.IdentityIssuer(); ok {
 		_spec.SetField(authtransaction.FieldIdentityIssuer, field.TypeString, value)

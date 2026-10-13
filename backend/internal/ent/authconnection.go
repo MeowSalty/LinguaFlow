@@ -23,6 +23,8 @@ type AuthConnection struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// Kind holds the value of the "kind" field.
 	Kind authconnection.Kind `json:"kind,omitempty"`
+	// IdentityAuthorityID holds the value of the "identity_authority_id" field.
+	IdentityAuthorityID *string `json:"identity_authority_id,omitempty"`
 	// AggregateRevision holds the value of the "aggregate_revision" field.
 	AggregateRevision int64 `json:"aggregate_revision,omitempty"`
 	// DraftRevision holds the value of the "draft_revision" field.
@@ -130,7 +132,7 @@ func (*AuthConnection) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case authconnection.FieldAggregateRevision, authconnection.FieldDraftRevision, authconnection.FieldPublishedRevision, authconnection.FieldAuthGeneration:
 			values[i] = new(sql.NullInt64)
-		case authconnection.FieldID, authconnection.FieldKind:
+		case authconnection.FieldID, authconnection.FieldKind, authconnection.FieldIdentityAuthorityID:
 			values[i] = new(sql.NullString)
 		case authconnection.FieldCreatedAt, authconnection.FieldUpdatedAt, authconnection.FieldArchivedAt:
 			values[i] = new(sql.NullTime)
@@ -172,6 +174,13 @@ func (_m *AuthConnection) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field kind", values[i])
 			} else if value.Valid {
 				_m.Kind = authconnection.Kind(value.String)
+			}
+		case authconnection.FieldIdentityAuthorityID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field identity_authority_id", values[i])
+			} else if value.Valid {
+				_m.IdentityAuthorityID = new(string)
+				*_m.IdentityAuthorityID = value.String
 			}
 		case authconnection.FieldAggregateRevision:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -285,6 +294,11 @@ func (_m *AuthConnection) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("kind=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Kind))
+	builder.WriteString(", ")
+	if v := _m.IdentityAuthorityID; v != nil {
+		builder.WriteString("identity_authority_id=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("aggregate_revision=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AggregateRevision))

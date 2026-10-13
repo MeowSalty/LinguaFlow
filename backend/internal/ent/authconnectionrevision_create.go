@@ -130,6 +130,110 @@ func (_c *AuthConnectionRevisionCreate) SetNillableEvidenceMaxAgeSeconds(v *int)
 	return _c
 }
 
+// SetOauth2AuthorizationEndpoint sets the "oauth2_authorization_endpoint" field.
+func (_c *AuthConnectionRevisionCreate) SetOauth2AuthorizationEndpoint(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOauth2AuthorizationEndpoint(v)
+	return _c
+}
+
+// SetNillableOauth2AuthorizationEndpoint sets the "oauth2_authorization_endpoint" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOauth2AuthorizationEndpoint(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOauth2AuthorizationEndpoint(*v)
+	}
+	return _c
+}
+
+// SetOauth2TokenEndpoint sets the "oauth2_token_endpoint" field.
+func (_c *AuthConnectionRevisionCreate) SetOauth2TokenEndpoint(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOauth2TokenEndpoint(v)
+	return _c
+}
+
+// SetNillableOauth2TokenEndpoint sets the "oauth2_token_endpoint" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOauth2TokenEndpoint(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOauth2TokenEndpoint(*v)
+	}
+	return _c
+}
+
+// SetOauth2ProfileEndpoint sets the "oauth2_profile_endpoint" field.
+func (_c *AuthConnectionRevisionCreate) SetOauth2ProfileEndpoint(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOauth2ProfileEndpoint(v)
+	return _c
+}
+
+// SetNillableOauth2ProfileEndpoint sets the "oauth2_profile_endpoint" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOauth2ProfileEndpoint(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOauth2ProfileEndpoint(*v)
+	}
+	return _c
+}
+
+// SetOauth2ClientID sets the "oauth2_client_id" field.
+func (_c *AuthConnectionRevisionCreate) SetOauth2ClientID(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOauth2ClientID(v)
+	return _c
+}
+
+// SetNillableOauth2ClientID sets the "oauth2_client_id" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOauth2ClientID(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOauth2ClientID(*v)
+	}
+	return _c
+}
+
+// SetOauth2SubjectPointer sets the "oauth2_subject_pointer" field.
+func (_c *AuthConnectionRevisionCreate) SetOauth2SubjectPointer(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOauth2SubjectPointer(v)
+	return _c
+}
+
+// SetNillableOauth2SubjectPointer sets the "oauth2_subject_pointer" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOauth2SubjectPointer(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOauth2SubjectPointer(*v)
+	}
+	return _c
+}
+
+// SetOauth2ClientAuthMethod sets the "oauth2_client_auth_method" field.
+func (_c *AuthConnectionRevisionCreate) SetOauth2ClientAuthMethod(v authconnectionrevision.Oauth2ClientAuthMethod) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOauth2ClientAuthMethod(v)
+	return _c
+}
+
+// SetNillableOauth2ClientAuthMethod sets the "oauth2_client_auth_method" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOauth2ClientAuthMethod(v *authconnectionrevision.Oauth2ClientAuthMethod) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOauth2ClientAuthMethod(*v)
+	}
+	return _c
+}
+
+// SetOauth2SubjectType sets the "oauth2_subject_type" field.
+func (_c *AuthConnectionRevisionCreate) SetOauth2SubjectType(v authconnectionrevision.Oauth2SubjectType) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOauth2SubjectType(v)
+	return _c
+}
+
+// SetNillableOauth2SubjectType sets the "oauth2_subject_type" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableOauth2SubjectType(v *authconnectionrevision.Oauth2SubjectType) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetOauth2SubjectType(*v)
+	}
+	return _c
+}
+
+// SetOauth2Scopes sets the "oauth2_scopes" field.
+func (_c *AuthConnectionRevisionCreate) SetOauth2Scopes(v []string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetOauth2Scopes(v)
+	return _c
+}
+
 // SetOidcIssuer sets the "oidc_issuer" field.
 func (_c *AuthConnectionRevisionCreate) SetOidcIssuer(v string) *AuthConnectionRevisionCreate {
 	_c.mutation.SetOidcIssuer(v)
@@ -395,6 +499,16 @@ func (_c *AuthConnectionRevisionCreate) check() error {
 			return &ValidationError{Name: "evidence_max_age_seconds", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.evidence_max_age_seconds": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.Oauth2ClientAuthMethod(); ok {
+		if err := authconnectionrevision.Oauth2ClientAuthMethodValidator(v); err != nil {
+			return &ValidationError{Name: "oauth2_client_auth_method", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.oauth2_client_auth_method": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.Oauth2SubjectType(); ok {
+		if err := authconnectionrevision.Oauth2SubjectTypeValidator(v); err != nil {
+			return &ValidationError{Name: "oauth2_subject_type", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.oauth2_subject_type": %w`, err)}
+		}
+	}
 	if v, ok := _c.mutation.OidcClientAuthMethod(); ok {
 		if err := authconnectionrevision.OidcClientAuthMethodValidator(v); err != nil {
 			return &ValidationError{Name: "oidc_client_auth_method", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.oidc_client_auth_method": %w`, err)}
@@ -478,6 +592,38 @@ func (_c *AuthConnectionRevisionCreate) createSpec() (*AuthConnectionRevision, *
 	if value, ok := _c.mutation.EvidenceMaxAgeSeconds(); ok {
 		_spec.SetField(authconnectionrevision.FieldEvidenceMaxAgeSeconds, field.TypeInt, value)
 		_node.EvidenceMaxAgeSeconds = value
+	}
+	if value, ok := _c.mutation.Oauth2AuthorizationEndpoint(); ok {
+		_spec.SetField(authconnectionrevision.FieldOauth2AuthorizationEndpoint, field.TypeString, value)
+		_node.Oauth2AuthorizationEndpoint = value
+	}
+	if value, ok := _c.mutation.Oauth2TokenEndpoint(); ok {
+		_spec.SetField(authconnectionrevision.FieldOauth2TokenEndpoint, field.TypeString, value)
+		_node.Oauth2TokenEndpoint = value
+	}
+	if value, ok := _c.mutation.Oauth2ProfileEndpoint(); ok {
+		_spec.SetField(authconnectionrevision.FieldOauth2ProfileEndpoint, field.TypeString, value)
+		_node.Oauth2ProfileEndpoint = value
+	}
+	if value, ok := _c.mutation.Oauth2ClientID(); ok {
+		_spec.SetField(authconnectionrevision.FieldOauth2ClientID, field.TypeString, value)
+		_node.Oauth2ClientID = value
+	}
+	if value, ok := _c.mutation.Oauth2SubjectPointer(); ok {
+		_spec.SetField(authconnectionrevision.FieldOauth2SubjectPointer, field.TypeString, value)
+		_node.Oauth2SubjectPointer = value
+	}
+	if value, ok := _c.mutation.Oauth2ClientAuthMethod(); ok {
+		_spec.SetField(authconnectionrevision.FieldOauth2ClientAuthMethod, field.TypeEnum, value)
+		_node.Oauth2ClientAuthMethod = value
+	}
+	if value, ok := _c.mutation.Oauth2SubjectType(); ok {
+		_spec.SetField(authconnectionrevision.FieldOauth2SubjectType, field.TypeEnum, value)
+		_node.Oauth2SubjectType = value
+	}
+	if value, ok := _c.mutation.Oauth2Scopes(); ok {
+		_spec.SetField(authconnectionrevision.FieldOauth2Scopes, field.TypeJSON, value)
+		_node.Oauth2Scopes = value
 	}
 	if value, ok := _c.mutation.OidcIssuer(); ok {
 		_spec.SetField(authconnectionrevision.FieldOidcIssuer, field.TypeString, value)

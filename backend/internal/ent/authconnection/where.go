@@ -75,6 +75,11 @@ func UpdatedAt(v time.Time) predicate.AuthConnection {
 	return predicate.AuthConnection(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// IdentityAuthorityID applies equality check predicate on the "identity_authority_id" field. It's identical to IdentityAuthorityIDEQ.
+func IdentityAuthorityID(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldIdentityAuthorityID, v))
+}
+
 // AggregateRevision applies equality check predicate on the "aggregate_revision" field. It's identical to AggregateRevisionEQ.
 func AggregateRevision(v int64) predicate.AuthConnection {
 	return predicate.AuthConnection(sql.FieldEQ(FieldAggregateRevision, v))
@@ -198,6 +203,81 @@ func KindIn(vs ...Kind) predicate.AuthConnection {
 // KindNotIn applies the NotIn predicate on the "kind" field.
 func KindNotIn(vs ...Kind) predicate.AuthConnection {
 	return predicate.AuthConnection(sql.FieldNotIn(FieldKind, vs...))
+}
+
+// IdentityAuthorityIDEQ applies the EQ predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDEQ(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDNEQ applies the NEQ predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDNEQ(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNEQ(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDIn applies the In predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDIn(vs ...string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIn(FieldIdentityAuthorityID, vs...))
+}
+
+// IdentityAuthorityIDNotIn applies the NotIn predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDNotIn(vs ...string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotIn(FieldIdentityAuthorityID, vs...))
+}
+
+// IdentityAuthorityIDGT applies the GT predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDGT(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGT(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDGTE applies the GTE predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDGTE(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGTE(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDLT applies the LT predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDLT(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLT(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDLTE applies the LTE predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDLTE(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLTE(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDContains applies the Contains predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDContains(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldContains(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDHasPrefix applies the HasPrefix predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDHasPrefix(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldHasPrefix(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDHasSuffix applies the HasSuffix predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDHasSuffix(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldHasSuffix(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDIsNil applies the IsNil predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDIsNil() predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIsNull(FieldIdentityAuthorityID))
+}
+
+// IdentityAuthorityIDNotNil applies the NotNil predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDNotNil() predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotNull(FieldIdentityAuthorityID))
+}
+
+// IdentityAuthorityIDEqualFold applies the EqualFold predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDEqualFold(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEqualFold(FieldIdentityAuthorityID, v))
+}
+
+// IdentityAuthorityIDContainsFold applies the ContainsFold predicate on the "identity_authority_id" field.
+func IdentityAuthorityIDContainsFold(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldContainsFold(FieldIdentityAuthorityID, v))
 }
 
 // AggregateRevisionEQ applies the EQ predicate on the "aggregate_revision" field.

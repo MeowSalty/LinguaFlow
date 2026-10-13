@@ -2390,6 +2390,7 @@ type AuthConnectionMutation struct {
 	created_at            *time.Time
 	updated_at            *time.Time
 	kind                  *authconnection.Kind
+	identity_authority_id *string
 	aggregate_revision    *int64
 	addaggregate_revision *int64
 	draft_revision        *int64
@@ -2636,6 +2637,55 @@ func (m *AuthConnectionMutation) OldKind(ctx context.Context) (v authconnection.
 // ResetKind resets all changes to the "kind" field.
 func (m *AuthConnectionMutation) ResetKind() {
 	m.kind = nil
+}
+
+// SetIdentityAuthorityID sets the "identity_authority_id" field.
+func (m *AuthConnectionMutation) SetIdentityAuthorityID(s string) {
+	m.identity_authority_id = &s
+}
+
+// IdentityAuthorityID returns the value of the "identity_authority_id" field in the mutation.
+func (m *AuthConnectionMutation) IdentityAuthorityID() (r string, exists bool) {
+	v := m.identity_authority_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdentityAuthorityID returns the old "identity_authority_id" field's value of the AuthConnection entity.
+// If the AuthConnection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionMutation) OldIdentityAuthorityID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdentityAuthorityID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdentityAuthorityID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdentityAuthorityID: %w", err)
+	}
+	return oldValue.IdentityAuthorityID, nil
+}
+
+// ClearIdentityAuthorityID clears the value of the "identity_authority_id" field.
+func (m *AuthConnectionMutation) ClearIdentityAuthorityID() {
+	m.identity_authority_id = nil
+	m.clearedFields[authconnection.FieldIdentityAuthorityID] = struct{}{}
+}
+
+// IdentityAuthorityIDCleared returns if the "identity_authority_id" field was cleared in this mutation.
+func (m *AuthConnectionMutation) IdentityAuthorityIDCleared() bool {
+	_, ok := m.clearedFields[authconnection.FieldIdentityAuthorityID]
+	return ok
+}
+
+// ResetIdentityAuthorityID resets all changes to the "identity_authority_id" field.
+func (m *AuthConnectionMutation) ResetIdentityAuthorityID() {
+	m.identity_authority_id = nil
+	delete(m.clearedFields, authconnection.FieldIdentityAuthorityID)
 }
 
 // SetAggregateRevision sets the "aggregate_revision" field.
@@ -3351,7 +3401,7 @@ func (m *AuthConnectionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AuthConnectionMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.created_at != nil {
 		fields = append(fields, authconnection.FieldCreatedAt)
 	}
@@ -3360,6 +3410,9 @@ func (m *AuthConnectionMutation) Fields() []string {
 	}
 	if m.kind != nil {
 		fields = append(fields, authconnection.FieldKind)
+	}
+	if m.identity_authority_id != nil {
+		fields = append(fields, authconnection.FieldIdentityAuthorityID)
 	}
 	if m.aggregate_revision != nil {
 		fields = append(fields, authconnection.FieldAggregateRevision)
@@ -3390,6 +3443,8 @@ func (m *AuthConnectionMutation) Field(name string) (ent.Value, bool) {
 		return m.UpdatedAt()
 	case authconnection.FieldKind:
 		return m.Kind()
+	case authconnection.FieldIdentityAuthorityID:
+		return m.IdentityAuthorityID()
 	case authconnection.FieldAggregateRevision:
 		return m.AggregateRevision()
 	case authconnection.FieldDraftRevision:
@@ -3415,6 +3470,8 @@ func (m *AuthConnectionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldUpdatedAt(ctx)
 	case authconnection.FieldKind:
 		return m.OldKind(ctx)
+	case authconnection.FieldIdentityAuthorityID:
+		return m.OldIdentityAuthorityID(ctx)
 	case authconnection.FieldAggregateRevision:
 		return m.OldAggregateRevision(ctx)
 	case authconnection.FieldDraftRevision:
@@ -3454,6 +3511,13 @@ func (m *AuthConnectionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetKind(v)
+		return nil
+	case authconnection.FieldIdentityAuthorityID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdentityAuthorityID(v)
 		return nil
 	case authconnection.FieldAggregateRevision:
 		v, ok := value.(int64)
@@ -3571,6 +3635,9 @@ func (m *AuthConnectionMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *AuthConnectionMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(authconnection.FieldIdentityAuthorityID) {
+		fields = append(fields, authconnection.FieldIdentityAuthorityID)
+	}
 	if m.FieldCleared(authconnection.FieldDraftRevision) {
 		fields = append(fields, authconnection.FieldDraftRevision)
 	}
@@ -3594,6 +3661,9 @@ func (m *AuthConnectionMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *AuthConnectionMutation) ClearField(name string) error {
 	switch name {
+	case authconnection.FieldIdentityAuthorityID:
+		m.ClearIdentityAuthorityID()
+		return nil
 	case authconnection.FieldDraftRevision:
 		m.ClearDraftRevision()
 		return nil
@@ -3619,6 +3689,9 @@ func (m *AuthConnectionMutation) ResetField(name string) error {
 		return nil
 	case authconnection.FieldKind:
 		m.ResetKind()
+		return nil
+	case authconnection.FieldIdentityAuthorityID:
+		m.ResetIdentityAuthorityID()
 		return nil
 	case authconnection.FieldAggregateRevision:
 		m.ResetAggregateRevision()
@@ -3882,41 +3955,50 @@ func (m *AuthConnectionMutation) ResetEdge(name string) error {
 // AuthConnectionRevisionMutation represents an operation that mutates the AuthConnectionRevision nodes in the graph.
 type AuthConnectionRevisionMutation struct {
 	config
-	op                          Op
-	typ                         string
-	id                          *int
-	created_at                  *time.Time
-	updated_at                  *time.Time
-	revision                    *int64
-	addrevision                 *int64
-	display_name                *string
-	description                 *string
-	display_order               *int
-	adddisplay_order            *int
-	config_version              *int
-	addconfig_version           *int
-	attribute_mappings          *[]authrules.Field
-	appendattribute_mappings    []authrules.Field
-	evidence_max_age_seconds    *int
-	addevidence_max_age_seconds *int
-	oidc_issuer                 *string
-	oidc_client_id              *string
-	oidc_client_auth_method     *authconnectionrevision.OidcClientAuthMethod
-	oidc_scopes                 *[]string
-	appendoidc_scopes           []string
-	oidc_userinfo_enabled       *bool
-	secret_version              *int64
-	addsecret_version           *int64
-	logo_data                   *[]byte
-	logo_media_type             *string
-	username_login_enabled      *bool
-	email_login_enabled         *bool
-	clearedFields               map[string]struct{}
-	connection                  *string
-	clearedconnection           bool
-	done                        bool
-	oldValue                    func(context.Context) (*AuthConnectionRevision, error)
-	predicates                  []predicate.AuthConnectionRevision
+	op                            Op
+	typ                           string
+	id                            *int
+	created_at                    *time.Time
+	updated_at                    *time.Time
+	revision                      *int64
+	addrevision                   *int64
+	display_name                  *string
+	description                   *string
+	display_order                 *int
+	adddisplay_order              *int
+	config_version                *int
+	addconfig_version             *int
+	attribute_mappings            *[]authrules.Field
+	appendattribute_mappings      []authrules.Field
+	evidence_max_age_seconds      *int
+	addevidence_max_age_seconds   *int
+	oauth2_authorization_endpoint *string
+	oauth2_token_endpoint         *string
+	oauth2_profile_endpoint       *string
+	oauth2_client_id              *string
+	oauth2_subject_pointer        *string
+	oauth2_client_auth_method     *authconnectionrevision.Oauth2ClientAuthMethod
+	oauth2_subject_type           *authconnectionrevision.Oauth2SubjectType
+	oauth2_scopes                 *[]string
+	appendoauth2_scopes           []string
+	oidc_issuer                   *string
+	oidc_client_id                *string
+	oidc_client_auth_method       *authconnectionrevision.OidcClientAuthMethod
+	oidc_scopes                   *[]string
+	appendoidc_scopes             []string
+	oidc_userinfo_enabled         *bool
+	secret_version                *int64
+	addsecret_version             *int64
+	logo_data                     *[]byte
+	logo_media_type               *string
+	username_login_enabled        *bool
+	email_login_enabled           *bool
+	clearedFields                 map[string]struct{}
+	connection                    *string
+	clearedconnection             bool
+	done                          bool
+	oldValue                      func(context.Context) (*AuthConnectionRevision, error)
+	predicates                    []predicate.AuthConnectionRevision
 }
 
 var _ ent.Mutation = (*AuthConnectionRevisionMutation)(nil)
@@ -4486,6 +4568,414 @@ func (m *AuthConnectionRevisionMutation) ResetEvidenceMaxAgeSeconds() {
 	m.addevidence_max_age_seconds = nil
 }
 
+// SetOauth2AuthorizationEndpoint sets the "oauth2_authorization_endpoint" field.
+func (m *AuthConnectionRevisionMutation) SetOauth2AuthorizationEndpoint(s string) {
+	m.oauth2_authorization_endpoint = &s
+}
+
+// Oauth2AuthorizationEndpoint returns the value of the "oauth2_authorization_endpoint" field in the mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2AuthorizationEndpoint() (r string, exists bool) {
+	v := m.oauth2_authorization_endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOauth2AuthorizationEndpoint returns the old "oauth2_authorization_endpoint" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldOauth2AuthorizationEndpoint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOauth2AuthorizationEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOauth2AuthorizationEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOauth2AuthorizationEndpoint: %w", err)
+	}
+	return oldValue.Oauth2AuthorizationEndpoint, nil
+}
+
+// ClearOauth2AuthorizationEndpoint clears the value of the "oauth2_authorization_endpoint" field.
+func (m *AuthConnectionRevisionMutation) ClearOauth2AuthorizationEndpoint() {
+	m.oauth2_authorization_endpoint = nil
+	m.clearedFields[authconnectionrevision.FieldOauth2AuthorizationEndpoint] = struct{}{}
+}
+
+// Oauth2AuthorizationEndpointCleared returns if the "oauth2_authorization_endpoint" field was cleared in this mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2AuthorizationEndpointCleared() bool {
+	_, ok := m.clearedFields[authconnectionrevision.FieldOauth2AuthorizationEndpoint]
+	return ok
+}
+
+// ResetOauth2AuthorizationEndpoint resets all changes to the "oauth2_authorization_endpoint" field.
+func (m *AuthConnectionRevisionMutation) ResetOauth2AuthorizationEndpoint() {
+	m.oauth2_authorization_endpoint = nil
+	delete(m.clearedFields, authconnectionrevision.FieldOauth2AuthorizationEndpoint)
+}
+
+// SetOauth2TokenEndpoint sets the "oauth2_token_endpoint" field.
+func (m *AuthConnectionRevisionMutation) SetOauth2TokenEndpoint(s string) {
+	m.oauth2_token_endpoint = &s
+}
+
+// Oauth2TokenEndpoint returns the value of the "oauth2_token_endpoint" field in the mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2TokenEndpoint() (r string, exists bool) {
+	v := m.oauth2_token_endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOauth2TokenEndpoint returns the old "oauth2_token_endpoint" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldOauth2TokenEndpoint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOauth2TokenEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOauth2TokenEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOauth2TokenEndpoint: %w", err)
+	}
+	return oldValue.Oauth2TokenEndpoint, nil
+}
+
+// ClearOauth2TokenEndpoint clears the value of the "oauth2_token_endpoint" field.
+func (m *AuthConnectionRevisionMutation) ClearOauth2TokenEndpoint() {
+	m.oauth2_token_endpoint = nil
+	m.clearedFields[authconnectionrevision.FieldOauth2TokenEndpoint] = struct{}{}
+}
+
+// Oauth2TokenEndpointCleared returns if the "oauth2_token_endpoint" field was cleared in this mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2TokenEndpointCleared() bool {
+	_, ok := m.clearedFields[authconnectionrevision.FieldOauth2TokenEndpoint]
+	return ok
+}
+
+// ResetOauth2TokenEndpoint resets all changes to the "oauth2_token_endpoint" field.
+func (m *AuthConnectionRevisionMutation) ResetOauth2TokenEndpoint() {
+	m.oauth2_token_endpoint = nil
+	delete(m.clearedFields, authconnectionrevision.FieldOauth2TokenEndpoint)
+}
+
+// SetOauth2ProfileEndpoint sets the "oauth2_profile_endpoint" field.
+func (m *AuthConnectionRevisionMutation) SetOauth2ProfileEndpoint(s string) {
+	m.oauth2_profile_endpoint = &s
+}
+
+// Oauth2ProfileEndpoint returns the value of the "oauth2_profile_endpoint" field in the mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2ProfileEndpoint() (r string, exists bool) {
+	v := m.oauth2_profile_endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOauth2ProfileEndpoint returns the old "oauth2_profile_endpoint" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldOauth2ProfileEndpoint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOauth2ProfileEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOauth2ProfileEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOauth2ProfileEndpoint: %w", err)
+	}
+	return oldValue.Oauth2ProfileEndpoint, nil
+}
+
+// ClearOauth2ProfileEndpoint clears the value of the "oauth2_profile_endpoint" field.
+func (m *AuthConnectionRevisionMutation) ClearOauth2ProfileEndpoint() {
+	m.oauth2_profile_endpoint = nil
+	m.clearedFields[authconnectionrevision.FieldOauth2ProfileEndpoint] = struct{}{}
+}
+
+// Oauth2ProfileEndpointCleared returns if the "oauth2_profile_endpoint" field was cleared in this mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2ProfileEndpointCleared() bool {
+	_, ok := m.clearedFields[authconnectionrevision.FieldOauth2ProfileEndpoint]
+	return ok
+}
+
+// ResetOauth2ProfileEndpoint resets all changes to the "oauth2_profile_endpoint" field.
+func (m *AuthConnectionRevisionMutation) ResetOauth2ProfileEndpoint() {
+	m.oauth2_profile_endpoint = nil
+	delete(m.clearedFields, authconnectionrevision.FieldOauth2ProfileEndpoint)
+}
+
+// SetOauth2ClientID sets the "oauth2_client_id" field.
+func (m *AuthConnectionRevisionMutation) SetOauth2ClientID(s string) {
+	m.oauth2_client_id = &s
+}
+
+// Oauth2ClientID returns the value of the "oauth2_client_id" field in the mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2ClientID() (r string, exists bool) {
+	v := m.oauth2_client_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOauth2ClientID returns the old "oauth2_client_id" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldOauth2ClientID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOauth2ClientID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOauth2ClientID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOauth2ClientID: %w", err)
+	}
+	return oldValue.Oauth2ClientID, nil
+}
+
+// ClearOauth2ClientID clears the value of the "oauth2_client_id" field.
+func (m *AuthConnectionRevisionMutation) ClearOauth2ClientID() {
+	m.oauth2_client_id = nil
+	m.clearedFields[authconnectionrevision.FieldOauth2ClientID] = struct{}{}
+}
+
+// Oauth2ClientIDCleared returns if the "oauth2_client_id" field was cleared in this mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2ClientIDCleared() bool {
+	_, ok := m.clearedFields[authconnectionrevision.FieldOauth2ClientID]
+	return ok
+}
+
+// ResetOauth2ClientID resets all changes to the "oauth2_client_id" field.
+func (m *AuthConnectionRevisionMutation) ResetOauth2ClientID() {
+	m.oauth2_client_id = nil
+	delete(m.clearedFields, authconnectionrevision.FieldOauth2ClientID)
+}
+
+// SetOauth2SubjectPointer sets the "oauth2_subject_pointer" field.
+func (m *AuthConnectionRevisionMutation) SetOauth2SubjectPointer(s string) {
+	m.oauth2_subject_pointer = &s
+}
+
+// Oauth2SubjectPointer returns the value of the "oauth2_subject_pointer" field in the mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2SubjectPointer() (r string, exists bool) {
+	v := m.oauth2_subject_pointer
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOauth2SubjectPointer returns the old "oauth2_subject_pointer" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldOauth2SubjectPointer(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOauth2SubjectPointer is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOauth2SubjectPointer requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOauth2SubjectPointer: %w", err)
+	}
+	return oldValue.Oauth2SubjectPointer, nil
+}
+
+// ClearOauth2SubjectPointer clears the value of the "oauth2_subject_pointer" field.
+func (m *AuthConnectionRevisionMutation) ClearOauth2SubjectPointer() {
+	m.oauth2_subject_pointer = nil
+	m.clearedFields[authconnectionrevision.FieldOauth2SubjectPointer] = struct{}{}
+}
+
+// Oauth2SubjectPointerCleared returns if the "oauth2_subject_pointer" field was cleared in this mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2SubjectPointerCleared() bool {
+	_, ok := m.clearedFields[authconnectionrevision.FieldOauth2SubjectPointer]
+	return ok
+}
+
+// ResetOauth2SubjectPointer resets all changes to the "oauth2_subject_pointer" field.
+func (m *AuthConnectionRevisionMutation) ResetOauth2SubjectPointer() {
+	m.oauth2_subject_pointer = nil
+	delete(m.clearedFields, authconnectionrevision.FieldOauth2SubjectPointer)
+}
+
+// SetOauth2ClientAuthMethod sets the "oauth2_client_auth_method" field.
+func (m *AuthConnectionRevisionMutation) SetOauth2ClientAuthMethod(aam authconnectionrevision.Oauth2ClientAuthMethod) {
+	m.oauth2_client_auth_method = &aam
+}
+
+// Oauth2ClientAuthMethod returns the value of the "oauth2_client_auth_method" field in the mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2ClientAuthMethod() (r authconnectionrevision.Oauth2ClientAuthMethod, exists bool) {
+	v := m.oauth2_client_auth_method
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOauth2ClientAuthMethod returns the old "oauth2_client_auth_method" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldOauth2ClientAuthMethod(ctx context.Context) (v authconnectionrevision.Oauth2ClientAuthMethod, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOauth2ClientAuthMethod is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOauth2ClientAuthMethod requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOauth2ClientAuthMethod: %w", err)
+	}
+	return oldValue.Oauth2ClientAuthMethod, nil
+}
+
+// ClearOauth2ClientAuthMethod clears the value of the "oauth2_client_auth_method" field.
+func (m *AuthConnectionRevisionMutation) ClearOauth2ClientAuthMethod() {
+	m.oauth2_client_auth_method = nil
+	m.clearedFields[authconnectionrevision.FieldOauth2ClientAuthMethod] = struct{}{}
+}
+
+// Oauth2ClientAuthMethodCleared returns if the "oauth2_client_auth_method" field was cleared in this mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2ClientAuthMethodCleared() bool {
+	_, ok := m.clearedFields[authconnectionrevision.FieldOauth2ClientAuthMethod]
+	return ok
+}
+
+// ResetOauth2ClientAuthMethod resets all changes to the "oauth2_client_auth_method" field.
+func (m *AuthConnectionRevisionMutation) ResetOauth2ClientAuthMethod() {
+	m.oauth2_client_auth_method = nil
+	delete(m.clearedFields, authconnectionrevision.FieldOauth2ClientAuthMethod)
+}
+
+// SetOauth2SubjectType sets the "oauth2_subject_type" field.
+func (m *AuthConnectionRevisionMutation) SetOauth2SubjectType(at authconnectionrevision.Oauth2SubjectType) {
+	m.oauth2_subject_type = &at
+}
+
+// Oauth2SubjectType returns the value of the "oauth2_subject_type" field in the mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2SubjectType() (r authconnectionrevision.Oauth2SubjectType, exists bool) {
+	v := m.oauth2_subject_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOauth2SubjectType returns the old "oauth2_subject_type" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldOauth2SubjectType(ctx context.Context) (v authconnectionrevision.Oauth2SubjectType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOauth2SubjectType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOauth2SubjectType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOauth2SubjectType: %w", err)
+	}
+	return oldValue.Oauth2SubjectType, nil
+}
+
+// ClearOauth2SubjectType clears the value of the "oauth2_subject_type" field.
+func (m *AuthConnectionRevisionMutation) ClearOauth2SubjectType() {
+	m.oauth2_subject_type = nil
+	m.clearedFields[authconnectionrevision.FieldOauth2SubjectType] = struct{}{}
+}
+
+// Oauth2SubjectTypeCleared returns if the "oauth2_subject_type" field was cleared in this mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2SubjectTypeCleared() bool {
+	_, ok := m.clearedFields[authconnectionrevision.FieldOauth2SubjectType]
+	return ok
+}
+
+// ResetOauth2SubjectType resets all changes to the "oauth2_subject_type" field.
+func (m *AuthConnectionRevisionMutation) ResetOauth2SubjectType() {
+	m.oauth2_subject_type = nil
+	delete(m.clearedFields, authconnectionrevision.FieldOauth2SubjectType)
+}
+
+// SetOauth2Scopes sets the "oauth2_scopes" field.
+func (m *AuthConnectionRevisionMutation) SetOauth2Scopes(s []string) {
+	m.oauth2_scopes = &s
+	m.appendoauth2_scopes = nil
+}
+
+// Oauth2Scopes returns the value of the "oauth2_scopes" field in the mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2Scopes() (r []string, exists bool) {
+	v := m.oauth2_scopes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOauth2Scopes returns the old "oauth2_scopes" field's value of the AuthConnectionRevision entity.
+// If the AuthConnectionRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthConnectionRevisionMutation) OldOauth2Scopes(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOauth2Scopes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOauth2Scopes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOauth2Scopes: %w", err)
+	}
+	return oldValue.Oauth2Scopes, nil
+}
+
+// AppendOauth2Scopes adds s to the "oauth2_scopes" field.
+func (m *AuthConnectionRevisionMutation) AppendOauth2Scopes(s []string) {
+	m.appendoauth2_scopes = append(m.appendoauth2_scopes, s...)
+}
+
+// AppendedOauth2Scopes returns the list of values that were appended to the "oauth2_scopes" field in this mutation.
+func (m *AuthConnectionRevisionMutation) AppendedOauth2Scopes() ([]string, bool) {
+	if len(m.appendoauth2_scopes) == 0 {
+		return nil, false
+	}
+	return m.appendoauth2_scopes, true
+}
+
+// ClearOauth2Scopes clears the value of the "oauth2_scopes" field.
+func (m *AuthConnectionRevisionMutation) ClearOauth2Scopes() {
+	m.oauth2_scopes = nil
+	m.appendoauth2_scopes = nil
+	m.clearedFields[authconnectionrevision.FieldOauth2Scopes] = struct{}{}
+}
+
+// Oauth2ScopesCleared returns if the "oauth2_scopes" field was cleared in this mutation.
+func (m *AuthConnectionRevisionMutation) Oauth2ScopesCleared() bool {
+	_, ok := m.clearedFields[authconnectionrevision.FieldOauth2Scopes]
+	return ok
+}
+
+// ResetOauth2Scopes resets all changes to the "oauth2_scopes" field.
+func (m *AuthConnectionRevisionMutation) ResetOauth2Scopes() {
+	m.oauth2_scopes = nil
+	m.appendoauth2_scopes = nil
+	delete(m.clearedFields, authconnectionrevision.FieldOauth2Scopes)
+}
+
 // SetOidcIssuer sets the "oidc_issuer" field.
 func (m *AuthConnectionRevisionMutation) SetOidcIssuer(s string) {
 	m.oidc_issuer = &s
@@ -5035,7 +5525,7 @@ func (m *AuthConnectionRevisionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AuthConnectionRevisionMutation) Fields() []string {
-	fields := make([]string, 0, 20)
+	fields := make([]string, 0, 28)
 	if m.created_at != nil {
 		fields = append(fields, authconnectionrevision.FieldCreatedAt)
 	}
@@ -5065,6 +5555,30 @@ func (m *AuthConnectionRevisionMutation) Fields() []string {
 	}
 	if m.evidence_max_age_seconds != nil {
 		fields = append(fields, authconnectionrevision.FieldEvidenceMaxAgeSeconds)
+	}
+	if m.oauth2_authorization_endpoint != nil {
+		fields = append(fields, authconnectionrevision.FieldOauth2AuthorizationEndpoint)
+	}
+	if m.oauth2_token_endpoint != nil {
+		fields = append(fields, authconnectionrevision.FieldOauth2TokenEndpoint)
+	}
+	if m.oauth2_profile_endpoint != nil {
+		fields = append(fields, authconnectionrevision.FieldOauth2ProfileEndpoint)
+	}
+	if m.oauth2_client_id != nil {
+		fields = append(fields, authconnectionrevision.FieldOauth2ClientID)
+	}
+	if m.oauth2_subject_pointer != nil {
+		fields = append(fields, authconnectionrevision.FieldOauth2SubjectPointer)
+	}
+	if m.oauth2_client_auth_method != nil {
+		fields = append(fields, authconnectionrevision.FieldOauth2ClientAuthMethod)
+	}
+	if m.oauth2_subject_type != nil {
+		fields = append(fields, authconnectionrevision.FieldOauth2SubjectType)
+	}
+	if m.oauth2_scopes != nil {
+		fields = append(fields, authconnectionrevision.FieldOauth2Scopes)
 	}
 	if m.oidc_issuer != nil {
 		fields = append(fields, authconnectionrevision.FieldOidcIssuer)
@@ -5124,6 +5638,22 @@ func (m *AuthConnectionRevisionMutation) Field(name string) (ent.Value, bool) {
 		return m.AttributeMappings()
 	case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
 		return m.EvidenceMaxAgeSeconds()
+	case authconnectionrevision.FieldOauth2AuthorizationEndpoint:
+		return m.Oauth2AuthorizationEndpoint()
+	case authconnectionrevision.FieldOauth2TokenEndpoint:
+		return m.Oauth2TokenEndpoint()
+	case authconnectionrevision.FieldOauth2ProfileEndpoint:
+		return m.Oauth2ProfileEndpoint()
+	case authconnectionrevision.FieldOauth2ClientID:
+		return m.Oauth2ClientID()
+	case authconnectionrevision.FieldOauth2SubjectPointer:
+		return m.Oauth2SubjectPointer()
+	case authconnectionrevision.FieldOauth2ClientAuthMethod:
+		return m.Oauth2ClientAuthMethod()
+	case authconnectionrevision.FieldOauth2SubjectType:
+		return m.Oauth2SubjectType()
+	case authconnectionrevision.FieldOauth2Scopes:
+		return m.Oauth2Scopes()
 	case authconnectionrevision.FieldOidcIssuer:
 		return m.OidcIssuer()
 	case authconnectionrevision.FieldOidcClientID:
@@ -5173,6 +5703,22 @@ func (m *AuthConnectionRevisionMutation) OldField(ctx context.Context, name stri
 		return m.OldAttributeMappings(ctx)
 	case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
 		return m.OldEvidenceMaxAgeSeconds(ctx)
+	case authconnectionrevision.FieldOauth2AuthorizationEndpoint:
+		return m.OldOauth2AuthorizationEndpoint(ctx)
+	case authconnectionrevision.FieldOauth2TokenEndpoint:
+		return m.OldOauth2TokenEndpoint(ctx)
+	case authconnectionrevision.FieldOauth2ProfileEndpoint:
+		return m.OldOauth2ProfileEndpoint(ctx)
+	case authconnectionrevision.FieldOauth2ClientID:
+		return m.OldOauth2ClientID(ctx)
+	case authconnectionrevision.FieldOauth2SubjectPointer:
+		return m.OldOauth2SubjectPointer(ctx)
+	case authconnectionrevision.FieldOauth2ClientAuthMethod:
+		return m.OldOauth2ClientAuthMethod(ctx)
+	case authconnectionrevision.FieldOauth2SubjectType:
+		return m.OldOauth2SubjectType(ctx)
+	case authconnectionrevision.FieldOauth2Scopes:
+		return m.OldOauth2Scopes(ctx)
 	case authconnectionrevision.FieldOidcIssuer:
 		return m.OldOidcIssuer(ctx)
 	case authconnectionrevision.FieldOidcClientID:
@@ -5271,6 +5817,62 @@ func (m *AuthConnectionRevisionMutation) SetField(name string, value ent.Value) 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEvidenceMaxAgeSeconds(v)
+		return nil
+	case authconnectionrevision.FieldOauth2AuthorizationEndpoint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOauth2AuthorizationEndpoint(v)
+		return nil
+	case authconnectionrevision.FieldOauth2TokenEndpoint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOauth2TokenEndpoint(v)
+		return nil
+	case authconnectionrevision.FieldOauth2ProfileEndpoint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOauth2ProfileEndpoint(v)
+		return nil
+	case authconnectionrevision.FieldOauth2ClientID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOauth2ClientID(v)
+		return nil
+	case authconnectionrevision.FieldOauth2SubjectPointer:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOauth2SubjectPointer(v)
+		return nil
+	case authconnectionrevision.FieldOauth2ClientAuthMethod:
+		v, ok := value.(authconnectionrevision.Oauth2ClientAuthMethod)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOauth2ClientAuthMethod(v)
+		return nil
+	case authconnectionrevision.FieldOauth2SubjectType:
+		v, ok := value.(authconnectionrevision.Oauth2SubjectType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOauth2SubjectType(v)
+		return nil
+	case authconnectionrevision.FieldOauth2Scopes:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOauth2Scopes(v)
 		return nil
 	case authconnectionrevision.FieldOidcIssuer:
 		v, ok := value.(string)
@@ -5438,6 +6040,30 @@ func (m *AuthConnectionRevisionMutation) ClearedFields() []string {
 	if m.FieldCleared(authconnectionrevision.FieldAttributeMappings) {
 		fields = append(fields, authconnectionrevision.FieldAttributeMappings)
 	}
+	if m.FieldCleared(authconnectionrevision.FieldOauth2AuthorizationEndpoint) {
+		fields = append(fields, authconnectionrevision.FieldOauth2AuthorizationEndpoint)
+	}
+	if m.FieldCleared(authconnectionrevision.FieldOauth2TokenEndpoint) {
+		fields = append(fields, authconnectionrevision.FieldOauth2TokenEndpoint)
+	}
+	if m.FieldCleared(authconnectionrevision.FieldOauth2ProfileEndpoint) {
+		fields = append(fields, authconnectionrevision.FieldOauth2ProfileEndpoint)
+	}
+	if m.FieldCleared(authconnectionrevision.FieldOauth2ClientID) {
+		fields = append(fields, authconnectionrevision.FieldOauth2ClientID)
+	}
+	if m.FieldCleared(authconnectionrevision.FieldOauth2SubjectPointer) {
+		fields = append(fields, authconnectionrevision.FieldOauth2SubjectPointer)
+	}
+	if m.FieldCleared(authconnectionrevision.FieldOauth2ClientAuthMethod) {
+		fields = append(fields, authconnectionrevision.FieldOauth2ClientAuthMethod)
+	}
+	if m.FieldCleared(authconnectionrevision.FieldOauth2SubjectType) {
+		fields = append(fields, authconnectionrevision.FieldOauth2SubjectType)
+	}
+	if m.FieldCleared(authconnectionrevision.FieldOauth2Scopes) {
+		fields = append(fields, authconnectionrevision.FieldOauth2Scopes)
+	}
 	if m.FieldCleared(authconnectionrevision.FieldOidcIssuer) {
 		fields = append(fields, authconnectionrevision.FieldOidcIssuer)
 	}
@@ -5475,6 +6101,30 @@ func (m *AuthConnectionRevisionMutation) ClearField(name string) error {
 	switch name {
 	case authconnectionrevision.FieldAttributeMappings:
 		m.ClearAttributeMappings()
+		return nil
+	case authconnectionrevision.FieldOauth2AuthorizationEndpoint:
+		m.ClearOauth2AuthorizationEndpoint()
+		return nil
+	case authconnectionrevision.FieldOauth2TokenEndpoint:
+		m.ClearOauth2TokenEndpoint()
+		return nil
+	case authconnectionrevision.FieldOauth2ProfileEndpoint:
+		m.ClearOauth2ProfileEndpoint()
+		return nil
+	case authconnectionrevision.FieldOauth2ClientID:
+		m.ClearOauth2ClientID()
+		return nil
+	case authconnectionrevision.FieldOauth2SubjectPointer:
+		m.ClearOauth2SubjectPointer()
+		return nil
+	case authconnectionrevision.FieldOauth2ClientAuthMethod:
+		m.ClearOauth2ClientAuthMethod()
+		return nil
+	case authconnectionrevision.FieldOauth2SubjectType:
+		m.ClearOauth2SubjectType()
+		return nil
+	case authconnectionrevision.FieldOauth2Scopes:
+		m.ClearOauth2Scopes()
 		return nil
 	case authconnectionrevision.FieldOidcIssuer:
 		m.ClearOidcIssuer()
@@ -5534,6 +6184,30 @@ func (m *AuthConnectionRevisionMutation) ResetField(name string) error {
 		return nil
 	case authconnectionrevision.FieldEvidenceMaxAgeSeconds:
 		m.ResetEvidenceMaxAgeSeconds()
+		return nil
+	case authconnectionrevision.FieldOauth2AuthorizationEndpoint:
+		m.ResetOauth2AuthorizationEndpoint()
+		return nil
+	case authconnectionrevision.FieldOauth2TokenEndpoint:
+		m.ResetOauth2TokenEndpoint()
+		return nil
+	case authconnectionrevision.FieldOauth2ProfileEndpoint:
+		m.ResetOauth2ProfileEndpoint()
+		return nil
+	case authconnectionrevision.FieldOauth2ClientID:
+		m.ResetOauth2ClientID()
+		return nil
+	case authconnectionrevision.FieldOauth2SubjectPointer:
+		m.ResetOauth2SubjectPointer()
+		return nil
+	case authconnectionrevision.FieldOauth2ClientAuthMethod:
+		m.ResetOauth2ClientAuthMethod()
+		return nil
+	case authconnectionrevision.FieldOauth2SubjectType:
+		m.ResetOauth2SubjectType()
+		return nil
+	case authconnectionrevision.FieldOauth2Scopes:
+		m.ResetOauth2Scopes()
 		return nil
 	case authconnectionrevision.FieldOidcIssuer:
 		m.ResetOidcIssuer()
@@ -7416,6 +8090,7 @@ type AuthTransactionMutation struct {
 	exchange_ticket_expires_at             *time.Time
 	confirmation_token_hash                *string
 	confirmation_expires_at                *time.Time
+	identity_protocol                      *authtransaction.IdentityProtocol
 	identity_issuer                        *string
 	identity_subject                       *string
 	identity_display_name                  *string
@@ -8516,6 +9191,55 @@ func (m *AuthTransactionMutation) ResetConfirmationExpiresAt() {
 	delete(m.clearedFields, authtransaction.FieldConfirmationExpiresAt)
 }
 
+// SetIdentityProtocol sets the "identity_protocol" field.
+func (m *AuthTransactionMutation) SetIdentityProtocol(ap authtransaction.IdentityProtocol) {
+	m.identity_protocol = &ap
+}
+
+// IdentityProtocol returns the value of the "identity_protocol" field in the mutation.
+func (m *AuthTransactionMutation) IdentityProtocol() (r authtransaction.IdentityProtocol, exists bool) {
+	v := m.identity_protocol
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdentityProtocol returns the old "identity_protocol" field's value of the AuthTransaction entity.
+// If the AuthTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuthTransactionMutation) OldIdentityProtocol(ctx context.Context) (v authtransaction.IdentityProtocol, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdentityProtocol is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdentityProtocol requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdentityProtocol: %w", err)
+	}
+	return oldValue.IdentityProtocol, nil
+}
+
+// ClearIdentityProtocol clears the value of the "identity_protocol" field.
+func (m *AuthTransactionMutation) ClearIdentityProtocol() {
+	m.identity_protocol = nil
+	m.clearedFields[authtransaction.FieldIdentityProtocol] = struct{}{}
+}
+
+// IdentityProtocolCleared returns if the "identity_protocol" field was cleared in this mutation.
+func (m *AuthTransactionMutation) IdentityProtocolCleared() bool {
+	_, ok := m.clearedFields[authtransaction.FieldIdentityProtocol]
+	return ok
+}
+
+// ResetIdentityProtocol resets all changes to the "identity_protocol" field.
+func (m *AuthTransactionMutation) ResetIdentityProtocol() {
+	m.identity_protocol = nil
+	delete(m.clearedFields, authtransaction.FieldIdentityProtocol)
+}
+
 // SetIdentityIssuer sets the "identity_issuer" field.
 func (m *AuthTransactionMutation) SetIdentityIssuer(s string) {
 	m.identity_issuer = &s
@@ -9390,7 +10114,7 @@ func (m *AuthTransactionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AuthTransactionMutation) Fields() []string {
-	fields := make([]string, 0, 37)
+	fields := make([]string, 0, 38)
 	if m.created_at != nil {
 		fields = append(fields, authtransaction.FieldCreatedAt)
 	}
@@ -9453,6 +10177,9 @@ func (m *AuthTransactionMutation) Fields() []string {
 	}
 	if m.confirmation_expires_at != nil {
 		fields = append(fields, authtransaction.FieldConfirmationExpiresAt)
+	}
+	if m.identity_protocol != nil {
+		fields = append(fields, authtransaction.FieldIdentityProtocol)
 	}
 	if m.identity_issuer != nil {
 		fields = append(fields, authtransaction.FieldIdentityIssuer)
@@ -9552,6 +10279,8 @@ func (m *AuthTransactionMutation) Field(name string) (ent.Value, bool) {
 		return m.ConfirmationTokenHash()
 	case authtransaction.FieldConfirmationExpiresAt:
 		return m.ConfirmationExpiresAt()
+	case authtransaction.FieldIdentityProtocol:
+		return m.IdentityProtocol()
 	case authtransaction.FieldIdentityIssuer:
 		return m.IdentityIssuer()
 	case authtransaction.FieldIdentitySubject:
@@ -9635,6 +10364,8 @@ func (m *AuthTransactionMutation) OldField(ctx context.Context, name string) (en
 		return m.OldConfirmationTokenHash(ctx)
 	case authtransaction.FieldConfirmationExpiresAt:
 		return m.OldConfirmationExpiresAt(ctx)
+	case authtransaction.FieldIdentityProtocol:
+		return m.OldIdentityProtocol(ctx)
 	case authtransaction.FieldIdentityIssuer:
 		return m.OldIdentityIssuer(ctx)
 	case authtransaction.FieldIdentitySubject:
@@ -9822,6 +10553,13 @@ func (m *AuthTransactionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetConfirmationExpiresAt(v)
+		return nil
+	case authtransaction.FieldIdentityProtocol:
+		v, ok := value.(authtransaction.IdentityProtocol)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdentityProtocol(v)
 		return nil
 	case authtransaction.FieldIdentityIssuer:
 		v, ok := value.(string)
@@ -10085,6 +10823,9 @@ func (m *AuthTransactionMutation) ClearedFields() []string {
 	if m.FieldCleared(authtransaction.FieldConfirmationExpiresAt) {
 		fields = append(fields, authtransaction.FieldConfirmationExpiresAt)
 	}
+	if m.FieldCleared(authtransaction.FieldIdentityProtocol) {
+		fields = append(fields, authtransaction.FieldIdentityProtocol)
+	}
 	if m.FieldCleared(authtransaction.FieldIdentityIssuer) {
 		fields = append(fields, authtransaction.FieldIdentityIssuer)
 	}
@@ -10164,6 +10905,9 @@ func (m *AuthTransactionMutation) ClearField(name string) error {
 		return nil
 	case authtransaction.FieldConfirmationExpiresAt:
 		m.ClearConfirmationExpiresAt()
+		return nil
+	case authtransaction.FieldIdentityProtocol:
+		m.ClearIdentityProtocol()
 		return nil
 	case authtransaction.FieldIdentityIssuer:
 		m.ClearIdentityIssuer()
@@ -10280,6 +11024,9 @@ func (m *AuthTransactionMutation) ResetField(name string) error {
 		return nil
 	case authtransaction.FieldConfirmationExpiresAt:
 		m.ResetConfirmationExpiresAt()
+		return nil
+	case authtransaction.FieldIdentityProtocol:
+		m.ResetIdentityProtocol()
 		return nil
 	case authtransaction.FieldIdentityIssuer:
 		m.ResetIdentityIssuer()

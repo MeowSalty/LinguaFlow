@@ -129,6 +129,26 @@ func (_u *AuthTransactionUpdate) ClearConfirmationExpiresAt() *AuthTransactionUp
 	return _u
 }
 
+// SetIdentityProtocol sets the "identity_protocol" field.
+func (_u *AuthTransactionUpdate) SetIdentityProtocol(v authtransaction.IdentityProtocol) *AuthTransactionUpdate {
+	_u.mutation.SetIdentityProtocol(v)
+	return _u
+}
+
+// SetNillableIdentityProtocol sets the "identity_protocol" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableIdentityProtocol(v *authtransaction.IdentityProtocol) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetIdentityProtocol(*v)
+	}
+	return _u
+}
+
+// ClearIdentityProtocol clears the value of the "identity_protocol" field.
+func (_u *AuthTransactionUpdate) ClearIdentityProtocol() *AuthTransactionUpdate {
+	_u.mutation.ClearIdentityProtocol()
+	return _u
+}
+
 // SetIdentityIssuer sets the "identity_issuer" field.
 func (_u *AuthTransactionUpdate) SetIdentityIssuer(v string) *AuthTransactionUpdate {
 	_u.mutation.SetIdentityIssuer(v)
@@ -431,6 +451,11 @@ func (_u *AuthTransactionUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.IdentityProtocol(); ok {
+		if err := authtransaction.IdentityProtocolValidator(v); err != nil {
+			return &ValidationError{Name: "identity_protocol", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.identity_protocol": %w`, err)}
+		}
+	}
 	if _u.mutation.ConnectionCleared() && len(_u.mutation.ConnectionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "AuthTransaction.connection"`)
 	}
@@ -487,6 +512,12 @@ func (_u *AuthTransactionUpdate) sqlSave(ctx context.Context) (_node int, err er
 	}
 	if _u.mutation.ConfirmationExpiresAtCleared() {
 		_spec.ClearField(authtransaction.FieldConfirmationExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.IdentityProtocol(); ok {
+		_spec.SetField(authtransaction.FieldIdentityProtocol, field.TypeEnum, value)
+	}
+	if _u.mutation.IdentityProtocolCleared() {
+		_spec.ClearField(authtransaction.FieldIdentityProtocol, field.TypeEnum)
 	}
 	if value, ok := _u.mutation.IdentityIssuer(); ok {
 		_spec.SetField(authtransaction.FieldIdentityIssuer, field.TypeString, value)
@@ -692,6 +723,26 @@ func (_u *AuthTransactionUpdateOne) SetNillableConfirmationExpiresAt(v *time.Tim
 // ClearConfirmationExpiresAt clears the value of the "confirmation_expires_at" field.
 func (_u *AuthTransactionUpdateOne) ClearConfirmationExpiresAt() *AuthTransactionUpdateOne {
 	_u.mutation.ClearConfirmationExpiresAt()
+	return _u
+}
+
+// SetIdentityProtocol sets the "identity_protocol" field.
+func (_u *AuthTransactionUpdateOne) SetIdentityProtocol(v authtransaction.IdentityProtocol) *AuthTransactionUpdateOne {
+	_u.mutation.SetIdentityProtocol(v)
+	return _u
+}
+
+// SetNillableIdentityProtocol sets the "identity_protocol" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableIdentityProtocol(v *authtransaction.IdentityProtocol) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetIdentityProtocol(*v)
+	}
+	return _u
+}
+
+// ClearIdentityProtocol clears the value of the "identity_protocol" field.
+func (_u *AuthTransactionUpdateOne) ClearIdentityProtocol() *AuthTransactionUpdateOne {
+	_u.mutation.ClearIdentityProtocol()
 	return _u
 }
 
@@ -1010,6 +1061,11 @@ func (_u *AuthTransactionUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.IdentityProtocol(); ok {
+		if err := authtransaction.IdentityProtocolValidator(v); err != nil {
+			return &ValidationError{Name: "identity_protocol", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.identity_protocol": %w`, err)}
+		}
+	}
 	if _u.mutation.ConnectionCleared() && len(_u.mutation.ConnectionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "AuthTransaction.connection"`)
 	}
@@ -1083,6 +1139,12 @@ func (_u *AuthTransactionUpdateOne) sqlSave(ctx context.Context) (_node *AuthTra
 	}
 	if _u.mutation.ConfirmationExpiresAtCleared() {
 		_spec.ClearField(authtransaction.FieldConfirmationExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.IdentityProtocol(); ok {
+		_spec.SetField(authtransaction.FieldIdentityProtocol, field.TypeEnum, value)
+	}
+	if _u.mutation.IdentityProtocolCleared() {
+		_spec.ClearField(authtransaction.FieldIdentityProtocol, field.TypeEnum)
 	}
 	if value, ok := _u.mutation.IdentityIssuer(); ok {
 		_spec.SetField(authtransaction.FieldIdentityIssuer, field.TypeString, value)

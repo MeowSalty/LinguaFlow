@@ -100,6 +100,31 @@ func EvidenceMaxAgeSeconds(v int) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldEvidenceMaxAgeSeconds, v))
 }
 
+// Oauth2AuthorizationEndpoint applies equality check predicate on the "oauth2_authorization_endpoint" field. It's identical to Oauth2AuthorizationEndpointEQ.
+func Oauth2AuthorizationEndpoint(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2TokenEndpoint applies equality check predicate on the "oauth2_token_endpoint" field. It's identical to Oauth2TokenEndpointEQ.
+func Oauth2TokenEndpoint(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2ProfileEndpoint applies equality check predicate on the "oauth2_profile_endpoint" field. It's identical to Oauth2ProfileEndpointEQ.
+func Oauth2ProfileEndpoint(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ClientID applies equality check predicate on the "oauth2_client_id" field. It's identical to Oauth2ClientIDEQ.
+func Oauth2ClientID(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2ClientID, v))
+}
+
+// Oauth2SubjectPointer applies equality check predicate on the "oauth2_subject_pointer" field. It's identical to Oauth2SubjectPointerEQ.
+func Oauth2SubjectPointer(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2SubjectPointer, v))
+}
+
 // OidcIssuer applies equality check predicate on the "oidc_issuer" field. It's identical to OidcIssuerEQ.
 func OidcIssuer(v string) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOidcIssuer, v))
@@ -583,6 +608,451 @@ func EvidenceMaxAgeSecondsLT(v int) predicate.AuthConnectionRevision {
 // EvidenceMaxAgeSecondsLTE applies the LTE predicate on the "evidence_max_age_seconds" field.
 func EvidenceMaxAgeSecondsLTE(v int) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldEvidenceMaxAgeSeconds, v))
+}
+
+// Oauth2AuthorizationEndpointEQ applies the EQ predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointNEQ applies the NEQ predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointIn applies the In predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOauth2AuthorizationEndpoint, vs...))
+}
+
+// Oauth2AuthorizationEndpointNotIn applies the NotIn predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOauth2AuthorizationEndpoint, vs...))
+}
+
+// Oauth2AuthorizationEndpointGT applies the GT predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointGTE applies the GTE predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointLT applies the LT predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointLTE applies the LTE predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointContains applies the Contains predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointHasPrefix applies the HasPrefix predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointHasSuffix applies the HasSuffix predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointIsNil applies the IsNil predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOauth2AuthorizationEndpoint))
+}
+
+// Oauth2AuthorizationEndpointNotNil applies the NotNil predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOauth2AuthorizationEndpoint))
+}
+
+// Oauth2AuthorizationEndpointEqualFold applies the EqualFold predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2AuthorizationEndpointContainsFold applies the ContainsFold predicate on the "oauth2_authorization_endpoint" field.
+func Oauth2AuthorizationEndpointContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldOauth2AuthorizationEndpoint, v))
+}
+
+// Oauth2TokenEndpointEQ applies the EQ predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointNEQ applies the NEQ predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointIn applies the In predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOauth2TokenEndpoint, vs...))
+}
+
+// Oauth2TokenEndpointNotIn applies the NotIn predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOauth2TokenEndpoint, vs...))
+}
+
+// Oauth2TokenEndpointGT applies the GT predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointGTE applies the GTE predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointLT applies the LT predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointLTE applies the LTE predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointContains applies the Contains predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointHasPrefix applies the HasPrefix predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointHasSuffix applies the HasSuffix predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointIsNil applies the IsNil predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOauth2TokenEndpoint))
+}
+
+// Oauth2TokenEndpointNotNil applies the NotNil predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOauth2TokenEndpoint))
+}
+
+// Oauth2TokenEndpointEqualFold applies the EqualFold predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2TokenEndpointContainsFold applies the ContainsFold predicate on the "oauth2_token_endpoint" field.
+func Oauth2TokenEndpointContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldOauth2TokenEndpoint, v))
+}
+
+// Oauth2ProfileEndpointEQ applies the EQ predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointNEQ applies the NEQ predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointIn applies the In predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOauth2ProfileEndpoint, vs...))
+}
+
+// Oauth2ProfileEndpointNotIn applies the NotIn predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOauth2ProfileEndpoint, vs...))
+}
+
+// Oauth2ProfileEndpointGT applies the GT predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointGTE applies the GTE predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointLT applies the LT predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointLTE applies the LTE predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointContains applies the Contains predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointHasPrefix applies the HasPrefix predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointHasSuffix applies the HasSuffix predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointIsNil applies the IsNil predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOauth2ProfileEndpoint))
+}
+
+// Oauth2ProfileEndpointNotNil applies the NotNil predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOauth2ProfileEndpoint))
+}
+
+// Oauth2ProfileEndpointEqualFold applies the EqualFold predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ProfileEndpointContainsFold applies the ContainsFold predicate on the "oauth2_profile_endpoint" field.
+func Oauth2ProfileEndpointContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldOauth2ProfileEndpoint, v))
+}
+
+// Oauth2ClientIDEQ applies the EQ predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDNEQ applies the NEQ predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDIn applies the In predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOauth2ClientID, vs...))
+}
+
+// Oauth2ClientIDNotIn applies the NotIn predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOauth2ClientID, vs...))
+}
+
+// Oauth2ClientIDGT applies the GT predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDGTE applies the GTE predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDLT applies the LT predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDLTE applies the LTE predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDContains applies the Contains predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDHasPrefix applies the HasPrefix predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDHasSuffix applies the HasSuffix predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDIsNil applies the IsNil predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOauth2ClientID))
+}
+
+// Oauth2ClientIDNotNil applies the NotNil predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOauth2ClientID))
+}
+
+// Oauth2ClientIDEqualFold applies the EqualFold predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldOauth2ClientID, v))
+}
+
+// Oauth2ClientIDContainsFold applies the ContainsFold predicate on the "oauth2_client_id" field.
+func Oauth2ClientIDContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldOauth2ClientID, v))
+}
+
+// Oauth2SubjectPointerEQ applies the EQ predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerNEQ applies the NEQ predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerIn applies the In predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOauth2SubjectPointer, vs...))
+}
+
+// Oauth2SubjectPointerNotIn applies the NotIn predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOauth2SubjectPointer, vs...))
+}
+
+// Oauth2SubjectPointerGT applies the GT predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerGTE applies the GTE predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerLT applies the LT predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerLTE applies the LTE predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerContains applies the Contains predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerHasPrefix applies the HasPrefix predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerHasSuffix applies the HasSuffix predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerIsNil applies the IsNil predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOauth2SubjectPointer))
+}
+
+// Oauth2SubjectPointerNotNil applies the NotNil predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOauth2SubjectPointer))
+}
+
+// Oauth2SubjectPointerEqualFold applies the EqualFold predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2SubjectPointerContainsFold applies the ContainsFold predicate on the "oauth2_subject_pointer" field.
+func Oauth2SubjectPointerContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldOauth2SubjectPointer, v))
+}
+
+// Oauth2ClientAuthMethodEQ applies the EQ predicate on the "oauth2_client_auth_method" field.
+func Oauth2ClientAuthMethodEQ(v Oauth2ClientAuthMethod) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2ClientAuthMethod, v))
+}
+
+// Oauth2ClientAuthMethodNEQ applies the NEQ predicate on the "oauth2_client_auth_method" field.
+func Oauth2ClientAuthMethodNEQ(v Oauth2ClientAuthMethod) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOauth2ClientAuthMethod, v))
+}
+
+// Oauth2ClientAuthMethodIn applies the In predicate on the "oauth2_client_auth_method" field.
+func Oauth2ClientAuthMethodIn(vs ...Oauth2ClientAuthMethod) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOauth2ClientAuthMethod, vs...))
+}
+
+// Oauth2ClientAuthMethodNotIn applies the NotIn predicate on the "oauth2_client_auth_method" field.
+func Oauth2ClientAuthMethodNotIn(vs ...Oauth2ClientAuthMethod) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOauth2ClientAuthMethod, vs...))
+}
+
+// Oauth2ClientAuthMethodIsNil applies the IsNil predicate on the "oauth2_client_auth_method" field.
+func Oauth2ClientAuthMethodIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOauth2ClientAuthMethod))
+}
+
+// Oauth2ClientAuthMethodNotNil applies the NotNil predicate on the "oauth2_client_auth_method" field.
+func Oauth2ClientAuthMethodNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOauth2ClientAuthMethod))
+}
+
+// Oauth2SubjectTypeEQ applies the EQ predicate on the "oauth2_subject_type" field.
+func Oauth2SubjectTypeEQ(v Oauth2SubjectType) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldOauth2SubjectType, v))
+}
+
+// Oauth2SubjectTypeNEQ applies the NEQ predicate on the "oauth2_subject_type" field.
+func Oauth2SubjectTypeNEQ(v Oauth2SubjectType) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldOauth2SubjectType, v))
+}
+
+// Oauth2SubjectTypeIn applies the In predicate on the "oauth2_subject_type" field.
+func Oauth2SubjectTypeIn(vs ...Oauth2SubjectType) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldOauth2SubjectType, vs...))
+}
+
+// Oauth2SubjectTypeNotIn applies the NotIn predicate on the "oauth2_subject_type" field.
+func Oauth2SubjectTypeNotIn(vs ...Oauth2SubjectType) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldOauth2SubjectType, vs...))
+}
+
+// Oauth2SubjectTypeIsNil applies the IsNil predicate on the "oauth2_subject_type" field.
+func Oauth2SubjectTypeIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOauth2SubjectType))
+}
+
+// Oauth2SubjectTypeNotNil applies the NotNil predicate on the "oauth2_subject_type" field.
+func Oauth2SubjectTypeNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOauth2SubjectType))
+}
+
+// Oauth2ScopesIsNil applies the IsNil predicate on the "oauth2_scopes" field.
+func Oauth2ScopesIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldOauth2Scopes))
+}
+
+// Oauth2ScopesNotNil applies the NotNil predicate on the "oauth2_scopes" field.
+func Oauth2ScopesNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldOauth2Scopes))
 }
 
 // OidcIssuerEQ applies the EQ predicate on the "oidc_issuer" field.

@@ -40,6 +40,22 @@ type AuthConnectionRevision struct {
 	AttributeMappings []authrules.Field `json:"attribute_mappings,omitempty"`
 	// EvidenceMaxAgeSeconds holds the value of the "evidence_max_age_seconds" field.
 	EvidenceMaxAgeSeconds int `json:"evidence_max_age_seconds,omitempty"`
+	// Oauth2AuthorizationEndpoint holds the value of the "oauth2_authorization_endpoint" field.
+	Oauth2AuthorizationEndpoint string `json:"oauth2_authorization_endpoint,omitempty"`
+	// Oauth2TokenEndpoint holds the value of the "oauth2_token_endpoint" field.
+	Oauth2TokenEndpoint string `json:"oauth2_token_endpoint,omitempty"`
+	// Oauth2ProfileEndpoint holds the value of the "oauth2_profile_endpoint" field.
+	Oauth2ProfileEndpoint string `json:"oauth2_profile_endpoint,omitempty"`
+	// Oauth2ClientID holds the value of the "oauth2_client_id" field.
+	Oauth2ClientID string `json:"oauth2_client_id,omitempty"`
+	// Oauth2SubjectPointer holds the value of the "oauth2_subject_pointer" field.
+	Oauth2SubjectPointer string `json:"oauth2_subject_pointer,omitempty"`
+	// Oauth2ClientAuthMethod holds the value of the "oauth2_client_auth_method" field.
+	Oauth2ClientAuthMethod authconnectionrevision.Oauth2ClientAuthMethod `json:"oauth2_client_auth_method,omitempty"`
+	// Oauth2SubjectType holds the value of the "oauth2_subject_type" field.
+	Oauth2SubjectType authconnectionrevision.Oauth2SubjectType `json:"oauth2_subject_type,omitempty"`
+	// Oauth2Scopes holds the value of the "oauth2_scopes" field.
+	Oauth2Scopes []string `json:"oauth2_scopes,omitempty"`
 	// OidcIssuer holds the value of the "oidc_issuer" field.
 	OidcIssuer string `json:"oidc_issuer,omitempty"`
 	// OidcClientID holds the value of the "oidc_client_id" field.
@@ -91,13 +107,13 @@ func (*AuthConnectionRevision) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case authconnectionrevision.FieldAttributeMappings, authconnectionrevision.FieldOidcScopes, authconnectionrevision.FieldLogoData:
+		case authconnectionrevision.FieldAttributeMappings, authconnectionrevision.FieldOauth2Scopes, authconnectionrevision.FieldOidcScopes, authconnectionrevision.FieldLogoData:
 			values[i] = new([]byte)
 		case authconnectionrevision.FieldOidcUserinfoEnabled, authconnectionrevision.FieldUsernameLoginEnabled, authconnectionrevision.FieldEmailLoginEnabled:
 			values[i] = new(sql.NullBool)
 		case authconnectionrevision.FieldID, authconnectionrevision.FieldRevision, authconnectionrevision.FieldDisplayOrder, authconnectionrevision.FieldConfigVersion, authconnectionrevision.FieldEvidenceMaxAgeSeconds, authconnectionrevision.FieldSecretVersion:
 			values[i] = new(sql.NullInt64)
-		case authconnectionrevision.FieldConnectionID, authconnectionrevision.FieldDisplayName, authconnectionrevision.FieldDescription, authconnectionrevision.FieldOidcIssuer, authconnectionrevision.FieldOidcClientID, authconnectionrevision.FieldOidcClientAuthMethod, authconnectionrevision.FieldLogoMediaType:
+		case authconnectionrevision.FieldConnectionID, authconnectionrevision.FieldDisplayName, authconnectionrevision.FieldDescription, authconnectionrevision.FieldOauth2AuthorizationEndpoint, authconnectionrevision.FieldOauth2TokenEndpoint, authconnectionrevision.FieldOauth2ProfileEndpoint, authconnectionrevision.FieldOauth2ClientID, authconnectionrevision.FieldOauth2SubjectPointer, authconnectionrevision.FieldOauth2ClientAuthMethod, authconnectionrevision.FieldOauth2SubjectType, authconnectionrevision.FieldOidcIssuer, authconnectionrevision.FieldOidcClientID, authconnectionrevision.FieldOidcClientAuthMethod, authconnectionrevision.FieldLogoMediaType:
 			values[i] = new(sql.NullString)
 		case authconnectionrevision.FieldCreatedAt, authconnectionrevision.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -183,6 +199,56 @@ func (_m *AuthConnectionRevision) assignValues(columns []string, values []any) e
 				return fmt.Errorf("unexpected type %T for field evidence_max_age_seconds", values[i])
 			} else if value.Valid {
 				_m.EvidenceMaxAgeSeconds = int(value.Int64)
+			}
+		case authconnectionrevision.FieldOauth2AuthorizationEndpoint:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oauth2_authorization_endpoint", values[i])
+			} else if value.Valid {
+				_m.Oauth2AuthorizationEndpoint = value.String
+			}
+		case authconnectionrevision.FieldOauth2TokenEndpoint:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oauth2_token_endpoint", values[i])
+			} else if value.Valid {
+				_m.Oauth2TokenEndpoint = value.String
+			}
+		case authconnectionrevision.FieldOauth2ProfileEndpoint:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oauth2_profile_endpoint", values[i])
+			} else if value.Valid {
+				_m.Oauth2ProfileEndpoint = value.String
+			}
+		case authconnectionrevision.FieldOauth2ClientID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oauth2_client_id", values[i])
+			} else if value.Valid {
+				_m.Oauth2ClientID = value.String
+			}
+		case authconnectionrevision.FieldOauth2SubjectPointer:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oauth2_subject_pointer", values[i])
+			} else if value.Valid {
+				_m.Oauth2SubjectPointer = value.String
+			}
+		case authconnectionrevision.FieldOauth2ClientAuthMethod:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oauth2_client_auth_method", values[i])
+			} else if value.Valid {
+				_m.Oauth2ClientAuthMethod = authconnectionrevision.Oauth2ClientAuthMethod(value.String)
+			}
+		case authconnectionrevision.FieldOauth2SubjectType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field oauth2_subject_type", values[i])
+			} else if value.Valid {
+				_m.Oauth2SubjectType = authconnectionrevision.Oauth2SubjectType(value.String)
+			}
+		case authconnectionrevision.FieldOauth2Scopes:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field oauth2_scopes", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Oauth2Scopes); err != nil {
+					return fmt.Errorf("unmarshal field oauth2_scopes: %w", err)
+				}
 			}
 		case authconnectionrevision.FieldOidcIssuer:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -317,6 +383,30 @@ func (_m *AuthConnectionRevision) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("evidence_max_age_seconds=")
 	builder.WriteString(fmt.Sprintf("%v", _m.EvidenceMaxAgeSeconds))
+	builder.WriteString(", ")
+	builder.WriteString("oauth2_authorization_endpoint=")
+	builder.WriteString(_m.Oauth2AuthorizationEndpoint)
+	builder.WriteString(", ")
+	builder.WriteString("oauth2_token_endpoint=")
+	builder.WriteString(_m.Oauth2TokenEndpoint)
+	builder.WriteString(", ")
+	builder.WriteString("oauth2_profile_endpoint=")
+	builder.WriteString(_m.Oauth2ProfileEndpoint)
+	builder.WriteString(", ")
+	builder.WriteString("oauth2_client_id=")
+	builder.WriteString(_m.Oauth2ClientID)
+	builder.WriteString(", ")
+	builder.WriteString("oauth2_subject_pointer=")
+	builder.WriteString(_m.Oauth2SubjectPointer)
+	builder.WriteString(", ")
+	builder.WriteString("oauth2_client_auth_method=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Oauth2ClientAuthMethod))
+	builder.WriteString(", ")
+	builder.WriteString("oauth2_subject_type=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Oauth2SubjectType))
+	builder.WriteString(", ")
+	builder.WriteString("oauth2_scopes=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Oauth2Scopes))
 	builder.WriteString(", ")
 	builder.WriteString("oidc_issuer=")
 	builder.WriteString(_m.OidcIssuer)
