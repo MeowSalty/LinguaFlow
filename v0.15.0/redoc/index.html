@@ -1,0 +1,251 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LinguaFlow API 参考</title>
+  <link rel="icon" href="../logo.svg" type="image/svg+xml" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: #1a1a2e;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      z-index: 1000;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .top-bar .logo {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .top-bar .logo img { width: 28px; height: 28px; }
+    .top-bar .nav-links {
+      margin-left: 32px;
+      display: flex;
+      gap: 20px;
+    }
+    .top-bar .nav-links a {
+      color: rgba(255,255,255,0.7);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .top-bar .nav-links a:hover,
+    .top-bar .nav-links a.active {
+      color: #fff;
+    }
+    .top-bar .right-section {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .version-select {
+      appearance: none;
+      background-color: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      padding: 6px 32px 6px 12px;
+      font-size: 13px;
+      color: #fff;
+      cursor: pointer;
+      outline: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+    .version-select:hover {
+      border-color: rgba(255,255,255,0.4);
+    }
+    .version-select option {
+      background: #1a1a2e;
+      color: #fff;
+    }
+    .back-link {
+      color: rgba(255,255,255,0.6);
+      text-decoration: none;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: color 0.2s;
+    }
+    .back-link:hover { color: #fff; }
+    #redoc-container {
+      margin-top: 56px;
+    }
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: calc(100vh - 56px);
+      color: #666;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <a class="logo" href="../">
+      <img src="../logo.svg" alt="LinguaFlow" width="28" height="28" />
+      LinguaFlow
+    </a>
+    <div class="nav-links">
+      <a href="../zh/guide/getting-started">指南</a>
+      <a href="../zh/api/" class="active">API</a>
+    </div>
+    <div class="right-section">
+      <select id="version-select" class="version-select">
+        <option value="latest">latest</option>
+      </select>
+      <a class="back-link" href="../zh/api/">← 返回文档</a>
+    </div>
+  </div>
+  <div id="redoc-container">
+    <div class="loading">加载中...</div>
+  </div>
+  <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  <script>
+    let currentRedoc = null;
+    const container = document.getElementById('redoc-container');
+    const select = document.getElementById('version-select');
+
+    // 获取当前 URL 中的版本号
+    function getVersionFromUrl() {
+      const path = window.location.pathname;
+      const match = path.match(/\/redoc\/(v[\d.]+)\//);
+      return match ? match[1] : 'latest';
+    }
+
+    // 构建规范文件 URL
+    function getSpecUrl(version) {
+      if (version === 'latest') {
+        return '../openapi/openapi-3.0.yaml';
+      }
+      return '../openapi/' + version + '/openapi-3.0.yaml';
+    }
+
+    // 渲染 Redoc
+    function renderRedoc(version) {
+      const specUrl = getSpecUrl(version);
+      container.innerHTML = '<div class="loading">加载中...</div>';
+      
+      if (currentRedoc) {
+        currentRedoc = null;
+      }
+
+      Redoc.init(
+        specUrl,
+        {
+          theme: {
+            colors: {
+              primary: { main: '#6366f1' },
+              success: { main: '#22c55e' },
+              error: { main: '#ef4444' },
+              warning: { main: '#f59e0b' },
+              text: { primary: '#1a1a2e' },
+              http: {
+                get: '#6366f1',
+                post: '#22c55e',
+                put: '#f59e0b',
+                delete: '#ef4444',
+              },
+            },
+            typography: {
+              fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              fontSize: '15px',
+              lineHeight: '1.6',
+              headings: { fontWeight: '600' },
+            },
+            sidebar: {
+              width: '280px',
+              backgroundColor: '#f8f9fa',
+              textColor: '#1a1a2e',
+              activeTextColor: '#6366f1',
+            },
+            rightPanel: {
+              backgroundColor: '#1a1a2e',
+            },
+            codeBlock: {
+              backgroundColor: '#1e1e2e',
+            },
+          },
+          hideDownloadButton: false,
+          expandResponses: '200',
+          requiredPropsFirst: true,
+          sortPropsAlphabetically: true,
+          pathInMiddlePanel: true,
+          hideHostname: false,
+          nativeScrollbars: true,
+        },
+        container,
+        function(err) {
+          if (err) {
+            container.innerHTML = '<div class="loading" style="color:#ef4444">加载规范文件失败：' + err.message + '</div>';
+          }
+        }
+      );
+    }
+
+    // 加载版本列表
+    async function loadVersions() {
+      try {
+        const res = await fetch('../versions.json');
+        if (res.ok) {
+          const data = await res.json();
+          const versions = data.versions || [];
+          
+          // 清空现有选项
+          select.innerHTML = '';
+          
+          // 添加 latest 选项
+          const latestOption = document.createElement('option');
+          latestOption.value = 'latest';
+          latestOption.textContent = 'latest (' + (data.latest || '最新') + ')';
+          select.appendChild(latestOption);
+          
+          // 添加版本选项
+          versions.forEach(function(v) {
+            const option = document.createElement('option');
+            option.value = v;
+            option.textContent = v;
+            select.appendChild(option);
+          });
+          
+          // 设置当前选中版本
+          const currentVersion = getVersionFromUrl();
+          select.value = currentVersion;
+        }
+      } catch (e) {
+        console.error('Failed to load versions:', e);
+      }
+    }
+
+    // 版本切换事件
+    select.addEventListener('change', function() {
+      const version = this.value;
+      renderRedoc(version);
+    });
+
+    // 初始化
+    loadVersions();
+    renderRedoc(getVersionFromUrl());
+  </script>
+</body>
+</html>
