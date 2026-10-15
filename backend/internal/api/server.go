@@ -69,6 +69,7 @@ type Server struct {
 	resourceSvc                  *service.ResourceService
 	storageSvc                   *service.StorageService
 	storageConnections           *service.StorageConnectionService
+	storageRetirements           *service.StorageRetirementService
 	storageRuntime               *storageRuntime
 	jobStore                     *filestore.LocalStore
 	dispatcher                   *worker.Dispatcher
@@ -163,7 +164,7 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	s.adminService = service.NewAdminService(client)
 	s.settingsService = service.NewSettingsService(client)
 	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(*cfg), s.settingsService)
-	s.externalAuth, err = service.NewExternalAuthService(client, s.authService, keys, cfg.Authentication)
+	s.externalAuth, err = service.NewExternalAuthService(client, s.authService, keys, cfg.Authentication, cfg.CORS)
 	if err != nil {
 		return nil, fmt.Errorf("initialize external authentication: %w", err)
 	}

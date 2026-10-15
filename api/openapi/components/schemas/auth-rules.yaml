@@ -98,6 +98,9 @@ AuthRulesPreviewRequest:
   required: [expected_revision, sources]
   properties:
     expected_revision: {type: integer, format: int64, minimum: 1}
+    changes:
+      $ref: './auth-external.yaml#/AuthConnectionChanges'
+      description: Optional candidate policy changes evaluated together with the simulated sources; falls back to the saved configuration when omitted.
     sources:
       type: object
       additionalProperties: false
@@ -123,10 +126,14 @@ AuthAttributeValue:
     status: {type: string, enum: [pass, fail, unknown]}
     reason: {type: string}
     fingerprint: {type: string}
-AuthPublishProblem:
+AuthConnectionErrorProblem:
   allOf:
     - {$ref: './common.yaml#/Problem'}
     - type: object
-      required: [impact]
+      required: [issues]
       properties:
-        impact: {$ref: './auth-external.yaml#/AuthConnectionImpact'}
+        issues:
+          type: array
+          items: {$ref: './auth-external.yaml#/AuthConfigurationIssue'}
+        impact:
+          $ref: './auth-external.yaml#/AuthConnectionImpact'

@@ -1,12 +1,12 @@
 OAuth2ConnectionConfig:
   type: object
   additionalProperties: false
-  required: [authorization_endpoint, token_endpoint, profile_endpoint, client_id, subject_mapping]
+  description: Saved or candidate OAuth configuration; fields may be missing or empty while configuring or disabled. Test and enable require all protocol inputs.
   properties:
-    authorization_endpoint: {type: string, format: uri}
-    token_endpoint: {type: string, format: uri}
-    profile_endpoint: {type: string, format: uri}
-    client_id: {type: string}
+    authorization_endpoint: {type: string, maxLength: 2048}
+    token_endpoint: {type: string, maxLength: 2048}
+    profile_endpoint: {type: string, maxLength: 2048}
+    client_id: {type: string, maxLength: 1024}
     client_auth_method:
       type: string
       enum: [client_secret_basic, client_secret_post]
@@ -19,22 +19,20 @@ OAuth2ConnectionConfig:
     subject_mapping:
       type: object
       additionalProperties: false
-      required: [pointer, type]
       properties:
-        pointer: {type: string, minLength: 1, maxLength: 1024}
-        type: {type: string, enum: [string, integer]}
+        pointer: {type: string, maxLength: 1024}
+        type: {type: string, enum: [string, integer], default: string}
 OIDCConnectionConfig:
   type: "object"
   additionalProperties: false
-  required:
-    - "issuer"
-    - "client_id"
+  description: Saved or candidate OIDC configuration; issuer and client_id may be missing or empty while configuring or disabled. Populated issuer values must be absolute allowed URLs.
   properties:
     issuer:
       type: "string"
-      format: "uri"
+      maxLength: 2048
     client_id:
       type: "string"
+      maxLength: 1024
     client_auth_method:
       type: "string"
       enum:
@@ -55,7 +53,6 @@ AuthConnectionPolicy:
   type: "object"
   additionalProperties: false
   required:
-    - "enabled"
     - "login_enabled"
     - "signup_enabled"
     - "link_enabled"
@@ -63,8 +60,6 @@ AuthConnectionPolicy:
     - "signup_rules"
     - "link_rules"
   properties:
-    enabled:
-      type: "boolean"
     login_enabled:
       type: "boolean"
     signup_enabled:
@@ -132,6 +127,9 @@ ExternalStartResponse:
     expires_at:
       type: "string"
       format: "date-time"
+    test_id:
+      type: "string"
+      description: "Transaction ID of the originating administrator connection test; empty for ordinary login flows."
 ExternalExchangeRequest:
   type: "object"
   additionalProperties: false
@@ -330,6 +328,12 @@ ExternalTestResponse:
     revision:
       type: "integer"
       format: "int64"
+    test_id:
+      type: "string"
+    expires_at:
+      type: "string"
+      format: "date-time"
+      description: "Transaction expiry at which the matching test evidence lapses;; the saved configuration capability persists independently."
 ExternalExchangeResponse:
   oneOf:
     -
@@ -422,13 +426,6 @@ CreateAuthConnectionRequest:
   required:
     - "kind"
     - "display_name"
-  oneOf:
-    - required: [oidc]
-      properties:
-        kind: {enum: [oidc]}
-    - required: [oauth2]
-      properties:
-        kind: {enum: [generic_oauth2]}
   properties:
     kind:
       type: "string"
@@ -454,20 +451,29 @@ UpdateAuthConnectionRequest:
   required:
     - "expected_revision"
   properties:
+    expected_revision:
+      type: "integer"
+      format: "int64"
+    test_id:
+      type: "string"
+      description: "ID of the administrator connection test matching these parameter changes."
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+      writeOnly: true
+      description: "Browser-held verifier bound to the referenced test."
     attribute_mappings:
       type: array
       maxItems: 64
       items:
-        $ref: './auth-rules.yaml#/AuthAttributeField'
+        $ref: "./auth-rules.yaml#/AuthAttributeField"
     evidence_max_age_seconds:
       type: integer
       minimum: 1
       maximum: 31536000
       default: 3600
       description: Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
-    expected_revision:
-      type: "integer"
-      format: "int64"
     display_name:
       type: "string"
     description:
@@ -485,7 +491,7 @@ UpdateAuthConnectionRequest:
       description: "Omitted keeps the current secret; null clears it; a nonempty string creates a new encrypted version."
     policy:
       $ref: "#/AuthConnectionPolicy"
-AuthConnectionRevisionRequest:
+AuthConnectionCandidateRequest:
   type: "object"
   additionalProperties: false
   required:
@@ -494,6 +500,24 @@ AuthConnectionRevisionRequest:
     expected_revision:
       type: "integer"
       format: "int64"
+    changes:
+      $ref: "#/AuthConnectionChanges"
+AuthConnectionActionRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "expected_revision"
+  properties:
+    expected_revision:
+      type: "integer"
+      format: "int64"
+    test_id:
+      type: "string"
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+      writeOnly: true
 AuthConnectionTestRequest:
   type: "object"
   additionalProperties: false
@@ -505,6 +529,8 @@ AuthConnectionTestRequest:
     expected_revision:
       type: "integer"
       format: "int64"
+    changes:
+      $ref: "#/AuthConnectionChanges"
     browser_challenge:
       type: "string"
       pattern: "^[A-Za-z0-9_-]{43}$"
@@ -516,6 +542,37 @@ AuthConnectionTestRequest:
       type: "string"
       default: "/"
       description: "Validated application-relative path."
+AuthConnectionChanges:
+  type: "object"
+  additionalProperties: false
+  properties:
+    attribute_mappings:
+      type: array
+      maxItems: 64
+      items:
+        $ref: "./auth-rules.yaml#/AuthAttributeField"
+    evidence_max_age_seconds:
+      type: integer
+      minimum: 1
+      maximum: 31536000
+      default: 3600
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    oidc:
+      $ref: "#/OIDCConnectionConfig"
+    oauth2:
+      $ref: "#/OAuth2ConnectionConfig"
+    client_secret:
+      type: "string"
+      nullable: true
+      writeOnly: true
+      description: "Omitted keeps the current secret; null clears it; a nonempty string creates a new encrypted version."
+    policy:
+      $ref: "#/AuthConnectionPolicy"
 AuthConnectionSnapshot:
   type: "object"
   additionalProperties: false
@@ -523,7 +580,9 @@ AuthConnectionSnapshot:
     - "display_name"
     - "description"
     - "display_order"
-    - "revision"
+    - "login_policy_revision"
+    - "attribute_mappings"
+    - "evidence_max_age_seconds"
     - "policy"
     - "has_client_secret"
   properties:
@@ -549,9 +608,6 @@ AuthConnectionSnapshot:
       $ref: "#/OIDCConnectionConfig"
     oauth2:
       $ref: "#/OAuth2ConnectionConfig"
-    revision:
-      type: "integer"
-      format: "int64"
     policy:
       $ref: "#/AuthConnectionPolicy"
     has_client_secret:
@@ -559,21 +615,22 @@ AuthConnectionSnapshot:
     logo_url:
       type: "string"
       nullable: true
-AuthConnectionValidation:
+AuthConnectionValidationResult:
   type: "object"
   additionalProperties: false
   required:
     - "fresh_supported"
-    - "fingerprint_matches"
+    - "tested_at"
   properties:
     fresh_supported:
-      type: "boolean"
-    fingerprint_matches:
       type: "boolean"
     tested_at:
       type: "string"
       format: "date-time"
       nullable: true
+    applied_test_id:
+      type: "string"
+      description: "AuthTransaction that produced the applied validation; empty before a persisted first test."
 AuthConnectionRecord:
   type: "object"
   additionalProperties: false
@@ -582,12 +639,15 @@ AuthConnectionRecord:
     - "kind"
     - "aggregate_revision"
     - "archived"
-    - "has_client_secret"
+    - "configuration"
+    - "configuration_complete"
+    - "capabilities"
+    - "validation"
+    - "setup"
   properties:
     identity_authority_id:
       type: string
       readOnly: true
-      nullable: true
       description: Server-assigned immutable namespace for a generic OAuth connection.
     id:
       type: "string"
@@ -600,24 +660,138 @@ AuthConnectionRecord:
     aggregate_revision:
       type: "integer"
       format: "int64"
-    draft_revision:
-      type: "integer"
-      format: "int64"
-      nullable: true
-    published_revision:
-      type: "integer"
-      format: "int64"
-      nullable: true
+      description: Change-detection revision for optimistic concurrency; distinct from the login policy revision.
+    state:
+      type: "string"
+      enum:
+        - "configuring"
+        - "enabled"
+        - "disabled"
+      description: Lifecycle state; omitted only for the built-in password connection, which never enters configuring.
     archived:
       type: "boolean"
-    has_client_secret:
+    configuration:
+      $ref: "#/AuthConnectionSnapshot"
+    configuration_complete:
       type: "boolean"
-    draft:
-      $ref: "#/AuthConnectionSnapshot"
-    published:
-      $ref: "#/AuthConnectionSnapshot"
+    capabilities:
+      $ref: "#/AuthConnectionCapabilities"
     validation:
-      $ref: "#/AuthConnectionValidation"
+      $ref: "#/AuthConnectionValidationResult"
+    setup:
+      $ref: "#/AuthConnectionSetup"
+AuthConnectionCapabilities:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "can_login"
+    - "can_signup"
+    - "can_link"
+    - "can_test"
+  properties:
+    can_login:
+      type: "boolean"
+    can_signup:
+      type: "boolean"
+    can_link:
+      type: "boolean"
+    can_test:
+      type: "boolean"
+AuthConnectionSetup:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "callback_url"
+    - "completion_urls"
+    - "configuration_complete"
+    - "issues"
+    - "protocol"
+  properties:
+    callback_url:
+      type: "string"
+      format: "uri"
+      nullable: true
+      description: "Backend-determined callback to register at the identity provider; null when the deployment base URL or protocol cannot produce one yet."
+    completion_urls:
+      type: "array"
+      items:
+        type: "string"
+        format: "uri"
+    configuration_complete:
+      type: "boolean"
+    issues:
+      type: "array"
+      items:
+        $ref: "#/AuthConfigurationIssue"
+    protocol:
+      $ref: "#/AuthConnectionProtocolSetup"
+AuthConfigurationIssue:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "code"
+    - "field"
+    - "message"
+  properties:
+    code:
+      type: "string"
+    field:
+      type: "string"
+    message:
+      type: "string"
+AuthConnectionProtocolSetup:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "required_fields"
+    - "client_auth_methods"
+    - "scope_guidance"
+  properties:
+    required_fields:
+      type: "array"
+      items:
+        type: "string"
+    client_auth_methods:
+      type: "array"
+      items:
+        type: "string"
+    scope_guidance:
+      type: "string"
+AuthConnectionErrorProblem:
+  type: object
+  additionalProperties: false
+  required:
+    - "type"
+    - "status"
+    - "issues"
+  properties:
+    type:
+      type: string
+      description: "urn:linguaflow:auth-connection-<code>; see AuthConnectionErrorCode for values."
+    title:
+      type: string
+    status:
+      type: integer
+      enum: [409]
+    detail:
+      type: string
+    issues:
+      type: array
+      items:
+        $ref: "#/AuthConfigurationIssue"
+    impact:
+      $ref: "#/AuthConnectionImpact"
+AuthConnectionErrorCode:
+  type: string
+  enum:
+    - "configuration-incomplete"
+    - "deployment-incomplete"
+    - "test-required"
+    - "test-expired"
+    - "test-mismatch"
+    - "state-conflict"
+    - "revision-conflict"
+    - "fallback-required"
 AuthConnectionsResponse:
   type: "object"
   additionalProperties: false
@@ -648,7 +822,7 @@ AuthConnectionCheck:
     issues:
       type: "array"
       items:
-        type: "string"
+        $ref: "#/AuthConfigurationIssue"
 AuthConnectionImpact:
   type: "object"
   additionalProperties: false
@@ -656,7 +830,7 @@ AuthConnectionImpact:
     - "affected_users"
     - "blocked_users"
     - "affected_sessions"
-    - "can_publish"
+    - "can_save"
   properties:
     revision: {type: integer, format: int64}
     evaluated_at: {type: string, format: date-time}
@@ -683,7 +857,7 @@ AuthConnectionImpact:
         type: "integer"
     affected_sessions:
       type: "integer"
-    can_publish:
+    can_save:
       type: "boolean"
 LoginMethod:
   type: "object"

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -32,9 +33,6 @@ type externalCompleteRequest struct {
 
 type externalProofRequest struct {
 	ReauthenticationProof string `json:"reauthentication_proof"`
-}
-type externalRevisionRequest struct {
-	ExpectedRevision int64 `json:"expected_revision"`
 }
 
 // New sensitive endpoints accept only the Authorization header. The historic
@@ -71,15 +69,23 @@ func (s *Server) externalActor(w http.ResponseWriter, r *http.Request, required,
 		s.writeServiceError(w, r, service.ErrForbidden)
 		return r, nil, false
 	}
-	ctx := service.WithExternalActor(r.Context(), account.ID, claims.AuthVersion)
+	ctx := service.WithExternalActorSession(r.Context(), account.ID, claims.AuthVersion, claims.SessionID)
 	return r.WithContext(ctx), &account.ID, true
 }
 func (s *Server) writeExternalError(w http.ResponseWriter, r *http.Request, err error) {
-	var conflict *service.AuthenticationPublishConflict
-	if errors.As(err, &conflict) {
+	var connErr *service.AuthConnectionError
+	if errors.As(err, &connErr) {
 		w.Header().Set("Content-Type", "application/problem+json")
 		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(map[string]any{"type": "urn:linguaflow:authentication-publish-blocked", "title": "authentication_publish_blocked", "error_code": "authentication_publish_blocked", "status": 409, "detail": conflict.Impact.Remediation, "impact": conflict.Impact})
+		issues := connErr.Issues
+		if issues == nil {
+			issues = []service.AuthConfigurationIssue{}
+		}
+		body := map[string]any{"type": "urn:linguaflow:auth-connection-" + connErr.Code, "title": "auth_connection_" + connErr.Code, "status": http.StatusConflict, "issues": issues}
+		if connErr.Impact != nil {
+			body["impact"] = connErr.Impact
+		}
+		_ = json.NewEncoder(w).Encode(body)
 		return
 	}
 	switch {
@@ -102,7 +108,11 @@ func (s *Server) writeExternalError(w http.ResponseWriter, r *http.Request, err 
 	}
 }
 func externalStartResponse(v service.ExternalStartResult) any {
-	return map[string]any{"transaction_id": v.TransactionID, "authorization_url": v.AuthorizationURL, "expires_at": v.ExpiresAt}
+	response := map[string]any{"transaction_id": v.TransactionID, "authorization_url": v.AuthorizationURL, "expires_at": v.ExpiresAt}
+	if v.TestID != "" {
+		response["test_id"] = v.TestID
+	}
+	return response
 }
 func externalProofResponse(v service.ReauthenticationResult) map[string]any {
 	return map[string]any{"reauthentication_proof": v.Proof, "expires_at": v.ExpiresAt}
@@ -221,6 +231,8 @@ func (s *Server) ExchangeExternalAuthentication(w http.ResponseWriter, r *http.R
 		response["fresh_supported"] = out.Test.FreshSupported
 		response["rules"] = out.Test.Diagnostics
 		response["attributes"] = out.Test.Attributes
+		response["test_id"] = out.Test.TestID
+		response["expires_at"] = out.Test.ExpiresAt
 	default:
 		s.writeExternalError(w, r, service.ErrExternalFlowInvalid)
 		return
@@ -436,63 +448,79 @@ func (s *Server) UpdateAuthConnection(w http.ResponseWriter, r *http.Request, id
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) connectionOperation(w http.ResponseWriter, r *http.Request, id, operation string) {
+func (s *Server) CheckAuthConnection(w http.ResponseWriter, r *http.Request, id string) {
 	r, actor, ok := s.externalActor(w, r, true, true)
 	if !ok {
 		return
 	}
-	var in externalRevisionRequest
+	var in service.AuthConnectionCandidateInput
 	if !s.decodeExternalRequest(w, r, &in) {
 		return
 	}
-	var out any
-	var err error
-	switch operation {
-	case "check":
-		out, err = s.externalAuth.CheckConnection(r.Context(), *actor, id, in.ExpectedRevision)
-	case "impact":
-		out, err = s.externalAuth.ImpactConnection(r.Context(), *actor, id, in.ExpectedRevision)
-	case "publish":
-		out, err = s.externalAuth.PublishConnection(r.Context(), *actor, id, in.ExpectedRevision)
-	case "archive":
-		out, err = s.externalAuth.ArchiveConnection(r.Context(), *actor, id, in.ExpectedRevision)
-	case "restore":
-		out, err = s.externalAuth.RestoreConnection(r.Context(), *actor, id, in.ExpectedRevision)
-	}
+	out, err := s.externalAuth.CheckConnection(r.Context(), *actor, id, in)
 	if err != nil {
 		s.writeExternalError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) CheckAuthConnection(w http.ResponseWriter, r *http.Request, id string) {
-	s.connectionOperation(w, r, id, "check")
-}
 func (s *Server) GetAuthConnectionImpact(w http.ResponseWriter, r *http.Request, id string) {
-	s.connectionOperation(w, r, id, "impact")
+	r, actor, ok := s.externalActor(w, r, true, true)
+	if !ok {
+		return
+	}
+	var in service.AuthConnectionCandidateInput
+	if !s.decodeExternalRequest(w, r, &in) {
+		return
+	}
+	out, err := s.externalAuth.ImpactConnection(r.Context(), *actor, id, in)
+	if err != nil {
+		s.writeExternalError(w, r, err)
+		return
+	}
+	writeJSON(w, 200, out)
 }
-func (s *Server) PublishAuthConnection(w http.ResponseWriter, r *http.Request, id string) {
-	s.connectionOperation(w, r, id, "publish")
+func (s *Server) connectionAction(w http.ResponseWriter, r *http.Request, id string, action func(context.Context, int, string, service.AuthConnectionActionInput) (service.AuthConnectionRecord, error)) {
+	r, actor, ok := s.externalActor(w, r, true, true)
+	if !ok {
+		return
+	}
+	var in service.AuthConnectionActionInput
+	if !s.decodeExternalRequest(w, r, &in) {
+		return
+	}
+	out, err := action(r.Context(), *actor, id, in)
+	if err != nil {
+		s.writeExternalError(w, r, err)
+		return
+	}
+	writeJSON(w, 200, out)
+}
+func (s *Server) ConfigureAuthConnection(w http.ResponseWriter, r *http.Request, id string) {
+	s.connectionAction(w, r, id, s.externalAuth.ConfigureConnection)
+}
+func (s *Server) EnableAuthConnection(w http.ResponseWriter, r *http.Request, id string) {
+	s.connectionAction(w, r, id, s.externalAuth.EnableConnection)
+}
+func (s *Server) DisableAuthConnection(w http.ResponseWriter, r *http.Request, id string) {
+	s.connectionAction(w, r, id, s.externalAuth.DisableConnection)
 }
 func (s *Server) ArchiveAuthConnection(w http.ResponseWriter, r *http.Request, id string) {
-	s.connectionOperation(w, r, id, "archive")
+	s.connectionAction(w, r, id, s.externalAuth.ArchiveConnection)
 }
 func (s *Server) RestoreAuthConnection(w http.ResponseWriter, r *http.Request, id string) {
-	s.connectionOperation(w, r, id, "restore")
+	s.connectionAction(w, r, id, s.externalAuth.RestoreConnection)
 }
 func (s *Server) TestAuthConnection(w http.ResponseWriter, r *http.Request, id string) {
 	r, actor, ok := s.externalActor(w, r, true, true)
 	if !ok {
 		return
 	}
-	var in struct {
-		externalBrowserRequest
-		externalRevisionRequest
-	}
+	var in service.AuthConnectionTestInput
 	if !s.decodeExternalRequest(w, r, &in) {
 		return
 	}
-	out, err := s.externalAuth.StartTest(r.Context(), *actor, id, in.ExpectedRevision, in.input())
+	out, err := s.externalAuth.StartTest(r.Context(), *actor, id, in)
 	if err != nil {
 		s.writeExternalError(w, r, err)
 		return
@@ -522,24 +550,24 @@ func (s *Server) UploadAuthConnectionLogo(w http.ResponseWriter, r *http.Request
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) GetDraftAuthConnectionLogo(w http.ResponseWriter, r *http.Request, id string, p GetDraftAuthConnectionLogoParams) {
+func (s *Server) GetAuthConnectionLogo(w http.ResponseWriter, r *http.Request, id string) {
 	r, actor, ok := s.externalActor(w, r, true, true)
 	if !ok {
 		return
 	}
-	data, err := s.externalAuth.DraftConnectionLogo(r.Context(), *actor, id, p.ExpectedRevision)
+	data, err := s.externalAuth.CurrentConnectionLogo(r.Context(), *actor, id)
 	if err != nil {
 		s.writeExternalError(w, r, err)
 		return
 	}
 	writeAuthenticationLogo(w, data)
 }
-func (s *Server) GetPublishedAuthConnectionLogo(w http.ResponseWriter, r *http.Request, id string) {
+func (s *Server) GetPublicAuthConnectionLogo(w http.ResponseWriter, r *http.Request, id string) {
 	r, _, ok := s.externalActor(w, r, false, false)
 	if !ok {
 		return
 	}
-	data, err := s.externalAuth.PublishedConnectionLogo(r.Context(), id)
+	data, err := s.externalAuth.PublicConnectionLogo(r.Context(), id)
 	if err != nil {
 		s.writeExternalError(w, r, err)
 		return

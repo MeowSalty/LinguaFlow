@@ -338,7 +338,7 @@ logo:
       schema:
         type: "string"
   get:
-    operationId: "GetPublishedAuthConnectionLogo"
+    operationId: "GetPublicAuthConnectionLogo"
     summary: "读取已发布连接的站内Logo"
     description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
     security: []

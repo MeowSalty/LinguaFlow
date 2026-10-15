@@ -54,7 +54,7 @@ func validateAuthenticationJSON(dec *json.Decoder, t reflect.Type, path string) 
 		if err := dec.Decode(&raw); err != nil {
 			return err
 		}
-		if string(raw) == "null" && path != "client_secret" {
+		if string(raw) == "null" && path != "client_secret" && !strings.HasSuffix(path, ".client_secret") {
 			return errors.New("null authentication field")
 		}
 		return authrules.ValidateJSON(raw)
@@ -100,6 +100,14 @@ func validateAuthenticationJSON(dec *json.Decoder, t reflect.Type, path string) 
 			}
 			if err := validateAuthenticationJSON(dec, fieldType, fieldPath); err != nil {
 				return err
+			}
+		}
+		if t.Kind() == reflect.Struct {
+			for i := 0; i < t.NumField(); i++ {
+				f := t.Field(i)
+				if f.Tag.Get("auth") == "required" && !seen[strings.Split(f.Tag.Get("json"), ",")[0]] {
+					return errors.New("missing required authentication field")
+				}
 			}
 		}
 	case '[':
