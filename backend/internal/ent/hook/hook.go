@@ -69,18 +69,6 @@ func (f AuthConnectionSecretFunc) Mutate(ctx context.Context, m ent.Mutation) (e
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthConnectionSecretMutation", m)
 }
 
-// The AuthConnectionValidationFunc type is an adapter to allow the use of ordinary
-// function as AuthConnectionValidation mutator.
-type AuthConnectionValidationFunc func(context.Context, *ent.AuthConnectionValidationMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f AuthConnectionValidationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.AuthConnectionValidationMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthConnectionValidationMutation", m)
-}
-
 // The AuthTransactionFunc type is an adapter to allow the use of ordinary
 // function as AuthTransaction mutator.
 type AuthTransactionFunc func(context.Context, *ent.AuthTransactionMutation) (ent.Value, error)
@@ -549,6 +537,30 @@ func (f StorageMigrationItemFunc) Mutate(ctx context.Context, m ent.Mutation) (e
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageMigrationItemMutation", m)
 }
 
+// The StorageNamespaceFunc type is an adapter to allow the use of ordinary
+// function as StorageNamespace mutator.
+type StorageNamespaceFunc func(context.Context, *ent.StorageNamespaceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageNamespaceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageNamespaceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageNamespaceMutation", m)
+}
+
+// The StoragePathClaimFunc type is an adapter to allow the use of ordinary
+// function as StoragePathClaim mutator.
+type StoragePathClaimFunc func(context.Context, *ent.StoragePathClaimMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StoragePathClaimFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StoragePathClaimMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StoragePathClaimMutation", m)
+}
+
 // The StorageReservationFunc type is an adapter to allow the use of ordinary
 // function as StorageReservation mutator.
 type StorageReservationFunc func(context.Context, *ent.StorageReservationMutation) (ent.Value, error)
@@ -559,6 +571,30 @@ func (f StorageReservationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageReservationMutation", m)
+}
+
+// The StorageRetirementFunc type is an adapter to allow the use of ordinary
+// function as StorageRetirement mutator.
+type StorageRetirementFunc func(context.Context, *ent.StorageRetirementMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageRetirementFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageRetirementMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageRetirementMutation", m)
+}
+
+// The StorageRetirementEntryFunc type is an adapter to allow the use of ordinary
+// function as StorageRetirementEntry mutator.
+type StorageRetirementEntryFunc func(context.Context, *ent.StorageRetirementEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageRetirementEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageRetirementEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageRetirementEntryMutation", m)
 }
 
 // The StorageSpaceFunc type is an adapter to allow the use of ordinary

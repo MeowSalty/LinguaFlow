@@ -17,7 +17,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
@@ -57,7 +56,11 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheckwrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagemigrationitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagenamespace"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagepathclaim"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageretirement"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageretiremententry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatch"
@@ -137,7 +140,6 @@ func checkColumn(t, c string) error {
 			authconnection.Table:            authconnection.ValidColumn,
 			authconnectionrevision.Table:    authconnectionrevision.ValidColumn,
 			authconnectionsecret.Table:      authconnectionsecret.ValidColumn,
-			authconnectionvalidation.Table:  authconnectionvalidation.ValidColumn,
 			authtransaction.Table:           authtransaction.ValidColumn,
 			backend.Table:                   backend.ValidColumn,
 			backuppin.Table:                 backuppin.ValidColumn,
@@ -177,7 +179,11 @@ func checkColumn(t, c string) error {
 			storagecheckwrite.Table:         storagecheckwrite.ValidColumn,
 			storageconnection.Table:         storageconnection.ValidColumn,
 			storagemigrationitem.Table:      storagemigrationitem.ValidColumn,
+			storagenamespace.Table:          storagenamespace.ValidColumn,
+			storagepathclaim.Table:          storagepathclaim.ValidColumn,
 			storagereservation.Table:        storagereservation.ValidColumn,
+			storageretirement.Table:         storageretirement.ValidColumn,
+			storageretiremententry.Table:    storageretiremententry.ValidColumn,
 			storagespace.Table:              storagespace.ValidColumn,
 			storagetask.Table:               storagetask.ValidColumn,
 			storageuploadbatch.Table:        storageuploadbatch.ValidColumn,

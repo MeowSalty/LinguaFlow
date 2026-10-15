@@ -20,7 +20,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
@@ -60,7 +59,11 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheckwrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagemigrationitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagenamespace"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagepathclaim"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageretirement"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageretiremententry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatch"
@@ -94,8 +97,6 @@ type Client struct {
 	AuthConnectionRevision *AuthConnectionRevisionClient
 	// AuthConnectionSecret is the client for interacting with the AuthConnectionSecret builders.
 	AuthConnectionSecret *AuthConnectionSecretClient
-	// AuthConnectionValidation is the client for interacting with the AuthConnectionValidation builders.
-	AuthConnectionValidation *AuthConnectionValidationClient
 	// AuthTransaction is the client for interacting with the AuthTransaction builders.
 	AuthTransaction *AuthTransactionClient
 	// Backend is the client for interacting with the Backend builders.
@@ -174,8 +175,16 @@ type Client struct {
 	StorageConnection *StorageConnectionClient
 	// StorageMigrationItem is the client for interacting with the StorageMigrationItem builders.
 	StorageMigrationItem *StorageMigrationItemClient
+	// StorageNamespace is the client for interacting with the StorageNamespace builders.
+	StorageNamespace *StorageNamespaceClient
+	// StoragePathClaim is the client for interacting with the StoragePathClaim builders.
+	StoragePathClaim *StoragePathClaimClient
 	// StorageReservation is the client for interacting with the StorageReservation builders.
 	StorageReservation *StorageReservationClient
+	// StorageRetirement is the client for interacting with the StorageRetirement builders.
+	StorageRetirement *StorageRetirementClient
+	// StorageRetirementEntry is the client for interacting with the StorageRetirementEntry builders.
+	StorageRetirementEntry *StorageRetirementEntryClient
 	// StorageSpace is the client for interacting with the StorageSpace builders.
 	StorageSpace *StorageSpaceClient
 	// StorageTask is the client for interacting with the StorageTask builders.
@@ -220,7 +229,6 @@ func (c *Client) init() {
 	c.AuthConnection = NewAuthConnectionClient(c.config)
 	c.AuthConnectionRevision = NewAuthConnectionRevisionClient(c.config)
 	c.AuthConnectionSecret = NewAuthConnectionSecretClient(c.config)
-	c.AuthConnectionValidation = NewAuthConnectionValidationClient(c.config)
 	c.AuthTransaction = NewAuthTransactionClient(c.config)
 	c.Backend = NewBackendClient(c.config)
 	c.BackupPin = NewBackupPinClient(c.config)
@@ -260,7 +268,11 @@ func (c *Client) init() {
 	c.StorageCheckWrite = NewStorageCheckWriteClient(c.config)
 	c.StorageConnection = NewStorageConnectionClient(c.config)
 	c.StorageMigrationItem = NewStorageMigrationItemClient(c.config)
+	c.StorageNamespace = NewStorageNamespaceClient(c.config)
+	c.StoragePathClaim = NewStoragePathClaimClient(c.config)
 	c.StorageReservation = NewStorageReservationClient(c.config)
+	c.StorageRetirement = NewStorageRetirementClient(c.config)
+	c.StorageRetirementEntry = NewStorageRetirementEntryClient(c.config)
 	c.StorageSpace = NewStorageSpaceClient(c.config)
 	c.StorageTask = NewStorageTaskClient(c.config)
 	c.StorageUploadBatch = NewStorageUploadBatchClient(c.config)
@@ -372,7 +384,6 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		AuthConnection:            NewAuthConnectionClient(cfg),
 		AuthConnectionRevision:    NewAuthConnectionRevisionClient(cfg),
 		AuthConnectionSecret:      NewAuthConnectionSecretClient(cfg),
-		AuthConnectionValidation:  NewAuthConnectionValidationClient(cfg),
 		AuthTransaction:           NewAuthTransactionClient(cfg),
 		Backend:                   NewBackendClient(cfg),
 		BackupPin:                 NewBackupPinClient(cfg),
@@ -412,7 +423,11 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		StorageCheckWrite:         NewStorageCheckWriteClient(cfg),
 		StorageConnection:         NewStorageConnectionClient(cfg),
 		StorageMigrationItem:      NewStorageMigrationItemClient(cfg),
+		StorageNamespace:          NewStorageNamespaceClient(cfg),
+		StoragePathClaim:          NewStoragePathClaimClient(cfg),
 		StorageReservation:        NewStorageReservationClient(cfg),
+		StorageRetirement:         NewStorageRetirementClient(cfg),
+		StorageRetirementEntry:    NewStorageRetirementEntryClient(cfg),
 		StorageSpace:              NewStorageSpaceClient(cfg),
 		StorageTask:               NewStorageTaskClient(cfg),
 		StorageUploadBatch:        NewStorageUploadBatchClient(cfg),
@@ -451,7 +466,6 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		AuthConnection:            NewAuthConnectionClient(cfg),
 		AuthConnectionRevision:    NewAuthConnectionRevisionClient(cfg),
 		AuthConnectionSecret:      NewAuthConnectionSecretClient(cfg),
-		AuthConnectionValidation:  NewAuthConnectionValidationClient(cfg),
 		AuthTransaction:           NewAuthTransactionClient(cfg),
 		Backend:                   NewBackendClient(cfg),
 		BackupPin:                 NewBackupPinClient(cfg),
@@ -491,7 +505,11 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		StorageCheckWrite:         NewStorageCheckWriteClient(cfg),
 		StorageConnection:         NewStorageConnectionClient(cfg),
 		StorageMigrationItem:      NewStorageMigrationItemClient(cfg),
+		StorageNamespace:          NewStorageNamespaceClient(cfg),
+		StoragePathClaim:          NewStoragePathClaimClient(cfg),
 		StorageReservation:        NewStorageReservationClient(cfg),
+		StorageRetirement:         NewStorageRetirementClient(cfg),
+		StorageRetirementEntry:    NewStorageRetirementEntryClient(cfg),
 		StorageSpace:              NewStorageSpaceClient(cfg),
 		StorageTask:               NewStorageTaskClient(cfg),
 		StorageUploadBatch:        NewStorageUploadBatchClient(cfg),
@@ -536,9 +554,9 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.ActivityLog, c.AuthChannelPolicy, c.AuthConnection, c.AuthConnectionRevision,
-		c.AuthConnectionSecret, c.AuthConnectionValidation, c.AuthTransaction,
-		c.Backend, c.BackupPin, c.Blob, c.BlobLocation, c.BootstrapPromptTemplate,
-		c.Credential, c.CredentialJobReference, c.CredentialVersion, c.DeletionEntry,
+		c.AuthConnectionSecret, c.AuthTransaction, c.Backend, c.BackupPin, c.Blob,
+		c.BlobLocation, c.BootstrapPromptTemplate, c.Credential,
+		c.CredentialJobReference, c.CredentialVersion, c.DeletionEntry,
 		c.ExecutionPlanTemplate, c.ExecutionProfile, c.ExportArtifact,
 		c.ExternalIdentity, c.GlossaryEntry, c.InstanceInitialization, c.Job,
 		c.JobResource, c.JobRound, c.JobRoundSegment, c.LoginBinding, c.OrgMembership,
@@ -546,10 +564,12 @@ func (c *Client) Use(hooks ...Hook) {
 		c.RefreshSession, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
 		c.SegmentRevision, c.SourceRevision, c.StorageAuthVersion, c.StorageBackup,
 		c.StorageCheck, c.StorageCheckWrite, c.StorageConnection,
-		c.StorageMigrationItem, c.StorageReservation, c.StorageSpace, c.StorageTask,
-		c.StorageUploadBatch, c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask,
-		c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
-		c.WorkCandidate, c.WorkItem, c.WorkRequest,
+		c.StorageMigrationItem, c.StorageNamespace, c.StoragePathClaim,
+		c.StorageReservation, c.StorageRetirement, c.StorageRetirementEntry,
+		c.StorageSpace, c.StorageTask, c.StorageUploadBatch, c.StorageUploadBatchItem,
+		c.StorageWrite, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.TranslationPromptTemplate, c.UsageRecord, c.User, c.WorkCandidate,
+		c.WorkItem, c.WorkRequest,
 	} {
 		n.Use(hooks...)
 	}
@@ -560,9 +580,9 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.ActivityLog, c.AuthChannelPolicy, c.AuthConnection, c.AuthConnectionRevision,
-		c.AuthConnectionSecret, c.AuthConnectionValidation, c.AuthTransaction,
-		c.Backend, c.BackupPin, c.Blob, c.BlobLocation, c.BootstrapPromptTemplate,
-		c.Credential, c.CredentialJobReference, c.CredentialVersion, c.DeletionEntry,
+		c.AuthConnectionSecret, c.AuthTransaction, c.Backend, c.BackupPin, c.Blob,
+		c.BlobLocation, c.BootstrapPromptTemplate, c.Credential,
+		c.CredentialJobReference, c.CredentialVersion, c.DeletionEntry,
 		c.ExecutionPlanTemplate, c.ExecutionProfile, c.ExportArtifact,
 		c.ExternalIdentity, c.GlossaryEntry, c.InstanceInitialization, c.Job,
 		c.JobResource, c.JobRound, c.JobRoundSegment, c.LoginBinding, c.OrgMembership,
@@ -570,10 +590,12 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.RefreshSession, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
 		c.SegmentRevision, c.SourceRevision, c.StorageAuthVersion, c.StorageBackup,
 		c.StorageCheck, c.StorageCheckWrite, c.StorageConnection,
-		c.StorageMigrationItem, c.StorageReservation, c.StorageSpace, c.StorageTask,
-		c.StorageUploadBatch, c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask,
-		c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
-		c.WorkCandidate, c.WorkItem, c.WorkRequest,
+		c.StorageMigrationItem, c.StorageNamespace, c.StoragePathClaim,
+		c.StorageReservation, c.StorageRetirement, c.StorageRetirementEntry,
+		c.StorageSpace, c.StorageTask, c.StorageUploadBatch, c.StorageUploadBatchItem,
+		c.StorageWrite, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.TranslationPromptTemplate, c.UsageRecord, c.User, c.WorkCandidate,
+		c.WorkItem, c.WorkRequest,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -592,8 +614,6 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.AuthConnectionRevision.mutate(ctx, m)
 	case *AuthConnectionSecretMutation:
 		return c.AuthConnectionSecret.mutate(ctx, m)
-	case *AuthConnectionValidationMutation:
-		return c.AuthConnectionValidation.mutate(ctx, m)
 	case *AuthTransactionMutation:
 		return c.AuthTransaction.mutate(ctx, m)
 	case *BackendMutation:
@@ -672,8 +692,16 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.StorageConnection.mutate(ctx, m)
 	case *StorageMigrationItemMutation:
 		return c.StorageMigrationItem.mutate(ctx, m)
+	case *StorageNamespaceMutation:
+		return c.StorageNamespace.mutate(ctx, m)
+	case *StoragePathClaimMutation:
+		return c.StoragePathClaim.mutate(ctx, m)
 	case *StorageReservationMutation:
 		return c.StorageReservation.mutate(ctx, m)
+	case *StorageRetirementMutation:
+		return c.StorageRetirement.mutate(ctx, m)
+	case *StorageRetirementEntryMutation:
+		return c.StorageRetirementEntry.mutate(ctx, m)
 	case *StorageSpaceMutation:
 		return c.StorageSpace.mutate(ctx, m)
 	case *StorageTaskMutation:
@@ -1226,22 +1254,6 @@ func (c *AuthConnectionClient) QuerySecrets(_m *AuthConnection) *AuthConnectionS
 	return query
 }
 
-// QueryValidations queries the validations edge of a AuthConnection.
-func (c *AuthConnectionClient) QueryValidations(_m *AuthConnection) *AuthConnectionValidationQuery {
-	query := (&AuthConnectionValidationClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(authconnection.Table, authconnection.FieldID, id),
-			sqlgraph.To(authconnectionvalidation.Table, authconnectionvalidation.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, authconnection.ValidationsTable, authconnection.ValidationsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
 // QueryTransactions queries the transactions edge of a AuthConnection.
 func (c *AuthConnectionClient) QueryTransactions(_m *AuthConnection) *AuthTransactionQuery {
 	query := (&AuthTransactionClient{config: c.config}).Query()
@@ -1580,155 +1592,6 @@ func (c *AuthConnectionSecretClient) mutate(ctx context.Context, m *AuthConnecti
 		return (&AuthConnectionSecretDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AuthConnectionSecret mutation op: %q", m.Op())
-	}
-}
-
-// AuthConnectionValidationClient is a client for the AuthConnectionValidation schema.
-type AuthConnectionValidationClient struct {
-	config
-}
-
-// NewAuthConnectionValidationClient returns a client for the AuthConnectionValidation from the given config.
-func NewAuthConnectionValidationClient(c config) *AuthConnectionValidationClient {
-	return &AuthConnectionValidationClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `authconnectionvalidation.Hooks(f(g(h())))`.
-func (c *AuthConnectionValidationClient) Use(hooks ...Hook) {
-	c.hooks.AuthConnectionValidation = append(c.hooks.AuthConnectionValidation, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `authconnectionvalidation.Intercept(f(g(h())))`.
-func (c *AuthConnectionValidationClient) Intercept(interceptors ...Interceptor) {
-	c.inters.AuthConnectionValidation = append(c.inters.AuthConnectionValidation, interceptors...)
-}
-
-// Create returns a builder for creating a AuthConnectionValidation entity.
-func (c *AuthConnectionValidationClient) Create() *AuthConnectionValidationCreate {
-	mutation := newAuthConnectionValidationMutation(c.config, OpCreate)
-	return &AuthConnectionValidationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of AuthConnectionValidation entities.
-func (c *AuthConnectionValidationClient) CreateBulk(builders ...*AuthConnectionValidationCreate) *AuthConnectionValidationCreateBulk {
-	return &AuthConnectionValidationCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *AuthConnectionValidationClient) MapCreateBulk(slice any, setFunc func(*AuthConnectionValidationCreate, int)) *AuthConnectionValidationCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &AuthConnectionValidationCreateBulk{err: fmt.Errorf("calling to AuthConnectionValidationClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*AuthConnectionValidationCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &AuthConnectionValidationCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for AuthConnectionValidation.
-func (c *AuthConnectionValidationClient) Update() *AuthConnectionValidationUpdate {
-	mutation := newAuthConnectionValidationMutation(c.config, OpUpdate)
-	return &AuthConnectionValidationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *AuthConnectionValidationClient) UpdateOne(_m *AuthConnectionValidation) *AuthConnectionValidationUpdateOne {
-	mutation := newAuthConnectionValidationMutation(c.config, OpUpdateOne, withAuthConnectionValidation(_m))
-	return &AuthConnectionValidationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *AuthConnectionValidationClient) UpdateOneID(id int) *AuthConnectionValidationUpdateOne {
-	mutation := newAuthConnectionValidationMutation(c.config, OpUpdateOne, withAuthConnectionValidationID(id))
-	return &AuthConnectionValidationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for AuthConnectionValidation.
-func (c *AuthConnectionValidationClient) Delete() *AuthConnectionValidationDelete {
-	mutation := newAuthConnectionValidationMutation(c.config, OpDelete)
-	return &AuthConnectionValidationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *AuthConnectionValidationClient) DeleteOne(_m *AuthConnectionValidation) *AuthConnectionValidationDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *AuthConnectionValidationClient) DeleteOneID(id int) *AuthConnectionValidationDeleteOne {
-	builder := c.Delete().Where(authconnectionvalidation.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &AuthConnectionValidationDeleteOne{builder}
-}
-
-// Query returns a query builder for AuthConnectionValidation.
-func (c *AuthConnectionValidationClient) Query() *AuthConnectionValidationQuery {
-	return &AuthConnectionValidationQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeAuthConnectionValidation},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a AuthConnectionValidation entity by its id.
-func (c *AuthConnectionValidationClient) Get(ctx context.Context, id int) (*AuthConnectionValidation, error) {
-	return c.Query().Where(authconnectionvalidation.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *AuthConnectionValidationClient) GetX(ctx context.Context, id int) *AuthConnectionValidation {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// QueryConnection queries the connection edge of a AuthConnectionValidation.
-func (c *AuthConnectionValidationClient) QueryConnection(_m *AuthConnectionValidation) *AuthConnectionQuery {
-	query := (&AuthConnectionClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(authconnectionvalidation.Table, authconnectionvalidation.FieldID, id),
-			sqlgraph.To(authconnection.Table, authconnection.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, authconnectionvalidation.ConnectionTable, authconnectionvalidation.ConnectionColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// Hooks returns the client hooks.
-func (c *AuthConnectionValidationClient) Hooks() []Hook {
-	return c.hooks.AuthConnectionValidation
-}
-
-// Interceptors returns the client interceptors.
-func (c *AuthConnectionValidationClient) Interceptors() []Interceptor {
-	return c.inters.AuthConnectionValidation
-}
-
-func (c *AuthConnectionValidationClient) mutate(ctx context.Context, m *AuthConnectionValidationMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&AuthConnectionValidationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&AuthConnectionValidationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&AuthConnectionValidationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&AuthConnectionValidationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown AuthConnectionValidation mutation op: %q", m.Op())
 	}
 }
 
@@ -8362,6 +8225,288 @@ func (c *StorageMigrationItemClient) mutate(ctx context.Context, m *StorageMigra
 	}
 }
 
+// StorageNamespaceClient is a client for the StorageNamespace schema.
+type StorageNamespaceClient struct {
+	config
+}
+
+// NewStorageNamespaceClient returns a client for the StorageNamespace from the given config.
+func NewStorageNamespaceClient(c config) *StorageNamespaceClient {
+	return &StorageNamespaceClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `storagenamespace.Hooks(f(g(h())))`.
+func (c *StorageNamespaceClient) Use(hooks ...Hook) {
+	c.hooks.StorageNamespace = append(c.hooks.StorageNamespace, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `storagenamespace.Intercept(f(g(h())))`.
+func (c *StorageNamespaceClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StorageNamespace = append(c.inters.StorageNamespace, interceptors...)
+}
+
+// Create returns a builder for creating a StorageNamespace entity.
+func (c *StorageNamespaceClient) Create() *StorageNamespaceCreate {
+	mutation := newStorageNamespaceMutation(c.config, OpCreate)
+	return &StorageNamespaceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StorageNamespace entities.
+func (c *StorageNamespaceClient) CreateBulk(builders ...*StorageNamespaceCreate) *StorageNamespaceCreateBulk {
+	return &StorageNamespaceCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StorageNamespaceClient) MapCreateBulk(slice any, setFunc func(*StorageNamespaceCreate, int)) *StorageNamespaceCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StorageNamespaceCreateBulk{err: fmt.Errorf("calling to StorageNamespaceClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StorageNamespaceCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StorageNamespaceCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StorageNamespace.
+func (c *StorageNamespaceClient) Update() *StorageNamespaceUpdate {
+	mutation := newStorageNamespaceMutation(c.config, OpUpdate)
+	return &StorageNamespaceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StorageNamespaceClient) UpdateOne(_m *StorageNamespace) *StorageNamespaceUpdateOne {
+	mutation := newStorageNamespaceMutation(c.config, OpUpdateOne, withStorageNamespace(_m))
+	return &StorageNamespaceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StorageNamespaceClient) UpdateOneID(id int) *StorageNamespaceUpdateOne {
+	mutation := newStorageNamespaceMutation(c.config, OpUpdateOne, withStorageNamespaceID(id))
+	return &StorageNamespaceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StorageNamespace.
+func (c *StorageNamespaceClient) Delete() *StorageNamespaceDelete {
+	mutation := newStorageNamespaceMutation(c.config, OpDelete)
+	return &StorageNamespaceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StorageNamespaceClient) DeleteOne(_m *StorageNamespace) *StorageNamespaceDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StorageNamespaceClient) DeleteOneID(id int) *StorageNamespaceDeleteOne {
+	builder := c.Delete().Where(storagenamespace.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StorageNamespaceDeleteOne{builder}
+}
+
+// Query returns a query builder for StorageNamespace.
+func (c *StorageNamespaceClient) Query() *StorageNamespaceQuery {
+	return &StorageNamespaceQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStorageNamespace},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StorageNamespace entity by its id.
+func (c *StorageNamespaceClient) Get(ctx context.Context, id int) (*StorageNamespace, error) {
+	return c.Query().Where(storagenamespace.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StorageNamespaceClient) GetX(ctx context.Context, id int) *StorageNamespace {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *StorageNamespaceClient) Hooks() []Hook {
+	return c.hooks.StorageNamespace
+}
+
+// Interceptors returns the client interceptors.
+func (c *StorageNamespaceClient) Interceptors() []Interceptor {
+	return c.inters.StorageNamespace
+}
+
+func (c *StorageNamespaceClient) mutate(ctx context.Context, m *StorageNamespaceMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StorageNamespaceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StorageNamespaceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StorageNamespaceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StorageNamespaceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StorageNamespace mutation op: %q", m.Op())
+	}
+}
+
+// StoragePathClaimClient is a client for the StoragePathClaim schema.
+type StoragePathClaimClient struct {
+	config
+}
+
+// NewStoragePathClaimClient returns a client for the StoragePathClaim from the given config.
+func NewStoragePathClaimClient(c config) *StoragePathClaimClient {
+	return &StoragePathClaimClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `storagepathclaim.Hooks(f(g(h())))`.
+func (c *StoragePathClaimClient) Use(hooks ...Hook) {
+	c.hooks.StoragePathClaim = append(c.hooks.StoragePathClaim, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `storagepathclaim.Intercept(f(g(h())))`.
+func (c *StoragePathClaimClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StoragePathClaim = append(c.inters.StoragePathClaim, interceptors...)
+}
+
+// Create returns a builder for creating a StoragePathClaim entity.
+func (c *StoragePathClaimClient) Create() *StoragePathClaimCreate {
+	mutation := newStoragePathClaimMutation(c.config, OpCreate)
+	return &StoragePathClaimCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StoragePathClaim entities.
+func (c *StoragePathClaimClient) CreateBulk(builders ...*StoragePathClaimCreate) *StoragePathClaimCreateBulk {
+	return &StoragePathClaimCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StoragePathClaimClient) MapCreateBulk(slice any, setFunc func(*StoragePathClaimCreate, int)) *StoragePathClaimCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StoragePathClaimCreateBulk{err: fmt.Errorf("calling to StoragePathClaimClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StoragePathClaimCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StoragePathClaimCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StoragePathClaim.
+func (c *StoragePathClaimClient) Update() *StoragePathClaimUpdate {
+	mutation := newStoragePathClaimMutation(c.config, OpUpdate)
+	return &StoragePathClaimUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StoragePathClaimClient) UpdateOne(_m *StoragePathClaim) *StoragePathClaimUpdateOne {
+	mutation := newStoragePathClaimMutation(c.config, OpUpdateOne, withStoragePathClaim(_m))
+	return &StoragePathClaimUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StoragePathClaimClient) UpdateOneID(id int) *StoragePathClaimUpdateOne {
+	mutation := newStoragePathClaimMutation(c.config, OpUpdateOne, withStoragePathClaimID(id))
+	return &StoragePathClaimUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StoragePathClaim.
+func (c *StoragePathClaimClient) Delete() *StoragePathClaimDelete {
+	mutation := newStoragePathClaimMutation(c.config, OpDelete)
+	return &StoragePathClaimDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StoragePathClaimClient) DeleteOne(_m *StoragePathClaim) *StoragePathClaimDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StoragePathClaimClient) DeleteOneID(id int) *StoragePathClaimDeleteOne {
+	builder := c.Delete().Where(storagepathclaim.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StoragePathClaimDeleteOne{builder}
+}
+
+// Query returns a query builder for StoragePathClaim.
+func (c *StoragePathClaimClient) Query() *StoragePathClaimQuery {
+	return &StoragePathClaimQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStoragePathClaim},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StoragePathClaim entity by its id.
+func (c *StoragePathClaimClient) Get(ctx context.Context, id int) (*StoragePathClaim, error) {
+	return c.Query().Where(storagepathclaim.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StoragePathClaimClient) GetX(ctx context.Context, id int) *StoragePathClaim {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QuerySpace queries the space edge of a StoragePathClaim.
+func (c *StoragePathClaimClient) QuerySpace(_m *StoragePathClaim) *StorageSpaceQuery {
+	query := (&StorageSpaceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(storagepathclaim.Table, storagepathclaim.FieldID, id),
+			sqlgraph.To(storagespace.Table, storagespace.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, storagepathclaim.SpaceTable, storagepathclaim.SpaceColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *StoragePathClaimClient) Hooks() []Hook {
+	return c.hooks.StoragePathClaim
+}
+
+// Interceptors returns the client interceptors.
+func (c *StoragePathClaimClient) Interceptors() []Interceptor {
+	return c.inters.StoragePathClaim
+}
+
+func (c *StoragePathClaimClient) mutate(ctx context.Context, m *StoragePathClaimMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StoragePathClaimCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StoragePathClaimUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StoragePathClaimUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StoragePathClaimDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StoragePathClaim mutation op: %q", m.Op())
+	}
+}
+
 // StorageReservationClient is a client for the StorageReservation schema.
 type StorageReservationClient struct {
 	config
@@ -8524,6 +8669,336 @@ func (c *StorageReservationClient) mutate(ctx context.Context, m *StorageReserva
 		return (&StorageReservationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown StorageReservation mutation op: %q", m.Op())
+	}
+}
+
+// StorageRetirementClient is a client for the StorageRetirement schema.
+type StorageRetirementClient struct {
+	config
+}
+
+// NewStorageRetirementClient returns a client for the StorageRetirement from the given config.
+func NewStorageRetirementClient(c config) *StorageRetirementClient {
+	return &StorageRetirementClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `storageretirement.Hooks(f(g(h())))`.
+func (c *StorageRetirementClient) Use(hooks ...Hook) {
+	c.hooks.StorageRetirement = append(c.hooks.StorageRetirement, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `storageretirement.Intercept(f(g(h())))`.
+func (c *StorageRetirementClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StorageRetirement = append(c.inters.StorageRetirement, interceptors...)
+}
+
+// Create returns a builder for creating a StorageRetirement entity.
+func (c *StorageRetirementClient) Create() *StorageRetirementCreate {
+	mutation := newStorageRetirementMutation(c.config, OpCreate)
+	return &StorageRetirementCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StorageRetirement entities.
+func (c *StorageRetirementClient) CreateBulk(builders ...*StorageRetirementCreate) *StorageRetirementCreateBulk {
+	return &StorageRetirementCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StorageRetirementClient) MapCreateBulk(slice any, setFunc func(*StorageRetirementCreate, int)) *StorageRetirementCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StorageRetirementCreateBulk{err: fmt.Errorf("calling to StorageRetirementClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StorageRetirementCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StorageRetirementCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StorageRetirement.
+func (c *StorageRetirementClient) Update() *StorageRetirementUpdate {
+	mutation := newStorageRetirementMutation(c.config, OpUpdate)
+	return &StorageRetirementUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StorageRetirementClient) UpdateOne(_m *StorageRetirement) *StorageRetirementUpdateOne {
+	mutation := newStorageRetirementMutation(c.config, OpUpdateOne, withStorageRetirement(_m))
+	return &StorageRetirementUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StorageRetirementClient) UpdateOneID(id int) *StorageRetirementUpdateOne {
+	mutation := newStorageRetirementMutation(c.config, OpUpdateOne, withStorageRetirementID(id))
+	return &StorageRetirementUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StorageRetirement.
+func (c *StorageRetirementClient) Delete() *StorageRetirementDelete {
+	mutation := newStorageRetirementMutation(c.config, OpDelete)
+	return &StorageRetirementDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StorageRetirementClient) DeleteOne(_m *StorageRetirement) *StorageRetirementDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StorageRetirementClient) DeleteOneID(id int) *StorageRetirementDeleteOne {
+	builder := c.Delete().Where(storageretirement.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StorageRetirementDeleteOne{builder}
+}
+
+// Query returns a query builder for StorageRetirement.
+func (c *StorageRetirementClient) Query() *StorageRetirementQuery {
+	return &StorageRetirementQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStorageRetirement},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StorageRetirement entity by its id.
+func (c *StorageRetirementClient) Get(ctx context.Context, id int) (*StorageRetirement, error) {
+	return c.Query().Where(storageretirement.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StorageRetirementClient) GetX(ctx context.Context, id int) *StorageRetirement {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *StorageRetirementClient) Hooks() []Hook {
+	return c.hooks.StorageRetirement
+}
+
+// Interceptors returns the client interceptors.
+func (c *StorageRetirementClient) Interceptors() []Interceptor {
+	return c.inters.StorageRetirement
+}
+
+func (c *StorageRetirementClient) mutate(ctx context.Context, m *StorageRetirementMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StorageRetirementCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StorageRetirementUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StorageRetirementUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StorageRetirementDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StorageRetirement mutation op: %q", m.Op())
+	}
+}
+
+// StorageRetirementEntryClient is a client for the StorageRetirementEntry schema.
+type StorageRetirementEntryClient struct {
+	config
+}
+
+// NewStorageRetirementEntryClient returns a client for the StorageRetirementEntry from the given config.
+func NewStorageRetirementEntryClient(c config) *StorageRetirementEntryClient {
+	return &StorageRetirementEntryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `storageretiremententry.Hooks(f(g(h())))`.
+func (c *StorageRetirementEntryClient) Use(hooks ...Hook) {
+	c.hooks.StorageRetirementEntry = append(c.hooks.StorageRetirementEntry, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `storageretiremententry.Intercept(f(g(h())))`.
+func (c *StorageRetirementEntryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StorageRetirementEntry = append(c.inters.StorageRetirementEntry, interceptors...)
+}
+
+// Create returns a builder for creating a StorageRetirementEntry entity.
+func (c *StorageRetirementEntryClient) Create() *StorageRetirementEntryCreate {
+	mutation := newStorageRetirementEntryMutation(c.config, OpCreate)
+	return &StorageRetirementEntryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StorageRetirementEntry entities.
+func (c *StorageRetirementEntryClient) CreateBulk(builders ...*StorageRetirementEntryCreate) *StorageRetirementEntryCreateBulk {
+	return &StorageRetirementEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StorageRetirementEntryClient) MapCreateBulk(slice any, setFunc func(*StorageRetirementEntryCreate, int)) *StorageRetirementEntryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StorageRetirementEntryCreateBulk{err: fmt.Errorf("calling to StorageRetirementEntryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StorageRetirementEntryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StorageRetirementEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StorageRetirementEntry.
+func (c *StorageRetirementEntryClient) Update() *StorageRetirementEntryUpdate {
+	mutation := newStorageRetirementEntryMutation(c.config, OpUpdate)
+	return &StorageRetirementEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StorageRetirementEntryClient) UpdateOne(_m *StorageRetirementEntry) *StorageRetirementEntryUpdateOne {
+	mutation := newStorageRetirementEntryMutation(c.config, OpUpdateOne, withStorageRetirementEntry(_m))
+	return &StorageRetirementEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StorageRetirementEntryClient) UpdateOneID(id int) *StorageRetirementEntryUpdateOne {
+	mutation := newStorageRetirementEntryMutation(c.config, OpUpdateOne, withStorageRetirementEntryID(id))
+	return &StorageRetirementEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StorageRetirementEntry.
+func (c *StorageRetirementEntryClient) Delete() *StorageRetirementEntryDelete {
+	mutation := newStorageRetirementEntryMutation(c.config, OpDelete)
+	return &StorageRetirementEntryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StorageRetirementEntryClient) DeleteOne(_m *StorageRetirementEntry) *StorageRetirementEntryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StorageRetirementEntryClient) DeleteOneID(id int) *StorageRetirementEntryDeleteOne {
+	builder := c.Delete().Where(storageretiremententry.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StorageRetirementEntryDeleteOne{builder}
+}
+
+// Query returns a query builder for StorageRetirementEntry.
+func (c *StorageRetirementEntryClient) Query() *StorageRetirementEntryQuery {
+	return &StorageRetirementEntryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStorageRetirementEntry},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StorageRetirementEntry entity by its id.
+func (c *StorageRetirementEntryClient) Get(ctx context.Context, id int) (*StorageRetirementEntry, error) {
+	return c.Query().Where(storageretiremententry.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StorageRetirementEntryClient) GetX(ctx context.Context, id int) *StorageRetirementEntry {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryRetirement queries the retirement edge of a StorageRetirementEntry.
+func (c *StorageRetirementEntryClient) QueryRetirement(_m *StorageRetirementEntry) *StorageRetirementQuery {
+	query := (&StorageRetirementClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(storageretiremententry.Table, storageretiremententry.FieldID, id),
+			sqlgraph.To(storageretirement.Table, storageretirement.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, storageretiremententry.RetirementTable, storageretiremententry.RetirementColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QuerySpace queries the space edge of a StorageRetirementEntry.
+func (c *StorageRetirementEntryClient) QuerySpace(_m *StorageRetirementEntry) *StorageSpaceQuery {
+	query := (&StorageSpaceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(storageretiremententry.Table, storageretiremententry.FieldID, id),
+			sqlgraph.To(storagespace.Table, storagespace.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, storageretiremententry.SpaceTable, storageretiremententry.SpaceColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryTargetSpace queries the target_space edge of a StorageRetirementEntry.
+func (c *StorageRetirementEntryClient) QueryTargetSpace(_m *StorageRetirementEntry) *StorageSpaceQuery {
+	query := (&StorageSpaceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(storageretiremententry.Table, storageretiremententry.FieldID, id),
+			sqlgraph.To(storagespace.Table, storagespace.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, storageretiremententry.TargetSpaceTable, storageretiremententry.TargetSpaceColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryMigrationTask queries the migration_task edge of a StorageRetirementEntry.
+func (c *StorageRetirementEntryClient) QueryMigrationTask(_m *StorageRetirementEntry) *StorageTaskQuery {
+	query := (&StorageTaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(storageretiremententry.Table, storageretiremententry.FieldID, id),
+			sqlgraph.To(storagetask.Table, storagetask.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, storageretiremententry.MigrationTaskTable, storageretiremententry.MigrationTaskColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *StorageRetirementEntryClient) Hooks() []Hook {
+	return c.hooks.StorageRetirementEntry
+}
+
+// Interceptors returns the client interceptors.
+func (c *StorageRetirementEntryClient) Interceptors() []Interceptor {
+	return c.inters.StorageRetirementEntry
+}
+
+func (c *StorageRetirementEntryClient) mutate(ctx context.Context, m *StorageRetirementEntryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StorageRetirementEntryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StorageRetirementEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StorageRetirementEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StorageRetirementEntryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StorageRetirementEntry mutation op: %q", m.Op())
 	}
 }
 
@@ -11001,32 +11476,32 @@ func (c *WorkRequestClient) mutate(ctx context.Context, m *WorkRequestMutation) 
 type (
 	hooks struct {
 		ActivityLog, AuthChannelPolicy, AuthConnection, AuthConnectionRevision,
-		AuthConnectionSecret, AuthConnectionValidation, AuthTransaction, Backend,
-		BackupPin, Blob, BlobLocation, BootstrapPromptTemplate, Credential,
-		CredentialJobReference, CredentialVersion, DeletionEntry,
-		ExecutionPlanTemplate, ExecutionProfile, ExportArtifact, ExternalIdentity,
-		GlossaryEntry, InstanceInitialization, Job, JobResource, JobRound,
-		JobRoundSegment, LoginBinding, OrgMembership, Organization, Project,
+		AuthConnectionSecret, AuthTransaction, Backend, BackupPin, Blob, BlobLocation,
+		BootstrapPromptTemplate, Credential, CredentialJobReference, CredentialVersion,
+		DeletionEntry, ExecutionPlanTemplate, ExecutionProfile, ExportArtifact,
+		ExternalIdentity, GlossaryEntry, InstanceInitialization, Job, JobResource,
+		JobRound, JobRoundSegment, LoginBinding, OrgMembership, Organization, Project,
 		PrunePromptTemplate, ReauthenticationProof, RefreshSession, RefreshToken,
 		Resource, SSEEvent, Segment, SegmentRevision, SourceRevision,
 		StorageAuthVersion, StorageBackup, StorageCheck, StorageCheckWrite,
-		StorageConnection, StorageMigrationItem, StorageReservation, StorageSpace,
+		StorageConnection, StorageMigrationItem, StorageNamespace, StoragePathClaim,
+		StorageReservation, StorageRetirement, StorageRetirementEntry, StorageSpace,
 		StorageTask, StorageUploadBatch, StorageUploadBatchItem, StorageWrite,
 		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord, User,
 		WorkCandidate, WorkItem, WorkRequest []ent.Hook
 	}
 	inters struct {
 		ActivityLog, AuthChannelPolicy, AuthConnection, AuthConnectionRevision,
-		AuthConnectionSecret, AuthConnectionValidation, AuthTransaction, Backend,
-		BackupPin, Blob, BlobLocation, BootstrapPromptTemplate, Credential,
-		CredentialJobReference, CredentialVersion, DeletionEntry,
-		ExecutionPlanTemplate, ExecutionProfile, ExportArtifact, ExternalIdentity,
-		GlossaryEntry, InstanceInitialization, Job, JobResource, JobRound,
-		JobRoundSegment, LoginBinding, OrgMembership, Organization, Project,
+		AuthConnectionSecret, AuthTransaction, Backend, BackupPin, Blob, BlobLocation,
+		BootstrapPromptTemplate, Credential, CredentialJobReference, CredentialVersion,
+		DeletionEntry, ExecutionPlanTemplate, ExecutionProfile, ExportArtifact,
+		ExternalIdentity, GlossaryEntry, InstanceInitialization, Job, JobResource,
+		JobRound, JobRoundSegment, LoginBinding, OrgMembership, Organization, Project,
 		PrunePromptTemplate, ReauthenticationProof, RefreshSession, RefreshToken,
 		Resource, SSEEvent, Segment, SegmentRevision, SourceRevision,
 		StorageAuthVersion, StorageBackup, StorageCheck, StorageCheckWrite,
-		StorageConnection, StorageMigrationItem, StorageReservation, StorageSpace,
+		StorageConnection, StorageMigrationItem, StorageNamespace, StoragePathClaim,
+		StorageReservation, StorageRetirement, StorageRetirementEntry, StorageSpace,
 		StorageTask, StorageUploadBatch, StorageUploadBatchItem, StorageWrite,
 		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord, User,
 		WorkCandidate, WorkItem, WorkRequest []ent.Interceptor

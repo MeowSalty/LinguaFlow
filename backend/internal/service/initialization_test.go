@@ -490,7 +490,7 @@ func TestInitializationRejectsDamagedAuthPolicyWithoutRepair(t *testing.T) {
 	for _, statement := range []string{
 		"DELETE FROM auth_connection_revisions",
 		"DELETE FROM auth_channel_policies",
-		"UPDATE auth_connections SET published_revision = NULL",
+		"UPDATE auth_connections SET current_revision = 999",
 		"UPDATE auth_connection_revisions SET email_login_enabled = true",
 	} {
 		t.Run(statement, func(t *testing.T) {

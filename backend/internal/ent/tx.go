@@ -24,8 +24,6 @@ type Tx struct {
 	AuthConnectionRevision *AuthConnectionRevisionClient
 	// AuthConnectionSecret is the client for interacting with the AuthConnectionSecret builders.
 	AuthConnectionSecret *AuthConnectionSecretClient
-	// AuthConnectionValidation is the client for interacting with the AuthConnectionValidation builders.
-	AuthConnectionValidation *AuthConnectionValidationClient
 	// AuthTransaction is the client for interacting with the AuthTransaction builders.
 	AuthTransaction *AuthTransactionClient
 	// Backend is the client for interacting with the Backend builders.
@@ -104,8 +102,16 @@ type Tx struct {
 	StorageConnection *StorageConnectionClient
 	// StorageMigrationItem is the client for interacting with the StorageMigrationItem builders.
 	StorageMigrationItem *StorageMigrationItemClient
+	// StorageNamespace is the client for interacting with the StorageNamespace builders.
+	StorageNamespace *StorageNamespaceClient
+	// StoragePathClaim is the client for interacting with the StoragePathClaim builders.
+	StoragePathClaim *StoragePathClaimClient
 	// StorageReservation is the client for interacting with the StorageReservation builders.
 	StorageReservation *StorageReservationClient
+	// StorageRetirement is the client for interacting with the StorageRetirement builders.
+	StorageRetirement *StorageRetirementClient
+	// StorageRetirementEntry is the client for interacting with the StorageRetirementEntry builders.
+	StorageRetirementEntry *StorageRetirementEntryClient
 	// StorageSpace is the client for interacting with the StorageSpace builders.
 	StorageSpace *StorageSpaceClient
 	// StorageTask is the client for interacting with the StorageTask builders.
@@ -270,7 +276,6 @@ func (tx *Tx) init() {
 	tx.AuthConnection = NewAuthConnectionClient(tx.config)
 	tx.AuthConnectionRevision = NewAuthConnectionRevisionClient(tx.config)
 	tx.AuthConnectionSecret = NewAuthConnectionSecretClient(tx.config)
-	tx.AuthConnectionValidation = NewAuthConnectionValidationClient(tx.config)
 	tx.AuthTransaction = NewAuthTransactionClient(tx.config)
 	tx.Backend = NewBackendClient(tx.config)
 	tx.BackupPin = NewBackupPinClient(tx.config)
@@ -310,7 +315,11 @@ func (tx *Tx) init() {
 	tx.StorageCheckWrite = NewStorageCheckWriteClient(tx.config)
 	tx.StorageConnection = NewStorageConnectionClient(tx.config)
 	tx.StorageMigrationItem = NewStorageMigrationItemClient(tx.config)
+	tx.StorageNamespace = NewStorageNamespaceClient(tx.config)
+	tx.StoragePathClaim = NewStoragePathClaimClient(tx.config)
 	tx.StorageReservation = NewStorageReservationClient(tx.config)
+	tx.StorageRetirement = NewStorageRetirementClient(tx.config)
+	tx.StorageRetirementEntry = NewStorageRetirementEntryClient(tx.config)
 	tx.StorageSpace = NewStorageSpaceClient(tx.config)
 	tx.StorageTask = NewStorageTaskClient(tx.config)
 	tx.StorageUploadBatch = NewStorageUploadBatchClient(tx.config)

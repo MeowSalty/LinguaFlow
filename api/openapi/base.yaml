@@ -49,8 +49,12 @@ paths:
     $ref: './paths/auth-connections.yaml#/test'
   /admin/auth-connections/{connectionId}/impact:
     $ref: './paths/auth-connections.yaml#/impact'
-  /admin/auth-connections/{connectionId}/publish:
-    $ref: './paths/auth-connections.yaml#/publish'
+  /admin/auth-connections/{connectionId}/configure:
+    $ref: './paths/auth-connections.yaml#/configure'
+  /admin/auth-connections/{connectionId}/enable:
+    $ref: './paths/auth-connections.yaml#/enable'
+  /admin/auth-connections/{connectionId}/disable:
+    $ref: './paths/auth-connections.yaml#/disable'
   /admin/auth-connections/{connectionId}/archive:
     $ref: './paths/auth-connections.yaml#/archive'
   /admin/auth-connections/{connectionId}/restore:
@@ -65,6 +69,20 @@ paths:
     $ref: './paths/task-retention.yaml#/batchDelete'
   /storage/capabilities:
     $ref: './paths/storage.yaml#/storageCapabilities'
+  /storage/retirement-previews:
+    $ref: './paths/storage-retirements.yaml#/storageRetirementPreviews'
+  /storage/retirements:
+    $ref: './paths/storage-retirements.yaml#/storageRetirements'
+  /storage/retirements/{retirementId}:
+    $ref: './paths/storage-retirements.yaml#/storageRetirement'
+  /storage/retirements/{retirementId}/plan:
+    $ref: './paths/storage-retirements.yaml#/storageRetirementPlan'
+  /storage/retirements/{retirementId}/resume:
+    $ref: './paths/storage-retirements.yaml#/resumeStorageRetirement'
+  /storage/retirements/{retirementId}/cancel:
+    $ref: './paths/storage-retirements.yaml#/cancelStorageRetirement'
+  /storage/retirements/{retirementId}/recover-authorization:
+    $ref: './paths/storage-retirements.yaml#/recoverStorageRetirementAuthorization'
   /storage/options:
     $ref: './paths/storage.yaml#/storageOptions'
   /projects/{projectId}/storage/options:
@@ -394,16 +412,32 @@ components:
       $ref: './components/schemas/auth-external.yaml#/CreateAuthConnectionRequest'
     UpdateAuthConnectionRequest:
       $ref: './components/schemas/auth-external.yaml#/UpdateAuthConnectionRequest'
-    AuthConnectionRevisionRequest:
-      $ref: './components/schemas/auth-external.yaml#/AuthConnectionRevisionRequest'
+    AuthConnectionCandidateRequest:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionCandidateRequest'
+    AuthConnectionActionRequest:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionActionRequest'
     AuthConnectionTestRequest:
       $ref: './components/schemas/auth-external.yaml#/AuthConnectionTestRequest'
+    AuthConnectionChanges:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionChanges'
     AuthConnectionSnapshot:
       $ref: './components/schemas/auth-external.yaml#/AuthConnectionSnapshot'
-    AuthConnectionValidation:
-      $ref: './components/schemas/auth-external.yaml#/AuthConnectionValidation'
+    AuthConnectionValidationResult:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionValidationResult'
     AuthConnectionRecord:
       $ref: './components/schemas/auth-external.yaml#/AuthConnectionRecord'
+    AuthConnectionCapabilities:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionCapabilities'
+    AuthConnectionSetup:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionSetup'
+    AuthConnectionProtocolSetup:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionProtocolSetup'
+    AuthConfigurationIssue:
+      $ref: './components/schemas/auth-external.yaml#/AuthConfigurationIssue'
+    AuthConnectionErrorProblem:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionErrorProblem'
+    AuthConnectionErrorCode:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionErrorCode'
     AuthConnectionsResponse:
       $ref: './components/schemas/auth-external.yaml#/AuthConnectionsResponse'
     AuthConnectionCheck:

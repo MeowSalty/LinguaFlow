@@ -21,9 +21,6 @@ type AuthConnectionRevision func(*sql.Selector)
 // AuthConnectionSecret is the predicate function for authconnectionsecret builders.
 type AuthConnectionSecret func(*sql.Selector)
 
-// AuthConnectionValidation is the predicate function for authconnectionvalidation builders.
-type AuthConnectionValidation func(*sql.Selector)
-
 // AuthTransaction is the predicate function for authtransaction builders.
 type AuthTransaction func(*sql.Selector)
 
@@ -141,8 +138,20 @@ type StorageConnection func(*sql.Selector)
 // StorageMigrationItem is the predicate function for storagemigrationitem builders.
 type StorageMigrationItem func(*sql.Selector)
 
+// StorageNamespace is the predicate function for storagenamespace builders.
+type StorageNamespace func(*sql.Selector)
+
+// StoragePathClaim is the predicate function for storagepathclaim builders.
+type StoragePathClaim func(*sql.Selector)
+
 // StorageReservation is the predicate function for storagereservation builders.
 type StorageReservation func(*sql.Selector)
+
+// StorageRetirement is the predicate function for storageretirement builders.
+type StorageRetirement func(*sql.Selector)
+
+// StorageRetirementEntry is the predicate function for storageretiremententry builders.
+type StorageRetirementEntry func(*sql.Selector)
 
 // StorageSpace is the predicate function for storagespace builders.
 type StorageSpace func(*sql.Selector)
