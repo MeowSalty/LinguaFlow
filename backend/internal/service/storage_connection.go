@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storageauth"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageguard"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storagenet"
 )
 
@@ -33,10 +34,12 @@ type StorageConnectionService struct {
 	factory      StorageDriverFactory
 	mu           sync.Mutex
 	activeWrites map[int]bool
+	ioGuard      *storageguard.Coordinator
+	retirements  *StorageRetirementService
 }
 
 func NewStorageConnectionService(client *ent.Client, keys *credential.Keyring, cfg config.StorageConfig, factory StorageDriverFactory) *StorageConnectionService {
-	return &StorageConnectionService{client: client, keys: keys, cfg: cfg, factory: factory, activeWrites: map[int]bool{}}
+	return &StorageConnectionService{client: client, keys: keys, cfg: cfg, factory: factory, activeWrites: map[int]bool{}, ioGuard: storageguard.New()}
 }
 
 type CreateStorageConnectionInput struct {
@@ -60,6 +63,9 @@ type AuthorizeStorageInput struct {
 	ExpectedManagementGeneration int64                 `json:"expected_management_generation"`
 }
 type StorageConnectionRecord struct {
+	Lifecycle            string                             `json:"lifecycle"`
+	RetirementID         *int                               `json:"retirement_id"`
+	ConfigurationSource  string                             `json:"configuration_source"`
 	ID                   int                                `json:"id"`
 	Name                 string                             `json:"name"`
 	Scope                string                             `json:"scope"`
@@ -77,6 +83,9 @@ type StorageConnectionRecord struct {
 	ManagementActions    StorageConnectionManagementActions `json:"management_actions"`
 }
 type StorageSpaceRecord struct {
+	Lifecycle            string                        `json:"lifecycle"`
+	RetirementID         *int                          `json:"retirement_id"`
+	ConfigurationSource  string                        `json:"configuration_source"`
 	AvailableBytes       *int64                        `json:"available_bytes"`
 	ID                   int                           `json:"id"`
 	ConnectionID         int                           `json:"connection_id"`
@@ -98,10 +107,10 @@ type StorageSpaceRecord struct {
 }
 
 func storageConnectionRecord(c *ent.StorageConnection) *StorageConnectionRecord {
-	return &StorageConnectionRecord{ID: c.ID, Name: c.Name, Scope: string(c.OwnerKind), OwnerID: c.OwnerID, Driver: string(c.Driver), Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle, Status: string(c.Status), Health: c.Health, HasAuth: c.ActiveAuthGeneration > 0, AuthGeneration: c.ActiveAuthGeneration, ManagementGeneration: c.ManagementGeneration, CheckedAt: c.CheckedAt}
+	return &StorageConnectionRecord{ID: c.ID, Name: c.Name, Scope: string(c.OwnerKind), OwnerID: c.OwnerID, Driver: string(c.Driver), Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle, Status: string(c.Status), Health: c.Health, HasAuth: c.ActiveAuthGeneration > 0, AuthGeneration: c.ActiveAuthGeneration, ManagementGeneration: c.ManagementGeneration, CheckedAt: c.CheckedAt, Lifecycle: string(c.Lifecycle), RetirementID: c.RetirementID, ConfigurationSource: string(c.AuthSource)}
 }
-func storageSpaceRecord(s *ent.StorageSpace) *StorageSpaceRecord {
-	return &StorageSpaceRecord{ID: s.ID, ConnectionID: s.ConnectionID, Name: s.Name, Scope: string(s.OwnerKind), OwnerID: s.OwnerID, Bucket: s.Bucket, Prefix: s.Prefix, Status: string(s.Status), Verified: s.Verified, Versioned: s.Versioned, ManagementGeneration: s.ManagementGeneration, CapacityBytes: s.CapacityBytes, ReservedBytes: s.ReservedBytes, CandidateBytes: s.CandidateBytes, LiveBytes: s.LiveBytes, PendingDeleteBytes: s.PendingDeleteBytes}
+func storageSpaceRecord(s *ent.StorageSpace, c *ent.StorageConnection) *StorageSpaceRecord {
+	return &StorageSpaceRecord{ID: s.ID, ConnectionID: s.ConnectionID, Name: s.Name, Scope: string(s.OwnerKind), OwnerID: s.OwnerID, Bucket: s.Bucket, Prefix: s.Prefix, Status: string(s.Status), Verified: s.Verified, Versioned: s.Versioned, ManagementGeneration: s.ManagementGeneration, CapacityBytes: s.CapacityBytes, ReservedBytes: s.ReservedBytes, CandidateBytes: s.CandidateBytes, LiveBytes: s.LiveBytes, PendingDeleteBytes: s.PendingDeleteBytes, Lifecycle: string(s.Lifecycle), RetirementID: s.RetirementID, ConfigurationSource: string(c.AuthSource)}
 }
 
 func (s *StorageConnectionService) requireOwner(ctx context.Context, client *ent.Client, actor int, scope string, owner int) error {
@@ -162,18 +171,28 @@ func (s *StorageConnectionService) Create(ctx context.Context, actor int, in Cre
 	if err = storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpCreateConnection, nil)); err != nil {
 		return nil, err
 	}
-	c, err := s.client.StorageConnection.Create().SetName(strings.TrimSpace(in.Name)).SetOwnerKind(storageconnection.OwnerKind(in.Scope)).SetOwnerID(in.OwnerID).SetDriver(storageconnection.DriverS3).SetEndpoint(endpoint).SetRegion(in.Region).SetPathStyle(in.PathStyle).SetAuthSource(storageconnection.AuthSourceStored).Save(ctx)
+	c, err := s.client.StorageConnection.Create().SetRemoteUseState(storageconnection.RemoteUseStateNever).SetName(strings.TrimSpace(in.Name)).SetOwnerKind(storageconnection.OwnerKind(in.Scope)).SetOwnerID(in.OwnerID).SetDriver(storageconnection.DriverS3).SetEndpoint(endpoint).SetRegion(in.Region).SetPathStyle(in.PathStyle).SetAuthSource(storageconnection.AuthSourceStored).Save(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return s.connectionRecord(ctx, s.client, c)
 }
 
-func (s *StorageConnectionService) List(ctx context.Context, actor int, scope string, owner int) ([]*StorageConnectionRecord, error) {
+func (s *StorageConnectionService) List(ctx context.Context, actor int, scope string, owner int, lifecycle ...string) ([]*StorageConnectionRecord, error) {
 	if err := s.requireOwner(ctx, s.client, actor, scope, owner); err != nil {
 		return nil, err
 	}
-	rows, err := s.client.StorageConnection.Query().Where(storageconnection.OwnerKindEQ(storageconnection.OwnerKind(scope)), storageconnection.OwnerIDEQ(owner)).Order(ent.Asc(storageconnection.FieldID)).Limit(1000).All(ctx)
+	filter, err := retirementListLifecycle(lifecycle)
+	if err != nil {
+		return nil, err
+	}
+	q := s.client.StorageConnection.Query().Where(storageconnection.OwnerKindEQ(storageconnection.OwnerKind(scope)), storageconnection.OwnerIDEQ(owner))
+	if filter == "" {
+		q.Where(storageconnection.LifecycleNEQ(storageconnection.LifecycleRemoved))
+	} else if filter != "all" {
+		q.Where(storageconnection.LifecycleEQ(storageconnection.Lifecycle(filter)))
+	}
+	rows, err := q.Order(ent.Asc(storageconnection.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -195,17 +214,27 @@ func (s *StorageConnectionService) Get(ctx context.Context, actor, id int) (*Sto
 	return s.connectionRecord(ctx, s.client, c)
 }
 
-func (s *StorageConnectionService) Spaces(ctx context.Context, actor, connectionID int) ([]*StorageSpaceRecord, error) {
+func (s *StorageConnectionService) Spaces(ctx context.Context, actor, connectionID int, lifecycle ...string) ([]*StorageSpaceRecord, error) {
 	if _, err := s.authorized(ctx, s.client, actor, connectionID); err != nil {
 		return nil, err
 	}
-	rows, err := s.client.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(connectionID)).Order(ent.Asc(storagespace.FieldID)).Limit(1000).All(ctx)
+	filter, err := retirementListLifecycle(lifecycle)
+	if err != nil {
+		return nil, err
+	}
+	q := s.client.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(connectionID))
+	if filter == "" {
+		q.Where(storagespace.LifecycleNEQ(storagespace.LifecycleRemoved))
+	} else if filter != "all" {
+		q.Where(storagespace.LifecycleEQ(storagespace.Lifecycle(filter)))
+	}
+	rows, err := q.Order(ent.Asc(storagespace.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]*StorageSpaceRecord, 0, len(rows))
 	for _, sp := range rows {
-		record, err := s.spaceRecord(sp)
+		record, err := s.spaceRecord(ctx, sp)
 		if err != nil {
 			return nil, err
 		}
@@ -227,6 +256,9 @@ func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, conne
 
 	var out *ent.StorageSpace
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		if err := storageguard.LockConnection(ctx, tx, connectionID); err != nil {
+			return err
+		}
 		c, err := s.authorized(ctx, tx, actor, connectionID)
 		if err != nil {
 			return err
@@ -236,7 +268,10 @@ func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, conne
 		}
 		// 端点别名并不能证明是不同的物理存储桶。即使端点名称不同，
 		// 也要求托管根路径互不相交。
-		spaces, err := tx.StorageSpace.Query().Where(storagespace.BucketEQ(in.Bucket)).All(ctx)
+		if err = storageguard.LockNamespace(ctx, tx, in.Bucket); err != nil {
+			return err
+		}
+		spaces, err := tx.StorageSpace.Query().Where(storagespace.BucketEQ(in.Bucket), storagespace.LifecycleNEQ(storagespace.LifecycleRemoved)).All(ctx)
 		if err != nil {
 			return err
 		}
@@ -245,11 +280,14 @@ func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, conne
 				return ErrStorageConflict
 			}
 		}
-		out, err = tx.StorageSpace.Create().SetConnectionID(c.ID).SetName(strings.TrimSpace(in.Name)).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetBucket(in.Bucket).SetPrefix(in.Prefix).SetOwnerKind(storagespace.OwnerKind(c.OwnerKind)).SetOwnerID(c.OwnerID).SetNillableCapacityBytes(in.CapacityBytes).Save(ctx)
+		out, err = tx.StorageSpace.Create().SetRemoteUseState(storagespace.RemoteUseStateNever).SetConnectionID(c.ID).SetName(strings.TrimSpace(in.Name)).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetBucket(in.Bucket).SetPrefix(in.Prefix).SetOwnerKind(storagespace.OwnerKind(c.OwnerKind)).SetOwnerID(c.OwnerID).SetNillableCapacityBytes(in.CapacityBytes).Save(ctx)
 		if err != nil {
 			return err
 		}
 		// 使任何仍在校验旧空间集合的授权候选失效。
+		if err = ensureStoragePathClaim(ctx, tx, out); err != nil {
+			return err
+		}
 		if !storageCanIncrement(c.ManagementGeneration) {
 			return ErrInvalidInput
 		}
@@ -258,7 +296,7 @@ func (s *StorageConnectionService) CreateSpace(ctx context.Context, actor, conne
 	if err != nil {
 		return nil, err
 	}
-	return s.spaceRecord(out)
+	return s.spaceRecord(ctx, out)
 }
 
 func storagePrefixesOverlap(a, b string) bool {
@@ -316,6 +354,9 @@ func (s *StorageConnectionService) SetSpaceStatus(ctx context.Context, actor, id
 		if sp.ManagementGeneration != generation {
 			return ErrStorageConflict
 		}
+		if sp.Lifecycle == storagespace.LifecycleRemoved {
+			return ErrStorageRemoved
+		}
 		if err = storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpSetStatus, nil)); err != nil {
 			return err
 		}
@@ -335,7 +376,7 @@ func (s *StorageConnectionService) SetSpaceStatus(ctx context.Context, actor, id
 	if err != nil {
 		return nil, err
 	}
-	return s.spaceRecord(sp)
+	return s.spaceRecord(ctx, sp)
 }
 
 func storageAuthIdentity(c *ent.StorageConnection, generation int64) storageauth.Identity {
@@ -358,6 +399,9 @@ func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int,
 	s.mu.Lock()
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		var err error
+		if err = storageguard.LockConnection(ctx, tx, id); err != nil {
+			return err
+		}
 		c, err = s.authorized(ctx, tx, actor, id)
 		if err != nil {
 			return err
@@ -372,7 +416,7 @@ func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int,
 		if err = s.admitManagement(ctx, tx, c, op); err != nil {
 			return err
 		}
-		spaces, err = tx.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(id)).Order(ent.Asc(storagespace.FieldID)).Limit(101).All(ctx)
+		spaces, err = tx.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(id), storagespace.LifecycleNEQ(storagespace.LifecycleRemoved)).Order(ent.Asc(storagespace.FieldID)).Limit(101).All(ctx)
 		if err != nil {
 			return err
 		}
@@ -432,6 +476,20 @@ func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int,
 		return nil, s.sanitize(err)
 	}
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		if err := storageguard.LockConnection(ctx, tx, c.ID); err != nil {
+			return err
+		}
+		current, err := tx.StorageConnection.Get(ctx, c.ID)
+		if err != nil {
+			return err
+		}
+		admissionOp := storageOpAuthorizeRead
+		if in.WriteCheck {
+			admissionOp = storageOpAuthorizeWrite
+		}
+		if err = s.admitManagement(ctx, tx, current, admissionOp); err != nil {
+			return err
+		}
 		if candidate.ExpiresAt != nil && !candidate.ExpiresAt.After(time.Now()) {
 			return storage.ErrAuthRequired
 		}
@@ -455,7 +513,7 @@ func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int,
 		if n != 1 {
 			return ErrStorageConflict
 		}
-		n, err = tx.StorageAuthVersion.Update().Where(storageauthversion.IDEQ(candidate.ID), storageauthversion.StatusEQ(storageauthversion.StatusCandidate)).SetStatus(storageauthversion.StatusActive).Save(ctx)
+		n, err = tx.StorageAuthVersion.Update().Where(storageauthversion.IDEQ(candidate.ID), storageauthversion.StatusEQ(storageauthversion.StatusCandidate), storageauthversion.PurposeEQ(storageauthversion.PurposeBusiness), storageauthversion.RetirementIDIsNil(), storageauthversion.PurgedAtIsNil()).SetStatus(storageauthversion.StatusActive).Save(ctx)
 		if err != nil {
 			return err
 		}
@@ -475,7 +533,7 @@ func (s *StorageConnectionService) authorize(ctx context.Context, actor, id int,
 				return ErrStorageConflict
 			}
 		}
-		_, err = tx.StorageAuthVersion.Update().Where(storageauthversion.ConnectionIDEQ(c.ID), storageauthversion.GenerationNEQ(candidate.Generation), storageauthversion.StatusEQ(storageauthversion.StatusActive)).SetStatus(storageauthversion.StatusRetired).Save(ctx)
+		_, err = tx.StorageAuthVersion.Update().Where(storageauthversion.ConnectionIDEQ(c.ID), storageauthversion.GenerationNEQ(candidate.Generation), storageauthversion.StatusEQ(storageauthversion.StatusActive), storageauthversion.PurposeEQ(storageauthversion.PurposeBusiness)).SetStatus(storageauthversion.StatusRetired).Save(ctx)
 		if err == nil {
 			if checkID, ok := ctx.Value(storageCheckContextKey{}).(int); ok {
 				err = tx.StorageCheck.UpdateOneID(checkID).SetAuthorizationActivated(true).Exec(ctx)
@@ -535,7 +593,7 @@ func (s *StorageConnectionService) Reencrypt(ctx context.Context) (changed, fail
 	}
 	last := 0
 	for {
-		rows, e := s.client.StorageAuthVersion.Query().Where(storageauthversion.IDGT(last)).Order(ent.Asc(storageauthversion.FieldID)).Limit(100).All(ctx)
+		rows, e := s.client.StorageAuthVersion.Query().Where(storageauthversion.IDGT(last), storageauthversion.PurgedAtIsNil()).Order(ent.Asc(storageauthversion.FieldID)).Limit(100).All(ctx)
 		if e != nil {
 			return changed, failed, e
 		}
@@ -568,7 +626,7 @@ func (s *StorageConnectionService) Reencrypt(ctx context.Context) (changed, fail
 				failed++
 				continue
 			}
-			n, e := s.client.StorageAuthVersion.Update().Where(storageauthversion.IDEQ(a.ID), storageauthversion.KeyIDEQ(a.KeyID), storageauthversion.CiphertextEQ(a.Ciphertext), storageauthversion.NonceEQ(a.Nonce)).SetKeyID(value.KeyID).SetNonce(value.Nonce).SetCiphertext(value.Data).Save(ctx)
+			n, e := s.client.StorageAuthVersion.Update().Where(storageauthversion.IDEQ(a.ID), storageauthversion.PurgedAtIsNil(), storageauthversion.KeyIDEQ(a.KeyID), storageauthversion.CiphertextEQ(a.Ciphertext), storageauthversion.NonceEQ(a.Nonce)).SetKeyID(value.KeyID).SetNonce(value.Nonce).SetCiphertext(value.Data).Save(ctx)
 			if e != nil || n != 1 {
 				failed++
 			} else {
@@ -582,7 +640,7 @@ func (s *StorageConnectionService) sanitize(err error) error {
 	if errors.Is(err, context.Canceled) {
 		return storage.ErrUnavailable
 	}
-	for _, safe := range []error{storage.ErrNotFound, storage.ErrCorrupt, storage.ErrPermission, storage.ErrAuthRequired, storage.ErrLimit, storage.ErrDiskSpaceInsufficient, storage.ErrDiskSpaceUnknown, storage.ErrPayloadTooLarge, storage.ErrUnsupported, ErrStorageConflict, ErrStorageCrypto, ErrStorageMaintenance, ErrStorageDeploymentDisabled, ErrStoragePolicy, ErrForbidden, context.Canceled, context.DeadlineExceeded} {
+	for _, safe := range []error{storage.ErrNotFound, storage.ErrCorrupt, storage.ErrPermission, storage.ErrAuthRequired, storage.ErrLimit, storage.ErrDiskSpaceInsufficient, storage.ErrDiskSpaceUnknown, storage.ErrPayloadTooLarge, storage.ErrUnsupported, ErrStorageConflict, ErrStorageCrypto, ErrStorageMaintenance, ErrStorageDeploymentDisabled, ErrStoragePolicy, ErrStorageRetiring, ErrStorageRemoved, ErrStorageRetirementConflict, ErrStorageRetirementPreviewStale, ErrStorageRetirementDependenciesRemaining, ErrStorageRetirementConfigurationPending, ErrForbidden, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, safe) {
 			return safe
 		}
@@ -591,7 +649,7 @@ func (s *StorageConnectionService) sanitize(err error) error {
 }
 
 func (s *StorageConnectionService) loadAuth(ctx context.Context, c *ent.StorageConnection, generation int64, allowed storageauthversion.Status) (*ent.StorageAuthVersion, storageauth.S3Payload, error) {
-	a, err := s.client.StorageAuthVersion.Query().Where(storageauthversion.ConnectionIDEQ(c.ID), storageauthversion.GenerationEQ(generation), storageauthversion.StatusEQ(allowed)).Only(ctx)
+	a, err := s.client.StorageAuthVersion.Query().Where(storageauthversion.ConnectionIDEQ(c.ID), storageauthversion.GenerationEQ(generation), storageauthversion.StatusEQ(allowed), storageauthversion.PurposeEQ(storageauthversion.PurposeBusiness), storageauthversion.RetirementIDIsNil(), storageauthversion.PurgedAtIsNil()).Only(ctx)
 	if ent.IsNotFound(err) {
 		return nil, storageauth.S3Payload{}, storage.ErrAuthRequired
 	}
@@ -624,10 +682,17 @@ func (s *StorageConnectionService) ResolveDriver(ctx context.Context, spaceID in
 	if !sp.Verified {
 		return nil, storage.ErrAuthRequired
 	}
-	return &storageGuardedDriver{service: s, spaceID: sp.ID}, nil
+	return bindStorageGuard(ctx, s.client, s.ioGuard, sp.ID, &storageGuardedDriver{service: s, spaceID: sp.ID})
 }
 
 func (s *StorageConnectionService) activeDriver(ctx context.Context, spaceID int, write bool) (storage.Driver, *ent.StorageSpace, error) {
+	mode := storageguard.Read
+	if write {
+		mode = storageguard.NewUse
+	}
+	if _, _, err := storageguard.Check(ctx, s.client, spaceID, mode, 0); err != nil {
+		return nil, nil, err
+	}
 	sp, err := s.client.StorageSpace.Get(ctx, spaceID)
 	if err != nil {
 		return nil, nil, err
@@ -685,15 +750,18 @@ func (s *StorageConnectionService) candidateDriver(ctx context.Context, c *ent.S
 	if _, err := check(ctx, false); err != nil {
 		return nil, err
 	}
-	return &storageGuardedDriver{check: check, deleteCheck: func(ctx context.Context) (storage.Driver, error) {
+	return bindStorageGuard(ctx, s.client, s.ioGuard, sp.ID, &storageGuardedDriver{check: check, deleteCheck: func(ctx context.Context) (storage.Driver, error) {
 		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpDelete, c)); err != nil {
 			return nil, err
 		}
 		return check(ctx, false)
-	}}, nil
+	}})
 }
 
 type storageGuardedDriver struct {
+	guard       *storageguard.Coordinator
+	client      *ent.Client
+	execution   storageguard.Identity
 	service     *StorageConnectionService
 	spaceID     int
 	check       func(context.Context, bool) (storage.Driver, error)
@@ -712,6 +780,11 @@ func (d *storageGuardedDriver) PutNew(ctx context.Context, key string, r io.Read
 	if err != nil {
 		return storage.Object{}, err
 	}
+	release, err := d.enter(ctx, true)
+	if err != nil {
+		return storage.Object{}, err
+	}
+	defer release()
 	return v.PutNew(ctx, key, r, n)
 }
 func (d *storageGuardedDriver) Open(ctx context.Context, o storage.Object) (io.ReadCloser, error) {
@@ -719,13 +792,31 @@ func (d *storageGuardedDriver) Open(ctx context.Context, o storage.Object) (io.R
 	if err != nil {
 		return nil, err
 	}
-	return v.Open(ctx, o)
+	release, err := d.enter(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	r, err := v.Open(ctx, o)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	protected := &protectedReader{ReadCloser: r, release: release}
+	if seeker, ok := r.(io.Seeker); ok {
+		return &protectedSeekReader{protectedReader: protected, Seeker: seeker}, nil
+	}
+	return protected, nil
 }
 func (d *storageGuardedDriver) Stat(ctx context.Context, o storage.Object) (storage.Object, error) {
 	v, err := d.resolve(ctx, false)
 	if err != nil {
 		return storage.Object{}, err
 	}
+	release, err := d.enter(ctx, false)
+	if err != nil {
+		return storage.Object{}, err
+	}
+	defer release()
 	return v.Stat(ctx, o)
 }
 func (d *storageGuardedDriver) Delete(ctx context.Context, o storage.Object) error {
@@ -744,6 +835,11 @@ func (d *storageGuardedDriver) Delete(ctx context.Context, o storage.Object) err
 	if err != nil {
 		return err
 	}
+	release, err := d.enter(ctx, false)
+	if err != nil {
+		return err
+	}
+	defer release()
 	return v.Delete(ctx, o)
 }
 func (d *storageGuardedDriver) Versions(ctx context.Context, key string) ([]storage.Object, error) {
@@ -755,6 +851,11 @@ func (d *storageGuardedDriver) Versions(ctx context.Context, key string) ([]stor
 	if !ok {
 		return nil, storage.ErrUnsupported
 	}
+	release, err := d.enter(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	return lister.Versions(ctx, key)
 }
 func (d *storageGuardedDriver) Capabilities(ctx context.Context) (storage.Capabilities, error) {
@@ -766,5 +867,36 @@ func (d *storageGuardedDriver) Capabilities(ctx context.Context) (storage.Capabi
 	if !ok {
 		return storage.Capabilities{}, storage.ErrUnsupported
 	}
+	release, err := d.enter(ctx, false)
+	if err != nil {
+		return storage.Capabilities{}, err
+	}
+	defer release()
 	return inspector.Capabilities(ctx)
+}
+
+func bindStorageGuard(ctx context.Context, c *ent.Client, g *storageguard.Coordinator, id int, d *storageGuardedDriver) (storage.Driver, error) {
+	sp, err := c.StorageSpace.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := c.StorageConnection.Get(ctx, sp.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	d.client = c
+	d.guard = g
+	d.spaceID = id
+	d.execution = storageguard.Identity{Connection: conn.ExecutionGeneration, Space: sp.ExecutionGeneration}
+	return d, nil
+}
+func (d *storageGuardedDriver) enter(ctx context.Context, write bool) (func(), error) {
+	if d.guard == nil {
+		return func() {}, nil
+	}
+	mode := storageguard.Read
+	if write {
+		mode = storageguard.NewUse
+	}
+	return d.guard.Acquire(ctx, d.client, d.spaceID, mode, 0, &d.execution)
 }

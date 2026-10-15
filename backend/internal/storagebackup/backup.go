@@ -22,6 +22,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageauthversion"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagebackup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageguard"
 )
 
 type Manifest struct {
@@ -107,6 +108,9 @@ func CaptureMetadata(ctx context.Context, client *ent.Client, expires time.Time)
 		}
 		if location.BlobID == nil || *location.BlobID != object.ID {
 			return nil, nil, errors.New("active location belongs to another object")
+		}
+		if err = storageguard.Gate(ctx, tx.Client(), location.SpaceID, storageguard.NewUse); err != nil {
+			return nil, nil, err
 		}
 		count, err := tx.BlobLocation.Update().Where(bloblocation.IDEQ(location.ID), bloblocation.StatusIn(bloblocation.StatusLive, bloblocation.StatusRetired)).SetStatus(location.Status).Save(ctx)
 		if err != nil {

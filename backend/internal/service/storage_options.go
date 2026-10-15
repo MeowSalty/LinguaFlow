@@ -7,13 +7,17 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bloblocation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/deletionentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sourcerevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageauthversion"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagemigrationitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 )
@@ -275,6 +279,11 @@ func (s *StorageService) storageTargetReasons(ctx context.Context, client *ent.C
 	if err != nil {
 		return nil, err
 	}
+	if conn.Lifecycle == storageconnection.LifecycleRemoved || sp.Lifecycle == storagespace.LifecycleRemoved {
+		reasons = append(reasons, "storage_removed")
+	} else if conn.Lifecycle != storageconnection.LifecycleAvailable || sp.Lifecycle != storagespace.LifecycleAvailable {
+		reasons = append(reasons, "storage_retiring")
+	}
 	if string(conn.OwnerKind) != string(sp.OwnerKind) || conn.OwnerID != sp.OwnerID {
 		reasons = appendReason(reasons, "policy_disallowed")
 	}
@@ -284,7 +293,7 @@ func (s *StorageService) storageTargetReasons(ctx context.Context, client *ent.C
 	}
 	if conn.AuthSource == storageconnection.AuthSourceStored {
 		auth, err := client.StorageAuthVersion.Query().Where(storageauthversion.ConnectionIDEQ(conn.ID),
-			storageauthversion.GenerationEQ(conn.ActiveAuthGeneration), storageauthversion.StatusEQ(storageauthversion.StatusActive)).Only(ctx)
+			storageauthversion.GenerationEQ(conn.ActiveAuthGeneration), storageauthversion.StatusEQ(storageauthversion.StatusActive), storageauthversion.PurposeEQ(storageauthversion.PurposeBusiness), storageauthversion.RetirementIDIsNil(), storageauthversion.PurgedAtIsNil()).Only(ctx)
 		if err != nil && !ent.IsNotFound(err) {
 			return nil, err
 		}
@@ -473,6 +482,22 @@ func storageRebindReason(ctx context.Context, client *ent.Client, projectID int)
 	}
 	if active {
 		return "storage_operation_in_progress", nil
+	}
+	// Failed/cancelled tasks can still own candidates, reservations or cleanup.
+	checks := []func(context.Context) (bool, error){
+		client.StorageWrite.Query().Where(storagewrite.HasTaskWith(storagetask.ProjectIDEQ(projectID)), storagewrite.PhaseNotIn("committed", "cleaned")).Exist,
+		client.StorageReservation.Query().Where(storagereservation.StateNEQ(storagereservation.StateFreed), storagereservation.HasWriteWith(storagewrite.HasTaskWith(storagetask.ProjectIDEQ(projectID)))).Exist,
+		client.DeletionEntry.Query().Where(deletionentry.ProjectIDEQ(projectID), deletionentry.StatusNEQ(deletionentry.StatusDone)).Exist,
+		client.BlobLocation.Query().Where(bloblocation.HasBlobWith(blob.ProjectIDEQ(projectID)), bloblocation.StatusNEQ(bloblocation.StatusDeleted)).Exist,
+	}
+	for _, check := range checks {
+		has, err := check(ctx)
+		if err != nil {
+			return "", err
+		}
+		if has {
+			return "storage_operation_in_progress", nil
+		}
 	}
 	return "", nil
 }

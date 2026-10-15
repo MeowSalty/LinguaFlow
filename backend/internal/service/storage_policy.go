@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageguard"
 )
 
 const storagePolicyKey = "storage_policy"
@@ -125,6 +126,12 @@ func (s *StorageService) SetPolicy(ctx context.Context, actor int, in StoragePol
 		if e = storageAdmissionError(storageOperationReasons(s.Runtime(), op, nil)); e != nil {
 			return e
 		}
+		// Re-selecting the site default is a new reference to that identity.
+		if p.DefaultChoice == "site" && s.defaultSpaceID != 0 {
+			if e = storageguard.Gate(ctx, tx, s.defaultSpaceID, storageguard.NewUse); e != nil {
+				return e
+			}
+		}
 		p.Generation++
 		in.Generation = p.Generation
 		b, e := json.Marshal(in)
@@ -156,6 +163,9 @@ func (s *StorageService) allowedTarget(ctx context.Context, tx *ent.Client, p *e
 
 func (s *StorageService) selectSpace(ctx context.Context, tx *ent.Client, p *ent.Project, requested *int) (int, error) {
 	if requested != nil {
+		if err := storageguard.Gate(ctx, tx, *requested, storageguard.NewUse); err != nil {
+			return 0, err
+		}
 		if err := s.allowedTarget(ctx, tx, p, *requested); err != nil {
 			return 0, err
 		}
@@ -175,6 +185,9 @@ func (s *StorageService) selectSpace(ctx context.Context, tx *ent.Client, p *ent
 		return 0, ErrStoragePolicy
 	}
 	if err = s.allowedTarget(ctx, tx, p, s.defaultSpaceID); err != nil {
+		return 0, err
+	}
+	if err = storageguard.Gate(ctx, tx, s.defaultSpaceID, storageguard.NewUse); err != nil {
 		return 0, err
 	}
 	return s.defaultSpaceID, nil
@@ -234,6 +247,9 @@ func (s *StorageService) Bind(ctx context.Context, actor, projectID, spaceID int
 			return ErrStorageMaintenance
 		}
 		if e := storageEmptyProject(ctx, tx, projectID); e != nil {
+			return e
+		}
+		if e := storageguard.Gate(ctx, tx, spaceID, storageguard.NewUse); e != nil {
 			return e
 		}
 		if e := s.allowedTarget(ctx, tx, p, spaceID); e != nil {

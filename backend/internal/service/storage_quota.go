@@ -150,6 +150,9 @@ func (s *StorageConnectionService) SetSpaceQuota(ctx context.Context, actor, spa
 		if sp.ManagementGeneration != expectedGeneration {
 			return ErrStorageConflict
 		}
+		if sp.Lifecycle == storagespace.LifecycleRemoved {
+			return ErrStorageRemoved
+		}
 		update := tx.StorageSpace.Update().Where(storagespace.IDEQ(spaceID), storagespace.ManagementGenerationEQ(expectedGeneration)).AddManagementGeneration(1)
 		if capacity == nil {
 			update.ClearCapacityBytes()
@@ -181,7 +184,7 @@ func (s *StorageConnectionService) SetSpaceQuota(ctx context.Context, actor, spa
 	if err != nil {
 		return nil, err
 	}
-	return s.spaceRecord(sp)
+	return s.spaceRecord(ctx, sp)
 }
 
 func storageCanIncrement(n int64) bool { return n >= 0 && n < MaxStorageInteger }

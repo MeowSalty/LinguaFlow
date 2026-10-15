@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -528,6 +529,9 @@ func (s *StorageService) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			_ = s.ProcessTasks(ctx)
+			if s.retirements != nil {
+				_ = s.retirements.Process(ctx)
+			}
 			if !time.Now().Before(nextReconcile) {
 				_ = s.Reconcile(ctx)
 				nextReconcile = time.Now().Add(s.cfg.ReconcileInterval)
@@ -539,14 +543,18 @@ func (s *StorageService) Run(ctx context.Context) {
 type protectedReader struct {
 	io.ReadCloser
 	release func()
-	once    bool
+	once    sync.Once
+}
+
+// Preserve optional seeking for immutable local reads without making streaming
+// providers appear seekable or releasing their I/O protection before Close.
+type protectedSeekReader struct {
+	*protectedReader
+	io.Seeker
 }
 
 func (r *protectedReader) Close() error {
-	err := r.ReadCloser.Close()
-	if !r.once {
-		r.once = true
-		r.release()
-	}
+	var err error
+	r.once.Do(func() { err = r.ReadCloser.Close(); r.release() })
 	return err
 }
