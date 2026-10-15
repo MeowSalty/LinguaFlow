@@ -12,7 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
-const CurrentDataVersion = 5
+const CurrentDataVersion = 3
 
 var ErrDataMigrationRequired = errors.New("database data migration required; start a compatible server version with auto_migrate enabled")
 
@@ -77,16 +77,6 @@ func MigrateData(ctx context.Context, client *ent.Client) error {
 				if len(ids) < 128 {
 					break
 				}
-			}
-		}
-		if marker.DataVersion < 4 {
-			if err := migrateAuthenticationRules(ctx, tx); err != nil {
-				return err
-			}
-		}
-		if marker.DataVersion < 5 {
-			if err := migrateAuthenticationOAuth(ctx, tx); err != nil {
-				return err
 			}
 		}
 		return tx.InstanceInitialization.UpdateOneID(marker.ID).SetDataVersion(CurrentDataVersion).Exec(ctx)

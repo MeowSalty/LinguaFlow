@@ -44,12 +44,6 @@ type AuthChannelPolicy struct {
 	SignupRules authrules.RuleSet `json:"signup_rules,omitempty"`
 	// LinkRules holds the value of the "link_rules" field.
 	LinkRules authrules.RuleSet `json:"link_rules,omitempty"`
-	// LegacyLoginRule holds the value of the "legacy_login_rule" field.
-	LegacyLoginRule string `json:"legacy_login_rule,omitempty"`
-	// LegacySignupRule holds the value of the "legacy_signup_rule" field.
-	LegacySignupRule string `json:"legacy_signup_rule,omitempty"`
-	// LegacyLinkRule holds the value of the "legacy_link_rule" field.
-	LegacyLinkRule string `json:"legacy_link_rule,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the AuthChannelPolicyQuery when eager-loading is set.
 	Edges        AuthChannelPolicyEdges `json:"edges"`
@@ -87,7 +81,7 @@ func (*AuthChannelPolicy) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case authchannelpolicy.FieldID, authchannelpolicy.FieldRevision, authchannelpolicy.FieldLoginPolicyRevision:
 			values[i] = new(sql.NullInt64)
-		case authchannelpolicy.FieldConnectionID, authchannelpolicy.FieldLegacyLoginRule, authchannelpolicy.FieldLegacySignupRule, authchannelpolicy.FieldLegacyLinkRule:
+		case authchannelpolicy.FieldConnectionID:
 			values[i] = new(sql.NullString)
 		case authchannelpolicy.FieldCreatedAt, authchannelpolicy.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -190,24 +184,6 @@ func (_m *AuthChannelPolicy) assignValues(columns []string, values []any) error 
 					return fmt.Errorf("unmarshal field link_rules: %w", err)
 				}
 			}
-		case authchannelpolicy.FieldLegacyLoginRule:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field legacy_login_rule", values[i])
-			} else if value.Valid {
-				_m.LegacyLoginRule = value.String
-			}
-		case authchannelpolicy.FieldLegacySignupRule:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field legacy_signup_rule", values[i])
-			} else if value.Valid {
-				_m.LegacySignupRule = value.String
-			}
-		case authchannelpolicy.FieldLegacyLinkRule:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field legacy_link_rule", values[i])
-			} else if value.Valid {
-				_m.LegacyLinkRule = value.String
-			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -284,15 +260,6 @@ func (_m *AuthChannelPolicy) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("link_rules=")
 	builder.WriteString(fmt.Sprintf("%v", _m.LinkRules))
-	builder.WriteString(", ")
-	builder.WriteString("legacy_login_rule=")
-	builder.WriteString(_m.LegacyLoginRule)
-	builder.WriteString(", ")
-	builder.WriteString("legacy_signup_rule=")
-	builder.WriteString(_m.LegacySignupRule)
-	builder.WriteString(", ")
-	builder.WriteString("legacy_link_rule=")
-	builder.WriteString(_m.LegacyLinkRule)
 	builder.WriteByte(')')
 	return builder.String()
 }

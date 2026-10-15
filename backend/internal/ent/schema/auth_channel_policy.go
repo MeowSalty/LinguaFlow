@@ -24,11 +24,6 @@ func (AuthChannelPolicy) Fields() []ent.Field {
 		field.JSON("login_rules", authrules.RuleSet{}).Optional().Immutable(),
 		field.JSON("signup_rules", authrules.RuleSet{}).Optional().Immutable(),
 		field.JSON("link_rules", authrules.RuleSet{}).Optional().Immutable(),
-		// Retained storage columns allow an in-place B1 upgrade without dropping
-		// immutable historical snapshots. Runtime readers never use these values.
-		field.String("legacy_login_rule").StorageKey("login_rule").Default("unrestricted").Immutable(),
-		field.String("legacy_signup_rule").StorageKey("signup_rule").Default("unrestricted").Immutable(),
-		field.String("legacy_link_rule").StorageKey("link_rule").Default("unrestricted").Immutable(),
 	}
 }
 func (AuthChannelPolicy) Edges() []ent.Edge {

@@ -39,12 +39,6 @@ const (
 	FieldSignupRules = "signup_rules"
 	// FieldLinkRules holds the string denoting the link_rules field in the database.
 	FieldLinkRules = "link_rules"
-	// FieldLegacyLoginRule holds the string denoting the legacy_login_rule field in the database.
-	FieldLegacyLoginRule = "login_rule"
-	// FieldLegacySignupRule holds the string denoting the legacy_signup_rule field in the database.
-	FieldLegacySignupRule = "signup_rule"
-	// FieldLegacyLinkRule holds the string denoting the legacy_link_rule field in the database.
-	FieldLegacyLinkRule = "link_rule"
 	// EdgeConnection holds the string denoting the connection edge name in mutations.
 	EdgeConnection = "connection"
 	// Table holds the table name of the authchannelpolicy in the database.
@@ -73,9 +67,6 @@ var Columns = []string{
 	FieldLoginRules,
 	FieldSignupRules,
 	FieldLinkRules,
-	FieldLegacyLoginRule,
-	FieldLegacySignupRule,
-	FieldLegacyLinkRule,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -115,12 +106,6 @@ var (
 	DefaultSignupEnabled bool
 	// DefaultLinkEnabled holds the default value on creation for the "link_enabled" field.
 	DefaultLinkEnabled bool
-	// DefaultLegacyLoginRule holds the default value on creation for the "legacy_login_rule" field.
-	DefaultLegacyLoginRule string
-	// DefaultLegacySignupRule holds the default value on creation for the "legacy_signup_rule" field.
-	DefaultLegacySignupRule string
-	// DefaultLegacyLinkRule holds the default value on creation for the "legacy_link_rule" field.
-	DefaultLegacyLinkRule string
 )
 
 // OrderOption defines the ordering options for the AuthChannelPolicy queries.
@@ -174,21 +159,6 @@ func BySignupEnabled(opts ...sql.OrderTermOption) OrderOption {
 // ByLinkEnabled orders the results by the link_enabled field.
 func ByLinkEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLinkEnabled, opts...).ToFunc()
-}
-
-// ByLegacyLoginRule orders the results by the legacy_login_rule field.
-func ByLegacyLoginRule(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLegacyLoginRule, opts...).ToFunc()
-}
-
-// ByLegacySignupRule orders the results by the legacy_signup_rule field.
-func ByLegacySignupRule(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLegacySignupRule, opts...).ToFunc()
-}
-
-// ByLegacyLinkRule orders the results by the legacy_link_rule field.
-func ByLegacyLinkRule(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLegacyLinkRule, opts...).ToFunc()
 }
 
 // ByConnectionField orders the results by connection field.
