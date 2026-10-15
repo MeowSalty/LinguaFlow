@@ -76,6 +76,12 @@ type AuthConnectionRevision struct {
 	UsernameLoginEnabled bool `json:"username_login_enabled,omitempty"`
 	// EmailLoginEnabled holds the value of the "email_login_enabled" field.
 	EmailLoginEnabled bool `json:"email_login_enabled,omitempty"`
+	// FreshSupported holds the value of the "fresh_supported" field.
+	FreshSupported bool `json:"fresh_supported,omitempty"`
+	// TestedAt holds the value of the "tested_at" field.
+	TestedAt *time.Time `json:"tested_at,omitempty"`
+	// AppliedTestID holds the value of the "applied_test_id" field.
+	AppliedTestID string `json:"applied_test_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the AuthConnectionRevisionQuery when eager-loading is set.
 	Edges        AuthConnectionRevisionEdges `json:"edges"`
@@ -109,13 +115,13 @@ func (*AuthConnectionRevision) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case authconnectionrevision.FieldAttributeMappings, authconnectionrevision.FieldOauth2Scopes, authconnectionrevision.FieldOidcScopes, authconnectionrevision.FieldLogoData:
 			values[i] = new([]byte)
-		case authconnectionrevision.FieldOidcUserinfoEnabled, authconnectionrevision.FieldUsernameLoginEnabled, authconnectionrevision.FieldEmailLoginEnabled:
+		case authconnectionrevision.FieldOidcUserinfoEnabled, authconnectionrevision.FieldUsernameLoginEnabled, authconnectionrevision.FieldEmailLoginEnabled, authconnectionrevision.FieldFreshSupported:
 			values[i] = new(sql.NullBool)
 		case authconnectionrevision.FieldID, authconnectionrevision.FieldRevision, authconnectionrevision.FieldDisplayOrder, authconnectionrevision.FieldConfigVersion, authconnectionrevision.FieldEvidenceMaxAgeSeconds, authconnectionrevision.FieldSecretVersion:
 			values[i] = new(sql.NullInt64)
-		case authconnectionrevision.FieldConnectionID, authconnectionrevision.FieldDisplayName, authconnectionrevision.FieldDescription, authconnectionrevision.FieldOauth2AuthorizationEndpoint, authconnectionrevision.FieldOauth2TokenEndpoint, authconnectionrevision.FieldOauth2ProfileEndpoint, authconnectionrevision.FieldOauth2ClientID, authconnectionrevision.FieldOauth2SubjectPointer, authconnectionrevision.FieldOauth2ClientAuthMethod, authconnectionrevision.FieldOauth2SubjectType, authconnectionrevision.FieldOidcIssuer, authconnectionrevision.FieldOidcClientID, authconnectionrevision.FieldOidcClientAuthMethod, authconnectionrevision.FieldLogoMediaType:
+		case authconnectionrevision.FieldConnectionID, authconnectionrevision.FieldDisplayName, authconnectionrevision.FieldDescription, authconnectionrevision.FieldOauth2AuthorizationEndpoint, authconnectionrevision.FieldOauth2TokenEndpoint, authconnectionrevision.FieldOauth2ProfileEndpoint, authconnectionrevision.FieldOauth2ClientID, authconnectionrevision.FieldOauth2SubjectPointer, authconnectionrevision.FieldOauth2ClientAuthMethod, authconnectionrevision.FieldOauth2SubjectType, authconnectionrevision.FieldOidcIssuer, authconnectionrevision.FieldOidcClientID, authconnectionrevision.FieldOidcClientAuthMethod, authconnectionrevision.FieldLogoMediaType, authconnectionrevision.FieldAppliedTestID:
 			values[i] = new(sql.NullString)
-		case authconnectionrevision.FieldCreatedAt, authconnectionrevision.FieldUpdatedAt:
+		case authconnectionrevision.FieldCreatedAt, authconnectionrevision.FieldUpdatedAt, authconnectionrevision.FieldTestedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -313,6 +319,25 @@ func (_m *AuthConnectionRevision) assignValues(columns []string, values []any) e
 			} else if value.Valid {
 				_m.EmailLoginEnabled = value.Bool
 			}
+		case authconnectionrevision.FieldFreshSupported:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field fresh_supported", values[i])
+			} else if value.Valid {
+				_m.FreshSupported = value.Bool
+			}
+		case authconnectionrevision.FieldTestedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field tested_at", values[i])
+			} else if value.Valid {
+				_m.TestedAt = new(time.Time)
+				*_m.TestedAt = value.Time
+			}
+		case authconnectionrevision.FieldAppliedTestID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field applied_test_id", values[i])
+			} else if value.Valid {
+				_m.AppliedTestID = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -438,6 +463,17 @@ func (_m *AuthConnectionRevision) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("email_login_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.EmailLoginEnabled))
+	builder.WriteString(", ")
+	builder.WriteString("fresh_supported=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FreshSupported))
+	builder.WriteString(", ")
+	if v := _m.TestedAt; v != nil {
+		builder.WriteString("tested_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("applied_test_id=")
+	builder.WriteString(_m.AppliedTestID)
 	builder.WriteByte(')')
 	return builder.String()
 }

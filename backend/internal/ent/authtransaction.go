@@ -92,6 +92,22 @@ type AuthTransaction struct {
 	AuthorizationExpiresAt *time.Time `json:"authorization_expires_at,omitempty"`
 	// FailureCode holds the value of the "failure_code" field.
 	FailureCode string `json:"failure_code,omitempty"`
+	// ActorSessionID holds the value of the "actor_session_id" field.
+	ActorSessionID *int `json:"actor_session_id,omitempty"`
+	// TestSnapshot holds the value of the "test_snapshot" field.
+	TestSnapshot string `json:"-"`
+	// TestProtocolFingerprint holds the value of the "test_protocol_fingerprint" field.
+	TestProtocolFingerprint string `json:"test_protocol_fingerprint,omitempty"`
+	// TestDiagnosticFingerprint holds the value of the "test_diagnostic_fingerprint" field.
+	TestDiagnosticFingerprint string `json:"test_diagnostic_fingerprint,omitempty"`
+	// TestDeploymentFingerprint holds the value of the "test_deployment_fingerprint" field.
+	TestDeploymentFingerprint string `json:"test_deployment_fingerprint,omitempty"`
+	// TestValidatedAt holds the value of the "test_validated_at" field.
+	TestValidatedAt *time.Time `json:"test_validated_at,omitempty"`
+	// TestAppliedRevision holds the value of the "test_applied_revision" field.
+	TestAppliedRevision *int64 `json:"test_applied_revision,omitempty"`
+	// TestBaseRevision holds the value of the "test_base_revision" field.
+	TestBaseRevision int64 `json:"test_base_revision,omitempty"`
 	// ExpiresAt holds the value of the "expires_at" field.
 	ExpiresAt time.Time `json:"expires_at,omitempty"`
 	// FinishedAt holds the value of the "finished_at" field.
@@ -129,11 +145,11 @@ func (*AuthTransaction) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case authtransaction.FieldEvidence:
 			values[i] = new([]byte)
-		case authtransaction.FieldConnectionRevision, authtransaction.FieldConnectionGeneration, authtransaction.FieldPolicyRevision, authtransaction.FieldUserID, authtransaction.FieldAuthVersion, authtransaction.FieldBindingID, authtransaction.FieldAuthorizationConnectionGeneration, authtransaction.FieldAuthorizationPolicyRevision:
+		case authtransaction.FieldConnectionRevision, authtransaction.FieldConnectionGeneration, authtransaction.FieldPolicyRevision, authtransaction.FieldUserID, authtransaction.FieldAuthVersion, authtransaction.FieldBindingID, authtransaction.FieldAuthorizationConnectionGeneration, authtransaction.FieldAuthorizationPolicyRevision, authtransaction.FieldActorSessionID, authtransaction.FieldTestAppliedRevision, authtransaction.FieldTestBaseRevision:
 			values[i] = new(sql.NullInt64)
-		case authtransaction.FieldID, authtransaction.FieldPurpose, authtransaction.FieldStatus, authtransaction.FieldConnectionID, authtransaction.FieldStateHash, authtransaction.FieldNonce, authtransaction.FieldPkceVerifier, authtransaction.FieldBrowserChallenge, authtransaction.FieldCompletionURL, authtransaction.FieldReturnTo, authtransaction.FieldExchangeTicketHash, authtransaction.FieldConfirmationTokenHash, authtransaction.FieldIdentityProtocol, authtransaction.FieldIdentityIssuer, authtransaction.FieldIdentitySubject, authtransaction.FieldIdentityDisplayName, authtransaction.FieldIdentityUsername, authtransaction.FieldIdentityEmail, authtransaction.FieldAuthorizationConnectionID, authtransaction.FieldAuthorizedAction, authtransaction.FieldAuthorizedTargetID, authtransaction.FieldFailureCode:
+		case authtransaction.FieldID, authtransaction.FieldPurpose, authtransaction.FieldStatus, authtransaction.FieldConnectionID, authtransaction.FieldStateHash, authtransaction.FieldNonce, authtransaction.FieldPkceVerifier, authtransaction.FieldBrowserChallenge, authtransaction.FieldCompletionURL, authtransaction.FieldReturnTo, authtransaction.FieldExchangeTicketHash, authtransaction.FieldConfirmationTokenHash, authtransaction.FieldIdentityProtocol, authtransaction.FieldIdentityIssuer, authtransaction.FieldIdentitySubject, authtransaction.FieldIdentityDisplayName, authtransaction.FieldIdentityUsername, authtransaction.FieldIdentityEmail, authtransaction.FieldAuthorizationConnectionID, authtransaction.FieldAuthorizedAction, authtransaction.FieldAuthorizedTargetID, authtransaction.FieldFailureCode, authtransaction.FieldTestSnapshot, authtransaction.FieldTestProtocolFingerprint, authtransaction.FieldTestDiagnosticFingerprint, authtransaction.FieldTestDeploymentFingerprint:
 			values[i] = new(sql.NullString)
-		case authtransaction.FieldCreatedAt, authtransaction.FieldUpdatedAt, authtransaction.FieldExchangeTicketExpiresAt, authtransaction.FieldConfirmationExpiresAt, authtransaction.FieldIdentityAuthTime, authtransaction.FieldAuthorizationExpiresAt, authtransaction.FieldExpiresAt, authtransaction.FieldFinishedAt:
+		case authtransaction.FieldCreatedAt, authtransaction.FieldUpdatedAt, authtransaction.FieldExchangeTicketExpiresAt, authtransaction.FieldConfirmationExpiresAt, authtransaction.FieldIdentityAuthTime, authtransaction.FieldAuthorizationExpiresAt, authtransaction.FieldTestValidatedAt, authtransaction.FieldExpiresAt, authtransaction.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -383,6 +399,57 @@ func (_m *AuthTransaction) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.FailureCode = value.String
 			}
+		case authtransaction.FieldActorSessionID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field actor_session_id", values[i])
+			} else if value.Valid {
+				_m.ActorSessionID = new(int)
+				*_m.ActorSessionID = int(value.Int64)
+			}
+		case authtransaction.FieldTestSnapshot:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field test_snapshot", values[i])
+			} else if value.Valid {
+				_m.TestSnapshot = value.String
+			}
+		case authtransaction.FieldTestProtocolFingerprint:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field test_protocol_fingerprint", values[i])
+			} else if value.Valid {
+				_m.TestProtocolFingerprint = value.String
+			}
+		case authtransaction.FieldTestDiagnosticFingerprint:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field test_diagnostic_fingerprint", values[i])
+			} else if value.Valid {
+				_m.TestDiagnosticFingerprint = value.String
+			}
+		case authtransaction.FieldTestDeploymentFingerprint:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field test_deployment_fingerprint", values[i])
+			} else if value.Valid {
+				_m.TestDeploymentFingerprint = value.String
+			}
+		case authtransaction.FieldTestValidatedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field test_validated_at", values[i])
+			} else if value.Valid {
+				_m.TestValidatedAt = new(time.Time)
+				*_m.TestValidatedAt = value.Time
+			}
+		case authtransaction.FieldTestAppliedRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field test_applied_revision", values[i])
+			} else if value.Valid {
+				_m.TestAppliedRevision = new(int64)
+				*_m.TestAppliedRevision = value.Int64
+			}
+		case authtransaction.FieldTestBaseRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field test_base_revision", values[i])
+			} else if value.Valid {
+				_m.TestBaseRevision = value.Int64
+			}
 		case authtransaction.FieldExpiresAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field expires_at", values[i])
@@ -551,6 +618,35 @@ func (_m *AuthTransaction) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("failure_code=")
 	builder.WriteString(_m.FailureCode)
+	builder.WriteString(", ")
+	if v := _m.ActorSessionID; v != nil {
+		builder.WriteString("actor_session_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("test_snapshot=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("test_protocol_fingerprint=")
+	builder.WriteString(_m.TestProtocolFingerprint)
+	builder.WriteString(", ")
+	builder.WriteString("test_diagnostic_fingerprint=")
+	builder.WriteString(_m.TestDiagnosticFingerprint)
+	builder.WriteString(", ")
+	builder.WriteString("test_deployment_fingerprint=")
+	builder.WriteString(_m.TestDeploymentFingerprint)
+	builder.WriteString(", ")
+	if v := _m.TestValidatedAt; v != nil {
+		builder.WriteString("test_validated_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.TestAppliedRevision; v != nil {
+		builder.WriteString("test_applied_revision=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("test_base_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TestBaseRevision))
 	builder.WriteString(", ")
 	builder.WriteString("expires_at=")
 	builder.WriteString(_m.ExpiresAt.Format(time.ANSIC))

@@ -383,6 +383,53 @@ func (_u *AuthTransactionUpdate) ClearFailureCode() *AuthTransactionUpdate {
 	return _u
 }
 
+// SetTestValidatedAt sets the "test_validated_at" field.
+func (_u *AuthTransactionUpdate) SetTestValidatedAt(v time.Time) *AuthTransactionUpdate {
+	_u.mutation.SetTestValidatedAt(v)
+	return _u
+}
+
+// SetNillableTestValidatedAt sets the "test_validated_at" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableTestValidatedAt(v *time.Time) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetTestValidatedAt(*v)
+	}
+	return _u
+}
+
+// ClearTestValidatedAt clears the value of the "test_validated_at" field.
+func (_u *AuthTransactionUpdate) ClearTestValidatedAt() *AuthTransactionUpdate {
+	_u.mutation.ClearTestValidatedAt()
+	return _u
+}
+
+// SetTestAppliedRevision sets the "test_applied_revision" field.
+func (_u *AuthTransactionUpdate) SetTestAppliedRevision(v int64) *AuthTransactionUpdate {
+	_u.mutation.ResetTestAppliedRevision()
+	_u.mutation.SetTestAppliedRevision(v)
+	return _u
+}
+
+// SetNillableTestAppliedRevision sets the "test_applied_revision" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableTestAppliedRevision(v *int64) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetTestAppliedRevision(*v)
+	}
+	return _u
+}
+
+// AddTestAppliedRevision adds value to the "test_applied_revision" field.
+func (_u *AuthTransactionUpdate) AddTestAppliedRevision(v int64) *AuthTransactionUpdate {
+	_u.mutation.AddTestAppliedRevision(v)
+	return _u
+}
+
+// ClearTestAppliedRevision clears the value of the "test_applied_revision" field.
+func (_u *AuthTransactionUpdate) ClearTestAppliedRevision() *AuthTransactionUpdate {
+	_u.mutation.ClearTestAppliedRevision()
+	return _u
+}
+
 // SetFinishedAt sets the "finished_at" field.
 func (_u *AuthTransactionUpdate) SetFinishedAt(v time.Time) *AuthTransactionUpdate {
 	_u.mutation.SetFinishedAt(v)
@@ -454,6 +501,11 @@ func (_u *AuthTransactionUpdate) check() error {
 	if v, ok := _u.mutation.IdentityProtocol(); ok {
 		if err := authtransaction.IdentityProtocolValidator(v); err != nil {
 			return &ValidationError{Name: "identity_protocol", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.identity_protocol": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TestAppliedRevision(); ok {
+		if err := authtransaction.TestAppliedRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "test_applied_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.test_applied_revision": %w`, err)}
 		}
 	}
 	if _u.mutation.ConnectionCleared() && len(_u.mutation.ConnectionIDs()) > 0 {
@@ -599,6 +651,39 @@ func (_u *AuthTransactionUpdate) sqlSave(ctx context.Context) (_node int, err er
 	}
 	if _u.mutation.FailureCodeCleared() {
 		_spec.ClearField(authtransaction.FieldFailureCode, field.TypeString)
+	}
+	if _u.mutation.ActorSessionIDCleared() {
+		_spec.ClearField(authtransaction.FieldActorSessionID, field.TypeInt)
+	}
+	if _u.mutation.TestSnapshotCleared() {
+		_spec.ClearField(authtransaction.FieldTestSnapshot, field.TypeString)
+	}
+	if _u.mutation.TestProtocolFingerprintCleared() {
+		_spec.ClearField(authtransaction.FieldTestProtocolFingerprint, field.TypeString)
+	}
+	if _u.mutation.TestDiagnosticFingerprintCleared() {
+		_spec.ClearField(authtransaction.FieldTestDiagnosticFingerprint, field.TypeString)
+	}
+	if _u.mutation.TestDeploymentFingerprintCleared() {
+		_spec.ClearField(authtransaction.FieldTestDeploymentFingerprint, field.TypeString)
+	}
+	if value, ok := _u.mutation.TestValidatedAt(); ok {
+		_spec.SetField(authtransaction.FieldTestValidatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.TestValidatedAtCleared() {
+		_spec.ClearField(authtransaction.FieldTestValidatedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TestAppliedRevision(); ok {
+		_spec.SetField(authtransaction.FieldTestAppliedRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTestAppliedRevision(); ok {
+		_spec.AddField(authtransaction.FieldTestAppliedRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.TestAppliedRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldTestAppliedRevision, field.TypeInt64)
+	}
+	if _u.mutation.TestBaseRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldTestBaseRevision, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.FinishedAt(); ok {
 		_spec.SetField(authtransaction.FieldFinishedAt, field.TypeTime, value)
@@ -980,6 +1065,53 @@ func (_u *AuthTransactionUpdateOne) ClearFailureCode() *AuthTransactionUpdateOne
 	return _u
 }
 
+// SetTestValidatedAt sets the "test_validated_at" field.
+func (_u *AuthTransactionUpdateOne) SetTestValidatedAt(v time.Time) *AuthTransactionUpdateOne {
+	_u.mutation.SetTestValidatedAt(v)
+	return _u
+}
+
+// SetNillableTestValidatedAt sets the "test_validated_at" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableTestValidatedAt(v *time.Time) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetTestValidatedAt(*v)
+	}
+	return _u
+}
+
+// ClearTestValidatedAt clears the value of the "test_validated_at" field.
+func (_u *AuthTransactionUpdateOne) ClearTestValidatedAt() *AuthTransactionUpdateOne {
+	_u.mutation.ClearTestValidatedAt()
+	return _u
+}
+
+// SetTestAppliedRevision sets the "test_applied_revision" field.
+func (_u *AuthTransactionUpdateOne) SetTestAppliedRevision(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.ResetTestAppliedRevision()
+	_u.mutation.SetTestAppliedRevision(v)
+	return _u
+}
+
+// SetNillableTestAppliedRevision sets the "test_applied_revision" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableTestAppliedRevision(v *int64) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetTestAppliedRevision(*v)
+	}
+	return _u
+}
+
+// AddTestAppliedRevision adds value to the "test_applied_revision" field.
+func (_u *AuthTransactionUpdateOne) AddTestAppliedRevision(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.AddTestAppliedRevision(v)
+	return _u
+}
+
+// ClearTestAppliedRevision clears the value of the "test_applied_revision" field.
+func (_u *AuthTransactionUpdateOne) ClearTestAppliedRevision() *AuthTransactionUpdateOne {
+	_u.mutation.ClearTestAppliedRevision()
+	return _u
+}
+
 // SetFinishedAt sets the "finished_at" field.
 func (_u *AuthTransactionUpdateOne) SetFinishedAt(v time.Time) *AuthTransactionUpdateOne {
 	_u.mutation.SetFinishedAt(v)
@@ -1064,6 +1196,11 @@ func (_u *AuthTransactionUpdateOne) check() error {
 	if v, ok := _u.mutation.IdentityProtocol(); ok {
 		if err := authtransaction.IdentityProtocolValidator(v); err != nil {
 			return &ValidationError{Name: "identity_protocol", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.identity_protocol": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TestAppliedRevision(); ok {
+		if err := authtransaction.TestAppliedRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "test_applied_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.test_applied_revision": %w`, err)}
 		}
 	}
 	if _u.mutation.ConnectionCleared() && len(_u.mutation.ConnectionIDs()) > 0 {
@@ -1226,6 +1363,39 @@ func (_u *AuthTransactionUpdateOne) sqlSave(ctx context.Context) (_node *AuthTra
 	}
 	if _u.mutation.FailureCodeCleared() {
 		_spec.ClearField(authtransaction.FieldFailureCode, field.TypeString)
+	}
+	if _u.mutation.ActorSessionIDCleared() {
+		_spec.ClearField(authtransaction.FieldActorSessionID, field.TypeInt)
+	}
+	if _u.mutation.TestSnapshotCleared() {
+		_spec.ClearField(authtransaction.FieldTestSnapshot, field.TypeString)
+	}
+	if _u.mutation.TestProtocolFingerprintCleared() {
+		_spec.ClearField(authtransaction.FieldTestProtocolFingerprint, field.TypeString)
+	}
+	if _u.mutation.TestDiagnosticFingerprintCleared() {
+		_spec.ClearField(authtransaction.FieldTestDiagnosticFingerprint, field.TypeString)
+	}
+	if _u.mutation.TestDeploymentFingerprintCleared() {
+		_spec.ClearField(authtransaction.FieldTestDeploymentFingerprint, field.TypeString)
+	}
+	if value, ok := _u.mutation.TestValidatedAt(); ok {
+		_spec.SetField(authtransaction.FieldTestValidatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.TestValidatedAtCleared() {
+		_spec.ClearField(authtransaction.FieldTestValidatedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TestAppliedRevision(); ok {
+		_spec.SetField(authtransaction.FieldTestAppliedRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTestAppliedRevision(); ok {
+		_spec.AddField(authtransaction.FieldTestAppliedRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.TestAppliedRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldTestAppliedRevision, field.TypeInt64)
+	}
+	if _u.mutation.TestBaseRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldTestBaseRevision, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.FinishedAt(); ok {
 		_spec.SetField(authtransaction.FieldFinishedAt, field.TypeTime, value)

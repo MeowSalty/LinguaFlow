@@ -14,7 +14,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
@@ -89,30 +88,44 @@ func (_c *AuthConnectionCreate) SetNillableAggregateRevision(v *int64) *AuthConn
 	return _c
 }
 
-// SetDraftRevision sets the "draft_revision" field.
-func (_c *AuthConnectionCreate) SetDraftRevision(v int64) *AuthConnectionCreate {
-	_c.mutation.SetDraftRevision(v)
+// SetCurrentRevision sets the "current_revision" field.
+func (_c *AuthConnectionCreate) SetCurrentRevision(v int64) *AuthConnectionCreate {
+	_c.mutation.SetCurrentRevision(v)
 	return _c
 }
 
-// SetNillableDraftRevision sets the "draft_revision" field if the given value is not nil.
-func (_c *AuthConnectionCreate) SetNillableDraftRevision(v *int64) *AuthConnectionCreate {
+// SetNillableCurrentRevision sets the "current_revision" field if the given value is not nil.
+func (_c *AuthConnectionCreate) SetNillableCurrentRevision(v *int64) *AuthConnectionCreate {
 	if v != nil {
-		_c.SetDraftRevision(*v)
+		_c.SetCurrentRevision(*v)
 	}
 	return _c
 }
 
-// SetPublishedRevision sets the "published_revision" field.
-func (_c *AuthConnectionCreate) SetPublishedRevision(v int64) *AuthConnectionCreate {
-	_c.mutation.SetPublishedRevision(v)
+// SetState sets the "state" field.
+func (_c *AuthConnectionCreate) SetState(v authconnection.State) *AuthConnectionCreate {
+	_c.mutation.SetState(v)
 	return _c
 }
 
-// SetNillablePublishedRevision sets the "published_revision" field if the given value is not nil.
-func (_c *AuthConnectionCreate) SetNillablePublishedRevision(v *int64) *AuthConnectionCreate {
+// SetNillableState sets the "state" field if the given value is not nil.
+func (_c *AuthConnectionCreate) SetNillableState(v *authconnection.State) *AuthConnectionCreate {
 	if v != nil {
-		_c.SetPublishedRevision(*v)
+		_c.SetState(*v)
+	}
+	return _c
+}
+
+// SetIdentityContract sets the "identity_contract" field.
+func (_c *AuthConnectionCreate) SetIdentityContract(v string) *AuthConnectionCreate {
+	_c.mutation.SetIdentityContract(v)
+	return _c
+}
+
+// SetNillableIdentityContract sets the "identity_contract" field if the given value is not nil.
+func (_c *AuthConnectionCreate) SetNillableIdentityContract(v *string) *AuthConnectionCreate {
+	if v != nil {
+		_c.SetIdentityContract(*v)
 	}
 	return _c
 }
@@ -226,21 +239,6 @@ func (_c *AuthConnectionCreate) AddSecrets(v ...*AuthConnectionSecret) *AuthConn
 	return _c.AddSecretIDs(ids...)
 }
 
-// AddValidationIDs adds the "validations" edge to the AuthConnectionValidation entity by IDs.
-func (_c *AuthConnectionCreate) AddValidationIDs(ids ...int) *AuthConnectionCreate {
-	_c.mutation.AddValidationIDs(ids...)
-	return _c
-}
-
-// AddValidations adds the "validations" edges to the AuthConnectionValidation entity.
-func (_c *AuthConnectionCreate) AddValidations(v ...*AuthConnectionValidation) *AuthConnectionCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddValidationIDs(ids...)
-}
-
 // AddTransactionIDs adds the "transactions" edge to the AuthTransaction entity by IDs.
 func (_c *AuthConnectionCreate) AddTransactionIDs(ids ...string) *AuthConnectionCreate {
 	_c.mutation.AddTransactionIDs(ids...)
@@ -311,6 +309,10 @@ func (_c *AuthConnectionCreate) defaults() error {
 		v := authconnection.DefaultAggregateRevision
 		_c.mutation.SetAggregateRevision(v)
 	}
+	if _, ok := _c.mutation.CurrentRevision(); !ok {
+		v := authconnection.DefaultCurrentRevision
+		_c.mutation.SetCurrentRevision(v)
+	}
 	if _, ok := _c.mutation.AuthGeneration(); !ok {
 		v := authconnection.DefaultAuthGeneration
 		_c.mutation.SetAuthGeneration(v)
@@ -342,14 +344,17 @@ func (_c *AuthConnectionCreate) check() error {
 			return &ValidationError{Name: "aggregate_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.aggregate_revision": %w`, err)}
 		}
 	}
-	if v, ok := _c.mutation.DraftRevision(); ok {
-		if err := authconnection.DraftRevisionValidator(v); err != nil {
-			return &ValidationError{Name: "draft_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.draft_revision": %w`, err)}
+	if _, ok := _c.mutation.CurrentRevision(); !ok {
+		return &ValidationError{Name: "current_revision", err: errors.New(`ent: missing required field "AuthConnection.current_revision"`)}
+	}
+	if v, ok := _c.mutation.CurrentRevision(); ok {
+		if err := authconnection.CurrentRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "current_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.current_revision": %w`, err)}
 		}
 	}
-	if v, ok := _c.mutation.PublishedRevision(); ok {
-		if err := authconnection.PublishedRevisionValidator(v); err != nil {
-			return &ValidationError{Name: "published_revision", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.published_revision": %w`, err)}
+	if v, ok := _c.mutation.State(); ok {
+		if err := authconnection.StateValidator(v); err != nil {
+			return &ValidationError{Name: "state", err: fmt.Errorf(`ent: validator failed for field "AuthConnection.state": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.AuthGeneration(); !ok {
@@ -420,13 +425,17 @@ func (_c *AuthConnectionCreate) createSpec() (*AuthConnection, *sqlgraph.CreateS
 		_spec.SetField(authconnection.FieldAggregateRevision, field.TypeInt64, value)
 		_node.AggregateRevision = value
 	}
-	if value, ok := _c.mutation.DraftRevision(); ok {
-		_spec.SetField(authconnection.FieldDraftRevision, field.TypeInt64, value)
-		_node.DraftRevision = &value
+	if value, ok := _c.mutation.CurrentRevision(); ok {
+		_spec.SetField(authconnection.FieldCurrentRevision, field.TypeInt64, value)
+		_node.CurrentRevision = value
 	}
-	if value, ok := _c.mutation.PublishedRevision(); ok {
-		_spec.SetField(authconnection.FieldPublishedRevision, field.TypeInt64, value)
-		_node.PublishedRevision = &value
+	if value, ok := _c.mutation.State(); ok {
+		_spec.SetField(authconnection.FieldState, field.TypeEnum, value)
+		_node.State = value
+	}
+	if value, ok := _c.mutation.IdentityContract(); ok {
+		_spec.SetField(authconnection.FieldIdentityContract, field.TypeString, value)
+		_node.IdentityContract = value
 	}
 	if value, ok := _c.mutation.AuthGeneration(); ok {
 		_spec.SetField(authconnection.FieldAuthGeneration, field.TypeInt64, value)
@@ -509,22 +518,6 @@ func (_c *AuthConnectionCreate) createSpec() (*AuthConnection, *sqlgraph.CreateS
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(authconnectionsecret.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.ValidationsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   authconnection.ValidationsTable,
-			Columns: []string{authconnection.ValidationsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(authconnectionvalidation.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

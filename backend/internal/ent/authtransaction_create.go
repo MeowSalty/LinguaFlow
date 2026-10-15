@@ -446,6 +446,118 @@ func (_c *AuthTransactionCreate) SetNillableFailureCode(v *string) *AuthTransact
 	return _c
 }
 
+// SetActorSessionID sets the "actor_session_id" field.
+func (_c *AuthTransactionCreate) SetActorSessionID(v int) *AuthTransactionCreate {
+	_c.mutation.SetActorSessionID(v)
+	return _c
+}
+
+// SetNillableActorSessionID sets the "actor_session_id" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableActorSessionID(v *int) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetActorSessionID(*v)
+	}
+	return _c
+}
+
+// SetTestSnapshot sets the "test_snapshot" field.
+func (_c *AuthTransactionCreate) SetTestSnapshot(v string) *AuthTransactionCreate {
+	_c.mutation.SetTestSnapshot(v)
+	return _c
+}
+
+// SetNillableTestSnapshot sets the "test_snapshot" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableTestSnapshot(v *string) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetTestSnapshot(*v)
+	}
+	return _c
+}
+
+// SetTestProtocolFingerprint sets the "test_protocol_fingerprint" field.
+func (_c *AuthTransactionCreate) SetTestProtocolFingerprint(v string) *AuthTransactionCreate {
+	_c.mutation.SetTestProtocolFingerprint(v)
+	return _c
+}
+
+// SetNillableTestProtocolFingerprint sets the "test_protocol_fingerprint" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableTestProtocolFingerprint(v *string) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetTestProtocolFingerprint(*v)
+	}
+	return _c
+}
+
+// SetTestDiagnosticFingerprint sets the "test_diagnostic_fingerprint" field.
+func (_c *AuthTransactionCreate) SetTestDiagnosticFingerprint(v string) *AuthTransactionCreate {
+	_c.mutation.SetTestDiagnosticFingerprint(v)
+	return _c
+}
+
+// SetNillableTestDiagnosticFingerprint sets the "test_diagnostic_fingerprint" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableTestDiagnosticFingerprint(v *string) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetTestDiagnosticFingerprint(*v)
+	}
+	return _c
+}
+
+// SetTestDeploymentFingerprint sets the "test_deployment_fingerprint" field.
+func (_c *AuthTransactionCreate) SetTestDeploymentFingerprint(v string) *AuthTransactionCreate {
+	_c.mutation.SetTestDeploymentFingerprint(v)
+	return _c
+}
+
+// SetNillableTestDeploymentFingerprint sets the "test_deployment_fingerprint" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableTestDeploymentFingerprint(v *string) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetTestDeploymentFingerprint(*v)
+	}
+	return _c
+}
+
+// SetTestValidatedAt sets the "test_validated_at" field.
+func (_c *AuthTransactionCreate) SetTestValidatedAt(v time.Time) *AuthTransactionCreate {
+	_c.mutation.SetTestValidatedAt(v)
+	return _c
+}
+
+// SetNillableTestValidatedAt sets the "test_validated_at" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableTestValidatedAt(v *time.Time) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetTestValidatedAt(*v)
+	}
+	return _c
+}
+
+// SetTestAppliedRevision sets the "test_applied_revision" field.
+func (_c *AuthTransactionCreate) SetTestAppliedRevision(v int64) *AuthTransactionCreate {
+	_c.mutation.SetTestAppliedRevision(v)
+	return _c
+}
+
+// SetNillableTestAppliedRevision sets the "test_applied_revision" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableTestAppliedRevision(v *int64) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetTestAppliedRevision(*v)
+	}
+	return _c
+}
+
+// SetTestBaseRevision sets the "test_base_revision" field.
+func (_c *AuthTransactionCreate) SetTestBaseRevision(v int64) *AuthTransactionCreate {
+	_c.mutation.SetTestBaseRevision(v)
+	return _c
+}
+
+// SetNillableTestBaseRevision sets the "test_base_revision" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableTestBaseRevision(v *int64) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetTestBaseRevision(*v)
+	}
+	return _c
+}
+
 // SetExpiresAt sets the "expires_at" field.
 func (_c *AuthTransactionCreate) SetExpiresAt(v time.Time) *AuthTransactionCreate {
 	_c.mutation.SetExpiresAt(v)
@@ -649,6 +761,21 @@ func (_c *AuthTransactionCreate) check() error {
 			return &ValidationError{Name: "identity_protocol", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.identity_protocol": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.ActorSessionID(); ok {
+		if err := authtransaction.ActorSessionIDValidator(v); err != nil {
+			return &ValidationError{Name: "actor_session_id", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.actor_session_id": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.TestAppliedRevision(); ok {
+		if err := authtransaction.TestAppliedRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "test_applied_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.test_applied_revision": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.TestBaseRevision(); ok {
+		if err := authtransaction.TestBaseRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "test_base_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.test_base_revision": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.ExpiresAt(); !ok {
 		return &ValidationError{Name: "expires_at", err: errors.New(`ent: missing required field "AuthTransaction.expires_at"`)}
 	}
@@ -834,6 +961,38 @@ func (_c *AuthTransactionCreate) createSpec() (*AuthTransaction, *sqlgraph.Creat
 	if value, ok := _c.mutation.FailureCode(); ok {
 		_spec.SetField(authtransaction.FieldFailureCode, field.TypeString, value)
 		_node.FailureCode = value
+	}
+	if value, ok := _c.mutation.ActorSessionID(); ok {
+		_spec.SetField(authtransaction.FieldActorSessionID, field.TypeInt, value)
+		_node.ActorSessionID = &value
+	}
+	if value, ok := _c.mutation.TestSnapshot(); ok {
+		_spec.SetField(authtransaction.FieldTestSnapshot, field.TypeString, value)
+		_node.TestSnapshot = value
+	}
+	if value, ok := _c.mutation.TestProtocolFingerprint(); ok {
+		_spec.SetField(authtransaction.FieldTestProtocolFingerprint, field.TypeString, value)
+		_node.TestProtocolFingerprint = value
+	}
+	if value, ok := _c.mutation.TestDiagnosticFingerprint(); ok {
+		_spec.SetField(authtransaction.FieldTestDiagnosticFingerprint, field.TypeString, value)
+		_node.TestDiagnosticFingerprint = value
+	}
+	if value, ok := _c.mutation.TestDeploymentFingerprint(); ok {
+		_spec.SetField(authtransaction.FieldTestDeploymentFingerprint, field.TypeString, value)
+		_node.TestDeploymentFingerprint = value
+	}
+	if value, ok := _c.mutation.TestValidatedAt(); ok {
+		_spec.SetField(authtransaction.FieldTestValidatedAt, field.TypeTime, value)
+		_node.TestValidatedAt = &value
+	}
+	if value, ok := _c.mutation.TestAppliedRevision(); ok {
+		_spec.SetField(authtransaction.FieldTestAppliedRevision, field.TypeInt64, value)
+		_node.TestAppliedRevision = &value
+	}
+	if value, ok := _c.mutation.TestBaseRevision(); ok {
+		_spec.SetField(authtransaction.FieldTestBaseRevision, field.TypeInt64, value)
+		_node.TestBaseRevision = value
 	}
 	if value, ok := _c.mutation.ExpiresAt(); ok {
 		_spec.SetField(authtransaction.FieldExpiresAt, field.TypeTime, value)

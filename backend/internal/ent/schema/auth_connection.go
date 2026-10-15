@@ -21,8 +21,9 @@ func (AuthConnection) Fields() []ent.Field {
 		field.Enum("kind").Values("password", "oidc", "generic_oauth2", "provider").Immutable(),
 		field.String("identity_authority_id").Optional().Nillable().Unique().Immutable(),
 		field.Int64("aggregate_revision").Default(1).Positive(),
-		field.Int64("draft_revision").Optional().Nillable().Positive(),
-		field.Int64("published_revision").Optional().Nillable().Positive(),
+		field.Int64("current_revision").Default(1).Positive(),
+		field.Enum("state").Values("configuring", "enabled", "disabled").Optional(),
+		field.String("identity_contract").Optional(),
 		field.Int64("auth_generation").Default(1).Positive(),
 		field.Time("archived_at").Optional().Nillable(),
 	}
@@ -51,6 +52,9 @@ func (AuthConnection) Annotations() []schema.Annotation {
 	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{
 		"auth_connection_reserved_password": "((id = 'password' AND kind = 'password' AND archived_at IS NULL) OR (id <> 'password' AND kind <> 'password'))",
 		"auth_connection_generation_safe":   "auth_generation >= 1 AND auth_generation <= 9007199254740991",
+		"auth_connection_current_safe":      "current_revision >= 1 AND current_revision <= 9007199254740991",
+		"auth_connection_state_kind":        "((kind = 'password' AND state IS NULL) OR (kind <> 'password' AND state IS NOT NULL AND state IN ('configuring', 'enabled', 'disabled')))",
+		"auth_connection_archive_disabled":  "(archived_at IS NULL OR state = 'disabled')",
 	}}}
 }
 func (AuthConnection) Edges() []ent.Edge {
@@ -60,7 +64,6 @@ func (AuthConnection) Edges() []ent.Edge {
 		edge.To("bindings", LoginBinding.Type),
 		edge.To("sessions", RefreshSession.Type),
 		edge.To("secrets", AuthConnectionSecret.Type),
-		edge.To("validations", AuthConnectionValidation.Type),
 		edge.To("transactions", AuthTransaction.Type),
 	}
 }

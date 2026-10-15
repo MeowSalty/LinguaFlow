@@ -26,10 +26,12 @@ const (
 	FieldIdentityAuthorityID = "identity_authority_id"
 	// FieldAggregateRevision holds the string denoting the aggregate_revision field in the database.
 	FieldAggregateRevision = "aggregate_revision"
-	// FieldDraftRevision holds the string denoting the draft_revision field in the database.
-	FieldDraftRevision = "draft_revision"
-	// FieldPublishedRevision holds the string denoting the published_revision field in the database.
-	FieldPublishedRevision = "published_revision"
+	// FieldCurrentRevision holds the string denoting the current_revision field in the database.
+	FieldCurrentRevision = "current_revision"
+	// FieldState holds the string denoting the state field in the database.
+	FieldState = "state"
+	// FieldIdentityContract holds the string denoting the identity_contract field in the database.
+	FieldIdentityContract = "identity_contract"
 	// FieldAuthGeneration holds the string denoting the auth_generation field in the database.
 	FieldAuthGeneration = "auth_generation"
 	// FieldArchivedAt holds the string denoting the archived_at field in the database.
@@ -44,8 +46,6 @@ const (
 	EdgeSessions = "sessions"
 	// EdgeSecrets holds the string denoting the secrets edge name in mutations.
 	EdgeSecrets = "secrets"
-	// EdgeValidations holds the string denoting the validations edge name in mutations.
-	EdgeValidations = "validations"
 	// EdgeTransactions holds the string denoting the transactions edge name in mutations.
 	EdgeTransactions = "transactions"
 	// Table holds the table name of the authconnection in the database.
@@ -85,13 +85,6 @@ const (
 	SecretsInverseTable = "auth_connection_secrets"
 	// SecretsColumn is the table column denoting the secrets relation/edge.
 	SecretsColumn = "connection_id"
-	// ValidationsTable is the table that holds the validations relation/edge.
-	ValidationsTable = "auth_connection_validations"
-	// ValidationsInverseTable is the table name for the AuthConnectionValidation entity.
-	// It exists in this package in order to avoid circular dependency with the "authconnectionvalidation" package.
-	ValidationsInverseTable = "auth_connection_validations"
-	// ValidationsColumn is the table column denoting the validations relation/edge.
-	ValidationsColumn = "connection_id"
 	// TransactionsTable is the table that holds the transactions relation/edge.
 	TransactionsTable = "auth_transactions"
 	// TransactionsInverseTable is the table name for the AuthTransaction entity.
@@ -109,8 +102,9 @@ var Columns = []string{
 	FieldKind,
 	FieldIdentityAuthorityID,
 	FieldAggregateRevision,
-	FieldDraftRevision,
-	FieldPublishedRevision,
+	FieldCurrentRevision,
+	FieldState,
+	FieldIdentityContract,
 	FieldAuthGeneration,
 	FieldArchivedAt,
 }
@@ -142,10 +136,10 @@ var (
 	DefaultAggregateRevision int64
 	// AggregateRevisionValidator is a validator for the "aggregate_revision" field. It is called by the builders before save.
 	AggregateRevisionValidator func(int64) error
-	// DraftRevisionValidator is a validator for the "draft_revision" field. It is called by the builders before save.
-	DraftRevisionValidator func(int64) error
-	// PublishedRevisionValidator is a validator for the "published_revision" field. It is called by the builders before save.
-	PublishedRevisionValidator func(int64) error
+	// DefaultCurrentRevision holds the default value on creation for the "current_revision" field.
+	DefaultCurrentRevision int64
+	// CurrentRevisionValidator is a validator for the "current_revision" field. It is called by the builders before save.
+	CurrentRevisionValidator func(int64) error
 	// DefaultAuthGeneration holds the default value on creation for the "auth_generation" field.
 	DefaultAuthGeneration int64
 	// AuthGenerationValidator is a validator for the "auth_generation" field. It is called by the builders before save.
@@ -176,6 +170,30 @@ func KindValidator(k Kind) error {
 		return nil
 	default:
 		return fmt.Errorf("authconnection: invalid enum value for kind field: %q", k)
+	}
+}
+
+// State defines the type for the "state" enum field.
+type State string
+
+// State values.
+const (
+	StateConfiguring State = "configuring"
+	StateEnabled     State = "enabled"
+	StateDisabled    State = "disabled"
+)
+
+func (s State) String() string {
+	return string(s)
+}
+
+// StateValidator is a validator for the "state" field enum values. It is called by the builders before save.
+func StateValidator(s State) error {
+	switch s {
+	case StateConfiguring, StateEnabled, StateDisabled:
+		return nil
+	default:
+		return fmt.Errorf("authconnection: invalid enum value for state field: %q", s)
 	}
 }
 
@@ -212,14 +230,19 @@ func ByAggregateRevision(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAggregateRevision, opts...).ToFunc()
 }
 
-// ByDraftRevision orders the results by the draft_revision field.
-func ByDraftRevision(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldDraftRevision, opts...).ToFunc()
+// ByCurrentRevision orders the results by the current_revision field.
+func ByCurrentRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCurrentRevision, opts...).ToFunc()
 }
 
-// ByPublishedRevision orders the results by the published_revision field.
-func ByPublishedRevision(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPublishedRevision, opts...).ToFunc()
+// ByState orders the results by the state field.
+func ByState(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldState, opts...).ToFunc()
+}
+
+// ByIdentityContract orders the results by the identity_contract field.
+func ByIdentityContract(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIdentityContract, opts...).ToFunc()
 }
 
 // ByAuthGeneration orders the results by the auth_generation field.
@@ -302,20 +325,6 @@ func BySecrets(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByValidationsCount orders the results by validations count.
-func ByValidationsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newValidationsStep(), opts...)
-	}
-}
-
-// ByValidations orders the results by validations terms.
-func ByValidations(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newValidationsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
 // ByTransactionsCount orders the results by transactions count.
 func ByTransactionsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -362,13 +371,6 @@ func newSecretsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(SecretsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, SecretsTable, SecretsColumn),
-	)
-}
-func newValidationsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(ValidationsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, ValidationsTable, ValidationsColumn),
 	)
 }
 func newTransactionsStep() *sqlgraph.Step {

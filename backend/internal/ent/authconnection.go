@@ -27,10 +27,12 @@ type AuthConnection struct {
 	IdentityAuthorityID *string `json:"identity_authority_id,omitempty"`
 	// AggregateRevision holds the value of the "aggregate_revision" field.
 	AggregateRevision int64 `json:"aggregate_revision,omitempty"`
-	// DraftRevision holds the value of the "draft_revision" field.
-	DraftRevision *int64 `json:"draft_revision,omitempty"`
-	// PublishedRevision holds the value of the "published_revision" field.
-	PublishedRevision *int64 `json:"published_revision,omitempty"`
+	// CurrentRevision holds the value of the "current_revision" field.
+	CurrentRevision int64 `json:"current_revision,omitempty"`
+	// State holds the value of the "state" field.
+	State authconnection.State `json:"state,omitempty"`
+	// IdentityContract holds the value of the "identity_contract" field.
+	IdentityContract string `json:"identity_contract,omitempty"`
 	// AuthGeneration holds the value of the "auth_generation" field.
 	AuthGeneration int64 `json:"auth_generation,omitempty"`
 	// ArchivedAt holds the value of the "archived_at" field.
@@ -53,13 +55,11 @@ type AuthConnectionEdges struct {
 	Sessions []*RefreshSession `json:"sessions,omitempty"`
 	// Secrets holds the value of the secrets edge.
 	Secrets []*AuthConnectionSecret `json:"secrets,omitempty"`
-	// Validations holds the value of the validations edge.
-	Validations []*AuthConnectionValidation `json:"validations,omitempty"`
 	// Transactions holds the value of the transactions edge.
 	Transactions []*AuthTransaction `json:"transactions,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [7]bool
+	loadedTypes [6]bool
 }
 
 // RevisionsOrErr returns the Revisions value or an error if the edge
@@ -107,19 +107,10 @@ func (e AuthConnectionEdges) SecretsOrErr() ([]*AuthConnectionSecret, error) {
 	return nil, &NotLoadedError{edge: "secrets"}
 }
 
-// ValidationsOrErr returns the Validations value or an error if the edge
-// was not loaded in eager-loading.
-func (e AuthConnectionEdges) ValidationsOrErr() ([]*AuthConnectionValidation, error) {
-	if e.loadedTypes[5] {
-		return e.Validations, nil
-	}
-	return nil, &NotLoadedError{edge: "validations"}
-}
-
 // TransactionsOrErr returns the Transactions value or an error if the edge
 // was not loaded in eager-loading.
 func (e AuthConnectionEdges) TransactionsOrErr() ([]*AuthTransaction, error) {
-	if e.loadedTypes[6] {
+	if e.loadedTypes[5] {
 		return e.Transactions, nil
 	}
 	return nil, &NotLoadedError{edge: "transactions"}
@@ -130,9 +121,9 @@ func (*AuthConnection) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case authconnection.FieldAggregateRevision, authconnection.FieldDraftRevision, authconnection.FieldPublishedRevision, authconnection.FieldAuthGeneration:
+		case authconnection.FieldAggregateRevision, authconnection.FieldCurrentRevision, authconnection.FieldAuthGeneration:
 			values[i] = new(sql.NullInt64)
-		case authconnection.FieldID, authconnection.FieldKind, authconnection.FieldIdentityAuthorityID:
+		case authconnection.FieldID, authconnection.FieldKind, authconnection.FieldIdentityAuthorityID, authconnection.FieldState, authconnection.FieldIdentityContract:
 			values[i] = new(sql.NullString)
 		case authconnection.FieldCreatedAt, authconnection.FieldUpdatedAt, authconnection.FieldArchivedAt:
 			values[i] = new(sql.NullTime)
@@ -188,19 +179,23 @@ func (_m *AuthConnection) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.AggregateRevision = value.Int64
 			}
-		case authconnection.FieldDraftRevision:
+		case authconnection.FieldCurrentRevision:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field draft_revision", values[i])
+				return fmt.Errorf("unexpected type %T for field current_revision", values[i])
 			} else if value.Valid {
-				_m.DraftRevision = new(int64)
-				*_m.DraftRevision = value.Int64
+				_m.CurrentRevision = value.Int64
 			}
-		case authconnection.FieldPublishedRevision:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field published_revision", values[i])
+		case authconnection.FieldState:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field state", values[i])
 			} else if value.Valid {
-				_m.PublishedRevision = new(int64)
-				*_m.PublishedRevision = value.Int64
+				_m.State = authconnection.State(value.String)
+			}
+		case authconnection.FieldIdentityContract:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field identity_contract", values[i])
+			} else if value.Valid {
+				_m.IdentityContract = value.String
 			}
 		case authconnection.FieldAuthGeneration:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -253,11 +248,6 @@ func (_m *AuthConnection) QuerySecrets() *AuthConnectionSecretQuery {
 	return NewAuthConnectionClient(_m.config).QuerySecrets(_m)
 }
 
-// QueryValidations queries the "validations" edge of the AuthConnection entity.
-func (_m *AuthConnection) QueryValidations() *AuthConnectionValidationQuery {
-	return NewAuthConnectionClient(_m.config).QueryValidations(_m)
-}
-
 // QueryTransactions queries the "transactions" edge of the AuthConnection entity.
 func (_m *AuthConnection) QueryTransactions() *AuthTransactionQuery {
 	return NewAuthConnectionClient(_m.config).QueryTransactions(_m)
@@ -303,15 +293,14 @@ func (_m *AuthConnection) String() string {
 	builder.WriteString("aggregate_revision=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AggregateRevision))
 	builder.WriteString(", ")
-	if v := _m.DraftRevision; v != nil {
-		builder.WriteString("draft_revision=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
+	builder.WriteString("current_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CurrentRevision))
 	builder.WriteString(", ")
-	if v := _m.PublishedRevision; v != nil {
-		builder.WriteString("published_revision=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
+	builder.WriteString("state=")
+	builder.WriteString(fmt.Sprintf("%v", _m.State))
+	builder.WriteString(", ")
+	builder.WriteString("identity_contract=")
+	builder.WriteString(_m.IdentityContract)
 	builder.WriteString(", ")
 	builder.WriteString("auth_generation=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AuthGeneration))

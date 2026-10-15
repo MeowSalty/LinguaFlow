@@ -165,6 +165,21 @@ func EmailLoginEnabled(v bool) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldEmailLoginEnabled, v))
 }
 
+// FreshSupported applies equality check predicate on the "fresh_supported" field. It's identical to FreshSupportedEQ.
+func FreshSupported(v bool) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldFreshSupported, v))
+}
+
+// TestedAt applies equality check predicate on the "tested_at" field. It's identical to TestedAtEQ.
+func TestedAt(v time.Time) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldTestedAt, v))
+}
+
+// AppliedTestID applies equality check predicate on the "applied_test_id" field. It's identical to AppliedTestIDEQ.
+func AppliedTestID(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldAppliedTestID, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldCreatedAt, v))
@@ -1448,6 +1463,141 @@ func EmailLoginEnabledEQ(v bool) predicate.AuthConnectionRevision {
 // EmailLoginEnabledNEQ applies the NEQ predicate on the "email_login_enabled" field.
 func EmailLoginEnabledNEQ(v bool) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldEmailLoginEnabled, v))
+}
+
+// FreshSupportedEQ applies the EQ predicate on the "fresh_supported" field.
+func FreshSupportedEQ(v bool) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldFreshSupported, v))
+}
+
+// FreshSupportedNEQ applies the NEQ predicate on the "fresh_supported" field.
+func FreshSupportedNEQ(v bool) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldFreshSupported, v))
+}
+
+// TestedAtEQ applies the EQ predicate on the "tested_at" field.
+func TestedAtEQ(v time.Time) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldTestedAt, v))
+}
+
+// TestedAtNEQ applies the NEQ predicate on the "tested_at" field.
+func TestedAtNEQ(v time.Time) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldTestedAt, v))
+}
+
+// TestedAtIn applies the In predicate on the "tested_at" field.
+func TestedAtIn(vs ...time.Time) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldTestedAt, vs...))
+}
+
+// TestedAtNotIn applies the NotIn predicate on the "tested_at" field.
+func TestedAtNotIn(vs ...time.Time) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldTestedAt, vs...))
+}
+
+// TestedAtGT applies the GT predicate on the "tested_at" field.
+func TestedAtGT(v time.Time) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldTestedAt, v))
+}
+
+// TestedAtGTE applies the GTE predicate on the "tested_at" field.
+func TestedAtGTE(v time.Time) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldTestedAt, v))
+}
+
+// TestedAtLT applies the LT predicate on the "tested_at" field.
+func TestedAtLT(v time.Time) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldTestedAt, v))
+}
+
+// TestedAtLTE applies the LTE predicate on the "tested_at" field.
+func TestedAtLTE(v time.Time) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldTestedAt, v))
+}
+
+// TestedAtIsNil applies the IsNil predicate on the "tested_at" field.
+func TestedAtIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldTestedAt))
+}
+
+// TestedAtNotNil applies the NotNil predicate on the "tested_at" field.
+func TestedAtNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldTestedAt))
+}
+
+// AppliedTestIDEQ applies the EQ predicate on the "applied_test_id" field.
+func AppliedTestIDEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDNEQ applies the NEQ predicate on the "applied_test_id" field.
+func AppliedTestIDNEQ(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDIn applies the In predicate on the "applied_test_id" field.
+func AppliedTestIDIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIn(FieldAppliedTestID, vs...))
+}
+
+// AppliedTestIDNotIn applies the NotIn predicate on the "applied_test_id" field.
+func AppliedTestIDNotIn(vs ...string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotIn(FieldAppliedTestID, vs...))
+}
+
+// AppliedTestIDGT applies the GT predicate on the "applied_test_id" field.
+func AppliedTestIDGT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGT(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDGTE applies the GTE predicate on the "applied_test_id" field.
+func AppliedTestIDGTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldGTE(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDLT applies the LT predicate on the "applied_test_id" field.
+func AppliedTestIDLT(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLT(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDLTE applies the LTE predicate on the "applied_test_id" field.
+func AppliedTestIDLTE(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldLTE(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDContains applies the Contains predicate on the "applied_test_id" field.
+func AppliedTestIDContains(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContains(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDHasPrefix applies the HasPrefix predicate on the "applied_test_id" field.
+func AppliedTestIDHasPrefix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasPrefix(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDHasSuffix applies the HasSuffix predicate on the "applied_test_id" field.
+func AppliedTestIDHasSuffix(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldHasSuffix(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDIsNil applies the IsNil predicate on the "applied_test_id" field.
+func AppliedTestIDIsNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldIsNull(FieldAppliedTestID))
+}
+
+// AppliedTestIDNotNil applies the NotNil predicate on the "applied_test_id" field.
+func AppliedTestIDNotNil() predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldNotNull(FieldAppliedTestID))
+}
+
+// AppliedTestIDEqualFold applies the EqualFold predicate on the "applied_test_id" field.
+func AppliedTestIDEqualFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldEqualFold(FieldAppliedTestID, v))
+}
+
+// AppliedTestIDContainsFold applies the ContainsFold predicate on the "applied_test_id" field.
+func AppliedTestIDContainsFold(v string) predicate.AuthConnectionRevision {
+	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldAppliedTestID, v))
 }
 
 // HasConnection applies the HasEdge predicate on the "connection" edge.

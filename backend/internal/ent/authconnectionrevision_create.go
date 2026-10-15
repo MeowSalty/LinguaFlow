@@ -358,6 +358,48 @@ func (_c *AuthConnectionRevisionCreate) SetNillableEmailLoginEnabled(v *bool) *A
 	return _c
 }
 
+// SetFreshSupported sets the "fresh_supported" field.
+func (_c *AuthConnectionRevisionCreate) SetFreshSupported(v bool) *AuthConnectionRevisionCreate {
+	_c.mutation.SetFreshSupported(v)
+	return _c
+}
+
+// SetNillableFreshSupported sets the "fresh_supported" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableFreshSupported(v *bool) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetFreshSupported(*v)
+	}
+	return _c
+}
+
+// SetTestedAt sets the "tested_at" field.
+func (_c *AuthConnectionRevisionCreate) SetTestedAt(v time.Time) *AuthConnectionRevisionCreate {
+	_c.mutation.SetTestedAt(v)
+	return _c
+}
+
+// SetNillableTestedAt sets the "tested_at" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableTestedAt(v *time.Time) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetTestedAt(*v)
+	}
+	return _c
+}
+
+// SetAppliedTestID sets the "applied_test_id" field.
+func (_c *AuthConnectionRevisionCreate) SetAppliedTestID(v string) *AuthConnectionRevisionCreate {
+	_c.mutation.SetAppliedTestID(v)
+	return _c
+}
+
+// SetNillableAppliedTestID sets the "applied_test_id" field if the given value is not nil.
+func (_c *AuthConnectionRevisionCreate) SetNillableAppliedTestID(v *string) *AuthConnectionRevisionCreate {
+	if v != nil {
+		_c.SetAppliedTestID(*v)
+	}
+	return _c
+}
+
 // SetConnection sets the "connection" edge to the AuthConnection entity.
 func (_c *AuthConnectionRevisionCreate) SetConnection(v *AuthConnection) *AuthConnectionRevisionCreate {
 	return _c.SetConnectionID(v.ID)
@@ -441,6 +483,10 @@ func (_c *AuthConnectionRevisionCreate) defaults() error {
 	if _, ok := _c.mutation.EmailLoginEnabled(); !ok {
 		v := authconnectionrevision.DefaultEmailLoginEnabled
 		_c.mutation.SetEmailLoginEnabled(v)
+	}
+	if _, ok := _c.mutation.FreshSupported(); !ok {
+		v := authconnectionrevision.DefaultFreshSupported
+		_c.mutation.SetFreshSupported(v)
 	}
 	return nil
 }
@@ -527,6 +573,9 @@ func (_c *AuthConnectionRevisionCreate) check() error {
 	}
 	if _, ok := _c.mutation.EmailLoginEnabled(); !ok {
 		return &ValidationError{Name: "email_login_enabled", err: errors.New(`ent: missing required field "AuthConnectionRevision.email_login_enabled"`)}
+	}
+	if _, ok := _c.mutation.FreshSupported(); !ok {
+		return &ValidationError{Name: "fresh_supported", err: errors.New(`ent: missing required field "AuthConnectionRevision.fresh_supported"`)}
 	}
 	if len(_c.mutation.ConnectionIDs()) == 0 {
 		return &ValidationError{Name: "connection", err: errors.New(`ent: missing required edge "AuthConnectionRevision.connection"`)}
@@ -664,6 +713,18 @@ func (_c *AuthConnectionRevisionCreate) createSpec() (*AuthConnectionRevision, *
 	if value, ok := _c.mutation.EmailLoginEnabled(); ok {
 		_spec.SetField(authconnectionrevision.FieldEmailLoginEnabled, field.TypeBool, value)
 		_node.EmailLoginEnabled = value
+	}
+	if value, ok := _c.mutation.FreshSupported(); ok {
+		_spec.SetField(authconnectionrevision.FieldFreshSupported, field.TypeBool, value)
+		_node.FreshSupported = value
+	}
+	if value, ok := _c.mutation.TestedAt(); ok {
+		_spec.SetField(authconnectionrevision.FieldTestedAt, field.TypeTime, value)
+		_node.TestedAt = &value
+	}
+	if value, ok := _c.mutation.AppliedTestID(); ok {
+		_spec.SetField(authconnectionrevision.FieldAppliedTestID, field.TypeString, value)
+		_node.AppliedTestID = value
 	}
 	if nodes := _c.mutation.ConnectionIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

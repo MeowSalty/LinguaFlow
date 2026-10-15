@@ -87,6 +87,22 @@ const (
 	FieldAuthorizationExpiresAt = "authorization_expires_at"
 	// FieldFailureCode holds the string denoting the failure_code field in the database.
 	FieldFailureCode = "failure_code"
+	// FieldActorSessionID holds the string denoting the actor_session_id field in the database.
+	FieldActorSessionID = "actor_session_id"
+	// FieldTestSnapshot holds the string denoting the test_snapshot field in the database.
+	FieldTestSnapshot = "test_snapshot"
+	// FieldTestProtocolFingerprint holds the string denoting the test_protocol_fingerprint field in the database.
+	FieldTestProtocolFingerprint = "test_protocol_fingerprint"
+	// FieldTestDiagnosticFingerprint holds the string denoting the test_diagnostic_fingerprint field in the database.
+	FieldTestDiagnosticFingerprint = "test_diagnostic_fingerprint"
+	// FieldTestDeploymentFingerprint holds the string denoting the test_deployment_fingerprint field in the database.
+	FieldTestDeploymentFingerprint = "test_deployment_fingerprint"
+	// FieldTestValidatedAt holds the string denoting the test_validated_at field in the database.
+	FieldTestValidatedAt = "test_validated_at"
+	// FieldTestAppliedRevision holds the string denoting the test_applied_revision field in the database.
+	FieldTestAppliedRevision = "test_applied_revision"
+	// FieldTestBaseRevision holds the string denoting the test_base_revision field in the database.
+	FieldTestBaseRevision = "test_base_revision"
 	// FieldExpiresAt holds the string denoting the expires_at field in the database.
 	FieldExpiresAt = "expires_at"
 	// FieldFinishedAt holds the string denoting the finished_at field in the database.
@@ -143,6 +159,14 @@ var Columns = []string{
 	FieldAuthorizedTargetID,
 	FieldAuthorizationExpiresAt,
 	FieldFailureCode,
+	FieldActorSessionID,
+	FieldTestSnapshot,
+	FieldTestProtocolFingerprint,
+	FieldTestDiagnosticFingerprint,
+	FieldTestDeploymentFingerprint,
+	FieldTestValidatedAt,
+	FieldTestAppliedRevision,
+	FieldTestBaseRevision,
 	FieldExpiresAt,
 	FieldFinishedAt,
 }
@@ -190,6 +214,12 @@ var (
 	CompletionURLValidator func(string) error
 	// DefaultReturnTo holds the default value on creation for the "return_to" field.
 	DefaultReturnTo string
+	// ActorSessionIDValidator is a validator for the "actor_session_id" field. It is called by the builders before save.
+	ActorSessionIDValidator func(int) error
+	// TestAppliedRevisionValidator is a validator for the "test_applied_revision" field. It is called by the builders before save.
+	TestAppliedRevisionValidator func(int64) error
+	// TestBaseRevisionValidator is a validator for the "test_base_revision" field. It is called by the builders before save.
+	TestBaseRevisionValidator func(int64) error
 	// IDValidator is a validator for the "id" field. It is called by the builders before save.
 	IDValidator func(string) error
 )
@@ -456,6 +486,46 @@ func ByAuthorizationExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 // ByFailureCode orders the results by the failure_code field.
 func ByFailureCode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFailureCode, opts...).ToFunc()
+}
+
+// ByActorSessionID orders the results by the actor_session_id field.
+func ByActorSessionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldActorSessionID, opts...).ToFunc()
+}
+
+// ByTestSnapshot orders the results by the test_snapshot field.
+func ByTestSnapshot(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTestSnapshot, opts...).ToFunc()
+}
+
+// ByTestProtocolFingerprint orders the results by the test_protocol_fingerprint field.
+func ByTestProtocolFingerprint(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTestProtocolFingerprint, opts...).ToFunc()
+}
+
+// ByTestDiagnosticFingerprint orders the results by the test_diagnostic_fingerprint field.
+func ByTestDiagnosticFingerprint(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTestDiagnosticFingerprint, opts...).ToFunc()
+}
+
+// ByTestDeploymentFingerprint orders the results by the test_deployment_fingerprint field.
+func ByTestDeploymentFingerprint(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTestDeploymentFingerprint, opts...).ToFunc()
+}
+
+// ByTestValidatedAt orders the results by the test_validated_at field.
+func ByTestValidatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTestValidatedAt, opts...).ToFunc()
+}
+
+// ByTestAppliedRevision orders the results by the test_applied_revision field.
+func ByTestAppliedRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTestAppliedRevision, opts...).ToFunc()
+}
+
+// ByTestBaseRevision orders the results by the test_base_revision field.
+func ByTestBaseRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTestBaseRevision, opts...).ToFunc()
 }
 
 // ByExpiresAt orders the results by the expires_at field.

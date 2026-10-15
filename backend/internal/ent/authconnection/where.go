@@ -85,14 +85,14 @@ func AggregateRevision(v int64) predicate.AuthConnection {
 	return predicate.AuthConnection(sql.FieldEQ(FieldAggregateRevision, v))
 }
 
-// DraftRevision applies equality check predicate on the "draft_revision" field. It's identical to DraftRevisionEQ.
-func DraftRevision(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldEQ(FieldDraftRevision, v))
+// CurrentRevision applies equality check predicate on the "current_revision" field. It's identical to CurrentRevisionEQ.
+func CurrentRevision(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldCurrentRevision, v))
 }
 
-// PublishedRevision applies equality check predicate on the "published_revision" field. It's identical to PublishedRevisionEQ.
-func PublishedRevision(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldEQ(FieldPublishedRevision, v))
+// IdentityContract applies equality check predicate on the "identity_contract" field. It's identical to IdentityContractEQ.
+func IdentityContract(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldIdentityContract, v))
 }
 
 // AuthGeneration applies equality check predicate on the "auth_generation" field. It's identical to AuthGenerationEQ.
@@ -320,104 +320,149 @@ func AggregateRevisionLTE(v int64) predicate.AuthConnection {
 	return predicate.AuthConnection(sql.FieldLTE(FieldAggregateRevision, v))
 }
 
-// DraftRevisionEQ applies the EQ predicate on the "draft_revision" field.
-func DraftRevisionEQ(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldEQ(FieldDraftRevision, v))
+// CurrentRevisionEQ applies the EQ predicate on the "current_revision" field.
+func CurrentRevisionEQ(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldCurrentRevision, v))
 }
 
-// DraftRevisionNEQ applies the NEQ predicate on the "draft_revision" field.
-func DraftRevisionNEQ(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldNEQ(FieldDraftRevision, v))
+// CurrentRevisionNEQ applies the NEQ predicate on the "current_revision" field.
+func CurrentRevisionNEQ(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNEQ(FieldCurrentRevision, v))
 }
 
-// DraftRevisionIn applies the In predicate on the "draft_revision" field.
-func DraftRevisionIn(vs ...int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldIn(FieldDraftRevision, vs...))
+// CurrentRevisionIn applies the In predicate on the "current_revision" field.
+func CurrentRevisionIn(vs ...int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIn(FieldCurrentRevision, vs...))
 }
 
-// DraftRevisionNotIn applies the NotIn predicate on the "draft_revision" field.
-func DraftRevisionNotIn(vs ...int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldNotIn(FieldDraftRevision, vs...))
+// CurrentRevisionNotIn applies the NotIn predicate on the "current_revision" field.
+func CurrentRevisionNotIn(vs ...int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotIn(FieldCurrentRevision, vs...))
 }
 
-// DraftRevisionGT applies the GT predicate on the "draft_revision" field.
-func DraftRevisionGT(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldGT(FieldDraftRevision, v))
+// CurrentRevisionGT applies the GT predicate on the "current_revision" field.
+func CurrentRevisionGT(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGT(FieldCurrentRevision, v))
 }
 
-// DraftRevisionGTE applies the GTE predicate on the "draft_revision" field.
-func DraftRevisionGTE(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldGTE(FieldDraftRevision, v))
+// CurrentRevisionGTE applies the GTE predicate on the "current_revision" field.
+func CurrentRevisionGTE(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGTE(FieldCurrentRevision, v))
 }
 
-// DraftRevisionLT applies the LT predicate on the "draft_revision" field.
-func DraftRevisionLT(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldLT(FieldDraftRevision, v))
+// CurrentRevisionLT applies the LT predicate on the "current_revision" field.
+func CurrentRevisionLT(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLT(FieldCurrentRevision, v))
 }
 
-// DraftRevisionLTE applies the LTE predicate on the "draft_revision" field.
-func DraftRevisionLTE(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldLTE(FieldDraftRevision, v))
+// CurrentRevisionLTE applies the LTE predicate on the "current_revision" field.
+func CurrentRevisionLTE(v int64) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLTE(FieldCurrentRevision, v))
 }
 
-// DraftRevisionIsNil applies the IsNil predicate on the "draft_revision" field.
-func DraftRevisionIsNil() predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldIsNull(FieldDraftRevision))
+// StateEQ applies the EQ predicate on the "state" field.
+func StateEQ(v State) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldState, v))
 }
 
-// DraftRevisionNotNil applies the NotNil predicate on the "draft_revision" field.
-func DraftRevisionNotNil() predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldNotNull(FieldDraftRevision))
+// StateNEQ applies the NEQ predicate on the "state" field.
+func StateNEQ(v State) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNEQ(FieldState, v))
 }
 
-// PublishedRevisionEQ applies the EQ predicate on the "published_revision" field.
-func PublishedRevisionEQ(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldEQ(FieldPublishedRevision, v))
+// StateIn applies the In predicate on the "state" field.
+func StateIn(vs ...State) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIn(FieldState, vs...))
 }
 
-// PublishedRevisionNEQ applies the NEQ predicate on the "published_revision" field.
-func PublishedRevisionNEQ(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldNEQ(FieldPublishedRevision, v))
+// StateNotIn applies the NotIn predicate on the "state" field.
+func StateNotIn(vs ...State) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotIn(FieldState, vs...))
 }
 
-// PublishedRevisionIn applies the In predicate on the "published_revision" field.
-func PublishedRevisionIn(vs ...int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldIn(FieldPublishedRevision, vs...))
+// StateIsNil applies the IsNil predicate on the "state" field.
+func StateIsNil() predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIsNull(FieldState))
 }
 
-// PublishedRevisionNotIn applies the NotIn predicate on the "published_revision" field.
-func PublishedRevisionNotIn(vs ...int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldNotIn(FieldPublishedRevision, vs...))
+// StateNotNil applies the NotNil predicate on the "state" field.
+func StateNotNil() predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotNull(FieldState))
 }
 
-// PublishedRevisionGT applies the GT predicate on the "published_revision" field.
-func PublishedRevisionGT(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldGT(FieldPublishedRevision, v))
+// IdentityContractEQ applies the EQ predicate on the "identity_contract" field.
+func IdentityContractEQ(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEQ(FieldIdentityContract, v))
 }
 
-// PublishedRevisionGTE applies the GTE predicate on the "published_revision" field.
-func PublishedRevisionGTE(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldGTE(FieldPublishedRevision, v))
+// IdentityContractNEQ applies the NEQ predicate on the "identity_contract" field.
+func IdentityContractNEQ(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNEQ(FieldIdentityContract, v))
 }
 
-// PublishedRevisionLT applies the LT predicate on the "published_revision" field.
-func PublishedRevisionLT(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldLT(FieldPublishedRevision, v))
+// IdentityContractIn applies the In predicate on the "identity_contract" field.
+func IdentityContractIn(vs ...string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIn(FieldIdentityContract, vs...))
 }
 
-// PublishedRevisionLTE applies the LTE predicate on the "published_revision" field.
-func PublishedRevisionLTE(v int64) predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldLTE(FieldPublishedRevision, v))
+// IdentityContractNotIn applies the NotIn predicate on the "identity_contract" field.
+func IdentityContractNotIn(vs ...string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotIn(FieldIdentityContract, vs...))
 }
 
-// PublishedRevisionIsNil applies the IsNil predicate on the "published_revision" field.
-func PublishedRevisionIsNil() predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldIsNull(FieldPublishedRevision))
+// IdentityContractGT applies the GT predicate on the "identity_contract" field.
+func IdentityContractGT(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGT(FieldIdentityContract, v))
 }
 
-// PublishedRevisionNotNil applies the NotNil predicate on the "published_revision" field.
-func PublishedRevisionNotNil() predicate.AuthConnection {
-	return predicate.AuthConnection(sql.FieldNotNull(FieldPublishedRevision))
+// IdentityContractGTE applies the GTE predicate on the "identity_contract" field.
+func IdentityContractGTE(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldGTE(FieldIdentityContract, v))
+}
+
+// IdentityContractLT applies the LT predicate on the "identity_contract" field.
+func IdentityContractLT(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLT(FieldIdentityContract, v))
+}
+
+// IdentityContractLTE applies the LTE predicate on the "identity_contract" field.
+func IdentityContractLTE(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldLTE(FieldIdentityContract, v))
+}
+
+// IdentityContractContains applies the Contains predicate on the "identity_contract" field.
+func IdentityContractContains(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldContains(FieldIdentityContract, v))
+}
+
+// IdentityContractHasPrefix applies the HasPrefix predicate on the "identity_contract" field.
+func IdentityContractHasPrefix(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldHasPrefix(FieldIdentityContract, v))
+}
+
+// IdentityContractHasSuffix applies the HasSuffix predicate on the "identity_contract" field.
+func IdentityContractHasSuffix(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldHasSuffix(FieldIdentityContract, v))
+}
+
+// IdentityContractIsNil applies the IsNil predicate on the "identity_contract" field.
+func IdentityContractIsNil() predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldIsNull(FieldIdentityContract))
+}
+
+// IdentityContractNotNil applies the NotNil predicate on the "identity_contract" field.
+func IdentityContractNotNil() predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldNotNull(FieldIdentityContract))
+}
+
+// IdentityContractEqualFold applies the EqualFold predicate on the "identity_contract" field.
+func IdentityContractEqualFold(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldEqualFold(FieldIdentityContract, v))
+}
+
+// IdentityContractContainsFold applies the ContainsFold predicate on the "identity_contract" field.
+func IdentityContractContainsFold(v string) predicate.AuthConnection {
+	return predicate.AuthConnection(sql.FieldContainsFold(FieldIdentityContract, v))
 }
 
 // AuthGenerationEQ applies the EQ predicate on the "auth_generation" field.
@@ -617,29 +662,6 @@ func HasSecrets() predicate.AuthConnection {
 func HasSecretsWith(preds ...predicate.AuthConnectionSecret) predicate.AuthConnection {
 	return predicate.AuthConnection(func(s *sql.Selector) {
 		step := newSecretsStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasValidations applies the HasEdge predicate on the "validations" edge.
-func HasValidations() predicate.AuthConnection {
-	return predicate.AuthConnection(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, ValidationsTable, ValidationsColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasValidationsWith applies the HasEdge predicate on the "validations" edge with a given conditions (other predicates).
-func HasValidationsWith(preds ...predicate.AuthConnectionValidation) predicate.AuthConnection {
-	return predicate.AuthConnection(func(s *sql.Selector) {
-		step := newValidationsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

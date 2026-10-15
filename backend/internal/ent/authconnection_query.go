@@ -16,7 +16,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
@@ -35,7 +34,6 @@ type AuthConnectionQuery struct {
 	withBindings     *LoginBindingQuery
 	withSessions     *RefreshSessionQuery
 	withSecrets      *AuthConnectionSecretQuery
-	withValidations  *AuthConnectionValidationQuery
 	withTransactions *AuthTransactionQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -176,28 +174,6 @@ func (_q *AuthConnectionQuery) QuerySecrets() *AuthConnectionSecretQuery {
 			sqlgraph.From(authconnection.Table, authconnection.FieldID, selector),
 			sqlgraph.To(authconnectionsecret.Table, authconnectionsecret.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, authconnection.SecretsTable, authconnection.SecretsColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
-}
-
-// QueryValidations chains the current query on the "validations" edge.
-func (_q *AuthConnectionQuery) QueryValidations() *AuthConnectionValidationQuery {
-	query := (&AuthConnectionValidationClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(authconnection.Table, authconnection.FieldID, selector),
-			sqlgraph.To(authconnectionvalidation.Table, authconnectionvalidation.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, authconnection.ValidationsTable, authconnection.ValidationsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -424,7 +400,6 @@ func (_q *AuthConnectionQuery) Clone() *AuthConnectionQuery {
 		withBindings:     _q.withBindings.Clone(),
 		withSessions:     _q.withSessions.Clone(),
 		withSecrets:      _q.withSecrets.Clone(),
-		withValidations:  _q.withValidations.Clone(),
 		withTransactions: _q.withTransactions.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
@@ -484,17 +459,6 @@ func (_q *AuthConnectionQuery) WithSecrets(opts ...func(*AuthConnectionSecretQue
 		opt(query)
 	}
 	_q.withSecrets = query
-	return _q
-}
-
-// WithValidations tells the query-builder to eager-load the nodes that are connected to
-// the "validations" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *AuthConnectionQuery) WithValidations(opts ...func(*AuthConnectionValidationQuery)) *AuthConnectionQuery {
-	query := (&AuthConnectionValidationClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withValidations = query
 	return _q
 }
 
@@ -587,13 +551,12 @@ func (_q *AuthConnectionQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 	var (
 		nodes       = []*AuthConnection{}
 		_spec       = _q.querySpec()
-		loadedTypes = [7]bool{
+		loadedTypes = [6]bool{
 			_q.withRevisions != nil,
 			_q.withPolicies != nil,
 			_q.withBindings != nil,
 			_q.withSessions != nil,
 			_q.withSecrets != nil,
-			_q.withValidations != nil,
 			_q.withTransactions != nil,
 		}
 	)
@@ -647,15 +610,6 @@ func (_q *AuthConnectionQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 		if err := _q.loadSecrets(ctx, query, nodes,
 			func(n *AuthConnection) { n.Edges.Secrets = []*AuthConnectionSecret{} },
 			func(n *AuthConnection, e *AuthConnectionSecret) { n.Edges.Secrets = append(n.Edges.Secrets, e) }); err != nil {
-			return nil, err
-		}
-	}
-	if query := _q.withValidations; query != nil {
-		if err := _q.loadValidations(ctx, query, nodes,
-			func(n *AuthConnection) { n.Edges.Validations = []*AuthConnectionValidation{} },
-			func(n *AuthConnection, e *AuthConnectionValidation) {
-				n.Edges.Validations = append(n.Edges.Validations, e)
-			}); err != nil {
 			return nil, err
 		}
 	}
@@ -804,36 +758,6 @@ func (_q *AuthConnectionQuery) loadSecrets(ctx context.Context, query *AuthConne
 	}
 	query.Where(predicate.AuthConnectionSecret(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(authconnection.SecretsColumn), fks...))
-	}))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		fk := n.ConnectionID
-		node, ok := nodeids[fk]
-		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "connection_id" returned %v for node %v`, fk, n.ID)
-		}
-		assign(node, n)
-	}
-	return nil
-}
-func (_q *AuthConnectionQuery) loadValidations(ctx context.Context, query *AuthConnectionValidationQuery, nodes []*AuthConnection, init func(*AuthConnection), assign func(*AuthConnection, *AuthConnectionValidation)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[string]*AuthConnection)
-	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
-		}
-	}
-	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(authconnectionvalidation.FieldConnectionID)
-	}
-	query.Where(predicate.AuthConnectionValidation(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(authconnection.ValidationsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

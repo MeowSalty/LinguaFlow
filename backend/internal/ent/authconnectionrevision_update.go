@@ -152,6 +152,12 @@ func (_u *AuthConnectionRevisionUpdate) sqlSave(ctx context.Context) (_node int,
 	if _u.mutation.LogoMediaTypeCleared() {
 		_spec.ClearField(authconnectionrevision.FieldLogoMediaType, field.TypeString)
 	}
+	if _u.mutation.TestedAtCleared() {
+		_spec.ClearField(authconnectionrevision.FieldTestedAt, field.TypeTime)
+	}
+	if _u.mutation.AppliedTestIDCleared() {
+		_spec.ClearField(authconnectionrevision.FieldAppliedTestID, field.TypeString)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{authconnectionrevision.Label}
@@ -325,6 +331,12 @@ func (_u *AuthConnectionRevisionUpdateOne) sqlSave(ctx context.Context) (_node *
 	}
 	if _u.mutation.LogoMediaTypeCleared() {
 		_spec.ClearField(authconnectionrevision.FieldLogoMediaType, field.TypeString)
+	}
+	if _u.mutation.TestedAtCleared() {
+		_spec.ClearField(authconnectionrevision.FieldTestedAt, field.TypeTime)
+	}
+	if _u.mutation.AppliedTestIDCleared() {
+		_spec.ClearField(authconnectionrevision.FieldAppliedTestID, field.TypeString)
 	}
 	_node = &AuthConnectionRevision{config: _u.config}
 	_spec.Assign = _node.assignValues

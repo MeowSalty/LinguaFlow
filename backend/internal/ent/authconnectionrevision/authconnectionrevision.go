@@ -72,6 +72,12 @@ const (
 	FieldUsernameLoginEnabled = "username_login_enabled"
 	// FieldEmailLoginEnabled holds the string denoting the email_login_enabled field in the database.
 	FieldEmailLoginEnabled = "email_login_enabled"
+	// FieldFreshSupported holds the string denoting the fresh_supported field in the database.
+	FieldFreshSupported = "fresh_supported"
+	// FieldTestedAt holds the string denoting the tested_at field in the database.
+	FieldTestedAt = "tested_at"
+	// FieldAppliedTestID holds the string denoting the applied_test_id field in the database.
+	FieldAppliedTestID = "applied_test_id"
 	// EdgeConnection holds the string denoting the connection edge name in mutations.
 	EdgeConnection = "connection"
 	// Table holds the table name of the authconnectionrevision in the database.
@@ -116,6 +122,9 @@ var Columns = []string{
 	FieldLogoMediaType,
 	FieldUsernameLoginEnabled,
 	FieldEmailLoginEnabled,
+	FieldFreshSupported,
+	FieldTestedAt,
+	FieldAppliedTestID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -167,6 +176,8 @@ var (
 	DefaultUsernameLoginEnabled bool
 	// DefaultEmailLoginEnabled holds the default value on creation for the "email_login_enabled" field.
 	DefaultEmailLoginEnabled bool
+	// DefaultFreshSupported holds the default value on creation for the "fresh_supported" field.
+	DefaultFreshSupported bool
 )
 
 // Oauth2ClientAuthMethod defines the type for the "oauth2_client_auth_method" enum field.
@@ -364,6 +375,21 @@ func ByUsernameLoginEnabled(opts ...sql.OrderTermOption) OrderOption {
 // ByEmailLoginEnabled orders the results by the email_login_enabled field.
 func ByEmailLoginEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEmailLoginEnabled, opts...).ToFunc()
+}
+
+// ByFreshSupported orders the results by the fresh_supported field.
+func ByFreshSupported(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFreshSupported, opts...).ToFunc()
+}
+
+// ByTestedAt orders the results by the tested_at field.
+func ByTestedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTestedAt, opts...).ToFunc()
+}
+
+// ByAppliedTestID orders the results by the applied_test_id field.
+func ByAppliedTestID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAppliedTestID, opts...).ToFunc()
 }
 
 // ByConnectionField orders the results by connection field.

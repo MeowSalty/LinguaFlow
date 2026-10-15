@@ -225,6 +225,46 @@ func FailureCode(v string) predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldEQ(FieldFailureCode, v))
 }
 
+// ActorSessionID applies equality check predicate on the "actor_session_id" field. It's identical to ActorSessionIDEQ.
+func ActorSessionID(v int) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldActorSessionID, v))
+}
+
+// TestSnapshot applies equality check predicate on the "test_snapshot" field. It's identical to TestSnapshotEQ.
+func TestSnapshot(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestSnapshot, v))
+}
+
+// TestProtocolFingerprint applies equality check predicate on the "test_protocol_fingerprint" field. It's identical to TestProtocolFingerprintEQ.
+func TestProtocolFingerprint(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestProtocolFingerprint, v))
+}
+
+// TestDiagnosticFingerprint applies equality check predicate on the "test_diagnostic_fingerprint" field. It's identical to TestDiagnosticFingerprintEQ.
+func TestDiagnosticFingerprint(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDeploymentFingerprint applies equality check predicate on the "test_deployment_fingerprint" field. It's identical to TestDeploymentFingerprintEQ.
+func TestDeploymentFingerprint(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestDeploymentFingerprint, v))
+}
+
+// TestValidatedAt applies equality check predicate on the "test_validated_at" field. It's identical to TestValidatedAtEQ.
+func TestValidatedAt(v time.Time) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestValidatedAt, v))
+}
+
+// TestAppliedRevision applies equality check predicate on the "test_applied_revision" field. It's identical to TestAppliedRevisionEQ.
+func TestAppliedRevision(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestAppliedRevision, v))
+}
+
+// TestBaseRevision applies equality check predicate on the "test_base_revision" field. It's identical to TestBaseRevisionEQ.
+func TestBaseRevision(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestBaseRevision, v))
+}
+
 // ExpiresAt applies equality check predicate on the "expires_at" field. It's identical to ExpiresAtEQ.
 func ExpiresAt(v time.Time) predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldEQ(FieldExpiresAt, v))
@@ -2243,6 +2283,506 @@ func FailureCodeEqualFold(v string) predicate.AuthTransaction {
 // FailureCodeContainsFold applies the ContainsFold predicate on the "failure_code" field.
 func FailureCodeContainsFold(v string) predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldContainsFold(FieldFailureCode, v))
+}
+
+// ActorSessionIDEQ applies the EQ predicate on the "actor_session_id" field.
+func ActorSessionIDEQ(v int) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldActorSessionID, v))
+}
+
+// ActorSessionIDNEQ applies the NEQ predicate on the "actor_session_id" field.
+func ActorSessionIDNEQ(v int) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldActorSessionID, v))
+}
+
+// ActorSessionIDIn applies the In predicate on the "actor_session_id" field.
+func ActorSessionIDIn(vs ...int) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldActorSessionID, vs...))
+}
+
+// ActorSessionIDNotIn applies the NotIn predicate on the "actor_session_id" field.
+func ActorSessionIDNotIn(vs ...int) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldActorSessionID, vs...))
+}
+
+// ActorSessionIDGT applies the GT predicate on the "actor_session_id" field.
+func ActorSessionIDGT(v int) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldActorSessionID, v))
+}
+
+// ActorSessionIDGTE applies the GTE predicate on the "actor_session_id" field.
+func ActorSessionIDGTE(v int) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldActorSessionID, v))
+}
+
+// ActorSessionIDLT applies the LT predicate on the "actor_session_id" field.
+func ActorSessionIDLT(v int) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldActorSessionID, v))
+}
+
+// ActorSessionIDLTE applies the LTE predicate on the "actor_session_id" field.
+func ActorSessionIDLTE(v int) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldActorSessionID, v))
+}
+
+// ActorSessionIDIsNil applies the IsNil predicate on the "actor_session_id" field.
+func ActorSessionIDIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldActorSessionID))
+}
+
+// ActorSessionIDNotNil applies the NotNil predicate on the "actor_session_id" field.
+func ActorSessionIDNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldActorSessionID))
+}
+
+// TestSnapshotEQ applies the EQ predicate on the "test_snapshot" field.
+func TestSnapshotEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestSnapshot, v))
+}
+
+// TestSnapshotNEQ applies the NEQ predicate on the "test_snapshot" field.
+func TestSnapshotNEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldTestSnapshot, v))
+}
+
+// TestSnapshotIn applies the In predicate on the "test_snapshot" field.
+func TestSnapshotIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldTestSnapshot, vs...))
+}
+
+// TestSnapshotNotIn applies the NotIn predicate on the "test_snapshot" field.
+func TestSnapshotNotIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldTestSnapshot, vs...))
+}
+
+// TestSnapshotGT applies the GT predicate on the "test_snapshot" field.
+func TestSnapshotGT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldTestSnapshot, v))
+}
+
+// TestSnapshotGTE applies the GTE predicate on the "test_snapshot" field.
+func TestSnapshotGTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldTestSnapshot, v))
+}
+
+// TestSnapshotLT applies the LT predicate on the "test_snapshot" field.
+func TestSnapshotLT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldTestSnapshot, v))
+}
+
+// TestSnapshotLTE applies the LTE predicate on the "test_snapshot" field.
+func TestSnapshotLTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldTestSnapshot, v))
+}
+
+// TestSnapshotContains applies the Contains predicate on the "test_snapshot" field.
+func TestSnapshotContains(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContains(FieldTestSnapshot, v))
+}
+
+// TestSnapshotHasPrefix applies the HasPrefix predicate on the "test_snapshot" field.
+func TestSnapshotHasPrefix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasPrefix(FieldTestSnapshot, v))
+}
+
+// TestSnapshotHasSuffix applies the HasSuffix predicate on the "test_snapshot" field.
+func TestSnapshotHasSuffix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasSuffix(FieldTestSnapshot, v))
+}
+
+// TestSnapshotIsNil applies the IsNil predicate on the "test_snapshot" field.
+func TestSnapshotIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldTestSnapshot))
+}
+
+// TestSnapshotNotNil applies the NotNil predicate on the "test_snapshot" field.
+func TestSnapshotNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldTestSnapshot))
+}
+
+// TestSnapshotEqualFold applies the EqualFold predicate on the "test_snapshot" field.
+func TestSnapshotEqualFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEqualFold(FieldTestSnapshot, v))
+}
+
+// TestSnapshotContainsFold applies the ContainsFold predicate on the "test_snapshot" field.
+func TestSnapshotContainsFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContainsFold(FieldTestSnapshot, v))
+}
+
+// TestProtocolFingerprintEQ applies the EQ predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintNEQ applies the NEQ predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintNEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintIn applies the In predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldTestProtocolFingerprint, vs...))
+}
+
+// TestProtocolFingerprintNotIn applies the NotIn predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintNotIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldTestProtocolFingerprint, vs...))
+}
+
+// TestProtocolFingerprintGT applies the GT predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintGT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintGTE applies the GTE predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintGTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintLT applies the LT predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintLT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintLTE applies the LTE predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintLTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintContains applies the Contains predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintContains(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContains(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintHasPrefix applies the HasPrefix predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintHasPrefix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasPrefix(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintHasSuffix applies the HasSuffix predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintHasSuffix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasSuffix(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintIsNil applies the IsNil predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldTestProtocolFingerprint))
+}
+
+// TestProtocolFingerprintNotNil applies the NotNil predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldTestProtocolFingerprint))
+}
+
+// TestProtocolFingerprintEqualFold applies the EqualFold predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintEqualFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEqualFold(FieldTestProtocolFingerprint, v))
+}
+
+// TestProtocolFingerprintContainsFold applies the ContainsFold predicate on the "test_protocol_fingerprint" field.
+func TestProtocolFingerprintContainsFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContainsFold(FieldTestProtocolFingerprint, v))
+}
+
+// TestDiagnosticFingerprintEQ applies the EQ predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintNEQ applies the NEQ predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintNEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintIn applies the In predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldTestDiagnosticFingerprint, vs...))
+}
+
+// TestDiagnosticFingerprintNotIn applies the NotIn predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintNotIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldTestDiagnosticFingerprint, vs...))
+}
+
+// TestDiagnosticFingerprintGT applies the GT predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintGT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintGTE applies the GTE predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintGTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintLT applies the LT predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintLT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintLTE applies the LTE predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintLTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintContains applies the Contains predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintContains(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContains(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintHasPrefix applies the HasPrefix predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintHasPrefix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasPrefix(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintHasSuffix applies the HasSuffix predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintHasSuffix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasSuffix(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintIsNil applies the IsNil predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldTestDiagnosticFingerprint))
+}
+
+// TestDiagnosticFingerprintNotNil applies the NotNil predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldTestDiagnosticFingerprint))
+}
+
+// TestDiagnosticFingerprintEqualFold applies the EqualFold predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintEqualFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEqualFold(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDiagnosticFingerprintContainsFold applies the ContainsFold predicate on the "test_diagnostic_fingerprint" field.
+func TestDiagnosticFingerprintContainsFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContainsFold(FieldTestDiagnosticFingerprint, v))
+}
+
+// TestDeploymentFingerprintEQ applies the EQ predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintNEQ applies the NEQ predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintNEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintIn applies the In predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldTestDeploymentFingerprint, vs...))
+}
+
+// TestDeploymentFingerprintNotIn applies the NotIn predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintNotIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldTestDeploymentFingerprint, vs...))
+}
+
+// TestDeploymentFingerprintGT applies the GT predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintGT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintGTE applies the GTE predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintGTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintLT applies the LT predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintLT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintLTE applies the LTE predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintLTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintContains applies the Contains predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintContains(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContains(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintHasPrefix applies the HasPrefix predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintHasPrefix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasPrefix(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintHasSuffix applies the HasSuffix predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintHasSuffix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasSuffix(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintIsNil applies the IsNil predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldTestDeploymentFingerprint))
+}
+
+// TestDeploymentFingerprintNotNil applies the NotNil predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldTestDeploymentFingerprint))
+}
+
+// TestDeploymentFingerprintEqualFold applies the EqualFold predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintEqualFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEqualFold(FieldTestDeploymentFingerprint, v))
+}
+
+// TestDeploymentFingerprintContainsFold applies the ContainsFold predicate on the "test_deployment_fingerprint" field.
+func TestDeploymentFingerprintContainsFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContainsFold(FieldTestDeploymentFingerprint, v))
+}
+
+// TestValidatedAtEQ applies the EQ predicate on the "test_validated_at" field.
+func TestValidatedAtEQ(v time.Time) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestValidatedAt, v))
+}
+
+// TestValidatedAtNEQ applies the NEQ predicate on the "test_validated_at" field.
+func TestValidatedAtNEQ(v time.Time) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldTestValidatedAt, v))
+}
+
+// TestValidatedAtIn applies the In predicate on the "test_validated_at" field.
+func TestValidatedAtIn(vs ...time.Time) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldTestValidatedAt, vs...))
+}
+
+// TestValidatedAtNotIn applies the NotIn predicate on the "test_validated_at" field.
+func TestValidatedAtNotIn(vs ...time.Time) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldTestValidatedAt, vs...))
+}
+
+// TestValidatedAtGT applies the GT predicate on the "test_validated_at" field.
+func TestValidatedAtGT(v time.Time) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldTestValidatedAt, v))
+}
+
+// TestValidatedAtGTE applies the GTE predicate on the "test_validated_at" field.
+func TestValidatedAtGTE(v time.Time) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldTestValidatedAt, v))
+}
+
+// TestValidatedAtLT applies the LT predicate on the "test_validated_at" field.
+func TestValidatedAtLT(v time.Time) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldTestValidatedAt, v))
+}
+
+// TestValidatedAtLTE applies the LTE predicate on the "test_validated_at" field.
+func TestValidatedAtLTE(v time.Time) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldTestValidatedAt, v))
+}
+
+// TestValidatedAtIsNil applies the IsNil predicate on the "test_validated_at" field.
+func TestValidatedAtIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldTestValidatedAt))
+}
+
+// TestValidatedAtNotNil applies the NotNil predicate on the "test_validated_at" field.
+func TestValidatedAtNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldTestValidatedAt))
+}
+
+// TestAppliedRevisionEQ applies the EQ predicate on the "test_applied_revision" field.
+func TestAppliedRevisionEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestAppliedRevision, v))
+}
+
+// TestAppliedRevisionNEQ applies the NEQ predicate on the "test_applied_revision" field.
+func TestAppliedRevisionNEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldTestAppliedRevision, v))
+}
+
+// TestAppliedRevisionIn applies the In predicate on the "test_applied_revision" field.
+func TestAppliedRevisionIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldTestAppliedRevision, vs...))
+}
+
+// TestAppliedRevisionNotIn applies the NotIn predicate on the "test_applied_revision" field.
+func TestAppliedRevisionNotIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldTestAppliedRevision, vs...))
+}
+
+// TestAppliedRevisionGT applies the GT predicate on the "test_applied_revision" field.
+func TestAppliedRevisionGT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldTestAppliedRevision, v))
+}
+
+// TestAppliedRevisionGTE applies the GTE predicate on the "test_applied_revision" field.
+func TestAppliedRevisionGTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldTestAppliedRevision, v))
+}
+
+// TestAppliedRevisionLT applies the LT predicate on the "test_applied_revision" field.
+func TestAppliedRevisionLT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldTestAppliedRevision, v))
+}
+
+// TestAppliedRevisionLTE applies the LTE predicate on the "test_applied_revision" field.
+func TestAppliedRevisionLTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldTestAppliedRevision, v))
+}
+
+// TestAppliedRevisionIsNil applies the IsNil predicate on the "test_applied_revision" field.
+func TestAppliedRevisionIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldTestAppliedRevision))
+}
+
+// TestAppliedRevisionNotNil applies the NotNil predicate on the "test_applied_revision" field.
+func TestAppliedRevisionNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldTestAppliedRevision))
+}
+
+// TestBaseRevisionEQ applies the EQ predicate on the "test_base_revision" field.
+func TestBaseRevisionEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldTestBaseRevision, v))
+}
+
+// TestBaseRevisionNEQ applies the NEQ predicate on the "test_base_revision" field.
+func TestBaseRevisionNEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldTestBaseRevision, v))
+}
+
+// TestBaseRevisionIn applies the In predicate on the "test_base_revision" field.
+func TestBaseRevisionIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldTestBaseRevision, vs...))
+}
+
+// TestBaseRevisionNotIn applies the NotIn predicate on the "test_base_revision" field.
+func TestBaseRevisionNotIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldTestBaseRevision, vs...))
+}
+
+// TestBaseRevisionGT applies the GT predicate on the "test_base_revision" field.
+func TestBaseRevisionGT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldTestBaseRevision, v))
+}
+
+// TestBaseRevisionGTE applies the GTE predicate on the "test_base_revision" field.
+func TestBaseRevisionGTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldTestBaseRevision, v))
+}
+
+// TestBaseRevisionLT applies the LT predicate on the "test_base_revision" field.
+func TestBaseRevisionLT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldTestBaseRevision, v))
+}
+
+// TestBaseRevisionLTE applies the LTE predicate on the "test_base_revision" field.
+func TestBaseRevisionLTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldTestBaseRevision, v))
+}
+
+// TestBaseRevisionIsNil applies the IsNil predicate on the "test_base_revision" field.
+func TestBaseRevisionIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldTestBaseRevision))
+}
+
+// TestBaseRevisionNotNil applies the NotNil predicate on the "test_base_revision" field.
+func TestBaseRevisionNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldTestBaseRevision))
 }
 
 // ExpiresAtEQ applies the EQ predicate on the "expires_at" field.

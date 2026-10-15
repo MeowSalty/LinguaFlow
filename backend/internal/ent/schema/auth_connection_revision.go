@@ -11,8 +11,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 )
 
-// Revisions are immutable snapshots. Only the connection's published pointer
-// selects runtime configuration; a saved candidate never changes authentication.
+// Revisions are immutable snapshots. The connection's current_revision points to
+// the single saved runtime configuration; each snapshot records whether it was
+// browser-validated at save time.
 type AuthConnectionRevision struct{ ent.Schema }
 
 func (AuthConnectionRevision) Mixin() []ent.Mixin { return []ent.Mixin{TimeMixin{}} }
@@ -44,6 +45,9 @@ func (AuthConnectionRevision) Fields() []ent.Field {
 		field.String("logo_media_type").Optional().Immutable(),
 		field.Bool("username_login_enabled").Default(false).Immutable(),
 		field.Bool("email_login_enabled").Default(false).Immutable(),
+		field.Bool("fresh_supported").Default(false).Immutable(),
+		field.Time("tested_at").Optional().Nillable().Immutable(),
+		field.String("applied_test_id").Optional().Immutable(),
 	}
 }
 func (AuthConnectionRevision) Edges() []ent.Edge {
