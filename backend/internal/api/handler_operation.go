@@ -66,6 +66,18 @@ func (s *Server) handleListOperations(w http.ResponseWriter, r *http.Request, p 
 				NextRetryAt: timeutil.NormalizePtr(t.NextRetryAt), CreatedAt: timeutil.Normalize(t.CreatedAt), UpdatedAt: timeutil.Normalize(t.UpdatedAt),
 				SupportedActions: []StorageOperationSupportedActions{"view", "cancel", "retry"},
 			})
+		} else if row.Retirement != nil {
+			// 跨项目退出父任务不携带 project_id,也不借用项目权限;连接管理权限已在查询层过滤。
+			r := row.Retirement
+			err = item.FromStorageRetirementOperation(StorageRetirementOperation{
+				TaskType: "storage_retirement", TaskId: strconv.Itoa(r.ID),
+				Scope: StorageRetirementScope(r.OwnerKind), OwnerId: r.OwnerID,
+				TargetKind: StorageRetirementTargetKind(r.TargetKind), TargetId: r.TargetID, Name: row.RetirementName,
+				Status: StorageRetirementStatus(r.Status), Phase: StorageRetirementPhase(r.Phase), ErrorCode: r.ErrorCode,
+				NextCheckAt: timeutil.NormalizePtr(r.NextCheckAt), CreatedAt: timeutil.Normalize(r.CreatedAt), UpdatedAt: timeutil.Normalize(r.UpdatedAt),
+				StartedAt: timeutil.NormalizePtr(r.StartedAt), FinishedAt: timeutil.NormalizePtr(r.FinishedAt),
+				CanDelete: false, SupportedActions: []StorageRetirementOperationSupportedActions{"view", "resume", "cancel"},
+			})
 		} else {
 			t := row.SyncTask
 			sync := GlossarySyncOperation{TaskType: "glossary_sync", TaskId: strconv.Itoa(t.ID), ProjectId: t.ProjectID, ProjectName: row.ProjectName, Status: GlossarySyncOperationStatus(t.Status), CreatedAt: timeutil.Normalize(t.CreatedAt), UpdatedAt: timeutil.Normalize(t.UpdatedAt), StartedAt: timeutil.NormalizePtr(t.StartedAt), FinishedAt: timeutil.NormalizePtr(t.FinishedAt), CanDelete: s.canDeleteHistory(r.Context(), actor.User.ID, "glossary_sync", t.ID, t.ProjectID, t.Status), SupportedActions: []GlossarySyncOperationSupportedActions{"view", "cancel", "delete"}}

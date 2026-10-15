@@ -23,15 +23,16 @@ const (
 )
 
 type problemDetails struct {
-	ErrorCode   string `json:"error_code,omitempty"`
-	TaskID      int    `json:"task_id,omitempty"`
-	OperationID string `json:"operation_id,omitempty"`
-	CheckID     int    `json:"check_id,omitempty"`
-	Type        string `json:"type,omitempty"`
-	Title       string `json:"title"`
-	Status      int    `json:"status"`
-	Detail      string `json:"detail,omitempty"`
-	Instance    string `json:"instance,omitempty"`
+	ErrorCode    string `json:"error_code,omitempty"`
+	TaskID       int    `json:"task_id,omitempty"`
+	OperationID  string `json:"operation_id,omitempty"`
+	CheckID      int    `json:"check_id,omitempty"`
+	RetirementID int    `json:"retirement_id,omitempty"`
+	Type         string `json:"type,omitempty"`
+	Title        string `json:"title"`
+	Status       int    `json:"status"`
+	Detail       string `json:"detail,omitempty"`
+	Instance     string `json:"instance,omitempty"`
 }
 
 type storageProblemIdentityKey struct{}
@@ -161,6 +162,7 @@ func (s *Server) writeProblemWithType(w http.ResponseWriter, r *http.Request, st
 	}
 	if identity, ok := r.Context().Value(storageProblemIdentityKey{}).(*service.StorageOperationError); ok {
 		problem.TaskID, problem.OperationID, problem.CheckID = identity.TaskID, identity.OperationID, identity.CheckID
+		problem.RetirementID = identity.RetirementID
 	}
 	_ = json.NewEncoder(w).Encode(problem)
 }
