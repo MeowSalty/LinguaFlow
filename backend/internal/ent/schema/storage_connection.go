@@ -25,12 +25,18 @@ func (StorageConnection) Fields() []ent.Field {
 		field.Int64("active_auth_generation").Default(0).NonNegative(),
 		field.Int64("management_generation").Default(0).NonNegative(),
 		field.Enum("status").Values("enabled", "disabled").Default("enabled"),
+		field.Enum("lifecycle").Values("available", "retiring", "removed").Default("available"),
+		field.Int("retirement_id").Optional().Nillable().Positive(),
 		field.String("health").Default("unknown"),
 		field.Time("checked_at").Optional().Nillable(),
+		field.Time("removed_at").Optional().Nillable(),
+		field.Int("removed_by").Optional().Nillable().NonNegative(),
+		field.Int64("execution_generation").Default(0).NonNegative(),
+		field.Enum("remote_use_state").Values("unknown", "never", "attempted").Default("unknown"),
 	}
 }
 
 // Database checks also cover atomic Add mutations, which skip field validators.
 func (StorageConnection) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"storage_connection_management_generation_safe": "management_generation >= 0 AND management_generation <= 9007199254740991", "storage_connection_active_auth_generation_safe": "active_auth_generation >= 0 AND active_auth_generation <= 9007199254740991"}}}
+	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"storage_connection_management_generation_safe": "management_generation >= 0 AND management_generation <= 9007199254740991", "storage_connection_active_auth_generation_safe": "active_auth_generation >= 0 AND active_auth_generation <= 9007199254740991", "storage_connection_execution_generation_safe": "execution_generation >= 0 AND execution_generation <= 9007199254740991"}}}
 }
