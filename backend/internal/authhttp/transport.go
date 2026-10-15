@@ -25,17 +25,51 @@ type Transport struct {
 	Base       http.Transport
 }
 
+// RoundTrip validates the URL, obtains gate admission from the context, and
+// holds the gate activity until the response body is fully read or closed.
+// Gate errors are returned as-is so callers can identify blocked connections.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL == nil || !t.ValidURL(req.URL) {
 		return nil, authprotocol.ErrUnavailable
 	}
+
+	req, release, gateErr := t.admit(req)
+	if gateErr != nil {
+		return nil, gateErr
+	}
+
 	resp, err := t.Base.RoundTrip(req)
 	if err != nil {
+		if release != nil {
+			release()
+		}
 		return nil, authprotocol.ErrUnavailable
 	}
-	resp.Body = &limitedBody{ReadCloser: resp.Body, reader: io.LimitReader(resp.Body, t.Deployment.MaxResponseBytes+1), max: t.Deployment.MaxResponseBytes}
+
+	var body io.ReadCloser = &limitedBody{ReadCloser: resp.Body, reader: io.LimitReader(resp.Body, t.Deployment.MaxResponseBytes+1), max: t.Deployment.MaxResponseBytes}
+	if release != nil {
+		body = &gatedBody{ReadCloser: body, release: release}
+	}
+	resp.Body = body
 	return resp, nil
 }
+
+// admit checks the request context for gate info and calls Enter to register
+// a cancellable activity. On success it returns a new request bound to the
+// activity context and a release func; otherwise it returns the original
+// request and a nil release (no gate), or the gate error itself.
+func (t *Transport) admit(req *http.Request) (*http.Request, func(), error) {
+	info := gateFromContext(req.Context())
+	if info == nil || info.gate == nil || info.key == "" {
+		return req, nil, nil
+	}
+	actCtx, release, err := info.gate.Enter(req.Context(), info.key, info.check)
+	if err != nil {
+		return req, nil, err
+	}
+	return req.WithContext(actCtx), release, nil
+}
+
 func (t *Transport) ValidRawURL(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && t.ValidURL(u)
