@@ -28,7 +28,7 @@ func (p passwordPolicy) canLogin() bool {
 // initializePasswordConnection runs only inside first-instance initialization.
 // Reads never recreate missing policy or overwrite an administrator's version.
 func initializePasswordConnection(ctx context.Context, client *ent.Client) error {
-	if err := client.AuthConnection.Create().SetID(PasswordConnectionID).SetKind(authconnection.KindPassword).SetPublishedRevision(1).Exec(ctx); err != nil {
+	if err := client.AuthConnection.Create().SetID(PasswordConnectionID).SetKind(authconnection.KindPassword).SetCurrentRevision(1).Exec(ctx); err != nil {
 		return err
 	}
 	if err := client.AuthConnectionRevision.Create().SetConnectionID(PasswordConnectionID).SetRevision(1).
@@ -47,10 +47,10 @@ func readPasswordPolicy(ctx context.Context, client *ent.Client) (passwordPolicy
 	if err != nil {
 		return p, fmt.Errorf("%w: password connection: %w", ErrSettingsUnavailable, err)
 	}
-	if connection.Kind != authconnection.KindPassword || connection.PublishedRevision == nil || *connection.PublishedRevision < 1 || *connection.PublishedRevision > maxAuthVersion || connection.AuthGeneration < 1 || connection.AuthGeneration > maxAuthVersion {
+	if connection.Kind != authconnection.KindPassword || connection.CurrentRevision < 1 || connection.CurrentRevision > maxAuthVersion || connection.AuthGeneration < 1 || connection.AuthGeneration > maxAuthVersion {
 		return p, fmt.Errorf("%w: invalid password connection version", ErrSettingsUnavailable)
 	}
-	revision := *connection.PublishedRevision
+	revision := connection.CurrentRevision
 	cfg, err := client.AuthConnectionRevision.Query().Where(authconnectionrevision.ConnectionIDEQ(PasswordConnectionID), authconnectionrevision.RevisionEQ(revision)).Only(ctx)
 	if err != nil {
 		return p, fmt.Errorf("%w: password configuration: %w", ErrSettingsUnavailable, err)
@@ -110,7 +110,7 @@ func (s *AuthService) Capabilities(ctx context.Context) (AuthCapabilities, error
 		return result, err
 	}
 	for _, connection := range connections {
-		if connection.ID == PasswordConnectionID || connection.PublishedRevision == nil || connection.ArchivedAt != nil {
+		if connection.ID == PasswordConnectionID || connection.State != authconnection.StateEnabled || connection.ArchivedAt != nil {
 			continue
 		}
 		x, err := readExternalConnection(ctx, s.client, connection.ID, 0)

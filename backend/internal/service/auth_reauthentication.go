@@ -203,18 +203,3 @@ func (s *ExternalAuthService) StartLink(ctx context.Context, userID int, connect
 	}
 	return s.startExternal(WithExternalActor(ctx, userID, proof.AuthVersion), p, authtransaction.PurposeLink, &userID, nil, input.ExternalBrowserInput, "link", connectionID, proof.ExpiresAt, proof)
 }
-
-func (s *ExternalAuthService) StartTest(ctx context.Context, actorID int, connectionID string, expected int64, input ExternalBrowserInput) (ExternalStartResult, error) {
-	p, err := s.candidateConnection(ctx, actorID, connectionID, expected)
-	if err != nil {
-		return ExternalStartResult{}, err
-	}
-	account, err := s.client.User.Get(ctx, actorID)
-	if err != nil || account.Role != SystemRoleAdmin || !account.Active {
-		return ExternalStartResult{}, ErrForbidden
-	}
-	if err = checkExternalActor(ctx, account); err != nil {
-		return ExternalStartResult{}, err
-	}
-	return s.startExternal(ctx, p, authtransaction.PurposeTest, &actorID, nil, input, "", "", time.Time{})
-}

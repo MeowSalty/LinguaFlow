@@ -121,7 +121,7 @@ func (s *ExternalAuthService) LoginMethods(ctx context.Context, userID int) (Log
 	if out.Password.IsSet {
 		out.Password.CanDelete, _ = connectionFallbackAt(ctx, s.client, account, PasswordConnectionID, s.now())
 	}
-	connections, err := s.client.AuthConnection.Query().Where(authconnection.KindIn(authconnection.KindOidc, authconnection.KindGenericOauth2), authconnection.ArchivedAtIsNil(), authconnection.PublishedRevisionNotNil()).All(ctx)
+	connections, err := s.client.AuthConnection.Query().Where(authconnection.KindIn(authconnection.KindOidc, authconnection.KindGenericOauth2), authconnection.ArchivedAtIsNil(), authconnection.StateEQ(authconnection.StateEnabled)).All(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -313,13 +313,26 @@ func (s *ExternalAuthService) DeletePassword(ctx context.Context, userID int, ra
 // CleanupExpired removes short-lived proofs and provider profile data. Terminal
 // rows remain until the original deadline so retries stay unambiguously invalid.
 func (s *ExternalAuthService) CleanupExpired(ctx context.Context) error {
+	s.cleanupMu.Lock()
+	defer s.cleanupMu.Unlock()
 	now := timeutil.Normalize(s.now())
 	if err := s.cleanupRuleEvidence(ctx, now); err != nil {
 		return err
 	}
-	if _, err := s.client.AuthTransaction.Delete().Where(authtransaction.ExpiresAtLTE(now)).Exec(ctx); err != nil {
+	expired, err := s.client.AuthTransaction.Query().Where(authtransaction.ExpiresAtLTE(now)).Limit(256).IDs(ctx)
+	if err != nil {
 		return err
 	}
-	_, err := s.client.ReauthenticationProof.Delete().Where(reauthenticationproof.ExpiresAtLTE(now)).Exec(ctx)
+	if _, err := s.client.AuthTransaction.Delete().Where(authtransaction.IDIn(expired...)).Exec(ctx); err != nil {
+		return err
+	}
+	if err := s.collectConnectionSnapshots(ctx, now); err != nil {
+		return err
+	}
+	proofs, err := s.client.ReauthenticationProof.Query().Where(reauthenticationproof.ExpiresAtLTE(now)).Limit(256).IDs(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = s.client.ReauthenticationProof.Delete().Where(reauthenticationproof.IDIn(proofs...)).Exec(ctx)
 	return err
 }

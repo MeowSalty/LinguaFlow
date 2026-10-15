@@ -110,7 +110,9 @@ func (s *ExternalAuthService) callbackURL(connectionID string) (string, error) {
 	}
 	base.Path = strings.TrimRight(base.Path, "/") + "/api/v1/auth/external/" + url.PathEscape(connectionID) + "/callback"
 	base.RawQuery = ""
+	base.ForceQuery = false
 	base.Fragment = ""
+	base.RawFragment = ""
 	return base.String(), nil
 }
 
@@ -162,36 +164,103 @@ func (s *ExternalAuthService) startExternal(ctx context.Context, p externalConne
 	if err != nil {
 		return ExternalStartResult{}, err
 	}
+	var testSnapshot string
+	if purpose == authtransaction.PurposeTest {
+		snapshot, ok := ctx.Value(authTestStartKey{}).(authTestSnapshot)
+		if !ok {
+			return ExternalStartResult{}, ErrInvalidInput
+		}
+		data, err := json.Marshal(snapshot)
+		if err != nil {
+			return ExternalStartResult{}, err
+		}
+		testSnapshot, err = s.sealTransactionField(id, "test-snapshot", string(data))
+		if err != nil {
+			return ExternalStartResult{}, err
+		}
+	}
+	err = withOrganizationTransaction(ctx, s.client, func(c *ent.Client) error {
+		if err := lockAuthConnection(ctx, c, p.Connection.ID); err != nil {
+			return err
+		}
+		current, err := readExternalConnection(ctx, c, p.Connection.ID, 0)
+		if err != nil {
+			return err
+		}
+		if current.Connection.AuthGeneration != p.Connection.AuthGeneration || current.Connection.AggregateRevision != p.Connection.AggregateRevision {
+			return connectionError("revision-conflict")
+		}
+		if current.Connection.ArchivedAt != nil {
+			return connectionError("state-conflict")
+		}
+		if purpose == authtransaction.PurposeTest {
+			if current.Connection.State == authconnection.StateDisabled {
+				return connectionError("state-conflict")
+			}
+		} else {
+			if !current.Policy.Enabled || (purpose == authtransaction.PurposeLink && !current.Policy.LinkEnabled) || (purpose != authtransaction.PurposeLink && !current.Policy.LoginEnabled) {
+				return connectionError("state-conflict")
+			}
+		}
+		create := c.AuthTransaction.Create().SetID(id).SetPurpose(purpose).SetConnectionID(p.Connection.ID).SetConnectionRevision(p.Config.Revision).SetConnectionGeneration(p.Connection.AuthGeneration).SetPolicyRevision(p.Policy.LoginPolicyRevision).SetStateHash(hash.Full(state)).SetNonce(sealedNonce).SetPkceVerifier(sealedPKCE).SetBrowserChallenge(input.BrowserChallenge).SetCompletionURL(input.CompletionURL).SetReturnTo(input.ReturnTo).SetExpiresAt(expires)
+		if userID != nil {
+			if err := lockAuthUser(ctx, c, *userID); err != nil {
+				return err
+			}
+			account, err := c.User.Get(ctx, *userID)
+			if err != nil || !account.Active {
+				return ErrTokenInvalid
+			}
+			if err = checkExternalActor(ctx, account); err != nil {
+				return err
+			}
+			create.SetUserID(*userID).SetAuthVersion(account.AuthVersion)
+			if purpose == authtransaction.PurposeTest {
+				sid := externalSessionID(ctx)
+				if err = s.checkTestSession(ctx, c, *userID, account.AuthVersion, sid); err != nil {
+					return err
+				}
+				create.SetActorSessionID(sid).SetTestSnapshot(testSnapshot).SetTestBaseRevision(p.Connection.AggregateRevision).SetTestProtocolFingerprint(testProtocolFingerprint(p, id)).SetTestDiagnosticFingerprint(testDiagnosticFingerprint(p)).SetTestDeploymentFingerprint(s.deploymentFingerprint())
+			}
+		}
+		if bindingID != nil {
+			create.SetBindingID(*bindingID)
+		}
+		if len(authorizations) > 0 && authorizations[0] != nil {
+			proof := authorizations[0]
+			create.SetAuthorizationConnectionID(proof.ConnectionID).SetAuthorizationConnectionGeneration(proof.ConnectionGeneration).SetAuthorizationPolicyRevision(proof.LoginPolicyRevision)
+		}
+		if action != "" {
+			create.SetAuthorizedAction(action).SetAuthorizedTargetID(target).SetAuthorizationExpiresAt(authorizationExpiry)
+		}
+		if err := create.Exec(ctx); err != nil {
+			return err
+		}
+		// Return the authoritative stored deadline. PostgreSQL persists instants
+		// on a microsecond grid; later test results must not report a different
+		// deadline from the one returned at flow creation.
+		stored, err := c.AuthTransaction.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		expires = timeutil.Normalize(stored.ExpiresAt)
+		return nil
+	})
+	if err != nil {
+		return ExternalStartResult{}, err
+	}
+	ctx = context.WithValue(ctx, providerFlowKey{}, id)
 	fresh := p.Connection.Kind == authconnection.KindOidc && (purpose == authtransaction.PurposeReauthenticate || purpose == authtransaction.PurposeTest)
 	authz, err := s.buildAuthorization(ctx, p, authoidc.AuthorizationRequest{RedirectURL: redirect, State: state, Nonce: nonce, CodeVerifier: pkce, Fresh: fresh, MaxAge: 0})
 	if err != nil {
-		return ExternalStartResult{}, ErrExternalUnavailable
-	}
-	create := s.client.AuthTransaction.Create().SetID(id).SetPurpose(purpose).SetConnectionID(p.Connection.ID).SetConnectionRevision(p.Config.Revision).SetConnectionGeneration(p.Connection.AuthGeneration).SetPolicyRevision(p.Policy.LoginPolicyRevision).SetStateHash(hash.Full(state)).SetNonce(sealedNonce).SetPkceVerifier(sealedPKCE).SetBrowserChallenge(input.BrowserChallenge).SetCompletionURL(input.CompletionURL).SetReturnTo(input.ReturnTo).SetExpiresAt(expires)
-	if userID != nil {
-		account, err := s.client.User.Get(ctx, *userID)
-		if err != nil || !account.Active {
-			return ExternalStartResult{}, ErrTokenInvalid
-		}
-		if err = checkExternalActor(ctx, account); err != nil {
-			return ExternalStartResult{}, err
-		}
-		create.SetUserID(*userID).SetAuthVersion(account.AuthVersion)
-	}
-	if bindingID != nil {
-		create.SetBindingID(*bindingID)
-	}
-	if len(authorizations) > 0 && authorizations[0] != nil {
-		proof := authorizations[0]
-		create.SetAuthorizationConnectionID(proof.ConnectionID).SetAuthorizationConnectionGeneration(proof.ConnectionGeneration).SetAuthorizationPolicyRevision(proof.LoginPolicyRevision)
-	}
-	if action != "" {
-		create.SetAuthorizedAction(action).SetAuthorizedTargetID(target).SetAuthorizationExpiresAt(authorizationExpiry)
-	}
-	if err := create.Exec(ctx); err != nil {
+		_, _ = s.client.AuthTransaction.Update().Where(authtransaction.IDEQ(id), authtransaction.StatusEQ(authtransaction.StatusCreated)).SetStatus(authtransaction.StatusFailed).SetFinishedAt(s.now()).Save(ctx)
 		return ExternalStartResult{}, err
 	}
-	return ExternalStartResult{TransactionID: id, AuthorizationURL: authz.URL, ExpiresAt: expires}, nil
+	out := ExternalStartResult{TransactionID: id, AuthorizationURL: authz.URL, ExpiresAt: expires}
+	if purpose == authtransaction.PurposeTest {
+		out.TestID = id
+	}
+	return out, nil
 }
 
 func (s *ExternalAuthService) HandleCallback(ctx context.Context, connectionID, state, code, providerError string, responseIssuer ...string) (ExternalCallbackResult, error) {
@@ -254,7 +323,7 @@ func (s *ExternalAuthService) HandleCallback(ctx context.Context, connectionID, 
 	if err != nil {
 		return issueFailure("invalid_transaction")
 	}
-	p, err := readExternalConnection(ctx, s.client, row.ConnectionID, row.ConnectionRevision)
+	p, err := s.readTestConnection(ctx, s.client, row)
 	if err != nil {
 		return issueFailure("configuration_changed")
 	}
@@ -273,7 +342,7 @@ func (s *ExternalAuthService) HandleCallback(ctx context.Context, connectionID, 
 	if err != nil {
 		return issueFailure("configuration_unavailable")
 	}
-	identity, err := s.verifyExternal(ctx, p, authoidc.ExchangeRequest{RedirectURL: redirect, Code: code, CodeVerifier: pkce, ExpectedNonce: nonce, RequireFresh: row.Purpose == authtransaction.PurposeReauthenticate, MaxAge: reauthenticationTTL, Now: now})
+	identity, err := s.verifyExternal(context.WithValue(ctx, providerFlowKey{}, row.ID), p, authoidc.ExchangeRequest{RedirectURL: redirect, Code: code, CodeVerifier: pkce, ExpectedNonce: nonce, RequireFresh: row.Purpose == authtransaction.PurposeReauthenticate, MaxAge: reauthenticationTTL, Now: now})
 	if err != nil {
 		if errors.Is(err, authoidc.ErrUnavailable) {
 			return issueFailure("identity_provider_unavailable")
@@ -311,16 +380,38 @@ func (s *ExternalAuthService) HandleCallback(ctx context.Context, connectionID, 
 	if row.ExpiresAt.Before(deadline) {
 		deadline = row.ExpiresAt
 	}
-	update := s.client.AuthTransaction.Update().Where(authtransaction.IDEQ(row.ID), authtransaction.StatusEQ(authtransaction.StatusCallbackProcessing)).SetStatus(authtransaction.StatusCallbackVerified).SetExchangeTicketHash(hash.Full(ticket)).SetExchangeTicketExpiresAt(deadline).SetIdentityProtocol(authtransaction.IdentityProtocol(identity.Protocol)).SetIdentityIssuer(identity.Authority).SetIdentitySubject(identity.Subject).SetIdentityDisplayName(identity.DisplayName).SetIdentityUsername(identity.PreferredUsername).SetIdentityEmail(identity.Email).SetEvidence(evidence)
-	if !identity.AuthTime.IsZero() {
-		update.SetIdentityAuthTime(identity.AuthTime)
-	}
-	n, err = update.Save(ctx)
+	err = withOrganizationTransaction(ctx, s.client, func(c *ent.Client) error {
+		if err := lockAuthConnection(ctx, c, row.ConnectionID); err != nil {
+			return err
+		}
+		if row.Purpose == authtransaction.PurposeTest {
+			if err := s.validateTestLifecycle(ctx, c, row); err != nil {
+				return err
+			}
+		} else {
+			current, e := readExternalConnection(ctx, c, row.ConnectionID, 0)
+			if e != nil {
+				return e
+			}
+			if e = transactionRulesCurrent(ctx, c, row, current); e != nil {
+				return e
+			}
+		}
+		update := c.AuthTransaction.Update().Where(authtransaction.IDEQ(row.ID), authtransaction.StatusEQ(authtransaction.StatusCallbackProcessing)).SetStatus(authtransaction.StatusCallbackVerified).SetExchangeTicketHash(hash.Full(ticket)).SetExchangeTicketExpiresAt(deadline).SetIdentityProtocol(authtransaction.IdentityProtocol(identity.Protocol)).SetIdentityIssuer(identity.Authority).SetIdentitySubject(identity.Subject).SetIdentityDisplayName(identity.DisplayName).SetIdentityUsername(identity.PreferredUsername).SetIdentityEmail(identity.Email).SetEvidence(evidence)
+		if !identity.AuthTime.IsZero() {
+			update.SetIdentityAuthTime(identity.AuthTime)
+		}
+		n, err = update.Save(ctx)
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return ErrExternalFlowInvalid
+		}
+		return nil
+	})
 	if err != nil {
 		return ExternalCallbackResult{}, err
-	}
-	if n != 1 {
-		return ExternalCallbackResult{}, ErrExternalFlowInvalid
 	}
 	return ExternalCallbackResult{CompletionURL: row.CompletionURL, Ticket: ticket, TransactionID: row.ID, ReturnTo: row.ReturnTo}, nil
 }

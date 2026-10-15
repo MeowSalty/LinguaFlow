@@ -69,6 +69,7 @@ func NewAuthService(client *ent.Client, cfg AuthConfig, settings RegistrationPol
 }
 
 type AccessTokenClaims struct {
+	SessionID   int    `json:"sid,omitempty"`
 	UserID      int    `json:"uid"`
 	Username    string `json:"username"`
 	Role        string `json:"role"`
@@ -512,7 +513,7 @@ func (s *AuthService) createSessionForConnection(ctx context.Context, tx *ent.Cl
 		return nil, err
 	}
 	accessExpiry := timeutil.Normalize(jwt.NewNumericDate(now.Add(s.cfg.AccessTokenTTL)).Time)
-	access, err := s.signAccessToken(account, accessExpiry)
+	access, err := s.signAccessToken(account, accessExpiry, chain.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -536,8 +537,11 @@ func lockAuthConnection(ctx context.Context, client *ent.Client, id string) erro
 	}
 	return nil
 }
-func (s *AuthService) signAccessToken(account *ent.User, expiresAt time.Time) (string, error) {
+func (s *AuthService) signAccessToken(account *ent.User, expiresAt time.Time, sessionIDs ...int) (string, error) {
 	claims := AccessTokenClaims{UserID: account.ID, Username: account.Username, Role: account.Role, AuthVersion: account.AuthVersion, RegisteredClaims: jwt.RegisteredClaims{Issuer: s.cfg.Issuer, Subject: fmt.Sprintf("user:%d", account.ID), IssuedAt: jwt.NewNumericDate(timeutil.Normalize(s.now())), ExpiresAt: jwt.NewNumericDate(expiresAt)}}
+	if len(sessionIDs) > 0 {
+		claims.SessionID = sessionIDs[0]
+	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.cfg.Secret)
 }
 func (s *AuthService) generateOpaqueToken() (string, error) {

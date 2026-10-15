@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authhttp"
+	"net/url"
 	"sort"
+	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoauth2"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authprotocol"
@@ -12,8 +15,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 )
 
 type OAuth2ConnectionInput struct {
@@ -35,7 +36,7 @@ func supportedExternalKind(k authconnection.Kind) bool {
 	return k == authconnection.KindOidc || k == authconnection.KindGenericOauth2
 }
 func configProtocol(c *ent.AuthConnectionRevision) string {
-	if c.Oauth2ClientID != "" {
+	if c.Oauth2ClientAuthMethod != "" {
 		return "oauth2"
 	}
 	return "oidc"
@@ -69,19 +70,54 @@ func (s *ExternalAuthService) normalizeOAuthInput(ctx context.Context, in OAuth2
 	if in.ClientAuthMethod == "" {
 		in.ClientAuthMethod = "client_secret_basic"
 	}
-	if in.Scopes == nil {
-		in.Scopes = []string{}
-	}
-	// This validates the actual adapter configuration, without making a request.
-	c, err := authoauth2.New(s.cfg)
-	if err != nil {
-		return in, err
-	}
-	if _, err = c.Check(ctx, oauthConfig(in, "validation-only")); err != nil {
+	if in.ClientAuthMethod != "client_secret_basic" && in.ClientAuthMethod != "client_secret_post" {
 		return in, ErrInvalidInput
 	}
+	if len(in.ClientID) > 1024 {
+		return in, ErrInvalidInput
+	}
+	if in.SubjectMapping.Type == "" {
+		in.SubjectMapping.Type = "string"
+	}
+	if in.SubjectMapping.Type != "string" && in.SubjectMapping.Type != "integer" {
+		return in, ErrInvalidInput
+	}
+	if in.SubjectMapping.Pointer != "" && authrules.ValidatePointer(in.SubjectMapping.Pointer) != nil {
+		return in, ErrInvalidInput
+	}
+	for _, endpoint := range []string{in.AuthorizationEndpoint, in.TokenEndpoint, in.ProfileEndpoint} {
+		if endpoint == "" {
+			continue
+		}
+		if len(endpoint) > 2048 || !(&authhttp.Transport{Deployment: s.cfg}).ValidRawURL(endpoint) {
+			return in, ErrInvalidInput
+		}
+		u, _ := url.Parse(endpoint)
+		q, e := url.ParseQuery(u.RawQuery)
+		if e != nil {
+			return in, ErrInvalidInput
+		}
+		for _, name := range []string{"response_type", "client_id", "client_secret", "redirect_uri", "scope", "state", "code", "code_verifier", "code_challenge", "code_challenge_method", "grant_type", "access_token"} {
+			if q.Has(name) {
+				return in, ErrInvalidInput
+			}
+		}
+	}
+	seen := map[string]bool{}
+	if len(in.Scopes) > 32 {
+		return in, ErrInvalidInput
+	}
+	for _, scope := range in.Scopes {
+		if scope == "" || len(scope) > 128 || strings.ContainsAny(scope, " \t\r\n") || seen[scope] {
+			return in, ErrInvalidInput
+		}
+		seen[scope] = true
+	}
+	in.Scopes = append([]string{}, in.Scopes...)
+	sort.Strings(in.Scopes)
 	return in, nil
 }
+
 func oauthIdentityContract(in OAuth2ConnectionInput) string {
 	b, _ := json.Marshal([]any{in.AuthorizationEndpoint, in.TokenEndpoint, in.ProfileEndpoint, in.ClientID, in.SubjectMapping})
 	return string(b)
@@ -102,9 +138,17 @@ func (s *ExternalAuthService) externalOAuthConfig(ctx context.Context, p externa
 		return cfg, err
 	}
 	cfg.ClientSecret = secret
+	if p.SecretOverride != nil {
+		cfg.ClientSecret = *p.SecretOverride
+	}
 	return cfg, nil
 }
 func (s *ExternalAuthService) buildAuthorization(ctx context.Context, p externalConnection, r authprotocol.AuthorizationRequest) (authprotocol.Authorization, error) {
+	ctx, release, gateErr := s.enterProvider(ctx, p)
+	if gateErr != nil {
+		return authprotocol.Authorization{}, gateErr
+	}
+	defer release()
 	if p.Connection.Kind == authconnection.KindGenericOauth2 {
 		cfg, err := s.externalOAuthConfig(ctx, p)
 		if err != nil {
@@ -116,9 +160,17 @@ func (s *ExternalAuthService) buildAuthorization(ctx context.Context, p external
 	if err != nil {
 		return authprotocol.Authorization{}, err
 	}
+	if p.SecretOverride != nil {
+		cfg.ClientSecret = *p.SecretOverride
+	}
 	return s.protocol.BuildAuthorization(ctx, cfg, r)
 }
 func (s *ExternalAuthService) verifyExternal(ctx context.Context, p externalConnection, r authprotocol.ExchangeRequest) (authprotocol.Identity, error) {
+	ctx, release, gateErr := s.enterProvider(ctx, p)
+	if gateErr != nil {
+		return authprotocol.Identity{}, gateErr
+	}
+	defer release()
 	if p.Connection.Kind == authconnection.KindGenericOauth2 {
 		cfg, err := s.externalOAuthConfig(ctx, p)
 		if err != nil {
@@ -130,20 +182,17 @@ func (s *ExternalAuthService) verifyExternal(ctx context.Context, p externalConn
 	if err != nil {
 		return authprotocol.Identity{}, err
 	}
+	if p.SecretOverride != nil {
+		cfg.ClientSecret = *p.SecretOverride
+	}
 	identity, err := s.protocol.ExchangeAndVerify(ctx, cfg, r)
 	// OIDC's verified issuer is the authority, never a profile mapping.
 	identity.Protocol = "oidc"
 	identity.Authority = identity.Issuer
 	return identity, err
 }
-func hasAuthenticationValidation(ctx context.Context, c *ent.Client, id, fingerprint string) (bool, error) {
-	return c.AuthConnectionValidation.Query().Where(authconnectionvalidation.ConnectionIDEQ(id), authconnectionvalidation.FingerprintEQ(fingerprint)).Exist(ctx)
-}
 func signupRequirements(ctx context.Context, c *ent.Client, p externalConnection) ([]string, bool, error) {
-	fresh, err := hasFreshValidation(ctx, c, p.Connection.ID, connectionFingerprint(p.Config))
-	if err != nil {
-		return nil, false, err
-	}
+	fresh := p.Config.FreshSupported
 	if fresh && p.Connection.Kind == authconnection.KindOidc {
 		return []string{}, true, nil
 	}
@@ -161,30 +210,18 @@ func validateIdentityResult(p externalConnection, i authprotocol.Identity) error
 }
 
 func freshCapabilityChanged(ctx context.Context, c *ent.Client, a, b externalConnection) (bool, error) {
-	old, err := hasFreshValidation(ctx, c, a.Connection.ID, connectionFingerprint(a.Config))
-	if err != nil {
-		return false, err
-	}
-	next, err := hasFreshValidation(ctx, c, b.Connection.ID, connectionFingerprint(b.Config))
-	return old != next, err
+	return a.Config.FreshSupported != b.Config.FreshSupported, nil
 }
-
-// A draft may predate the first binding. Recheck at every publication boundary
-// under the same connection lock used by registration and explicit linking.
+func identityContract(p externalConnection) string {
+	if p.Connection.Kind == authconnection.KindGenericOauth2 {
+		return oauthIdentityContract(oauthInput(p.Config))
+	}
+	data, _ := json.Marshal([]string{p.Config.OidcIssuer, p.Config.OidcClientID})
+	return string(data)
+}
 func ensureIdentityContract(ctx context.Context, c *ent.Client, p externalConnection) error {
-	if p.Connection.Kind != authconnection.KindGenericOauth2 || p.Connection.PublishedRevision == nil {
-		return nil
-	}
-	bound, err := c.LoginBinding.Query().Where(loginbinding.ConnectionIDEQ(p.Connection.ID)).Exist(ctx)
-	if err != nil || !bound {
-		return err
-	}
-	published, err := readExternalConnection(ctx, c, p.Connection.ID, 0)
-	if err != nil {
-		return err
-	}
-	if oauthIdentityContract(oauthInput(p.Config)) != oauthIdentityContract(oauthInput(published.Config)) {
-		return ErrAuthConnectionConflict
+	if p.Connection.IdentityContract != "" && p.Connection.IdentityContract != identityContract(p) {
+		return connectionError("state-conflict")
 	}
 	return nil
 }

@@ -65,14 +65,8 @@ func (s *ExternalAuthService) cleanupRuleEvidence(ctx context.Context, now time.
 	return nil
 }
 
-type AuthenticationPublishConflict struct{ Impact AuthConnectionImpactResult }
-
-func (e *AuthenticationPublishConflict) Error() string {
-	return "users must establish a verified fallback before publishing"
-}
-func (e *AuthenticationPublishConflict) Unwrap() error { return ErrAuthConnectionConflict }
-
 type AuthRulesPreviewInput struct {
+	Changes          *AuthConnectionChanges     `json:"changes,omitempty"`
 	ExpectedRevision int64                      `json:"expected_revision"`
 	Sources          map[string]json.RawMessage `json:"sources"`
 }
@@ -164,8 +158,8 @@ func transactionRulesCurrent(ctx context.Context, c *ent.Client, row *ent.AuthTr
 		return ErrAuthConnectionConflict
 	}
 	if row.Purpose == authtransaction.PurposeTest {
-		if old.Connection.DraftRevision == nil || *old.Connection.DraftRevision != row.ConnectionRevision {
-			return ErrAuthConnectionConflict
+		if old.Connection.ArchivedAt != nil || old.Connection.State == authconnection.StateDisabled || old.Connection.AuthGeneration != row.ConnectionGeneration || old.Connection.AggregateRevision != row.TestBaseRevision {
+			return connectionError("state-conflict")
 		}
 		return nil
 	}
@@ -232,25 +226,8 @@ func diagnostics(p externalConnection, e authrules.Evidence, now time.Time) Auth
 	return AuthRulesDiagnostics{Login: ruleEvidence(p, e, p.Policy.LoginRules, now, false), Signup: ruleEvidence(p, e, p.Policy.SignupRules, now, false), Link: ruleEvidence(p, e, p.Policy.LinkRules, now, false)}
 }
 
-func (s *ExternalAuthService) ConnectionAttributes(ctx context.Context, actorID int, id string, expected int64) (AuthAttributeCatalog, error) {
-	if err := checkConnectionAdmin(ctx, s.client, actorID); err != nil {
-		return AuthAttributeCatalog{}, err
-	}
-	row, err := s.client.AuthConnection.Get(ctx, id)
-	if ent.IsNotFound(err) {
-		return AuthAttributeCatalog{}, ErrAuthConnectionNotFound
-	}
-	if err != nil {
-		return AuthAttributeCatalog{}, err
-	}
-	if expected < 1 || row.AggregateRevision != expected {
-		return AuthAttributeCatalog{}, ErrAuthConnectionConflict
-	}
-	var revision int64
-	if row.DraftRevision != nil {
-		revision = *row.DraftRevision
-	}
-	p, err := readExternalConnection(ctx, s.client, id, revision)
+func (s *ExternalAuthService) ConnectionAttributes(ctx context.Context, actorID int, id string, in AuthConnectionCandidateInput) (AuthAttributeCatalog, error) {
+	p, err := s.candidateConnection(ctx, actorID, id, in)
 	if err != nil {
 		return AuthAttributeCatalog{}, err
 	}
@@ -259,7 +236,7 @@ func (s *ExternalAuthService) ConnectionAttributes(ctx context.Context, actorID 
 		"string": {"eq", "ne", "in"}, "boolean": {"eq"}, "integer": {"eq", "ne", "gt", "gte", "lt", "lte"}, "number": {"eq", "ne", "gt", "gte", "lt", "lte"}, "datetime": {"gt", "gte", "lt", "lte"}, "string_list": {"contains", "not_contains", "contains_any", "contains_all"}}}, err
 }
 func (s *ExternalAuthService) PreviewConnectionRules(ctx context.Context, actorID int, id string, in AuthRulesPreviewInput) (AuthRulesPreview, error) {
-	p, err := s.candidateConnection(ctx, actorID, id, in.ExpectedRevision)
+	p, err := s.candidateConnection(ctx, actorID, id, AuthConnectionCandidateInput{ExpectedRevision: in.ExpectedRevision, Changes: in.Changes})
 	if err != nil {
 		return AuthRulesPreview{}, err
 	}
@@ -373,10 +350,7 @@ func candidateImpact(ctx context.Context, c *ent.Client, p externalConnection, n
 		default:
 			out.UnknownUsers = append(out.UnknownUsers, u.ID)
 		}
-		fresh, err := hasFreshValidation(ctx, c, p.Connection.ID, connectionFingerprint(p.Config))
-		if err != nil {
-			return out, err
-		}
+		fresh := p.Config.FreshSupported
 		if result.Status != "pass" || !fresh {
 			fallback, err := connectionFallbackAt(ctx, c, u, p.Connection.ID, now)
 			if err != nil {
@@ -384,14 +358,14 @@ func candidateImpact(ctx context.Context, c *ent.Client, p externalConnection, n
 			}
 			if !fallback {
 				out.BlockedUsers = append(out.BlockedUsers, u.ID)
-				out.CanPublish = false
+				out.CanSave = false
 			}
 		}
 	}
 	for _, ids := range [][]int{out.AffectedUsers, out.BlockedUsers, out.PassUsers, out.FailUsers, out.UnknownUsers, out.AdministratorUsers} {
 		sort.Ints(ids)
 	}
-	if p.Connection.PublishedRevision != nil {
+	if p.Connection.CurrentRevision > 0 {
 		current, readErr := readExternalConnection(ctx, c, p.Connection.ID, 0)
 		if readErr != nil {
 			return out, readErr
@@ -417,12 +391,12 @@ func candidateImpact(ctx context.Context, c *ent.Client, p externalConnection, n
 			out.AffectedSessions++
 		}
 	}
-	if !out.CanPublish {
-		out.Remediation = "Have blocked users establish and verify a usable password or another login and maintenance method under the currently published configuration, then repeat impact and publish."
+	if !out.CanSave {
+		out.Remediation = "Have blocked users establish and verify a usable password or another login and maintenance method under the current configuration, then repeat impact and save."
 	}
 	return out, err
 }
 
 func emptyAuthImpact(revision int64, now time.Time) AuthConnectionImpactResult {
-	return AuthConnectionImpactResult{Revision: revision, EvaluatedAt: now, AffectedUsers: []int{}, BlockedUsers: []int{}, PassUsers: []int{}, FailUsers: []int{}, UnknownUsers: []int{}, AdministratorUsers: []int{}, CanPublish: true}
+	return AuthConnectionImpactResult{Revision: revision, EvaluatedAt: now, AffectedUsers: []int{}, BlockedUsers: []int{}, PassUsers: []int{}, FailUsers: []int{}, UnknownUsers: []int{}, AdministratorUsers: []int{}, CanSave: true}
 }

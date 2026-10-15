@@ -8,7 +8,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionvalidation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
@@ -77,7 +76,7 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 		if current.Status != authtransaction.StatusCallbackVerified || current.ExchangeTicketHash == nil || *current.ExchangeTicketHash != hash.Full(input.Ticket) || current.ExchangeTicketExpiresAt == nil || !now.Before(*current.ExchangeTicketExpiresAt) || !now.Before(current.ExpiresAt) {
 			return ErrExternalFlowInvalid
 		}
-		p, err := readExternalConnection(ctx, c, current.ConnectionID, current.ConnectionRevision)
+		p, err := s.readTestConnection(ctx, c, current)
 		if err != nil {
 			return ErrAuthConnectionConflict
 		}
@@ -225,25 +224,19 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 				return ErrForbidden
 			}
 			freshSupported := p.Connection.Kind == authconnection.KindOidc && current.IdentityAuthTime != nil && !current.IdentityAuthTime.After(now.Add(2*time.Second)) && now.Sub(*current.IdentityAuthTime) < reauthenticationTTL
-			fingerprint := connectionFingerprint(p.Config)
-			validation, err := c.AuthConnectionValidation.Query().Where(authconnectionvalidation.ConnectionIDEQ(current.ConnectionID), authconnectionvalidation.FingerprintEQ(fingerprint)).Only(ctx)
-			if ent.IsNotFound(err) {
-				err = c.AuthConnectionValidation.Create().SetConnectionID(current.ConnectionID).SetFingerprint(fingerprint).SetRevision(current.ConnectionRevision).SetFreshSupported(freshSupported).SetTestedAt(now).SetActorUserID(account.ID).Exec(ctx)
-			} else if err == nil {
-				// A failed fresh probe cannot silently downgrade a published capability.
-				// A new configuration may test as non-fresh and go through safe publication.
-				if validation.FreshSupported && !freshSupported {
-					return ErrReauthenticationRequired
-				}
-				err = c.AuthConnectionValidation.UpdateOneID(validation.ID).SetFreshSupported(freshSupported).SetTestedAt(now).SetActorUserID(account.ID).Exec(ctx)
+			if current.ActorSessionID == nil || *current.ActorSessionID != externalSessionID(ctx) {
+				return ErrTokenInvalid
 			}
-			if err != nil {
+			if err = s.validateTestLifecycle(ctx, c, current); err != nil {
+				return err
+			}
+			if err = c.AuthTransaction.UpdateOneID(current.ID).SetTestValidatedAt(now).Exec(ctx); err != nil {
 				return err
 			}
 			if err = s.finishExchange(ctx, c, current.ID, input.Ticket); err != nil {
 				return err
 			}
-			result = ExternalExchangeResult{Kind: "test_result", Test: &ExternalTestResult{ConnectionID: current.ConnectionID, Revision: current.ConnectionRevision, FreshSupported: freshSupported, Attributes: current.Evidence.Attributes, Diagnostics: diagnostics(p, current.Evidence, now)}}
+			result = ExternalExchangeResult{Kind: "test_result", Test: &ExternalTestResult{TestID: current.ID, ExpiresAt: current.ExpiresAt, ConnectionID: current.ConnectionID, Revision: current.TestBaseRevision, FreshSupported: freshSupported, Attributes: current.Evidence.Attributes, Diagnostics: diagnostics(p, current.Evidence, now)}}
 			return nil
 		default:
 			return ErrExternalFlowInvalid
@@ -548,6 +541,12 @@ func (s *ExternalAuthService) Cancel(ctx context.Context, actorID *int, input Ex
 		if err != nil {
 			return err
 		}
+		if err := lockAuthConnection(ctx, c, row.ConnectionID); err != nil {
+			return err
+		}
+		if row.Purpose == authtransaction.PurposeTest && (row.ActorSessionID == nil || *row.ActorSessionID != externalSessionID(ctx)) {
+			return ErrTokenInvalid
+		}
 		if row.UserID != nil {
 			if actorID == nil || *actorID != *row.UserID {
 				return ErrTokenInvalid
@@ -572,7 +571,11 @@ func (s *ExternalAuthService) Cancel(ctx context.Context, actorID *int, input Ex
 			return ErrExternalFlowInvalid
 		}
 		now := timeutil.Normalize(s.now())
-		n, err := c.AuthTransaction.Update().Where(authtransaction.IDEQ(row.ID), authtransaction.ExpiresAtGT(now), authtransaction.StatusIn(authtransaction.StatusCreated, authtransaction.StatusCallbackProcessing, authtransaction.StatusCallbackVerified, authtransaction.StatusAwaitingConfirmation)).SetStatus(authtransaction.StatusCancelled).ClearExchangeTicketHash().ClearExchangeTicketExpiresAt().ClearConfirmationTokenHash().ClearConfirmationExpiresAt().SetFinishedAt(now).Save(ctx)
+		statuses := []authtransaction.Status{authtransaction.StatusCreated, authtransaction.StatusCallbackProcessing, authtransaction.StatusCallbackVerified, authtransaction.StatusAwaitingConfirmation}
+		if row.Purpose == authtransaction.PurposeTest {
+			statuses = append(statuses, authtransaction.StatusCompleted)
+		}
+		n, err := c.AuthTransaction.Update().Where(authtransaction.IDEQ(row.ID), authtransaction.ExpiresAtGT(now), authtransaction.StatusIn(statuses...)).SetStatus(authtransaction.StatusCancelled).ClearTestValidatedAt().ClearExchangeTicketHash().ClearExchangeTicketExpiresAt().ClearConfirmationTokenHash().ClearConfirmationExpiresAt().SetFinishedAt(now).Save(ctx)
 		if err != nil {
 			return err
 		}
