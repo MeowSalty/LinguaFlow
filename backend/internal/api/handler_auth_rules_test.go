@@ -33,7 +33,7 @@ func TestRouter_AuthRulesAdministratorPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := "/admin/auth-connections/" + rec.ID
-	body := `{"expected_revision":1,"attribute_mappings":[{"field_id":"custom.department","label":"Department","type":"string","source":"oidc_id_token","pointer":"/department"}],"policy":{"enabled":true,"login_enabled":true,"signup_enabled":true,"link_enabled":true,"login_rules":{"mode":"conditions","match":"all","conditions":[{"field_id":"custom.department","operator":"eq","value":"engineering"}]},"signup_rules":{"mode":"unrestricted"},"link_rules":{"mode":"unrestricted"}}}`
+	body := `{"expected_revision":1,"attribute_mappings":[{"field_id":"custom.department","label":"Department","type":"string","source":"oidc_id_token","pointer":"/department"}],"policy":{"login_enabled":true,"signup_enabled":true,"link_enabled":true,"login_rules":{"mode":"conditions","match":"all","conditions":[{"field_id":"custom.department","operator":"eq","value":"engineering"}]},"signup_rules":{"mode":"unrestricted"},"link_rules":{"mode":"unrestricted"}}}`
 	accountAssertStatus(t, accountRequest(router, http.MethodPatch, path, session.AccessToken, body), http.StatusOK)
 	catalog := accountRequest(router, http.MethodGet, path+"/attributes?expected_revision=2", session.AccessToken, "")
 	accountAssertStatus(t, catalog, 200)

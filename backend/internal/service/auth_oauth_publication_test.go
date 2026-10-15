@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -12,114 +13,127 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 )
 
-func TestAuthenticationB3OAuthDraftIdentityCannotReplaceNewBinding(t *testing.T) {
+// B4 freezes the identity contract on first enable, before a binding can be
+// created. Rejected candidates must never become current through save or archive.
+func TestAuthenticationB4OAuthIdentityCannotReplaceNewBinding(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
 			svcs, clients, admin, protocol := oauthTestServices(t, driver)
-			s, c, ctx := svcs[0], clients[0], context.Background()
+			s, c, ctx := svcs[0], clients[0], protocol.adminCtx
 			rec := oauthTestConnection(t, s, admin, protocol)
-			original := *rec.Published.OAuth2
+			before := c.AuthConnection.GetX(ctx, rec.ID)
+			original := *rec.Configuration.OAuth2
 			next := original
 			next.ProfileEndpoint = "https://oauth.example.test/another-authority"
-			draft, err := s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, OAuth2: &next})
-			if err != nil {
-				t.Fatal(err)
+			changes := AuthConnectionChanges{OAuth2: &next}
+			_, err := s.StartTest(ctx, admin.ID, rec.ID, AuthConnectionTestInput{AuthConnectionCandidateInput: AuthConnectionCandidateInput{ExpectedRevision: rec.AggregateRevision, Changes: &changes}, ExternalBrowserInput: ExternalBrowserInput{BrowserChallenge: browserChallenge(flowTestVerifier), CompletionURL: s.cfg.CompletionURLs[0]}})
+			if !errors.Is(err, ErrAuthConnectionConflict) {
+				t.Fatalf("enabled identity accepted replacement candidate: %v", err)
 			}
-			cfg := c.AuthConnectionRevision.Query().Where(authconnectionrevision.ConnectionIDEQ(rec.ID), authconnectionrevision.RevisionEQ(*draft.DraftRevision)).OnlyX(ctx)
-			c.AuthConnectionValidation.Create().SetConnectionID(rec.ID).SetFingerprint(connectionFingerprint(cfg)).SetRevision(cfg.Revision).SetFreshSupported(false).SetActorUserID(admin.ID).SetTestedAt(time.Now()).ExecX(ctx)
 			_, confirm := oauthTestConfirmation(t, s, protocol, rec.ID, "subject", "old-source-owner")
-			if _, err = s.Complete(ctx, nil, confirm); err != nil {
+			if _, err = s.Complete(context.Background(), nil, confirm); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = s.auth.Login(ctx, LoginInput{Identifier: confirm.Username, Password: *confirm.InitialPassword}); err != nil {
+			if _, err = s.auth.Login(context.Background(), LoginInput{Identifier: confirm.Username, Password: *confirm.InitialPassword}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = s.PublishConnection(ctx, admin.ID, rec.ID, draft.AggregateRevision); !errors.Is(err, ErrAuthConnectionConflict) {
-				t.Fatalf("new binding did not freeze publication identity: %v", err)
+			binding := c.LoginBinding.Query().OnlyX(ctx)
+			identity := c.ExternalIdentity.GetX(ctx, binding.ExternalIdentityID)
+			_, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, AuthConnectionChanges: changes})
+			if !errors.Is(err, ErrAuthConnectionConflict) {
+				t.Fatalf("new binding identity replaced: %v", err)
 			}
-			if _, err = s.ArchiveConnection(ctx, admin.ID, rec.ID, draft.AggregateRevision); !errors.Is(err, ErrAuthConnectionConflict) {
-				t.Fatalf("archive published changed identity: %v", err)
+			if got := c.AuthConnection.GetX(ctx, rec.ID); got.CurrentRevision != before.CurrentRevision || got.AggregateRevision != before.AggregateRevision || got.IdentityContract != before.IdentityContract {
+				t.Fatal("rejected candidate changed current identity or revision")
 			}
-			if got := c.AuthConnection.GetX(ctx, rec.ID); *got.PublishedRevision != *rec.PublishedRevision {
-				t.Fatal("identity conflict changed published revision")
+			// Saving the original contract is a no-op, so rejection is repairable.
+			repaired, err := s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, AuthConnectionChanges: AuthConnectionChanges{OAuth2: &original}})
+			if err != nil || repaired.AggregateRevision != rec.AggregateRevision {
+				t.Fatalf("original identity cannot be retained: %+v, %v", repaired, err)
 			}
-			// A rejected draft can be repaired back to the bound identity contract.
-			if _, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: draft.AggregateRevision, OAuth2: &original}); err != nil {
-				t.Fatalf("cannot repair stale draft: %v", err)
+			archived, err := s.ArchiveConnection(ctx, admin.ID, rec.ID, AuthConnectionActionInput{ExpectedRevision: rec.AggregateRevision})
+			if err != nil || !archived.Archived || archived.State != "disabled" || !reflect.DeepEqual(archived.Configuration.OAuth2, &original) {
+				t.Fatalf("archive applied rejected identity: %+v, %v", archived, err)
+			}
+			if got := c.ExternalIdentity.GetX(ctx, identity.ID); got.UserID != identity.UserID || got.Authority != identity.Authority || got.Subject != identity.Subject || c.LoginBinding.GetX(ctx, binding.ID).ExternalIdentityID != identity.ID {
+				t.Fatal("archive reassigned the existing binding")
 			}
 		})
 	}
 }
 
-func TestAuthenticationB3OAuthFreshDowngradeNeedsMaintenanceFallback(t *testing.T) {
+func TestAuthenticationB4OAuthFreshDowngradeNeedsMaintenanceFallback(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
-			svcs, clients, admin := connectionTestServices(t, driver)
-			s, c, ctx := svcs[0], clients[0], context.Background()
-			rec := publishedRuleFixture(t, s, c, admin, false)
+			f := newB4Fixture(t, driver)
+			s, c, ctx := f.services[0], f.clients[0], f.ctx
+			rec := f.enabled(t)
 			owner := c.User.Create().SetUsername("fresh-only-owner").SaveX(ctx)
-			ruleBindingFixture(t, c, owner, rec.ID, time.Now())
-			draft, err := s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, ClientSecret: json.RawMessage(`"non-fresh-new-secret"`)})
-			if err != nil {
-				t.Fatal(err)
+			ruleBindingFixture(t, c, owner, rec.ID, s.now(), c.AuthConnection.GetX(ctx, rec.ID).AuthGeneration)
+			changes := AuthConnectionChanges{ClientSecret: json.RawMessage(`"non-fresh-new-secret"`)}
+			f.protocol.exchange = func(_ context.Context, cfg authoidc.Config, _ authoidc.ExchangeRequest) (authoidc.Identity, error) {
+				return authoidc.Identity{Issuer: cfg.Issuer, Subject: "retest"}, nil
 			}
-			cfg := c.AuthConnectionRevision.Query().Where(authconnectionrevision.ConnectionIDEQ(rec.ID), authconnectionrevision.RevisionEQ(*draft.DraftRevision)).OnlyX(ctx)
-			c.AuthConnectionValidation.Create().SetConnectionID(rec.ID).SetFingerprint(connectionFingerprint(cfg)).SetRevision(cfg.Revision).SetFreshSupported(false).SetActorUserID(admin.ID).SetTestedAt(time.Now()).ExecX(ctx)
-			impact, err := s.ImpactConnection(ctx, admin.ID, rec.ID, draft.AggregateRevision)
-			if err != nil || impact.CanPublish {
-				t.Fatalf("fresh downgrade impact=%+v err=%v", impact, err)
+			tested := f.test(t, rec, &changes)
+			if tested.FreshSupported {
+				t.Fatal("missing auth_time advertised fresh capability")
 			}
-			if _, err = s.PublishConnection(ctx, admin.ID, rec.ID, draft.AggregateRevision); !errors.Is(err, ErrAuthConnectionConflict) {
-				t.Fatalf("sole maintenance source downgraded: %v", err)
+			input := UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, TestID: tested.TestID, Verifier: b4Verifier, AuthConnectionChanges: changes}
+			_, err := s.UpdateConnection(ctx, f.admin.ID, rec.ID, input)
+			b4Code(t, err, "fallback-required")
+			var conflict *AuthConnectionError
+			if !errors.As(err, &conflict) || conflict.Impact == nil || conflict.Impact.CanSave || !reflect.DeepEqual(conflict.Impact.BlockedUsers, []int{owner.ID}) {
+				t.Fatalf("fresh downgrade omitted maintenance impact: %v", err)
 			}
 			h, err := hashPassword("password-123")
 			if err != nil {
 				t.Fatal(err)
 			}
 			c.User.UpdateOneID(owner.ID).SetPasswordHash(h).ExecX(ctx)
-			if _, err = s.auth.Login(ctx, LoginInput{Identifier: owner.Username, Password: "password-123"}); err != nil {
+			_, err = s.UpdateConnection(ctx, f.admin.ID, rec.ID, input)
+			b4Code(t, err, "fallback-required")
+			if _, err = s.auth.Login(context.Background(), LoginInput{Identifier: owner.Username, Password: "password-123"}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = s.PublishConnection(ctx, admin.ID, rec.ID, draft.AggregateRevision); err != nil {
-				t.Fatalf("verified fallback did not permit downgrade: %v", err)
+			saved, err := s.UpdateConnection(ctx, f.admin.ID, rec.ID, input)
+			if err != nil || saved.Validation.FreshSupported || saved.Validation.AppliedTestID != tested.TestID || saved.State != "enabled" {
+				t.Fatalf("verified fallback did not permit downgrade: %+v, %v", saved, err)
 			}
 		})
 	}
 }
 
-func TestAuthenticationB3OAuthFailedFreshRetestPreservesPublishedCapability(t *testing.T) {
-	for _, missing := range []bool{true, false} {
-		t.Run(map[bool]string{true: "missing", false: "expired"}[missing], func(t *testing.T) {
-			now := time.Now().UTC()
-			svcs, clients, protocol := externalFlowServices(t, dialect.SQLite, now)
-			s, c, ctx := svcs[0], clients[0], context.Background()
-			admin := createPasswordTestUser(t, c, "retest-admin", "password-123")
-			admin = c.User.UpdateOneID(admin.ID).SetRole(SystemRoleAdmin).SaveX(ctx)
-			before := c.AuthConnectionValidation.Query().OnlyX(ctx)
-			c.AuthConnection.UpdateOneID("flow-oidc").SetDraftRevision(1).ExecX(ctx)
-			protocol.exchange = func(context.Context, authoidc.Config, authoidc.ExchangeRequest) (authoidc.Identity, error) {
-				i := authoidc.Identity{Issuer: "https://issuer.example.test", Subject: "retest"}
-				if !missing {
-					i.AuthTime = now.Add(-time.Hour)
-				}
-				return i, nil
-			}
-			if _, err := s.StartTest(ctx, admin.ID, "flow-oidc", 1, ExternalBrowserInput{BrowserChallenge: browserChallenge(flowTestVerifier), CompletionURL: "https://app.example.test/auth/complete"}); err != nil {
-				t.Fatal(err)
-			}
-			cb, err := s.HandleCallback(ctx, "flow-oidc", protocol.state, "authorization-code-secret", "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = s.Exchange(ctx, &admin.ID, ExternalExchangeInput{Ticket: cb.Ticket, Verifier: flowTestVerifier}); !errors.Is(err, ErrReauthenticationRequired) {
-				t.Fatalf("failed fresh retest was successful: %v", err)
-			}
-			after := c.AuthConnectionValidation.GetX(ctx, before.ID)
-			if !after.FreshSupported || !after.TestedAt.Equal(before.TestedAt) {
-				t.Fatal("failed test mutated published capability")
-			}
-			if conn := c.AuthConnection.GetX(ctx, "flow-oidc"); conn.AuthGeneration != 1 || *conn.PublishedRevision != 1 {
-				t.Fatal("failed test changed runtime connection")
+func TestAuthenticationB4OAuthFailedFreshRetestPreservesCurrentCapability(t *testing.T) {
+	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
+		t.Run(driver, func(t *testing.T) {
+			for _, missing := range []bool{true, false} {
+				t.Run(map[bool]string{true: "missing", false: "expired"}[missing], func(t *testing.T) {
+					f := newB4Fixture(t, driver)
+					s, c, ctx := f.services[0], f.clients[0], f.ctx
+					rec := f.enabled(t)
+					before := c.AuthConnection.GetX(ctx, rec.ID)
+					cfg := c.AuthConnectionRevision.Query().Where(authconnectionrevision.ConnectionIDEQ(rec.ID), authconnectionrevision.RevisionEQ(before.CurrentRevision)).OnlyX(ctx)
+					f.protocol.exchange = func(_ context.Context, cfg authoidc.Config, _ authoidc.ExchangeRequest) (authoidc.Identity, error) {
+						i := authoidc.Identity{Issuer: cfg.Issuer, Subject: "retest"}
+						if !missing {
+							i.AuthTime = s.now().Add(-time.Hour)
+						}
+						return i, nil
+					}
+					// An authentication-only diagnostic is valid in B4. Its failure to
+					// prove fresh authentication must not downgrade the saved snapshot.
+					tested := f.test(t, rec, nil)
+					if tested.FreshSupported {
+						t.Fatal("retest without recent auth_time proved fresh authentication")
+					}
+					after := c.AuthConnectionRevision.GetX(ctx, cfg.ID)
+					if !after.FreshSupported || !reflect.DeepEqual(after.TestedAt, cfg.TestedAt) || after.AppliedTestID != cfg.AppliedTestID {
+						t.Fatal("diagnostic mutated saved fresh capability")
+					}
+					if conn := c.AuthConnection.GetX(ctx, rec.ID); conn.AuthGeneration != before.AuthGeneration || conn.CurrentRevision != before.CurrentRevision || conn.AggregateRevision != before.AggregateRevision || conn.State != before.State {
+						t.Fatal("retest changed runtime connection")
+					}
+				})
 			}
 		})
 	}

@@ -2,24 +2,30 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"entgo.io/ent/dialect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoauth2"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authprotocol"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
 )
 
 type oauthFlowProtocol struct {
+	adminCtx      context.Context
+	clock         *atomic.Int64
 	state         string
 	authorization authprotocol.AuthorizationRequest
 	exchange      func(context.Context, authoauth2.Config, authprotocol.ExchangeRequest) (authprotocol.Identity, error)
@@ -44,8 +50,9 @@ func (p *oauthFlowProtocol) ExchangeAndVerify(ctx context.Context, cfg authoauth
 
 func oauthTestServices(t *testing.T, driver string) ([2]*ExternalAuthService, [2]*ent.Client, *ent.User, *oauthFlowProtocol) {
 	t.Helper()
-	svcs, clients, admin := connectionTestServices(t, driver)
-	p := &oauthFlowProtocol{}
+	f := newB4Fixture(t, driver)
+	svcs, clients, admin := f.services, f.clients, f.admin
+	p := &oauthFlowProtocol{adminCtx: f.ctx, clock: f.clock}
 	for _, svc := range svcs {
 		svc.cfg.PublicBaseURL = "https://app.example.test"
 		svc.cfg.CompletionURLs = []string{"https://app.example.test/auth/complete"}
@@ -56,51 +63,60 @@ func oauthTestServices(t *testing.T, driver string) ([2]*ExternalAuthService, [2
 
 func oauthTestConnection(t *testing.T, svc *ExternalAuthService, admin *ent.User, protocol *oauthFlowProtocol) AuthConnectionRecord {
 	t.Helper()
-	ctx := WithExternalActor(context.Background(), admin.ID, admin.AuthVersion)
+	ctx := protocol.adminCtx
 	input := OAuth2ConnectionInput{AuthorizationEndpoint: "https://oauth.example.test/authorize", TokenEndpoint: "https://oauth.example.test/token", ProfileEndpoint: "https://oauth.example.test/profile", ClientID: "oauth-client", SubjectMapping: authoauth2.SubjectMapping{Pointer: "/id", Type: "string"}}
 	rec, err := svc.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "generic_oauth2", DisplayName: "Generic identity", OAuth2: &input, ClientSecret: "oauth-client-secret"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.IdentityAuthorityID == nil || *rec.IdentityAuthorityID == "" || rec.Draft == nil || rec.Draft.OIDC != nil || rec.Draft.OAuth2 == nil {
+	if rec.IdentityAuthorityID == nil || *rec.IdentityAuthorityID == "" || rec.Configuration == nil || rec.Configuration.OIDC != nil || rec.Configuration.OAuth2 == nil {
 		t.Fatalf("generic connection lacks its own authority or protocol config: %+v", rec)
 	}
-	policy := rec.Draft.Policy
-	policy.Enabled, policy.LoginEnabled, policy.SignupEnabled, policy.LinkEnabled = true, true, true, true
-	rec, err = svc.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, Policy: &policy})
+	policy := rec.Configuration.Policy
+	policy.LoginEnabled, policy.SignupEnabled, policy.LinkEnabled = true, true, true
+	rec, err = svc.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, AuthConnectionChanges: AuthConnectionChanges{Policy: &policy}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	check, err := svc.CheckConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
+	check, err := svc.CheckConnection(ctx, admin.ID, rec.ID, AuthConnectionCandidateInput{ExpectedRevision: rec.AggregateRevision})
 	if err != nil || !check.Valid || check.FreshSupported {
 		t.Fatalf("generic check=%+v err=%v", check, err)
 	}
-	if _, err = svc.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision); !errors.Is(err, ErrAuthConnectionConflict) {
-		t.Fatalf("configuration check alone permitted publication: %v", err)
+	_, err = svc.EnableConnection(ctx, admin.ID, rec.ID, AuthConnectionActionInput{ExpectedRevision: rec.AggregateRevision})
+	b4Code(t, err, "test-required")
+	tested := oauthTestProof(t, svc, admin, protocol, rec, nil)
+	rec, err = svc.EnableConnection(ctx, admin.ID, rec.ID, AuthConnectionActionInput{ExpectedRevision: rec.AggregateRevision, TestID: tested.TestID, Verifier: flowTestVerifier})
+	if err != nil {
+		t.Fatal(err)
 	}
-	_, err = svc.StartTest(ctx, admin.ID, rec.ID, rec.AggregateRevision, ExternalBrowserInput{BrowserChallenge: browserChallenge(flowTestVerifier), CompletionURL: "https://app.example.test/auth/complete"})
+	if rec.Validation.FreshSupported || rec.Validation.TestedAt == nil || rec.Validation.AppliedTestID != tested.TestID || rec.State != "enabled" || rec.Configuration == nil {
+		t.Fatalf("enabled validation=%+v", rec.Validation)
+	}
+	return rec
+}
+
+func oauthTestProof(t *testing.T, svc *ExternalAuthService, admin *ent.User, protocol *oauthFlowProtocol, rec AuthConnectionRecord, changes *AuthConnectionChanges) ExternalTestResult {
+	t.Helper()
+	ctx := protocol.adminCtx
+	start, err := svc.StartTest(ctx, admin.ID, rec.ID, AuthConnectionTestInput{AuthConnectionCandidateInput: AuthConnectionCandidateInput{ExpectedRevision: rec.AggregateRevision, Changes: changes}, ExternalBrowserInput: ExternalBrowserInput{BrowserChallenge: browserChallenge(flowTestVerifier), CompletionURL: "https://app.example.test/auth/complete"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if protocol.authorization.Fresh {
 		t.Fatal("generic administrator test requested fresh authentication")
 	}
-	cb, err := svc.HandleCallback(ctx, rec.ID, protocol.state, "administrator-test-subject", "")
+	cb, err := svc.HandleCallback(context.Background(), rec.ID, protocol.state, "administrator-test-subject", "")
 	if err != nil || cb.Failed {
 		t.Fatalf("test callback=%+v err=%v", cb, err)
 	}
 	x, err := svc.Exchange(ctx, &admin.ID, ExternalExchangeInput{Ticket: cb.Ticket, Verifier: flowTestVerifier})
-	if err != nil || x.Test == nil || x.Kind != "test_result" || x.Test.FreshSupported {
+	if err != nil || x.Test == nil || x.Kind != "test_result" || x.Test.FreshSupported || x.Session != nil || x.Proof != nil {
 		t.Fatalf("test result=%+v err=%v", x, err)
 	}
-	rec, err = svc.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
-	if err != nil {
-		t.Fatal(err)
+	if x.Test.TestID != start.TestID || start.TestID != start.TransactionID || !x.Test.ExpiresAt.Equal(start.ExpiresAt) {
+		t.Fatal("test proof changed transaction identity or deadline")
 	}
-	if rec.Validation.FreshSupported || !rec.Validation.FingerprintMatches || rec.Published == nil {
-		t.Fatalf("published validation=%+v", rec.Validation)
-	}
-	return rec
+	return *x.Test
 }
 
 func oauthTestExchange(t *testing.T, svc *ExternalAuthService, protocol *oauthFlowProtocol, id, subject string) (ExternalStartResult, ExternalExchangeResult, error) {
@@ -130,12 +146,14 @@ func oauthTestConfirmation(t *testing.T, svc *ExternalAuthService, protocol *oau
 func oauthAssertAccountCounts(t *testing.T, c *ent.Client, users, identities, sessions int) {
 	t.Helper()
 	ctx := context.Background()
-	if c.User.Query().CountX(ctx) != users || c.ExternalIdentity.Query().CountX(ctx) != identities || c.LoginBinding.Query().CountX(ctx) != identities || c.RefreshSession.Query().CountX(ctx) != sessions || c.RefreshToken.Query().CountX(ctx) != sessions {
+	// newB4Fixture establishes exactly one real administrator session/token.
+	// Provider tests must not create any additional sessions, users, or bindings.
+	if c.User.Query().CountX(ctx) != users || c.ExternalIdentity.Query().CountX(ctx) != identities || c.LoginBinding.Query().CountX(ctx) != identities || c.RefreshSession.Query().CountX(ctx) != sessions+1 || c.RefreshToken.Query().CountX(ctx) != sessions+1 {
 		t.Fatalf("partial/duplicate state: users=%d identities=%d bindings=%d sessions=%d tokens=%d", c.User.Query().CountX(ctx), c.ExternalIdentity.Query().CountX(ctx), c.LoginBinding.Query().CountX(ctx), c.RefreshSession.Query().CountX(ctx), c.RefreshToken.Query().CountX(ctx))
 	}
 }
 
-func TestAuthenticationB3OAuthSignupAndMaintenance(t *testing.T) {
+func TestAuthenticationB4OAuthSignupAndMaintenance(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
 			svcs, clients, admin, protocol := oauthTestServices(t, driver)
@@ -216,7 +234,7 @@ func TestAuthenticationB3OAuthSignupAndMaintenance(t *testing.T) {
 	}
 }
 
-func TestAuthenticationB3OAuthPolicyDependencies(t *testing.T) {
+func TestAuthenticationB4OAuthPolicyDependencies(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
 			for _, setting := range []string{"password_link", "password_login", "password_enabled", "username_login", "global_registration"} {
@@ -260,7 +278,7 @@ func TestAuthenticationB3OAuthPolicyDependencies(t *testing.T) {
 	}
 }
 
-func TestAuthenticationB3OAuthAtomicCompletion(t *testing.T) {
+func TestAuthenticationB4OAuthAtomicCompletion(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
 			t.Run("late session failure rolls back password and identity", func(t *testing.T) {
@@ -334,7 +352,7 @@ func TestAuthenticationB3OAuthAtomicCompletion(t *testing.T) {
 	}
 }
 
-func TestAuthenticationB3OAuthCompletePasswordPolicyPublicationRace(t *testing.T) {
+func TestAuthenticationB4OAuthCompletePasswordPolicySaveRace(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
 			svcs, clients, admin, protocol := oauthTestServices(t, driver)
@@ -342,9 +360,9 @@ func TestAuthenticationB3OAuthCompletePasswordPolicyPublicationRace(t *testing.T
 			rec := oauthTestConnection(t, svcs[0], admin, protocol)
 			started, input := oauthTestConfirmation(t, svcs[0], protocol, rec.ID, "policy-race-subject", "policy-race-member")
 			type outcome struct {
-				publication bool
-				completed   ExternalCompleteResult
-				err         error
+				save      bool
+				completed ExternalCompleteResult
+				err       error
 			}
 			start, results := make(chan struct{}), make(chan outcome, 2)
 			go func() {
@@ -354,7 +372,7 @@ func TestAuthenticationB3OAuthCompletePasswordPolicyPublicationRace(t *testing.T
 			}()
 			go func() {
 				<-start
-				adminCtx := WithExternalActor(ctx, admin.ID, admin.AuthVersion)
+				adminCtx := protocol.adminCtx
 				err := withOrganizationTransaction(adminCtx, clients[1], func(tx *ent.Client) error {
 					if err := lockExternalConfiguration(adminCtx, tx, admin.ID); err != nil {
 						return err
@@ -370,29 +388,29 @@ func TestAuthenticationB3OAuthCompletePasswordPolicyPublicationRace(t *testing.T
 					if err := tx.AuthChannelPolicy.Create().SetConnectionID(PasswordConnectionID).SetRevision(next).SetLoginPolicyRevision(current.Policy.LoginPolicyRevision).SetEnabled(current.Policy.Enabled).SetLoginEnabled(current.Policy.LoginEnabled).SetSignupEnabled(current.Policy.SignupEnabled).SetLinkEnabled(false).SetLoginRules(current.Policy.LoginRules).SetSignupRules(current.Policy.SignupRules).SetLinkRules(current.Policy.LinkRules).Exec(adminCtx); err != nil {
 						return err
 					}
-					return tx.AuthConnection.UpdateOneID(PasswordConnectionID).SetAggregateRevision(next).SetPublishedRevision(next).ClearDraftRevision().Exec(adminCtx)
+					return tx.AuthConnection.UpdateOneID(PasswordConnectionID).SetAggregateRevision(next).SetCurrentRevision(next).Exec(adminCtx)
 				})
-				results <- outcome{publication: true, err: err}
+				results <- outcome{save: true, err: err}
 			}()
 			close(start)
 			var completed outcome
 			for range 2 {
 				result := <-results
-				if result.publication {
+				if result.save {
 					if result.err != nil {
-						t.Fatalf("password policy publication failed: %v", result.err)
+						t.Fatalf("password policy save failed: %v", result.err)
 					}
 				} else {
 					completed = result
 				}
 			}
-			published, err := readPasswordPolicy(ctx, c)
-			if err != nil || published.Policy.LinkEnabled || published.Policy.Revision != 2 || *published.Connection.PublishedRevision != 2 {
-				t.Fatalf("new password policy was not published: %+v, %v", published, err)
+			saved, err := readPasswordPolicy(ctx, c)
+			if err != nil || saved.Policy.LinkEnabled || saved.Policy.Revision != 2 || saved.Connection.CurrentRevision != 2 {
+				t.Fatalf("new password policy was not saved: %+v, %v", saved, err)
 			}
 			previous := c.AuthChannelPolicy.Query().Where(authchannelpolicy.ConnectionIDEQ(PasswordConnectionID), authchannelpolicy.RevisionEQ(1)).OnlyX(ctx)
 			if !previous.LinkEnabled {
-				t.Fatal("publication rewrote the previous immutable policy")
+				t.Fatal("save rewrote the previous immutable policy")
 			}
 			transaction := c.AuthTransaction.GetX(ctx, started.TransactionID)
 			switch {
@@ -402,7 +420,7 @@ func TestAuthenticationB3OAuthCompletePasswordPolicyPublicationRace(t *testing.T
 				}
 				account := c.User.GetX(ctx, completed.completed.Session.User.ID)
 				if comparePassword(account.PasswordHash, *input.InitialPassword) != nil {
-					t.Fatal("completion before policy publication omitted the initial password")
+					t.Fatal("completion before policy save omitted the initial password")
 				}
 				oauthAssertAccountCounts(t, c, 2, 1, 1)
 			case errors.Is(completed.err, ErrRegistrationClosed):
@@ -411,13 +429,13 @@ func TestAuthenticationB3OAuthCompletePasswordPolicyPublicationRace(t *testing.T
 				}
 				oauthAssertAccountCounts(t, c, 1, 0, 0)
 			default:
-				t.Fatalf("completion was not serialized with policy publication: %v", completed.err)
+				t.Fatalf("completion was not serialized with policy save: %v", completed.err)
 			}
 		})
 	}
 }
 
-func TestAuthenticationB3OAuthIdentityAndStateIsolation(t *testing.T) {
+func TestAuthenticationB4OAuthIdentityAndStateIsolation(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
 			svcs, clients, admin, p := oauthTestServices(t, driver)
@@ -486,25 +504,25 @@ func TestAuthenticationB3OAuthIdentityAndStateIsolation(t *testing.T) {
 	}
 }
 
-func TestAuthenticationB3OAuthOIDCWithoutAuthTime(t *testing.T) {
+func TestAuthenticationB4OAuthOIDCWithoutAuthTime(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
-			svcs, clients, admin, _ := oauthTestServices(t, driver)
+			svcs, clients, admin, oauthProtocol := oauthTestServices(t, driver)
 			s, c := svcs[0], clients[0]
-			ctx := WithExternalActor(context.Background(), admin.ID, admin.AuthVersion)
+			ctx := oauthProtocol.adminCtx
 			protocol := &externalFlowTestProtocol{}
 			s.SetOIDCProtocol(protocol)
 			rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "OIDC without auth_time", OIDC: &OIDCConnectionInput{Issuer: "https://issuer.example.test", ClientID: "oidc-client"}, ClientSecret: "oidc-secret"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			policy := rec.Draft.Policy
-			policy.Enabled, policy.LoginEnabled, policy.SignupEnabled, policy.LinkEnabled = true, true, true, true
-			rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, Policy: &policy})
+			policy := rec.Configuration.Policy
+			policy.LoginEnabled, policy.SignupEnabled, policy.LinkEnabled = true, true, true
+			rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, AuthConnectionChanges: AuthConnectionChanges{Policy: &policy}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = s.StartTest(ctx, admin.ID, rec.ID, rec.AggregateRevision, ExternalBrowserInput{BrowserChallenge: browserChallenge(flowTestVerifier), CompletionURL: "https://app.example.test/auth/complete"})
+			_, err = s.StartTest(ctx, admin.ID, rec.ID, AuthConnectionTestInput{AuthConnectionCandidateInput: AuthConnectionCandidateInput{ExpectedRevision: rec.AggregateRevision}, ExternalBrowserInput: ExternalBrowserInput{BrowserChallenge: browserChallenge(flowTestVerifier), CompletionURL: "https://app.example.test/auth/complete"}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -516,9 +534,9 @@ func TestAuthenticationB3OAuthOIDCWithoutAuthTime(t *testing.T) {
 			if err != nil || tested.Kind != "test_result" || tested.Test == nil || tested.Test.FreshSupported {
 				t.Fatalf("authentication-only OIDC test=%+v err=%v", tested, err)
 			}
-			rec, err = s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
-			if err != nil || rec.Published == nil || rec.Validation.FreshSupported {
-				t.Fatalf("publish authentication-only OIDC=%+v err=%v", rec, err)
+			rec, err = s.EnableConnection(ctx, admin.ID, rec.ID, AuthConnectionActionInput{ExpectedRevision: rec.AggregateRevision, TestID: tested.Test.TestID, Verifier: flowTestVerifier})
+			if err != nil || rec.Configuration == nil || rec.Validation.FreshSupported {
+				t.Fatalf("enable authentication-only OIDC=%+v err=%v", rec, err)
 			}
 			flowTestStart(t, s, rec.ID)
 			callback, err = s.HandleCallback(context.Background(), rec.ID, protocol.state, "authorization-code-secret", "")
@@ -545,6 +563,140 @@ func TestAuthenticationB3OAuthOIDCWithoutAuthTime(t *testing.T) {
 			methods, err := s.LoginMethods(context.Background(), created.Session.User.ID)
 			if err != nil || len(methods.Bindings) != 1 || methods.Bindings[0].CanReauthenticate {
 				t.Fatalf("OIDC without auth_time advertised reauthentication: %+v err=%v", methods, err)
+			}
+		})
+	}
+}
+
+func TestAuthenticationB4OAuthRulesAndRefreshEvidence(t *testing.T) {
+	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
+		t.Run(driver, func(t *testing.T) {
+			svcs, clients, admin, protocol := oauthTestServices(t, driver)
+			s, c, ctx := svcs[0], clients[0], context.Background()
+			rec := oauthTestConnection(t, s, admin, protocol)
+			department := "sales"
+			protocol.exchange = func(_ context.Context, cfg authoauth2.Config, in authprotocol.ExchangeRequest) (authprotocol.Identity, error) {
+				raw, err := json.Marshal(map[string]string{"id": in.Code, "department": department})
+				return authprotocol.Identity{Protocol: "oauth2", Authority: cfg.Authority, Subject: in.Code, Sources: map[string]json.RawMessage{"oauth2_profile": raw}}, err
+			}
+			mapping := []authrules.Field{{FieldID: "custom.department", Label: "Department", Type: "string", Source: "oauth2_profile", Pointer: "/department"}}
+			policy := rec.Configuration.Policy
+			policy.LoginRules = departmentRule()
+			policy.LinkRules = departmentRule()
+			policy.LinkRules.Conditions[0].Value = json.RawMessage(`"never"`)
+			age := 60
+			changes := AuthConnectionChanges{Policy: &policy, AttributeMappings: &mapping, EvidenceMaxAgeSeconds: &age}
+			tested := oauthTestProof(t, s, admin, protocol, rec, &changes)
+			var err error
+			rec, err = s.UpdateConnection(protocol.adminCtx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, TestID: tested.TestID, Verifier: flowTestVerifier, AuthConnectionChanges: changes})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err = oauthTestExchange(t, s, protocol, rec.ID, "rule-subject"); !errors.Is(err, ErrAuthenticationRuleDenied) {
+				t.Fatalf("denied OAuth profile admitted signup: %v", err)
+			}
+			oauthAssertAccountCounts(t, c, 1, 0, 0)
+			department = "engineering"
+			pending, input := oauthTestConfirmation(t, s, protocol, rec.ID, "rule-subject", "rule-owner")
+			deadline := c.AuthTransaction.GetX(ctx, pending.TransactionID).Evidence.ExpiresAt
+			protocol.clock.Store(deadline.UnixNano())
+			if _, err = s.Complete(ctx, nil, input); !errors.Is(err, ErrAuthenticationRuleDenied) {
+				t.Fatalf("final confirmation accepted expired OAuth evidence: %v", err)
+			}
+			oauthAssertAccountCounts(t, c, 1, 0, 0)
+			if c.AuthTransaction.GetX(ctx, pending.TransactionID).Status != authtransaction.StatusAwaitingConfirmation {
+				t.Fatal("rejected stale evidence consumed confirmation")
+			}
+			_, input = oauthTestConfirmation(t, s, protocol, rec.ID, "rule-subject", "rule-owner")
+			completed, err := s.Complete(ctx, nil, input)
+			if err != nil || completed.Session == nil {
+				t.Fatalf("OAuth signup incorrectly applied link rule: %+v, %v", completed, err)
+			}
+			if comparePassword(c.User.GetX(ctx, completed.Session.User.ID).PasswordHash, *input.InitialPassword) != nil {
+				t.Fatal("rule-controlled signup omitted its initial password")
+			}
+			session := c.RefreshSession.Query().Where(refreshsession.UserIDEQ(completed.Session.User.ID)).OnlyX(ctx)
+			deadline = session.Evidence.ExpiresAt
+			if len(session.Evidence.Attributes) != 1 || deadline.IsZero() || session.Evidence.Issuer != *rec.IdentityAuthorityID || session.Evidence.Subject != "rule-subject" {
+				t.Fatal("OAuth refresh session lacks scoped profile evidence")
+			}
+			protocol.clock.Add(int64(30 * time.Second))
+			rotated, err := s.auth.Refresh(ctx, completed.Session.RefreshToken)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !c.RefreshSession.GetX(ctx, session.ID).Evidence.ExpiresAt.Equal(deadline) {
+				t.Fatal("refresh rotation extended OAuth evidence lifetime")
+			}
+			protocol.clock.Store(deadline.UnixNano())
+			if _, err = s.auth.Refresh(ctx, rotated.RefreshToken); !errors.Is(err, ErrRefreshTokenRevoked) {
+				t.Fatalf("OAuth evidence expiry admitted refresh: %v", err)
+			}
+			if c.RefreshSession.GetX(ctx, session.ID).RevokedAt == nil {
+				t.Fatal("rejected refresh did not persist revocation")
+			}
+			_, fresh, err := oauthTestExchange(t, s, protocol, rec.ID, "rule-subject")
+			if err != nil || fresh.Session == nil || fresh.Session.User.ID != completed.Session.User.ID {
+				t.Fatalf("new OAuth authentication failed after evidence expiry: %+v, %v", fresh, err)
+			}
+		})
+	}
+}
+
+func TestAuthenticationB4OAuthCompleteSignupRuleSaveRace(t *testing.T) {
+	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
+		t.Run(driver, func(t *testing.T) {
+			svcs, clients, admin, protocol := oauthTestServices(t, driver)
+			s, c, ctx := svcs[0], clients[0], context.Background()
+			rec := oauthTestConnection(t, s, admin, protocol)
+			mapping := []authrules.Field{{FieldID: "custom.department", Label: "Department", Type: "string", Source: "oauth2_profile", Pointer: "/department"}}
+			changes := AuthConnectionChanges{AttributeMappings: &mapping}
+			tested := oauthTestProof(t, s, admin, protocol, rec, &changes)
+			var err error
+			rec, err = s.UpdateConnection(protocol.adminCtx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, TestID: tested.TestID, Verifier: flowTestVerifier, AuthConnectionChanges: changes})
+			if err != nil {
+				t.Fatal(err)
+			}
+			started, input := oauthTestConfirmation(t, s, protocol, rec.ID, "rule-race-subject", "rule-race-member")
+			policy := rec.Configuration.Policy
+			policy.SignupRules = departmentRule()
+			var completed ExternalCompleteResult
+			results := raceExternalCalls(func() error {
+				var err error
+				completed, err = s.Complete(ctx, nil, input)
+				return err
+			}, func() error {
+				_, err := svcs[1].UpdateConnection(protocol.adminCtx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, AuthConnectionChanges: AuthConnectionChanges{Policy: &policy}})
+				return err
+			})
+			// The rule save always succeeds. Completion either commits first or
+			// observes the changed signup rule before creating any account state.
+			for _, err := range results {
+				if err != nil && !errors.Is(err, ErrAuthConnectionConflict) {
+					t.Fatalf("unexpected rule/confirmation race error: %v", err)
+				}
+			}
+			saved, err := s.GetConnection(protocol.adminCtx, admin.ID, rec.ID)
+			if err != nil || saved.AggregateRevision != rec.AggregateRevision+1 || !reflect.DeepEqual(saved.Configuration.Policy.SignupRules, policy.SignupRules) {
+				t.Fatalf("signup rule save did not commit: %+v, %v", saved, err)
+			}
+			transaction := c.AuthTransaction.GetX(ctx, started.TransactionID)
+			if completed.Session != nil {
+				if transaction.Status != authtransaction.StatusCompleted || comparePassword(c.User.GetX(ctx, completed.Session.User.ID).PasswordHash, *input.InitialPassword) != nil {
+					t.Fatal("winning confirmation left partial password/account state")
+				}
+				oauthAssertAccountCounts(t, c, 2, 1, 1)
+				if _, err := s.auth.Refresh(ctx, completed.Session.RefreshToken); err != nil {
+					t.Fatalf("signup-only rule save revoked an existing login session: %v", err)
+				}
+			} else {
+				if transaction.Status != authtransaction.StatusAwaitingConfirmation || transaction.ConfirmationTokenHash == nil {
+					t.Fatal("rejected confirmation was consumed")
+				}
+				oauthAssertAccountCounts(t, c, 1, 0, 0)
+			}
+			if _, err := s.Complete(ctx, nil, input); !(errors.Is(err, ErrExternalFlowInvalid) || errors.Is(err, ErrAuthConnectionConflict)) {
+				t.Fatalf("old confirmation usable after signup rule save: %v", err)
 			}
 		})
 	}

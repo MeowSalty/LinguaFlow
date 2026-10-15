@@ -23,7 +23,7 @@ func accountTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	s, client, account := authTestServer(t)
 	client.InstanceInitialization.Create().SetID(1).SetVersion(service.InitializationVersion).SetDataVersion(service.CurrentDataVersion).SetMode("serve").ExecX(t.Context())
 	client.SystemSetting.Create().SetKey(service.SettingRegistrationEnabled).SetValue("true").SaveX(context.Background())
-	client.AuthConnection.Create().SetID(service.PasswordConnectionID).SetKind("password").SetPublishedRevision(1).ExecX(t.Context())
+	client.AuthConnection.Create().SetID(service.PasswordConnectionID).SetKind("password").SetCurrentRevision(1).ExecX(t.Context())
 	client.AuthConnectionRevision.Create().SetConnectionID(service.PasswordConnectionID).SetRevision(1).
 		SetDisplayName("Password").SetUsernameLoginEnabled(true).ExecX(t.Context())
 	client.AuthChannelPolicy.Create().SetConnectionID(service.PasswordConnectionID).SetRevision(1).SetLoginPolicyRevision(1).

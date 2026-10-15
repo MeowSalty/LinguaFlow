@@ -60,7 +60,7 @@ func TestAuthRulesPurposeAndEvidenceExpiry(t *testing.T) {
 			if err = saveExternalSnapshot(ctx, c, "flow-oidc", 2, 2, &cfg, policy); err != nil {
 				t.Fatal(err)
 			}
-			c.AuthConnection.UpdateOneID("flow-oidc").SetPublishedRevision(2).SetAggregateRevision(2).ExecX(ctx)
+			c.AuthConnection.UpdateOneID("flow-oidc").SetCurrentRevision(2).SetAggregateRevision(2).ExecX(ctx)
 			department := "sales"
 			protocol.exchange = func(context.Context, authoidc.Config, authoidc.ExchangeRequest) (authoidc.Identity, error) {
 				raw, _ := json.Marshal(map[string]string{"sub": "rule-subject", "department": department})
@@ -112,49 +112,35 @@ func TestAuthRulesPurposeAndEvidenceExpiry(t *testing.T) {
 	}
 }
 
-func TestAuthRulesPublicationUnknownAndFallback(t *testing.T) {
+func TestAuthRulesUpdateUnknownAndFallback(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
-			services, clients, admin := connectionTestServices(t, driver)
-			s, c := services[0], clients[0]
-			ctx := WithExternalActor(context.Background(), admin.ID, admin.AuthVersion)
-			rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Rules", OIDC: &OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "rule-client"}, ClientSecret: "secret"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			validateConnectionCandidate(t, s, c, admin.ID, rec.ID, *rec.DraftRevision)
-			policy := defaultExternalPolicy()
-			policy.Enabled = true
-			policy.LoginEnabled = true
-			policy.SignupEnabled = true
-			policy.LinkEnabled = true
-			rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, Policy: &policy})
-			if err != nil {
-				t.Fatal(err)
-			}
-			rec, err = s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
-			if err != nil {
-				t.Fatal(err)
-			}
+			f := newB4Fixture(t, driver)
+			s, c, ctx := f.services[0], f.clients[0], f.ctx
+			rec := f.enabled(t)
 			owner := c.User.Create().SetUsername("no-fallback").SetActive(true).SaveX(ctx)
 			identity := c.ExternalIdentity.Create().SetUserID(owner.ID).SetProtocol(externalidentity.ProtocolOidc).SetAuthority("https://idp.example.test").SetSubject("owner-subject").SaveX(ctx)
 			binding := c.LoginBinding.Create().SetUserID(owner.ID).SetConnectionID(rec.ID).SetExternalIdentityID(identity.ID).SetLastVerifiedAt(time.Now().UTC()).SetVerifiedAuthGeneration(1).SetVerifiedLoginPolicyRevision(1).SaveX(ctx)
 			mapping := departmentMapping()
-			policy.LoginRules = departmentRule()
-			rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, Policy: &policy, AttributeMappings: &mapping})
-			if err != nil {
-				t.Fatal(err)
-			}
-			preview, err := s.PreviewConnectionRules(ctx, admin.ID, rec.ID, AuthRulesPreviewInput{ExpectedRevision: rec.AggregateRevision, Sources: map[string]json.RawMessage{"oidc_id_token": json.RawMessage(`{"department":"engineering"}`)}})
+			restricted := b4Policy()
+			restricted.LoginRules = departmentRule()
+			changes := AuthConnectionChanges{Policy: &restricted, AttributeMappings: &mapping}
+			preview, err := s.PreviewConnectionRules(ctx, f.admin.ID, rec.ID, AuthRulesPreviewInput{ExpectedRevision: rec.AggregateRevision, Changes: &changes, Sources: map[string]json.RawMessage{"oidc_id_token": json.RawMessage(`{"department":"engineering"}`)}})
 			if err != nil || preview.Rules.Login.Status != "pass" {
 				t.Fatalf("preview=%+v err=%v", preview, err)
 			}
-			impact, err := s.ImpactConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
-			if err != nil || impact.CanPublish || len(impact.UnknownUsers) != 1 {
+			// Attribute/protocol-affecting candidate changes consume a fresh real
+			// test, and the simulated result must never become stored evidence.
+			result := f.test(t, rec, &changes)
+			impact, err := s.ImpactConnection(ctx, f.admin.ID, rec.ID, AuthConnectionCandidateInput{ExpectedRevision: rec.AggregateRevision, Changes: &changes})
+			if err != nil || impact.CanSave || len(impact.UnknownUsers) != 1 {
 				t.Fatalf("simulated result became evidence: %+v %v", impact, err)
 			}
-			if _, err = s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision); !errors.Is(err, ErrAuthConnectionConflict) {
-				t.Fatalf("unsafe publication: %v", err)
+			savedID, savedRevision := rec.ID, rec.AggregateRevision
+			rec, err = s.UpdateConnection(ctx, f.admin.ID, rec.ID, UpdateAuthConnectionInput{AuthConnectionChanges: changes, ExpectedRevision: rec.AggregateRevision, TestID: result.TestID, Verifier: b4Verifier})
+			var blocked *AuthConnectionError
+			if !errors.As(err, &blocked) || blocked.Code != "fallback-required" || blocked.Impact == nil || len(blocked.Impact.UnknownUsers) != 1 {
+				t.Fatalf("unsafe save without fallback: %v", err)
 			}
 			// Establish a usable local credential and prove actual control by logging in.
 			hashed, err := hashPassword("verified-password")
@@ -166,9 +152,6 @@ func TestAuthRulesPublicationUnknownAndFallback(t *testing.T) {
 			if err != nil || !methods.Password.CanLogin || methods.Password.Verified {
 				t.Fatalf("password existence confused with verification: %+v %v", methods.Password, err)
 			}
-			if _, err = s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision); !errors.Is(err, ErrAuthConnectionConflict) {
-				t.Fatalf("unverified password must not permit publication: %v", err)
-			}
 			if _, err = s.auth.Login(ctx, LoginInput{Identifier: owner.Username, Password: "verified-password"}); err != nil {
 				t.Fatal(err)
 			}
@@ -176,53 +159,54 @@ func TestAuthRulesPublicationUnknownAndFallback(t *testing.T) {
 			if err != nil || !methods.Password.Verified {
 				t.Fatalf("successful password login not reflected in methods: %v", err)
 			}
-			rec, err = s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
+			// The same proof now saves the restricted configuration with a verified
+			// fallback; login rules bump the login policy revision, not evidence.
+			rec, err = s.UpdateConnection(ctx, f.admin.ID, savedID, UpdateAuthConnectionInput{AuthConnectionChanges: changes, ExpectedRevision: savedRevision, TestID: result.TestID, Verifier: b4Verifier})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if rec.Published.LoginPolicyRevision != 2 {
+			if rec.Configuration.LoginPolicyRevision != 2 {
 				t.Fatal("login version not incremented")
 			}
 			if c.LoginBinding.GetX(ctx, binding.ID).VerifiedLoginPolicyRevision != 1 {
-				t.Fatal("publication fabricated current evidence")
+				t.Fatal("save fabricated current evidence")
+			}
+			// An applied test cannot authorize a different revision.
+			var reuseErr error
+			var conflict *AuthConnectionError
+			_, reuseErr = s.UpdateConnection(ctx, f.admin.ID, rec.ID, UpdateAuthConnectionInput{AuthConnectionChanges: changes, ExpectedRevision: rec.AggregateRevision, TestID: result.TestID, Verifier: b4Verifier})
+			if !errors.As(reuseErr, &conflict) || conflict.Code != "state-conflict" {
+				t.Fatalf("applied test reused for a new revision: %v", reuseErr)
 			}
 		})
 	}
 }
 
 func TestAuthRulesOnlySignupChangePreservesSession(t *testing.T) {
-	services, clients, admin := connectionTestServices(t, dialect.SQLite)
-	s, c := services[0], clients[0]
-	ctx := WithExternalActor(context.Background(), admin.ID, admin.AuthVersion)
-	rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Rules", OIDC: &OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "client"}, ClientSecret: "secret"})
+	f := newB4Fixture(t, dialect.SQLite)
+	s, c, ctx := f.services[0], f.clients[0], f.ctx
+	rec := f.configured(t)
+	// Registering the attribute map is itself a protocol-affecting save.
+	mapping := departmentMapping()
+	mappingChanges := AuthConnectionChanges{AttributeMappings: &mapping}
+	proof := f.test(t, rec, &mappingChanges)
+	rec, err := s.UpdateConnection(ctx, f.admin.ID, rec.ID, UpdateAuthConnectionInput{AuthConnectionChanges: mappingChanges, ExpectedRevision: rec.AggregateRevision, TestID: proof.TestID, Verifier: b4Verifier})
 	if err != nil {
 		t.Fatal(err)
 	}
-	validateConnectionCandidate(t, s, c, admin.ID, rec.ID, 1)
-	policy := defaultExternalPolicy()
-	policy.Enabled = true
-	policy.LoginEnabled = true
-	rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: 1, Policy: &policy})
+	rec, err = s.EnableConnection(ctx, f.admin.ID, rec.ID, AuthConnectionActionInput{ExpectedRevision: rec.AggregateRevision, TestID: proof.TestID, Verifier: b4Verifier})
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec, err = s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
+	chain := c.RefreshSession.Create().SetUserID(f.admin.ID).SetAuthVersion(f.admin.AuthVersion).SetConnectionID(rec.ID).SetConnectionGeneration(1).SetLoginPolicyRevision(1).SetExpiresAt(time.Now().Add(time.Hour)).SaveX(ctx)
+	// Signup-only rule changes never touch the login policy revision.
+	signup := b4Policy()
+	signup.SignupRules = departmentRule()
+	rec, err = s.UpdateConnection(ctx, f.admin.ID, rec.ID, UpdateAuthConnectionInput{AuthConnectionChanges: AuthConnectionChanges{Policy: &signup}, ExpectedRevision: rec.AggregateRevision})
 	if err != nil {
 		t.Fatal(err)
 	}
-	chain := c.RefreshSession.Create().SetUserID(admin.ID).SetAuthVersion(admin.AuthVersion).SetConnectionID(rec.ID).SetConnectionGeneration(1).SetLoginPolicyRevision(1).SetExpiresAt(time.Now().Add(time.Hour)).SaveX(ctx)
-	fields := departmentMapping()
-	policy.SignupRules = departmentRule()
-	rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, Policy: &policy, AttributeMappings: &fields})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec, err = s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rec.Published.LoginPolicyRevision != 1 || c.RefreshSession.GetX(ctx, chain.ID).RevokedAt != nil {
+	if rec.Configuration.LoginPolicyRevision != 1 || c.RefreshSession.GetX(ctx, chain.ID).RevokedAt != nil {
 		t.Fatal("signup-only rule revoked login")
 	}
-
 }

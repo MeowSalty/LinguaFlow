@@ -33,11 +33,13 @@ export async function ready(url, child, timeout = 120000) {
 export async function createRuntime() {
   const root = await mkdtemp(join(tmpdir(), 'linguaflow-b3-acceptance-'));
   const children = [], servers = [], secrets = [];
+  let closed = false;
   const applicationPorts = {};
   for (const mode of ['same-origin', 'cross-origin']) {
     applicationPorts[mode] = { apiPort: await freePort(), proxyPort: await freePort(), crossPort: await freePort() };
   }
   function launch(program, args, name, env = {}) {
+    if (closed) throw new Error("Acceptance runtime closed before launch");
     const log = createWriteStream(join(root, name + '.log'), { flags: 'a', mode: 0o600 });
     const child = spawn(program, args, { cwd: root, env: { ...cleanEnvironment(), ...env }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     child.stdout.pipe(log); child.stderr.pipe(log);
@@ -46,6 +48,8 @@ export async function createRuntime() {
     return child;
   }
   async function close() {
+    if (closed) return;
+    closed = true;
     for (const child of children.reverse()) {
       if (child.exitCode !== null || !child.pid) continue;
       if (process.platform === 'win32') {
@@ -87,7 +91,7 @@ export async function createRuntime() {
       realm: 'linguaflow-b1', enabled: true, sslRequired: 'none', registrationAllowed: false,
       clients: ['b1-first', 'b1-second'].map(clientId => ({ clientId, enabled: true, protocol: 'openid-connect', publicClient: false,
         secret: clientSecret, standardFlowEnabled: true, directAccessGrantsEnabled: false,
-        redirectUris: Object.values(applicationPorts).map(({ proxyPort }) => `http://127.0.0.1:${proxyPort}/api/v1/auth/external/*`),
+        redirectUris: Object.entries(applicationPorts).map(([mode, { proxyPort }]) => `http://127.0.0.1:${proxyPort}${mode === 'cross-origin' ? '/gateway' : ''}/api/v1/auth/external/*`),
         attributes: { 'pkce.code.challenge.method': 'S256' }, defaultClientScopes: ['basic', 'profile', 'email'],
         protocolMappers: [
           { name: 'department', protocol: 'openid-connect', protocolMapper: 'oidc-usermodel-attribute-mapper', config: { 'user.attribute': 'department', 'claim.name': 'department', 'jsonType.label': 'String', 'id.token.claim': 'true', 'access.token.claim': 'true', 'userinfo.token.claim': 'true' } },
@@ -111,13 +115,14 @@ export async function createRuntime() {
     return { issuer, clientSecret, password };
   }
   async function oauth2() {
-    const provider = await controlledOAuth({ callbackBases: Object.values(applicationPorts).map(({ proxyPort }) => `http://127.0.0.1:${proxyPort}`), secrets });
+    const provider = await controlledOAuth({ callbackBases: Object.entries(applicationPorts).map(([mode, { proxyPort }]) => `http://127.0.0.1:${proxyPort}${mode === 'cross-origin' ? '/gateway' : ''}`), secrets });
     servers.push(provider.server);
     return provider;
   }
   async function application(mode, dsn = '', options = {}) {
     const { apiPort, proxyPort, crossPort } = applicationPorts[mode];
-    const publicBase = `http://127.0.0.1:${proxyPort}`, crossBase = `http://127.0.0.1:${crossPort}`;
+    const apiPrefix = mode === 'cross-origin' ? '/gateway' : '';
+    const publicBase = `http://127.0.0.1:${proxyPort}${apiPrefix}`, crossBase = `http://127.0.0.1:${crossPort}`;
     const completionBase = mode === 'same-origin' ? publicBase : crossBase;
     const directory = join(root, mode); await mkdir(directory);
     const adminPassword = secret(); secrets.push(adminPassword);
@@ -135,8 +140,8 @@ export async function createRuntime() {
     const child = launch(binary, ['serve', '--config', configPath], mode);
     const fixture = (await readFile(join(sourceDir, 'fixture.html'), 'utf8')).replace('__API_BASE__', JSON.stringify(publicBase));
     function handler(proxy) { return (req, res) => {
-      if (proxy && req.url.startsWith('/api/')) {
-        const upstream = httpRequest({ host: '127.0.0.1', port: apiPort, method: req.method, path: req.url, headers: req.headers }, answer => { res.writeHead(answer.statusCode, answer.headers); answer.pipe(res); });
+      if (proxy && req.url.startsWith(apiPrefix + '/api/')) {
+        const upstream = httpRequest({ host: '127.0.0.1', port: apiPort, method: req.method, path: req.url.slice(apiPrefix.length), headers: req.headers }, answer => { res.writeHead(answer.statusCode, answer.headers); answer.pipe(res); });
         upstream.on('error', () => { res.writeHead(502); res.end(); }); req.pipe(upstream); return;
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }); res.end(fixture);

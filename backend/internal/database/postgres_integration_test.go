@@ -241,6 +241,7 @@ func TestPostgresIntegration(t *testing.T) {
 	connection, err := client.AuthConnection.Create().
 		SetID("pg-" + suffix).
 		SetKind(authconnection.KindOidc).
+		SetState(authconnection.StateEnabled).
 		Save(ctx)
 	if err != nil {
 		t.Fatalf("create authentication connection: %v", err)

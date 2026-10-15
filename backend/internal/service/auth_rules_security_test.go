@@ -4,65 +4,69 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
 
 	"entgo.io/ent/dialect"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/authoidc"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 )
 
-func publishedRuleFixture(t *testing.T, s *ExternalAuthService, c *ent.Client, admin *ent.User, restricted bool) AuthConnectionRecord {
+// b4RulesFixture brings an external connection through the B4 management flow:
+// configured, really tested through the mock provider callback and then enabled.
+// Protocol-affecting changes consume the test proof; rule-only changes do not.
+func b4RulesFixture(t *testing.T, f *b4Fixture, restricted bool) AuthConnectionRecord {
 	t.Helper()
-	ctx := context.Background()
-	rec, err := s.CreateConnection(ctx, admin.ID, CreateAuthConnectionInput{Kind: "oidc", DisplayName: "Rules", OIDC: &OIDCConnectionInput{Issuer: "https://idp.example.test", ClientID: "rules"}, ClientSecret: "secret"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := defaultExternalPolicy()
-	p.Enabled = true
-	p.LoginEnabled = true
-	p.SignupEnabled = true
-	p.LinkEnabled = true
-	fields := departmentMapping()
+	rec := f.configured(t)
+	var changes *AuthConnectionChanges
 	if restricted {
+		p := b4Policy()
 		p.LoginRules = departmentRule()
+		mapping := departmentMapping()
+		changes = &AuthConnectionChanges{Policy: &p, AttributeMappings: &mapping}
 	}
-	rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, Policy: &p, AttributeMappings: &fields})
-	if err != nil {
-		t.Fatal(err)
+	return b4Reenable(t, f, rec, changes)
+}
+
+func b4Reenable(t *testing.T, f *b4Fixture, rec AuthConnectionRecord, changes *AuthConnectionChanges) AuthConnectionRecord {
+	t.Helper()
+	s := f.services[0]
+	proof := f.test(t, rec, changes)
+	var err error
+	if changes != nil {
+		rec, err = s.UpdateConnection(f.ctx, f.admin.ID, rec.ID, UpdateAuthConnectionInput{AuthConnectionChanges: *changes, ExpectedRevision: rec.AggregateRevision, TestID: proof.TestID, Verifier: b4Verifier})
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	validateConnectionCandidate(t, s, c, admin.ID, rec.ID, rec.AggregateRevision)
-	rec, err = s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
+	rec, err = s.EnableConnection(f.ctx, f.admin.ID, rec.ID, AuthConnectionActionInput{ExpectedRevision: rec.AggregateRevision, TestID: proof.TestID, Verifier: b4Verifier})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return rec
 }
 
-func ruleBindingFixture(t *testing.T, c *ent.Client, owner *ent.User, id string, now time.Time) *ent.LoginBinding {
+func ruleBindingFixture(t *testing.T, c *ent.Client, owner *ent.User, id string, now time.Time, generation int64) *ent.LoginBinding {
 	t.Helper()
 	ctx := context.Background()
 	identity := c.ExternalIdentity.Create().SetUserID(owner.ID).SetProtocol(externalidentity.ProtocolOidc).SetAuthority("https://idp.example.test").SetSubject("subject-" + strconv.Itoa(owner.ID) + id).SaveX(ctx)
-	return c.LoginBinding.Create().SetUserID(owner.ID).SetConnectionID(id).SetExternalIdentityID(identity.ID).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(1).SetVerifiedLoginPolicyRevision(1).SaveX(ctx)
+	return c.LoginBinding.Create().SetUserID(owner.ID).SetConnectionID(id).SetExternalIdentityID(identity.ID).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(generation).SetVerifiedLoginPolicyRevision(1).SaveX(ctx)
 }
 
-func TestAuthRulesPublishRechecksExpiredEvidence(t *testing.T) {
+func TestAuthRulesSaveRechecksExpiredEvidence(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
-			svcs, clients, admin := connectionTestServices(t, driver)
-			s, c, ctx := svcs[0], clients[0], context.Background()
-			now := time.Now().UTC()
-			s.now = func() time.Time { return now }
-			rec := publishedRuleFixture(t, s, c, admin, true)
+			f := newB4Fixture(t, driver)
+			s, c, ctx := f.services[0], f.clients[0], f.ctx
+			now := f.services[0].now()
+			rec := b4RulesFixture(t, f, true)
 			owner := c.User.Create().SetUsername("expiry-owner").SaveX(ctx)
-			b := ruleBindingFixture(t, c, owner, rec.ID, now)
-			p, err := readExternalConnection(ctx, c, rec.ID, 0)
+			p, err := readExternalConnection(context.Background(), c, rec.ID, 0)
+			b := ruleBindingFixture(t, c, owner, rec.ID, now, p.Connection.AuthGeneration)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -70,49 +74,47 @@ func TestAuthRulesPublishRechecksExpiredEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			identity := c.ExternalIdentity.GetX(ctx, b.ExternalIdentityID)
+			identity := c.ExternalIdentity.GetX(context.Background(), b.ExternalIdentityID)
 			e := authrules.Evidence{Issuer: identity.Authority, Subject: identity.Subject, SourceFingerprint: sourceTrustFingerprint(p.Config), LoginPolicyRevision: 1, ObservedAt: now, ExpiresAt: now.Add(time.Minute), Attributes: attrs}
-			c.LoginBinding.UpdateOneID(b.ID).SetEvidence(e).ExecX(ctx)
+			e.LoginPolicyRevision = p.Policy.LoginPolicyRevision
+			c.LoginBinding.UpdateOneID(b.ID).SetEvidence(e).ExecX(context.Background())
 			policy := policyInput(p.Policy)
 			policy.LoginRules.Conditions[0].Operator = "ne"
 			policy.LoginRules.Conditions[0].Value = json.RawMessage(`"sales"`)
-			rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, Policy: &policy})
-			if err != nil {
-				t.Fatal(err)
-			}
-			impact, err := s.ImpactConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
-			if err != nil || !impact.CanPublish || len(impact.PassUsers) != 1 {
+			candidate := AuthConnectionCandidateInput{ExpectedRevision: rec.AggregateRevision, Changes: &AuthConnectionChanges{Policy: &policy}}
+			impact, err := s.ImpactConnection(ctx, f.admin.ID, rec.ID, candidate)
+			if err != nil || !impact.CanSave || len(impact.PassUsers) != 1 {
 				t.Fatalf("fresh candidate: %+v %v", impact, err)
 			}
-			now = e.ExpiresAt
-			_, err = s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision)
-			var conflict *AuthenticationPublishConflict
-			if !errors.As(err, &conflict) || len(conflict.Impact.UnknownUsers) != 1 {
-				t.Fatalf("publish trusted prior impact: %v", err)
+			f.clock.Store(e.ExpiresAt.UnixNano())
+			_, err = s.UpdateConnection(ctx, f.admin.ID, rec.ID, UpdateAuthConnectionInput{AuthConnectionChanges: AuthConnectionChanges{Policy: &policy}, ExpectedRevision: rec.AggregateRevision})
+			var blocked *AuthConnectionError
+			if !errors.As(err, &blocked) || blocked.Code != "fallback-required" || blocked.Impact == nil || len(blocked.Impact.UnknownUsers) != 1 {
+				t.Fatalf("save trusted prior impact: %v", err)
 			}
-			current := c.AuthConnection.GetX(ctx, rec.ID)
-			if *current.PublishedRevision != *rec.PublishedRevision || current.DraftRevision == nil {
-				t.Fatal("blocked publish replaced online snapshot")
+			current := c.AuthConnection.GetX(context.Background(), rec.ID)
+			if current.CurrentRevision != rec.AggregateRevision {
+				t.Fatal("blocked save replaced online snapshot")
 			}
 		})
 	}
 }
 
-func TestAuthRulesPublishAndFallbackRemovalRace(t *testing.T) {
+func TestAuthRulesSaveAndFallbackRemovalRace(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		for _, method := range []string{"password", "binding"} {
 			t.Run(driver+"/"+method, func(t *testing.T) {
-				svcs, clients, admin := connectionTestServices(t, driver)
-				s, c, ctx := svcs[0], clients[0], context.Background()
-				now := time.Now().UTC()
-				rec := publishedRuleFixture(t, s, c, admin, false)
+				f := newB4Fixture(t, driver)
+				s, c, ctx := f.services[0], f.clients[0], context.Background()
+				now := f.services[0].now()
+				rec := b4RulesFixture(t, f, true)
 				owner := createPasswordTestUser(t, c, "race-rule-owner", "password-123")
-				ruleBindingFixture(t, c, owner, rec.ID, now)
+				ruleBindingFixture(t, c, owner, rec.ID, now, c.AuthConnection.GetX(ctx, rec.ID).AuthGeneration)
 				action, target := "password_delete", PasswordConnectionID
 				var fallbackBinding *ent.LoginBinding
 				if method == "binding" {
-					other := publishedRuleFixture(t, s, c, admin, false)
-					fallbackBinding = ruleBindingFixture(t, c, owner, other.ID, now)
+					other := b4RulesFixture(t, f, false)
+					fallbackBinding = ruleBindingFixture(t, c, owner, other.ID, now, c.AuthConnection.GetX(ctx, other.ID).AuthGeneration)
 					owner = c.User.UpdateOneID(owner.ID).ClearPasswordHash().SaveX(ctx)
 					action, target = "unlink", strconv.Itoa(fallbackBinding.ID)
 				}
@@ -120,43 +122,46 @@ func TestAuthRulesPublishAndFallbackRemovalRace(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				p := rec.Published.Policy
-				p.LoginRules = departmentRule()
-				rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, Policy: &p})
-				if err != nil {
-					t.Fatal(err)
-				}
+				p := rec.Configuration.Policy
+				p.LoginRules = authrules.RuleSet{Mode: "conditions", Match: "all", Conditions: []authrules.Condition{{FieldID: "custom.department", Operator: "ne", Value: json.RawMessage(`"sales"`)}}}
 				start := make(chan struct{})
-				pub, removal := make(chan error, 1), make(chan error, 1)
-				go func() { <-start; _, e := s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision); pub <- e }()
+				save, removal := make(chan error, 1), make(chan error, 1)
+				go func() {
+					<-start
+					_, e := s.UpdateConnection(f.ctx, f.admin.ID, rec.ID, UpdateAuthConnectionInput{AuthConnectionChanges: AuthConnectionChanges{Policy: &p}, ExpectedRevision: rec.AggregateRevision})
+					save <- e
+				}()
 				go func() {
 					<-start
 					var e error
 					if method == "password" {
-						e = svcs[1].DeletePassword(ctx, owner.ID, proof.Proof)
+						e = f.services[1].DeletePassword(ctx, owner.ID, proof.Proof)
 					} else {
-						e = svcs[1].Unlink(ctx, owner.ID, fallbackBinding.ID, proof.Proof)
+						e = f.services[1].Unlink(ctx, owner.ID, fallbackBinding.ID, proof.Proof)
 					}
 					removal <- e
 				}()
 				close(start)
-				pubErr, removeErr := <-pub, <-removal
-				if pubErr == nil && removeErr == nil {
-					t.Fatal("publication and last fallback removal both committed")
+				saveErr, removeErr := <-save, <-removal
+				if saveErr == nil && removeErr == nil {
+					t.Fatal("rule save and last fallback removal both committed")
 				}
-				if pubErr != nil && !errors.Is(pubErr, ErrAuthConnectionConflict) {
-					t.Fatalf("publish race: %v", pubErr)
+				if saveErr != nil {
+					var conflict *AuthConnectionError
+					if !errors.As(saveErr, &conflict) {
+						t.Fatalf("save race: %v", saveErr)
+					}
 				}
 				if removeErr != nil && !errors.Is(removeErr, ErrLoginMethodConflict) && !errors.Is(removeErr, ErrReauthenticationRequired) {
 					t.Fatalf("removal race: %v", removeErr)
 				}
-				if pubErr != nil && removeErr != nil {
-					t.Fatalf("neither serial outcome committed: %v / %v", pubErr, removeErr)
+				if saveErr != nil && removeErr != nil {
+					t.Fatalf("neither serial outcome committed: %v / %v", saveErr, removeErr)
 				}
-				if pubErr == nil {
+				if saveErr == nil {
 					fallback, err := connectionFallbackAt(ctx, c, c.User.GetX(ctx, owner.ID), rec.ID, time.Now().UTC())
 					if err != nil || !fallback {
-						t.Fatalf("published without fallback: %v", err)
+						t.Fatalf("saved without fallback: %v", err)
 					}
 				}
 			})
@@ -164,37 +169,42 @@ func TestAuthRulesPublishAndFallbackRemovalRace(t *testing.T) {
 	}
 }
 
-func TestAuthRulesPublishAndRefreshRace(t *testing.T) {
+func TestAuthRulesSaveAndRefreshRace(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
-			svcs, clients, admin := connectionTestServices(t, driver)
-			s, c, ctx := svcs[0], clients[0], context.Background()
-			rec := publishedRuleFixture(t, s, c, admin, false)
-			b := ruleBindingFixture(t, c, admin, rec.ID, time.Now().UTC())
+			f := newB4Fixture(t, driver)
+			s, c, ctx := f.services[0], f.clients[0], f.ctx
+			rec := b4RulesFixture(t, f, true)
+			now := f.services[0].now()
+			b := ruleBindingFixture(t, c, f.admin, rec.ID, now, c.AuthConnection.GetX(ctx, rec.ID).AuthGeneration)
 			var initial *Session
 			err := withOrganizationTransaction(ctx, c, func(tx *ent.Client) error {
 				p, e := readExternalConnection(ctx, tx, rec.ID, 0)
 				if e != nil {
 					return e
 				}
-				initial, e = s.auth.createSessionForConnection(ctx, tx, admin, p.Connection, p.Policy.LoginPolicyRevision, b, nil)
+				initial, e = s.auth.createSessionForConnection(ctx, tx, f.admin, p.Connection, p.Policy.LoginPolicyRevision, b, nil)
 				return e
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			p := rec.Published.Policy
-			p.LoginRules = departmentRule()
-			rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, Policy: &p})
-			if err != nil {
-				t.Fatal(err)
-			}
+			p := rec.Configuration.Policy
+			p.LoginRules = authrules.RuleSet{Mode: "conditions", Match: "all", Conditions: []authrules.Condition{{FieldID: "custom.department", Operator: "ne", Value: json.RawMessage(`"sales"`)}}}
 			start := make(chan struct{})
-			pub, refresh := make(chan error, 1), make(chan error, 1)
-			go func() { <-start; _, e := s.PublishConnection(ctx, admin.ID, rec.ID, rec.AggregateRevision); pub <- e }()
-			go func() { <-start; _, e := svcs[1].auth.Refresh(ctx, initial.RefreshToken); refresh <- e }()
+			save, refresh := make(chan error, 1), make(chan error, 1)
+			go func() {
+				<-start
+				_, e := s.UpdateConnection(ctx, f.admin.ID, rec.ID, UpdateAuthConnectionInput{AuthConnectionChanges: AuthConnectionChanges{Policy: &p}, ExpectedRevision: rec.AggregateRevision})
+				save <- e
+			}()
+			go func() {
+				<-start
+				_, e := f.services[1].auth.Refresh(ctx, initial.RefreshToken)
+				refresh <- e
+			}()
 			close(start)
-			if e := <-pub; e != nil {
+			if e := <-save; e != nil {
 				t.Fatal(e)
 			}
 			if e := <-refresh; e != nil && !errors.Is(e, ErrRefreshTokenRevoked) {
@@ -207,42 +217,46 @@ func TestAuthRulesPublishAndRefreshRace(t *testing.T) {
 	}
 }
 
-func TestAuthRulesPublishAndCompleteRace(t *testing.T) {
+func TestAuthRulesSaveAndCompleteRace(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		for _, purpose := range []string{"signup", "link"} {
 			t.Run(driver+"/"+purpose, func(t *testing.T) {
-				svcs, clients, admin := connectionTestServices(t, driver)
-				s, c, ctx := svcs[0], clients[0], context.Background()
-				record := publishedRuleFixture(t, s, c, admin, false)
-				protocol := &externalFlowTestProtocol{exchange: func(context.Context, authoidc.Config, authoidc.ExchangeRequest) (authoidc.Identity, error) {
-					return authoidc.Identity{Issuer: "https://idp.example.test", Subject: "new-subject"}, nil
-				}}
-				for _, svc := range svcs {
-					svc.cfg = config.AuthDeploymentConfig{PublicBaseURL: "https://app.example.test", CompletionURLs: []string{"https://app.example.test/auth/complete"}}
-					svc.SetOIDCProtocol(protocol)
-				}
+				f := newB4Fixture(t, driver)
+				s, c := f.services[0], f.clients[0]
+				ctx := context.Background()
+				now := f.services[0].now()
+				record := b4RulesFixture(t, f, purpose == "link")
 				browser := ExternalBrowserInput{BrowserChallenge: browserChallenge(flowTestVerifier), CompletionURL: "https://app.example.test/auth/complete"}
 				var actor *int
+				var authURL string
 				target := record.ID
 				if purpose == "link" {
 					owner := c.User.Create().SetUsername("link-race-owner").SaveX(ctx)
 					actor = &owner.ID
-					ruleBindingFixture(t, c, owner, record.ID, time.Now().UTC())
-					other := publishedRuleFixture(t, s, c, admin, false)
+					ruleBindingFixture(t, c, owner, record.ID, now, c.AuthConnection.GetX(ctx, record.ID).AuthGeneration)
+					other := b4RulesFixture(t, f, false)
 					target = other.ID
-					proof, err := s.issueReauthenticationProof(ctx, c, owner, "oidc", record.ID, "link", target, time.Now().UTC())
+					proof, err := s.issueReauthenticationProof(ctx, c, owner, "oidc", record.ID, "link", target, now)
 					if err != nil {
 						t.Fatal(err)
 					}
-					if _, err = s.StartLink(ctx, owner.ID, target, ExternalLinkStartInput{ExternalBrowserInput: browser, ReauthenticationProof: proof.Proof}); err != nil {
+					started, err := s.StartLink(ctx, owner.ID, target, ExternalLinkStartInput{ExternalBrowserInput: browser, ReauthenticationProof: proof.Proof})
+					if err != nil {
 						t.Fatal(err)
 					}
+					authURL = started.AuthorizationURL
 				} else {
-					if _, err := s.StartLogin(ctx, target, browser); err != nil {
+					started, err := s.StartLogin(ctx, target, browser)
+					if err != nil {
 						t.Fatal(err)
 					}
+					authURL = started.AuthorizationURL
 				}
-				callback, err := s.HandleCallback(ctx, target, protocol.state, "authorization-code-secret", "")
+				u, err := url.Parse(authURL)
+				if err != nil {
+					t.Fatal(err)
+				}
+				callback, err := s.HandleCallback(ctx, target, u.Query().Get("state"), "authorization-code-secret", "")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -250,32 +264,33 @@ func TestAuthRulesPublishAndCompleteRace(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				p := record.Published.Policy
-				p.LoginRules = departmentRule()
-				record, err = s.UpdateConnection(ctx, admin.ID, record.ID, UpdateAuthConnectionInput{ExpectedRevision: record.AggregateRevision, Policy: &p})
-				if err != nil {
-					t.Fatal(err)
+				p := record.Configuration.Policy
+				p.LoginRules = authrules.RuleSet{Mode: "conditions", Match: "all", Conditions: []authrules.Condition{{FieldID: "custom.department", Operator: "ne", Value: json.RawMessage(`"sales"`)}}}
+				changes := AuthConnectionChanges{Policy: &p}
+				if purpose == "signup" {
+					mapping := departmentMapping()
+					changes.AttributeMappings = &mapping
 				}
 				sessions := c.RefreshSession.Query().CountX(ctx)
 				start := make(chan struct{})
-				publish, complete := make(chan error, 1), make(chan error, 1)
+				save, complete := make(chan error, 1), make(chan error, 1)
 				go func() {
 					<-start
-					_, e := s.PublishConnection(ctx, admin.ID, record.ID, record.AggregateRevision)
-					publish <- e
+					_, e := s.UpdateConnection(f.ctx, f.admin.ID, record.ID, UpdateAuthConnectionInput{AuthConnectionChanges: changes, ExpectedRevision: record.AggregateRevision})
+					save <- e
 				}()
 				go func() {
 					<-start
-					_, e := svcs[1].Complete(ctx, actor, ExternalCompleteInput{ConfirmationToken: confirmation.Confirmation.ConfirmationToken, Verifier: flowTestVerifier, Username: "signup-race-owner"})
+					_, e := f.services[1].Complete(ctx, actor, ExternalCompleteInput{ConfirmationToken: confirmation.Confirmation.ConfirmationToken, Verifier: flowTestVerifier, Username: "signup-race-owner"})
 					complete <- e
 				}()
 				close(start)
-				pubErr, completeErr := <-publish, <-complete
+				saveErr, completeErr := <-save, <-complete
 				if purpose == "signup" {
-					expectOneExternalWinner(t, []error{pubErr, completeErr}, ErrAuthConnectionConflict)
+					expectOneExternalWinner(t, []error{saveErr, completeErr}, ErrAuthConnectionConflict)
 				} else {
-					if !errors.Is(pubErr, ErrAuthConnectionConflict) || completeErr != nil {
-						t.Fatalf("unverified binding became fallback: %v / %v", pubErr, completeErr)
+					if !errors.Is(saveErr, ErrAuthConnectionConflict) || completeErr != nil {
+						t.Fatalf("unverified binding became fallback: %v / %v", saveErr, completeErr)
 					}
 					if c.RefreshSession.Query().CountX(ctx) != sessions {
 						t.Fatal("link completion signed a session")

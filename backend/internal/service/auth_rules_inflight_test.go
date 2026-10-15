@@ -28,8 +28,7 @@ func TestAuthRulesInFlightMappingChange(t *testing.T) {
 			if err = saveExternalSnapshot(ctx, c, "flow-oidc", 2, 1, &cfg, policy); err != nil {
 				t.Fatal(err)
 			}
-			c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(2).SetPublishedRevision(2).ExecX(ctx)
-			validateConnectionCandidate(t, s, c, 1, "flow-oidc", 2)
+			c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(2).SetCurrentRevision(2).ExecX(ctx)
 			change := func() {
 				next := cfg
 				next.AttributeMappings = departmentMapping()
@@ -37,7 +36,7 @@ func TestAuthRulesInFlightMappingChange(t *testing.T) {
 				if e := saveExternalSnapshot(ctx, c, "flow-oidc", 3, 1, &next, policy); e != nil {
 					t.Fatal(e)
 				}
-				c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(3).SetPublishedRevision(3).ExecX(ctx)
+				c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(3).SetCurrentRevision(3).ExecX(ctx)
 			}
 			protocol.exchange = func(context.Context, authoidc.Config, authoidc.ExchangeRequest) (authoidc.Identity, error) {
 				if stage == "during_callback" {
@@ -75,32 +74,53 @@ func TestAuthRulesInFlightMappingChange(t *testing.T) {
 	}
 }
 
-func TestAuthRulesTestDraftChangedDuringCallback(t *testing.T) {
+func TestAuthRulesTestCandidateChangedDuringCallback(t *testing.T) {
 	now := time.Now().UTC()
 	svcs, clients, protocol := externalFlowServices(t, dialect.SQLite, now)
-	s, c, ctx := svcs[0], clients[0], context.Background()
+	s, c := svcs[0], clients[0]
 	admin := createPasswordTestUser(t, c, "draft-test-admin", "password-123")
-	admin = c.User.UpdateOneID(admin.ID).SetRole(SystemRoleAdmin).SaveX(ctx)
-	c.AuthConnection.UpdateOneID("flow-oidc").SetDraftRevision(1).ExecX(ctx)
+	admin = c.User.UpdateOneID(admin.ID).SetRole(SystemRoleAdmin).SaveX(context.Background())
+	s.now = func() time.Time { return now }
+	ctx := adminSessionContext(t, c, admin)
 	protocol.exchange = func(context.Context, authoidc.Config, authoidc.ExchangeRequest) (authoidc.Identity, error) {
-		c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(2).SetDraftRevision(2).ExecX(ctx)
+		c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(2).ExecX(context.Background())
 		return authoidc.Identity{Issuer: "https://issuer.example.test", Subject: "test-admin", AuthTime: now}, nil
 	}
-	if _, err := s.StartTest(ctx, admin.ID, "flow-oidc", 1, ExternalBrowserInput{BrowserChallenge: browserChallenge(flowTestVerifier), CompletionURL: "https://app.example.test/auth/complete"}); err != nil {
+	in := AuthConnectionTestInput{
+		AuthConnectionCandidateInput: AuthConnectionCandidateInput{ExpectedRevision: 1, Changes: &AuthConnectionChanges{ClientSecret: json.RawMessage(`"inflight-test-secret"`)}},
+		ExternalBrowserInput:         ExternalBrowserInput{BrowserChallenge: browserChallenge(flowTestVerifier), CompletionURL: "https://app.example.test/auth/complete"},
+	}
+	freshBefore, err := readExternalConnection(context.Background(), c, "flow-oidc", 0)
+	if err != nil {
 		t.Fatal(err)
 	}
-	cb, err := s.HandleCallback(ctx, "flow-oidc", protocol.state, "authorization-code-secret", "")
+	started, err := s.StartTest(ctx, admin.ID, "flow-oidc", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cb, err := s.HandleCallback(context.Background(), "flow-oidc", protocol.state, "authorization-code-secret", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !cb.Failed {
-		t.Fatal("callback retained stale test draft after network exchange")
+		t.Fatal("callback retained stale test candidate after network exchange")
 	}
 	if _, err = s.Exchange(ctx, &admin.ID, ExternalExchangeInput{Ticket: cb.Ticket, Verifier: flowTestVerifier}); !errors.Is(err, ErrAuthConnectionConflict) {
 		t.Fatalf("stale test result: %v", err)
 	}
-	if c.AuthConnectionValidation.Query().CountX(ctx) != 1 {
-		t.Fatal("stale test recorded protocol validation")
+	row := c.AuthTransaction.GetX(context.Background(), started.TransactionID)
+	if row.TestValidatedAt != nil || row.TestAppliedRevision != nil {
+		t.Fatal("stale test persisted a proof capability")
+	}
+	current, err := readExternalConnection(context.Background(), c, "flow-oidc", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Config.FreshSupported != freshBefore.Config.FreshSupported {
+		t.Fatal("stale test changed saved validation freshness")
+	}
+	if current.Connection.CurrentRevision != freshBefore.Connection.CurrentRevision {
+		t.Fatal("stale test replaced the saved configuration")
 	}
 }
 
@@ -121,8 +141,7 @@ func TestAuthRulesTemporarySourceAndPurposeIsolation(t *testing.T) {
 	if err = saveExternalSnapshot(ctx, c, "flow-oidc", 2, 1, &cfg, policy); err != nil {
 		t.Fatal(err)
 	}
-	c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(2).SetPublishedRevision(2).ExecX(ctx)
-	validateConnectionCandidate(t, s, c, 1, "flow-oidc", 2)
+	c.AuthConnection.UpdateOneID("flow-oidc").SetAggregateRevision(2).SetCurrentRevision(2).ExecX(ctx)
 	protocol.exchange = func(context.Context, authoidc.Config, authoidc.ExchangeRequest) (authoidc.Identity, error) {
 		return authoidc.Identity{Issuer: cfg.OidcIssuer, Subject: "unavailable", SourceErrors: map[string]string{"oidc_userinfo": "source_unavailable"}}, nil
 	}

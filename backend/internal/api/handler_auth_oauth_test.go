@@ -45,7 +45,7 @@ func TestRouter_AuthOAuthConfigurationContract(t *testing.T) {
 	if err = json.Unmarshal(created.Body.Bytes(), &rec); err != nil {
 		t.Fatal(err)
 	}
-	if rec.IdentityAuthorityID == nil || *rec.IdentityAuthorityID == "" || rec.Draft == nil || rec.Draft.OAuth2 == nil || rec.Draft.OIDC != nil || !rec.HasClientSecret || rec.Draft.Policy.Enabled {
+	if rec.IdentityAuthorityID == nil || *rec.IdentityAuthorityID == "" || rec.Configuration == nil || rec.Configuration.OAuth2 == nil || rec.Configuration.OIDC != nil || !rec.Configuration.HasClientSecret || rec.State != "configuring" || !rec.Setup.ConfigurationComplete {
 		t.Fatalf("incorrect OAuth connection response: %s", created.Body.String())
 	}
 	if strings.Contains(created.Body.String(), "private-oauth-test-secret") {
@@ -67,5 +67,7 @@ func TestRouter_AuthOAuthConfigurationContract(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"simulated":true`) || strings.Contains(w.Body.String(), "email_verified") || strings.Contains(w.Body.String(), "auth_time") {
 		t.Fatal("preview promoted unrelated claims")
 	}
-	accountAssertStatus(t, accountRequest(router, http.MethodPost, path+"/publish", session.AccessToken, `{"expected_revision":2}`), 409)
+	if accountRequest(router, http.MethodPost, path+"/publish", session.AccessToken, `{"expected_revision":2}`).Code != http.StatusNotFound {
+		t.Fatal("independent publish endpoint must be retired with 404")
+	}
 }

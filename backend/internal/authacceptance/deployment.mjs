@@ -32,6 +32,8 @@ async function adopt(page, session) { await page.evaluate(s => auth.adopt(s), se
 async function loginPassword(page, username, password) { const session = await request(page, '/auth/login', { identifier: username, password }, 'POST', 200, null); await adopt(page, session); return session; }
 async function driveProvider(page, authorizationURL, provider, username, requirePrompt = false, expected = 200) {
   const authURL = new URL(authorizationURL);
+  const expectedCallbackBase = await page.evaluate(() => apiBase + '/api/v1/auth/external/');
+  must(authURL.searchParams.get('redirect_uri')?.startsWith(expectedCallbackBase), 'Provider request lost the deployment callback base or path prefix');
   must(authURL.searchParams.get('code_challenge_method') === 'S256', 'Upstream PKCE S256 missing');
   if (!provider.base) must(authURL.searchParams.has('nonce'), 'OIDC nonce missing');
   if (requirePrompt) must(authURL.searchParams.get('max_age') === '0', 'Fresh authentication must request max_age=0');
@@ -63,27 +65,52 @@ async function reauth(page, bindingID, action, targetID, provider) {
   must(result.kind === 'reauthentication_proof', 'Expected an action-bound reauthentication proof');
   return result.reauthentication_proof;
 }
+async function flowVerifier(page) {
+  return page.evaluate(() => JSON.parse(sessionStorage.getItem(flowKey)).verifier);
+}
+async function saveOIDCConnection(page, record, provider, clientID) {
+  return request(page, `/admin/auth-connections/${record.id}`, {
+    expected_revision: record.aggregate_revision,
+    oidc: { issuer: provider.issuer, client_id: clientID },
+    client_secret: provider.clientSecret,
+    policy: { login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: "unrestricted" }, signup_rules: { mode: "unrestricted" }, link_rules: { mode: "unrestricted" } }
+  }, "PATCH");
+}
+async function testOIDCConnection(page, record, provider, username = "provideradmin") {
+  const tested = await flow(page, `/admin/auth-connections/${record.id}/test`, { expected_revision: record.aggregate_revision }, provider, username, { fresh: true });
+  must(tested.kind === "test_result" && tested.test_id && tested.expires_at, "Real connection test did not return bounded test evidence");
+  must(!tested.session && !tested.confirmation_token, "Administrator test leaked formal account evidence");
+  return tested;
+}
+async function connectionAction(page, record, action, tested) {
+  const input = { expected_revision: record.aggregate_revision };
+  if (action === "enable") input.test_id = tested.test_id;
+  if (tested) input.verifier = await flowVerifier(page);
+  return request(page, `/admin/auth-connections/${record.id}/${action}`, input, "POST");
+}
 async function createConnection(page, provider, clientID) {
-  console.log(`Checking and testing connection ${clientID}`);
-  let record = await request(page, '/admin/auth-connections', { kind: 'oidc', display_name: clientID, oidc: { issuer: provider.issuer, client_id: clientID }, client_secret: provider.clientSecret }, 'POST', 201);
-  const path = '/admin/auth-connections/' + record.id;
-  must(Object.values(record.draft.policy).filter(v => typeof v === 'boolean').every(v => !v), 'New connection switches must be off');
-  const checked = await request(page, path + '/check', { expected_revision: record.aggregate_revision });
-  must(checked.valid && !checked.fresh_supported, 'Discovery must not claim tested fresh authentication');
-  const tested = await flow(page, path + '/test', { expected_revision: record.aggregate_revision }, provider, 'provideradmin', { fresh: true });
-  must(tested.kind === 'test_result' && tested.fresh_supported, 'Real connection test failed');
-  record = await request(page, path, undefined, 'GET');
-  record = await request(page, path + '/publish', { expected_revision: record.aggregate_revision });
-  must(!record.published.policy.enabled && !record.published.policy.login_enabled, 'First publication must keep switches off');
-  record = await request(page, path, { expected_revision: record.aggregate_revision, policy: { enabled: true, login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: 'unrestricted' }, signup_rules: { mode: 'unrestricted' }, link_rules: { mode: 'unrestricted' } } }, 'PATCH');
-  record = await request(page, path + '/publish', { expected_revision: record.aggregate_revision });
+  let record = await request(page, "/admin/auth-connections", { kind: "oidc", display_name: clientID }, "POST", 201);
+  const path = `/admin/auth-connections/${record.id}`;
+  must(record.state === "configuring" && record.configuration_complete === false && !record.capabilities.can_test, "Minimal connection did not enter configuring");
+  const expectedCallback = await page.evaluate(id => apiBase + `/api/v1/auth/external/${id}/callback`, record.id);
+  must(record.setup.callback_url === expectedCallback, "Minimal creation did not expose the exact callback including its deployment path prefix");
+  must(record.setup.issues.some(i => i.field === "oidc.issuer"), "Setup omitted protocol issue");
+  const checked = await request(page, `${path}/check`, { expected_revision: record.aggregate_revision });
+  must(!checked.valid && !checked.fresh_supported, "Incomplete check must not claim tested fresh authentication");
+  record = await saveOIDCConnection(page, record, provider, clientID);
+  must(record.state === "configuring" && !record.capabilities.can_login && !record.capabilities.can_signup && !record.capabilities.can_link && record.capabilities.can_test, "Validating save must remain configuring and retain test capability");
+  const tested = await testOIDCConnection(page, record, provider);
+  record = await connectionAction(page, record, "enable", tested);
+  must(record.state === "enabled" && record.validation.applied_test_id === tested.test_id, "Enable did not consume matching test evidence");
   return record;
 }
 
 async function rulesScenario(admin, page, app, provider, first, second, bindingID) {
   const path = `/admin/auth-connections/${second.id}`;
   let record = await request(admin, path, undefined, 'GET');
-  const onlineRevision = record.published_revision;
+  if (record.state !== 'enabled') throw new Error('Rules scenario requires an enabled connection');
+  const baselineConfiguration = JSON.stringify(record.configuration);
+  const baselinePolicyRevision = record.configuration.login_policy_revision;
   const mappings = [
     { field_id: 'custom.department', label: 'Department', type: 'string', source: 'oidc_userinfo', pointer: '/department' },
     { field_id: 'custom.groups', label: 'Groups', type: 'string_list', source: 'oidc_userinfo', pointer: '/groups' }
@@ -92,29 +119,37 @@ async function rulesScenario(admin, page, app, provider, first, second, bindingI
     { field_id: 'custom.department', operator: 'eq', value: 'engineering' },
     { field_id: 'custom.groups', operator: 'contains', value: 'ops' }
   ] };
-  record = await request(admin, path, { expected_revision: record.aggregate_revision, attribute_mappings: mappings, evidence_max_age_seconds: 10, policy: { ...record.published.policy, login_rules: loginRules } }, 'PATCH');
-  const catalog = await request(admin, path + '/attributes?expected_revision=' + record.aggregate_revision, undefined, 'GET');
-  must(catalog.fields.some(f => f.field_id === 'custom.department') && catalog.operators.string_list.includes('contains'), 'Catalog missing typed mappings');
-  const sample = await request(admin, path + '/preview', { expected_revision: record.aggregate_revision, sources: { oidc_userinfo: { department: 'engineering', groups: ['ops'] } } });
-  must(sample.simulated && sample.rules.login.status === 'pass', 'Simulated rule preview failed');
+  const changes = {
+    attribute_mappings: mappings,
+    evidence_max_age_seconds: 10,
+    policy: { ...record.configuration.policy, login_rules: loginRules }
+  };
+  const candidate = { expected_revision: record.aggregate_revision, changes };
+  const patchPayload = { expected_revision: record.aggregate_revision, ...changes };
+  const catalog = await request(admin, path + '/attributes', candidate, 'POST');
+  must(catalog.fields.some(f => f.field_id === 'custom.department') && catalog.operators.string_list.includes('contains'), 'Candidate catalog missing typed mappings');
+  const sample = await request(admin, path + '/preview', { ...candidate, sources: { oidc_userinfo: { department: 'engineering', groups: ['ops'] } } });
+  must(sample.simulated && sample.rules.login.status === 'pass', 'Candidate rule preview failed');
   await request(page, path + '/preview', { expected_revision: record.aggregate_revision, sources: {} }, 'POST', 403);
-  const tested = await flow(admin, path + '/test', { expected_revision: record.aggregate_revision }, provider, 'provideradmin', { fresh: true });
-  must(tested.kind === 'test_result' && tested.rules.login.status === 'fail' && !tested.session, 'Administrator failing test did not return isolated diagnostics');
-  let impact = await request(admin, path + '/impact', { expected_revision: record.aggregate_revision });
-  must(!impact.can_publish && impact.unknown_users.length === 1 && impact.blocked_users.length === 1, 'Old unrestricted login or simulation became candidate evidence');
-  const blocked = await request(admin, path + '/publish', { expected_revision: record.aggregate_revision }, 'POST', 409);
-  must(blocked.impact?.unknown_users.length === 1 && blocked.impact.remediation, 'Missing publication remediation');
-  must((await request(admin, path, undefined, 'GET')).published_revision === onlineRevision, 'Blocked publication replaced online version');
+  const impact = await request(admin, path + '/impact', candidate);
+  must(impact.can_save === false && impact.unknown_users.length === 1 && impact.blocked_users.length === 1, 'Unknown-user rule impact did not block the candidate');
+  const blocked = await request(admin, path, patchPayload, 'PATCH', 409);
+  must(blocked.impact?.can_save === false && blocked.impact?.unknown_users.length === 1 && blocked.impact?.remediation, 'Blocked candidate save lacked impact remediation');
+  record = await request(admin, path, undefined, 'GET');
+  must(record.state === 'enabled' && JSON.stringify(record.configuration) === baselineConfiguration, 'Blocked candidate changed the enabled configuration');
+  const tested = await flow(admin, path + '/test', candidate, provider, 'provideradmin', { fresh: true });
+  must(tested.kind === 'test_result' && tested.test_id && tested.expires_at && tested.rules.login.status === 'fail' && !tested.session, 'Administrator candidate test did not return isolated bounded diagnostics');
+  record = await request(admin, path, undefined, 'GET');
+  must(JSON.stringify(record.configuration) === baselineConfiguration, 'Candidate test changed the enabled configuration');
   const setProof = await reauth(page, bindingID, 'password_set', 'password', provider);
   const password = 'B2-verified-fallback-password!'; runtime.secrets.push(password);
   await request(page, '/users/me/password', { reauthentication_proof: setProof, new_password: password }, 'POST', 204);
-  await request(admin, path + '/publish', { expected_revision: record.aggregate_revision }, 'POST', 409);
   await loginPassword(page, 'alice_local', password);
   must((await request(page, '/users/me/login-methods', undefined, 'GET')).password.verified, 'Password login did not establish verified fallback status');
   const oldLogin = await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
   const oldProof = await reauth(page, bindingID, 'link', first.id, provider);
-  record = await request(admin, path + '/publish', { expected_revision: record.aggregate_revision });
-  must(record.published.login_policy_revision > second.published.login_policy_revision, 'Login rule version did not advance');
+  record = await request(admin, path, { ...patchPayload, test_id: tested.test_id, verifier: await flowVerifier(admin) }, 'PATCH');
+  must(record.state === 'enabled' && record.configuration.login_policy_revision > baselinePolicyRevision && record.validation.applied_test_id === tested.test_id, 'Rule save did not atomically apply the candidate and consume its browser evidence');
   await request(page, '/auth/refresh', { refresh_token: oldLogin.session.refresh_token }, 'POST', 401, null);
   await request(page, `/users/me/login-bindings/${first.id}/start`, { reauthentication_proof: oldProof, browser_challenge: 'a'.repeat(43), completion_url: app.completionBase + '/complete' }, 'POST', 403);
   const current = await flow(page, `/auth/external/${second.id}/start`, {}, provider, 'alice', { anonymous: true });
@@ -137,9 +172,26 @@ async function rulesScenario(admin, page, app, provider, first, second, bindingI
     must(!denied.attributes && !denied.rules && denied.type === 'urn:linguaflow:authentication-rule-denied', 'Rule denial leaked attributes or used wrong status');
     await deniedContext.close();
   }
-  console.log('PASS B2: unknown blocks publication, verified fallback permits it, formal attributes and expiry enforced');
+  console.log('PASS B2: unknown candidates block save, verified fallback permits it, formal attributes and expiry enforced');
 }
 
+async function assertExplicitLifecycle(page, provider, enabled) {
+  const path = `/admin/auth-connections/${enabled.id}`;
+  const config = JSON.stringify(enabled.configuration);
+  const adminID = await page.evaluate(() => auth.session()?.user?.id);
+  if (!adminID) throw new Error("Administrator session missing");
+  const disabled = await connectionAction(page, enabled, "disable");
+  must(disabled.state === "disabled" && !disabled.capabilities.can_login && !disabled.capabilities.can_signup && !disabled.capabilities.can_link && !disabled.capabilities.can_test, "Disable did not close formal and test capabilities");
+  const denied = await request(page, `${path}/test`, { expected_revision: disabled.aggregate_revision, browser_challenge: "a".repeat(43), completion_url: "https://connection-test.invalid/complete" }, "POST", 409);
+  if (denied.authorization_url) throw new Error("Disabled connection started a browser test");
+  const configured = await connectionAction(page, disabled, "configure");
+  must(configured.state === "configuring" && JSON.stringify(configured.configuration) === config, "Configure changed current configuration");
+  const tested = await testOIDCConnection(page, configured, provider);
+  const enabledAgain = await connectionAction(page, configured, "enable", tested);
+  must(enabledAgain.state === "enabled" && JSON.stringify(enabledAgain.configuration) === config && enabledAgain.validation.applied_test_id === tested.test_id, "Explicit re-enable changed configuration or evidence");
+  must(await page.evaluate(() => auth.session()?.user?.id) === adminID, "Connection lifecycle changed administrator identity");
+  return enabledAgain;
+}
 async function scenario(app, provider, mode) {
   console.log(`Running ${mode} browser lifecycle`);
   const adminContext = await browser.newContext(), userContext = await browser.newContext();
@@ -155,6 +207,7 @@ async function scenario(app, provider, mode) {
   await loginPassword(admin, 'admin', app.adminPassword);
   const first = await createConnection(admin, provider, 'b1-first');
   const second = await createConnection(admin, provider, 'b1-second');
+  await assertExplicitLifecycle(admin, provider, second);
   const capabilities = await request(page, '/auth/capabilities', undefined, 'GET', 200, null);
   must(capabilities.connections.length === 2 && capabilities.connections.every(c => c.can_login && c.can_signup && c.signup_requirements.length === 0), 'Capabilities mismatch');
   await request(page, '/auth/register', { username: 'taken_name', password: app.adminPassword }, 'POST', 201, null);
@@ -210,8 +263,14 @@ async function scenario(app, provider, mode) {
   // A display-only publication must preserve current sessions.
   const previousRevision = record.aggregate_revision;
   record = await request(admin, `/admin/auth-connections/${second.id}`, { expected_revision: previousRevision, description: 'Updated display only' }, 'PATCH');
-  await request(admin, `/admin/auth-connections/${second.id}/publish`, { expected_revision: previousRevision }, 'POST', 409);
-  await request(admin, `/admin/auth-connections/${second.id}/publish`, { expected_revision: record.aggregate_revision });
+  // Removed publish endpoint is probed once as a negative 404 contract, without relying on the JSON response parser.
+  const publishGone = await page.request.post(`${app.publicBase}/api/v1/admin/auth-connections/${second.id}/publish`, {
+    data: { expected_revision: previousRevision },
+    headers: { Authorization: `Bearer ${await admin.evaluate(() => auth.session().access_token)}` },
+    failOnStatusCode: false
+  });
+  must(publishGone.status() === 404, 'Removed publish endpoint must return 404');
+  must(!publishGone.headers().location, 'Removed publish endpoint must not redirect');
   await request(page, '/users/me/login-methods', undefined, 'GET');
   const adminProof = await request(admin, '/auth/reauthenticate', { method: 'password', password: app.adminPassword, action: 'password_delete', target_id: 'password' });
   await request(admin, '/users/me/password', { reauthentication_proof: adminProof.reauthentication_proof }, 'DELETE', 409);
@@ -241,7 +300,7 @@ async function scenario(app, provider, mode) {
   const audit = await request(admin, '/admin/audit-logs', undefined, 'GET');
   for (const marker of runtime.secrets) must(!JSON.stringify(audit).includes(marker), 'Audit response leaked a marker secret');
   await adminContext.close(); await userContext.close();
-  results.push({ mode, status: 'passed', flows: ['connection_check_test_publish', 'signup_username_retry', 'login', 'fresh_oidc_reauthentication_with_cookie', 'set_change_delete_password', 'explicit_second_binding', 'verified_fallback', 'safe_unlink', 'last_method_and_admin_protection', 'display_publication_session', 'cancel', 'denial_retry_replay', 'completion_allowlist', 'cors', 'url_ticket_removal', 'no_store_no_referrer', 'typed_attribute_catalog_preview', 'admin_test_rule_failure', 'unknown_blocks_publish', 'password_control_required_for_fallback', 'verified_fallback_allows_publish', 'old_rule_refresh_and_proof_rejected', 'department_and_groups_rules', 'refresh_retains_evidence_deadline', 'expired_evidence_reauthentication', 'denied_and_missing_attributes_private'] });
+  results.push({ mode, status: 'passed', flows: ['connection_check_test_explicit_enable', 'signup_username_retry', 'login', 'fresh_oidc_reauthentication_with_cookie', 'set_change_delete_password', 'explicit_second_binding', 'verified_fallback', 'safe_unlink', 'last_method_and_admin_protection', 'display_save_session', 'cancel', 'denial_retry_replay', 'completion_allowlist', 'cors', 'url_ticket_removal', 'no_store_no_referrer', 'typed_attribute_catalog_preview', 'admin_test_rule_failure', 'unknown_blocks_save', 'password_control_required_for_fallback', 'verified_fallback_allows_save', 'old_rule_refresh_and_proof_rejected', 'department_and_groups_rules', 'refresh_retains_evidence_deadline', 'expired_evidence_reauthentication', 'denied_and_missing_attributes_private'] });
   console.log(`PASS ${mode}: real Keycloak account lifecycle and browser contract`);
 }
 
@@ -285,24 +344,23 @@ async function oauthScenario(app, provider, mode) {
   const password = 'B3-first-maintenance-password!'; runtime.secrets.push(password);
   const connections = [];
   for (const [clientID, method] of [['b3-basic', 'client_secret_basic'], ['b3-post', 'client_secret_post']]) {
-    let record = await request(admin, '/admin/auth-connections', {
-      kind: 'generic_oauth2', display_name: clientID, client_secret: provider.clientSecret,
-      oauth2: { authorization_endpoint: provider.base + '/authorize', token_endpoint: provider.base + '/token', profile_endpoint: provider.base + '/user', client_id: clientID, client_auth_method: method, scopes: [], subject_mapping: { pointer: '/id', type: 'integer' } }
-    }, 'POST', 201);
+let record = await request(admin, '/admin/auth-connections', { kind: 'generic_oauth2', display_name: clientID }, 'POST', 201);
     const path = '/admin/auth-connections/' + record.id;
-    must(!record.draft.policy.enabled, 'New OAuth connection must start disabled');
+    must(record.state === 'configuring' && record.configuration_complete === false, 'New OAuth connection did not start configuring');
     record = await request(admin, path, { expected_revision: record.aggregate_revision,
+      oauth2: { authorization_endpoint: provider.base + '/authorize', token_endpoint: provider.base + '/token', profile_endpoint: provider.base + '/user', client_id: clientID, client_auth_method: method, scopes: [], subject_mapping: { pointer: '/id', type: 'integer' } },
+      client_secret: provider.clientSecret,
       attribute_mappings: [{ field_id: 'external.account_created_at', label: 'Account created', type: 'datetime', source: 'oauth2_profile', pointer: '/created_at' }],
-      policy: { enabled: true, login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: 'unrestricted' }, link_rules: { mode: 'unrestricted' }, signup_rules: { mode: 'conditions', match: 'all', conditions: [{ field_id: 'external.account_age_days', operator: 'gte', value: 365 }] } }
+      policy: { login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: 'unrestricted' }, link_rules: { mode: 'unrestricted' }, signup_rules: { mode: 'conditions', match: 'all', conditions: [{ field_id: 'external.account_age_days', operator: 'gte', value: 365 }] } }
     }, 'PATCH');
+    must(record.state === 'configuring', 'OAuth save must remain configuring');
     const checked = await request(admin, path + '/check', { expected_revision: record.aggregate_revision });
     must(checked.valid && !checked.fresh_supported, 'OAuth configuration check must not invent fresh authentication');
-    await request(admin, path + '/publish', { expected_revision: record.aggregate_revision }, 'POST', 409);
     const tested = await flow(admin, path + '/test', { expected_revision: record.aggregate_revision }, provider, 'provideradmin');
-    must(tested.kind === 'test_result' && !tested.fresh_supported && tested.rules.signup.status === 'pass', 'OAuth real test or account age rule failed');
+    must(tested.kind === 'test_result' && tested.test_id && tested.expires_at && !tested.fresh_supported && tested.rules.signup.status === 'pass', 'OAuth real test or account age rule failed');
     must(tested.attributes['external.account_created_at'].status === 'pass' && tested.attributes['external.account_age_days'].value >= 365, 'Profile date did not feed typed derived rule');
-    record = await request(admin, path, undefined, 'GET');
-    record = await request(admin, path + '/publish', { expected_revision: record.aggregate_revision });
+    record = await connectionAction(admin, record, 'enable', tested);
+    must(record.state === 'enabled' && record.validation.applied_test_id === tested.test_id, 'OAuth enable did not consume matching evidence');
     connections.push(record);
   }
   const [first, second] = connections;
@@ -361,14 +419,17 @@ async function oauthScenario(app, provider, mode) {
     for (const secret of runtime.secrets) must(!JSON.stringify(response).includes(secret), 'OAuth secrets leaked in administrator response');
   }
   await adminContext.close(); await userContext.close();
-  results.push({ mode, database: mode === 'same-origin' ? 'SQLite' : 'PostgreSQL', protocol: 'generic_oauth2', status: 'passed', flows: ['client_secret_basic', 'client_secret_post', 'authorization_code_pkce_s256', 'bearer_current_user_profile', 'real_test_required_before_publish', 'fresh_supported_false_can_publish', 'created_at_derived_signup_rule', 'missing_and_young_date_denied', 'required_initial_password_atomic_signup', 'initial_password_immediate_reauthentication', 'generic_fresh_reauthentication_rejected', 'second_binding_and_login', 'distinct_adjacent_large_integer_subjects', 'unverified_email_not_promoted', 'last_maintenance_password_preserved', 'password_reauthenticated_unlink', 'password_login_after_unlink'] });
+  results.push({ mode, database: mode === 'same-origin' ? 'SQLite' : 'PostgreSQL', protocol: 'generic_oauth2', status: 'passed', flows: ['client_secret_basic', 'client_secret_post', 'authorization_code_pkce_s256', 'bearer_current_user_profile', 'real_test_before_explicit_enable', 'fresh_supported_false_explicit_enable', 'created_at_derived_signup_rule', 'missing_and_young_date_denied', 'required_initial_password_atomic_signup', 'initial_password_immediate_reauthentication', 'generic_fresh_reauthentication_rejected', 'second_binding_and_login', 'distinct_adjacent_large_integer_subjects', 'unverified_email_not_promoted', 'last_maintenance_password_preserved', 'password_reauthenticated_unlink', 'password_login_after_unlink'] });
   console.log(`PASS ${mode}: generic OAuth, initial password, maintenance, profile date rules and integer identity isolation`);
 }
 
 try {
   await run('task', ['backend:build'], { cwd: resolve(backendDir, '..') });
   console.log('Starting isolated PostgreSQL and verified Keycloak 26.8.0');
-  const [postgres, provider, oauth] = await Promise.all([runtime.postgres(), runtime.keycloak(), runtime.oauth2()]);
+  const started = await Promise.allSettled([runtime.postgres(), runtime.keycloak(), runtime.oauth2()]);
+  const failures = started.filter(result => result.status === "rejected");
+  if (failures.length) throw failures[0].reason;
+  const [postgres, provider, oauth] = started.map(result => result.value);
   if (process.argv.includes('--postgres')) {
     await run('task', ['backend:test:auth:postgres'], { cwd: resolve(backendDir, '..'), env: { ...process.env, LINGUAFLOW_TEST_POSTGRES_DSN: postgres.dsn } });
     results.push({ database: 'PostgreSQL', status: 'passed' });

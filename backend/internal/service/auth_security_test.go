@@ -318,7 +318,7 @@ func TestPasswordPublishedConfigurationIsolation(t *testing.T) {
 	}
 	caps, err := svc.Capabilities(ctx)
 	if err != nil || !caps.Password.CanLogin {
-		t.Fatalf("draft changed runtime: %+v %v", caps, err)
+		t.Fatalf("unsaved revision changed runtime: %+v %v", caps, err)
 	}
 	if err := client.AuthConnection.DeleteOneID(PasswordConnectionID).Exec(ctx); err == nil {
 		t.Fatal("deleted built-in connection")
@@ -326,9 +326,9 @@ func TestPasswordPublishedConfigurationIsolation(t *testing.T) {
 	if _, err := client.AuthConnection.Create().SetID("another-password").SetKind(authconnection.KindPassword).Save(ctx); !ent.IsConstraintError(err) {
 		t.Fatalf("duplicate password kind allowed: %v", err)
 	}
-	client.AuthConnection.UpdateOneID(PasswordConnectionID).SetPublishedRevision(2).SaveX(ctx)
+	client.AuthConnection.UpdateOneID(PasswordConnectionID).SetCurrentRevision(2).SaveX(ctx)
 	if _, err := svc.Capabilities(ctx); !errors.Is(err, ErrSettingsUnavailable) {
-		t.Fatalf("missing published policy accepted: %v", err)
+		t.Fatalf("missing current policy accepted: %v", err)
 	}
 	if _, err := svc.Refresh(ctx, session.RefreshToken); !errors.Is(err, ErrSettingsUnavailable) {
 		t.Fatalf("refresh ignored missing policy: %v", err)

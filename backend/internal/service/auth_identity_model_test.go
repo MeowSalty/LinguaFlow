@@ -62,8 +62,8 @@ func TestAuthenticationIdentityModel(t *testing.T) {
 				client, ctx := clients[0], t.Context()
 				owner := client.User.Create().SetUsername("binding-owner").SaveX(ctx)
 				other := client.User.Create().SetUsername("binding-other").SaveX(ctx)
-				first := client.AuthConnection.Create().SetID("identity-first").SetKind(authconnection.KindOidc).SaveX(ctx)
-				second := client.AuthConnection.Create().SetID("identity-second").SetKind(authconnection.KindOidc).SaveX(ctx)
+				first := client.AuthConnection.Create().SetID("identity-first").SetKind(authconnection.KindOidc).SetState(authconnection.StateConfiguring).SaveX(ctx)
+				second := client.AuthConnection.Create().SetID("identity-second").SetKind(authconnection.KindOidc).SetState(authconnection.StateConfiguring).SaveX(ctx)
 				identity := client.ExternalIdentity.Create().SetUserID(owner.ID).
 					SetProtocol(externalidentity.ProtocolOidc).SetAuthority("https://issuer.example").SetSubject("subject-one").SaveX(ctx)
 				alternative := client.ExternalIdentity.Create().SetUserID(owner.ID).

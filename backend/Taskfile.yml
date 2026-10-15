@@ -42,12 +42,20 @@ tasks:
       - node --check ./internal/authacceptance/oauth2.mjs
       - node --check ./internal/authacceptance/github.mjs
       - node --check ./internal/authacceptance/postgres-b3.mjs
+      - node --check ./internal/authacceptance/postgres-b4.mjs
+
+  test:auth:postgres:b4:
+    desc: 独立隔离 PostgreSQL B4 认证契约与竞态验收（等待整个 Go 测试完成再清理实例）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/postgres-b4.mjs
 
   test:auth:postgres:b3:
     desc: 独立隔离 PostgreSQL B3 认证竞态验收（等待整个测试完成再清理实例）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - node ./internal/authacceptance/postgres-b3.mjs
+      - node --check ./internal/authacceptance/postgres-b4.mjs
 
   test:auth:github:
     desc: 显式真实 GitHub OAuth 交互验收（需专用 OAuth App 与人工浏览器授权；未运行不得记为通过）
