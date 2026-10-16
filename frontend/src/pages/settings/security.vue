@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 import { extractErrorMessage } from '@/utils/errors'
 import { validateNewPassword } from '@/utils/password'
+import LoginMethodsPanel from '@/components/auth/security/LoginMethodsPanel.vue'
 
 const auth = useAuthStore()
 const service = useServiceStore()
@@ -16,6 +17,7 @@ const formRef = ref<FormInst | null>(null)
 const currentError = ref<string | null>(null)
 const error = ref<string | null>(null)
 const loggingOut = ref(false)
+const methodsBusy = ref(false)
 const formValue = reactive({ current_password: '', new_password: '', confirm_password: '' })
 const rules = computed<FormRules>(() => ({
   current_password: [
@@ -60,13 +62,21 @@ watch(
   },
 )
 const onSubmit = async (): Promise<void> => {
-  if (service.isLocal || auth.passwordChanging) return
+  if (service.isLocal || auth.passwordChanging || methodsBusy.value || loggingOut.value) return
+  const snapshot = captureSession()
   try {
     await formRef.value?.validate()
   } catch {
     return
   }
-  const snapshot = captureSession()
+  if (
+    !isSessionCurrent(snapshot) ||
+    !auth.user ||
+    auth.passwordChanging ||
+    methodsBusy.value ||
+    loggingOut.value
+  )
+    return
   error.value = null
   currentError.value = null
   try {
@@ -77,7 +87,9 @@ const onSubmit = async (): Promise<void> => {
     if (!isSessionCurrent(snapshot)) return
     reset()
     formRef.value?.restoreValidation()
-    message.success(t('account.security.messages.changeSuccess'))
+    message.success(t('accountAuth.security.messages.passwordChanged'))
+    auth.clearSession()
+    await router.replace('/login')
   } catch (cause) {
     if (!isSessionCurrent(snapshot)) return
     const problem =
@@ -93,16 +105,18 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 const logout = async (): Promise<void> => {
-  if (loggingOut.value) return
+  if (loggingOut.value || methodsBusy.value || auth.passwordChanging) return
   loggingOut.value = true
+  const request = auth.logout()
+  const snapshot = captureSession()
   try {
-    await auth.logout()
-    message.success(t('workbench.settings.logoutSuccess'))
+    await request
+    if (isSessionCurrent(snapshot)) message.success(t('workbench.settings.logoutSuccess'))
   } catch {
-    message.warning(t('workbench.settings.logoutFailed'))
+    if (isSessionCurrent(snapshot)) message.warning(t('workbench.settings.logoutFailed'))
   } finally {
     loggingOut.value = false
-    await router.replace('/login')
+    if (isSessionCurrent(snapshot)) await router.replace('/login')
   }
 }
 </script>
@@ -120,54 +134,65 @@ const logout = async (): Promise<void> => {
     </template>
     <template v-else>
       <NAlert v-if="error" type="error" class="mb-5">{{ error }}</NAlert>
-      <NForm
-        ref="formRef"
-        :model="formValue"
-        :rules="rules"
-        label-placement="top"
-        @submit.prevent="onSubmit"
+      <LoginMethodsPanel
+        :disabled="auth.passwordChanging || loggingOut"
+        @busy="methodsBusy = $event"
       >
-        <NFormItem
-          :label="t('account.security.form.currentPassword')"
-          path="current_password"
-          :validation-status="currentError ? 'error' : undefined"
-          :feedback="currentError ?? undefined"
-        >
-          <NInput
-            v-model:value="formValue.current_password"
-            type="password"
-            show-password-on="click"
-            :input-props="{ autocomplete: 'current-password' }"
-          />
-        </NFormItem>
-        <NFormItem :label="t('account.security.form.newPassword')" path="new_password">
-          <NInput
-            v-model:value="formValue.new_password"
-            type="password"
-            show-password-on="click"
-            :input-props="{ autocomplete: 'new-password' }"
-          />
-        </NFormItem>
-        <p class="mb-5 text-xs text-lf-text-muted">{{ t('workbench.password.hint') }}</p>
-        <NFormItem :label="t('account.security.form.confirmPassword')" path="confirm_password">
-          <NInput
-            v-model:value="formValue.confirm_password"
-            type="password"
-            show-password-on="click"
-            :input-props="{ autocomplete: 'new-password' }"
-          />
-        </NFormItem>
-        <NButton attr-type="submit" type="primary" :loading="auth.passwordChanging">{{
-          t('account.security.form.submit')
-        }}</NButton>
-      </NForm>
+        <template #password>
+          <NForm
+            ref="formRef"
+            :model="formValue"
+            :rules="rules"
+            :disabled="methodsBusy || loggingOut || auth.passwordChanging"
+            label-placement="top"
+            @submit.prevent="onSubmit"
+          >
+            <NFormItem
+              :label="t('account.security.form.currentPassword')"
+              path="current_password"
+              :validation-status="currentError ? 'error' : undefined"
+              :feedback="currentError ?? undefined"
+            >
+              <NInput
+                v-model:value="formValue.current_password"
+                type="password"
+                show-password-on="click"
+                :input-props="{ autocomplete: 'current-password' }"
+              />
+            </NFormItem>
+            <NFormItem :label="t('account.security.form.newPassword')" path="new_password">
+              <NInput
+                v-model:value="formValue.new_password"
+                type="password"
+                show-password-on="click"
+                :input-props="{ autocomplete: 'new-password' }"
+              />
+            </NFormItem>
+            <p class="mb-5 text-xs text-lf-text-muted">{{ t('workbench.password.hint') }}</p>
+            <NFormItem :label="t('account.security.form.confirmPassword')" path="confirm_password">
+              <NInput
+                v-model:value="formValue.confirm_password"
+                type="password"
+                show-password-on="click"
+                :input-props="{ autocomplete: 'new-password' }"
+              />
+            </NFormItem>
+            <NButton attr-type="submit" type="primary" :loading="auth.passwordChanging">{{
+              t('account.security.form.submit')
+            }}</NButton>
+          </NForm>
+        </template>
+      </LoginMethodsPanel>
       <div
         class="mt-7 flex flex-wrap items-center justify-between gap-4 border-t border-lf-border-soft pt-5"
       >
         <p class="text-sm text-lf-text-muted">{{ t('workbench.settings.logoutHint') }}</p>
-        <NButton :loading="loggingOut" @click="logout">{{
-          t('workbench.settings.logout')
-        }}</NButton>
+        <NButton
+          :loading="loggingOut"
+          :disabled="methodsBusy || auth.passwordChanging"
+          @click="logout"
+          >{{ t('workbench.settings.logout') }}</NButton
+        >
       </div>
     </template>
   </section>
