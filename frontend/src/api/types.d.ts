@@ -4,6 +4,464 @@
  */
 
 export interface paths {
+    "/auth/reauthenticate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 验证当前登录方式并获得操作证明
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["ReauthenticateCurrentUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/{connectionId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 开始已发布外部渠道登录
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["StartExternalAuthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/{connectionId}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 接收固定外部认证回调
+         * @description Claims the transaction before contacting the provider. Invalid state never redirects. Valid success/failure redirects only to the stored trusted completion URL with a one-use ticket.
+         */
+        get: operations["ExternalAuthenticationCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 交换浏览器绑定的一次性票据
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. An associated user flow additionally requires the same valid Bearer identity; anonymous signup/login uses the browser verifier.
+         */
+        post: operations["ExchangeExternalAuthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 原子确认注册或绑定
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. An associated user flow additionally requires the same valid Bearer identity; anonymous signup/login uses the browser verifier.
+         */
+        post: operations["CompleteExternalAuthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 取消尚未完成的流程
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. An associated user flow additionally requires the same valid Bearer identity; anonymous signup/login uses the browser verifier.
+         */
+        post: operations["CancelExternalAuthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/connections/{connectionId}/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 读取已发布连接的站内Logo
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        get: operations["GetPublishedAuthConnectionLogo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/login-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取当前账号可用登录与维护方式
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        get: operations["GetCurrentUserLoginMethods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/login-bindings/{connectionId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 消费重新认证证明并开始绑定
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["StartCurrentUserLoginBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/login-bindings/{bindingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bindingId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 安全解绑并撤销旧会话
+         * @description 仅 server 模式。必须使用另一登录方式的近期认证证明；目标绑定不能证明自身的删除操作。不满足证明要求返回 403，无可靠后备方式返回 409。成功撤销旧会话及相关认证事务，最后一个绑定移除后释放外部身份归属；审计保留。响应使用 Cache-Control: no-store。
+         */
+        delete: operations["DeleteCurrentUserLoginBinding"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 管理员列出认证连接
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        get: operations["ListAuthConnections"];
+        put?: never;
+        /**
+         * 创建默认关闭的OIDC草稿
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["CreateAuthConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 管理员读取连接及草稿
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        get: operations["GetAuthConnection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 保存不可变草稿版本
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        patch: operations["UpdateAuthConnection"];
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        /** 获取指定版本的受信属性目录和可用运算符 */
+        get: operations["GetAuthConnectionAttributes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 使用模拟数据预览草稿规则，不创建认证证据 */
+        post: operations["PreviewAuthConnectionRules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员 check 连接
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["CheckAuthConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 开始绑定管理员及草稿版本的真实认证测试
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["TestAuthConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员 impact 连接
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["GetAuthConnectionImpact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员 publish 连接
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["PublishAuthConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员 archive 连接
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["ArchiveAuthConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员 restore 连接
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["RestoreAuthConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/logo": {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 管理员读取草稿Logo
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        get: operations["GetDraftAuthConnectionLogo"];
+        put?: never;
+        /**
+         * 上传256KiB以内PNG/WebP并解码重编码
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["UploadAuthConnectionLogo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/task-retention/preview": {
         parameters: {
             query?: never;
@@ -934,6 +1392,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取当前实例可用认证入口
+         * @description 仅公开已实现且有效的入口能力，不披露用户或私有政策。读取失败不能解释为允许注册。local 不提供登录入口。
+         */
+        get: operations["GetAuthCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -963,7 +1441,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 用户登录 */
+        /**
+         * 用户登录
+         * @description 仅接受 identifier/password。字段错误返回 400；无效标识、关闭的标识入口、不存在或停用账号、未设密码及密码错误统一返回 401。政策不可用返回 503。
+         */
         post: operations["LoginAuth"];
         delete?: never;
         options?: never;
@@ -980,7 +1461,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 刷新访问令牌 */
+        /**
+         * 刷新访问令牌
+         * @description 原子轮换同一刷新会话链。已消费 token 重放会撤销整条链，无重试宽限期；并发刷新至多一次签发且成功方后继也可能被重放撤销。绝对期限从首次登录计算，轮换不延长。失效后重新登录。
+         */
         post: operations["RefreshAuth"];
         delete?: never;
         options?: never;
@@ -999,7 +1483,7 @@ export interface paths {
         put?: never;
         /**
          * 登出并撤销刷新令牌
-         * @description 只撤销当前认证用户提交的 refresh token，不影响其他会话。本人已撤销的 token 再次提交返回 204；
+         * @description 撤销当前认证用户提交的 refresh token 所属整条会话链，包含已轮换后继，不影响其他独立登录会话。本人已撤销的 token 再次提交返回 204；
          *     他人的 token（包括已撤销的 token）返回 403 且不修改。未知 token 保持 401 token-invalid 错误，
          *     响应不包含 token 所属信息。数据库中仍存在的本人过期 refresh token 也可撤销。
          *     已签发的 access token 在到期前仍可能有效，不承诺全设备退出或即时撤销 access token。
@@ -1026,7 +1510,7 @@ export interface paths {
         get: operations["GetCurrentUser"];
         /**
          * 更新当前用户资料
-         * @description 省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400，邮箱冲突返回 409；失败不部分更新。
+         * @description 省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400；已验证邮箱禁止直接替换（409）。未验证邮箱允许重复；失败不部分更新。
          *     服务器模式要求 bearer 认证；本地模式仍允许通过本地身份调用，页面只读不代表后端禁止写入。
          */
         put: operations["UpdateCurrentUser"];
@@ -1047,14 +1531,22 @@ export interface paths {
         get?: never;
         /**
          * 修改当前用户密码
-         * @description 只更新密码，已有 access/refresh token 继续沿用各自有效期。
+         * @description 核验当前密码后原子更新密码、递增账号认证版本并撤销全部刷新会话。旧 access 在后续鉴权失效；已连接 SSE 有界中止。成功后须重新登录，不在改密响应中签发替代会话。
          *     缺失、空值、非法类型或新密码长度不合法返回 400；非空旧密码错误返回专用
          *     urn:linguaflow:current-password-mismatch Problem（400），不会被当作认证失效。
          *     401 仅表示请求认证缺失或失效。本地模式沿用现有本地身份授权，页面不提供密码表单。
          */
         put: operations["ChangeCurrentUserPassword"];
-        post?: never;
-        delete?: never;
+        /**
+         * 首次设置本地密码并撤销旧会话
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         */
+        post: operations["SetCurrentUserInitialPassword"];
+        /**
+         * 删除密码并保留可靠后备方式
+         * @description 仅 server 模式。要求另一登录方式的近期认证证明，不能使用待删除密码生成的证明；证明不符合要求返回 403，无可靠后备方式或最后密码管理员保护冲突返回 409。成功后撤销旧会话，响应使用 Cache-Control: no-store。
+         */
+        delete: operations["DeleteCurrentUserPassword"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2784,6 +3276,334 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OIDCConnectionConfig: {
+            /** Format: uri */
+            issuer: string;
+            client_id: string;
+            /**
+             * @default client_secret_basic
+             * @enum {string}
+             */
+            client_auth_method?: "client_secret_basic" | "client_secret_post";
+            /**
+             * @default [
+             *       "openid",
+             *       "profile"
+             *     ]
+             */
+            scopes?: string[];
+            /** @default true */
+            userinfo_enabled?: boolean;
+        };
+        AuthConnectionPolicy: {
+            enabled: boolean;
+            login_enabled: boolean;
+            signup_enabled: boolean;
+            link_enabled: boolean;
+            login_rules: components["schemas"]["AuthRuleSet"];
+            signup_rules: components["schemas"]["AuthRuleSet"];
+            link_rules: components["schemas"]["AuthRuleSet"];
+        };
+        ExternalBrowserInput: {
+            /** @description SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE. */
+            browser_challenge: string;
+            /** Format: uri */
+            completion_url: string;
+            /**
+             * @description Validated application-relative path.
+             * @default /
+             */
+            return_to?: string;
+        };
+        ExternalLinkStartRequest: {
+            /** @description SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE. */
+            browser_challenge: string;
+            /** Format: uri */
+            completion_url: string;
+            /**
+             * @description Validated application-relative path.
+             * @default /
+             */
+            return_to?: string;
+            reauthentication_proof: string;
+        };
+        ExternalStartResponse: {
+            transaction_id: string;
+            /** Format: uri */
+            authorization_url: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        ExternalExchangeRequest: {
+            ticket: string;
+            verifier: string;
+        };
+        ExternalCompleteRequest: {
+            confirmation_token: string;
+            verifier: string;
+            /** @description Required only for a signup confirmation requiring local_password; never accepted for an existing account or binding. */
+            initial_password?: string;
+            username?: components["schemas"]["UsernameInput"];
+            display_name?: string;
+        };
+        ExternalCancelRequest: {
+            transaction_id: string;
+            verifier: string;
+        };
+        ReauthenticationRequest: {
+            /** @enum {string} */
+            method: "password" | "oidc";
+            password?: string;
+            binding_id?: number;
+            /** @enum {string} */
+            action: "link" | "password_set" | "password_delete" | "unlink";
+            target_id: string;
+            /** @description SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE. */
+            browser_challenge?: string;
+            /** Format: uri */
+            completion_url?: string;
+            /**
+             * @description Validated application-relative path.
+             * @default /
+             */
+            return_to?: string;
+        };
+        ReauthenticationProofResponse: {
+            reauthentication_proof: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        ExternalProfile: {
+            connection_id: string;
+            connection_name: string;
+            external_display: string;
+        };
+        ExternalConfirmationResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "signup_confirmation" | "link_confirmation";
+            confirmation_token: string;
+            transaction_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description Empty for linking and signup with fresh authentication support. */
+            signup_requirements: "local_password"[];
+            profile: components["schemas"]["ExternalProfile"];
+        };
+        ExternalSessionResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "session";
+            session: components["schemas"]["AuthSession"];
+        };
+        ExternalProofResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "reauthentication_proof";
+            reauthentication_proof: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        ExternalTestResponse: {
+            attributes: {
+                [key: string]: components["schemas"]["AuthAttributeValue"];
+            };
+            rules: components["schemas"]["AuthRulesDiagnostics"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "test_result";
+            fresh_supported: boolean;
+            connection_id: string;
+            /** Format: int64 */
+            revision: number;
+        };
+        ExternalExchangeResponse: components["schemas"]["ExternalSessionResponse"] | components["schemas"]["ExternalConfirmationResponse"] | components["schemas"]["ExternalProofResponse"] | components["schemas"]["ExternalTestResponse"];
+        ExternalLinkedResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "linked";
+            binding_id: number;
+        };
+        ExternalCompleteResponse: components["schemas"]["ExternalSessionResponse"] | components["schemas"]["ExternalLinkedResponse"];
+        InitialPasswordRequest: {
+            reauthentication_proof: string;
+            new_password: components["schemas"]["password"];
+        };
+        SensitiveOperationRequest: {
+            reauthentication_proof: string;
+        };
+        PublicAuthConnection: {
+            connection_id: string;
+            display_name: string;
+            description: string;
+            display_order: number;
+            logo_url?: string | null;
+            can_login: boolean;
+            can_signup: boolean;
+            signup_requirements: "local_password"[];
+        };
+        CreateAuthConnectionRequest: {
+            /** @enum {string} */
+            kind: "oidc" | "generic_oauth2";
+            display_name: string;
+            description?: string;
+            display_order?: number;
+            oidc?: components["schemas"]["OIDCConnectionConfig"];
+            oauth2?: components["schemas"]["OAuth2ConnectionConfig"];
+            client_secret?: string;
+        } & ({
+            /** @enum {unknown} */
+            kind?: "oidc";
+        } | {
+            /** @enum {unknown} */
+            kind?: "generic_oauth2";
+        });
+        UpdateAuthConnectionRequest: {
+            attribute_mappings?: components["schemas"]["AuthAttributeField"][];
+            /**
+             * @description Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
+             * @default 3600
+             */
+            evidence_max_age_seconds?: number;
+            /** Format: int64 */
+            expected_revision: number;
+            display_name?: string;
+            description?: string;
+            display_order?: number;
+            oidc?: components["schemas"]["OIDCConnectionConfig"];
+            oauth2?: components["schemas"]["OAuth2ConnectionConfig"];
+            /** @description Omitted keeps the current secret; null clears it; a nonempty string creates a new encrypted version. */
+            client_secret?: string | null;
+            policy?: components["schemas"]["AuthConnectionPolicy"];
+        };
+        AuthConnectionRevisionRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+        };
+        AuthConnectionTestRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            /** @description SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE. */
+            browser_challenge: string;
+            /** Format: uri */
+            completion_url: string;
+            /**
+             * @description Validated application-relative path.
+             * @default /
+             */
+            return_to?: string;
+        };
+        AuthConnectionSnapshot: {
+            /** Format: int64 */
+            login_policy_revision?: number;
+            attribute_mappings?: components["schemas"]["AuthAttributeField"][];
+            /**
+             * @description Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
+             * @default 3600
+             */
+            evidence_max_age_seconds?: number;
+            display_name: string;
+            description: string;
+            display_order: number;
+            oidc?: components["schemas"]["OIDCConnectionConfig"];
+            oauth2?: components["schemas"]["OAuth2ConnectionConfig"];
+            /** Format: int64 */
+            revision: number;
+            policy: components["schemas"]["AuthConnectionPolicy"];
+            has_client_secret: boolean;
+            logo_url?: string | null;
+        };
+        AuthConnectionValidation: {
+            fresh_supported: boolean;
+            fingerprint_matches: boolean;
+            /** Format: date-time */
+            tested_at?: string | null;
+        };
+        AuthConnectionRecord: {
+            /** @description Server-assigned immutable namespace for a generic OAuth connection. */
+            readonly identity_authority_id?: string | null;
+            id: string;
+            /** @enum {string} */
+            kind: "password" | "oidc" | "generic_oauth2";
+            /** Format: int64 */
+            aggregate_revision: number;
+            /** Format: int64 */
+            draft_revision?: number | null;
+            /** Format: int64 */
+            published_revision?: number | null;
+            archived: boolean;
+            has_client_secret: boolean;
+            draft?: components["schemas"]["AuthConnectionSnapshot"];
+            published?: components["schemas"]["AuthConnectionSnapshot"];
+            validation?: components["schemas"]["AuthConnectionValidation"];
+        };
+        AuthConnectionsResponse: {
+            items: components["schemas"]["AuthConnectionRecord"][];
+        };
+        AuthConnectionCheck: {
+            /** Format: int64 */
+            revision: number;
+            rules: components["schemas"]["AuthRulesDiagnostics"];
+            valid: boolean;
+            fresh_supported: boolean;
+            issues: string[];
+        };
+        AuthConnectionImpact: {
+            /** Format: int64 */
+            revision?: number;
+            /** Format: date-time */
+            evaluated_at?: string;
+            remediation?: string;
+            pass_users?: number[];
+            fail_users?: number[];
+            unknown_users?: number[];
+            administrator_users?: number[];
+            affected_users: number[];
+            blocked_users: number[];
+            affected_sessions: number;
+            can_publish: boolean;
+        };
+        LoginMethod: {
+            /** @enum {string} */
+            login_rule_status?: "pass" | "fail" | "unknown";
+            /** Format: date-time */
+            evidence_expires_at?: string;
+            binding_id: number;
+            connection_id: string;
+            display_name: string;
+            can_login: boolean;
+            can_reauthenticate: boolean;
+            can_unlink: boolean;
+            verified: boolean;
+            archived: boolean;
+        };
+        LoginMethodsResponse: {
+            password: {
+                /** @description Current password has been used successfully for login or reauthentication under an enabled password policy. */
+                verified: boolean;
+                is_set: boolean;
+                can_login: boolean;
+                can_set: boolean;
+                can_delete: boolean;
+            };
+            email: {
+                address: string | null;
+                verified: boolean;
+                can_recover: boolean;
+            };
+            bindings: components["schemas"]["LoginMethod"][];
+            available_connections: components["schemas"]["AvailableLoginConnection"][];
+        };
         TaskRetentionPolicy: {
             /** @default false */
             enabled: boolean;
@@ -2853,25 +3673,51 @@ export interface components {
             /** @enum {string} */
             mode: "local" | "server";
         };
+        /**
+         * @description 原始输入最多 128 ASCII 字节；先拒绝非 ASCII、控制字符和 DEL，再移除首尾普通空格并仅将 A-Z 转为小写。
+         *     规范值须为 3–32 字符，以字母开头、字母或数字结尾，仅允许 a-z、0-9 及不相邻的中间 -/_。
+         *     保留名按服务端创建用途限制，登录和成员定位不重新检查分配用途。创建后不可改名。
+         */
+        UsernameInput: string;
+        /** @description 实例唯一且不可改名的规范用户名；停用后继续占用。 */
+        Username: string;
+        AuthCapabilities: {
+            /** @enum {string} */
+            mode: "local" | "server";
+            password: {
+                can_login: boolean;
+                /** @description 同时满足已发布密码渠道政策及全局公开注册政策。 */
+                can_signup: boolean;
+                username_login_enabled: boolean;
+                email_login_enabled: boolean;
+            };
+            /** @description 已发布且具备有效用途的 OIDC 连接；不暴露绑定、私有规则或配置。local 始终为空。 */
+            connections: components["schemas"]["PublicAuthConnection"][];
+            /** @enum {boolean} */
+            email_verification_enabled: false;
+            /** @enum {boolean} */
+            password_reset_enabled: false;
+        };
         User: {
             id: number;
-            username: string;
+            username: components["schemas"]["Username"];
             /** Format: email */
-            email: string;
+            email: string | null;
             display_name?: string;
             role: string;
             active: boolean;
         };
         RegisterRequest: {
-            username: string;
+            username: components["schemas"]["UsernameInput"];
             /** @description 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。 */
             password: string;
-            /** Format: email */
-            email: string;
+            /** @description 可省略、为 null 或空字符串；非空值去除首尾空白并转小写后校验单个纯邮箱地址。填写地址仅作为未验证资料，不占用唯一登录归属。 */
+            email?: string | null;
             display_name?: string;
         };
         LoginRequest: {
-            username: string;
+            /** @description 按是否含 ASCII @ 选择唯一的用户名或已验证邮箱定位路径。阶段 A 仅开放用户名入口；邮箱路径统一认证失败，不回退查询用户名。不接受 username 或 identifier_type 别名。 */
+            identifier: string;
             /** @description 原样验证密码，不施加注册或改密时的新密码长度规则，以兼容历史密码。 */
             password: string;
         };
@@ -2879,7 +3725,7 @@ export interface components {
             refresh_token: string;
         };
         LogoutRequest: {
-            /** @description 当前认证用户本人持有的 refresh token；只撤销此 token，不影响其他会话。 */
+            /** @description 当前认证用户本人持有的 refresh token；撤销其整条刷新会话链，包括已轮换后继，不影响其他独立登录会话。 */
             refresh_token: string;
         };
         AuthSession: {
@@ -2894,16 +3740,13 @@ export interface components {
         };
         /**
          * @description 仅更新提供的字段，省略字段保持原值；空对象返回当前资料且不修改更新时间。
-         *     字段不可为 null，用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
+         *     仅 email 可为 null（清空）；用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
          */
         UpdateCurrentUserRequest: {
             /** @description 去除首尾空白；空字符串允许清空显示名。 */
             display_name?: string;
-            /**
-             * Format: email
-             * @description 去除首尾空白并转小写后校验单个纯邮箱地址；拒绝空值、内部空白、显示名及地址包装。
-             */
-            email?: string;
+            /** @description null 或空字符串清空未验证邮箱；非空值去除首尾空白并转小写后校验单个纯邮箱地址。未验证邮箱可重复；已有验证状态的邮箱禁止通过资料接口变更（409）。 */
+            email?: string | null;
         };
         ChangePasswordRequest: {
             /** @description 原样验证当前密码，不去除空白，不施加新密码的长度规则。 */
@@ -2943,8 +3786,7 @@ export interface components {
             items: components["schemas"]["OrganizationMember"][];
         };
         AddOrganizationMemberRequest: {
-            /** @description 精确匹配已有账号用户名；不发送邀请。 */
-            username: string;
+            username: components["schemas"]["UsernameInput"];
             /**
              * @description 省略时为 member；admin 仅能添加 member，owner 可授予任意合法角色，显式空值或 null 无效。
              * @default member
@@ -4127,10 +4969,10 @@ export interface components {
             total: number;
         };
         AdminCreateUserRequest: {
-            username: string;
+            username: components["schemas"]["UsernameInput"];
             password: string;
-            /** Format: email */
-            email: string;
+            /** @description 可省略、为 null 或空字符串；非空值去除首尾空白并转小写后校验单个纯邮箱地址。管理员录入不代表已验证所有权。 */
+            email?: string | null;
             display_name?: string;
             /**
              * @default user
@@ -4140,8 +4982,8 @@ export interface components {
         };
         AdminUpdateUserRequest: {
             display_name?: string;
-            /** Format: email */
-            email?: string;
+            /** @description 省略保持原值；null 或空串清空未验证邮箱；非空值去除首尾空白并转小写后校验单个纯邮箱地址。已有验证状态的邮箱禁止直接变更（409）。 */
+            email?: string | null;
             /** @enum {string} */
             role?: "user" | "admin";
             active?: boolean;
@@ -4329,6 +5171,125 @@ export interface components {
             resource_id: number;
             /** @description 占用该资源的未完成任务 ID */
             active_job_id: number;
+        };
+        AuthAttributeValue: {
+            value?: unknown;
+            /** @enum {string} */
+            status: "pass" | "fail" | "unknown";
+            reason?: string;
+            fingerprint: string;
+        };
+        AuthRuleResult: {
+            /** @enum {string} */
+            status: "pass" | "fail" | "unknown";
+            retryable: boolean;
+            conditions: {
+                field_id: string;
+                operator: string;
+                /** @enum {string} */
+                status: "pass" | "fail" | "unknown";
+                reason?: string;
+            }[];
+        };
+        AuthRulesDiagnostics: {
+            login: components["schemas"]["AuthRuleResult"];
+            signup: components["schemas"]["AuthRuleResult"];
+            link: components["schemas"]["AuthRuleResult"];
+        };
+        AvailableLoginConnection: {
+            connection_id: string;
+            display_name: string;
+            can_link: boolean;
+            logo_url?: string | null;
+        };
+        AuthAttributeField: {
+            field_id: string;
+            label: string;
+            /** @enum {string} */
+            type: "string" | "boolean" | "integer" | "number" | "datetime" | "string_list";
+            /** @enum {string} */
+            source: "oidc_id_token" | "oidc_userinfo" | "oauth2_profile" | "derived";
+            pointer: string;
+            required_scopes?: string[];
+            optional?: boolean;
+            /**
+             * @description Administrator-declared property of the upstream field; never grants trust or platform permissions.
+             * @default false
+             */
+            user_editable?: boolean;
+            /** @description Server-defined dependencies of a derived field. */
+            readonly derived_from?: string[];
+        };
+        OAuth2ConnectionConfig: {
+            /** Format: uri */
+            authorization_endpoint: string;
+            /** Format: uri */
+            token_endpoint: string;
+            /** Format: uri */
+            profile_endpoint: string;
+            client_id: string;
+            /**
+             * @default client_secret_basic
+             * @enum {string}
+             */
+            client_auth_method?: "client_secret_basic" | "client_secret_post";
+            /** @default [] */
+            scopes?: string[];
+            subject_mapping: {
+                pointer: string;
+                /** @enum {string} */
+                type: "string" | "integer";
+            };
+        };
+        AuthRuleCondition: {
+            field_id: string;
+            /** @enum {string} */
+            operator: "eq" | "ne" | "in" | "gt" | "gte" | "lt" | "lte" | "contains" | "not_contains" | "contains_any" | "contains_all";
+            /** @description Strictly typed against the referenced field. Strings are case-sensitive; integers retain precision; datetimes require RFC3339 with timezone. No coercion or null values. */
+            value: string | boolean | number | string[];
+        };
+        AuthRuleSet: {
+            /** @enum {string} */
+            mode: "unrestricted";
+        } | {
+            /** @enum {string} */
+            mode: "conditions";
+            /** @enum {string} */
+            match: "all" | "any";
+            conditions: components["schemas"]["AuthRuleCondition"][];
+        };
+        AuthAttributeCatalog: {
+            /** Format: int64 */
+            revision: number;
+            fields: components["schemas"]["AuthAttributeField"][];
+            operators: {
+                [key: string]: string[];
+            };
+        };
+        AuthRulesPreviewRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            sources: {
+                oidc_id_token?: {
+                    [key: string]: unknown;
+                };
+                oidc_userinfo?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        AuthRulesPreview: {
+            /** Format: int64 */
+            revision: number;
+            /** @enum {boolean} */
+            simulated: true;
+            attributes: {
+                [key: string]: components["schemas"]["AuthAttributeValue"];
+            };
+            rules: components["schemas"]["AuthRulesDiagnostics"];
+        };
+        AuthPublishProblem: components["schemas"]["Problem"] & {
+            impact: components["schemas"]["AuthConnectionImpact"];
         };
         /**
          * Format: int64
@@ -4952,6 +5913,8 @@ export interface components {
             id: number;
             version: number;
         };
+        /** @description 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。 */
+        password: string;
         /**
          * @description 响应格式：
          *     - json_schema: 强制结构化 JSON 输出（推荐）
@@ -5817,6 +6780,767 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    ReauthenticateCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReauthenticationRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReauthenticationProofResponse"] | components["schemas"]["ExternalStartResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    StartExternalAuthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalBrowserInput"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalStartResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ExternalAuthenticationCallback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trusted completion URL; no access or refresh token in the URL */
+            303: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ExchangeExternalAuthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalExchangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalExchangeResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CompleteExternalAuthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalCompleteResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CancelExternalAuthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalCancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetPublishedAuthConnectionLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Validated PNG image */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetCurrentUserLoginMethods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginMethodsResponse"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    StartCurrentUserLoginBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalLinkStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalStartResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteCurrentUserLoginBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bindingId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SensitiveOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListAuthConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionsResponse"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAuthConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionRecord"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionRecord"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAuthConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionRecord"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetAuthConnectionAttributes: {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attribute catalogue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthAttributeCatalog"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    PreviewAuthConnectionRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthRulesPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Simulated diagnostics only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthRulesPreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CheckAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionCheck"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    TestAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalStartResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetAuthConnectionImpact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionImpact"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    PublishAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionRecord"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Revision conflict or users without a verified fallback. Safety conflicts include the current impact and remediation. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AuthPublishProblem"] | components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    ArchiveAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionRecord"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    RestoreAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionRecord"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetDraftAuthConnectionLogo: {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Validated PNG */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    UploadAuthConnectionLogo: {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/png": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionRecord"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     PreviewTaskRetention: {
         parameters: {
             query?: never;
@@ -7236,6 +8960,28 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    GetAuthCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前能力快照 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCapabilities"];
+                };
+            };
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     RegisterAuth: {
         parameters: {
             query?: never;
@@ -7421,6 +9167,67 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetCurrentUserInitialPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitialPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteCurrentUserPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SensitiveOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
