@@ -30,6 +30,7 @@ import {
   type OrganizationRole,
 } from '@/utils/organization-scope'
 import { formatDateTime } from '@/utils/datetime'
+import { normalizeUsername, validateUsername } from '@/utils/username'
 import StorageManager from '@/components/storage/StorageManager.vue'
 
 const { t } = useI18n()
@@ -225,8 +226,16 @@ async function memberAction(action: (id: number) => Promise<unknown>, leaving = 
   }
 }
 function submitAddMember() {
+  const issue = validateUsername(username.value, 'lookup')
+  if (issue) {
+    message.error(t(`accountInput.username.${issue}`))
+    return
+  }
   memberAction((id) =>
-    api.addOrganizationMember(id, { username: username.value.trim(), role: role.value }),
+    api.addOrganizationMember(id, {
+      username: normalizeUsername(username.value),
+      role: role.value,
+    }),
   )
 }
 function confirmRole(member: ApiSchemas['OrganizationMember'], value: OrganizationRole) {
@@ -328,11 +337,7 @@ onUnmounted(() => {
         </div></NCard
       >
       <NCard :title="t('team.members')" size="small">
-        <form
-          v-if="canWrite"
-          class="mb-5 flex flex-wrap gap-3"
-          @submit.prevent="submitAddMember"
-        >
+        <form v-if="canWrite" class="mb-5 flex flex-wrap gap-3" @submit.prevent="submitAddMember">
           <NInput
             v-model:value="username"
             class="min-w-48 flex-1!"
