@@ -86,19 +86,46 @@ export const summaryFixture: ApiSchemas['OperationsSummaryResponse'] = {
 export const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, json: body })
 
+export const authCapabilities: ApiSchemas['AuthCapabilities'] = {
+  mode: 'server',
+  password: {
+    can_login: true,
+    can_signup: true,
+    username_login_enabled: true,
+    email_login_enabled: false,
+  },
+  connections: [],
+  email_verification_enabled: false,
+  password_reset_enabled: false,
+}
+export const loginMethods: ApiSchemas['LoginMethodsResponse'] = {
+  password: { is_set: true, can_login: true, can_set: false, can_delete: false, verified: true },
+  email: { address: 'tester-1@example.com', verified: false, can_recover: false },
+  bindings: [],
+  available_connections: [],
+}
+
 /** Stable API baseline; later page.route registrations override individual endpoints. */
 export async function mockApp(
   page: Page,
-  options: { role?: string; mode?: 'local' | 'server'; theme?: 'light' | 'dark' } = {},
+  options: {
+    role?: string
+    mode?: 'local' | 'server'
+    theme?: 'light' | 'dark'
+    initializeAuthOnce?: boolean
+  } = {},
 ) {
   await page.addInitScript(
-    ({ theme }) => {
-      localStorage.setItem('linguaflow.api_base_url', '/api/v1')
-      localStorage.setItem('linguaflow.access_token', 'test-access')
-      localStorage.setItem('linguaflow.refresh_token', 'test-refresh')
+    ({ theme, initializeAuthOnce }) => {
+      if (!initializeAuthOnce || !localStorage.getItem('fixture.auth.initialized')) {
+        localStorage.setItem('linguaflow.api_base_url', '/api/v1')
+        localStorage.setItem('linguaflow.access_token', 'test-access')
+        localStorage.setItem('linguaflow.refresh_token', 'test-refresh')
+        if (initializeAuthOnce) localStorage.setItem('fixture.auth.initialized', '1')
+      }
       localStorage.setItem('linguaflow.theme', theme)
     },
-    { theme: options.theme ?? 'light' },
+    { theme: options.theme ?? 'light', initializeAuthOnce: options.initializeAuthOnce ?? false },
   )
   await page.route('**/api/v1/**', (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '')
@@ -109,6 +136,10 @@ export async function mockApp(
         return json(route, { mode: options.mode ?? 'server' })
       case '/users/me':
         return json(route, testUser(options.role))
+      case '/auth/capabilities':
+        return json(route, { ...authCapabilities, mode: options.mode ?? 'server' })
+      case '/users/me/login-methods':
+        return json(route, loginMethods)
       case '/operations/summary':
         return json(route, summaryFixture)
       case '/admin/runtime/summary':

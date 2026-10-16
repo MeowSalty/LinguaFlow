@@ -13,6 +13,10 @@ import {
 } from '@/api/session-context'
 import { ApiError } from '@/api/utils'
 import { validateNewPassword } from '@/utils/password'
+import { validateUsername, normalizeUsername } from '@/utils/username'
+import { useAuthCapabilities } from '@/composables/useAuthCapabilities'
+import { safeReturnPath } from '@/auth/return-path'
+import ExternalLoginOptions from '@/components/auth/ExternalLoginOptions.vue'
 
 definePage({
   meta: {
@@ -26,6 +30,19 @@ const route = useRoute()
 const auth = useAuthStore()
 const message = useMessage()
 const { t } = useI18n()
+const {
+  capabilities,
+  connections,
+  canSignup,
+  loading,
+  error: capabilitiesError,
+  reload,
+} = useAuthCapabilities()
+const signupConnections = computed(() =>
+  connections.value.filter((connection) => connection.can_signup),
+)
+const externalBusy = ref(false)
+const returnTo = computed(() => safeReturnPath(route.query.redirect))
 
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
@@ -63,18 +80,18 @@ const rules = computed<FormRules>(() => ({
       message: t('register.validation.usernameRequired'),
     },
     {
-      min: 3,
-      max: 32,
       trigger: ['blur', 'input'],
-      message: t('register.validation.usernameLength'),
+      validator(_rule, value: string) {
+        const issue = validateUsername(value || '')
+        return issue ? new Error(t(`accountInput.username.${issue}`)) : true
+      },
     },
   ],
   email: [
-    { required: true, trigger: ['blur', 'input'], message: t('register.validation.emailRequired') },
     {
       trigger: ['blur', 'input'],
       validator(_rule, value: string) {
-        if (!value) return true
+        if (!value?.trim()) return true
         const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
         return ok ? true : new Error(t('register.validation.emailInvalid'))
       },
@@ -105,7 +122,7 @@ const rules = computed<FormRules>(() => ({
 }))
 
 const onSubmit = async () => {
-  if (submitting.value) return
+  if (submitting.value || externalBusy.value || !capabilities.value?.password.can_signup) return
   const generation = ++submissionGeneration
   let context = captureSession()
   const current = () => alive && generation === submissionGeneration && isSessionCurrent(context)
@@ -120,8 +137,8 @@ const onSubmit = async () => {
   if (!current()) return
   try {
     const registration = auth.register({
-      username: formValue.username.trim(),
-      email: formValue.email.trim(),
+      username: normalizeUsername(formValue.username),
+      email: formValue.email.trim() || undefined,
       display_name: formValue.display_name.trim() || undefined,
       password: formValue.password,
     })
@@ -131,8 +148,7 @@ const onSubmit = async () => {
     context = await registration
     if (!current()) return
     message.success(t('register.messages.success'))
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
-    await router.push(redirect ?? '/')
+    await router.push(returnTo.value)
   } catch (error) {
     if (
       !current() ||
@@ -157,7 +173,16 @@ const onSubmit = async () => {
 <template>
   <BlankLayout :title="t('register.title')" :subtitle="t('register.subtitle')">
     <div class="lf-panel p-6">
+      <NSkeleton v-if="loading" text :repeat="5" />
+      <NAlert v-else-if="capabilitiesError" type="error" :show-icon="false">
+        {{ capabilitiesError }}
+        <NButton class="mt-3" @click="reload">{{ t('authentication.retry') }}</NButton>
+      </NAlert>
+      <NAlert v-else-if="!canSignup" type="info" :show-icon="false">{{
+        t('authentication.signupClosed')
+      }}</NAlert>
       <NForm
+        v-if="!loading && capabilities?.password.can_signup"
         ref="formRef"
         :model="formValue"
         :rules="rules"
@@ -173,8 +198,10 @@ const onSubmit = async () => {
             :input-props="{ autocomplete: 'username' }"
           />
         </NFormItem>
-
-        <NFormItem :label="t('register.form.email')" path="email">
+        <p class="mb-4 text-xs leading-5 text-lf-text-muted">
+          {{ t('authentication.usernameHint') }}
+        </p>
+        <NFormItem :label="t('authentication.optionalEmail')" path="email">
           <NInput
             v-model:value="formValue.email"
             :placeholder="t('register.form.emailPlaceholder')"
@@ -182,6 +209,7 @@ const onSubmit = async () => {
             :input-props="{ autocomplete: 'email', type: 'email' }"
           />
         </NFormItem>
+        <p class="mb-4 text-xs leading-5 text-lf-text-muted">{{ t('authentication.emailHint') }}</p>
 
         <NFormItem :label="t('register.form.displayName')" path="display_name">
           <NInput
@@ -211,15 +239,35 @@ const onSubmit = async () => {
           />
         </NFormItem>
 
-        <NButton attr-type="submit" type="primary" size="large" block :loading="submitting">
+        <NButton
+          attr-type="submit"
+          type="primary"
+          size="large"
+          block
+          :loading="submitting"
+          :disabled="externalBusy"
+        >
           {{ t('register.form.submit') }}
         </NButton>
       </NForm>
+      <NDivider v-if="capabilities?.password.can_signup && signupConnections.length">{{
+        t('authentication.externalDivider')
+      }}</NDivider>
+      <ExternalLoginOptions
+        v-if="signupConnections.length"
+        v-model:busy="externalBusy"
+        :connections="signupConnections"
+        :return-to="returnTo"
+        :disabled="submitting"
+      />
     </div>
 
     <div class="mt-6 text-center text-xs text-lf-text-muted">
       {{ t('register.links.hasAccount') }}
-      <RouterLink to="/login" class="text-brand-500 no-underline hover:underline">
+      <RouterLink
+        :to="{ path: '/login', query: { redirect: returnTo } }"
+        class="text-brand-500 no-underline hover:underline"
+      >
         {{ t('register.links.login') }}
       </RouterLink>
     </div>
