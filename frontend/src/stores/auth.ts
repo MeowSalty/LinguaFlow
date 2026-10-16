@@ -13,6 +13,7 @@ import {
   logout as logoutApi,
   registerAndLogin,
   setLocalMode,
+  setAuthSession,
   setUnauthorizedHandler,
   updateCurrentUser,
 } from '@/api/client'
@@ -61,6 +62,12 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     accessToken.value = null
     refreshToken.value = null
+  }
+
+  const acceptExternalSession = (session: AuthSession, context: SessionSnapshot): void => {
+    assertSessionCurrent(context)
+    setAuthSession(session)
+    applySession(session)
   }
 
   const login = async (credentials: LoginPayload): Promise<void> => {
@@ -226,5 +233,6 @@ export const useAuthStore = defineStore('auth', () => {
     bootstrap,
     bootstrapForMode,
     clearSession,
+    acceptExternalSession,
   }
 })

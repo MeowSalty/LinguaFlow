@@ -2,6 +2,14 @@
 <html lang="">
   <head>
     <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
+    <script>
+      if (location.pathname === '/auth/complete') {
+        const callbackUrl = new URL(location.href)
+        window.__linguaflowAuthTicket = callbackUrl.searchParams.get('ticket') || undefined
+        history.replaceState(history.state, '', callbackUrl.pathname)
+      }
+    </script>
     <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LinguaFlow</title>
