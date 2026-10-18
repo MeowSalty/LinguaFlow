@@ -6,6 +6,7 @@ import {
   fetchOperationsSummary,
   listOperations,
   type Operation,
+  type SupportedOperation,
   type OperationsQuery,
   type OperationsSummary,
   type SummaryQuery,
@@ -42,6 +43,10 @@ export type TaskDetailMap = {
 type TaskType = keyof TaskDetailMap
 type TaskDetail = TaskDetailMap[TaskType]
 type TranslationOperation = Extract<Operation, { task_type: 'translation' }>
+const isSupportedTask = (operation: Operation): operation is SupportedOperation =>
+  operation.task_type === 'translation' ||
+  operation.task_type === 'glossary_sync' ||
+  operation.task_type === 'storage'
 type TranslationObservation = Pick<
   TranslationOperation,
   'project_id' | 'status' | 'updated_at' | 'can_delete' | 'finished_at'
@@ -532,9 +537,15 @@ export const useOperationsStore = defineStore('operations', () => {
     discardRequests()
     for (const [id, state] of translationObservations)
       if (state.value.project_id === projectId) translationObservations.delete(id)
-    active.value = active.value.filter((item) => item.project_id !== projectId)
-    terminal.value = terminal.value.filter((item) => item.project_id !== projectId)
-    items.value = items.value.filter((item) => item.project_id !== projectId)
+    active.value = active.value.filter(
+      (item) => !isSupportedTask(item) || item.project_id !== projectId,
+    )
+    terminal.value = terminal.value.filter(
+      (item) => !isSupportedTask(item) || item.project_id !== projectId,
+    )
+    items.value = items.value.filter(
+      (item) => !isSupportedTask(item) || item.project_id !== projectId,
+    )
     queryCache.clear()
     summaryCache.clear()
     summary.value = null
@@ -575,7 +586,7 @@ export const useOperationsStore = defineStore('operations', () => {
         subscriptions.delete(subscription)
       }
     discardRequests()
-    const keep = (item: Operation) => !matches(item)
+    const keep = (item: Operation) => !isSupportedTask(item) || !matches(item)
     active.value = active.value.filter(keep)
     terminal.value = terminal.value.filter(keep)
     items.value = items.value.filter(keep)
@@ -610,6 +621,7 @@ export const useOperationsStore = defineStore('operations', () => {
         } while (cursor)
         // Cursor pagination is not a snapshot. Confirm every disappearance explicitly.
         for (const old of active.value) {
+          if (!isSupportedTask(old)) continue
           if (found.has(operationKey(old))) continue
           try {
             const detail = await queryTask(old)

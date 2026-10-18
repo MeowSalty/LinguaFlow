@@ -271,7 +271,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
         task.task_id === String(id) &&
         (projectId == null || task.project_id === projectId),
     )
-    projectName.value = operation?.project_name
+    projectName.value = operation?.task_type === 'translation' ? operation.project_name : undefined
     const current = version,
       context = captureSession()
     const valid = () => current === version && isSessionCurrent(context) && !disposed

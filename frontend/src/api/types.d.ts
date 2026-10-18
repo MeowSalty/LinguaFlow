@@ -141,7 +141,7 @@ export interface paths {
          * 读取已发布连接的站内Logo
          * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
          */
-        get: operations["GetPublishedAuthConnectionLogo"];
+        get: operations["GetPublicAuthConnectionLogo"];
         put?: never;
         post?: never;
         delete?: never;
@@ -228,7 +228,7 @@ export interface paths {
         get: operations["ListAuthConnections"];
         put?: never;
         /**
-         * 创建默认关闭的OIDC草稿
+         * 创建进入 configuring 状态的新连接
          * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
          */
         post: operations["CreateAuthConnection"];
@@ -248,7 +248,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 管理员读取连接及草稿
+         * 管理员读取连接当前配置
          * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
          */
         get: operations["GetAuthConnection"];
@@ -258,7 +258,7 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * 保存不可变草稿版本
+         * 原子保存连接配置变更
          * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
          */
         patch: operations["UpdateAuthConnection"];
@@ -276,7 +276,8 @@ export interface paths {
         /** 获取指定版本的受信属性目录和可用运算符 */
         get: operations["GetAuthConnectionAttributes"];
         put?: never;
-        post?: never;
+        /** 获取候选版本的受信属性目录和可用运算符（不访问第三方） */
+        post: operations["PreviewAuthConnectionAttributes"];
         delete?: never;
         options?: never;
         head?: never;
@@ -294,7 +295,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 使用模拟数据预览草稿规则，不创建认证证据 */
+        /** 使用模拟数据预览候选规则，不创建认证证据 */
         post: operations["PreviewAuthConnectionRules"];
         delete?: never;
         options?: never;
@@ -314,7 +315,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 管理员 check 连接
+         * 本地检查连接候选配置（不访问第三方）
          * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
          */
         post: operations["CheckAuthConnection"];
@@ -336,7 +337,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 开始绑定管理员及草稿版本的真实认证测试
+         * 以管理员身份对候选配置发起真实认证测试
          * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
          */
         post: operations["TestAuthConnection"];
@@ -358,8 +359,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 管理员 impact 连接
-         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         * 评估保存候选配置对现有用户的影响
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. Disabled and archived connections block this operation.
          */
         post: operations["GetAuthConnectionImpact"];
         delete?: never;
@@ -368,7 +369,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/auth-connections/{connectionId}/publish": {
+    "/admin/auth-connections/{connectionId}/configure": {
         parameters: {
             query?: never;
             header?: never;
@@ -380,10 +381,54 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 管理员 publish 连接
-         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         * 退出服务并回到 configuring 状态
+         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. Disabling formal use revokes dependent sessions in the same transaction.
          */
-        post: operations["PublishAuthConnection"];
+        post: operations["ConfigureAuthConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 启用连接并开放正式用途
+         * @description Server mode only. Requires complete configuration, fresh matching validation bound to the current admin session and browser proof, purpose switches, and fallback protection. Authentication secrets and flow results use Cache-Control: no-store.
+         */
+        post: operations["EnableAuthConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth-connections/{connectionId}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 停用连接并撤销正式用途
+         * @description Server mode only. Stops all formal use, blocks new external requests, and revokes dependent sessions in one transaction. Disabled requires an explicit configure step before testing again.
+         */
+        post: operations["DisableAuthConnection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -436,9 +481,7 @@ export interface paths {
     };
     "/admin/auth-connections/{connectionId}/logo": {
         parameters: {
-            query: {
-                expected_revision: number;
-            };
+            query?: never;
             header?: never;
             path: {
                 connectionId: string;
@@ -446,14 +489,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 管理员读取草稿Logo
-         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         * 管理员读取当前配置Logo
+         * @description Server mode only. Sensitive artefacts use Cache-Control: no-store.
          */
-        get: operations["GetDraftAuthConnectionLogo"];
+        get: operations["GetAuthConnectionLogo"];
         put?: never;
         /**
          * 上传256KiB以内PNG/WebP并解码重编码
-         * @description Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.
+         * @description Server mode only. Sensitive artefacts use Cache-Control: no-store.
          */
         post: operations["UploadAuthConnectionLogo"];
         delete?: never;
@@ -542,6 +585,160 @@ export interface paths {
         get: operations["GetStorageCapabilities"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/retirement-previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview the normalized storage retirement scope
+         * @description Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. The issued preview_revision expires five minutes after issue and is bound to the actor; a service restart invalidates issued revisions, so the caller must re-preview instead of confirming a stale revision. Read-only metadata snapshot; never a remote capability guarantee. Site space entry expands visibly to the whole backend before confirmation. Management authority does not grant project migration permission. Dependencies and project checks are redacted using current permissions. Dependency paging is in the body so this operation has no generated params argument. No state or remote writes occur.
+         */
+        post: operations["CreateStorageRetirementPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/retirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List retirements by management ownership
+         * @description Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. User scope requires the current user as owner_id; org scope requires organization owner/admin membership and its ID; platform admin status does not bypass organization membership. Site scope requires a platform administrator and owner_id=0. Includes recoverable failed tasks and authorized removed-target history. Order by descending retirement_id; cursor is the last ID of the previous page. No provider I/O. Responses are private and must not be cached.
+         */
+        get: operations["ListStorageRetirements"];
+        put?: never;
+        /**
+         * Confirm a storage retirement
+         * @description Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Acceptance atomically rechecks preview_revision, the complete normalized scope and its management/execution generations, policy/defaults and per-project plans before establishing barriers. Connection and child-space retirements cannot overlap; failed parents retain exclusivity. Idempotency is scoped to ownership, immutable normalized target identity and operation kind. Same key with different input conflicts; an accepted idempotent result is replayed first, authenticated and returned as the original retirement_id, including after removal. Acceptance and replay both return 202 with the same Location header. Immediate completion returns the same queryable resource.
+         */
+        post: operations["CreateStorageRetirement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/retirements/{retirementId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * Read retirement progress and paginated dependencies
+         * @description Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Reads use the target's management ownership, with independent visibility checks for each project and child task. Cursor pages the sanitized dependency projection; missing or hidden details never prove safe removal. The response reports parent generation, state/phase, durable waiting, cleanup/configuration results and current allowed_actions. Removed identities remain queryable as history. Responses are private and must not be cached.
+         */
+        get: operations["GetStorageRetirement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/retirements/{retirementId}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update unaccepted project migration destinations
+         * @description Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Update requires the parent expected_generation and a fresh preview_revision confirming the same complete source scope; a revision older than five minutes, or one invalidated by a service restart, returns storage_retirement_preview_stale. Recheck each project's migration authority and destination. Change only unaccepted child inputs; already accepted migrations resume through their original tasks. Never expand scope or bypass failed-task ownership.
+         */
+        patch: operations["UpdateStorageRetirementPlan"];
+        trace?: never;
+    };
+    "/storage/retirements/{retirementId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume the same storage retirement
+         * @description Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Resume checks expected_generation, current ownership permissions and allowed_actions. Continue the original parent and child identities; never create a replacement task, reset lifecycle or bypass disable, revocation or maintenance. A repeated resume with the same expected_generation replays the accepted result instead of creating a second task.
+         */
+        post: operations["ResumeStorageRetirement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/retirements/{retirementId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request safe cancellation before finalizing
+         * @description Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Cancellation checks expected_generation, current permissions and allowed_actions. Stop accepting children and wait for accepted cutovers to reach safe results. Already migrated projects remain at their destinations and registered cleanup remains tracked. Release only this retirement barrier once safe, preserving later disable or revocation. Reject cancellation from finalizing onward, including partial marker cleanup. An accepted request is not a claim that cancellation has already completed.
+         */
+        post: operations["CancelStorageRetirement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/retirements/{retirementId}/recover-authorization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recover restricted authorization for finalization
+         * @description Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Recovery requires connection management permission, expected_generation, expected_management_generation and Idempotency-Key, scoped to ownership, normalized immutable target and this recovery operation. Same key with different input conflicts; an accepted idempotent result is replayed first, authenticated and preserves the same retirement. Only stored connections blocked in finalizing accept writeOnly candidate credentials through authorization versions restricted to exact verification/cleanup for this task. No ordinary business authorization is activated, no removed marker is recreated and no secret is returned. Deployment sources reject credential uploads and report storage_retirement_configuration_pending with sanitized deployment recovery guidance.
+         */
+        post: operations["RecoverStorageRetirementAuthorization"];
         delete?: never;
         options?: never;
         head?: never;
@@ -694,7 +891,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List configured site storage connections */
+        /**
+         * List configured site storage connections
+         * @description 列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
+         */
         get: operations["ListSiteStorageConnections"];
         put?: never;
         post?: never;
@@ -713,7 +913,7 @@ export interface paths {
         };
         /**
          * ListStorageConnections
-         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
          */
         get: operations["ListStorageConnections"];
         put?: never;
@@ -739,7 +939,7 @@ export interface paths {
         };
         /**
          * ListOrgStorageConnections
-         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
          */
         get: operations["ListOrgStorageConnections"];
         put?: never;
@@ -787,7 +987,7 @@ export interface paths {
         };
         /**
          * ListStorageConnectionSpaces
-         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+         * @description 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
          */
         get: operations["ListStorageConnectionSpaces"];
         put?: never;
@@ -2650,12 +2850,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 按项目权限发现翻译、术语同步与存储任务
-         * @description 只读投影，不新增通用任务实体。默认返回三类活动任务，组织成员可看到同项目其他成员的任务。
-         *     未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限。
+         * 按项目权限发现翻译、术语同步、存储与退出任务
+         * @description 只读投影，不新增通用任务实体。默认返回四类活动任务，组织成员可看到同项目其他成员的任务。
+         *     storage_retirement 为跨项目退出父任务，没有 project_id，只按管理归属与项目权限投影；显式传入 project_id 时父任务被排除。
+         *     未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限，也不因此获得跨项目退出父任务的读取权。
          *     state 默认 active，与 status 互斥；翻译活动状态包含 pending、running、pausing、paused。
-         *     同步和存储没有 pausing、paused。trigger_type 仅允许显式 task_type=translation。
-         *     存储任务的 waiting_retry、needs_action 属于活动状态；其实际可控制动作以存储任务详情为准。
+         *     同步、存储和退出没有 pausing、paused。trigger_type 仅允许显式 task_type=translation。
+         *     存储任务的 waiting_retry、needs_action 属于活动状态；其实际可控制动作以存储任务详情为准。退出父任务的可控制动作以 supported_actions 与退出详情为准。
          *     updated_at 区间为 [updated_from, updated_before)，按 updated_at DESC, task_type DESC, 整数 task_id DESC 排序。
          *     独立版本化游标绑定规范化筛选（不含 limit）；不可使用 Job 游标。每页重新鉴权，不提供跨请求快照。
          *     刷新从第一页开始并处理全部续页，客户端以 (task_type,task_id) 去重，单页缺失不代表任务结束。
@@ -2678,10 +2879,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 获取三类任务的独立数量摘要
-         * @description 只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。
+         * 获取四类任务的独立数量摘要
+         * @description 只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。显式 project_id 排除没有 project_id 的退出父任务。
          *     未知、重复、空或非法参数返回 400。权限与列表一致，无权项目返回零。
-         *     by_type 固定返回三类，未选类型计零，同步和存储 pausing、paused 恒为零；total 为逐字段求和。
+         *     by_type 固定返回四类，未选类型计零，同步、存储和退出的 pausing、paused 恒为零；被排除的退出父任务计零；total 为逐字段求和。
          *     pausing 为必返的非负计数，无符合任务时返回零。
          *     waiting_retry、needs_action 分开统计，翻译与术语同步的这两个计数恒为零。
          *     recent_failed 只数当前 failed 且 updated_at 位于 [recent_failed_since,as_of) 的记录，窗口为连续七天。
@@ -3276,10 +3477,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Saved or candidate OIDC configuration; issuer and client_id may be missing or empty while configuring or disabled. Populated issuer values must be absolute allowed URLs. */
         OIDCConnectionConfig: {
-            /** Format: uri */
-            issuer: string;
-            client_id: string;
+            issuer?: string;
+            client_id?: string;
             /**
              * @default client_secret_basic
              * @enum {string}
@@ -3296,7 +3497,6 @@ export interface components {
             userinfo_enabled?: boolean;
         };
         AuthConnectionPolicy: {
-            enabled: boolean;
             login_enabled: boolean;
             signup_enabled: boolean;
             link_enabled: boolean;
@@ -3333,6 +3533,8 @@ export interface components {
             authorization_url: string;
             /** Format: date-time */
             expires_at: string;
+            /** @description Transaction ID of the originating administrator connection test; empty for ordinary login flows. */
+            test_id?: string;
         };
         ExternalExchangeRequest: {
             ticket: string;
@@ -3424,6 +3626,12 @@ export interface components {
             connection_id: string;
             /** Format: int64 */
             revision: number;
+            test_id?: string;
+            /**
+             * Format: date-time
+             * @description Transaction expiry at which the matching test evidence lapses;; the saved configuration capability persists independently.
+             */
+            expires_at?: string;
         };
         ExternalExchangeResponse: components["schemas"]["ExternalSessionResponse"] | components["schemas"]["ExternalConfirmationResponse"] | components["schemas"]["ExternalProofResponse"] | components["schemas"]["ExternalTestResponse"];
         ExternalLinkedResponse: {
@@ -3461,22 +3669,20 @@ export interface components {
             oidc?: components["schemas"]["OIDCConnectionConfig"];
             oauth2?: components["schemas"]["OAuth2ConnectionConfig"];
             client_secret?: string;
-        } & ({
-            /** @enum {unknown} */
-            kind?: "oidc";
-        } | {
-            /** @enum {unknown} */
-            kind?: "generic_oauth2";
-        });
+        };
         UpdateAuthConnectionRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            /** @description ID of the administrator connection test matching these parameter changes. */
+            test_id?: string;
+            /** @description Browser-held verifier bound to the referenced test. */
+            verifier?: string;
             attribute_mappings?: components["schemas"]["AuthAttributeField"][];
             /**
              * @description Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
              * @default 3600
              */
             evidence_max_age_seconds?: number;
-            /** Format: int64 */
-            expected_revision: number;
             display_name?: string;
             description?: string;
             display_order?: number;
@@ -3486,13 +3692,21 @@ export interface components {
             client_secret?: string | null;
             policy?: components["schemas"]["AuthConnectionPolicy"];
         };
-        AuthConnectionRevisionRequest: {
+        AuthConnectionCandidateRequest: {
             /** Format: int64 */
             expected_revision: number;
+            changes?: components["schemas"]["AuthConnectionChanges"];
+        };
+        AuthConnectionActionRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            test_id?: string;
+            verifier?: string;
         };
         AuthConnectionTestRequest: {
             /** Format: int64 */
             expected_revision: number;
+            changes?: components["schemas"]["AuthConnectionChanges"];
             /** @description SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE. */
             browser_challenge: string;
             /** Format: uri */
@@ -3503,50 +3717,106 @@ export interface components {
              */
             return_to?: string;
         };
+        AuthConnectionChanges: {
+            attribute_mappings?: components["schemas"]["AuthAttributeField"][];
+            /** @default 3600 */
+            evidence_max_age_seconds?: number;
+            display_name?: string;
+            description?: string;
+            display_order?: number;
+            oidc?: components["schemas"]["OIDCConnectionConfig"];
+            oauth2?: components["schemas"]["OAuth2ConnectionConfig"];
+            /** @description Omitted keeps the current secret; null clears it; a nonempty string creates a new encrypted version. */
+            client_secret?: string | null;
+            policy?: components["schemas"]["AuthConnectionPolicy"];
+        };
         AuthConnectionSnapshot: {
             /** Format: int64 */
-            login_policy_revision?: number;
-            attribute_mappings?: components["schemas"]["AuthAttributeField"][];
+            login_policy_revision: number;
+            attribute_mappings: components["schemas"]["AuthAttributeField"][];
             /**
              * @description Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
              * @default 3600
              */
-            evidence_max_age_seconds?: number;
+            evidence_max_age_seconds: number;
             display_name: string;
             description: string;
             display_order: number;
             oidc?: components["schemas"]["OIDCConnectionConfig"];
             oauth2?: components["schemas"]["OAuth2ConnectionConfig"];
-            /** Format: int64 */
-            revision: number;
             policy: components["schemas"]["AuthConnectionPolicy"];
             has_client_secret: boolean;
             logo_url?: string | null;
         };
-        AuthConnectionValidation: {
+        AuthConnectionValidationResult: {
             fresh_supported: boolean;
-            fingerprint_matches: boolean;
             /** Format: date-time */
-            tested_at?: string | null;
+            tested_at: string | null;
+            /** @description AuthTransaction that produced the applied validation; empty before a persisted first test. */
+            applied_test_id?: string;
         };
         AuthConnectionRecord: {
             /** @description Server-assigned immutable namespace for a generic OAuth connection. */
-            readonly identity_authority_id?: string | null;
+            readonly identity_authority_id?: string;
             id: string;
             /** @enum {string} */
             kind: "password" | "oidc" | "generic_oauth2";
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Change-detection revision for optimistic concurrency; distinct from the login policy revision.
+             */
             aggregate_revision: number;
-            /** Format: int64 */
-            draft_revision?: number | null;
-            /** Format: int64 */
-            published_revision?: number | null;
+            /**
+             * @description Lifecycle state; omitted only for the built-in password connection, which never enters configuring.
+             * @enum {string}
+             */
+            state?: "configuring" | "enabled" | "disabled";
             archived: boolean;
-            has_client_secret: boolean;
-            draft?: components["schemas"]["AuthConnectionSnapshot"];
-            published?: components["schemas"]["AuthConnectionSnapshot"];
-            validation?: components["schemas"]["AuthConnectionValidation"];
+            configuration: components["schemas"]["AuthConnectionSnapshot"];
+            configuration_complete: boolean;
+            capabilities: components["schemas"]["AuthConnectionCapabilities"];
+            validation: components["schemas"]["AuthConnectionValidationResult"];
+            setup: components["schemas"]["AuthConnectionSetup"];
         };
+        AuthConnectionCapabilities: {
+            can_login: boolean;
+            can_signup: boolean;
+            can_link: boolean;
+            can_test: boolean;
+        };
+        AuthConnectionSetup: {
+            /**
+             * Format: uri
+             * @description Backend-determined callback to register at the identity provider; null when the deployment base URL or protocol cannot produce one yet.
+             */
+            callback_url: string | null;
+            completion_urls: string[];
+            configuration_complete: boolean;
+            issues: components["schemas"]["AuthConfigurationIssue"][];
+            protocol: components["schemas"]["AuthConnectionProtocolSetup"];
+        };
+        AuthConnectionProtocolSetup: {
+            required_fields: string[];
+            client_auth_methods: string[];
+            scope_guidance: string;
+        };
+        AuthConfigurationIssue: {
+            code: string;
+            field: string;
+            message: string;
+        };
+        AuthConnectionErrorProblem: {
+            /** @description urn:linguaflow:auth-connection-<code>; see AuthConnectionErrorCode for values. */
+            type: string;
+            title?: string;
+            /** @enum {integer} */
+            status: 409;
+            detail?: string;
+            issues: components["schemas"]["AuthConfigurationIssue"][];
+            impact?: components["schemas"]["AuthConnectionImpact"];
+        };
+        /** @enum {string} */
+        AuthConnectionErrorCode: "configuration-incomplete" | "deployment-incomplete" | "test-required" | "test-expired" | "test-mismatch" | "state-conflict" | "revision-conflict" | "fallback-required";
         AuthConnectionsResponse: {
             items: components["schemas"]["AuthConnectionRecord"][];
         };
@@ -3556,7 +3826,7 @@ export interface components {
             rules: components["schemas"]["AuthRulesDiagnostics"];
             valid: boolean;
             fresh_supported: boolean;
-            issues: string[];
+            issues: components["schemas"]["AuthConfigurationIssue"][];
         };
         AuthConnectionImpact: {
             /** Format: int64 */
@@ -3571,7 +3841,7 @@ export interface components {
             affected_users: number[];
             blocked_users: number[];
             affected_sessions: number;
-            can_publish: boolean;
+            can_save: boolean;
         };
         LoginMethod: {
             /** @enum {string} */
@@ -3653,8 +3923,10 @@ export interface components {
             items: components["schemas"]["TaskHistoryDeleteResult"][];
         };
         Problem: {
-            /** @description Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses storage_disk_probe_failed (503). Neither signals automatic retry. Provider authorization, quota and availability retain their separate domain codes. */
+            /** @description Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses storage_disk_probe_failed (503). Neither signals automatic retry. Provider authorization, quota and availability retain their separate domain codes. Retirement adds storage_retiring (409, new use rejected by the retirement barrier), storage_removed (410, the identity is permanently retired), storage_retirement_conflict (409, overlapping retirement or generation conflict), storage_retirement_preview_stale (409, obtain and confirm a new preview), storage_retirement_dependencies_remaining (409, authoritative dependencies remain), and storage_retirement_configuration_pending (409, deployment configuration action required). A retirement operation whose required capability stage is not enabled, or is blocked by local mode, a disabled deployment or global maintenance, returns storage_capability_unsupported (409) after authentication with no side effects. Existing domain errors keep their meanings. */
             error_code?: string;
+            /** @description Related retirement visible to the caller, including an existing conflicting task; omitted when disclosure is not authorized. */
+            retirement_id?: number;
             task_id?: number;
             operation_id?: string;
             check_id?: number;
@@ -5220,14 +5492,12 @@ export interface components {
             /** @description Server-defined dependencies of a derived field. */
             readonly derived_from?: string[];
         };
+        /** @description Saved or candidate OAuth configuration; fields may be missing or empty while configuring or disabled. Test and enable require all protocol inputs. */
         OAuth2ConnectionConfig: {
-            /** Format: uri */
-            authorization_endpoint: string;
-            /** Format: uri */
-            token_endpoint: string;
-            /** Format: uri */
-            profile_endpoint: string;
-            client_id: string;
+            authorization_endpoint?: string;
+            token_endpoint?: string;
+            profile_endpoint?: string;
+            client_id?: string;
             /**
              * @default client_secret_basic
              * @enum {string}
@@ -5235,10 +5505,13 @@ export interface components {
             client_auth_method?: "client_secret_basic" | "client_secret_post";
             /** @default [] */
             scopes?: string[];
-            subject_mapping: {
-                pointer: string;
-                /** @enum {string} */
-                type: "string" | "integer";
+            subject_mapping?: {
+                pointer?: string;
+                /**
+                 * @default string
+                 * @enum {string}
+                 */
+                type?: "string" | "integer";
             };
         };
         AuthRuleCondition: {
@@ -5269,6 +5542,8 @@ export interface components {
         AuthRulesPreviewRequest: {
             /** Format: int64 */
             expected_revision: number;
+            /** @description Optional candidate policy changes evaluated together with the simulated sources; falls back to the saved configuration when omitted. */
+            changes?: components["schemas"]["AuthConnectionChanges"];
             sources: {
                 oidc_id_token?: {
                     [key: string]: unknown;
@@ -5287,9 +5562,6 @@ export interface components {
                 [key: string]: components["schemas"]["AuthAttributeValue"];
             };
             rules: components["schemas"]["AuthRulesDiagnostics"];
-        };
-        AuthPublishProblem: components["schemas"]["Problem"] & {
-            impact: components["schemas"]["AuthConnectionImpact"];
         };
         /**
          * Format: int64
@@ -5372,17 +5644,45 @@ export interface components {
             /** @enum {string} */
             status: "deleted" | "not_found" | "forbidden" | "not_terminal" | "busy" | "blocked" | "deferred" | "failed";
         };
-        /** @description Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate. */
-        StorageRuntime: {
-            deployment_enabled: boolean;
-            maintenance: boolean;
-        };
         /** @enum {string} */
-        StorageActionReasonCode: "storage_maintenance" | "storage_deployment_disabled" | "storage_capability_unsupported" | "connection_disabled" | "storage_space_required" | "storage_check_space_limit_exceeded" | "space_disabled" | "space_read_only" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_disk_insufficient" | "storage_disk_probe_failed" | "storage_quota_exceeded" | "storage_unavailable";
+        StorageActionReasonCode: "storage_maintenance" | "storage_deployment_disabled" | "storage_capability_unsupported" | "connection_disabled" | "storage_space_required" | "storage_check_space_limit_exceeded" | "space_disabled" | "space_read_only" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_disk_insufficient" | "storage_disk_probe_failed" | "storage_quota_exceeded" | "storage_unavailable" | "storage_retiring" | "storage_removed" | "storage_retirement_conflict" | "storage_retirement_preview_stale" | "storage_retirement_dependencies_remaining" | "storage_retirement_configuration_pending";
         /** @description Metadata-only admission snapshot, not a guarantee of provider I/O success. Allowed actions have an empty reason array; denied actions have at least one stable reason. */
         StorageActionAvailability: {
             allowed: boolean;
             reason_codes: components["schemas"]["StorageActionReasonCode"][];
+        };
+        /**
+         * @description Independent retirement contract. Support for S3, project migration or connection disable does not imply that complete connection removal is available; clients must read this contract instead of inferring it. Contract version 1 exposes two independent stages: unused_removal for targets with no remote use facts, and in_use_retirement for targets that still need project migration, cleanup and marker recovery. Each stage is computed from the running service configuration, so a stage that is not enabled, or is blocked by local mode, a disabled deployment or global maintenance, reports storage_capability_unsupported or the matching availability reason.
+         * @example {
+         *       "contract_version": 1,
+         *       "unused_removal": {
+         *         "allowed": false,
+         *         "reason_codes": [
+         *           "storage_capability_unsupported"
+         *         ]
+         *       },
+         *       "in_use_retirement": {
+         *         "allowed": false,
+         *         "reason_codes": [
+         *           "storage_capability_unsupported"
+         *         ]
+         *       }
+         *     }
+         */
+        StorageRetirementCapabilities: {
+            /**
+             * @description Retirement contract version; version 1 covers preview, acceptance, plan update, resume, cancel and restricted authorization recovery.
+             * @enum {integer}
+             */
+            contract_version: 1;
+            unused_removal: components["schemas"]["StorageActionAvailability"];
+            in_use_retirement: components["schemas"]["StorageActionAvailability"];
+        };
+        /** @description Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate. retirement carries the independent retirement contract version and staged action availability. */
+        StorageRuntime: {
+            deployment_enabled: boolean;
+            maintenance: boolean;
+            retirement: components["schemas"]["StorageRetirementCapabilities"];
         };
         /**
          * @example {
@@ -5390,7 +5690,22 @@ export interface components {
          *       "owner_id": 1,
          *       "runtime": {
          *         "deployment_enabled": false,
-         *         "maintenance": false
+         *         "maintenance": false,
+         *         "retirement": {
+         *           "contract_version": 1,
+         *           "unused_removal": {
+         *             "allowed": false,
+         *             "reason_codes": [
+         *               "storage_capability_unsupported"
+         *             ]
+         *           },
+         *           "in_use_retirement": {
+         *             "allowed": false,
+         *             "reason_codes": [
+         *               "storage_capability_unsupported"
+         *             ]
+         *           }
+         *         }
          *       },
          *       "management_actions": {
          *         "create_connection": {
@@ -5411,13 +5726,215 @@ export interface components {
                 create_connection: components["schemas"]["StorageActionAvailability"];
             };
         };
+        /** @enum {string} */
+        StorageRetirementTargetKind: "connection" | "space";
+        /** Format: int64 */
+        StorageRetirementGeneration: number;
+        /** @description One destination per project. Project migration authority is checked separately from connection/space management, at preview, acceptance and child acceptance. A destination must be outside the complete retiring source set and pass existing policy, capacity, authorization and lifecycle checks. Already accepted child input is immutable; updating a plan cannot enlarge the retirement scope. */
+        StorageRetirementProjectPlan: {
+            project_id: number;
+            target_space_id: number;
+            expected_storage_generation: components["schemas"]["StorageRetirementGeneration"];
+            expected_target_management_generation: components["schemas"]["StorageRetirementGeneration"];
+            expected_target_execution_generation: components["schemas"]["StorageRetirementGeneration"];
+        };
+        StorageRetirementPreviewRequest: {
+            target_kind: components["schemas"]["StorageRetirementTargetKind"];
+            target_id: number;
+            /** @description Optional per-project destinations; omitted projects may remain blocked for their authorized managers. */
+            plan?: components["schemas"]["StorageRetirementProjectPlan"][];
+            /** @description Dependency page cursor; when present, preview_revision is required to retain the same snapshot. */
+            cursor?: number;
+            /** @default 50 */
+            limit?: number;
+            /** @description Required with cursor; an expired or changed snapshot returns storage_retirement_preview_stale. */
+            preview_revision?: string;
+        };
+        /** @enum {string} */
+        StorageRetirementScope: "user" | "org" | "site";
+        /**
+         * @description Stored configuration is managed through the service; deployment configuration requires operator action and never accepts uploaded retirement credentials.
+         * @enum {string}
+         */
+        StorageConfigurationSource: "stored" | "deployment";
+        StorageRetirementSpaceScope: {
+            space_id: number;
+            space_identity: string;
+            connection_id: number;
+            management_generation: components["schemas"]["StorageRetirementGeneration"];
+            execution_generation: components["schemas"]["StorageRetirementGeneration"];
+        };
+        /** @description Complete normalized confirmation scope, never paginated. A site space entry normalizes to its entire backend connection and all non-removed child spaces; BYOS space retirement covers only that space. Connection retirement freezes all non-removed children. The caller must echo this entire object unchanged. target_identity is an opaque immutable identity, never a provider path. Management generations protect configuration; execution generations fence I/O. Neither generations nor preview revisions grant authority. */
+        StorageRetirementTarget: {
+            target_kind: components["schemas"]["StorageRetirementTargetKind"];
+            target_id: number;
+            target_identity: string;
+            scope: components["schemas"]["StorageRetirementScope"];
+            /** @description Current user ID for user, organization ID for org, and 0 for site. */
+            owner_id: number;
+            configuration_source: components["schemas"]["StorageConfigurationSource"];
+            /** @description Required in every normalized target and confirmed scope. For deployment configuration, the actual non-empty backend_id from the loaded deployment configuration, displayed explicitly so the operator can identify the backend configuration to remove and echoed unchanged on confirmation. Never substitute a connection ID or opaque target_identity. For stored configuration, always null. */
+            backend_id: string | null;
+            management_generation: components["schemas"]["StorageRetirementGeneration"];
+            execution_generation: components["schemas"]["StorageRetirementGeneration"];
+            /** @description Complete covered space set; an unused connection may have none. */
+            spaces: components["schemas"]["StorageRetirementSpaceScope"][];
+        };
+        /**
+         * @description Retirement-only permission and destination assessment reasons. forbidden denotes the caller lacking the required project or management permission; storage_permission_denied denotes provider permission failure. Preserve existing destination discovery reasons such as policy_disallowed and space_unverified. This enum does not expand the reason vocabulary or semantics of management actions.
+         * @enum {string}
+         */
+        StorageRetirementAssessmentReasonCode: "forbidden" | "policy_disallowed" | "selection_required" | "byos_disabled" | "storage_policy_violation" | "storage_permission_denied" | "space_unverified" | "storage_operation_in_progress" | "project_not_empty" | "storage_generation_conflict" | "storage_maintenance" | "storage_deployment_disabled" | "storage_capability_unsupported" | "connection_disabled" | "storage_space_required" | "storage_check_space_limit_exceeded" | "space_disabled" | "space_read_only" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_disk_insufficient" | "storage_disk_probe_failed" | "storage_quota_exceeded" | "storage_unavailable" | "storage_retiring" | "storage_removed" | "storage_retirement_conflict" | "storage_retirement_preview_stale" | "storage_retirement_dependencies_remaining" | "storage_retirement_configuration_pending";
+        /** @description Metadata-only retirement assessment of current actor permissions or destination eligibility, not a management action or guarantee of provider I/O success. Allowed assessments have no reasons; denied assessments have at least one stable, sanitized reason. Connection management never implies project migration permission. */
+        StorageRetirementAssessment: {
+            allowed: boolean;
+            reason_codes: components["schemas"]["StorageRetirementAssessmentReasonCode"][];
+        };
+        /** @description Only returned for a project the caller may view; hidden projects appear solely in redacted dependency aggregates. */
+        StorageRetirementProjectAssessment: {
+            project_id: number;
+            plan?: components["schemas"]["StorageRetirementProjectPlan"];
+            permissions: {
+                view: components["schemas"]["StorageRetirementAssessment"];
+                migrate: components["schemas"]["StorageRetirementAssessment"];
+                update_plan: components["schemas"]["StorageRetirementAssessment"];
+            };
+            target_check: components["schemas"]["StorageRetirementAssessment"];
+            accepted: boolean;
+            /** @description Included only when the caller may view this child task. */
+            migration_task_id?: number;
+        };
+        /** @enum {string} */
+        StorageRetirementStatus: "pending" | "running" | "waiting_retry" | "needs_action" | "completed" | "failed" | "cancelled";
+        /** @description Metadata-only projection. No credentials, ciphertext, object keys, provider versions, bucket/prefix, leases or signed URLs. Without project visibility, aggregate by kind, set redacted=true and omit project_id, space_id, migration_task_id and protected_bytes. Reason codes remain sanitized. */
+        StorageRetirementDependency: {
+            /** @enum {string} */
+            kind: "project_binding" | "active_location" | "candidate" | "probe" | "reservation" | "unknown_write" | "deletion" | "execution_reference" | "backup_pin" | "default_policy" | "configuration" | "marker";
+            status: components["schemas"]["StorageRetirementStatus"];
+            redacted: boolean;
+            count: number;
+            project_id?: number;
+            space_id?: number;
+            migration_task_id?: number;
+            /** Format: int64 */
+            protected_bytes?: number;
+            /** Format: date-time */
+            next_check_at?: string | null;
+            /** @description Stable domain codes; permission, capacity, maintenance and missing-object reasons remain distinct. */
+            reason_codes: string[];
+        };
+        /** @description Stable cursor pagination of the authorized projection. Never infer safe removal from an empty page, redacted details, a failed page load or incomplete pagination. Completion depends on authoritative inventory, not this projection. */
+        StorageRetirementDependencyPage: {
+            items: components["schemas"]["StorageRetirementDependency"][];
+            /** @description Opaque numeric continuation; null exactly when has_more is false. */
+            next_cursor: number | null;
+            has_more: boolean;
+        };
+        /** @description Read-only metadata snapshot only, never a remote capability guarantee. Revision covers normalized target, complete scope/generations, bindings/objects, defaults, policy and confirmed destinations. Acceptance rechecks all facts transactionally. */
+        StorageRetirementPreview: {
+            /** @enum {integer} */
+            contract_version: 1;
+            target: components["schemas"]["StorageRetirementTarget"];
+            /** @description Signed preview revision; valid for five minutes and bound to the requesting actor. A service restart rotates the signing key, so revisions issued before a restart are stale and the caller must re-preview. An expired, restarted or changed snapshot returns storage_retirement_preview_stale. */
+            preview_revision: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @enum {string} */
+            required_capability: "unused_removal" | "in_use_retirement";
+            availability: components["schemas"]["StorageRetirementAssessment"];
+            projects: components["schemas"]["StorageRetirementProjectAssessment"][];
+            dependencies: components["schemas"]["StorageRetirementDependencyPage"];
+            impact: {
+                space_count: number;
+                project_count: number;
+                hidden_project_count: number;
+                configuration_action_required: boolean;
+            };
+        };
+        /** @enum {string} */
+        StorageRetirementPhase: "draining" | "migrating" | "waiting_cleanup" | "finalizing" | "waiting_configuration" | "completed";
+        /** @description Recomputed using current actor permissions and durable state. Connection management never grants project migration authority. Cancel is absent from finalizing onward. Resume continues the same task. Merely viewing progress does not require permission to migrate every project. update_plan, resume, cancel and recover_authorization are recomputed per request; cancel disappears from finalizing onward and resume only continues the same durable task. */
+        StorageRetirementAllowedActions: ("update_plan" | "resume" | "cancel" | "recover_authorization")[];
+        StorageRetirementResult: {
+            /** @enum {string} */
+            cleanup_status: "pending" | "running" | "blocked" | "completed";
+            configuration_source: components["schemas"]["StorageConfigurationSource"];
+            /** @enum {string} */
+            configuration_status: "not_required" | "pending" | "completed";
+            /** @description Sanitized operator guidance; completion requires actual loaded configuration verification, never a client acknowledgement. */
+            configuration_actions: ("change_default" | "restore_deployment_authorization" | "remove_backend_configuration" | "reload_configuration")[];
+        };
+        /** @description Dedicated cross-project parent, with no fabricated project_id. Failed retains lifecycle=retiring and exclusive ownership; resume uses this same identity. Completed means the target and every covered space are removed, with cleanup and configuration obligations satisfied. Cancellation does not roll back migrated projects or override subsequent disable/revocation. Historical results remain queryable under management ownership permissions. */
+        StorageRetirement: {
+            retirement_id: number;
+            /** @enum {integer} */
+            contract_version: 1;
+            target: components["schemas"]["StorageRetirementTarget"];
+            status: components["schemas"]["StorageRetirementStatus"];
+            phase: components["schemas"]["StorageRetirementPhase"];
+            generation: components["schemas"]["StorageRetirementGeneration"];
+            cancel_requested: boolean;
+            /**
+             * Format: date-time
+             * @description Durable retention/pin waiting does not consume failure retry attempts.
+             */
+            next_check_at: string | null;
+            reason_codes: string[];
+            allowed_actions: components["schemas"]["StorageRetirementAllowedActions"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            result: components["schemas"]["StorageRetirementResult"];
+        };
+        StorageRetirementList: {
+            items: components["schemas"]["StorageRetirement"][];
+            next_cursor: number | null;
+            has_more: boolean;
+        };
+        /** @description Echo the full normalized target as confirmed_scope, including management and execution generations. No omitted or additional source spaces. An explicit empty plan is permitted only as evaluated by preview and actual capability. Same idempotency key with different confirmed input conflicts; an accepted idempotent result is replayed first, reauthorized and returned as the original identity, even after removal. */
+        StorageRetirementCreateRequest: {
+            /** @description Signed preview revision; valid for five minutes and bound to the requesting actor. A service restart rotates the signing key, so revisions issued before a restart are stale and the caller must re-preview. An expired, restarted or changed snapshot returns storage_retirement_preview_stale. */
+            preview_revision: string;
+            confirmed_scope: components["schemas"]["StorageRetirementTarget"];
+            plan: components["schemas"]["StorageRetirementProjectPlan"][];
+        };
+        StorageRetirementDetail: {
+            retirement: components["schemas"]["StorageRetirement"];
+            /** @description Authorized project/child projections for this dependency page; never include hidden project identities. */
+            projects: components["schemas"]["StorageRetirementProjectAssessment"][];
+            dependencies: components["schemas"]["StorageRetirementDependencyPage"];
+        };
+        StorageRetirementPlanRequest: {
+            expected_generation: components["schemas"]["StorageRetirementGeneration"];
+            /** @description Signed preview revision; valid for five minutes and bound to the requesting actor. A service restart rotates the signing key, so revisions issued before a restart are stale and the caller must re-preview. An expired, restarted or changed snapshot returns storage_retirement_preview_stale. */
+            preview_revision: string;
+            confirmed_scope: components["schemas"]["StorageRetirementTarget"];
+            /** @description Replace only unaccepted project destinations; never rewrite accepted child inputs or expand the source scope. */
+            plan: components["schemas"]["StorageRetirementProjectPlan"][];
+        };
+        StorageRetirementActionRequest: {
+            expected_generation: components["schemas"]["StorageRetirementGeneration"];
+        };
+        /** @description Stored connections only, with connection management permission, while the same retirement is blocked in finalizing. Save candidate credentials through an authorization version restricted to this retirement's exact verification/cleanup. Never activate ordinary business authorization, recreate removed markers, enable the connection or unlock ordinary I/O. Deployment sources reject uploaded credentials and return configuration recovery guidance. Never echo secrets. */
+        StorageRetirementRecoverAuthorizationRequest: {
+            expected_generation: components["schemas"]["StorageRetirementGeneration"];
+            expected_management_generation: components["schemas"]["StorageRetirementGeneration"];
+            credentials: {
+                access_key_id: string;
+                secret_access_key: string;
+                session_token?: string;
+                /** Format: date-time */
+                expires_at?: string | null;
+            };
+        };
         StorageOption: {
             space_id: number;
             name: string;
             /** @enum {string} */
             scope: "site" | "user" | "org";
             selectable: boolean;
-            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
+            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty" | "storage_retiring" | "storage_removed" | "storage_retirement_conflict")[];
         };
         StorageOptions: {
             runtime: components["schemas"]["StorageRuntime"];
@@ -5434,7 +5951,7 @@ export interface components {
             };
             default_space_id: number | null;
             /** @enum {string|null} */
-            default_unavailable_reason: "policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty" | null;
+            default_unavailable_reason: "policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty" | "storage_removed" | "storage_retirement_conflict" | null;
             items: components["schemas"]["StorageOption"][];
             /** Format: int64 */
             storage_generation?: number;
@@ -5536,7 +6053,22 @@ export interface components {
          *       "default_space_capacity_bytes": null,
          *       "runtime": {
          *         "deployment_enabled": false,
-         *         "maintenance": false
+         *         "maintenance": false,
+         *         "retirement": {
+         *           "contract_version": 1,
+         *           "unused_removal": {
+         *             "allowed": false,
+         *             "reason_codes": [
+         *               "storage_capability_unsupported"
+         *             ]
+         *           },
+         *           "in_use_retirement": {
+         *             "allowed": false,
+         *             "reason_codes": [
+         *               "storage_capability_unsupported"
+         *             ]
+         *           }
+         *         }
          *       },
          *       "allowed_policy_modes": [
          *         "site_only"
@@ -5578,7 +6110,14 @@ export interface components {
             /** Format: int64 */
             logical_limit_bytes: number | null;
         };
+        /**
+         * @description Independent of administrative status, health and authorization. Existing identities start available, including disabled ones. Retiring rejects new bindings, incoming migrations and ordinary writes; finalizing also denies ordinary reads. Failed retirement retains the barrier. Removed permanently denies I/O for this identity. Admission, migration and configuration gates all read this same lifecycle fact.
+         * @enum {string}
+         */
+        StorageLifecycle: "available" | "retiring" | "removed";
+        /** @description Retire enters the retirement workflow and is gated by the retirement contract plus the connection's current lifecycle, permissions and maintenance state. Other actions retain their existing behavior. */
         StorageConnectionManagementActions: {
+            retire: components["schemas"]["StorageActionAvailability"];
             create_space: components["schemas"]["StorageActionAvailability"];
             authorize_read: components["schemas"]["StorageActionAvailability"];
             authorize_write: components["schemas"]["StorageActionAvailability"];
@@ -5588,6 +6127,10 @@ export interface components {
             set_status: components["schemas"]["StorageActionAvailability"];
         };
         StorageConnection: {
+            lifecycle: components["schemas"]["StorageLifecycle"];
+            /** @description Owning retirement, including failed tasks that still hold the barrier; null when none. */
+            retirement_id: number | null;
+            configuration_source: components["schemas"]["StorageConfigurationSource"];
             management_actions: components["schemas"]["StorageConnectionManagementActions"];
             id: number;
             name: string;
@@ -5609,6 +6152,7 @@ export interface components {
             checked_at?: string | null;
             check_id?: number | null;
         };
+        /** @description Lifecycle-filtered connection projection. The default list hides removed rows; available, retiring, removed and all select one lifecycle explicitly. A removed row keeps its tombstone identity for authorized history but no longer serves storage I/O. */
         StorageConnectionList: {
             items: components["schemas"]["StorageConnection"][];
         };
@@ -5628,11 +6172,17 @@ export interface components {
             /** Format: int64 */
             expected_generation: number;
         };
+        /** @description Retire enters the retirement workflow and is gated by the retirement contract plus the connection's current lifecycle, permissions and maintenance state. Other actions retain their existing behavior. */
         StorageSpaceManagementActions: {
+            retire: components["schemas"]["StorageActionAvailability"];
             set_quota: components["schemas"]["StorageActionAvailability"];
             set_status: components["schemas"]["StorageActionAvailability"];
         };
         StorageSpace: {
+            lifecycle: components["schemas"]["StorageLifecycle"];
+            /** @description Owning retirement, including a connection retirement covering this space; null when none. */
+            retirement_id: number | null;
+            configuration_source: components["schemas"]["StorageConfigurationSource"];
             /**
              * Format: int64
              * @description Business quota headroom, null for unlimited; not physical disk or bucket free space.
@@ -5662,6 +6212,7 @@ export interface components {
             /** Format: int64 */
             pending_delete_bytes: number;
         };
+        /** @description Lifecycle-filtered space projection. The default list hides removed rows; a space may be retiring because of its own retirement or the covering connection retirement. */
         StorageSpaceList: {
             items: components["schemas"]["StorageSpace"][];
         };
@@ -5715,7 +6266,7 @@ export interface components {
                 historical: boolean;
                 owner_id: number;
             } | null;
-            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty")[];
+            reason_codes: ("policy_disallowed" | "selection_required" | "byos_disabled" | "storage_deployment_disabled" | "storage_maintenance" | "connection_disabled" | "storage_auth_required" | "storage_crypto_unavailable" | "storage_permission_denied" | "storage_unavailable" | "space_unverified" | "space_read_only" | "space_disabled" | "storage_quota_exceeded" | "storage_operation_in_progress" | "project_not_empty" | "storage_removed" | "storage_retirement_conflict")[];
         };
         StorageBindingRequest: {
             space_id: number;
@@ -6242,7 +6793,48 @@ export interface components {
              */
             task_type: "storage";
         };
-        OperationSummary: components["schemas"]["TranslationOperation"] | components["schemas"]["GlossarySyncOperation"] | components["schemas"]["StorageOperation"];
+        /** @description 专用跨项目退出父任务投影。父任务没有虚构的 project_id，因此不继承带 project_id 的 OperationBase；显式 project_id 筛选必须排除父任务。只投影任务中心需要的稳定字段， 不返回凭据、对象键、bucket/prefix、租约、内部 CAS 或依赖明细。历史结果按管理归属 权限可查，移除完成后保留 tombstone 与已完成的幂等结果。 */
+        StorageRetirementOperation: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            task_type: "storage_retirement";
+            /** @description 退出任务标识；与项目任务一致以字符串返回，避免大整数精度损失。 */
+            task_id: string;
+            scope: components["schemas"]["StorageRetirementScope"];
+            /** @description user 为当前用户 ID，org 为组织 ID，site 为 0，与退出任务归属一致。 */
+            owner_id: number;
+            target_kind: components["schemas"]["StorageRetirementTargetKind"];
+            target_id: number;
+            /** @description 目标显示名，来自连接或空间；不含 provider 路径、凭据或对象键。 */
+            name: string;
+            status: components["schemas"]["StorageRetirementStatus"];
+            phase: components["schemas"]["StorageRetirementPhase"];
+            /** @description 脱敏的稳定领域错误码；空字符串表示无错误，不返回错误正文。 */
+            error_code: string;
+            /**
+             * Format: date-time
+             * @description 持久等待（保留期、pin、部署配置）的下一次检查时间；纯等待不消耗失败重试次数。
+             */
+            next_check_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            /**
+             * @description 退出父任务承担屏障与恢复依据，本功能不可删除，始终为 false。
+             * @enum {boolean}
+             */
+            readonly can_delete: false;
+            /** @description 类型能力，不是当前状态或用户权限许可；执行时必须再次鉴权。 */
+            supported_actions: ("view" | "resume" | "cancel")[];
+        };
+        OperationSummary: components["schemas"]["TranslationOperation"] | components["schemas"]["GlossarySyncOperation"] | components["schemas"]["StorageOperation"] | components["schemas"]["StorageRetirementOperation"];
         OperationListResponse: {
             items: components["schemas"]["OperationSummary"][];
             next_cursor?: string;
@@ -6262,6 +6854,7 @@ export interface components {
                 translation: components["schemas"]["OperationCounts"];
                 glossary_sync: components["schemas"]["OperationCounts"];
                 storage: components["schemas"]["OperationCounts"];
+                storage_retirement: components["schemas"]["OperationCounts"];
             };
             /** Format: date-time */
             recent_failed_since: string;
@@ -6770,9 +7363,11 @@ export interface components {
         Limit: number;
         AfterSeq: number;
         BeforeSeq: number;
+        /** @description Lifecycle filter for connection and space lists. Omitted returns available and retiring only; removed rows are hidden by default and need this explicit filter or all. available, retiring and removed return their own lifecycle; all includes removed history. Removed history keeps management-ownership authorization, never revives the identity and never relaxes admission, migration or configuration gates. */
+        storageLifecycleFilter: "available" | "retiring" | "removed" | "all";
         jobProjectFilter: number;
         jobTriggerFilter: "manual" | "file_update" | "glossary_change" | "web_edit";
-        taskType: "translation" | "glossary_sync" | "storage";
+        taskType: "translation" | "glossary_sync" | "storage" | "storage_retirement";
     };
     requestBodies: never;
     headers: never;
@@ -6965,7 +7560,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    GetPublishedAuthConnectionLogo: {
+    GetPublicAuthConnectionLogo: {
         parameters: {
             query?: never;
             header?: never;
@@ -7229,6 +7824,37 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    PreviewAuthConnectionAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionCandidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Attribute catalogue for the candidate configuration */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthAttributeCatalog"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     PreviewAuthConnectionRules: {
         parameters: {
             query?: never;
@@ -7271,7 +7897,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+                "application/json": components["schemas"]["AuthConnectionCandidateRequest"];
             };
         };
         responses: {
@@ -7339,7 +7965,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+                "application/json": components["schemas"]["AuthConnectionCandidateRequest"];
             };
         };
         responses: {
@@ -7362,7 +7988,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    PublishAuthConnection: {
+    ConfigureAuthConnection: {
         parameters: {
             query?: never;
             header?: never;
@@ -7373,7 +7999,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+                "application/json": components["schemas"]["AuthConnectionActionRequest"];
             };
         };
         responses: {
@@ -7390,15 +8016,83 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
-            /** @description Revision conflict or users without a verified fallback. Safety conflicts include the current impact and remediation. */
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    EnableAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionRecord"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Revision conflict, incomplete configuration, missing/expired/mismatched test evidence, state conflict, or users without a verified fallback. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["AuthPublishProblem"] | components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["AuthConnectionErrorProblem"] | components["schemas"]["Problem"];
                 };
             };
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    DisableAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthConnectionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionRecord"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             429: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
@@ -7415,7 +8109,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+                "application/json": components["schemas"]["AuthConnectionActionRequest"];
             };
         };
         responses: {
@@ -7449,7 +8143,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AuthConnectionRevisionRequest"];
+                "application/json": components["schemas"]["AuthConnectionActionRequest"];
             };
         };
         responses: {
@@ -7472,11 +8166,9 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    GetDraftAuthConnectionLogo: {
+    GetAuthConnectionLogo: {
         parameters: {
-            query: {
-                expected_revision: number;
-            };
+            query?: never;
             header?: never;
             path: {
                 connectionId: string;
@@ -7498,7 +8190,6 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
             429: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
@@ -7649,6 +8340,460 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateStorageRetirementPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRetirementPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Read-only metadata snapshot; never a remote capability guarantee. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageRetirementPreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "title": "Storage retiring",
+                     *       "status": 409,
+                     *       "error_code": "storage_retiring",
+                     *       "retirement_id": 42
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStorageRetirements: {
+        parameters: {
+            query: {
+                scope: "user" | "org" | "site";
+                owner_id: number;
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only metadata snapshot; never a remote capability guarantee. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageRetirementList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "title": "Storage retiring",
+                     *       "status": 409,
+                     *       "error_code": "storage_retiring",
+                     *       "retirement_id": 42
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateStorageRetirement: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRetirementCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted retirement task; immediate completion returns the same queryable resource. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageRetirement"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "title": "Storage retiring",
+                     *       "status": 409,
+                     *       "error_code": "storage_retiring",
+                     *       "retirement_id": 42
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStorageRetirement: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only metadata snapshot; never a remote capability guarantee. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageRetirementDetail"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "title": "Storage retiring",
+                     *       "status": 409,
+                     *       "error_code": "storage_retiring",
+                     *       "retirement_id": 42
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateStorageRetirementPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRetirementPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Read-only metadata snapshot; never a remote capability guarantee. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageRetirement"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "title": "Storage retiring",
+                     *       "status": 409,
+                     *       "error_code": "storage_retiring",
+                     *       "retirement_id": 42
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ResumeStorageRetirement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRetirementActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted retirement task; immediate completion returns the same queryable resource. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageRetirement"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "title": "Storage retiring",
+                     *       "status": 409,
+                     *       "error_code": "storage_retiring",
+                     *       "retirement_id": 42
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CancelStorageRetirement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRetirementActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted retirement task; immediate completion returns the same queryable resource. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageRetirement"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "title": "Storage retiring",
+                     *       "status": 409,
+                     *       "error_code": "storage_retiring",
+                     *       "retirement_id": 42
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RecoverStorageRetirementAuthorization: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                retirementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRetirementRecoverAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted retirement task; immediate completion returns the same queryable resource. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageRetirement"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "title": "Storage retiring",
+                     *       "status": 409,
+                     *       "error_code": "storage_retiring",
+                     *       "retirement_id": 42
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -7873,7 +9018,10 @@ export interface operations {
     };
     ListSiteStorageConnections: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Lifecycle filter for connection and space lists. Omitted returns available and retiring only; removed rows are hidden by default and need this explicit filter or all. available, retiring and removed return their own lifecycle; all includes removed history. Removed history keeps management-ownership authorization, never revives the identity and never relaxes admission, migration or configuration gates. */
+                lifecycle?: components["parameters"]["storageLifecycleFilter"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7897,7 +9045,10 @@ export interface operations {
     };
     ListStorageConnections: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Lifecycle filter for connection and space lists. Omitted returns available and retiring only; removed rows are hidden by default and need this explicit filter or all. available, retiring and removed return their own lifecycle; all includes removed history. Removed history keeps management-ownership authorization, never revives the identity and never relaxes admission, migration or configuration gates. */
+                lifecycle?: components["parameters"]["storageLifecycleFilter"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7949,7 +9100,10 @@ export interface operations {
     };
     ListOrgStorageConnections: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Lifecycle filter for connection and space lists. Omitted returns available and retiring only; removed rows are hidden by default and need this explicit filter or all. available, retiring and removed return their own lifecycle; all includes removed history. Removed history keeps management-ownership authorization, never revives the identity and never relaxes admission, migration or configuration gates. */
+                lifecycle?: components["parameters"]["storageLifecycleFilter"];
+            };
             header?: never;
             path: {
                 orgId: number;
@@ -8035,7 +9189,10 @@ export interface operations {
     };
     ListStorageConnectionSpaces: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Lifecycle filter for connection and space lists. Omitted returns available and retiring only; removed rows are hidden by default and need this explicit filter or all. available, retiring and removed return their own lifecycle; all includes removed history. Removed history keeps management-ownership authorization, never revives the identity and never relaxes admission, migration or configuration gates. */
+                lifecycle?: components["parameters"]["storageLifecycleFilter"];
+            };
             header?: never;
             path: {
                 connectionId: number;

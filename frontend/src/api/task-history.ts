@@ -22,7 +22,7 @@ export const validTaskHistoryTarget = (target: TaskHistoryTarget): boolean =>
   Number.isSafeInteger(target.project_id) &&
   target.project_id > 0
 export const toTaskHistoryItem = (operation: Operation): TaskHistoryItem | null => {
-  if (operation.task_type === 'storage') return null
+  if (operation.task_type !== 'translation' && operation.task_type !== 'glossary_sync') return null
   const target = {
     kind: operation.task_type,
     id: operation.task_id,
