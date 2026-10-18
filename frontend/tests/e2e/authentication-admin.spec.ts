@@ -1,116 +1,204 @@
 import { expect, test } from '@playwright/test'
 import { json, mockApp } from './fixtures'
+import {
+  authDiagnostics,
+  b4ConnectionCalls,
+  mockB4Connection,
+  oidcConnection,
+  type B4ConnectionHandler,
+} from './auth-admin-b4-fixtures'
 
-const rules = { mode: 'unrestricted' }
-const diagnostics = Object.fromEntries(
-  ['login', 'signup', 'link'].map((purpose) => [
-    purpose,
-    { status: 'pass', retryable: false, conditions: [] },
-  ]),
-)
-const record = {
-  id: 'company',
-  kind: 'generic_oauth2',
-  aggregate_revision: 3,
-  draft_revision: 2,
-  published_revision: null,
-  archived: false,
-  has_client_secret: true,
-  identity_authority_id: 'authority-company',
-  draft: {
-    display_name: 'Company OAuth',
-    description: '',
-    display_order: 0,
-    revision: 2,
-    has_client_secret: true,
-    attribute_mappings: [],
-    evidence_max_age_seconds: 3600,
-    oauth2: {
-      authorization_endpoint: 'https://idp.example/authorize',
-      token_endpoint: 'https://idp.example/token',
-      profile_endpoint: 'https://idp.example/user',
-      client_id: 'application',
-      client_auth_method: 'client_secret_basic',
-      scopes: [],
-      subject_mapping: { pointer: '/id', type: 'integer' },
-    },
-    policy: {
-      enabled: true,
-      login_enabled: true,
-      signup_enabled: true,
-      link_enabled: true,
-      login_rules: rules,
-      signup_rules: rules,
-      link_rules: rules,
-    },
-  },
-  validation: { fresh_supported: false, fingerprint_matches: true },
-}
+const baseRecord = () => oidcConnection()
 
-test('a publication conflict retains the draft and exposes the required remediation', async ({
+test('create, copy callback, save conflicting candidate, reconnect, then enable', async ({
   page,
 }) => {
   await mockApp(page)
-  let publications = 0
-  await page.route('**/api/v1/admin/auth-connections**', (route) => {
-    const url = new URL(route.request().url())
-    if (url.pathname.endsWith('/attributes'))
-      return json(route, { revision: 2, fields: [], operators: {} })
-    if (url.pathname.endsWith('/check'))
-      return json(route, {
-        valid: true,
-        fresh_supported: false,
-        issues: [],
-        revision: 2,
-        rules: diagnostics,
+  const configured = baseRecord()
+  let record = oidcConnection({
+    ...configured,
+    aggregate_revision: 1,
+    configuration_complete: false,
+    configuration: {
+      ...configured.configuration,
+      has_client_secret: false,
+      oidc: { ...configured.configuration.oidc!, issuer: '', client_id: '' },
+    },
+  })
+  let created = false
+  let saveConflict = true
+  let saved: Record<string, unknown> | undefined
+  const calls = b4ConnectionCalls()
+  await page.route('**/api/v1/admin/auth-connections?*', (route) =>
+    json(route, { items: created ? [record] : [] }),
+  )
+  await page.route('**/api/v1/admin/auth-connections', (route) => {
+    if (route.request().method() !== 'POST') return json(route, { items: created ? [record] : [] })
+    expect(route.request().postDataJSON()).toEqual({
+      kind: 'oidc',
+      display_name: 'Company SSO',
+      description: 'Production identity provider',
+    })
+    created = true
+    return json(route, record, 201)
+  })
+  await page.route('**/api/v1/admin/auth-connections/company', async (route) => {
+    if (route.request().method() !== 'PATCH') return json(route, record)
+    saved = route.request().postDataJSON()
+    calls.save += 1
+    if (saveConflict) {
+      saveConflict = false
+      record = oidcConnection({
+        aggregate_revision: 8,
+        configuration: {
+          ...record.configuration,
+          oidc: {
+            ...record.configuration.oidc!,
+            issuer: 'https://writer.example',
+            client_id: 'writer-client',
+          },
+        },
       })
-    if (url.pathname.endsWith('/impact'))
-      return json(route, {
-        revision: 2,
-        affected_users: [2],
-        blocked_users: [],
-        affected_sessions: 2,
-        can_publish: true,
-      })
-    if (url.pathname.endsWith('/publish')) {
-      publications++
       return json(
         route,
         {
-          type: 'urn:linguaflow:authentication-publish-blocked',
-          title: '发布受阻',
-          detail: '请先为用户 2 验证备用登录方式',
+          type: 'urn:linguaflow:auth-connection-revision-conflict',
+          title: 'Revision conflict',
           status: 409,
-          impact: {
-            revision: 3,
-            affected_users: [2],
-            blocked_users: [2],
-            affected_sessions: 2,
-            can_publish: false,
-            remediation: '请先为用户 2 验证备用登录方式',
-          },
+          code: 'revision-conflict',
         },
         409,
       )
     }
-    return json(route, url.pathname.endsWith('/company') ? record : { items: [record] })
+    const body = saved!
+    record = oidcConnection({
+      aggregate_revision: 9,
+      configuration: {
+        ...record.configuration,
+        oidc: {
+          ...record.configuration.oidc!,
+          issuer: body.oidc.issuer,
+          client_id: body.oidc.client_id,
+        },
+      },
+    })
+    return json(route, record)
   })
   await page.goto('/admin/authentication')
-  await page
-    .getByTestId('auth-connection-company')
-    .getByRole('button', { name: '编辑草稿', exact: true })
-    .click()
-  await page.getByRole('button', { name: '检查配置', exact: true }).click()
-  await expect(page.getByText('配置检查通过', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '影响评估', exact: true }).click()
-  await page.getByRole('checkbox', { name: '确认发布此版本' }).check()
-  await page.getByRole('button', { name: '发布', exact: true }).click()
-  await expect.poll(() => publications).toBe(1)
-  await expect(page.getByText('请先为用户 2 验证备用登录方式').first()).toBeVisible()
-  await expect(page.getByRole('button', { name: '发布', exact: true })).toBeDisabled()
-  await expect(page.getByRole('textbox', { name: '显示名称', exact: true })).toHaveValue(
-    'Company OAuth',
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.goto('/admin/authentication')
+  await expect(page.getByTestId('auth-connections-create')).toBeEnabled()
+  await page.getByTestId('auth-connections-create').click()
+  await page.getByLabel('显示名称').fill('Company SSO')
+  await page.getByRole('dialog').locator('textarea').fill('Production identity provider')
+  await page.getByRole('dialog').getByRole('button', { name: '创建连接' }).click()
+  const drawer = page.locator('.n-drawer-content')
+  await expect(drawer.getByLabel('显示名称')).toHaveValue('Company SSO')
+  await expect(drawer.getByText('https://frontend.example/auth/callback/company')).toBeVisible()
+  await drawer.getByRole('button', { name: '复制', exact: true }).click()
+  await expect(page.evaluate(() => navigator.clipboard.readText())).resolves.toBe(
+    'https://frontend.example/auth/callback/company',
   )
+
+  await expect(drawer.getByLabel('Issuer 地址')).toHaveValue('')
+  await expect(drawer.getByLabel('Client ID')).toHaveValue('')
+  await expect(drawer.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
+
+  await drawer.getByLabel('Issuer 地址').fill('https://candidate.example')
+  await drawer.getByLabel('Client ID').fill('candidate-client')
+  await drawer.getByRole('button', { name: '保存配置', exact: true }).click()
+  const conflictPanel = drawer
+    .locator('.n-alert')
+    .filter({ hasText: '修订发生变化。请选择最新设置，或将我的修改重新应用后手动保存。' })
+  await expect.poll(() => calls.save).toBe(1)
+  await expect(conflictPanel).toContainText('https://writer.example')
+  await expect(conflictPanel).toContainText('https://candidate.example')
+  await expect(drawer.getByRole('heading', { name: '最新设置' })).toBeVisible()
+  await expect(drawer.getByRole('heading', { name: '我的修改' })).toBeVisible()
+  await drawer.getByTestId('auth-connection-conflict-reapply').click()
+  await drawer.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect.poll(() => calls.save).toBe(2)
+  expect(saved).toMatchObject({
+    expected_revision: 8,
+    oidc: { issuer: 'https://candidate.example', client_id: 'candidate-client' },
+  })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  )
+})
+
+test('candidate check and enable action require a revision-bound test proof', async ({ page }) => {
+  const calls = b4ConnectionCalls()
+  let record = baseRecord()
+  const handler: B4ConnectionHandler = {
+    start(body) {
+      expect(body.expected_revision).toBe(7)
+      return {
+        transaction_id: 'transaction-e2e',
+        authorization_url: 'http://127.0.0.1:4173/auth/complete?ticket=ticket-e2e',
+        expires_at: new Date(Date.now() + 120_000).toISOString(),
+      }
+    },
+    enable(body) {
+      expect(body.test_id).toBe('transaction-e2e')
+      expect(body.verifier).toMatch(/^[\w-]{43}$/)
+    },
+  }
+  await mockB4Connection(page, () => record, calls, handler)
+  await page.route('**/api/v1/admin/auth-connections/company/check', (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      expected_revision: 7,
+      changes: { oidc: { issuer: 'https://candidate.example', client_id: 'candidate-client' } },
+    })
+    return json(route, {
+      valid: true,
+      revision: 7,
+      fresh_supported: true,
+      issues: [],
+      rules: authDiagnostics,
+    })
+  })
+  await page.goto('/admin/authentication')
+  await page.getByTestId('auth-connection-company').getByRole('button', { name: '编辑' }).click()
+  const drawer = page.locator('.n-drawer-content')
+  await drawer.getByLabel('Issuer 地址').fill('https://candidate.example')
+  await drawer.getByLabel('Client ID').fill('candidate-client')
+  await drawer.getByRole('button', { name: '检查配置', exact: true }).click()
+  await expect(drawer.getByText('配置检查通过', { exact: true })).toBeVisible()
+  await page.route('**/api/v1/admin/auth-connections/company', (route) => {
+    if (route.request().method() !== 'PATCH') return json(route, record)
+    record = oidcConnection({
+      aggregate_revision: 8,
+      configuration: {
+        ...record.configuration,
+        oidc: {
+          ...record.configuration.oidc!,
+          issuer: 'https://candidate.example',
+          client_id: 'candidate-client',
+        },
+      },
+      validation: {
+        fresh_supported: true,
+        tested_at: new Date(Date.now() - 1000).toISOString(),
+        applied_test_id: 'transaction-e2e',
+      },
+    })
+    return json(route, record)
+  })
+
+  const popupPromise = page.context().waitForEvent('page')
+  await drawer.getByRole('button', { name: '真实测试', exact: true }).click()
+  const popup = await popupPromise
+  await expect(popup).toHaveURL(/\/auth\/complete$/)
+  await expect.poll(() => calls.exchange).toBe(1)
+  await expect(drawer.getByText('真实测试结果')).toBeVisible()
+  await expect(drawer.getByRole('button', { name: '保存配置', exact: true })).toBeEnabled()
+  await drawer.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect(drawer.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
+  await drawer.getByRole('button', { name: '启用', exact: true }).click()
+  await expect(drawer.getByText('已启用')).toBeVisible()
+  await expect.poll(() => calls.enable).toBe(1)
+  await expect.poll(() => calls.exchange).toBe(1)
 })
 
 test('a non-administrator never fetches authentication configuration', async ({ page }) => {
@@ -125,37 +213,112 @@ test('a non-administrator never fetches authentication configuration', async ({ 
   expect(reads).toBe(0)
 })
 
-test('the built-in password policy stays read-only without calling unsupported draft endpoints', async ({
+test('the built-in password policy is read-only and uses connection actions only', async ({
   page,
 }) => {
-  await mockApp(page)
-  const calls: string[] = []
-  await page.route('**/api/v1/admin/auth-connections**', (route) => {
-    calls.push(new URL(route.request().url()).pathname)
-    return json(route, {
-      items: [
-        {
-          id: 'password',
-          kind: 'password',
-          aggregate_revision: 1,
-          published_revision: 1,
-          draft_revision: null,
-          archived: false,
-          has_client_secret: false,
-          published: { ...record.draft, display_name: 'Password', revision: 1, oauth2: undefined },
-        },
-      ],
-    })
-  })
+  const calls = b4ConnectionCalls()
+  const connection = oidcConnection()
+  const record = {
+    ...connection,
+    id: 'password',
+    kind: 'password' as const,
+    configuration: { ...connection.configuration, display_name: 'Password', oidc: undefined },
+  }
+  await mockB4Connection(page, () => record, calls)
   await page.goto('/admin/authentication')
   await page
     .getByTestId('auth-connection-password')
     .getByRole('button', { name: '查看政策' })
     .click()
-  await expect(
-    page.getByText('当前后端仅开放内置密码政策的读取。公开注册总开关可在系统设置中调整。'),
-  ).toBeVisible()
-  await expect(page.getByRole('textbox', { name: '显示名称', exact: true })).toBeDisabled()
-  await expect(page.getByRole('button', { name: '保存草稿', exact: true })).toHaveCount(0)
-  expect(calls).toEqual(['/api/v1/admin/auth-connections'])
+  await expect(page.getByText('内置密码连接只读，认证政策由系统设置管理。')).toBeVisible()
+  await expect(page.getByRole('button', { name: '启用', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '停用', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '保存配置', exact: true })).toHaveCount(0)
+  expect(calls.start).toBe(0)
+  expect(calls.exchange).toBe(0)
+
+  await page.locator('.n-drawer-header__close').click()
+  await expect(page.locator('.n-drawer-content')).toHaveCount(0)
+})
+
+test('a disabled state response loss reads back once and applies the new state', async ({
+  page,
+}) => {
+  const calls = b4ConnectionCalls()
+  const record = oidcConnection({ state: 'enabled' })
+  const disabled = oidcConnection({ aggregate_revision: 8, state: 'disabled' })
+  let reads = 0
+  let disablePosts = 0
+  await mockB4Connection(page, record, calls)
+  await page.route('**/api/v1/admin/auth-connections/company', (route) => {
+    if (route.request().method() !== 'GET') return json(route, record)
+    reads += 1
+    return json(route, disabled)
+  })
+  await page.route('**/api/v1/admin/auth-connections/company/disable', (route) => {
+    disablePosts += 1
+    return json(route, { title: 'Response lost' }, 503)
+  })
+  await page.goto('/admin/authentication')
+  await page.getByTestId('auth-connection-company').getByRole('button', { name: '编辑' }).click()
+  const drawer = page.locator('.n-drawer-content')
+  await drawer.getByTestId('auth-connection-disable').click()
+
+  await expect.poll(() => disablePosts).toBe(1)
+  await expect.poll(() => reads).toBe(1)
+  await expect(drawer.getByText('已停用')).toBeVisible()
+  await expect(drawer.getByTestId('auth-connection-configure')).toBeEnabled()
+  await expect(drawer.getByTestId('auth-connection-disable')).toHaveCount(0)
+})
+
+test('closing a dirty editor requires confirmation and discards without writing', async ({
+  page,
+}) => {
+  const calls = b4ConnectionCalls()
+  const record = oidcConnection()
+  await mockB4Connection(page, record, calls)
+  await page.goto('/admin/authentication')
+  await page.getByTestId('auth-connection-company').getByRole('button', { name: '编辑' }).click()
+  const drawer = page.locator('.n-drawer-content')
+  await drawer.getByLabel('Issuer 地址').fill('https://candidate.example')
+  await expect(drawer.getByRole('button', { name: '保存配置', exact: true })).toBeEnabled()
+
+  await drawer.getByTestId('auth-connection-close').click()
+  const confirmation = page.locator('.n-dialog:visible')
+  await expect(confirmation).toContainText('存在未保存修改，关闭后这些修改将丢失。')
+  await confirmation.getByRole('button', { name: '放弃并关闭' }).click()
+
+  await expect(drawer).toHaveCount(0)
+  await expect(page.getByTestId('auth-connection-company')).toBeVisible()
+})
+
+test('the drawer header close icon runs the editor close flow instead of doing nothing', async ({
+  page,
+}) => {
+  const calls = b4ConnectionCalls()
+  const record = oidcConnection()
+  await mockB4Connection(page, record, calls)
+  await page.goto('/admin/authentication')
+  const open = () =>
+    page.getByTestId('auth-connection-company').getByRole('button', { name: '编辑' }).click()
+  const drawer = page.locator('.n-drawer-content')
+  const headerClose = page.locator('.n-drawer-header__close')
+
+  await open()
+  await expect(drawer.getByLabel('Issuer 地址')).toHaveValue('https://identity.example.com')
+  await headerClose.click()
+  await expect(drawer).toHaveCount(0)
+
+  await open()
+  await drawer.getByLabel('Issuer 地址').fill('https://candidate.example')
+  await headerClose.click()
+  const confirmation = page.locator('.n-dialog:visible')
+  await expect(confirmation).toContainText('存在未保存修改，关闭后这些修改将丢失。')
+  await confirmation.getByRole('button', { name: '继续编辑' }).click()
+  await expect(drawer.getByLabel('Issuer 地址')).toHaveValue('https://candidate.example')
+
+  await headerClose.click()
+  await confirmation.getByRole('button', { name: '放弃并关闭' }).click()
+  await expect(drawer).toHaveCount(0)
+  expect(calls.save).toBe(0)
 })

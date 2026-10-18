@@ -9,7 +9,6 @@ import {
   completeExternalConfirmation,
   cancelExternalFlow,
   startExternalLogin,
-  startExternalTest,
   saveExternalResult,
   takeExternalProof,
   type ExternalFlow,
@@ -72,28 +71,21 @@ beforeEach(() => {
   changeSessionContext('https://service.example/api/v1', null, true)
 })
 describe('external browser transactions', () => {
-  it('uses the aggregate revision to start a test and the snapshot revision to validate its result', async () => {
-    changeSessionContext(captureSession().baseUrl, 1, true)
-    mocks.post.mockResolvedValueOnce(
-      reply({
-        transaction_id: 'tx-test',
-        authorization_url: 'https://idp.example/authorize',
-        expires_at: new Date(Date.now() + 60_000).toISOString(),
-      }),
-    )
-    await startExternalTest('oidc-one', 7, 4)
-    expect(mocks.post.mock.calls[0]?.[1].body.expected_revision).toBe(7)
-    mocks.post.mockResolvedValueOnce(
-      reply({
+  it('does not expose the removed test purpose or persist test results in ordinary flows', async () => {
+    seed()
+    expect(() =>
+      saveExternalResult({
         kind: 'test_result',
         connection_id: 'oidc-one',
-        revision: 4,
+        revision: 1,
         fresh_supported: false,
         attributes: {},
         rules: {},
+        test_id: 'test-one',
+        expires_at: new Date(Date.now() + 20_000).toISOString(),
       }),
-    )
-    expect((await exchangeExternalTicket('ticket')).kind).toBe('test_result')
+    ).toThrow()
+    expect(storage.get(EXTERNAL_FLOW_KEY)).toContain('"purpose":"login"')
   })
   it('rejects a late exchange after changing services without replacing the new transaction', async () => {
     seed()
@@ -176,10 +168,20 @@ describe('external browser transactions', () => {
     await expect(exchangeExternalTicket('ticket')).rejects.toThrow()
     expect(mocks.post).toHaveBeenCalledTimes(1)
   })
-  it('does not turn an administrator test into a login session', async () => {
-    changeSessionContext(captureSession().baseUrl, 1, true)
-    seed(flow({ userId: 1, purpose: 'test', revision: 3 }))
-    mocks.post.mockResolvedValue(reply({ kind: 'session', session: {} }))
+  it('rejects a removed test result in an ordinary login flow and clears the flow', async () => {
+    seed()
+    mocks.post.mockResolvedValue(
+      reply({
+        kind: 'test_result',
+        connection_id: 'oidc-one',
+        revision: 1,
+        fresh_supported: false,
+        attributes: {},
+        rules: {},
+        test_id: 'test-one',
+        expires_at: new Date(Date.now() + 20_000).toISOString(),
+      }),
+    )
     await expect(exchangeExternalTicket('ticket')).rejects.toThrow()
     expect(readExternalFlow()).toBeNull()
   })
